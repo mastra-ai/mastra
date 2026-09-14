@@ -141,4 +141,13 @@ describe('Board card error tooltip', () => {
 
     expect(await screen.findByText(DECISION_ERROR)).toBeVisible();
   });
+
+  it('links a run the provider rejected to the Factory memory settings', async () => {
+    stubBoardEndpoints([{ ...failedDecision, failureCode: 'run_configuration_invalid', canRetry: false }]);
+    renderWorkBoard();
+
+    const fix = await screen.findByRole('link', { name: 'Memory settings' });
+    expect(fix).toHaveAttribute('href', `/factories/${FACTORY_ID}/settings/memory?scope=factory`);
+    expect(screen.queryByRole('button', { name: /retry/i })).not.toBeInTheDocument();
+  });
 });

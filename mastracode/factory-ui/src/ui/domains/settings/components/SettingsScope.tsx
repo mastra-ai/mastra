@@ -117,9 +117,10 @@ export type ScopeSwapControl = ScopeControl & { shown: SettingsScope; bodyRef: R
 export function useScopeControl(
   options: readonly SettingsScope[],
   disabledReasons?: ScopeControl['disabledReasons'],
+  initial: SettingsScope = 'personal',
 ): ScopeSwapControl {
-  const [picked, setPicked] = useState<SettingsScope>('personal');
-  const [revealed, setRevealed] = useState<SettingsScope>('personal');
+  const [picked, setPicked] = useState<SettingsScope>(initial);
+  const [revealed, setRevealed] = useState<SettingsScope>(initial);
   const bodyRef = useRef<HTMLDivElement>(null);
 
   // A permission answer lands after first paint, so a scope picked meanwhile

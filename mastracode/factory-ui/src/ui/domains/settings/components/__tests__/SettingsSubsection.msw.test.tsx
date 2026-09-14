@@ -10,11 +10,13 @@ import { SettingsSubsection } from '../SettingsSubsection';
 function ScopeHarness({
   options,
   disabledReasons,
+  initial,
 }: {
   options: SettingsScope[];
   disabledReasons?: ScopeControl['disabledReasons'];
+  initial?: SettingsScope;
 }) {
-  const control = useScopeControl(options, disabledReasons);
+  const control = useScopeControl(options, disabledReasons, initial);
   return (
     <TooltipProvider delayDuration={0}>
       <SettingsSubsection scope={control} title="Provider access" />
@@ -75,6 +77,18 @@ describe('SettingsSubsection', () => {
       await user.click(screen.getByRole('button', { name: 'Org-wide' }));
 
       expect(onChange).toHaveBeenCalledWith('org');
+    });
+  });
+
+  describe('given a deep link that names a scope', () => {
+    it('opens on that scope when it is offered, else on the first one', () => {
+      const { rerender } = render(<ScopeHarness options={['personal', 'factory']} initial="factory" />);
+
+      expect(screen.getByRole('button', { name: 'Factory-wide' })).toHaveAttribute('aria-pressed', 'true');
+
+      rerender(<ScopeHarness options={['personal']} initial="factory" />);
+
+      expect(screen.getByText('Personal')).toBeInTheDocument();
     });
   });
 

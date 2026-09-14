@@ -8,6 +8,7 @@ import { ModelCombobox } from '../../settings/components/ModelCombobox';
 import { SharedCredentialNotice } from '../../settings/components/SharedCredentialNotice';
 import { providerDisplayName } from '../../settings/components/provider-display-name';
 import { useFactoryModelChoice } from '../hooks/useFactoryModelChoice';
+import { FactoryOMDefaultNote } from './FactoryOMDefaultNote';
 import { ProviderBrandIcon } from './ProviderBrandIcon';
 
 export interface FactoryDefaultModelFormProps {
@@ -61,6 +62,7 @@ export function FactoryDefaultModelForm({
         />
       </label>
       <SharedCredentialNotice modelId={choice.modelId || undefined} />
+      <FactoryOMDefaultNote providerId={provider.provider} factoryModelId={choice.modelId || undefined} />
       {choice.error && (
         <Txt as="p" variant="ui-sm" className="text-notice-destructive-fg m-0" role="alert">
           {choice.error}

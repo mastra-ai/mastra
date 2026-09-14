@@ -1,3 +1,4 @@
+import type { SettingsSection } from '../settings/settingsSections';
 import type { SessionRowStatus } from '../workspaces/services/sessionStatus';
 import type { FactoryDecisionSummary } from './services/decisions';
 
@@ -8,7 +9,19 @@ export type BoardCardStatus =
   /** Triage classed the card as non-bug work, so it waits on a maintainer's call. */
   | { kind: 'held'; label: string }
   | { kind: 'busy'; label: string }
-  | { kind: 'error'; label: string; detail?: string; retryDecisionId?: string };
+  | {
+      kind: 'error';
+      label: string;
+      detail?: string;
+      retryDecisionId?: string;
+      /** Where the person fixes a failure the server will not retry. */
+      settingsSection?: SettingsSection;
+    };
+
+// Only raised for observational-memory rejections (rules/dispatcher.ts), so Memory is where it is fixed.
+const SETTINGS_FOR_FAILURE: Partial<Record<NonNullable<FactoryDecisionSummary['failureCode']>, SettingsSection>> = {
+  run_configuration_invalid: 'memory',
+};
 
 export interface BoardCardStatusInput {
   /** Run a rule parked on this card, held until someone releases it. */
@@ -103,10 +116,12 @@ export function boardCardStatus(input: BoardCardStatusInput): BoardCardStatus {
   if (input.preparing !== undefined) return { kind: 'busy', label: input.preparing };
   if (input.transitionReason !== undefined) return { kind: 'error', label: input.transitionReason };
   if (decision?.status === 'failed') {
+    const settingsSection = decision.failureCode ? SETTINGS_FOR_FAILURE[decision.failureCode] : undefined;
     return {
       kind: 'error',
       label: automationCopy(decision).failed,
       ...(decision.canRetry ? { retryDecisionId: decision.id } : {}),
+      ...(settingsSection ? { settingsSection } : {}),
       detail: decision.lastError ?? undefined,
     };
   }

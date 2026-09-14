@@ -67,6 +67,24 @@ describe('boardCardStatus', () => {
     });
   });
 
+  it('points a configuration failure at the Factory memory settings instead of a retry', () => {
+    expect(
+      boardCardStatus({
+        decision: decision({
+          status: 'failed',
+          failureCode: 'run_configuration_invalid',
+          canRetry: false,
+          lastError: "The 'gpt-5.4-mini' model is not supported when using Codex with a ChatGPT account.",
+        }),
+      }),
+    ).toEqual({
+      kind: 'error',
+      label: 'Automated run could not start',
+      detail: "The 'gpt-5.4-mini' model is not supported when using Codex with a ChatGPT account.",
+      settingsSection: 'memory',
+    });
+  });
+
   it('separates an effect the server is retrying from one it has not tried yet', () => {
     expect(boardCardStatus({ decision: decision({ status: 'retry', lastError: 'ECONNRESET' }) })).toEqual({
       kind: 'error',

@@ -6,8 +6,9 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastr
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Hand, Maximize2, Sparkles, TriangleAlert } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { Link } from 'react-router';
+import { Link, useParams } from 'react-router';
 
+import { SETTINGS_SECTION_LABELS, settingsSectionPath } from '../../settings/settingsSections';
 import type { BoardCardStatus } from '../boardCardStatus';
 import { HIDDEN_CARD_LABELS, SOURCE_LABELS } from '../boardItems';
 import type { CardAction } from '../cardPrimaryAction';
@@ -48,6 +49,7 @@ export function CardDetailsHint() {
 }
 
 export function CardStatus({ status }: { status: BoardCardStatus }) {
+  const { factoryId } = useParams<{ factoryId: string }>();
   if (status.kind === 'idle') return null;
 
   // A parked run is the one idle state the card cannot whisper: it needs the
@@ -89,6 +91,14 @@ export function CardStatus({ status }: { status: BoardCardStatus }) {
     >
       <TriangleAlert size={11} aria-hidden className="mt-0.5 shrink-0" />
       <span className="min-w-0 wrap-anywhere">{status.label}</span>
+      {status.settingsSection && factoryId && (
+        <Link
+          to={`${settingsSectionPath(factoryId, status.settingsSection)}?scope=factory`}
+          className="text-icon4 hover:text-icon5 relative z-10 shrink-0 underline underline-offset-2"
+        >
+          {SETTINGS_SECTION_LABELS[status.settingsSection]} settings
+        </Link>
+      )}
     </span>
   );
 

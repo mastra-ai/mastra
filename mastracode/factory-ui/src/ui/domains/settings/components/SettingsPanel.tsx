@@ -1,6 +1,6 @@
 import type { AgentControllerSessionSettings } from '@mastra/client-js';
 import { useEffect } from 'react';
-import { Link, useLocation, useParams } from 'react-router';
+import { Link, useLocation, useParams, useSearchParams } from 'react-router';
 import { Brain } from 'lucide-react';
 import { buttonVariants } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
@@ -27,6 +27,7 @@ import { CustomProvidersSection } from './CustomProvidersSection';
 import { SettingsHeader } from './SettingsHeader';
 import { FactoryManagementSection } from './FactoryManagementSection';
 import { FactoryDefaultModelSection } from './FactoryDefaultModelSection';
+import { FactoryMemoryModelRow } from './FactoryMemoryModelRow';
 import { FactorySkillsSection } from './FactorySkillsSection';
 import { IntakeSection } from './IntakeSection';
 import { ModelPacksSection } from './ModelPacksSection';
@@ -142,7 +143,12 @@ interface MemorySettingsSectionProps {
 function MemorySettingsSection({ factoryId, models, sessionResourceId, sessionScope }: MemorySettingsSectionProps) {
   const providersQuery = useProvidersQuery();
   const customProvidersQuery = useCustomProvidersQuery();
-  const scopeControl = useScopeControl(factoryId ? ['personal', 'factory'] : ['personal']);
+  const [searchParams] = useSearchParams();
+  const scopeControl = useScopeControl(
+    factoryId ? ['personal', 'factory'] : ['personal'],
+    undefined,
+    searchParams.get('scope') === 'factory' ? 'factory' : undefined,
+  );
   const anyConnected =
     (providersQuery.data ?? []).some(p => p.source !== 'none') || (customProvidersQuery.data ?? []).length > 0;
   const providersKnown = providersQuery.isSuccess && customProvidersQuery.isSuccess;
@@ -172,7 +178,7 @@ function MemorySettingsSection({ factoryId, models, sessionResourceId, sessionSc
       title="Observational memory"
       description={
         factoryView
-          ? 'Models and token thresholds used to summarize and retain context in Factory runs.'
+          ? 'Models and token thresholds used to summarize and retain context in Factory runs. A change applies to every Factory run, including ones already running, from their next observation.'
           : 'Models and token thresholds used to summarize and retain context in your interactive chats.'
       }
       scope={scopeControl}
@@ -225,6 +231,7 @@ function ModelsSettingsSection({ models, settings, onBehaviorChange }: ModelsSet
       >
         <SettingsContainer>
           <FactoryDefaultModelSection models={models} />
+          <FactoryMemoryModelRow models={models} />
         </SettingsContainer>
       </SettingsSubsection>
       <SettingsSubsection

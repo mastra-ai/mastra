@@ -1,7 +1,7 @@
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import { DEFAULT_OM_MODEL_ID } from '@mastra/code-sdk/constants';
 import { getAvailableModePacks, resolveProviderOMDefault } from '@mastra/code-sdk/onboarding/packs';
-import type { ModePack, ProviderAccess, ProviderAccessLevel } from '@mastra/code-sdk/onboarding/packs';
+import type { ModePack, OMPack, ProviderAccess, ProviderAccessLevel } from '@mastra/code-sdk/onboarding/packs';
 import {
   getCustomProviderId,
   isThinkingLevelSetting,
@@ -152,6 +152,7 @@ interface ModelCatalog {
   >;
   listModes?: () => Array<{ id: string; defaultModelId?: string }>;
   getSessionByResource?: (resourceId: string, scope?: string) => Promise<OMSession | undefined>;
+  listSessions?: () => Promise<OMSession[]>;
 }
 
 /**
@@ -520,6 +521,11 @@ export interface ProviderOMDefaultsResponse {
   config: OMConfigInfo;
 }
 
+/** `GET /web/config/om/provider-defaults` — the pack the POST would seed, read without writing it. */
+export interface ProviderOMDefaultPreviewResponse {
+  pack: OMPack;
+}
+
 /** `GET /web/config/thinking` — deployment-scoped reasoning-effort defaults. */
 export interface ThinkingConfigInfo {
   /** All selectable levels, in escalation order. */
@@ -574,6 +580,8 @@ interface MemorySettingsContext {
   storage: MemorySettingsStorage;
   orgId: string;
   userId: string;
+  /** Set when the row is a factory's, so a change can follow onto that factory's live runs. */
+  factoryProjectId?: string;
 }
 
 /**
@@ -616,8 +624,13 @@ async function resolveMemorySettingsContext({
       await memorySettings.ensureReady();
       const factoryUserId = factoryProjectId ? factoryMemorySettingsUserId(factoryProjectId) : undefined;
       return tenant
-        ? { storage: memorySettings, orgId: tenantOrgId(tenant), userId: factoryUserId ?? tenant.userId }
-        : { storage: memorySettings, orgId: 'local', userId: factoryUserId ?? 'local' };
+        ? {
+            storage: memorySettings,
+            orgId: tenantOrgId(tenant),
+            userId: factoryUserId ?? tenant.userId,
+            factoryProjectId,
+          }
+        : { storage: memorySettings, orgId: 'local', userId: factoryUserId ?? 'local', factoryProjectId };
     } catch {
       // fall through to the unavailable response
     }
@@ -706,6 +719,25 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
         return provider ? resolveProviderOMDefault(provider, defaultModelId).modelId : undefined;
       } catch {
         return undefined;
+      }
+    };
+
+    // A live Factory run keeps a copy of its row in session state and only re-reads
+    // the row at boot or dispatcher reuse; push the change so its next observation
+    // uses it. Best-effort per session: a retired model must not fail the save.
+    const followRowOntoLiveFactorySessions = async (context: MemorySettingsContext): Promise<void> => {
+      if (!context.factoryProjectId || !controller.listSessions) return;
+      const record = await context.storage.get({ orgId: context.orgId, userId: context.userId });
+      const fallback = await factoryOmFallback(context.factoryProjectId);
+      for (const session of await controller.listSessions()) {
+        if (session.state.get()?.factoryProjectId !== context.factoryProjectId) continue;
+        try {
+          await applyStoredMemorySettings(session, record, fallback);
+        } catch (error) {
+          console.warn('[Memory settings] Failed to apply a factory-wide change to a live session', {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
       }
     };
 
@@ -1273,6 +1305,17 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
       }),
 
       registerApiRoute('/web/config/om/provider-defaults', {
+        method: 'GET',
+        requiresAuth: false,
+        handler: c => {
+          const providerId = c.req.query('providerId')?.trim() ?? '';
+          const factoryModelId = c.req.query('factoryModelId')?.trim() ?? '';
+          if (!providerId) return c.json({ error: 'Missing required query parameter: providerId' }, 400);
+          return c.json({ pack: resolveProviderOMDefault(providerId, factoryModelId) });
+        },
+      }),
+
+      registerApiRoute('/web/config/om/provider-defaults', {
         method: 'POST',
         requiresAuth: false,
         handler: async c => {
@@ -1316,6 +1359,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               patch: {},
               fillIfUnset: { observerModelId: modelId, reflectorModelId: modelId },
             });
+            await followRowOntoLiveFactorySessions(context);
             return c.json({ ok: true, config: readStoredOMConfig(record) });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
@@ -1407,6 +1451,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               { [role === 'observer' ? 'observerModelId' : 'reflectorModelId']: modelId },
               otherRoleCurrentModelId ? { [otherKey]: otherRoleCurrentModelId } : undefined,
             );
+            await followRowOntoLiveFactorySessions(context);
             const config = session
               ? readOMConfig(session)
               : readStoredOMConfig(
@@ -1474,6 +1519,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               ...(observation !== undefined ? { observationThreshold: observation } : {}),
               ...(reflection !== undefined ? { reflectionThreshold: reflection } : {}),
             });
+            await followRowOntoLiveFactorySessions(context);
             const config = session
               ? readOMConfig(session)
               : readStoredOMConfig(
@@ -1522,6 +1568,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               await session.thread.setSetting({ key: 'observeAttachments', value });
             }
             await persistMemorySettings(context, { observeAttachments: value });
+            await followRowOntoLiveFactorySessions(context);
             const config = session
               ? readOMConfig(session)
               : readStoredOMConfig(

@@ -25,8 +25,8 @@ export function FactoryDefaultModelSection({ models }: { models: AvailableModelO
       description={
         <>
           <span>
-            Factory runs (triage, board work items) start on this model and use the Factory observational-memory
-            settings below — your personal defaults don&apos;t apply to them.
+            Factory runs (triage, board work items) start on this model — your personal defaults don&apos;t apply to
+            them.
           </span>
           {error && (
             <Txt as="span" variant="ui-xs" className="text-notice-destructive-fg">
