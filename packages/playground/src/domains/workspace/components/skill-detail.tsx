@@ -81,14 +81,10 @@ export function SkillDetail({ skill, rawSkillMd, onReferenceClick }: SkillDetail
       {/* Metadata */}
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
         <MetadataCard label="Source" value={sourceInfo.label} icon={sourceInfo.icon} />
-        <MetadataCard label="Path" value={skill.path} icon={<FolderOpen className="h-3.5 w-3.5" />} />
+        <MetadataCard label="Path" value={skill.path} icon={<FolderOpen />} />
         {skill.license && <MetadataCard label="License" value={skill.license} />}
         {skill.compatibility != null && <MetadataCard label="Compatibility" value={skill.compatibility} />}
-        <MetadataCard
-          label="References"
-          value={`${skill.references.length} files`}
-          icon={<FileText className="h-3.5 w-3.5" />}
-        />
+        <MetadataCard label="References" value={`${skill.references.length} files`} icon={<FileText />} />
       </div>
 
       {/* Instructions */}

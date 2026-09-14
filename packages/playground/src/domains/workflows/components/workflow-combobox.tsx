@@ -15,6 +15,8 @@ export interface WorkflowComboboxProps {
   disabled?: boolean;
   variant?: ComboboxProps['variant'];
   size?: ComboboxProps['size'];
+  'aria-label'?: string;
+  align?: ComboboxProps['align'];
 }
 
 export function WorkflowCombobox({
@@ -27,6 +29,8 @@ export function WorkflowCombobox({
   disabled = false,
   variant,
   size,
+  'aria-label': ariaLabel,
+  align,
 }: WorkflowComboboxProps) {
   const { data: workflows = {}, isLoading, isError, error } = useWorkflows();
   const { navigate, paths } = useLinkComponent();
@@ -63,6 +67,8 @@ export function WorkflowCombobox({
       disabled={disabled || isLoading || isError}
       variant={variant}
       size={size}
+      aria-label={ariaLabel}
+      align={align}
     />
   );
 }

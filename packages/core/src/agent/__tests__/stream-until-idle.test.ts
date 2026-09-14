@@ -1,5 +1,6 @@
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { buildContinuationOpts } from '../../loop/shared/stream-until-idle-helpers';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory';
 import { MockStore } from '../../storage';
@@ -53,6 +54,23 @@ async function drain(stream: ReadableStream<any>): Promise<any[]> {
 
 describe('Agent.streamUntilIdle', () => {
   const storage = new MockStore();
+
+  it('passes completion directives as execution-only system context', () => {
+    const options = buildContinuationOpts({}, undefined, [
+      {
+        type: 'background-task-completed',
+        payload: { taskId: 'task-1', toolCallId: 'call-1', toolName: 'view' },
+      },
+    ]);
+
+    expect(options.context).toEqual([
+      {
+        role: 'system',
+        content:
+          'IMPORTANT: These tool calls ran as background tasks. Their authoritative results may now look like ordinary tool results after reconciliation; do not reinterpret them as foreground calls. IMPORTANT: The following tool-call IDs completed successfully: call-1 (view), background task task-1. Their results are now in the conversation. Do not call the same tool again — the result is already available.',
+      },
+    ]);
+  });
 
   let mastra: Mastra;
 
@@ -256,10 +274,10 @@ describe('Agent.streamUntilIdle', () => {
     await new Promise(r => setTimeout(r, 50));
     expect(getCallCount()).toBe(1);
 
-    // Fire two completions while the initial turn is still running.
+    // Track two concurrent background tasks while the initial turn is still running.
     const bgManager = mastra.backgroundTaskManager!;
-    const publishCompleted = (taskId: string) =>
-      (bgManager as any).publishLifecycleEvent('task.completed', {
+    const publishLifecycle = (event: 'task.running' | 'task.completed', taskId: string) =>
+      (bgManager as any).publishLifecycleEvent(event, {
         id: taskId,
         toolName: 'dummy',
         toolCallId: taskId,
@@ -267,27 +285,31 @@ describe('Agent.streamUntilIdle', () => {
         agentId: 'a3',
         threadId: 'thread-3',
         resourceId: 'user-1',
-        status: 'completed',
-        result: {},
+        status: event === 'task.running' ? 'running' : 'completed',
+        result: event === 'task.completed' ? {} : undefined,
         retryCount: 0,
         maxRetries: 0,
         timeoutMs: 1000,
         createdAt: new Date(),
         args: {},
       });
-    await publishCompleted('t-a');
-    await publishCompleted('t-b');
+    await publishLifecycle('task.running', 't-a');
+    await publishLifecycle('task.running', 't-b');
+    await publishLifecycle('task.completed', 't-a');
     await new Promise(r => setTimeout(r, 50));
 
-    // Both completions queued but no second inner turn yet — still 1 call.
+    // One completion is queued, but the other task is still running.
     expect(getCallCount()).toBe(1);
 
-    // Let the initial turn finish.
+    // Let the initial turn finish. The remaining running task still prevents
+    // a fragmented completion-triggered continuation.
     resolver1();
     await new Promise(r => setTimeout(r, 50));
+    expect(getCallCount()).toBe(1);
 
-    // After initial ends, processIfIdle should kick off ONE continuation
-    // that drains all queued completions together. Call count is 2.
+    // Once all tracked work settles, both completions are synthesized together.
+    await publishLifecycle('task.completed', 't-b');
+    await new Promise(r => setTimeout(r, 50));
     expect(getCallCount()).toBe(2);
 
     // Let continuation 2 finish. No more pending → outer closes.
@@ -479,6 +501,71 @@ describe('Agent.streamUntilIdle', () => {
 
     // Allow slack but confirm we're closing on the timer, not hanging open.
     expect(elapsed).toBeLessThan(2_000);
+  });
+
+  it('re-arms maxIdleMs after a completion arrives mid-turn while another task remains running', async () => {
+    let finishInitialTurn!: () => void;
+    const initialTurnDone = new Promise<void>(resolve => {
+      finishInitialTurn = resolve;
+    });
+    const blockingStream = () =>
+      new ReadableStream<any>({
+        async start(controller) {
+          controller.enqueue({ type: 'stream-start', warnings: [] });
+          await initialTurnDone;
+          controller.enqueue({
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          });
+          controller.close();
+        },
+      });
+    const { model } = makeScriptedModel([blockingStream]);
+    const agent = new Agent({
+      id: 'a-pending-idle',
+      name: 'a-pending-idle',
+      instructions: 'test',
+      model,
+      memory: new MockMemory(),
+    });
+    mastra.addAgent(agent, 'a-pending-idle');
+
+    const publishLifecycle = (event: 'task.running' | 'task.completed', taskId: string) =>
+      (mastra.backgroundTaskManager as any).publishLifecycleEvent(event, {
+        id: taskId,
+        toolName: 'dummy',
+        toolCallId: taskId,
+        runId: 'run-1',
+        agentId: 'a-pending-idle',
+        threadId: 'thread-pending-idle',
+        resourceId: 'user-1',
+        status: event === 'task.running' ? 'running' : 'completed',
+        result: event === 'task.completed' ? {} : undefined,
+        retryCount: 0,
+        maxRetries: 0,
+        timeoutMs: 1000,
+        createdAt: new Date(),
+        args: {},
+      });
+
+    const result = await agent.streamUntilIdle('hi', {
+      memory: { thread: 'thread-pending-idle', resource: 'user-1' },
+      maxIdleMs: 100,
+    });
+    const drainPromise = drain(result.fullStream as ReadableStream<any>);
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await publishLifecycle('task.running', 'task-completed');
+    await publishLifecycle('task.running', 'task-stalled');
+    await publishLifecycle('task.completed', 'task-completed');
+    await new Promise(resolve => setTimeout(resolve, 0));
+    const start = Date.now();
+    finishInitialTurn();
+
+    await drainPromise;
+    const elapsedMs = Date.now() - start;
+    expect(elapsedMs).toBeGreaterThanOrEqual(100);
+    expect(elapsedMs).toBeLessThan(2_000);
   });
 
   it('does not close mid-turn when inner stream is slow (idle timer only runs between turns)', async () => {

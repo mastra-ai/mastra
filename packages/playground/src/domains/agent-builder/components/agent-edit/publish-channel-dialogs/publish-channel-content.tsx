@@ -7,6 +7,7 @@ import {
   DialogTitle,
 } from '@mastra/playground-ui/components/Dialog';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { X, Plug, Unplug } from 'lucide-react';
 import { PlatformIcon } from '@/domains/agents/components/agent-channels/platform-icons';
 import { useConnectChannelAction } from '@/domains/agents/hooks/use-channels';
 import type { ChannelInstallationInfo, ChannelPlatformInfo } from '@/domains/agents/hooks/use-channels';
@@ -94,6 +95,7 @@ export function PublishChannelContent({
       <DialogFooter>
         {platform.isConfigured && activeInstallation ? (
           <Button
+            icon={<Unplug />}
             variant="default"
             onClick={onDisconnectRequest}
             data-testid={`publish-channel-dialog-${platform.id}-disconnect`}
@@ -102,6 +104,7 @@ export function PublishChannelContent({
           </Button>
         ) : platform.isConfigured ? (
           <Button
+            icon={<Plug />}
             variant="default"
             onClick={handleConnect}
             disabled={isConnecting}
@@ -110,7 +113,7 @@ export function PublishChannelContent({
             {isConnecting ? 'Connecting…' : copy.connectLabel}
           </Button>
         ) : (
-          <Button variant="default" onClick={onClose}>
+          <Button icon={<X />} variant="default" onClick={onClose}>
             Close
           </Button>
         )}

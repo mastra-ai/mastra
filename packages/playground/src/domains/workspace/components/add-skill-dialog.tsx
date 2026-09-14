@@ -13,7 +13,7 @@ import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { SkillIcon } from '@mastra/playground-ui/icons/SkillIcon';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Search, Download, ExternalLink, Loader2, CircleSlashIcon, Package, Check, Folder } from 'lucide-react';
+import { Search, Download, ExternalLink, Loader2, CircleSlashIcon, Package, Check, Folder, X } from 'lucide-react';
 import { useState, useCallback, useMemo } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
 import { useSearchSkillsSh, usePopularSkillsSh, useSkillPreview, parseSkillSource } from '../hooks/use-skills-sh';
@@ -224,11 +224,11 @@ export function AddSkillDialog({
                 }
               >
                 {isLoadingPopular || isSearching ? (
-                  <div className="flex items-center justify-center py-8">
+                  <div className="flex items-center justify-center py-5">
                     <Loader2 className="text-neutral3 h-6 w-6 animate-spin" />
                   </div>
                 ) : displaySkills.length === 0 ? (
-                  <div className="text-neutral4 flex flex-1 flex-col items-center-safe justify-center-safe py-8">
+                  <div className="text-neutral4 flex flex-1 flex-col items-center-safe justify-center-safe py-5">
                     <CircleSlashIcon className="mb-2 h-8 w-8" />
                     <p className="text-ui-md">{hasSearchResults ? 'No skills found' : 'No skills available'}</p>
                   </div>
@@ -393,7 +393,7 @@ export function AddSkillDialog({
                     const mount = writableMounts.find(m => skillPath.startsWith(m.path + '/') || skillPath === m.path);
                     return mount ? <span className="text-icon4 text-ui-sm">Installed at {mount.path}</span> : null;
                   })()}
-                <Button variant="default" onClick={() => handleOpenChange(false)}>
+                <Button icon={<X />} variant="default" onClick={() => handleOpenChange(false)}>
                   Cancel
                 </Button>
                 <Button

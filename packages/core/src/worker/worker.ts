@@ -6,6 +6,11 @@ import type { MastraCompositeStore } from '../storage';
 /**
  * Infrastructure dependencies provided to workers during initialization.
  */
+export interface WorkerStopOptions {
+  /** Max time to wait for in-flight work before tearing down, in ms. */
+  drainTimeout?: number;
+}
+
 export interface WorkerDeps {
   pubsub: PubSub;
   storage: MastraCompositeStore;
@@ -45,6 +50,6 @@ export abstract class MastraWorker {
   }
 
   abstract start(): Promise<void>;
-  abstract stop(): Promise<void>;
+  abstract stop(options?: WorkerStopOptions): Promise<void>;
   abstract get isRunning(): boolean;
 }

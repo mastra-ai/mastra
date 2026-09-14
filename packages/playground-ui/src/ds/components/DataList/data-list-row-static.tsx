@@ -20,7 +20,7 @@ export const DataListRowStatic = forwardRef<HTMLDivElement, DataListRowStaticPro
       <div
         ref={ref}
         className={cn(
-          isWrapped ? 'grid grid-cols-subgrid gap-8 px-5 transition-colors duration-200' : dataListRowStaticStyles,
+          isWrapped ? 'grid grid-cols-subgrid gap-4 px-3 transition-colors duration-200' : dataListRowStaticStyles,
           className,
         )}
         style={resolvedStyle}

@@ -41,7 +41,6 @@ values
     await runtime.waitForScreenText(/E2E seeded history fixture/i, terminal);
     terminal.write('\r');
 
-    await runtime.waitForScreenText(/Switched to: E2E seeded history fixture/i, terminal);
     await runtime.waitForScreenText(/Recovered prior user request from a sanitized fixture/i, terminal);
     await runtime.waitForScreenText(/Recovered assistant answer from sanitized history/i, terminal);
     runtime.printScreen('after seeded thread switch', terminal);

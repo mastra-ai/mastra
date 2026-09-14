@@ -25,6 +25,7 @@ import type {
   StorageListThreadsOutput,
   StorageCloneThreadInput,
   StorageCloneThreadOutput,
+  StorageCopyThreadOutput,
 } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
 import type { ToolAction } from '../tools';
@@ -993,6 +994,18 @@ https://mastra.ai/en/docs/memory/overview`,
    * @returns Promise resolving to the cloned thread and copied messages
    */
   abstract cloneThread(args: StorageCloneThreadInput): Promise<StorageCloneThreadOutput>;
+
+  /**
+   * Copies a thread and its messages to a new thread without returning the message
+   * payloads. Prefer this over `cloneThread` when only the new thread id is needed
+   * (e.g. forking), so large threads never have to be loaded into memory.
+   * @param args - Clone parameters including source thread ID and optional filtering options
+   * @returns Promise resolving to the new thread and the source→new message id map
+   */
+  async copyThread(args: StorageCloneThreadInput): Promise<StorageCopyThreadOutput> {
+    const { thread, messageIdMap } = await this.cloneThread(args);
+    return { thread, messageIdMap };
+  }
 
   /**
    * Reassign a thread and all of its messages to a different resource.

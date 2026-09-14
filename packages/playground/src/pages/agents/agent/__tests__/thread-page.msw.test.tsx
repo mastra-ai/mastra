@@ -156,7 +156,6 @@ const buildRouter = (initialEntry: string) =>
           { path: 'chat/:threadId', loader: legacyAgentChatLoader },
           { path: 'threads', loader: agentThreadsIndexLoader },
           { path: 'threads/:threadId', element: <AgentThread /> },
-          { path: 'overview', element: <div data-testid="overview-page" /> },
         ],
       },
     ],
@@ -615,7 +614,7 @@ describe('Standalone thread page', () => {
 
     await screen.findByText('Tonight we cook carbonara.');
     expect(screen.getByRole('tab', { name: 'Chat' }).getAttribute('aria-selected')).toBe('true');
-    expect(screen.getByRole('tab', { name: 'Overview' }).getAttribute('aria-selected')).toBe('false');
+    expect(screen.queryByRole('tab', { name: 'Overview' })).toBeNull();
   });
 
   it('highlights the Chat tab on /threads/new', async () => {
@@ -647,11 +646,13 @@ describe('Standalone thread page', () => {
     );
   });
 
-  it('redirects bare /agents/:agentId to the overview page', async () => {
+  it('redirects bare /agents/:agentId to the new-thread chat', async () => {
     installHandlers();
     renderAt(`/agents/${AGENT_ID}`);
 
-    await waitFor(() => expect(screen.getByTestId('location-probe').textContent).toBe(`/agents/${AGENT_ID}/overview`));
+    await waitFor(() =>
+      expect(screen.getByTestId('location-probe').textContent).toBe(`/agents/${AGENT_ID}/threads/new`),
+    );
   });
 
   it('redirects the legacy chat URL to /threads/:threadId preserving ?messageId=', async () => {
@@ -861,7 +862,7 @@ describe('Standalone thread page', () => {
 
 describe('thread link builders', () => {
   it('point to the standalone thread routes', () => {
-    expect(paths.agentLink(AGENT_ID)).toBe(`/agents/${AGENT_ID}/overview`);
+    expect(paths.agentLink(AGENT_ID)).toBe(`/agents/${AGENT_ID}/threads/new`);
     expect(paths.agentNewThreadLink(AGENT_ID)).toBe(`/agents/${AGENT_ID}/threads/new`);
     expect(paths.agentThreadLink(AGENT_ID, THREAD_ID)).toBe(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
     expect(paths.agentThreadLink(AGENT_ID, THREAD_ID, 'msg-1')).toBe(

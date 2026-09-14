@@ -38,6 +38,7 @@
 
 import type { Agent, AgentExecutionOptions } from '@mastra/core/agent';
 import {
+  agentThreadStreamRuntime,
   prepareForDurableExecution,
   createDurableAgentStream,
   emitErrorEvent,
@@ -482,6 +483,19 @@ export interface InngestAgent<TOutput = undefined> {
   getConfiguredProcessorWorkflows(...args: any[]): any;
   /** Get raw agent configuration. Forwarded to the underlying Agent. */
   toRawConfig(...args: any[]): any;
+  /**
+   * Send a signal to a thread. Forwarded to the underlying Agent; a signal that
+   * wakes an idle thread starts the run through this agent's durable `stream()`.
+   */
+  sendSignal: Agent<any, any, TOutput>['sendSignal'];
+  /** Send a state signal to a thread. Forwarded to the underlying Agent. */
+  sendStateSignal: Agent<any, any, TOutput>['sendStateSignal'];
+  /** Send a notification signal to a thread. Forwarded to the underlying Agent. */
+  sendNotificationSignal: Agent<any, any, TOutput>['sendNotificationSignal'];
+  /** Subscribe to a thread's runs. Forwarded to the underlying Agent. */
+  subscribeToThread: Agent<any, any, TOutput>['subscribeToThread'];
+  /** Get the active run id for a thread. Forwarded to the underlying Agent. */
+  getActiveThreadRunId: Agent<any, any, TOutput>['getActiveThreadRunId'];
   /** Resume a streaming execution. Forwarded to the underlying Agent. */
   resumeStream(...args: any[]): any;
   /** Approve a pending tool call. Forwarded to the underlying Agent. */
@@ -859,6 +873,18 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       if (trackedEntry) {
         trackedEntry.workflowExecution = workflowExecution;
       }
+
+      // 3b. Register with the thread-stream runtime under the durable wrapper's
+      // identity, mirroring DurableAgent. This lets subscribeToThread /
+      // sendSignal find the run, and releases the thread reservation held by a
+      // signal-woken run once the durable stream finishes. Uses the Mastra-level
+      // pubsub (agent.getPubSub()) — not the CachingPubSub carrying workflow chunks.
+      await agentThreadStreamRuntime.registerRun(
+        proxyRef as unknown as Agent<any, any, any, any>,
+        output,
+        (streamOptions ?? {}) as AgentExecutionOptions<TOutput>,
+        agent.getPubSub(),
+      );
 
       // 4. Return stream result - attach extra properties to output for compatibility
       // This allows both destructuring { output, runId, cleanup } AND direct access to fullStream
@@ -1321,6 +1347,11 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
 
   // Assign the late-bound reference so stream()'s untilIdle path can use it
   proxyRef = result;
+  // Signal, message, and subscription APIs are forwarded to the wrapped agent
+  // by the Proxy above, and the thread-stream runtime wakes idle threads with
+  // `agent.stream()`. Point the runtime at the proxy so those wakes take the
+  // durable path instead of the wrapped agent's in-process stream().
+  agent.__setThreadRuntimeAgent(result as unknown as Agent<any, any, any, any>);
   return result;
 }
 
