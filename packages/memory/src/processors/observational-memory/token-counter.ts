@@ -1723,7 +1723,7 @@ export class TokenCounter {
     if (invocation.toolName) {
       tokens += this.readOrPersistPartEstimate(part, 'tool-call-name', invocation.toolName);
     }
-    if (invocation.args) {
+    if (invocation.args !== undefined) {
       if (typeof invocation.args === 'string') {
         tokens += this.readOrPersistPartEstimate(part, 'tool-call-args', invocation.args);
       } else {
@@ -1787,7 +1787,10 @@ export class TokenCounter {
           invocation.result,
         );
 
-        if (resultForCounting !== undefined) {
+        const hasResult =
+          resultForCounting !== undefined &&
+          (typeof resultForCounting !== 'string' || resultForCounting.trim().length > 0);
+        if (hasResult) {
           const contentTokens = this.countMultimodalToolResultContent(part, resultForCounting);
 
           if (contentTokens !== undefined) {
@@ -1804,6 +1807,17 @@ export class TokenCounter {
           if (typeof resultForCounting !== 'string') {
             overheadDelta -= 12;
           }
+        } else {
+          const fallback = invocation.isError
+            ? invocation.errorText?.trim()
+              ? invocation.errorText
+              : 'Tool execution failed'
+            : '[empty result]';
+          tokens += this.readOrPersistPartEstimate(
+            part,
+            invocation.isError ? 'tool-result-error' : 'tool-result-json',
+            fallback,
+          );
         }
 
         return { tokens, overheadDelta, extraMessageDelta };

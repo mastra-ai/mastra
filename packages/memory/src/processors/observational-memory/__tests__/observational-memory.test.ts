@@ -2161,6 +2161,12 @@ describe('Observer Agent Helpers', () => {
   });
 
   it('preserves skill activation arguments in observer history', async () => {
+    await Promise.allSettled([...BufferingCoordinator.asyncBufferingOps.values()]);
+    BufferingCoordinator.asyncBufferingOps.clear();
+    BufferingCoordinator.lastBufferedBoundary.clear();
+    BufferingCoordinator.lastBufferedAtTime.clear();
+    BufferingCoordinator.reflectionBufferCycleIds.clear();
+
     const skillName = 'observer-provenance-skill';
     const skillInstructions = '# Observer Provenance Skill\n\nAlways preserve the activated skill identity.';
     const threadId = `observer-skill-thread-${randomUUID()}`;
@@ -2362,8 +2368,9 @@ describe('Observer Agent Helpers', () => {
       expect(joinedText).not.toContain(base64);
     });
 
-    it('formatMessagesForObserver preserves attachments from superseded terminal records while rendering only the latest outcome', () => {
-      const base64 = 'C'.repeat(1500);
+    it('preserves attachments from every terminal record in traversal order while rendering only the latest outcome', () => {
+      const firstBase64 = 'C'.repeat(1500);
+      const secondBase64 = 'D'.repeat(1500);
       const message = createToolInvocationMessage([
         {
           type: 'tool-invocation',
@@ -2380,7 +2387,7 @@ describe('Observer Agent Helpers', () => {
                 type: 'content',
                 value: [
                   { type: 'text', text: 'superseded outcome' },
-                  { type: 'image-data', data: base64, mediaType: 'image/png' },
+                  { type: 'image-data', data: firstBase64, mediaType: 'image/png' },
                 ],
               },
             },
@@ -2393,7 +2400,18 @@ describe('Observer Agent Helpers', () => {
             toolCallId: 'repeated-terminal',
             toolName: 'screenshot',
             args: { url: 'https://example.com/final' },
-            result: 'latest outcome',
+            result: {},
+          },
+          providerMetadata: {
+            mastra: {
+              modelOutput: {
+                type: 'content',
+                value: [
+                  { type: 'text', text: 'latest outcome' },
+                  { type: 'image-data', data: secondBase64, mediaType: 'image/jpeg' },
+                ],
+              },
+            },
           },
         },
       ]);
@@ -2405,13 +2423,17 @@ describe('Observer Agent Helpers', () => {
         .map(part => part.text ?? '')
         .join('\n');
 
-      expect(content.filter(part => part.type === 'image')).toHaveLength(1);
-      expect(content.find(part => part.type === 'image')?.image).toBe(`data:image/png;base64,${base64}`);
+      const imageParts = content.filter(part => part.type === 'image');
+      expect(imageParts).toHaveLength(2);
+      expect(imageParts.map(part => part.image)).toEqual([
+        `data:image/png;base64,${firstBase64}`,
+        `data:image/jpeg;base64,${secondBase64}`,
+      ]);
       expect(joinedText).not.toContain('superseded outcome');
       expect(joinedText).toContain('latest outcome');
       expect(joinedText).toContain('"url": "https://example.com/final"');
       expect((joinedText.match(/^Tool Call screenshot(?: \([^)]*\))?: \{$/gm) ?? []).length).toBe(1);
-      expect((joinedText.match(/^Tool Result screenshot(?: \([^)]*\))?: latest outcome$/gm) ?? []).length).toBe(1);
+      expect((joinedText.match(/^Tool Result screenshot(?: \([^)]*\))?: /gm) ?? []).length).toBe(1);
     });
 
     it('should hoist URL and media tool-result blocks into observer input attachments', () => {

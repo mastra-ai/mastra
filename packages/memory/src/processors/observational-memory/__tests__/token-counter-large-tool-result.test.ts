@@ -114,6 +114,85 @@ describe('TokenCounter with oversized tool results', () => {
     }
   });
 
+  it.each([
+    ['null', null, 'null', -12],
+    ['false', false, 'false', -12],
+    ['zero', 0, '0', -12],
+    ['empty string', '', '', 0],
+  ])('counts falsy %s arguments as part of the terminal signature', (_label, args, serializedArgs, argsOverhead) => {
+    const counter = new TokenCounter();
+    const message = messageWithInvocation({
+      state: 'result',
+      toolCallId: `falsy-${_label}`,
+      toolName: 'lookup',
+      args,
+      result: 'saved',
+    });
+    const expected = Math.round(
+      counter.countString('assistant') +
+        counter.countString('lookup') +
+        counter.countString(serializedArgs) +
+        counter.countString('saved') +
+        3.8 +
+        3.8 +
+        argsOverhead,
+    );
+
+    expect(counter.countMessage(message)).toBe(expected);
+  });
+
+  it.each([
+    ['provided error text', 'disk full', 'disk full'],
+    ['missing error text', undefined, 'Tool execution failed'],
+    ['empty error text', '', 'Tool execution failed'],
+  ])('counts %s for an errored result without a result body', (_label, errorText, outcome) => {
+    const counter = new TokenCounter();
+    const args = { path: '/tmp/a' };
+    const message = messageWithInvocation({
+      state: 'result',
+      toolCallId: `errored-fallback-${_label}`,
+      toolName: 'write_file',
+      args,
+      result: '',
+      isError: true,
+      errorText,
+    });
+    const expected = Math.round(
+      counter.countString('assistant') +
+        counter.countString('write_file') +
+        counter.countString(JSON.stringify(args)) +
+        counter.countString(outcome) +
+        3.8 +
+        3.8 -
+        12,
+    );
+
+    expect(counter.countMessage(message)).toBe(expected);
+  });
+
+  it('counts the visible fallback for an empty successful result', () => {
+    const counter = new TokenCounter();
+    const args = { query: 'status' };
+    const message = messageWithInvocation({
+      state: 'result',
+      toolCallId: 'empty-success',
+      toolName: 'lookup',
+      args,
+      result: '',
+    });
+    const expected = Math.round(
+      counter.countString('assistant') +
+        counter.countString('lookup') +
+        counter.countString(JSON.stringify(args)) +
+        counter.countString('[empty result]') +
+        3.8 +
+        3.8 -
+        12,
+    );
+
+    expect(counter.countMessage(message)).toBe(expected);
+  });
+
   it('applies object overhead adjustments to both signature and result', () => {
     const counter = new TokenCounter();
     const args = { query: 'status' };
