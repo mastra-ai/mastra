@@ -734,6 +734,7 @@ export function createObjectStreamTransformer<OUTPUT = undefined>({
         runId: currentRunId ?? '',
         type: 'object-result',
         object: structuredOutput.fallbackValue as OUTPUT,
+        metadata: { fallback: true },
       });
     } else {
       controller.enqueue({
