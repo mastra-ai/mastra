@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
-import { formatHierarchicalSpans } from '@mastra/playground-ui/domains/traces/components/format-hierarchical-spans';
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
+import { formatHierarchicalSpans } from '../../components/format-hierarchical-spans';
 
-import { traceASpans, traceBSpans } from '../../components/__tests__/fixtures/thread-traces';
+import { traceASpans, traceBSpans } from '../../components/thread-trace/__tests__/fixtures/thread-trace';
 import { useExpandedSpanIds } from '../use-expanded-span-ids';
 
 const treeA = formatHierarchicalSpans(traceASpans.spans);

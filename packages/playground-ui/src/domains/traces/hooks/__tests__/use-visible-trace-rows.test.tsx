@@ -42,7 +42,11 @@ const makeList = (traceIds: string[]) => {
   return root;
 };
 
-const row = (root: HTMLElement, id: string) => root.querySelector<HTMLElement>(`[data-trace-id="${id}"]`)!;
+const row = (root: HTMLElement, id: string): HTMLElement => {
+  const element = root.querySelector<HTMLElement>(`[data-trace-id="${id}"]`);
+  if (!element) throw new Error(`Missing row for ${id}`);
+  return element;
+};
 
 describe('useVisibleTraceRows', () => {
   it('observes every trace row and reports visible rows in trace order, topmost first', () => {

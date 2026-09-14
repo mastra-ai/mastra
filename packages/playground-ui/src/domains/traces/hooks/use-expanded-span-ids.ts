@@ -1,7 +1,7 @@
-import { getAllSpanIds } from '@mastra/playground-ui/domains/traces/hooks/get-all-span-ids';
-import type { UISpan } from '@mastra/playground-ui/domains/traces/types';
 import { useMemo, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
+import type { UISpan } from '../types';
+import { getAllSpanIds } from './get-all-span-ids';
 
 /**
  * Expanded node ids for a span tree. Everything is expanded by default; user toggles are stored
