@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { z } from 'zod/v4';
 import { Mastra } from '../mastra';
 import { MastraCompositeStore } from '../storage/base';
 import { InMemoryNotificationsStorage } from './storage';
@@ -214,6 +215,7 @@ describe('notification inbox', () => {
       kind: 'direct-message',
       summary: 'Jane sent a launch update',
       payload: { body: 'Launch moved to Friday' },
+      metadata: { internal: 'bookkeeping' },
       resourceId: 'resource-1',
       agentId: 'agent-1',
     });
@@ -233,24 +235,45 @@ describe('notification inbox', () => {
     }));
     const tool = createNotificationInboxTool({ storage });
 
-    await expect(tool.execute?.({ action: 'list' }, { agent: { threadId: 'thread-1' } } as any)).resolves.toMatchObject(
-      {
-        notifications: expect.arrayContaining([
-          expect.objectContaining({ id: 'n1', status: 'pending' }),
-          expect.objectContaining({ id: 'n2', status: 'pending' }),
-        ]),
-      },
-    );
+    // Listing views the notifications: returned records are marked seen and internal
+    // metadata/payload bookkeeping is stripped from the agent-facing projection.
+    const listResult = (await tool.execute?.({ action: 'list' }, { agent: { threadId: 'thread-1' } } as any)) as {
+      notifications: Record<string, unknown>[];
+      hasMore: boolean;
+    };
+    expect(listResult.hasMore).toBe(false);
+    expect(listResult.notifications).toHaveLength(2);
+    const listed = Object.fromEntries(listResult.notifications.map(notification => [notification.id, notification]));
+    expect(listed.n1).toMatchObject({ id: 'n1', status: 'seen', summary: 'Jane sent a launch update' });
+    expect(listed.n2).toMatchObject({ id: 'n2', status: 'seen' });
+    expect('payload' in listed.n1!).toBe(false);
+    expect('metadata' in listed.n1!).toBe(false);
+    await expect(storage.getNotification({ threadId: 'thread-1', id: 'n2' })).resolves.toMatchObject({
+      status: 'seen',
+    });
+
+    // Search still finds viewed records and marks fresh matches seen too.
     await expect(
       tool.execute?.({ action: 'search', query: 'launch' }, { agent: { threadId: 'thread-1' } } as any),
-    ).resolves.toMatchObject({ notifications: [{ id: 'n1' }] });
+    ).resolves.toMatchObject({ notifications: [{ id: 'n1' }], hasMore: false });
+
+    // The pending backlog is drained because viewing marked everything seen.
     await expect(
-      tool.execute?.({ action: 'search', query: 'github', status: 'pending', source: 'github' }, {
-        agent: { threadId: 'thread-1' },
-      } as any),
-    ).resolves.toMatchObject({ notifications: [{ id: 'n2' }] });
+      tool.execute?.({ action: 'search', query: 'CI', status: 'pending' }, { agent: { threadId: 'thread-1' } } as any),
+    ).resolves.toMatchObject({ notifications: [] });
+
+    // Reading a not-yet-viewed notification still delivers it through the agent.
+    await storage.createNotification({
+      id: 'n3',
+      threadId: 'thread-1',
+      source: 'email',
+      kind: 'direct-message',
+      summary: 'Fresh pending update',
+      resourceId: 'resource-1',
+      agentId: 'agent-1',
+    });
     await expect(
-      tool.execute?.({ action: 'read', id: 'n1' }, {
+      tool.execute?.({ action: 'read', id: 'n3' }, {
         agent: { agentId: 'agent-1', threadId: 'thread-1', resourceId: 'resource-1' },
         mastra: { getAgentById: vi.fn(async () => ({ sendSignal })) },
       } as any),
@@ -259,10 +282,10 @@ describe('notification inbox', () => {
       delivered: 1,
     });
     expect(sendSignal).toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'notification', tagName: 'notification', contents: 'Jane sent a launch update' }),
+      expect.objectContaining({ type: 'notification', tagName: 'notification', contents: 'Fresh pending update' }),
       { resourceId: 'resource-1', threadId: 'thread-1' },
     );
-    await expect(storage.getNotification({ threadId: 'thread-1', id: 'n1' })).resolves.toMatchObject({
+    await expect(storage.getNotification({ threadId: 'thread-1', id: 'n3' })).resolves.toMatchObject({
       status: 'seen',
     });
     await expect(
@@ -270,6 +293,94 @@ describe('notification inbox', () => {
     ).resolves.toMatchObject({
       notification: { id: 'n1', status: 'archived' },
     });
+  });
+
+  it('bounds list results, drains unread pages without repeating them, and reports hasMore', async () => {
+    const storage = new InMemoryNotificationsStorage();
+    for (let index = 0; index < 25; index += 1) {
+      await storage.createNotification({
+        id: `n${index}`,
+        threadId: 'thread-1',
+        source: 'github',
+        kind: 'pull-request-activity',
+        summary: `Notification ${index}`,
+        createdAt: new Date(Date.UTC(2026, 0, 1, 0, index)),
+      });
+    }
+    const tool = createNotificationInboxTool({ storage });
+    const context = { agent: { threadId: 'thread-1' } } as any;
+    type Page = { notifications: { id: string; status: string }[]; hasMore: boolean; markedSeen: number };
+
+    // Listing defaults to unread notifications and marks the returned page seen, so repeated
+    // lists page through the backlog even though marking seen bumps the updatedAt sort key.
+    const firstPage = (await tool.execute?.({ action: 'list' }, context)) as Page;
+    expect(firstPage.notifications).toHaveLength(20);
+    expect(firstPage.hasMore).toBe(true);
+    expect(firstPage.markedSeen).toBe(20);
+
+    const secondPage = (await tool.execute?.({ action: 'list' }, context)) as Page;
+    expect(secondPage.notifications).toHaveLength(5);
+    expect(secondPage.hasMore).toBe(false);
+    expect(secondPage.markedSeen).toBe(5);
+    const firstIds = new Set(firstPage.notifications.map(notification => notification.id));
+    expect(secondPage.notifications.some(notification => firstIds.has(notification.id))).toBe(false);
+
+    const drained = (await tool.execute?.({ action: 'list' }, context)) as Page;
+    expect(drained.notifications).toHaveLength(0);
+    expect(drained.markedSeen).toBe(0);
+
+    // An explicit status lists already-viewed records; explicit limit is honored.
+    const seenPage = (await tool.execute?.({ action: 'list', status: 'seen', limit: 3 }, context)) as Page;
+    expect(seenPage.notifications).toHaveLength(3);
+    expect(seenPage.hasMore).toBe(true);
+    expect(seenPage.markedSeen).toBe(0);
+
+    const allSeen = (await tool.execute?.({ action: 'list', status: 'seen', limit: 25 }, context)) as Page;
+    expect(allSeen.notifications).toHaveLength(25);
+    expect(allSeen.hasMore).toBe(false);
+  });
+
+  it('reports how many viewed notifications were actually marked seen when a status write fails', async () => {
+    const storage = new InMemoryNotificationsStorage();
+    await storage.createNotification({ id: 'ok', threadId: 'thread-1', source: 'email', kind: 'dm', summary: 'ok' });
+    await storage.createNotification({ id: 'bad', threadId: 'thread-1', source: 'email', kind: 'dm', summary: 'bad' });
+    const update = storage.updateNotification.bind(storage);
+    vi.spyOn(storage, 'updateNotification').mockImplementation(async input => {
+      if (input.id === 'bad') throw new Error('write failed');
+      return update(input);
+    });
+    const tool = createNotificationInboxTool({ storage });
+
+    const page = (await tool.execute?.({ action: 'list' }, { agent: { threadId: 'thread-1' } } as any)) as {
+      notifications: { id: string; status: string }[];
+      markedSeen: number;
+    };
+    expect(page.notifications).toHaveLength(2);
+    expect(page.markedSeen).toBe(1);
+    // The returned status reflects what storage actually holds for each record.
+    const byId = Object.fromEntries(page.notifications.map(notification => [notification.id, notification]));
+    expect(byId.ok!.status).toBe('seen');
+    expect(byId.bad!.status).toBe('pending');
+    await expect(storage.getNotification({ threadId: 'thread-1', id: 'bad' })).resolves.toMatchObject({
+      status: 'pending',
+    });
+  });
+
+  it('rejects search without a query and id-scoped actions without an id at the schema level', () => {
+    const tool = createNotificationInboxTool({ storage: new InMemoryNotificationsStorage() });
+    const schema = tool.inputSchema as z.ZodType;
+    expect(schema.safeParse({ action: 'search' }).success).toBe(false);
+    expect(schema.safeParse({ action: 'search', query: '  ' }).success).toBe(false);
+    expect(schema.safeParse({ action: 'search', query: 'launch' }).success).toBe(true);
+    expect(schema.safeParse({ action: 'list' }).success).toBe(true);
+    for (const action of ['markSeen', 'dismiss', 'archive']) {
+      expect(schema.safeParse({ action }).success).toBe(false);
+      expect(schema.safeParse({ action, id: '' }).success).toBe(false);
+      expect(schema.safeParse({ action, id: '   ' }).success).toBe(false);
+      expect(schema.safeParse({ action, id: 'n1' }).success).toBe(true);
+    }
+    // read supports both a single id and a bulk unread read.
+    expect(schema.safeParse({ action: 'read' }).success).toBe(true);
   });
 
   it('resolves priority-aware default delivery decisions', async () => {

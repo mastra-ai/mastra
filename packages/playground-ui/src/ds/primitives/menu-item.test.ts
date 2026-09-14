@@ -19,6 +19,7 @@ describe('menuItemClass', () => {
     expect(menuItemClass).toContain('data-highlighted:bg-neutral6/5');
     expect(menuItemClass).toContain('data-highlighted:text-neutral6');
     expect(menuItemClass).toContain('data-disabled:opacity-50');
+    expect(menuItemClass).toContain('focus-visible:border-transparent');
     expect(menuItemClass).not.toContain('focus-visible:border-neutral5/50');
   });
 

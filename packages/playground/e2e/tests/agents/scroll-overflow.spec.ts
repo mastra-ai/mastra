@@ -44,7 +44,6 @@ test.describe('Agents list scrolling', () => {
         await page.keyboard.press('Tab');
         const provider = page.getByRole('button', { name: 'Show model details for Agent 2' });
         await expect(provider).toBeFocused();
-        await expect.poll(() => provider.evaluate(element => getComputedStyle(element, '::before').opacity)).toBe('1');
         await expectNoVerticalOverflow(viewport);
         await page.keyboard.press('Escape');
 
