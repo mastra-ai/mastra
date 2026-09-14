@@ -112,7 +112,7 @@ export const Row = forwardRef<HTMLTableRowElement, RowProps>(
         className={cn(
           'border-b border-border1',
           // Smooth hover transition
-          'transition-colors duration-normal ease-out-custom',
+          'duration-normal transition-colors ease-out-custom',
           'hover:bg-surface3',
           // Focus state
           'focus:bg-surface3 focus:ring-1 focus:ring-accent1/50 focus:outline-hidden focus:ring-inset',
