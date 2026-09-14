@@ -250,10 +250,10 @@ describe('createDynamicTools – extraTools', () => {
     ).resolves.toMatchObject({ notifications: [{ id: 'n1' }] });
     expect(notificationStore.listNotifications).toHaveBeenCalledWith({
       threadId: 'thread-1',
-      status: undefined,
+      status: ['pending', 'delivered'],
       priority: undefined,
       source: undefined,
-      limit: undefined,
+      limit: 21,
     });
   });
 
