@@ -15,7 +15,7 @@ export { parseKeyCombo, parseKeyBinding, matchesCombo } from './keyboard-dispatc
 export type { UseKeydownArgs, KeyStep, ParsedKeyBinding } from './keyboard-dispatcher';
 
 export type UseKeydownOptions = {
-  /** Stable ref to an element mounted with this hook; defaults to `window`. */
+  /** Attach the listener to this element instead of `window`. */
   target?: RefObject<HTMLElement | null>;
   /** When `false`, no listener is attached. Defaults to `true`. */
   enabled?: boolean;
@@ -69,8 +69,7 @@ export const useKeydown = (opts: UseKeydownArgs, options: UseKeydownOptions = {}
       unregister();
       dispatcher.reset();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- The target ref stays stable for this hook's lifetime.
-  }, [enabled, shared]);
+  }, [enabled, target, shared]);
 };
 
 export type UseTableKeydownArgs = {

@@ -27,4 +27,4 @@ function handleComposerKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) 
 <ComposerInput {...inputProps} ref={inputRef} onKeyDown={handleComposerKeyDown} />;
 ```
 
-Exact commands without options still reach the caller's submit handler. Keep the target ref stable and mount the input with the hook. Shortcuts attached to the input can handle its keys; ancestor and page shortcuts still leave unmodified keys in editable fields alone.
+Exact commands without options still reach the caller's submit handler. Mount the input with the hook. Shortcuts attached to the input can handle its keys; ancestor and page shortcuts still leave unmodified keys in editable fields alone.
