@@ -251,7 +251,7 @@ function SpanDataPanelContent({
   return (
     <DataPanel.Content>
       <Tabs defaultTab="details" value={activeTab} onValueChange={onTabChange}>
-        <TabList variant="pill-ghost" className="px-0">
+        <TabList variant="pill-ghost">
           <Tab value="details">Details</Tab>
           <Tab value="feedback">Feedback{feedbackTabBadge}</Tab>
         </TabList>

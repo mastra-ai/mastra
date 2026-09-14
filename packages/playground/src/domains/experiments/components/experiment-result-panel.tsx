@@ -273,7 +273,7 @@ export function ExperimentResultPanel({
           {feedbackTraceId ? (
             <Tabs<'details' | 'feedback'> defaultTab="details" className="grid h-full min-h-0 grid-rows-[auto_1fr]">
               <DataPanel.Header className="py-2">
-                <TabList variant="pill-ghost" className="px-0">
+                <TabList variant="pill-ghost">
                   <Tab value="details">Details</Tab>
                   <Tab value="feedback">
                     Feedback

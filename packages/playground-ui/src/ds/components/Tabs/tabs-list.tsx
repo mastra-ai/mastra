@@ -15,7 +15,7 @@ const tabListVariants = cva('relative flex items-center text-ui-md', {
     variant: {
       line: 'w-max min-w-full border-b border-border1',
       pill: 'w-fit gap-1 rounded-full bg-surface2 p-1',
-      'pill-ghost': 'w-fit gap-1 rounded-full p-1',
+      'pill-ghost': 'w-fit gap-0.5 rounded-full',
     },
   },
   defaultVariants: {
@@ -122,7 +122,10 @@ export const TabList = ({ children, className, variant, sticky, style }: TabList
     .filter(tab => !hiddenValues.has(tab.value))
     .reduce((sum, tab) => sum + tab.width + gap, tabs?.frame === 'inset' ? 4 : 0);
   const visibleClosableTabs = measurements.filter(tab => !hiddenValues.has(tab.value) && tab.onClose);
-  const listContext = useMemo(() => ({ hiddenValues, register, unregister }), [hiddenValues, register, unregister]);
+  const listContext = useMemo(
+    () => ({ variant: resolvedVariant, hiddenValues, register, unregister }),
+    [resolvedVariant, hiddenValues, register, unregister],
+  );
   useLayoutEffect(() => {
     const nextPositions = new Map(tabPositions.current);
     const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
@@ -202,7 +205,8 @@ export const TabList = ({ children, className, variant, sticky, style }: TabList
               <BaseTabs.Indicator
                 className={cn(
                   'absolute top-1/2 left-0 z-0 rounded-full bg-[var(--tab-indicator-color,var(--surface4))]',
-                  'h-[calc(100%-0.5rem)] w-[var(--active-tab-width)]',
+                  resolvedVariant === 'pill' ? 'h-[calc(100%-0.5rem)]' : 'h-full',
+                  'w-[var(--active-tab-width)]',
                   'transition-[width,transform] duration-200 ease-in-out motion-reduce:transition-none',
                 )}
                 data-slot="tabs-indicator"

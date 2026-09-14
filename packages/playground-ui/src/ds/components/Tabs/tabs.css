@@ -54,7 +54,7 @@
       right: 20px;
     }
 
-    :is([data-variant='pill'], [data-variant='pill-ghost']) [data-slot='tab'] {
+    [data-variant='pill'] [data-slot='tab'] {
       position: relative;
       z-index: 10;
       padding: 4px 12px;
