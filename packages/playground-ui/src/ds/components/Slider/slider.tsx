@@ -1,5 +1,5 @@
 import { Slider as SliderPrimitive } from '@base-ui/react/slider';
-import { useKeyboardNavigation } from '@/ds/primitives/focus/use-keyboard-navigation';
+import '@/ds/primitives/focus.css';
 
 import { cn } from '@/lib/utils';
 
@@ -27,7 +27,6 @@ const Slider = ({
   'aria-labelledby': ariaLabelledBy,
   ...props
 }: SliderProps) => {
-  useKeyboardNavigation();
   const values = Array.isArray(value) ? value : Array.isArray(defaultValue) ? defaultValue : [min];
 
   return (

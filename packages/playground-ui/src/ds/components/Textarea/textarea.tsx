@@ -1,7 +1,7 @@
 import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
 import * as React from 'react';
-import { useKeyboardNavigation } from '@/ds/primitives/focus/use-keyboard-navigation';
+import '@/ds/primitives/focus.css';
 
 import {
   inputOutlineAndFocusStyle,
@@ -49,7 +49,6 @@ export type TextareaProps = Omit<React.TextareaHTMLAttributes<HTMLTextAreaElemen
 
 const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
   ({ className, size, testId, variant, error, ...props }, ref) => {
-    useKeyboardNavigation();
     return (
       <textarea
         className={cn(

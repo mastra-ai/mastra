@@ -6,7 +6,7 @@ import type { ComboboxVariant } from './combobox-styles';
 import { Button, isIconButtonSize } from '@/ds/components/Button/Button';
 import type { ButtonSize } from '@/ds/components/Button/Button';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
-import { useKeyboardNavigation } from '@/ds/primitives/focus/use-keyboard-navigation';
+import '@/ds/primitives/focus.css';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
 import { cn } from '@/lib/utils';
 
@@ -71,7 +71,6 @@ function ComboboxOptionText({ option }: { option: ComboboxOption }) {
 }
 
 export function Combobox(props: ComboboxProps) {
-  useKeyboardNavigation();
   const {
     options,
     placeholder = isMultipleCombobox(props) ? 'Select options...' : 'Select option...',

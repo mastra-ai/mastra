@@ -3,7 +3,7 @@ import { useContext, useEffect, useRef } from 'react';
 import { buttonVariants } from '../Button/Button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../Tooltip/tooltip';
 import { TabListContext } from './tabs-context';
-import { useKeyboardNavigation } from '@/ds/primitives/focus/use-keyboard-navigation';
+import '@/ds/primitives/focus.css';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
@@ -28,7 +28,6 @@ export const Tab = ({
   attention = false,
   className,
 }: TabProps) => {
-  useKeyboardNavigation();
   const list = useContext(TabListContext);
   const ref = useRef<HTMLDivElement>(null);
   const register = list?.register;

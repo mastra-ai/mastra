@@ -1,7 +1,7 @@
 import { Radio as RadioPrimitive } from '@base-ui/react/radio';
 import { RadioGroup as RadioGroupPrimitive } from '@base-ui/react/radio-group';
 import * as React from 'react';
-import { useKeyboardNavigation } from '@/ds/primitives/focus/use-keyboard-navigation';
+import '@/ds/primitives/focus.css';
 
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
@@ -20,7 +20,6 @@ type RadioGroupItemProps = Omit<RadioPrimitive.Root.Props, 'className'> & {
 };
 
 const RadioGroupItem = React.forwardRef<HTMLSpanElement, RadioGroupItemProps>(({ className, ...props }, ref) => {
-  useKeyboardNavigation();
   return (
     <RadioPrimitive.Root
       ref={ref}

@@ -3,7 +3,7 @@ import type { VariantProps } from 'class-variance-authority';
 import * as React from 'react';
 
 import { controlSizeClasses } from '@/ds/primitives/control-size';
-import { useKeyboardNavigation } from '@/ds/primitives/focus/use-keyboard-navigation';
+import '@/ds/primitives/focus.css';
 import {
   inputOutlineAndFocusStyle,
   inputSurfaceAndFocusStyle,
@@ -53,7 +53,6 @@ export type InputProps = Omit<React.InputHTMLAttributes<HTMLInputElement>, 'size
 
 const Input = React.forwardRef<HTMLInputElement, InputProps>(
   ({ className, size, testId, variant, type, error, ...props }, ref) => {
-    useKeyboardNavigation();
     return (
       <input
         type={type}

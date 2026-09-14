@@ -6,7 +6,7 @@ import { Button } from '@/ds/components/Button';
 import type { ButtonProps } from '@/ds/components/Button/Button';
 import { controlHeight } from '@/ds/primitives/control-size';
 import type { ControlSize } from '@/ds/primitives/control-size';
-import { useKeyboardNavigation } from '@/ds/primitives/focus/use-keyboard-navigation';
+import '@/ds/primitives/focus.css';
 import { inputHoverBorderWithin } from '@/ds/primitives/form-element';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
@@ -66,7 +66,6 @@ export type InputGroupProps = React.ComponentPropsWithoutRef<'div'> & {
 
 const InputGroup = React.forwardRef<HTMLDivElement, InputGroupProps>(
   ({ className, size = 'md', variant, ...props }, ref) => {
-    useKeyboardNavigation();
     return (
       <div
         ref={ref}

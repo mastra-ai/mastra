@@ -1,7 +1,7 @@
 import { Checkbox as CheckboxPrimitive } from '@base-ui/react/checkbox';
 import { Check, Minus } from 'lucide-react';
 import * as React from 'react';
-import { useKeyboardNavigation } from '@/ds/primitives/focus/use-keyboard-navigation';
+import '@/ds/primitives/focus.css';
 
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
@@ -15,7 +15,6 @@ type CheckboxProps = Omit<CheckboxPrimitive.Root.Props, 'className' | 'checked'>
 
 const Checkbox = React.forwardRef<HTMLSpanElement, CheckboxProps>(
   ({ className, checked, indeterminate, ...props }, ref) => {
-    useKeyboardNavigation();
     const isCheckedIndeterminate = checked === 'indeterminate';
 
     return (

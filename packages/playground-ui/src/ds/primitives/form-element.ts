@@ -1,4 +1,4 @@
-import './focus/focus.css';
+import './focus.css';
 
 export const sharedFormElementDisabledStyle = 'disabled:opacity-50 disabled:cursor-not-allowed';
 

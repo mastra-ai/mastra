@@ -7,7 +7,7 @@ import { buttonVariants } from '../Button/Button';
 import type { TextButtonSize } from '../Button/Button';
 import { controlTriggerOpenState } from '@/ds/primitives/control-size';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
-import { useKeyboardNavigation } from '@/ds/primitives/focus/use-keyboard-navigation';
+import '@/ds/primitives/focus.css';
 import { menuItemCheckClass, menuItemClass, menuPopupClass, menuPositionerClass } from '@/ds/primitives/menu-item';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
 import { transitions } from '@/ds/primitives/transitions';
@@ -86,7 +86,6 @@ function normalizeSelectTriggerVariant(
 
 const SelectTrigger = React.forwardRef<HTMLButtonElement, SelectTriggerProps>(
   ({ className, children, size = 'md', variant = 'default', ...props }, ref) => {
-    useKeyboardNavigation();
     const visualVariant = normalizeSelectTriggerVariant(variant);
 
     return (
@@ -151,7 +150,6 @@ const SelectContent = React.forwardRef<HTMLDivElement, SelectContentProps>(
     },
     ref,
   ) => {
-    useKeyboardNavigation();
     const resolvedContainer = usePortalContainer(container);
     const positionerProps: SelectContentPositionerProps = {
       side,

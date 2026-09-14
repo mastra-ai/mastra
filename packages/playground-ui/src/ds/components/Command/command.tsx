@@ -5,23 +5,20 @@ import * as React from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/ds/components/Dialog';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import type { ScrollAreaMask } from '@/ds/components/ScrollArea';
-import { useKeyboardNavigation } from '@/ds/primitives/focus/use-keyboard-navigation';
+import '@/ds/primitives/focus.css';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
 const Command = React.forwardRef<
   React.ElementRef<typeof CommandPrimitive>,
   React.ComponentPropsWithoutRef<typeof CommandPrimitive>
->(({ className, ...props }, ref) => {
-  useKeyboardNavigation();
-  return (
-    <CommandPrimitive
-      ref={ref}
-      className={cn('flex size-full flex-col overflow-hidden rounded-xl bg-surface3 text-neutral4', className)}
-      {...props}
-    />
-  );
-});
+>(({ className, ...props }, ref) => (
+  <CommandPrimitive
+    ref={ref}
+    className={cn('flex size-full flex-col overflow-hidden rounded-xl bg-surface3 text-neutral4', className)}
+    {...props}
+  />
+));
 Command.displayName = CommandPrimitive.displayName;
 
 type CommandDialogProps = Omit<React.ComponentPropsWithoutRef<typeof Dialog>, 'children'> & {

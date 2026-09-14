@@ -1,7 +1,7 @@
 import { Tabs as BaseTabs } from '@base-ui/react/tabs';
 import { useContext, useEffect, useState } from 'react';
 import { TabsContext } from './tabs-context';
-import { useKeyboardNavigation } from '@/ds/primitives/focus/use-keyboard-navigation';
+import '@/ds/primitives/focus.css';
 import { cn } from '@/lib/utils';
 
 export type TabContentProps = {
@@ -13,7 +13,6 @@ export type TabContentProps = {
 };
 
 export const TabContent = ({ children, value, flush = false, keepMounted = false, className }: TabContentProps) => {
-  useKeyboardNavigation();
   const tabs = useContext(TabsContext);
   const selected = tabs?.value === value;
   const [visited, setVisited] = useState(selected);

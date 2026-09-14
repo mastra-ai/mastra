@@ -3,7 +3,7 @@ import type { MenuPopupProps, MenuPositionerProps } from '@base-ui/react/menu';
 import { CheckIcon, ChevronDown } from 'lucide-react';
 import * as React from 'react';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
-import { useKeyboardNavigation } from '@/ds/primitives/focus/use-keyboard-navigation';
+import '@/ds/primitives/focus.css';
 import {
   MENU_SIDE_OFFSET,
   menuItemCheckClass,
@@ -96,7 +96,6 @@ const DropdownMenuSubContent = React.forwardRef<HTMLDivElement, DropdownMenuSubC
     },
     ref,
   ) => {
-    useKeyboardNavigation();
     const resolvedContainer = usePortalContainer();
     const positionerProps: DropdownMenuContentPositionerProps = {
       align,
@@ -155,7 +154,6 @@ const DropdownMenuContent = React.forwardRef<HTMLDivElement, DropdownMenuContent
     },
     ref,
   ) => {
-    useKeyboardNavigation();
     const resolvedContainer = usePortalContainer(container);
     const positionerProps: DropdownMenuContentPositionerProps = {
       align,

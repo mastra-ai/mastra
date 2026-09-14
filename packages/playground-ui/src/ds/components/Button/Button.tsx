@@ -4,7 +4,7 @@ import React from 'react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { Icon } from '@/ds/icons/Icon';
 import { controlHeight, controlSizeClasses } from '@/ds/primitives/control-size';
-import { useKeyboardNavigation } from '@/ds/primitives/focus/use-keyboard-navigation';
+import '@/ds/primitives/focus.css';
 import { controlFocusStyle, sharedFormElementDisabledStyle } from '@/ds/primitives/form-element';
 import { cn } from '@/lib/utils';
 
@@ -134,7 +134,6 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     },
     ref,
   ) => {
-    useKeyboardNavigation();
     const Component = as || 'button';
     const iconMode = isIconButtonSize(size);
     const resolvedSize: ButtonSize = size ?? 'md';

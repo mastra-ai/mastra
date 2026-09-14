@@ -1,6 +1,6 @@
 import type { CSSProperties, HTMLAttributes, ReactNode, ThHTMLAttributes } from 'react';
 import { forwardRef, useEffect, useRef } from 'react';
-import { useKeyboardNavigation } from '@/ds/primitives/focus/use-keyboard-navigation';
+import '@/ds/primitives/focus.css';
 import { cn } from '@/lib/utils';
 
 export interface TableProps {
@@ -81,7 +81,6 @@ export interface RowProps {
 
 export const Row = forwardRef<HTMLTableRowElement, RowProps>(
   ({ className, children, selected = false, style, onClick, isActive = false, ...props }, ref) => {
-    useKeyboardNavigation();
     const internalRef = useRef<HTMLTableRowElement>(null);
 
     useEffect(() => {

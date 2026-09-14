@@ -1,6 +1,6 @@
 import { Switch as SwitchPrimitive } from '@base-ui/react/switch';
 import * as React from 'react';
-import { useKeyboardNavigation } from '@/ds/primitives/focus/use-keyboard-navigation';
+import '@/ds/primitives/focus.css';
 
 import { cn } from '@/lib/utils';
 import './switch.css';
@@ -16,7 +16,6 @@ type SwitchProps = Omit<SwitchPrimitive.Root.Props, 'className'> & {
 
 const Switch = React.forwardRef<HTMLButtonElement, SwitchProps>(
   ({ className, asChild, children, icon, checkedIcon, uncheckedIcon, ...props }, ref) => {
-    useKeyboardNavigation();
     const shouldRenderStateIcons = checkedIcon !== undefined || uncheckedIcon !== undefined;
     const shouldRenderIcon = icon !== undefined || shouldRenderStateIcons;
 

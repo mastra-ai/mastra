@@ -1,11 +1,3 @@
-:root[data-mastra-keyboard-navigation='true'] {
-  --ds-keyboard-navigation: 1;
-}
-
-:root[data-mastra-keyboard-navigation='false'] {
-  --ds-keyboard-navigation: 0;
-}
-
 .ds-focus {
   --ds-focus-progress: 0;
   --ds-focus-color: var(--neutral5);
@@ -13,10 +5,10 @@
 }
 
 .ds-focus:focus-visible,
-.ds-focus-within:focus-within,
-.ds-focus-menu:focus-within .ds-focus-item[data-highlighted],
-[cmdk-root]:focus-within .ds-focus-command-item[data-selected='true'] {
-  --ds-focus-progress: var(--ds-keyboard-navigation, 1);
+.ds-focus-within:has(:focus-visible),
+.ds-focus-menu:is(:focus-visible, :has(:focus-visible)) .ds-focus-item[data-highlighted],
+[cmdk-root]:has([cmdk-input]:focus-visible) .ds-focus-command-item[data-selected='true'] {
+  --ds-focus-progress: 1;
 }
 
 .ds-focus-line {
@@ -142,8 +134,8 @@
     background-color 180ms;
 }
 
-.ds-focus-row:has([data-slot='checkbox']:focus-within) {
-  --ds-focus-progress: var(--ds-keyboard-navigation, 1);
+.ds-focus-row:has([data-slot='checkbox']:focus-visible, [data-slot='checkbox'] :focus-visible) {
+  --ds-focus-progress: 1;
 }
 
 .ds-focus-row [data-slot='checkbox']::before {
@@ -178,12 +170,8 @@
     display: none;
   }
 
-  .ds-focus:focus-visible,
-  .ds-focus-within:focus-within,
-  .ds-focus-menu:focus-within .ds-focus-item[data-highlighted],
-  [cmdk-root]:focus-within .ds-focus-command-item[data-selected='true'],
-  .ds-focus-row:has([data-slot='checkbox']:focus-within) {
-    outline: calc(2px * var(--ds-keyboard-navigation, 1)) solid Highlight;
+  .ds-focus {
+    outline: calc(2px * var(--ds-focus-progress)) solid Highlight;
     outline-offset: -2px;
   }
 }
