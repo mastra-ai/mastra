@@ -1,0 +1,34 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "Start notification interrupt host run.",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat"
+      },
+      "chunkSize": 4,
+      "streamingProfile": {
+        "ttft": 500,
+        "tps": 2
+      },
+      "response": {
+        "content": "Initial interrupt host text completes before the idle notification wake begins."
+      }
+    },
+    {
+      "match": {
+        "userMessage": "Interrupt race notification marker: peer work completed",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat"
+      },
+      "chunkSize": 4,
+      "streamingProfile": {
+        "ttft": 500,
+        "tps": 2
+      },
+      "response": {
+        "content": "Notification wake response that should be interrupted."
+      }
+    }
+  ]
+}
