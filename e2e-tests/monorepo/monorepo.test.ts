@@ -1,7 +1,8 @@
+import { createHash } from 'crypto';
 import { it, describe, expect, beforeAll, afterAll, inject } from 'vitest';
-import { join } from 'path';
+import { join, relative } from 'path';
 import { setupMonorepo } from './prepare';
-import { mkdtemp, mkdir, readdir, rm, readFile, writeFile } from 'fs/promises';
+import { mkdtemp, mkdir, readdir, readFile, readlink, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import getPort from 'get-port';
 import { execa, execaNode } from 'execa';
@@ -47,6 +48,32 @@ async function findInDir(root: string, targetName: string): Promise<boolean> {
     }
   }
   return false;
+}
+
+async function getDirectoryDigests(root: string): Promise<Record<string, string>> {
+  const digests: Record<string, string> = {};
+
+  async function visit(dir: string) {
+    const entries = await readdir(dir, { withFileTypes: true });
+    entries.sort((first, second) => first.name.localeCompare(second.name));
+
+    for (const entry of entries) {
+      const path = join(dir, entry.name);
+      const relativePath = relative(root, path).replaceAll('\\', '/');
+      if (entry.isDirectory()) {
+        await visit(path);
+      } else if (entry.isSymbolicLink()) {
+        digests[relativePath] = `link:${await readlink(path)}`;
+      } else if (entry.isFile()) {
+        digests[relativePath] = createHash('sha256')
+          .update(await readFile(path))
+          .digest('hex');
+      }
+    }
+  }
+
+  await visit(root);
+  return digests;
 }
 
 const activeProcesses: Array<{ controller: AbortController; proc: ReturnType<typeof execa | typeof execaNode> }> = [];
@@ -228,7 +255,7 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
             "import { testRoute } from '@/api/route/test';",
             "import { testRoute } from '@/api/route/test';\nimport { environmentRoute } from '@/api/route/environment';",
           )
-          .replace('apiRoutes: [testRoute,', 'apiRoutes: [testRoute, environmentRoute,');
+          .replace(/apiRoutes: \[\s*testRoute,/, 'apiRoutes: [testRoute, environmentRoute,');
         await Promise.all([
           writeFile(mastraIndexPath, mastraIndex),
           writeFile(join(inputFile, '.env'), 'BASE_ONLY=base\nSHARED=base\n'),
@@ -695,6 +722,63 @@ export const mastra = new Mastra({
       },
       timeout,
     );
+
+    it(
+      'lets an in-flight evented workflow run finish before the generated server exits on SIGTERM',
+      async () => {
+        // The route starts the run without awaiting it and responds at once, so
+        // there is no open HTTP connection for the request drain to hold the
+        // process open. Only `mastra.shutdown({ drainTimeout })` — which the
+        // generated server must forward `server.drainTimeout` into — keeps
+        // pubsub alive long enough for the step to finish and print its marker.
+        const drainPort = await getPort();
+        const outputDir = join(fixturePath, 'apps', 'custom', '.mastra', 'output');
+        const drainController = new AbortController();
+        const server = execaNode('index.mjs', {
+          cwd: outputDir,
+          cancelSignal: drainController.signal,
+          env: {
+            OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+            MASTRA_PORT: drainPort.toString(),
+          },
+        });
+        activeProcesses.push({ controller: drainController, proc: server });
+
+        let stdout = '';
+        server.stdout?.on('data', (chunk: Buffer) => {
+          stdout += chunk.toString();
+        });
+
+        try {
+          const maxAttempts = 60;
+          for (let i = 0; i < maxAttempts; i++) {
+            try {
+              const res = await fetch(`http://localhost:${drainPort}/api/tools`);
+              if (res.ok) break;
+            } catch {
+              // Server not ready yet
+            }
+            if (i === maxAttempts - 1) {
+              throw new Error('Workflow drain test server failed to start within timeout');
+            }
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
+
+          const response = await fetch(`http://localhost:${drainPort}/shutdown-drain-workflow`, { method: 'POST' });
+          expect(response.ok).toBe(true);
+          expect(stdout).not.toContain('shutdown-drain-workflow:finished');
+
+          server.kill('SIGTERM');
+
+          await expect(server).resolves.toMatchObject({ exitCode: 0 });
+          expect(stdout).toContain('shutdown-drain-workflow:finished');
+        } finally {
+          server.kill('SIGKILL');
+          await Promise.race([server.catch(() => {}), new Promise(resolve => setTimeout(resolve, 5_000))]);
+        }
+      },
+      timeout,
+    );
   });
 
   describe.sequential('build without externals', async () => {
@@ -988,6 +1072,52 @@ export const mastra = new Mastra({
           expect(output).toContain('pnpm blocked build scripts for: bcrypt');
           expect(output).toContain('Add these packages to allowBuilds in pnpm-workspace.yaml and retry the build.');
           expect(output).not.toContain('DEPLOYER_BUNDLER_BUNDLE_STAGE_FAILED');
+        } finally {
+          await rm(isolatedFixturePath, { recursive: true, force: true });
+        }
+      },
+      timeout,
+    );
+  });
+
+  describe.sequential('reproducible tool bundles', () => {
+    it(
+      'produces identical tool bundles when invoked from the app and monorepo roots',
+      async () => {
+        const isolatedFixturePath = await mkdtemp(join(tmpdir(), `mastra-monorepo-reproducible-test-${pkgManager}-`));
+        try {
+          await setupMonorepo(isolatedFixturePath, pkgManager);
+
+          const appDir = join(isolatedFixturePath, 'apps', 'custom');
+          const outputRoot = join(appDir, '.mastra', 'output');
+          const build = async (cwd: string, args: string[], cliPath?: string) => {
+            await rm(join(appDir, '.mastra'), { recursive: true, force: true });
+            const options = {
+              cwd,
+              env: { ...process.env, MASTRA_BUILD_SKIP_INSTALL: 'true' },
+              reject: false,
+            };
+            const result = cliPath ? await execaNode(cliPath, args, options) : await execa(pkgManager, args, options);
+            expect(result.exitCode, `${result.stdout}\n${result.stderr}`).toBe(0);
+            const outputDigests = await getDirectoryDigests(outputRoot);
+            return Object.fromEntries(
+              Object.entries(outputDigests).filter(
+                ([path]) => path === 'tools.mjs' || (path.startsWith('tools/') && path.endsWith('.mjs')),
+              ),
+            );
+          };
+
+          const first = await build(appDir, ['build']);
+          const second = await build(
+            isolatedFixturePath,
+            ['build', '--root', 'apps/custom'],
+            join(appDir, 'node_modules', 'mastra', 'dist', 'index.js'),
+          );
+
+          expect(
+            Object.keys(first).filter(path => path.startsWith('tools/') && path.endsWith('.mjs')).length,
+          ).toBeGreaterThan(0);
+          expect(second).toEqual(first);
         } finally {
           await rm(isolatedFixturePath, { recursive: true, force: true });
         }

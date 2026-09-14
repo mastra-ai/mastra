@@ -148,6 +148,7 @@ export function createGoalScorer({
     judge: {
       model: judgeModel,
       instructions,
+      fallbackJsonPromptInjection: 'inline',
       ...(hasTools ? { tools } : {}),
       ...(memory ? { memory } : {}),
       ...(defaultMemoryOptions ? { defaultMemoryOptions } : {}),

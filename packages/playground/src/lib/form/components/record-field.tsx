@@ -77,7 +77,7 @@ export const RecordField: React.FC<AutoFormFieldProps> = ({ inputProps, field })
             <TrashIcon className="h-4 w-4" />
           </Button>
 
-          <div className="space-y-2 pt-6">
+          <div className="space-y-2 pt-4">
             <Input
               placeholder="Key"
               value={pair.key}
@@ -93,8 +93,7 @@ export const RecordField: React.FC<AutoFormFieldProps> = ({ inputProps, field })
           </div>
         </div>
       ))}
-      <Button type="button" className="w-full" onClick={addPair}>
-        <Plus className="mr-2 h-4 w-4" />
+      <Button type="button" className="w-full" onClick={addPair} icon={<Plus />}>
         Add Key-Value Pair
       </Button>
     </div>

@@ -190,6 +190,7 @@ import { agentThreadStreamRuntime } from './thread-stream-runtime';
 import type { ActiveThreadRun } from './thread-stream-runtime';
 import { TripWire } from './trip-wire';
 import type {
+  AgentClaimThreadPeerOptions,
   AgentConfig,
   AgentDurableOption,
   AgentGenerateOptions,
@@ -210,7 +211,13 @@ import type {
   AgentStateSignalInput,
   AgentSubscribeToThreadOptions,
   AgentThreadIdentityOptions,
+  AgentThreadPeerAdvertisement,
   AgentThreadSubscription,
+  DiscoverAgentThreadPeersOptions,
+  CancelQueuedAgentMessagesOptions,
+  CancelQueuedAgentMessagesResult,
+  AgentThreadEventListener,
+  SubscribeAgentThreadEventsOptions,
   PublicStructuredOutputOptions,
   QueueAgentMessageOptions,
   QueueAgentMessageResult,
@@ -628,6 +635,12 @@ export class Agent<
   #storedVersionApplied = false;
   #pubsub?: PubSub;
   #inheritedPubSub?: PubSub;
+  /**
+   * The agent the shared `AgentThreadStreamRuntime` addresses for this agent's
+   * signal, message, and subscription APIs. Defaults to `this`. See
+   * {@link Agent.__setThreadRuntimeAgent}.
+   */
+  #threadRuntimeAgent?: Agent<any, any, any, any>;
   #memory?: DynamicArgument<MastraMemory, TRequestContext>;
   #skills?: AgentSkillsInput<TRequestContext>;
   #skillsFormat?: SkillFormat;
@@ -1038,6 +1051,25 @@ export class Agent<
   __getDrainPendingSignals(): (runId: string, scope?: 'pending' | 'pre-run') => CreatedAgentSignal[] {
     const pubsub = this.getPubSub();
     return (runId, scope) => agentThreadStreamRuntime.drainPendingSignals(runId, pubsub, scope);
+  }
+
+  /**
+   * Registers the agent the shared `AgentThreadStreamRuntime` calls back into
+   * for this agent's signal, message, and subscription APIs. The runtime starts
+   * idle threads with `agent.stream()`, so the agent it addresses decides the
+   * execution path. `DurableAgent` subclasses `Agent`, so `this` is already the
+   * durable entry point. The Inngest wrapper is a Proxy over a plain object that
+   * forwards these methods to the wrapped agent; without this hook a signal that
+   * wakes an idle thread would run through the wrapped agent's in-process
+   * `stream()` instead of the durable one.
+   * @internal
+   */
+  __setThreadRuntimeAgent(agent: Agent<any, any, any, any>) {
+    this.#threadRuntimeAgent = agent;
+  }
+
+  #getThreadRuntimeAgent(): Agent<any, any, any, any> {
+    return this.#threadRuntimeAgent ?? (this as Agent<any, any, any, any>);
   }
 
   /**
@@ -4430,6 +4462,7 @@ export class Agent<
         const memory = await this.getMemory({ requestContext });
         const result = await runner.runProcessInputStep({
           messageList,
+          runId,
           stepNumber,
           steps: [],
           ...observabilityContext,
@@ -5488,7 +5521,10 @@ export class Agent<
                       context: filteredContextMessages as unknown as ModelMessage[],
                       ...subAgentMemoryOption,
                       ...subAgentAbortOptions,
-                      disableBackgroundTasks: true,
+                      backgroundTaskPolicy: {
+                        allowToolDispatch: true,
+                        allowDelegationDispatch: false,
+                      },
                     })
                   : await resolvedAgent.generate(messagesForSubAgent, {
                       requestContext: subAgentRequestContext,
@@ -5499,7 +5535,10 @@ export class Agent<
                       context: filteredContextMessages as unknown as ModelMessage[],
                       ...subAgentMemoryOption,
                       ...subAgentAbortOptions,
-                      disableBackgroundTasks: true,
+                      backgroundTaskPolicy: {
+                        allowToolDispatch: true,
+                        allowDelegationDispatch: false,
+                      },
                     });
 
                 const agentResponseMessages = generateResult.response.dbMessages ?? [];
@@ -5594,7 +5633,10 @@ export class Agent<
                       context: filteredContextMessages as unknown as ModelMessage[],
                       ...subAgentMemoryOption,
                       ...subAgentAbortOptions,
-                      disableBackgroundTasks: true,
+                      backgroundTaskPolicy: {
+                        allowToolDispatch: true,
+                        allowDelegationDispatch: false,
+                      },
                     })
                   : await resolvedAgent.stream(messagesForSubAgent, {
                       requestContext: subAgentRequestContext,
@@ -5605,7 +5647,10 @@ export class Agent<
                       context: filteredContextMessages as unknown as ModelMessage[],
                       ...subAgentMemoryOption,
                       ...subAgentAbortOptions,
-                      disableBackgroundTasks: true,
+                      backgroundTaskPolicy: {
+                        allowToolDispatch: true,
+                        allowDelegationDispatch: false,
+                      },
                     });
 
                 let requireToolApproval;
@@ -6281,6 +6326,7 @@ export class Agent<
     delegation?: DelegationConfig;
     methodType?: AgentMethodType;
     backgroundTaskEnabled?: boolean;
+    backgroundTaskPolicy?: AgentExecutionOptionsBase<any>['backgroundTaskPolicy'];
   }): Promise<Record<string, CoreTool>> {
     const requestContext = options.requestContext ?? new RequestContext();
     const defaultOptions = await this.getDefaultOptions({ requestContext });
@@ -6317,6 +6363,7 @@ export class Agent<
       delegation: mergedOptions.delegation,
       methodType: options.methodType ?? 'stream',
       backgroundTaskEnabled: options.backgroundTaskEnabled,
+      backgroundTaskPolicy: mergedOptions.backgroundTaskPolicy,
     });
   }
 
@@ -6337,6 +6384,7 @@ export class Agent<
     autoResumeSuspendedTools,
     delegation,
     backgroundTaskEnabled,
+    backgroundTaskPolicy,
     inputProcessors,
     hooks,
     model,
@@ -6354,6 +6402,10 @@ export class Agent<
     autoResumeSuspendedTools?: boolean;
     delegation?: DelegationConfig;
     backgroundTaskEnabled?: boolean;
+    backgroundTaskPolicy?: {
+      allowToolDispatch: boolean;
+      allowDelegationDispatch: boolean;
+    };
     inputProcessors?: InputProcessorOrWorkflow[];
     hooks?: ToolHooks;
     model?: MastraLanguageModel | MastraLegacyLanguageModel;
@@ -6457,7 +6509,7 @@ export class Agent<
       ...observabilityContext,
       autoResumeSuspendedTools,
       delegation,
-      backgroundTaskEnabled,
+      backgroundTaskEnabled: backgroundTaskPolicy?.allowDelegationDispatch ?? backgroundTaskEnabled,
       getModel: getResolvedModel,
     });
 
@@ -7601,7 +7653,7 @@ export class Agent<
       toolCallId: options.toolCallId,
       workspace,
       toolPayloadTransform,
-      ...(options.disableBackgroundTasks
+      ...(options.disableBackgroundTasks || options.backgroundTaskPolicy?.allowToolDispatch === false
         ? {}
         : {
             backgroundTaskManager: this.#mastra?.backgroundTaskManager,
@@ -8246,11 +8298,32 @@ export class Agent<
   async subscribeToThread<OUTPUT = TOutput>(
     options: AgentSubscribeToThreadOptions,
   ): Promise<AgentThreadSubscription<OUTPUT>> {
-    return agentThreadStreamRuntime.subscribeToThread<OUTPUT>(
-      this as Agent<any, any, any, any>,
-      options,
+    return agentThreadStreamRuntime.subscribeToThread<OUTPUT>(this.#getThreadRuntimeAgent(), options, this.getPubSub());
+  }
+
+  /**
+   * @experimental Agent signals are experimental and may change in a future release.
+   */
+  async claimThreadOwnership<OUTPUT = TOutput>(options: {
+    resourceId: string;
+    threadId: string;
+    streamOptions?:
+      | AgentExecutionOptions<OUTPUT>
+      | (() => AgentExecutionOptions<OUTPUT> | Promise<AgentExecutionOptions<OUTPUT>>);
+    peer?: false | AgentClaimThreadPeerOptions;
+  }): Promise<{ claimed: boolean; unsubscribe: () => void }> {
+    return agentThreadStreamRuntime.claimThreadOwnership(
+      this.#getThreadRuntimeAgent(),
+      options as Parameters<typeof agentThreadStreamRuntime.claimThreadOwnership>[1],
       this.getPubSub(),
     );
+  }
+
+  /**
+   * @experimental Agent signals are experimental and may change in a future release.
+   */
+  async discoverThreadPeers(options?: DiscoverAgentThreadPeersOptions): Promise<AgentThreadPeerAdvertisement[]> {
+    return agentThreadStreamRuntime.discoverThreadPeers(options, this.getPubSub());
   }
 
   getActiveThreadRunId(options: AgentThreadIdentityOptions): string | undefined {
@@ -8414,7 +8487,7 @@ export class Agent<
     target: SendAgentMessageOptions<OUTPUT>,
   ): SendAgentMessageResult<OUTPUT> {
     return agentThreadStreamRuntime.sendMessage<OUTPUT>(
-      this as Agent<any, any, any, any>,
+      this.#getThreadRuntimeAgent(),
       message,
       target,
       this.getPubSub(),
@@ -8429,9 +8502,28 @@ export class Agent<
     target: QueueAgentMessageOptions<OUTPUT>,
   ): QueueAgentMessageResult<OUTPUT> {
     return agentThreadStreamRuntime.queueMessage<OUTPUT>(
-      this as Agent<any, any, any, any>,
+      this.#getThreadRuntimeAgent(),
       message,
       target,
+      this.getPubSub(),
+    );
+  }
+
+  /**
+   * @experimental Agent message APIs are experimental and may change in a future release.
+   */
+  cancelQueuedMessages(target: CancelQueuedAgentMessagesOptions): CancelQueuedAgentMessagesResult {
+    return agentThreadStreamRuntime.cancelQueuedMessages(this as Agent<any, any, any, any>, target, this.getPubSub());
+  }
+
+  /**
+   * @experimental Agent thread event APIs are experimental and may change in a future release.
+   */
+  subscribeThreadEvents(scope: SubscribeAgentThreadEventsOptions, listener: AgentThreadEventListener): () => void {
+    return agentThreadStreamRuntime.subscribeThreadEvents(
+      this as Agent<any, any, any, any>,
+      scope,
+      listener,
       this.getPubSub(),
     );
   }
@@ -8444,7 +8536,7 @@ export class Agent<
     target: SendAgentStateSignalOptions<OUTPUT>,
   ): Promise<SendAgentStateSignalResult<OUTPUT>> {
     return agentThreadStreamRuntime.sendStateSignal<OUTPUT>(
-      this as Agent<any, any, any, any>,
+      this.#getThreadRuntimeAgent(),
       state,
       target,
       this.getPubSub(),
@@ -8575,7 +8667,7 @@ export class Agent<
         if (shouldEmitSummaryNow) {
           const signal = createNotificationSummarySignal(summarizeNotifications([updated]));
           const result = agentThreadStreamRuntime.sendSignal<OUTPUT>(
-            this as Agent<any, any, any, any>,
+            this.#getThreadRuntimeAgent(),
             signal,
             {
               ...target,
@@ -8654,7 +8746,7 @@ export class Agent<
             }
           : target;
       const result = agentThreadStreamRuntime.sendSignal<OUTPUT>(
-        this as Agent<any, any, any, any>,
+        this.#getThreadRuntimeAgent(),
         signal,
         deliverTarget,
         this.getPubSub(),
@@ -8721,12 +8813,7 @@ export class Agent<
     signal: AgentSignal,
     target: SendAgentSignalOptions<OUTPUT>,
   ): SendAgentSignalResult<OUTPUT> {
-    return agentThreadStreamRuntime.sendSignal<OUTPUT>(
-      this as Agent<any, any, any, any>,
-      signal,
-      target,
-      this.getPubSub(),
-    );
+    return agentThreadStreamRuntime.sendSignal<OUTPUT>(this.#getThreadRuntimeAgent(), signal, target, this.getPubSub());
   }
 
   async stream<

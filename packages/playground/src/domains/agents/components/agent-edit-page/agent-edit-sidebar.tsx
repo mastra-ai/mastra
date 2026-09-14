@@ -138,12 +138,12 @@ export function AgentEditSidebar({
 
         <TabContent value="identity" className="min-h-0 flex-1 py-0 pb-3">
           <ScrollArea className="h-full">
-            <div className="flex flex-col gap-6 p-4">
+            <div className="flex flex-col gap-4 p-4">
               <SectionHeader title="Identity" subtitle="Define your agent's name, description, and model." />
 
               {/* Agent Name */}
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="agent-name" className="text-icon5 text-xs">
+                <Label htmlFor="agent-name" className="text-icon5 text-ui-sm">
                   Name <span className="text-accent2">*</span>
                 </Label>
                 <Input
@@ -154,12 +154,12 @@ export function AgentEditSidebar({
                   error={!!errors.name}
                   disabled={readOnly}
                 />
-                {errors.name && <span className="text-accent2 text-xs">{errors.name.message}</span>}
+                {errors.name && <span className="text-accent2 text-ui-sm">{errors.name.message}</span>}
               </div>
 
               {/* Description */}
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="agent-description" className="text-icon5 text-xs">
+                <Label htmlFor="agent-description" className="text-icon5 text-ui-sm">
                   Description
                 </Label>
                 <Textarea
@@ -170,12 +170,12 @@ export function AgentEditSidebar({
                   error={!!errors.description}
                   disabled={readOnly}
                 />
-                {errors.description && <span className="text-accent2 text-xs">{errors.description.message}</span>}
+                {errors.description && <span className="text-accent2 text-ui-sm">{errors.description.message}</span>}
               </div>
 
               {/* Provider */}
               <div className="flex flex-col gap-1.5">
-                <Label className="text-icon5 text-xs">
+                <Label className="text-icon5 text-ui-sm">
                   Provider <span className="text-accent2">*</span>
                 </Label>
                 <Controller
@@ -188,13 +188,13 @@ export function AgentEditSidebar({
                   )}
                 />
                 {errors.model?.provider && (
-                  <span className="text-accent2 text-xs">{errors.model.provider.message}</span>
+                  <span className="text-accent2 text-ui-sm">{errors.model.provider.message}</span>
                 )}
               </div>
 
               {/* Model */}
               <div className="flex flex-col gap-1.5">
-                <Label className="text-icon5 text-xs">
+                <Label className="text-icon5 text-ui-sm">
                   Model <span className="text-accent2">*</span>
                 </Label>
                 <Controller
@@ -211,7 +211,7 @@ export function AgentEditSidebar({
                     </div>
                   )}
                 />
-                {errors.model?.name && <span className="text-accent2 text-xs">{errors.model.name.message}</span>}
+                {errors.model?.name && <span className="text-accent2 text-ui-sm">{errors.model.name.message}</span>}
               </div>
             </div>
           </ScrollArea>
@@ -219,7 +219,7 @@ export function AgentEditSidebar({
 
         <TabContent value="capabilities" className="min-h-0 flex-1 py-0 pb-3">
           <ScrollArea className="h-full">
-            <div className="flex flex-col gap-6 p-4">
+            <div className="flex flex-col gap-4 p-4">
               <SectionHeader
                 title="Capabilities"
                 subtitle="Extend your agent with tools, workflows, and other resources to enhance its abilities."
@@ -241,7 +241,7 @@ export function AgentEditSidebar({
 
         <TabContent value="variables" className="min-h-0 flex-1 py-0 pb-3">
           <ScrollArea className="h-full">
-            <div className="border-border1 flex flex-col gap-6 border-b p-4">
+            <div className="border-border1 flex flex-col gap-4 border-b p-4">
               <SectionHeader
                 title="Variables"
                 subtitle={

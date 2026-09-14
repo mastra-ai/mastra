@@ -146,7 +146,7 @@ export default AgentSession;
 const AgentSessionLoadingSkeleton = () => (
   <MainContentLayout>
     <SessionHeader />
-    <div className="relative grid h-full overflow-y-auto pt-6" data-testid="agent-session-skeleton" aria-busy="true">
+    <div className="relative grid h-full overflow-y-auto pt-4" data-testid="agent-session-skeleton" aria-busy="true">
       <AgentChatLoadingSkeleton />
     </div>
   </MainContentLayout>

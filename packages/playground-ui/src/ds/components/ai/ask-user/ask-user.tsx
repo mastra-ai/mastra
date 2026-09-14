@@ -1,3 +1,4 @@
+import { Check } from 'lucide-react';
 import { useId, useState } from 'react';
 import type { ComponentProps, KeyboardEvent, ReactNode } from 'react';
 import { Badge } from '@/ds/components/Badge';
@@ -25,7 +26,7 @@ export interface AskUserResult {
 }
 
 export const AskUserContainer = ({ className, ...props }: ComponentProps<'div'>) => (
-  <div className={cn('rounded-lg border border-border1 bg-surface2 p-3 text-sm', className)} {...props} />
+  <div className={cn('rounded-lg border border-border1 bg-surface2 p-3 text-ui-md', className)} {...props} />
 );
 
 export const AskUserQuestion = ({ className, ...props }: ComponentProps<'legend'>) => (
@@ -58,7 +59,7 @@ export const AskUserOptionControl = ({ type, label, description, className, ...p
 );
 
 export const AskUserSubmit = ({ children = 'Submit answer', ...props }: ComponentProps<typeof Button>) => (
-  <Button type="button" size="sm" variant="primary" {...props}>
+  <Button icon={<Check />} type="button" size="sm" variant="primary" {...props}>
     {children}
   </Button>
 );

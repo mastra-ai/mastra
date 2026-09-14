@@ -55,13 +55,14 @@ export interface ExecuteProcessorResponse {
   error?: string;
 }
 
-export const useProcessors = () => {
+export const useProcessors = (options?: { enabled?: boolean }) => {
   const { requestContext } = usePlaygroundStore();
   const client = useMastraClient();
 
   return useQuery({
     queryKey: ['processors'],
     queryFn: () => client.listProcessors(requestContext),
+    enabled: options?.enabled ?? true,
   });
 };
 

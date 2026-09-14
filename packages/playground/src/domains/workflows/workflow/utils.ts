@@ -1,8 +1,8 @@
 import Dagre from '@dagrejs/dagre';
 import type { Workflow, SerializedStepFlowEntry } from '@mastra/core/workflows';
+import type { WorkflowDataEdgeModel } from '@mastra/playground-ui/components/Workflow';
 import type { Node } from '@xyflow/react';
 import { MarkerType } from '@xyflow/react';
-import type { WorkflowDataEdgeModel } from './workflow-data-edge';
 import {
   resolveWorkflowGraphStep,
   unwrapInnerEntry,
@@ -59,31 +59,6 @@ const getNodeSize = (node: WorkflowGraphNode): { width: number; height: number }
     height: node.measured?.height ?? (node?.data?.isLarge ? 260 : 100),
   };
 };
-
-export type ConditionConditionType = 'if' | 'else' | 'when' | 'until' | 'while' | 'dountil' | 'dowhile';
-
-export type Condition =
-  | {
-      type: ConditionConditionType;
-      ref: {
-        step:
-          | {
-              id: string;
-            }
-          | 'trigger';
-        path: string;
-      };
-      query: Record<string, any>;
-      conj?: 'and' | 'or' | 'not';
-      fnString?: never;
-    }
-  | {
-      type: ConditionConditionType;
-      fnString: string;
-      ref?: never;
-      query?: never;
-      conj?: never;
-    };
 
 const formatMappingLabel = (stepId: string, prevStepIds: string[], nextStepIds: string[]): string => {
   // If not a mapping node, return original ID

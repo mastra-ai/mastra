@@ -69,7 +69,7 @@ export function SkillBuilderList({ skills, search, onSkillClick, showFavorites =
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <span
-                          className="bg-surface5 text-neutral4 inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium"
+                          className="bg-surface5 text-neutral4 text-ui-xs inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 font-medium"
                           aria-label={isCopy ? 'Copied skill' : 'Imported skill'}
                           data-testid="skill-builder-origin-badge"
                         >
@@ -117,13 +117,13 @@ export function SkillBuilderList({ skills, search, onSkillClick, showFavorites =
         return onSkillClick ? (
           <button
             key={skill.id}
-            className="hover:bg-surface3/50 flex w-full items-start gap-4 px-6 py-5 text-left transition-colors md:items-center"
+            className="hover:bg-surface3/50 flex w-full items-start gap-4 px-4 py-3 text-left transition-colors md:items-center"
             onClick={() => onSkillClick(skill)}
           >
             {row}
           </button>
         ) : (
-          <div key={skill.id} className="flex items-start gap-4 px-6 py-5 md:items-center">
+          <div key={skill.id} className="flex items-start gap-4 px-4 py-3 md:items-center">
             {row}
           </div>
         );
@@ -136,7 +136,7 @@ export function SkillBuilderListSkeleton({ rows = 4 }: { rows?: number }) {
   return (
     <div className="bg-surface2 border-border1 divide-border1 divide-y overflow-hidden rounded-xl border">
       {Array.from({ length: rows }).map((_, i) => (
-        <div key={i} className="flex items-center gap-4 px-6 py-5">
+        <div key={i} className="flex items-center gap-4 px-4 py-3">
           <div className="min-w-0 flex-1 space-y-2">
             <div className="bg-surface3 h-3.5 w-48 animate-pulse rounded" />
             <div className="bg-surface3 h-3 w-72 max-w-full animate-pulse rounded" />

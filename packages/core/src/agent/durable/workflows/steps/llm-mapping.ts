@@ -105,6 +105,17 @@ export function createDurableLLMMappingStep() {
       const isDeniedApproval = (toolResult: { approval?: { approved?: boolean } }) =>
         toolResult?.approval?.approved === false;
 
+      // A pending client-side / HITL call: no result, no error, not provider-executed and
+      // not a resolved denial. The client answers it on a follow-up request, so it must
+      // stay in `call` state, must not appear as a tool result anywhere, and must end the
+      // turn — the durable counterpart of the non-durable llm-mapping-step's
+      // `hasPendingHITL` (issue #23295).
+      const isPendingClientCall = (toolResult: (typeof toolResults)[number]) =>
+        toolResult.result === undefined &&
+        !toolResult.error &&
+        !toolResult.providerExecuted &&
+        !isDeniedApproval(toolResult);
+
       // 2. Add tool results to message list
       // Look up tools from the in-process registry for toModelOutput support
       const registryTools = registryEntry?.tools;
@@ -143,6 +154,12 @@ export function createDurableLLMMappingStep() {
                 },
               },
             });
+            continue;
+          }
+
+          // Recording a pending call as a `result` would overwrite the invocation with an
+          // undefined value and feed the model a fabricated tool output on the next turn.
+          if (isPendingClientCall(toolResult)) {
             continue;
           }
 
@@ -261,7 +278,10 @@ export function createDurableLLMMappingStep() {
       // self-correct. This matches the regular agent's behaviour where both
       // ToolNotFoundError and generic tool execution errors are recoverable.
       const hasToolErrors = toolResults.some(r => r.error !== undefined);
-      const isContinued = hasToolErrors ? true : llmOutput.stepResult.isContinued;
+      // A pending client call ends the turn so the client can answer it. Without this the
+      // loop re-invoked the model on a result nobody produced.
+      const hasPendingHITL = toolResults.some(isPendingClientCall);
+      const isContinued = hasPendingHITL ? false : hasToolErrors ? true : llmOutput.stepResult.isContinued;
 
       // Check if any delegation hook called ctx.bail(). The bail flag is
       // communicated via requestContext because Zod output validation strips
@@ -352,6 +372,9 @@ export function createDurableLLMMappingStep() {
             });
           }
           for (const tr of toolResults ?? []) {
+            // Public step content must not show a completed result for a call the client
+            // has not answered yet.
+            if (isPendingClientCall(tr)) continue;
             stepContent.push({
               type: 'tool-result',
               toolCallId: tr.toolCallId,
@@ -365,6 +388,15 @@ export function createDurableLLMMappingStep() {
             ...deferredChunk,
             payload: {
               ...deferredChunk.payload,
+              // Stamp the value the loop actually decided on — the same one this step returns on
+              // `output.stepResult` and the dowhile predicate reads. It can disagree with the model's
+              // finish reason, because a tool error forces another turn so the model can self-correct,
+              // and the chunk must not claim otherwise: ChatChannelOutputProcessor closes its render
+              // queue on the first step-finish whose isContinued is not `true` (#23341).
+              stepResult: {
+                ...deferredChunk.payload?.stepResult,
+                isContinued,
+              },
               _durableStepContent: stepContent,
             },
           };

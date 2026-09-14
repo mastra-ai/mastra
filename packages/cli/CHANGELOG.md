@@ -1,5 +1,89 @@
 # mastra
 
+## 1.30.0-alpha.5
+
+### Patch Changes
+
+- Replaced the agent **Overview** tab in Studio with a collapsible side panel. ([#23870](https://github.com/mastra-ai/mastra/pull/23870))
+
+  The models, capabilities (agents, tools, workflows, processors, skills, scorers), memory, channels and system prompt of an agent are now shown in a resizable panel on the right of the Studio frame. Toggle it with the panel button in the top-right header on any agent page (Chat, Editor, Evaluate, Review, Traces); its open state and width are remembered across reloads. Long lists show the first 10 items with a `+N` button to reveal the rest.
+
+  Opening `/agents/:agentId` (and the old `/overview` and `/settings` URLs) now lands on the agent chat.
+
+  Press `]` to toggle the overview panel from the keyboard (tooltips on the header button show the shortcut). The **Share** action in the agent header is now an icon button.
+
+- Added the Studio Workflow Builder backend. Configure the editor with the new `workflowBuilder` option to enable a hidden, editor-owned agent that authors persisted workflow definitions: ([#23493](https://github.com/mastra-ai/mastra/pull/23493))
+
+  ```ts
+  import { Mastra } from '@mastra/core';
+  import { MastraEditor } from '@mastra/editor';
+
+  const mastra = new Mastra({
+    editor: new MastraEditor({
+      workflowBuilder: {
+        enabled: true,
+        model: 'openai/gpt-5.5', // optional, this is the default
+        lastMessages: 100, // optional, raise or lower how much authoring history the agent recalls
+      },
+    }),
+  });
+  ```
+
+  The server exposes two new endpoints for it: `GET /editor/workflow-builder/settings` reports availability and the admin model policy, and `POST /editor/workflow-builder/stream` streams responses from the builder agent. Access is gated by the `stored-workflows:read` and `stored-workflows:write` permissions, and the `stored:<action>` permission umbrella now also matches `stored-workflows:<action>`, so roles granted `stored` access can use the stored-workflow endpoints.
+
+- Added a Delete button to the prompt block editor in Studio so you can remove stored prompt blocks directly from the UI. Previously the delete endpoint existed but no UI consumed it, forcing a manual API call. A confirmation dialog guards against accidental deletion, and you are returned to the prompt blocks list once a block is deleted. Fixes #22356. ([#23703](https://github.com/mastra-ai/mastra/pull/23703))
+
+- Added "go to" keyboard shortcuts in Studio for every sidebar page: press `g` then a letter to jump there. For example, `g` then `a` opens Agents, `g` then `w` opens Workflows, `g` then `t` opens Traces, `g` then `p` opens Prompts, `g` then `l` opens Logs and `g` then `,` opens Settings. Inside an agent page, `g` then `t` opens that agent's traces instead of the global traces page. ([#23831](https://github.com/mastra-ai/mastra/pull/23831))
+
+- Improved the Studio Settings page with a theme toggle and separate rows for the instance URL, API prefix, and request headers. ([#23747](https://github.com/mastra-ai/mastra/pull/23747))
+
+- Improved the Traces page in Studio: "View full thread" now opens the thread's full conversation (every turn with its messages and spans) inside the trace side panel, anchored on the current trace, instead of navigating away to the agent thread page. A "Back to trace" button returns to the trace timeline, and selecting another trace falls back to the trace panel automatically. ([#23900](https://github.com/mastra-ai/mastra/pull/23900))
+
+- Updated dependencies [[`ad5ac69`](https://github.com/mastra-ai/mastra/commit/ad5ac69bcd037bfb85c3399d8b39d9364931ad1b), [`df14b5d`](https://github.com/mastra-ai/mastra/commit/df14b5d12374137db86f92061f8714b28473672e), [`fff3361`](https://github.com/mastra-ai/mastra/commit/fff33614a3376676797cb9b5a5c5b090b026fa0e), [`ffe16f1`](https://github.com/mastra-ai/mastra/commit/ffe16f17447449b7155f1f15992e3c9e5f6511ac), [`04c11b3`](https://github.com/mastra-ai/mastra/commit/04c11b3cd698fa37af8fad466dc2bf6fa0d5494d), [`ad5ac69`](https://github.com/mastra-ai/mastra/commit/ad5ac69bcd037bfb85c3399d8b39d9364931ad1b), [`e83dfad`](https://github.com/mastra-ai/mastra/commit/e83dfade569ee5aea688de9f2bb8bf8db0a653a7), [`6bb122c`](https://github.com/mastra-ai/mastra/commit/6bb122c5147b612c0fe7f173f940933066c4cfcc), [`7f6d101`](https://github.com/mastra-ai/mastra/commit/7f6d101044eefc0d776a555b45dbea1c0d5224c4)]:
+  - @mastra/core@1.67.0-alpha.4
+  - @mastra/deployer@1.67.0-alpha.4
+
+## 1.30.0-alpha.4
+
+### Minor Changes
+
+- Added the `mastra api trace query` command for advanced observability trace predicates and cursor pagination. ([#23680](https://github.com/mastra-ai/mastra/pull/23680))
+
+  ```bash
+  mastra api trace query '{"timeRange":{"from":"2026-08-01T00:00:00.000Z","to":"2026-08-08T00:00:00.000Z"}}'
+  ```
+
+## 1.29.1-alpha.3
+
+### Patch Changes
+
+- Fixed `create-mastra` appearing to freeze when enabling Mastra platform observability. Template clone and dependency install still run in the background during platform sign-in, but once sign-in finishes the CLI now shows a spinner until the install completes instead of going silent. ([#23440](https://github.com/mastra-ai/mastra/pull/23440))
+
+- Improved nested workflow graphs in Studio with a resizable desktop panel and a full-width layout on smaller screens. ([#23662](https://github.com/mastra-ai/mastra/pull/23662))
+
+- Updated dependencies [[`492c0ae`](https://github.com/mastra-ai/mastra/commit/492c0aedcee3fde9555111a660b6c975c160a0db), [`4fd3b29`](https://github.com/mastra-ai/mastra/commit/4fd3b299b83a8c97c2e4ff0f83e04fddad593c87), [`ddbd352`](https://github.com/mastra-ai/mastra/commit/ddbd3527654a058ed413ae164a1246003dcc9030), [`4112ecd`](https://github.com/mastra-ai/mastra/commit/4112ecdec76827384d3a7ab4e8db3ccf90ae7ed1), [`617c1b3`](https://github.com/mastra-ai/mastra/commit/617c1b30e7e794bbb77feaced1848fde291fc240), [`617c1b3`](https://github.com/mastra-ai/mastra/commit/617c1b30e7e794bbb77feaced1848fde291fc240), [`422e798`](https://github.com/mastra-ai/mastra/commit/422e798ab1a4b14302c5b49fed2f6c818a82706e), [`47868b2`](https://github.com/mastra-ai/mastra/commit/47868b2dde360b038d829c9f88e15061acf3efb5), [`b95aabb`](https://github.com/mastra-ai/mastra/commit/b95aabba261a39b73430d95f3ed051634117d517), [`055057c`](https://github.com/mastra-ai/mastra/commit/055057ca2102e35008fe30871f7c8f422ae25ec2), [`7290151`](https://github.com/mastra-ai/mastra/commit/7290151bdb3bfe518653b0a66a19d6790925e4a0), [`9bc7895`](https://github.com/mastra-ai/mastra/commit/9bc789591ad683f304c63bd01e554fbba2df9cf6), [`47868b2`](https://github.com/mastra-ai/mastra/commit/47868b2dde360b038d829c9f88e15061acf3efb5), [`6902f94`](https://github.com/mastra-ai/mastra/commit/6902f940f1879955a90faa0a0ac871667b59d428), [`7148bf5`](https://github.com/mastra-ai/mastra/commit/7148bf55b147e3fae90b3ba0c9517adb0af5f2a4), [`6bdb944`](https://github.com/mastra-ai/mastra/commit/6bdb944acb3f39bccad59ee140d7614420948f6b), [`a54766a`](https://github.com/mastra-ai/mastra/commit/a54766a10381295583144847b856d18e8f924d30), [`ff45065`](https://github.com/mastra-ai/mastra/commit/ff45065d42132075c4efb064d96169c4eadbab58)]:
+  - @mastra/core@1.67.0-alpha.3
+  - @mastra/deployer@1.67.0-alpha.3
+
+## 1.29.1-alpha.2
+
+### Patch Changes
+
+- Added a Langfuse Observations API v2 reader for trace imports. ([#23425](https://github.com/mastra-ai/mastra/pull/23425))
+
+- Improved deploy log output in the CLI. Log lines now match the platform dashboard: timestamps are shown as a short gray local time instead of the full ISO string, log levels like info, warn and error are colored and no longer wrapped in square brackets, and only the last 20 lines stay on screen while a deploy streams so long builds do not flood the terminal. Pass --debug to print every line, and piped or CI output still prints everything. ([#23524](https://github.com/mastra-ai/mastra/pull/23524))
+
+  Fixed `mastra server deploy` showing no build or deploy logs for projects backed by platform environments. The platform returns those logs as a single combined string, which the CLI now reads.
+
+  When a deploy fails, the CLI now prints the error lines from the deploy log with a few lines of context around each, followed by a link to the full log in the dashboard. Successful deploys keep the short tail.
+
+- Added a loading skeleton in the Studio agent chat while an existing thread's message history is being fetched, instead of briefly showing the empty welcome screen before the messages appear. ([#23595](https://github.com/mastra-ai/mastra/pull/23595))
+
+- Updated dependencies [[`a0aa698`](https://github.com/mastra-ai/mastra/commit/a0aa698427db9730e39f0c9956d21b97307ab313), [`c3d00db`](https://github.com/mastra-ai/mastra/commit/c3d00db279a95c7dcba0f767704a2bb6544b7b29), [`44c20c9`](https://github.com/mastra-ai/mastra/commit/44c20c9a40ba5ef153e1d5d0c413b825e1de42d7), [`f466753`](https://github.com/mastra-ai/mastra/commit/f4667539a0c41ae4aa08a4ed380f374687db2592), [`c3d00db`](https://github.com/mastra-ai/mastra/commit/c3d00db279a95c7dcba0f767704a2bb6544b7b29), [`e3c3e5e`](https://github.com/mastra-ai/mastra/commit/e3c3e5e3e354e88207aa9747f9f0cd3352cea972), [`d581249`](https://github.com/mastra-ai/mastra/commit/d581249a5bf97d32d73e0f1f30cd50ff108e2d67), [`990b47f`](https://github.com/mastra-ai/mastra/commit/990b47fa7370753967ea7ce83100a522f79ab328), [`e872dd6`](https://github.com/mastra-ai/mastra/commit/e872dd6619f3a5a46f1158b190b02f607b74d191)]:
+  - @mastra/core@1.67.0-alpha.2
+  - @mastra/loggers@1.3.2-alpha.0
+  - @mastra/deployer@1.67.0-alpha.2
+
 ## 1.29.1-alpha.1
 
 ### Patch Changes

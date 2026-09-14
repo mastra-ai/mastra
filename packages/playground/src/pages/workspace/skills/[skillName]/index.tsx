@@ -117,7 +117,7 @@ export default function WorkspaceSkillDetailPage() {
         <div className="grid h-full place-items-center">
           <div className="text-center">
             <p className="mb-2 text-red-400">Failed to load skill</p>
-            <p className="text-neutral3 text-sm">{error instanceof Error ? error.message : 'Skill not found'}</p>
+            <p className="text-neutral3 text-ui-md">{error instanceof Error ? error.message : 'Skill not found'}</p>
           </div>
         </div>
       </MainContentLayout>
@@ -128,7 +128,7 @@ export default function WorkspaceSkillDetailPage() {
     <MainContentLayout>
       {agentCrumbs && <RouteHeaderCrumbs crumbs={agentCrumbs} />}
       <div className="grid h-full overflow-x-hidden overflow-y-auto">
-        <div className="mx-auto h-full w-full max-w-[100rem] overflow-x-hidden px-[3rem] py-8">
+        <div className="mx-auto h-full w-full max-w-[100rem] overflow-x-hidden px-[3rem] py-5">
           <SkillDetail skill={skill} rawSkillMd={rawSkillMdData?.content} onReferenceClick={setViewingReference} />
         </div>
       </div>

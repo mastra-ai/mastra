@@ -1,5 +1,34 @@
 # @mastra/mcp
 
+## 1.18.0-alpha.1
+
+### Minor Changes
+
+- Added `MastraApiMCPServer` to expose supported Mastra server operations from the `mastra api` CLI as MCP tools. The server reads the target API's input schemas and forwards authentication. All non-GET operations, including agent, workflow, experiment, and tool execution, are marked as potentially destructive so MCP clients can ask for confirmation. Factory commands aren't included. ([#23077](https://github.com/mastra-ai/mastra/pull/23077))
+
+  ```typescript
+  import { MastraApiMCPServer } from '@mastra/mcp';
+
+  const operations = await MastraApiMCPServer.create({
+    url: 'https://my-mastra-server.example.com',
+    headers: { Authorization: `Bearer ${process.env.MASTRA_API_TOKEN}` },
+  });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`ad5ac69`](https://github.com/mastra-ai/mastra/commit/ad5ac69bcd037bfb85c3399d8b39d9364931ad1b), [`df14b5d`](https://github.com/mastra-ai/mastra/commit/df14b5d12374137db86f92061f8714b28473672e), [`fff3361`](https://github.com/mastra-ai/mastra/commit/fff33614a3376676797cb9b5a5c5b090b026fa0e), [`ffe16f1`](https://github.com/mastra-ai/mastra/commit/ffe16f17447449b7155f1f15992e3c9e5f6511ac), [`04c11b3`](https://github.com/mastra-ai/mastra/commit/04c11b3cd698fa37af8fad466dc2bf6fa0d5494d), [`ad5ac69`](https://github.com/mastra-ai/mastra/commit/ad5ac69bcd037bfb85c3399d8b39d9364931ad1b), [`e83dfad`](https://github.com/mastra-ai/mastra/commit/e83dfade569ee5aea688de9f2bb8bf8db0a653a7), [`6bb122c`](https://github.com/mastra-ai/mastra/commit/6bb122c5147b612c0fe7f173f940933066c4cfcc), [`7f6d101`](https://github.com/mastra-ai/mastra/commit/7f6d101044eefc0d776a555b45dbea1c0d5224c4)]:
+  - @mastra/core@1.67.0-alpha.4
+
+## 1.17.4-alpha.0
+
+### Patch Changes
+
+- Improved MCP client and server declarations with concise setup examples and directions to bundled documentation. ([#23489](https://github.com/mastra-ai/mastra/pull/23489))
+
+- Updated dependencies [[`a0aa698`](https://github.com/mastra-ai/mastra/commit/a0aa698427db9730e39f0c9956d21b97307ab313), [`c3d00db`](https://github.com/mastra-ai/mastra/commit/c3d00db279a95c7dcba0f767704a2bb6544b7b29), [`44c20c9`](https://github.com/mastra-ai/mastra/commit/44c20c9a40ba5ef153e1d5d0c413b825e1de42d7), [`f466753`](https://github.com/mastra-ai/mastra/commit/f4667539a0c41ae4aa08a4ed380f374687db2592), [`e3c3e5e`](https://github.com/mastra-ai/mastra/commit/e3c3e5e3e354e88207aa9747f9f0cd3352cea972), [`d581249`](https://github.com/mastra-ai/mastra/commit/d581249a5bf97d32d73e0f1f30cd50ff108e2d67), [`990b47f`](https://github.com/mastra-ai/mastra/commit/990b47fa7370753967ea7ce83100a522f79ab328), [`e872dd6`](https://github.com/mastra-ai/mastra/commit/e872dd6619f3a5a46f1158b190b02f607b74d191)]:
+  - @mastra/core@1.67.0-alpha.2
+
 ## 1.17.3
 
 ### Patch Changes

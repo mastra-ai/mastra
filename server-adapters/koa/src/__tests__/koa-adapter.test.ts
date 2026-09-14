@@ -42,11 +42,12 @@ async function waitFor(assertion: () => boolean, timeout = 500): Promise<void> {
 describe('Koa Server Adapter', () => {
   createRouteAdapterTestSuite({
     suiteName: 'Koa Adapter Integration Tests',
+    emptyBodyNormalization: { withoutContentType: 'empty-object', withJsonContentType: 'empty-string' },
 
     setupAdapter: async (context: AdapterTestContext, options?: AdapterSetupOptions) => {
       // Create Koa app
       const app = new Koa();
-      app.use(bodyParser());
+      app.use(bodyParser({ strict: false }));
 
       // Create adapter
       const adapter = new MastraServer({
@@ -97,13 +98,13 @@ describe('Koa Server Adapter', () => {
         const fetchOptions: RequestInit = {
           method: httpRequest.method,
           headers: {
-            'Content-Type': 'application/json',
+            ...(httpRequest.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
             ...(httpRequest.headers || {}),
           },
         };
 
         // Add body for POST/PUT/PATCH/DELETE
-        if (httpRequest.body && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(httpRequest.method)) {
+        if (httpRequest.body !== undefined && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(httpRequest.method)) {
           fetchOptions.body = JSON.stringify(httpRequest.body);
         }
 

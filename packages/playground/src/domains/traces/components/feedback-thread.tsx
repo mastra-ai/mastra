@@ -20,7 +20,7 @@ import {
 } from '@mastra/playground-ui/components/Comment';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { format } from 'date-fns';
-import { Trash2Icon } from 'lucide-react';
+import { Trash2Icon, Trash2, ChevronRight, ChevronLeft, ClipboardCheck } from 'lucide-react';
 import { useState } from 'react';
 
 import { ReviewStatusBadge } from '@/domains/review/components/review-status-badge';
@@ -91,6 +91,7 @@ function FeedbackItems({
     const status = <FeedbackReviewStatusBadge status={fb.reviewStatus} />;
     const markReviewed = onMarkReviewed && feedbackId && fb.reviewStatus !== 'reviewed' && (
       <Button
+        icon={<ClipboardCheck />}
         variant="ghost"
         size="sm"
         disabled={pendingFeedbackId === feedbackId}
@@ -241,6 +242,7 @@ export function FeedbackThread({
       {(hasMore || currentPage > 0) && (
         <div className="flex items-center gap-2">
           <Button
+            icon={<ChevronLeft />}
             size="sm"
             variant="ghost"
             disabled={currentPage === 0}
@@ -248,7 +250,13 @@ export function FeedbackThread({
           >
             Previous
           </Button>
-          <Button size="sm" variant="ghost" disabled={!hasMore} onClick={() => onPageChange?.(currentPage + 1)}>
+          <Button
+            icon={<ChevronRight />}
+            size="sm"
+            variant="ghost"
+            disabled={!hasMore}
+            onClick={() => onPageChange?.(currentPage + 1)}
+          >
             Next
           </Button>
         </div>
@@ -269,7 +277,7 @@ export function FeedbackThread({
           </AlertDialog.Header>
           <AlertDialog.Footer>
             <AlertDialog.Cancel disabled={isDeleting}>Cancel</AlertDialog.Cancel>
-            <Button variant="primary" disabled={isDeleting} onClick={handleDeleteConfirm}>
+            <Button icon={<Trash2 />} variant="primary" disabled={isDeleting} onClick={handleDeleteConfirm}>
               {isDeleting ? 'Deleting…' : 'Delete'}
             </Button>
           </AlertDialog.Footer>

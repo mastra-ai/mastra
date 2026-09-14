@@ -1,6 +1,7 @@
 import { PanelRightIcon } from 'lucide-react';
 import type { ComponentPropsWithoutRef } from 'react';
 import { useMainSidebar } from './main-sidebar-context';
+import { Kbd } from '@/ds/components/Kbd';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { cn } from '@/lib/utils';
 
@@ -30,9 +31,9 @@ export function MainSidebarTrigger({ className, onClick, ...props }: MainSidebar
               'size-7',
               isCollapsed ? 'mx-auto' : 'ml-auto',
               'hover:bg-sidebar-nav-hover hover:text-neutral6',
-              'duration-normal transition-all ease-out-custom',
+              'transition-all duration-normal ease-out-custom',
               'focus-visible:shadow-focus-ring focus-visible:ring-1 focus-visible:ring-accent1 focus-visible:outline-hidden',
-              '[&_svg]:duration-normal [&_svg]:size-4 [&_svg]:text-neutral3 [&_svg]:transition-transform [&:hover_svg]:text-neutral5',
+              '[&_svg]:size-4 [&_svg]:text-neutral3 [&_svg]:transition-transform [&_svg]:duration-normal [&:hover_svg]:text-neutral5',
               className,
             )}
           >
@@ -45,7 +46,12 @@ export function MainSidebarTrigger({ className, onClick, ...props }: MainSidebar
         }
       />
 
-      <TooltipContent>Toggle Sidebar</TooltipContent>
+      <TooltipContent>
+        <span className="inline-flex items-center gap-1.5">
+          Toggle Sidebar
+          <Kbd size="xs">[</Kbd>
+        </span>
+      </TooltipContent>
     </Tooltip>
   );
 }

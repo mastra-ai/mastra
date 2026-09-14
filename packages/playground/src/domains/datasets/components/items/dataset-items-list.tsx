@@ -1,10 +1,10 @@
 import type { DatasetItem } from '@mastra/client-js';
-import { Button } from '@mastra/playground-ui/components/Button';
+import { Button, CreateButton } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { DataList, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { format, isThisYear, isToday } from 'date-fns';
-import { CircleSlashIcon, ExternalLinkIcon, FileJson, Plus, Upload } from 'lucide-react';
+import { CircleSlashIcon, ExternalLinkIcon, FileJson, Upload } from 'lucide-react';
 
 export interface DatasetItemsListProps {
   items: DatasetItem[];
@@ -230,19 +230,16 @@ function EmptyDatasetItemList({ onAddClick, onImportClick, onImportJsonClick }: 
         actionSlot={
           <div className="flex flex-col items-center gap-2">
             <ButtonsGroup>
-              <Button variant="primary" onClick={onAddClick}>
-                <Plus />
-                Add Item
-              </Button>
+              <CreateButton variant="primary" onClick={onAddClick} tooltip="Add an item">
+                New item
+              </CreateButton>
               {onImportClick && (
-                <Button onClick={onImportClick}>
-                  <Upload />
+                <Button onClick={onImportClick} icon={<Upload />}>
                   Import CSV
                 </Button>
               )}
               {onImportJsonClick && (
-                <Button onClick={onImportJsonClick}>
-                  <FileJson />
+                <Button onClick={onImportJsonClick} icon={<FileJson />}>
                   Import JSON
                 </Button>
               )}
@@ -253,8 +250,9 @@ function EmptyDatasetItemList({ onAddClick, onImportClick, onImportJsonClick }: 
               href="https://mastra.ai/docs/evals/datasets"
               target="_blank"
               rel="noopener noreferrer"
+              icon={<ExternalLinkIcon />}
             >
-              Datasets Documentation <ExternalLinkIcon />
+              Datasets Documentation
             </Button>
           </div>
         }

@@ -74,6 +74,17 @@ export interface ChannelAdapterBaseConfig {
   textFormat?: 'markdown' | 'plain';
 
   /**
+   * What to do with buffered (not-yet-posted) reply text when a run is aborted.
+   * Only affects the static (non-streaming) driver.
+   * - `'flush'` (default) — post the partial buffered text before stopping.
+   * - `'discard'` — drop the buffered text and post nothing.
+   *
+   * Use `'discard'` for human-takeover flows where an operator replies and the
+   * in-flight agent reply should not appear as a truncated message beside it.
+   */
+  onAbort?: 'flush' | 'discard';
+
+  /**
    * Show platform typing indicators (and adaptive status text where supported,
    * e.g. Slack Assistant mode displays `<App Name> <status>`).
    *

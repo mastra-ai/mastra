@@ -1,3 +1,4 @@
+import type { ExperimentTargetType } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
@@ -20,7 +21,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useMastraClient } from '@mastra/react';
-import { CheckCircle, CircleSlashIcon, EllipsisIcon, Sparkles, Trash2, XIcon } from 'lucide-react';
+import { CheckCircle, CircleSlashIcon, EllipsisIcon, Sparkles, Trash2, XIcon, Check, X } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useReviewItems, useCompletedItems } from '../hooks/use-dataset-review-items';
@@ -55,6 +56,10 @@ export interface DatasetReviewProps {
   datasetId?: string;
   /** When set, scopes the review (and completed) lists to items produced by this experiment; otherwise project-wide. */
   experimentId?: string;
+  /** When set, scopes the lists to experiments run against this target type (server-side). */
+  targetType?: ExperimentTargetType | '';
+  /** When set, scopes the lists to experiments run against this target ID (server-side). */
+  targetId?: string;
   /**
    * Optional request from the parent to auto-feature this item. Whenever this prop changes
    * to a non-null value, the matching review row is selected. Internal interactions still
@@ -72,6 +77,8 @@ export interface DatasetReviewProps {
 export function DatasetReview({
   datasetId,
   experimentId,
+  targetType,
+  targetId,
   featuredItemId: featuredItemIdRequest,
   detailPanelVariant = 'inline',
   toolbarStart,
@@ -82,8 +89,12 @@ export function DatasetReview({
   const { data: dataset } = useDataset(datasetId ?? '');
   // Keep `undefined` while loading: the hydration effect below treats a defined
   // value as "server data arrived", so coercing to [] here would lock in an empty queue.
-  const { data: reviewItems, isLoading: isLoadingReview } = useReviewItems({ experimentId });
-  const { data: completedItems, isLoading: isLoadingCompleted } = useCompletedItems({ experimentId });
+  const { data: reviewItems, isLoading: isLoadingReview } = useReviewItems({ experimentId, targetType, targetId });
+  const { data: completedItems, isLoading: isLoadingCompleted } = useCompletedItems({
+    experimentId,
+    targetType,
+    targetId,
+  });
   const { updateExperimentResult } = useDatasetMutations();
 
   // Local state
@@ -409,8 +420,8 @@ export function DatasetReview({
           />
         )}
         {hasActiveFilters && (
-          <Button onClick={resetFilters} size="sm" variant="default">
-            <XIcon className="size-3" /> Reset
+          <Button onClick={resetFilters} size="sm" variant="default" icon={<XIcon />}>
+            Reset
           </Button>
         )}
       </ButtonsGroup>
@@ -428,8 +439,7 @@ export function DatasetReview({
                 onRemoveTag={handleBulkRemoveTag}
                 onNewTag={tag => handleBulkTag(tag)}
               />
-              <Button variant="primary" onClick={handleBulkComplete}>
-                <CheckCircle />
+              <Button variant="primary" onClick={handleBulkComplete} icon={<CheckCircle />}>
                 Mark as reviewed
               </Button>
               <DropdownMenu>
@@ -514,11 +524,11 @@ export function DatasetReview({
           <div className="space-y-4 py-2">
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <Label className="mb-1 block text-xs">Provider</Label>
+                <Label className="text-ui-sm mb-1 block">Provider</Label>
                 <LLMProviders value={analyzeProvider} onValueChange={setAnalyzeProvider} />
               </div>
               <div>
-                <Label className="mb-1 block text-xs">Model</Label>
+                <Label className="text-ui-sm mb-1 block">Model</Label>
                 <LLMModels llmId={analyzeProvider} value={analyzeModel} onValueChange={setAnalyzeModel} />
               </div>
             </div>
@@ -526,18 +536,18 @@ export function DatasetReview({
               {selectedItemIds.size} item{selectedItemIds.size !== 1 ? 's' : ''} will be analyzed
             </Txt>
             <div>
-              <Label className="text-xs">Instructions (optional)</Label>
+              <Label className="text-ui-sm">Instructions (optional)</Label>
               <Textarea
                 value={analyzePrompt}
                 onChange={e => setAnalyzePrompt(e.target.value)}
                 placeholder="E.g., Focus on safety issues and factual errors..."
                 rows={3}
-                className="mt-1 text-xs"
+                className="text-ui-sm mt-1"
               />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowAnalyzeDialog(false)}>
+            <Button icon={<X />} variant="outline" onClick={() => setShowAnalyzeDialog(false)}>
               Cancel
             </Button>
             <Button onClick={handleAnalyze} disabled={!analyzeProvider || !analyzeModel || isAnalyzing}>
@@ -611,10 +621,14 @@ export function DatasetReview({
             })}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowProposalDialog(false)}>
+            <Button icon={<X />} variant="outline" onClick={() => setShowProposalDialog(false)}>
               Cancel
             </Button>
-            <Button onClick={handleAcceptProposals} disabled={proposedAssignments.filter(p => p.accepted).length === 0}>
+            <Button
+              icon={<Check />}
+              onClick={handleAcceptProposals}
+              disabled={proposedAssignments.filter(p => p.accepted).length === 0}
+            >
               Accept {proposedAssignments.filter(p => p.accepted).length} proposals
             </Button>
           </DialogFooter>
@@ -635,7 +649,7 @@ export function DatasetReview({
               <Spinner className="h-6 w-6" />
             </div>
           ) : displayItems.length === 0 ? (
-            <div className="flex h-full items-center-safe justify-center-safe overflow-auto py-12">
+            <div className="flex h-full items-center-safe justify-center-safe overflow-auto py-8">
               <EmptyState
                 iconSlot={<CircleSlashIcon className="text-neutral3 h-8 w-8" />}
                 titleSlot={showCompleted ? 'No completed reviews yet' : 'No items to review'}

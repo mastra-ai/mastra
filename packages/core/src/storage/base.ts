@@ -122,17 +122,18 @@ void _domainKeysExhaustive;
  * @param perPageInput - The raw perPage value from the user
  * @param defaultValue - The default perPage value to use when undefined (typically 40 for messages, 100 for threads)
  * @returns A numeric perPage value suitable for queries (false becomes MAX_SAFE_INTEGER)
- * @throws Error if perPage is a negative number
+ * @throws Error if numeric perPage is not a finite, nonnegative integer
  */
 export function normalizePerPage(perPageInput: number | false | undefined, defaultValue: number): number {
   if (perPageInput === false) {
     return Number.MAX_SAFE_INTEGER; // Get all results
   } else if (perPageInput === 0) {
     return 0; // Return zero results
-  } else if (typeof perPageInput === 'number' && perPageInput > 0) {
-    return perPageInput; // Valid positive number
-  } else if (typeof perPageInput === 'number' && perPageInput < 0) {
-    throw new Error('perPage must be >= 0');
+  } else if (typeof perPageInput === 'number') {
+    if (!Number.isInteger(perPageInput) || perPageInput < 0) {
+      throw new Error('perPage must be >= 0');
+    }
+    return perPageInput;
   }
   // For undefined, use default
   return defaultValue;
@@ -152,6 +153,9 @@ export function calculatePagination(
   perPageInput: number | false | undefined,
   normalizedPerPage: number,
 ): { offset: number; perPage: number | false } {
+  if (!Number.isInteger(page) || page < 0) {
+    throw new Error('page must be >= 0');
+  }
   return {
     offset: perPageInput === false ? 0 : page * normalizedPerPage,
     perPage: perPageInput === false ? false : normalizedPerPage,

@@ -1,5 +1,6 @@
 {
   "attachment": [
+    "deepseek-v4.1-flash",
     "gemma-3-27b-it",
     "gemma4",
     "gpt-oss-120b",
@@ -19,6 +20,7 @@
   ],
   "temperature": [
     "deepseek-v4-flash-0731",
+    "deepseek-v4.1-flash",
     "devstral-2-123b-instruct-2512",
     "gemma-3-27b-it",
     "gemma4",
@@ -56,6 +58,7 @@
   ],
   "structuredOutput": [
     "deepseek-v4-flash-0731",
+    "deepseek-v4.1-flash",
     "gemma-3-27b-it",
     "gemma4",
     "glm-5.1",

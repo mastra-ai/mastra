@@ -8,6 +8,7 @@
  */
 
 import { z } from 'zod/v4';
+import type { ToolBackgroundConfig } from '../../background-tasks/types';
 import { RequestContext } from '../../request-context';
 import type { WorkspaceToolName } from '../constants';
 import { WORKSPACE_TOOLS } from '../constants';
@@ -119,6 +120,7 @@ function toPlainRequestContext(requestContext: unknown): Record<string, unknown>
 export interface ResolvedToolConfig {
   enabled: boolean;
   requireApproval: DynamicToolConfigValue<ToolConfigWithArgsContext>;
+  background?: ToolBackgroundConfig;
   requireReadBeforeWrite?: DynamicToolConfigValue<ToolConfigWithArgsContext>;
   maxOutputTokens?: number;
   name?: string;
@@ -144,6 +146,7 @@ export async function resolveToolConfig(
 ): Promise<ResolvedToolConfig> {
   let enabled: DynamicToolConfigValue = true;
   let requireApproval: DynamicToolConfigValue<ToolConfigWithArgsContext> = false;
+  let background: ToolBackgroundConfig | undefined;
   let requireReadBeforeWrite: DynamicToolConfigValue<ToolConfigWithArgsContext> | undefined;
   let maxOutputTokens: number | undefined;
   let name: string | undefined;
@@ -165,6 +168,9 @@ export async function resolveToolConfig(
       if (perToolConfig.requireApproval !== undefined) {
         requireApproval = perToolConfig.requireApproval;
       }
+      if (perToolConfig.background !== undefined) {
+        background = perToolConfig.background;
+      }
       if (perToolConfig.requireReadBeforeWrite !== undefined) {
         requireReadBeforeWrite = perToolConfig.requireReadBeforeWrite;
       }
@@ -180,7 +186,15 @@ export async function resolveToolConfig(
   // Resolve `enabled` now (tool-listing time) — safe default: false (fail-closed)
   const resolvedEnabled = await resolveDynamicValue(enabled, context, false);
 
-  return { enabled: resolvedEnabled, requireApproval, requireReadBeforeWrite, maxOutputTokens, name, hooks };
+  return {
+    enabled: resolvedEnabled,
+    requireApproval,
+    background,
+    requireReadBeforeWrite,
+    maxOutputTokens,
+    name,
+    hooks,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -452,6 +466,10 @@ export async function createWorkspaceTools(
       };
     } else {
       wrapped = { ...tool, requireApproval: config.requireApproval };
+    }
+
+    if (config.background) {
+      wrapped = { ...wrapped, background: config.background };
     }
 
     if (opts?.readTrackerMode) {

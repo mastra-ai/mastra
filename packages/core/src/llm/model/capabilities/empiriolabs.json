@@ -2,6 +2,7 @@
   "attachment": [
     "fugu-ultra-v1-0",
     "fugu-ultra-v1-1",
+    "fugu-ultra-v2-0",
     "gemma-3-27b",
     "gemma-4-26b-a4b",
     "glm-4-6v-flash",
@@ -105,6 +106,7 @@
     "deepseek-v4-pro-0813",
     "fugu-ultra-v1-0",
     "fugu-ultra-v1-1",
+    "fugu-ultra-v2-0",
     "gemma-3-27b",
     "gemma-4-26b-a4b",
     "glm-4-5-flash",

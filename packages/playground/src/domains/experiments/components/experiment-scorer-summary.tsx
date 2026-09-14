@@ -84,7 +84,7 @@ export function ExperimentScorerSummary({ scoresByItemId, experimentStatus }: Ex
               </Tooltip>
               <span className="truncate">{scorerName}</span>
             </LinkComponent>
-            <strong className="text-ui-lg text-neutral4 font-semibold">
+            <strong className="text-ui-md text-neutral4 font-semibold">
               {avg.toFixed(3)}
               <span className="text-ui-sm text-neutral3 ml-1.5 font-normal">avg score</span>
             </strong>

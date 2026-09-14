@@ -559,6 +559,19 @@ export const updateThreadBodySchema = z.object({
 });
 
 /**
+ * Body schema for POST /memory/threads/:threadId/transfer
+ * Reassigns the thread (and its messages) to a different resource.
+ */
+export const transferThreadBodySchema = z.object({
+  resourceId: z.string().min(1),
+});
+
+/**
+ * Response schema for POST /memory/threads/:threadId/transfer
+ */
+export const transferThreadResponseSchema = threadSchema;
+
+/**
  * Body schema for PUT /memory/threads/:threadId/working-memory
  */
 export const updateWorkingMemoryBodySchema = z.object({

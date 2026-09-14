@@ -8,11 +8,12 @@ import { BadgeWrapper } from '@mastra/playground-ui/domains/chat/components/badg
 import { LoadingBadge } from '@mastra/playground-ui/domains/chat/components/loading-badge';
 import { NetworkChoiceMetadataDialogTrigger } from '@mastra/playground-ui/domains/chat/components/network-choice-metadata-dialog';
 import { SectionLabel } from '@mastra/playground-ui/domains/chat/components/section-label';
+import type { ToolApprovalButtonsProps } from '@mastra/playground-ui/domains/chat/tools/badges/tool-approval-buttons';
+import { ToolApprovalButtons } from '@mastra/playground-ui/domains/chat/tools/badges/tool-approval-buttons';
 import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
+import { Eye } from 'lucide-react';
 import { useContext, useEffect } from 'react';
 import { BackgroundTaskMetadataDialogTrigger } from './background-task-metadata-dialog';
-import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
-import { ToolApprovalButtons } from './tool-approval-buttons';
 import {
   WorkflowGraph,
   WorkflowRunContext,
@@ -133,11 +134,11 @@ const WorkflowBadgeExtended = ({ workflowId, workflow, runId }: WorkflowBadgeExt
   return (
     <>
       <div className="flex items-center gap-2 pb-2">
-        <Button as={Link} href={`/workflows/${workflowId}/graph`}>
+        <Button icon={<WorkflowIcon />} as={Link} href={`/workflows/${workflowId}/graph`}>
           Go to workflow
         </Button>
         {runId && (
-          <Button as={Link} href={`/workflows/${workflowId}/graph/${runId}`}>
+          <Button icon={<Eye />} as={Link} href={`/workflows/${workflowId}/graph/${runId}`}>
             See run
           </Button>
         )}
