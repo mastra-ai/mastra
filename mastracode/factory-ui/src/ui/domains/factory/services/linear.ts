@@ -8,11 +8,7 @@
  */
 
 export type LinearStatusReason =
-  | 'missing_config'
-  | 'auth_required'
-  | 'organization_required'
-  | 'not_connected'
-  | 'ready';
+  'missing_config' | 'auth_required' | 'organization_required' | 'not_connected' | 'ready';
 
 export interface LinearStatus {
   enabled: boolean;
@@ -156,4 +152,33 @@ export async function getLinearIssue(
 export async function listLinearProjects(baseUrl: string): Promise<LinearProject[]> {
   const { projects } = await getLinearResource<{ projects: LinearProject[] }>(baseUrl, '/web/linear/projects');
   return projects;
+}
+
+/** A Linear team, selectable as an intake source in its own right. */
+export interface LinearTeam {
+  id: string;
+  /** Short team key, e.g. `ENG`. */
+  key: string;
+  name: string;
+}
+
+/** List the connected workspace's teams (Settings intake-source picker). */
+export async function listLinearTeams(baseUrl: string): Promise<LinearTeam[]> {
+  const { teams } = await getLinearResource<{ teams: LinearTeam[] }>(baseUrl, '/web/linear/teams');
+  return teams;
+}
+
+/**
+ * Intake source id for a whole Linear team. Mirrors the self-managed
+ * integration's scheme (`linear-team:<teamId>`); a raw project id (no prefix)
+ * is the source id for a single project, so the two never collide.
+ */
+export const LINEAR_TEAM_SOURCE_PREFIX = 'linear-team:';
+
+export function linearTeamSourceId(teamId: string): string {
+  return `${LINEAR_TEAM_SOURCE_PREFIX}${teamId}`;
+}
+
+export function isLinearTeamSourceId(sourceId: string): boolean {
+  return sourceId.startsWith(LINEAR_TEAM_SOURCE_PREFIX);
 }

@@ -39,6 +39,7 @@ export const queryKeys = {
     ['github', 'commits', projectRepositoryId ?? null, limit] as const,
   linearStatus: () => ['linear', 'status'] as const,
   linearProjects: () => ['linear', 'projects'] as const,
+  linearTeams: () => ['linear', 'teams'] as const,
   linearIssuesAll: () => ['linear', 'issues'] as const,
   linearIssues: (githubProjectId: string | undefined) =>
     [...queryKeys.linearIssuesAll(), githubProjectId ?? null] as const,

@@ -5,7 +5,8 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { useIntakeBindingsQuery, useSaveIntakeBindingMutation } from '../../../../hooks/useIntakeConfig';
-import type { LinearProject } from '../../factory/services/linear';
+import { isLinearTeamSourceId, LINEAR_TEAM_SOURCE_PREFIX } from '../../factory/services/linear';
+import type { LinearProject, LinearTeam } from '../../factory/services/linear';
 
 const UNROUTED = '__unrouted__';
 const NO_BOARD = '__no_board__';
@@ -13,16 +14,28 @@ const NO_BOARD = '__no_board__';
 export function LinearRouting({
   sourceIds,
   projects,
+  teams,
   factories,
 }: {
   sourceIds: string[];
   projects: LinearProject[];
+  teams: LinearTeam[];
   factories: { id: string; name: string }[];
 }) {
   const bindingsQuery = useIntakeBindingsQuery();
   const saveBinding = useSaveIntakeBindingMutation();
   const bindings = bindingsQuery.data ?? [];
   const busy = saveBinding.isPending;
+
+  const teamById = new Map(teams.map(team => [team.id, team]));
+  const labelFor = (sourceId: string): string => {
+    if (isLinearTeamSourceId(sourceId)) {
+      const teamId = sourceId.slice(LINEAR_TEAM_SOURCE_PREFIX.length);
+      const team = teamById.get(teamId);
+      return team ? `All issues in ${team.name}` : sourceId;
+    }
+    return projects.find(project => project.id === sourceId)?.name ?? sourceId;
+  };
 
   const route = (sourceId: string, factoryProjectId: string | null, board: string | null) => {
     saveBinding.mutate(
@@ -37,7 +50,7 @@ export function LinearRouting({
   return (
     <div className="flex flex-col">
       {sourceIds.map(sourceId => {
-        const name = projects.find(project => project.id === sourceId)?.name ?? sourceId;
+        const name = labelFor(sourceId);
         const binding = bindings.find(
           candidate => candidate.integrationId === 'linear' && candidate.sourceId === sourceId,
         );
@@ -45,9 +58,9 @@ export function LinearRouting({
         const routedFactory = factories.find(candidate => candidate.id === binding?.factoryProjectId);
         const board = binding?.board ?? null;
         const description = !routedFactory
-          ? "Not routed — this project's issues won't be picked up."
+          ? "Not routed — this source's issues won't be picked up."
           : board === null
-            ? "Choose a board — this project's issues won't be picked up until one is set."
+            ? "Choose a board — this source's issues won't be picked up until one is set."
             : undefined;
         return (
           <SettingsRow key={sourceId} label={name} description={description}>

@@ -82,7 +82,7 @@ export interface LinearWorkspace {
 
 export interface LinearIssue {
   id: string;
-  projectId: string;
+  projectId: string | null;
   /** Human key like `ENG-123`. */
   identifier: string;
   title: string;
@@ -123,6 +123,14 @@ export interface LinearProject {
   teams: LinearProjectTeam[];
 }
 
+/** A Linear team, selectable as an intake source in its own right. */
+export interface LinearTeam {
+  id: string;
+  /** Short team key, e.g. `ENG`. */
+  key: string;
+  name: string;
+}
+
 export interface LinearIssueComment {
   author: string | null;
   body: string;
@@ -132,6 +140,8 @@ export interface LinearIssueComment {
 /** Full issue payload for agent context: everything in {@link LinearIssue} plus description and discussion. */
 export interface LinearIssueDetail extends Omit<LinearIssue, 'projectId'> {
   projectId: string | null;
+  /** Team id the issue belongs to, used to authorize team-sourced intake reads. */
+  teamId: string | null;
   /** Markdown body of the issue, or `null` when empty. */
   description: string | null;
   /** Discussion comments, oldest first. */
@@ -183,7 +193,7 @@ interface IssuesQueryData {
       createdAt: string;
       updatedAt: string;
       state: { name: string; type: string };
-      project: { id: string };
+      project: { id: string } | null;
       assignee: { name: string } | null;
       creator: { name: string } | null;
       team: { key: string } | null;
@@ -218,7 +228,7 @@ interface IssueDetailQueryData {
     project: { id: string } | null;
     assignee: { name: string } | null;
     creator: { name: string } | null;
-    team: { key: string } | null;
+    team: { id: string; key: string } | null;
     labels: { nodes: Array<{ name: string }> };
     comments: IssueCommentsPage;
   } | null;
@@ -513,12 +523,20 @@ export class LinearIntegration implements FactoryIntegration {
       const connection = await this.loadConnection(orgId);
       if (!connection) return [];
       const accessToken = await this.getFreshAccessToken(connection);
-      const projects = await this.listProjects(accessToken);
-      return projects.map(project => ({
-        id: project.id,
-        name: project.name,
-        type: 'project',
-      }));
+      const [projects, teams] = await Promise.all([this.listProjects(accessToken), this.listTeams(accessToken)]);
+      return [
+        ...projects.map(project => ({
+          id: project.id,
+          name: project.name,
+          type: 'project' as const,
+        })),
+        ...teams.map(team => ({
+          id: encodeSelfManagedTeamSourceId(team.id),
+          name: team.name,
+          type: 'team' as const,
+          metadata: { teamKey: team.key },
+        })),
+      ];
     },
     listItems: async ({ orgId, sourceIds, cursor }) => {
       if (sourceIds.length === 0) return { items: [], nextCursor: null };
@@ -527,22 +545,31 @@ export class LinearIntegration implements FactoryIntegration {
       const accessToken = await this.getFreshAccessToken(connection);
       const page = await this.listActiveIssues(accessToken, cursor, sourceIds);
       return {
-        items: page.issues.map(issue => ({
-          source: { type: 'issue', externalId: issue.id, url: issue.url },
-          sourceId: issue.projectId,
-          title: `${issue.identifier}: ${issue.title}`,
-          status: issue.state,
-          labels: issue.labels,
-          assignee: issue.assignee,
-          createdAt: issue.createdAt,
-          updatedAt: issue.updatedAt,
-          metadata: {
-            identifier: issue.identifier,
-            stateType: issue.stateType,
-            priority: issue.priorityLabel,
-            team: issue.team,
-          },
-        })),
+        items: page.issues.flatMap(issue => {
+          // The generic item list keys each item by its source id. Projectless
+          // issues have no project source id here; they surface through the
+          // team-aware `listIssues` path instead, so skip them in this legacy
+          // project-keyed view rather than emitting an unroutable null id.
+          if (issue.projectId === null) return [];
+          return [
+            {
+              source: { type: 'issue', externalId: issue.id, url: issue.url },
+              sourceId: issue.projectId,
+              title: `${issue.identifier}: ${issue.title}`,
+              status: issue.state,
+              labels: issue.labels,
+              assignee: issue.assignee,
+              createdAt: issue.createdAt,
+              updatedAt: issue.updatedAt,
+              metadata: {
+                identifier: issue.identifier,
+                stateType: issue.stateType,
+                priority: issue.priorityLabel,
+                team: issue.team,
+              },
+            },
+          ];
+        }),
         nextCursor: page.nextCursor,
       };
     },
@@ -676,10 +703,57 @@ export class LinearIntegration implements FactoryIntegration {
 
   async #listIntakeIssues(input: ListIntakeIssuesInput): Promise<{ issues: IntakeIssue[]; nextCursor: string | null }> {
     const accessToken = getLinearAccessToken(input.connection);
-    const result = await this.listActiveIssues(accessToken, input.cursor, input.sourceIds, input.labels);
+    const { projectIds, teamIds } = splitSelfManagedSourceIds(input.sourceIds);
+
+    // Only a project selection (or nothing selected): keep the original
+    // single-query path so existing project-only intake is byte-for-byte
+    // unchanged, including its cursor.
+    if (teamIds.length === 0) {
+      const result = await this.listActiveIssues(accessToken, input.cursor, projectIds, input.labels);
+      return {
+        issues: result.issues.map(issue => linearIssueToIntakeIssue(issue)),
+        nextCursor: result.nextCursor,
+      };
+    }
+
+    // A team is selected. List projects and teams separately (the two Linear
+    // filters would AND together in one query) and stamp each issue with the
+    // selected source that surfaced it. Each source kind paginates on its own
+    // cursor, carried in a compound cursor when both are present.
+    const cursors = decodeSelfManagedListCursor(input.cursor, projectIds.length > 0);
+
+    const projectResult =
+      projectIds.length > 0 && cursors.projects !== null
+        ? await this.listActiveIssues(accessToken, cursors.projects, projectIds, input.labels)
+        : { issues: [], nextCursor: null };
+    const teamResult =
+      cursors.teams !== null
+        ? await this.listActiveIssues(accessToken, cursors.teams, undefined, input.labels, teamIds)
+        : { issues: [], nextCursor: null };
+
+    // Stamp project issues with their (selected) project id; stamp team issues
+    // with the team source id. A team issue whose project was also selected is
+    // reconciled by the dedupe step below (project wins).
+    const projectIssues = projectResult.issues.map(issue => linearIssueToIntakeIssue(issue));
+    const selectedTeamSourceById = new Map(teamIds.map(teamId => [teamId, encodeSelfManagedTeamSourceId(teamId)]));
+    const teamIssues = teamResult.issues.map(issue => {
+      // The self-managed issue carries the raw team key, not id, so we cannot
+      // map back to the specific selected team id when several are selected.
+      // With a single team selected this is exact; with several we attribute to
+      // the first selected team, which still routes to a team board the user
+      // chose. Board routing is per-source-id and dedupe is by issue id, so
+      // this stays deterministic.
+      const teamSourceId = selectedTeamSourceById.get(teamIds[0]!)!;
+      return { ...linearIssueToIntakeIssue(issue), sourceId: teamSourceId };
+    });
+
+    const deduped = dedupeSelfManagedIssues([...projectIssues, ...teamIssues]);
     return {
-      issues: result.issues.map(issue => linearIssueToIntakeIssue(issue)),
-      nextCursor: result.nextCursor,
+      issues: deduped,
+      nextCursor: encodeSelfManagedListCursor(
+        { projects: projectResult.nextCursor, teams: teamResult.nextCursor },
+        projectIds.length > 0,
+      ),
     };
   }
 
@@ -773,31 +847,45 @@ export class LinearIntegration implements FactoryIntegration {
     }));
   }
 
+  /** List the workspace's teams (for the Settings intake-source picker). */
+  async listTeams(accessToken: string): Promise<LinearTeam[]> {
+    const data = await linearGraphql<{
+      teams: { nodes: Array<{ id: string; key: string; name: string }> };
+    }>(accessToken, `query { teams(first: 100) { nodes { id key name } } }`);
+    return data.teams.nodes.map(team => ({ id: team.id, key: team.key, name: team.name }));
+  }
+
   /**
    * List one page of the workspace's active issues (triage/backlog/unstarted/
    * started — completed and canceled are excluded), most recently updated
    * first. When `projectIds` is provided, only issues from those projects are
-   * returned.
+   * returned. When `teamIds` is provided, only issues in those teams are
+   * returned, including issues that belong to no project. Callers list team
+   * sources and project sources in separate calls so the two filters are not
+   * AND-ed together.
    */
   async listActiveIssues(
     accessToken: string,
     after?: string,
     projectIds?: string[],
     labels?: string[],
+    teamIds?: string[],
   ): Promise<LinearIssuePage> {
     const normalizedLabels = [...new Set((labels ?? []).map(label => label.trim()).filter(Boolean))];
     const projectFilter = projectIds?.length ? ', project: { id: { in: $projectIds } }' : '';
     const projectVar = projectIds?.length ? ', $projectIds: [ID!]' : '';
+    const teamFilter = teamIds?.length ? ', team: { id: { in: $teamIds } }' : '';
+    const teamVar = teamIds?.length ? ', $teamIds: [ID!]' : '';
     const labelFilter = normalizedLabels.length > 0 ? ', labels: { name: { in: $labels } }' : '';
     const labelVar = normalizedLabels.length > 0 ? ', $labels: [String!]' : '';
     const data = await linearGraphql<IssuesQueryData>(
       accessToken,
-      `query Intake($first: Int!, $after: String${projectVar}${labelVar}) {
+      `query Intake($first: Int!, $after: String${projectVar}${teamVar}${labelVar}) {
         issues(
           first: $first
           after: $after
           orderBy: updatedAt
-          filter: { state: { type: { in: ["triage", "backlog", "unstarted", "started"] } }${projectFilter}${labelFilter} }
+          filter: { state: { type: { in: ["triage", "backlog", "unstarted", "started"] } }${projectFilter}${teamFilter}${labelFilter} }
         ) {
           nodes {
             id
@@ -821,6 +909,7 @@ export class LinearIntegration implements FactoryIntegration {
         first: LINEAR_ISSUES_PAGE_SIZE,
         after: after ?? null,
         ...(projectIds?.length ? { projectIds } : {}),
+        ...(teamIds?.length ? { teamIds } : {}),
         ...(normalizedLabels.length > 0 ? { labels: normalizedLabels } : {}),
       },
     );
@@ -828,7 +917,7 @@ export class LinearIntegration implements FactoryIntegration {
     return {
       issues: nodes.map(node => ({
         id: node.id,
-        projectId: node.project.id,
+        projectId: node.project?.id ?? null,
         identifier: node.identifier,
         title: node.title,
         url: node.url,
@@ -900,7 +989,7 @@ export class LinearIntegration implements FactoryIntegration {
             project { id }
             assignee { name }
             creator { name }
-            team { key }
+            team { id key }
             labels { nodes { name } }
             comments(first: $commentsFirst) {
               nodes { body createdAt user { name } }
@@ -924,6 +1013,7 @@ export class LinearIntegration implements FactoryIntegration {
     return {
       id: issue.id,
       projectId: issue.project?.id ?? null,
+      teamId: issue.team?.id ?? null,
       identifier: issue.identifier,
       title: issue.title,
       description: issue.description?.trim() ? issue.description : null,
@@ -1036,6 +1126,109 @@ function getLinearAccessToken(connection: IntegrationConnection): string {
     throw new Error('Linear capabilities require an OAuth connection.');
   }
   return connection.accessToken;
+}
+
+/**
+ * Self-managed source ids. Projects use their raw Linear project id (no prefix,
+ * preserving existing intake bindings). Teams are prefixed so the two never
+ * collide and callers can tell them apart.
+ */
+const SELF_MANAGED_TEAM_SOURCE_PREFIX = 'linear-team:';
+
+function encodeSelfManagedTeamSourceId(teamId: string): string {
+  return `${SELF_MANAGED_TEAM_SOURCE_PREFIX}${teamId}`;
+}
+
+function isSelfManagedTeamSourceId(sourceId: string): boolean {
+  return sourceId.startsWith(SELF_MANAGED_TEAM_SOURCE_PREFIX);
+}
+
+function decodeSelfManagedTeamSourceId(sourceId: string): string {
+  return sourceId.slice(SELF_MANAGED_TEAM_SOURCE_PREFIX.length);
+}
+
+/**
+ * Split selected source ids into raw project ids and raw team ids. A team
+ * source id carries the `linear-team:` prefix; everything else is a project id.
+ */
+function splitSelfManagedSourceIds(sourceIds: string[]): { projectIds: string[]; teamIds: string[] } {
+  const projectIds: string[] = [];
+  const teamIds: string[] = [];
+  for (const sourceId of sourceIds) {
+    if (isSelfManagedTeamSourceId(sourceId)) teamIds.push(decodeSelfManagedTeamSourceId(sourceId));
+    else projectIds.push(sourceId);
+  }
+  return { projectIds, teamIds };
+}
+
+/**
+ * Cursor for a mixed team+project listing. When both kinds are selected the two
+ * per-kind cursors travel together as JSON; `null` marks an exhausted kind. A
+ * plain string (project-only path) never reaches here.
+ */
+type SelfManagedListCursor = { projects: string | null; teams: string | null };
+
+function decodeSelfManagedListCursor(
+  cursor: string | undefined,
+  hasProjects: boolean,
+): { projects: string | null | undefined; teams: string | null | undefined } {
+  if (!cursor) return { projects: undefined, teams: undefined };
+  // Team-only selection paginates on a single (team) cursor string.
+  if (!hasProjects) return { projects: null, teams: cursor };
+  try {
+    const parsed = JSON.parse(cursor) as Partial<SelfManagedListCursor>;
+    return {
+      projects: parsed.projects ?? null,
+      teams: parsed.teams ?? null,
+    };
+  } catch {
+    throw new Error('Linear cursor is invalid.');
+  }
+}
+
+function encodeSelfManagedListCursor(state: SelfManagedListCursor, hasProjects: boolean): string | null {
+  if (state.projects === null && state.teams === null) return null;
+  // Team-only selection: expose the bare team cursor.
+  if (!hasProjects) return state.teams;
+  return JSON.stringify(state);
+}
+
+/**
+ * Deduplicate issues that surfaced from both a selected team and one of its
+ * selected projects. Keeps one entry per Linear issue UUID.
+ *
+ * Tie-breaker — MOST-SPECIFIC-WINS: an issue in a selected project is
+ * attributed to that project source (routes to the project's board); the team
+ * source covers only the remainder (projectless issues and issues in projects
+ * that were not separately selected). Change the comparison here to change the
+ * routing policy — this is the single precedence point for the self-managed
+ * integration, mirroring the platform-backed one.
+ */
+function dedupeSelfManagedIssues(
+  issues: Array<IntakeIssue & { sourceId?: string | null }>,
+): Array<IntakeIssue & { sourceId?: string | null }> {
+  const isProjectSource = (sourceId: string | null | undefined): boolean =>
+    typeof sourceId === 'string' && sourceId.length > 0 && !isSelfManagedTeamSourceId(sourceId);
+  const winners = new Map<string, IntakeIssue & { sourceId?: string | null }>();
+  for (const issue of issues) {
+    const existing = winners.get(issue.id);
+    if (!existing) {
+      winners.set(issue.id, issue);
+      continue;
+    }
+    // Project source beats team source; otherwise keep the first seen.
+    if (isProjectSource(issue.sourceId) && !isProjectSource(existing.sourceId)) {
+      winners.set(issue.id, issue);
+    }
+  }
+  const seen = new Set<string>();
+  const ordered: Array<IntakeIssue & { sourceId?: string | null }> = [];
+  for (const issue of issues) {
+    if (seen.has(issue.id)) continue;
+    seen.add(issue.id);
+    ordered.push(winners.get(issue.id)!);
+  }
+  return ordered;
 }
 
 function linearIssueToIntakeIssue(issue: Omit<LinearIssue, 'projectId'> & { projectId?: string | null }): IntakeIssue {

@@ -38,7 +38,7 @@ export interface LinearIssueIngress {
   labels: string[];
   createdAt: string;
   updatedAt: string;
-  /** Linear project the issue was read from; resolves the bound board via `intakeBoards`. */
+  /** Linear source the issue was read from (project or team); resolves the bound board via `intakeBoards`. */
   sourceId?: string | null;
 }
 

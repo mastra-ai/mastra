@@ -136,14 +136,28 @@ describe('PlatformLinearIntegration', () => {
     ).resolves.toBeNull();
   });
 
-  it('lists connected workspace projects as Intake sources', async () => {
-    const fetchImpl = vi
-      .fn<typeof fetch>()
-      .mockResolvedValueOnce(
-        json({ workspaces: [workspace, { ...workspace, linearWorkspaceId: 'old', connected: false }] }),
-      )
-      .mockResolvedValueOnce(json({ projects: [project], pageInfo: { hasNextPage: false, endCursor: null } }));
+  it('lists connected workspace projects and teams as Intake sources', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async input => {
+      const url = String(input);
+      if (url.endsWith('/v1/server/linear/workspaces')) {
+        return json({ workspaces: [workspace, { ...workspace, linearWorkspaceId: 'old', connected: false }] });
+      }
+      if (url.includes('/projects')) {
+        return json({ projects: [project], pageInfo: { hasNextPage: false, endCursor: null } });
+      }
+      if (url.includes('/teams')) {
+        return json({
+          teams: [{ id: 'team-1', key: 'ENG', name: 'Engineering' }],
+          pageInfo: { hasNextPage: false, endCursor: null },
+        });
+      }
+      throw new Error(`unexpected request: ${url}`);
+    });
     const integration = createIntegration(fetchImpl);
+
+    const teamSourceId = `linear-team:${Buffer.from(
+      JSON.stringify({ workspaceId: 'workspace-1', teamId: 'team-1' }),
+    ).toString('base64url')}`;
 
     await expect(integration.intake.listSources({ orgId: 'org-1', userId: 'user-1' })).resolves.toEqual([
       {
@@ -152,12 +166,13 @@ describe('PlatformLinearIntegration', () => {
         type: 'project',
         metadata: expect.objectContaining({ workspaceId: 'workspace-1', workspaceName: 'Acme', state: 'started' }),
       },
+      {
+        id: teamSourceId,
+        name: 'Engineering',
+        type: 'team',
+        metadata: expect.objectContaining({ workspaceId: 'workspace-1', workspaceName: 'Acme', teamKey: 'ENG' }),
+      },
     ]);
-    expect(fetchImpl).toHaveBeenNthCalledWith(
-      1,
-      'https://platform.example.com/v1/server/linear/workspaces',
-      expect.objectContaining({ headers: expect.objectContaining({ authorization: 'Bearer platform-token' }) }),
-    );
   });
 
   it('normalizes active project issues and filters labels client-side', async () => {
@@ -202,6 +217,96 @@ describe('PlatformLinearIntegration', () => {
     expect(issuesUrl).toContain('/workspaces/workspace-1/issues?');
     expect(issuesUrl).toContain('projectIds=project-1');
     expect(issuesUrl).toContain('stateType=triage%2Cbacklog%2Cunstarted%2Cstarted');
+  });
+
+  it('lists a team source with teamId (no projectIds) and returns projectless issues', async () => {
+    const teamSourceId = `linear-team:${Buffer.from(
+      JSON.stringify({ workspaceId: 'workspace-1', teamId: 'team-1' }),
+    ).toString('base64url')}`;
+    const projectlessIssue = {
+      ...issue,
+      id: 'issue-9',
+      identifier: 'ENG-9',
+      project: null,
+      labels: [] as Array<{ id: string; name: string }>,
+    };
+    const fetchImpl = vi.fn<typeof fetch>(async input => {
+      const url = String(input);
+      if (url.endsWith('/v1/server/linear/workspaces')) return json({ workspaces: [workspace] });
+      if (url.includes('/projects')) {
+        return json({ projects: [project], pageInfo: { hasNextPage: false, endCursor: null } });
+      }
+      if (url.includes('/teams')) {
+        return json({
+          teams: [{ id: 'team-1', key: 'ENG', name: 'Engineering' }],
+          pageInfo: { hasNextPage: false, endCursor: null },
+        });
+      }
+      if (url.includes('/issues')) {
+        return json({ issues: [projectlessIssue], pageInfo: { hasNextPage: false, endCursor: null } });
+      }
+      throw new Error(`unexpected request: ${url}`);
+    });
+    const integration = createIntegration(fetchImpl);
+
+    const result = await integration.intake.listIssues({
+      connection: { type: 'oauth', accessToken: 'unused-provider-token' },
+      sourceIds: [teamSourceId],
+    });
+
+    expect(result.issues).toEqual([
+      expect.objectContaining({ id: 'issue-9', identifier: 'ENG-9', sourceId: teamSourceId }),
+    ]);
+    const issuesCall = fetchImpl.mock.calls.map(c => String(c[0])).find(u => u.includes('/issues'))!;
+    expect(issuesCall).toContain('teamId=team-1');
+    expect(issuesCall).not.toContain('projectIds=');
+    expect(issuesCall).toContain('stateType=triage%2Cbacklog%2Cunstarted%2Cstarted');
+  });
+
+  it('dedupes an issue selected via both a team and its project, project wins (most-specific)', async () => {
+    const teamSourceId = `linear-team:${Buffer.from(
+      JSON.stringify({ workspaceId: 'workspace-1', teamId: 'team-1' }),
+    ).toString('base64url')}`;
+    const overlapping = { ...issue, id: 'issue-1', project: { id: 'project-1' } };
+    const projectlessTeamIssue = {
+      ...issue,
+      id: 'issue-2',
+      identifier: 'ENG-99',
+      project: null,
+      labels: [] as Array<{ id: string; name: string }>,
+    };
+    const fetchImpl = vi.fn<typeof fetch>(async input => {
+      const url = String(input);
+      if (url.endsWith('/v1/server/linear/workspaces')) return json({ workspaces: [workspace] });
+      if (url.includes('/projects')) {
+        return json({ projects: [project], pageInfo: { hasNextPage: false, endCursor: null } });
+      }
+      if (url.includes('/teams')) {
+        return json({
+          teams: [{ id: 'team-1', key: 'ENG', name: 'Engineering' }],
+          pageInfo: { hasNextPage: false, endCursor: null },
+        });
+      }
+      if (url.includes('projectIds=project-1')) {
+        return json({ issues: [overlapping], pageInfo: { hasNextPage: false, endCursor: null } });
+      }
+      if (url.includes('teamId=team-1')) {
+        return json({ issues: [overlapping, projectlessTeamIssue], pageInfo: { hasNextPage: false, endCursor: null } });
+      }
+      throw new Error(`unexpected request: ${url}`);
+    });
+    const integration = createIntegration(fetchImpl);
+
+    const result = await integration.intake.listIssues({
+      connection: { type: 'oauth', accessToken: 'unused-provider-token' },
+      sourceIds: [project1SourceId, teamSourceId],
+    });
+
+    expect(result.issues).toHaveLength(2);
+    const overlap = result.issues.find(i => i.id === 'issue-1')!;
+    expect(overlap.sourceId).toBe(project1SourceId);
+    const projectless = result.issues.find(i => i.id === 'issue-2')!;
+    expect(projectless.sourceId).toBe(teamSourceId);
   });
 
   it('fetches issue details with comments and creates comments through the source workspace', async () => {

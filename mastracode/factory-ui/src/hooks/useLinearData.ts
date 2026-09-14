@@ -7,6 +7,7 @@ import {
   getLinearIssue,
   listLinearIssues,
   listLinearProjects,
+  listLinearTeams,
 } from '../ui/domains/factory/services/linear';
 import { DETAIL_STALE_MS, INTAKE_POLL_MS } from './useFactoryData';
 
@@ -65,6 +66,16 @@ export function useLinearProjectsQuery(enabled: boolean) {
   return useQuery({
     queryKey: queryKeys.linearProjects(),
     queryFn: () => listLinearProjects(baseUrl),
+    enabled,
+  });
+}
+
+/** The connected workspace's teams (Settings intake-source picker). */
+export function useLinearTeamsQuery(enabled: boolean) {
+  const { baseUrl } = useApiConfig();
+  return useQuery({
+    queryKey: queryKeys.linearTeams(),
+    queryFn: () => listLinearTeams(baseUrl),
     enabled,
   });
 }

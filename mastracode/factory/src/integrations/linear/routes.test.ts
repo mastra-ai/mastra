@@ -281,6 +281,62 @@ describe('issues route', () => {
     });
   });
 
+  it('ingests a projectless team-sourced issue onto the team board', async () => {
+    await connect();
+    const teamSourceId = 'linear-team:team-1';
+    const factoryProjectId = '11111111-1111-4111-8111-111111111111';
+    await seed.intake.saveConfig({
+      orgId: 'org1',
+      userId: 'u1',
+      config: { linear: { enabled: true, sourceIds: [teamSourceId] } },
+    });
+    await seed.intake.setBinding({
+      orgId: 'org1',
+      integrationId: 'linear',
+      sourceId: teamSourceId,
+      factoryProjectId,
+      board: 'work',
+    });
+    // The team listing returns a projectless issue; stamp reflects the team source.
+    vi.spyOn(linear, 'listActiveIssues').mockResolvedValue({
+      issues: [
+        {
+          id: 'issue-9',
+          projectId: null,
+          identifier: 'ENG-99',
+          title: 'Projectless bug',
+          url: 'https://linear.app/acme/issue/ENG-99',
+          state: 'Triage',
+          stateType: 'triage',
+          priorityLabel: 'No priority',
+          assignee: null,
+          creator: 'grace',
+          team: 'ENG',
+          labels: [],
+          createdAt: '2026-07-01T00:00:00Z',
+          updatedAt: '2026-07-02T00:00:00Z',
+        },
+      ],
+      nextCursor: null,
+    });
+    const ingestFactoryIssues = vi.fn(async () => ({ status: 'committed', ingested: 1 }));
+
+    const res = await buildApp(org1(), { ingestFactoryIssues }).request(
+      `/web/linear/issues?factoryProjectId=${factoryProjectId}`,
+    );
+
+    expect(res.status).toBe(200);
+    expect(ingestFactoryIssues).toHaveBeenCalledWith({
+      orgId: 'org1',
+      userId: 'u1',
+      factoryProjectId,
+      intakeBoards: { [teamSourceId]: 'work' },
+      issues: expect.arrayContaining([
+        expect.objectContaining({ id: 'issue-9', identifier: 'ENG-99', sourceId: teamSourceId }),
+      ]),
+    });
+  });
+
   describe('Factory project scoping', () => {
     const projectA = '11111111-1111-4111-8111-111111111111';
     const projectB = '22222222-2222-4222-8222-222222222222';

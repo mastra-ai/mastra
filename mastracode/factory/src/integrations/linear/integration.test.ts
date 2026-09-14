@@ -113,6 +113,140 @@ describe('LinearIntegration capability surface', () => {
     expect(request.variables).toMatchObject({ labels: ['bug', 'urgent'] });
   });
 
+  it('maps a projectless active issue to projectId: null without throwing', async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            data: {
+              issues: {
+                nodes: [
+                  {
+                    id: 'issue-2',
+                    identifier: 'ENG-7',
+                    title: 'Projectless bug',
+                    url: 'https://linear.app/acme/issue/ENG-7',
+                    priorityLabel: 'No priority',
+                    createdAt: '2026-07-01T00:00:00Z',
+                    updatedAt: '2026-07-02T00:00:00Z',
+                    state: { name: 'Triage', type: 'triage' },
+                    project: null,
+                    assignee: null,
+                    creator: null,
+                    team: { key: 'ENG' },
+                    labels: { nodes: [] },
+                  },
+                ],
+                pageInfo: { hasNextPage: false, endCursor: null },
+              },
+            },
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const linear = integration();
+
+    const page = await linear.listActiveIssues('linear-token');
+
+    expect(page.issues).toEqual([
+      expect.objectContaining({ id: 'issue-2', identifier: 'ENG-7', projectId: null, team: 'ENG' }),
+    ]);
+  });
+
+  it('lists workspace teams for the intake-source picker', async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            data: {
+              teams: {
+                nodes: [
+                  { id: 'team-1', key: 'ENG', name: 'Engineering' },
+                  { id: 'team-2', key: 'OPS', name: 'Operations' },
+                ],
+              },
+            },
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const linear = integration();
+
+    await expect(linear.listTeams('linear-token')).resolves.toEqual([
+      { id: 'team-1', key: 'ENG', name: 'Engineering' },
+      { id: 'team-2', key: 'OPS', name: 'Operations' },
+    ]);
+  });
+
+  it('applies a team filter (and no project filter) when teamIds is provided', async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({ data: { issues: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } } } }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const linear = integration();
+
+    await linear.listActiveIssues('linear-token', undefined, undefined, undefined, ['team-1', 'team-2']);
+
+    const request = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as {
+      query: string;
+      variables: Record<string, unknown>;
+    };
+    expect(request.query).toContain('team: { id: { in: $teamIds } }');
+    expect(request.query).not.toContain('project: { id: { in: $projectIds } }');
+    expect(request.variables).toMatchObject({ teamIds: ['team-1', 'team-2'] });
+  });
+
+  it('lists team sources and dedupes an overlapping issue in favour of the project (most-specific-wins)', async () => {
+    const linear = integration();
+    const teamSourceId = `linear-team:team-1`;
+    const overlapping: LinearIssue = { ...issue, id: 'issue-1', projectId: 'project-1' };
+    const projectlessTeamIssue: LinearIssue = { ...issue, id: 'issue-2', identifier: 'ENG-99', projectId: null };
+
+    const listActiveIssues = vi
+      .spyOn(linear, 'listActiveIssues')
+      // First call = project source listing.
+      .mockResolvedValueOnce({ issues: [overlapping], nextCursor: null })
+      // Second call = team source listing (includes the overlap + a projectless issue).
+      .mockResolvedValueOnce({ issues: [overlapping, projectlessTeamIssue], nextCursor: null });
+
+    const result = await linear.intake.listIssues({
+      connection,
+      sourceIds: ['project-1', teamSourceId],
+    });
+
+    // Project call: projectIds=['project-1'], no teamIds.
+    expect(listActiveIssues).toHaveBeenNthCalledWith(1, 'linear-token', undefined, ['project-1'], undefined);
+    // Team call: no projectIds, teamIds=['team-1'].
+    expect(listActiveIssues).toHaveBeenNthCalledWith(2, 'linear-token', undefined, undefined, undefined, ['team-1']);
+
+    // issue-1 appears once, attributed to the project source; issue-2 kept via team.
+    expect(result.issues).toHaveLength(2);
+    const overlap = result.issues.find(i => i.id === 'issue-1')!;
+    expect(overlap.sourceId).toBe('project-1');
+    const projectless = result.issues.find(i => i.id === 'issue-2')!;
+    expect(projectless.sourceId).toBe(teamSourceId);
+  });
+
+  it('keeps the original single-query path for a project-only selection', async () => {
+    const linear = integration();
+    const listActiveIssues = vi
+      .spyOn(linear, 'listActiveIssues')
+      .mockResolvedValue({ issues: [issue], nextCursor: 'next' });
+
+    const result = await linear.intake.listIssues({ connection, sourceIds: ['project-1', 'project-2'] });
+
+    // One call, all ids passed as projectIds, cursor forwarded verbatim.
+    expect(listActiveIssues).toHaveBeenCalledTimes(1);
+    expect(listActiveIssues).toHaveBeenCalledWith('linear-token', undefined, ['project-1', 'project-2'], undefined);
+    expect(result.nextCursor).toBe('next');
+  });
+
   it('fetches issue details without a project', async () => {
     vi.stubGlobal(
       'fetch',

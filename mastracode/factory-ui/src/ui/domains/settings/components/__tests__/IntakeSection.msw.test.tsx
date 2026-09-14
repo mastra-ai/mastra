@@ -13,6 +13,7 @@ import { IntakeSection } from '../IntakeSection';
 const CONFIG_URL = `${TEST_BASE_URL}/web/intake/config`;
 const LINEAR_STATUS_URL = `${TEST_BASE_URL}/web/linear/status`;
 const LINEAR_PROJECTS_URL = `${TEST_BASE_URL}/web/linear/projects`;
+const LINEAR_TEAMS_URL = `${TEST_BASE_URL}/web/linear/teams`;
 
 function baseConfig(): IntakeConfig {
   return {
@@ -36,6 +37,8 @@ const linearProjects: LinearProject[] = [
   { id: 'lproj-2', name: 'Design refresh', state: 'planned', teams: [] },
   { id: 'lproj-3', name: 'Shared initiative', state: 'started', teams: [engTeam, designTeam] },
 ];
+
+const linearTeams = [engTeam, designTeam];
 
 function seedGithubProject() {
   server.use(
@@ -76,6 +79,9 @@ function useIntakeHandlers({
     }),
     http.get(LINEAR_STATUS_URL, () => HttpResponse.json(status)),
     http.get(LINEAR_PROJECTS_URL, () => HttpResponse.json({ projects: linearProjects })),
+    http.get(LINEAR_TEAMS_URL, () => HttpResponse.json({ teams: linearTeams })),
+    http.get(`${TEST_BASE_URL}/web/intake/bindings`, () => HttpResponse.json({ bindings: [] })),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/:id/boards`, () => HttpResponse.json({ boards: [] })),
   );
   return saved;
 }
@@ -111,7 +117,7 @@ describe('IntakeSection', () => {
 
       renderIntakeSection();
 
-      const projects = await screen.findByRole('group', { name: 'Linear projects' });
+      const projects = await screen.findByRole('group', { name: 'Linear projects and teams' });
 
       expect(within(projects).getByText('Engineering')).toBeInTheDocument();
       expect(within(projects).getByText('Design')).toBeInTheDocument();
@@ -145,7 +151,7 @@ describe('IntakeSection', () => {
 
       renderIntakeSection();
 
-      const search = await screen.findByRole('textbox', { name: 'Search Linear projects' });
+      const search = await screen.findByRole('textbox', { name: 'Search Linear projects and teams' });
       expect(await screen.findByRole('checkbox', { name: 'Design refresh' })).toBeInTheDocument();
 
       await userEvent.type(search, 'road');
@@ -207,14 +213,16 @@ describe('IntakeSection', () => {
 
       await userEvent.click(await screen.findByRole('checkbox', { name: 'Q3 Roadmap' }));
 
-      expect(await screen.findByRole('status', { name: 'Saving Linear projects selection' })).toBeInTheDocument();
+      expect(await screen.findByRole('status', { name: 'Saving Linear projects and teams selection' })).toBeInTheDocument();
       // Base UI's checkbox root is a span, so disabled state is exposed via aria-disabled.
       expect(screen.getByRole('checkbox', { name: 'Q3 Roadmap' })).toHaveAttribute('aria-disabled', 'true');
 
       releaseSave();
 
       await waitFor(() =>
-        expect(screen.queryByRole('status', { name: 'Saving Linear projects selection' })).not.toBeInTheDocument(),
+        expect(
+          screen.queryByRole('status', { name: 'Saving Linear projects and teams selection' }),
+        ).not.toBeInTheDocument(),
       );
       expect(screen.getByRole('checkbox', { name: 'Q3 Roadmap' })).not.toHaveAttribute('aria-disabled');
     });
@@ -232,6 +240,41 @@ describe('IntakeSection', () => {
       // have fired, so a doubled label toggle shows up as a third request here.
       await userEvent.click(await screen.findByText('Design refresh'));
       await waitFor(() => expect(saved).toHaveLength(2));
+    });
+  });
+
+  describe('when a Linear team is picked', () => {
+    it('persists the team as its own source id', async () => {
+      const saved = useIntakeHandlers();
+
+      renderIntakeSection();
+
+      await userEvent.click(await screen.findByRole('checkbox', { name: 'All issues in Engineering' }));
+
+      await waitFor(() => expect(saved).toHaveLength(1));
+      expect(saved[0]!.linear.sourceIds).toEqual(['linear-team:team-eng']);
+    });
+
+    it('marks projects under a selected team as redundant and disables them', async () => {
+      useIntakeHandlers({
+        config: {
+          github: { enabled: true, sourceIds: null },
+          linear: { enabled: true, sourceIds: ['linear-team:team-eng'] },
+        },
+      });
+
+      renderIntakeSection();
+
+      // Q3 Roadmap belongs to Engineering, which is selected as a whole team.
+      // Its row gains a "covered by team" hint, so match by the leading label.
+      const project = await screen.findByRole('checkbox', { name: /Q3 Roadmap/ });
+      expect(project).toHaveAttribute('aria-disabled', 'true');
+      const linearSection = screen.getByRole('region', { name: 'Linear issues' });
+      // Q3 Roadmap and Shared initiative both sit under Engineering, so both are marked.
+      expect(within(linearSection).getAllByText('covered by team').length).toBeGreaterThanOrEqual(1);
+
+      // Design refresh has no team, so it stays selectable.
+      expect(screen.getByRole('checkbox', { name: /Design refresh/ })).not.toHaveAttribute('aria-disabled');
     });
   });
 
@@ -315,6 +358,7 @@ describe('IntakeSection', () => {
         http.get(CONFIG_URL, () => HttpResponse.json({ config: {} })),
         http.get(LINEAR_STATUS_URL, () => HttpResponse.json(connectedStatus)),
         http.get(LINEAR_PROJECTS_URL, () => HttpResponse.json({ projects: linearProjects })),
+        http.get(LINEAR_TEAMS_URL, () => HttpResponse.json({ teams: linearTeams })),
       );
 
       renderIntakeSection();
@@ -331,6 +375,7 @@ describe('IntakeSection', () => {
         http.get(CONFIG_URL, () => HttpResponse.json({ error: 'nope' }, { status: 500 })),
         http.get(LINEAR_STATUS_URL, () => HttpResponse.json(connectedStatus)),
         http.get(LINEAR_PROJECTS_URL, () => HttpResponse.json({ projects: linearProjects })),
+        http.get(LINEAR_TEAMS_URL, () => HttpResponse.json({ teams: linearTeams })),
       );
 
       renderIntakeSection();

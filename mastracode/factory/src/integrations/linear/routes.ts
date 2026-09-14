@@ -306,6 +306,31 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions): ApiRoute[]
     }),
   );
 
+  // ── List the workspace's teams (Settings intake-source picker) ──────────
+  routes.push(
+    registerApiRoute('/web/linear/teams', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        const resolved = await resolveOrgTenant(loose(c), auth);
+        if ('response' in resolved) return resolved.response;
+
+        const connection = await linear.loadConnection(resolved.tenant.orgId);
+        if (!connection) {
+          return c.json({ error: 'linear_not_connected', message: 'Connect Linear to list Linear teams.' }, 409);
+        }
+
+        try {
+          const accessToken = await linear.getFreshAccessToken(connection);
+          const teams = await linear.listTeams(accessToken);
+          return c.json({ teams });
+        } catch (err) {
+          return linearFetchError(loose(c), err);
+        }
+      },
+    }),
+  );
+
   // ── List the workspace's active issues (cursor-paged) ───────────────────
   // Respects the caller's intake config: disabled Linear intake 404s the
   // source, and an explicit project selection narrows the issue filter.
@@ -340,10 +365,11 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions): ApiRoute[]
           return c.json({ error: 'linear_intake_disabled', message: 'Linear intake is turned off in Settings.' }, 404);
         }
 
-        // No projects selected means nothing is synced — don't fan out to Linear.
+        // No sources selected means nothing is synced — don't fan out to Linear.
         const selectedIds = selection.sourceIds ?? [];
         // A board request is also an ingest, so it only ever sees the sources
-        // routed to a board of that Factory project.
+        // routed to a board of that Factory project. Sources may be projects or
+        // whole teams; both are keyed by their opaque source id.
         const intakeBoards = factoryProjectId
           ? await scopeSourceIdsToProject({
               intake,
@@ -352,8 +378,8 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions): ApiRoute[]
               selectedIds,
             })
           : null;
-        const projectIds = intakeBoards ? Object.keys(intakeBoards) : selectedIds;
-        if (projectIds.length === 0) {
+        const routedSourceIds = intakeBoards ? Object.keys(intakeBoards) : selectedIds;
+        if (routedSourceIds.length === 0) {
           return c.json({ issues: [], nextCursor: null });
         }
 
@@ -361,7 +387,7 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions): ApiRoute[]
           const accessToken = await linear.getFreshAccessToken(connection);
           const { issues, nextCursor } = await linear.intake.listIssues({
             connection: { type: 'oauth', accessToken },
-            sourceIds: projectIds,
+            sourceIds: routedSourceIds,
             cursor: after,
           });
           const issuePayload = issues.map(issue => ({
@@ -427,7 +453,7 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions): ApiRoute[]
         if (!selection.enabled) {
           return c.json({ error: 'linear_intake_disabled', message: 'Linear intake is turned off in Settings.' }, 404);
         }
-        const projectIds = Object.keys(
+        const routedSourceIds = Object.keys(
           await scopeSourceIdsToProject({
             intake,
             orgId: resolved.tenant.orgId,
@@ -435,13 +461,23 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions): ApiRoute[]
             selectedIds: selection.sourceIds ?? [],
           }),
         );
-        if (projectIds.length === 0) return c.json({ error: 'issue_not_found' }, 404);
+        if (routedSourceIds.length === 0) return c.json({ error: 'issue_not_found' }, 404);
+
+        // Split routed sources into project ids and team ids. An issue is
+        // visible if it belongs to a routed project, or (for team sources) if
+        // its team is routed — which also covers projectless team issues.
+        const routedProjectIds = new Set(routedSourceIds.filter(id => !id.startsWith('linear-team:')));
+        const routedTeamIds = new Set(
+          routedSourceIds.filter(id => id.startsWith('linear-team:')).map(id => id.slice('linear-team:'.length)),
+        );
 
         try {
           const accessToken = await linear.getFreshAccessToken(connection);
           const issue = await linear.fetchIssueDetail(accessToken, identifier);
+          const inRoutedProject = issue?.projectId != null && routedProjectIds.has(issue.projectId);
+          const inRoutedTeam = issue?.teamId != null && routedTeamIds.has(issue.teamId);
           // Reads exactly like an issue that doesn't exist.
-          if (!issue || issue.projectId === null || !projectIds.includes(issue.projectId)) {
+          if (!issue || (!inRoutedProject && !inRoutedTeam)) {
             return c.json({ error: 'issue_not_found' }, 404);
           }
           return c.json({
