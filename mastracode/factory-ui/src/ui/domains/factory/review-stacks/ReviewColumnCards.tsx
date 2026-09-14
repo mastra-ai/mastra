@@ -42,7 +42,7 @@ export function ReviewColumnCards({
               role="group"
               aria-label={`Stack #${stack.number} · ${stack.title}`}
               data-review-stack={stack.id}
-              className="before:border-neutral3/30 relative flex min-w-0 flex-col gap-2.5 before:pointer-events-none before:absolute before:-inset-0.5 before:rounded-[calc(var(--radius-card)+var(--spacing-0\_5))] before:border before:border-dashed"
+              className="before:border-neutral3/30 relative flex min-w-0 flex-col gap-2.5 before:pointer-events-none before:absolute before:-inset-0.5 before:rounded-t-[12px] before:rounded-b-[calc(var(--radius-card)+var(--spacing-0\_5))] before:border before:border-dashed"
             >
               <div className="text-icon3 flex min-w-0 items-center gap-2 p-1">
                 <GitPullRequestArrow size={14} className="shrink-0" aria-hidden />
