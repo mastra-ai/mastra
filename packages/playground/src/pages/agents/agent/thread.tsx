@@ -5,6 +5,7 @@ import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired'
 import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
 import type { CollapsiblePanelHandle } from '@mastra/playground-ui/resize/collapsible-panel';
 import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
+import { useMastraClient } from '@mastra/react';
 import { useLayoutEffect, useMemo, useRef } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { AgentSidebar } from '@/domains/agents/agent-sidebar';
@@ -24,23 +25,34 @@ import { MemoryTimelineProvider } from '@/domains/agents/context/memory-timeline
 import { useAgent } from '@/domains/agents/hooks/use-agent';
 import { buildAgentDefaultSettings } from '@/domains/agents/utils/agent-default-settings';
 import { getAgentSuggestedPrompts } from '@/domains/agents/utils/agent-suggested-prompts';
+import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
+import { isAuthenticated } from '@/domains/auth/types';
+import type { ThreadDraftHandle } from '@/domains/conversation/context/ThreadInputContext';
 import { ThreadInputProvider } from '@/domains/conversation/context/ThreadInputContext';
 import { useMemory, useThreads } from '@/domains/memory/hooks/use-memory';
 import { ThreadViewByTrace } from '@/domains/traces/components/thread-view-by-trace';
 
 function AgentThread() {
   const { agentId, threadId } = useParams();
+  const client = useMastraClient();
+  const { data: auth, isLoading: isAuthLoading } = useAuthCapabilities();
+  const signedIn = auth && isAuthenticated(auth);
+  const userId = signedIn ? auth.user.id : undefined;
+  const canPersistDraft = auth?.enabled === false || Boolean(signedIn);
+  const draftScope = [client.options.baseUrl, client.options.apiPrefix, userId, agentId];
+  const draftKey = JSON.stringify([...draftScope, threadId ?? 'new']);
   const [searchParams] = useSearchParams();
   const { data: agent, isLoading: isAgentLoading, error } = useAgent(agentId!);
   const { data: memory } = useMemory(agentId!);
   const navigate = useNavigate();
   const isMobile = useIsMobile();
   const threadsPanel = useRef<CollapsiblePanelHandle>(null);
+  const draftHandle = useRef<ThreadDraftHandle>(null);
   const isNewThread = threadId === 'new';
 
   // eslint-disable-next-line react-hooks/exhaustive-deps -- threadId is intentional: we need a new UUID per thread
   const newThreadId = useMemo(() => uuid(), [threadId]);
-  const newThreadKey = `${agentId}:${newThreadId}`;
+  const newThreadKey = JSON.stringify([...draftScope, newThreadId]);
   const activeNewThread = useRef<string | undefined>(undefined);
   useLayoutEffect(() => {
     activeNewThread.current = isNewThread ? newThreadKey : undefined;
@@ -96,7 +108,7 @@ function AgentThread() {
     );
   }
 
-  if (isAgentLoading) {
+  if (isAgentLoading || isAuthLoading) {
     return <AgentThreadLoadingSkeleton />;
   }
 
@@ -117,7 +129,11 @@ function AgentThread() {
 
   const handleRefreshThreadList = async () => {
     if (isNewThread && activeNewThread.current === newThreadKey) {
-      void navigate(`/agents/${agentId}/threads/${newThreadId}`, { replace: true });
+      const currentDraft = draftHandle.current;
+      if (canPersistDraft) await currentDraft?.move(newThreadKey);
+      if (activeNewThread.current === newThreadKey && currentDraft === draftHandle.current) {
+        void navigate(`/agents/${agentId}/threads/${newThreadId}`, { replace: true });
+      }
     }
 
     await refreshThreads();
@@ -133,7 +149,11 @@ function AgentThread() {
             threadId={actualThreadId}
             enabled={Boolean(agent?.hasBrowser ?? agent?.browserTools?.length)}
           >
-            <ThreadInputProvider>
+            <ThreadInputProvider
+              ref={draftHandle}
+              key={`${canPersistDraft}:${JSON.stringify([...draftScope, actualThreadId])}`}
+              persistence={canPersistDraft ? { key: draftKey, threadId: actualThreadId } : undefined}
+            >
               <ObservationalMemoryProvider>
                 <MemoryTimelineProvider key={`memory-timeline-${agentId}-${actualThreadId}`}>
                   <ActivatedSkillsProvider key={`${agentId}-${actualThreadId}`}>
