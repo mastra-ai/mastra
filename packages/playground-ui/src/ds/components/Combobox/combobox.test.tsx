@@ -332,6 +332,29 @@ describe('Combobox', () => {
     expect(screen.getByRole('combobox').className).toContain('h-form-sm');
   });
 
+  it('renders a chevron-only trigger at icon sizes while keeping the value for assistive tech', async () => {
+    const onValueChange = vi.fn();
+    render(
+      <Combobox
+        options={options}
+        value="openai"
+        onValueChange={onValueChange}
+        size="icon-sm"
+        aria-label="Switch provider"
+      />,
+    );
+
+    const trigger = screen.getByRole('combobox', { name: 'Switch provider' });
+    expect(trigger.className).toContain('w-form-sm');
+    expect(trigger.className).not.toContain('w-full');
+    expect(screen.getByText('OpenAI').className).toContain('sr-only');
+
+    fireEvent.click(trigger);
+    fireEvent.click(await screen.findByRole('option', { name: 'Anthropic' }));
+
+    expect(onValueChange).toHaveBeenCalledWith('anthropic');
+  });
+
   it('invites a choice in its own words when the caller gives none', () => {
     const { rerender } = render(<Combobox options={options} />);
     expect(screen.getByRole('combobox').textContent).toContain('Select option...');

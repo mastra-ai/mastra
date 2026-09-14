@@ -16,6 +16,8 @@ export interface DatasetComboboxProps {
   className?: string;
   disabled?: boolean;
   variant?: ComboboxProps['variant'];
+  size?: ComboboxProps['size'];
+  'aria-label'?: string;
   container?: ComboboxProps['container'];
 }
 
@@ -28,6 +30,8 @@ export function DatasetCombobox({
   className,
   disabled = false,
   variant,
+  size,
+  'aria-label': ariaLabel,
   container,
 }: DatasetComboboxProps) {
   const { data, isLoading, isError, error } = useDatasets();
@@ -65,6 +69,8 @@ export function DatasetCombobox({
       className={className}
       disabled={disabled || isLoading || isError}
       variant={variant}
+      size={size}
+      aria-label={ariaLabel}
       container={container}
     />
   );

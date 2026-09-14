@@ -3,8 +3,8 @@ import { Check, ChevronsUpDown, Search, X } from 'lucide-react';
 import * as React from 'react';
 import { comboboxItemClass, comboboxStyles, comboboxTriggerClass } from './combobox-styles';
 import type { ComboboxVariant } from './combobox-styles';
-import { Button } from '@/ds/components/Button/Button';
-import type { TextButtonSize } from '@/ds/components/Button/Button';
+import { Button, isIconButtonSize } from '@/ds/components/Button/Button';
+import type { ButtonSize } from '@/ds/components/Button/Button';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
 import { cn } from '@/lib/utils';
@@ -27,7 +27,8 @@ type ComboboxSharedProps = {
   className?: string;
   disabled?: boolean;
   variant?: ComboboxVariant;
-  size?: TextButtonSize;
+  /** Icon sizes (`icon-*`) render a chevron-only trigger; pass `aria-label` to name it. */
+  size?: ButtonSize;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   container?: HTMLElement | ShadowRoot | null | React.RefObject<HTMLElement | ShadowRoot | null>;
@@ -107,6 +108,7 @@ export function Combobox(props: ComboboxProps) {
   // Default to the nearest SideDialog/Drawer popup so the list stays
   // interactive inside a modal drawer; an explicit `container` still wins.
   const resolvedContainer = usePortalContainer(container);
+  const iconOnly = isIconButtonSize(size);
 
   const comboboxContent = (
     <>
@@ -114,7 +116,9 @@ export function Combobox(props: ComboboxProps) {
         aria-label={ariaLabel}
         className={comboboxTriggerClass({ variant, size, error: Boolean(error), className })}
       >
-        {multiple ? (
+        {iconOnly ? (
+          <span className="sr-only">{multiple ? triggerText : <BaseCombobox.Value placeholder={placeholder} />}</span>
+        ) : multiple ? (
           <span className={cn('truncate', selectedOptions.length === 0 && comboboxStyles.placeholder)}>
             {triggerText}
           </span>
@@ -130,7 +134,7 @@ export function Combobox(props: ComboboxProps) {
         {/* Wrap the chevron in a `<span>` so the svg is one level deep and
             escapes Button's `[&>svg]` adornments — mirrors Select's chevron wrap. */}
         <span className="flex shrink-0 items-center">
-          <ChevronsUpDown className={comboboxStyles.chevron} />
+          <ChevronsUpDown className={cn(comboboxStyles.chevron, iconOnly && 'ml-0')} />
         </span>
       </BaseCombobox.Trigger>
 
