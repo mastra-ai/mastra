@@ -2,68 +2,57 @@ import { Button, buttonVariants } from '@mastra/playground-ui/components/Button'
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
-import { cn } from '@mastra/playground-ui/utils/cn';
 import { Plus } from 'lucide-react';
-import { Link, useParams, useSearchParams } from 'react-router';
+import { Link, useParams } from 'react-router';
 import type { InstalledBoardInfo } from '../../api/types';
-import { useBoardCatalog } from '../../hooks/useBoardCatalog';
 
 import { useRecentAuditEvents } from '../../hooks/useAuditEvents';
+import { useBoardCatalog } from '../../hooks/useBoardCatalog';
 import { useFactoryAuth } from '../../hooks/useFactoryAuth';
-import { INTAKE_SOURCES, stageContentCount } from '../domains/factory/boardCandidates';
-import type { IntakeSource } from '../domains/factory/boardCandidates';
+import { IntakeSourceSwitch } from '../domains/factory/board-view/IntakeSourceSwitch';
+import { useBoardSearchParams } from '../domains/factory/board-view/useBoardSearchParams';
+import { stageContentCount } from '../domains/factory/boardCandidates';
+import type { IntakeSource, BoardCandidate } from '../domains/factory/boardCandidates';
+import { candidatePayload } from '../domains/factory/boardDrag';
+import { cardMatchesSearch } from '../domains/factory/boardItems';
+import {
+  boardLabels,
+  boardParticipants,
+  candidateMatchesLabels,
+  candidateMatchesRelevance,
+  workItemMatchesLabels,
+  workItemMatchesRelevance,
+} from '../domains/factory/boardRelevance';
 import { boardLoadingStages, itemAppearsInStage } from '../domains/factory/boardStages';
 import type { BoardKind } from '../domains/factory/boardStages';
 import { BoardAutomationSettings } from '../domains/factory/components/BoardAutomationSettings';
 import { BoardTooltipDelay } from '../domains/factory/components/BoardCardParts';
 import { BoardColumn, BoardColumnHeader } from '../domains/factory/components/BoardColumn';
 import { BoardColumnEmptyState } from '../domains/factory/components/BoardColumnEmptyState';
-import { ColumnReveal } from '../domains/factory/components/ColumnReveal';
 import { BoardRelevanceFilters } from '../domains/factory/components/BoardRelevanceFilters';
 import { CandidateCard } from '../domains/factory/components/CandidateCard';
+import { ColumnReveal } from '../domains/factory/components/ColumnReveal';
 import { FactoryPageShell } from '../domains/factory/components/FactoryPageShell';
 import { InlineWorkItemComposer } from '../domains/factory/components/InlineWorkItemComposer';
 import { IntakeColumnExtras } from '../domains/factory/components/IntakeColumnExtras';
 import { IntakeFeedNotice } from '../domains/factory/components/IntakeFeedNotice';
 import { WorkItemCard } from '../domains/factory/components/WorkItemCard';
 import { useBoardComposer } from '../domains/factory/hooks/useBoardComposer';
-import { useBoardDeepLink } from '../domains/factory/hooks/useBoardDeepLink';
 import { useBoardDecisions } from '../domains/factory/hooks/useBoardDecisions';
+import { useBoardDeepLink } from '../domains/factory/hooks/useBoardDeepLink';
 import { useBoardIntake } from '../domains/factory/hooks/useBoardIntake';
-import { useItemSessionStatuses } from '../domains/factory/hooks/useItemSessionStatuses';
 import { useBoardItems } from '../domains/factory/hooks/useBoardItems';
 import { useBoardRuns } from '../domains/factory/hooks/useBoardRuns';
-import { isTerminalStage } from '../domains/factory/stages';
-import {
-  boardLabels,
-  boardLabelsFromQuery,
-  boardLabelsQueryValues,
-  boardParticipants,
-  boardRelevanceFromQuery,
-  boardRelevanceQueryValue,
-  candidateMatchesLabels,
-  candidateMatchesRelevance,
-  workItemMatchesLabels,
-  workItemMatchesRelevance,
-} from '../domains/factory/boardRelevance';
-import type { BoardRelevanceType } from '../domains/factory/boardRelevance';
-import { candidatePayload } from '../domains/factory/boardDrag';
-import { cardMatchesSearch } from '../domains/factory/boardItems';
+import { useItemSessionStatuses } from '../domains/factory/hooks/useItemSessionStatuses';
+import { ReviewColumnCards } from '../domains/factory/review-stacks/ReviewColumnCards';
+import { buildReviewStackIndex, reviewCards } from '../domains/factory/review-stacks/reviewStacks';
 import { relatedWorkItemIndex } from '../domains/factory/services/relationships';
+import type { WorkItem } from '../domains/factory/services/workItems';
 import { workItemHumanActorIds } from '../domains/factory/workItemActivity';
+import { settingsSectionPath } from '../domains/settings/settingsSections';
 import type { FactoryProject, LinkedRepositoryPayload } from '../domains/workspaces/services/github';
 import { SkeletonRows } from '../ui/SkeletonRows';
-import { settingsSectionPath } from '../domains/settings/settingsSections';
 
-/**
- * Factory › Board: an org-wide kanban over the repository's work items. The
- * Intake column merges persisted `intake` cards with live GitHub/Linear
- * candidates (issues and PRs that have no record yet — records are
- * materialized only when someone acts on them). Everything enters through
- * Intake and moves through the system from there. Cards move between columns
- * by drag-and-drop or the card menu; moves only file/move cards, never start
- * agent runs.
- */
 export function WorkBoardPage() {
   return <FactoryPageShell bleed>{factory => <Board factory={factory} kind="work" />}</FactoryPageShell>;
 }
@@ -119,12 +108,6 @@ function InstalledBoard({ factory, definition }: { factory: FactoryProject; defi
   return <BoardContent factory={factory} repository={repository} kind={kind} definition={definition} />;
 }
 
-/** The open card and the comment it deep-links to are one selection: clear them together. */
-function clearOpenCard(params: URLSearchParams) {
-  params.delete('item');
-  params.delete('comment');
-}
-
 function BoardContent({
   factory,
   repository,
@@ -140,13 +123,7 @@ function BoardContent({
   const review = kind === 'review';
   const builtin = kind === 'work' || review;
   const stages = definition.phases.map(phase => ({ ...phase, label: phase.title }));
-  const [searchParams, setSearchParams] = useSearchParams();
-  const targetItemId = searchParams.get('item') || undefined;
-  const targetCommentId = targetItemId !== undefined ? (searchParams.get('comment') ?? undefined) : undefined;
-  const selectedParticipantId = searchParams.get('teammate') || undefined;
-  const search = searchParams.get('q') ?? '';
-  const selectedRelevanceTypes = boardRelevanceFromQuery(searchParams.get('relevance'), kind);
-  const selectedLabels = boardLabelsFromQuery(searchParams.getAll('label'));
+  const filters = useBoardSearchParams(kind);
 
   const auth = useFactoryAuth();
   const items = useBoardItems({ factoryProjectId, kind });
@@ -159,6 +136,7 @@ function BoardContent({
   });
   const runs = useBoardRuns({ factoryProjectId, refetchItems: items.refetch });
   const relatedItemsFor = relatedWorkItemIndex(items.all);
+  const reviewStacks = buildReviewStackIndex(review ? reviewCards(items.visible, intake.candidates) : []);
   const sessionStatuses = useItemSessionStatuses({
     factoryProjectId,
     projectRepositoryId: repository.projectRepositoryId,
@@ -181,69 +159,18 @@ function BoardContent({
   const availableLabels = boardLabels({ items: items.all, candidates: intake.participantCandidates });
   const filteredCandidates = intake.candidates.filter(
     candidate =>
-      candidateMatchesRelevance(candidate, selectedParticipantId, selectedRelevanceTypes) &&
-      candidateMatchesLabels(candidate, selectedLabels) &&
-      cardMatchesSearch(candidate, search),
+      candidateMatchesRelevance(candidate, filters.selectedParticipantId, filters.selectedRelevanceTypes) &&
+      candidateMatchesLabels(candidate, filters.selectedLabels) &&
+      cardMatchesSearch(candidate, filters.search),
   );
-  const setSearch = (next: string) => {
-    const params = new URLSearchParams(searchParams);
-    clearOpenCard(params);
-    if (next.trim()) params.set('q', next);
-    else params.delete('q');
-    setSearchParams(params, { replace: true });
-  };
-  const setParticipant = (participantId: string | undefined) => {
-    const next = new URLSearchParams(searchParams);
-    clearOpenCard(next);
-    if (participantId) next.set('teammate', participantId);
-    else {
-      next.delete('teammate');
-      next.delete('relevance');
-    }
-    setSearchParams(next, { replace: true });
-  };
-  const setRelevanceType = (type: BoardRelevanceType, selected: boolean) => {
-    const nextTypes = new Set(selectedRelevanceTypes);
-    if (selected) nextTypes.add(type);
-    else nextTypes.delete(type);
-    const next = new URLSearchParams(searchParams);
-    clearOpenCard(next);
-    const value = boardRelevanceQueryValue(nextTypes, kind);
-    if (value) next.set('relevance', value);
-    else next.delete('relevance');
-    setSearchParams(next, { replace: true });
-  };
-  const setLabel = (label: string, selected: boolean) => {
-    const nextLabels = new Set(selectedLabels);
-    if (selected) nextLabels.add(label);
-    else nextLabels.delete(label);
-    const next = new URLSearchParams(searchParams);
-    clearOpenCard(next);
-    next.delete('label');
-    for (const value of boardLabelsQueryValues(nextLabels)) next.append('label', value);
-    setSearchParams(next, { replace: true });
-  };
-  const resetFilters = () => {
-    const next = new URLSearchParams(searchParams);
-    next.delete('teammate');
-    next.delete('relevance');
-    next.delete('label');
-    next.delete('q');
-    clearOpenCard(next);
-    setSearchParams(next, { replace: true });
-  };
   const setIntakeSource = (source: IntakeSource) => {
-    if (targetItemId) {
-      const next = new URLSearchParams(searchParams);
-      clearOpenCard(next);
-      setSearchParams(next, { replace: true });
-    }
+    filters.clearSelection();
     intake.select(source);
   };
   const unfilteredWorkItemsForStage = (stage: (typeof stages)[number]['id']) =>
     items.visible.filter(item => {
       if (!itemAppearsInStage(item, stage, stages)) return false;
-      if (item.id === targetItemId) return true;
+      if (item.id === filters.targetItemId) return true;
       if (stage !== definition.initialPhase || review || item.source === 'manual') return true;
       if (intake.active === 'github') return item.source === 'github-issue';
       if (intake.active === 'linear') return item.source === 'linear-issue';
@@ -253,13 +180,20 @@ function BoardContent({
     unfilteredWorkItemsForStage(stage).filter(item => {
       const liveCandidate = item.sourceKey ? participantCandidateBySourceKey.get(item.sourceKey) : undefined;
       return (
-        workItemMatchesRelevance(item, activityPage, selectedParticipantId, selectedRelevanceTypes, liveCandidate) &&
-        workItemMatchesLabels(item, selectedLabels, liveCandidate) &&
-        cardMatchesSearch(item, search)
+        workItemMatchesRelevance(
+          item,
+          activityPage,
+          filters.selectedParticipantId,
+          filters.selectedRelevanceTypes,
+          liveCandidate,
+        ) &&
+        workItemMatchesLabels(item, filters.selectedLabels, liveCandidate) &&
+        cardMatchesSearch(item, filters.search)
       );
     });
   const boardWorkItems = stages.flatMap(stage => workItemsForStage(stage.id));
-  const targetReady = !items.isPending && (!targetItemId || boardWorkItems.some(item => item.id === targetItemId));
+  const targetReady =
+    !items.isPending && (!filters.targetItemId || boardWorkItems.some(item => item.id === filters.targetItemId));
   const loadingStages = boardLoadingStages({
     stages,
     itemsPending: items.isPending,
@@ -268,7 +202,7 @@ function BoardContent({
   });
   const registerDeepLinkedCard = useBoardDeepLink({
     boardKey: `${factoryProjectId}:${kind}`,
-    targetItemId,
+    targetItemId: filters.targetItemId,
     targetReady,
   });
 
@@ -285,7 +219,8 @@ function BoardContent({
   const unfilteredVisibleWorkItems = new Set(stages.flatMap(stage => unfilteredWorkItemsForStage(stage.id)));
   const totalTaskCount = visibleWorkItems.size + filteredCandidates.length;
   const unfilteredTaskCount = unfilteredVisibleWorkItems.size + intake.candidates.length;
-  const anyFilterActive = selectedParticipantId !== undefined || selectedLabels.size > 0 || search !== '';
+  const anyFilterActive =
+    filters.selectedParticipantId !== undefined || filters.selectedLabels.size > 0 || filters.search !== '';
   const filtersExcludeAll = anyFilterActive && totalTaskCount === 0 && unfilteredTaskCount > 0;
 
   const stageViews = stages.map(stage => {
@@ -310,6 +245,44 @@ function BoardContent({
     };
   });
 
+  const renderWorkItem = (stage: string) => (item: WorkItem) => (
+    <WorkItemCard
+      key={`${item.id}:${stage}`}
+      item={item}
+      deepLinkRef={registerDeepLinkedCard(item.id)}
+      deepLinkCommentId={filters.targetItemId === item.id ? filters.targetCommentId : undefined}
+      highlighted={filters.targetItemId === item.id}
+      columnStage={stage}
+      relatedItems={relatedItemsFor(item)}
+      sessionStatus={sessionStatuses.get(item.id)}
+      projectRepositoryId={repository.projectRepositoryId}
+      activityPage={activityPage}
+      preparing={runs.preparingFor(item.id)}
+      evaluatingStage={items.evaluatingStages.get(item.id)}
+      transitionReason={items.transitionReasons[item.id]}
+      decision={decisions.effectByItem.get(item.id)}
+      proposal={decisions.proposalByItem.get(item.id)}
+      approvingDecisionId={decisions.approvingId}
+      retryingDecisionId={decisions.retryingId}
+      onApproveProposal={decisions.approve}
+      onDismissProposal={decisions.dismiss}
+      onRetryDecision={decisions.retry}
+      onCreateSession={() => void runs.openOrCreateSession(item)}
+      onMove={(toStage, options) => items.move(item.id, toStage, options)}
+      onRemove={() => items.remove(item.id)}
+    />
+  );
+  const renderCandidate = (candidate: BoardCandidate) => (
+    <CandidateCard
+      key={candidate.sourceKey}
+      candidate={candidate}
+      projectRepositoryId={repository.projectRepositoryId}
+      factoryProjectId={factoryProjectId}
+      onRun={(move, prompt) => items.handleDrop(candidatePayload(candidate, prompt), move.stage, 'card_action')}
+      onFile={() => items.handleDrop(candidatePayload(candidate), candidate.column)}
+    />
+  );
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {mutationError !== undefined && (
@@ -326,17 +299,17 @@ function BoardContent({
               <BoardRelevanceFilters
                 kind={kind}
                 participants={participants}
-                search={search}
-                onSearchChange={setSearch}
-                selectedParticipantId={selectedParticipantId}
-                selectedTypes={selectedRelevanceTypes}
+                search={filters.search}
+                onSearchChange={filters.setSearch}
+                selectedParticipantId={filters.selectedParticipantId}
+                selectedTypes={filters.selectedRelevanceTypes}
                 availableLabels={availableLabels}
-                selectedLabels={selectedLabels}
+                selectedLabels={filters.selectedLabels}
                 currentUserId={auth.data?.user?.userId}
-                onParticipantChange={setParticipant}
-                onTypeChange={setRelevanceType}
-                onLabelChange={setLabel}
-                onReset={resetFilters}
+                onParticipantChange={filters.setParticipant}
+                onTypeChange={filters.setRelevanceType}
+                onLabelChange={filters.setLabel}
+                onReset={filters.resetFilters}
               />
               <div className="w-full lg:w-auto [&>div]:w-full [&>div]:justify-between lg:[&>div]:w-auto lg:[&>div]:justify-start">
                 {builtin && (
@@ -421,52 +394,25 @@ function BoardContent({
                         onClose={() => composer.close(stage.id)}
                       />
                     ) : null}
-                    <ColumnReveal
-                      items={stageWorkItems}
-                      pinned={item => item.id === targetItemId}
-                      renderItem={item => (
-                        <WorkItemCard
-                          key={`${item.id}:${stage.id}`}
-                          item={item}
-                          deepLinkRef={registerDeepLinkedCard(item.id)}
-                          deepLinkCommentId={targetItemId === item.id ? targetCommentId : undefined}
-                          highlighted={targetItemId === item.id}
-                          columnStage={stage.id}
-                          relatedItems={relatedItemsFor(item)}
-                          sessionStatus={sessionStatuses.get(item.id)}
-                          projectRepositoryId={repository.projectRepositoryId}
-                          activityPage={activityPage}
-                          preparing={runs.preparingFor(item.id)}
-                          evaluatingStage={items.evaluatingStages.get(item.id)}
-                          transitionReason={items.transitionReasons[item.id]}
-                          decision={decisions.effectByItem.get(item.id)}
-                          proposal={decisions.proposalByItem.get(item.id)}
-                          approvingDecisionId={decisions.approvingId}
-                          retryingDecisionId={decisions.retryingId}
-                          onApproveProposal={decisions.approve}
-                          onDismissProposal={decisions.dismiss}
-                          onRetryDecision={decisions.retry}
-                          onCreateSession={() => void runs.openOrCreateSession(item)}
-                          onMove={(toStage, options) => items.move(item.id, toStage, options)}
-                          onRemove={() => items.remove(item.id)}
-                        />
-                      )}
-                    />
-                    <ColumnReveal
-                      items={stageCandidates}
-                      renderItem={candidate => (
-                        <CandidateCard
-                          key={candidate.sourceKey}
-                          candidate={candidate}
-                          projectRepositoryId={repository.projectRepositoryId}
-                          factoryProjectId={factoryProjectId}
-                          onRun={(move, prompt) =>
-                            items.handleDrop(candidatePayload(candidate, prompt), move.stage, 'card_action')
-                          }
-                          onFile={() => items.handleDrop(candidatePayload(candidate), candidate.column)}
-                        />
-                      )}
-                    />
+                    {review ? (
+                      <ReviewColumnCards
+                        workItems={stageWorkItems}
+                        candidates={stageCandidates}
+                        stacks={reviewStacks}
+                        targetItemId={filters.targetItemId}
+                        renderWorkItem={renderWorkItem(stage.id)}
+                        renderCandidate={renderCandidate}
+                      />
+                    ) : (
+                      <>
+                        <ColumnReveal items={stageWorkItems} pinned={item => item.id === filters.targetItemId}>
+                          {visibleItems => visibleItems.map(renderWorkItem(stage.id))}
+                        </ColumnReveal>
+                        <ColumnReveal items={stageCandidates}>
+                          {visibleCandidates => visibleCandidates.map(renderCandidate)}
+                        </ColumnReveal>
+                      </>
+                    )}
                     {loading && (
                       <SkeletonRows label={`Loading ${stage.label} column`} rows={3} rowClassName="h-24 w-full" />
                     )}
@@ -488,37 +434,6 @@ function BoardContent({
           </BoardTooltipDelay>
         </div>
       </div>
-    </div>
-  );
-}
-
-function IntakeSourceSwitch({
-  available,
-  active,
-  onSelect,
-}: {
-  available: readonly IntakeSource[];
-  active?: IntakeSource;
-  onSelect: (source: IntakeSource) => void;
-}) {
-  return (
-    <div role="group" aria-label="Intake source" className="flex items-center gap-1">
-      {INTAKE_SOURCES.filter(source => available.includes(source.id)).map(source => (
-        <button
-          key={source.id}
-          type="button"
-          aria-pressed={active === source.id}
-          onClick={() => onSelect(source.id)}
-          className={cn(
-            'rounded-full border px-2.5 py-0.5 text-ui-xs transition',
-            active === source.id
-              ? 'border-accent1 bg-surface4 text-icon6'
-              : 'border-border1 bg-transparent text-icon3 hover:text-icon5',
-          )}
-        >
-          {source.label}
-        </button>
-      ))}
     </div>
   );
 }

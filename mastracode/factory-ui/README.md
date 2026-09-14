@@ -14,6 +14,14 @@ Open `http://localhost:5173`. To restart one side without losing the other, star
 
 Keep policy, validation, and persistence in [`@mastra/factory`](../factory/README.md), not in React.
 
+## Review stacks
+
+The Review board groups dependent pull requests inside each stage column, with base pull requests first. A dashed container surrounds each stack, with a header identifying its root pull request, including when other members are in another stage or hidden by a filter. Cards are dragged individually; the container does not move the whole stack. Standalone pull requests keep their usual card layout.
+
+Stacks are derived from matching base and head branches in the same repository, using saved cards and currently loaded Intake candidates. Additional candidate pages can reveal more of a stack. Closed or merged pull requests and cards with missing or ambiguous branch information remain ungrouped. Grouping does not change card actions or stage transitions.
+
+Work boards remain scoped to one Factory project.
+
 ## Board activity
 
 Cards on the **Work** and **Review** boards show the last person recorded in the work item's audit history. Hover over the person's name or profile image to open the recent event timeline for that card.
