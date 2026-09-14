@@ -4,16 +4,19 @@
 
 Preserve MCP tool failure signals for non-LLM consumers.
 
-With `onToolError: 'return'`, an `isError` tool result now preserves the failure signal without changing the returned shape: it still returns the bare `structuredContent` (so consumers reading fields directly keep working), and the `isError` flag is preserved on a non-enumerable symbol channel alongside the existing `content`/`_meta` channels. Read it with the new `getMcpCallToolIsError()` helper so MCP App UI hosts can detect failure regardless of whether the tool has an output schema. With `onToolError: 'throw'`, the thrown `MastraError` now includes the server's `structuredContent` (JSON-serialized) under `details.structuredContent`, so callers that catch the error can recover structured error data.
+With `onToolError: 'return'`, object/array structured errors keep their existing bare shape and carry a non-enumerable error flag. Scalar/null structured errors now return the full `CallToolResult` envelope instead of the bare value. Consumers of these failed scalar/null results must read `result.structuredContent` instead of treating the result as a primitive. Successful return shapes are unchanged.
 
-This is not a breaking change — the enumerable shape of `structuredContent` is unchanged on both the success and error paths.
+Content-only errors continue to return the full envelope. All client-returned errors now carry the hidden flag, so `getMcpCallToolIsError()` detects both bare structured errors and error envelopes. It reads client metadata, not a user-data field named `isError`. Raw or deserialized MCP envelopes instead expose `result.isError` directly.
+
+With `onToolError: 'throw'`, the thrown `MastraError` includes the server's `structuredContent` (JSON-serialized) under `details.structuredContent`.
 
 ```ts
-import { getMcpCallToolIsError } from '@mastra/mcp';
+import { getMcpCallToolIsError, getMcpCallToolContent } from '@mastra/mcp';
 
-const result = await tool.execute(...);
-// structured fields remain top-level, exactly as before
+const result = await tool.execute(input);
 if (getMcpCallToolIsError(result)) {
-  // non-LLM consumers can now detect an in-band tool failure
+  const content = getMcpCallToolContent(result);
+  // Object/array structured errors expose fields directly.
+  // Scalar/null errors preserve their value in result.structuredContent.
 }
 ```

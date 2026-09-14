@@ -786,6 +786,8 @@ describe('MastraMCPClient - isError handling', () => {
     const tools = await client.tools();
     const result = await tools['fetch'].execute?.({});
     expect(result).toEqual(failingResult);
+    expect(getMcpCallToolIsError(result)).toBe(true);
+    expect(getMcpCallToolContent(result)).toEqual(failingResult.content);
 
     await client.disconnect().catch(() => {});
   });
@@ -820,6 +822,77 @@ describe('MastraMCPClient - isError handling', () => {
     expect(getMcpCallToolContent(result)).toEqual(errorResult.content);
 
     await client.disconnect().catch(() => {});
+  });
+
+  it.each([0, false, '', 'failed', null])(
+    'preserves scalar/null error %j without changing successful results',
+    async structuredContent => {
+      const client = new InternalMastraMCPClient({
+        name: 'iserror-return-scalar-client',
+        server: { url: testServer.baseUrl, onToolError: 'return' },
+      });
+      await client.connect();
+      try {
+        const sdkClient = (client as any).client as Client;
+        vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+          tools: [
+            {
+              name: 'fetch',
+              inputSchema: { type: 'object' as const },
+              outputSchema: { type: 'object' as const, properties: { value: { type: 'number' } }, required: ['value'] },
+            },
+          ],
+        });
+        const errorResult = {
+          content: [{ type: 'text', text: 'Fetch failed' }],
+          structuredContent,
+          isError: true,
+          _meta: { source: 'test' },
+        };
+        const callTool = vi.spyOn(sdkClient, 'callTool').mockResolvedValue(errorResult);
+        const tools = await client.tools();
+        const result = await tools['fetch'].execute?.({});
+        expect(result).toEqual(errorResult);
+        expect(getMcpCallToolIsError(result)).toBe(true);
+        expect(getMcpCallToolContent(result)).toEqual(errorResult.content);
+        expect(getMcpCallToolMeta(result)).toMatchObject({ source: 'test' });
+        expect(JSON.parse(JSON.stringify(result))).toEqual(errorResult);
+
+        // A schema-free tool must still return successful primitives unchanged.
+        vi.mocked(sdkClient.listTools).mockResolvedValue({
+          tools: [{ name: 'success', inputSchema: { type: 'object' as const } }],
+        });
+        callTool.mockResolvedValue({ content: [], structuredContent });
+        const successTools = await client.tools();
+        const success = await successTools['success'].execute?.({});
+        expect(success).toBe(structuredContent);
+        expect(getMcpCallToolIsError(success)).toBeUndefined();
+      } finally {
+        await client.disconnect().catch(() => {});
+      }
+    },
+  );
+
+  it('does not interpret structured user fields as MCP error metadata', async () => {
+    const client = new InternalMastraMCPClient({
+      name: 'iserror-user-fields-client',
+      server: { url: testServer.baseUrl, onToolError: 'return' },
+    });
+    await client.connect();
+    try {
+      const sdkClient = (client as any).client as Client;
+      vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+        tools: [{ name: 'fetch', inputSchema: { type: 'object' as const } }],
+      });
+      const structuredContent = { isError: true, content: [] };
+      vi.spyOn(sdkClient, 'callTool').mockResolvedValue({ content: [], structuredContent });
+      const tools = await client.tools();
+      const result = await tools['fetch'].execute?.({});
+      expect(result).toEqual(structuredContent);
+      expect(getMcpCallToolIsError(result)).toBeUndefined();
+    } finally {
+      await client.disconnect().catch(() => {});
+    }
   });
 
   it('includes structuredContent in the thrown MastraError details when onToolError is "throw"', async () => {

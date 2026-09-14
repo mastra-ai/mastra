@@ -156,9 +156,9 @@ export const MCP_CALL_TOOL_CONTENT = Symbol.for('mastra.mcp.callToolContent');
 export const MCP_CALL_TOOL_META = Symbol.for('mastra.mcp.callToolMeta');
 
 /**
- * Non-enumerable `isError` flag attached to structured tool execute results.
- * Lets non-LLM consumers (`onToolError: 'return'`) detect an in-band tool failure
- * without changing the enumerable shape of `structuredContent`.
+ * Non-enumerable `isError` flag attached to structured objects and error envelopes.
+ * Lets non-LLM consumers (`onToolError: 'return'`) detect an in-band tool failure.
+ * Scalar/null errors use envelopes because primitives cannot carry this flag.
  */
 export const MCP_CALL_TOOL_IS_ERROR = Symbol.for('mastra.mcp.callToolIsError');
 
@@ -212,9 +212,10 @@ export function getMcpCallToolMeta(output: unknown): Record<string, unknown> | u
 }
 
 /**
- * Read the MCP `isError` flag preserved on a structured tool execute result.
- * Lets non-LLM consumers (`onToolError: 'return'`) detect an in-band tool failure.
- * Returns `undefined` for scalar results or successful results without the flag.
+ * Read the MCP `isError` flag preserved on a tool execute result.
+ * Works on structured objects and error envelopes returned by this client.
+ * Returns `undefined` for successful results and values without the hidden flag;
+ * it does not inspect an arbitrary object's `isError` field.
  */
 export function getMcpCallToolIsError(output: unknown): boolean | undefined {
   if (output === null || typeof output !== 'object') return undefined;
@@ -1538,6 +1539,17 @@ export class InternalMastraMCPClient extends MastraBase {
                 }
 
                 this.log('debug', `Tool executed successfully: ${tool.name}`);
+
+                // Primitives cannot carry symbols. Keep the envelope for these errors,
+                // including content-only failures, and mark it without inspecting user fields.
+                if (res.isError && (res.structuredContent === null || typeof res.structuredContent !== 'object')) {
+                  return attachMcpCallToolContent(
+                    res,
+                    res.content,
+                    res._meta ? this.stampServerIdInMeta(res._meta) : undefined,
+                    true,
+                  );
+                }
 
                 if (res.structuredContent !== undefined) {
                   // Enforce the server-advertised outputSchema before the result reaches the
