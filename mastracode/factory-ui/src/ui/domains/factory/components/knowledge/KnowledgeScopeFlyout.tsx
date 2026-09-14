@@ -2,7 +2,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { X } from 'lucide-react';
 
 import { useKnowledgeActivity } from '../../../../../hooks/useKnowledgeGraph';
-import type { KnowledgeScopeNode, KnowledgeSelection } from '../../services/knowledge';
+import type { KnowledgeActivityEvent, KnowledgeScopeNode, KnowledgeSelection } from '../../services/knowledge';
 import { knowledgeActivityLabel } from './activityLabel';
 
 interface KnowledgeScopeFlyoutProps {
@@ -12,6 +12,7 @@ interface KnowledgeScopeFlyoutProps {
   childScopeCount: number;
   contentNodeCount: number;
   threadId?: string;
+  onSelectActivity: (event: KnowledgeActivityEvent) => void;
   onClose: () => void;
 }
 
@@ -23,6 +24,7 @@ export function KnowledgeScopeFlyout({
   childScopeCount,
   contentNodeCount,
   threadId,
+  onSelectActivity,
   onClose,
 }: KnowledgeScopeFlyoutProps) {
   const activity = useKnowledgeActivity(factoryProjectId, selection, threadId);
@@ -81,7 +83,15 @@ export function KnowledgeScopeFlyout({
             <ol className="mt-2 space-y-2">
               {recentActivity.map(event => (
                 <li key={event.id} className="border-surface5 border-l pl-2 text-xs">
-                  <span className="text-icon5 font-medium">{knowledgeActivityLabel(event)}</span>
+                  <span className="text-icon5">{knowledgeActivityLabel(event)}</span>
+                  <span className="text-icon3"> · </span>
+                  <button
+                    type="button"
+                    className="text-icon6 font-medium hover:text-purple-300 hover:underline"
+                    onClick={() => onSelectActivity(event)}
+                  >
+                    {event.node.name}
+                  </button>
                   <time className="text-icon3 mt-0.5 block" dateTime={event.createdAt}>
                     {new Date(event.createdAt).toLocaleString()}
                   </time>
