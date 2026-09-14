@@ -1,4 +1,3 @@
-import type { ServerDetailInfo } from '@mastra/core/mcp';
 import type { RequestContext } from '@mastra/core/request-context';
 import {
   Agent,
@@ -106,6 +105,7 @@ import type {
   GetTagsArgs,
   GetTagsResponse,
 } from './resources/observability-route-types.js';
+import type { PathParams, QueryParams, RouteResponse } from './route-types.generated.js';
 import type {
   ListFeedbackResponse,
   ClientOptions,
@@ -811,7 +811,10 @@ export class MastraClient extends BaseResource {
    * @param params - Optional parameters, e.g., specific version.
    * @returns Promise containing the detailed MCP server information.
    */
-  public getMcpServerDetails(serverId: string, params?: { version?: string }): Promise<ServerDetailInfo> {
+  public getMcpServerDetails(
+    serverId: PathParams<'GET /mcp/v0/servers/:id'>['id'],
+    params?: QueryParams<'GET /mcp/v0/servers/:id'>,
+  ): Promise<RouteResponse<'GET /mcp/v0/servers/:id'>> {
     const searchParams = new URLSearchParams();
     if (params?.version) {
       searchParams.set('version', params.version);
