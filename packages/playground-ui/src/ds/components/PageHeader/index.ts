@@ -1,1 +1,1 @@
-export * from '../../new/layout/page-header';
+export * from './page-header';
