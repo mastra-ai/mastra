@@ -4,10 +4,23 @@ import type {
   Conversation,
   ConversationItemsPage,
   CreateConversationParams,
+  CreateDatasetParams,
   CreateResponseParams,
+  DatasetExperiment,
+  DatasetRecord,
   GetAgentResponse,
   GetToolResponse,
   GetWorkflowResponse,
+  ListMemoryThreadsParams,
+  ListSchedulesParams,
+  McpServerListResponse,
+  ScheduleResponse,
+  ScheduleTriggerResponse,
+  McpToolInfo,
+  QueryVectorParams,
+  ExecuteProcessorParams,
+  GetProcessorDetailResponse,
+  ListScoresByRunIdParams,
   ListWorkflowRunsParams,
   ListWorkflowRunsResponse,
   PathParams,
@@ -82,10 +95,51 @@ const workflowRunQuery = {
   limit: false,
 } satisfies ListWorkflowRunsParams;
 
+const vectorQuery = {
+  indexName: 'index-1',
+  queryVector: [0.1],
+} satisfies QueryVectorParams;
+
+const memoryThreads = {
+  page: 1,
+  orderBy: { field: 'createdAt', direction: 'DESC' },
+} satisfies ListMemoryThreadsParams;
+
+const processorExecution = {
+  phase: 'input',
+  messages: [],
+} satisfies ExecuteProcessorParams;
+
+type _ProcessorDetails = Expect<Equal<GetProcessorDetailResponse, RouteResponse<'GET /processors/:processorId'>>>;
+type _McpServers = Expect<Equal<McpServerListResponse, RouteResponse<'GET /mcp/v0/servers'>>>;
+type _McpTool = Expect<Equal<McpToolInfo, RouteResponse<'GET /mcp/:serverId/tools/:toolId'>>>;
+type _ScheduleQuery = Expect<Equal<ListSchedulesParams, QueryParams<'GET /schedules'>>>;
+type _ScheduleResponse = Expect<Equal<ScheduleResponse, RouteResponse<'GET /schedules'>['schedules'][number]>>;
+type _ScheduleTrigger = Expect<
+  Equal<ScheduleTriggerResponse, RouteResponse<'GET /schedules/:scheduleId/triggers'>['triggers'][number]>
+>;
+type _DatasetCreateInput = Expect<CreateDatasetParams extends Body<'POST /datasets'> ? true : false>;
+type _DatasetRecord = Expect<Equal<keyof DatasetRecord, keyof RouteResponse<'GET /datasets/:datasetId'>>>;
+type _DatasetExperiment = Expect<
+  Equal<DatasetExperiment['id'], RouteResponse<'GET /experiments'>['experiments'][number]['id']>
+>;
+type _ObservabilityTraceQuery = Expect<Equal<QueryParams<'GET /observability/traces'>['page'], number | undefined>>;
+type _ObservabilityTraceResponse = Expect<
+  Equal<NonNullable<RouteResponse<'GET /observability/traces'>['pagination']>['page'], number>
+>;
+type _ScoreListInput = Expect<
+  ListScoresByRunIdParams extends PathParams<'GET /scores/run/:runId'> & QueryParams<'GET /scores/run/:runId'>
+    ? true
+    : false
+>;
+
 void scoreRequest;
 void createResponse;
 void createConversation;
 void workflowRunQuery;
+void vectorQuery;
+void memoryThreads;
+void processorExecution;
 
 // @ts-expect-error Route path parameters remain strings.
 const invalidScoreRequest: RouteRequest<'GET /scores/run/:runId'> = { params: { runId: 1 }, query: {} };
