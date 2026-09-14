@@ -1212,7 +1212,7 @@ export class KnowledgePG extends KnowledgeStorage {
   async listScopeAddresses(input: { after?: string; limit?: number } = {}): Promise<KnowledgeScopeAddress[]> {
     const limit = Math.max(1, Math.min(input.limit ?? 100, 1000));
     const result = await this.#executor.execute({
-      sql: `SELECT a.address,a.scopeNodeId FROM "${TABLE_KNOWLEDGE_SCOPE_ADDRESSES}" a JOIN "${TABLE_KNOWLEDGE_NODES}" n ON n.id=a.scopeNodeId WHERE n.isScope=TRUE AND n.deletedAt IS NULL AND (? IS NULL OR a.address>?) ORDER BY a.address ASC LIMIT ?`,
+      sql: `SELECT a.address,a.scopeNodeId FROM "${TABLE_KNOWLEDGE_SCOPE_ADDRESSES}" a JOIN "${TABLE_KNOWLEDGE_NODES}" n ON n.id=a.scopeNodeId WHERE n.isScope=TRUE AND n.deletedAt IS NULL AND (CAST(? AS TEXT) IS NULL OR a.address>?) ORDER BY a.address ASC LIMIT ?`,
       args: [input.after ?? null, input.after ?? null, limit],
     });
     return result.rows.map(row => ({ address: String(row.address), scopeNodeId: String(row.scopeNodeId) }));
