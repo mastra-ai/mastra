@@ -101,19 +101,15 @@ describe('migrateSignalTables (DuckDB)', () => {
       CREATE TABLE feedback_events (
         timestamp TIMESTAMP NOT NULL,
         traceId VARCHAR NOT NULL,
-        spanId VARCHAR,
-        experimentId VARCHAR,
-        userId VARCHAR,
-        source VARCHAR,
+        feedbackSource VARCHAR NOT NULL,
         feedbackType VARCHAR NOT NULL,
         value VARCHAR NOT NULL,
-        comment VARCHAR,
-        metadata JSON
+        reviewStatus VARCHAR NOT NULL
       )
     `);
     await db.execute(
-      `INSERT INTO feedback_events (timestamp, traceId, source, feedbackType, value)
-       VALUES (TIMESTAMP '2026-01-01 00:00:00', 'trace-a', 'user', 'rating', '3')`,
+      `INSERT INTO feedback_events (timestamp, traceId, feedbackSource, feedbackType, value, reviewStatus)
+       VALUES (TIMESTAMP '2026-01-01 00:00:00', 'trace-a', 'user', 'rating', '3', 'needs-review')`,
     );
 
     await migrateSignalTables(db);
@@ -121,17 +117,13 @@ describe('migrateSignalTables (DuckDB)', () => {
     expect(await hasPrimaryKey(db, 'feedback_events')).toBe(true);
     const rows = await db.query<{
       feedbackId: string;
-      feedbackSource: string;
-      reviewStatus: string;
       value: string;
       valueString: string | null;
       valueNumber: number | null;
-    }>(`SELECT feedbackId, feedbackSource, reviewStatus, value, valueString, valueNumber FROM feedback_events`);
+    }>(`SELECT feedbackId, value, valueString, valueNumber FROM feedback_events`);
     expect(rows).toEqual([
       {
         feedbackId: expect.stringMatching(UUID_RE),
-        feedbackSource: 'user',
-        reviewStatus: 'needs-review',
         value: '3',
         valueString: null,
         valueNumber: null,

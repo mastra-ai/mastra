@@ -216,14 +216,20 @@ function toSeriesName(values: unknown[]): string {
   return values.map(value => (value === null || value === undefined ? '' : String(value))).join('|');
 }
 
-function rowToFeedbackRecord(row: Record<string, unknown>): FeedbackRecord {
-  const value =
-    row.valueNumber != null
-      ? Number(row.valueNumber)
-      : row.valueString != null
-        ? String(row.valueString)
-        : String(row.value);
+function readFeedbackValue(row: Record<string, unknown>): FeedbackRecord['value'] {
+  if (row.valueNumber != null) {
+    return Number(row.valueNumber);
+  }
 
+  if (row.valueString != null) {
+    return String(row.valueString);
+  }
+
+  // Legacy rows have neither typed column populated.
+  return String(row.value);
+}
+
+function rowToFeedbackRecord(row: Record<string, unknown>): FeedbackRecord {
   return feedbackRecordSchema.parse({
     feedbackId: row.feedbackId as string,
     timestamp: toDate(row.timestamp),
@@ -258,7 +264,7 @@ function rowToFeedbackRecord(row: Record<string, unknown>): FeedbackRecord {
     source: row.feedbackSource as string,
     feedbackSource: row.feedbackSource as string,
     feedbackType: row.feedbackType as string,
-    value,
+    value: readFeedbackValue(row),
     comment: (row.comment as string) ?? null,
     tags: parseJsonArray(row.tags) as string[] | null,
     metadata: parseJson(row.metadata) as Record<string, unknown> | null,
