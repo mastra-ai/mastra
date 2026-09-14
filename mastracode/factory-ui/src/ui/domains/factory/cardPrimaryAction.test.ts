@@ -238,6 +238,7 @@ describe('cardActions', () => {
     const lit = (actions: CardAction[]) => actions.filter(action => action.urgent).map(action => action.label);
     expect(lit(cardActions({ ...idle, session, run }))).toEqual([]);
     expect(lit(cardActions({ ...idle, session, retry, run }))).toEqual(['Retry']);
+    expect(lit(cardActions({ ...idle, session, retry, run, fixFirst: true }))).toEqual([]);
     expect(lit(cardActions({ ...idle, running: true, waiting: true, session, run }))).toEqual([]);
     expect(lit(cardActions({ ...idle, running: true, session, retry, run }))).toEqual([]);
   });

@@ -23,13 +23,20 @@ export interface CardStatusHint {
   link?: { label: string; href: string };
 }
 
-// Only raised for observational-memory rejections (rules/dispatcher.ts), so Memory is where it is fixed.
-const FAILURE_HINTS: Partial<
-  Record<NonNullable<FactoryDecisionSummary['failureCode']>, (factoryId: string) => CardStatusHint>
+/** Failures a person fixes elsewhere before the run can go again: what the row says, what the hover explains. */
+const FIX_FIRST_FAILURES: Partial<
+  Record<
+    NonNullable<FactoryDecisionSummary['failureCode']>,
+    (factoryId: string) => { label: string; hint: CardStatusHint }
+  >
 > = {
+  // Only raised for observational-memory rejections (rules/dispatcher.ts), so Memory is where it is fixed.
   run_configuration_invalid: factoryId => ({
-    text: 'The provider refused the observational-memory model Factory runs use. Pick another one, then retry.',
-    link: { label: 'Memory settings', href: settingsSectionPath(factoryId, 'memory', 'factory') },
+    label: 'Memory model refused by the provider',
+    hint: {
+      text: 'Factory runs summarize their context with this model. Pick another one for the factory and this run resumes on its own.',
+      link: { label: 'Memory settings', href: settingsSectionPath(factoryId, 'memory', 'factory') },
+    },
   }),
 };
 
@@ -128,12 +135,12 @@ export function boardCardStatus(input: BoardCardStatusInput): BoardCardStatus {
   if (input.preparing !== undefined) return { kind: 'busy', label: input.preparing };
   if (input.transitionReason !== undefined) return { kind: 'error', label: input.transitionReason };
   if (decision?.status === 'failed') {
-    const hint = decision.failureCode ? FAILURE_HINTS[decision.failureCode]?.(input.factoryId) : undefined;
+    const fixFirst = decision.failureCode ? FIX_FIRST_FAILURES[decision.failureCode]?.(input.factoryId) : undefined;
     return {
       kind: 'error',
-      label: automationCopy(decision).failed,
+      label: fixFirst?.label ?? automationCopy(decision).failed,
       ...(decision.canRetry ? { retryDecisionId: decision.id } : {}),
-      ...(hint ? { hint } : {}),
+      ...(fixFirst ? { hint: fixFirst.hint } : {}),
       detail: decision.lastError ?? undefined,
     };
   }

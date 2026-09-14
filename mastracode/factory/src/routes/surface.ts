@@ -534,6 +534,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       sourceControlSessions: deps.sourceControlStorage.forIntegration('github').sessions,
       memorySettings: deps.domains.memorySettings,
       factoryProjects: deps.domains.projects,
+      ...(deps.factoryReady ? { failedRuns: deps.domains.workItems } : {}),
       customProviders: deps.domains.customProviders,
       features: { knowledge: deps.knowledgeEnabled },
       onCredentialsChanged: invalidateTenantCredentialSnapshots,

@@ -148,12 +148,13 @@ describe('Board card error tooltip', () => {
     renderWorkBoard();
 
     const failure = await screen.findByRole('alert');
+    expect(failure).toHaveTextContent('Memory model refused by the provider');
     expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Memory settings' })).not.toBeInTheDocument();
 
     await user.hover(failure);
 
-    expect(await screen.findByText(/Pick another one, then retry/)).toBeVisible();
+    expect(await screen.findByText(/this run resumes on its own/)).toBeVisible();
     expect(screen.getByRole('link', { name: 'Memory settings' })).toHaveAttribute(
       'href',
       `/factories/${FACTORY_ID}/settings/memory?scope=factory`,

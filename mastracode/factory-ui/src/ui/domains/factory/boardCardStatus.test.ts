@@ -76,7 +76,7 @@ describe('boardCardStatus', () => {
     });
   });
 
-  it('tells the person how to fix a configuration failure and offers the retry for once it is fixed', () => {
+  it('names the memory model as the cause, says the fix resumes the run, and still offers Retry', () => {
     expect(
       boardCardStatus({
         factoryId: 'fp-1',
@@ -89,11 +89,11 @@ describe('boardCardStatus', () => {
       }),
     ).toEqual({
       kind: 'error',
-      label: 'Automated run could not start',
+      label: 'Memory model refused by the provider',
       detail: "The 'gpt-5.4-mini' model is not supported when using Codex with a ChatGPT account.",
       retryDecisionId: 'decision-1',
       hint: {
-        text: 'The provider refused the observational-memory model Factory runs use. Pick another one, then retry.',
+        text: 'Factory runs summarize their context with this model. Pick another one for the factory and this run resumes on its own.',
         link: { label: 'Memory settings', href: '/factories/fp-1/settings/memory?scope=factory' },
       },
     });

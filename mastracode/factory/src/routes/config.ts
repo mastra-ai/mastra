@@ -37,6 +37,7 @@ import type {
 import type { ModelPackRecord, ModelPacksStorage } from '../storage/domains/model-packs/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
+import type { FactoryDeferredDecisionRecord } from '../storage/domains/work-items/base.js';
 import { seedPersonalOmDefaults } from './om-seed.js';
 import {
   getAuthProviderId,
@@ -656,6 +657,14 @@ async function persistMemorySettings(
 }
 
 /** Dependencies injected into {@link ConfigRoutes}. */
+export interface FailedRunsStore {
+  listDeferredDecisions(
+    orgId: string,
+    factoryProjectId: string,
+  ): Promise<Pick<FactoryDeferredDecisionRecord, 'id' | 'status' | 'failureCode'>[]>;
+  retryDeferredDecision(orgId: string, factoryProjectId: string, decisionId: string, now: Date): Promise<unknown>;
+}
+
 export interface ConfigRoutesDeps extends RouteDependencies {
   controller: ModelCatalog;
   features?: { knowledge: boolean };
@@ -670,6 +679,8 @@ export interface ConfigRoutesDeps extends RouteDependencies {
   memorySettings?: MemorySettingsStorage;
   /** Factory projects domain, used to derive OM fallbacks from a factory's default model. */
   factoryProjects?: FactoryProjectsStorage;
+  /** Runs that died on the memory model; a Factory-wide model save re-queues them. Absent in local mode. */
+  failedRuns?: FailedRunsStore;
   /** Custom-providers domain handle; absent when the app database is missing. */
   customProviders?: CustomProvidersStorage;
   /** Notifies the host after tenant credentials change so caches can be dropped. */
@@ -738,6 +749,22 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             error: error instanceof Error ? error.message : String(error),
           });
         }
+      }
+    };
+
+    // The one failure the dispatcher leaves to a person: this save is that person's fix,
+    // so the runs it killed in this factory go back in the queue without a Retry each.
+    const resumeRunsTheModelKilled = async (context: MemorySettingsContext): Promise<void> => {
+      if (!context.factoryProjectId || !options.failedRuns) return;
+      const decisions = await options.failedRuns.listDeferredDecisions(context.orgId, context.factoryProjectId);
+      for (const decision of decisions) {
+        if (decision.status !== 'failed' || decision.failureCode !== 'run_configuration_invalid') continue;
+        await options.failedRuns.retryDeferredDecision(
+          context.orgId,
+          context.factoryProjectId,
+          decision.id,
+          new Date(),
+        );
       }
     };
 
@@ -1452,6 +1479,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               otherRoleCurrentModelId ? { [otherKey]: otherRoleCurrentModelId } : undefined,
             );
             await followRowOntoLiveFactorySessions(context);
+            await resumeRunsTheModelKilled(context);
             const config = session
               ? readOMConfig(session)
               : readStoredOMConfig(

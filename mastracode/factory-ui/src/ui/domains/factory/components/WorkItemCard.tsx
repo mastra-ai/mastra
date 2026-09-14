@@ -218,6 +218,7 @@ export function WorkItemCard({
   const actions = cardActions({
     running: wickStatus !== undefined,
     waiting: status.kind === 'waiting' || status.kind === 'held',
+    fixFirst: status.kind === 'error' && status.hint !== undefined,
     session: sessionLink(sessionHref),
     retry: retryButton({ decisionId: retryDecisionId, retryingDecisionId, onRetry: onRetryDecision }),
     run: runButton({
