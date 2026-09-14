@@ -551,23 +551,26 @@ mastra env db create --kind turso                                    # picks or 
 mastra env db create staging --kind turso                            # scoped to the "staging" environment
 mastra env db create --kind turso --shared                           # shared by all environments
 mastra env db create --kind neon --name my-app-db --region aws-us-east-1 --shared
+mastra env db create production --kind postgres                      # managed Postgres in the "production" environment
 ```
 
 #### `--kind`
 
-Database provider (required). One of `turso`, `neon`, or `redis`.
+Database provider (required). One of `turso`, `neon`, `redis`, or `postgres`.
+
+`neon` and `postgres` are both PostgreSQL but differ in hosting and injected variables. `neon` provisions serverless Postgres and injects `DATABASE_URL`. `postgres` provisions a managed Postgres instance that runs alongside your environment on its private network and injects `POSTGRES_URL`. Both providers can coexist in the same environment, since they inject different variables.
 
 #### `--name`
 
-Database name. Defaults to a name derived from the project slug and provider (for example `my-app-turso` or `my-app-redis`).
+Database name. Defaults to a name derived from the project slug and provider (for example `my-app-turso` or `my-app-postgres`).
 
 #### `--region`
 
-Provider region ID for shared databases. Ignored for environment-scoped databases.
+Provider region ID for shared databases. Ignored for environment-scoped databases, which always use the environment's region. `redis` and `postgres` databases run in the environment itself, so they never take a region.
 
 #### `--shared`
 
-Attach as a project-scoped database that's shared by every environment. Can't be combined with an environment argument.
+Attach as a project-scoped database that's shared by every environment. Can't be combined with an environment argument, and isn't supported for `postgres`: managed Postgres is always environment-scoped.
 
 #### `--no-wait`
 

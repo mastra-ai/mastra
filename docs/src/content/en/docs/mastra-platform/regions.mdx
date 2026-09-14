@@ -50,6 +50,8 @@ When you attach an [environment-scoped database](/docs/mastra-platform/database)
 | `sfo` | `sjc` (San Jose) | `aws-us-west-2` (Oregon) |
 | `ams` | `ams` (Amsterdam) | `aws-eu-central-1` (Frankfurt) |
 
+Managed Redis (`--kind redis`) and managed Postgres (`--kind postgres`) run inside the environment itself on Railway's private network, so they inherit the environment's Railway region and never accept `--region`.
+
 Project-scoped databases (shared across environments) accept an explicit `--region` because they aren't bound to a single environment. Use a provider region ID for the flag, not the `us` / `eu` shorthand:
 
 ```bash

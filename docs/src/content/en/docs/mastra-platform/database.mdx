@@ -64,11 +64,11 @@ mastra env db create staging --kind turso
 mastra env db create --kind turso --shared
 ```
 
-Supported kinds are `turso` and `neon` (Postgres). Useful flags:
+Supported kinds are `turso`, `neon` (Postgres), `redis`, and `postgres` (managed Postgres on Railway). Useful flags:
 
-- `--shared`: Attach a project-scoped database shared by every environment. Can't be combined with an environment argument.
+- `--shared`: Attach a project-scoped database shared by every environment. Can't be combined with an environment argument. Not supported for `redis` or `postgres`, which are always environment-scoped.
 - `--name <name>`: Database name. Defaults to a name derived from the project slug.
-- `--region <region>`: Provider region ID for project-scoped databases (for example `fra`). Environment-scoped databases are placed near the environment's region automatically, and an explicit `--region` is ignored.
+- `--region <region>`: Provider region ID for project-scoped databases (for example `fra`). Environment-scoped databases are placed near the environment's region automatically, and an explicit `--region` is ignored. `redis` and `postgres` run inside the environment itself and never accept a region.
 - `--no-wait`: Return immediately instead of polling. Check progress later with `mastra env db show`.
 - `--json`: Machine-readable output. When the project has multiple environments, `--json` requires an environment argument or `--shared` (no interactive prompt).
 
@@ -137,11 +137,11 @@ Install the adapter:
 npm install @mastra/libsql@latest
 ```
 
-### PostgreSQL
+### PostgreSQL (Neon)
 
-PostgreSQL exposes a single `DATABASE_URL` connection string. The following example connects a [PostgresStore](/integrations/databases/postgresql) using that variable.
+Neon-hosted serverless Postgres exposes a single `DATABASE_URL` connection string. The following example connects a [PostgresStore](/integrations/databases/postgresql) using that variable.
 
-```ts title="src/mastra/storage.ts" caption="Connect a Postgres database"
+```ts title="src/mastra/storage.ts" caption="Connect a Neon Postgres database"
 import { PostgresStore } from '@mastra/pg'
 
 export const storage = new PostgresStore({
@@ -154,6 +154,20 @@ Install the adapter:
 ```bash npm2yarn
 npm install @mastra/pg@latest
 ```
+
+### Managed Postgres (Railway)
+
+`--kind postgres` provisions a managed Postgres instance on Railway that runs alongside your environment on its private network. It's always environment-scoped and injects a single `POSTGRES_URL` connection string. Connect it with the same `@mastra/pg` adapter:
+
+```ts title="src/mastra/storage.ts" caption="Connect a managed Postgres (Railway) database"
+import { PostgresStore } from '@mastra/pg'
+
+export const storage = new PostgresStore({
+  connectionString: process.env.POSTGRES_URL!,
+})
+```
+
+Managed Postgres uses a distinct variable from Neon (`POSTGRES_URL` versus `DATABASE_URL`), so both can coexist in the same environment when you need a serverless Neon database and an in-environment Postgres instance for different workloads.
 
 Pass the `storage` instance to your `Mastra` configuration so agents, memory, and workflows can use it:
 
@@ -173,10 +187,12 @@ Each provider injects a fixed set of managed environment variables. These are av
 | Provider | Variables |
 | - | - |
 | Turso | `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN` |
-| Postgres | `DATABASE_URL` |
+| Postgres (Neon) | `DATABASE_URL` |
+| Postgres (Railway) | `POSTGRES_URL` |
+| Redis | `REDIS_URL` |
 
 :::warning
-Treat connection credentials as secrets. The auth token (`TURSO_AUTH_TOKEN`) and the Postgres connection string (`DATABASE_URL`) grant full access to your data. The platform masks them by default and only reveals them on request.
+Treat connection credentials as secrets. The auth token (`TURSO_AUTH_TOKEN`) and the Postgres connection strings (`DATABASE_URL`, `POSTGRES_URL`) grant full access to your data. The platform masks them by default and only reveals them on request.
 :::
 
 ## Manage a database
