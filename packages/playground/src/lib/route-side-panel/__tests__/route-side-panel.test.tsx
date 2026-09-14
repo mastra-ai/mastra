@@ -6,7 +6,7 @@ import { RouteSidePanel, RouteSidePanelProvider, RouteSidePanelSlot } from '../r
 import { useRouteSidePanel } from '../use-route-side-panel';
 
 function PanelProbe() {
-  const { hasPanel, isCollapsed, toggle, setIsCollapsed } = useRouteSidePanel();
+  const { hasPanel, isCollapsed, toggle, onPanelResize } = useRouteSidePanel();
   return (
     <div>
       <span data-testid="has-panel">{String(hasPanel)}</span>
@@ -14,7 +14,7 @@ function PanelProbe() {
       <button type="button" onClick={toggle}>
         toggle
       </button>
-      <button type="button" onClick={() => setIsCollapsed(false)}>
+      <button type="button" onClick={() => onPanelResize(380)}>
         report-expanded
       </button>
     </div>

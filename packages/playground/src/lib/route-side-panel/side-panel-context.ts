@@ -9,9 +9,9 @@ export interface SidePanelState {
   register: (owner: string, priority: number) => () => void;
   /** Ref the layout attaches to its `CollapsiblePanel`; pages drive it through `toggle()`. */
   panelHandle: RefObject<CollapsiblePanelHandle | null>;
-  /** Physical state reported by the panel's `onResize`, so header controls reflect it. */
+  /** Derived: collapsed on desktop (from the panel's `onResize`); never collapsed on mobile, where the drawer owns its own open state. */
   isCollapsed: boolean;
-  setIsCollapsed: Dispatch<SetStateAction<boolean>>;
+  onPanelResize: (sizeInPixels: number) => void;
   toggle: () => void;
 }
 

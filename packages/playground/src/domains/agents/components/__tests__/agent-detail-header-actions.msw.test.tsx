@@ -30,10 +30,10 @@ const panelHandle: CollapsiblePanelHandle = { collapse: vi.fn(), expand: vi.fn()
 
 /** Stands in for the layout's CollapsiblePanel: binds the shared handle and lets the test report a size. */
 function FakeLayoutPanel() {
-  const { panelHandle: ref, setIsCollapsed } = useRouteSidePanel();
+  const { panelHandle: ref, onPanelResize } = useRouteSidePanel();
   useImperativeHandle(ref, () => panelHandle);
   return (
-    <button type="button" onClick={() => setIsCollapsed(false)}>
+    <button type="button" onClick={() => onPanelResize(380)}>
       report-expanded
     </button>
   );

@@ -1,3 +1,4 @@
+import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
 import type { CollapsiblePanelHandle } from '@mastra/playground-ui/resize/collapsible-panel';
 import type { ComponentProps, ReactNode } from 'react';
 import { use, useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -17,7 +18,10 @@ interface PanelOwner {
 export function RouteSidePanelProvider({ children }: { children: ReactNode }) {
   const [el, setEl] = useState<HTMLElement | null>(null);
   const [owners, setOwners] = useState<PanelOwner[]>([]);
-  const [isCollapsed, setIsCollapsed] = useState(true);
+  const [panelCollapsed, setPanelCollapsed] = useState(true);
+  const isMobile = useIsMobile();
+  // The mobile drawer owns its own open state, so the portal must not be gated on collapse there.
+  const isCollapsed = !isMobile && panelCollapsed;
   const panelHandle = useRef<CollapsiblePanelHandle | null>(null);
   const orderRef = useRef(0);
 
@@ -48,10 +52,11 @@ export function RouteSidePanelProvider({ children }: { children: ReactNode }) {
   }, [owners]);
 
   const toggle = useCallback(() => panelHandle.current?.toggle(), []);
+  const onPanelResize = useCallback((sizeInPixels: number) => setPanelCollapsed(sizeInPixels <= 0), []);
 
   const value = useMemo(
-    () => ({ el, setEl, activeOwner, register, panelHandle, isCollapsed, setIsCollapsed, toggle }),
-    [activeOwner, el, isCollapsed, register, toggle],
+    () => ({ el, setEl, activeOwner, register, panelHandle, isCollapsed, onPanelResize, toggle }),
+    [activeOwner, el, isCollapsed, onPanelResize, register, toggle],
   );
   return <SidePanelContext.Provider value={value}>{children}</SidePanelContext.Provider>;
 }

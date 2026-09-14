@@ -154,6 +154,28 @@ describe('StudioFrame side panel', () => {
 
     const drawer = await screen.findByTestId('panel-drawer');
     await waitFor(() => expect(drawer.textContent).toContain('Panel content'));
-    expect(screen.queryByTestId('panel-group')).toBeNull();
+    // The page stays under the same panel so crossing the breakpoint never remounts it.
+    expect(screen.getByTestId('panel-studio-frame')).toBeTruthy();
+    expect(screen.queryByTestId('collapsible-route-side-panel')).toBeNull();
+    expect(screen.queryByTestId('panel-separator')).toBeNull();
+  });
+
+  it('keeps the page mounted when crossing the mobile breakpoint', async () => {
+    const { rerender } = renderFrame({ withPanel: true });
+    const before = screen.getByTestId('frame-content');
+
+    mobileState.value = true;
+    rerender(
+      <RouteSidePanelProvider>
+        <Toggle />
+        <StudioFrame>
+          <div data-testid="frame-content">page</div>
+        </StudioFrame>
+        <RouteSidePanel owner="agent-detail">Panel content</RouteSidePanel>
+      </RouteSidePanelProvider>,
+    );
+
+    await screen.findByTestId('panel-drawer');
+    expect(screen.getByTestId('frame-content')).toBe(before);
   });
 });

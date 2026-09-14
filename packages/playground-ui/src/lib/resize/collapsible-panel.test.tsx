@@ -230,6 +230,7 @@ describe('CollapsiblePanel', () => {
         act(() => handle.current?.toggle());
         fireEvent.click(screen.getByTestId('resize-shrinking'));
         fireEvent.click(screen.getByTestId('resize-collapsed'));
+        panelMocks.state.size = 0;
 
         act(() => handle.current?.toggle());
 
@@ -240,11 +241,33 @@ describe('CollapsiblePanel', () => {
       it('expands a panel that mounted collapsed', () => {
         const handle = renderWithHandle();
         fireEvent.click(screen.getByTestId('resize-collapsed'));
+        panelMocks.state.size = 0;
 
         act(() => handle.current?.toggle());
 
         expect(panelMocks.handle.resize).toHaveBeenCalledWith(300);
         expect(panelMocks.handle.collapse).not.toHaveBeenCalled();
+      });
+
+      it('expands a panel at zero width before the first onResize has fired', () => {
+        // Mirrors a shortcut fired right after mount, before the library reports a layout.
+        panelMocks.state.size = 0;
+        const handle = renderWithHandle();
+
+        act(() => handle.current?.toggle());
+
+        expect(panelMocks.handle.resize).toHaveBeenCalledWith(300);
+        expect(panelMocks.handle.collapse).not.toHaveBeenCalled();
+      });
+
+      it('does not remember a collapsed width as the restore target', () => {
+        panelMocks.state.size = 0;
+        const handle = renderWithHandle();
+
+        act(() => handle.current?.collapse());
+        act(() => handle.current?.expand());
+
+        expect(panelMocks.handle.resize).toHaveBeenCalledWith(300);
       });
     });
   });

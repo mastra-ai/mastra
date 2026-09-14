@@ -12,7 +12,6 @@ import { PanelDrawer } from '@mastra/playground-ui/resize/panel-drawer';
 import { PanelGroup } from '@mastra/playground-ui/resize/panel-group';
 import { PanelSeparator } from '@mastra/playground-ui/resize/separator';
 import { Search } from 'lucide-react';
-import { useEffect } from 'react';
 import { Panel, useDefaultLayout } from 'react-resizable-panels';
 import { useLocation } from 'react-router';
 import { AppSidebar } from './ui/app-sidebar';
@@ -73,65 +72,55 @@ const SIDE_PANEL_COLLAPSED_LAYOUT = { 'studio-frame': 100, 'route-side-panel': 0
 
 /**
  * Hosts the page-registered side panel next to the Studio frame (outside the
- * rounded card). Desktop: resizable panel; mobile: edge drawer.
+ * rounded card). Desktop: resizable panel; mobile: edge drawer. The page always
+ * renders under the same `Panel` so crossing the breakpoint never remounts it.
  */
 export function StudioFrame({ children, className }: { children: React.ReactNode; className?: string }) {
   const isMobile = useIsMobile();
-  const { hasPanel, panelHandle, setIsCollapsed } = useRouteSidePanel();
+  const { hasPanel, panelHandle, onPanelResize } = useRouteSidePanel();
   const { defaultLayout, onLayoutChange } = useDefaultLayout({
     id: 'studio-frame-layout-v1',
     storage: localStorage,
   });
 
-  // The mobile drawer owns its own open state, so the portal must not be gated on collapse there.
-  useEffect(() => {
-    if (isMobile) setIsCollapsed(false);
-  }, [isMobile, setIsCollapsed]);
-
-  if (isMobile) {
-    return (
-      <div className={cn('relative', className)}>
-        {children}
-        {hasPanel && (
-          <PanelDrawer direction="right" label="Open details panel">
-            <RouteSidePanelSlot className="h-full min-h-0" />
-          </PanelDrawer>
-        )}
-      </div>
-    );
-  }
-
   return (
-    <PanelGroup
-      className="min-h-0 flex-1"
-      orientation="horizontal"
-      defaultLayout={defaultLayout ?? SIDE_PANEL_COLLAPSED_LAYOUT}
-      onLayoutChange={onLayoutChange}
-    >
-      <Panel id="studio-frame" className={cn('min-w-0', className)}>
-        {children}
-      </Panel>
-      {hasPanel && (
-        <>
-          <PanelSeparator />
-          <CollapsiblePanel
-            id="route-side-panel"
-            ref={panelHandle}
-            direction="right"
-            collapsible
-            collapsedSize={0}
-            hideExpandButton
-            minSize={320}
-            maxSize="50%"
-            defaultSize={380}
-            className="min-w-0"
-            onResize={size => setIsCollapsed(size.inPixels <= 0)}
-          >
-            <RouteSidePanelSlot className="h-full min-h-0 py-1.5 pr-1.5 lg:py-2 lg:pr-2" />
-          </CollapsiblePanel>
-        </>
+    <div className="relative flex min-h-0 flex-1">
+      <PanelGroup
+        className="min-h-0 flex-1"
+        orientation="horizontal"
+        defaultLayout={defaultLayout ?? SIDE_PANEL_COLLAPSED_LAYOUT}
+        onLayoutChange={onLayoutChange}
+      >
+        <Panel id="studio-frame" className={cn('min-w-0', className)}>
+          {children}
+        </Panel>
+        {hasPanel && !isMobile && (
+          <>
+            <PanelSeparator />
+            <CollapsiblePanel
+              id="route-side-panel"
+              ref={panelHandle}
+              direction="right"
+              collapsible
+              collapsedSize={0}
+              hideExpandButton
+              minSize={320}
+              maxSize="50%"
+              defaultSize={380}
+              className="min-w-0"
+              onResize={size => onPanelResize(size.inPixels)}
+            >
+              <RouteSidePanelSlot className="h-full min-h-0 py-1.5 pr-1.5 lg:py-2 lg:pr-2" />
+            </CollapsiblePanel>
+          </>
+        )}
+      </PanelGroup>
+      {hasPanel && isMobile && (
+        <PanelDrawer direction="right" label="Open details panel">
+          <RouteSidePanelSlot className="h-full min-h-0" />
+        </PanelDrawer>
       )}
-    </PanelGroup>
+    </div>
   );
 }
 

@@ -44,9 +44,9 @@ const panelHandle: CollapsiblePanelHandle = { collapse: vi.fn(), expand: vi.fn()
 
 /** Stands in for the layout's CollapsiblePanel by binding the shared handle. */
 function FakeLayoutPanel() {
-  const { panelHandle: ref, setIsCollapsed } = useRouteSidePanel();
+  const { panelHandle: ref, onPanelResize } = useRouteSidePanel();
   useImperativeHandle(ref, () => panelHandle);
-  useEffect(() => setIsCollapsed(false), [setIsCollapsed]);
+  useEffect(() => onPanelResize(380), [onPanelResize]);
   return null;
 }
 
