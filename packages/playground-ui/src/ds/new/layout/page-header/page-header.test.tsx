@@ -12,7 +12,6 @@ describe('PageHeader', () => {
   it('renders every compound slot', () => {
     const markup = renderToStaticMarkup(
       <PageHeader aria-label="Project header">
-        <PageHeader.Eyebrow>Project</PageHeader.Eyebrow>
         <PageHeader.Icon>Icon</PageHeader.Icon>
         <PageHeader.Title>Production</PageHeader.Title>
         <PageHeader.Meta>Live</PageHeader.Meta>
@@ -23,7 +22,6 @@ describe('PageHeader', () => {
 
     expect(markup).toContain('<header');
     expect(markup).toContain('<h1');
-    expect(markup).toContain('Project');
     expect(markup).toContain('Icon');
     expect(markup).toContain('Production');
     expect(markup).toContain('Live');

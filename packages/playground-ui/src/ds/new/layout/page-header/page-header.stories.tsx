@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { ArrowLeftIcon, BotIcon } from 'lucide-react';
+import { BotIcon } from 'lucide-react';
 
 import { PageHeader } from './page-header';
 import type { PageHeaderTitleSize } from './page-header';
@@ -16,7 +16,6 @@ type PageHeaderStoryProps = {
   metaBeside: boolean;
   showAction: boolean;
   showDescription: boolean;
-  showEyebrow: boolean;
   showIcon: boolean;
   showMeta: boolean;
   showTitle: boolean;
@@ -30,7 +29,6 @@ function PageHeaderStory({
   metaBeside,
   showAction,
   showDescription,
-  showEyebrow,
   showIcon,
   showMeta,
   showTitle,
@@ -40,14 +38,6 @@ function PageHeaderStory({
   return (
     <StoryFrame>
       <PageHeader>
-        {showEyebrow && (
-          <PageHeader.Eyebrow>
-            <a href="#agents" className="text-neutral2 hover:text-neutral4 -ml-4 flex items-center gap-1">
-              <ArrowLeftIcon className="size-3" />
-              Back to agents
-            </a>
-          </PageHeader.Eyebrow>
-        )}
         {showIcon && (
           <PageHeader.Icon>
             <BotIcon strokeWidth={2.5} />
@@ -85,7 +75,6 @@ const meta = {
     metaBeside: false,
     showAction: true,
     showDescription: true,
-    showEyebrow: false,
     showIcon: false,
     showMeta: false,
     showTitle: true,
@@ -98,7 +87,6 @@ const meta = {
     description: { control: 'text' },
     metaBeside: { control: 'boolean' },
     isLoading: { control: 'boolean' },
-    showEyebrow: { control: 'boolean' },
     showIcon: { control: 'boolean' },
     showTitle: { control: 'boolean' },
     showMeta: { control: 'boolean' },
@@ -114,7 +102,6 @@ export const Default: Story = {};
 
 export const AllSlots: Story = {
   args: {
-    showEyebrow: true,
     showIcon: true,
     showMeta: true,
   },
@@ -152,21 +139,6 @@ export const MetaBoth: Story = {
         <PageHeader.Action>
           <Button size="sm">Settings</Button>
         </PageHeader.Action>
-      </PageHeader>
-    </StoryFrame>
-  ),
-};
-
-export const EyebrowOnly: Story = {
-  render: () => (
-    <StoryFrame>
-      <PageHeader>
-        <PageHeader.Eyebrow>
-          <a href="#agents" className="text-neutral2 hover:text-neutral4 -ml-4 flex items-center gap-1">
-            <ArrowLeftIcon className="size-3" />
-            Back to agents
-          </a>
-        </PageHeader.Eyebrow>
       </PageHeader>
     </StoryFrame>
   ),

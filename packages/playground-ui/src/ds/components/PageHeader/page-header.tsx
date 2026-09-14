@@ -2,7 +2,6 @@ export { PageHeader } from '../../new/layout/page-header';
 export type {
   PageHeaderActionProps,
   PageHeaderDescriptionProps,
-  PageHeaderEyebrowProps,
   PageHeaderIconProps,
   PageHeaderMetaProps,
   PageHeaderRootProps,
