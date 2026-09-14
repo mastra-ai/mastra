@@ -56,7 +56,7 @@ export function SidebarNewNavHeader({
           <VisuallyHidden asChild>
             <header {...props}>{children}</header>
           </VisuallyHidden>
-          <div aria-hidden="true" className="bg-border1 mx-3 h-px flex-1" />
+          <div aria-hidden="true" className="bg-neutral4/40 mx-3 h-px flex-1" />
         </>
       )}
     </div>
