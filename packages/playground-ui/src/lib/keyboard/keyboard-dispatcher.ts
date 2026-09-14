@@ -219,8 +219,9 @@ export const createKeyboardDispatcher = (): KeyboardDispatcher => {
   const accepts = (layer: KeyboardLayer, event: KeyboardEvent) => !layer.shouldHandle || layer.shouldHandle(event);
 
   const handleKeydown = (event: KeyboardEvent) => {
-    const skipShortcut = event.defaultPrevented || event.isComposing || event.keyCode === 229;
-    if (skipShortcut) {
+    // IME boundary events can report 229 while isComposing is false.
+    const isImeComposition = event.isComposing || event.keyCode === 229;
+    if (event.defaultPrevented || isImeComposition) {
       reset();
       return;
     }
