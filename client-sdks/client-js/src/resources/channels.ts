@@ -1,41 +1,16 @@
+import type { Body, PathParams, RouteResponse } from '../route-types.generated.js';
 import type { ClientOptions } from '../types';
 
 import { BaseResource } from './base';
 
-export interface ChannelPlatformInfo {
-  id: string;
-  name: string;
-  isConfigured: boolean;
-  connectOptionsSchema?: Record<string, unknown>;
-}
+export type ChannelPlatformInfo = RouteResponse<'GET /channels/platforms'>[number];
 
-export interface ChannelInstallationInfo {
-  id: string;
-  platform: string;
-  agentId: string;
-  status: 'active' | 'pending';
-  displayName?: string;
-  installedAt?: string;
-}
+export type ChannelInstallationInfo = RouteResponse<'GET /channels/:platform/installations'>[number];
 
-export interface ChannelConnectOAuth {
-  type: 'oauth';
-  authorizationUrl: string;
-  installationId: string;
-}
-
-export interface ChannelConnectDeepLink {
-  type: 'deep_link';
-  url: string;
-  installationId: string;
-}
-
-export interface ChannelConnectImmediate {
-  type: 'immediate';
-  installationId: string;
-}
-
-export type ChannelConnectResult = ChannelConnectOAuth | ChannelConnectDeepLink | ChannelConnectImmediate;
+export type ChannelConnectResult = RouteResponse<'POST /channels/:platform/connect'>;
+export type ChannelConnectOAuth = Extract<ChannelConnectResult, { type: 'oauth' }>;
+export type ChannelConnectDeepLink = Extract<ChannelConnectResult, { type: 'deep_link' }>;
+export type ChannelConnectImmediate = Extract<ChannelConnectResult, { type: 'immediate' }>;
 
 export class Channels extends BaseResource {
   constructor(options: ClientOptions) {
@@ -56,7 +31,10 @@ export class Channels extends BaseResource {
    * @param agentId - Optional agent ID to filter by (client-side)
    * @returns Array of installations
    */
-  async listInstallations(platform: string, agentId?: string): Promise<ChannelInstallationInfo[]> {
+  async listInstallations(
+    platform: PathParams<'GET /channels/:platform/installations'>['platform'],
+    agentId?: string,
+  ): Promise<ChannelInstallationInfo[]> {
     const all = await this.request<ChannelInstallationInfo[]>(`/channels/${platform}/installations`);
     if (agentId) {
       return all.filter(i => i.agentId === agentId);
@@ -71,7 +49,11 @@ export class Channels extends BaseResource {
    * @param options - Platform-specific connection options
    * @returns Discriminated connect result — check `type` for the authorization flow
    */
-  connect(platform: string, agentId: string, options?: Record<string, unknown>): Promise<ChannelConnectResult> {
+  connect(
+    platform: PathParams<'POST /channels/:platform/connect'>['platform'],
+    agentId: Body<'POST /channels/:platform/connect'>['agentId'],
+    options?: Body<'POST /channels/:platform/connect'>['options'],
+  ): Promise<ChannelConnectResult> {
     return this.request(`/channels/${platform}/connect`, {
       method: 'POST',
       body: { agentId, options },
@@ -83,7 +65,10 @@ export class Channels extends BaseResource {
    * @param platform - Platform identifier (e.g., "slack")
    * @param agentId - Agent to disconnect
    */
-  disconnect(platform: string, agentId: string): Promise<{ success: boolean }> {
+  disconnect(
+    platform: PathParams<'POST /channels/:platform/:agentId/disconnect'>['platform'],
+    agentId: PathParams<'POST /channels/:platform/:agentId/disconnect'>['agentId'],
+  ): Promise<RouteResponse<'POST /channels/:platform/:agentId/disconnect'>> {
     return this.request(`/channels/${platform}/${agentId}/disconnect`, {
       method: 'POST',
     });
