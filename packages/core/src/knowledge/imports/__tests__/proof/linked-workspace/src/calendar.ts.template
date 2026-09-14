@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
-import { Knowledge } from '@mastra/core/knowledge';
+import { Knowledge, type KnowledgeImporterHandlerContext, type KnowledgeImporterWebhookBindingContext } from '@mastra/core/knowledge';
 import { knowledgeImporterBindingKey } from '@mastra/core/storage';
 import { LibSQLStore } from '@mastra/libsql';
 import { PostgresStore } from '@mastra/pg';
@@ -75,11 +75,11 @@ const knowledge = new Knowledge({
         cron: { schedule: '0 */6 * * *', bindings: [primary, secondary] },
         webhook: {
           bindings: [primary, secondary],
-          resolveBinding: ({ payload }) =>
+          resolveBinding: ({ payload }: KnowledgeImporterWebhookBindingContext) =>
             (payload as { calendar?: 'secondary' } | undefined)?.calendar === 'secondary' ? secondary : primary,
         },
       },
-      handler: async context => {
+      handler: async (context: KnowledgeImporterHandlerContext<CalendarPayload>) => {
         const payload = (context.payload ?? {}) as CalendarPayload;
         if (payload.hold) {
           executionOrder.push(`start:${payload.hold}`);
