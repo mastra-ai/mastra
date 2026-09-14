@@ -208,6 +208,7 @@ export const API_ROUTE_METADATA = {
     ],
     "queryParams": [],
     "bodyParams": [
+      "clearPendingSignals",
       "resourceId",
       "threadId"
     ],
@@ -215,6 +216,25 @@ export const API_ROUTE_METADATA = {
     "hasBody": true,
     "responseShape": {
       "kind": "single"
+    }
+  },
+  "POST /agents/:agentId/threads/signals/cancel": {
+    "method": "POST",
+    "path": "/agents/:agentId/threads/signals/cancel",
+    "pathParams": [
+      "agentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "resourceId",
+      "signalIds",
+      "threadId"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "cancelledSignalIds"
     }
   },
   "POST /agents/:agentId/tools/:toolId/execute": {

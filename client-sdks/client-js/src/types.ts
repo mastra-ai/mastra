@@ -164,6 +164,14 @@ export interface SubscribeAgentThreadParams {
   threadId: string;
 }
 
+/** @experimental Agent thread cancellation is experimental. */
+export type AbortAgentThreadParams = GeneratedRequest<Body<'POST /agents/:agentId/threads/abort'>>;
+
+/** @experimental Cancels pending signals on the server process handling the request. */
+export type CancelPendingAgentSignalsParams = GeneratedRequest<Body<'POST /agents/:agentId/threads/signals/cancel'>>;
+
+export type CancelPendingAgentSignalsResponse = GeneratedResponse<'POST /agents/:agentId/threads/signals/cancel'>;
+
 export type ListAgentSuspendedRunsParams = GeneratedRequest<QueryParams<'GET /agents/:agentId/suspended-runs'>>;
 
 /**

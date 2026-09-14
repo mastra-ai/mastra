@@ -429,6 +429,22 @@ export interface AgentThreadIdentityOptions {
 }
 
 /** @experimental Agent signals are experimental and may change in a future release. */
+export interface AgentAbortThreadOptions extends AgentThreadIdentityOptions {
+  /** Clear this runtime's pending signals before aborting. Forwarded aborts also clear the receiving owner's queues. */
+  clearPendingSignals?: boolean;
+}
+
+/** @experimental Cancels process-local pending signals across all Agents on the thread. */
+export interface CancelPendingAgentSignalsOptions extends AgentThreadIdentityOptions {
+  signalIds: string[];
+}
+
+/** @experimental IDs actually removed or cancelled while waiting for a lease. */
+export interface CancelPendingAgentSignalsResult {
+  cancelledSignalIds: string[];
+}
+
+/** @experimental Agent signals are experimental and may change in a future release. */
 export interface AgentSubscribeToThreadOptions extends AgentThreadIdentityOptions {
   /** Subscriber-local signal filtering: true hides all recognized types, false hides none, or select types with an array. Defaults to none. */
   hideSignals?: boolean | AgentSignalType[];
@@ -442,7 +458,7 @@ export interface AgentThreadSubscription<OUTPUT = unknown> {
   activeRunId: () => string | null;
   /** @internal */
   __getCurrentRunRequestContext?: () => RequestContext | undefined;
-  abort: () => boolean;
+  abort: (options?: Pick<AgentAbortThreadOptions, 'clearPendingSignals'>) => boolean;
   unsubscribe: () => void;
 }
 

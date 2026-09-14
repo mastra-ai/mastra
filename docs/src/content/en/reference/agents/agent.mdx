@@ -363,6 +363,30 @@ The count includes messages waiting in the local FIFO and a non-cancelled messag
 
 Use `cancelQueuedMessages({ resourceId, threadId, signalIds })` to remove specific queued messages, or pass `{ resourceId, threadId, queueOwnerId }` to remove an owner group. Supply exactly one selector. Owner-scoped observation and cancellation match the calling Agent, its local runtime, resource, thread, and owner ID. They don't cancel already-running, remote-owner, or crash-persisted work, and don't provide durable queue delivery.
 
+### `cancelPendingSignals(options)`
+
+Cancels selected pending signals on a memory thread without aborting the active run. Unlike `cancelQueuedMessages()`, this method isn't filtered by the calling Agent or `queueOwnerId`. It covers signals waiting for run preparation, signals pending in an active run, and queued messages waiting for a later run.
+
+```typescript
+const { cancelledSignalIds } = agent.cancelPendingSignals({
+  resourceId: 'user-123',
+  threadId: 'thread-abc',
+  signalIds: ['signal-123', 'signal-456'],
+})
+```
+
+<PropertiesTable
+  content={[
+  { name: 'resourceId', type: 'string', isOptional: true, description: 'Resource ID for the memory thread.' },
+  { name: 'threadId', type: 'string', description: 'Thread containing the pending signals.' },
+  { name: 'signalIds', type: 'string[]', description: 'IDs to cancel. Duplicate and unknown IDs are ignored.' },
+]}
+/>
+
+Returns `{ cancelledSignalIds: string[] }`, containing each ID actually cancelled by this call once. An empty array means none of the selected signals were still pending locally. A signal waiting to acquire or transfer its lease remains cancellable. Once execution or forwarding starts, cancellation no longer applies.
+
+The scope is local to this runtime and PubSub instance. The method doesn't send cancellation requests to remote owners. It leaves continuations from `continueWithMessages()`, saved messages, state updates, and notification records unchanged. Accepted acknowledgements remain settled.
+
 ### `sendSignal(signal, options)`
 
 Sends a signal to an active run or memory thread.
@@ -738,6 +762,39 @@ export const supportAgent = new Agent({
 })
 ```
 
+### `abortThreadStream(options)`
+
+Requests cancellation of the thread's active run. Pending signals survive by default. Set `clearPendingSignals: true` to remove locally pending signals across Agents before aborting the run.
+
+```typescript
+const aborted = agent.abortThreadStream({
+  resourceId: 'user-123',
+  threadId: 'thread-abc',
+  clearPendingSignals: true,
+})
+```
+
+<PropertiesTable
+  content={[
+  { name: 'resourceId', type: 'string', isOptional: true, description: 'Resource ID for the memory thread.' },
+  { name: 'threadId', type: 'string', description: 'Thread to abort.' },
+  {
+    name: 'clearPendingSignals',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'false',
+    description:
+      'Clear pending signals before aborting. Includes signals waiting for preparation or a lease, but not running work or continuations from continueWithMessages().',
+  },
+]}
+/>
+
+Returns a boolean indicating whether an active run was found for cancellation. For a remote owner, `true` means an abort request was sent, not that cancellation was acknowledged. The request carries `clearPendingSignals` so the active owner clears its own queues before applying the abort. Other processes' queues aren't globally cleared.
+
+Local pending signals are cleared when requested even if no active run is found and the method returns `false`. If a queued run is still preparing when clear-on-abort stops it, a later preparation failure doesn't restore its input to the queue. Clearing doesn't undo persisted effects or prior acceptance acknowledgements.
+
+Queue-count listeners run after clear-on-abort is applied. Input submitted by those listeners isn't included in the completed clear. Subscribers remain attached, and new input can start another run.
+
 ### `subscribeToThread(options)`
 
 Subscribes to raw stream chunks for a memory thread. Use this before calling `sendMessage()`, `queueMessage()`, or `sendSignal()`. It lets you render stream output and observe signal echoes, including when a signal aborts the active run.
@@ -808,8 +865,9 @@ Returns an `AgentThreadSubscription` object with these members:
   },
   {
     name: 'abort',
-    type: '() => boolean',
-    description: 'Aborts the active run for the thread. Returns `true` when a run was aborted.',
+    type: '(options?: { clearPendingSignals?: boolean }) => boolean',
+    description:
+      'Requests an abort for the active run. Pending signals survive unless clearPendingSignals is true. Uses the same cancellation and return semantics as abortThreadStream().',
   },
   {
     name: 'unsubscribe',
