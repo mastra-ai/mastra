@@ -235,6 +235,14 @@ function stubKnowledgeRoute(
               rung: null,
               address: 'features:memory',
             },
+            {
+              id: '44444444-4444-4444-8444-444444444444',
+              name: 'memory',
+              kind: 'package',
+              type: 'scope',
+              rung: null,
+              address: 'packages:memory',
+            },
           ],
           truncated: false,
         });
@@ -551,8 +559,9 @@ describe('KnowledgePage', () => {
     await user.click(screen.getByRole('button', { name: 'Close details' }));
 
     await user.type(search, 'memory');
-    const memory = await screen.findByRole('option', { name: /memory/ });
-    await user.click(memory);
+    const featureMemory = await screen.findByRole('option', { name: /memory features:memory scope/ });
+    expect(screen.getByRole('option', { name: /memory packages:memory scope/ })).toBeInTheDocument();
+    await user.click(featureMemory);
     expect(router.state.location.search).toContain('scope=33333333-3333-4333-8333-333333333333');
     expect(router.state.location.search).toContain('node=33333333-3333-4333-8333-333333333333');
     expect(await screen.findByTestId('knowledge-scope-flyout')).toHaveTextContent('memory');
