@@ -104,10 +104,11 @@ function createNewRoute<
     onValidationError?: ValidationErrorHook;
     maxBodySize?: number;
     preserveHttpExceptions?: boolean;
+    onUnsupportedCore?: () => never;
     handler: ServerRouteHandler<InferParams<TPathSchema, TQuerySchema, TBodySchema>>;
   },
 ) {
-  const { handler, preserveHttpExceptions, ...schemas } = config;
+  const { handler, preserveHttpExceptions, onUnsupportedCore, ...schemas } = config;
   return createRoute({
     ...def,
     ...schemas,
@@ -117,6 +118,7 @@ function createNewRoute<
     handler: (async (params: InferParams<TPathSchema, TQuerySchema, TBodySchema> & ServerContext) => {
       try {
         if (!coreFeatures.has('observability:v1.13.2')) {
+          if (onUnsupportedCore) onUnsupportedCore();
           throw new HTTPException(501, {
             message: 'New observability endpoints require @mastra/core >= 1.13.2, please upgrade.',
           });
@@ -302,6 +304,11 @@ export const QUERY_THREADS = createNewRoute(NEW_ROUTE_DEFS.QUERY_THREADS, {
   onValidationError: traceQueryValidationError,
   maxBodySize: 256 * 1024,
   preserveHttpExceptions: true,
+  onUnsupportedCore: () =>
+    throwTraceQueryError(501, {
+      code: 'TRACE_QUERY_UNSUPPORTED',
+      message: 'New observability endpoints require @mastra/core >= 1.13.2, please upgrade.',
+    }),
   handler: async ({ mastra, traces, where, page }) => {
     let plan;
     try {

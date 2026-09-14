@@ -4,6 +4,7 @@ import {
   THREAD_QUERY_FIXTURE_DATA,
 } from '@internal/storage-test-utils';
 import type { Mastra } from '@mastra/core';
+import { coreFeatures } from '@mastra/core/features';
 import {
   encodeTraceQueryCursor,
   parseQueryThreadsInput,
@@ -61,6 +62,26 @@ function getDeclaredErrorSchema(status: 400 | 409 | 413 | 422 | 501 | 504): z.Zo
 
 describe('QUERY_THREADS', () => {
   beforeEach(() => vi.clearAllMocks());
+
+  it('returns a structured 501 when the installed core lacks advanced observability endpoints', async () => {
+    const { mastra, getStore } = createHarness();
+    coreFeatures.delete('observability:v1.13.2');
+
+    try {
+      const error = await captureHttpException(
+        QUERY_THREADS.handler(params(mastra, { traces: { timeRange: TIME_RANGE } })),
+      );
+
+      expect(error.status).toBe(501);
+      expect(getDeclaredErrorSchema(501).parse(await error.getResponse().json())).toEqual({
+        code: 'TRACE_QUERY_UNSUPPORTED',
+        message: 'New observability endpoints require @mastra/core >= 1.13.2, please upgrade.',
+      });
+      expect(getStore).not.toHaveBeenCalled();
+    } finally {
+      coreFeatures.add('observability:v1.13.2');
+    }
+  });
 
   it('plans eligibility and thread predicates before using the request-available store', async () => {
     const { mastra, observabilityStore, getStore } = createHarness();
