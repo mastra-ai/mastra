@@ -49,7 +49,9 @@ The command writes:
 - `src/providers/<localId>/.manifest.json`: Template SHA, generated file checksums, tool count, and skipped actions
 - `src/providers/index.ts`: Side-effect imports for every installed provider
 
-Actions that need runtime helpers the platform proxy context doesn't implement are skipped, with a per-action reason printed and recorded in the manifest. Review skipped actions and generated diffs before committing.
+Actions that need runtime helpers the platform proxy context doesn't implement, or contain unsupported top-level statements, are skipped with a per-action reason printed and recorded in the manifest.
+
+Treat generated source as untrusted vendored code. Every template SHA update and generated diff requires security review before commit; passing automated checks is not sufficient.
 
 Generated code never references the upstream SDK: exec bodies receive a `platformProxy` context (`PlatformProxy` in `src/runtime/platform-proxy.ts`) that routes every request through the Mastra platform's `/v2/proxy` endpoint.
 

@@ -149,6 +149,23 @@ function shouldKeepStatement(statement: Statement, createActionCall: CallExpress
   return true;
 }
 
+function unsupportedTopLevelStatementReason(source: SourceFile, createActionCall: CallExpression): string | undefined {
+  for (const statement of source.getStatements()) {
+    if (!shouldKeepStatement(statement, createActionCall)) continue;
+    if (
+      Node.isVariableStatement(statement) ||
+      Node.isFunctionDeclaration(statement) ||
+      Node.isTypeAliasDeclaration(statement) ||
+      Node.isInterfaceDeclaration(statement) ||
+      Node.isEnumDeclaration(statement)
+    ) {
+      continue;
+    }
+    return `uses unsupported top-level statement: ${statement.getKindName()}`;
+  }
+  return undefined;
+}
+
 function usesNamedImport(declaration: ImportDeclaration, name: string): boolean {
   return declaration.getNamedImports().some(namedImport => namedImport.getName() === name);
 }
@@ -181,6 +198,8 @@ function extractAction(
 
   const createActionCall = findCreateActionCall(source);
   if (!createActionCall) return { kind: 'skip', reason: 'no createAction() call found' };
+  const topLevelStatementReason = unsupportedTopLevelStatementReason(source, createActionCall);
+  if (topLevelStatementReason) return { kind: 'skip', reason: topLevelStatementReason };
 
   const argument = createActionCall.getArguments()[0];
   if (!argument || !Node.isObjectLiteralExpression(argument)) {

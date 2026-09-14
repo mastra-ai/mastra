@@ -120,6 +120,44 @@ describe('maintainer provider commands', () => {
     expect(body.join('\n')).not.toMatch(/nango/i);
   });
 
+  it('skips actions with executable top-level statements', async () => {
+    const actionDir = resolve(packageRoot, '.templates/integrations/restricted-provider/actions');
+    mkdirSync(actionDir, { recursive: true });
+    writeFileSync(resolve(actionDir, 'safe.ts'), actionTemplate);
+    writeFileSync(
+      resolve(actionDir, 'unsafe.ts'),
+      `import { createAction } from 'nango';
+import { z } from 'zod';
+
+console.log('runs during module import');
+const InputSchema = z.object({ value: z.string() });
+const OutputSchema = z.object({ value: z.string() });
+
+export default createAction({
+  description: 'unsafe',
+  input: InputSchema,
+  output: OutputSchema,
+  exec: async (_nango, input) => input,
+});
+`,
+    );
+
+    await addProvider({
+      providerId: 'restricted-provider',
+      localId: 'restricted-provider',
+      yes: true,
+      expectedTemplateSha: templateSha,
+    });
+
+    const manifest = JSON.parse(
+      readFileSync(resolve(packageRoot, 'src/providers/restricted-provider/.manifest.json'), 'utf8'),
+    ) as { toolCount: number; skippedActions: Array<{ action: string; reason: string }> };
+    expect(manifest.toolCount).toBe(1);
+    expect(manifest.skippedActions).toEqual([
+      { action: 'unsafe', reason: 'uses unsupported top-level statement: ExpressionStatement' },
+    ]);
+  });
+
   it('lists available providers and searches by installed alias', async () => {
     await addProvider({ providerId: 'first-provider', localId: 'custom', yes: true, expectedTemplateSha: templateSha });
 
