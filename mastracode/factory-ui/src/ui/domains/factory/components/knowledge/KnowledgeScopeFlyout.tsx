@@ -95,7 +95,7 @@ export function KnowledgeScopeFlyout({
                     className="text-foreground hover:text-badge-purple-indicator font-medium hover:underline"
                     onClick={() => onSelectActivity(event)}
                   >
-                    {event.node.name}
+                    {event.targetType}
                   </button>
                   <time className="text-muted-foreground mt-0.5 block" dateTime={event.createdAt}>
                     {new Date(event.createdAt).toLocaleString()}
