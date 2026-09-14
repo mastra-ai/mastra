@@ -390,10 +390,15 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions): ApiRoute[]
           const accessToken = await linear.getFreshAccessToken(connection);
           const { issues, nextCursor } = await linear.intake.listIssues({
             connection: { type: 'oauth', accessToken },
-            sourceIds: routedSourceIds,
+            sourceIds: selectedIds,
             cursor: after,
           });
-          const issuePayload = issues.map(issue => ({
+          // Source precedence must be resolved against the complete selection,
+          // then the winning issues can be narrowed to this Factory project.
+          const routedIssues = intakeBoards
+            ? issues.filter(issue => issue.sourceId != null && routedSourceIds.includes(issue.sourceId))
+            : issues;
+          const issuePayload = routedIssues.map(issue => ({
             id: issue.id,
             identifier: issue.identifier,
             title: issue.title,

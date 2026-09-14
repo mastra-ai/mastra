@@ -360,7 +360,7 @@ describe('issues route', () => {
       });
     });
 
-    it('fetches and ingests only the sources bound to the requested project', async () => {
+    it('resolves attribution across all sources before ingesting the requested project', async () => {
       await seedProjects(2);
       await bind('proj-1', projectA, 'work');
       await bind('proj-2', projectB, 'work');
@@ -371,10 +371,70 @@ describe('issues route', () => {
       );
 
       expect(res.status).toBe(200);
-      expect(listActiveLinearIssues).toHaveBeenCalledWith('linear-token', undefined, ['proj-1']);
+      expect(listActiveLinearIssues).toHaveBeenCalledWith('linear-token', undefined, ['proj-1', 'proj-2']);
       expect(ingestFactoryIssues).toHaveBeenCalledWith(expect.objectContaining({ factoryProjectId: projectA }));
     });
 
+
+    it('does not route a selected-project issue through a team bound to another Factory project', async () => {
+      const teamSourceId = 'linear-team:team-1';
+      await seedProjects(2);
+      await seed.intake.saveConfig({
+        orgId: 'org1',
+        userId: 'u1',
+        config: { linear: { enabled: true, sourceIds: ['proj-1', teamSourceId] } },
+      });
+      await bind('proj-1', projectA, 'work');
+      await bind(teamSourceId, projectB, 'work');
+      const projectIssue = {
+        id: 'issue-1',
+        identifier: 'ENG-42',
+        title: 'Project issue',
+        url: 'https://linear.app/acme/issue/ENG-42',
+        author: 'grace',
+        state: 'Todo',
+        stateType: 'unstarted',
+        priority: 'High',
+        assignee: null,
+        source: 'ENG',
+        sourceId: 'proj-1',
+        labels: [],
+        commentCount: null,
+        createdAt: '2026-07-01T00:00:00Z',
+        updatedAt: '2026-07-02T00:00:00Z',
+      };
+      const teamIssue = {
+        ...projectIssue,
+        id: 'issue-2',
+        identifier: 'ENG-43',
+        title: 'Projectless team issue',
+        sourceId: teamSourceId,
+      };
+      const listIssues = vi
+        .spyOn(linear.intake, 'listIssues')
+        .mockResolvedValue({ issues: [projectIssue, teamIssue], nextCursor: null });
+      const ingestFactoryIssues = vi.fn(async () => ({ status: 'committed' }));
+
+      const res = await buildApp(org1(), { ingestFactoryIssues }).request(
+        `/web/linear/issues?factoryProjectId=${projectB}`,
+      );
+
+      expect(res.status).toBe(200);
+      expect(listIssues).toHaveBeenCalledWith(
+        expect.objectContaining({ sourceIds: ['proj-1', teamSourceId] }),
+      );
+      expect(await res.json()).toEqual({
+        issues: [expect.objectContaining({ id: 'issue-2', sourceId: teamSourceId })],
+        nextCursor: null,
+      });
+      expect(ingestFactoryIssues).toHaveBeenCalledWith(
+        expect.objectContaining({
+          factoryProjectId: projectB,
+          intakeBoards: { [teamSourceId]: 'work' },
+          issues: [expect.objectContaining({ id: 'issue-2', sourceId: teamSourceId })],
+        }),
+      );
+    });
     it('tells the ingest which bound sources target a board', async () => {
       await seedProjects(2);
       await bind('proj-1', projectA, 'release');
