@@ -119,7 +119,7 @@ export function connect(options: ConnectOptions = {}): ConnectTools {
       // instead of one per agent call.
       const staleSnapshot = cache.snapshot;
       const inCooldown = lastFailureAt !== undefined && Date.now() - lastFailureAt < FAILURE_COOLDOWN_MS;
-      if (!inCooldown) {
+      if (!inCooldown && !inflight) {
         const staleFetchedAt = cache.fetchedAt;
         void refresh().catch((error: unknown) => {
           console.warn(

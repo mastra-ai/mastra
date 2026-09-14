@@ -170,6 +170,37 @@ describe('connect resolver caching and liveness', () => {
     expect(Object.keys(again)).toEqual(['linear_fake_tool']);
   });
 
+  it('warns once when concurrent stale resolutions share a failed background refresh', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
+    let fail = false;
+    const fetchMock = vi
+      .fn()
+      .mockImplementation(async () =>
+        fail ? Promise.reject(new Error('network down')) : Response.json({ connections: [makeConnection()] }),
+      );
+    const tools = connect({
+      projectId: 'proj_1',
+      ttlMs: 1_000,
+      client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as unknown as typeof fetch },
+    });
+
+    const start = Date.now();
+    await tools();
+    fail = true;
+    vi.setSystemTime(start + 1_001);
+
+    const results = await Promise.all([tools(), tools(), tools()]);
+    expect(results.every(result => Object.keys(result).includes('linear_fake_tool'))).toBe(true);
+    await flush();
+
+    const refreshWarnings = warnSpy.mock.calls.filter((call: unknown[]) =>
+      String(call[0]).includes('platform refresh failed'),
+    );
+    expect(refreshWarnings).toHaveLength(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it('applies a cooldown after a failed background refresh instead of refetching every resolution', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
