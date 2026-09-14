@@ -444,6 +444,48 @@ describe('MessageList sealed message handling', () => {
     expect(assistantMessages[0]?.content.metadata).toMatchObject({ mastra: { sealed: true } });
     expect(toolPart).toMatchObject({ metadata: { mastra: { sealedAt: expect.any(Number) } } });
 
+    // A delayed pre-approval snapshot must not regress the completed tool state.
+    messageList.add(
+      {
+        id: assistantMessageId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            reasoningPart,
+            { type: 'text', text: 'May I run the workflow?' },
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                toolCallId: 'call-1',
+                toolName: 'runWorkflow',
+                args: { input: 'test' },
+                state: 'approval-requested',
+                approval: { id: 'approval-1' },
+              },
+            } as MastraMessagePart,
+          ],
+        },
+        createdAt: new Date(),
+      } as MastraDBMessage,
+      'response',
+    );
+
+    const toolPartsAfterDelayedApproval = messageList.get.all
+      .db()
+      .flatMap(message => message.content.parts)
+      .filter(part => part.type === 'tool-invocation' && part.toolInvocation?.toolCallId === 'call-1');
+    expect(toolPartsAfterDelayedApproval).toHaveLength(1);
+
+    const toolPartAfterDelayedApproval = toolPartsAfterDelayedApproval[0];
+    expect(
+      toolPartAfterDelayedApproval?.type === 'tool-invocation' && toolPartAfterDelayedApproval.toolInvocation,
+    ).toMatchObject({
+      toolCallId: 'call-1',
+      state: 'result',
+      result: 'complete',
+    });
+
     // Streaming may later flush only the resumed invocation and new text,
     // rather than another complete accumulated assistant snapshot.
     messageList.add(

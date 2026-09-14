@@ -1,6 +1,29 @@
 import { CacheKeyGenerator } from '../cache/CacheKeyGenerator';
-import type { MastraDBMessage, MastraMessageContentV2 } from '../state/types';
+import type { MastraDBMessage, MastraMessageContentV2, MastraToolInvocation } from '../state/types';
 import { stampPart } from '../utils/stamp-part';
+
+const TOOL_INVOCATION_STATE_ORDER: Partial<Record<MastraToolInvocation['state'], number>> = {
+  'partial-call': 0,
+  call: 1,
+  'approval-requested': 2,
+  'approval-responded': 3,
+  result: 4,
+  'output-denied': 4,
+  'output-error': 4,
+};
+
+function isForwardToolInvocationTransition(
+  existingState: MastraToolInvocation['state'],
+  incomingState: MastraToolInvocation['state'],
+): boolean {
+  if (existingState === incomingState) return true;
+
+  const existingOrder = TOOL_INVOCATION_STATE_ORDER[existingState];
+  const incomingOrder = TOOL_INVOCATION_STATE_ORDER[incomingState];
+  if (existingOrder === undefined || incomingOrder === undefined) return true;
+
+  return incomingOrder > existingOrder;
+}
 
 /**
  * MessageMerger - Handles complex logic for merging assistant messages
@@ -120,6 +143,14 @@ export class MessageMerger {
         const existingCallToolInvocation = !!existingCallPart && existingCallPart.type === 'tool-invocation';
 
         if (existingCallToolInvocation) {
+          // Matching parts are anchors even when an out-of-order snapshot is ignored.
+          const existingIndex = latestMessage.content.parts.findIndex(p => p === existingCallPart);
+          toolResultAnchorMap.set(index, existingIndex);
+
+          if (!isForwardToolInvocationTransition(existingCallPart.toolInvocation.state, part.toolInvocation.state)) {
+            continue;
+          }
+
           if (part.toolInvocation.state === 'result') {
             // Update the existing tool-call part with the result
             existingCallPart.toolInvocation = {
@@ -190,9 +221,6 @@ export class MessageMerger {
               existingCallPart.preliminary = part.preliminary;
             }
           }
-          // Map the index of the tool call in incomingMessage to the index of the tool call in latestMessage
-          const existingIndex = latestMessage.content.parts.findIndex(p => p === existingCallPart);
-          toolResultAnchorMap.set(index, existingIndex);
           // Otherwise we do nothing, as we're not updating the tool call
         } else {
           partsToAdd.set(index, part);
