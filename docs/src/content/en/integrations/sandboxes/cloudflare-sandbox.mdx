@@ -174,4 +174,4 @@ For bucket mounts and execution sessions, use the corresponding `CloudflareSandb
 
 ## Limitations
 
-The provider supports command execution, streamed output, and file writes. It doesn't currently expose the bridge's bucket mounts, sessions, PTY terminals, or workspace persistence routes, and it doesn't support background process management, stdin, snapshots, or port URLs.
+The provider surfaces command execution, streamed output, file reads and writes, and workspace persistence directly on the sandbox. Bucket mounts and sessions are available on the bridge client (`CloudflareSandboxBridgeClient`) but not on the `CloudflareSandbox` surface. PTY terminals are not exposed, and the provider doesn't support background process management, stdin, snapshots, or port URLs.
