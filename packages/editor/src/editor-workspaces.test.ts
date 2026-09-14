@@ -402,6 +402,12 @@ describe('editor.workspace — hydrateSnapshotToWorkspace', () => {
     });
 
     expect(workspace).toBeInstanceOf(Workspace);
+    expect(workspace.getToolsConfig()).toEqual({
+      enabled: true,
+      requireApproval: true,
+      mastra_workspace_read_file: { enabled: true },
+      mastra_workspace_write_file: { enabled: false },
+    });
   });
 });
 
