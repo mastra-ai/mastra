@@ -330,6 +330,33 @@ describe('processMastraStream', () => {
     expect(mockOnChunk).toHaveBeenCalledWith(testChunk);
   });
 
+  it.each(['\n', '\r\n', '\r'])(
+    'should handle complete events with %j line endings at every transport split',
+    async eol => {
+      const chunk: ChunkType = {
+        type: 'message',
+        runId: 'run-123',
+        from: ChunkFrom.AGENT,
+        payload: { text: 'complete event' },
+      };
+      const frame = `: heartbeat${eol}id: 1${eol}data: ${JSON.stringify(chunk)}${eol}${eol}`;
+      const input = `${frame}data: [DONE]${eol}${eol}${frame}`;
+      for (let split = 1; split < input.length; split++) {
+        const onChunk = vi.fn();
+        const stream = new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode(input.slice(0, split)));
+            controller.enqueue(new Uint8Array());
+            controller.enqueue(new TextEncoder().encode(input.slice(split)));
+            controller.close();
+          },
+        });
+        await processMastraStream({ stream, onChunk });
+        expect(onChunk).toHaveBeenCalledExactlyOnceWith(chunk);
+      }
+    },
+  );
+
   it('should handle CRLF line endings within a frame', async () => {
     const testChunk: ChunkType = {
       type: 'message',

@@ -12,6 +12,7 @@ async function sharedProcessMastraStream({
   const reader = stream.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
+  let trailingCR = false;
   const abort = () => void reader.cancel();
   if (signal?.aborted) abort();
   else signal?.addEventListener('abort', abort, { once: true });
@@ -22,8 +23,13 @@ async function sharedProcessMastraStream({
 
       if (done) break;
 
-      // Decode the chunk and add to buffer
-      buffer += decoder.decode(value, { stream: true });
+      let text = decoder.decode(value, { stream: true });
+      if (text.length === 0) continue;
+      // Normalize SSE line endings, including CRLF split across transport chunks.
+      const endsWithCR = text.endsWith('\r');
+      if (trailingCR && text.startsWith('\n')) text = text.slice(1);
+      trailingCR = endsWithCR;
+      buffer += text.replace(/\r\n|\r/g, '\n');
 
       // Process complete SSE messages
       const frames = buffer.split('\n\n');
