@@ -118,7 +118,7 @@ function isIconOnly(children: React.ReactNode): boolean {
 
 // eslint-disable-next-line react-refresh/only-export-components -- shared with Combobox's icon-only trigger
 export function isIconButtonSize(size: ButtonSize | null | undefined): size is IconButtonSize {
-  return typeof size === 'string' && size.startsWith('icon-');
+  return size?.startsWith('icon-') ?? false;
 }
 
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
@@ -142,7 +142,8 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     const resolvedSize: ButtonSize = size ?? 'md';
     const isLabelless = !iconMode && isIconOnly(children);
 
-    const ariaLabel = ariaLabelProp ?? ((iconMode || isLabelless) && typeof tooltip === 'string' ? tooltip : undefined);
+    const tooltipLabel = tooltip?.constructor === String ? tooltip.toString() : undefined;
+    const ariaLabel = ariaLabelProp ?? (iconMode || isLabelless ? tooltipLabel : undefined);
 
     const content = isIconButtonSize(resolvedSize) ? (
       <Icon size={iconChildSizeMap[resolvedSize]}>{children}</Icon>

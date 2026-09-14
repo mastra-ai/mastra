@@ -6,8 +6,8 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 
 // Base UI synthesizes PointerEvents, which this jsdom version does not implement.
 beforeAll(() => {
-  if (typeof window.PointerEvent === 'undefined') {
-    window.PointerEvent = window.MouseEvent as unknown as typeof PointerEvent;
+  if (window.PointerEvent === undefined) {
+    Object.defineProperty(window, 'PointerEvent', { value: window.MouseEvent, configurable: true });
   }
 });
 
