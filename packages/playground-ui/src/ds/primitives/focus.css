@@ -1,0 +1,177 @@
+.ds-focus {
+  --ds-focus-progress: 0;
+  --ds-focus-color: var(--neutral5);
+  --ds-focus-line-gradient: linear-gradient(90deg, transparent 5%, var(--ds-focus-color) 50%, transparent 95%);
+  outline: none;
+}
+
+.ds-focus:focus-visible,
+.ds-focus-within:has(:focus-visible),
+.ds-focus-menu:is(:focus-visible, :has(:focus-visible)) .ds-focus-item[data-highlighted],
+[cmdk-root]:has([cmdk-input]:focus-visible) .ds-focus-command-item[data-selected='true'] {
+  --ds-focus-progress: 1;
+}
+
+.ds-focus-line {
+  --ds-focus-color: currentColor;
+  background-image: var(--ds-focus-line-gradient);
+  background-repeat: no-repeat;
+  background-position: center calc(100% - 1px);
+  background-size: calc(var(--ds-focus-progress) * max(60%, 100% - 2em)) 1px;
+  transition:
+    background-size 240ms cubic-bezier(0.2, 0.7, 0.2, 1),
+    background-color 180ms,
+    color 180ms,
+    border-color 180ms;
+}
+
+@layer components {
+  .ds-focus-orbit,
+  .ds-focus-notch,
+  .ds-focus-contour {
+    position: relative;
+  }
+}
+
+.ds-focus-orbit::before,
+.ds-focus-notch::before,
+.ds-focus-contour > [data-slot='focus-decoration'] {
+  position: absolute;
+  pointer-events: none;
+  content: '';
+  opacity: var(--ds-focus-progress);
+  transition:
+    opacity 180ms ease-out,
+    transform 280ms cubic-bezier(0.2, 0.7, 0.2, 1),
+    clip-path 280ms ease-out;
+}
+
+.ds-focus-orbit::before {
+  inset: -7px;
+  background:
+    radial-gradient(circle at 50% 3px, var(--ds-focus-color) 0 1.5px, transparent 3px),
+    radial-gradient(circle at 50% calc(100% - 3px), var(--ds-focus-color) 0 1.5px, transparent 3px);
+  transform: rotate(calc(-65deg + var(--ds-focus-progress) * 90deg)) scale(calc(0.8 + var(--ds-focus-progress) * 0.2));
+}
+
+.ds-focus-orbit {
+  --ds-focus-color: var(--neutral5);
+  background-image: none;
+}
+
+.ds-focus-notch::before {
+  inset: auto -12px -11px;
+  height: 6px;
+  background: linear-gradient(90deg, transparent, var(--ds-focus-color) 40% 60%, transparent);
+  clip-path: polygon(
+    0 0,
+    30% 0,
+    50% calc(var(--ds-focus-progress) * 4px),
+    70% 0,
+    100% 0,
+    100% 2px,
+    70% 2px,
+    50% calc(2px + var(--ds-focus-progress) * 4px),
+    30% 2px,
+    0 2px
+  );
+  transform: scaleX(calc(0.35 + var(--ds-focus-progress) * 0.65));
+}
+
+.ds-focus-notch[data-orientation='vertical']::before {
+  inset: -12px -11px -12px auto;
+  width: 6px;
+  height: auto;
+  background: linear-gradient(180deg, transparent, var(--ds-focus-color) 40% 60%, transparent);
+  clip-path: polygon(
+    0 0,
+    0 30%,
+    calc(var(--ds-focus-progress) * 4px) 50%,
+    0 70%,
+    0 100%,
+    2px 100%,
+    2px 70%,
+    calc(2px + var(--ds-focus-progress) * 4px) 50%,
+    2px 30%,
+    2px 0
+  );
+  transform: scaleY(calc(0.35 + var(--ds-focus-progress) * 0.65));
+}
+
+.ds-focus-contour {
+  --ds-focus-color: var(--neutral5);
+  background-image: none;
+}
+
+.ds-focus-contour > [data-slot='focus-decoration'] {
+  inset: 1px;
+  z-index: 2;
+  padding: 1.5px;
+  border-radius: inherit;
+  background: conic-gradient(
+    from 25deg,
+    transparent,
+    var(--ds-focus-color) 70deg,
+    transparent 140deg 180deg,
+    var(--ds-focus-color) 250deg,
+    transparent 320deg 360deg
+  );
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  transform: scale(calc(0.94 + var(--ds-focus-progress) * 0.06));
+}
+
+.ds-focus-row {
+  background-image: var(--ds-focus-line-gradient), var(--ds-focus-line-gradient);
+  background-position:
+    center 1px,
+    center calc(100% - 1px);
+  background-repeat: no-repeat;
+  background-size: calc(var(--ds-focus-progress) * 100%) 1px;
+  transition:
+    background-size 240ms cubic-bezier(0.2, 0.7, 0.2, 1),
+    background-color 180ms;
+}
+
+.ds-focus-row:has([data-slot='checkbox']:focus-visible, [data-slot='checkbox'] :focus-visible) {
+  --ds-focus-progress: 1;
+}
+
+.ds-focus-row [data-slot='checkbox']::before {
+  display: none;
+}
+
+.ds-focus:disabled,
+.ds-focus[data-disabled]:not([data-disabled='false']),
+.ds-focus[aria-disabled='true'] {
+  --ds-focus-progress: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ds-focus,
+  .ds-focus::before,
+  .ds-focus::after,
+  [data-slot='focus-decoration'] {
+    transition: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .ds-focus-line,
+  .ds-focus-row {
+    background-image: none;
+  }
+
+  .ds-focus::before,
+  .ds-focus::after,
+  [data-slot='focus-decoration'] {
+    display: none;
+  }
+
+  .ds-focus {
+    outline: calc(2px * var(--ds-focus-progress)) solid Highlight;
+    outline-offset: -2px;
+  }
+}
