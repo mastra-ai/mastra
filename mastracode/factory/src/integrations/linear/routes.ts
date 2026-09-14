@@ -140,7 +140,7 @@ async function resolveOrgTenant(
  */
 function parseAfterCursor(raw: string | undefined): string | undefined | null {
   if (raw === undefined || raw === '') return undefined;
-  if (raw.length > 512 || !/^[\w+/=.:-]+$/.test(raw)) return null;
+  if (raw.length > 8192 || !/^[\w+/=.:-]+$/.test(raw)) return null;
   return raw;
 }
 
@@ -149,6 +149,9 @@ const ISSUE_IDENTIFIER_RE = /^[A-Za-z][A-Za-z0-9]{0,9}-\d{1,7}$/;
 
 /** Map a Linear read failure to the API response for the SPA. */
 function linearFetchError(c: RouteContext, err: unknown) {
+  if ((err as { code?: unknown }).code === 'invalid_cursor') {
+    return c.json({ error: 'invalid_cursor' }, 400);
+  }
   if (err instanceof LinearReauthRequiredError || (err as { status?: number }).status === 401) {
     return c.json({ error: 'linear_reauth_required', message: new LinearReauthRequiredError().message }, 409);
   }

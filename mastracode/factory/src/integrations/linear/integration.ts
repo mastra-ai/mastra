@@ -19,6 +19,7 @@
  *    `this` as the API client.
  */
 
+import { createHash } from 'node:crypto';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 import type { MastraWorker } from '@mastra/core/worker';
@@ -704,16 +705,18 @@ export class LinearIntegration implements FactoryIntegration {
 
   async #listIntakeIssues(input: ListIntakeIssuesInput): Promise<{ issues: IntakeIssue[]; nextCursor: string | null }> {
     const accessToken = getLinearAccessToken(input.connection);
+    if (input.sourceIds.length === 0) return { issues: [], nextCursor: null };
     const { projectIds, teamIds } = splitSelfManagedSourceIds(input.sourceIds);
+    const cursors = decodeSelfManagedListCursor(input.cursor, input.sourceIds);
 
-    // Only a project selection (or nothing selected): keep the original
-    // single-query path so existing project-only intake is byte-for-byte
-    // unchanged, including its cursor.
+    // Project-only intake still uses one Linear query, but its provider cursor
+    // is wrapped so a later source-selection change cannot reinterpret it.
     if (teamIds.length === 0) {
-      const result = await this.listActiveIssues(accessToken, input.cursor, projectIds, input.labels);
+      if (cursors.projects === null) return { issues: [], nextCursor: null };
+      const result = await this.listActiveIssues(accessToken, cursors.projects, projectIds, input.labels);
       return {
         issues: result.issues.map(issue => linearIssueToIntakeIssue(issue)),
-        nextCursor: result.nextCursor,
+        nextCursor: encodeSelfManagedListCursor({ projects: result.nextCursor, teams: null }, input.sourceIds),
       };
     }
 
@@ -721,8 +724,6 @@ export class LinearIntegration implements FactoryIntegration {
     // filters would AND together in one query) and stamp each issue with the
     // selected source that surfaced it. Each source kind paginates on its own
     // cursor, carried in a compound cursor when both are present.
-    const cursors = decodeSelfManagedListCursor(input.cursor, projectIds.length > 0);
-
     const projectResult =
       projectIds.length > 0 && cursors.projects !== null
         ? await this.listActiveIssues(accessToken, cursors.projects, projectIds, input.labels)
@@ -751,7 +752,7 @@ export class LinearIntegration implements FactoryIntegration {
       issues: deduped,
       nextCursor: encodeSelfManagedListCursor(
         { projects: projectResult.nextCursor, teams: teamResult.nextCursor },
-        projectIds.length > 0,
+        input.sourceIds,
       ),
     };
   }
@@ -1175,36 +1176,64 @@ function splitSelfManagedSourceIds(sourceIds: string[]): { projectIds: string[];
   return { projectIds, teamIds };
 }
 
-/**
- * Cursor for a mixed team+project listing. When both kinds are selected the two
- * per-kind cursors travel together as JSON; `null` marks an exhausted kind. A
- * plain string (project-only path) never reaches here.
- */
-type SelfManagedListCursor = { projects: string | null; teams: string | null };
+type SelfManagedListCursor = {
+  v: 1;
+  sourceSet: string;
+  projects: string | null;
+  teams: string | null;
+};
+
+function linearSourceSetFingerprint(sourceIds: string[]): string {
+  const canonical = [...new Set(sourceIds)].sort();
+  return createHash('sha256').update(JSON.stringify(canonical)).digest('base64url');
+}
+
+function invalidLinearCursor(): Error {
+  return Object.assign(new Error('Linear cursor is invalid or stale.'), { code: 'invalid_cursor' as const });
+}
+
+function isCursorValue(value: unknown): value is string | null {
+  return value === null || typeof value === 'string';
+}
 
 function decodeSelfManagedListCursor(
   cursor: string | undefined,
-  hasProjects: boolean,
+  sourceIds: string[],
 ): { projects: string | null | undefined; teams: string | null | undefined } {
-  if (!cursor) return { projects: undefined, teams: undefined };
-  // Team-only selection paginates on a single (team) cursor string.
-  if (!hasProjects) return { projects: null, teams: cursor };
-  try {
-    const parsed = JSON.parse(cursor) as Partial<SelfManagedListCursor>;
+  const { projectIds, teamIds } = splitSelfManagedSourceIds(sourceIds);
+  if (!cursor) {
     return {
-      projects: parsed.projects ?? null,
-      teams: parsed.teams ?? null,
+      projects: projectIds.length > 0 ? undefined : null,
+      teams: teamIds.length > 0 ? undefined : null,
+    };
+  }
+  try {
+    const parsed = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) as Partial<SelfManagedListCursor>;
+    if (
+      parsed.v !== 1 ||
+      parsed.sourceSet !== linearSourceSetFingerprint(sourceIds) ||
+      !isCursorValue(parsed.projects) ||
+      !isCursorValue(parsed.teams)
+    ) {
+      throw invalidLinearCursor();
+    }
+    return {
+      projects: parsed.projects,
+      teams: parsed.teams,
     };
   } catch {
-    throw new Error('Linear cursor is invalid.');
+    throw invalidLinearCursor();
   }
 }
 
-function encodeSelfManagedListCursor(state: SelfManagedListCursor, hasProjects: boolean): string | null {
+function encodeSelfManagedListCursor(
+  state: Pick<SelfManagedListCursor, 'projects' | 'teams'>,
+  sourceIds: string[],
+): string | null {
   if (state.projects === null && state.teams === null) return null;
-  // Team-only selection: expose the bare team cursor.
-  if (!hasProjects) return state.teams;
-  return JSON.stringify(state);
+  return Buffer.from(
+    JSON.stringify({ v: 1, sourceSet: linearSourceSetFingerprint(sourceIds), ...state } satisfies SelfManagedListCursor),
+  ).toString('base64url');
 }
 
 /**

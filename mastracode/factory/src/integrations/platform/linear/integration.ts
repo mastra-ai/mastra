@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
@@ -894,21 +895,48 @@ function normalizeLabels(labels: string[] | undefined): string[] {
   return [...new Set((labels ?? []).map(label => label.trim()).filter(Boolean))];
 }
 
+type PlatformListCursor = { v: 1; sourceSet: string; cursors: Array<string | null> };
+
+function canonicalSourceIds(sourceIds: string[]): string[] {
+  return [...new Set(sourceIds)].sort();
+}
+
+function linearSourceSetFingerprint(sourceIds: string[]): string {
+  return createHash('sha256').update(JSON.stringify(canonicalSourceIds(sourceIds))).digest('base64url');
+}
+
+function invalidLinearCursor(): Error {
+  return Object.assign(new Error('Linear cursor is invalid or stale.'), { code: 'invalid_cursor' as const });
+}
+
 function decodeCursor(cursor: string | undefined, sourceIds: string[]): Record<string, string | null | undefined> {
   if (!cursor) return {};
-  if (sourceIds.length === 1) return { [sourceIds[0]!]: cursor };
   try {
-    const parsed = JSON.parse(cursor) as unknown;
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error();
-    return parsed as Record<string, string | null>;
+    const parsed = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) as Partial<PlatformListCursor>;
+    const canonical = canonicalSourceIds(sourceIds);
+    if (
+      parsed.v !== 1 ||
+      parsed.sourceSet !== linearSourceSetFingerprint(sourceIds) ||
+      !Array.isArray(parsed.cursors) ||
+      parsed.cursors.length !== canonical.length ||
+      !parsed.cursors.every(value => value === null || typeof value === 'string')
+    ) {
+      throw invalidLinearCursor();
+    }
+    return Object.fromEntries(canonical.map((sourceId, index) => [sourceId, parsed.cursors![index]]));
   } catch {
-    throw new Error('Linear cursor is invalid.');
+    throw invalidLinearCursor();
   }
 }
 
 function encodeCursor(state: Record<string, string | null>, sourceIds: string[]): string {
-  if (sourceIds.length === 1) return state[sourceIds[0]!]!;
-  return JSON.stringify(state);
+  const canonical = canonicalSourceIds(sourceIds);
+  const cursor: PlatformListCursor = {
+    v: 1,
+    sourceSet: linearSourceSetFingerprint(sourceIds),
+    cursors: canonical.map(sourceId => state[sourceId] ?? null),
+  };
+  return Buffer.from(JSON.stringify(cursor)).toString('base64url');
 }
 
 function requireLinearConnection(connection: IntegrationConnection): void {

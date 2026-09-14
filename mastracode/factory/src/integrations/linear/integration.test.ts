@@ -75,7 +75,6 @@ describe('LinearIntegration capability surface', () => {
       linear.intake.listIssues({
         connection,
         sourceIds: ['project-1'],
-        cursor: 'cursor-1',
         labels: ['bug', 'urgent'],
       }),
     ).resolves.toEqual({
@@ -88,9 +87,9 @@ describe('LinearIntegration capability surface', () => {
           labels: ['bug'],
         }),
       ],
-      nextCursor: 'cursor-2',
+      nextCursor: expect.any(String),
     });
-    expect(listActiveIssues).toHaveBeenCalledWith('linear-token', 'cursor-1', ['project-1'], ['bug', 'urgent']);
+    expect(listActiveIssues).toHaveBeenCalledWith('linear-token', undefined, ['project-1'], ['bug', 'urgent']);
   });
 
   it('passes label filters to Linear GraphQL', async () => {
@@ -288,18 +287,33 @@ describe('LinearIntegration capability surface', () => {
     expect(result.nextCursor).not.toBeNull();
   });
 
-  it('keeps the original single-query path for a project-only selection', async () => {
+  it('keeps one project query while binding its cursor to the selected sources', async () => {
     const linear = integration();
     const listActiveIssues = vi
       .spyOn(linear, 'listActiveIssues')
-      .mockResolvedValue({ issues: [issue], nextCursor: 'next' });
+      .mockResolvedValueOnce({ issues: [issue], nextCursor: 'next' })
+      .mockResolvedValueOnce({ issues: [issue], nextCursor: null });
 
-    const result = await linear.intake.listIssues({ connection, sourceIds: ['project-1', 'project-2'] });
+    const first = await linear.intake.listIssues({ connection, sourceIds: ['project-1', 'project-2'] });
+    const second = await linear.intake.listIssues({
+      connection,
+      sourceIds: ['project-1', 'project-2'],
+      cursor: first.nextCursor!,
+    });
 
-    // One call, all ids passed as projectIds, cursor forwarded verbatim.
-    expect(listActiveIssues).toHaveBeenCalledTimes(1);
-    expect(listActiveIssues).toHaveBeenCalledWith('linear-token', undefined, ['project-1', 'project-2'], undefined);
-    expect(result.nextCursor).toBe('next');
+    expect(listActiveIssues).toHaveBeenNthCalledWith(1, 'linear-token', undefined, ['project-1', 'project-2'], undefined);
+    expect(listActiveIssues).toHaveBeenNthCalledWith(2, 'linear-token', 'next', ['project-1', 'project-2'], undefined);
+    expect(first.nextCursor).toEqual(expect.any(String));
+    expect(second.nextCursor).toBeNull();
+
+    await expect(
+      linear.intake.listIssues({
+        connection,
+        sourceIds: ['project-1', 'project-3'],
+        cursor: first.nextCursor!,
+      }),
+    ).rejects.toMatchObject({ code: 'invalid_cursor' });
+    expect(listActiveIssues).toHaveBeenCalledTimes(2);
   });
 
   it('fetches issue details without a project', async () => {

@@ -211,7 +211,7 @@ describe('PlatformLinearIntegration', () => {
           labels: ['bug'],
         }),
       ],
-      nextCursor: 'cursor-2',
+      nextCursor: expect.any(String),
     });
     const issuesUrl = String(fetchImpl.mock.calls[2]?.[0]);
     expect(issuesUrl).toContain('/workspaces/workspace-1/issues?');
@@ -532,7 +532,20 @@ describe('PlatformLinearIntegration', () => {
       sourceIds: [project1SourceId, project2SourceId],
     });
     expect(result.items).toHaveLength(2);
-    expect(JSON.parse(result.nextCursor!)).toEqual({ [project1SourceId]: null, [project2SourceId]: 'next-2' });
+    expect(JSON.parse(Buffer.from(result.nextCursor!, 'base64url').toString('utf8'))).toEqual({
+      v: 1,
+      sourceSet: expect.any(String),
+      cursors: [null, 'next-2'],
+    });
+
+    await expect(
+      integration.intake.listItems({
+        orgId: 'org-1',
+        userId: 'user-1',
+        sourceIds: [project1SourceId],
+        cursor: result.nextCursor!,
+      }),
+    ).rejects.toMatchObject({ code: 'invalid_cursor' });
   });
 
   it('propagates platform rate limits through Linear capabilities', async () => {

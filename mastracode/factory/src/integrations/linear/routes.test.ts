@@ -250,7 +250,7 @@ describe('issues route', () => {
     const res = await buildApp(org1()).request('/web/linear/issues');
     const json = await res.json();
     expect(json.issues[0]).toMatchObject({ identifier: 'ENG-42', title: 'Fix intake sync' });
-    expect(json.nextCursor).toBe('cursor-2');
+    expect(json.nextCursor).toEqual(expect.any(String));
     expect(listActiveLinearIssues).toHaveBeenCalledWith('linear-token', undefined, ['proj-1']);
   });
 
@@ -311,6 +311,7 @@ describe('issues route', () => {
           priorityLabel: 'No priority',
           assignee: null,
           creator: 'grace',
+          teamId: 'team-1',
           team: 'ENG',
           labels: [],
           createdAt: '2026-07-01T00:00:00Z',
@@ -457,8 +458,26 @@ describe('issues route', () => {
 
   it('forwards the pagination cursor', async () => {
     await connect();
-    await buildApp(org1()).request('/web/linear/issues?after=cursor-2');
+    const app = buildApp(org1());
+    const first = await app.request('/web/linear/issues');
+    const cursor = (await first.json()).nextCursor;
+    listActiveLinearIssues.mockClear();
+
+    await app.request(`/web/linear/issues?after=${encodeURIComponent(cursor)}`);
     expect(listActiveLinearIssues).toHaveBeenCalledWith('linear-token', 'cursor-2', ['proj-1']);
+  });
+
+  it('rejects a cursor minted for a different source selection', async () => {
+    await connect();
+    const staleCursor = Buffer.from(
+      JSON.stringify({ v: 1, sourceSet: 'wrong-source-set', projects: 'cursor-2', teams: null }),
+    ).toString('base64url');
+
+    const res = await buildApp(org1()).request(`/web/linear/issues?after=${staleCursor}`);
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: 'invalid_cursor' });
+    expect(listActiveLinearIssues).not.toHaveBeenCalled();
   });
 
   it('rejects malformed cursors', async () => {
