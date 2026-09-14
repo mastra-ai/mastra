@@ -2,12 +2,11 @@
 '@mastra/playground-ui': minor
 ---
 
-Added weight and color props to the Txt component so text styles come from the design system instead of className overrides.
+Added title and caption variants to the Txt component. Each variant carries its full text treatment, so call sites no longer override color or weight with class names.
 
 ```tsx
-<Txt as="h2" variant="ui-md" weight="semibold" color="neutral6">
-  Settings group
-</Txt>
+<Txt as="h2" variant="title">Section title</Txt>
+<Txt variant="caption">Supporting caption text</Txt>
 ```
 
-Settings group titles and descriptions now use these props, which also fixes their text color outside Factory where the previous icon color utilities did not resolve.
+Settings group titles and descriptions now use these variants, which also fixes their text color outside Factory where the previous icon color utilities did not resolve.

@@ -14,19 +14,11 @@ const meta: Meta<typeof Txt> = {
     },
     variant: {
       control: { type: 'select' },
-      options: ['header-md', 'ui-lg', 'ui-md', 'ui-sm', 'ui-xs'],
+      options: ['header-md', 'ui-lg', 'ui-md', 'ui-sm', 'ui-xs', 'title', 'caption'],
     },
     font: {
       control: { type: 'select' },
       options: [undefined, 'mono'],
-    },
-    weight: {
-      control: { type: 'select' },
-      options: [undefined, 'medium', 'semibold'],
-    },
-    color: {
-      control: { type: 'select' },
-      options: [undefined, 'neutral1', 'neutral2', 'neutral3', 'neutral4', 'neutral5', 'neutral6'],
     },
   },
 };
@@ -74,6 +66,21 @@ export const UiXs: Story = {
   args: {
     children: 'UI Extra Small text',
     variant: 'ui-xs',
+  },
+};
+
+export const Title: Story = {
+  args: {
+    children: 'Section title',
+    variant: 'title',
+    as: 'h2',
+  },
+};
+
+export const Caption: Story = {
+  args: {
+    children: 'Supporting caption text',
+    variant: 'caption',
   },
 };
 
