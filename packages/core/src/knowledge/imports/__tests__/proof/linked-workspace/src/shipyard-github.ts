@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { Agent } from '@mastra/core/agent';
-import { Knowledge } from '@mastra/core/knowledge';
+import { Knowledge, type KnowledgeImporterHandlerContext } from '@mastra/core/knowledge';
 import { knowledgeImporterBindingKey } from '@mastra/core/storage';
 import { LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
@@ -163,7 +163,7 @@ function createKnowledge(storage: LibSQLStore, sourceWindow: StaticPayload, onAg
       {
         id: 'github-static',
         access: { 'repo:$repo': 'owner' },
-        handler: async context => {
+        handler: async (context: KnowledgeImporterHandlerContext<StaticPayload>) => {
           const payload = context.payload as StaticPayload;
           const importer = await context.importer();
           const entries = [
@@ -215,7 +215,7 @@ function createKnowledge(storage: LibSQLStore, sourceWindow: StaticPayload, onAg
         id: 'github-merged-pr-distiller',
         access: { 'feature:$feature': 'owner', 'repo:mastra': 'readonly' },
         agentic: { agent, maxSteps: 12 },
-        handler: async context => {
+        handler: async (context: KnowledgeImporterHandlerContext) => {
           const pull = sourceWindow.pull;
           const result = await context.agentImport!({
             instructions: [
