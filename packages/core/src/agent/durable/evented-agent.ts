@@ -34,13 +34,27 @@ export interface EventedAgentConfig<
  * - You don't need an external execution engine (like Inngest)
  * - You want fire-and-forget execution with pubsub streaming
  * - You need resumable streams with event caching
+ * - You need runs to survive process death: an active run can be picked up by
+ *   a fresh process over the same storage via `recover(runId)` /
+ *   `recoverActiveRuns()` (running step state is persisted before execution)
  *
  * The key difference from DurableAgent is the execution strategy:
  * - DurableAgent: Runs the workflow synchronously via createRun + start
- * - EventedAgent: Starts the run without awaiting it (fire-and-forget)
+ * - EventedAgent: Starts the run without awaiting it (fire-and-forget); steps
+ *   execute via events on `mastra.pubsub`, so any worker sharing that bus can
+ *   process them. The agent's stream follows `mastra.pubsub`, so streaming,
+ *   suspend/resume, and finish events work even when the agent was constructed
+ *   with its own pubsub.
+ *
+ * An EventedAgent must be registered on a `Mastra` instance (with storage)
+ * before use — the evented engine needs the host's pubsub, storage, and event
+ * workers. Without one, the run fails loudly with a `MastraError` ("requires a
+ * Mastra host") surfaced as an error event on the stream, and recovery entry
+ * points (`recover`, `listActiveRuns`, `recoverActiveRuns`) throw directly.
  *
  * @example
  * ```typescript
+ * import { Mastra } from '@mastra/core';
  * import { Agent } from '@mastra/core/agent';
  * import { EventedAgent } from '@mastra/core/agent/durable';
  *
@@ -52,9 +66,18 @@ export interface EventedAgentConfig<
  *
  * const eventedAgent = new EventedAgent({ agent });
  *
+ * // Required: the evented engine runs on the Mastra host's pubsub + storage.
+ * const mastra = new Mastra({
+ *   agents: { myAgent: eventedAgent },
+ *   storage: new LibSQLStore({ url: 'file:mastra.db' }),
+ * });
+ *
  * const { output, runId, cleanup } = await eventedAgent.stream('Hello!');
  * const text = await output.text;
  * cleanup();
+ *
+ * // After a crash/restart, a fresh process over the same storage can resume:
+ * // await eventedAgent.recoverActiveRuns();
  * ```
  */
 export class EventedAgent<

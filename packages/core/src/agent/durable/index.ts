@@ -23,6 +23,8 @@
  * 2. **Pluggable Cache**: Use InMemoryServerCache (default) or custom backends (Redis, etc.)
  * 3. **Cache Inheritance**: Durable agents inherit cache from Mastra if not explicitly provided
  * 4. **Durable Execution**: Run agentic loops on workflow engines (Inngest, evented, etc.)
+ * 5. **Crash Recovery**: In-flight runs persist their state; a fresh process over the
+ *    same storage can resume them via `recover(runId)` / `recoverActiveRuns()`
  *
  * @example Basic usage with resumable streams
  * ```typescript
