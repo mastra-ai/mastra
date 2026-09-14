@@ -47,12 +47,6 @@ describe('PageHeader', () => {
     expect(markup).toContain('data-placement="beside"');
   });
 
-  it('supports a large icon', () => {
-    const markup = renderToStaticMarkup(<PageHeader.Icon size="lg">Icon</PageHeader.Icon>);
-
-    expect(markup).toContain('data-size="lg"');
-  });
-
   it('renders an empty header', () => {
     expect(renderToStaticMarkup(<PageHeader />)).toContain('<header');
   });

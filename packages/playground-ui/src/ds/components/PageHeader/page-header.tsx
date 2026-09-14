@@ -4,7 +4,6 @@ export type {
   PageHeaderDescriptionProps,
   PageHeaderEyebrowProps,
   PageHeaderIconProps,
-  PageHeaderIconSize,
   PageHeaderMetaProps,
   PageHeaderRootProps,
   PageHeaderTitleProps,

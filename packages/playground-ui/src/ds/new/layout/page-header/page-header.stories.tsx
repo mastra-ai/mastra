@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { ArrowLeftIcon, BotIcon } from 'lucide-react';
 
 import { PageHeader } from './page-header';
-import type { PageHeaderIconSize, PageHeaderTitleSize } from './page-header';
+import type { PageHeaderTitleSize } from './page-header';
 import { Badge } from '@/ds/components/Badge';
 import { Button } from '@/ds/components/Button';
 
@@ -12,7 +12,6 @@ function StoryFrame({ children }: { children: React.ReactNode }) {
 
 type PageHeaderStoryProps = {
   description: string;
-  iconSize: PageHeaderIconSize;
   isLoading: boolean;
   metaBeside: boolean;
   showAction: boolean;
@@ -27,7 +26,6 @@ type PageHeaderStoryProps = {
 
 function PageHeaderStory({
   description,
-  iconSize,
   isLoading,
   metaBeside,
   showAction,
@@ -51,7 +49,7 @@ function PageHeaderStory({
           </PageHeader.Eyebrow>
         )}
         {showIcon && (
-          <PageHeader.Icon size={iconSize}>
+          <PageHeader.Icon>
             <BotIcon strokeWidth={2.5} />
           </PageHeader.Icon>
         )}
@@ -83,7 +81,6 @@ const meta = {
   parameters: { layout: 'centered' },
   args: {
     description: 'Searches trusted sources and writes cited summaries.',
-    iconSize: 'sm',
     isLoading: false,
     metaBeside: false,
     showAction: true,
@@ -99,7 +96,6 @@ const meta = {
     title: { control: 'text' },
     titleSize: { control: 'inline-radio', options: ['sm', 'md', 'lg', 'xl'] },
     description: { control: 'text' },
-    iconSize: { control: 'inline-radio', options: ['sm', 'lg'] },
     metaBeside: { control: 'boolean' },
     isLoading: { control: 'boolean' },
     showEyebrow: { control: 'boolean' },
@@ -122,10 +118,6 @@ export const AllSlots: Story = {
     showIcon: true,
     showMeta: true,
   },
-};
-
-export const LargeIcon: Story = {
-  args: { iconSize: 'lg', showIcon: true },
 };
 
 export const MetaBeside: Story = {
