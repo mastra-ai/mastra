@@ -2,4 +2,4 @@
 '@mastra/react': patch
 ---
 
-Improved MessageFactory handling for persisted agent error parts.
+Improved MessageFactory so terminal agent failures remain visible when rendering message history.
