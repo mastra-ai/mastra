@@ -243,13 +243,62 @@ describe('Subconscious remind thread ownership', () => {
     });
   });
 
-  afterEach(async () => {
+  async function drainWakeOutputs() {
     try {
-      await Promise.all(pendingWakeOutputs);
+      const results = await Promise.allSettled(pendingWakeOutputs);
+      const errors = results.filter(result => result.status === 'rejected').map(result => result.reason);
+      if (errors.length) throw new AggregateError(errors, 'Reminder wake outputs failed');
     } finally {
       pendingWakeOutputs.length = 0;
       vi.restoreAllMocks();
     }
+  }
+
+  afterEach(drainWakeOutputs);
+
+  it('waits for every wake output before restoring mocks and surfacing failures', async () => {
+    const failure = new Error('first wake failed');
+    const lateFailure = new Error('gated wake failed');
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    let gatedFinished = false;
+    const target = { read: () => 'original' };
+    vi.spyOn(target, 'read').mockReturnValue('mocked');
+    pendingWakeOutputs.push(
+      Promise.reject(failure),
+      gate.then(() => {
+        gatedFinished = true;
+        throw lateFailure;
+      }),
+    );
+    let settled = false;
+    const result = drainWakeOutputs().then(
+      () => {
+        settled = true;
+        return undefined;
+      },
+      error => {
+        settled = true;
+        return error;
+      },
+    );
+    try {
+      await new Promise(resolve => setTimeout(resolve, 0));
+      expect(settled).toBe(false);
+      expect(gatedFinished).toBe(false);
+      expect(target.read()).toBe('mocked');
+      expect(pendingWakeOutputs).toHaveLength(2);
+    } finally {
+      release();
+      await result;
+    }
+    expect(gatedFinished).toBe(true);
+    expect(target.read()).toBe('original');
+    expect(pendingWakeOutputs).toHaveLength(0);
+    expect(await result).toBeInstanceOf(AggregateError);
+    expect((await result).errors).toEqual([failure, lateFailure]);
   });
 
   // Control first: the package vitest config bails after the first failure.
