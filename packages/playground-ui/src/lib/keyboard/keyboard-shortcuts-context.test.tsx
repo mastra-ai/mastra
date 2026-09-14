@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
-import { useRef, type ReactNode } from 'react';
+import { StrictMode, useRef, type ReactNode } from 'react';
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 
 import { KeyboardScope, KeyboardShortcutsProvider } from './keyboard-shortcuts-context';
@@ -30,6 +30,278 @@ afterEach(() => {
 });
 
 describe('useKeydown inside KeyboardShortcutsProvider', () => {
+  describe('when a scoped sequence rejects a shared prefix', () => {
+    it('executes the distinct accepted global sequence only', () => {
+      const onAgents = vi.fn();
+      const onTraces = vi.fn();
+      render(
+        <KeyboardShortcutsProvider>
+          <Shortcuts bindings={{ 'g$+a': onAgents }} />
+          <KeyboardScope>
+            <Shortcuts bindings={{ 'g$+t': onTraces }} options={{ shouldHandle: () => false }} />
+          </KeyboardScope>
+        </KeyboardShortcutsProvider>,
+      );
+
+      pressSequence('g', 'a');
+
+      expect(onAgents).toHaveBeenCalledTimes(1);
+      expect(onTraces).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('when a rejected scoped sequence shadows a global sequence', () => {
+    it('does not fall back to the global traces action', () => {
+      const onGlobal = vi.fn();
+      const onScoped = vi.fn();
+      render(
+        <KeyboardShortcutsProvider>
+          <Shortcuts bindings={{ 'g$+a': vi.fn(), 'g$+t': onGlobal }} />
+          <KeyboardScope>
+            <Shortcuts bindings={{ 'g$+t': onScoped }} options={{ shouldHandle: () => false }} />
+          </KeyboardScope>
+        </KeyboardShortcutsProvider>,
+      );
+      pressSequence('g', 't');
+      expect(onGlobal).not.toHaveBeenCalled();
+      expect(onScoped).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('when every sequence rejects the prefix', () => {
+    it('leaves the prefix untouched and does not arm a continuation', () => {
+      const onAgents = vi.fn();
+      render(
+        <KeyboardShortcutsProvider>
+          <Shortcuts bindings={{ 'g$+a': onAgents }} options={{ shouldHandle: event => event.key !== 'g' }} />
+        </KeyboardShortcutsProvider>,
+      );
+      expect(pressKey('g')).toBe(true);
+      pressKey('a');
+      expect(onAgents).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('when a sequence rejects only its first step', () => {
+    it('does not join another sequence that accepted the prefix', () => {
+      const onTraces = vi.fn();
+      render(
+        <KeyboardShortcutsProvider>
+          <Shortcuts bindings={{ 'g$+a': vi.fn() }} />
+          <KeyboardScope>
+            <Shortcuts bindings={{ 'g$+t': onTraces }} options={{ shouldHandle: event => event.key !== 'g' }} />
+          </KeyboardScope>
+        </KeyboardShortcutsProvider>,
+      );
+      pressSequence('g', 't');
+      expect(onTraces).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('when a hook is disabled and re-enabled during a sequence', () => {
+    it('does not resume the old prefix', () => {
+      const onAgents = vi.fn();
+      const App = ({ enabled }: { enabled: boolean }) => (
+        <KeyboardShortcutsProvider>
+          <Shortcuts bindings={{ 'g$+a': onAgents }} options={{ enabled }} />
+        </KeyboardShortcutsProvider>
+      );
+      const { rerender } = render(<App enabled />);
+      pressKey('g');
+      rerender(<App enabled={false} />);
+      rerender(<App enabled />);
+      pressKey('a');
+      expect(onAgents).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('when a hook is re-enabled after losing its prefix', () => {
+    it('executes a fresh complete sequence once', () => {
+      const onAgents = vi.fn();
+      const App = ({ enabled }: { enabled: boolean }) => (
+        <KeyboardShortcutsProvider>
+          <Shortcuts bindings={{ 'g$+a': onAgents }} options={{ enabled }} />
+        </KeyboardShortcutsProvider>
+      );
+      const { rerender } = render(<App enabled />);
+      pressKey('g');
+      rerender(<App enabled={false} />);
+      expect(vi.getTimerCount()).toBe(0);
+      rerender(<App enabled />);
+      pressSequence('g', 'a');
+      expect(onAgents).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('when a hook remounts while its provider stays mounted', () => {
+    it('requires a fresh complete sequence', () => {
+      const onAgents = vi.fn();
+      const App = ({ mounted }: { mounted: boolean }) => (
+        <KeyboardShortcutsProvider>
+          {mounted && <Shortcuts bindings={{ 'g$+a': onAgents }} />}
+        </KeyboardShortcutsProvider>
+      );
+      const { rerender } = render(<App mounted />);
+      pressKey('g');
+      rerender(<App mounted={false} />);
+      rerender(<App mounted />);
+      pressKey('a');
+      expect(onAgents).not.toHaveBeenCalled();
+      pressSequence('g', 'a');
+      expect(onAgents).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('when a participating scope unmounts', () => {
+    it('does not transfer its prefix to the shadowed parent', () => {
+      const onGlobal = vi.fn();
+      const onScoped = vi.fn();
+      const App = ({ scoped }: { scoped: boolean }) => (
+        <KeyboardShortcutsProvider>
+          <Shortcuts bindings={{ 'g$+t': onGlobal }} />
+          {scoped && (
+            <KeyboardScope>
+              <Shortcuts bindings={{ 'g$+t': onScoped }} />
+            </KeyboardScope>
+          )}
+        </KeyboardShortcutsProvider>
+      );
+      const { rerender } = render(<App scoped />);
+      pressKey('g');
+      rerender(<App scoped={false} />);
+      pressKey('t');
+      expect(onGlobal).not.toHaveBeenCalled();
+      expect(onScoped).not.toHaveBeenCalled();
+      pressSequence('g', 't');
+      expect(onGlobal).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('when an independent participating hook unmounts', () => {
+    it('preserves the remaining sequence and its updated callback', () => {
+      const onOld = vi.fn();
+      const onLatest = vi.fn();
+      const App = ({ other, handler }: { other: boolean; handler: () => void }) => (
+        <KeyboardShortcutsProvider>
+          <Shortcuts bindings={{ 'g$+a': handler }} />
+          {other && <Shortcuts bindings={{ 'g$+t': vi.fn() }} />}
+        </KeyboardShortcutsProvider>
+      );
+      const { rerender } = render(<App other handler={onOld} />);
+      pressKey('g');
+      rerender(<App other={false} handler={onLatest} />);
+      pressKey('a');
+      expect(onLatest).toHaveBeenCalledTimes(1);
+      expect(onOld).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('when the provider mounts in StrictMode', () => {
+    it('runs a sequence once and clears its pending timer on unmount', () => {
+      const onAgents = vi.fn();
+      const { unmount } = render(
+        <StrictMode>
+          <KeyboardShortcutsProvider>
+            <Shortcuts bindings={{ 'g$+a': onAgents }} />
+          </KeyboardShortcutsProvider>
+        </StrictMode>,
+      );
+      pressSequence('g', 'a');
+      expect(onAgents).toHaveBeenCalledTimes(1);
+      pressKey('g');
+      unmount();
+      expect(vi.getTimerCount()).toBe(0);
+      pressKey('a');
+      expect(onAgents).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('when a child consumes a combo', () => {
+    it('does not execute the global action', () => {
+      const onGlobal = vi.fn();
+      render(
+        <KeyboardShortcutsProvider>
+          <Shortcuts bindings={{ 'ctrl+k': onGlobal }} />
+          <button onKeyDown={event => event.preventDefault()}>Local control</button>
+        </KeyboardShortcutsProvider>,
+      );
+      fireEvent.keyDown(screen.getByRole('button'), { key: 'k', ctrlKey: true });
+      expect(onGlobal).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('when a child consumes a sequence prefix', () => {
+    it('does not arm the global sequence', () => {
+      const onGlobal = vi.fn();
+      render(
+        <KeyboardShortcutsProvider>
+          <Shortcuts bindings={{ 'g$+a': onGlobal }} />
+          <button
+            onKeyDown={event => {
+              if (event.key === 'g') event.preventDefault();
+            }}
+          >
+            Local control
+          </button>
+        </KeyboardShortcutsProvider>,
+      );
+      fireEvent.keyDown(screen.getByRole('button'), { key: 'g' });
+      pressKey('a');
+      expect(onGlobal).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('when a child consumes a sequence continuation', () => {
+    it('cancels the pending sequence rather than resuming on the next key', () => {
+      const onGlobal = vi.fn();
+      render(
+        <KeyboardShortcutsProvider>
+          <Shortcuts bindings={{ 'g$+a': onGlobal }} />
+          <button onKeyDown={event => event.preventDefault()}>Local control</button>
+        </KeyboardShortcutsProvider>,
+      );
+      pressKey('g');
+      fireEvent.keyDown(screen.getByRole('button'), { key: 'a' });
+      pressKey('a');
+      expect(onGlobal).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('when a keyboard event is composing', () => {
+    it.each([false, true])('ignores combos and prefixes with ctrlKey=%s', ctrlKey => {
+      const onGlobal = vi.fn();
+      render(
+        <KeyboardShortcutsProvider>
+          <Shortcuts bindings={{ k: onGlobal, 'ctrl+k': onGlobal, 'g$+a': onGlobal, 'ctrl+g$+a': onGlobal }} />
+          <button>Local control</button>
+        </KeyboardShortcutsProvider>,
+      );
+      const target = screen.getByRole('button');
+      expect(fireEvent.keyDown(target, { key: 'k', ctrlKey, isComposing: true })).toBe(true);
+      expect(fireEvent.keyDown(target, { key: 'g', ctrlKey, isComposing: true })).toBe(true);
+      pressKey('a');
+      expect(onGlobal).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('when composition interrupts a pending sequence', () => {
+    it('requires a fresh sequence after composition ends', () => {
+      const onGlobal = vi.fn();
+      render(
+        <KeyboardShortcutsProvider>
+          <Shortcuts bindings={{ 'g$+a': onGlobal }} />
+          <button>Local control</button>
+        </KeyboardShortcutsProvider>,
+      );
+      pressKey('g');
+      fireEvent.keyDown(screen.getByRole('button'), { key: 'a', isComposing: true });
+      pressKey('a');
+      expect(onGlobal).not.toHaveBeenCalled();
+      pressSequence('g', 'a');
+      expect(onGlobal).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('given a global "g$+t" and a scoped page also binding "g$+t"', () => {
     const renderApp = (showPage: boolean, onGlobal: () => void, onPage: () => void) =>
       render(
@@ -270,7 +542,7 @@ describe('useKeydown inside KeyboardShortcutsProvider', () => {
       );
     };
 
-    it('when k is pressed inside the target, then both the target and the global handler fire', () => {
+    it('when k is consumed inside the target, then only the target handler fires', () => {
       const onGlobal = vi.fn();
       const onTarget = vi.fn();
       render(
@@ -285,7 +557,7 @@ describe('useKeydown inside KeyboardShortcutsProvider', () => {
       fireEvent.keyDown(screen.getByTestId('inside'), { key: 'k' });
 
       expect(onTarget).toHaveBeenCalledTimes(1);
-      expect(onGlobal).toHaveBeenCalledTimes(1);
+      expect(onGlobal).not.toHaveBeenCalled();
     });
 
     it('when k is pressed on window, then only the global handler fires', () => {

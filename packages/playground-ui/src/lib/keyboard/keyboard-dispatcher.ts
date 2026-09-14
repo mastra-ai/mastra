@@ -165,6 +165,7 @@ type ResolvedBinding = {
 type PendingSequence = {
   /** Steps already matched, as parsed combos (several bindings may share a prefix). */
   matched: KeyStep[];
+  candidates: ResolvedBinding[];
   expiresAt: number;
 };
 
@@ -194,9 +195,9 @@ export const createKeyboardDispatcher = (): KeyboardDispatcher => {
     }
   };
 
-  const arm = (matched: KeyStep[], now: number) => {
+  const arm = (matched: KeyStep[], candidates: ResolvedBinding[], now: number) => {
     reset();
-    pending = { matched, expiresAt: now + SEQUENCE_TIMEOUT_MS };
+    pending = { matched, candidates, expiresAt: now + SEQUENCE_TIMEOUT_MS };
     expiryTimer = setTimeout(reset, SEQUENCE_TIMEOUT_MS);
   };
 
@@ -218,6 +219,10 @@ export const createKeyboardDispatcher = (): KeyboardDispatcher => {
   const accepts = (layer: KeyboardLayer, event: KeyboardEvent) => !layer.shouldHandle || layer.shouldHandle(event);
 
   const handleKeydown = (event: KeyboardEvent) => {
+    if (event.defaultPrevented || event.isComposing) {
+      reset();
+      return;
+    }
     if (isTypingInConsumer(event)) return;
 
     const bindings = resolveBindings();
@@ -226,7 +231,14 @@ export const createKeyboardDispatcher = (): KeyboardDispatcher => {
     if (pending) {
       if (now < pending.expiresAt) {
         const stepIndex = pending.matched.length;
-        for (const { steps, handler, layer } of bindings) {
+        const candidates = bindings.filter(binding =>
+          pending?.candidates.some(
+            candidate =>
+              candidate.layer === binding.layer &&
+              canonicalBinding(candidate.steps) === canonicalBinding(binding.steps),
+          ),
+        );
+        for (const { steps, handler, layer } of candidates) {
           const step = steps[stepIndex];
           if (!step || !hasPrefix(steps, pending.matched) || !matchesCombo(event, step)) continue;
           if (!accepts(layer, event)) return;
@@ -235,7 +247,7 @@ export const createKeyboardDispatcher = (): KeyboardDispatcher => {
             reset();
             handler();
           } else {
-            arm([...pending.matched, step], now);
+            arm([...pending.matched, step], candidates, now);
           }
           return;
         }
@@ -245,14 +257,15 @@ export const createKeyboardDispatcher = (): KeyboardDispatcher => {
     }
 
     // Sequence prefixes win over plain combos on the same key.
-    for (const { steps, layer } of bindings) {
+    const candidates = bindings.filter(({ steps, layer }) => {
       const [first] = steps;
-      if (steps.length > 1 && first && matchesCombo(event, first)) {
-        if (!accepts(layer, event)) return;
-        event.preventDefault();
-        arm([first], now);
-        return;
-      }
+      return steps.length > 1 && first && matchesCombo(event, first) && accepts(layer, event);
+    });
+    const first = candidates[0]?.steps[0];
+    if (first) {
+      event.preventDefault();
+      arm([first], candidates, now);
+      return;
     }
 
     for (const { steps, handler, layer } of bindings) {
@@ -270,6 +283,10 @@ export const createKeyboardDispatcher = (): KeyboardDispatcher => {
     layers.set(layer, nextOrder++);
     return () => {
       layers.delete(layer);
+      if (pending) {
+        pending.candidates = pending.candidates.filter(candidate => candidate.layer !== layer);
+        if (pending.candidates.length === 0) reset();
+      }
     };
   };
 
