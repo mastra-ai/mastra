@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { MCPServerBase } from '@mastra/core/mcp';
-import type { MCPServerHTTPOptions, MCPToolExecutionContextV2, MCPToolExecutionResultV2 } from '@mastra/core/mcp';
+import type { MCPRequestContextV2, MCPServerHTTPOptions, MCPToolExecutionResultV2 } from '@mastra/core/mcp';
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
@@ -19,15 +19,17 @@ const confirmation = createTool({
   suspendSchema: z.object({ phase: z.literal('confirm'), amount: z.number() }),
   resumeSchema: z.object({ confirmed: z.boolean() }),
   execute: async ({ amount }, context) => {
-    const round = context.mcpv2;
     // @ts-expect-error the 1.x context is a different, unrelated shape
-    round?.extra;
-    if (!round?.resumeData) {
-      await round?.suspend({ phase: 'confirm', amount });
+    context.mcpv2?.extra;
+    // @ts-expect-error suspend/resume are top-level, not nested under the request context
+    context.mcpv2?.suspend;
+    assert.equal(context.mcpv2?.protocolVersion, '2026-07-28');
+    if (!context.resumeData) {
+      await context.suspend?.({ phase: 'confirm', amount });
       return;
     }
-    assert.deepEqual(round.suspendPayload, { phase: 'confirm', amount });
-    return round.resumeData.confirmed;
+    assert.deepEqual(context.suspendPayload, { phase: 'confirm', amount });
+    return context.resumeData.confirmed;
   },
 });
 
@@ -54,20 +56,23 @@ class Fixture extends MCPServerBase {
     const tool = this.convertedTools[toolId];
     if (!tool?.execute) throw new Error(`Tool ${toolId} not found`);
     let suspension: { payload: unknown } | undefined;
-    const round: Omit<MCPToolExecutionContextV2, 'suspend'> = executionContext.mcpv2 ?? {
+    const round: MCPRequestContextV2 = executionContext.mcpv2 ?? {
       protocolVersion: '2026-07-28',
       requestId: 'rest',
       signal: new AbortController().signal,
-      metadata: {},
       log: async () => {},
       progress: async () => {},
     };
     const output = await tool.execute(args, {
-      toolCallId: String(round.requestId),
+      // Same idiom as the 1.x package: an empty toolCallId keeps CoreToolBuilder on the MCP path.
+      toolCallId: '',
       messages: [],
       requestContext: executionContext.requestContext,
       abortSignal: round.signal,
-      mcpv2: { ...round, suspend: async payload => void (suspension = { payload }) },
+      mcpv2: round,
+      suspend: async (payload: unknown) => void (suspension = { payload }),
+      resumeData: executionContext.resumeData,
+      suspendPayload: executionContext.suspendPayload,
     });
     if (suspension) {
       const original = this.originalTools[toolId];
@@ -111,11 +116,10 @@ const server = new Fixture({ id: 'fixture', name: 'Fixture', version: '2.0.0', t
 const mastra = new Mastra({ mcpServers: { fixture: server }, tools: { confirmation } });
 assert.equal(mastra.getTool('confirmation'), confirmation);
 
-const request = (): Omit<MCPToolExecutionContextV2, 'suspend'> => ({
+const request = (): MCPRequestContextV2 => ({
   protocolVersion: '2026-07-28',
   requestId: 'first',
   signal: new AbortController().signal,
-  metadata: {},
   log: async () => {},
   progress: async () => {},
 });
@@ -131,12 +135,9 @@ const accepted = await server.executeTool(
   { amount: 990 },
   {
     requestContext,
-    mcpv2: {
-      ...request(),
-      requestId: 'second',
-      resumeData: { confirmed: true },
-      suspendPayload: { phase: 'confirm', amount: 990 },
-    },
+    mcpv2: { ...request(), requestId: 'second' },
+    resumeData: { confirmed: true },
+    suspendPayload: { phase: 'confirm', amount: 990 },
   },
 );
 assert.deepEqual(accepted, { status: 'completed', output: true });
