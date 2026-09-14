@@ -126,6 +126,55 @@ await dataset.addItems({
 })
 ```
 
+## Validate snapshot artifacts
+
+Use `createDatasetSnapshot()` and `parseDatasetSnapshot()` from `@mastra/core/datasets` to create and validate a versioned JSON artifact. These are pure format utilities: they don't export from storage, import a dataset, allocate portable identities, or change Studio's JSON importer.
+
+```typescript title="src/mastra/datasets/snapshot.ts"
+import { createDatasetSnapshot, parseDatasetSnapshot } from '@mastra/core/datasets'
+
+const snapshot = createDatasetSnapshot({
+  formatVersion: 1,
+  datasetIdentity: '00000000-0000-4000-8000-000000000001',
+  configuration: { name: 'translation-pairs' },
+  items: [
+    {
+      itemIdentity: '00000000-0000-4000-8000-000000000002',
+      payload: { input: 'Hello', groundTruth: 'Hola', scorerIds: [] },
+    },
+  ],
+  provenance: {
+    exportedAt: '2026-09-11T12:00:00Z',
+    sourceDatasetId: 'dev-translations',
+    itemVersion: 1,
+    configurationBasis: 'export-time',
+  },
+})
+
+const parsed = parseDatasetSnapshot(JSON.stringify(snapshot))
+console.log(parsed.digest === snapshot.digest) // true
+```
+
+The artifact includes configuration, complete authored item payloads, portable UUIDs, and provenance. Supply stable lowercase UUIDs rather than generating new identities on every serialization. Authored `externalId` values are separate from portable identity and remain unchanged. Absent, `null`, and empty overrides remain distinct; omit optional properties rather than assigning `undefined`. Dataset descriptions also preserve absent, `null`, and string values.
+
+This preservation applies to the supplied artifact content. Storage adapters may already have normalized values before capture. Format validation neither recovers those distinctions nor guarantees that ordinary dataset CRUD operations can restore them.
+
+Both helpers throw a Zod validation error for invalid content or size options. `datasetSnapshotContentSchema.safeParse()` validates unsigned content and identity uniqueness; `datasetSnapshotSchema.safeParse()` additionally checks the digest. These schemas don't enforce a byte limit. Use `parseDatasetSnapshot()` for untrusted text to enforce a size budget before parsing and reject duplicate JSON property names.
+
+The helpers default to a 4 MiB UTF-8 budget (`DATASET_SNAPSHOT_DEFAULT_MAX_BYTES`). Pass `{ maxBytes }` as the second argument to either helper to raise or lower it. The value must be a positive safe integer. This is an operational limit, not part of the v1 format or digest. For example, parse the snapshot above with an 8 MiB budget:
+
+```typescript
+const parsedWithLargerBudget = parseDatasetSnapshot(JSON.stringify(snapshot), {
+  maxBytes: 8 * 1024 * 1024,
+})
+```
+
+`createDatasetSnapshot()` measures the complete artifact's compact `JSON.stringify()` output, including the digest. `parseDatasetSnapshot()` measures the supplied text, including whitespace. Pretty-printing can exceed a budget that accepts the compact artifact. Neither helper truncates data. During creation, validation, cloning, and hashing happen before the byte-size check. The budget limits output size, not CPU time or peak memory; shared references can expand during JSON serialization. Raising this budget doesn't change HTTP request-body limits; configure those separately when adding a transport.
+
+Artifacts have a maximum nesting depth of 100, measured from the envelope root. They reject unknown structural fields, duplicate item identities or non-null `externalId` values, non-JSON values, and invalid Unicode. Programmatic content must use plain objects and standard arrays, not class instances or array subclasses. Arbitrary JSON inside authored payloads remains intact, including trajectory expectations. Dataset schemas are preserved as JSON objects, but these utilities don't compile them or validate items against them. Destination authorization, reference resolution, and storage support also require separate preflight checks.
+
+The digest is a lowercase hexadecimal SHA-256 hash of the RFC 8785 canonical JSON representation of the envelope without `digest`. Items are sorted by portable identity for hashing; authored array order is preserved. Provenance is covered, so a new capture time changes the digest. This detects modification, not authorship or approval. The utilities don't redact sensitive data.
+
 ## Updating, deleting, and purging items
 
 [`updateItem()`](/reference/datasets/updateItem), [`deleteItem()`](/reference/datasets/deleteItem), and [`deleteItems()`](/reference/datasets/deleteItems) create new dataset versions as they modify or remove items:
