@@ -1001,6 +1001,23 @@ export class MessageList {
     return messages.map(message => this.transformMessageForTranscript(message));
   }
 
+  /**
+   * Apply transcript payload transforms to messages without draining them.
+   *
+   * Persistence paths that read messages directly instead of draining (e.g.
+   * the MessageHistory output processor persisting `get.response.db()`) must
+   * apply the same transcript redaction as {@link drainUnsavedMessages}.
+   * Otherwise the two writers race last-writer-wins on the same message id: a
+   * background tool result committed via {@link updateToolInvocation} holds
+   * the raw payload plus its transcript transform in providerMetadata, and a
+   * direct save landing after the redacting save-queue flush would persist
+   * the raw payload. The transform is idempotent — re-applying it to an
+   * already-transformed message writes the same values.
+   */
+  public transformMessagesForTranscript(messages: MastraDBMessage[]): MastraDBMessage[] {
+    return messages.map(message => this.transformMessageForTranscript(message));
+  }
+
   private transformToolStateDataForTranscript(data: unknown, phase: 'approval' | 'suspend'): unknown {
     if (!data || typeof data !== 'object') {
       return data;
