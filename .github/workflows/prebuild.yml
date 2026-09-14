@@ -168,48 +168,28 @@ jobs:
           # Parse results, split unit/E2E files, and compute downstream gates.
           node <<'NODE'
           const fs = require('fs');
-          const { execFileSync } = require('child_process');
           const {
             discoverWorkspacePackages,
             selectWorkspacePackages,
-            testsForChangedPackageManifests,
+            discoverRepoTestFiles,
+            gitManifestDependencyFieldsChanged,
+            planAffectedUnitTests,
           } = require('./.github/scripts/ci-routing.cjs');
           const data = JSON.parse(fs.readFileSync('/tmp/affected.json', 'utf-8'));
           const changedFiles = fs.readFileSync('/tmp/changed-files.txt', 'utf-8').split(/\r?\n/).filter(Boolean);
           const nonMarkdownChangedFiles = changedFiles.filter(file => !file.endsWith('.md'));
-          const repoTestFiles = execFileSync(
-            'git',
-            [
-              'ls-files',
-              '*.test.ts',
-              '**/*.test.ts',
-              '*.test.tsx',
-              '**/*.test.tsx',
-              '*.spec.ts',
-              '**/*.spec.ts',
-              '*.spec.tsx',
-              '**/*.spec.tsx',
-              '*.test-d.ts',
-              '**/*.test-d.ts',
-              '*.test-d.tsx',
-              '**/*.test-d.tsx',
-              '*.spec-d.ts',
-              '**/*.spec-d.ts',
-              '*.spec-d.tsx',
-              '**/*.spec-d.tsx',
-            ],
-            { encoding: 'utf8' },
-          )
-            .split(/\r?\n/)
-            .filter(Boolean);
-          const affectedTests = [
-            ...new Set([...(data.affectedTests || []), ...testsForChangedPackageManifests(changedFiles, repoTestFiles)]),
-          ].sort();
-          const count = affectedTests.length;
-          const total = data.testFiles || 1;
-          const ratio = count / total;
+          const repoTestFiles = discoverRepoTestFiles();
+          const didDependencyFieldsChange = file =>
+            gitManifestDependencyFieldsChanged(file, process.env.BASE_SHA, process.env.HEAD_SHA);
           const hasChangedSource = changedFiles.some(file => /\/src\/.*\.(ts|tsx)$/.test(file) && !/__fixtures__|\/fixtures\//.test(file));
-          const runFull = hasChangedSource && ratio > 0.5;
+          const { affectedTests, count, total, ratio, runFull } = planAffectedUnitTests({
+            graphAffectedTests: data.affectedTests || [],
+            graphTestFileCount: data.testFiles || 0,
+            changedFiles,
+            repoTestFiles,
+            didDependencyFieldsChange,
+            hasChangedSource,
+          });
 
           const output = (line) => fs.appendFileSync(process.env.GITHUB_OUTPUT, line);
           const outputList = (name, files) => {

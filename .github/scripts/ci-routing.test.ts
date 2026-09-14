@@ -6,7 +6,12 @@ import { describe, expect, test } from 'vitest';
 import routing from './ci-routing.cjs';
 
 const {
+  TEST_FILE_PATTERNS,
+  dependencyFieldsChanged,
+  discoverRepoTestFiles,
   discoverWorkspacePackages,
+  gitManifestDependencyFieldsChanged,
+  planAffectedUnitTests,
   qualityAssuranceInputs,
   selectWorkspacePackages,
   testsForChangedPackageManifests,
@@ -264,60 +269,90 @@ describe('workspace cloud workflow routing', () => {
 
 describe('package.json dependency-bump unit test routing', () => {
   const arizeTests = ['observability/arize/src/tracing.config.test.ts', 'observability/arize/src/tracing.test.ts'];
-  const otherTests = [
+  const inventory = [
+    ...arizeTests,
     'packages/core/src/agent/agent.test.ts',
     'docs/src/ignored.test.ts',
     'examples/agent/src/example.test.ts',
     'observability/arize/src/__fixtures__/skip.test.ts',
   ];
-  const inventory = [...arizeTests, ...otherTests];
+  const arizeOnly = file => file === 'observability/arize/package.json';
+  const pkgs = n => Array.from({ length: n }, (_, i) => `pkg-${String(i).padStart(3, '0')}`);
+  const plan = (nChanged, nTests, depsChanged) =>
+    planAffectedUnitTests({
+      graphAffectedTests: [],
+      graphTestFileCount: 1,
+      changedFiles: pkgs(nChanged).map(id => `${id}/package.json`),
+      repoTestFiles: pkgs(nTests).map(id => `${id}/src/a.test.ts`),
+      didDependencyFieldsChange: depsChanged,
+      hasChangedSource: false,
+    });
 
-  test('maps a workspace package.json bump to that package own tests (#20950 / #19783 shape)', () => {
+  test('selects own-package tests for dependency bumps and ignores version-only, lockfile, and docs manifests', () => {
     expect(
       testsForChangedPackageManifests(
         ['observability/arize/package.json', 'pnpm-lock.yaml', '.changeset/arize-bump.md'],
         inventory,
+        arizeOnly,
       ),
     ).toEqual(arizeTests);
-  });
-
-  test('does not select tests for lockfile, changeset, or root package.json only', () => {
-    expect(testsForChangedPackageManifests(['pnpm-lock.yaml', '.changeset/x.md'], inventory)).toEqual([]);
-    expect(testsForChangedPackageManifests(['package.json', 'pnpm-lock.yaml'], inventory)).toEqual([]);
-  });
-
-  test('ignores docs, examples, explorations, and prefix-overlapping package names', () => {
-    expect(testsForChangedPackageManifests(['docs/package.json'], inventory)).toEqual([]);
-    expect(testsForChangedPackageManifests(['examples/agent/package.json'], inventory)).toEqual([]);
+    expect(testsForChangedPackageManifests(['pnpm-lock.yaml'], inventory, () => true)).toEqual([]);
+    expect(testsForChangedPackageManifests(['package.json'], inventory, () => true)).toEqual([]);
+    expect(testsForChangedPackageManifests(['docs/package.json'], inventory, () => true)).toEqual([]);
+    expect(testsForChangedPackageManifests(['observability/arize/package.json'], inventory, () => false)).toEqual([]);
     expect(
       testsForChangedPackageManifests(
-        ['observability/arize/package.json'],
-        [...inventory, 'observability/arize-extra/src/extra.test.ts'],
+        ['observability/arize/package.json', 'packages/core/package.json'],
+        inventory,
+        () => true,
       ),
-    ).toEqual(arizeTests);
-  });
-
-  test('unions tests from multiple changed package manifests', () => {
+    ).toEqual([...arizeTests, 'packages/core/src/agent/agent.test.ts']);
+    expect(testsForChangedPackageManifests(undefined, inventory, () => true)).toEqual([]);
     expect(
-      testsForChangedPackageManifests(['observability/arize/package.json', 'packages/core/package.json'], inventory),
-    ).toEqual([
-      'observability/arize/src/tracing.config.test.ts',
-      'observability/arize/src/tracing.test.ts',
-      'packages/core/src/agent/agent.test.ts',
-    ]);
+      dependencyFieldsChanged(
+        { version: '1.0.0', dependencies: { x: '1' } },
+        { version: '1.0.1', dependencies: { x: '1' } },
+      ),
+    ).toBe(false);
+    expect(
+      dependencyFieldsChanged(
+        { version: '1.0.0', dependencies: { x: '1' } },
+        { version: '1.0.0', dependencies: { x: '2' } },
+      ),
+    ).toBe(true);
   });
 
-  test.each([undefined, [123], 'observability/arize/package.json'])(
-    'returns no tests when changed files are malformed: %j',
-    changedFiles => {
-      expect(testsForChangedPackageManifests(changedFiles, inventory)).toEqual([]);
-    },
-  );
+  test('gitManifestDependencyFieldsChanged treats version-only as unchanged and added manifests as changed', () => {
+    const manifests = {
+      'base:observability/arize/package.json': { version: '1.0.0', dependencies: { x: '1' } },
+      'head:observability/arize/package.json': { version: '1.0.1', dependencies: { x: '1' } },
+      'head:packages/core/package.json': { version: '1.0.0', dependencies: { y: '1' } },
+    };
+    const exec = (_cmd, args) => {
+      if (!manifests[args[1]]) throw new Error(args[1]);
+      return JSON.stringify(manifests[args[1]]);
+    };
+    expect(gitManifestDependencyFieldsChanged('observability/arize/package.json', 'base', 'head', exec)).toBe(false);
+    expect(gitManifestDependencyFieldsChanged('packages/core/package.json', 'base', 'head', exec)).toBe(true);
+  });
 
-  test('wires package-manifest tests into prebuild affected-test selection without a full suite on lockfile', () => {
+  test('version-only changeset PRs select nothing; large dep-bump sets shard', () => {
+    expect(plan(56, 100, () => false)).toMatchObject({ count: 0, total: 100, runFull: false });
+    expect(plan(60, 100, () => true)).toMatchObject({ count: 60, total: 100, runFull: true });
+  });
+
+  test('prebuild uses the shared planner instead of a lockfile full suite or inlined git ls-files', () => {
     expect(prebuildWorkflow).toContain("grep -E '/src/.*\\.(ts|tsx)$'");
-    expect(prebuildWorkflow).toContain('testsForChangedPackageManifests(changedFiles, repoTestFiles)');
-    expect(prebuildWorkflow).toContain('const runFull = hasChangedSource && ratio > 0.5;');
+    expect(prebuildWorkflow).toContain('planAffectedUnitTests({');
+    expect(prebuildWorkflow).toContain('gitManifestDependencyFieldsChanged');
+    expect(prebuildWorkflow).toContain('discoverRepoTestFiles()');
+    expect(prebuildWorkflow).not.toContain('const runFull = hasChangedSource && ratio > 0.5;');
+    expect(prebuildWorkflow).not.toContain('const total = data.testFiles || 1;');
+    expect(prebuildWorkflow).not.toContain("'*.test.ts'");
+    expect(TEST_FILE_PATTERNS).toContain('**/*.test.ts');
+    expect(discoverRepoTestFiles(() => 'observability/arize/src/tracing.test.ts\n')).toEqual([
+      'observability/arize/src/tracing.test.ts',
+    ]);
   });
 });
 
