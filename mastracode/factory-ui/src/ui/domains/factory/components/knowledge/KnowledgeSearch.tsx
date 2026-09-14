@@ -19,7 +19,7 @@ export function KnowledgeSearch({ factoryProjectId, threadId, onSelect }: Knowle
   const open = focused && query.trim().length >= 2;
 
   return (
-    <div className="relative w-full">
+    <div className="relative w-full max-w-sm">
       <div className="border-surface5 bg-surface2 flex items-center gap-2 rounded-md border px-2">
         <Search className="text-icon3 size-4 shrink-0" />
         <Input
@@ -27,7 +27,7 @@ export function KnowledgeSearch({ factoryProjectId, threadId, onSelect }: Knowle
           aria-label="Search knowledge"
           autoComplete="off"
           className="text-icon6 placeholder:text-icon3 h-9 min-w-0 flex-1 p-0"
-          placeholder="Search scopes and nodes…"
+          placeholder="Search"
           value={query}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
