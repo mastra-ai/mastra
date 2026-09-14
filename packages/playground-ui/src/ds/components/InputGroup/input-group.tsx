@@ -146,21 +146,22 @@ const InputGroupAddon = React.forwardRef<HTMLDivElement, InputGroupAddonProps>(
 InputGroupAddon.displayName = 'InputGroupAddon';
 
 // Size flows from the parent group's `data-size` (no React context). All four sizes are
-// written out so Tailwind's scanner emits them. The control mirrors the root height so it
-// doesn't collapse to the line-height in block mode (flex-col + flex-none); the root's
-// explicit border-box height means this never makes the group grow.
+// written out so Tailwind's scanner emits them. The control is sized to the root's
+// content box (token height minus the 1px border on each side) so it never overflows the
+// root — otherwise, in a flex-column parent, the root's content-based minimum would win
+// over its explicit height and the group would render 2px taller than a sibling control.
+// The explicit height also keeps the control from collapsing to the line-height in block
+// mode (flex-col + flex-none).
 const inputGroupControlHeightBySize = cn(
-  'group-data-[size=xs]/input-group:h-form-xs',
-  'group-data-[size=sm]/input-group:h-form-sm',
-  'group-data-[size=md]/input-group:h-form-md',
-  'group-data-[size=default]/input-group:h-form-default',
-  'group-data-[size=lg]/input-group:h-form-lg',
+  'group-data-[size=xs]/input-group:h-[calc(var(--spacing-form-xs)-2px)]',
+  'group-data-[size=sm]/input-group:h-[calc(var(--spacing-form-sm)-2px)]',
+  'group-data-[size=md]/input-group:h-[calc(var(--spacing-form-md)-2px)]',
+  'group-data-[size=lg]/input-group:h-[calc(var(--spacing-form-lg)-2px)]',
 );
 const inputGroupControlTextBySize = cn(
   'group-data-[size=xs]/input-group:text-ui-xs',
   'group-data-[size=sm]/input-group:text-ui-sm',
   'group-data-[size=md]/input-group:text-ui-smd',
-  'group-data-[size=default]/input-group:text-ui-smd',
   'group-data-[size=lg]/input-group:text-ui-md',
 );
 
@@ -179,8 +180,7 @@ const InputGroupInput = React.forwardRef<HTMLInputElement, InputGroupInputProps>
         data-testid={testId}
         aria-invalid={error}
         className={cn(
-          // Height matches the root box (which is fixed/border-box, so it doesn't grow);
-          // this also keeps the control from collapsing in block mode (flex-col).
+          // Height fits the root's content box (see inputGroupControlHeightBySize).
           'min-w-0 flex-1 bg-transparent px-3 text-neutral6 outline-hidden',
           inputGroupControlHeightBySize,
           inputGroupControlTextBySize,

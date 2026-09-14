@@ -108,7 +108,7 @@ export const comboboxStyles = {
 
   /** Search input */
   searchInput: cn(
-    'flex h-7 w-full rounded-md bg-transparent py-1 text-ui-smd leading-ui-sm text-neutral6',
+    'flex h-form-md w-full rounded-md bg-transparent py-1 text-ui-smd leading-ui-sm text-neutral6',
     'placeholder:text-neutral3 disabled:cursor-not-allowed disabled:opacity-50',
     'outline-none focus:outline-none focus-visible:outline-none',
     transitions.colors,
