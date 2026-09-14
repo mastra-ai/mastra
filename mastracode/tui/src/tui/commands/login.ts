@@ -1,3 +1,4 @@
+import { PROVIDER_DISPLAY_NAMES } from '@mastra/code-sdk/auth/account-rotation-processor';
 import { getOAuthProviders, PROVIDER_DEFAULT_MODELS } from '@mastra/code-sdk/auth/storage';
 import type { OAuthAccountRecord } from '@mastra/code-sdk/auth/types';
 import { LoginAccountManagerComponent } from '../components/login-account-manager.js';
@@ -17,6 +18,10 @@ function toManagedAccounts(accounts: OAuthAccountRecord[]) {
  * one-shot rename before the dialog closes. Escape or empty submit keeps the
  * label the registry resolved (re-authenticated accounts keep their previous
  * label; new accounts fall back to the provider hook or the default).
+ *
+ * The typed text is a postfix on the provider's short display name: typing
+ * "work" for Anthropic labels the account "Anthropic work", so accounts stay
+ * grouped by provider in the account manager.
  */
 async function promptForAccountName(
   ctx: SlashCommandContext,
@@ -26,11 +31,17 @@ async function promptForAccountName(
 ) {
   const authStorage = ctx.authStorage;
   if (!authStorage) return;
-  const input = await dialog.promptOptional(`Name this account (Enter to keep "${account.label}")`);
+  const provider = getOAuthProviders().find(p => p.id === providerId);
+  const baseLabel = PROVIDER_DISPLAY_NAMES[providerId] ?? provider?.name ?? providerId;
+  const input = await dialog.promptOptional(
+    `Name this account — saved as "${baseLabel} <name>" (Enter to keep "${account.label}")`,
+  );
   if (input === null) return;
   const name = input.trim();
-  if (name && name !== account.label) {
-    authStorage.renameAccount(providerId, account.id, name);
+  if (!name) return;
+  const label = name.toLowerCase().startsWith(baseLabel.toLowerCase()) ? name : `${baseLabel} ${name}`;
+  if (label !== account.label) {
+    authStorage.renameAccount(providerId, account.id, label);
   }
 }
 

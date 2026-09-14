@@ -112,11 +112,11 @@ export const multiAccountLoginScenario = {
 
     // On disk: two accounts, A still active, slot still holds A's tokens.
     terminal.submit(
-      `!node -e 'const fs=require("fs"); const a=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/auth.json","utf8")); const keys=Object.keys(a).filter(k=>k.startsWith("accounts:anthropic:")); console.log("ADD_COUNT="+keys.length); console.log("ADD_ACTIVE="+keys.map(k=>a[k].label+":"+a[k].active).join(",")); console.log("ADD_SLOT_ACCESS="+(a.anthropic&&a.anthropic.access));'`,
+      `!node -e 'const fs=require("fs"); const a=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/auth.json","utf8")); const keys=Object.keys(a).filter(k=>k.startsWith("accounts:anthropic:")); console.log("ADD_COUNT="+keys.length); console.log("ADD_ACTIVE="+keys.map(k=>a[k].label+":"+a[k].active).join(",")); console.log("ADD_SLOT_OK="+Boolean(a.anthropic&&a.anthropic.access==="mc-multi-a-access"));'`,
     );
     await runtime.waitForScreenText(/ADD_COUNT=2/i, terminal, 8_000);
-    await runtime.waitForScreenText(/ADD_ACTIVE=Account A:true,Account B:false/i, terminal, 8_000);
-    await runtime.waitForScreenText(/ADD_SLOT_ACCESS=mc-multi-a-access/i, terminal, 8_000);
+    await runtime.waitForScreenText(/ADD_ACTIVE=Anthropic Account A:true,Anthropic Account B:false/i, terminal, 8_000);
+    await runtime.waitForScreenText(/ADD_SLOT_OK=true/i, terminal, 8_000);
 
     // Activate Account B from the manager.
     terminal.submit('/login');
@@ -124,9 +124,9 @@ export const multiAccountLoginScenario = {
     terminal.write('\r');
     await runtime.waitForScreenText(/Account A\s*✓ active/i, terminal, 8_000);
     terminal.write('\x1b[B');
-    await runtime.waitForScreenText(/→ Account B/i, terminal, 8_000);
+    await runtime.waitForScreenText(/→ Anthropic Account B/i, terminal, 8_000);
     terminal.write('\r');
-    await runtime.waitForScreenText(/Switched Anthropic \(Claude Pro\/Max\) to Account B/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Switched Anthropic \(Claude Pro\/Max\) to Anthropic Account B/i, terminal, 8_000);
 
     // Re-authenticate account A in place: fresh tokens (rotated refresh
     // token) must replace A's entry — same label, same position, now active —
@@ -144,16 +144,17 @@ export const multiAccountLoginScenario = {
     await runtime.waitForScreenText(/Select the account to re-authenticate:/i, terminal, 8_000);
     terminal.write('\r'); // Account A is the first row
     await runtime.waitForScreenText(/Name this account/i, terminal, 8_000);
-    // The placeholder names Account A — the picked account, not a fresh append.
-    await runtime.waitForScreenText(/Enter to keep "Account A"/i, terminal, 8_000);
-    terminal.write('\r'); // keep the "Account A" label
+    // The placeholder names Anthropic Account A — the picked account, not a
+    // fresh append (typed names are postfixed on the provider base label).
+    await runtime.waitForScreenText(/Enter to keep "Anthropic Account A"/i, terminal, 8_000);
+    terminal.write('\r'); // keep the "Anthropic Account A" label
     await runtime.waitForScreenText(/Logged in to Anthropic/i, terminal, 8_000);
 
     // Registry on disk after re-auth: two entries, A re-keyed to the new
     // refresh token and active with its label preserved, slot holds A's new
     // tokens.
     terminal.submit(
-      `!node -e 'const fs=require("fs"); const a=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/auth.json","utf8")); const keys=Object.keys(a).filter(k=>k.startsWith("accounts:anthropic:")); const reAuth=keys.find(k=>a[k].label==="Account A"); console.log("REAUTH_COUNT="+keys.length); console.log("REAUTH_REFRESH_OK="+Boolean(reAuth&&a[reAuth].refresh==="mc-multi-a2-refresh")); console.log("REAUTH_ACTIVE="+(reAuth?a[reAuth].active:"missing")); console.log("REAUTH_SLOT_OK="+Boolean(a.anthropic&&a.anthropic.access==="mc-multi-a2-access"));'`,
+      `!node -e 'const fs=require("fs"); const a=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/auth.json","utf8")); const keys=Object.keys(a).filter(k=>k.startsWith("accounts:anthropic:")); const reAuth=keys.find(k=>a[k].label==="Anthropic Account A"); console.log("REAUTH_COUNT="+keys.length); console.log("REAUTH_REFRESH_OK="+Boolean(reAuth&&a[reAuth].refresh==="mc-multi-a2-refresh")); console.log("REAUTH_ACTIVE="+(reAuth?a[reAuth].active:"missing")); console.log("REAUTH_SLOT_OK="+Boolean(a.anthropic&&a.anthropic.access==="mc-multi-a2-access"));'`,
     );
     await runtime.waitForScreenText(/REAUTH_COUNT=2/i, terminal, 8_000);
     await runtime.waitForScreenText(/REAUTH_REFRESH_OK=true/i, terminal, 8_000);
@@ -174,18 +175,18 @@ export const multiAccountLoginScenario = {
     await runtime.waitForScreenText(/→ Remove…/i, terminal, 8_000);
     terminal.write('\r');
     await runtime.waitForScreenText(/Select the account to remove:/i, terminal, 8_000);
-    await runtime.waitForScreenText(/→ Account A/i, terminal, 8_000);
+    await runtime.waitForScreenText(/→ Anthropic Account A/i, terminal, 8_000);
     terminal.write('\r');
-    await runtime.waitForScreenText(/Remove "Account A"\?/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Remove "Anthropic Account A"\?/i, terminal, 8_000);
     terminal.write('\r');
-    await runtime.waitForScreenText(/Removed Account A from Anthropic/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Removed Anthropic Account A from Anthropic/i, terminal, 8_000);
 
     // Registry on disk: exactly one anthropic account left, B active, slot holds B's tokens.
     terminal.submit(
       `!node -e 'const fs=require("fs"); const a=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/auth.json","utf8")); const keys=Object.keys(a).filter(k=>k.startsWith("accounts:anthropic:")); const rec=a[keys[0]]; console.log("MULTI_ACCOUNT_COUNT="+keys.length); console.log("MULTI_ACCOUNT_LABEL="+rec.label); console.log("MULTI_ACCOUNT_ACTIVE="+rec.active); console.log("MULTI_ACCOUNT_REFRESH_OK="+Boolean(rec&&rec.refresh==="mc-multi-b-refresh")); console.log("MULTI_SLOT_OK="+Boolean(a.anthropic&&a.anthropic.access==="mc-multi-b-access"));'`,
     );
     await runtime.waitForScreenText(/MULTI_ACCOUNT_COUNT=1/i, terminal, 8_000);
-    await runtime.waitForScreenText(/MULTI_ACCOUNT_LABEL=Account B/i, terminal, 8_000);
+    await runtime.waitForScreenText(/MULTI_ACCOUNT_LABEL=Anthropic Account B/i, terminal, 8_000);
     await runtime.waitForScreenText(/MULTI_ACCOUNT_ACTIVE=true/i, terminal, 8_000);
     await runtime.waitForScreenText(/MULTI_ACCOUNT_REFRESH_OK=true/i, terminal, 8_000);
     await runtime.waitForScreenText(/MULTI_SLOT_OK=true/i, terminal, 8_000);

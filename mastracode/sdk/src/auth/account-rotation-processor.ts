@@ -294,7 +294,7 @@ function getForcedRefreshInstances(state: Record<string, unknown>): Set<string> 
 }
 
 /** Friendly names for the part/notice copy (display only — never auth data). */
-const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
+export const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
   anthropic: 'Anthropic',
   'kimi-for-coding': 'Kimi',
   'openai-codex': 'Codex',
