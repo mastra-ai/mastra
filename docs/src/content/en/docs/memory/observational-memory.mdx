@@ -222,9 +222,9 @@ const memory = new Memory({
 })
 ```
 
-In continue mode, Mastra makes one Observer model attempt, reports the failure through the existing OM diagnostics, and leaves the failed input pending for a later observation cycle. It does not advance observation boundaries or discard unobserved messages.
+In continue mode, Mastra makes one Observer model attempt, reports the failure through the existing OM diagnostics, and leaves the failed input pending for a later observation cycle. It doesn't advance observation boundaries or discard unobserved messages.
 
-This policy applies only to Observer model and provider failures in synchronous, resource-scoped, and buffered observation. Persistence, indexing, transform, locking, invariant, and explicit abort failures remain fatal. It does not prevent the underlying provider or network error, change `blockAfter`, or change attachment handling.
+This policy applies only to Observer model and provider failures in synchronous, resource-scoped, and buffered observation. Persistence, indexing, transform, locking, invariant, and explicit abort failures remain fatal. It doesn't prevent the underlying provider or network error, change `blockAfter`, or change attachment handling.
 
 See [the API reference](/reference/memory/observational-memory#configuration) for the full configuration shape.
 
