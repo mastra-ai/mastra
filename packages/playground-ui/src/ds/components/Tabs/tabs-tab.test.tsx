@@ -2,10 +2,12 @@
 import { cleanup, act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { buttonVariants } from '../Button/Button';
 import { TabContent } from './tabs-content';
 import { TabList } from './tabs-list';
 import { Tabs } from './tabs-root';
 import { Tab } from './tabs-tab';
+import { cn } from '@/lib/utils';
 
 beforeEach(() => {
   vi.stubGlobal('PointerEvent', window.MouseEvent);
@@ -503,5 +505,45 @@ describe('Tab', () => {
     const tab = screen.getByRole('tab', { name: 'First' });
     expect(tab.className).toContain('my-own-class');
     expect(tab.className).toContain('text-neutral3');
+  });
+
+  describe('pill-ghost variant', () => {
+    it('renders tabs from the shared ghost buttonVariants recipe', () => {
+      render(
+        <Tabs defaultTab="first">
+          <TabList variant="pill-ghost">
+            <Tab value="first">First</Tab>
+          </TabList>
+          <TabContent value="first">First content</TabContent>
+        </Tabs>,
+      );
+
+      const tab = screen.getByRole('tab', { name: 'First' });
+      const tabClasses = tab.className.split(/\s+/);
+      // `cn` merges the raw recipe the same way <Button> does (e.g. tailwind-merge drops `leading-0`
+      // in favour of the size's `text-*`), so compare against the merged form.
+      for (const token of cn(buttonVariants({ variant: 'ghost', size: 'md' })).split(/\s+/)) {
+        expect(tabClasses).toContain(token);
+      }
+      // The list owns no padding of its own — the button recipe is the only source of spacing.
+      const list = screen.getByRole('tablist');
+      expect(list.className).not.toMatch(/\bp-1\b/);
+      expect(list.className).toContain('gap-0.5');
+    });
+
+    it('does not apply the button recipe to pill tabs', () => {
+      render(
+        <Tabs defaultTab="first">
+          <TabList variant="pill">
+            <Tab value="first">First</Tab>
+          </TabList>
+          <TabContent value="first">First content</TabContent>
+        </Tabs>,
+      );
+
+      const tab = screen.getByRole('tab', { name: 'First' });
+      expect(tab.className).not.toContain('h-form-md');
+      expect(tab.className).toContain('text-neutral3');
+    });
   });
 });
