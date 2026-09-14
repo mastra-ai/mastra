@@ -306,6 +306,20 @@ describe('Combobox', () => {
     expect(screen.getByRole('combobox').className).toContain('border-transparent');
   });
 
+  it('renders options on the shared menu item recipe (ghost/md, rounded-lg)', async () => {
+    render(<Combobox options={options} placeholder="Pick provider" />);
+
+    fireEvent.click(screen.getByRole('combobox'));
+
+    const option = await screen.findByRole('option', { name: 'OpenAI' });
+    expect(option.className).toContain('min-h-form-md');
+    expect(option.className).toContain('text-ui-smd');
+    expect(option.className).toContain('rounded-lg');
+    expect(option.className).not.toContain('rounded-full');
+    expect(option.className).not.toContain('rounded-md');
+    expect(option.className).toContain('data-highlighted:bg-neutral6/5');
+  });
+
   it('applies the error border when an error is provided', () => {
     render(<Combobox options={options} placeholder="Pick provider" error="Required" />);
     expect(screen.getByRole('combobox').className).toContain('border-error');

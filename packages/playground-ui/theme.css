@@ -329,8 +329,7 @@ html.light {
   --spacing-form-xs: 1.25rem;
   --spacing-form-sm: 1.5rem;
   --spacing-form-md: 1.75rem;
-  --spacing-form-default: 1.75rem;
-  --spacing-form-lg: 2rem;
+  --spacing-form-lg: 1.75rem;
   --height-header-default: 40px;
   --height-table-header: 28px;
   --height-table-row: 40px;

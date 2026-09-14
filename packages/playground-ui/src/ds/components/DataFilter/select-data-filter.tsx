@@ -4,6 +4,7 @@ import { useState, useMemo, useCallback } from 'react';
 
 import { Button } from '@/ds/components/Button/Button';
 import { DropdownMenu } from '@/ds/components/DropdownMenu/dropdown-menu';
+import { menuSearchClasses } from '@/ds/primitives/menu-item';
 import { cn } from '@/lib/utils';
 
 // ---------------------------------------------------------------------------
@@ -59,34 +60,30 @@ export type SelectDataFilterProps = {
 
 const SUBMENU_SEARCH_THRESHOLD = 6;
 
-function SubMenuSearch({
+function MenuSearch({
   value,
   onChange,
   label = 'Search',
+  placeholder = 'Search...',
 }: {
   value: string;
   onChange: (v: string) => void;
   label?: string;
+  placeholder?: string;
 }) {
   return (
-    <div className={cn('px-2 pb-2')}>
-      <div
-        className={cn(
-          'flex items-center gap-2 rounded-md border border-border1 px-2 py-1',
-          'focus-within:border-neutral2',
-        )}
-      >
-        <SearchIcon className={cn('size-3.5 shrink-0 text-neutral3')} />
-        <input
-          type="text"
-          placeholder="Search..."
-          aria-label={label}
-          value={value}
-          onChange={e => onChange(e.target.value)}
-          onKeyDown={e => e.stopPropagation()}
-          className={cn('w-full bg-transparent text-ui-sm text-neutral4 outline-none placeholder:text-neutral3')}
-        />
-      </div>
+    // Pull the row flush against the popup edges (the popup pads its items with p-1).
+    <div className={cn(menuSearchClasses.container, '-mx-1 -mt-1 mb-1')}>
+      <SearchIcon className={menuSearchClasses.icon} />
+      <input
+        type="text"
+        placeholder={placeholder}
+        aria-label={label}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        onKeyDown={e => e.stopPropagation()}
+        className={menuSearchClasses.input}
+      />
     </div>
   );
 }
@@ -184,12 +181,12 @@ export function SelectDataFilter({
     return (
       <DropdownMenu.Sub key={cat.id} onOpenChange={resetSubSearch}>
         <DropdownMenu.SubTrigger>
-          <span className={cn('truncate')}>{cat.label}</span>
-          {selectedCount > 0 && <span className={cn('ml-auto text-ui-sm text-accent1')}>{selectedCount}</span>}
+          <span className="flex-1 truncate">{cat.label}</span>
+          {selectedCount > 0 && <span className={cn('text-ui-sm text-accent1')}>{selectedCount}</span>}
         </DropdownMenu.SubTrigger>
-        <DropdownMenu.SubContent className={cn('max-h-80')}>
+        <DropdownMenu.SubContent>
           {cat.values.length >= searchThreshold && (
-            <SubMenuSearch value={subSearch} onChange={setSubSearch} label={`Search ${cat.label.toLowerCase()}`} />
+            <MenuSearch value={subSearch} onChange={setSubSearch} label={`Search ${cat.label.toLowerCase()}`} />
           )}
           {mode === 'single' ? (
             <DropdownMenu.RadioGroup value={selected[0] ?? ''} onValueChange={val => handleSelect(cat.id, val, mode)}>
@@ -236,29 +233,13 @@ export function SelectDataFilter({
           )}
         </Button>
       </DropdownMenu.Trigger>
-      <DropdownMenu.Content align={align} className={cn('min-w-48')}>
-        {/* Search */}
-        <div className={cn('px-2 pb-2')}>
-          <div
-            className={cn(
-              'flex items-center gap-2 rounded-md border border-border1 px-2 py-1',
-              'focus-within:border-neutral2',
-            )}
-          >
-            <SearchIcon className={cn('size-3.5 shrink-0 text-neutral3')} />
-            <input
-              type="text"
-              placeholder="Search filters..."
-              aria-label="Search filters"
-              value={filterSearch}
-              onChange={e => setFilterSearch(e.target.value)}
-              onKeyDown={e => e.stopPropagation()}
-              className={cn('w-full bg-transparent text-ui-sm text-neutral4 outline-none placeholder:text-neutral3')}
-            />
-          </div>
-        </div>
-
-        <DropdownMenu.Separator />
+      <DropdownMenu.Content align={align}>
+        <MenuSearch
+          value={filterSearch}
+          onChange={setFilterSearch}
+          label="Search filters"
+          placeholder="Search filters..."
+        />
 
         {grouped.map(group => {
           const firstItem = group.items[0];
@@ -272,9 +253,7 @@ export function SelectDataFilter({
           return (
             <DropdownMenu.Sub key={group.key}>
               <DropdownMenu.SubTrigger>{group.label}</DropdownMenu.SubTrigger>
-              <DropdownMenu.SubContent className={cn('max-h-80')}>
-                {group.items.map(cat => renderCategory(cat))}
-              </DropdownMenu.SubContent>
+              <DropdownMenu.SubContent>{group.items.map(cat => renderCategory(cat))}</DropdownMenu.SubContent>
             </DropdownMenu.Sub>
           );
         })}

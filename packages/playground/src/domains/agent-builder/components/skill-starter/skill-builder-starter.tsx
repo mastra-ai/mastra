@@ -122,7 +122,7 @@ export const SkillBuilderStarter = () => {
             <Textarea
               ref={textareaRef}
               testId="skill-builder-starter-input"
-              size="default"
+              size="md"
               variant="unstyled"
               placeholder="Describe the skill you want to build…"
               value={message}
