@@ -1,4 +1,5 @@
 import type { AgentConfig, MastraDBMessage } from '@mastra/core/agent';
+import type { WidenModelId } from '@mastra/core/llm';
 import type { Mastra } from '@mastra/core/mastra';
 import type { ObservationalMemoryModelSettings } from '@mastra/core/memory';
 import type { ObservabilityContext } from '@mastra/core/observability';
@@ -63,6 +64,12 @@ export type ResolvedActivationTTL = number | 'auto';
  * Configuration for the observation step (Observer agent).
  */
 export type ObservationalMemoryModel = Exclude<AgentConfig['model'], undefined> | ModelByInputTokens;
+
+/**
+ * `ObservationalMemoryModel` with model-id literals widened to `string`. Read config model
+ * fields into this before combining them (`??`, ternaries) — see `WidenModelId` in core.
+ */
+export type WidenedObservationalMemoryModel = WidenModelId<ObservationalMemoryModel>;
 
 /**
  * Controls which continuation-hint sections OM asks the Observer and Reflector to emit.
