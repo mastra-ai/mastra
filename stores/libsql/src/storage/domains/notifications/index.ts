@@ -10,7 +10,6 @@ import type {
   NotificationSignalAttributes,
   NotificationStatus,
   UpdateNotificationInput,
-  UpdateNotificationsStatusInput,
   PruneOptions,
   PruneResult,
   RetentionTablesDescriptor,
@@ -335,7 +334,13 @@ export class NotificationsLibSQL extends NotificationsStorage {
     return updated;
   }
 
-  override async updateNotificationsStatus(input: UpdateNotificationsStatusInput): Promise<NotificationRecord[]> {
+  // Inlined instead of importing `UpdateNotificationsStatusInput` so this adapter's `.d.ts` stays valid
+  // against older @mastra/core versions that predate the bulk method.
+  override async updateNotificationsStatus(input: {
+    threadId: string;
+    ids: string[];
+    status: NotificationStatus;
+  }): Promise<NotificationRecord[]> {
     if (input.ids.length === 0) return [];
 
     const now = new Date();
