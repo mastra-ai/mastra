@@ -1,3 +1,4 @@
+import { WORKFLOW_DATA_EDGE_TYPE } from '@mastra/playground-ui/components/Workflow';
 import { renderHook } from '@testing-library/react';
 import type { Edge } from '@xyflow/react';
 import type { PropsWithChildren } from 'react';
@@ -5,7 +6,6 @@ import { describe, expect, it } from 'vitest';
 
 import { WorkflowRunContext } from '../../context/workflow-run-context';
 import { useWorkflowGraphRuntime } from '../use-workflow-graph-runtime';
-import { WORKFLOW_DATA_EDGE_TYPE } from '../workflow-data-edge';
 import { WORKFLOW_BOUNDARY_NODE_TYPE } from '../workflow-step-node-utils';
 
 const workflowRunContextValue = {
