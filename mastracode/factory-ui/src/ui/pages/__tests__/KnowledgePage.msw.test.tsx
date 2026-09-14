@@ -547,13 +547,16 @@ describe('KnowledgePage', () => {
     const user = userEvent.setup();
     const { router } = renderRoute(`/factories/${FACTORY_ID}/knowledge`);
     const scopes = await screen.findByRole('complementary', { name: 'Knowledge scopes' });
-    const search = screen.getByRole('textbox', { name: 'Search knowledge' });
+    const search = screen.getByRole('combobox', { name: 'Search knowledge' });
     expect(search).toHaveAttribute('placeholder', 'Search');
-    expect(within(scopes).queryByRole('textbox', { name: 'Search knowledge' })).not.toBeInTheDocument();
+    expect(within(scopes).queryByRole('combobox', { name: 'Search knowledge' })).not.toBeInTheDocument();
 
     await user.type(search, 'payments');
     const payments = await screen.findByRole('option', { name: /Payments Service/ });
-    await user.click(payments);
+    expect(payments).toHaveAttribute('aria-selected', 'false');
+    await user.keyboard('{ArrowDown}');
+    expect(payments).toHaveAttribute('aria-selected', 'true');
+    await user.keyboard('{Enter}');
     expect(router.state.location.search).toContain('scope=resource');
     expect(router.state.location.search).toContain('node=ent-a');
     expect(await screen.findByText(/Handles charging flows/)).toBeInTheDocument();
@@ -562,8 +565,12 @@ describe('KnowledgePage', () => {
 
     await user.type(search, 'memory');
     const featureMemory = await screen.findByRole('option', { name: /memory features:memory scope/ });
-    expect(screen.getByRole('option', { name: /memory packages:memory scope/ })).toBeInTheDocument();
-    await user.click(featureMemory);
+    const packageMemory = screen.getByRole('option', { name: /memory packages:memory scope/ });
+    await user.keyboard('{ArrowDown}{ArrowDown}');
+    expect(packageMemory).toHaveAttribute('aria-selected', 'true');
+    await user.keyboard('{ArrowUp}');
+    expect(featureMemory).toHaveAttribute('aria-selected', 'true');
+    await user.keyboard('{Enter}');
     expect(router.state.location.search).toContain('scope=33333333-3333-4333-8333-333333333333');
     expect(router.state.location.search).toContain('node=33333333-3333-4333-8333-333333333333');
     expect(await screen.findByTestId('knowledge-scope-flyout')).toHaveTextContent('memory');
