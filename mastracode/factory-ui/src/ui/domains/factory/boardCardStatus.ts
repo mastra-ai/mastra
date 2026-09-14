@@ -1,6 +1,5 @@
 import { settingsSectionPath } from '../settings/settingsSections';
 import type { SessionRowStatus } from '../workspaces/services/sessionStatus';
-import type { CardAction } from './cardPrimaryAction';
 import type { FactoryDecisionSummary } from './services/decisions';
 
 /** A card has one status row, so every announcement it could make resolves to one of these. */
@@ -21,7 +20,7 @@ export type BoardCardStatus =
 
 export interface CardStatusHint {
   text: string;
-  action?: CardAction;
+  link?: { label: string; href: string };
 }
 
 // Only raised for observational-memory rejections (rules/dispatcher.ts), so Memory is where it is fixed.
@@ -30,7 +29,7 @@ const FAILURE_HINTS: Partial<
 > = {
   run_configuration_invalid: factoryId => ({
     text: 'The provider refused the observational-memory model Factory runs use. Pick another one, then retry.',
-    action: { label: 'Memory settings', href: settingsSectionPath(factoryId, 'memory', 'factory') },
+    link: { label: 'Memory settings', href: settingsSectionPath(factoryId, 'memory', 'factory') },
   }),
 };
 

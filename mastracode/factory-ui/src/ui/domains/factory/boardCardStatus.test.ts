@@ -94,7 +94,7 @@ describe('boardCardStatus', () => {
       retryDecisionId: 'decision-1',
       hint: {
         text: 'The provider refused the observational-memory model Factory runs use. Pick another one, then retry.',
-        action: { label: 'Memory settings', href: '/factories/fp-1/settings/memory?scope=factory' },
+        link: { label: 'Memory settings', href: '/factories/fp-1/settings/memory?scope=factory' },
       },
     });
   });

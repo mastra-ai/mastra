@@ -102,6 +102,11 @@ export function CardStatus({ status }: { status: BoardCardStatus }) {
       <TooltipContent side="top" className="max-w-80 gap-1.5">
         {status.detail !== undefined && <span className="wrap-anywhere whitespace-pre-wrap">{status.detail}</span>}
         {status.hint && <span>{status.hint.text}</span>}
+        {status.hint?.link && (
+          <Link to={status.hint.link.href} draggable={false} className="w-fit underline underline-offset-2">
+            {status.hint.link.label}
+          </Link>
+        )}
       </TooltipContent>
     </Tooltip>
   );

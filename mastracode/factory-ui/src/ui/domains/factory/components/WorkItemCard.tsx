@@ -220,7 +220,6 @@ export function WorkItemCard({
     waiting: status.kind === 'waiting' || status.kind === 'held',
     session: sessionLink(sessionHref),
     retry: retryButton({ decisionId: retryDecisionId, retryingDecisionId, onRetry: onRetryDecision }),
-    fix: status.kind === 'error' ? status.hint?.action : undefined,
     run: runButton({
       action: primaryAction,
       pending: busyLabel !== undefined,
