@@ -118,6 +118,7 @@ import {
   MV_DISCOVERY_PAIRS,
   TABLE_DISCOVERY_VALUES,
   TABLE_DISCOVERY_PAIRS,
+  RETENTION_MANAGED_TABLES,
   buildRetentionEntries,
   parseTtlExpression,
 } from './ddl';
@@ -242,7 +243,18 @@ async function readRetentionCreateQueries(
 function retentionEntryMatches(createQuery: string | undefined, entry: RetentionEntry): boolean {
   if (!createQuery) return false;
   const current = parseTtlExpression(createQuery);
+  if (entry.operation === 'remove') return current === null;
   return current?.column === entry.column && current.days === entry.days;
+}
+
+function buildRetentionRemovalEntry(table: string): RetentionEntry {
+  return {
+    operation: 'remove',
+    table,
+    column: '',
+    days: 0,
+    sql: `ALTER TABLE ${table} REMOVE TTL`,
+  };
 }
 
 type ClusterRetentionSnapshot = {
@@ -291,34 +303,50 @@ function retentionEntryMatchesEveryClusterHost(snapshot: ClusterRetentionSnapsho
 }
 
 /**
- * Returns retention entries whose `MODIFY TTL` would actually change the
- * table's TTL. Falls back to running every entry if introspection fails.
+ * Returns the DDL needed to reconcile every retention-managed table with the
+ * configured policy. Falls back to applying configured TTLs without removing
+ * existing TTLs if introspection fails.
  */
 async function filterAppliedRetention(
   client: ClickHouseClient,
   entries: readonly RetentionEntry[],
   replication?: ClickhouseReplicationConfig,
 ): Promise<readonly RetentionEntry[]> {
-  if (entries.length === 0) return entries;
+  const desiredTables = new Set(entries.map(entry => entry.table));
+  const tables = RETENTION_MANAGED_TABLES;
 
-  const tables = [...new Set(entries.map(entry => entry.table))];
   try {
     const cluster = replication?.cluster?.trim();
     if (cluster) {
       const snapshot = await readClusterRetentionSnapshot(client, tables, cluster);
-      return entries.filter(entry => !retentionEntryMatchesEveryClusterHost(snapshot, entry));
+      const pending = entries.filter(entry => !retentionEntryMatchesEveryClusterHost(snapshot, entry));
+      for (const table of tables) {
+        if (desiredTables.has(table)) continue;
+        const createQueries = snapshot.createQueries.get(table) ?? [];
+        if (createQueries.some(createQuery => parseTtlExpression(createQuery) !== null)) {
+          pending.push(buildRetentionRemovalEntry(table));
+        }
+      }
+      return pending;
     }
 
     const createQueries = await readRetentionCreateQueries(client, tables);
-    return entries.filter(entry => !retentionEntryMatches(createQueries.get(entry.table), entry));
+    const pending = entries.filter(entry => !retentionEntryMatches(createQueries.get(entry.table), entry));
+    for (const table of tables) {
+      if (desiredTables.has(table)) continue;
+      if (parseTtlExpression(createQueries.get(table) ?? '') !== null) {
+        pending.push(buildRetentionRemovalEntry(table));
+      }
+    }
+    return pending;
   } catch {
     return entries;
   }
 }
 
 /**
- * Applies configured observability TTLs to existing ClickHouse tables.
- * Statements whose current TTL already matches are skipped.
+ * Reconciles observability TTLs on existing ClickHouse tables with the current
+ * retention configuration. Statements whose current TTL already matches are skipped.
  */
 export async function applyClickHouseRetention(args: {
   client: ClickHouseClient;

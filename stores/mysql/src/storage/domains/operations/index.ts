@@ -312,6 +312,9 @@ export class StoreOperationsMySQL extends StoreOperations {
     if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(column)) {
       throw new Error(`Invalid retention identifier: ${tableName}.${column}`);
     }
+    if (!Number.isSafeInteger(limit) || limit <= 0) {
+      throw new Error(`Retention batch limit must be a positive safe integer; received ${limit}`);
+    }
     const [result] = await this.pool.execute(
       `DELETE FROM ${formatTableName(tableName, this.database)} WHERE ${quoteIdentifier(column, 'column name')} < ? ORDER BY ${quoteIdentifier(column, 'column name')} LIMIT ${limit}`,
       [cutoff],

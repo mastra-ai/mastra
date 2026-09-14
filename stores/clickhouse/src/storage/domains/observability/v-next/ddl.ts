@@ -1267,11 +1267,14 @@ const SIGNAL_TO_TABLES: Record<keyof RetentionConfig, string[]> = {
  * Replicated/Shared MergeTree tables).
  */
 export interface RetentionEntry {
+  operation: 'modify' | 'remove';
   table: string;
   column: string;
   days: number;
   sql: string;
 }
+
+export const RETENTION_MANAGED_TABLES = [...Object.keys(SIGNAL_TTL_COLUMNS), TABLE_DELETION_REQUESTS];
 
 const DELETION_REQUEST_RETENTION_MARGIN_DAYS = 30;
 
@@ -1285,6 +1288,7 @@ export function buildRetentionEntries(retention: RetentionConfig): RetentionEntr
 
     const tables = SIGNAL_TO_TABLES[signal as keyof RetentionConfig];
     if (!tables) continue;
+    // Only these signals create deletion-request records. Metrics and logs don't have deletion APIs.
     if (signal === 'tracing' || signal === 'scores' || signal === 'feedback') {
       deletionSignalRetentionDays.push(safeDays);
     }
@@ -1293,6 +1297,7 @@ export function buildRetentionEntries(retention: RetentionConfig): RetentionEntr
       const col = SIGNAL_TTL_COLUMNS[table];
       if (!col) continue;
       entries.push({
+        operation: 'modify',
         table,
         column: col,
         days: safeDays,
@@ -1304,6 +1309,7 @@ export function buildRetentionEntries(retention: RetentionConfig): RetentionEntr
   if (deletionSignalRetentionDays.length > 0) {
     const days = Math.max(...deletionSignalRetentionDays) + DELETION_REQUEST_RETENTION_MARGIN_DAYS;
     entries.push({
+      operation: 'modify',
       table: TABLE_DELETION_REQUESTS,
       column: 'requestedAt',
       days,

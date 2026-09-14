@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { TABLE_LOG_EVENTS, TABLE_SCORE_EVENTS } from './ddl';
+import { TABLE_DELETION_REQUESTS, TABLE_LOG_EVENTS, TABLE_SCORE_EVENTS } from './ddl';
 import { applyClickHouseRetention } from '.';
 
 describe('applyClickHouseRetention', () => {
@@ -177,5 +177,60 @@ describe('applyClickHouseRetention', () => {
     await expect(
       applyClickHouseRetention({ client: { query, command } as any, retention: { scores: 30 } }),
     ).rejects.toBe(alterError);
+  });
+
+  it('removes stale signal and deletion-request TTLs when a signal is removed', async () => {
+    const query = vi.fn().mockResolvedValue({
+      json: async () => [
+        {
+          name: TABLE_LOG_EVENTS,
+          create_table_query: `CREATE TABLE ${TABLE_LOG_EVENTS} (...) TTL timestamp + toIntervalDay(30)`,
+        },
+        {
+          name: TABLE_SCORE_EVENTS,
+          create_table_query: `CREATE TABLE ${TABLE_SCORE_EVENTS} (...) TTL timestamp + toIntervalDay(90)`,
+        },
+        {
+          name: TABLE_DELETION_REQUESTS,
+          create_table_query: `CREATE TABLE ${TABLE_DELETION_REQUESTS} (...) TTL requestedAt + toIntervalDay(120)`,
+        },
+      ],
+    });
+    const command = vi.fn().mockResolvedValue(undefined);
+
+    const applied = await applyClickHouseRetention({
+      client: { query, command } as any,
+      retention: { logs: 30 },
+    });
+
+    expect(applied.map(entry => entry.sql)).toEqual([
+      `ALTER TABLE ${TABLE_SCORE_EVENTS} REMOVE TTL`,
+      `ALTER TABLE ${TABLE_DELETION_REQUESTS} REMOVE TTL`,
+    ]);
+    expect(command.mock.calls.map(([args]) => args.query)).toEqual(applied.map(entry => entry.sql));
+  });
+
+  it('removes all stale managed TTLs when retention is disabled', async () => {
+    const query = vi.fn().mockResolvedValue({
+      json: async () => [
+        {
+          name: TABLE_LOG_EVENTS,
+          create_table_query: `CREATE TABLE ${TABLE_LOG_EVENTS} (...) TTL timestamp + toIntervalDay(30)`,
+        },
+        {
+          name: TABLE_DELETION_REQUESTS,
+          create_table_query: `CREATE TABLE ${TABLE_DELETION_REQUESTS} (...) TTL requestedAt + toIntervalDay(60)`,
+        },
+      ],
+    });
+    const command = vi.fn().mockResolvedValue(undefined);
+
+    const applied = await applyClickHouseRetention({ client: { query, command } as any, retention: {} });
+
+    expect(applied.map(entry => entry.sql)).toEqual([
+      `ALTER TABLE ${TABLE_LOG_EVENTS} REMOVE TTL`,
+      `ALTER TABLE ${TABLE_DELETION_REQUESTS} REMOVE TTL`,
+    ]);
+    expect(command).toHaveBeenCalledTimes(2);
   });
 });
