@@ -11,7 +11,7 @@ import type { AIV5Type } from '@mastra/core/agent/message-list';
 import type { VersionOverrides } from '@mastra/core/di';
 import { mergeVersionOverrides, MASTRA_VERSIONS_KEY } from '@mastra/core/di';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { PROVIDER_REGISTRY, parseModelString, defaultGateways, GatewayManager } from '@mastra/core/llm';
+import { PROVIDER_REGISTRY, parseModelString, defaultGateways } from '@mastra/core/llm';
 import type { ProviderConfig, SystemMessage } from '@mastra/core/llm';
 import type {
   InputProcessor,
@@ -321,14 +321,17 @@ export function isProviderConnected(providerId: string, customProviders?: Record
   return envVars.every(envVar => !!process.env[envVar]);
 }
 
-function createProviderConnectionChecker(
+async function createProviderConnectionChecker(
   mastra: Context['mastra'],
   customProviders?: Record<string, ProviderConfig>,
-): (providerId: string, modelId: string | undefined) => Promise<boolean> {
-  const gatewayManager = new GatewayManager(Object.values(mastra?.listGateways() ?? {}));
+): Promise<(providerId: string, modelId: string | undefined) => Promise<boolean>> {
+  // Older supported core versions do not export GatewayManager.
+  const coreLlm = await import('@mastra/core/llm');
+  const gatewayManager =
+    'GatewayManager' in coreLlm ? new coreLlm.GatewayManager(Object.values(mastra?.listGateways() ?? {})) : undefined;
   return async (providerId, modelId) => {
     if (isProviderConnected(providerId, customProviders)) return true;
-    if (!modelId) return false;
+    if (!modelId || !gatewayManager) return false;
     try {
       return await gatewayManager.hasAuth(`${providerId}/${modelId}`);
     } catch {
@@ -1763,7 +1766,7 @@ export async function buildProvidersList(mastra: Context['mastra']): Promise<Pro
     }
   }
 
-  const isConnected = createProviderConnectionChecker(mastra, allProviders);
+  const isConnected = await createProviderConnectionChecker(mastra, allProviders);
   return Promise.all(
     Object.entries(allProviders).map(async ([id, provider]) => ({
       id,
@@ -3529,7 +3532,7 @@ async function findConnectedModel(
   agent: Agent,
   mastra: Context['mastra'],
 ): Promise<Awaited<ReturnType<Agent['getModel']>> | null> {
-  const isConnected = createProviderConnectionChecker(mastra);
+  const isConnected = await createProviderConnectionChecker(mastra);
   const modelList = await agent.getModelList();
 
   if (modelList && modelList.length > 0) {
