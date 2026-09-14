@@ -40,17 +40,17 @@ export function SettingsTitle({
   accessory,
   className,
   ...props
-}: Omit<ComponentProps<'h2'>, 'id'> & { accessory?: ReactNode }) {
+}: Omit<ComponentProps<'h2'>, 'id' | 'color'> & { accessory?: ReactNode }) {
   const titleId = useContext(SettingsTitleIdContext);
 
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-2">
-      <Txt as="h2" id={titleId} variant="ui-md" className={cn('text-icon6 font-semibold', className)} {...props} />
+      <Txt as="h2" id={titleId} variant="ui-md" weight="semibold" color="neutral6" className={className} {...props} />
       {accessory}
     </div>
   );
 }
 
-export function SettingsDescription({ className, ...props }: ComponentProps<'p'>) {
-  return <Txt as="p" variant="ui-sm" className={cn('text-icon3', className)} {...props} />;
+export function SettingsDescription({ className, ...props }: Omit<ComponentProps<'p'>, 'color'>) {
+  return <Txt as="p" variant="ui-sm" color="neutral3" className={className} {...props} />;
 }

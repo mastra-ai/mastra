@@ -150,7 +150,7 @@ const commentItemAuthorTone: Record<CommentVariant, string> = {
   thread: 'truncate font-medium text-neutral6',
 };
 
-export type CommentItemAuthorProps = ComponentPropsWithoutRef<'span'>;
+export type CommentItemAuthorProps = Omit<ComponentPropsWithoutRef<'span'>, 'color'>;
 
 export const CommentItemAuthor = forwardRef<HTMLElement, CommentItemAuthorProps>(({ className, ...props }, ref) => {
   const variant = useCommentVariant();
@@ -204,7 +204,7 @@ const commentItemBodyTone: Record<CommentVariant, string> = {
   thread: '',
 };
 
-export type CommentItemBodyProps = ComponentPropsWithoutRef<'p'>;
+export type CommentItemBodyProps = Omit<ComponentPropsWithoutRef<'p'>, 'color'>;
 
 export const CommentItemBody = forwardRef<HTMLElement, CommentItemBodyProps>(({ className, ...props }, ref) => {
   const variant = useCommentVariant();

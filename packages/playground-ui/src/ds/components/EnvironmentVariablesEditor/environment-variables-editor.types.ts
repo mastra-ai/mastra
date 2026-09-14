@@ -21,7 +21,7 @@ export interface EnvironmentVariablesEditorRootProps<
   hidePasteHint?: boolean;
 }
 
-export type EnvironmentVariablesEditorPasteHintProps = ComponentPropsWithoutRef<'p'>;
+export type EnvironmentVariablesEditorPasteHintProps = Omit<ComponentPropsWithoutRef<'p'>, 'color'>;
 
 export interface EnvironmentVariablesEditorProps<
   TRow extends EnvironmentVariableEntry = EnvironmentVariableEntry,

@@ -20,6 +20,14 @@ const meta: Meta<typeof Txt> = {
       control: { type: 'select' },
       options: [undefined, 'mono'],
     },
+    weight: {
+      control: { type: 'select' },
+      options: [undefined, 'medium', 'semibold'],
+    },
+    color: {
+      control: { type: 'select' },
+      options: [undefined, 'neutral1', 'neutral2', 'neutral3', 'neutral4', 'neutral5', 'neutral6'],
+    },
   },
 };
 
