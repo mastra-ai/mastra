@@ -833,4 +833,27 @@ describe('SidebarNew', () => {
     await waitFor(() => expect(document.activeElement).toBe(trigger));
     expect(screen.getByText('Grouped navigation')).toBeDefined();
   });
+
+  it('keeps group titles visible and hides the desktop trigger in the mobile drawer', () => {
+    mockMatchMedia(true);
+    render(
+      <SidebarNew.Provider storageKey="sidebar-new-mobile-test">
+        <SidebarNew.MobileTrigger />
+        <SidebarNew>
+          <SidebarNew.Header>
+            <SidebarNew.Trigger />
+          </SidebarNew.Header>
+          <SidebarNew.Nav>
+            <SidebarNew.NavHeader>Observability</SidebarNew.NavHeader>
+          </SidebarNew.Nav>
+        </SidebarNew>
+      </SidebarNew.Provider>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open navigation menu' }));
+
+    expect(screen.getByRole('dialog', { name: 'Navigation' })).toBeTruthy();
+    expect(screen.getByText('Observability')).toBeDefined();
+    expect(screen.queryByRole('button', { name: 'Toggle sidebar' })).toBeNull();
+  });
 });

@@ -24,7 +24,7 @@ export function SidebarNewNavHeader({
 }: SidebarNewNavHeaderProps) {
   const context = useMaybeSidebarState();
   const state = stateProp ?? context?.state ?? 'default';
-  const showTitle = state === 'default' && !context?.isMobile;
+  const showTitle = state === 'default';
   const Link = LinkProp ?? context?.LinkComponent ?? 'a';
 
   return (

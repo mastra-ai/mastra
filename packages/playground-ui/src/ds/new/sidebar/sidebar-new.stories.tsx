@@ -135,6 +135,7 @@ function SidebarNewStory() {
       </SidebarNew>
 
       <main className="min-w-0 flex-1 p-6">
+        <SidebarNew.MobileTrigger className="mb-4" />
         <h1 className="text-header-md text-neutral6 font-medium">Main content</h1>
         <p className="text-ui-md text-neutral4 mt-2">
           Primary navigation remains grouped. Account and organization settings take over only the sidebar body.
