@@ -351,7 +351,8 @@ export function createDurableToolCallStep() {
         ? createObservabilityContext({ currentSpan: processorAgentSpan })
         : undefined;
 
-      let tool = registryEntry?.tools?.[toolName];
+      const stepTools = registryEntry?.stepTools ?? registryEntry?.tools;
+      let tool = stepTools?.[toolName];
       let mastraTools: Record<string, any> | undefined;
       // Tools rebuilt from the Mastra instance when the per-process registry is
       // empty (cross-process worker). Populated lazily below; reused for
@@ -362,11 +363,11 @@ export function createDurableToolCallStep() {
       let rebuiltSaveQueueManager: any;
 
       if (!tool) {
-        tool = findProviderToolByName(registryEntry?.tools as any, toolName) as typeof tool;
+        tool = findProviderToolByName(stepTools as any, toolName) as typeof tool;
       }
 
       if (!tool) {
-        tool = Object.values(registryEntry?.tools ?? {}).find(
+        tool = Object.values(stepTools ?? {}).find(
           (t: any) => t && typeof t === 'object' && 'id' in t && t.id === toolName,
         ) as typeof tool;
       }
@@ -442,16 +443,12 @@ export function createDurableToolCallStep() {
       }
 
       // Resolve the key the tool is registered under for activeTools filtering.
-      // Prefer the per-run registryEntry key (exact name then identity match),
-      // and fall back to the Mastra-wide registry when the tool was resolved
-      // there. Without this fallback, a globally-registered tool like
-      // `webSearch` invoked by its model-facing name `web_search` would be
-      // hidden whenever `activeTools` was set, because the key from
-      // registryEntry.tools would be `undefined`.
+      // Prefer the current LLM step's tool snapshot (exact name then identity
+      // match), and fall back to rebuilt or Mastra-wide tools when needed.
       const toolKey =
-        registryEntry?.tools?.[toolName] || rebuiltTools?.[toolName]
+        stepTools?.[toolName] || rebuiltTools?.[toolName]
           ? toolName
-          : (Object.entries(registryEntry?.tools ?? {}).find(([, registeredTool]) => registeredTool === tool)?.[0] ??
+          : (Object.entries(stepTools ?? {}).find(([, registeredTool]) => registeredTool === tool)?.[0] ??
             Object.entries(rebuiltTools ?? {}).find(([, registeredTool]) => registeredTool === tool)?.[0] ??
             Object.entries(mastraTools ?? {}).find(([, registeredTool]) => registeredTool === tool)?.[0]);
       const effectiveActiveTools = activeTools === null ? undefined : (activeTools ?? agentOptions.activeTools);
@@ -459,7 +456,7 @@ export function createDurableToolCallStep() {
       const isHiddenByActiveTools = effectiveActiveTools !== undefined && !effectiveActiveTools.includes(activeToolKey);
 
       if (!tool || isHiddenByActiveTools) {
-        const availableToolNames = effectiveActiveTools ?? Object.keys(rebuiltTools ?? registryEntry?.tools ?? {});
+        const availableToolNames = effectiveActiveTools ?? Object.keys(rebuiltTools ?? stepTools ?? {});
         const availableToolsStr =
           availableToolNames.length > 0 ? ` Available tools: ${availableToolNames.join(', ')}` : '';
         const error = {
@@ -755,7 +752,7 @@ export function createDurableToolCallStep() {
                 },
                 {
                   policy: registryEntry?.toolPayloadTransform,
-                  tools: registryEntry?.tools,
+                  tools: stepTools,
                   logger: logger as any,
                 },
               );
@@ -1389,7 +1386,7 @@ export function createDurableToolCallStep() {
               },
               {
                 policy: registryEntry?.toolPayloadTransform,
-                tools: registryEntry?.tools,
+                tools: stepTools,
                 logger: logger as any,
               },
             );
@@ -1441,7 +1438,7 @@ export function createDurableToolCallStep() {
               },
               {
                 policy: registryEntry?.toolPayloadTransform,
-                tools: registryEntry?.tools,
+                tools: stepTools,
                 logger: logger as any,
               },
             );
