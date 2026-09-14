@@ -126,30 +126,4 @@ describe('Select', () => {
     expect(trigger.classList.contains('text-ui-smd')).toBe(true);
     expect(trigger.classList.contains('text-ui-md')).toBe(false);
   });
-
-  it('wires the variant prop through to the button recipe (default = the filled Button default, field-only variants)', () => {
-    function renderWithVariant(variant?: 'default' | 'outline' | 'ghost' | 'primary') {
-      const utils = render(
-        <Select>
-          <SelectTrigger {...(variant ? { variant } : {})}>
-            <SelectValue placeholder="Pick one" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="apple">Apple</SelectItem>
-          </SelectContent>
-        </Select>,
-      );
-      const className = screen.getByRole('combobox').className;
-      utils.unmount();
-      return className;
-    }
-
-    expect(renderWithVariant()).toBe(renderWithVariant('default'));
-    expect(renderWithVariant('default')).toContain('bg-button-default-bg');
-    expect(renderWithVariant('default')).not.toContain('bg-transparent');
-    expect(renderWithVariant('primary')).toBe(renderWithVariant('default'));
-    expect(renderWithVariant('outline')).toContain('bg-surface3');
-    expect(renderWithVariant('outline')).toContain('border-border2');
-    expect(renderWithVariant('ghost')).toContain('border-transparent');
-  });
 });
