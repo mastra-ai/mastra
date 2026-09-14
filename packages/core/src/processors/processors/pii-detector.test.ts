@@ -679,6 +679,63 @@ describe('PIIDetector', () => {
       consoleWarnSpy.mockRestore();
     });
 
+    it.each(['processInput', 'processOutputResult'] as const)(
+      'should propagate the processor tripwire from %s when strict model detection fails',
+      async method => {
+        const model = new MockLanguageModelV1({
+          defaultObjectGenerationMode: 'json',
+          doGenerate: async () => {
+            throw new Error('provider failure');
+          },
+        });
+        const detector = new PIIDetector({ model, detectionTypes: ['name'], errorStrategy: 'strict' });
+        const tripwire = new TripWire('strict PII failure');
+        const abort = vi.fn(() => {
+          throw tripwire;
+        });
+
+        await expect(
+          detector[method]({
+            messages: [
+              createTestMessage('Alice lives nearby', method === 'processOutputResult' ? 'assistant' : 'user'),
+            ],
+            abort: abort as any,
+          }),
+        ).rejects.toBe(tripwire);
+        expect(abort).toHaveBeenCalledWith('PII detection failed because the internal model call failed');
+      },
+    );
+
+    it('should not emit buffered text when strict streaming model detection fails', async () => {
+      const model = new MockLanguageModelV1({
+        defaultObjectGenerationMode: 'json',
+        doGenerate: async () => {
+          throw new Error('provider failure');
+        },
+      });
+      const detector = new PIIDetector({
+        model,
+        detectionTypes: ['name'],
+        errorStrategy: 'strict',
+        bufferSize: 1,
+      });
+      const tripwire = new TripWire('strict PII failure');
+      const abort = vi.fn(() => {
+        throw tripwire;
+      });
+      const part: ChunkType = {
+        type: 'text-delta',
+        payload: { text: 'Alice lives nearby.', id: 'text-1' },
+        runId: 'run-1',
+        from: ChunkFrom.AGENT,
+      };
+
+      await expect(
+        detector.processOutputStream({ part, streamParts: [part], state: {}, abort: abort as any }),
+      ).rejects.toBe(tripwire);
+      expect(abort).toHaveBeenCalledWith('PII detection failed because the internal model call failed');
+    });
+
     it('should handle empty message array', async () => {
       const model = setupMockModel(createMockPIIResult());
       const detector = new PIIDetector({

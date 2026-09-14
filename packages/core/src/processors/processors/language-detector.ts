@@ -12,6 +12,8 @@ import { standardSchemaToJSONSchema } from '../../schema';
 import type { Processor } from '../index';
 import { selectMessagesToCheck } from './message-selection';
 import type { LastMessageOnlyOption } from './message-selection';
+import { handleModelError } from './model-error-strategy';
+import type { ModelErrorStrategy } from './model-error-strategy';
 
 /**
  * Language detection result for a single text
@@ -48,6 +50,9 @@ export interface LanguageDetectionResult {
 export interface LanguageDetectorOptions extends LastMessageOnlyOption {
   /** Model configuration for the detection/translation agent */
   model: MastraModelConfig;
+
+  /** How internal model errors are handled. Defaults to 'warn'. */
+  errorStrategy?: ModelErrorStrategy;
 
   /**
    * Target language(s) for the project.
@@ -138,6 +143,7 @@ export class LanguageDetector implements Processor<'language-detector'> {
   private includeDetectionDetails: boolean;
   private lastMessageOnly: boolean;
   private providerOptions?: ProviderOptions;
+  private errorStrategy: ModelErrorStrategy;
 
   // Default target language
   private static readonly DEFAULT_TARGET_LANGUAGES = ['English', 'en'];
@@ -192,6 +198,7 @@ export class LanguageDetector implements Processor<'language-detector'> {
     this.includeDetectionDetails = options.includeDetectionDetails ?? false;
     this.lastMessageOnly = options.lastMessageOnly ?? false;
     this.providerOptions = options.providerOptions;
+    this.errorStrategy = options.errorStrategy ?? 'warn';
 
     // Create internal detection and translation agent
     this.detectionAgent = new Agent({
@@ -237,7 +244,7 @@ export class LanguageDetector implements Processor<'language-detector'> {
           continue;
         }
 
-        const detectionResult = await this.detectLanguage(textContent, observabilityContext, requestContext);
+        const detectionResult = await this.detectLanguage(textContent, abort, observabilityContext, requestContext);
 
         // Check if confidence meets threshold
         if (detectionResult.confidence && detectionResult.confidence < this.threshold) {
@@ -288,6 +295,7 @@ export class LanguageDetector implements Processor<'language-detector'> {
    */
   private async detectLanguage(
     content: string,
+    abort: (reason?: string) => never,
     observabilityContext?: ObservabilityContext,
     requestContext?: RequestContext,
   ): Promise<LanguageDetectionResult> {
@@ -341,7 +349,13 @@ export class LanguageDetector implements Processor<'language-detector'> {
 
       return result;
     } catch (error) {
-      console.warn('[LanguageDetector] Detection agent failed, assuming target language:', error);
+      handleModelError({
+        error,
+        errorStrategy: this.errorStrategy,
+        abort,
+        warningMessage: '[LanguageDetector] Detection agent failed, assuming target language:',
+        abortMessage: 'Language detection failed because the internal model call failed',
+      });
       // Fail open - assume target language if detection fails
       return {
         iso_code: null,

@@ -14,6 +14,8 @@ import type { ChunkType } from '../../stream';
 import type { Processor } from '../index';
 import { selectMessagesToCheck } from './message-selection';
 import type { LastMessageOnlyOption } from './message-selection';
+import { handleModelError } from './model-error-strategy';
+import type { ModelErrorStrategy } from './model-error-strategy';
 
 /**
  * Individual moderation category score
@@ -42,6 +44,9 @@ export interface ModerationOptions extends LastMessageOnlyOption {
    * Supports magic strings like "openai/gpt-4o", config objects, or direct LanguageModel instances
    */
   model: MastraModelConfig;
+
+  /** How internal model errors are handled. Defaults to 'warn'. */
+  errorStrategy?: ModelErrorStrategy;
 
   /**
    * Categories to check for moderation.
@@ -126,6 +131,7 @@ export class ModerationProcessor implements Processor<'moderation'> {
   private lastMessageOnly: boolean;
   private structuredOutputOptions?: ModerationOptions['structuredOutputOptions'];
   private providerOptions?: ProviderOptions;
+  private errorStrategy: ModelErrorStrategy;
 
   // Default OpenAI moderation categories
   private static readonly DEFAULT_CATEGORIES = [
@@ -151,6 +157,7 @@ export class ModerationProcessor implements Processor<'moderation'> {
     this.lastMessageOnly = options.lastMessageOnly ?? false;
     this.structuredOutputOptions = options.structuredOutputOptions;
     this.providerOptions = options.providerOptions;
+    this.errorStrategy = options.errorStrategy ?? 'warn';
 
     // Create internal moderation agent
     this.moderationAgent = new Agent({
@@ -197,7 +204,13 @@ export class ModerationProcessor implements Processor<'moderation'> {
           continue;
         }
 
-        const moderationResult = await this.moderateContent(textContent, false, observabilityContext, requestContext);
+        const moderationResult = await this.moderateContent(
+          textContent,
+          false,
+          abort,
+          observabilityContext,
+          requestContext,
+        );
         results.push(moderationResult);
 
         if (this.isModerationFlagged(moderationResult)) {
@@ -255,6 +268,7 @@ export class ModerationProcessor implements Processor<'moderation'> {
       const moderationResult = await this.moderateContent(
         contentToModerate,
         true,
+        abort,
         observabilityContext,
         requestContext,
       );
@@ -284,7 +298,8 @@ export class ModerationProcessor implements Processor<'moderation'> {
    */
   private async moderateContent(
     content: string,
-    isStream = false,
+    isStream: boolean,
+    abort: (reason?: string) => never,
     observabilityContext?: ObservabilityContext,
     requestContext?: RequestContext,
   ): Promise<ModerationResult> {
@@ -345,7 +360,13 @@ export class ModerationProcessor implements Processor<'moderation'> {
 
       return result;
     } catch (error) {
-      console.warn('[ModerationProcessor] Agent moderation failed, allowing content:', error);
+      handleModelError({
+        error,
+        errorStrategy: this.errorStrategy,
+        abort,
+        warningMessage: '[ModerationProcessor] Agent moderation failed, allowing content:',
+        abortMessage: 'Moderation failed because the internal model call failed',
+      });
       // Fail open - return empty result if moderation agent fails (no moderation needed)
       return {
         category_scores: null,

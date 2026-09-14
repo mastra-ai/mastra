@@ -17,6 +17,8 @@ import type { Processor } from '../index';
 import { REPROCESS_PART_KEY } from '../stream-reprocess';
 import { selectMessagesToCheck } from './message-selection';
 import type { LastMessageOnlyOption } from './message-selection';
+import { handleModelError } from './model-error-strategy';
+import type { ModelErrorStrategy } from './model-error-strategy';
 
 /**
  * PII categories for detection and redaction
@@ -92,6 +94,9 @@ export interface PIIDetectorOptions extends LastMessageOnlyOption {
    * Supports magic strings like "openai/gpt-4o", config objects, or direct LanguageModel instances
    */
   model: MastraModelConfig;
+
+  /** How internal model errors are handled. Defaults to 'warn'. */
+  errorStrategy?: ModelErrorStrategy;
 
   /**
    * PII types to detect.
@@ -209,6 +214,7 @@ export class PIIDetector implements Processor<'pii-detector'> {
   private providerOptions?: ProviderOptions;
   private bufferSize: number;
   private onDetection?: (event: PIIDetectionEvent) => void | Promise<void>;
+  private errorStrategy: ModelErrorStrategy;
 
   // Default PII types based on common privacy regulations and comprehensive PII detection
   private static readonly DEFAULT_DETECTION_TYPES = [
@@ -270,6 +276,7 @@ export class PIIDetector implements Processor<'pii-detector'> {
     this.providerOptions = options.providerOptions;
     this.bufferSize = options.bufferSize ?? PIIDetector.DEFAULT_BUFFER_SIZE;
     this.onDetection = options.onDetection;
+    this.errorStrategy = options.errorStrategy ?? 'warn';
 
     // Create internal detection agent
     this.detectionAgent = new Agent({
@@ -315,7 +322,7 @@ export class PIIDetector implements Processor<'pii-detector'> {
           continue;
         }
 
-        const detectionResult = await this.detectPII(textContent, observabilityContext, requestContext);
+        const detectionResult = await this.detectPII(textContent, abort, observabilityContext, requestContext);
         const flagged = this.isPIIFlagged(detectionResult);
         await this.emitDetection(textContent, detectionResult, flagged);
 
@@ -369,6 +376,7 @@ export class PIIDetector implements Processor<'pii-detector'> {
    */
   private async detectPII(
     content: string,
+    abort: (reason?: string) => never,
     observabilityContext?: ObservabilityContext,
     requestContext?: RequestContext,
   ): Promise<PIIDetectionResult> {
@@ -465,7 +473,13 @@ export class PIIDetector implements Processor<'pii-detector'> {
 
       return result;
     } catch (error) {
-      console.warn('[PIIDetector] Detection agent failed, allowing content:', error);
+      handleModelError({
+        error,
+        errorStrategy: this.errorStrategy,
+        abort,
+        warningMessage: '[PIIDetector] Detection agent failed, allowing content:',
+        abortMessage: 'PII detection failed because the internal model call failed',
+      });
       // Fail open - return empty result if detection agent fails (no PII detected)
       return {
         categories: null,
@@ -820,7 +834,7 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
 
     if (!buffer) return null;
 
-    const detectionResult = await this.detectPII(buffer, observabilityContext, requestContext);
+    const detectionResult = await this.detectPII(buffer, abort, observabilityContext, requestContext);
     const flagged = this.isPIIFlagged(detectionResult);
     await this.emitDetection(buffer, detectionResult, flagged);
 
@@ -1029,7 +1043,7 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
           continue;
         }
 
-        const detectionResult = await this.detectPII(textContent, observabilityContext, requestContext);
+        const detectionResult = await this.detectPII(textContent, abort, observabilityContext, requestContext);
         const flagged = this.isPIIFlagged(detectionResult);
         await this.emitDetection(textContent, detectionResult, flagged);
 

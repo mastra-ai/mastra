@@ -451,6 +451,53 @@ describe('ModerationProcessor', () => {
       consoleWarnSpy.mockRestore();
     });
 
+    it.each(['processInput', 'processOutputResult'] as const)(
+      'should propagate the processor tripwire from %s when strict model moderation fails',
+      async method => {
+        const model = new MockLanguageModelV1({
+          defaultObjectGenerationMode: 'json',
+          doGenerate: async () => {
+            throw new Error('provider failure');
+          },
+        });
+        const moderator = new ModerationProcessor({ model, errorStrategy: 'strict' });
+        const tripwire = new TripWire('strict moderation failure');
+        const abort = vi.fn(() => {
+          throw tripwire;
+        });
+
+        await expect(
+          moderator[method]({ messages: [createTestMessage('Test content')], abort: abort as any }),
+        ).rejects.toBe(tripwire);
+        expect(abort).toHaveBeenCalledWith('Moderation failed because the internal model call failed');
+      },
+    );
+
+    it('should not emit a stream part when strict model moderation fails', async () => {
+      const model = new MockLanguageModelV1({
+        defaultObjectGenerationMode: 'json',
+        doGenerate: async () => {
+          throw new Error('provider failure');
+        },
+      });
+      const moderator = new ModerationProcessor({ model, errorStrategy: 'strict' });
+      const tripwire = new TripWire('strict moderation failure');
+      const abort = vi.fn(() => {
+        throw tripwire;
+      });
+      const part: ChunkType = {
+        type: 'text-delta',
+        payload: { text: 'unchecked output', id: 'text-1' },
+        runId: 'run-1',
+        from: ChunkFrom.AGENT,
+      };
+
+      await expect(
+        moderator.processOutputStream({ part, streamParts: [part], state: {}, abort: abort as any }),
+      ).rejects.toBe(tripwire);
+      expect(abort).toHaveBeenCalledWith('Moderation failed because the internal model call failed');
+    });
+
     it('should handle empty message array', async () => {
       const model = setupMockModel({ object: createMockModerationResult(false) });
       const moderator = new ModerationProcessor({

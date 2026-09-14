@@ -556,40 +556,67 @@ describe('LanguageDetector', () => {
   });
 
   describe('error handling', () => {
-    it('should fail open when detection agent fails', async () => {
+    it.each([undefined, 'warn'] as const)(
+      'should fail open when detection agent fails with errorStrategy %s',
+      async errorStrategy => {
+        const model = new MockLanguageModelV1({
+          defaultObjectGenerationMode: 'json',
+          doGenerate: async () => {
+            throw new TripWire('Detection agent failed');
+          },
+        });
+        const detector = new LanguageDetector({
+          model,
+          targetLanguages: ['Spanish'],
+          includeDetectionDetails: true,
+          threshold: 0.4, // Low threshold to ensure processing
+          errorStrategy,
+        });
+
+        const mockAbort = vi.fn();
+        const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const consoleInfoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+
+        const messages = [createTestMessage('Some text content', 'user')];
+        const result = await detector.processInput({ messages, abort: mockAbort as any });
+
+        expect(result).toHaveLength(1);
+        expect((result[0].content.metadata as any)?.language_detection?.detected_language).toBe('Spanish'); // Should assume target
+        expect((result[0].content.metadata as any)?.language_detection?.is_target_language).toBe(true);
+        expect(consoleWarnSpy).toHaveBeenCalledWith(
+          expect.stringContaining('[LanguageDetector] Detection agent failed'),
+          expect.anything(),
+        );
+        expect(consoleInfoSpy).toHaveBeenCalledWith(
+          expect.stringContaining('[LanguageDetector] Content in target language'),
+        );
+
+        consoleWarnSpy.mockRestore();
+        consoleInfoSpy.mockRestore();
+      },
+    );
+
+    it('should propagate the processor tripwire when strict model detection fails', async () => {
       const model = new MockLanguageModelV1({
         defaultObjectGenerationMode: 'json',
         doGenerate: async () => {
-          throw new TripWire('Detection agent failed');
+          throw new Error('provider failure');
         },
       });
       const detector = new LanguageDetector({
         model,
-        targetLanguages: ['Spanish'],
-        includeDetectionDetails: true,
-        threshold: 0.4, // Low threshold to ensure processing
+        targetLanguages: ['English'],
+        errorStrategy: 'strict',
+      });
+      const tripwire = new TripWire('strict language failure');
+      const abort = vi.fn(() => {
+        throw tripwire;
       });
 
-      const mockAbort = vi.fn();
-      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      const consoleInfoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
-
-      const messages = [createTestMessage('Some text content', 'user')];
-      const result = await detector.processInput({ messages, abort: mockAbort as any });
-
-      expect(result).toHaveLength(1);
-      expect((result[0].content.metadata as any)?.language_detection?.detected_language).toBe('Spanish'); // Should assume target
-      expect((result[0].content.metadata as any)?.language_detection?.is_target_language).toBe(true);
-      expect(consoleWarnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('[LanguageDetector] Detection agent failed'),
-        expect.anything(),
-      );
-      expect(consoleInfoSpy).toHaveBeenCalledWith(
-        expect.stringContaining('[LanguageDetector] Content in target language'),
-      );
-
-      consoleWarnSpy.mockRestore();
-      consoleInfoSpy.mockRestore();
+      await expect(
+        detector.processInput({ messages: [createTestMessage('Some text content')], abort: abort as any }),
+      ).rejects.toBe(tripwire);
+      expect(abort).toHaveBeenCalledWith('Language detection failed because the internal model call failed');
     });
 
     it('should handle empty message array', async () => {
