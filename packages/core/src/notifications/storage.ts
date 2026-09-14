@@ -30,14 +30,24 @@ export abstract class NotificationsStorage extends StorageDomain {
    * `updateNotification` per id (omitting any that fail) so existing adapters keep working.
    */
   async updateNotificationsStatus(input: UpdateNotificationsStatusInput): Promise<NotificationRecord[]> {
-    const results = await Promise.allSettled(
-      uniqueNotificationIds(input.ids).map(id =>
-        this.updateNotification({ threadId: input.threadId, id, status: input.status }),
-      ),
-    );
-    return results.flatMap(result => (result.status === 'fulfilled' ? [result.value] : []));
+    const ids = uniqueNotificationIds(input.ids);
+    const updated: NotificationRecord[] = [];
+    // Bounded waves so a long id list cannot open one write per id against the adapter at once.
+    for (let offset = 0; offset < ids.length; offset += FALLBACK_UPDATE_CONCURRENCY) {
+      const results = await Promise.allSettled(
+        ids
+          .slice(offset, offset + FALLBACK_UPDATE_CONCURRENCY)
+          .map(id => this.updateNotification({ threadId: input.threadId, id, status: input.status })),
+      );
+      for (const result of results) {
+        if (result.status === 'fulfilled') updated.push(result.value);
+      }
+    }
+    return updated;
   }
 }
+
+const FALLBACK_UPDATE_CONCURRENCY = 20;
 
 /** Collapse duplicate ids so bulk updates touch and return each record once. */
 function uniqueNotificationIds(ids: string[]): string[] {

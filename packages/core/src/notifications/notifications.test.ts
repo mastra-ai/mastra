@@ -3,6 +3,7 @@ import type { z } from 'zod/v4';
 import { Mastra } from '../mastra';
 import { MastraCompositeStore } from '../storage/base';
 import { InMemoryNotificationsStorage, NotificationsStorage } from './storage';
+import type { UpdateNotificationInput } from './types';
 import {
   buildNotificationDispatchSchedule,
   createNotificationDispatchWorkflow,
@@ -187,6 +188,35 @@ describe('notification inbox', () => {
     expect(single).toHaveBeenCalledTimes(3);
     expect(updated.map(notification => notification.id)).toEqual(['a', 'b']);
     expect(updated.every(notification => notification.status === 'dismissed')).toBe(true);
+  });
+
+  it('fallback bulk update bounds how many per-record writes are in flight at once', async () => {
+    let inFlight = 0;
+    let maxInFlight = 0;
+    class LegacyStorage extends InMemoryNotificationsStorage {
+      override updateNotificationsStatus = NotificationsStorage.prototype.updateNotificationsStatus;
+      override async updateNotification(input: UpdateNotificationInput) {
+        inFlight++;
+        maxInFlight = Math.max(maxInFlight, inFlight);
+        await new Promise(resolve => setTimeout(resolve, 1));
+        try {
+          return await super.updateNotification(input);
+        } finally {
+          inFlight--;
+        }
+      }
+    }
+    const storage = new LegacyStorage();
+    const ids = Array.from({ length: 100 }, (_, index) => `n-${index}`);
+    for (const id of ids) {
+      await storage.createNotification({ id, threadId: 'thread-1', source: 'email', kind: 'dm', summary: id });
+    }
+
+    const updated = await storage.updateNotificationsStatus({ threadId: 'thread-1', ids, status: 'seen' });
+
+    expect(updated).toHaveLength(100);
+    expect(maxInFlight).toBeLessThanOrEqual(20);
+    expect(maxInFlight).toBeGreaterThan(1);
   });
 
   it('creates individual and summary notification signals', async () => {
