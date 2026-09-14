@@ -43,6 +43,7 @@ const CommandDialog = ({
   overlayClassName,
   ...props
 }: CommandDialogProps) => {
+  // Equal match scores keep cmdk from reordering the declared items.
   const filter = React.useCallback((value: string, search: string) => {
     const normalizedValue = value.toLowerCase();
     const normalizedSearch = search.toLowerCase();
@@ -55,6 +56,7 @@ const CommandDialog = ({
   const handleKeyDown = React.useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Escape') return;
 
+    // Keep command navigation from reaching document-level shortcuts such as table navigation.
     e.stopPropagation();
   }, []);
 

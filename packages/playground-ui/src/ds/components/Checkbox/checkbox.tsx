@@ -6,6 +6,7 @@ import '@/ds/primitives/focus.css';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
+/** Keeps Radix's controlled indeterminate value compatible with existing consumers. */
 export type CheckedState = boolean | 'indeterminate';
 
 type CheckboxProps = Omit<CheckboxPrimitive.Root.Props, 'className' | 'checked'> & {
@@ -36,6 +37,7 @@ const Checkbox = React.forwardRef<HTMLSpanElement, CheckboxProps>(
           'data-[indeterminate]:hover:border-neutral5 data-[indeterminate]:hover:bg-neutral5',
           'data-[checked]:active:border-neutral4 data-[checked]:active:bg-neutral4',
           'data-[indeterminate]:active:border-neutral4 data-[indeterminate]:active:bg-neutral4',
+          // Base UI renders a span, so :disabled never matches the visible control.
           'data-[disabled]:cursor-not-allowed data-[disabled]:border-neutral6/[0.38] data-[disabled]:bg-neutral6/[0.38] data-[disabled]:hover:border-neutral6/[0.38] data-[disabled]:hover:bg-neutral6/[0.38] data-[disabled]:active:scale-100',
           'data-[disabled]:data-[checked]:border-neutral6/[0.38] data-[disabled]:data-[checked]:bg-neutral6/[0.38] data-[disabled]:data-[checked]:text-neutral6',
           'data-[disabled]:data-[indeterminate]:border-neutral6/[0.38] data-[disabled]:data-[indeterminate]:bg-neutral6/[0.38] data-[disabled]:data-[indeterminate]:text-neutral6',
@@ -68,6 +70,7 @@ function CheckboxIndicatorIcon() {
       <Check
         className={cn(
           'stroke-3.25 size-3 scale-95 transition-[stroke-dashoffset,transform] duration-200 ease-out-custom',
+          // The dash exceeds the check path length so the final mark is not clipped.
           '[stroke-dasharray:28] [stroke-dashoffset:28]',
           'group-data-[checked]/checkbox-indicator:[stroke-dashoffset:0]',
           'group-data-[checked]/checkbox-indicator:scale-100',

@@ -23,6 +23,7 @@ const Switch = React.forwardRef<HTMLButtonElement, SwitchProps>(
     const onIcon = checkedIcon ?? icon;
     const offIcon = uncheckedIcon ?? icon;
 
+    // A native button keeps the consumer's id and click target on the visible switch.
     const renderProps =
       asChild && React.isValidElement(children)
         ? { render: children }

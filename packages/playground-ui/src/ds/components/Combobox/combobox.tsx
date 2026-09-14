@@ -28,6 +28,7 @@ type ComboboxSharedProps = {
   className?: string;
   disabled?: boolean;
   variant?: ComboboxVariant;
+  /** Icon sizes show only a chevron; provide aria-label to name the trigger. */
   size?: ButtonSize;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
@@ -36,6 +37,7 @@ type ComboboxSharedProps = {
   'aria-label'?: string;
   align?: 'start' | 'center' | 'end';
   allowCustomValue?: boolean;
+  /** Single mode reports search edits and an empty string when selection clears the query. */
   onInputValueChange?: (value: string) => void;
 };
 
@@ -106,6 +108,7 @@ export function Combobox(props: ComboboxProps) {
   const clearSelection = () => {
     if (isMultipleCombobox(props)) props.onValueChange?.([]);
   };
+  // Keep the popup inside the modal's interaction boundary unless a container overrides it.
   const resolvedContainer = usePortalContainer(container);
   const iconOnly = isIconButtonSize(size);
 
@@ -122,6 +125,7 @@ export function Combobox(props: ComboboxProps) {
             {triggerText}
           </span>
         ) : (
+          // Truncate only the label so start adornments are not clipped.
           <span className="flex min-w-0 flex-1 items-center gap-2">
             {selectedOption?.start}
             <span className="truncate">
@@ -130,6 +134,7 @@ export function Combobox(props: ComboboxProps) {
           </span>
         )}
 
+        {/* Keep the chevron nested so Button's direct-SVG styles cannot distort it. */}
         <span className="flex shrink-0 items-center">
           <ChevronsUpDown className={cn(comboboxStyles.chevron, iconOnly && 'ml-0')} />
         </span>

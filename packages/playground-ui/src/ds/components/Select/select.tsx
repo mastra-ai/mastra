@@ -34,11 +34,13 @@ function collectItems(children: React.ReactNode, acc: Array<{ value: unknown; la
 type SelectRootProps<Value> = SelectPrimitive.Root.Props<Value, false>;
 type SelectChangeDetails = Parameters<NonNullable<SelectRootProps<unknown>['onValueChange']>>[1];
 
+/** Preserves the non-null onValueChange signature used by existing consumers. */
 type SelectProps<Value = string> = Omit<SelectRootProps<Value>, 'onValueChange'> & {
   onValueChange?: (value: Value, eventDetails: SelectChangeDetails) => void;
 };
 
 function Select<Value = string>({ children, items, onValueChange, ...props }: SelectProps<Value>) {
+  // Base UI needs item labels before the popup mounts to display the closed selection.
   const derivedItems = React.useMemo(() => {
     if (items != null) return items;
     const acc: Array<{ value: unknown; label: React.ReactNode }> = [];
@@ -81,6 +83,7 @@ export type SelectTriggerProps = Omit<SelectPrimitive.Trigger.Props, 'className'
 function normalizeSelectTriggerVariant(
   variant: SelectTriggerVariant | SelectTriggerLegacyVariant,
 ): SelectTriggerVariant {
+  // Legacy primary stays accepted but renders with form-field emphasis.
   return variant === 'primary' ? 'default' : variant;
 }
 
@@ -104,6 +107,7 @@ const SelectTrigger = React.forwardRef<HTMLButtonElement, SelectTriggerProps>(
       >
         {children}
 
+        {/* Keep the chevron nested so Button's direct-SVG styles cannot distort it. */}
         <SelectPrimitive.Icon
           render={
             <span className="flex shrink-0 items-center">
@@ -122,6 +126,7 @@ type SelectContentPositionerProps = Omit<SelectPositionerProps, keyof SelectPopu
 export type SelectContentProps = Omit<SelectPopupProps, 'className'> &
   SelectContentPositionerProps & {
     className?: string;
+    /** Ignored compatibility prop from Radix; use Base UI positioning props instead. */
     position?: 'popper' | 'item-aligned';
     container?: HTMLElement | null;
   };
@@ -150,6 +155,7 @@ const SelectContent = React.forwardRef<HTMLDivElement, SelectContentProps>(
     },
     ref,
   ) => {
+    // Keep the popup inside the modal's interaction boundary unless a container overrides it.
     const resolvedContainer = usePortalContainer(container);
     const positionerProps: SelectContentPositionerProps = {
       side,

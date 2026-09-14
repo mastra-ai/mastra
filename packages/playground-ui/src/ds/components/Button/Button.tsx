@@ -8,6 +8,7 @@ import '@/ds/primitives/focus.css';
 import { controlFocusStyle, sharedFormElementDisabledStyle } from '@/ds/primitives/form-element';
 import { cn } from '@/lib/utils';
 
+// Direct SVG rules support label-less children; icon props use the data-slot wrapper.
 const TEXT_MODE_ADORNMENTS = cn(
   'gap-[.75em] rounded-full',
   '[&>[data-slot=button-icon]]:-ml-[.3em] [&>[data-slot=button-icon]]:opacity-50',
@@ -51,6 +52,7 @@ export const buttonVariants = cva(
         'icon-xs': cn(controlHeight.xs, 'ds-focus-orbit w-form-xs rounded-full'),
         'icon-sm': cn(controlHeight.sm, 'ds-focus-orbit w-form-sm rounded-full'),
         'icon-md': cn(controlHeight.md, 'ds-focus-orbit w-form-md rounded-full'),
+        // Icon lg stays 32px while text lg uses the shared 28px control height.
         'icon-lg': 'ds-focus-orbit size-8 rounded-full',
       },
     },
@@ -75,6 +77,7 @@ export interface ButtonProps
   to?: string;
   prefetch?: boolean | null;
   children: React.ReactNode;
+  /** Rendered before the label; ignored for icon-* sizes. */
   icon?: React.ReactNode;
   tooltip?: React.ReactNode;
   target?: string;
@@ -154,6 +157,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       </>
     );
 
+    // ButtonsGroup reads data-variant to draw dividers through opaque button backgrounds.
     const button = (
       <Component
         ref={ref}

@@ -11,6 +11,7 @@ import { inputHoverBorderWithin } from '@/ds/primitives/form-element';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
+// Preserve the root's content minimum so flex layouts cannot collapse the control.
 const inputGroupBaseClassName = cn(
   'group/input-group relative flex w-full flex-1 items-center',
   'border border-border1 text-neutral6',
@@ -22,6 +23,7 @@ const inputGroupBaseClassName = cn(
   'has-[textarea]:h-auto',
   'has-[>[data-align=inline-start]]:[&>[data-slot=input-group-control]]:pl-0',
   'has-[>[data-align=inline-end]]:[&>[data-slot=input-group-control]]:pr-0',
+  // Vertical groups need flex-none because flex-basis: 0% would collapse the control's height.
   'has-[>[data-align=block-start]]:[&>[data-slot=input-group-control]]:w-full has-[>[data-align=block-start]]:[&>[data-slot=input-group-control]]:flex-none',
   'has-[>[data-align=block-end]]:[&>[data-slot=input-group-control]]:w-full has-[>[data-align=block-end]]:[&>[data-slot=input-group-control]]:flex-none',
 );
@@ -128,6 +130,7 @@ const InputGroupAddon = React.forwardRef<HTMLDivElement, InputGroupAddonProps>(
 );
 InputGroupAddon.displayName = 'InputGroupAddon';
 
+// Subtract the root's two 1px borders so nested controls cannot grow the group past its size token.
 const inputGroupControlHeightBySize = cn(
   'group-data-[size=xs]/input-group:h-[calc(var(--spacing-form-xs)-2px)]',
   'group-data-[size=sm]/input-group:h-[calc(var(--spacing-form-sm)-2px)]',
@@ -162,6 +165,7 @@ const InputGroupInput = React.forwardRef<HTMLInputElement, InputGroupInputProps>
           'placeholder:text-neutral2 placeholder:transition-opacity placeholder:duration-normal',
           'focus:placeholder:opacity-70',
           'disabled:cursor-not-allowed',
+          // Custom steppers and clear buttons replace native number/search controls.
           '[&::-webkit-outer-spin-button]:m-0 [&::-webkit-outer-spin-button]:appearance-none',
           '[&::-webkit-inner-spin-button]:m-0 [&::-webkit-inner-spin-button]:appearance-none',
           '[&[type=number]]:[appearance:textfield]',

@@ -53,6 +53,7 @@ export const Tab = ({
     return () => observer.disconnect();
   }, [register, value, children, disabled, onClick, onClose]);
   useEffect(() => () => unregister?.(value), [unregister, value]);
+  // The tab renders a div, so disabled styling must also match Base UI aria/data attributes.
   const tabClassName =
     list?.variant === 'pill-ghost'
       ? cn(

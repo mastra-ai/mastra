@@ -76,6 +76,7 @@ export interface RowProps {
   style?: CSSProperties;
   onClick?: () => void;
   tabIndex?: number;
+  /** Focuses the row and scrolls it into view. */
   isActive?: boolean;
 }
 

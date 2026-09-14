@@ -4,6 +4,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from './select';
 
+// Base UI synthesizes PointerEvents, which this jsdom version does not implement.
 beforeAll(() => {
   if (typeof window.PointerEvent === 'undefined') {
     window.PointerEvent = window.MouseEvent as unknown as typeof PointerEvent;
@@ -88,6 +89,7 @@ describe('Select', () => {
     fireEvent.click(screen.getByRole('combobox'));
 
     const banana = await screen.findByRole('option', { name: 'Banana' });
+    // Base UI only commits a mouse click preceded by pointerdown on the same item.
     fireEvent.pointerDown(banana, { pointerType: 'mouse' });
     fireEvent.click(banana, { detail: 1 });
 

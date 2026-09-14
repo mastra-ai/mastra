@@ -96,6 +96,7 @@ const DropdownMenuSubContent = React.forwardRef<HTMLDivElement, DropdownMenuSubC
     },
     ref,
   ) => {
+    // Keep the submenu inside the modal's interaction boundary.
     const resolvedContainer = usePortalContainer();
     const positionerProps: DropdownMenuContentPositionerProps = {
       align,
@@ -154,6 +155,7 @@ const DropdownMenuContent = React.forwardRef<HTMLDivElement, DropdownMenuContent
     },
     ref,
   ) => {
+    // Keep the menu inside the modal's interaction boundary unless a container overrides it.
     const resolvedContainer = usePortalContainer(container);
     const positionerProps: DropdownMenuContentPositionerProps = {
       align,
@@ -189,6 +191,7 @@ DropdownMenuContent.displayName = 'DropdownMenuContent';
 type DropdownMenuItemProps = MenuPrimitive.Item.Props & {
   inset?: boolean;
   variant?: 'default' | 'destructive';
+  /** Compatibility alias for onClick from the previous Radix API. */
   onSelect?: MenuPrimitive.Item.Props['onClick'];
 };
 

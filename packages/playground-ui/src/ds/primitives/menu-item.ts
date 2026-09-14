@@ -1,6 +1,7 @@
 import { buttonVariants } from '@/ds/components/Button/Button';
 import { cn } from '@/lib/utils';
 
+// Block-level items keep w-max popups from measuring options side by side.
 const MENU_ITEM_OVERRIDES = cn(
   'flex w-full justify-start rounded-lg text-left select-none',
   'ds-focus-item',
@@ -18,6 +19,7 @@ export const menuItemDestructiveClass = cn(
   'data-highlighted:bg-accent2/10 data-highlighted:text-accent2',
 );
 
+// Apply to a wrapper: Button's direct-SVG margins would override ml-auto on the icon.
 export const menuItemTrailingIconClass =
   'ml-auto flex size-[1.1em] shrink-0 items-center justify-center [&>svg]:size-full';
 
@@ -27,6 +29,7 @@ export const menuItemInsetClass = 'pl-[calc(.9em+1.1em+.75em)]';
 
 export const MENU_SIDE_OFFSET = 4;
 
+// Hide detached popups instead of showing them at the floating fallback origin.
 export const menuPositionerClass = 'z-50 outline-none data-[anchor-hidden]:hidden';
 
 export const menuPopupClass = cn(

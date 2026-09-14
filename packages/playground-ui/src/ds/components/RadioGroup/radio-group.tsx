@@ -34,6 +34,7 @@ const RadioGroupItem = React.forwardRef<HTMLSpanElement, RadioGroupItemProps>(({
         'data-[checked]:border-neutral6 data-[checked]:bg-neutral6 data-[checked]:text-surface1',
         'data-[checked]:hover:border-neutral5 data-[checked]:hover:bg-neutral5',
         'data-[checked]:active:border-neutral4 data-[checked]:active:bg-neutral4',
+        // Base UI renders a span, so :disabled never matches the visible control.
         'data-[disabled]:cursor-not-allowed data-[disabled]:border-neutral6/[0.38] data-[disabled]:bg-neutral6/[0.38] data-[disabled]:hover:border-neutral6/[0.38] data-[disabled]:hover:bg-neutral6/[0.38] data-[disabled]:active:scale-100',
         'data-[disabled]:data-[checked]:border-neutral6/[0.38] data-[disabled]:data-[checked]:bg-neutral6/[0.38] data-[disabled]:data-[checked]:text-neutral6',
         className,

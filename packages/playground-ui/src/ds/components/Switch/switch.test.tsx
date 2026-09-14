@@ -4,6 +4,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { Switch } from './switch';
 
+// Base UI synthesizes PointerEvents, which this jsdom version does not implement.
 beforeAll(() => {
   if (typeof window.PointerEvent === 'undefined') {
     window.PointerEvent = window.MouseEvent as unknown as typeof PointerEvent;

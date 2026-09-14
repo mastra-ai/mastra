@@ -18,9 +18,11 @@ const inputVariants = cva(
     'transition-all duration-normal ease-out-custom',
     'placeholder:text-neutral2 placeholder:transition-opacity placeholder:duration-normal',
     'focus:placeholder:opacity-70',
+    // Native number spinners clip pill corners; compose InputGroup buttons for a stepper.
     '[&::-webkit-outer-spin-button]:m-0 [&::-webkit-outer-spin-button]:appearance-none',
     '[&::-webkit-inner-spin-button]:m-0 [&::-webkit-inner-spin-button]:appearance-none',
     '[&[type=number]]:[appearance:textfield]',
+    // Custom InputGroup clear buttons replace the browser's search-clear control.
     '[&::-webkit-search-cancel-button]:appearance-none',
   ),
   {
