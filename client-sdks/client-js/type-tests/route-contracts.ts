@@ -46,10 +46,15 @@ import type {
   AgentControllerSessionState,
   AgentControllerThreadInfo,
 } from '../src/index.js';
+import type { AgentBuilder } from '../src/resources/agent-builder.js';
+import type { Agent } from '../src/resources/agent.js';
+import type { MCPTool } from '../src/resources/mcp-tool.js';
+import type { MemoryThread } from '../src/resources/memory-thread.js';
 import type {
   ListTracesArgs as ObservabilityListTracesArgs,
   ListTracesResponse as ObservabilityListTracesResponse,
 } from '../src/resources/observability-route-types.js';
+import type { Vector } from '../src/resources/vector.js';
 
 type Equal<Actual, Expected> =
   (<T>() => T extends Actual ? 1 : 2) extends <T>() => T extends Expected ? 1 : 2 ? true : false;
@@ -180,6 +185,33 @@ type _StoredWorkspaceListInput = Expect<
 >;
 type _StoredMcpClient = Expect<
   Equal<StoredMCPClientResponse['id'], RouteResponse<'GET /stored/mcp-clients/:storedMCPClientId'>['id']>
+>;
+type _VectorDelete = Expect<
+  Equal<ReturnType<Vector['delete']>, Promise<RouteResponse<'DELETE /vector/:vectorName/indexes/:indexName'>>>
+>;
+type _VectorUpsert = Expect<
+  Equal<ReturnType<Vector['upsert']>, Promise<RouteResponse<'POST /vector/:vectorName/upsert'>>>
+>;
+type _MemoryThreadDelete = Expect<
+  Equal<ReturnType<MemoryThread['delete']>, Promise<RouteResponse<'DELETE /memory/threads/:threadId'>>>
+>;
+type _MemoryMessagesDelete = Expect<
+  Equal<ReturnType<MemoryThread['deleteMessages']>, Promise<RouteResponse<'POST /memory/messages/delete'>>>
+>;
+type _McpToolExecute = Expect<
+  Equal<ReturnType<MCPTool['execute']>, Promise<RouteResponse<'POST /mcp/:serverId/tools/:toolId/execute'>>>
+>;
+type _AgentMessage = Expect<
+  Equal<ReturnType<Agent['sendMessage']>, Promise<RouteResponse<'POST /agents/:agentId/send-message'>>>
+>;
+type _AgentSignal = Expect<
+  Equal<ReturnType<Agent['sendSignal']>, Promise<RouteResponse<'POST /agents/:agentId/signals'>>>
+>;
+type _AgentBuilderStart = Expect<
+  Equal<ReturnType<AgentBuilder['startActionRun']>, Promise<RouteResponse<'POST /agent-builder/:actionId/start'>>>
+>;
+type _AgentBuilderResume = Expect<
+  Equal<ReturnType<AgentBuilder['resume']>, Promise<RouteResponse<'POST /agent-builder/:actionId/resume'>>>
 >;
 type _StoredScorer = Expect<
   Equal<StoredScorerResponse['id'], RouteResponse<'GET /stored/scorers/:storedScorerId'>['id']>

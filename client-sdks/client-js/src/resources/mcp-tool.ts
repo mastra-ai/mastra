@@ -1,4 +1,5 @@
 import type { RequestContext } from '@mastra/core/request-context';
+import type { Body, RouteResponse } from '../route-types.generated.js';
 import type { ClientOptions, McpToolInfo } from '../types';
 import { requestContextQueryString } from '../utils';
 import { BaseResource } from './base';
@@ -33,14 +34,12 @@ export class MCPTool extends BaseResource {
    * @param params - Parameters for tool execution, including data/args and optional requestContext.
    * @returns Promise containing the result of the tool execution.
    */
-  execute(params: { data?: any; requestContext?: RequestContext }): Promise<any> {
-    const body: { data?: any; requestContext?: RequestContext } = {};
-    if (params.data !== undefined) body.data = params.data;
-    if (params.requestContext !== undefined) body.requestContext = params.requestContext;
-
+  execute(
+    params: Body<'POST /mcp/:serverId/tools/:toolId/execute'> & { requestContext?: RequestContext },
+  ): Promise<RouteResponse<'POST /mcp/:serverId/tools/:toolId/execute'>> {
     return this.request(`/mcp/${encodeURIComponent(this.serverId)}/tools/${encodeURIComponent(this.toolId)}/execute`, {
       method: 'POST',
-      body,
+      body: params,
     });
   }
 }
