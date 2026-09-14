@@ -57,7 +57,7 @@ export const paginationInfoSchema = z.object({
  * The lower bound is 0 rather than 1 because `perPage: 0` is a supported
  * storage contract (the include-only fast path).
  */
-const paginationNumber = () => z.coerce.number().int().min(0);
+export const paginationNumber = () => z.coerce.number().int().min(0);
 
 /**
  * Factory function for page/perPage pagination query params

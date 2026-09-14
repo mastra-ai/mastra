@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { createPagePaginationSchema } from './common';
+import { paginationNumber } from './common';
 
 export const backgroundTaskStatusSchema = z.enum([
   'pending',
@@ -21,7 +21,7 @@ export const backgroundTaskStreamQuerySchema = z.object({
 
 export const backgroundTaskDateColumnSchema = z.enum(['createdAt', 'startedAt', 'suspendedAt', 'completedAt']);
 
-export const listBackgroundTasksQuerySchema = createPagePaginationSchema().extend({
+export const listBackgroundTasksQuerySchema = z.object({
   agentId: z.string().optional(),
   status: backgroundTaskStatusSchema.optional(),
   runId: z.string().optional(),
@@ -34,6 +34,8 @@ export const listBackgroundTasksQuerySchema = createPagePaginationSchema().exten
   dateFilterBy: backgroundTaskDateColumnSchema.optional(),
   orderBy: backgroundTaskDateColumnSchema.optional(),
   orderDirection: z.enum(['asc', 'desc']).optional(),
+  page: paginationNumber().optional(),
+  perPage: paginationNumber().optional(),
 });
 
 export const backgroundTaskIdPathParams = z.object({
