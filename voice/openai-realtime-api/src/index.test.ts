@@ -146,6 +146,18 @@ describe('OpenAIRealtimeVoice', () => {
       expect(sent.filter((ev: any) => ev.type === 'response.create')).toHaveLength(1);
     });
 
+    it('should ignore function_calls for tools that were not added', async () => {
+      (voice as any).ws = { on: vi.fn(), send: vi.fn(), close: vi.fn() };
+
+      await (voice as any).handleFunctionCalls({
+        response: {
+          output: [{ type: 'function_call', name: 'external_tool', call_id: '1', arguments: '{}' }],
+        },
+      });
+
+      expect((voice as any).ws.send).not.toHaveBeenCalled();
+    });
+
     it('should not send response.create when there are no function_call outputs', async () => {
       (voice as any).ws = { on: vi.fn(), send: vi.fn(), close: vi.fn() };
 
