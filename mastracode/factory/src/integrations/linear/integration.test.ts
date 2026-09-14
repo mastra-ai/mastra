@@ -233,6 +233,39 @@ describe('LinearIntegration capability surface', () => {
     expect(projectless.sourceId).toBe(teamSourceId);
   });
 
+  it('returns projectless team issues from the generic listItems surface', async () => {
+    const linear = integration();
+    const teamSourceId = 'linear-team:team-1';
+    const projectlessTeamIssue: LinearIssue = {
+      ...issue,
+      id: 'issue-2',
+      identifier: 'ENG-99',
+      projectId: null,
+    };
+    vi.spyOn(linear, 'loadConnection').mockResolvedValue({} as never);
+    vi.spyOn(linear, 'getFreshAccessToken').mockResolvedValue('linear-token');
+    const listActiveIssues = vi
+      .spyOn(linear, 'listActiveIssues')
+      .mockResolvedValue({ issues: [projectlessTeamIssue], nextCursor: null });
+
+    const result = await linear.intake.listItems({
+      orgId: 'org-1',
+      userId: 'user-1',
+      sourceIds: [teamSourceId],
+    });
+
+    expect(listActiveIssues).toHaveBeenCalledWith(
+      'linear-token',
+      undefined,
+      undefined,
+      undefined,
+      ['team-1'],
+    );
+    expect(result.items).toEqual([
+      expect.objectContaining({ sourceId: teamSourceId, source: expect.objectContaining({ externalId: 'issue-2' }) }),
+    ]);
+  });
+
   it('keeps the original single-query path for a project-only selection', async () => {
     const linear = integration();
     const listActiveIssues = vi

@@ -545,20 +545,20 @@ export class LinearIntegration implements FactoryIntegration {
       const connection = await this.loadConnection(orgId);
       if (!connection) return { items: [], nextCursor: null };
       const accessToken = await this.getFreshAccessToken(connection);
-      const page = await this.listActiveIssues(accessToken, cursor, sourceIds);
+      const page = await this.#listIntakeIssues({
+        connection: { type: 'oauth', accessToken },
+        sourceIds,
+        cursor,
+      });
       return {
         items: page.issues.flatMap(issue => {
-          // The generic item list keys each item by its source id. Projectless
-          // issues have no project source id here; they surface through the
-          // team-aware `listIssues` path instead, so skip them in this legacy
-          // project-keyed view rather than emitting an unroutable null id.
-          if (issue.projectId === null) return [];
+          if (!issue.sourceId) return [];
           return [
             {
               source: { type: 'issue', externalId: issue.id, url: issue.url },
-              sourceId: issue.projectId,
+              sourceId: issue.sourceId,
               title: `${issue.identifier}: ${issue.title}`,
-              status: issue.state,
+              status: issue.state ?? '',
               labels: issue.labels,
               assignee: issue.assignee,
               createdAt: issue.createdAt,
@@ -566,8 +566,8 @@ export class LinearIntegration implements FactoryIntegration {
               metadata: {
                 identifier: issue.identifier,
                 stateType: issue.stateType,
-                priority: issue.priorityLabel,
-                team: issue.team,
+                priority: issue.priority,
+                team: issue.source,
               },
             },
           ];
