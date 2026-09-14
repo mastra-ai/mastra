@@ -9,10 +9,15 @@ export function collectInngestFunctions({
   mastra: Mastra;
   functions?: InngestFunction.Like[];
 }) {
-  const workflows = mastra.listWorkflows();
+  const workflows = Object.values(mastra.listWorkflows());
+  // Mastra hides each durable agent's backing loop workflow from listWorkflows()
+  // because it is internal plumbing, but Inngest still has to serve it.
+  const durableAgentWorkflows = Object.values(mastra.listAgents()).flatMap(
+    agent => (agent as { getDurableWorkflows?: () => unknown[] }).getDurableWorkflows?.() ?? [],
+  );
   const workflowFunctions = Array.from(
     new Set(
-      Object.values(workflows).flatMap(workflow => {
+      Array.from(new Set([...workflows, ...durableAgentWorkflows])).flatMap(workflow => {
         if (workflow instanceof InngestWorkflow) {
           workflow.__registerMastra(mastra);
           return workflow.getFunctions();
