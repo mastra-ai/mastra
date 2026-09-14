@@ -10,6 +10,7 @@ import { DatasetsList, DatasetsToolbar, getDatasetTagOptions } from '@/domains/d
 import { NoDatasetsInfo } from '@/domains/datasets/components/datasets-list/no-datasets-info';
 import { useInfiniteDatasets } from '@/domains/datasets/hooks/use-datasets';
 import { useExperiments } from '@/domains/datasets/hooks/use-experiments';
+import { useTargetFilterParams } from '@/domains/shared/hooks/use-target-filter-params';
 import { RouteHeaderActions } from '@/lib/route-header';
 
 export default function Datasets() {
@@ -17,6 +18,7 @@ export default function Datasets() {
   const [search, setSearch] = useState('');
   const [experimentFilter, setExperimentFilter] = useState('all');
   const [tagFilter, setTagFilter] = useState('all');
+  const { targetType, targetId, setTargetType, setTargetId, clear: clearTarget } = useTargetFilterParams();
 
   const {
     data: datasets = [],
@@ -25,7 +27,7 @@ export default function Datasets() {
     isFetchingNextPage,
     hasNextPage,
     setEndOfListElement,
-  } = useInfiniteDatasets();
+  } = useInfiniteDatasets({ targetType, targetId });
   const { data: experimentsData, isLoading: isLoadingExperiments, error: errorExperiments } = useExperiments();
 
   const experiments = useMemo(() => experimentsData?.experiments ?? [], [experimentsData?.experiments]);
@@ -68,7 +70,8 @@ export default function Datasets() {
     );
   }
 
-  if (datasets.length === 0 && !isLoading) {
+  // With a target filter active, keep the toolbar so the user can reset it.
+  if (datasets.length === 0 && !isLoading && !targetType) {
     return (
       <NoDataPageLayout>
         {headerCreateAction}
@@ -77,12 +80,13 @@ export default function Datasets() {
     );
   }
 
-  const hasFilters = experimentFilter !== 'all' || tagFilter !== 'all' || search !== '';
+  const hasFilters = experimentFilter !== 'all' || tagFilter !== 'all' || search !== '' || targetType !== '';
 
   const resetFilters = () => {
     setSearch('');
     setExperimentFilter('all');
     setTagFilter('all');
+    clearTarget();
   };
 
   return (
@@ -97,6 +101,10 @@ export default function Datasets() {
           tagFilter={tagFilter}
           onTagFilterChange={setTagFilter}
           tagOptions={datasetTagOptions}
+          targetType={targetType}
+          onTargetTypeChange={setTargetType}
+          targetId={targetId}
+          onTargetIdChange={setTargetId}
           onReset={resetFilters}
           hasActiveFilters={hasFilters}
         />

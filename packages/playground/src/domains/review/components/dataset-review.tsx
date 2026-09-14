@@ -1,3 +1,4 @@
+import type { ExperimentTargetType } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
@@ -55,6 +56,10 @@ export interface DatasetReviewProps {
   datasetId?: string;
   /** When set, scopes the review (and completed) lists to items produced by this experiment; otherwise project-wide. */
   experimentId?: string;
+  /** When set, scopes the lists to experiments run against this target type (server-side). */
+  targetType?: ExperimentTargetType | '';
+  /** When set, scopes the lists to experiments run against this target ID (server-side). */
+  targetId?: string;
   /**
    * Optional request from the parent to auto-feature this item. Whenever this prop changes
    * to a non-null value, the matching review row is selected. Internal interactions still
@@ -72,6 +77,8 @@ export interface DatasetReviewProps {
 export function DatasetReview({
   datasetId,
   experimentId,
+  targetType,
+  targetId,
   featuredItemId: featuredItemIdRequest,
   detailPanelVariant = 'inline',
   toolbarStart,
@@ -82,8 +89,12 @@ export function DatasetReview({
   const { data: dataset } = useDataset(datasetId ?? '');
   // Keep `undefined` while loading: the hydration effect below treats a defined
   // value as "server data arrived", so coercing to [] here would lock in an empty queue.
-  const { data: reviewItems, isLoading: isLoadingReview } = useReviewItems({ experimentId });
-  const { data: completedItems, isLoading: isLoadingCompleted } = useCompletedItems({ experimentId });
+  const { data: reviewItems, isLoading: isLoadingReview } = useReviewItems({ experimentId, targetType, targetId });
+  const { data: completedItems, isLoading: isLoadingCompleted } = useCompletedItems({
+    experimentId,
+    targetType,
+    targetId,
+  });
   const { updateExperimentResult } = useDatasetMutations();
 
   // Local state

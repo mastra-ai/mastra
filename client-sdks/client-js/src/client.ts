@@ -191,6 +191,7 @@ import type {
   DatasetExperimentResult,
   DatasetExperimentResultRow,
   ListExperimentsParams,
+  ListDatasetsParams,
   ExperimentReviewCounts,
   CreateDatasetParams,
   UpdateDatasetParams,
@@ -1938,13 +1939,12 @@ export class MastraClient extends BaseResource {
   /**
    * Lists all datasets with optional pagination
    */
-  public listDatasets(pagination?: {
-    page?: number;
-    perPage?: number;
-  }): Promise<{ datasets: DatasetRecord[]; pagination: PaginationInfo }> {
+  public listDatasets(params?: ListDatasetsParams): Promise<{ datasets: DatasetRecord[]; pagination: PaginationInfo }> {
     const searchParams = new URLSearchParams();
-    if (pagination?.page !== undefined) searchParams.set('page', String(pagination.page));
-    if (pagination?.perPage !== undefined) searchParams.set('perPage', String(pagination.perPage));
+    if (params?.page !== undefined) searchParams.set('page', String(params.page));
+    if (params?.perPage !== undefined) searchParams.set('perPage', String(params.perPage));
+    if (params?.targetType !== undefined) searchParams.set('targetType', params.targetType);
+    for (const id of params?.targetIds ?? []) searchParams.append('targetIds', id);
     const qs = searchParams.toString();
     return this.request(`/datasets${qs ? `?${qs}` : ''}`);
   }
@@ -2193,6 +2193,8 @@ export class MastraClient extends BaseResource {
     if (params?.comparisonId !== undefined) searchParams.set('comparisonId', params.comparisonId);
     if (params?.variantId !== undefined) searchParams.set('variantId', params.variantId);
     if (params?.trialIndex !== undefined) searchParams.set('trialIndex', String(params.trialIndex));
+    if (params?.targetType !== undefined) searchParams.set('targetType', params.targetType);
+    if (params?.targetId !== undefined) searchParams.set('targetId', params.targetId);
     const qs = searchParams.toString();
     return this.request(`/experiments${qs ? `?${qs}` : ''}`);
   }
@@ -2218,6 +2220,8 @@ export class MastraClient extends BaseResource {
     if (params?.comparisonId !== undefined) searchParams.set('comparisonId', params.comparisonId);
     if (params?.variantId !== undefined) searchParams.set('variantId', params.variantId);
     if (params?.trialIndex !== undefined) searchParams.set('trialIndex', String(params.trialIndex));
+    if (params?.targetType !== undefined) searchParams.set('targetType', params.targetType);
+    if (params?.targetId !== undefined) searchParams.set('targetId', params.targetId);
     const qs = searchParams.toString();
     return this.request(`/datasets/${encodeURIComponent(datasetId)}/experiments${qs ? `?${qs}` : ''}`);
   }

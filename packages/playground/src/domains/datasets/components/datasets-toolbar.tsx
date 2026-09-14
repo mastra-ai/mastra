@@ -4,6 +4,8 @@ import { SelectFieldBlock } from '@mastra/playground-ui/components/FormFieldBloc
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { XIcon } from 'lucide-react';
 import { DATASET_EXPERIMENT_OPTIONS } from './datasets-list/helpers';
+import type { DatasetTargetType } from './target-type-options';
+import { TargetFilter } from '@/domains/shared/components/target-filter';
 
 export interface DatasetsToolbarTagOption {
   value: string;
@@ -18,6 +20,10 @@ export interface DatasetsToolbarProps {
   tagFilter: string;
   onTagFilterChange: (value: string) => void;
   tagOptions: DatasetsToolbarTagOption[];
+  targetType: DatasetTargetType | '';
+  onTargetTypeChange: (type: DatasetTargetType | '') => void;
+  targetId: string;
+  onTargetIdChange: (id: string) => void;
   onReset?: () => void;
   hasActiveFilters?: boolean;
 }
@@ -30,6 +36,10 @@ export function DatasetsToolbar({
   tagFilter,
   onTagFilterChange,
   tagOptions,
+  targetType,
+  onTargetTypeChange,
+  targetId,
+  onTargetIdChange,
   onReset,
   hasActiveFilters,
 }: DatasetsToolbarProps) {
@@ -44,6 +54,12 @@ export function DatasetsToolbar({
         />
       </div>
       <ButtonsGroup>
+        <TargetFilter
+          targetType={targetType}
+          targetId={targetId}
+          onTargetTypeChange={onTargetTypeChange}
+          onTargetIdChange={onTargetIdChange}
+        />
         <SelectFieldBlock
           label="Experiments"
           labelIsHidden
