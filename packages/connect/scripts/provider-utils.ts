@@ -27,9 +27,9 @@ export interface ProviderManifest {
 }
 
 export function validateProviderId(id: string, label: string): void {
-  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(id) || id === '.' || id === '..') {
+  if (!/^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$/.test(id)) {
     throw new Error(
-      `${label} must be a safe directory identifier containing only letters, numbers, dots, underscores, and hyphens.`,
+      `${label} must be a safe directory identifier containing only letters, numbers, dots, underscores, and hyphens, and must end with a letter or number.`,
     );
   }
 }

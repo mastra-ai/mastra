@@ -224,6 +224,12 @@ describe('maintainer provider commands', () => {
     ).rejects.toThrow('Local ID must be a safe directory identifier');
   });
 
+  it.each(['unsafe-', 'unsafe_', 'unsafe.'])('rejects a local ID ending in a separator: %s', async localId => {
+    await expect(
+      addProvider({ providerId: 'first-provider', localId, yes: true, expectedTemplateSha: templateSha }),
+    ).rejects.toThrow('must end with a letter or number');
+  });
+
   it('removes a provider only after confirmation and updates the provider index', async () => {
     await addProvider({ providerId: 'first-provider', localId: 'local', yes: true, expectedTemplateSha: templateSha });
 
