@@ -112,6 +112,7 @@ function NodeNodeComponent({ data, selected }: NodeProps<NodeFlowNode>) {
           <Badge
             variant="neutral"
             size="xs"
+            className="bg-neutral3"
             aria-label={`${node.memberCount}${node.memberCountTruncated ? '+' : ''} direct members`}
           >
             {node.memberCount}
