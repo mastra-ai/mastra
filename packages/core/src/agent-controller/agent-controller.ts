@@ -8,6 +8,7 @@ import type { ActiveThreadRun } from '../agent/thread-stream-runtime';
 import type { AgentInstructions, ToolsInput, ToolsetsInput } from '../agent/types';
 import type { MastraBrowser } from '../browser/browser';
 import { AgentControllerChannels } from '../channels/agent-controller-channels';
+import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import { GatewayManager } from '../llm/model/gateways';
 import { defaultGateways } from '../llm/model/gateways/defaults';
 import type { MastraModelConfig } from '../llm/model/shared.types';
@@ -1113,18 +1114,59 @@ export class AgentController<TState = {}> {
     newSessionScope: string;
     requestContext?: RequestContext;
   }): Promise<AgentControllerThread> {
-    if (this.#pendingMessageEdits.has(newThreadId)) throw new Error('Edited thread is already being created');
+    if (this.#pendingMessageEdits.has(newThreadId))
+      throw new MastraError({
+        id: 'AGENT_CONTROLLER_EDIT_CONFLICT',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: 'Edited thread is already being created',
+        details: { status: 409 },
+      });
     this.#pendingMessageEdits.add(newThreadId);
     try {
-      if (!content.trim()) throw new Error('The edited message must not be empty');
-      if (!newThreadId || !newSessionScope) throw new Error('An edited copy requires its own thread and session scope');
+      if (!content.trim())
+        throw new MastraError({
+          id: 'AGENT_CONTROLLER_EDIT_INVALID_INPUT',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          text: 'The edited message must not be empty',
+          details: { status: 400 },
+        });
+      if (!newThreadId || !newSessionScope)
+        throw new MastraError({
+          id: 'AGENT_CONTROLLER_EDIT_INVALID_INPUT',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          text: 'An edited copy requires its own thread and session scope',
+          details: { status: 400 },
+        });
       await this.initStorage();
       const store = await this.getMemoryStorage();
       const source = await store.getThreadById({ threadId: sourceThreadId });
-      if (!source || source.resourceId !== resourceId) throw new Error('Source thread not found');
-      if (await store.getThreadById({ threadId: newThreadId })) throw new Error('Edited thread already exists');
+      if (!source || source.resourceId !== resourceId)
+        throw new MastraError({
+          id: 'AGENT_CONTROLLER_EDIT_NOT_FOUND',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          text: 'Source thread not found',
+          details: { status: 404 },
+        });
+      if (await store.getThreadById({ threadId: newThreadId }))
+        throw new MastraError({
+          id: 'AGENT_CONTROLLER_EDIT_CONFLICT',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          text: 'Edited thread already exists',
+          details: { status: 409 },
+        });
       if (await this.getSessionByResource(resourceId, newSessionScope))
-        throw new Error('Edited session already exists');
+        throw new MastraError({
+          id: 'AGENT_CONTROLLER_EDIT_CONFLICT',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          text: 'Edited session already exists',
+          details: { status: 409 },
+        });
       const { messages } = await store.listMessages({
         threadId: sourceThreadId,
         resourceId,
@@ -1133,7 +1175,14 @@ export class AgentController<TState = {}> {
       });
       const index = messages.findIndex(message => message.id === messageId);
       const original = messages[index];
-      if (!original || !isUserAuthoredMessage(original)) throw new Error('User message not found');
+      if (!original || !isUserAuthoredMessage(original))
+        throw new MastraError({
+          id: 'AGENT_CONTROLLER_EDIT_NOT_FOUND',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          text: 'User message not found',
+          details: { status: 404 },
+        });
       const originalContents = mastraDBMessageToSignal({ ...original, type: 'user' }).contents;
       const files = typeof originalContents === 'string' ? [] : originalContents.filter(part => part.type === 'file');
       const { workingMemory: _workingMemory, ...metadata } = source.metadata ?? {};

@@ -139,7 +139,8 @@ describe('Controller edited conversations', () => {
     { newSessionScope: '' },
   ])('rejects invalid or foreign edits before creating a copy: %j', async patch => {
     const f = await fixture();
-    await expect(f.controller.editMessage({ ...f.input, ...patch })).rejects.toThrow();
+    const status = 'content' in patch || 'newSessionScope' in patch ? 400 : 'newThreadId' in patch ? 409 : 404;
+    await expect(f.controller.editMessage({ ...f.input, ...patch })).rejects.toMatchObject({ details: { status } });
     expect(await f.store.getThreadById({ threadId: 'edited' })).toBeNull();
     expect(f.sendSignal).not.toHaveBeenCalled();
   });
