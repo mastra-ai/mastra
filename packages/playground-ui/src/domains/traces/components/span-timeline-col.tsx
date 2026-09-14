@@ -22,7 +22,7 @@ export function SpanTimelineCol({ ctx }: SpanTimelineColProps) {
           'bg-surface4': isSelected,
         })}
       >
-        <div className="relative h-5 w-full rounded-sm bg-surface4">
+        <div className="bg-surface4 relative h-5 w-full rounded-sm">
           <div
             data-testid="span-timeline-bar"
             className="absolute top-0 h-5 rounded-sm"

@@ -31,8 +31,8 @@ export function TraceMessagesPanel({
 
   return (
     <div data-testid="messages-panel" className={cn('flex h-full min-h-0 flex-col', className)}>
+      {/* Compact, same height as the tab bar it sits next to. */}
       {fullThreadHref && hasOtherTraces && (
-        // Compact, same height as the tab bar it sits next to.
         <DataPanel.Header className="flex min-h-0 items-center justify-center px-2 py-1">
           <Button icon={<Eye />} as={Link} href={fullThreadHref} variant="default" size="xs">
             View full thread

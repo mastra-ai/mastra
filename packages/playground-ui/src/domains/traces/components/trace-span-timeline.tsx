@@ -57,7 +57,7 @@ export function TraceSpanTimeline({
       <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(12rem,1fr)] content-start items-start gap-y-px overflow-hidden py-1">
         <div
           aria-label="Trace time axis"
-          className="col-start-3 flex justify-between px-1 pr-2 pb-1 text-ui-xs text-neutral3"
+          className="text-ui-xs text-neutral3 col-start-3 flex justify-between px-1 pr-2 pb-1"
         >
           {TICKS.map(tick => (
             <span key={tick}>{formatTick(overallLatency * tick)}</span>

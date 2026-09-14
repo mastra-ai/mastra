@@ -84,7 +84,7 @@ export function ThreadTraceSpansTab({
           />
         </div>
         {overflows && isClamped && (
-          <div className="absolute inset-x-0 bottom-0 flex h-20 items-end justify-center bg-linear-to-t from-surface1 via-surface1/80 to-transparent pb-2">
+          <div className="from-surface1 via-surface1/80 absolute inset-x-0 bottom-0 flex h-20 items-end justify-center bg-linear-to-t to-transparent pb-2">
             <Button icon={<ChevronDown />} variant="ghost" size="sm" onClick={() => setExpanded(true)}>
               Show more
             </Button>

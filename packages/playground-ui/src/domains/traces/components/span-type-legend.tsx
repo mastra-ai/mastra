@@ -33,7 +33,7 @@ export function SpanTypeLegend({ spans }: { spans: UISpan[] }) {
       {usedSpanTypes.map(type => {
         const spanUI = getSpanTypeUi(type);
         return (
-          <div key={type} className="flex shrink-0 items-center gap-1 text-ui-sm text-neutral3">
+          <div key={type} className="text-ui-sm text-neutral3 flex shrink-0 items-center gap-1">
             <span className="inline-block size-1.5 shrink-0 rounded-full" style={{ backgroundColor: spanUI?.color }} />
             {spanUI?.label || type}
           </div>
