@@ -1552,6 +1552,42 @@ describe('Agent signals', () => {
     subscription.unsubscribe();
   });
 
+  it('wakes idle threads through the registered thread-runtime agent instead of the wrapped agent', async () => {
+    // Durable wrappers that are not Agent subclasses (the Inngest Proxy) forward
+    // sendSignal() to the wrapped agent. The runtime must still start the idle
+    // run on the wrapper so the woken turn takes the durable path.
+    const pubsub = new EventEmitterPubSub();
+    const agent = new Agent({
+      id: 'runtime-agent-wrapper',
+      name: 'Runtime Agent Wrapper',
+      instructions: 'Test',
+      model: createTextStreamModel('wrapped response'),
+      pubsub,
+    });
+    const wrapper = {
+      id: agent.id,
+      stream: vi.fn((...args: Parameters<Agent['stream']>) => agent.stream(...args)),
+    };
+    agent.__setThreadRuntimeAgent(wrapper as unknown as Agent<any, any, any, any>);
+
+    const signalResult = await agent.sendSignal(
+      { type: 'user-message', contents: 'Hello through the wrapper' },
+      {
+        resourceId: 'wrapper-user',
+        threadId: 'wrapper-thread',
+        ifIdle: { streamOptions: { memory: { resource: 'wrapper-user', thread: 'wrapper-thread' } } },
+      },
+    );
+
+    const accepted = await signalResult.accepted;
+    expect(accepted).toMatchObject({ action: 'wake' });
+    if (accepted.action !== 'wake') throw new Error('Expected signal wake');
+    expect(await accepted.output.text).toBe('wrapped response');
+    expect(wrapper.stream).toHaveBeenCalledTimes(1);
+    expect(wrapper.stream.mock.calls[0]?.[0]).toBe(signalResult.signal);
+    expect(wrapper.stream.mock.calls[0]?.[1]).toMatchObject({ untilIdle: true, runId: accepted.runId });
+  });
+
   it('delivers directly when the current runtime owns the thread claim', async () => {
     const pubsub = new EventEmitterPubSub();
     const agent = new Agent({
