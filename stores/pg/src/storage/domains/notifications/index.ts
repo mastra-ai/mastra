@@ -453,7 +453,8 @@ export class NotificationsPG extends NotificationsStorage {
     ids: string[];
     status: NotificationStatus;
   }): Promise<NotificationRecord[]> {
-    if (input.ids.length === 0) return [];
+    const ids = Array.from(new Set(input.ids));
+    if (ids.length === 0) return [];
 
     const now = new Date();
     const assignments: Record<string, unknown> = {
@@ -465,13 +466,14 @@ export class NotificationsPG extends NotificationsStorage {
     const setClause = columns
       .map((column, index) => `"${parseSqlIdentifier(column, 'column name')}" = $${index + 1}`)
       .join(', ');
-    const idPlaceholders = input.ids.map((_, index) => `$${columns.length + 2 + index}`).join(', ');
 
     const schemaName = getSchemaName(this.#schema);
     const tableName = getTableName({ indexName: TABLE_NOTIFICATIONS, schemaName });
+    // Bind the id list as one array parameter so the statement's parameter count is
+    // independent of how many ids are passed.
     const rows = await this.#db.client.manyOrNone(
-      `UPDATE ${tableName} SET ${setClause} WHERE "threadId" = $${columns.length + 1} AND "id" IN (${idPlaceholders}) RETURNING *`,
-      [...Object.values(assignments), input.threadId, ...input.ids],
+      `UPDATE ${tableName} SET ${setClause} WHERE "threadId" = $${columns.length + 1} AND "id" = ANY($${columns.length + 2}::text[]) RETURNING *`,
+      [...Object.values(assignments), input.threadId, ids],
     );
     return rows.map(rowToNotification);
   }

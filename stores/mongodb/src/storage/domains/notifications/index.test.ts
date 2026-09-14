@@ -264,6 +264,27 @@ describe('NotificationsMongoDB', () => {
     expect(updated.summarySignalId).toBe('summary-1');
   });
 
+  it('bulk status update accepts more ids than one statement can bind and returns each record once', async () => {
+    const ids = Array.from({ length: 1200 }, (_, index) => `n-${index}`);
+    for (const id of ids) {
+      await store.createNotification({ id, threadId: 'thread-1', source: 'email', kind: 'dm', summary: id });
+    }
+
+    // 40k ids exceeds any single-statement bind-parameter limit (SQLite caps at 32,766);
+    // most are unknown ids so the test stays fast while still stressing the parameter count.
+    const missing = Array.from({ length: 40_000 - ids.length }, (_, index) => `missing-${index}`);
+    const updated = await store.updateNotificationsStatus({
+      threadId: 'thread-1',
+      ids: [...ids, ...ids.slice(0, 10), ...missing],
+      status: 'seen',
+    });
+
+    expect(updated).toHaveLength(ids.length);
+    expect(new Set(updated.map(notification => notification.id)).size).toBe(ids.length);
+    expect(updated.every(notification => notification.status === 'seen')).toBe(true);
+    await expect(store.listNotifications({ threadId: 'thread-1', status: 'pending' })).resolves.toEqual([]);
+  });
+
   it('updates the status of many notifications in one write, scoped to the thread', async () => {
     for (const id of ['a', 'b', 'c']) {
       await store.createNotification({ id, threadId: 'thread-1', source: 'email', kind: 'dm', summary: id });
@@ -272,7 +293,7 @@ describe('NotificationsMongoDB', () => {
 
     const updated = await store.updateNotificationsStatus({
       threadId: 'thread-1',
-      ids: ['a', 'b', 'missing'],
+      ids: ['a', 'b', 'missing', 'a'],
       status: 'seen',
     });
 

@@ -23,6 +23,9 @@ import { buildSelectColumns } from '../../db/utils';
 import { withClientWriteLock } from '../../db/write-lock';
 import { runPrune, resolveTargets } from '../../retention';
 
+/** Ids per UPDATE statement — keeps bind parameters well under SQLite's per-statement limit. */
+const BULK_ID_BATCH_SIZE = 500;
+
 const statusTimestamp = (status: NotificationStatus, now: Date) => {
   if (status === 'delivered') return { deliveredAt: now };
   if (status === 'seen') return { seenAt: now };
@@ -341,7 +344,8 @@ export class NotificationsLibSQL extends NotificationsStorage {
     ids: string[];
     status: NotificationStatus;
   }): Promise<NotificationRecord[]> {
-    if (input.ids.length === 0) return [];
+    const ids = Array.from(new Set(input.ids));
+    if (ids.length === 0) return [];
 
     const now = new Date();
     const assignments: Record<string, string> = { status: input.status, updatedAt: now.toISOString() };
@@ -352,18 +356,25 @@ export class NotificationsLibSQL extends NotificationsStorage {
       .map(column => `"${column}" = ?`)
       .join(', ');
 
-    const result = await this.#db.executeWriteOperationWithRetry(
-      () =>
-        withClientWriteLock(this.#client, () =>
-          this.#client.execute({
-            sql: `UPDATE "${TABLE_NOTIFICATIONS}" SET ${setClause} WHERE "threadId" = ? AND "id" IN (${input.ids.map(() => '?').join(', ')}) RETURNING ${buildSelectColumns(TABLE_NOTIFICATIONS)}`,
-            args: [...Object.values(assignments), input.threadId, ...input.ids],
-          }),
-        ),
-      `bulk update notification status in table ${TABLE_NOTIFICATIONS}`,
-    );
-
-    return (result.rows ?? []).map(row => rowToNotification(row as Record<string, unknown>));
+    const updated: NotificationRecord[] = [];
+    // SQLite caps bind parameters per statement (999 on older builds); batch the id list.
+    for (let offset = 0; offset < ids.length; offset += BULK_ID_BATCH_SIZE) {
+      const batch = ids.slice(offset, offset + BULK_ID_BATCH_SIZE);
+      const result = await this.#db.executeWriteOperationWithRetry(
+        () =>
+          withClientWriteLock(this.#client, () =>
+            this.#client.execute({
+              sql: `UPDATE "${TABLE_NOTIFICATIONS}" SET ${setClause} WHERE "threadId" = ? AND "id" IN (${batch.map(() => '?').join(', ')}) RETURNING ${buildSelectColumns(TABLE_NOTIFICATIONS)}`,
+              args: [...Object.values(assignments), input.threadId, ...batch],
+            }),
+          ),
+        `bulk update notification status in table ${TABLE_NOTIFICATIONS}`,
+      );
+      for (const row of result.rows ?? []) {
+        updated.push(rowToNotification(row as Record<string, unknown>));
+      }
+    }
+    return updated;
   }
 
   private async findCoalescable(input: CreateNotificationInput): Promise<NotificationRecord | undefined> {

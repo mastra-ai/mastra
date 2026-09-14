@@ -361,10 +361,11 @@ export class NotificationsMongoDB extends NotificationsStorage {
     ids: string[];
     status: NotificationStatus;
   }): Promise<NotificationRecord[]> {
-    if (input.ids.length === 0) return [];
+    const ids = Array.from(new Set(input.ids));
+    if (ids.length === 0) return [];
 
     const now = new Date();
-    const filter = { threadId: input.threadId, id: { $in: input.ids } };
+    const filter = { threadId: input.threadId, id: { $in: ids } };
     const collection = await this.getCollection();
     await collection.updateMany(filter, {
       $set: { status: input.status, ...statusTimestamp(input.status, now), updatedAt: now },

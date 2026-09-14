@@ -154,7 +154,7 @@ describe('notification inbox', () => {
 
     const updated = await storage.updateNotificationsStatus({
       threadId: 'thread-1',
-      ids: ['a', 'b', 'missing'],
+      ids: ['a', 'b', 'missing', 'a'],
       status: 'seen',
     });
     expect(updated.map(notification => notification.id).sort()).toEqual(['a', 'b']);
@@ -181,7 +181,7 @@ describe('notification inbox', () => {
 
     const updated = await storage.updateNotificationsStatus({
       threadId: 'thread-1',
-      ids: ['a', 'missing', 'b'],
+      ids: ['a', 'missing', 'b', 'a'],
       status: 'dismissed',
     });
     expect(single).toHaveBeenCalledTimes(3);

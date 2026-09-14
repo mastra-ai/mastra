@@ -22,17 +22,26 @@ export abstract class NotificationsStorage extends StorageDomain {
   abstract updateNotification(input: UpdateNotificationInput): Promise<NotificationRecord>;
 
   /**
-   * Set the same status on many notifications of one thread in a single write.
-   * Returns the records that were updated; ids that do not exist are skipped.
+   * Set the same status on many notifications of one thread.
+   * Returns each updated record once — duplicate ids are collapsed and ids that do not
+   * exist are skipped. Implementations must accept arbitrarily long id lists (batching
+   * internally where the backend limits bind parameters).
    * Adapters should override this with a native bulk update — the default issues one
    * `updateNotification` per id (omitting any that fail) so existing adapters keep working.
    */
   async updateNotificationsStatus(input: UpdateNotificationsStatusInput): Promise<NotificationRecord[]> {
     const results = await Promise.allSettled(
-      input.ids.map(id => this.updateNotification({ threadId: input.threadId, id, status: input.status })),
+      uniqueNotificationIds(input.ids).map(id =>
+        this.updateNotification({ threadId: input.threadId, id, status: input.status }),
+      ),
     );
     return results.flatMap(result => (result.status === 'fulfilled' ? [result.value] : []));
   }
+}
+
+/** Collapse duplicate ids so bulk updates touch and return each record once. */
+function uniqueNotificationIds(ids: string[]): string[] {
+  return Array.from(new Set(ids));
 }
 
 const cloneDate = (value?: Date) => (value ? new Date(value) : undefined);
@@ -202,7 +211,7 @@ export class InMemoryNotificationsStorage extends NotificationsStorage {
   override async updateNotificationsStatus(input: UpdateNotificationsStatusInput): Promise<NotificationRecord[]> {
     const now = new Date();
     const updated: NotificationRecord[] = [];
-    for (const id of input.ids) {
+    for (const id of uniqueNotificationIds(input.ids)) {
       const existing = this.#notifications.get(notificationKey(input.threadId, id));
       if (!existing) continue;
       const next: NotificationRecord = {
