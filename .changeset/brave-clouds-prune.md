@@ -1,14 +1,15 @@
 ---
-'@mastra/mysql': minor
+'@mastra/dsql': minor
 ---
 
 Added configurable age-based pruning for observability spans.
 
 ```typescript
-import { MySQLStore } from '@mastra/mysql'
+import { DSQLStore } from '@mastra/dsql'
 
-const storage = new MySQLStore({
-  connectionString: process.env.DATABASE_URL!,
+const storage = new DSQLStore({
+  id: 'dsql-storage',
+  host: 'abc123.dsql.us-east-1.on.aws',
   retention: {
     observability: {
       spans: { maxAge: '30d', batchSize: 1_000 },

@@ -1,13 +1,14 @@
 ---
-'@mastra/mysql': minor
+'@mastra/mssql': minor
 ---
 
 Added configurable age-based pruning for observability spans.
 
 ```typescript
-import { MySQLStore } from '@mastra/mysql'
+import { MSSQLStore } from '@mastra/mssql'
 
-const storage = new MySQLStore({
+const storage = new MSSQLStore({
+  id: 'mssql-storage',
   connectionString: process.env.DATABASE_URL!,
   retention: {
     observability: {

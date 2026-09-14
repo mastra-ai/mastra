@@ -1288,7 +1288,6 @@ export function buildRetentionEntries(retention: RetentionConfig): RetentionEntr
 
     const tables = SIGNAL_TO_TABLES[signal as keyof RetentionConfig];
     if (!tables) continue;
-    // Only these signals create deletion-request records. Metrics and logs don't have deletion APIs.
     if (signal === 'tracing' || signal === 'scores' || signal === 'feedback') {
       deletionSignalRetentionDays.push(safeDays);
     }
