@@ -99,6 +99,7 @@ type WithoutIndexSignatures<T> = {
 
 export type ListFeedbackResponse = GeneratedResponse<'GET /observability/feedback'>;
 export type FeedbackItem = ListFeedbackResponse['feedback'][number];
+export type GetMetricTimeSeriesResponse = GeneratedResponse<'POST /observability/metrics/timeseries'>;
 
 export interface ClientOptions {
   /** Base URL for API requests */
@@ -1388,14 +1389,7 @@ export interface CompareScorerVersionsResponse {
 
 export type ListAgentsModelProvidersResponse = GeneratedResponse<'GET /agents/providers'>;
 
-export interface Provider {
-  id: string;
-  name: string;
-  envVar: string | string[];
-  connected: boolean;
-  docUrl?: string;
-  models: string[];
-}
+export type Provider = ListAgentsModelProvidersResponse['providers'][number];
 
 // ============================================================================
 // System Types
@@ -2413,36 +2407,7 @@ export type { BuilderModelPolicy, DefaultModelEntry, ProviderModelEntry, ModelPr
 /**
  * Response from GET /editor/builder/settings
  */
-export interface BuilderSettingsResponse {
-  enabled: boolean;
-  features?: {
-    agent?: BuilderAgentFeatures;
-  };
-  configuration?: {
-    agent?: Record<string, unknown>;
-  };
-  /**
-   * Server-derived model policy. Always present; `{ active: false }` when no
-   * builder is configured. UI consumers should read this directly rather than
-   * re-deriving from `features` / `configuration`.
-   */
-  modelPolicy?: BuilderModelPolicy;
-  /**
-   * Resolved picker visibility for tools, agents, and workflows. Present when
-   * the builder is enabled. Each `visible*` field is `null` when unrestricted
-   * (show all registered entries) and `string[]` otherwise — making the
-   * empty-vs-unrestricted distinction explicit so the UI never has to
-   * disambiguate.
-   */
-  picker?: BuilderPickerResponse;
-  /**
-   * Non-fatal warnings produced by builder config validation (e.g. allowlist
-   * entries with unknown providers that aren't tagged `kind: 'custom'`, or
-   * picker allowlist entries that don't match a registered ID).
-   * Only present when there is at least one warning.
-   */
-  modelPolicyWarnings?: string[];
-}
+export type BuilderSettingsResponse = GeneratedResponse<'GET /editor/builder/settings'>;
 
 /**
  * Response from GET /editor/builder/models/available.
@@ -2487,41 +2452,7 @@ export interface BuilderPickerResponse {
  *
  * Agent Builder infrastructure configuration plus lightweight runtime resolution state.
  */
-export interface InfrastructureStatusResponse {
-  channels: {
-    providers: Array<{
-      id: string;
-      name: string;
-      isConfigured: boolean;
-      routeCount: number;
-    }>;
-  };
-  browser: {
-    type: string | null;
-    provider: string | null;
-    env: string | null;
-    registered: boolean;
-    availableProviders: string[];
-    config: Array<{ key: string; value: string }>;
-  };
-  workspace: {
-    type: string | null;
-    workspaceId: string | null;
-    name: string | null;
-    source: string | null;
-    registered: boolean;
-    hasFilesystem: boolean;
-    hasSandbox: boolean;
-    filesystemProvider: string | null;
-    sandboxProvider: string | null;
-    config: Array<{ key: string; value: string }>;
-  };
-  registries: {
-    skillsSh: {
-      enabled: boolean;
-    };
-  };
-}
+export type InfrastructureStatusResponse = GeneratedResponse<'GET /editor/builder/infrastructure'>;
 
 // ============================================================================
 // Builder registries (skills.sh and other external skill catalogs)
@@ -2530,76 +2461,15 @@ export interface InfrastructureStatusResponse {
 /**
  * One known skill registry surfaced from the Agent Builder config.
  */
-export interface BuilderRegistryDescriptor {
-  id: string;
-  enabled: boolean;
-  label: string;
-}
-
-/**
- * Response from `GET /editor/builder/registries`.
- */
-export interface ListBuilderRegistriesResponse {
-  registries: BuilderRegistryDescriptor[];
-}
-
-/**
- * Single skill summary returned from a registry search/popular endpoint.
- * Wire shape matches the upstream skills.sh proxy.
- */
-export interface BuilderRegistrySkillSummary {
-  id: string;
-  name: string;
-  installs: number;
-  /** Repository identifier in `owner/repo` or `owner/repo/path` form. */
-  topSource: string;
-}
-
-/**
- * Response from `GET /editor/builder/registries/:registryId/search`.
- */
-export interface BuilderRegistrySearchResponse {
-  query: string;
-  searchType: string;
-  skills: BuilderRegistrySkillSummary[];
-  count: number;
-}
-
-/**
- * Response from `GET /editor/builder/registries/:registryId/popular`.
- */
-export interface BuilderRegistryPopularResponse {
-  skills: BuilderRegistrySkillSummary[];
-  count: number;
-  limit: number;
-  offset: number;
-}
-
-/**
- * Response from `GET /editor/builder/registries/:registryId/preview`.
- */
-export interface BuilderRegistryPreviewResponse {
-  content: string;
-}
-
-/**
- * Body for `POST /editor/builder/registries/:registryId/install`.
- */
-export interface BuilderRegistryInstallBody {
-  owner: string;
-  repo: string;
-  skillName: string;
-  visibility?: 'private' | 'public';
-}
-
-/**
- * Response from `POST /editor/builder/registries/:registryId/install`.
- */
-export interface BuilderRegistryInstallResponse {
-  storedSkillId: string;
-  name: string;
-  filesWritten: number;
-}
+export type BuilderRegistryDescriptor = GeneratedResponse<'GET /editor/builder/registries'>['registries'][number];
+export type ListBuilderRegistriesResponse = GeneratedResponse<'GET /editor/builder/registries'>;
+export type BuilderRegistrySkillSummary =
+  GeneratedResponse<'GET /editor/builder/registries/:registryId/search'>['skills'][number];
+export type BuilderRegistrySearchResponse = GeneratedResponse<'GET /editor/builder/registries/:registryId/search'>;
+export type BuilderRegistryPopularResponse = GeneratedResponse<'GET /editor/builder/registries/:registryId/popular'>;
+export type BuilderRegistryPreviewResponse = GeneratedResponse<'GET /editor/builder/registries/:registryId/preview'>;
+export type BuilderRegistryInstallBody = GeneratedRequest<Body<'POST /editor/builder/registries/:registryId/install'>>;
+export type BuilderRegistryInstallResponse = GeneratedResponse<'POST /editor/builder/registries/:registryId/install'>;
 
 // ============================================================================
 // AgentController

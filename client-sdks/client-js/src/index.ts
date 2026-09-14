@@ -34,7 +34,7 @@ export { RequestContext } from '@mastra/core/request-context';
 // users interact via `observe` on the tool execution context.
 export type { ObservabilityCollector } from './observability/types';
 export type { UIMessageWithMetadata } from '@mastra/core/agent';
-export type { GetMetricTimeSeriesResponse } from '@mastra/core/storage';
+export type { GetMetricTimeSeriesResponse } from './types';
 export type {
   Body,
   Client,
