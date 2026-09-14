@@ -2,6 +2,7 @@ import { isMCPServerV2, isMCPToolV2 } from '@mastra/core/mcp';
 import type {
   MCPServerBase as MastraMCPServerImplementation,
   MCPServerRegistryEntry,
+  ServerDetailInfo,
   ServerInfo,
 } from '@mastra/core/mcp';
 import { HTTPException } from '../http-exception';
@@ -25,6 +26,22 @@ import {
 import type { ServerContext } from '../server-adapter';
 import type { SetMcpRequestAuth } from '../server-adapter/mcp-auth';
 import { createRoute } from '../server-adapter/routes/route-builder';
+
+/** Protocol transports the Studio/REST API exposes for a registered MCP server. */
+export type MCPServerTransport = 'streamable-http' | 'sse';
+
+export interface MCPServerInfoResponse extends ServerInfo {
+  /** Transport endpoints served under `/mcp/:serverId`; v2 servers speak modern Streamable HTTP only. */
+  transports: MCPServerTransport[];
+}
+
+export interface MCPServerDetailResponse extends ServerDetailInfo {
+  transports: MCPServerTransport[];
+}
+
+function transportsOf(server: MCPServerRegistryEntry): MCPServerTransport[] {
+  return isMCPServerV2(server) ? ['streamable-http'] : ['streamable-http', 'sse'];
+}
 
 // ============================================================================
 // Route Definitions (createRoute pattern for server adapters)
@@ -99,7 +116,10 @@ export const LIST_MCP_SERVERS_ROUTE = createRoute({
     }
 
     // Get server info for each server
-    const serverInfoList: ServerInfo[] = paginatedServers.map(server => server.getServerInfo());
+    const serverInfoList: MCPServerInfoResponse[] = paginatedServers.map(server => ({
+      ...server.getServerInfo(),
+      transports: transportsOf(server),
+    }));
 
     return {
       servers: serverInfoList,
@@ -131,7 +151,7 @@ export const GET_MCP_SERVER_DETAIL_ROUTE = createRoute({
       throw new HTTPException(404, { message: `MCP server with ID '${id}' not found` });
     }
 
-    const serverDetail = server.getServerDetail();
+    const serverDetail: MCPServerDetailResponse = { ...server.getServerDetail(), transports: transportsOf(server) };
 
     // If a specific version was requested, check if it matches
     if (version && serverDetail.version_detail.version !== version) {

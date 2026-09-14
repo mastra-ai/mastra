@@ -6,7 +6,7 @@
  * with MCPOAuthClientProvider to complete the authorization-code flow for
  * OAuth-protected MCP servers.
  *
- * @see https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization
+ * @see https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization
  */
 
 import { timingSafeEqual } from 'node:crypto';

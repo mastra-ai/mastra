@@ -34,10 +34,13 @@ export const versionDetailSchema = z.object({
   is_latest: z.boolean(),
 });
 
+export const mcpServerTransportSchema = z.enum(['streamable-http', 'sse']);
+
 export const serverInfoSchema = z.object({
   id: z.string(),
   name: z.string(),
   version_detail: versionDetailSchema,
+  transports: z.array(mcpServerTransportSchema),
 });
 
 export const listMcpServersResponseSchema = z.object({
@@ -54,10 +57,12 @@ export const serverDetailSchema = z.object({
   package_canonical: z.string().optional(),
   packages: z.array(z.unknown()).optional(),
   remotes: z.array(z.unknown()).optional(),
+  transports: z.array(mcpServerTransportSchema),
 });
 
 // Tool schemas
 export const mcpToolInfoSchema = z.object({
+  id: z.string().optional(),
   name: z.string(),
   description: z.string().optional(),
   inputSchema: z.unknown(),

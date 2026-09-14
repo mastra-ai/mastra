@@ -452,6 +452,11 @@ const sidebars = {
           label: '.network() to Supervisor Agents',
         },
         {
+          type: 'doc',
+          id: 'migrations/mcp-v2',
+          label: '@mastra/mcp v1 to v2',
+        },
+        {
           type: 'category',
           label: 'v1.0',
           items: [

@@ -10,60 +10,54 @@ import { toStandardSchema } from '@mastra/schema-compat';
 import type { JSONSchema7, StandardSchemaWithJSON } from '@mastra/schema-compat';
 import {
   Client,
-  SdkHttpError,
-  SSEClientTransport,
+  LOG_LEVEL_META_KEY,
   StreamableHTTPClientTransport,
   DEFAULT_REQUEST_TIMEOUT_MSEC,
 } from '@modelcontextprotocol/client';
 import type {
   Transport,
-  EmptyResult,
   GetPromptResult,
   ListPromptsResult,
   ListResourcesResult,
   ListResourceTemplatesResult,
   LoggingLevel,
+  McpSubscription,
   ReadResourceResult,
   ClientCapabilities,
+  SubscriptionFilter,
 } from '@modelcontextprotocol/client';
 import { getDefaultEnvironment, StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { asyncExitHook, gracefulExit } from 'exit-hook';
 import { getMastraToolStrictMeta } from '../shared/mastra-tool-meta';
 import { UnauthorizedError } from '../shared/oauth-types';
-import { ElicitationClientActions } from './actions/elicitation';
 import { ProgressClientActions } from './actions/progress';
 import { PromptClientActions } from './actions/prompt';
 import { ResourceClientActions } from './actions/resource';
 import { isReconnectableMCPError } from './error-utils';
+import { MCP_CLIENT_PROTOCOL_VERSION } from './types';
 import type {
   FetchLike,
   LogHandler,
-  ElicitationHandler,
   ProgressHandler,
   MastraMCPServerDefinition,
   InternalMastraMCPClientOptions,
-  Root,
   RequireToolApproval,
   SerializableMCPToolDefinition,
 } from './types';
-import {
-  assertHostAllowed,
-  fetchFollowingAllowedRedirects,
-  isUrlPolicyError,
-  wrapFetchWithHostPolicy,
-} from './url-policy';
+import { assertHostAllowed, fetchFollowingAllowedRedirects, wrapFetchWithHostPolicy } from './url-policy';
 
 // Re-export types for convenience
 export type {
   LoggingLevel,
   LogMessage,
   LogHandler,
-  ElicitationHandler,
   ProgressHandler,
   MastraFetchLike,
   MastraMCPServerDefinition,
+  MCPClientCapabilities,
+  MCPInputRequest,
+  MCPInputRequestHandler,
   InternalMastraMCPClientOptions,
-  Root,
   RequireToolApproval,
   RequireToolApprovalFn,
   RequireToolApprovalContext,
@@ -75,6 +69,7 @@ type MCPToolListEntry = Awaited<ReturnType<Client['listTools']>>['tools'][0];
 
 const DEFAULT_SERVER_CONNECT_TIMEOUT_MSEC = 3000;
 const DEFAULT_INSTRUCTIONS_MAX_LENGTH = 512;
+const DEFAULT_SERVER_LOG_LEVEL: LoggingLevel = 'info';
 
 /**
  * OAuth authorization state of an MCP server connection.
@@ -87,8 +82,6 @@ const DEFAULT_INSTRUCTIONS_MAX_LENGTH = 512;
  */
 export type MCPServerAuthState = 'needs-auth' | 'authorized';
 
-// Per MCP spec, only fallback to SSE for these status codes
-const SSE_FALLBACK_STATUS_CODES = [400, 404, 405];
 const DATADOG_TRACER_TEST_SYMBOL = Symbol.for('mastra.mcp.dd-trace-test-tracer');
 
 type DatadogScopeLike = {
@@ -102,8 +95,19 @@ type DatadogTracerLike = {
   };
 };
 
+/**
+ * Modern Streamable HTTP has no standalone GET stream; the only long-lived request is
+ * the `subscriptions/listen` POST, whose response stays open for the life of the
+ * subscription and must not hold the caller's active Datadog span open with it.
+ */
 function shouldDetachPersistentTransportRequest(init?: RequestInit): boolean {
-  return (init?.method ?? 'GET').toUpperCase() === 'GET';
+  if (typeof init?.body !== 'string' || !init.body.includes('subscriptions/listen')) return false;
+  try {
+    const message: unknown = JSON.parse(init.body);
+    return typeof message === 'object' && message !== null && 'method' in message && message.method === 'subscriptions/listen';
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -210,7 +214,8 @@ function createStructuredToolToModelOutput(): (output: unknown) =>
 
 function getDatadogScope(): DatadogScopeLike | null {
   const testTracer = (globalThis as Record<PropertyKey, unknown>)[DATADOG_TRACER_TEST_SYMBOL] as
-    DatadogTracerLike | undefined;
+    | DatadogTracerLike
+    | undefined;
   const tracer = testTracer ?? loadDatadogTracer();
 
   if (typeof tracer?.scope === 'function') {
@@ -286,7 +291,6 @@ function convertLogLevelToLoggerMethod(level: LoggingLevel): 'debug' | 'info' | 
     case 'emergency':
       return 'error';
     default:
-      // For any other levels, default to info
       return 'info';
   }
 }
@@ -294,8 +298,10 @@ function convertLogLevelToLoggerMethod(level: LoggingLevel): 'debug' | 'info' | 
 /**
  * Internal MCP client implementation for connecting to a single MCP server.
  *
- * This class handles the low-level connection, transport management, and protocol
- * communication with an MCP server. Most users should use MCPClient instead.
+ * Speaks the 2026-07-28 revision only: connections are established with
+ * `server/discover`, there is no session, embedded input requests are answered
+ * through the configured `inputRequests` handler, and change notifications arrive
+ * on `subscriptions/listen` streams opened with {@link listen}.
  *
  * @internal
  */
@@ -304,11 +310,11 @@ export class InternalMastraMCPClient extends MastraBase {
   private client: Client;
   private readonly timeout: number;
   private logHandler?: LogHandler;
-  private enableServerLogs?: boolean;
-  private enableProgressTracking?: boolean;
+  private readonly serverLogLevel?: LoggingLevel;
+  private enableProgressTracking: boolean;
   private serverConfig: MastraMCPServerDefinition;
   private transport?: Transport;
-  private pendingAuthTransport?: StreamableHTTPClientTransport | SSEClientTransport;
+  private pendingAuthTransport?: StreamableHTTPClientTransport;
   private clientBaseOnClose?: () => void;
   private clientConnectionOnClose?: () => void;
   private _authState?: MCPServerAuthState;
@@ -317,111 +323,84 @@ export class InternalMastraMCPClient extends MastraBase {
   private sigTermHandler?: () => void;
   private sigHupHandler?: () => void;
   private serverInstructions?: string;
-  private _roots: Root[];
-  private hasElicitationCapability: boolean;
   private readonly requireToolApproval: RequireToolApproval | undefined;
   private readonly onToolError: 'throw' | 'return';
 
-  /** Provides access to resource operations (list, read, subscribe, etc.) */
+  /** Provides access to resource operations (list, read, notifications) */
   public readonly resources: ResourceClientActions;
   /** Provides access to prompt operations (list, get, notifications) */
   public readonly prompts: PromptClientActions;
-  /** Provides access to elicitation operations (request handling) */
-  public readonly elicitation: ElicitationClientActions;
   /** Provides access to progress operations (notifications) */
   public readonly progress: ProgressClientActions;
 
   /**
    * @internal
    */
-  constructor({
-    name,
-    version = '1.0.0',
-    server,
-    capabilities = {},
-    timeout = DEFAULT_REQUEST_TIMEOUT_MSEC,
-  }: InternalMastraMCPClientOptions) {
+  constructor({ name, version = '1.0.0', server, timeout = DEFAULT_REQUEST_TIMEOUT_MSEC }: InternalMastraMCPClientOptions) {
     super({ name: 'MastraMCPClient' });
     this.name = name;
     this.timeout = timeout;
     this.logHandler = server.logger;
-    this.enableServerLogs = server.enableServerLogs ?? true;
+    this.serverLogLevel =
+      (server.enableServerLogs ?? true) ? (server.serverLogLevel ?? DEFAULT_SERVER_LOG_LEVEL) : undefined;
     this.serverConfig = server;
     this.enableProgressTracking = !!server.enableProgressTracking;
     this.requireToolApproval = server.requireToolApproval;
     this.onToolError = server.onToolError ?? 'throw';
 
-    // Initialize roots from server config
-    this._roots = server.roots ?? [];
-    this.hasElicitationCapability = capabilities.elicitation !== undefined;
-
-    // Build client capabilities, automatically enabling roots if configured
-    const hasRoots = this._roots.length > 0 || !!capabilities.roots;
+    const configured = server.capabilities ?? {};
+    if (configured.elicitation !== undefined && !server.inputRequests) {
+      throw new Error(
+        `MCP server '${name}' advertises the elicitation capability without an inputRequests handler. Configure inputRequests or remove capabilities.elicitation.`,
+      );
+    }
     const clientCapabilities: ClientCapabilities = {
-      ...capabilities,
-      // Only advertise elicitation when explicitly configured or when a handler
-      // registers it before connect(). `elicitation: {}` is legacy form support.
-      ...(capabilities.elicitation !== undefined ? { elicitation: { ...capabilities.elicitation } } : {}),
-      // Auto-enable roots capability if roots are provided
-      ...(hasRoots ? { roots: { listChanged: true, ...(capabilities.roots ?? {}) } } : {}),
+      ...(server.inputRequests ? { elicitation: configured.elicitation ?? { form: {} } } : {}),
       // Advertise MCP Apps extension support so servers know we can render UI resources
       extensions: {
-        ...(capabilities.extensions ?? {}),
+        ...(configured.extensions ?? {}),
         'io.modelcontextprotocol/ui': {},
       },
     };
 
-    // Opt-in protocol version negotiation. Omitted keeps the SDK default
-    // ('legacy'): the plain 2025 connect sequence, byte-identical to today.
-    // 'auto' probes with server/discover and falls back to initialize;
-    // '2026-07-28' pins that revision and fails loudly when unavailable.
-    const versionNegotiation =
-      server.protocolVersion === undefined
-        ? undefined
-        : { mode: server.protocolVersion === 'auto' ? ('auto' as const) : { pin: server.protocolVersion } };
-
     this.client = new Client(
-      {
-        name,
-        version,
-      },
+      { name, version },
       {
         capabilities: clientCapabilities,
         ...(server.jsonSchemaValidator ? { jsonSchemaValidator: server.jsonSchemaValidator } : {}),
-        ...(versionNegotiation ? { versionNegotiation } : {}),
+        versionNegotiation: { mode: { pin: MCP_CLIENT_PROTOCOL_VERSION } },
       },
     );
 
-    // Set up log message capturing
-    this.setupLogging();
+    if (server.inputRequests) {
+      const handler = server.inputRequests;
+      this.client.setRequestHandler('elicitation/create', async (request, ctx) => {
+        this.log('debug', `Answering input request '${String(ctx.mcpReq.id)}'`);
+        return handler({ key: String(ctx.mcpReq.id), params: request.params, signal: ctx.mcpReq.signal });
+      });
+    }
 
-    // Set up roots/list request handler if roots capability is enabled
-    if (hasRoots) {
-      this.setupRootsHandler();
+    if (this.serverLogLevel) {
+      this.client.setNotificationHandler('notifications/message', notification => {
+        const { level, ...params } = notification.params;
+        this.log(level, '[MCP SERVER LOG]', params);
+      });
     }
 
     this.resources = new ResourceClientActions({ client: this, logger: this.logger });
     this.prompts = new PromptClientActions({ client: this, logger: this.logger });
-    this.elicitation = new ElicitationClientActions({ client: this, logger: this.logger });
     this.progress = new ProgressClientActions({ client: this, logger: this.logger });
   }
 
   /**
    * Log a message at the specified level
-   * @param level Log level
-   * @param message Log message
-   * @param details Optional additional details
    */
   private log(level: LoggingLevel, message: string, details?: Record<string, any>): void {
-    // Convert MCP logging level to our logger method
     const loggerMethod = convertLogLevelToLoggerMethod(level);
-
     const msg = `[${this.name}] ${message}`;
 
-    // Log to internal logger
     this.logger[loggerMethod](msg, details);
 
-    // Send to registered handler if available
     if (this.logHandler) {
       this.logHandler({
         level,
@@ -434,74 +413,16 @@ export class InternalMastraMCPClient extends MastraBase {
     }
   }
 
-  private setupLogging(): void {
-    if (this.enableServerLogs) {
-      this.client.setNotificationHandler('notifications/message', (notification: any) => {
-        const { level, ...params } = notification.params;
-        this.log(level as LoggingLevel, '[MCP SERVER LOG]', params);
-      });
-    }
-  }
-
   /**
-   * Set up handler for roots/list requests from the server.
-   *
-   * Per MCP spec (https://modelcontextprotocol.io/specification/2025-11-25/client/roots):
-   * When a server sends a roots/list request, the client responds with the configured roots.
+   * Request metadata every outgoing request carries: the per-request log-level
+   * opt-in (when enabled) merged under caller-supplied keys.
    */
-  private setupRootsHandler(): void {
-    this.log('debug', 'Setting up roots/list request handler');
-    this.client.setRequestHandler('roots/list', async () => {
-      this.log('debug', `Responding to roots/list request with ${this._roots.length} roots`);
-      return { roots: this._roots };
-    });
-  }
-
-  /**
-   * Get the currently configured roots.
-   *
-   * @returns Array of configured filesystem roots
-   */
-  get roots(): Root[] {
-    return [...this._roots];
-  }
-
-  /**
-   * Update the list of filesystem roots and notify the server.
-   *
-   * Per MCP spec, when roots change, the client sends a `notifications/roots/list_changed`
-   * notification to inform the server that it should re-fetch the roots list.
-   *
-   * @param roots - New list of filesystem roots
-   *
-   * @example
-   * ```typescript
-   * await client.setRoots([
-   *   { uri: 'file:///home/user/projects', name: 'Projects' },
-   *   { uri: 'file:///tmp', name: 'Temp' }
-   * ]);
-   * ```
-   */
-  async setRoots(roots: Root[]): Promise<void> {
-    this.log('debug', `Updating roots to ${roots.length} entries`);
-    this._roots = [...roots];
-    await this.sendRootsListChanged();
-  }
-
-  /**
-   * Send a roots/list_changed notification to the server.
-   *
-   * Per MCP spec, clients that support `listChanged` MUST send this notification
-   * when the list of roots changes. The server will then call roots/list to get
-   * the updated list.
-   */
-  async sendRootsListChanged(): Promise<void> {
-    if (!this.transport) {
-      this.log('debug', 'Cannot send roots/list_changed: not connected');
-      return;
-    }
-    this.log('debug', 'Sending notifications/roots/list_changed');
-    await this.client.notification({ method: 'notifications/roots/list_changed' });
+  private requestMeta(meta?: Record<string, unknown>): Record<string, unknown> | undefined {
+    const merged = {
+      ...(this.serverLogLevel ? { [LOG_LEVEL_META_KEY]: this.serverLogLevel } : {}),
+      ...meta,
+    };
+    return Object.keys(merged).length > 0 ? merged : undefined;
   }
 
   private buildStdioEnv(): Record<string, string> {
@@ -540,8 +461,7 @@ export class InternalMastraMCPClient extends MastraBase {
   }
 
   private async connectHttp(url: URL) {
-    const { requestInit, eventSourceInit, authProvider, connectTimeout, fetch: userFetch, allowedHosts } =
-      this.serverConfig;
+    const { requestInit, authProvider, connectTimeout, fetch: userFetch, allowedHosts } = this.serverConfig;
 
     // Fail fast with a clear error before any transport is constructed.
     if (allowedHosts !== undefined) {
@@ -549,10 +469,10 @@ export class InternalMastraMCPClient extends MastraBase {
     }
 
     // Wrap fetch so request-scoped metadata still flows through normal MCP POSTs, while
-    // the long-lived Streamable HTTP event stream does not inherit the active Datadog span.
-    // When allowedHosts is set, the same wrapper enforces the host policy: on the default
-    // path via manual redirect following (hops blocked before being sent), and on the
-    // custom-fetch path via a pre-request check plus post-hoc response validation.
+    // long-lived streams do not inherit the active Datadog span. When allowedHosts is
+    // set, the same wrapper enforces the host policy: on the default path via manual
+    // redirect following (hops blocked before being sent), and on the custom-fetch path
+    // via a pre-request check plus post-hoc response validation.
     const policyUserFetch =
       userFetch && allowedHosts !== undefined ? wrapFetchWithHostPolicy(userFetch, allowedHosts) : undefined;
     const fetch: FetchLike = (requestUrl: string | URL, init?: RequestInit) => {
@@ -575,114 +495,29 @@ export class InternalMastraMCPClient extends MastraBase {
       return shouldDetachPersistentTransportRequest(init) ? runOutsideDatadogTraceScope(executeFetch) : executeFetch();
     };
 
-    this.log('debug', `Attempting to connect to URL: ${url}`);
+    this.log('debug', `Connecting to URL: ${url}`);
 
-    // Assume /sse means sse.
-    let shouldTrySSE = url.pathname.endsWith(`/sse`);
-
-    if (!shouldTrySSE) {
-      // Constructed outside the try so an UnauthorizedError can keep a handle on the
-      // transport that started the authorization flow (finishAuth must run on it).
-      const streamableTransport = new StreamableHTTPClientTransport(url, {
-        requestInit,
-        reconnectionOptions: this.serverConfig.reconnectionOptions,
-        authProvider: authProvider,
-        fetch,
-      });
-      try {
-        // Try Streamable HTTP transport first
-        this.log('debug', 'Trying Streamable HTTP transport...');
-        await this.client.connect(streamableTransport, {
-          timeout: connectTimeout ?? DEFAULT_SERVER_CONNECT_TIMEOUT_MSEC,
-        });
-        this.transport = streamableTransport;
-        this.log('debug', 'Successfully connected using Streamable HTTP transport.');
-      } catch (error: any) {
-        this.log('debug', `Streamable HTTP transport failed: ${error}`);
-
-        // A 401 means the flow continues on this transport via finishAuth, not on a
-        // fallback: the SDK has already run discovery and redirected to authorization.
-        // Guarded on authProvider so servers without one never carry an auth state.
-        if (authProvider && error instanceof UnauthorizedError) {
-          this.markNeedsAuth(streamableTransport);
-          throw error;
-        }
-
-        // Policy violations and pinned protocol negotiation failures are final:
-        // retrying over legacy SSE cannot succeed and would bury the typed error.
-        if (isUrlPolicyError(error) || this.serverConfig.protocolVersion === '2026-07-28') {
-          throw error;
-        }
-
-        // The Streamable HTTP transport reports non-OK responses as SdkHttpError, which
-        // carries the HTTP status on `status` (`code` is a string SdkErrorCode, not a
-        // status). Servers that only speak the deprecated HTTP+SSE transport answer the
-        // initial POST with 400/404/405, which is the signal to retry over SSE; any other
-        // status is a real failure. Non-HTTP failures (network, timeout) keep the legacy
-        // behavior of attempting the SSE fallback.
-        const status = error instanceof SdkHttpError ? error.status : undefined;
-        if (status !== undefined && !SSE_FALLBACK_STATUS_CODES.includes(status)) {
-          throw error;
-        }
-        shouldTrySSE = true;
+    // Constructed outside the try so an UnauthorizedError can keep a handle on the
+    // transport that started the authorization flow (finishAuth must run on it).
+    const transport = new StreamableHTTPClientTransport(url, { requestInit, authProvider, fetch });
+    try {
+      await this.client.connect(transport, { timeout: connectTimeout ?? DEFAULT_SERVER_CONNECT_TIMEOUT_MSEC });
+      this.transport = transport;
+      this.log('debug', 'Successfully connected using Streamable HTTP transport.');
+      // Close any transport left pending from an earlier 401: authorization is satisfied.
+      this.closePendingAuthTransport();
+      if (authProvider) {
+        this._authState = 'authorized';
       }
-    }
-
-    if (shouldTrySSE) {
-      // The SDK's cleanup after a failed streamable initialize is fire-and-forget,
-      // so the streamable transport may still be attached; detach it or the SSE
-      // attempt is rejected with "Already connected to a transport".
-      await this.detachStaleClientTransport();
-
-      this.log('debug', 'Falling back to deprecated HTTP+SSE transport...');
-      // Fallback to SSE transport
-      // The top-level fetch is used for POST requests, but eventSourceInit.fetch is needed for the SSE stream.
-      // Only supply our span-detaching fetch when the caller hasn't provided one, so an explicit
-      // eventSourceInit.fetch is preserved rather than overwritten. When allowedHosts is set, a
-      // caller-supplied eventSourceInit.fetch is wrapped with the same policy check + post-hoc
-      // redirect validation as the custom-fetch path — otherwise it would bypass the policy.
-      const callerSseFetch = eventSourceInit?.fetch;
-      const sseEventSourceInit = {
-        ...eventSourceInit,
-        fetch:
-          callerSseFetch && allowedHosts !== undefined
-            ? wrapFetchWithHostPolicy(callerSseFetch, allowedHosts)
-            : (callerSseFetch ?? fetch),
-      };
-
-      const sseTransport = new SSEClientTransport(url, {
-        requestInit,
-        eventSourceInit: sseEventSourceInit,
-        authProvider,
-        fetch,
-      });
-      try {
-        await this.client.connect(sseTransport, { timeout: this.serverConfig.timeout ?? this.timeout });
-        this.transport = sseTransport;
-        this.log('debug', 'Successfully connected using deprecated HTTP+SSE transport.');
-      } catch (sseError) {
-        if (authProvider && sseError instanceof UnauthorizedError) {
-          this.markNeedsAuth(sseTransport);
-          throw sseError;
-        }
-        // Surface policy violations directly instead of the generic connect error.
-        if (isUrlPolicyError(sseError)) {
-          throw sseError;
-        }
-        this.log(
-          'error',
-          `Failed to connect with SSE transport after failing to connect to Streamable HTTP transport first. SSE error: ${sseError}`,
-        );
-        throw new Error('Could not connect to server with any available HTTP transport');
+    } catch (error) {
+      this.log('debug', `Streamable HTTP transport failed: ${error}`);
+      // A 401 means the flow continues on this transport via finishAuth: the SDK has
+      // already run discovery and redirected to authorization. Guarded on authProvider
+      // so servers without one never carry an auth state.
+      if (authProvider && error instanceof UnauthorizedError) {
+        this.markNeedsAuth(transport);
       }
-    }
-
-    // Reaching here means a transport connected; any earlier authorization requirement is satisfied.
-    // Close, don't just drop, any transport left pending from an earlier 401 so its event stream
-    // and session resources are released rather than abandoned.
-    this.closePendingAuthTransport();
-    if (authProvider) {
-      this._authState = 'authorized';
+      throw error;
     }
   }
 
@@ -690,14 +525,10 @@ export class InternalMastraMCPClient extends MastraBase {
    * Detaches whatever transport is still attached to the underlying SDK Client.
    *
    * The SDK assigns its internal `_transport` before `transport.start()` and never
-   * clears it when `start()` throws, and its cleanup after a failed initialize is a
-   * fire-and-forget `void this.close()`. Either way a stale transport can remain
-   * attached, making every subsequent `client.connect()` throw "Already connected
-   * to a transport" and permanently wedging this client (issue #19862). Mastra's
-   * own `this.transport` is only assigned after a successful connect, so
-   * disconnect/forceReconnect never see the stale one. Calling this before every
-   * connect attempt restores the invariant that a connect starts from a detached
-   * SDK client.
+   * clears it when `start()` throws, so a stale transport can remain attached and
+   * make every subsequent `client.connect()` throw "Already connected to a
+   * transport". Mastra's own `this.transport` is only assigned after a successful
+   * connect, so disconnect/forceReconnect never see the stale one.
    */
   private async detachStaleClientTransport(): Promise<void> {
     const stale = this.client.transport;
@@ -712,23 +543,19 @@ export class InternalMastraMCPClient extends MastraBase {
     }
     this.log('debug', 'Closing stale SDK client transport before connect attempt');
     try {
-      // Close fires the SDK's onclose chain, which rejects in-flight requests and
-      // clears the SDK client's transport reference.
       await stale.close();
     } catch (e) {
       this.log('debug', 'Error closing stale SDK client transport (ignored)', {
         error: e instanceof Error ? e.message : String(e),
       });
     }
-    // Safety net in case close() did not fire the onclose chain.
     this.severClientTransportLink(stale);
   }
 
   /**
    * Severs the mutual references between the SDK client and a stale transport
-   * without closing it. Clearing the transport's callbacks ensures a later
-   * close() of the stale transport cannot reach into the SDK client and clear
-   * the state of a newer live connection.
+   * without closing it, so a later close() of the stale transport cannot reach
+   * into the SDK client and clear the state of a newer live connection.
    */
   private severClientTransportLink(stale: Transport): void {
     stale.onclose = undefined;
@@ -741,10 +568,9 @@ export class InternalMastraMCPClient extends MastraBase {
 
   /**
    * Closes and clears any transport retained from an unfinished authorization
-   * flow. Safe to call when nothing is pending. Centralizes the cleanup so
-   * success, disconnect, and forceReconnect all release the same resource.
+   * flow. Safe to call when nothing is pending.
    */
-  private closePendingAuthTransport(replacement?: StreamableHTTPClientTransport | SSEClientTransport): void {
+  private closePendingAuthTransport(replacement?: StreamableHTTPClientTransport): void {
     const pending = this.pendingAuthTransport;
     this.pendingAuthTransport = replacement;
     if (pending && pending !== replacement) {
@@ -756,10 +582,7 @@ export class InternalMastraMCPClient extends MastraBase {
    * Records that the server rejected the connection with a 401 and keeps the
    * transport that started the authorization flow so finishAuth can complete it.
    */
-  private markNeedsAuth(transport: StreamableHTTPClientTransport | SSEClientTransport): void {
-    // A prior connect() may have left a pending transport that never completed
-    // finishAuth. Close the superseded one before replacing it so its event
-    // stream and session resources are released rather than abandoned.
+  private markNeedsAuth(transport: StreamableHTTPClientTransport): void {
     this.closePendingAuthTransport(transport);
     this._authState = 'needs-auth';
     this.log('debug', 'Server requires OAuth authorization before connecting.');
@@ -779,9 +602,6 @@ export class InternalMastraMCPClient extends MastraBase {
    *
    * Exchanges the authorization code captured at the redirect URI on the same
    * transport that started the flow, then leaves the client ready to connect().
-   *
-   * @param authorizationCode - The authorization code captured at the redirect URI
-   * @throws {Error} If no authorization flow is pending for this server
    *
    * @internal
    */
@@ -806,11 +626,7 @@ export class InternalMastraMCPClient extends MastraBase {
   /**
    * Connects to the MCP server using the configured transport.
    *
-   * Automatically detects transport type based on configuration (stdio vs HTTP).
    * Safe to call multiple times - returns existing connection if already connected.
-   *
-   * @returns Promise resolving to true when connected
-   * @throws {MastraError} If connection fails
    *
    * @internal
    */
@@ -821,8 +637,6 @@ export class InternalMastraMCPClient extends MastraBase {
 
     this.isConnected = new Promise<boolean>(async (resolve, reject) => {
       try {
-        // A previous failed connect attempt can leave a stale transport attached
-        // to the SDK client; release it or every reconnect fails (issue #19862).
         await this.detachStaleClientTransport();
 
         const { command, url } = this.serverConfig;
@@ -835,7 +649,7 @@ export class InternalMastraMCPClient extends MastraBase {
           throw new Error('Server configuration must include either a command or a url.');
         }
 
-        this.refreshServerInstructions();
+        this.serverInstructions = this.client.getInstructions();
 
         resolve(true);
 
@@ -849,9 +663,6 @@ export class InternalMastraMCPClient extends MastraBase {
         const connectionOnClose = () => {
           if (this.transport === connectedTransport) {
             this.log('debug', `MCP server connection closed`);
-            // Close the stale transport before any reconnect so its EventSource/session
-            // can't keep retrying and leak server-side sessions (issue #16693). Clear
-            // synchronously first so a concurrent connect() sees a clean slate.
             const staleTransport = this.transport;
             this.transport = undefined;
             if (this.isConnected === connectionPromise) {
@@ -859,8 +670,6 @@ export class InternalMastraMCPClient extends MastraBase {
             }
             this.serverInstructions = undefined;
             if (staleTransport) {
-              // Prevent a duplicate late close signal from this transport from
-              // reaching the SDK client after a replacement connection is attached.
               this.severClientTransportLink(staleTransport);
               void staleTransport.close().catch(() => {});
             }
@@ -875,7 +684,6 @@ export class InternalMastraMCPClient extends MastraBase {
       }
     });
 
-    // Only register exit hooks if not already registered
     if (!this.exitHookUnsubscribe) {
       this.exitHookUnsubscribe = asyncExitHook(
         async () => {
@@ -896,30 +704,11 @@ export class InternalMastraMCPClient extends MastraBase {
       process.on('SIGHUP', this.sigHupHandler);
     }
 
-    this.log('debug', `Successfully connected to MCP server`);
     return this.isConnected;
   }
 
   /**
-   * Gets the current session ID if using Streamable HTTP transport.
-   *
-   * Returns undefined if not connected or not using Streamable HTTP transport.
-   *
-   * @returns Session ID string or undefined
-   *
-   * @internal
-   */
-  get sessionId(): string | undefined {
-    if (this.transport instanceof StreamableHTTPClientTransport) {
-      return this.transport.sessionId;
-    }
-    return undefined;
-  }
-
-  /**
    * Gets the stderr stream of the child process, if using stdio transport with `stderr: 'pipe'`.
-   *
-   * Returns null if not connected, not using stdio transport, or stderr is not piped.
    *
    * @internal
    */
@@ -942,29 +731,18 @@ export class InternalMastraMCPClient extends MastraBase {
     return this.serverConfig.instructionsMaxLength ?? DEFAULT_INSTRUCTIONS_MAX_LENGTH;
   }
 
-  private refreshServerInstructions(): void {
-    this.serverInstructions = this.client.getInstructions();
-  }
-
   async disconnect() {
     // Invalidate tool calls that started before this explicit teardown. Their
     // recovery path must not establish a replacement connection afterwards.
     this.lifecycleGeneration++;
 
-    // A reconnect that started first may publish a replacement transport.
-    // Wait for it, then tear down whichever transport is current.
     const reconnectPromise = this.reconnectPromise;
     if (reconnectPromise) {
       await reconnectPromise.catch(() => {});
     }
 
-    // Release any transport left pending from an unfinished authorization flow,
-    // even when there is no live transport to tear down.
     this.closePendingAuthTransport();
     if (!this.transport) {
-      // Even without a live transport, a failed connect attempt may have left a
-      // stale transport attached to the SDK client; release it so a future
-      // connect starts clean (issue #19862).
       await this.detachStaleClientTransport();
       this.log('debug', 'Disconnect called but no transport was connected.');
       return;
@@ -985,7 +763,6 @@ export class InternalMastraMCPClient extends MastraBase {
       this.isConnected = null;
       this.serverInstructions = undefined;
 
-      // Clean up exit hooks to prevent memory leaks
       if (this.exitHookUnsubscribe) {
         this.exitHookUnsubscribe();
         this.exitHookUnsubscribe = undefined;
@@ -1004,12 +781,6 @@ export class InternalMastraMCPClient extends MastraBase {
   /**
    * Forces a reconnection to the MCP server by disconnecting and reconnecting.
    *
-   * This is useful when the session becomes invalid (e.g., after server restart)
-   * and the client needs to establish a fresh connection.
-   *
-   * @returns Promise resolving when reconnection is complete
-   * @throws {Error} If reconnection fails
-   *
    * @internal
    */
   async forceReconnect(): Promise<void> {
@@ -1021,11 +792,8 @@ export class InternalMastraMCPClient extends MastraBase {
     const reconnectPromise = (async () => {
       this.log('debug', 'Forcing reconnection to MCP server...');
 
-      // Release any transport left pending from an unfinished authorization flow
-      // before rebuilding the connection.
       this.closePendingAuthTransport();
 
-      // Disconnect current connection (ignore errors as connection may already be broken)
       const disconnectedTransport = this.transport;
       try {
         if (disconnectedTransport) {
@@ -1042,8 +810,7 @@ export class InternalMastraMCPClient extends MastraBase {
       }
 
       // Reset connection state only when it still belongs to the transport that
-      // this reconnect attempt disconnected. A close callback may have already
-      // cleared it, but must not let us erase a replacement transport.
+      // this reconnect attempt disconnected.
       if (!disconnectedTransport || this.transport === disconnectedTransport) {
         this.transport = undefined;
         this.isConnected = null;
@@ -1073,8 +840,6 @@ export class InternalMastraMCPClient extends MastraBase {
       const reconnectPromise = this.reconnectPromise;
       if (reconnectPromise) {
         await reconnectPromise;
-        // Re-evaluate after the owner clears the settled promise. The transport
-        // that failed may itself be the replacement created by that reconnect.
         continue;
       }
 
@@ -1094,52 +859,17 @@ export class InternalMastraMCPClient extends MastraBase {
 
   async listResources(): Promise<ListResourcesResult> {
     this.log('debug', `Requesting resources from MCP server`);
-    return await this.client.request(
-      { method: 'resources/list' },
-      {
-        timeout: this.timeout,
-      },
-    );
+    return await this.client.listResources({ _meta: this.requestMeta() }, { timeout: this.timeout });
   }
 
   async readResource(uri: string): Promise<ReadResourceResult> {
     this.log('debug', `Reading resource from MCP server: ${uri}`);
-    return await this.client.request(
-      { method: 'resources/read', params: { uri } },
-      {
-        timeout: this.timeout,
-      },
-    );
-  }
-
-  async subscribeResource(uri: string): Promise<EmptyResult> {
-    this.log('debug', `Subscribing to resource on MCP server: ${uri}`);
-    return await this.client.request(
-      { method: 'resources/subscribe', params: { uri } },
-      {
-        timeout: this.timeout,
-      },
-    );
-  }
-
-  async unsubscribeResource(uri: string): Promise<EmptyResult> {
-    this.log('debug', `Unsubscribing from resource on MCP server: ${uri}`);
-    return await this.client.request(
-      { method: 'resources/unsubscribe', params: { uri } },
-      {
-        timeout: this.timeout,
-      },
-    );
+    return await this.client.readResource({ uri, _meta: this.requestMeta() }, { timeout: this.timeout });
   }
 
   async listResourceTemplates(): Promise<ListResourceTemplatesResult> {
     this.log('debug', `Requesting resource templates from MCP server`);
-    return await this.client.request(
-      { method: 'resources/templates/list' },
-      {
-        timeout: this.timeout,
-      },
-    );
+    return await this.client.listResourceTemplates({ _meta: this.requestMeta() }, { timeout: this.timeout });
   }
 
   /**
@@ -1147,98 +877,60 @@ export class InternalMastraMCPClient extends MastraBase {
    */
   async listPrompts(): Promise<ListPromptsResult> {
     this.log('debug', `Requesting prompts from MCP server`);
-    return await this.client.request(
-      { method: 'prompts/list' },
-      {
-        timeout: this.timeout,
-      },
-    );
+    return await this.client.listPrompts({ _meta: this.requestMeta() }, { timeout: this.timeout });
   }
 
   /**
    * Get a prompt and its dynamic messages from the server.
-   * @param name The prompt name
-   * @param args Arguments for the prompt
    */
   async getPrompt({ name, args }: { name: string; args?: Record<string, any> }): Promise<GetPromptResult> {
     this.log('debug', `Requesting prompt from MCP server: ${name}`);
-    return await this.client.request(
-      { method: 'prompts/get', params: { name, arguments: args } },
+    return await this.client.getPrompt(
+      { name, arguments: args, _meta: this.requestMeta() },
       { timeout: this.timeout },
     );
   }
 
   /**
-   * Register a handler to be called when the prompt list changes on the server.
-   * Use this to refresh cached prompt lists in the client/UI if needed.
+   * Opens a `subscriptions/listen` stream. Change notifications delivered on the
+   * stream dispatch to the handlers registered via the `on*` methods below.
    */
+  async listen(filter: SubscriptionFilter): Promise<McpSubscription> {
+    this.log('debug', 'Opening subscriptions/listen stream', { filter });
+    return await this.client.listen(filter, { timeout: this.timeout });
+  }
+
   setPromptListChangedNotificationHandler(handler: () => void): void {
-    this.log('debug', 'Setting prompt list changed notification handler');
     this.client.setNotificationHandler('notifications/prompts/list_changed', () => {
       handler();
     });
   }
 
-  /**
-   * Register a handler to be called when the tool list changes on the server.
-   * Use this to re-fetch tools via `tools()` when notified.
-   */
   setToolListChangedNotificationHandler(handler: () => void): void {
-    this.log('debug', 'Setting tool list changed notification handler');
     this.client.setNotificationHandler('notifications/tools/list_changed', () => {
       handler();
     });
   }
 
-  setResourceUpdatedNotificationHandler(handler: (params: any) => void): void {
-    this.log('debug', 'Setting resource updated notification handler');
-    this.client.setNotificationHandler('notifications/resources/updated', (notification: any) => {
+  setResourceUpdatedNotificationHandler(handler: (params: { uri: string }) => void): void {
+    this.client.setNotificationHandler('notifications/resources/updated', notification => {
       handler(notification.params);
     });
   }
 
   setResourceListChangedNotificationHandler(handler: () => void): void {
-    this.log('debug', 'Setting resource list changed notification handler');
     this.client.setNotificationHandler('notifications/resources/list_changed', () => {
       handler();
     });
   }
 
-  setElicitationRequestHandler(handler: ElicitationHandler): void {
-    this.log('debug', 'Setting elicitation request handler');
-    // The handler serves both protocol eras: on legacy (2025-era) connections it
-    // answers elicitation/create wire requests; on negotiated 2026-07-28
-    // connections the SDK's multi-round-trip driver dispatches embedded
-    // elicitation requests from input_required results through the same
-    // registered handler and retries the originating call automatically.
-    if (!this.hasElicitationCapability) {
-      try {
-        this.client.registerCapabilities({ elicitation: { form: {} } });
-        this.hasElicitationCapability = true;
-      } catch (error) {
-        throw new Error(
-          'Cannot register an elicitation handler after connecting unless elicitation capability was configured before initialization.',
-          { cause: error },
-        );
-      }
-    }
-
-    this.client.setRequestHandler('elicitation/create', async request => {
-      this.log('debug', `Received elicitation request: ${request.params.message}`);
-      return handler(request.params);
-    });
-  }
-
   setProgressNotificationHandler(handler: ProgressHandler): void {
-    this.log('debug', 'Setting progress notification handler');
     this.client.setNotificationHandler('notifications/progress', notification => {
       handler(notification.params);
     });
   }
 
-  private convertInputSchema(
-    inputSchema: Awaited<ReturnType<Client['listTools']>>['tools'][0]['inputSchema'],
-  ): JSONSchema7 {
+  private convertInputSchema(inputSchema: MCPToolListEntry['inputSchema']): JSONSchema7 {
     return ('jsonSchema' in inputSchema ? inputSchema.jsonSchema : inputSchema) as JSONSchema7;
   }
 
@@ -1250,9 +942,7 @@ export class InternalMastraMCPClient extends MastraBase {
    * structuredContent path (see buildToolFromListEntry). The JSON schema is surfaced here
    * for documentation.
    */
-  private convertOutputSchema(
-    outputSchema: Awaited<ReturnType<Client['listTools']>>['tools'][0]['outputSchema'],
-  ): StandardSchemaWithJSON | undefined {
+  private convertOutputSchema(outputSchema: MCPToolListEntry['outputSchema']): StandardSchemaWithJSON | undefined {
     if (!outputSchema) return outputSchema;
     const schema = ('jsonSchema' in outputSchema ? outputSchema.jsonSchema : outputSchema) as JSONSchema7;
     const standardSchema = toStandardSchema(schema)['~standard'];
@@ -1266,14 +956,10 @@ export class InternalMastraMCPClient extends MastraBase {
 
   /**
    * Returns the server's tool catalog as plain, serializable definitions.
-   *
-   * Unlike {@link tools}, this performs no schema conversion and creates no executable
-   * wrappers, so the result can be cached and reused by other processes. Pass a definition
-   * back to {@link toolFromDefinition} to rebuild the executable tool without rediscovery.
    */
   async toolDefinitions(): Promise<Record<string, SerializableMCPToolDefinition>> {
     this.log('debug', `Requesting tool definitions from MCP server`);
-    const { tools } = await this.client.listTools({}, { timeout: this.timeout });
+    const { tools } = await this.client.listTools({ _meta: this.requestMeta() }, { timeout: this.timeout });
 
     const definitions: Record<string, SerializableMCPToolDefinition> = {};
     for (const tool of tools) {
@@ -1283,10 +969,6 @@ export class InternalMastraMCPClient extends MastraBase {
     return definitions;
   }
 
-  /**
-   * Captures a `tools/list` entry plus the server metadata that is only reachable from a live
-   * connection, so a hydrated tool is indistinguishable from a freshly discovered one.
-   */
   private toSerializableDefinition(tool: MCPToolListEntry): SerializableMCPToolDefinition {
     const annotations = tool.annotations;
     const rawMeta = (tool as { _meta?: Record<string, unknown> })._meta;
@@ -1308,9 +990,7 @@ export class InternalMastraMCPClient extends MastraBase {
 
   /**
    * Rebuilds an executable Mastra tool from a cached {@link SerializableMCPToolDefinition}.
-   *
-   * No connection is opened here. The client connects lazily, the first time the returned tool
-   * is actually executed, which is what makes a cached catalog useful for cold starts.
+   * The client connects lazily on the first execution.
    */
   toolFromDefinition({ definition }: { definition: SerializableMCPToolDefinition }): Tool<any, any, any, any> {
     const tool = {
@@ -1343,10 +1023,9 @@ export class InternalMastraMCPClient extends MastraBase {
 
   async tools(): Promise<Record<string, Tool<any, any, any, any>>> {
     this.log('debug', `Requesting tools from MCP server`);
-    const { tools } = await this.client.listTools({}, { timeout: this.timeout });
+    const { tools } = await this.client.listTools({ _meta: this.requestMeta() }, { timeout: this.timeout });
     const toolsRes: Record<string, Tool<any, any, any, any>> = {};
     for (const tool of tools) {
-      this.log('debug', `Processing tool: ${tool.name}`);
       const mastraTool = this.buildToolFromListEntry(tool, {
         version: this.client.getServerVersion()?.version,
         instructions: this.serverInstructions,
@@ -1361,237 +1040,191 @@ export class InternalMastraMCPClient extends MastraBase {
   }
 
   /**
-   * Single conversion path shared by live discovery and cached hydration.
-   *
-   * Keeping both callers on this one method is what guarantees the issue's requirement that
-   * hydrated tools behave identically to discovered ones: strict-mode metadata, approval
-   * policies, structured content, in-band tool errors, progress metadata, abort signals and
-   * reconnect/retry all come from here rather than being reimplemented per call site.
+   * Single conversion path shared by live discovery and cached hydration, so hydrated
+   * tools behave identically to discovered ones.
    */
   private buildToolFromListEntry(
     tool: MCPToolListEntry,
     serverMeta: { version?: string; instructions?: string; connectFirst?: boolean },
   ): Tool<any, any, any, any> | undefined {
-    {
-      try {
-        // Resolve requireToolApproval for this tool
-        let requireApproval: boolean | undefined;
-        let needsApprovalFn: NeedsApprovalFn | undefined;
+    try {
+      let requireApproval: boolean | undefined;
+      let needsApprovalFn: NeedsApprovalFn | undefined;
 
-        // Capture server-advertised annotations (title, readOnlyHint, destructiveHint, ...).
-        // These are exposed on the tool's `mcp.annotations` field and forwarded to the
-        // requireToolApproval callback so consumers can write annotation-driven policies.
-        const annotations = tool.annotations;
+      // Server-advertised annotations are exposed on `mcp.annotations` and forwarded to
+      // the requireToolApproval callback so consumers can write annotation-driven policies.
+      const annotations = tool.annotations;
 
-        if (typeof this.requireToolApproval === 'function') {
-          // Wrap the server-level function to match the per-tool needsApprovalFn signature.
-          // Note: ctx may be undefined when called via network/index.ts (which only passes args).
-          // We default ctx to {} so the spread doesn't fail and approval fn receives partial context.
-          const serverApprovalFn = this.requireToolApproval;
-          const toolName = tool.name;
-          requireApproval = true; // Signal that approval check is needed
-          needsApprovalFn = (args: Record<string, unknown>, ctx: Record<string, unknown> = {}) => {
-            // Server-supplied annotations are placed AFTER the ctx spread so a
-            // caller can't accidentally (or maliciously) override them by
-            // injecting an `annotations` key into ctx — the value the
-            // requireToolApproval policy sees always reflects what came back
-            // from the MCP server's tools/list response.
-            return serverApprovalFn({ toolName, args, ...ctx, annotations });
-          };
-        } else if (this.requireToolApproval === true) {
-          requireApproval = true;
-        }
-        // When requireToolApproval is false/undefined, requireApproval stays undefined
-        // and createTool defaults it to false
-
-        const rawMeta = (tool as { _meta?: Record<string, unknown> })._meta;
-        // Stamp serverId into _meta.ui so consumers can resolve app resources
-        // back to the originating MCP server without scanning all servers.
-        const toolMeta = rawMeta ? this.stampServerIdInMeta(rawMeta) : undefined;
-        const mcpToolProps =
-          toolMeta || annotations
-            ? {
-                mcp: {
-                  ...(toolMeta ? { _meta: toolMeta } : {}),
-                  ...(annotations ? { annotations } : {}),
-                },
-              }
-            : {};
-        // Real validator for structuredContent. Kept separate from the Tool's outputSchema
-        // (whose validator is a no-op — see convertOutputSchema) because only the
-        // structuredContent success path should be validated, not envelope returns.
-        const rawOutputSchema = tool.outputSchema
-          ? (('jsonSchema' in tool.outputSchema ? tool.outputSchema.jsonSchema : tool.outputSchema) as JSONSchema7)
-          : undefined;
-        const outputValidator = rawOutputSchema ? toStandardSchema(rawOutputSchema) : undefined;
-        const mastraTool = createTool({
-          id: `${this.name}_${tool.name}`,
-          description: tool.description || '',
-          inputSchema: this.convertInputSchema(tool.inputSchema),
-          outputSchema: this.convertOutputSchema(tool.outputSchema),
-          strict: getMastraToolStrictMeta(toolMeta),
-          // Preserve the full _meta from the remote MCP server (including ui.resourceUri
-          // for MCP Apps) so downstream consumers (e.g. Studio) can detect app tools.
-          // Also propagate MCP tool annotations so listTools() / listToolsets() consumers
-          // can read them via `tool.mcp.annotations`.
-          ...mcpToolProps,
-          requireApproval,
-          mcpMetadata: {
-            serverName: this.name,
-            serverVersion: serverMeta.version,
-            serverInstructions: serverMeta.instructions,
-            forwardInstructions: this.forwardInstructions,
-            instructionsMaxLength: this.instructionsMaxLength,
-          },
-          ...(tool.outputSchema ? { toModelOutput: createStructuredToolToModelOutput() } : {}),
-          execute: async (
-            input: any,
-            context?: {
-              requestContext?: RequestContext | null;
-              runId?: string;
-              abortSignal?: AbortSignal;
-              _meta?: Record<string, unknown>;
-            },
-          ) => {
-            // A hydrated tool was rebuilt from cache without ever opening a connection, so the
-            // first execution is what establishes it. `connect()` is memoised, making this a
-            // no-op for tools that came from live discovery.
-            if (serverMeta.connectFirst) {
-              await this.connect();
-            }
-
-            const operationContext = context?.requestContext ?? null;
-
-            return this.operationContextStore.run(operationContext, async () => {
-              const executeToolCall = async () => {
-                this.log('debug', `Executing tool: ${tool.name}`, { toolArgs: input, runId: context?.runId });
-                const userMeta = context?._meta;
-                // progressMeta spreads last so Mastra-managed progressToken takes precedence over any user-supplied one
-                const progressMeta = this.enableProgressTracking
-                  ? { progressToken: context?.runId || crypto.randomUUID() }
-                  : undefined;
-                const combinedMeta = userMeta || progressMeta ? { ...userMeta, ...progressMeta } : undefined;
-
-                const res = await this.client.callTool(
-                  {
-                    name: tool.name,
-                    arguments: input,
-                    ...(combinedMeta ? { _meta: combinedMeta } : {}),
-                  },
-                  {
-                    timeout: this.timeout,
-                    signal: context?.abortSignal,
-                  },
-                );
-
-                // Per the MCP spec, tool *execution* failures are reported in-band:
-                // the server returns a normal CallToolResult with `isError: true` and
-                // the failure details in `content`. Map that onto Mastra's failed-tool-call
-                // path (unless the consumer opted into the legacy `'return'` behaviour) so
-                // tool spans, stream chunks, scorers, and persisted message parts reflect the
-                // failure, and the model sees the error text so it can self-correct.
-                if (res.isError && this.onToolError === 'throw') {
-                  const errorText = extractToolErrorText(res.content);
-                  this.log('debug', `Tool reported an error: ${tool.name}`, { error: errorText });
-                  throw new MastraError({
-                    id: 'MCP_CLIENT_TOOL_EXECUTION_FAILED',
-                    domain: ErrorDomain.MCP,
-                    category: ErrorCategory.THIRD_PARTY,
-                    text: errorText,
-                    details: { toolName: tool.name, serverName: this.name },
-                  });
-                }
-
-                this.log('debug', `Tool executed successfully: ${tool.name}`);
-
-                if (res.structuredContent !== undefined) {
-                  // Enforce the server-advertised outputSchema before the result reaches the
-                  // model. This covers both live-discovered tools and tools hydrated from a
-                  // cached catalog (which never populate the MCP SDK's tools/list output-schema
-                  // cache, so the SDK's own AJV check does not fire for them). On mismatch,
-                  // return the same structured ValidationError shape createTool produces so
-                  // the model can self-correct. Skipped for isError results, which are handled
-                  // above / by the `onToolError: 'return'` envelope path.
-                  if (!res.isError && outputValidator) {
-                    const validation = validateToolOutput(outputValidator, res.structuredContent, tool.name);
-                    if (validation.error) {
-                      this.log('debug', `Tool output failed schema validation: ${tool.name}`, {
-                        message: validation.error.message,
-                      });
-                      return validation.error;
-                    }
-                  }
-                  // Attach content metadata to the original structuredContent reference so the
-                  // hidden symbol channels (content/_meta) are preserved.
-                  return attachMcpCallToolContent(
-                    res.structuredContent,
-                    res.content,
-                    res._meta ? this.stampServerIdInMeta(res._meta) : undefined,
-                  );
-                }
-
-                return res;
-              };
-
-              const failedTransport = this.transport;
-              const lifecycleGeneration = this.lifecycleGeneration;
-              try {
-                return await executeToolCall();
-              } catch (e) {
-                // Tool-execution errors (isError: true from the MCP server) are semantic
-                // failures, not transport issues. Don't misclassify them as reconnectable
-                // just because their text happens to contain "session", "404", etc.
-                const isToolExecutionError =
-                  e instanceof MastraError && e.id === 'MCP_CLIENT_TOOL_EXECUTION_FAILED';
-
-                if (!isToolExecutionError && isReconnectableMCPError(e)) {
-                  this.log('debug', `Session error detected for tool ${tool.name}, attempting reconnection...`, {
-                    error: e instanceof Error ? e.message : String(e),
-                  });
-
-                  try {
-                    // Force reconnection
-                    await this.reconnectAfterTransportFailure(failedTransport, lifecycleGeneration);
-
-                    // Retry the tool call with fresh connection
-                    this.log('debug', `Retrying tool ${tool.name} after reconnection...`);
-                    return await executeToolCall();
-                  } catch (reconnectError) {
-                    this.log('error', `Reconnection or retry failed for tool ${tool.name}`, {
-                      originalError: e instanceof Error ? e.message : String(e),
-                      reconnectError: reconnectError instanceof Error ? reconnectError.stack : String(reconnectError),
-                      toolArgs: input,
-                    });
-                    throw reconnectError;
-                  }
-                }
-
-                // For non-session errors, log and rethrow
-                this.log('error', `Error calling tool: ${tool.name}`, {
-                  error: e instanceof Error ? e.stack : JSON.stringify(e, null, 2),
-                  toolArgs: input,
-                });
-                throw e;
-              }
-            });
-          },
-        });
-
-        // Set needsApprovalFn directly on the tool instance (same pattern as tool-builder).
-        // The agent runtime reads it back via the typed `getNeedsApprovalFn` helper.
-        if (needsApprovalFn) {
-          mastraTool.needsApprovalFn = needsApprovalFn;
-        }
-
-        return mastraTool;
-      } catch (toolCreationError: unknown) {
-        // Catch errors during tool creation itself (e.g., if createTool has issues)
-        this.log('error', `Failed to create Mastra tool wrapper for MCP tool: ${tool.name}`, {
-          error: toolCreationError instanceof Error ? toolCreationError.stack : String(toolCreationError),
-          mcpToolDefinition: tool,
-        });
-        return undefined;
+      if (typeof this.requireToolApproval === 'function') {
+        const serverApprovalFn = this.requireToolApproval;
+        const toolName = tool.name;
+        requireApproval = true;
+        needsApprovalFn = (args: Record<string, unknown>, ctx: Record<string, unknown> = {}) => {
+          // Server-supplied annotations are placed AFTER the ctx spread so a caller
+          // cannot override them by injecting an `annotations` key into ctx.
+          return serverApprovalFn({ toolName, args, ...ctx, annotations });
+        };
+      } else if (this.requireToolApproval === true) {
+        requireApproval = true;
       }
+
+      const rawMeta = (tool as { _meta?: Record<string, unknown> })._meta;
+      // Stamp serverId into _meta.ui so consumers can resolve app resources
+      // back to the originating MCP server without scanning all servers.
+      const toolMeta = rawMeta ? this.stampServerIdInMeta(rawMeta) : undefined;
+      const mcpToolProps =
+        toolMeta || annotations
+          ? {
+              mcp: {
+                ...(toolMeta ? { _meta: toolMeta } : {}),
+                ...(annotations ? { annotations } : {}),
+              },
+            }
+          : {};
+      // Real validator for structuredContent. Kept separate from the Tool's outputSchema
+      // (whose validator is a no-op — see convertOutputSchema) because only the
+      // structuredContent success path should be validated, not envelope returns.
+      const rawOutputSchema = tool.outputSchema
+        ? (('jsonSchema' in tool.outputSchema ? tool.outputSchema.jsonSchema : tool.outputSchema) as JSONSchema7)
+        : undefined;
+      const outputValidator = rawOutputSchema ? toStandardSchema(rawOutputSchema) : undefined;
+      const mastraTool = createTool({
+        id: `${this.name}_${tool.name}`,
+        description: tool.description || '',
+        inputSchema: this.convertInputSchema(tool.inputSchema),
+        outputSchema: this.convertOutputSchema(tool.outputSchema),
+        strict: getMastraToolStrictMeta(toolMeta),
+        ...mcpToolProps,
+        requireApproval,
+        mcpMetadata: {
+          serverName: this.name,
+          serverVersion: serverMeta.version,
+          serverInstructions: serverMeta.instructions,
+          forwardInstructions: this.forwardInstructions,
+          instructionsMaxLength: this.instructionsMaxLength,
+        },
+        ...(tool.outputSchema ? { toModelOutput: createStructuredToolToModelOutput() } : {}),
+        execute: async (
+          input: any,
+          context?: {
+            requestContext?: RequestContext | null;
+            runId?: string;
+            abortSignal?: AbortSignal;
+            _meta?: Record<string, unknown>;
+          },
+        ) => {
+          // A hydrated tool was rebuilt from cache without ever opening a connection, so the
+          // first execution is what establishes it. `connect()` is memoised.
+          if (serverMeta.connectFirst) {
+            await this.connect();
+          }
+
+          const operationContext = context?.requestContext ?? null;
+
+          return this.operationContextStore.run(operationContext, async () => {
+            const executeToolCall = async () => {
+              this.log('debug', `Executing tool: ${tool.name}`, { toolArgs: input, runId: context?.runId });
+              // progressToken spreads last so the Mastra-managed token takes precedence.
+              const progressMeta = this.enableProgressTracking
+                ? { progressToken: context?.runId || crypto.randomUUID() }
+                : undefined;
+              const _meta = this.requestMeta({ ...context?._meta, ...progressMeta });
+
+              const res = await this.client.callTool(
+                { name: tool.name, arguments: input, ...(_meta ? { _meta } : {}) },
+                { timeout: this.timeout, signal: context?.abortSignal },
+              );
+
+              // Per the MCP spec, tool *execution* failures are reported in-band with
+              // `isError: true`. Map that onto Mastra's failed-tool-call path unless the
+              // consumer opted into `'return'`.
+              if (res.isError && this.onToolError === 'throw') {
+                const errorText = extractToolErrorText(res.content);
+                this.log('debug', `Tool reported an error: ${tool.name}`, { error: errorText });
+                throw new MastraError({
+                  id: 'MCP_CLIENT_TOOL_EXECUTION_FAILED',
+                  domain: ErrorDomain.MCP,
+                  category: ErrorCategory.THIRD_PARTY,
+                  text: errorText,
+                  details: { toolName: tool.name, serverName: this.name },
+                });
+              }
+
+              this.log('debug', `Tool executed successfully: ${tool.name}`);
+
+              if (res.structuredContent !== undefined) {
+                // Enforce the server-advertised outputSchema before the result reaches the
+                // model. Covers hydrated tools too, which never populate the SDK's tools/list
+                // output-schema cache. On mismatch, return the structured ValidationError
+                // shape createTool produces so the model can self-correct.
+                if (!res.isError && outputValidator) {
+                  const validation = validateToolOutput(outputValidator, res.structuredContent, tool.name);
+                  if (validation.error) {
+                    this.log('debug', `Tool output failed schema validation: ${tool.name}`, {
+                      message: validation.error.message,
+                    });
+                    return validation.error;
+                  }
+                }
+                return attachMcpCallToolContent(
+                  res.structuredContent,
+                  res.content,
+                  res._meta ? this.stampServerIdInMeta(res._meta) : undefined,
+                );
+              }
+
+              return res;
+            };
+
+            const failedTransport = this.transport;
+            const lifecycleGeneration = this.lifecycleGeneration;
+            try {
+              return await executeToolCall();
+            } catch (e) {
+              // In-band tool errors are semantic failures, never transport issues.
+              const isToolExecutionError = e instanceof MastraError && e.id === 'MCP_CLIENT_TOOL_EXECUTION_FAILED';
+
+              if (!isToolExecutionError && isReconnectableMCPError(e)) {
+                this.log('debug', `Transport error detected for tool ${tool.name}, attempting reconnection...`, {
+                  error: e instanceof Error ? e.message : String(e),
+                });
+
+                try {
+                  await this.reconnectAfterTransportFailure(failedTransport, lifecycleGeneration);
+                  this.log('debug', `Retrying tool ${tool.name} after reconnection...`);
+                  return await executeToolCall();
+                } catch (reconnectError) {
+                  this.log('error', `Reconnection or retry failed for tool ${tool.name}`, {
+                    originalError: e instanceof Error ? e.message : String(e),
+                    reconnectError: reconnectError instanceof Error ? reconnectError.stack : String(reconnectError),
+                    toolArgs: input,
+                  });
+                  throw reconnectError;
+                }
+              }
+
+              this.log('error', `Error calling tool: ${tool.name}`, {
+                error: e instanceof Error ? e.stack : JSON.stringify(e, null, 2),
+                toolArgs: input,
+              });
+              throw e;
+            }
+          });
+        },
+      });
+
+      // The agent runtime reads this back via the typed `getNeedsApprovalFn` helper.
+      if (needsApprovalFn) {
+        mastraTool.needsApprovalFn = needsApprovalFn;
+      }
+
+      return mastraTool;
+    } catch (toolCreationError: unknown) {
+      this.log('error', `Failed to create Mastra tool wrapper for MCP tool: ${tool.name}`, {
+        error: toolCreationError instanceof Error ? toolCreationError.stack : String(toolCreationError),
+        mcpToolDefinition: tool,
+      });
+      return undefined;
     }
   }
 

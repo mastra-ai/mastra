@@ -14,9 +14,11 @@ import { MCPOAuthClientProvider, InMemoryOAuthStorage } from './oauth-provider.j
 // Fake OAuth authorization server
 //
 // Implements just enough of OAuth 2.1 for the MCP client's OAuth flow: RFC 8414
-// metadata discovery, RFC 7591 dynamic client registration, the authorization
-// code grant with PKCE (S256), and the refresh token grant. Tokens are opaque
-// random strings shared with the protected MCP server via `validTokens`.
+// metadata discovery, pre-registered clients and URL-based client IDs (Client ID
+// Metadata Documents), the authorization code grant with PKCE (S256), and the
+// refresh token grant. Tokens are opaque random strings shared with the protected
+// MCP server via `validTokens`. The registration endpoint is a trap: the v2 client
+// never registers dynamically, so it must never be contacted.
 // =============================================================================
 
 interface ClientRegistration {
@@ -26,8 +28,10 @@ interface ClientRegistration {
 
 interface FakeAuthorizationServer {
   url: string;
-  /** Every dynamic client registration received, in order. */
-  registrations: ClientRegistration[];
+  /** Registers a client the way an operator would out of band. */
+  preregister(client: ClientRegistration): void;
+  /** How many times the (unsupported) dynamic registration endpoint was contacted. */
+  registrationAttempts: number;
   /** The redirect_uri of every authorization request received, in order. */
   authorizeRedirectUris: string[];
   /** How many refresh_token grants the token endpoint served. */
@@ -61,7 +65,8 @@ async function startFakeAuthorizationServer(port: number): Promise<FakeAuthoriza
 
   const state: FakeAuthorizationServer = {
     url,
-    registrations: [],
+    preregister: client => void clientsById.set(client.client_id, client),
+    registrationAttempts: 0,
     authorizeRedirectUris: [],
     refreshGrantCount: 0,
     validTokens: new Set(),
@@ -81,6 +86,7 @@ async function startFakeAuthorizationServer(port: number): Promise<FakeAuthoriza
         authorization_endpoint: `${url}/authorize`,
         token_endpoint: `${url}/token`,
         registration_endpoint: `${url}/register`,
+        client_id_metadata_document_supported: true,
         response_types_supported: ['code'],
         grant_types_supported: ['authorization_code', 'refresh_token'],
         code_challenge_methods_supported: ['S256'],
@@ -89,20 +95,9 @@ async function startFakeAuthorizationServer(port: number): Promise<FakeAuthoriza
       return;
     }
 
-    if (requestUrl.pathname === '/register' && req.method === 'POST') {
-      const metadata = JSON.parse(await readBody(req));
-      const registration: ClientRegistration = {
-        client_id: `client-${randomUUID()}`,
-        redirect_uris: metadata.redirect_uris,
-      };
-      clientsById.set(registration.client_id, registration);
-      state.registrations.push(registration);
-      sendJson(res, 201, {
-        ...metadata,
-        client_id: registration.client_id,
-        client_id_issued_at: Math.floor(Date.now() / 1000),
-        token_endpoint_auth_method: 'none',
-      });
+    if (requestUrl.pathname === '/register') {
+      state.registrationAttempts += 1;
+      sendJson(res, 201, { client_id: `client-${randomUUID()}`, token_endpoint_auth_method: 'none' });
       return;
     }
 
@@ -112,7 +107,11 @@ async function startFakeAuthorizationServer(port: number): Promise<FakeAuthoriza
       const oauthState = requestUrl.searchParams.get('state') ?? '';
       const codeChallenge = requestUrl.searchParams.get('code_challenge') ?? '';
 
-      const client = clientsById.get(clientId);
+      // A URL-based client ID stands in for fetching the metadata document: this fake
+      // accepts any loopback redirect for such clients.
+      const client = clientId.startsWith('https://')
+        ? { client_id: clientId, redirect_uris: [redirectUri] }
+        : clientsById.get(clientId);
       if (!client || !client.redirect_uris.includes(redirectUri)) {
         sendJson(res, 400, { error: 'invalid_request', error_description: 'Unknown client or redirect_uri' });
         return;
@@ -256,11 +255,24 @@ async function driveBrowser(authorizationUrl: URL): Promise<void> {
   await fetch(location);
 }
 
+const CLIENT_METADATA_URL = 'https://client.example.com/oauth/client-metadata.json';
+
+/**
+ * Builds a provider for a client the fake authorization server knows out of band:
+ * every callback-port candidate is pre-registered so a fallback-bound port still
+ * matches a registered URI.
+ */
 function createProvider(options: {
   callbackUrl: string;
+  authServer: FakeAuthorizationServer;
   storage?: InMemoryOAuthStorage;
   onRedirectToAuthorization?: (url: URL) => void | Promise<void>;
 }): MCPOAuthClientProvider {
+  const clientId = `preregistered-${randomUUID()}`;
+  options.authServer.preregister({
+    client_id: clientId,
+    redirect_uris: getCallbackUrlCandidates(options.callbackUrl).map(candidate => candidate.toString()),
+  });
   return new MCPOAuthClientProvider({
     redirectUrl: options.callbackUrl,
     clientMetadata: {
@@ -270,6 +282,7 @@ function createProvider(options: {
       response_types: ['code'],
       token_endpoint_auth_method: 'none',
     },
+    clientInformation: { client_id: clientId },
     storage: options.storage,
     onRedirectToAuthorization: options.onRedirectToAuthorization,
   });
@@ -313,10 +326,11 @@ describe('MCPClient OAuth authorization flow', () => {
   });
 
   it('marks the server as needs-auth when the connection is rejected with a 401', async () => {
-    const { mcpServer, callbackUrl } = await setup();
+    const { authServer, mcpServer, callbackUrl } = await setup();
     const authorizationUrls: URL[] = [];
     const provider = createProvider({
       callbackUrl,
+      authServer,
       onRedirectToAuthorization: url => void authorizationUrls.push(url),
     });
     const mcp = track(createClient(mcpServer.url, provider));
@@ -328,10 +342,10 @@ describe('MCPClient OAuth authorization flow', () => {
     expect(authorizationUrls).toHaveLength(1);
   });
 
-  it('authenticates end to end: registration, consent, code exchange, connect', async () => {
+  it('authenticates end to end with a pre-registered client: consent, code exchange, connect', async () => {
     const { authServer, mcpServer, callbackUrl } = await setup();
     const storage = new InMemoryOAuthStorage();
-    const provider = createProvider({ callbackUrl, storage, onRedirectToAuthorization: driveBrowser });
+    const provider = createProvider({ callbackUrl, authServer, storage, onRedirectToAuthorization: driveBrowser });
     const mcp = track(createClient(mcpServer.url, provider));
 
     await mcp.authenticate('fixture');
@@ -339,12 +353,9 @@ describe('MCPClient OAuth authorization flow', () => {
     expect(mcp.getServerAuthState('fixture')).toBe('authorized');
     await expect(mcp.listTools()).resolves.toBeDefined();
 
-    // Dynamic client registration registered every callback-port candidate,
-    // so a future fallback-bound port still matches a registered URI.
-    expect(authServer.registrations).toHaveLength(1);
-    expect(authServer.registrations[0]!.redirect_uris).toEqual(
-      getCallbackUrlCandidates(callbackUrl).map(candidate => candidate.toString()),
-    );
+    // The configured identity was used as-is; nothing was registered dynamically.
+    expect(authServer.registrationAttempts).toBe(0);
+    expect(authServer.authorizeRedirectUris).toHaveLength(1);
 
     // Tokens were persisted through the provider's storage.
     const tokens = await provider.tokens();
@@ -352,10 +363,31 @@ describe('MCPClient OAuth authorization flow', () => {
     expect(authServer.validTokens.has(tokens!.access_token)).toBe(true);
   });
 
+  it('authenticates end to end with a Client ID Metadata Document URL as the client_id', async () => {
+    const { authServer, mcpServer, callbackUrl } = await setup();
+    const authorizationUrls: URL[] = [];
+    const provider = new MCPOAuthClientProvider({
+      redirectUrl: callbackUrl,
+      clientMetadata: { redirect_uris: [callbackUrl], client_name: 'CIMD Test Client', token_endpoint_auth_method: 'none' },
+      clientMetadataUrl: CLIENT_METADATA_URL,
+      onRedirectToAuthorization: url => {
+        authorizationUrls.push(url);
+        return driveBrowser(url);
+      },
+    });
+    const mcp = track(createClient(mcpServer.url, provider));
+
+    await mcp.authenticate('fixture');
+
+    expect(mcp.getServerAuthState('fixture')).toBe('authorized');
+    expect(authorizationUrls[0]!.searchParams.get('client_id')).toBe(CLIENT_METADATA_URL);
+    expect(authServer.registrationAttempts).toBe(0);
+  });
+
   it('reconnects with persisted tokens without a new browser flow', async () => {
-    const { mcpServer, callbackUrl } = await setup();
+    const { authServer, mcpServer, callbackUrl } = await setup();
     const storage = new InMemoryOAuthStorage();
-    const provider = createProvider({ callbackUrl, storage, onRedirectToAuthorization: driveBrowser });
+    const provider = createProvider({ callbackUrl, authServer, storage, onRedirectToAuthorization: driveBrowser });
     const mcp = track(createClient(mcpServer.url, provider));
     await mcp.authenticate('fixture');
     await mcp.disconnect();
@@ -363,6 +395,7 @@ describe('MCPClient OAuth authorization flow', () => {
     // A fresh client sharing the same storage must connect silently.
     const silentProvider = createProvider({
       callbackUrl,
+      authServer,
       storage,
       onRedirectToAuthorization: () => {
         throw new Error('Browser flow must not run when stored tokens are valid');
@@ -379,6 +412,7 @@ describe('MCPClient OAuth authorization flow', () => {
     let browserRuns = 0;
     const provider = createProvider({
       callbackUrl,
+      authServer,
       onRedirectToAuthorization: url => {
         browserRuns += 1;
         return driveBrowser(url);
@@ -398,27 +432,29 @@ describe('MCPClient OAuth authorization flow', () => {
     expect(browserRuns).toBe(1);
   });
 
-  it('re-registers when the stored client registration does not cover the callback URL', async () => {
+  it('fails explicitly instead of registering when the authorization server rejects the configured client', async () => {
     const { authServer, mcpServer, callbackUrl } = await setup();
-    const provider = createProvider({ callbackUrl, onRedirectToAuthorization: driveBrowser });
-    // Simulate a registration from an older configuration whose redirect_uris
-    // no longer include the callback URL.
-    await provider.saveClientInformation({
-      client_id: 'stale-client',
-      redirect_uris: ['http://127.0.0.1:9999/oauth/callback'],
+    const authorizationUrls: URL[] = [];
+    // A client the authorization server does not know: the flow must surface the
+    // rejection rather than fall back to dynamic registration.
+    const provider = new MCPOAuthClientProvider({
+      redirectUrl: callbackUrl,
+      clientMetadata: { redirect_uris: [callbackUrl], client_name: 'Unknown Client', token_endpoint_auth_method: 'none' },
+      clientInformation: { client_id: 'unknown-client' },
+      onRedirectToAuthorization: url => void authorizationUrls.push(url),
     });
     const mcp = track(createClient(mcpServer.url, provider));
 
-    await mcp.authenticate('fixture');
-
-    expect(mcp.getServerAuthState('fixture')).toBe('authorized');
-    expect(authServer.registrations).toHaveLength(1);
-    expect(authServer.registrations[0]!.client_id).not.toBe('stale-client');
+    await expect(mcp.reconnectServer('fixture')).rejects.toThrow();
+    expect(mcp.getServerAuthState('fixture')).toBe('needs-auth');
+    const consent = await fetch(authorizationUrls[0]!, { redirect: 'manual' });
+    expect(consent.status).toBe(400);
+    expect(authServer.registrationAttempts).toBe(0);
   });
 
   it('joins concurrent authenticate calls for the same server into one flow', async () => {
     const { authServer, mcpServer, callbackUrl } = await setup();
-    const provider = createProvider({ callbackUrl, onRedirectToAuthorization: driveBrowser });
+    const provider = createProvider({ callbackUrl, authServer, onRedirectToAuthorization: driveBrowser });
     const mcp = track(createClient(mcpServer.url, provider));
 
     await Promise.all([mcp.authenticate('fixture'), mcp.authenticate('fixture')]);
@@ -432,8 +468,8 @@ describe('MCPClient OAuth authorization flow', () => {
     const secondMcpServer = await startProtectedMcpServer(ports.secondMcpPort, authServer);
     cleanups.push(() => secondMcpServer.close());
 
-    const firstProvider = createProvider({ callbackUrl, onRedirectToAuthorization: driveBrowser });
-    const secondProvider = createProvider({ callbackUrl, onRedirectToAuthorization: driveBrowser });
+    const firstProvider = createProvider({ callbackUrl, authServer, onRedirectToAuthorization: driveBrowser });
+    const secondProvider = createProvider({ callbackUrl, authServer, onRedirectToAuthorization: driveBrowser });
     const firstMcp = track(createClient(mcpServer.url, firstProvider));
     const secondMcp = track(createClient(secondMcpServer.url, secondProvider));
 
@@ -454,7 +490,7 @@ describe('MCPClient OAuth authorization flow', () => {
   it('returns to needs-auth when the user denies authorization', async () => {
     const { authServer, mcpServer, callbackUrl } = await setup();
     authServer.denyAuthorization = true;
-    const provider = createProvider({ callbackUrl, onRedirectToAuthorization: driveBrowser });
+    const provider = createProvider({ callbackUrl, authServer, onRedirectToAuthorization: driveBrowser });
     const mcp = track(createClient(mcpServer.url, provider));
 
     await expect(mcp.authenticate('fixture')).rejects.toThrow(/access_denied/);
@@ -462,9 +498,9 @@ describe('MCPClient OAuth authorization flow', () => {
   });
 
   it('returns to needs-auth when the browser never delivers a code', async () => {
-    const { mcpServer, callbackUrl } = await setup();
+    const { authServer, mcpServer, callbackUrl } = await setup();
     // The "browser" never visits the authorization URL.
-    const provider = createProvider({ callbackUrl, onRedirectToAuthorization: () => {} });
+    const provider = createProvider({ callbackUrl, authServer, onRedirectToAuthorization: () => {} });
     const mcp = track(createClient(mcpServer.url, provider));
 
     await expect(mcp.authenticate('fixture', { timeoutMs: 300 })).rejects.toThrow(/Timed out/);
@@ -472,7 +508,7 @@ describe('MCPClient OAuth authorization flow', () => {
   });
 
   it('cancels a pending flow: the authenticate call rejects and the server returns to needs-auth', async () => {
-    const { mcpServer, callbackUrl } = await setup();
+    const { authServer, mcpServer, callbackUrl } = await setup();
     // The "browser" reaches the authorization URL but the redirect never comes
     // back (the user closed the tab), so the flow is left waiting for the code.
     let authorizationReached: (() => void) | undefined;
@@ -481,6 +517,7 @@ describe('MCPClient OAuth authorization flow', () => {
     });
     const provider = createProvider({
       callbackUrl,
+      authServer,
       onRedirectToAuthorization: () => {
         authorizationReached?.();
       },
@@ -498,15 +535,15 @@ describe('MCPClient OAuth authorization flow', () => {
   });
 
   it('cancelAuthentication returns false when no flow is pending', async () => {
-    const { mcpServer, callbackUrl } = await setup();
-    const provider = createProvider({ callbackUrl, onRedirectToAuthorization: driveBrowser });
+    const { authServer, mcpServer, callbackUrl } = await setup();
+    const provider = createProvider({ callbackUrl, authServer, onRedirectToAuthorization: driveBrowser });
     const mcp = track(createClient(mcpServer.url, provider));
 
     await expect(mcp.cancelAuthentication('fixture')).resolves.toBe(false);
   });
 
   it('can authenticate again after a cancelled flow', async () => {
-    const { mcpServer, callbackUrl } = await setup();
+    const { authServer, mcpServer, callbackUrl } = await setup();
     let authorizationReached: (() => void) | undefined;
     const reachedAuthorization = new Promise<void>(resolve => {
       authorizationReached = resolve;
@@ -516,6 +553,7 @@ describe('MCPClient OAuth authorization flow', () => {
     let driveOnRedirect = false;
     const provider = createProvider({
       callbackUrl,
+      authServer,
       onRedirectToAuthorization: url => {
         if (driveOnRedirect) {
           return driveBrowser(url);
@@ -536,13 +574,14 @@ describe('MCPClient OAuth authorization flow', () => {
   });
 
   it('disconnect cancels a pending flow: the callback port is released and the flow settles', async () => {
-    const { mcpServer, callbackUrl } = await setup();
+    const { authServer, mcpServer, callbackUrl } = await setup();
     let authorizationReached: (() => void) | undefined;
     const reachedAuthorization = new Promise<void>(resolve => {
       authorizationReached = resolve;
     });
     const provider = createProvider({
       callbackUrl,
+      authServer,
       onRedirectToAuthorization: () => {
         authorizationReached?.();
       },
@@ -559,8 +598,8 @@ describe('MCPClient OAuth authorization flow', () => {
   });
 
   it('cancels a flow still in its setup phase before the callback server binds', async () => {
-    const { mcpServer, callbackUrl } = await setup();
-    const provider = createProvider({ callbackUrl, onRedirectToAuthorization: driveBrowser });
+    const { authServer, mcpServer, callbackUrl } = await setup();
+    const provider = createProvider({ callbackUrl, authServer, onRedirectToAuthorization: driveBrowser });
 
     // Gate beginAuthorizationSession so the flow parks in setup — before the
     // callback server is created and stored — which is the window CodeRabbit
@@ -601,8 +640,8 @@ describe('MCPClient OAuth authorization flow', () => {
   });
 
   it('disconnect does not deadlock on a flow still in its setup phase', async () => {
-    const { mcpServer, callbackUrl } = await setup();
-    const provider = createProvider({ callbackUrl, onRedirectToAuthorization: driveBrowser });
+    const { authServer, mcpServer, callbackUrl } = await setup();
+    const provider = createProvider({ callbackUrl, authServer, onRedirectToAuthorization: driveBrowser });
 
     let reachSetup: (() => void) | undefined;
     const inSetup = new Promise<void>(resolve => {
@@ -636,7 +675,7 @@ describe('MCPClient OAuth authorization flow', () => {
   });
 
   it('waits for an in-flight disconnect before starting a new authenticate flow', async () => {
-    const { mcpServer, callbackUrl } = await setup();
+    const { authServer, mcpServer, callbackUrl } = await setup();
 
     // First flow stalls at the authorization URL so a disconnect can catch it
     // mid-flight. The retry after disconnect drives the browser to completion.
@@ -647,6 +686,7 @@ describe('MCPClient OAuth authorization flow', () => {
     let driveOnRedirect = false;
     const provider = createProvider({
       callbackUrl,
+      authServer,
       onRedirectToAuthorization: url => {
         if (driveOnRedirect) {
           return driveBrowser(url);
@@ -687,10 +727,10 @@ describe('MCPClient OAuth authorization flow', () => {
   });
 
   it('rejects a redirect URL whose hostname only looks like loopback', async () => {
-    const { mcpServer } = await setup();
+    const { authServer, mcpServer } = await setup();
     // 127.evil.com is not a loopback address; a naive startsWith('127.') check
     // would wrongly accept it and bind the callback server for an attacker host.
-    const provider = createProvider({ callbackUrl: 'http://127.evil.com:9999/oauth/callback' });
+    const provider = createProvider({ callbackUrl: 'http://127.evil.com:9999/oauth/callback', authServer });
     const mcp = track(createClient(mcpServer.url, provider));
 
     await expect(mcp.authenticate('fixture')).rejects.toThrow(/loopback address/);

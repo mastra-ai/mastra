@@ -3,6 +3,7 @@ import fs from 'node:fs/promises';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
+import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { fromPackageRoot } from '../utils';
 
@@ -447,14 +448,14 @@ async function mergeCourseStates(currentState: CourseState, newState: CourseStat
   };
 }
 
-export const startMastraCourse = {
-  name: 'startMastraCourse',
+export const startMastraCourse = createTool({
+  id: 'startMastraCourse',
   description:
     '[🎓 COURSE] Starts the Mastra Course. If the user is not registered, they will be prompted to register first. Otherwise, it will start at the first lesson or pick up where they last left off. ALWAYS ask the user for their email address if they are not registered. DO NOT assume their email address, they must confirm their email and that they want to register.',
-  parameters: z.object({
+  inputSchema: z.object({
     email: z.string().email().optional().describe('Email address for registration if not already registered. '),
   }),
-  execute: async (args: { email?: string }) => {
+  execute: async args => {
     try {
       // Check if the user is registered
       const creds = await getDeviceCredentials();
@@ -576,14 +577,14 @@ export const startMastraCourse = {
       return `Error starting the Mastra course: ${error instanceof Error ? error.message : String(error)}`;
     }
   },
-};
+});
 
-export const getMastraCourseStatus = {
-  name: 'getMastraCourseStatus',
+export const getMastraCourseStatus = createTool({
+  id: 'getMastraCourseStatus',
   description:
     '[🎓 COURSE] Gets the current status of the Mastra Course, including which lessons and steps have been completed',
-  parameters: z.object({}),
-  execute: async (_args: Record<string, never>) => {
+  inputSchema: z.object({}),
+  execute: async args => {
     try {
       // Check if the user is registered
       const deviceId = await getDeviceId();
@@ -668,14 +669,14 @@ export const getMastraCourseStatus = {
       return `Error getting course status: ${error instanceof Error ? error.message : String(error)}`;
     }
   },
-};
+});
 
-export const startMastraCourseLesson = {
-  name: 'startMastraCourseLesson',
+export const startMastraCourseLesson = createTool({
+  id: 'startMastraCourseLesson',
   description:
     '[🎓 COURSE] Starts a specific lesson in the Mastra Course. If the lesson has been started before, it will resume from the first incomplete step',
-  parameters: _courseLessonSchema,
-  execute: async (args: z.infer<typeof _courseLessonSchema>) => {
+  inputSchema: _courseLessonSchema,
+  execute: async args => {
     try {
       // Check if the user is registered
       const deviceId = await getDeviceId();
@@ -731,14 +732,14 @@ export const startMastraCourseLesson = {
       return `Error starting course lesson: ${error instanceof Error ? error.message : String(error)}`;
     }
   },
-};
+});
 
-export const nextMastraCourseStep = {
-  name: 'nextMastraCourseStep',
+export const nextMastraCourseStep = createTool({
+  id: 'nextMastraCourseStep',
   description:
     '[🎓 COURSE] Advances to the next step in the current Mastra Course lesson. If all steps in the current lesson are completed, it will move to the next lesson',
-  parameters: z.object({}),
-  execute: async (_args: Record<string, never>) => {
+  inputSchema: z.object({}),
+  execute: async args => {
     try {
       // Check if the user is registered
       const deviceId = await getDeviceId();
@@ -834,14 +835,14 @@ export const nextMastraCourseStep = {
       return `Error advancing to the next course step: ${error instanceof Error ? error.message : String(error)}`;
     }
   },
-};
+});
 
-export const clearMastraCourseHistory = {
-  name: 'clearMastraCourseHistory',
+export const clearMastraCourseHistory = createTool({
+  id: 'clearMastraCourseHistory',
   description:
     '[🎓 COURSE] Clears all Mastra Course progress history and starts over from the beginning. This action cannot be undone',
-  parameters: _confirmationSchema,
-  execute: async (args: z.infer<typeof _confirmationSchema>) => {
+  inputSchema: _confirmationSchema,
+  execute: async args => {
     try {
       // Check if the user is registered
       const deviceId = await getDeviceId();
@@ -871,4 +872,4 @@ export const clearMastraCourseHistory = {
       return `Error clearing course history: ${error instanceof Error ? error.message : String(error)}`;
     }
   },
-};
+});

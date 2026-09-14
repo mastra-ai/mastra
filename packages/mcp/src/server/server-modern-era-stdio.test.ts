@@ -1,37 +1,45 @@
 import path from 'node:path';
-import { Client } from '@modelcontextprotocol/client';
+import { Client, LOG_LEVEL_META_KEY, ProtocolError } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-describe('MCPServer with protocolVersion 2026-07-28 over stdio', () => {
+vi.setConfig({ testTimeout: 30_000, hookTimeout: 30_000 });
+
+describe('MCPServer over stdio (2026-07-28)', () => {
   const tsxCli = path.join(path.dirname(require.resolve('tsx/package.json')), 'dist', 'cli.mjs');
   const fixturePath = path.join(__dirname, '..', '__fixtures__/modern-era-notification-server.ts');
 
   let client: Client | undefined;
+
+  const transport = () => {
+    const t = new StdioClientTransport({ command: process.execPath, args: [tsxCli, fixturePath], stderr: 'pipe' });
+    t.stderr?.on('data', (chunk: Buffer) => process.stderr.write(chunk));
+    return t;
+  };
 
   afterEach(async () => {
     await client?.close().catch(() => {});
     client = undefined;
   });
 
-  it('delivers tool-list-changed notifications through a modern-era subscription', async () => {
+  it('serves discovery, subscriptions, per-request logs and native input rounds to a modern client', async () => {
     client = new Client(
-      { name: 'modern-era-stdio-client', version: '1.0.0' },
-      { versionNegotiation: { mode: { pin: '2026-07-28' } } },
+      { name: 'modern-stdio-client', version: '1.0.0' },
+      { versionNegotiation: { mode: { pin: '2026-07-28' } }, capabilities: { elicitation: { form: {} } } },
     );
-    const transport = new StdioClientTransport({
-      command: process.execPath,
-      args: [tsxCli, fixturePath],
-      stderr: 'pipe',
+    client.setRequestHandler('elicitation/create', async () => ({ action: 'accept', content: { name: 'Ada' } }));
+    const logs: unknown[] = [];
+    client.setNotificationHandler('notifications/message', async n => {
+      logs.push(n.params.data);
     });
-    transport.stderr?.on('data', (chunk: Buffer) => process.stderr.write(chunk));
-    await client.connect(transport);
+    await client.connect(transport());
+    expect(client.getDiscoverResult()?.supportedVersions).toEqual(['2026-07-28']);
+    expect(client.getServerCapabilities()).not.toHaveProperty('roots');
 
     const changed = new Promise<void>(resolve => {
       client!.setNotificationHandler('notifications/tools/list_changed', async () => resolve());
     });
     const subscription = await client.listen({ toolsListChanged: true });
-
     try {
       expect(subscription.honoredFilter.toolsListChanged).toBe(true);
       await client.callTool({ name: 'triggerToolListChanged', arguments: {} });
@@ -39,5 +47,20 @@ describe('MCPServer with protocolVersion 2026-07-28 over stdio', () => {
     } finally {
       await subscription.close();
     }
-  }, 30000);
+
+    const greeted = await client.callTool({ name: 'askName', arguments: {}, _meta: { [LOG_LEVEL_META_KEY]: 'info' } });
+    expect(greeted.structuredContent).toBe('hello Ada');
+    expect(logs).toEqual([{ message: 'greeting' }]);
+  });
+
+  it('rejects a legacy client instead of serving the 2025 handshake', async () => {
+    client = new Client({ name: 'legacy-stdio-client', version: '1.0.0' }, { versionNegotiation: { mode: 'legacy' } });
+    const error = await client.connect(transport()).then(
+      () => undefined,
+      e => e,
+    );
+    expect(error).toBeInstanceOf(ProtocolError);
+    expect(error.message).toContain('Unsupported protocol version: 2025-11-25');
+    expect(client.getServerCapabilities()).toBeUndefined();
+  });
 });

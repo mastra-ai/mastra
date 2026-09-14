@@ -16,6 +16,7 @@ import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import type { Server as HttpServer, IncomingMessage, ServerResponse } from 'node:http';
 import { exchangeAuthorization, refreshAuthorization } from '@modelcontextprotocol/client';
+import { CLIENT_CAPABILITIES_META_KEY, CLIENT_INFO_META_KEY, PROTOCOL_VERSION_META_KEY } from '@modelcontextprotocol/server';
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest';
 
 import type { OAuthMiddlewareResult } from '../server/oauth-middleware.js';
@@ -144,6 +145,43 @@ describe('OAuth Types and Helpers', () => {
 // =============================================================================
 
 describe('MCPOAuthClientProvider', () => {
+  const clientMetadata = {
+    redirect_uris: ['http://localhost:3000/callback'],
+    client_name: 'Test Client',
+  };
+
+  it('requires a configured client identity instead of registering dynamically', () => {
+    expect(() => new MCPOAuthClientProvider({ redirectUrl: 'http://localhost:3000/callback', clientMetadata })).toThrow(
+      /Dynamic client registration is not supported/,
+    );
+    // No registration hook: the SDK cannot fall back to dynamic registration.
+    const provider = new MCPOAuthClientProvider({
+      redirectUrl: 'http://localhost:3000/callback',
+      clientMetadata,
+      clientInformation: { client_id: 'pre-registered' },
+    });
+    expect((provider as unknown as Record<string, unknown>)['saveClientInformation']).toBeUndefined();
+  });
+
+  it('uses the Client ID Metadata Document URL as the client_id', () => {
+    const clientMetadataUrl = 'https://client.example.com/oauth/client-metadata.json';
+    const provider = new MCPOAuthClientProvider({
+      redirectUrl: 'http://localhost:3000/callback',
+      clientMetadata,
+      clientMetadataUrl,
+    });
+    expect(provider.clientMetadataUrl).toBe(clientMetadataUrl);
+    expect(provider.clientInformation()).toEqual({ client_id: clientMetadataUrl });
+  });
+
+  it('rejects a metadata document URL that is not an HTTPS URL with a path', () => {
+    for (const clientMetadataUrl of ['http://client.example.com/metadata.json', 'https://client.example.com/']) {
+      expect(
+        () => new MCPOAuthClientProvider({ redirectUrl: 'http://localhost:3000/callback', clientMetadata, clientMetadataUrl }),
+      ).toThrow();
+    }
+  });
+
   it('should return the configured redirect URL', () => {
     const provider = new MCPOAuthClientProvider({
       redirectUrl: 'http://localhost:3000/callback',
@@ -151,6 +189,7 @@ describe('MCPOAuthClientProvider', () => {
         redirect_uris: ['http://localhost:3000/callback'],
         client_name: 'Test Client',
       },
+      clientInformation: { client_id: 'test-client' },
     });
 
     expect(provider.redirectUrl).toBe('http://localhost:3000/callback');
@@ -166,6 +205,7 @@ describe('MCPOAuthClientProvider', () => {
     const provider = new MCPOAuthClientProvider({
       redirectUrl: 'http://localhost:3000/callback',
       clientMetadata: metadata,
+      clientInformation: { client_id: 'test-client' },
     });
 
     expect(provider.clientMetadata).toEqual(metadata);
@@ -178,6 +218,7 @@ describe('MCPOAuthClientProvider', () => {
         redirect_uris: ['http://localhost:3000/callback'],
         client_name: 'Test Client',
       },
+      clientInformation: { client_id: 'test-client' },
     });
 
     // Initially no tokens
@@ -203,6 +244,7 @@ describe('MCPOAuthClientProvider', () => {
         redirect_uris: ['http://localhost:3000/callback'],
         client_name: 'Test Client',
       },
+      clientInformation: { client_id: 'test-client' },
     });
 
     await provider.saveCodeVerifier('test-verifier-123');
@@ -216,6 +258,7 @@ describe('MCPOAuthClientProvider', () => {
         redirect_uris: ['http://localhost:3000/callback'],
         client_name: 'Test Client',
       },
+      clientInformation: { client_id: 'test-client' },
     });
 
     // Set up some data
@@ -244,6 +287,7 @@ describe('MCPOAuthClientProvider', () => {
         redirect_uris: ['http://localhost:3000/callback'],
         client_name: 'Test Client',
       },
+      clientInformation: { client_id: 'test-client' },
     });
 
     const state = await provider.state?.();
@@ -260,6 +304,7 @@ describe('MCPOAuthClientProvider', () => {
         redirect_uris: ['http://localhost:3000/callback'],
         client_name: 'Test Client',
       },
+      clientInformation: { client_id: 'test-client' },
       stateGenerator: () => customState,
     });
 
@@ -278,6 +323,7 @@ describe('MCPOAuthClientProvider', () => {
         redirect_uris: ['http://localhost:3000/callback'],
         client_name: 'Test Client',
       },
+      clientInformation: { client_id: 'test-client' },
     });
 
     // Bracket access since the property is intentionally absent from the type.
@@ -302,6 +348,7 @@ describe('MCPOAuthClientProvider', () => {
           redirect_uris: ['http://localhost:3000/callback'],
           client_name: 'Test Client',
         },
+        clientInformation: { client_id: 'test-client' },
       });
 
     const mockTokenFetch = () => {
@@ -381,6 +428,7 @@ describe('createSimpleTokenProvider', () => {
         redirect_uris: ['http://localhost:3000/callback'],
         client_name: 'Test Client',
       },
+      clientInformation: { client_id: 'test-client' },
     });
 
     const tokens = await provider.tokens();
@@ -395,6 +443,7 @@ describe('createSimpleTokenProvider', () => {
         redirect_uris: ['http://localhost:3000/callback'],
         client_name: 'Test Client',
       },
+      clientInformation: { client_id: 'test-client' },
       refreshToken: 'my-refresh-token',
       expiresIn: 7200,
       scope: 'mcp:read mcp:write',
@@ -596,7 +645,7 @@ describe('OAuth Middleware Integration', () => {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ jsonrpc: '2.0', method: 'initialize', id: 1 }),
+      body: JSON.stringify({ jsonrpc: '2.0', method: 'server/discover', id: 1 }),
     });
 
     expect(response.status).toBe(401);
@@ -617,7 +666,7 @@ describe('OAuth Middleware Integration', () => {
         'Content-Type': 'application/json',
         Authorization: 'Bearer invalid-token',
       },
-      body: JSON.stringify({ jsonrpc: '2.0', method: 'initialize', id: 1 }),
+      body: JSON.stringify({ jsonrpc: '2.0', method: 'server/discover', id: 1 }),
     });
 
     expect(response.status).toBe(401);
@@ -634,27 +683,32 @@ describe('OAuth Middleware Integration', () => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        Accept: 'application/json, text/event-stream',
         Authorization: `Bearer ${VALID_TOKEN}`,
+        'mcp-protocol-version': '2026-07-28',
+        'mcp-method': 'server/discover',
       },
       body: JSON.stringify({
         jsonrpc: '2.0',
-        method: 'initialize',
+        method: 'server/discover',
         params: {
-          protocolVersion: '2024-11-05',
-          capabilities: {},
-          clientInfo: { name: 'test', version: '1.0.0' },
+          _meta: {
+            [PROTOCOL_VERSION_META_KEY]: '2026-07-28',
+            [CLIENT_INFO_META_KEY]: { name: 'test', version: '1.0.0' },
+            [CLIENT_CAPABILITIES_META_KEY]: {},
+          },
         },
         id: 1,
       }),
     });
 
-    // The key assertion: with a valid token, we should NOT get a 401.
-    // The OAuth middleware passed the request through to the MCP handler.
-    expect(response.status).not.toBe(401);
-
-    // The response should be from the MCP server, not the OAuth middleware
-    const wwwAuth = response.headers.get('www-authenticate');
-    expect(wwwAuth).toBeNull(); // No WWW-Authenticate means OAuth middleware didn't reject
+    // With a valid token the OAuth middleware passes the request through to the MCP
+    // handler, which answers discovery.
+    expect(response.status).toBe(200);
+    expect(response.headers.get('www-authenticate')).toBeNull();
+    const body = await response.json();
+    expect(body.result.supportedVersions).toEqual(['2026-07-28']);
+    expect(body.result._meta['io.modelcontextprotocol/serverInfo'].name).toBe('OAuth Test Server');
   });
 
   it('should handle CORS preflight for metadata endpoint', async () => {
@@ -687,7 +741,6 @@ describe('MCPClient authProvider passthrough', () => {
    * Users can implement the full OAuthClientProvider interface to handle:
    * - Token storage and retrieval
    * - PKCE flow management
-   * - Client registration
    * - Authorization redirects
    */
   it('should accept MCPOAuthClientProvider as authProvider', async () => {
@@ -699,6 +752,7 @@ describe('MCPClient authProvider passthrough', () => {
         grant_types: ['authorization_code', 'refresh_token'],
         response_types: ['code'],
       },
+      clientInformation: { client_id: 'test-client' },
       onRedirectToAuthorization: url => {
         // In a real app, this would redirect the user
         console.log(`Would redirect to: ${url}`);
@@ -714,7 +768,6 @@ describe('MCPClient authProvider passthrough', () => {
     expect(typeof provider.codeVerifier).toBe('function');
     expect(typeof provider.redirectToAuthorization).toBe('function');
     expect(typeof provider.clientInformation).toBe('function');
-    expect(typeof provider.saveClientInformation).toBe('function');
     expect(typeof provider.invalidateCredentials).toBe('function');
   });
 });

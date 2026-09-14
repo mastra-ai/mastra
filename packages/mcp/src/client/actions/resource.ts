@@ -132,47 +132,10 @@ export class ResourceClientActions {
   }
 
   /**
-   * Subscribes to updates for a specific resource.
-   *
-   * After subscribing, you'll receive notifications via the `onUpdated` handler
-   * when the resource content changes.
-   *
-   * @param uri - URI of the resource to subscribe to
-   * @returns Promise resolving when subscription is established
-   * @throws {Error} If subscription fails
-   *
-   * @example
-   * ```typescript
-   * await client.resources.subscribe('file://data/config.json');
-   * ```
-   */
-  public async subscribe(uri: string) {
-    return this.client.subscribeResource(uri);
-  }
-
-  /**
-   * Unsubscribes from updates for a specific resource.
-   *
-   * Stops receiving notifications for this resource URI.
-   *
-   * @param uri - URI of the resource to unsubscribe from
-   * @returns Promise resolving when unsubscription is complete
-   * @throws {Error} If unsubscription fails
-   *
-   * @example
-   * ```typescript
-   * await client.resources.unsubscribe('file://data/config.json');
-   * ```
-   */
-  public async unsubscribe(uri: string) {
-    return this.client.unsubscribeResource(uri);
-  }
-
-  /**
    * Sets a notification handler for when subscribed resources are updated.
    *
-   * The handler is called whenever the server sends a resource update notification
-   * for any resource you've subscribed to.
+   * Updates are delivered on a `subscriptions/listen` stream opened with
+   * `listen({ resourceSubscriptions: [uri] })`.
    *
    * @param handler - Callback function receiving the updated resource URI
    *

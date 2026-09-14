@@ -6,7 +6,7 @@
  * MCP packages, so both sides source them from `@modelcontextprotocol/client`
  * alongside the OAuth flow helpers below.
  *
- * @see https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization
+ * @see https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization
  */
 import type { OAuthProtectedResourceMetadata as SDKOAuthProtectedResourceMetadata } from '@modelcontextprotocol/client';
 
@@ -16,8 +16,6 @@ export type {
   OAuthErrorResponse,
   OAuthClientMetadata,
   OAuthClientInformation,
-  OAuthClientInformationFull,
-  OAuthClientRegistrationError,
   OAuthTokenRevocationRequest,
   OAuthProtectedResourceMetadata,
   AuthorizationServerMetadata,
@@ -31,7 +29,6 @@ export {
   startAuthorization,
   exchangeAuthorization,
   refreshAuthorization,
-  registerClient,
   extractResourceMetadataUrl,
   selectResourceURL,
   parseErrorResponse,
