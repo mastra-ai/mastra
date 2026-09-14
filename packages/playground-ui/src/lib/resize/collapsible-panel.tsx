@@ -22,6 +22,8 @@ export interface CollapsiblePanelProps extends PanelProps {
   direction: 'left' | 'right';
   /** Key shown in the expand button tooltip when the caller binds a shortcut to `toggle()`. */
   expandShortcut?: string;
+  /** Skip the floating "Expand panel" button when the caller provides its own expand control. */
+  hideExpandButton?: boolean;
   ref?: Ref<CollapsiblePanelHandle>;
 }
 
@@ -30,6 +32,7 @@ export const CollapsiblePanel = ({
   children,
   direction,
   expandShortcut,
+  hideExpandButton = false,
   className,
   onResize,
   style,
@@ -102,7 +105,7 @@ export const CollapsiblePanel = ({
         {children}
       </div>
 
-      {isCollapsed && (
+      {isCollapsed && !hideExpandButton && (
         <Tooltip>
           <TooltipTrigger asChild>
             <button

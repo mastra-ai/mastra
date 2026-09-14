@@ -140,6 +140,14 @@ describe('CollapsiblePanel', () => {
       expect(panelMocks.handle.resize).not.toHaveBeenCalled();
     });
 
+    it('is not rendered when hideExpandButton is set, even once collapsed', () => {
+      render(<Harness minSize={280} hideExpandButton />);
+      fireEvent.click(screen.getByTestId('resize-collapsed'));
+
+      expect(screen.queryByRole('button', { name: 'Expand panel' })).toBeNull();
+      expect(screen.getByTestId('panel-content').parentElement?.getAttribute('hidden')).toBe('');
+    });
+
     it('shows the keyboard shortcut in its tooltip when one is provided', async () => {
       render(<Harness minSize={280} expandShortcut="{" />);
       fireEvent.click(screen.getByTestId('resize-collapsed'));

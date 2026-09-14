@@ -3,10 +3,14 @@ import { MainContentLayout } from '@mastra/playground-ui/components/MainContent'
 import { KeyboardScope } from '@mastra/playground-ui/keyboard/keyboard-shortcuts-context';
 import { useKeydown } from '@mastra/playground-ui/keyboard/use-keydown';
 import { useParams, useLocation, useNavigate } from 'react-router';
+import { AgentDetailHeaderActions } from '@/domains/agents/components/agent-detail-header-actions';
+import { AgentOverviewPanel } from '@/domains/agents/components/agent-overview-panel/agent-overview-panel';
 import { AgentPageTabs } from '@/domains/agents/components/agent-page-tabs';
 import type { AgentPageTab } from '@/domains/agents/components/agent-page-tabs';
 import { AgentTopBarRunOptions } from '@/domains/agents/components/agent-top-bar-controls';
+import { OverviewPanelShortcuts } from '@/domains/agents/components/overview-panel-shortcuts';
 import { ThreadTracesToggle } from '@/domains/agents/components/thread-traces-toggle';
+import { ActivatedSkillsProvider } from '@/domains/agents/context/activated-skills-context';
 import { PlaygroundModelProvider } from '@/domains/agents/context/playground-model-context';
 import { ReviewQueueProvider } from '@/domains/agents/context/review-queue-context';
 import { useAgent } from '@/domains/agents/hooks/use-agent';
@@ -16,6 +20,7 @@ import { GenerationProvider } from '@/domains/datasets/context/generation-contex
 import { cleanProviderId } from '@/domains/llm/utils';
 import { TracingSettingsProvider } from '@/domains/observability/context/tracing-settings-context';
 import { SchemaRequestContextProvider } from '@/domains/request-context/context/schema-request-context';
+import { RouteSidePanel } from '@/lib/route-side-panel';
 
 /** Shadows the global "go to" sequences with agent-scoped targets while an agent page is mounted. */
 const AgentShortcuts = ({ agentId }: { agentId: string }) => {
@@ -50,9 +55,7 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
           ? 'review'
           : location.pathname.includes('/traces')
             ? 'traces'
-            : location.pathname.includes('/overview')
-              ? 'overview'
-              : 'none';
+            : 'none';
 
   const showTopBarRunOptions =
     (activeTab === 'evaluate' || activeTab === 'review') && (showPlayground || showObservability);
@@ -60,6 +63,13 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
   const content = (
     <KeyboardScope>
       <AgentShortcuts agentId={agentId!} />
+      <OverviewPanelShortcuts />
+      <AgentDetailHeaderActions agentId={agentId!} />
+      <RouteSidePanel owner="agent-detail">
+        <ActivatedSkillsProvider key={agentId}>
+          <AgentOverviewPanel agentId={agentId!} />
+        </ActivatedSkillsProvider>
+      </RouteSidePanel>
       <MainContentLayout>
         <AgentPageTabs
           agentId={agentId!}

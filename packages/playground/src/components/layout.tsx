@@ -6,7 +6,14 @@ import { PageHeadingContext } from '@mastra/playground-ui/components/PageLayout'
 import { ThemeProvider } from '@mastra/playground-ui/components/ThemeProvider';
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
+import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
+import { CollapsiblePanel } from '@mastra/playground-ui/resize/collapsible-panel';
+import { PanelDrawer } from '@mastra/playground-ui/resize/panel-drawer';
+import { PanelGroup } from '@mastra/playground-ui/resize/panel-group';
+import { PanelSeparator } from '@mastra/playground-ui/resize/separator';
 import { Search } from 'lucide-react';
+import { useEffect } from 'react';
+import { Panel, useDefaultLayout } from 'react-resizable-panels';
 import { useLocation } from 'react-router';
 import { AppSidebar } from './ui/app-sidebar';
 import { AuthRequired } from '@/domains/auth/components/auth-required';
@@ -25,6 +32,7 @@ import {
   useRouteHeader,
   useRouteHeaderCrumbsOverride,
 } from '@/lib/route-header';
+import { RouteSidePanelProvider, RouteSidePanelSlot, useRouteSidePanel } from '@/lib/route-side-panel';
 import { cn } from '@/lib/utils';
 
 function MobileNavbar() {
@@ -60,6 +68,73 @@ function MobileNavbar() {
   );
 }
 
+// First visit: the panel starts collapsed; `useDefaultLayout` persists later widths.
+const SIDE_PANEL_COLLAPSED_LAYOUT = { 'studio-frame': 100, 'route-side-panel': 0 };
+
+/**
+ * Hosts the page-registered side panel next to the Studio frame (outside the
+ * rounded card). Desktop: resizable panel; mobile: edge drawer.
+ */
+export function StudioFrame({ children, className }: { children: React.ReactNode; className?: string }) {
+  const isMobile = useIsMobile();
+  const { hasPanel, panelHandle, setIsCollapsed } = useRouteSidePanel();
+  const { defaultLayout, onLayoutChange } = useDefaultLayout({
+    id: 'studio-frame-layout-v1',
+    storage: localStorage,
+  });
+
+  // The mobile drawer owns its own open state, so the portal must not be gated on collapse there.
+  useEffect(() => {
+    if (isMobile) setIsCollapsed(false);
+  }, [isMobile, setIsCollapsed]);
+
+  if (isMobile) {
+    return (
+      <div className={cn('relative', className)}>
+        {children}
+        {hasPanel && (
+          <PanelDrawer direction="right" label="Open details panel">
+            <RouteSidePanelSlot className="h-full min-h-0" />
+          </PanelDrawer>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <PanelGroup
+      className="min-h-0 flex-1"
+      orientation="horizontal"
+      defaultLayout={defaultLayout ?? SIDE_PANEL_COLLAPSED_LAYOUT}
+      onLayoutChange={onLayoutChange}
+    >
+      <Panel id="studio-frame" className={cn('min-w-0', className)}>
+        {children}
+      </Panel>
+      {hasPanel && (
+        <>
+          <PanelSeparator />
+          <CollapsiblePanel
+            id="route-side-panel"
+            ref={panelHandle}
+            direction="right"
+            collapsible
+            collapsedSize={0}
+            hideExpandButton
+            minSize={320}
+            maxSize="50%"
+            defaultSize={380}
+            className="min-w-0"
+            onResize={size => setIsCollapsed(size.inPixels <= 0)}
+          >
+            <RouteSidePanelSlot className="h-full min-h-0 py-1.5 pr-1.5 lg:py-2 lg:pr-2" />
+          </CollapsiblePanel>
+        </>
+      )}
+    </PanelGroup>
+  );
+}
+
 function LayoutContent({ children }: { children: React.ReactNode }) {
   const { data: authCapabilities, isFetched } = useAuthCapabilities();
   const { pathname } = useLocation();
@@ -78,19 +153,21 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
         <div className="flex h-full min-h-0 flex-col">
           {shouldShowSidebar && <MobileNavbar />}
           <PageHeadingContext.Provider value={pageHeading}>
-            <div
-              className={cn(
-                'relative ml-0 mx-1.5 my-1.5 grid flex-1 min-h-0 overflow-hidden [--studio-frame-radius:1.5rem] [--studio-frame-inset:0.5rem] rounded-studio-frame border border-border1 bg-surface2 shadow-main-frame lg:mx-2 lg:my-2 lg:ml-0',
-                shouldShowSidebar ? 'grid-rows-[auto_1fr]' : 'grid-rows-[1fr] h-[calc(100%-1.5rem)]',
-              )}
-            >
-              {shouldShowSidebar && <RouteHeader />}
-              <div className="min-h-0 overflow-y-auto">
-                <AuthRequired>
-                  <ErrorBoundary resetKeys={[pathname]}>{children}</ErrorBoundary>
-                </AuthRequired>
+            <StudioFrame className="flex min-h-0 flex-1 flex-col">
+              <div
+                className={cn(
+                  'relative ml-0 mx-1.5 my-1.5 grid flex-1 min-h-0 overflow-hidden [--studio-frame-radius:1.5rem] [--studio-frame-inset:0.5rem] rounded-studio-frame border border-border1 bg-surface2 shadow-main-frame lg:mx-2 lg:my-2 lg:ml-0',
+                  shouldShowSidebar ? 'grid-rows-[auto_1fr]' : 'grid-rows-[1fr] h-[calc(100%-1.5rem)]',
+                )}
+              >
+                {shouldShowSidebar && <RouteHeader />}
+                <div className="min-h-0 overflow-y-auto">
+                  <AuthRequired>
+                    <ErrorBoundary resetKeys={[pathname]}>{children}</ErrorBoundary>
+                  </AuthRequired>
+                </div>
               </div>
-            </div>
+            </StudioFrame>
           </PageHeadingContext.Provider>
         </div>
       </div>
@@ -111,7 +188,9 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
               <SidebarShortcuts />
               <RouteHeaderActionsProvider>
                 <RouteHeaderCrumbsProvider>
-                  <LayoutContent>{children}</LayoutContent>
+                  <RouteSidePanelProvider>
+                    <LayoutContent>{children}</LayoutContent>
+                  </RouteSidePanelProvider>
                 </RouteHeaderCrumbsProvider>
               </RouteHeaderActionsProvider>
             </MainSidebarProvider>
