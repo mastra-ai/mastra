@@ -2,6 +2,7 @@ import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-
 import { MockLanguageModelV3 } from '@internal/ai-v6/test';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
+import { StructuredOutputProcessor } from '../../processors/processors/structured-output';
 import { Agent } from '../agent';
 
 function createModel(version: 'v2' | 'v3', respond: (prompt: unknown) => string) {
@@ -85,6 +86,44 @@ describe.each(['v2', 'v3'] as const)('separate structuring model retries (%s)', 
       expect(await result.finishReason).toBe('stop');
       expect(await result.object).toEqual(errorStrategy === 'fallback' ? { count: 0 } : undefined);
     });
+
+    it.each(['sequential', 'concurrent'] as const)(
+      'isolates a configured processor across %s requests',
+      async execution => {
+        let structuringCalls = 0;
+        const processor = new StructuredOutputProcessor({
+          schema: z.object({ count: z.number() }),
+          model: createModel(version, () => {
+            structuringCalls++;
+            return '{"count":3}';
+          }),
+        });
+        const agent = new Agent({
+          id: 'structured-output-shared',
+          name: 'Structured output shared',
+          model: createModel(version, () => 'There are three files.'),
+          outputProcessors: [processor],
+        });
+        const request = async () => {
+          const result = await agent[method]('Count the files.');
+          if (method === 'stream' && 'fullStream' in result) {
+            for await (const _chunk of result.fullStream) {
+              // Drain the stream before inspecting its final result.
+            }
+          }
+          expect(await result.object).toEqual({ count: 3 });
+          expect(await result.tripwire).toBeUndefined();
+          expect(await result.finishReason).toBe('stop');
+        };
+        if (execution === 'concurrent') {
+          await Promise.all([request(), request()]);
+        } else {
+          await request();
+          await request();
+        }
+        expect(structuringCalls).toBe(2);
+      },
+    );
 
     it('isolates failure state across sequential requests on the same agent', async () => {
       let structuringCalls = 0;

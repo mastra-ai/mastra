@@ -827,11 +827,12 @@ describe('StructuredOutputProcessor', () => {
 
       const streamSpy = vi.spyOn(processor['structuringAgent'], 'stream').mockResolvedValue(mockStream as any);
 
-      // Call processOutputStream twice with finish chunks
+      // Call processOutputStream twice with finish chunks from the same request.
+      const state = { controller };
       await processor.processOutputStream({
         part: finishChunk,
         streamParts: [],
-        state: { controller },
+        state,
         abort,
         retryCount: 0,
       });
@@ -839,7 +840,7 @@ describe('StructuredOutputProcessor', () => {
       await processor.processOutputStream({
         part: finishChunk,
         streamParts: [],
-        state: { controller },
+        state,
         abort,
         retryCount: 0,
       });
