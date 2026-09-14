@@ -291,6 +291,89 @@ describe('intake configuration', () => {
       expect(again.find(i => i.id === resting.id)).toMatchObject({ board: 'work', stages: ['intake'] });
     });
 
+    it('moves only team-owned cards when an overlapping project wins attribution', async () => {
+      const project = await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'app' } });
+      await seed.intake.saveConfig({
+        orgId: 'org1',
+        userId: 'u1',
+        config: {
+          github: { enabled: true, sourceIds: null },
+          linear: { enabled: true, sourceIds: ['project-1', 'linear-team:team-1'] },
+        },
+      });
+      const externalSource = (identifier: string) => ({
+        integrationId: 'linear',
+        type: 'issue',
+        externalId: `linear:${identifier}`,
+        url: `https://linear.app/acme/issue/${identifier}`,
+      });
+      const projectCard = (
+        await seed.workItems.upsert({
+          orgId: 'org1',
+          userId: 'u1',
+          factoryProjectId: project.id,
+          input: {
+            board: 'work',
+            title: 'ENG-1',
+            stages: ['intake'],
+            externalSource: externalSource('ENG-1'),
+          },
+        })
+      ).item;
+      const teamCard = (
+        await seed.workItems.upsert({
+          orgId: 'org1',
+          userId: 'u1',
+          factoryProjectId: project.id,
+          input: {
+            board: 'work',
+            title: 'ENG-2',
+            stages: ['intake'],
+            externalSource: externalSource('ENG-2'),
+          },
+        })
+      ).item;
+      vi.mocked(linear.listItems).mockResolvedValueOnce({
+        items: [
+          {
+            source: { type: 'issue', externalId: 'uuid-project' },
+            sourceId: 'project-1',
+            title: 'project issue',
+            metadata: { identifier: 'ENG-1' },
+          },
+          {
+            source: { type: 'issue', externalId: 'uuid-team' },
+            sourceId: 'linear-team:team-1',
+            title: 'projectless team issue',
+            metadata: { identifier: 'ENG-2' },
+          },
+        ],
+        nextCursor: null,
+      });
+
+      await put({
+        integrationId: 'linear',
+        sourceId: 'linear-team:team-1',
+        factoryProjectId: project.id,
+        board: 'work',
+      });
+      const response = await put({
+        integrationId: 'linear',
+        sourceId: 'linear-team:team-1',
+        factoryProjectId: project.id,
+        board: 'release',
+      });
+
+      expect(response.status).toBe(200);
+      expect(linear.listItems).toHaveBeenCalledWith(
+        expect.objectContaining({ sourceIds: ['project-1', 'linear-team:team-1'] }),
+      );
+      expect(await response.json()).toMatchObject({ relocated: { moved: 1, skipped: 0 } });
+      const items = await seed.workItems.list({ orgId: 'org1', factoryProjectId: project.id });
+      expect(items.find(item => item.id === projectCard.id)).toMatchObject({ board: 'work', stages: ['intake'] });
+      expect(items.find(item => item.id === teamCard.id)).toMatchObject({ board: 'release', stages: ['queued'] });
+    });
+
     it('keeps a custom-board card whose session is keyed by the phase role', async () => {
       const project = await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'app' } });
       const { item: shipping } = await seed.workItems.upsert({

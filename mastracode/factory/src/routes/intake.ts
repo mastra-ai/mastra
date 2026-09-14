@@ -76,6 +76,7 @@ async function relocateSourceCards({
   factoryProjectId,
   sourceId,
   targetBoard,
+  sourceIds,
 }: {
   workItems: Pick<WorkItemsStorage, 'list' | 'update' | 'supersedeDecisionsForWorkItem'>;
   integration: IntakeIntegration;
@@ -85,6 +86,7 @@ async function relocateSourceCards({
   factoryProjectId: string;
   sourceId: string;
   targetBoard: string;
+  sourceIds: string[];
 }): Promise<{ moved: number; skipped: number }> {
   if (!boardRegistry.has(targetBoard)) return { moved: 0, skipped: 0 };
 
@@ -94,10 +96,11 @@ async function relocateSourceCards({
   for (let page = 0; page < REBIND_MAX_PAGES; page += 1) {
     const result = await withTimeout(
       integration.id,
-      () => integration.intake.listItems({ orgId, userId, sourceIds: [sourceId], cursor }),
+      () => integration.intake.listItems({ orgId, userId, sourceIds, cursor }),
       deadline - Date.now(),
     );
     for (const item of result.items) {
+      if (item.sourceId !== sourceId) continue;
       for (const key of intakeItemSourceKeys(integration.id, item)) sourceKeys.add(key);
     }
     if (!result.nextCursor) break;
@@ -465,6 +468,15 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
               previousBinding.board !== nextBoard
             ) {
               try {
+                const config = await intake.getConfig({
+                  orgId: tenant.orgId,
+                  userId: tenant.userId,
+                  integrationIds: [binding.integrationId],
+                });
+                const configuredSourceIds = config[binding.integrationId]?.sourceIds ?? [];
+                const sourceIds = configuredSourceIds.includes(binding.sourceId)
+                  ? configuredSourceIds
+                  : [binding.sourceId];
                 relocated = await relocateSourceCards({
                   workItems,
                   integration,
@@ -473,6 +485,7 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
                   userId: tenant.userId,
                   factoryProjectId: binding.factoryProjectId,
                   sourceId: binding.sourceId,
+                  sourceIds,
                   targetBoard: nextBoard,
                 });
               } catch (error) {
