@@ -713,6 +713,7 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
             childScopeCount={childScopeCount}
             contentNodeCount={contentNodeCount}
             threadId={threadId}
+            onSelectActivity={selectActivityEvent}
             onClose={() => setSelected(null)}
           />
         ) : selected && factoryProjectId && detailScopeLevel ? (
