@@ -508,6 +508,39 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
         ]);
       });
 
+      it('persists the original terminal error when an output processor transforms its streamed chunk', async () => {
+        const mockMemory = new MockMemory();
+        const agent = new Agent({
+          id: 'processed-terminal-error-agent',
+          name: 'Processed Terminal Error Agent',
+          instructions: 'test',
+          model: createPartialThenErrorModel('original failure'),
+          memory: mockMemory,
+          outputProcessors: [
+            {
+              id: 'replace-terminal-error-chunk',
+              processOutputStream: ({ part }: { part: ChunkType }) =>
+                part.type === 'error'
+                  ? { ...part, payload: { ...part.payload, error: new Error('processor replacement') } }
+                  : part,
+            },
+          ],
+        });
+
+        const result = await agent.stream('tell me something', {
+          memory: { thread: 'thread-processed-error', resource: 'resource-processed-error' },
+          modelSettings: { maxRetries: 0 },
+        });
+        for await (const _chunk of result.fullStream) {
+          // drain so the run reaches its terminal error path
+        }
+
+        const messages = await recallAll(mockMemory, 'thread-processed-error', 'resource-processed-error');
+        expect(errorPartsIn(messages)).toEqual([
+          { type: 'error', error: { name: 'Error', message: 'original failure' }, createdAt: expect.any(Number) },
+        ]);
+      });
+
       it('keeps partial parts and the error part on one record after a retry-budget-exhausted id rotation', async () => {
         const mockMemory = new MockMemory();
         let rotations = 0;

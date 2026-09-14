@@ -2358,7 +2358,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           messageList,
           attemptId: attemptMessageId,
           activeId: currentMessageId,
-          error: errorChunk.payload.error ?? deferredError,
+          error: deferredError,
         });
 
         safeEnqueue(controller, errorChunk);
