@@ -2,17 +2,14 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { X } from 'lucide-react';
 
 import { useKnowledgeActivity } from '../../../../../hooks/useKnowledgeGraph';
-import type { KnowledgeActivityEvent, KnowledgeScopeNode, KnowledgeSelection } from '../../services/knowledge';
+import type { KnowledgeActivityEvent, KnowledgeScopeNode } from '../../services/knowledge';
 import { knowledgeActivityLabel, KNOWLEDGE_ACTIVITY_TRUNCATED } from './activityLabel';
 
 interface KnowledgeScopeFlyoutProps {
   factoryProjectId: string;
-  selection: KnowledgeSelection;
   scope: KnowledgeScopeNode;
   childScopeCount: number;
   contentNodeCount: number;
-  /** True when the counts come from a truncated window and are lower bounds. */
-  countsTruncated: boolean;
   threadId?: string;
   onSelectActivity: (event: KnowledgeActivityEvent) => void;
   onClose: () => void;
@@ -21,17 +18,14 @@ interface KnowledgeScopeFlyoutProps {
 /** Detail surface for the structural scope at the root of the active lens. */
 export function KnowledgeScopeFlyout({
   factoryProjectId,
-  selection,
   scope,
   childScopeCount,
   contentNodeCount,
-  countsTruncated,
   threadId,
   onSelectActivity,
   onClose,
 }: KnowledgeScopeFlyoutProps) {
-  const count = (value: number) => (countsTruncated ? `${value}+` : String(value));
-  const activity = useKnowledgeActivity(factoryProjectId, selection, threadId);
+  const activity = useKnowledgeActivity(factoryProjectId, scope.id, threadId, {});
   const recentActivity = activity.data?.pages[0]?.events.slice(0, 5) ?? [];
   const activityTruncated = activity.data?.pages[0]?.truncated === true;
   const displayAddress =
@@ -67,11 +61,11 @@ export function KnowledgeScopeFlyout({
           <dt>Kind</dt>
           <dd className="text-foreground text-right">{scope.kind ?? 'scope'}</dd>
           <dt>Content nodes</dt>
-          <dd className="text-foreground text-right">{count(contentNodeCount)}</dd>
+          <dd className="text-foreground text-right">{contentNodeCount}</dd>
           <dt>Child scopes</dt>
-          <dd className="text-foreground text-right">{count(childScopeCount)}</dd>
+          <dd className="text-foreground text-right">{childScopeCount}</dd>
           <dt>Direct members</dt>
-          <dd className="text-foreground text-right">{count(contentNodeCount + childScopeCount)}</dd>
+          <dd className="text-foreground text-right">{contentNodeCount + childScopeCount}</dd>
         </dl>
 
         <section aria-labelledby="scope-recent-activity">
