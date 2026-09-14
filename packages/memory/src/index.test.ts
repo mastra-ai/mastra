@@ -60,6 +60,22 @@ describe('Memory', () => {
           }),
       ).toThrow("workingMemory.useStateSignals is not supported with workingMemory.version: 'vnext'");
     });
+
+    it('passes the observation failure policy to the observational-memory engine', async () => {
+      const memory = new Memory({
+        storage: new InMemoryStore(),
+        options: {
+          observationalMemory: {
+            model: 'test-model',
+            observation: { onFailure: 'continue' },
+          },
+        },
+      });
+
+      const om = await memory.omEngine;
+
+      expect(om?.config.observation.onFailure).toBe('continue');
+    });
   });
 
   describe('settled', () => {
