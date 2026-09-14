@@ -8,6 +8,7 @@ import type { AgentSignalInput, Agent, AgentSignalIfIdleOptions } from '@mastra/
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import type { Mastra } from '@mastra/core/mastra';
 import type { StorageThreadType } from '@mastra/core/memory';
+import type { SendNotificationSignalInput } from '@mastra/core/notifications';
 import type {
   InputProcessorOrWorkflow,
   OutputProcessorOrWorkflow,
@@ -226,7 +227,7 @@ type GithubPRSignal = {
 type GithubSignalAgent = {
   sendSignal(signal: AgentSignalInput, target: unknown): { accepted: unknown };
   sendNotificationSignal?(
-    notification: unknown | unknown[],
+    notification: SendNotificationSignalInput | SendNotificationSignalInput[],
     target: unknown,
   ): { accepted?: unknown } | Promise<unknown>;
 };
@@ -2071,43 +2072,37 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
         ...(input.snapshot.latestCommentUpdatedAt
           ? { latestCommentUpdatedAt: input.snapshot.latestCommentUpdatedAt }
           : {}),
-        ...(failingChecks.length > 0 ? { failingChecks: failingChecks.map(check => check.name).join(', ') } : {}),
-        ...(pendingChecks.length > 0 ? { pendingChecks: pendingChecks.map(check => check.name).join(', ') } : {}),
+        ...(failingChecks.length
+          ? {
+              failingChecks: failingChecks.map(check => check.name).join(', '),
+              failingCheckUrls: failingChecks
+                .filter(check => check.detailsUrl)
+                .map(check => `${check.name}: ${check.detailsUrl}`)
+                .join('; '),
+            }
+          : {}),
+        ...(pendingChecks.length ? { pendingChecks: pendingChecks.map(check => check.name).join(', ') } : {}),
       },
       metadata: {
         github: {
-          owner: input.subscription.owner,
-          repo: input.subscription.repo,
-          number: input.subscription.number,
-          mode: input.subscription.mode,
-          title: input.snapshot.title,
-          state: input.snapshot.state,
-          htmlUrl: input.snapshot.htmlUrl,
-          githubUpdatedAt: input.snapshot.githubUpdatedAt,
+          // Agent-facing fields (title, state, URL, CI state, comment fields, PR identity) live in
+          // attributes only — they were previously mirrored here, doubling every record's size.
+          // This object keeps just the internal bookkeeping the sync loop needs for change detection.
           previousGithubUpdatedAt: input.previousGithubUpdatedAt,
-          contentHash: input.snapshot.contentHash,
           previousContentHash: input.previousContentHash,
+          contentHash: input.snapshot.contentHash,
           threadContentHash: input.snapshot.threadContentHash,
           headSha: input.snapshot.headSha,
           headRef: input.snapshot.headRef,
-          mergeableState: input.snapshot.mergeableState,
-          ciState: input.snapshot.ciState,
-          closedAt: input.snapshot.closedAt,
-          mergedAt: input.snapshot.mergedAt,
-          unresolvedReviewThreads: input.snapshot.unresolvedReviewThreads,
           reviewStateHash: input.snapshot.reviewStateHash,
           latestReviewThreadAt: input.snapshot.latestReviewThreadAt,
-          latestCommentAuthor: input.snapshot.latestCommentAuthor,
-          latestCommentAuthorType: input.snapshot.latestCommentAuthorType,
-          latestCommentIsBot: input.snapshot.latestCommentIsBot,
+          closedAt: input.snapshot.closedAt,
+          mergedAt: input.snapshot.mergedAt,
           // Intentionally omit the full latestCommentBody here: persisting it verbatim bloats
           // notification payloads (a single CodeRabbit comment can exceed 100KB) and can overflow
           // agent context windows when listed. The 240-char latestCommentExcerpt is stored instead.
-          latestCommentExcerpt,
-          latestCommentUrl: input.snapshot.latestCommentUrl,
-          latestCommentUpdatedAt: input.snapshot.latestCommentUpdatedAt,
-          failingChecks,
-          pendingChecks,
+          // Check names and failing-check URLs live in attributes as flat strings (signal attributes
+          // must be scalars); full check snapshots ballooned every record by several KB.
         },
       },
     };
