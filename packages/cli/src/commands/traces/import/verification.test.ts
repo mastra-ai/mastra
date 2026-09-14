@@ -163,6 +163,26 @@ describe('trace import verification', () => {
     expect(report.verification).toMatchObject({ status: 'verified', queryAttempts: 3 });
   });
 
+  it('bounds a server retry delay without retrying faster than local backoff', async () => {
+    const value = trace(1);
+    const directory = await prepareAndUpload([value]);
+    const readTrace = vi
+      .fn<TraceImportVerifier['readTrace']>()
+      .mockResolvedValueOnce({ kind: 'retryable', reason: 'busy', retryAfterMs: 120_000 })
+      .mockResolvedValueOnce({ kind: 'retryable', reason: 'busy', retryAfterMs: 1 })
+      .mockResolvedValueOnce({ kind: 'found', spans: stored(value) });
+    const sleep = vi.fn(async () => undefined);
+
+    await verifyTraceImport({
+      directory,
+      verifier: { projectId: 'target-project', readTrace },
+      dependencies: { sleep },
+    });
+
+    expect(sleep).toHaveBeenNthCalledWith(1, 30_000, undefined);
+    expect(sleep).toHaveBeenNthCalledWith(2, 1_000, undefined);
+  });
+
   it('pauses on a mismatch without reporting customer payload values', async () => {
     const value = trace(1);
     const directory = await prepareAndUpload([value]);

@@ -10,7 +10,6 @@ const DEFAULT_MAX_RETRY_AFTER_MS = 30_000;
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 const DEFAULT_SPANS_PER_SECOND = 100;
 const MAX_TIMER_DELAY_MS = 2_147_483_647;
-const DEFAULT_QUERY_REQUEST_TIMEOUT_MS = 5_000;
 const MAX_QUERY_RESPONSE_BYTES = 16 * 1024 * 1024;
 const OBSERVABILITY_CAPABILITIES_HEADER = 'x-mastra-observability-capabilities';
 const QUOTA_PAUSE_CAPABILITY = 'quota-pause-v1';
@@ -33,7 +32,6 @@ export interface MastraPlatformTraceTargetDependencies {
   now?: () => number;
   maxAttempts?: number;
   requestTimeoutMs?: number;
-  queryRequestTimeoutMs?: number;
 }
 
 export class MastraPlatformUploadError extends Error {
@@ -79,7 +77,6 @@ export class MastraPlatformTraceTarget implements TraceImportTarget, TraceImport
   private readonly requestTimeoutMs: number;
   private readonly spansPerSecond: number;
   private nextUploadAt = 0;
-  private readonly queryRequestTimeoutMs: number;
 
   constructor(options: MastraPlatformTraceTargetOptions, dependencies: MastraPlatformTraceTargetDependencies = {}) {
     this.accessToken = requireValue(options.accessToken, 'Mastra Platform access token');
@@ -92,7 +89,6 @@ export class MastraPlatformTraceTarget implements TraceImportTarget, TraceImport
     this.maxAttempts = dependencies.maxAttempts ?? DEFAULT_MAX_ATTEMPTS;
     this.requestTimeoutMs = dependencies.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
     this.spansPerSecond = options.spansPerSecond ?? DEFAULT_SPANS_PER_SECOND;
-    this.queryRequestTimeoutMs = dependencies.queryRequestTimeoutMs ?? DEFAULT_QUERY_REQUEST_TIMEOUT_MS;
 
     if (!Number.isInteger(this.maxAttempts) || this.maxAttempts < 1) {
       throw new Error('Mastra Platform max attempts must be a positive integer.');
@@ -106,9 +102,6 @@ export class MastraPlatformTraceTarget implements TraceImportTarget, TraceImport
     }
     if (!Number.isFinite(this.spansPerSecond) || this.spansPerSecond <= 0) {
       throw new Error('Mastra Platform spans per second must be greater than zero.');
-    }
-    if (!Number.isFinite(this.queryRequestTimeoutMs) || this.queryRequestTimeoutMs <= 0) {
-      throw new Error('Mastra Platform query timeout must be greater than zero.');
     }
   }
 
@@ -197,7 +190,7 @@ export class MastraPlatformTraceTarget implements TraceImportTarget, TraceImport
     options.signal?.throwIfAborted();
     let response: Response;
     try {
-      const timeoutSignal = AbortSignal.timeout(this.queryRequestTimeoutMs);
+      const timeoutSignal = AbortSignal.timeout(this.requestTimeoutMs);
       response = await this.fetch(`${this.queryOrigin}/api/observability/traces/${encodeURIComponent(traceId)}/light`, {
         method: 'GET',
         headers: {
