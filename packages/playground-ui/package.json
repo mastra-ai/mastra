@@ -185,6 +185,7 @@
     "shiki": "^1.29.2",
     "sonner": "^2.0.7",
     "use-debounce": "^10.1.0",
+    "zod": "^3.25.0",
     "zustand": "^5.0.12"
   },
   "peerDependencies": {
