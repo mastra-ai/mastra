@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -8,18 +9,20 @@ afterEach(() => cleanup());
 
 const renderToolbar = () =>
   render(
-    <DatasetsToolbar
-      search=""
-      onSearchChange={vi.fn()}
-      experimentFilter="all"
-      onExperimentFilterChange={vi.fn()}
-      tagFilter="all"
-      onTagFilterChange={vi.fn()}
-      tagOptions={[
-        { value: 'all', label: 'All tags' },
-        { value: 'prod', label: 'prod' },
-      ]}
-    />,
+    <TooltipProvider>
+      <DatasetsToolbar
+        search=""
+        onSearchChange={vi.fn()}
+        experimentFilter="all"
+        onExperimentFilterChange={vi.fn()}
+        tagFilter="all"
+        onTagFilterChange={vi.fn()}
+        tagOptions={[
+          { value: 'all', label: 'All tags' },
+          { value: 'prod', label: 'prod' },
+        ]}
+      />
+    </TooltipProvider>,
   );
 
 describe('DatasetsToolbar', () => {

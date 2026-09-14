@@ -1,3 +1,4 @@
+import { CreateButton } from '@mastra/playground-ui/components/Button';
 import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
@@ -9,6 +10,7 @@ import { DatasetsList, DatasetsToolbar, getDatasetTagOptions } from '@/domains/d
 import { NoDatasetsInfo } from '@/domains/datasets/components/datasets-list/no-datasets-info';
 import { useInfiniteDatasets } from '@/domains/datasets/hooks/use-datasets';
 import { useExperiments } from '@/domains/datasets/hooks/use-experiments';
+import { RouteHeaderActions } from '@/lib/route-header';
 
 export default function Datasets() {
   const navigate = useNavigate();
@@ -33,6 +35,14 @@ export default function Datasets() {
   const error = errorDatasets || errorExperiments;
 
   const openCreatePage = () => void navigate('/datasets/new');
+
+  const headerCreateAction = (
+    <RouteHeaderActions owner="dataset-list">
+      <CreateButton onClick={openCreatePage} tooltip="Create a dataset" variant="ghost" size="sm">
+        New dataset
+      </CreateButton>
+    </RouteHeaderActions>
+  );
 
   if (error && is401UnauthorizedError(error)) {
     return (
@@ -61,6 +71,7 @@ export default function Datasets() {
   if (datasets.length === 0 && !isLoading) {
     return (
       <NoDataPageLayout>
+        {headerCreateAction}
         <NoDatasetsInfo onCreateClick={openCreatePage} />
       </NoDataPageLayout>
     );
@@ -76,6 +87,7 @@ export default function Datasets() {
 
   return (
     <PageLayout height="full">
+      {headerCreateAction}
       <PageLayout.TopArea>
         <DatasetsToolbar
           search={search}
@@ -87,7 +99,6 @@ export default function Datasets() {
           tagOptions={datasetTagOptions}
           onReset={resetFilters}
           hasActiveFilters={hasFilters}
-          onCreateClick={openCreatePage}
         />
       </PageLayout.TopArea>
 

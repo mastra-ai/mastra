@@ -2,7 +2,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { SelectFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
-import { Plus, XIcon } from 'lucide-react';
+import { XIcon } from 'lucide-react';
 import { DATASET_EXPERIMENT_OPTIONS } from './datasets-list/helpers';
 
 export interface DatasetsToolbarTagOption {
@@ -20,7 +20,6 @@ export interface DatasetsToolbarProps {
   tagOptions: DatasetsToolbarTagOption[];
   onReset?: () => void;
   hasActiveFilters?: boolean;
-  onCreateClick?: () => void;
 }
 
 export function DatasetsToolbar({
@@ -33,7 +32,6 @@ export function DatasetsToolbar({
   tagOptions,
   onReset,
   hasActiveFilters,
-  onCreateClick,
 }: DatasetsToolbarProps) {
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -72,11 +70,6 @@ export function DatasetsToolbar({
           </Button>
         )}
       </ButtonsGroup>
-      {onCreateClick && (
-        <Button onClick={onCreateClick} variant="primary" className="ml-auto shrink-0" icon={<Plus />}>
-          Create Dataset
-        </Button>
-      )}
     </div>
   );
 }
