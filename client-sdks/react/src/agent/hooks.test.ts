@@ -1268,18 +1268,32 @@ describe('useChat forwards clientTools', () => {
     const gate = new Promise<void>(resolve => {
       complete = resolve;
     });
-    networkMock.mockImplementationOnce(async () => ({
-      processDataStream: async ({ onChunk }) => {
-        await onChunk(toolExecutionStartChunk('lookupWeather', 'network-tool'));
-        await gate;
-      },
-    }));
+    let respond = () => {};
+    const responseGate = new Promise<void>(resolve => {
+      respond = resolve;
+    });
+    networkMock.mockImplementationOnce(async () => {
+      await responseGate;
+      return {
+        processDataStream: async ({ onChunk }) => {
+          await onChunk(toolExecutionStartChunk('lookupWeather', 'network-tool'));
+          await gate;
+        },
+      };
+    });
     const { result } = renderHook(() => useChat({ agentId: 'test-agent' }), { wrapper });
     let sending: Promise<void> | undefined;
     await act(async () => {
       sending = result.current.sendMessage({ mode: 'network', message: 'Check weather' });
     });
+    expect(result.current.isRunning).toBe(true);
     expect(result.current.activeRunId).toEqual(expect.any(String));
+    const pendingRunId = result.current.activeRunId;
+    expect(result.current.messages.some(message => message.role === 'assistant')).toBe(false);
+    await act(async () => {
+      respond();
+    });
+    expect(result.current.activeRunId).toBe(pendingRunId);
     const assistant = result.current.messages.find(message => message.role === 'assistant');
     expect(assistant?.content.metadata?.runId).toBe(result.current.activeRunId);
     await act(async () => {

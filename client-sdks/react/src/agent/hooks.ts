@@ -993,6 +993,7 @@ export const useChat = ({
     const agent = clientWithAbort.getAgent(agentId, undefined, { stream: streamPath });
 
     const runId = uuid();
+    _currentRunId.current = runId;
 
     const response = await agent.network(coreUserMessages, {
       model,
@@ -1014,7 +1015,6 @@ export const useChat = ({
 
     _onNetworkChunk.current = onNetworkChunk;
     _networkRunId.current = runId;
-    _currentRunId.current = runId;
 
     // Accumulate network chunks into `messages` as `MastraDBMessage` (temporary
     // bridge until the next major), while still forwarding chunks to the
