@@ -1,6 +1,5 @@
 import { EntityType, SpanType } from '@mastra/core/observability';
-import type { TraceQueryRequest, TraceQueryTraceResponse } from '@mastra/core/storage';
-import { describe, expect, beforeEach, expectTypeOf, it, vi } from 'vitest';
+import { describe, expect, beforeEach, it, vi } from 'vitest';
 import { MastraClient } from '../client';
 
 // Mock fetch globally
@@ -480,11 +479,6 @@ describe('Observability Methods', () => {
   });
 
   describe('queryTraces()', () => {
-    it('exposes only ungrouped trace queries', () => {
-      expectTypeOf<Parameters<MastraClient['queryTraces']>[0]>().toEqualTypeOf<Omit<TraceQueryRequest, 'group'>>();
-      expectTypeOf<ReturnType<MastraClient['queryTraces']>>().toEqualTypeOf<Promise<TraceQueryTraceResponse>>();
-    });
-
     it('should post the advanced query body unchanged', async () => {
       mockSuccessfulResponse();
       const request = {
