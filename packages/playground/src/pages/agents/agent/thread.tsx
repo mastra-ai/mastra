@@ -131,7 +131,6 @@ function AgentThread() {
       defaultProvider={cleanProviderId(agent.provider ?? '')}
       defaultModel={agent.modelId ?? ''}
       defaultSettings={defaultSettings}
-      isNewThread={isNewThread}
     >
       <WorkingMemoryProvider agentId={agentId!} threadId={actualThreadId} resourceId={agentId!}>
         <BrowserToolCallsProvider key={`browser-${agentId}-${actualThreadId}`}>

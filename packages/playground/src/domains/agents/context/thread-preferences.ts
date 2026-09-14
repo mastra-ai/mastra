@@ -45,21 +45,13 @@ function readModelSettings(value: unknown): ThreadPreferences['modelSettings'] {
   return modelSettingsSchema.parse(validFields);
 }
 
-export function readThreadPreferences(key: string, legacyKey?: string): ThreadPreferences {
-  try {
-    const stored = localStorage.getItem(key) ?? (legacyKey ? localStorage.getItem(legacyKey) : null);
-    if (!stored) return {};
-    const record = recordSchema.safeParse(JSON.parse(stored));
-    if (!record.success) return {};
-    const selection = selectionSchema.safeParse(record.data.selection);
-    return {
-      selection: selection.success ? selection.data : undefined,
-      modelSettings: readModelSettings(record.data.modelSettings),
-    };
-  } catch {
-    return {};
-  }
-}
+export const threadPreferencesSchema = recordSchema.transform((record): ThreadPreferences => {
+  const selection = selectionSchema.safeParse(record.selection);
+  return {
+    selection: selection.success ? selection.data : undefined,
+    modelSettings: readModelSettings(record.modelSettings),
+  };
+});
 
 export function serializeThreadPreferences(preferences: ThreadPreferences): string {
   return JSON.stringify({

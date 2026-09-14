@@ -1,12 +1,12 @@
 import type { ReactNode } from 'react';
-import { useEffect, useState } from 'react';
 import { AgentSettingsContext } from './agent-context';
 import { PlaygroundModelContext } from './playground-model-context';
-import { readThreadPreferences, serializeThreadPreferences } from './thread-preferences';
+import { threadPreferencesSchema, serializeThreadPreferences } from './thread-preferences';
 import { useAgentBuilderAllowedModels } from '@/domains/agent-builder/hooks/use-agent-builder-allowed-models';
 import { useBuilderSettings } from '@/domains/agent-builder/hooks/use-builder-settings';
 import { defaultSettings as fallbackSettings } from '@/domains/agents/hooks/use-agent-settings-state';
 import { cleanProviderId } from '@/domains/llm';
+import { useLocalStorageState } from '@/hooks/use-local-storage-state';
 import type { AgentSettingsType } from '@/types';
 
 export interface ThreadPreferencesProviderProps {
@@ -16,7 +16,6 @@ export interface ThreadPreferencesProviderProps {
   defaultProvider: string;
   defaultModel: string;
   defaultSettings?: AgentSettingsType;
-  isNewThread?: boolean;
 }
 
 export function ThreadPreferencesProvider(props: ThreadPreferencesProviderProps) {
@@ -30,28 +29,24 @@ function ThreadPreferencesState({
   defaultModel,
   defaultSettings,
   storageKey,
-  agentId,
-  isNewThread,
 }: ThreadPreferencesProviderProps & { storageKey: string }) {
-  const [preferences, setPreferences] = useState(() =>
-    readThreadPreferences(storageKey, isNewThread ? undefined : `mastra-agent-store-${agentId}`),
-  );
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(storageKey, serializeThreadPreferences(preferences));
-    } catch {
-      // Keep chat usable when browser storage is unavailable or full.
-    }
-  }, [storageKey, preferences]);
+  const [preferences, setPreferences] = useLocalStorageState({
+    initialKey: storageKey,
+    defaultValue: {},
+    schema: threadPreferencesSchema,
+    serialize: serializeThreadPreferences,
+  });
 
   const { data: builderSettings, isError: policyError } = useBuilderSettings();
   const policy = builderSettings?.modelPolicy;
-  const { models: allowedModels, isLoading: allowedModelsLoading } = useAgentBuilderAllowedModels({
-    enabled: policy?.active === true,
-  });
+  const {
+    models: allowedModels,
+    isLoading: allowedModelsLoading,
+    isError: allowedModelsError,
+  } = useAgentBuilderAllowedModels({ enabled: policy?.active === true });
+  const needsAllowlist = policy?.active && policy.allowed !== undefined;
   const policyResolved =
-    Boolean(builderSettings) && !(policy?.active && policy.allowed !== undefined && allowedModelsLoading);
+    Boolean(builderSettings) && !policyError && !(needsAllowlist && (allowedModelsLoading || allowedModelsError));
   const savedSelection = preferences.selection;
   const allowed =
     !policy?.active ||
@@ -63,9 +58,14 @@ function ThreadPreferencesState({
     );
   const locked = policy?.active && policy.pickerVisible === false;
   // Never send a restored override before policy resolution, or when it is no longer allowed.
-  const selection = policyResolved && !policyError && !locked && allowed ? savedSelection : undefined;
-  const policyDefault =
-    policyResolved && policy?.active && (locked || (savedSelection && !allowed)) ? policy.default : undefined;
+  const selection = policyResolved && !locked && allowed ? savedSelection : undefined;
+  // A locked default comes from the policy itself, not the available-model catalog.
+  const usePolicyDefault = !policyError && policy?.active && (locked || (policyResolved && savedSelection && !allowed));
+  const policyDefault = usePolicyDefault ? policy?.default : undefined;
+  const modelWarning =
+    policyError || (needsAllowlist && allowedModelsError && !locked)
+      ? 'Unable to verify model policy. Using the agent default until policy data is available. Your saved model is unchanged.'
+      : undefined;
   const provider = selection?.provider ?? policyDefault?.provider ?? defaultProvider;
   const model = selection?.model ?? policyDefault?.modelId ?? defaultModel;
   const modelOverride = (selection || policyDefault) && provider && model ? `${provider}/${model}` : undefined;
@@ -83,6 +83,7 @@ function ThreadPreferencesState({
         provider,
         model,
         modelOverride,
+        modelWarning,
         setProvider: provider => setPreferences(previous => ({ ...previous, selection: { provider, model: '' } })),
         setModel: (provider, model) => setPreferences(previous => ({ ...previous, selection: { provider, model } })),
       }}

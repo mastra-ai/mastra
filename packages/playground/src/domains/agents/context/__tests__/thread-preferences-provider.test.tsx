@@ -19,6 +19,7 @@ import {
   workingMemory,
 } from './fixtures/thread-preferences';
 import { buildBuilderSettings } from '@/domains/agent-builder/hooks/__tests__/fixtures/builder-settings';
+import { ComposerModelSwitcher, ComposerModelWarning } from '@/domains/agents/components/composer-model-switcher';
 import { ChatProvider } from '@/lib/ai-ui/chat/chat-provider';
 import { server } from '@/test/msw-server';
 
@@ -32,6 +33,8 @@ function Controls() {
   const send = useChatSend();
   return (
     <>
+      <ComposerModelSwitcher />
+      <ComposerModelWarning />
       <output>
         {model}:{settings?.modelSettings.temperature}
       </output>
@@ -103,6 +106,7 @@ function mountSession(
     modelsHandler ??
       http.get(`${BASE_URL}/api/editor/builder/models/available`, () => HttpResponse.json({ providers: [] })),
     http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json(currentUser)),
+    http.get(`${BASE_URL}/api/agents/providers`, () => HttpResponse.json(allowedModels)),
     http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json(memoryConfig)),
     http.get(`${BASE_URL}/api/memory/threads/:threadId/working-memory`, () => HttpResponse.json(workingMemory)),
   );
@@ -165,7 +169,7 @@ describe('ThreadPreferencesProvider', () => {
   });
 
   describe('while the allowed-model list is loading', () => {
-    it.each([false, true])('does not apply an override until policy resolves (locked: %s)', async locked => {
+    it.each([false, true])('keeps the displayed model consistent with requests (locked: %s)', async locked => {
       localStorage.setItem(
         'mastra-thread-preferences-["agent-1","thread-a"]',
         JSON.stringify({
@@ -202,10 +206,18 @@ describe('ThreadPreferencesProvider', () => {
       );
       try {
         await waitFor(() => expect(requested).toHaveBeenCalledOnce());
-        expect(screen.getByText('gpt-4o:0.9')).toBeTruthy();
+        expect(screen.getByText(`${locked ? 'gpt-5-mini' : 'gpt-4o'}:0.9`)).toBeTruthy();
+        expect(screen.queryByText(/is no longer allowed by admin policy/)).toBeNull();
+        if (locked) {
+          expect((await screen.findByTestId('composer-model-locked')).textContent).toContain('openai/gpt-5-mini');
+        }
         fireEvent.click(screen.getByText('Send'));
         await waitFor(() => expect(sent).toHaveBeenCalledOnce());
-        expect(sent.mock.calls[0][0]).not.toHaveProperty('model');
+        if (locked) {
+          expect(sent.mock.calls[0][0]).toMatchObject({ model: 'openai/gpt-5-mini' });
+        } else {
+          expect(sent.mock.calls[0][0]).not.toHaveProperty('model');
+        }
         await act(async () => release());
         const expectedModel = locked ? 'gpt-5-mini' : 'gpt-4o-mini';
         await screen.findByText(`${expectedModel}:0.9`);
@@ -215,6 +227,41 @@ describe('ThreadPreferencesProvider', () => {
       } finally {
         release();
       }
+    });
+  });
+
+  describe('when the allowed-model request fails', () => {
+    it('warns about the agent-default fallback and restores the saved model after recovery', async () => {
+      localStorage.setItem(
+        'mastra-thread-preferences-["agent-1","thread-a"]',
+        JSON.stringify({ selection: { provider: 'openai', model: 'gpt-4o-mini' } }),
+      );
+      const sent = vi.fn();
+      server.use(
+        http.post(`${BASE_URL}/api/agents/:agentId/stream`, async ({ request }) => {
+          sent(await request.json());
+          return new HttpResponse('data: {"type":"finish","payload":{}}\n\n', {
+            headers: { 'content-type': 'text/event-stream' },
+          });
+        }),
+      );
+      const view = mountSession(
+        'thread-a',
+        { active: true, allowed: [{ provider: 'openai' }], default: { provider: 'openai', modelId: 'gpt-5-mini' } },
+        http.get(`${BASE_URL}/api/editor/builder/models/available`, () => new HttpResponse(null, { status: 500 })),
+      );
+      expect(await screen.findByText(/Unable to verify model policy/)).toBeTruthy();
+      expect(screen.getByText('gpt-4o:0.9')).toBeTruthy();
+      fireEvent.click(screen.getByText('Send'));
+      await waitFor(() => expect(sent).toHaveBeenCalledOnce());
+      expect(sent.mock.calls[0][0]).not.toHaveProperty('model');
+      server.use(http.get(`${BASE_URL}/api/editor/builder/models/available`, () => HttpResponse.json(allowedModels)));
+      await act(() => view.client.invalidateQueries({ queryKey: ['builder-available-models'] }));
+      await screen.findByText('gpt-4o-mini:0.9');
+      expect(screen.queryByText(/Unable to verify model policy/)).toBeNull();
+      fireEvent.click(screen.getByText('Send'));
+      await waitFor(() => expect(sent).toHaveBeenCalledTimes(2));
+      expect(sent.mock.calls[1][0]).toMatchObject({ model: 'openai/gpt-4o-mini' });
     });
   });
 
@@ -329,13 +376,16 @@ describe('ThreadPreferencesProvider', () => {
   });
 
   describe('when only legacy agent settings exist', () => {
-    it('migrates them once without linking later changes between chats', () => {
+    it('starts from defaults and keeps subsequent preferences scoped to each chat', () => {
       localStorage.setItem('mastra-agent-store-agent-1', JSON.stringify({ modelSettings: { temperature: 0.4 } }));
       const view = mountSession();
-      expect(screen.getByText('gpt-4o:0.4')).toBeTruthy();
+      expect(screen.getByText('gpt-4o:0.9')).toBeTruthy();
       fireEvent.click(screen.getByText('Customize'));
       view.rerender(<Session threadId="thread-b" />);
-      expect(screen.getByText('gpt-4o:0.4')).toBeTruthy();
+      expect(screen.getByText('gpt-4o:0.9')).toBeTruthy();
+      expect(localStorage.getItem('mastra-agent-store-agent-1')).toBe(
+        JSON.stringify({ modelSettings: { temperature: 0.4 } }),
+      );
       localStorage.setItem('mastra-agent-store-agent-1', JSON.stringify({ modelSettings: { temperature: 0.7 } }));
       view.rerender(<Session threadId="thread-a" />);
       expect(screen.getByText('gpt-4o-mini:0.2')).toBeTruthy();

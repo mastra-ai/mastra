@@ -6,6 +6,7 @@ interface PlaygroundModelContextType {
   provider: string;
   model: string;
   modelOverride?: string;
+  modelWarning?: string;
   setProvider: (provider: string) => void;
   setModel: (provider: string, model: string) => void;
 }
