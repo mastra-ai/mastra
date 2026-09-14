@@ -43,8 +43,8 @@ sent again; provider adapters therefore generate stable destination IDs.
 
 Partial preparation is discarded and downloaded again. The implementation does
 not keep source pages, shards, batch files, checksums, or fsync bookkeeping.
-Prepared trace data is removed only when the later orchestration layer marks the
-overall import successful.
+Prepared trace data is removed only after upload and read-back verification
+succeed.
 
 ## Platform upload
 
@@ -61,5 +61,18 @@ other permanent errors are returned immediately without changing progress.
 Consecutive batches are paced to approximately 100 spans per second by default;
 an individual trace remains whole even when it contains more than 100 spans.
 
-Read-back verification, reports, and the customer-facing command are
-implemented by later tickets.
+## Read-back verification and reports
+
+After every prepared trace is acknowledged, the shared verifier selects a
+deterministic sample of at most ten traces. It uses Platform's lightweight
+trace endpoint to compare span IDs, parent links, names, span types, event
+flags, timestamps, and errors. It does not download or compare customer input,
+output, attributes, metadata, or tags.
+
+Verification retries briefly for query propagation. A mismatch, timeout, or
+unavailable query API pauses the import, writes `report.json`, and keeps
+`traces.jsonl` so verification can be retried without uploading acknowledged
+traces again. Successful verification marks the import complete, writes the
+report, and removes the prepared trace file.
+
+The customer-facing command is implemented by a later ticket.
