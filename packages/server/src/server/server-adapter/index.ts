@@ -1350,8 +1350,11 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       if (omitted.success) return omitted.data;
       // Preserve bodyless object requests with optional/defaulted fields, but keep
       // the original missing-input error if the compatibility fallback also fails.
-      const emptyObject = await bodySchema.safeParseAsync({});
-      if (emptyObject.success) return emptyObject.data;
+      const schemaType = getSchemaTypeName(unwrapOptionalNullable(bodySchema));
+      if (schemaType === 'object' || schemaType === 'ZodObject') {
+        const emptyObject = await bodySchema.safeParseAsync({});
+        if (emptyObject.success) return emptyObject.data;
+      }
       throw omitted.error;
     }
 

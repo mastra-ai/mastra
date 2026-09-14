@@ -92,6 +92,40 @@ describe('body schema validation', () => {
     },
   );
 
+  it.each([z.record(z.string(), z.string()), z.record(z.string(), z.string()).nullable()])(
+    'rejects omitted record bodies without rejecting explicit empty objects %#',
+    async bodySchema => {
+      const adapter = createTestAdapter();
+      await expect(adapter.parseBody({ ...requiredBodyRoute, bodySchema }, undefined)).rejects.toThrow();
+      await expect(adapter.parseBody({ ...requiredBodyRoute, bodySchema }, {})).resolves.toEqual({});
+    },
+  );
+
+  it('preserves optional and defaulted record bodies', async () => {
+    const schema = z.record(z.string(), z.string());
+    const adapter = createTestAdapter();
+    await expect(
+      adapter.parseBody({ ...requiredBodyRoute, bodySchema: schema.optional() }, undefined),
+    ).resolves.toBeUndefined();
+    await expect(
+      adapter.parseBody({ ...requiredBodyRoute, bodySchema: schema.default({}) }, undefined),
+    ).resolves.toEqual({});
+  });
+
+  it('validates nullable object schemas through the original schema', async () => {
+    const schema = z.object({ limit: z.number().default(10) });
+    const adapter = createTestAdapter();
+    await expect(
+      adapter.parseBody({ ...requiredBodyRoute, bodySchema: schema.nullable() }, undefined),
+    ).resolves.toEqual({ limit: 10 });
+    await expect(
+      adapter.parseBody(
+        { ...requiredBodyRoute, bodySchema: schema.refine(value => value.limit < 5).nullable() },
+        undefined,
+      ),
+    ).rejects.toThrow();
+  });
+
   it('keeps explicit empty objects distinct from omitted bodies', async () => {
     const bodySchema = z.object({ name: z.string().optional() }).default({ name: 'default' });
     const adapter = createTestAdapter();

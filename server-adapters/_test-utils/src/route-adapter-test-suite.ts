@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { createRoute, HTTPException, SERVER_ROUTES, type ServerRoute } from '@mastra/server/server-adapter';
 import { z } from 'zod';
+import { z as z3 } from 'zod/v3';
 
 import {
   AdapterTestContext,
@@ -51,6 +52,58 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
       // Setup adapter and app
       setup = await setupAdapter(context);
       app = setup.app;
+    });
+
+    describe.each([
+      {
+        version: 'v3',
+        recordSchema: z3.record(z3.string(), z3.string()),
+        objectSchema: z3.object({ limit: z3.number().default(10) }),
+      },
+      {
+        version: 'v4',
+        recordSchema: z.record(z.string(), z.string()),
+        objectSchema: z.object({ limit: z.number().default(10) }),
+      },
+    ])('Zod $version record body validation', ({ recordSchema, objectSchema }) => {
+      beforeEach(async () => {
+        await setup.adapter.registerRoute(app, {
+          method: 'DELETE',
+          path: '/test/record-body',
+          responseType: 'json',
+          bodySchema: recordSchema,
+          handler: async () => ({ success: true }),
+        });
+        await setup.adapter.registerRoute(app, {
+          method: 'DELETE',
+          path: '/test/object-body',
+          responseType: 'json',
+          bodySchema: objectSchema,
+          handler: async ({ limit }: { limit: number }) => ({ limit }),
+        });
+      });
+
+      it('does not convert missing record bodies to empty objects', async () => {
+        const response = await executeHttpRequest(app, { method: 'DELETE', path: '/api/test/record-body' });
+        // Some framework parsers already supply {} before adapter validation runs.
+        const alreadyNormalized = config.emptyBodyNormalization?.withoutContentType === 'empty-object';
+        expect(response.status).toBe(alreadyNormalized ? 200 : 400);
+        if (!alreadyNormalized) {
+          expect(response.data).toMatchObject({ error: 'Invalid request body', issues: [{ field: 'root' }] });
+        }
+      });
+
+      it('accepts explicitly empty record bodies', async () => {
+        const response = await executeHttpRequest(app, { method: 'DELETE', path: '/api/test/record-body', body: {} });
+        expect(response.status).toBe(200);
+        expect(response.data).toEqual({ success: true });
+      });
+
+      it('keeps bodyless object field defaults', async () => {
+        const response = await executeHttpRequest(app, { method: 'DELETE', path: '/api/test/object-body' });
+        expect(response.status).toBe(200);
+        expect(response.data).toEqual({ limit: 10 });
+      });
     });
 
     describe('Whole-body defaults over HTTP', () => {
