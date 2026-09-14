@@ -2933,7 +2933,7 @@ export class Session<TState = unknown> {
       getTokenUsage: () => this.getTokenUsage(),
       getSubagentDisplayName: agentType => this.#resolveSubagentName?.(agentType),
       getThreadId: () => this.thread.getId(),
-      clearFollowUps: () => this.followUps.clear(),
+      clearFollowUps: () => this.cleanupFollowUpBinding(),
     });
     this.#bus.setDisplayState(this.displayState);
     this.state = new SessionState(state ?? { initialState: {} as TState }, this.#bus, () => {
@@ -3662,6 +3662,44 @@ export class Session<TState = unknown> {
     });
   }
 
+  private async prepareMessageTarget({
+    requestContext,
+    tracingContext,
+    tracingOptions,
+    untilIdle,
+    includeStreamOptions = true,
+  }: {
+    requestContext?: RequestContext;
+    tracingContext?: TracingContext;
+    tracingOptions?: TracingOptions;
+    untilIdle?: boolean | { maxIdleMs?: number };
+    includeStreamOptions?: boolean;
+  }) {
+    if (!this.thread.getId()) {
+      const thread = await this.thread.create();
+      this.thread.set({ threadId: thread.id });
+    }
+    const threadId = this.thread.getId()!;
+    await this.thread.ensureSubscription(threadId);
+
+    if (!includeStreamOptions) {
+      return { resourceId: this.identity.getResourceId(), threadId };
+    }
+
+    const streamOptions = await this.machinery.buildStreamOptions({
+      requestContext,
+      tracingContext,
+      tracingOptions,
+      untilIdle,
+    });
+
+    return {
+      resourceId: this.identity.getResourceId(),
+      threadId,
+      ifIdle: { streamOptions: streamOptions as any },
+    };
+  }
+
   /**
    * Send a message to this session's current agent and await the run. Streams
    * the response and emits events.
@@ -3712,6 +3750,7 @@ export class Session<TState = unknown> {
       requestContext: requestContextInput,
       tracingContext,
       tracingOptions,
+      untilIdle,
       includeStreamOptions: !routesToActiveRun,
     });
     const result = this.machinery
@@ -3751,7 +3790,8 @@ export class Session<TState = unknown> {
     const target = await this.prepareMessageTarget({
       requestContext: requestContextInput,
       tracingContext,
-      tracingOptions,    });
+      tracingOptions,
+    });
     const messageInput = this.createMessageInput({ content, files });
     const providerOptions = withMessageAuthor(undefined, readMessageAuthor(requestContextInput));
     const result = this.machinery
@@ -3762,7 +3802,8 @@ export class Session<TState = unknown> {
       await result.accepted;
     } else {
       await this.waitForAcceptedRunCompletion(result.accepted, { waitForDelivery: false });
-    }  }
+    }
+  }
 
   /** Abort the current run and send steering input without clearing queued follow-ups. */
   async steer({ content, requestContext }: { content: string; requestContext?: RequestContext }): Promise<void> {
