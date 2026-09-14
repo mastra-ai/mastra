@@ -1,3 +1,4 @@
+import type { JSONSchema7 } from 'json-schema';
 import type { MCPLoggingLevel } from '../tools/types';
 
 export const MCP_PROTOCOL_VERSION_V2 = '2026-07-28' as const;
@@ -37,3 +38,13 @@ export interface MCPSuspendContextV2<TSuspend = unknown, TResume = unknown> {
 /** `context.mcpv2` for a tool executed by an MCP 2026-07-28 server. */
 export type MCPToolExecutionContextV2<TSuspend = unknown, TResume = unknown> = MCPRequestContextV2 &
   MCPSuspendContextV2<TSuspend, TResume>;
+
+/**
+ * What `executeTool` resolves to on a server with `mcpVersion === 2`. A tool that
+ * calls `context.mcpv2.suspend(payload)` is reported as `suspended` together with
+ * the payload and its `resumeSchema` (as JSON Schema) so the caller can ask for
+ * exactly that input; otherwise the tool's output is returned as `completed`.
+ */
+export type MCPToolExecutionResultV2 =
+  | { status: 'completed'; output: unknown }
+  | { status: 'suspended'; suspendPayload: unknown; resumeSchema?: JSONSchema7 };

@@ -1,17 +1,21 @@
+import { tool } from '@internal/ai-sdk-v5';
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it, vi } from 'vitest';
-import { z } from 'zod/v4';
+import { z } from 'zod';
 import { Agent } from '../agent';
+import type { ToolsInput } from '../agent';
 import { Mastra } from '../mastra';
 import { RequestContext } from '../request-context';
+import { standardSchemaToJSONSchema } from '../schema';
 import { createTool } from '../tools';
-import type { InternalCoreTool, ToolsInput } from '../tools';
+import type { InternalCoreTool } from '../tools';
 import { makeCoreTool } from '../utils';
-import { createWorkflow } from '../workflows';
-import { MCPServerBase, MCPServerBaseV2, isMCPServerV2 } from './index';
+import { Workflow } from '../workflows';
+import { MCPServerBase } from './index';
 import type { MCPToolExecutionContextV2, MCPToolExecutionResultV2 } from './index';
 
-class NativeServer extends MCPServerBaseV2 {
+class NativeServer extends MCPServerBase {
+  override readonly mcpVersion = 2 as const;
   // Converts tools the way the 1.x package does, so the mcpv2 context flows through CoreToolBuilder.
   convertTools(tools: ToolsInput) {
     const converted: Record<string, InternalCoreTool> = {};
@@ -28,7 +32,7 @@ class NativeServer extends MCPServerBaseV2 {
   async executeTool(
     toolId: string,
     args: unknown,
-    executionContext: Parameters<MCPServerBaseV2['executeTool']>[2] = {},
+    executionContext: Parameters<MCPServerBase['executeTool']>[2] = {},
   ): Promise<MCPToolExecutionResultV2> {
     const tool = this.convertedTools[toolId];
     if (!tool?.execute) throw new Error(`Tool ${toolId} not found`);
@@ -47,7 +51,7 @@ class NativeServer extends MCPServerBaseV2 {
       return {
         status: 'suspended',
         suspendPayload: suspension.payload,
-        resumeSchema: resumeSchema ? z.toJSONSchema(resumeSchema as z.ZodType) : undefined,
+        resumeSchema: resumeSchema ? standardSchemaToJSONSchema(resumeSchema, { io: 'input' }) : undefined,
       };
     }
     return { status: 'completed', output };
@@ -168,9 +172,8 @@ describe('MCP v1/v2 registry boundaries', () => {
     // A tool that can suspend is an ordinary Mastra tool too: agents and workflows resume it.
     expect(mastra.getToolById('confirm')).toBe(confirm);
     expect(modern.getServerInfo().version_detail.release_date).toBe('2026-07-28');
-    expect(isMCPServerV2(modern)).toBe(true);
-    expect(isMCPServerV2(legacy)).toBe(false);
-    expect('mcpVersion' in legacy).toBe(false);
+    expect(modern.mcpVersion).toBe(2);
+    expect(legacy.mcpVersion).toBeUndefined();
     expect('startSSE' in modern).toBe(false);
     expect('startHonoSSE' in modern).toBe(false);
   });
@@ -182,9 +185,18 @@ describe('MCP v1/v2 registry boundaries', () => {
       instructions: 'help',
       model: new MockLanguageModelV2({}),
     });
-    const workflow = createWorkflow({ id: 'flow', inputSchema: z.object({}), outputSchema: z.object({}) }).commit();
+    const workflow = new Workflow({
+      id: 'flow',
+      inputSchema: z.object({ q: z.string() }),
+      outputSchema: z.object({ q: z.string() }),
+      steps: [],
+    });
     const mastraTool = createTool({ id: 'ordinary', description: 'Ordinary tool', execute: async () => 1 });
-    const vercelTool = { description: 'AI SDK shape', inputSchema: z.object({}), execute: async () => 'ok' };
+    const vercelTool = tool({
+      description: 'AI SDK shape',
+      inputSchema: z.object({ q: z.string() }),
+      execute: async () => 'ok',
+    });
     const server = new NativeServer({
       id: 'Returns Desk v2',
       name: 'Returns',

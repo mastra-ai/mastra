@@ -1,6 +1,6 @@
 {
   "extends": "../../../tsconfig.build.json",
   "compilerOptions": { "noEmit": true },
-  "include": ["v2-types.ts", "../registry-v2.test.ts"],
+  "include": ["v2-types.ts"],
   "exclude": []
 }

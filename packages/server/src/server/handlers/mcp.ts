@@ -1,7 +1,6 @@
 import type {
   MCPServerBase as MastraMCPServerImplementation,
-  MCPServerBaseV2,
-  MCPServerRegistryEntry,
+  MCPToolExecutionResultV2,
   ServerInfo,
 } from '@mastra/core/mcp';
 import { HTTPException } from '../http-exception';
@@ -26,15 +25,14 @@ import type { ServerContext } from '../server-adapter';
 import type { SetMcpRequestAuth } from '../server-adapter/mcp-auth';
 import { createRoute } from '../server-adapter/routes/route-builder';
 
-// Mirrors core's `isMCPServerV2` without a value import, so this package keeps
-// its existing core peer floor: only 2026-07-28 servers carry `mcpVersion`.
-function isV2Server(server: MCPServerRegistryEntry): server is MCPServerBaseV2 {
-  return 'mcpVersion' in server && server.mcpVersion === 2;
-}
-
 // ============================================================================
 // Route Definitions (createRoute pattern for server adapters)
 // ============================================================================
+
+/** Only `@mastra/mcp` 1.x servers implement the standalone HTTP+SSE transport. */
+function hasSSETransport(server: MastraMCPServerImplementation): server is MCPSseTransportResult['server'] {
+  return typeof server.startSSE === 'function' && typeof server.startHonoSSE === 'function';
+}
 
 export const LIST_MCP_SERVERS_ROUTE = createRoute({
   method: 'GET',
@@ -245,10 +243,10 @@ export const EXECUTE_MCP_SERVER_TOOL_ROUTE = createRoute({
       throw new HTTPException(501, { message: `Server '${serverId}' cannot execute tools in this way.` });
     }
 
-    if (isV2Server(server)) {
+    if (server.mcpVersion === 2) {
       // A 2026-07-28 server runs the tool with no protocol client attached: a tool
       // that suspends for input is reported as such instead of pretending it finished.
-      const execution = await server.executeTool(toolId, data, { requestContext });
+      const execution: MCPToolExecutionResultV2 = await server.executeTool(toolId, data, { requestContext });
       if (execution.status === 'suspended') {
         return {
           status: 'suspended' as const,
@@ -365,7 +363,7 @@ export interface MCPTransportOptions {
  * Adapters use this to set up the HTTP transport via MCPServer.startHTTP()
  */
 export interface MCPHttpTransportResult {
-  server: MCPServerRegistryEntry;
+  server: MastraMCPServerImplementation;
   httpPath: string;
   /**
    * Optional MCP transport options for this specific route.
@@ -381,7 +379,8 @@ export interface MCPHttpTransportResult {
  * Note: SSE transport is inherently stateful and doesn't support serverless mode.
  */
 export interface MCPSseTransportResult {
-  server: MastraMCPServerImplementation;
+  /** A 1.x server: the SSE route only resolves servers that still implement the transport. */
+  server: MastraMCPServerImplementation & Required<Pick<MastraMCPServerImplementation, 'startSSE' | 'startHonoSSE'>>;
   ssePath: string;
   messagePath: string;
 }
@@ -433,7 +432,7 @@ export const MCP_SSE_TRANSPORT_ROUTE = createRoute({
       throw new HTTPException(404, { message: `MCP server '${serverId}' not found` });
     }
 
-    if (isV2Server(server)) {
+    if (!hasSSETransport(server)) {
       throw new HTTPException(404, { message: 'Legacy SSE transport is unavailable for MCP v2 servers' });
     }
 

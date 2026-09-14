@@ -39,7 +39,7 @@ import {
   createExportSuppressedLogger,
 } from '../logger';
 import type { IMastraLogger, LoggerAdapterOptions } from '../logger';
-import type { MCPServerRegistryEntry } from '../mcp/server-v2';
+import type { MCPServerBase } from '../mcp';
 import type { MastraMemory } from '../memory';
 import type { NotificationDispatchConfig } from '../notifications/workflow';
 import {
@@ -259,7 +259,7 @@ export interface Config<
   TVectors extends Record<string, MastraVector<any>> = Record<string, MastraVector<any>>,
   TTTS extends Record<string, MastraTTS> = Record<string, MastraTTS>,
   TLogger extends IMastraLogger = IMastraLogger,
-  TMCPServers extends Record<string, MCPServerRegistryEntry> = Record<string, MCPServerRegistryEntry>,
+  TMCPServers extends Record<string, MCPServerBase<any>> = Record<string, MCPServerBase<any>>,
   TScorers extends Record<string, MastraScorer<any, any, any, any>> = Record<string, MastraScorer<any, any, any, any>>,
   TTools extends Record<string, ToolAction<any, any, any, any, any, any>> = Record<
     string,
@@ -756,7 +756,7 @@ export class Mastra<
   TVectors extends Record<string, MastraVector<any>> = Record<string, MastraVector<any>>,
   TTTS extends Record<string, MastraTTS> = Record<string, MastraTTS>,
   TLogger extends IMastraLogger = IMastraLogger,
-  TMCPServers extends Record<string, MCPServerRegistryEntry> = Record<string, MCPServerRegistryEntry>,
+  TMCPServers extends Record<string, MCPServerBase<any>> = Record<string, MCPServerBase<any>>,
   TScorers extends Record<string, MastraScorer<any, any, any, any>> = Record<string, MastraScorer<any, any, any, any>>,
   TTools extends Record<string, ToolAction<any, any, any, any, any, any>> = Record<
     string,
@@ -6136,7 +6136,7 @@ export class Mastra<
    * }
    * ```
    */
-  public listMCPServers(): Record<string, MCPServerRegistryEntry> | undefined {
+  public listMCPServers(): Record<string, MCPServerBase> | undefined {
     return this.#mcpServers;
   }
 
@@ -6159,7 +6159,7 @@ export class Mastra<
    * mastra.addMCPServer(newServer, 'customKey'); // Uses custom key
    * ```
    */
-  public addMCPServer<M extends MCPServerRegistryEntry>(server: M, key?: string): void {
+  public addMCPServer<M extends MCPServerBase>(server: M, key?: string): void {
     if (!server) {
       throw createUndefinedPrimitiveError('mcp-server', server, key);
     }
@@ -6184,7 +6184,7 @@ export class Mastra<
     }
 
     const serverKey = key ?? resolvedId;
-    const servers = this.#mcpServers as Record<string, MCPServerRegistryEntry>;
+    const servers = this.#mcpServers as Record<string, MCPServerBase>;
     if (servers[serverKey]) {
       return;
     }

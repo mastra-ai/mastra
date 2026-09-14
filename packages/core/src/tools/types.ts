@@ -255,6 +255,10 @@ export interface WorkflowToolExecutionContext<TSuspend, TResume> {
 /** Log levels for MCP `notifications/message`, ordered per RFC 5424. */
 export type MCPLoggingLevel = 'debug' | 'info' | 'notice' | 'warning' | 'error' | 'critical' | 'alert' | 'emergency';
 
+/**
+ * Protocol context `@mastra/mcp` 1.x hands to a tool as `context.mcp.extra`.
+ * @deprecated 1.x-only; MCP 2026-07-28 servers provide `MCPRequestContextV2` instead. Removed in the next core major.
+ */
 export type MCPServerContext = ServerContext & {
   signal: ServerContext['mcpReq']['signal'];
   requestId: ServerContext['mcpReq']['id'];
@@ -264,7 +268,11 @@ export type MCPServerContext = ServerContext & {
   _meta?: ServerContext['mcpReq']['_meta'];
 };
 
-// MCP tool execution context - properties specific when tools are executed via Model Context Protocol
+/**
+ * MCP tool execution context - properties specific when tools are executed via an `@mastra/mcp` 1.x server.
+ * @deprecated 1.x-only; MCP 2026-07-28 servers provide `MCPToolExecutionContextV2` (`context.mcpv2`) instead.
+ * Removed in the next core major, when `mcpv2` becomes `mcp`.
+ */
 export interface MCPToolExecutionContext {
   /** MCP protocol context passed by the server */
   extra: MCPServerContext;
@@ -304,11 +312,12 @@ export type MastraToolInvocationOptions = ToolInvocationOptions &
     suspendPayload?: any;
     outputWriter?: OutputWriter;
     /**
-     * Optional MCP-specific context passed when tool is executed in MCP server.
+     * Optional MCP-specific context passed when tool is executed in an `@mastra/mcp` 1.x server.
      * This is populated by the MCP server and passed through to the tool's execution context.
+     * @deprecated 1.x-only; removed in the next core major, when `mcpv2` becomes `mcp`.
      */
     mcp?: MCPToolExecutionContext;
-    /** The 2026-07-28 request context when an `@mastra/mcp` 2.x server executes the tool. */
+    /** The 2026-07-28 request context when an `@mastra/mcp` 2.x server executes the tool. Becomes `mcp` in the next core major. */
     mcpv2?: MCPToolExecutionContextV2;
     /**
      * Workspace for tool execution. When provided at execution time, this overrides
@@ -594,11 +603,17 @@ export interface ToolExecutionContext<
   // Workflow-specific properties
   workflow?: WorkflowToolExecutionContext<TSuspend, TResume>;
 
-  // MCP (Model Context Protocol) specific context provided by `@mastra/mcp` 1.x servers
+  /**
+   * MCP (Model Context Protocol) specific context provided by `@mastra/mcp` 1.x servers.
+   * @deprecated 1.x-only; removed in the next core major, when `mcpv2` becomes `mcp`.
+   */
   mcp?: MCPToolExecutionContext;
 
-  // The 2026-07-28 request an `@mastra/mcp` 2.x server is running this tool in:
-  // per-request log/progress/metadata plus suspend/resume for `input_required` rounds
+  /**
+   * The 2026-07-28 request an `@mastra/mcp` 2.x server is running this tool in:
+   * per-request log/progress/metadata plus suspend/resume for `input_required` rounds.
+   * Becomes `mcp` in the next core major.
+   */
   mcpv2?: MCPToolExecutionContextV2<TSuspend, TResume>;
 
   /**

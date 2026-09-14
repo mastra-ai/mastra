@@ -2,7 +2,9 @@
 '@mastra/core': minor
 ---
 
-Added the MCP v2 server and registry contracts while preserving MCP 1.x contexts. `MCPServerRegistryEntry` accepts `MCPServerBase` and the new `MCPServerBaseV2`; existing 1.x servers need no new properties. `MCPServerBaseV2` mirrors `MCPServerBase` and differs only where the 2026-07-28 protocol does: no standalone SSE transport methods, and `executeTool` reports a suspended tool.
+Prepared `MCPServerBase` for MCP 2026-07-28 servers while preserving MCP 1.x contexts. `startSSE` and `startHonoSSE` are now optional (only `@mastra/mcp` 1.x implements the standalone SSE transport), a server can set `mcpVersion` to `2`, and `executeTool` on such a server resolves to the new `MCPToolExecutionResultV2`, which reports a suspended tool instead of a bare result. Existing 1.x servers need no new properties.
+
+The 1.x-only surfaces are now `@deprecated` and will be removed in the next core major: `startSSE`, `startHonoSSE`, `MCPServerSSEOptions`, `MCPServerHonoSSEOptions`, `MCPServerHTTPOptions.options`, `MCPServerContext`, `MCPToolExecutionContext` and `context.mcp`.
 
 Tools that need input mid-execution use the suspend/resume primitives `createTool` already has. On a 2026-07-28 server they receive `context.mcpv2` with per-request `log`, `progress`, `metadata`, `signal`, `suspend`, `resumeData`, and the new `suspendPayload`:
 

@@ -52,17 +52,17 @@ const serverById = mastra.getMCPServerById('my-mcp-server')
   content={[
   {
     name: 'server',
-    type: 'MCPServerRegistryEntry | undefined',
+    type: 'MCPServerBase | undefined',
     description: 'The MCP server instance with the specified registry key, or undefined if not found.',
   },
 ]}
 />
 
-## MCP v1 and v2 servers
+## MCP 1.x and 2026-07-28 servers
 
-`MCPServerRegistryEntry` is the union of `MCPServerBase` and `MCPServerBaseV2`, exported from `@mastra/core/mcp`. Existing MCP 1.x servers don't need new properties or methods. Use `isMCPServerV2(server)` after checking that the lookup returned a server to narrow the union.
+Both `@mastra/mcp` 1.x and 2.x servers extend the same `MCPServerBase` from `@mastra/core/mcp`. A 2.x server sets `mcpVersion` to `2`, while 1.x servers leave it undefined and need no new properties or methods. The differences are limited to what the 2026-07-28 protocol changed: `startSSE` and `startHonoSSE` are optional (only 1.x implements the standalone SSE transport, and both are deprecated), and a server with `mcpVersion` set to `2` resolves `executeTool` to a `MCPToolExecutionResultV2` that reports a suspended tool rather than a bare result.
 
-`MCPServerBaseV2` is a copy of `MCPServerBase` with the same `MCPServerConfig`, id handling, `convertTools`, `tools()` and Mastra registration of tools, agents and workflows. The differences are limited to what the 2026-07-28 protocol changed, which means the base has no `startSSE` or `startHonoSSE` methods, its `executeTool` reports a suspended tool rather than a bare result, and it carries `mcpVersion` set to `2`. None of this changes the behavior of an installed `@mastra/mcp` 1.x server.
+The 1.x-only surfaces are marked `@deprecated` and are removed in the next major release of `@mastra/core`: `startSSE`, `startHonoSSE`, `MCPServerSSEOptions`, `MCPServerHonoSSEOptions`, `MCPServerHTTPOptions.options`, `MCPServerContext`, `MCPToolExecutionContext` and `context.mcp`.
 
 ### Tools that ask for input
 
@@ -102,7 +102,7 @@ When an `@mastra/mcp` 2.x server executes a tool, `context.mcpv2` is an `MCPTool
 
 ### Registration and execution
 
-Tools are registered on the Mastra instance exactly as a 1.x server registers them. `executeTool(toolId, args, context?)` returns `{ status: 'completed', output }` or, when the tool suspended, `{ status: 'suspended', suspendPayload, resumeSchema }` with `resumeSchema` as JSON Schema. Shared REST execution endpoints return the suspended shape instead of pretending the tool finished. Legacy SSE routes remain available only to v1 server instances.
+Tools are registered on the Mastra instance exactly as a 1.x server registers them. On a server with `mcpVersion` set to `2`, `executeTool(toolId, args, context?)` returns `{ status: 'completed', output }` or, when the tool suspended, `{ status: 'suspended', suspendPayload, resumeSchema }` with `resumeSchema` as JSON Schema. Shared REST execution endpoints return the suspended shape instead of pretending the tool finished. Legacy SSE routes remain available only to servers that implement `startSSE` and `startHonoSSE`.
 
 Registering another server under an occupied registry key keeps the existing instance. Registry keys and intrinsic server IDs remain distinct.
 

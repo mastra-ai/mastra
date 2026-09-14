@@ -32,6 +32,7 @@ interface MCPServerSSEOptionsBase {
 
 /**
  * Options for starting an MCP server with SSE transport
+ * @deprecated The standalone HTTP+SSE transport only exists in `@mastra/mcp` 1.x; removed in the next core major.
  */
 export interface MCPServerSSEOptions extends MCPServerSSEOptionsBase {
   /**
@@ -47,6 +48,7 @@ export interface MCPServerSSEOptions extends MCPServerSSEOptionsBase {
 
 /**
  * Options for starting an MCP server with Hono SSE transport
+ * @deprecated The standalone HTTP+SSE transport only exists in `@mastra/mcp` 1.x; removed in the next core major.
  */
 export interface MCPServerHonoSSEOptions extends MCPServerSSEOptionsBase {
   /**
@@ -85,6 +87,7 @@ export interface MCPServerHTTPOptions {
 
   /**
    * Optional options to pass to the transport (e.g. sessionIdGenerator)
+   * @deprecated Only `@mastra/mcp` 1.x reads this; MCP 2026-07-28 has no sessions. Removed in the next core major.
    */
   options?: any; // Consider typing StreamableHTTPServerTransportOptions from @modelcontextprotocol/node if possible
 }

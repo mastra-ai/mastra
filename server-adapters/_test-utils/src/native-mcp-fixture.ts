@@ -1,4 +1,4 @@
-import { MCPServerBaseV2 } from '@mastra/core/mcp';
+import { MCPServerBase } from '@mastra/core/mcp';
 import type { MCPServerHTTPOptions, MCPToolExecutionContextV2, MCPToolExecutionResultV2 } from '@mastra/core/mcp';
 import { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
@@ -8,7 +8,8 @@ import { makeCoreTool } from '@mastra/core/utils';
 import { z } from 'zod/v4';
 
 /** Exercises adapter dispatch, not MCP wire-protocol conformance. */
-export class NativeMCPFixture extends MCPServerBaseV2 {
+export class NativeMCPFixture extends MCPServerBase {
+  override readonly mcpVersion = 2 as const;
   constructor() {
     super({
       id: 'native-fixture',
@@ -58,7 +59,7 @@ export class NativeMCPFixture extends MCPServerBaseV2 {
   async executeTool(
     toolId: string,
     args: unknown,
-    executionContext: Parameters<MCPServerBaseV2['executeTool']>[2] = {},
+    executionContext: Parameters<MCPServerBase['executeTool']>[2] = {},
   ): Promise<MCPToolExecutionResultV2> {
     const tool = this.convertedTools[toolId];
     if (!tool?.execute) throw new Error(`Tool ${toolId} not found`);
