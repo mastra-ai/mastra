@@ -15,6 +15,7 @@ import {
 export const OBSERVABILITY_DELTA_POLLING_FEATURE = 'observability-delta-polling';
 export const OBSERVABILITY_DELTA_POLLING_UPGRADE_MESSAGE =
   'Delta polling requires a newer @mastra/core with observability delta polling support. Please upgrade.';
+const OBSERVABILITY_TRACE_QUERY_STORAGE_FEATURE = 'trace-query';
 
 export const OBSERVABILITY_LIST_ENDPOINTS = {
   traces: 'traces',
@@ -68,6 +69,14 @@ export async function getScoresStore(mastra: Mastra): Promise<ScoresStorage> {
   return scores;
 }
 
+export function assertObservabilityTraceQuerySupported(observabilityStore: ObservabilityStorage) {
+  if (getFeatures(observabilityStore)?.includes(OBSERVABILITY_TRACE_QUERY_STORAGE_FEATURE)) return;
+
+  throw new HTTPException(501, {
+    message: 'Advanced trace queries are not supported by the configured observability store',
+  });
+}
+
 export function assertObservabilityDeltaSupported(
   observabilityStore: ObservabilityStorage,
   endpoint: ObservabilityListEndpoint,
@@ -96,6 +105,14 @@ export interface RouteDetails {
 }
 
 export const NEW_ROUTE_DEFS = {
+  QUERY_TRACES: {
+    method: 'POST',
+    path: '/observability/traces/query',
+    summary: 'Query traces',
+    description: 'Returns completed logical traces or distinct thread groups matching an advanced trace query',
+    requiresPermission: 'observability:read',
+  },
+
   LIST_METRICS: {
     method: 'GET',
     path: '/observability/metrics',
@@ -122,6 +139,14 @@ export const NEW_ROUTE_DEFS = {
     path: '/observability/scores',
     summary: 'Create a score',
     description: 'Creates a single score record in the observability store',
+  },
+
+  DELETE_SCORES: {
+    method: 'DELETE',
+    path: '/observability/scores',
+    summary: 'Delete scores',
+    description: 'Deletes score records by scoreId, optionally scoped to a tenant',
+    requiresPermission: 'observability:delete',
   },
 
   GET_SCORE: {
@@ -175,6 +200,14 @@ export const NEW_ROUTE_DEFS = {
     path: '/observability/feedback',
     summary: 'Create feedback',
     description: 'Creates a single feedback record in the observability store',
+  },
+
+  DELETE_FEEDBACK: {
+    method: 'DELETE',
+    path: '/observability/feedback',
+    summary: 'Delete feedback',
+    description: 'Deletes feedback records by feedbackId, optionally scoped to a tenant',
+    requiresPermission: 'observability:delete',
   },
 
   UPDATE_FEEDBACK_REVIEW_STATUS: {

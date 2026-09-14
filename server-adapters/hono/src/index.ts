@@ -10,6 +10,7 @@ import {
   MastraServer as MastraServerBase,
   applyMcpRequestAuth,
   checkRouteFGA,
+  getCustomHTTPExceptionResponse,
   isZodError,
   normalizeQueryParams,
   redactStreamChunk,
@@ -466,25 +467,27 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
     // Default prefix to this.prefix if not provided, or empty string
     const prefix = prefixParam ?? this.prefix ?? '';
 
-    // Determine if body limits should be applied
-    const shouldApplyBodyLimit =
-      this.bodyLimitOptions && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(route.method.toUpperCase());
-
-    // Get the body size limit for this route (route-specific or default)
     const maxSize = route.maxBodySize ?? this.bodyLimitOptions?.maxSize;
+    const isBodyMethod = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(route.method.toUpperCase());
 
     // Build middleware array
     const middlewares: MiddlewareHandler[] = [];
 
-    if (shouldApplyBodyLimit && maxSize && this.bodyLimitOptions) {
-      const { onError } = this.bodyLimitOptions;
+    if (isBodyMethod && maxSize !== undefined) {
       middlewares.push(
         bodyLimit({
           maxSize,
-          // Hono's bodyLimit middleware uses this callback's return value as the response
-          // directly, so it must resolve to a Response, unlike onError's framework-agnostic
-          // (error: unknown) => unknown contract used by the other adapters.
-          onError: (c: Context) => c.json(onError({ error: 'Request body too large' }), 413),
+          onError: (c: Context) => {
+            let errorResponse: unknown = { error: 'Request body too large' };
+            if (route.maxBodySize === undefined && this.bodyLimitOptions) {
+              try {
+                errorResponse = this.bodyLimitOptions.onError(errorResponse);
+              } catch {
+                // Fall back to the default response.
+              }
+            }
+            return c.json(errorResponse, 413);
+          },
         }),
       );
     }
@@ -659,6 +662,11 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
               method: route.method,
             });
           }
+          const customResponse = getCustomHTTPExceptionResponse(error);
+          if (customResponse) {
+            return customResponse;
+          }
+
           // Check if it's an HTTPException or MastraError with a status code
           if (error && typeof error === 'object') {
             // Check for direct status property (HTTPException)

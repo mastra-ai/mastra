@@ -1,4 +1,4 @@
-import type { Server } from 'node:http';
+import { request as createHttpRequest, type Server } from 'node:http';
 import type {
   AdapterTestContext,
   AdapterSetupOptions,
@@ -1370,6 +1370,42 @@ describe('Express Server Adapter', () => {
           ...(options.body ? { body: options.body } : {}),
         });
         return { status: response.status };
+      } finally {
+        await new Promise<void>(resolve => server.close(() => resolve()));
+      }
+    },
+
+    executeRequestWithoutContentLength: async (app, method, url, options = {}) => {
+      const server: Server = await new Promise(resolve => {
+        const started = app.listen(0, () => resolve(started));
+      });
+
+      try {
+        const address = server.address();
+        if (!address || typeof address === 'string') {
+          throw new Error('Failed to get server address');
+        }
+        const parsedUrl = new URL(url);
+        return await new Promise<{ status: number }>((resolve, reject) => {
+          const request = createHttpRequest(
+            {
+              hostname: 'localhost',
+              port: address.port,
+              path: parsedUrl.pathname + parsedUrl.search,
+              method,
+              headers: { ...options.headers, 'Transfer-Encoding': 'chunked' },
+            },
+            response => {
+              response.resume();
+              response.on('end', () => resolve({ status: response.statusCode ?? 0 }));
+            },
+          );
+          request.on('error', reject);
+          const body = options.body ?? '';
+          const midpoint = Math.floor(body.length / 2);
+          request.write(body.slice(0, midpoint));
+          request.end(body.slice(midpoint));
+        });
       } finally {
         await new Promise<void>(resolve => server.close(() => resolve()));
       }

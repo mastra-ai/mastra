@@ -25,6 +25,7 @@ import type {
   ListMetricsArgs,
   ListMetricsResponse,
   CreateScoreArgs,
+  DeleteScoresArgs,
   BatchCreateScoresArgs,
   ListScoresArgs,
   ListScoresResponse,
@@ -38,6 +39,7 @@ import type {
   GetScorePercentilesArgs,
   GetScorePercentilesResponse,
   CreateFeedbackArgs,
+  DeleteFeedbackArgs,
   BatchCreateFeedbackArgs,
   ListFeedbackArgs,
   ListFeedbackResponse,
@@ -76,6 +78,8 @@ import type {
   GetTagsArgs,
   GetTagsResponse,
   ObservabilityStorageStrategy,
+  TraceQueryResponse,
+  TrustedTraceQueryPlan,
 } from '@mastra/core/storage';
 import type { DuckDBConnection } from '../../db/index';
 import { ALL_DDL, ALL_MIGRATIONS } from './ddl';
@@ -86,6 +90,7 @@ import * as metricOps from './metrics';
 import { checkSignalTablesMigrationStatus, dropLegacyCursorIdDefaults, migrateSignalTables } from './migration';
 import { deltaPollingFeatureEnabled } from './polling';
 import * as scoreOps from './scores';
+import * as traceQueryOps from './trace-query';
 import * as tracingOps from './tracing';
 
 function buildSignalMigrationRequiredMessage(args: { tables: Array<{ table: string }> }): string {
@@ -204,10 +209,10 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
 
   override getFeatures() {
     if (!deltaPollingFeatureEnabled()) {
-      return ['metrics', 'logs'] as const;
+      return ['metrics', 'logs', 'trace-query'] as const;
     }
 
-    return ['metrics', 'logs', 'delta-polling'] as const;
+    return ['metrics', 'logs', 'delta-polling', 'trace-query'] as const;
   }
 
   // Tracing
@@ -237,6 +242,9 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
   }
   async listTraces(args: ListTracesArgs): Promise<ListTracesResponse> {
     return tracingOps.listTraces(this.db, args);
+  }
+  override async queryTraces(plan: TrustedTraceQueryPlan): Promise<TraceQueryResponse> {
+    return traceQueryOps.queryTraces(this.db, plan);
   }
   async listTracesLight(args: ListTracesArgs): Promise<ListTracesLightResponse> {
     if (args.mode === 'delta') {
@@ -310,6 +318,9 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
   async batchCreateScores(args: BatchCreateScoresArgs): Promise<void> {
     return scoreOps.batchCreateScores(this.db, args);
   }
+  async deleteScores(args: DeleteScoresArgs): Promise<void> {
+    return scoreOps.deleteScores(this.db, args);
+  }
   async listScores(args: ListScoresArgs): Promise<ListScoresResponse> {
     return scoreOps.listScores(this.db, args);
   }
@@ -335,6 +346,9 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
   }
   async batchCreateFeedback(args: BatchCreateFeedbackArgs): Promise<void> {
     return feedbackOps.batchCreateFeedback(this.db, args);
+  }
+  async deleteFeedback(args: DeleteFeedbackArgs): Promise<void> {
+    return feedbackOps.deleteFeedback(this.db, args);
   }
   async listFeedback(args: ListFeedbackArgs): Promise<ListFeedbackResponse> {
     return feedbackOps.listFeedback(this.db, args);

@@ -2105,6 +2105,7 @@ describe('AGENT_RUN span must be ended on LLM errors', () => {
       parent: parentSpan,
 
       end: vi.fn(),
+      endTree: vi.fn(),
       error: vi.fn(),
       update: vi.fn(),
       exportSpan: vi.fn(),
@@ -2141,6 +2142,76 @@ describe('AGENT_RUN span must be ended on LLM errors', () => {
     return { spy, getAgentRunSpan: () => agentRunSpan };
   }
 
+  function simpleMockModel() {
+    return new MockLanguageModelV2({
+      doGenerate: async () => {
+        throw new Error('should not be called');
+      },
+      doStream: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: convertArrayToReadableStream([{ type: 'stream-start', warnings: [] }]),
+      }),
+    });
+  }
+
+  it('should end the AGENT_RUN span tree when the prepare workflow resolves as failed', async () => {
+    const { spy, getAgentRunSpan } = await mockGetOrCreateSpan();
+    const { Workflow } = await import('../../workflows/workflow');
+    const createRunSpy = vi.spyOn(Workflow.prototype as unknown as Record<string, any>, 'createRun').mockResolvedValue({
+      start: vi.fn().mockResolvedValue({ status: 'failed', error: { message: 'prepare step failed' } }),
+    });
+
+    try {
+      const agent = new Agent({
+        id: 'test-prepare-failed-result',
+        name: 'Test Prepare Failed Result',
+        model: simpleMockModel(),
+        instructions: 'You are a helpful assistant.',
+      });
+
+      await expect(agent.stream('Hello')).rejects.toThrow('prepare step failed');
+
+      const agentRunSpan = getAgentRunSpan();
+      expect(agentRunSpan).toBeDefined();
+      expect(agentRunSpan.error).toHaveBeenCalledTimes(1);
+      expect(agentRunSpan.error.mock.calls[0][0]).toMatchObject({ endTree: true });
+      expect(agentRunSpan.error.mock.calls[0][0].error.message).toBe('prepare step failed');
+      expect(agentRunSpan.endTree).not.toHaveBeenCalled();
+    } finally {
+      createRunSpy.mockRestore();
+      spy.mockRestore();
+    }
+  });
+
+  it('should end the AGENT_RUN span tree when the prepare workflow rejects', async () => {
+    const { spy, getAgentRunSpan } = await mockGetOrCreateSpan();
+    const { Workflow } = await import('../../workflows/workflow');
+    const prepareError = new Error('prepare workflow rejected');
+    const createRunSpy = vi.spyOn(Workflow.prototype as unknown as Record<string, any>, 'createRun').mockResolvedValue({
+      start: vi.fn().mockRejectedValue(prepareError),
+    });
+
+    try {
+      const agent = new Agent({
+        id: 'test-prepare-workflow-rejection',
+        name: 'Test Prepare Workflow Rejection',
+        model: simpleMockModel(),
+        instructions: 'You are a helpful assistant.',
+      });
+
+      await expect(agent.stream('Hello')).rejects.toThrow(prepareError);
+
+      const agentRunSpan = getAgentRunSpan();
+      expect(agentRunSpan).toBeDefined();
+      expect(agentRunSpan.error).toHaveBeenCalledWith({ error: prepareError, endTree: true });
+      expect(agentRunSpan.endTree).not.toHaveBeenCalled();
+    } finally {
+      createRunSpy.mockRestore();
+      spy.mockRestore();
+    }
+  });
+
   it('should end the AGENT_RUN span when the model throws during doStream', async () => {
     const { spy, getAgentRunSpan } = await mockGetOrCreateSpan();
 
@@ -2172,7 +2243,8 @@ describe('AGENT_RUN span must be ended on LLM errors', () => {
       const agentRunSpan = getAgentRunSpan();
       expect(agentRunSpan).toBeDefined();
       expect(agentRunSpan.error).toHaveBeenCalled();
-      expect(agentRunSpan.error.mock.calls[0][0]).toMatchObject({ endSpan: true });
+      expect(agentRunSpan.error.mock.calls[0][0]).toMatchObject({ endTree: true });
+      expect(agentRunSpan.endTree).not.toHaveBeenCalled();
     } finally {
       spy.mockRestore();
     }
@@ -2239,7 +2311,8 @@ describe('AGENT_RUN span must be ended on LLM errors', () => {
       const agentRunSpan = getAgentRunSpan();
       expect(agentRunSpan).toBeDefined();
       expect(agentRunSpan.error).toHaveBeenCalled();
-      expect(agentRunSpan.error.mock.calls[0][0]).toMatchObject({ endSpan: true });
+      expect(agentRunSpan.error.mock.calls[0][0]).toMatchObject({ endTree: true });
+      expect(agentRunSpan.endTree).not.toHaveBeenCalled();
       expect(agentRunSpan.error.mock.calls[0][0].error).toBeInstanceOf(MastraError);
       expect(agentRunSpan.error.mock.calls[0][0].error.message).toBe(
         'Agent stream finished with finishReason "error" but no error payload was provided',
@@ -2404,7 +2477,8 @@ describe('AGENT_RUN span must be ended on LLM errors', () => {
       const agentRunSpan = getAgentRunSpan();
       expect(agentRunSpan).toBeDefined();
       expect(agentRunSpan.error).toHaveBeenCalled();
-      expect(agentRunSpan.error.mock.calls[0][0]).toMatchObject({ endSpan: true });
+      expect(agentRunSpan.error.mock.calls[0][0]).toMatchObject({ endTree: true });
+      expect(agentRunSpan.endTree).not.toHaveBeenCalled();
     } finally {
       spy.mockRestore();
     }
@@ -2517,9 +2591,9 @@ describe('AGENT_RUN span must be ended on LLM errors', () => {
 
       const agentRunSpan = getAgentRunSpan();
       expect(agentRunSpan).toBeDefined();
-      expect(agentRunSpan.end).toHaveBeenCalled();
       expect(agentRunSpan.error).not.toHaveBeenCalled();
-      expect(agentRunSpan.end.mock.calls[0][0]).toMatchObject({
+      expect(agentRunSpan.end).toHaveBeenCalledWith({
+        endTree: true,
         output: {
           status: 'suspended',
           reason: 'tool-call-approval',
@@ -2594,9 +2668,9 @@ describe('AGENT_RUN span must be ended on LLM errors', () => {
 
       const agentRunSpan = getAgentRunSpan();
       expect(agentRunSpan).toBeDefined();
-      expect(agentRunSpan.end).toHaveBeenCalled();
       expect(agentRunSpan.error).not.toHaveBeenCalled();
-      expect(agentRunSpan.end.mock.calls[0][0]).toMatchObject({
+      expect(agentRunSpan.end).toHaveBeenCalledWith({
+        endTree: true,
         output: {
           status: 'aborted',
           reason: 'abort',

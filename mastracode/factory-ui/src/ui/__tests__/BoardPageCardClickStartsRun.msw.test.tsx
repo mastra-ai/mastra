@@ -1,10 +1,8 @@
 /**
- * Clicking a board card opens its details; committing to work happens through
- * the dialog's run button. The run still starts with its invocation so the
- * resulting thread gets a kickoff message instead of an empty "What can I help
- * you build?" session. Only items with no run spec fall back to a plain session.
+ * A card's button is a move: it transitions the card into the lane whose rule
+ * runs the work, and the lane's own button re-enters it. Nothing here starts a
+ * run directly — the server's rules do, off the transition.
  */
-import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -12,7 +10,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
+import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
 import { createAppRoutes } from '../router';
 
 const FACTORY_ID = 'fp-1';
@@ -42,6 +40,19 @@ const issueWorkItem = {
   updatedAt: '2026-07-18T00:00:00.000Z',
 };
 
+const logoutIssue = {
+  number: 9,
+  title: 'Crash on logout',
+  url: 'https://github.com/acme/app/issues/9',
+  author: 'octocat',
+  labels: [],
+  comments: 0,
+  createdAt: '2026-07-18T00:00:00.000Z',
+  updatedAt: '2026-07-18T00:00:00.000Z',
+};
+
+const intakeWorkItem = { ...issueWorkItem, stages: ['intake'] };
+
 const linearWorkItem = {
   ...issueWorkItem,
   id: 'linear-item-1',
@@ -55,12 +66,17 @@ const linearWorkItem = {
   metadata: { identifier: 'ENG-42' },
 };
 
-/**
- * Stubs the board's data endpoints and captures run-start requests. The run
- * start never resolves, keeping the test on the board (no thread navigation).
- */
+interface TransitionRequest {
+  itemId: string;
+  body: Record<string, unknown>;
+}
+
+/** Stubs the board's data endpoints and captures everything a card click writes. */
 function stubBoardEndpoints({ issues = [] as object[], workItems = [issueWorkItem] as object[] } = {}) {
-  const startRequests: Array<Record<string, unknown>> = [];
+  const transitions: TransitionRequest[] = [];
+  const patches: Array<{ itemId: string; body: Record<string, unknown> }> = [];
+  const created: Array<Record<string, unknown>> = [];
+  const comments: Array<{ itemId: string; body: Record<string, unknown> }> = [];
 
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () =>
@@ -137,17 +153,48 @@ function stubBoardEndpoints({ issues = [] as object[], workItems = [issueWorkIte
       HttpResponse.json({ error: 'pull_request_not_found' }, { status: 404 }),
     ),
     http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () => HttpResponse.json({ sessions: [] })),
-    http.post(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () =>
-      HttpResponse.json({ session: { sessionId: 'session-1', branch: 'factory/issue-7' } }),
-    ),
-    http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/runs/start`, async ({ request }) => {
-      startRequests.push((await request.json()) as Record<string, unknown>);
-      await new Promise(() => {}); // never resolves — assertions read startRequests
-      return HttpResponse.json({});
+    http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, async ({ request }) => {
+      const body = (await request.json()) as Record<string, unknown>;
+      created.push(body);
+      return HttpResponse.json({
+        workItem: { ...issueWorkItem, id: 'item-filed', title: String(body.title), stages: ['intake'] },
+      });
     }),
+    http.post(`${TEST_BASE_URL}/web/factory/work-items/:itemId/comments`, async ({ params, request }) => {
+      comments.push({ itemId: String(params.itemId), body: (await request.json()) as Record<string, unknown> });
+      return HttpResponse.json({ comment: { id: 'comment-1' } });
+    }),
+    http.patch(`${TEST_BASE_URL}/web/factory/work-items/:itemId`, async ({ params, request }) => {
+      patches.push({ itemId: String(params.itemId), body: (await request.json()) as Record<string, unknown> });
+      return HttpResponse.json({
+        workItem: {
+          ...issueWorkItem,
+          id: String(params.itemId),
+          revision: 5,
+          plansPreapprovedAt: '2026-07-18T01:00:00.000Z',
+        },
+      });
+    }),
+    http.post(
+      `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items/:itemId/transition`,
+      async ({ params, request }) => {
+        const body = (await request.json()) as Record<string, unknown>;
+        transitions.push({ itemId: String(params.itemId), body });
+        return HttpResponse.json({
+          result: {
+            status: 'accepted',
+            transitionId: `transition-${transitions.length}`,
+            itemId: String(params.itemId),
+            revision: 9,
+            stage: body.stage,
+            decisions: [],
+          },
+        });
+      },
+    ),
   );
 
-  return { startRequests };
+  return { transitions, patches, created, comments };
 }
 
 function renderWorkBoard() {
@@ -155,42 +202,122 @@ function renderWorkBoard() {
   return renderWithProviders(<RouterProvider router={router} />);
 }
 
-async function startRunFromCardDetails(cardTitle: string) {
+async function moveFromCardDetails(cardTitle: string, action: string) {
   const user = userEvent.setup();
   await user.click(await screen.findByRole('button', { name: `Details for ${cardTitle}` }));
 
   const dialog = await screen.findByRole('dialog', { name: cardTitle });
-  await user.click(within(dialog).getByRole('button', { name: 'Investigate' }));
+  await user.click(within(dialog).getByRole('button', { name: action }));
 }
 
-describe('Board card details open the default run', () => {
-  it('starts the default run with its invocation from a sessionless work-item card details', async () => {
-    const { startRequests } = stubBoardEndpoints();
+describe('Board card buttons move the card', () => {
+  it('issues a transition to Triage with cause card_action when Investigate is clicked', async () => {
+    const { transitions } = stubBoardEndpoints({ workItems: [intakeWorkItem] });
     renderWorkBoard();
 
-    await startRunFromCardDetails('Fix login bug');
+    await moveFromCardDetails('Fix login bug', 'Investigate');
 
-    await waitFor(() => expect(startRequests).toHaveLength(1));
-    expect(startRequests[0]).toMatchObject({
-      destinationStage: 'triage',
-      invocation: { type: 'skill', skillName: 'factory-triage' },
-      workItem: { id: 'item-1', role: 'triage' },
+    await waitFor(() => expect(transitions).toHaveLength(1));
+    expect(transitions[0]).toMatchObject({
+      itemId: 'item-1',
+      body: { board: 'work', stage: 'triage', cause: 'card_action', expectedRevision: 1 },
     });
+    expect(transitions[0]?.body).not.toHaveProperty('reenter');
   });
 
-  it('starts a hands-off run from the card menu, asking the server to preapprove its plans', async () => {
-    const { startRequests } = stubBoardEndpoints();
+  it("re-enters the lane when the card's own lane button is clicked", async () => {
+    const { transitions } = stubBoardEndpoints();
     renderWorkBoard();
+
+    await moveFromCardDetails('Fix login bug', 'Investigate');
+
+    await waitFor(() => expect(transitions).toHaveLength(1));
+    expect(transitions[0]?.body).toMatchObject({ stage: 'triage', cause: 'card_action', reenter: true });
+  });
+
+  it('patches plansPreapproved hands-off, then transitions against the revision the patch returned', async () => {
+    const { transitions, patches } = stubBoardEndpoints();
+    const { client } = renderWorkBoard();
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole('button', { name: 'Actions for Fix login bug' }));
     await user.click(await screen.findByRole('menuitem', { name: 'Investigate hands-off' }));
 
-    await waitFor(() => expect(startRequests).toHaveLength(1));
-    expect(startRequests[0]).toMatchObject({
-      preapprovePlans: true,
-      workItem: { id: 'item-1', role: 'triage' },
+    await waitFor(() => expect(transitions).toHaveLength(1));
+    await waitForMutationsIdle(client);
+    expect(patches).toEqual([{ itemId: 'item-1', body: { plansPreapproved: true } }]);
+    expect(transitions[0]?.body).toMatchObject({ stage: 'triage', cause: 'card_action', expectedRevision: 5 });
+  });
+
+  it('stamps a card hands-off once when the menu item is clicked twice', async () => {
+    const { transitions, patches } = stubBoardEndpoints();
+    let releasePatch = () => {};
+    const patchInFlight = new Promise<void>(resolve => {
+      releasePatch = resolve;
     });
+    server.use(
+      http.patch(`${TEST_BASE_URL}/web/factory/work-items/:itemId`, async ({ params, request }) => {
+        patches.push({ itemId: String(params.itemId), body: (await request.json()) as Record<string, unknown> });
+        await patchInFlight;
+        return HttpResponse.json({ workItem: { ...issueWorkItem, id: String(params.itemId), revision: 5 } });
+      }),
+    );
+    const { client } = renderWorkBoard();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole('button', { name: 'Actions for Fix login bug' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Investigate hands-off' }));
+    await user.click(await screen.findByRole('button', { name: 'Actions for Fix login bug' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Investigate hands-off' }));
+    releasePatch();
+
+    await waitFor(() => expect(transitions).toHaveLength(1));
+    await waitForMutationsIdle(client);
+    expect(patches).toHaveLength(1);
+  });
+
+  it('files a candidate in Intake, posts its custom prompt as a comment, then moves it', async () => {
+    const { transitions, created, comments } = stubBoardEndpoints({
+      issues: [logoutIssue],
+    });
+    const { client } = renderWorkBoard();
+
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Details for Crash on logout' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Crash on logout' });
+    expect(await within(dialog).findByText('The app crashes when logging out.')).toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole('button', { name: 'Custom prompt…' }));
+    await user.type(await screen.findByRole('textbox', { name: 'Prompt for Crash on logout' }), 'Check the token TTL');
+    await user.click(screen.getByRole('button', { name: 'Run' }));
+
+    await waitFor(() => expect(transitions).toHaveLength(1));
+    await waitForMutationsIdle(client);
+    expect(created).toEqual([expect.objectContaining({ title: 'Crash on logout', stages: ['intake'] })]);
+    expect(comments).toEqual([
+      { itemId: 'item-filed', body: expect.objectContaining({ body: 'Guidance for this run: Check the token TTL' }) },
+    ]);
+    expect(transitions[0]).toMatchObject({ itemId: 'item-filed', body: { stage: 'triage', cause: 'card_action' } });
+  });
+
+  it('reports the guidance that could not be posted, and leaves the card in Intake', async () => {
+    const { transitions } = stubBoardEndpoints({ issues: [logoutIssue] });
+    server.use(
+      http.post(`${TEST_BASE_URL}/web/factory/work-items/:itemId/comments`, () =>
+        HttpResponse.json({ error: 'The guidance could not be posted.' }, { status: 500 }),
+      ),
+    );
+    renderWorkBoard();
+
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Details for Crash on logout' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Crash on logout' });
+    await user.click(within(dialog).getByRole('button', { name: 'Custom prompt…' }));
+    await user.type(await screen.findByRole('textbox', { name: 'Prompt for Crash on logout' }), 'Check the token TTL');
+    await user.click(screen.getByRole('button', { name: 'Run' }));
+
+    expect(await screen.findByText('The guidance could not be posted.')).toBeInTheDocument();
+    expect(transitions).toEqual([]);
   });
 
   it('offers no hands-off twin for Prepare approval, whose outcome is a maintainer decision', async () => {
@@ -250,89 +377,5 @@ describe('Board card details open the default run', () => {
       'href',
       'https://github.com/acme/app/issues/7',
     );
-  });
-
-  it('starts a persisted Linear Triage item with the Linear kickoff invocation', async () => {
-    const { startRequests } = stubBoardEndpoints({ workItems: [linearWorkItem] });
-    renderWorkBoard();
-
-    await startRunFromCardDetails('ENG-42: Fix intake sync');
-
-    await waitFor(() => expect(startRequests).toHaveLength(1));
-    expect(startRequests[0]).toMatchObject({
-      destinationStage: 'planning',
-      invocation: {
-        type: 'skill',
-        skillName: 'factory-triage',
-        arguments: expect.stringContaining(
-          `Linear issue ENG-42 (https://linear.app/acme/issue/ENG-42/fix-intake-sync)\n\n` +
-            `Start by fetching the issue's full details (description and comments) with the linear_get_issue tool.`,
-        ),
-      },
-      workItem: { id: 'linear-item-1', role: 'plan' },
-    });
-  });
-
-  it('shows the source description in the dialog and runs a candidate card from it', async () => {
-    const { startRequests } = stubBoardEndpoints({
-      issues: [
-        {
-          number: 9,
-          title: 'Crash on logout',
-          url: 'https://github.com/acme/app/issues/9',
-          author: 'octocat',
-          labels: [],
-          comments: 0,
-          createdAt: '2026-07-18T00:00:00.000Z',
-          updatedAt: '2026-07-18T00:00:00.000Z',
-        },
-      ],
-    });
-    renderWorkBoard();
-
-    const user = userEvent.setup();
-    await user.click(await screen.findByRole('button', { name: 'Details for Crash on logout' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Crash on logout' });
-    expect(await within(dialog).findByText('The app crashes when logging out.')).toBeInTheDocument();
-
-    await user.click(within(dialog).getByRole('button', { name: 'Investigate' }));
-
-    await waitFor(() => expect(startRequests).toHaveLength(1));
-    expect(startRequests[0]).toMatchObject({
-      destinationStage: 'triage',
-      invocation: { type: 'skill', skillName: 'factory-triage' },
-      workItem: { role: 'triage' },
-    });
-  });
-
-  // Run clicks refetch worktrees before deciding what to do. When that
-  // refetch fails (e.g. the auth cookie expired overnight), the click used to
-  // die silently — no run, no toast, nothing. It must surface an error.
-  it('shows an error toast instead of failing silently when the pre-start refetch fails', async () => {
-    const { startRequests } = stubBoardEndpoints();
-    // First work-items read (board load) succeeds; the click's pre-start
-    // refetch 401s like an expired session would.
-    let itemsCalls = 0;
-    server.use(
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () => {
-        itemsCalls += 1;
-        if (itemsCalls === 1) return HttpResponse.json({ workItems: [issueWorkItem] });
-        return HttpResponse.json({ error: 'unauthorized' }, { status: 401 });
-      }),
-    );
-    // The Toaster normally mounts in main.tsx, above the router.
-    const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/${FACTORY_ID}/work`] });
-    renderWithProviders(
-      <>
-        <RouterProvider router={router} />
-        <Toaster position="bottom-right" />
-      </>,
-    );
-
-    await startRunFromCardDetails('Fix login bug');
-
-    // Both the click's toast and the poll's retry can surface the same message.
-    await waitFor(() => expect(screen.getAllByText(/unauthorized/i).length).toBeGreaterThanOrEqual(1));
-    expect(startRequests).toHaveLength(0);
   });
 });

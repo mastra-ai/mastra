@@ -12,8 +12,8 @@ import { AuditTimeline } from '../domains/factory/components/audit/AuditTimeline
 import { DocumentFactoryPageShell } from '../domains/factory/components/FactoryPageShell';
 import {
   AUDIT_CATEGORIES,
-  auditActionsForCategories,
   auditEventBounds,
+  auditNamespacesForCategories,
   auditRangeLabel,
   eventInAuditRange,
   type AuditNamespace,
@@ -46,7 +46,7 @@ function AuditLogEmptyState({
         }
       : {
           title: 'No audit events yet',
-          description: 'Work items, runs, worktrees and agent activity land here as they happen.',
+          description: 'Work items, runs, git and agent activity land here as they happen.',
           reset: undefined,
         };
 
@@ -77,9 +77,9 @@ export function AuditPage() {
 function AuditContent({ factoryProjectId }: { factoryProjectId: string | undefined }) {
   const [selectedCategories, setSelectedCategories] = useState(() => new Set<AuditNamespace>());
   const [selectedRange, setSelectedRange] = useState<AuditTimeRange>();
-  const actions = auditActionsForCategories(selectedCategories);
+  const namespaces = auditNamespacesForCategories(selectedCategories);
   const filterKey = selectedCategories.size === 0 ? 'all' : [...selectedCategories].toSorted().join(',');
-  const eventsQuery = useAuditEvents(factoryProjectId, filterKey, actions);
+  const eventsQuery = useAuditEvents(factoryProjectId, filterKey, namespaces);
   // The axis spans everything loaded, not the current filter: categories are compared by
   // toggling them, and a scale that rescales under each toggle makes marks impossible to place.
   const historyQuery = useAuditEvents(factoryProjectId, 'all', undefined);
@@ -170,7 +170,6 @@ function AuditContent({ factoryProjectId }: { factoryProjectId: string | undefin
             events={visibleEvents}
             actorNames={actorNames}
             hasNextPage={eventsQuery.hasNextPage}
-            autoLoad={!selectedRange}
             isFetchingNextPage={eventsQuery.isFetchingNextPage}
             onLoadMore={() => void eventsQuery.fetchNextPage()}
           />

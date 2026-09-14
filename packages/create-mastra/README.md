@@ -26,7 +26,7 @@ yarn dlx create-mastra@latest
 Using pnpm:
 
 ```bash
-pnpm create mastra
+pnpm create mastra@latest
 ```
 
 ## Usage

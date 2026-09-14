@@ -116,8 +116,15 @@ export class CachingPubSub extends PubSub {
    * @internal
    */
   __setSource(source: PubSub | undefined): void {
-    // Following ourselves would just re-observe our own publishes.
-    if (source === this) return;
+    // Following ourselves is meaningless and hazardous: every publish on such
+    // a source already flows through this.publish(), so any un-indexed event
+    // the follower would observe is one publish() *deliberately* declined to
+    // cache (the `localOnly` bypass, or `shouldCache`) — re-caching it would
+    // resurrect the run-local cache leak (#21668). The `__self()` probe sees
+    // through the `mastra.pubsub` proxy, which breaks plain reference
+    // equality while still targeting this very instance (the reuse-not-
+    // double-wrap configuration, #18148).
+    if (source === this || source?.__self?.() === this) return;
     this.source = source;
   }
 
@@ -227,19 +234,15 @@ export class CachingPubSub extends PubSub {
         const aliased = this.isSourceAliased();
         let outbound: Event = event;
         if (this.shouldCache?.(topic) !== false) {
-          let index: number | undefined;
+          // Same single-round-trip op as publish() (#22477): the follower sits
+          // on the identical per-chunk hot path for engine-originated events.
+          // The stored copy carries the allocated index, preserving the
+          // "indexed ⇒ already cached" dedup contract.
           try {
-            index = (await this.cache.increment(this.getCounterKey(topic))) - 1;
-          } catch (error) {
-            this.logError(`[CachingPubSub] Failed to increment counter for followed ${topic}`, error);
-          }
-          if (index !== undefined) {
+            const index = await this.cache.listPushIndexed(this.getCacheKey(topic), this.getCounterKey(topic), event);
             outbound = { ...event, index };
-            try {
-              await this.cache.listPush(this.getCacheKey(topic), outbound);
-            } catch (error) {
-              this.logError(`[CachingPubSub] Failed to cache followed event for ${topic}`, error);
-            }
+          } catch (error) {
+            this.logError(`[CachingPubSub] Failed to cache followed event for ${topic}`, error);
           }
         }
         if (!aliased) {
@@ -320,34 +323,29 @@ export class CachingPubSub extends PubSub {
     const cacheKey = this.getCacheKey(topic);
     const counterKey = this.getCounterKey(topic);
 
-    let index: number | undefined;
-    let indexFailed = false;
-    try {
-      // Atomically get next index (increment returns value after incrementing, so subtract 1 for 0-based index)
-      index = (await this.cache.increment(counterKey)) - 1;
-    } catch (error) {
-      this.logError(`[CachingPubSub] Failed to increment counter for ${topic}`, error);
-      indexFailed = true;
-    }
-
-    // On counter failure leave `index` undefined rather than defaulting to 0:
-    // downstream consumers that key off `index` (e.g. replay-from-offset)
-    // would otherwise see colliding indices across failed publishes.
-    const fullEvent: Event = {
+    const baseEvent: Omit<Event, 'index'> = {
       ...event,
       id: crypto.randomUUID(),
       createdAt: new Date(),
-      ...(index !== undefined ? { index } : {}),
     };
 
-    if (!indexFailed) {
-      try {
-        // Cache BEFORE live publish so late-joining observers never miss events
-        await this.cache.listPush(cacheKey, fullEvent);
-      } catch (error) {
-        this.logError(`[CachingPubSub] Failed to cache event for ${topic}`, error);
-      }
+    // Cache BEFORE live publish so late-joining observers never miss events.
+    // Index allocation and the list append happen in one cache operation so
+    // network-backed caches can do it in a single round-trip (issue #22477).
+    let index: number | undefined;
+    try {
+      index = await this.cache.listPushIndexed(cacheKey, counterKey, baseEvent);
+    } catch (error) {
+      this.logError(`[CachingPubSub] Failed to cache event for ${topic}`, error);
     }
+
+    // On cache failure leave `index` undefined rather than defaulting to 0:
+    // downstream consumers that key off `index` (e.g. replay-from-offset)
+    // would otherwise see colliding indices across failed publishes.
+    const fullEvent: Event = {
+      ...baseEvent,
+      ...(index !== undefined ? { index } : {}),
+    };
 
     // Always publish to inner PubSub — cache failure must not block live delivery
     await this.inner.publish(topic, fullEvent, options);

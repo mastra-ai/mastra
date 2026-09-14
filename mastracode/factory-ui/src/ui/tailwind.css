@@ -40,6 +40,15 @@
   --color-pr-merged: var(--pr-merged);
 }
 
+/* The board card's corner. It is not a free number: a card is a rounded box with
+ * a capsule pill sitting in its bottom corner, and the two only look concentric
+ * while the card's radius is the pill's plus the padding between them —
+ * `1.375rem = 0.875rem (h-form-sm capsule) + 0.5rem (p-2)`. Move one, move all
+ * three. */
+@theme {
+  --radius-card: 1.375rem;
+}
+
 /* Merged pull requests read purple everywhere; the DS accent ramp has no purple.
  * Brightens on near-black, darkens on white so it stays legible in both themes. */
 :root {

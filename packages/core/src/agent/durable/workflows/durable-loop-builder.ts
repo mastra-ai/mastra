@@ -383,6 +383,10 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
           // CachingPubSub follows that bus (Phase 2 Item 5). Toggling it to
           // `false` changes nothing there.
           sharePubsub: true,
+          // Generic boot-time restart must not re-drive agent loops — recovery
+          // is owned by the dedicated opt-in path (`recovery.durableAgents:
+          // 'auto'`) with leasing/fencing (issue #22598).
+          autoRestartActiveRuns: false,
           // Internal durable-agent execution plumbing — hide workflow spans;
           // the agent/tool/model spans within still surface for users.
           tracingPolicy: {
@@ -754,6 +758,10 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
           // Engine step events off for the same reason as the iteration
           // workflow (#21529) — see singleIterationWorkflow.
           emitStepEvents: false,
+          // Generic boot-time restart must not re-drive agent loops — recovery
+          // is owned by the dedicated opt-in path (`recovery.durableAgents:
+          // 'auto'`) with leasing/fencing (issue #22598).
+          autoRestartActiveRuns: false,
           // Internal durable-agent execution plumbing — see singleIterationWorkflow.
           tracingPolicy: {
             internal: InternalSpans.WORKFLOW,

@@ -104,7 +104,7 @@ test.describe('Dataset items list', () => {
       await page.goto(`/datasets/${dataset.id}`);
 
       await expect(page.getByText('No items yet')).toBeVisible();
-      await expect(page.getByRole('button', { name: /Add Single Item/i })).toBeVisible();
+      await expect(page.getByRole('button', { name: /Add Item/i })).toBeVisible();
       await expect(page.getByRole('button', { name: /Import CSV/i })).toBeVisible();
     });
   });

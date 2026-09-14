@@ -1,7 +1,7 @@
 /* Three markers, one grammar: the row's belt travels or breathes down the
- * sidebar; the card's wick runs a lit head round its outline until the whole rim
- * comes up under it. Working and ready differ by amplitude — travel, breath, fill — so a run
- * finishing morphs instead of cutting; initializing is working in the setup hue,
+ * sidebar; the card's beam drifts pools of light along its outline until they
+ * park and the whole rim comes up under them. Working and ready differ by
+ * amplitude — travel, breath, fill — so a run finishing morphs instead of cutting; initializing is working in the setup hue,
  * one 520ms colour slide away. The amplitudes rest on one rule: a rate has to be
  * expressed as a distance, never as an `animation-duration`. Durations cannot
  * cross-fade; lengths can. */
@@ -24,16 +24,16 @@
   initial-value: currentcolor;
 }
 
-/* How much of the wick's rim is already lit behind the travelling head. The head
- * never stops; at 1 the rim it is running on has caught up with it. */
+/* How much of the wick's rim is lit behind the pools. At 1 the whole outline has
+ * caught up with them. */
 @property --wick-fill {
   syntax: '<number>';
   inherits: true;
   initial-value: 0;
 }
 
-/* How much of the travelling head is drawn. At 0 the rim is all there is. */
-@property --wick-head {
+/* How far the beam's pools travel along the rim. At 0 they are parked. */
+@property --wick-drift {
   syntax: '<number>';
   inherits: true;
   initial-value: 1;
@@ -51,7 +51,7 @@
   --belt-pitch: 9px;
   --belt-sway: 0;
   --wick-fill: 0;
-  --wick-head: 1;
+  --wick-drift: 1;
   --belt-hue: var(--positive1);
 }
 
@@ -61,7 +61,7 @@
   --belt-pitch: 9px;
   --belt-sway: 0;
   --wick-fill: 0;
-  --wick-head: 1;
+  --wick-drift: 1;
   --belt-hue: var(--warning1);
 }
 
@@ -71,7 +71,7 @@
   --belt-pitch: 0px;
   --belt-sway: 1;
   --wick-fill: 1;
-  --wick-head: 1;
+  --wick-drift: 0;
   --belt-hue: var(--accent3);
 }
 
@@ -152,64 +152,257 @@
   }
 }
 
-/* The card's wick. The head never stops — an angle cannot cross-fade its sweep
- * without snapping at the loop seam, so `--wick-fill` brings the rim up under
- * it. */
-@property --wick-run {
-  syntax: '<angle>';
-  inherits: false;
-  initial-value: 0deg;
+/* The card's beam. Eight pools of light resting on the card's own outline,
+ * breathing on three clocks that never line up. A pool is a size and a place,
+ * both of which cross-fade; the old head was an angle, and an angle snaps at the
+ * loop seam. `--wick-drift` is how far the pools are allowed to travel along the
+ * rim, so parking them is one amplitude going to zero. */
+@property --wick-a {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 0.5;
+}
+
+@property --wick-b {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 0.5;
+}
+
+@property --wick-c {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 0.5;
 }
 
 .session-wick {
   --belt-beat: 1.4s;
+  --wick-phase: 0s;
 
-  /* Lap length, in belt beats. Long, because the head is crossing a whole card
-   * rather than a 6px rail: it has to read as travelling, not as spinning. */
-  --wick-lap: 6;
+  /* What a hot spot is made of, and how hard the pools push. On black, light is
+   * whiter than the hue it carries; on white there is no whiter, so the hot
+   * spots deepen instead and every pool has to push harder to be seen. */
+  --wick-hot: white;
+  --wick-lit: 1;
+  --wick-halo: 0.26;
 
   position: absolute;
 
-  /* The ring is the card's border, not a line inside it: the card turns its own
-   * 1px border transparent and the wick paints that exact strip — same box,
-   * same radius, same width, resting colour included. Reaching the border box
-   * means reaching out of the padding box, so a card carrying a wick drops
-   * `content-visibility`, whose clip stops there. The radius is inherited
-   * rather than named: the card owns it, and a guess is a corner that misses. */
+  /* The beam sits on the card's border, not on a line inside it: the card turns
+   * its own 1px border transparent and the ring paints that exact strip — same
+   * box, same radius, same width, resting colour included. Reaching the border
+   * box means reaching out of the padding box, so a card carrying a wick drops
+   * `content-visibility`, whose clip stops there. The radius is inherited rather
+   * than named: the card owns it, and a guess is a corner that misses. */
   inset: -1px;
   border-radius: inherit;
-  padding: 1px;
   pointer-events: none;
-  background:
-    conic-gradient(
-      from var(--wick-run),
-      transparent 0deg 120deg,
-      color-mix(in oklab, var(--belt-hue) calc(var(--wick-head) * 12%), transparent) 250deg,
-      color-mix(in oklab, var(--belt-hue) calc(var(--wick-head) * 45%), transparent) 330deg,
-      color-mix(in oklab, var(--belt-hue) calc(var(--wick-head) * 80%), transparent) 352deg,
-      color-mix(in oklab, var(--belt-hue) calc(var(--wick-head) * 100%), transparent) 358deg,
-      color-mix(in oklab, color-mix(in oklab, white 55%, var(--belt-hue)) calc(var(--wick-head) * 100%), transparent)
-        360deg
+
+  /* One clock per group, none a multiple of another, each started mid-phase so
+   * the three are never together on the first frame either. */
+  animation:
+    session-wick-a 5.2s ease-in-out calc(-1.2s + var(--wick-phase)) infinite,
+    session-wick-b 6.8s ease-in-out calc(-4.7s + var(--wick-phase)) infinite,
+    session-wick-c 8.6s ease-in-out calc(-6.3s + var(--wick-phase)) infinite,
+    session-wick-breathe calc(var(--belt-beat) * 4) ease-in-out var(--wick-phase) infinite;
+  transition:
+    --wick-fill 700ms cubic-bezier(0.4, 0, 0.2, 1),
+    --wick-drift 700ms cubic-bezier(0.4, 0, 0.2, 1),
+    --belt-sway 700ms cubic-bezier(0.4, 0, 0.2, 1),
+    --belt-hue 520ms ease;
+}
+
+/* Declared on the pseudo-elements, not on the wick itself: a custom property has
+ * its `var()`s substituted where it is declared, so a beam built on the parent
+ * would reach both pseudos with the parent's drift already baked in and the
+ * halo could never park. Here each one substitutes its own.
+ */
+.session-wick::before,
+.session-wick::after {
+  /* Each clock centred on zero and scaled by the drift: at rest every pool sits
+   * at its base size in its base place, and the card is lit but still. */
+  --wick-ka: calc((var(--wick-a) - 0.5) * var(--wick-drift));
+  --wick-kb: calc((var(--wick-b) - 0.5) * var(--wick-drift));
+  --wick-kc: calc((var(--wick-c) - 0.5) * var(--wick-drift));
+
+  /* Two pools a side, sized in percentages so a tall card lights the same way a
+   * short one does. The whitened ones are the hot spots: light, not paint. */
+  --wick-beam:
+    radial-gradient(
+      ellipse calc(30% * (1 + 0.5 * var(--wick-ka))) calc(11% * (1 + 0.4 * var(--wick-ka))) at
+        calc(27% + var(--wick-ka) * 58px) 0%,
+      color-mix(
+        in oklab,
+        color-mix(in oklab, var(--wick-hot) 62%, var(--belt-hue)) calc(92% * var(--wick-lit)),
+        transparent
+      ),
+      transparent
     ),
-    linear-gradient(color-mix(in oklab, var(--belt-hue) calc(var(--wick-fill) * 62%), transparent) 0 0),
+    radial-gradient(
+      ellipse calc(26% * (1 + 0.5 * var(--wick-kb))) calc(8% * (1 + 0.4 * var(--wick-kb))) at
+        calc(72% + var(--wick-kb) * 52px) 0%,
+      color-mix(
+        in oklab,
+        color-mix(in oklab, var(--wick-hot) 45%, var(--belt-hue)) calc(62% * var(--wick-lit)),
+        transparent
+      ),
+      transparent
+    ),
+    radial-gradient(
+      ellipse calc(7% * (1 + 0.5 * var(--wick-kc))) calc(26% * (1 + 0.4 * var(--wick-kc))) at 100%
+        calc(34% + var(--wick-kc) * 44px),
+      color-mix(
+        in oklab,
+        color-mix(in oklab, var(--wick-hot) 55%, var(--belt-hue)) calc(82% * var(--wick-lit)),
+        transparent
+      ),
+      transparent
+    ),
+    radial-gradient(
+      ellipse calc(6% * (1 + 0.5 * var(--wick-ka))) calc(20% * (1 + 0.4 * var(--wick-ka))) at 100%
+        calc(74% + var(--wick-ka) * 38px),
+      color-mix(
+        in oklab,
+        color-mix(in oklab, var(--wick-hot) 40%, var(--belt-hue)) calc(58% * var(--wick-lit)),
+        transparent
+      ),
+      transparent
+    ),
+    radial-gradient(
+      ellipse calc(31% * (1 + 0.5 * var(--wick-kb))) calc(9% * (1 + 0.4 * var(--wick-kb))) at
+        calc(66% + var(--wick-kb) * 58px) 100%,
+      color-mix(
+        in oklab,
+        color-mix(in oklab, var(--wick-hot) 58%, var(--belt-hue)) calc(88% * var(--wick-lit)),
+        transparent
+      ),
+      transparent
+    ),
+    radial-gradient(
+      ellipse calc(22% * (1 + 0.5 * var(--wick-kc))) calc(7% * (1 + 0.4 * var(--wick-kc))) at
+        calc(24% + var(--wick-kc) * 48px) 100%,
+      color-mix(
+        in oklab,
+        color-mix(in oklab, var(--wick-hot) 42%, var(--belt-hue)) calc(55% * var(--wick-lit)),
+        transparent
+      ),
+      transparent
+    ),
+    radial-gradient(
+      ellipse calc(7% * (1 + 0.5 * var(--wick-kc))) calc(23% * (1 + 0.4 * var(--wick-kc))) at 0%
+        calc(62% + var(--wick-kc) * 42px),
+      color-mix(
+        in oklab,
+        color-mix(in oklab, var(--wick-hot) 50%, var(--belt-hue)) calc(78% * var(--wick-lit)),
+        transparent
+      ),
+      transparent
+    ),
+    radial-gradient(
+      ellipse calc(6% * (1 + 0.5 * var(--wick-kb))) calc(17% * (1 + 0.4 * var(--wick-kb))) at 0%
+        calc(28% + var(--wick-kb) * 38px),
+      color-mix(
+        in oklab,
+        color-mix(in oklab, var(--wick-hot) 38%, var(--belt-hue)) calc(52% * var(--wick-lit)),
+        transparent
+      ),
+      transparent
+    );
+}
+
+/* The rim itself: the pools, the fill coming up under them, and the resting
+ * border under both. Masked down to the 1px strip, which is why it cannot be the
+ * same box as the halo — a mask clips the halo too. */
+.session-wick::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background:
+    var(--wick-beam),
+    linear-gradient(
+      color-mix(in oklab, var(--belt-hue) calc(var(--wick-fill) * 62% * var(--wick-lit)), transparent) 0 0
+    ),
     linear-gradient(color-mix(in oklab, var(--border1) 50%, transparent) 0 0);
   mask:
     linear-gradient(#000 0 0) content-box,
     linear-gradient(#000 0 0);
   mask-composite: exclude;
-  transition:
-    --wick-fill 700ms cubic-bezier(0.4, 0, 0.2, 1),
-    --wick-head 700ms cubic-bezier(0.4, 0, 0.2, 1),
-    --belt-sway 700ms cubic-bezier(0.4, 0, 0.2, 1),
-    --belt-hue 520ms ease;
-  animation:
-    session-wick-run calc(var(--belt-beat) * var(--wick-lap)) linear infinite,
-    session-wick-breathe calc(var(--belt-beat) * 4) ease-in-out infinite;
 }
 
-@keyframes session-wick-run {
-  to {
-    --wick-run: 360deg;
+/* The same pools blurred and let out past the card, which is what turns a lit
+ * edge into a lit card. Kept short: cards sit 10px apart in a column. */
+.session-wick::before {
+  /* The halo does not travel with the rim. Under a 9px blur its own drift is
+   * invisible, and animating it would mean re-blurring eight gradients every
+   * frame for nothing: parked, the browser paints this layer once and the only
+   * thing moving per frame is the 1px rim above it. */
+  --wick-drift: 0;
+
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: inherit;
+  background: var(--wick-beam);
+  opacity: var(--wick-halo);
+  filter: blur(9px);
+}
+
+/* Light mode: the pools deepen into the hue instead of whitening out of it, and
+ * they push about a quarter harder — a tint that reads as light on black reads
+ * as haze on white. */
+html.light .session-wick {
+  --wick-hot: color-mix(in oklab, black 30%, var(--belt-hue));
+  --wick-lit: 1.15;
+  --wick-halo: 0.16;
+}
+
+/* Cards mount together, so a board would breathe in one voice. Four phases dealt
+ * by where the card sits break that up without threading a seed through the
+ * component. */
+:nth-child(2n) > .session-wick {
+  --wick-phase: -1.7s;
+}
+
+:nth-child(3n) > .session-wick {
+  --wick-phase: -3.4s;
+}
+
+:nth-child(5n) > .session-wick {
+  --wick-phase: -0.9s;
+}
+
+@keyframes session-wick-a {
+  0%,
+  100% {
+    --wick-a: 0;
+  }
+
+  50% {
+    --wick-a: 1;
+  }
+}
+
+@keyframes session-wick-b {
+  0%,
+  100% {
+    --wick-b: 0;
+  }
+
+  50% {
+    --wick-b: 1;
+  }
+}
+
+@keyframes session-wick-c {
+  0%,
+  100% {
+    --wick-c: 0;
+  }
+
+  50% {
+    --wick-c: 1;
   }
 }
 

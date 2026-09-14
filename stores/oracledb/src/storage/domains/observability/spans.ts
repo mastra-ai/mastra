@@ -1,5 +1,5 @@
 import { ErrorCategory } from '@mastra/core/error';
-import { TABLE_SPANS, TraceStatus, listTracesArgsSchema, toTraceSpans } from '@mastra/core/storage';
+import { TABLE_SCORERS, TABLE_SPANS, TraceStatus, listTracesArgsSchema, toTraceSpans } from '@mastra/core/storage';
 import type {
   BatchCreateSpansArgs,
   BatchDeleteTracesArgs,
@@ -31,6 +31,7 @@ import type {
 } from '@mastra/core/storage';
 import oracledb from 'oracledb';
 
+import { isOracleErrorCode } from '../../../shared/connection';
 import { assertJsonPath, qualifyName } from '../../../vector/identifiers';
 import type { OracleDB } from '../../db';
 import { parseJsonValue, toDate } from '../../domain-utils';
@@ -46,6 +47,7 @@ import {
   logCol,
   logQcol,
   qcol,
+  scoreCol,
   SPAN_COLUMNS,
   SPAN_KEY_COLUMNS,
   SPAN_SCHEMA,
@@ -238,6 +240,17 @@ export async function batchDeleteTraces(
         args.traceIds.map(traceId => ({ traceId })),
         { bindDefs: { traceId: { type: oracledb.STRING, maxSize: 512 } } },
       );
+      try {
+        await client.executeMany(
+          `DELETE FROM ${qualifyName(TABLE_SCORERS, schemaName)} WHERE ${scoreCol('traceId')} = :traceId`,
+          args.traceIds.map(traceId => ({ traceId })),
+          { bindDefs: { traceId: { type: oracledb.STRING, maxSize: 512 } } },
+        );
+      } catch (error) {
+        // Scorer storage is provisioned separately from observability; standalone
+        // deployments without the scorers table have no score rows to cascade.
+        if (!isOracleErrorCode(error, [-942])) throw error;
+      }
     });
   } catch (error) {
     throw storageError('BATCH_DELETE_TRACES', 'FAILED', { count: args.traceIds.length }, error, ErrorCategory.USER);

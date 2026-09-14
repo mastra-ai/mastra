@@ -19,7 +19,7 @@ export function ValidationReport({ result, className }: ValidationReportProps) {
   // All rows valid
   if (invalidCount === 0) {
     return (
-      <div className={cn('flex items-center gap-2 text-sm text-success', className)}>
+      <div className={cn('flex items-center gap-2 text-ui-md text-success', className)}>
         <CheckCircleIcon className="h-4 w-4" />
         All {totalRows} row{totalRows !== 1 ? 's' : ''} valid
       </div>
@@ -29,16 +29,16 @@ export function ValidationReport({ result, className }: ValidationReportProps) {
   return (
     <div className={cn('space-y-3', className)}>
       {/* Summary warning */}
-      <div className="text-warning flex items-center gap-2 text-sm">
+      <div className="text-warning text-ui-md flex items-center gap-2">
         <AlertTriangleIcon className="h-4 w-4" />
         {invalidCount} of {totalRows} rows will be skipped (validation failed)
       </div>
 
-      {validCount > 0 && <div className="text-muted-foreground text-sm">{validCount} rows will be imported</div>}
+      {validCount > 0 && <div className="text-muted-foreground text-ui-md">{validCount} rows will be imported</div>}
 
       {/* Failing rows table */}
       <div className="max-h-48 overflow-y-auto rounded-md border">
-        <table className="w-full text-xs">
+        <table className="text-ui-sm w-full">
           <thead className="bg-muted sticky top-0">
             <tr>
               <th className="px-2 py-1 text-left font-medium">Row</th>
@@ -75,7 +75,7 @@ function ValidationRow({ row }: { row: RowValidationResult }) {
     <tr className="border-t">
       <td className="text-muted-foreground px-2 py-1">{row.rowNumber}</td>
       <td className="px-2 py-1">
-        <code className="bg-muted rounded px-1 text-xs">
+        <code className="bg-muted text-ui-sm rounded px-1">
           {row.field}
           {errorPath !== '/' ? errorPath : ''}
         </code>

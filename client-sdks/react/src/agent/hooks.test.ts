@@ -1058,6 +1058,32 @@ describe('useChat forwards clientTools', () => {
     expect(messageCalls[0]?.[0].ifIdle.streamOptions.clientTools).toBe(clientTools);
   });
 
+  it('passes clientToolsResolver to sendMessage ifIdle.streamOptions', async () => {
+    const clientToolsResolver = vi.fn(() => clientTools);
+    const { result } = renderHook(
+      () =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          enableThreadSignals: true,
+        }),
+      { wrapper },
+    );
+
+    await act(async () => {
+      await result.current.sendMessage({
+        mode: 'stream',
+        message: 'hi',
+        threadId: 'thread-1',
+        clientToolsResolver,
+      });
+    });
+
+    const messageCalls = sendMessageMock.mock.calls as unknown as Array<[any]>;
+    expect(messageCalls[0]?.[0].ifIdle.streamOptions.clientToolsResolver).toBe(clientToolsResolver);
+  });
+
   it('keeps per-send clientTools and continuation options on sendMessage', async () => {
     keepSubscriptionOpen = true;
     const perSendClientTools = {
@@ -1087,6 +1113,7 @@ describe('useChat forwards clientTools', () => {
         modelSettings: {
           maxSteps: 3,
           instructions: 'use the hook tool',
+          system: 'current hook state',
         },
         requestContext: { userId: 'user-123' } as any,
       });
@@ -1105,6 +1132,7 @@ describe('useChat forwards clientTools', () => {
         modelSettings: {
           maxSteps: 5,
           instructions: 'use the per-send tool',
+          system: 'current per-send state',
           temperature: 0.2,
         },
         requestContext: { userId: 'user-456' } as any,
@@ -1120,6 +1148,7 @@ describe('useChat forwards clientTools', () => {
       expect.objectContaining({
         maxSteps: 3,
         instructions: 'use the hook tool',
+        system: 'current hook state',
         requestContext: { userId: 'user-123' },
         clientTools,
       }),
@@ -1128,6 +1157,7 @@ describe('useChat forwards clientTools', () => {
       expect.objectContaining({
         maxSteps: 5,
         instructions: 'use the per-send tool',
+        system: 'current per-send state',
         requestContext: { userId: 'user-456' },
         clientTools: perSendClientTools,
       }),

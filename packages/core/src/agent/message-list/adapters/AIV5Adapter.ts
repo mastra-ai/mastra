@@ -404,6 +404,7 @@ export class AIV5Adapter {
           // shapes so the media type survives (instead of the image/png default) and the
           // payload is read from `url` when v5-shaped. Mirrors #17366.
           const { mediaType: fileMimeType, data: fileData } = resolveFilePartMediaTypeAndData(part);
+          const filename = (part as { filename?: string }).filename;
 
           // Skip file parts that came from experimental_attachments to avoid duplicates
           if (typeof fileData === 'string' && attachmentUrls.has(fileData)) {
@@ -422,6 +423,7 @@ export class AIV5Adapter {
               type: 'file' as const,
               url: fileData,
               mediaType: categorized.mimeType || 'image/png',
+              ...(filename ? { filename } : {}),
             };
             v5UIPart.providerMetadata = mergeMastraCreatedAt(part.providerMetadata, part.createdAt);
             parts.push(v5UIPart);
@@ -459,6 +461,7 @@ export class AIV5Adapter {
               type: 'file' as const,
               url: dataUri,
               mediaType: finalMimeType,
+              ...(filename ? { filename } : {}),
             };
             v5UIPart.providerMetadata = mergeMastraCreatedAt(part.providerMetadata, part.createdAt);
             parts.push(v5UIPart);

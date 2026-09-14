@@ -1,5 +1,89 @@
 # @mastra/docker
 
+## 0.8.0-alpha.1
+
+### Minor Changes
+
+- Added cancellation support to `DockerSandbox.writeFiles`. Pass an `AbortSignal` to stop uploading files to a container mid-transfer. ([#23644](https://github.com/mastra-ai/mastra/pull/23644))
+
+  **Cancelling a file upload**
+
+  ```ts
+  import { SandboxAbortError } from '@mastra/core/workspace';
+
+  const controller = new AbortController();
+
+  // Cancel from elsewhere (e.g. a timeout or user action)
+  setTimeout(() => controller.abort(), 1000);
+
+  try {
+    await sandbox.writeFiles(files, { abortSignal: controller.signal });
+  } catch (error) {
+    if (error instanceof SandboxAbortError) {
+      // Upload was cancelled
+    }
+  }
+  ```
+
+  If the signal is already aborted, the upload rejects before any work begins. If it aborts during transfer, the in-flight upload to the Docker daemon is terminated. Cancellation rejects with a `SandboxAbortError` (code `ABORTED`). Cancellation does not roll back files that were already written, so dispose of or clean up the sandbox if you need a clean state.
+
+- Added an optional per-file `mode` to `WorkspaceSandbox.writeFiles` inputs so callers can set POSIX permissions (`0o001`–`0o777`) when provisioning files. The Docker sandbox applies the requested mode to each uploaded file, falling back to `0644` when omitted. Sandboxes that cannot honor an explicit mode (Vercel, E2B, Daytona, Cloudflare) reject the request with `SandboxUnsupportedFeatureError` instead of silently ignoring it. Closes #23580. ([#23652](https://github.com/mastra-ai/mastra/pull/23652))
+
+  ```ts
+  await sandbox.writeFiles([
+    { path: 'scripts/setup.sh', content: '#!/bin/sh\necho ready\n', mode: 0o755 },
+    { path: 'config/private.json', content: JSON.stringify({ token }), mode: 0o600 },
+    { path: 'README.md', content: 'Sandbox instructions' }, // defaults to 0644
+  ]);
+  ```
+
+  `@mastra/core` now exports `validateSandboxFileMode`, `assertModesUnsupported`, and `SandboxUnsupportedFeatureError` for sandbox providers; the built-in providers' `@mastra/core` peer dependency floor is raised to `1.67.0` accordingly.
+
+### Patch Changes
+
+- Updated dependencies [[`492c0ae`](https://github.com/mastra-ai/mastra/commit/492c0aedcee3fde9555111a660b6c975c160a0db), [`ddbd352`](https://github.com/mastra-ai/mastra/commit/ddbd3527654a058ed413ae164a1246003dcc9030), [`4112ecd`](https://github.com/mastra-ai/mastra/commit/4112ecdec76827384d3a7ab4e8db3ccf90ae7ed1), [`617c1b3`](https://github.com/mastra-ai/mastra/commit/617c1b30e7e794bbb77feaced1848fde291fc240), [`422e798`](https://github.com/mastra-ai/mastra/commit/422e798ab1a4b14302c5b49fed2f6c818a82706e), [`47868b2`](https://github.com/mastra-ai/mastra/commit/47868b2dde360b038d829c9f88e15061acf3efb5), [`b95aabb`](https://github.com/mastra-ai/mastra/commit/b95aabba261a39b73430d95f3ed051634117d517), [`055057c`](https://github.com/mastra-ai/mastra/commit/055057ca2102e35008fe30871f7c8f422ae25ec2), [`7290151`](https://github.com/mastra-ai/mastra/commit/7290151bdb3bfe518653b0a66a19d6790925e4a0), [`9bc7895`](https://github.com/mastra-ai/mastra/commit/9bc789591ad683f304c63bd01e554fbba2df9cf6), [`47868b2`](https://github.com/mastra-ai/mastra/commit/47868b2dde360b038d829c9f88e15061acf3efb5), [`6902f94`](https://github.com/mastra-ai/mastra/commit/6902f940f1879955a90faa0a0ac871667b59d428), [`7148bf5`](https://github.com/mastra-ai/mastra/commit/7148bf55b147e3fae90b3ba0c9517adb0af5f2a4), [`6bdb944`](https://github.com/mastra-ai/mastra/commit/6bdb944acb3f39bccad59ee140d7614420948f6b), [`a54766a`](https://github.com/mastra-ai/mastra/commit/a54766a10381295583144847b856d18e8f924d30), [`ff45065`](https://github.com/mastra-ai/mastra/commit/ff45065d42132075c4efb064d96169c4eadbab58)]:
+  - @mastra/core@1.67.0-alpha.3
+
+## 0.8.0-alpha.0
+
+### Minor Changes
+
+- Implement the optional `writeFiles()` bulk upload API on `DockerSandbox`. ([#23571](https://github.com/mastra-ai/mastra/pull/23571))
+
+  You can now upload multiple files to a running Docker sandbox in a single call instead of relying on host bind mounts or shell writes:
+
+  ```ts
+  await sandbox.writeFiles([
+    { path: 'src/index.js', content: 'console.log("hello")' },
+    { path: 'data.json', content: Buffer.from('{"count":1}') },
+  ]);
+  ```
+
+  Files are uploaded in one operation using Docker's native archive transfer (`container.putArchive`). Relative paths resolve against the sandbox `workingDirectory`, absolute paths are honored as-is, missing parent directories are created automatically, existing files are overwritten, and both `string` and `Buffer` contents are preserved. New files are created with mode `0644`. The upload is not atomic across files: if it fails, the promise rejects and partially written files may remain. Calling `writeFiles()` before the sandbox has started throws `SandboxNotReadyError`.
+
+### Patch Changes
+
+- Updated dependencies [[`d9ef543`](https://github.com/mastra-ai/mastra/commit/d9ef54303b7f050f4e364701c3821fc61e7002f2), [`b96744d`](https://github.com/mastra-ai/mastra/commit/b96744daad8c6e181f03fdf38c732206ded428a2), [`37065ad`](https://github.com/mastra-ai/mastra/commit/37065ad6cd3f74afd16417e8d4e0839c13beca40), [`2990bcc`](https://github.com/mastra-ai/mastra/commit/2990bccd1c648c8f8614da97fbb459819871f5bc), [`1ce03b9`](https://github.com/mastra-ai/mastra/commit/1ce03b9c04c633e815bc21cb78c29f7f19851fb2), [`2990bcc`](https://github.com/mastra-ai/mastra/commit/2990bccd1c648c8f8614da97fbb459819871f5bc), [`967ab17`](https://github.com/mastra-ai/mastra/commit/967ab179c9814e734af9c3395ff8ef795acbe06c), [`fde3ca5`](https://github.com/mastra-ai/mastra/commit/fde3ca590f7d854ff33354eff4261b907bdacde4), [`0775cde`](https://github.com/mastra-ai/mastra/commit/0775cdee12b6ad2ad6b5c97874e6248db720224c), [`44057ea`](https://github.com/mastra-ai/mastra/commit/44057eac6fd048100574bf71c6dc095f769a6d63), [`2289456`](https://github.com/mastra-ai/mastra/commit/228945659b2003633e0ebb33e7e34cc2f6efbded), [`90846f2`](https://github.com/mastra-ai/mastra/commit/90846f2bfd890de159ab7c3d4fcf8a71c6fb7125), [`d1b070c`](https://github.com/mastra-ai/mastra/commit/d1b070cd77a944e6bb2e5848052b1e8275be88a2), [`1bd31e7`](https://github.com/mastra-ai/mastra/commit/1bd31e7fd49e6de56e6e9a157a6b452cbbd86983)]:
+  - @mastra/core@1.67.0-alpha.1
+
+## 0.7.1
+
+### Patch Changes
+
+- Fixed Docker sandbox clones ignoring workingDirectory overrides. ([#23430](https://github.com/mastra-ai/mastra/pull/23430))
+
+- Updated dependencies [[`7eda39b`](https://github.com/mastra-ai/mastra/commit/7eda39bd17356b9985ae44e663ccde30ff0fedea), [`bb09e86`](https://github.com/mastra-ai/mastra/commit/bb09e860dd6c510365f0d7ab068b194707e99fa4), [`4cbb201`](https://github.com/mastra-ai/mastra/commit/4cbb201261df30574a98c241615cd096d9f223f3), [`cf9cd79`](https://github.com/mastra-ai/mastra/commit/cf9cd7963c664c7e9bcebe41fe7e492d1557ff6f), [`f3d9aae`](https://github.com/mastra-ai/mastra/commit/f3d9aae7bb5324c9dc7abc7caa166595f7582190), [`4d72bce`](https://github.com/mastra-ai/mastra/commit/4d72bceaf323dfe617a882b80defb2ab21b97ed9), [`44a6da9`](https://github.com/mastra-ai/mastra/commit/44a6da9cd61b7767a73c66da42ab1eca4073cd42), [`1e1fe34`](https://github.com/mastra-ai/mastra/commit/1e1fe3483102459e6ec9da096756b4efb12f5221), [`1fc8225`](https://github.com/mastra-ai/mastra/commit/1fc82255bdca4340a7e0fd42aa61a97359d6c87f), [`67315b1`](https://github.com/mastra-ai/mastra/commit/67315b10f2058a17bfadcb053e49b0d4655bf3bb), [`2efa6ba`](https://github.com/mastra-ai/mastra/commit/2efa6bab6dde4e77e21adf1a9d59e8e44710194b), [`cc91725`](https://github.com/mastra-ai/mastra/commit/cc917251a39b60050b9d8b004f5d281f4a578b75), [`0d56f39`](https://github.com/mastra-ai/mastra/commit/0d56f398f08a1527eff72de4c0b66f74606b17d6), [`3da908f`](https://github.com/mastra-ai/mastra/commit/3da908fdf7b80b4e1577aa85cc45f28bb54aebc9), [`ecada83`](https://github.com/mastra-ai/mastra/commit/ecada83c1960b02720dcff6323ce5cd3fc39cbe7), [`7865a79`](https://github.com/mastra-ai/mastra/commit/7865a79253be403bd79a307224c9968d98ea0b72), [`e7df80e`](https://github.com/mastra-ai/mastra/commit/e7df80e4e043c1c63ad81fbb4b6e0716f43c43bd), [`1fa24d1`](https://github.com/mastra-ai/mastra/commit/1fa24d1d23bfac997af49fa5a9684b67c8249612), [`9c43765`](https://github.com/mastra-ai/mastra/commit/9c437659d97fe45775ecf3a35e121db15c6405fa), [`0096d5c`](https://github.com/mastra-ai/mastra/commit/0096d5c819d058ecc4de645774e4f46b8c122656), [`119d2aa`](https://github.com/mastra-ai/mastra/commit/119d2aaded03df03325fe25b167e71603cd8a2aa), [`50c588e`](https://github.com/mastra-ai/mastra/commit/50c588ebe5e3fe407efe3a36e46c380a9d2492fb), [`de5db60`](https://github.com/mastra-ai/mastra/commit/de5db6055519fd22d1673a2ad90e69d1b45ac54d), [`8fb01c3`](https://github.com/mastra-ai/mastra/commit/8fb01c3ef5a4b2e2d2ac5099f19f663c7e7a382c)]:
+  - @mastra/core@1.66.0
+
+## 0.7.1-alpha.0
+
+### Patch Changes
+
+- Fixed Docker sandbox clones ignoring workingDirectory overrides. ([#23430](https://github.com/mastra-ai/mastra/pull/23430))
+
+- Updated dependencies [[`4cbb201`](https://github.com/mastra-ai/mastra/commit/4cbb201261df30574a98c241615cd096d9f223f3), [`44a6da9`](https://github.com/mastra-ai/mastra/commit/44a6da9cd61b7767a73c66da42ab1eca4073cd42), [`1e1fe34`](https://github.com/mastra-ai/mastra/commit/1e1fe3483102459e6ec9da096756b4efb12f5221), [`67315b1`](https://github.com/mastra-ai/mastra/commit/67315b10f2058a17bfadcb053e49b0d4655bf3bb), [`cc91725`](https://github.com/mastra-ai/mastra/commit/cc917251a39b60050b9d8b004f5d281f4a578b75), [`50c588e`](https://github.com/mastra-ai/mastra/commit/50c588ebe5e3fe407efe3a36e46c380a9d2492fb)]:
+  - @mastra/core@1.66.0-alpha.3
+
 ## 0.7.0
 
 ### Minor Changes

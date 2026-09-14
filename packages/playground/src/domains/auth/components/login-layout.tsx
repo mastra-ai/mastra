@@ -21,7 +21,7 @@ export function LoginLayout({ title, description, errorBanner, children }: Login
       <div className="w-full max-w-sm space-y-6">
         <div className="flex flex-col items-center space-y-2">
           <LogoWithoutText className="h-10 w-10" />
-          <h1 className="text-neutral6 text-xl font-semibold">{title}</h1>
+          <h1 className="text-neutral6 text-header-md font-semibold">{title}</h1>
         </div>
 
         {description}

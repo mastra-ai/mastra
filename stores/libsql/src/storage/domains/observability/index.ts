@@ -623,6 +623,7 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
   }
 
   async batchDeleteTraces(args: BatchDeleteTracesArgs): Promise<void> {
+    this.assertUnscopedBatchDeleteTraces(args);
     try {
       const keys = args.traceIds.map(traceId => ({ traceId }));
       return this.#db.batchDelete({

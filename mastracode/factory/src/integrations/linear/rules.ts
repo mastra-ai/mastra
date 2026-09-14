@@ -1,9 +1,11 @@
-import { resolveFactoryLinearRule } from '../../rules/resolve.js';
-import type { FactoryLinearRuleContext, FactoryRuleDecision, FactoryRules } from '../../rules/types.js';
-import { validateFactoryRuleDecisions } from '../../rules/validation.js';
+import { boardForWorkItem } from '../../boards/index.js';
+import type { BoardRegistry } from '../../boards/index.js';
+import type { FactoryLinearRuleContext, FactoryRuleDecision } from '../../rules/types.js';
+import { assertFactoryDecisionTarget, validateFactoryRuleDecisions } from '../../rules/validation.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type { WorkItemRow, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
 import type { IntegrationContext } from '../base.js';
+import type { LinearEventRules } from './default-rules.js';
 
 const RULE_TIMEOUT_MS = 5_000;
 
@@ -36,12 +38,16 @@ export interface LinearIssueIngress {
   labels: string[];
   createdAt: string;
   updatedAt: string;
+  /** Linear project the issue was read from; resolves the bound board via `intakeBoards`. */
+  sourceId?: string | null;
 }
 
 export interface LinearRulesOptions {
   projects: Pick<FactoryProjectsStorage, 'get'>;
   storage: WorkItemsStorage;
-  rules: FactoryRules;
+  configVersion: string;
+  boards: BoardRegistry;
+  linearRules: LinearEventRules;
 }
 
 export interface LinearRulesIngress {
@@ -49,6 +55,8 @@ export interface LinearRulesIngress {
   userId: string;
   factoryProjectId: string;
   issues: LinearIssueIngress[];
+  /** Board id per bound Linear source id, from the project's intake bindings. */
+  intakeBoards?: Readonly<Record<string, string>>;
 }
 
 type IngressStatus = 'committed' | 'replayed' | 'missing';
@@ -86,13 +94,15 @@ export class LinearRules {
     }
 
     const event = isClosed ? 'issueClosed' : 'issueObserved';
+    const boundBoardId = issue.sourceId ? input.intakeBoards?.[issue.sourceId] : undefined;
+    const boundBoard = boundBoardId ? this.options.boards.get(boundBoardId) : undefined;
     const context: FactoryLinearRuleContext = {
       tenant: { orgId: input.orgId, projectId: input.factoryProjectId },
       actor,
       ingress: { type: 'linear', id: ingressId },
       cause: `linear.${event}`,
       causalChain: [],
-      ruleSetVersion: this.options.rules.version,
+      configVersion: this.options.configVersion,
       ...(relatedItem
         ? {
             item: {
@@ -103,17 +113,19 @@ export class LinearRules {
               title: relatedItem.title,
               url: relatedItem.externalSource?.url ?? null,
               stages: relatedItem.stages,
+              acceptedAt: relatedItem.acceptedAt,
               metadata: relatedItem.metadata,
             },
-            board: 'work' as const,
+            board: boardForWorkItem(relatedItem),
             itemRevision: relatedItem.revision,
           }
         : {}),
+      ...(boundBoard ? { intake: { board: boundBoard.id, initialPhase: boundBoard.initialPhase } } : {}),
       event,
       issue,
     };
 
-    const rule = resolveFactoryLinearRule(this.options.rules, context.event);
+    const rule = this.options.linearRules[context.event];
     let decision: FactoryRuleDecision | void;
     let decisions: Record<string, unknown>[] = [];
     let outcome: { status: 'accepted' | 'rejected'; code?: string; reason?: string } = { status: 'accepted' };
@@ -122,7 +134,14 @@ export class LinearRules {
       if (decision?.type === 'reject') {
         outcome = { status: 'rejected', code: decision.code, reason: decision.reason };
       } else if (decision) {
-        decisions = validateFactoryRuleDecisions([decision]).map(entry => ({ ...entry }));
+        decisions = validateFactoryRuleDecisions([decision]).map(entry => {
+          assertFactoryDecisionTarget(
+            entry,
+            this.options.boards,
+            relatedItem ? boardForWorkItem(relatedItem) : undefined,
+          );
+          return { ...entry };
+        });
       }
     } catch (error) {
       const timedOut = error instanceof Error && error.message === 'FACTORY_RULE_TIMEOUT';
@@ -142,7 +161,7 @@ export class LinearRules {
       factoryProjectId: input.factoryProjectId,
       workItemId: relatedItem?.id ?? null,
       ingress: { identity: ingressId, triggerType: 'linear.issueObserved' },
-      ruleSetVersion: this.options.rules.version,
+      configVersion: this.options.configVersion,
       expectedRevision: relatedItem?.revision ?? null,
       actor,
       outcome,
@@ -155,13 +174,16 @@ export class LinearRules {
 }
 
 export function attachLinearRules(
+  linear: { readonly rules: LinearEventRules },
   context: IntegrationContext,
 ): ((input: LinearRulesIngress) => Promise<unknown>) | undefined {
-  if (!context.rules) return undefined;
+  if (!context.runtime) return undefined;
   const rules = new LinearRules({
     projects: context.storage.projects,
-    storage: context.rules.workItems,
-    rules: context.rules.config,
+    storage: context.runtime.workItems,
+    configVersion: context.runtime.configVersion,
+    boards: context.runtime.boards,
+    linearRules: linear.rules,
   });
   return input => rules.ingest(input);
 }

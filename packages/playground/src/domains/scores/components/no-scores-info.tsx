@@ -11,8 +11,7 @@ export const NoScoresInfo = ({ onRunExperiment }: { onRunExperiment?: () => void
       actionSlot={
         <div className="flex flex-col items-center gap-2">
           {onRunExperiment && (
-            <Button variant="primary" onClick={onRunExperiment}>
-              <Play />
+            <Button variant="primary" onClick={onRunExperiment} icon={<Play />}>
               Run Experiment
             </Button>
           )}
@@ -22,8 +21,9 @@ export const NoScoresInfo = ({ onRunExperiment }: { onRunExperiment?: () => void
             href="https://mastra.ai/en/docs/evals/overview"
             target="_blank"
             rel="noopener noreferrer"
+            icon={<ExternalLinkIcon />}
           >
-            Scorers Documentation <ExternalLinkIcon />
+            Scorers Documentation
           </Button>
         </div>
       }

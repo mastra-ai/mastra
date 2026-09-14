@@ -7,7 +7,6 @@ import { RouteHeaderActions, RouteHeaderActionsProvider, RouteHeaderActionsSlot 
 import { RouteHeaderCrumbs, RouteHeaderCrumbsProvider } from '../route-header-crumbs';
 import { getRouteHeaderHeading } from '../route-heading';
 import type { CrumbDef, RouteHeaderHandle } from '../types';
-import { useRouteHeader } from '../use-route-header';
 import { routes } from '@/App';
 import { ExperimentCrumb } from '@/domains/experiments/experiment-crumb';
 
@@ -107,11 +106,6 @@ function hasRenderableNode(crumb: CrumbDef) {
   if ('label' in crumb) return crumb.label !== '';
   if ('node' in crumb) return crumb.node !== null && crumb.node !== undefined && crumb.node !== '';
   return Boolean(crumb.Component);
-}
-
-function RouteHeaderProbe() {
-  const { docs } = useRouteHeader();
-  return <div data-testid="route-docs">{docs?.href ?? 'none'}</div>;
 }
 
 function RouteHeaderOverrideProbe() {
@@ -216,36 +210,20 @@ describe('route header handles', () => {
     expect(crumbs[3]).toMatchObject({ label: 'item-1' });
   });
 
-  it('truncates long item ids to 8 chars with an ellipsis in item and compare crumbs', () => {
+  it('truncates long item ids to 8 chars with an ellipsis in item crumbs', () => {
     const handles = collectRouteHandles(getAppRoutes());
     const itemHandle = handles.find(({ path }) => path === '/datasets/:datasetId/items/:itemId')?.handle;
-    const compareHandle = handles.find(
-      ({ path }) => path === '/datasets/:datasetId/items/:itemId/compare/:secondItemId',
-    )?.handle;
 
     expect(itemHandle?.crumbs).toBeTypeOf('function');
-    expect(compareHandle?.crumbs).toBeTypeOf('function');
-    if (typeof itemHandle?.crumbs !== 'function' || typeof compareHandle?.crumbs !== 'function') return;
+    if (typeof itemHandle?.crumbs !== 'function') return;
 
     const longId = '03bb5c8f-970f-4d09-98cb-e3f0bd5813f0';
-    const secondId = '50203836-7083-448d-8624-97eae4dfb297';
 
     const itemCrumbs = itemHandle.crumbs({
       params: { datasetId: 'ds-1', itemId: longId },
       pathname: `/datasets/ds-1/items/${longId}`,
     });
     expect(itemCrumbs.find(c => c.id === 'dataset-item')).toMatchObject({ label: '03bb5c8f...' });
-
-    const compareCrumbs = compareHandle.crumbs({
-      params: { datasetId: 'ds-1', itemId: longId, secondItemId: secondId },
-      pathname: `/datasets/ds-1/items/${longId}/compare/${secondId}`,
-    });
-    // Truncated label, but the link keeps the full id.
-    expect(compareCrumbs.find(c => c.id === 'dataset-item')).toMatchObject({
-      label: '03bb5c8f...',
-      to: `/datasets/ds-1/items/${longId}`,
-    });
-    expect(compareCrumbs.find(c => c.id === 'dataset-item-compare-second')).toMatchObject({ label: '50203836...' });
   });
 
   it('does not throw when route params contain malformed URI encoding', () => {
@@ -262,30 +240,6 @@ describe('route header handles', () => {
       });
       expect(crumbs.at(-1)).toMatchObject({ label: '%E0%A4%A' });
     }).not.toThrow();
-  });
-
-  it('allows deeper route handles to clear inherited docs links', async () => {
-    const router = createMemoryRouter(
-      [
-        {
-          path: '/',
-          element: <Outlet />,
-          handle: { docs: { href: 'https://example.com/docs' } },
-          children: [
-            {
-              path: 'child',
-              element: <RouteHeaderProbe />,
-              handle: { crumbs: [{ id: 'child', label: 'Child' }], docs: () => undefined },
-            },
-          ],
-        },
-      ],
-      { initialEntries: ['/child'] },
-    );
-
-    render(<RouterProvider router={router} />);
-
-    await waitFor(() => expect(screen.getByTestId('route-docs').textContent).toBe('none'));
   });
 
   it('renders only the active route header action owner', async () => {

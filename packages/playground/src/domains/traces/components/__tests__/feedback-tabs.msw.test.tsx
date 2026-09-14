@@ -6,7 +6,15 @@ import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { SPAN_ID, spanFeedbackResponse, TRACE_ID } from '../../hooks/__tests__/fixtures/trace-feedback';
+import {
+  authoredFeedbackResponse,
+  feedbackRecord,
+  listFeedbackResponse,
+  reviewedFeedbackResponse,
+  SPAN_ID,
+  spanFeedbackResponse,
+  TRACE_ID,
+} from '../../hooks/__tests__/fixtures/trace-feedback';
 import { SpanFeedbackTab } from '../span-feedback-tab';
 import { TraceFeedbackTab } from '../trace-feedback-tab';
 import { server } from '@/test/msw-server';
@@ -32,7 +40,7 @@ afterEach(() => cleanup());
 
 describe('feedback tabs composer', () => {
   it('submits span-scoped feedback and refetches the list', async () => {
-    const onPost = vi.fn<(body: Record<string, unknown>) => void>();
+    const onPost = vi.fn<(body: unknown) => void>();
     const onList = vi.fn();
     server.use(
       http.get(FEEDBACK_URL, () => {
@@ -40,7 +48,7 @@ describe('feedback tabs composer', () => {
         return HttpResponse.json(spanFeedbackResponse);
       }),
       http.post(FEEDBACK_URL, async ({ request }) => {
-        onPost((await request.json()) as Record<string, unknown>);
+        onPost(await request.json());
         return HttpResponse.json({ success: true });
       }),
     );
@@ -58,11 +66,11 @@ describe('feedback tabs composer', () => {
   });
 
   it('submits trace-level feedback without a spanId', async () => {
-    const onPost = vi.fn<(body: Record<string, unknown>) => void>();
+    const onPost = vi.fn<(body: unknown) => void>();
     server.use(
       http.get(FEEDBACK_URL, () => HttpResponse.json(spanFeedbackResponse)),
       http.post(FEEDBACK_URL, async ({ request }) => {
-        onPost((await request.json()) as Record<string, unknown>);
+        onPost(await request.json());
         return HttpResponse.json({ success: true });
       }),
     );
@@ -73,6 +81,196 @@ describe('feedback tabs composer', () => {
 
     await waitFor(() => expect(onPost).toHaveBeenCalled());
     expect(onPost.mock.calls[0][0]).toMatchObject({ feedback: { traceId: TRACE_ID, value: 'trace note' } });
-    expect((onPost.mock.calls[0][0] as { feedback: object }).feedback).not.toHaveProperty('spanId');
+    expect(onPost.mock.calls[0][0]).not.toHaveProperty('feedback.spanId');
+  });
+});
+
+describe('feedback tabs delete', () => {
+  it('confirms a span feedback deletion, shows its pending state, and refetches the list', async () => {
+    const onDelete = vi.fn<(body: unknown) => void>();
+    const onList = vi.fn();
+    let resolveDelete: (() => void) | undefined;
+    let listResponse = spanFeedbackResponse;
+    server.use(
+      http.get(FEEDBACK_URL, () => {
+        onList();
+        return HttpResponse.json(listResponse);
+      }),
+      http.delete(FEEDBACK_URL, async ({ request }) => {
+        onDelete(await request.json());
+        await new Promise<void>(resolve => {
+          resolveDelete = resolve;
+        });
+        listResponse = listFeedbackResponse([]);
+        return HttpResponse.json({ success: true });
+      }),
+    );
+
+    render(<SpanFeedbackTab traceId={TRACE_ID} spanId={SPAN_ID} />, { wrapper });
+    await waitFor(() => expect(onList).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete feedback' }));
+
+    expect(screen.getByRole('heading', { name: 'Delete feedback?' })).toBeTruthy();
+    expect(onDelete).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+    await waitFor(() => expect(onDelete).toHaveBeenCalled());
+    expect(onDelete.mock.calls[0][0]).toEqual({ feedbackIds: ['span-a-feedback'] });
+    expect(screen.getByRole('button', { name: 'Deleting…' }).getAttribute('disabled')).not.toBeNull();
+    expect(screen.getByRole('heading', { name: 'Delete feedback?' })).toBeTruthy();
+
+    resolveDelete?.();
+
+    // Invalidation refetches; the emptied list drops the record from the thread.
+    await waitFor(() => expect(onList).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Delete feedback?' })).toBeNull());
+    expect(screen.getByText('No feedback yet')).toBeTruthy();
+  });
+
+  it('deletes a trace-level feedback record by feedbackId after confirmation', async () => {
+    const onDelete = vi.fn<(body: unknown) => void>();
+    server.use(
+      http.get(FEEDBACK_URL, () => HttpResponse.json(listFeedbackResponse([feedbackRecord({ feedbackId: 'fb-42' })]))),
+      http.delete(FEEDBACK_URL, async ({ request }) => {
+        onDelete(await request.json());
+        return HttpResponse.json({ success: true });
+      }),
+    );
+
+    render(<TraceFeedbackTab traceId={TRACE_ID} />, { wrapper });
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete feedback' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+    await waitFor(() => expect(onDelete).toHaveBeenCalled());
+    expect(onDelete.mock.calls[0][0]).toEqual({ feedbackIds: ['fb-42'] });
+  });
+
+  it('cancels feedback deletion without sending a request', async () => {
+    const onDelete = vi.fn();
+    server.use(
+      http.get(FEEDBACK_URL, () => HttpResponse.json(spanFeedbackResponse)),
+      http.delete(FEEDBACK_URL, () => {
+        onDelete();
+        return HttpResponse.json({ success: true });
+      }),
+    );
+
+    render(<SpanFeedbackTab traceId={TRACE_ID} spanId={SPAN_ID} />, { wrapper });
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete feedback' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Delete feedback?' })).toBeNull());
+    expect(onDelete).not.toHaveBeenCalled();
+  });
+
+  it('keeps the confirmation open after a failed deletion so it can be retried', async () => {
+    const onDelete = vi.fn();
+    server.use(
+      http.get(FEEDBACK_URL, () => HttpResponse.json(spanFeedbackResponse)),
+      http.delete(FEEDBACK_URL, () => {
+        onDelete();
+        return onDelete.mock.calls.length === 1
+          ? HttpResponse.json({ error: 'Delete failed' }, { status: 500 })
+          : HttpResponse.json({ success: true });
+      }),
+    );
+
+    render(<SpanFeedbackTab traceId={TRACE_ID} spanId={SPAN_ID} />, { wrapper });
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete feedback' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+    await waitFor(() => expect(onDelete).toHaveBeenCalledTimes(1));
+    expect(screen.getByRole('heading', { name: 'Delete feedback?' })).toBeTruthy();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete' }));
+
+    await waitFor(() => expect(onDelete).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Delete feedback?' })).toBeNull());
+  });
+
+  it('shows no delete action for records without a feedbackId', async () => {
+    server.use(
+      http.get(FEEDBACK_URL, () => HttpResponse.json(listFeedbackResponse([feedbackRecord({ feedbackId: null })]))),
+    );
+
+    render(<TraceFeedbackTab traceId={TRACE_ID} />, { wrapper });
+    await screen.findByText('👍');
+
+    expect(screen.queryByRole('button', { name: 'Delete feedback' })).toBeNull();
+  });
+
+  it('shows the resolved author avatar and name on trace feedback', async () => {
+    server.use(http.get(FEEDBACK_URL, () => HttpResponse.json(authoredFeedbackResponse)));
+
+    render(<TraceFeedbackTab traceId={TRACE_ID} />, { wrapper });
+
+    expect((await screen.findByText('Marvin Frachet')).getAttribute('data-slot')).toBe('comment-item-author');
+    expect((screen.getByAltText('Marvin Frachet') as HTMLImageElement).src).toBe('https://example.com/marvin.png');
+    expect(screen.getByText('Looks off to me')).toBeTruthy();
+  });
+});
+
+describe('feedback tabs review status', () => {
+  const REVIEW_STATUS_URL = `${FEEDBACK_URL}/:feedbackId/review-status`;
+
+  /** GET serves `needsReview` until the PATCH lands, then `reviewed` — mirroring the server. */
+  const reviewFlow = (needsReview: typeof authoredFeedbackResponse, reviewed: typeof authoredFeedbackResponse) => {
+    const onList = vi.fn();
+    const onPatch = vi.fn<(feedbackId: string, body: unknown) => void>();
+    let isReviewed = false;
+    server.use(
+      http.get(FEEDBACK_URL, () => {
+        onList();
+        return HttpResponse.json(isReviewed ? reviewed : needsReview);
+      }),
+      http.patch(REVIEW_STATUS_URL, async ({ params, request }) => {
+        onPatch(String(params.feedbackId), await request.json());
+        isReviewed = true;
+        return HttpResponse.json({ success: true });
+      }),
+    );
+    return { onList, onPatch };
+  };
+
+  it('shows the review status of trace feedback', async () => {
+    server.use(http.get(FEEDBACK_URL, () => HttpResponse.json(authoredFeedbackResponse)));
+    const { unmount } = render(<TraceFeedbackTab traceId={TRACE_ID} />, { wrapper });
+    expect(await screen.findByText('Needs review')).toBeTruthy();
+    unmount();
+
+    server.use(http.get(FEEDBACK_URL, () => HttpResponse.json(reviewedFeedbackResponse)));
+    render(<TraceFeedbackTab traceId={TRACE_ID} />, { wrapper });
+    expect(await screen.findByText('Reviewed')).toBeTruthy();
+  });
+
+  it('marks trace feedback reviewed and refetches the thread', async () => {
+    const { onList, onPatch } = reviewFlow(authoredFeedbackResponse, reviewedFeedbackResponse);
+
+    render(<TraceFeedbackTab traceId={TRACE_ID} />, { wrapper });
+    await screen.findByText('Needs review');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Mark reviewed' }));
+
+    await waitFor(() => expect(onPatch).toHaveBeenCalledWith('authored', { reviewStatus: 'reviewed' }));
+    expect(await screen.findByText('Reviewed')).toBeTruthy();
+    expect(onList).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole('button', { name: 'Mark reviewed' })).toBeNull();
+  });
+
+  it('marks span feedback reviewed and refetches the thread', async () => {
+    const reviewedSpanResponse = listFeedbackResponse([
+      feedbackRecord({ feedbackId: 'span-a-feedback', spanId: SPAN_ID, reviewStatus: 'reviewed' }),
+    ]);
+    const { onList, onPatch } = reviewFlow(spanFeedbackResponse, reviewedSpanResponse);
+
+    render(<SpanFeedbackTab traceId={TRACE_ID} spanId={SPAN_ID} />, { wrapper });
+    await screen.findByText('Needs review');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Mark reviewed' }));
+
+    await waitFor(() => expect(onPatch).toHaveBeenCalledWith('span-a-feedback', { reviewStatus: 'reviewed' }));
+    expect(await screen.findByText('Reviewed')).toBeTruthy();
+    expect(onList).toHaveBeenCalledTimes(2);
   });
 });

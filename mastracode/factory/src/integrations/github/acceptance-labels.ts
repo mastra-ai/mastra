@@ -1,8 +1,7 @@
+import { NEEDS_APPROVAL_LABEL } from '../../rules/types.js';
 import type { SourceControlStorageHandle } from '../../storage/domains/source-control/base.js';
 import type { WorkItemRow } from '../../storage/domains/work-items/base.js';
 import type { GithubIntegration } from './integration.js';
-
-export const NEEDS_APPROVAL_LABEL = 'status: needs approval';
 
 export interface ReconcileAcceptanceLabelsInput {
   orgId: string;

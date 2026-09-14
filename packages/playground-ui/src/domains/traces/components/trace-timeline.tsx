@@ -15,8 +15,10 @@ type TraceTimelineProps = {
   expandedSpanIds?: string[];
   setExpandedSpanIds?: Dispatch<SetStateAction<string[]>>;
   featuredSpanIds?: string[];
+  /** Row scrolled into view once it is mounted (ancestors auto-expand when the span is featured). */
+  revealSpanId?: string;
   chartWidth?: 'wide' | 'default';
-  /** Rendered on the left of the span type legend row. */
+  /** Rendered full-width above the span type legend row. */
   leadingSlot?: ReactNode;
 };
 
@@ -29,6 +31,7 @@ export function TraceTimeline({
   expandedSpanIds,
   setExpandedSpanIds,
   featuredSpanIds,
+  revealSpanId,
   chartWidth = 'default',
   leadingSlot,
 }: TraceTimelineProps) {
@@ -67,12 +70,9 @@ export function TraceTimeline({
         </div>
       ) : (
         <>
-          {(usedSpanTypes.length > 0 || leadingSlot) && (
+          {leadingSlot && <div className="px-2 pt-1.5">{leadingSlot}</div>}
+          {usedSpanTypes.length > 0 && (
             <div className="flex flex-wrap items-center justify-end gap-3 px-2 py-1.5">
-              {/* The slot takes the leftover width and is the only thing allowed to
-                  shrink, so the legend never compresses or wraps. `min-w-0` lets it
-                  shrink past its content width instead of pushing the legend down. */}
-              {leadingSlot && <div className="min-w-0 flex-1">{leadingSlot}</div>}
               {usedSpanTypes.map(type => {
                 const spanUI = getSpanTypeUi(type);
                 return (
@@ -99,6 +99,7 @@ export function TraceTimeline({
                 overallStartTime={overallStartTime}
                 fadedTypes={fadedTypes}
                 featuredSpanIds={featuredSpanIds}
+                revealSpanId={revealSpanId}
                 expandedSpanIds={expandedSpanIds}
                 setExpandedSpanIds={setExpandedSpanIds}
                 chartWidth={chartWidth}

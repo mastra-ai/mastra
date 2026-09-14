@@ -52,8 +52,8 @@ export function WorkflowTriggerForm({
             size="sm"
             className="w-full justify-start"
             onClick={() => setIsInputDialogOpen(true)}
+            icon={<FormInput className="text-neutral3" />}
           >
-            <FormInput className="text-neutral3 shrink-0" />
             <span className="truncate">Run input</span>
           </Button>
         </div>

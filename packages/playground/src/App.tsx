@@ -1,4 +1,5 @@
 import { coreFeatures } from '@mastra/core/features';
+import { KeyboardShortcutsProvider } from '@mastra/playground-ui/keyboard/keyboard-shortcuts-context';
 import { MastraReactProvider } from '@mastra/react';
 import { CalendarClockIcon } from 'lucide-react';
 import { useMemo } from 'react';
@@ -62,7 +63,6 @@ import Datasets from './pages/datasets';
 import DatasetPage from './pages/datasets/dataset';
 import EditDatasetPage from './pages/datasets/dataset/edit';
 import DatasetItemPage from './pages/datasets/dataset/item';
-import DatasetItemsComparePage from './pages/datasets/dataset/item/compare';
 import DatasetItemVersionsComparePage from './pages/datasets/dataset/item/versions';
 import DatasetCompareDatasetVersions from './pages/datasets/dataset/versions';
 import CreateDatasetPage from './pages/datasets/new';
@@ -110,6 +110,7 @@ import { PlaygroundConfigGuard } from '@/domains/configuration/components/playgr
 import { StudioConfigProvider } from '@/domains/configuration/context/studio-config-context';
 import { useStudioConfig } from '@/domains/configuration/context/studio-config-state';
 import { McpServerCrumb, McpServerToolCrumb } from '@/domains/mcps/mcp-crumbs';
+import { GlobalShortcuts } from '@/domains/navigation/components/global-shortcuts';
 import { ProcessorCrumb } from '@/domains/processors/processor-crumb';
 import { PromptBlockCrumb } from '@/domains/prompt-blocks/prompt-block-crumb';
 import { StoredScorerCrumb, ScorerCrumb } from '@/domains/scores/scorer-crumb';
@@ -153,11 +154,14 @@ const RootLayout = () => {
 
   return (
     <LinkComponentProvider Link={Link} navigate={frameworkNavigate} paths={paths}>
-      <Layout>
-        <RoutePermissionGuard>
-          <Outlet />
-        </RoutePermissionGuard>
-      </Layout>
+      <KeyboardShortcutsProvider>
+        <GlobalShortcuts />
+        <Layout>
+          <RoutePermissionGuard>
+            <Outlet />
+          </RoutePermissionGuard>
+        </Layout>
+      </KeyboardShortcutsProvider>
     </LinkComponentProvider>
   );
 };
@@ -309,8 +313,6 @@ export const routes: RouteObject[] = [
     children: [
       { path: '/agents/:agentId/session', element: <AgentSession /> },
       { path: '/agents/:agentId/session/:threadId', element: <AgentSession /> },
-      { path: '/agents/:agentId/threads', loader: agentThreadsIndexLoader },
-      { path: '/agents/:agentId/threads/:threadId', element: <AgentThread /> },
     ],
   },
   {
@@ -433,6 +435,8 @@ export const routes: RouteObject[] = [
           },
           { path: 'chat', loader: legacyAgentChatLoader },
           { path: 'chat/:threadId', loader: legacyAgentChatLoader },
+          { path: 'threads', loader: agentThreadsIndexLoader },
+          { path: 'threads/:threadId', element: <AgentThread /> },
           { path: 'overview', element: <Agent /> },
           { path: 'settings', loader: legacyAgentSettingsLoader },
           ...(isExperimentalFeatures
@@ -617,7 +621,7 @@ export const routes: RouteObject[] = [
                         ? `/datasets/${encodeURIComponent(params.datasetId)}/items/${encodeURIComponent(params.itemId)}`
                         : undefined,
                   },
-                  { id: 'dataset-item-versions', label: 'Versions' },
+                  { id: 'dataset-item-versions', label: 'Item Version History' },
                 ],
               } satisfies RouteHeaderHandle,
             },
@@ -664,24 +668,6 @@ export const routes: RouteObject[] = [
                   } satisfies RouteHeaderHandle,
                 },
               ],
-            },
-            {
-              path: '/datasets/:datasetId/items/:itemId/compare/:secondItemId',
-              element: <DatasetItemsComparePage />,
-              handle: {
-                crumbs: ({ params }) => [
-                  navCrumb('/datasets'),
-                  { id: 'dataset', Component: DatasetCrumb, heading: 'Dataset' },
-                  { id: 'dataset-items', label: 'Items' },
-                  {
-                    id: 'dataset-item',
-                    label: truncateItemIdCrumb(params.itemId),
-                    to: `/datasets/${params.datasetId}/items/${params.itemId}`,
-                  },
-                  { id: 'dataset-item-compare', label: 'Compare' },
-                  { id: 'dataset-item-compare-second', label: truncateItemIdCrumb(params.secondItemId) },
-                ],
-              } satisfies RouteHeaderHandle,
             },
             {
               path: '/datasets/:datasetId/versions',

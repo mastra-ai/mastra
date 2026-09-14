@@ -105,6 +105,9 @@ type RequestContextOptions = {
 type GeneratedRequest<T> = OptionalizeUndefined<T>;
 type GeneratedResponse<T extends RouteKey> = Serialized<RouteResponse<T>>;
 
+export type ListFeedbackResponse = GeneratedResponse<'GET /observability/feedback'>;
+export type FeedbackItem = ListFeedbackResponse['feedback'][number];
+
 export interface ClientOptions {
   /** Base URL for API requests */
   baseUrl: string;
@@ -557,6 +560,8 @@ export interface GetAgentBrowserSessionResponse {
   screencastAvailable: boolean;
 }
 
+export type ClientToolsResolver = () => ToolsInput | undefined;
+
 export type GenerateLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
   messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[];
   model?: string;
@@ -564,6 +569,7 @@ export type GenerateLegacyParams<T extends JSONSchema7 | ZodSchema | undefined =
   experimental_output?: T;
   requestContext?: RequestContext | Record<string, any>;
   clientTools?: ToolsInput;
+  clientToolsResolver?: ClientToolsResolver;
 } & WithoutMethods<
   // Use `any` to avoid "Type instantiation is excessively deep" error from complex ZodSchema generics
   Omit<
@@ -579,6 +585,7 @@ export type StreamLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = u
   experimental_output?: T;
   requestContext?: RequestContext | Record<string, any>;
   clientTools?: ToolsInput;
+  clientToolsResolver?: ClientToolsResolver;
 } & WithoutMethods<
   // Use `any` to avoid "Type instantiation is excessively deep" error from complex ZodSchema generics
   Omit<
@@ -598,6 +605,7 @@ export type StreamParamsBase<OUTPUT = undefined> = {
   tracingOptions?: TracingOptions;
   requestContext?: RequestContext;
   clientTools?: ToolsInput;
+  clientToolsResolver?: ClientToolsResolver;
 } & WithoutMethods<
   Omit<
     AgentExecutionOptions<OUTPUT>,
@@ -844,6 +852,11 @@ export type CloneMemoryThreadResponse = {
   thread: StorageThreadType;
   clonedMessages: MastraDBMessage[];
 };
+
+export type TransferMemoryThreadParams = GeneratedRequest<
+  Body<'POST /memory/threads/:threadId/transfer'> & QueryParams<'POST /memory/threads/:threadId/transfer'>
+> &
+  RequestContextOptions;
 
 export type GetLogsParams = GeneratedRequest<QueryParams<'GET /logs'>>;
 
@@ -3070,6 +3083,7 @@ export interface DatasetItemVersionResponse {
   expectedTrajectory?: unknown;
   toolMocks?: DatasetItemToolMock[];
   scorerIds?: string[];
+  requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   validTo: number | null;
   isDeleted: boolean;
@@ -3585,6 +3599,8 @@ export type PermissionPattern = string;
 /**
  * Response from GET /auth/permission-patterns.
  */
+export type WorkflowBuilderSettingsResponse = GeneratedResponse<'GET /editor/workflow-builder/settings'>;
+
 export type PermissionPatternsResponse = GeneratedResponse<'GET /auth/permission-patterns'>;
 
 /**

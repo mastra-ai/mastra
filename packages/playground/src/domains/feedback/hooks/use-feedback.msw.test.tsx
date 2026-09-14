@@ -154,6 +154,9 @@ describe('feedback inbox hooks', () => {
         traceId: 'trace-1',
         input: 'Review me',
         output: 'Result',
+        status: 'needs-review',
+        tags: undefined,
+        error: undefined,
       },
     ]);
   });

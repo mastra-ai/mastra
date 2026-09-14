@@ -1,0 +1,11 @@
+extends: existence
+message: "Replace '%s' with what was missed or bypassed and why."
+level: error
+nonword: true
+ignorecase: true
+tokens:
+  - '\bslip(?:s|ped|ping)? (?:through|past|by|in|into)\b'
+  - '\b(?:go|goes|going|went) around (?:it|that|them|the (?:guard|gate|hook|check|preflight|confirmation|review|prompt)s?)\b'
+  - '\bsneak(?:s|ed|ing)? (?:in|into|past|through|by)\b'
+  - '\bsnuck (?:in|into|past|through|by)\b'
+  - '\bsidestep(?:s|ped|ping)?\b'

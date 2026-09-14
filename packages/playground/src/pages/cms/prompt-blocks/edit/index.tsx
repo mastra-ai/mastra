@@ -7,6 +7,7 @@ import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
 import { useQueryClient } from '@tanstack/react-query';
+import { Rocket, Eye } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router';
 import { AgentEditLayout } from '@/domains/agents/components/agent-edit-page/agent-edit-layout';
@@ -187,10 +188,11 @@ function CmsPromptBlocksEditForm({
         <Notice variant="info" title="This is a previous version" className="m-4 mb-0">
           <Notice.Message>You are seeing a specific version of the prompt block.</Notice.Message>
           <div className="flex gap-2">
-            <Button type="button" variant="default" size="sm" onClick={onClearVersion}>
+            <Button icon={<Eye />} type="button" variant="default" size="sm" onClick={onClearVersion}>
               View latest version
             </Button>
             <Button
+              icon={<Rocket />}
               type="button"
               variant="default"
               size="sm"

@@ -549,6 +549,216 @@ describe('GeminiLiveVoice', () => {
 
       await expect(errorPromise).resolves.toBeDefined();
     });
+
+    it('should execute a tool call delivered through both wire formats only once', async () => {
+      const mockExecute = vi.fn(async ({}: { context: any }) => ({ result: 'ok' }));
+      const tools = {
+        testTool: {
+          id: 'testTool',
+          description: 'Test tool',
+          inputSchema: { type: 'object', properties: {} },
+          execute: mockExecute,
+        },
+      };
+
+      voice.addTools(tools);
+
+      (voice as any).state = 'connected';
+      (voice as any).ws = {
+        send: vi.fn(),
+        readyState: 1, // WebSocket.OPEN
+        close: vi.fn(),
+        once: vi.fn(),
+      };
+      (voice as any).connectionManager.setWebSocket((voice as any).ws);
+      mockWs = (voice as any).ws;
+
+      const toolCallEvents: any[] = [];
+      voice.on('toolCall', event => toolCallEvents.push(event));
+
+      // The same provider call (id `call-1`) is delivered twice: once embedded
+      // in serverContent.modelTurn.parts and once as a top-level toolCall.
+      (voice as any).handleServerContent({
+        modelTurn: {
+          parts: [{ functionCall: { name: 'testTool', args: { test: 'value' }, id: 'call-1' } }],
+        },
+      });
+      // Flush the async dispatch started by handleServerContent
+      await new Promise(resolve => setTimeout(resolve, 0));
+
+      await (voice as any).handleToolCall({
+        toolCall: {
+          functionCalls: [{ name: 'testTool', args: { test: 'value' }, id: 'call-1' }],
+        },
+      });
+
+      expect(mockExecute).toHaveBeenCalledTimes(1);
+      expect(mockExecute).toHaveBeenCalledWith(
+        { test: 'value' },
+        expect.objectContaining({ requestContext: undefined }),
+      );
+      expect(toolCallEvents).toHaveLength(1);
+      expect(mockWs.send).toHaveBeenCalledTimes(1);
+      expect(JSON.parse(mockWs.send.mock.calls[0]![0])).toMatchObject({
+        toolResponse: {
+          functionResponses: [{ id: 'call-1', name: 'testTool', response: { result: 'ok' } }],
+        },
+      });
+    });
+
+    it('should execute tool calls with an id reused across reconnections', async () => {
+      const mockExecute = vi.fn(async ({}: { context: any }) => ({ result: 'ok' }));
+      const tools = {
+        testTool: {
+          id: 'testTool',
+          description: 'Test tool',
+          inputSchema: { type: 'object', properties: {} },
+          execute: mockExecute,
+        },
+      };
+
+      voice.addTools(tools);
+
+      vi.spyOn((voice as any).connectionManager, 'waitForOpen').mockResolvedValue(undefined as any);
+      (voice as any).waitForSessionCreated = vi.fn().mockResolvedValue(undefined);
+
+      // First connection: process a tool call with id `call-1`
+      await voice.connect();
+      mockWs = mockWsInstance;
+
+      await (voice as any).handleToolCall({
+        toolCall: { name: 'testTool', args: { test: 'value' }, id: 'call-1' },
+      });
+      expect(mockExecute).toHaveBeenCalledTimes(1);
+
+      // Disconnect and reconnect on the same instance; the provider may reuse
+      // the call id from the prior connection on the new one.
+      await voice.disconnect();
+      await voice.connect();
+      mockWs = mockWsInstance;
+
+      await (voice as any).handleToolCall({
+        toolCall: { name: 'testTool', args: { test: 'value' }, id: 'call-1' },
+      });
+
+      // The tool must execute again and a toolResponse must go out on the new socket
+      expect(mockExecute).toHaveBeenCalledTimes(2);
+      const frames = mockWs.send.mock.calls.map((c: any[]) => JSON.parse(c[0]));
+      expect(
+        frames.some(
+          (frame: any) =>
+            frame.toolResponse?.functionResponses?.[0]?.id === 'call-1' &&
+            frame.toolResponse?.functionResponses?.[0]?.name === 'testTool',
+        ),
+      ).toBe(true);
+    });
+
+    describe('unregistered tool names', () => {
+      // Gemini blocks the turn until every functionCall id in the batch is answered. A
+      // tool-not-found that sends nothing leaves the call unanswered, so the model goes
+      // silent until hangup.
+      const connect = (instance: any) => {
+        instance.state = 'connected';
+        instance.ws = {
+          send: vi.fn(),
+          readyState: 1, // WebSocket.OPEN
+          close: vi.fn(),
+          once: vi.fn(),
+        };
+        instance.connectionManager.setWebSocket(instance.ws);
+        return instance.ws;
+      };
+
+      const responsesFrom = (ws: any) =>
+        ws.send.mock.calls
+          .map((c: any[]) => JSON.parse(c[0]))
+          .filter((frame: any) => frame.toolResponse)
+          .map((frame: any) => frame.toolResponse.functionResponses[0]);
+
+      it('should still answer the call id when the tool is not registered', async () => {
+        voice.addTools({
+          known: {
+            id: 'known',
+            description: 'Known tool',
+            inputSchema: { type: 'object', properties: {} },
+            execute: async () => ({ ok: true }),
+          },
+        });
+        const ws = connect(voice as any);
+
+        const errors: any[] = [];
+        voice.on('error', event => errors.push(event));
+
+        await (voice as any).handleToolCall({
+          toolCall: { functionCalls: [{ name: 'noSuchTool', args: {}, id: 'call-2' }] },
+        });
+
+        expect(ws.send).toHaveBeenCalledTimes(1);
+        expect(JSON.parse(ws.send.mock.calls[0]![0])).toEqual({
+          toolResponse: {
+            functionResponses: [
+              {
+                id: 'call-2',
+                name: 'noSuchTool',
+                response: { error: 'Tool "noSuchTool" not found' },
+              },
+            ],
+          },
+        });
+
+        // The fix is additive: the tool_not_found event contract is unchanged.
+        expect(errors).toHaveLength(1);
+        expect(errors[0]).toMatchObject({
+          code: 'tool_not_found',
+          details: { toolName: 'noSuchTool', availableTools: ['known'] },
+        });
+      });
+
+      it('should answer every id in a batch mixing unknown and known tools', async () => {
+        voice.addTools({
+          known: {
+            id: 'known',
+            description: 'Known tool',
+            inputSchema: { type: 'object', properties: {} },
+            execute: async () => ({ ok: true }),
+          },
+        });
+        const ws = connect(voice as any);
+
+        await (voice as any).handleToolCall({
+          toolCall: {
+            functionCalls: [
+              { name: 'nope', args: {}, id: 'call-a' },
+              { name: 'known', args: {}, id: 'call-b' },
+            ],
+          },
+        });
+
+        // Previously only `call-b` was answered, leaving the batch incomplete.
+        expect(responsesFrom(ws).map((r: any) => r.id)).toEqual(['call-a', 'call-b']);
+      });
+
+      it('should answer a tool declared via config but absent from the dispatch registry', async () => {
+        // `GeminiToolConfig` entries have no `execute`, so they are declared to Gemini but
+        // are never dispatchable. The call must still be answered rather than stalling.
+        const configVoice = new GeminiLiveVoice({
+          apiKey: 'test-api-key',
+          model: 'gemini-2.0-flash-live-001',
+          tools: [{ name: 'configOnlyTool', description: 'd', parameters: { type: 'object', properties: {} } }],
+        });
+        const ws = connect(configVoice as any);
+
+        await (configVoice as any).handleToolCall({
+          toolCall: { functionCalls: [{ name: 'configOnlyTool', args: {}, id: 'c-1' }] },
+        });
+
+        expect(responsesFrom(ws)).toEqual([
+          { id: 'c-1', name: 'configOnlyTool', response: { error: 'Tool "configOnlyTool" not found' } },
+        ]);
+
+        configVoice.disconnect();
+      });
+    });
   });
 
   describe('Session Management', () => {

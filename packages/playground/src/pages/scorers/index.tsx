@@ -53,7 +53,7 @@ export default function Scorers() {
   };
 
   return (
-    <PageLayout>
+    <PageLayout height="full">
       <PageLayout.TopArea>
         <ScorersToolbar
           search={search}

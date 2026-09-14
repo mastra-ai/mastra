@@ -28,6 +28,7 @@ export function GithubPatBlock() {
 
   return (
     <SettingsSubsection
+      scope="org"
       title="GitHub CLI tokens"
       description="Classic PATs agents use for gh CLI commands in sandboxes. The token's account needs access to the linked repositories."
     >

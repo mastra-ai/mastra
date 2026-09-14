@@ -153,7 +153,9 @@ export class EventedAgent<
           // (#17727's idle-start gap on the evented transport).
           if (result?.status === 'failed') {
             const error = new Error((result as any).error?.message || 'Workflow execution failed');
-            await this.emitError(runId, error);
+            // Background variant: a pubsub already closing during shutdown must
+            // not turn the run's own failure into an unhandledRejection (#23168).
+            this.emitErrorInBackground(runId, error);
           }
           // Reaching any non-suspended terminal status means the run is done and
           // its persisted snapshot rows will never be resumed. Delete them so
@@ -166,8 +168,8 @@ export class EventedAgent<
             await this.deleteRunSnapshots(runId);
           }
         })
-        .catch(async error => {
-          await this.emitError(runId, error instanceof Error ? error : new Error(String(error)));
+        .catch(error => {
+          this.emitErrorInBackground(runId, error instanceof Error ? error : new Error(String(error)));
         });
     } catch (error) {
       await this.emitError(runId, error instanceof Error ? error : new Error(String(error)));

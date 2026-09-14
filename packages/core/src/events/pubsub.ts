@@ -155,6 +155,20 @@ export abstract class PubSub {
   __rawBus(): PubSub {
     return this;
   }
+
+  /**
+   * Identity probe that sees through binding decorators.
+   *
+   * The `mastra.pubsub` proxy binds every method to its target, so calling
+   * `__self()` on the proxy returns the underlying PubSub instance. Used where
+   * reference equality must hold across the proxy (e.g. `CachingPubSub`
+   * refusing to follow itself). Unlike `__rawBus`, this does NOT unwrap
+   * delegating decorators — a `CachingPubSub` returns itself, not its inner.
+   * @internal
+   */
+  __self(): PubSub {
+    return this;
+  }
 }
 
 /**

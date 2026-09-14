@@ -71,7 +71,7 @@ export default function PromptBlocks() {
   }
 
   return (
-    <PageLayout>
+    <PageLayout height="full">
       <PageLayout.TopArea>
         <PageLayout.Row align="center" stack="responsive">
           <div className="max-w-120 flex-1">
@@ -82,8 +82,13 @@ export default function PromptBlocks() {
             />
           </div>
           {isCmsAvailable && (
-            <Button as={Link} to={paths.cmsPromptBlockCreateLink()} variant="primary" className="shrink-0">
-              <Plus />
+            <Button
+              as={Link}
+              to={paths.cmsPromptBlockCreateLink()}
+              variant="primary"
+              className="shrink-0"
+              icon={<Plus />}
+            >
               Create Prompt
             </Button>
           )}

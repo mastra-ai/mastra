@@ -37,6 +37,11 @@ import {
   createProcessorSendSignal,
 } from '../../processors';
 import {
+  resolveProcessorSpanAttributes,
+  resolveProcessorSpanName,
+  toProcessorSpanPhase,
+} from '../../processors/span-declaration';
+import {
   summarizeActiveToolsForSpan,
   summarizeProcessorModelForSpan,
   summarizeProcessorResultForSpan,
@@ -809,6 +814,7 @@ function createStepFromProcessor<TProcessorId extends string>(
         messages,
         messageList,
         stepNumber,
+        runId: agentRunId,
         systemMessages,
         part,
         streamParts,
@@ -1036,13 +1042,18 @@ function createStepFromProcessor<TProcessorId extends string>(
       const processorSpan =
         phase !== 'outputStream'
           ? parentSpan?.createChildSpan({
-              type: SpanType.PROCESSOR_RUN,
-              name: `${getSpanNamePrefix(phase)}: ${processor.id}`,
+              type: processor.spanType ?? SpanType.PROCESSOR_RUN,
+              name: resolveProcessorSpanName(
+                processor,
+                toProcessorSpanPhase(phase),
+                `${getSpanNamePrefix(phase)}: ${processor.id}`,
+              ),
               entityType: getProcessorEntityType(phase),
               entityId: processor.id,
               entityName: processor.name ?? processor.id,
               input: buildProcessorSpanInput(),
               attributes: {
+                ...resolveProcessorSpanAttributes(processor, toProcessorSpanPhase(phase)),
                 processorExecutor: 'workflow',
                 // Read processorIndex from processor (set in combineProcessorsIntoWorkflow)
                 processorIndex: processor.processorIndex,
@@ -1113,6 +1124,7 @@ function createStepFromProcessor<TProcessorId extends string>(
       // This enables processor workflows to use .then(), .parallel(), .branch(), etc.
       const passThrough = {
         phase,
+        runId: agentRunId,
         // Auto-create MessageList from messages if not provided
         // This enables running processor workflows from the UI where messageList can't be serialized
         messageList: processorMessageList,
@@ -1268,6 +1280,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 messages: messages as MastraDBMessage[],
                 messageList: passThrough.messageList,
                 stepNumber: stepNumber ?? 0,
+                runId: agentRunId,
                 systemMessages: (systemMessages ?? []) as CoreMessage[],
                 // Pass model/tools configuration fields - types match ProcessInputStepArgs
                 model: model!,
@@ -1307,6 +1320,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 ...passThrough,
                 messages,
                 ...validatedResult,
+                runId: agentRunId,
                 systemMessages: passThrough.messageList.getSystemMessages(),
                 ...(currentMessageId ? { messageId: validatedResult.messageId ?? currentMessageId } : {}),
               };
@@ -1329,12 +1343,13 @@ function createStepFromProcessor<TProcessorId extends string>(
               if (!processorSpan && parentSpan) {
                 // First chunk - create span for this processor
                 processorSpan = parentSpan.createChildSpan({
-                  type: SpanType.PROCESSOR_RUN,
-                  name: `output stream processor: ${processor.id}`,
+                  type: processor.spanType ?? SpanType.PROCESSOR_RUN,
+                  name: resolveProcessorSpanName(processor, 'output', `output stream processor: ${processor.id}`),
                   entityType: EntityType.OUTPUT_PROCESSOR,
                   entityId: processor.id,
                   entityName: processor.name ?? processor.id,
                   attributes: {
+                    ...resolveProcessorSpanAttributes(processor, 'output'),
                     processorExecutor: 'workflow',
                     processorIndex: processor.processorIndex,
                   },

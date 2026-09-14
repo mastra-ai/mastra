@@ -609,6 +609,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                         },
                         undefined,
                         execOptions.autoResumeSuspendedTools,
+                        Boolean(registryEntry?.backgroundTaskManager),
                       );
                     } else {
                       convertedTools[name] = tool as CoreTool;
@@ -1045,6 +1046,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               responseFormat: structuredOutput ? 'json_schema' : undefined,
             });
             modelSpanTracker?.startInference?.();
+            let inferenceStartedAt: number | undefined;
 
             // Collect chunks for post-stream message building (via
             // buildMessagesFromChunks) and for the processLLMResponse hook
@@ -1128,6 +1130,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             } else {
               const releaseModelCallActivity = markRunActive(runId);
               try {
+                inferenceStartedAt = Date.now();
                 modelResult = execute({
                   runId,
                   model: currentModel,
@@ -1280,6 +1283,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   await emitStepStartEvent(pubsub, runId, {
                     stepId: DurableStepIds.LLM_EXECUTION,
                     messageId: currentMessageId,
+                    startedAt: inferenceStartedAt,
                     warnings,
                   });
                 }
@@ -2082,6 +2086,15 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   ...deferredStepFinishChunk,
                   payload: {
                     ...deferredStepFinishChunk.payload,
+                    // The regular loop stamps isContinued on every step-finish chunk it emits
+                    // (loop/workflows/agentic-loop/index.ts). Output processors depend on it:
+                    // ChatChannelOutputProcessor closes its render queue on the first chunk where the
+                    // flag is not `true`, so a durable chunk that omits it ends channel rendering at
+                    // the tool step and drops everything after it (#23341).
+                    stepResult: {
+                      ...deferredStepFinishChunk.payload?.stepResult,
+                      isContinued,
+                    },
                     _durableStepContent: stepContent,
                   },
                 };

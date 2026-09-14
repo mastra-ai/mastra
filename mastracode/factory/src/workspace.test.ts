@@ -347,6 +347,17 @@ describe('bundled Factory skill assets', () => {
     expect(rereview).toContain('Review runtime: <model>, reasoning setting: <reasoning>.');
   });
 
+  it('guards the initial triage label when any status label is present', async () => {
+    const assetRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'factory-skills');
+    const triage = await fs.readFile(path.join(assetRoot, 'factory-triage', 'SKILL.md'), 'utf8');
+    const phase1 = triage.slice(triage.indexOf('## Phase 1'), triage.indexOf('## Phase 2'));
+
+    expect(phase1).toContain('add `status: needs triage` only if no `status:` label is present');
+    expect(phase1).toContain('gh issue edit "$ISSUE" --add-label "status: needs triage"');
+    expect(phase1).toContain('For Linear issues, skip this GitHub-only label mutation.');
+    expect(triage).toContain('gh issue edit "$ISSUE" --remove-label "status: needs triage"');
+  });
+
   it('keeps the autonomous Factory skills on the terminal-handoff contract', async () => {
     const assetRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'factory-skills');
     const read = (skillName: string) => fs.readFile(path.join(assetRoot, skillName, 'SKILL.md'), 'utf8');
@@ -420,11 +431,12 @@ describe('bundled Factory skill assets', () => {
     expect(triage).toContain('Remove only conflicting alternatives from these explicit labels');
     expect(triage).toContain('On every initial run and refresh, keep exactly the selected effort label');
     expect(triage).toContain('Do not add, remove, or derive any `trio-*` labels');
-    expect(triage).toContain("gh label list --repo mastra-ai/mastra --limit 1000 --json name --jq '.[].name'");
-    expect(triage).toContain("gh label create '@mastra/core' --repo mastra-ai/mastra");
-    expect(triage).toContain('gh issue edit "$ISSUE" --repo mastra-ai/mastra --add-label \'@mastra/core\'');
-    expect(triage.indexOf("gh label create '@mastra/core'")).toBeLessThan(
-      triage.indexOf('gh issue edit "$ISSUE" --repo mastra-ai/mastra --add-label \'@mastra/core\''),
+    expect(triage).toContain('gh label create "$LABEL" --repo mastra-ai/mastra');
+    expect(triage).toContain(
+      'gh issue edit "$ISSUE" --repo mastra-ai/mastra --add-label \'<comma-separated labels selected in Phase 4>\'',
+    );
+    expect(triage.indexOf('gh label create "$LABEL"')).toBeLessThan(
+      triage.indexOf('gh issue edit "$ISSUE" --repo mastra-ai/mastra --add-label'),
     );
     expect(triage).toContain('Apply only these label mutations.');
     expect(triage).toContain(
@@ -870,6 +882,28 @@ describe('GitHub session workspace preparation', () => {
       warnSpy.mockRestore();
     }
     expect(sandbox.executeCommand).toHaveBeenCalled();
+  });
+
+  it('authorizes a workspace-free supervisor session before controller session creation', async () => {
+    const projects = { get: vi.fn().mockResolvedValue({ id: 'project-1', orgId: 'org-1' }) };
+    const resolver = createWorkspaceFactory({ projects: projects as any });
+    const requestContext = createGithubRequestContext('project-1', 'factory-supervisor:project-1');
+
+    await expect(resolver({ requestContext } as any)).resolves.toBeUndefined();
+    expect(projects.get).toHaveBeenCalledWith({ orgId: 'org-1', id: 'project-1' });
+  });
+
+  it('refuses a workspace-free supervisor session outside the caller organization', async () => {
+    const projects = { get: vi.fn().mockResolvedValue(null) };
+    const resolver = createWorkspaceFactory({ projects: projects as any });
+    const requestContext = createGithubRequestContext('project-1', 'factory-supervisor:project-1', {
+      organizationId: 'org-2',
+      workosId: 'user-1',
+    });
+
+    await expect(resolver({ requestContext } as any)).rejects.toThrow(
+      'Factory supervisor project-1 is not available to the current user',
+    );
   });
 
   it('opens the session for a session-shaped auth user, whose org lives on the session half', async () => {
@@ -1432,6 +1466,55 @@ describe('GitHub session workspace preparation', () => {
 
     expect(lastGhToken()).toBe('ghp_worker');
     expect(() => injectGithubToken(reviewerContext, 'stale-reviewer-token')).toThrow(/no longer matches/);
+  });
+
+  it('keeps refresh authority with the current context across a sandbox reconnect', async () => {
+    mocks.githubPat = 'ghp_worker';
+    mocks.githubReviewerPat = 'ghp_reviewer';
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+
+    const workerContext = createGithubRequestContext('project-1', 'session-a');
+    await workspace({ requestContext: workerContext });
+    expect(lastGhToken()).toBe('ghp_worker');
+
+    // The active binding flips to review and the same cached workspace is
+    // reused, so reconciliation switches the live sandbox to the reviewer PAT
+    // and authorizes the reviewer context.
+    mocks.runBindingRole = 'review';
+    mocks.setEnv.mockClear();
+    const reviewerContext = createGithubRequestContext('project-1', 'session-a');
+    await workspace({
+      requestContext: reviewerContext,
+      mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
+    });
+    expect(lastGhToken()).toBe('ghp_reviewer');
+
+    // Reconnect: the memoized sandbox starts again and re-runs the onStart
+    // hook bound at construction (worker context). It must not reauthorize the
+    // stale worker context nor reject the current reviewer context.
+    const sandbox = mocks.createSandbox.mock.results[0]!.value;
+    await sandbox.start();
+
+    expect(() => injectGithubToken(reviewerContext, 'fresh-reviewer-token')).not.toThrow();
+    expect(() => injectGithubToken(workerContext, 'stale-worker-token')).toThrow(/no longer matches/);
+  });
+
+  it('keeps a same-role context usable across a sandbox reconnect', async () => {
+    mocks.githubPat = 'ghp_worker';
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+
+    const workerContext = createGithubRequestContext('project-1', 'session-a');
+    await workspace({ requestContext: workerContext });
+    expect(lastGhToken()).toBe('ghp_worker');
+
+    const sandbox = mocks.createSandbox.mock.results[0]!.value;
+    await sandbox.start();
+
+    expect(() => injectGithubToken(workerContext, 'rotated-worker-token')).not.toThrow();
   });
 
   it('replaces reviewer credentials with repository access when no worker PAT is configured', async () => {

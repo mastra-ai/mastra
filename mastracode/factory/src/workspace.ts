@@ -15,7 +15,7 @@ import type {
   SkillSourceStat,
   WorkspaceSandbox,
 } from '@mastra/core/workspace';
-import { getFactoryAuthUserFromContext, getFactoryAuthUserId } from './auth.js';
+import { getFactoryAuthOrgId, getFactoryAuthUserFromContext, getFactoryAuthUserId } from './auth.js';
 import type { MastraFactorySandboxConfig } from './factory.js';
 import type { GithubIntegration } from './integrations/github/integration.js';
 import { getGithubPat } from './integrations/github/pat.js';
@@ -41,8 +41,11 @@ import {
   resolveSessionWorkdir,
 } from './sandbox/session-sandbox.js';
 import type { SessionSetupGate } from './sandbox/session-sandbox.js';
+import type { FactoryProjectsStorage } from './storage/domains/projects/base.js';
 import type { WorkItemsStorage } from './storage/domains/work-items/base.js';
+import { parseSupervisorResourceId } from './supervisor/session.js';
 import { timedPhase } from './timing.js';
+import { pullRequestNumberFromBranch } from './work-item-branch.js';
 
 const WORKSPACE_ID_PREFIX = 'mfw';
 const bundleDirectory = dirname(fileURLToPath(import.meta.url));
@@ -236,6 +239,8 @@ export interface CreateWorkspaceFactoryOptions {
    * review-board sessions get the reviewer PAT as `GH_TOKEN`. Optional —
    * without it every session uses the default (worker) PAT. */
   workItems?: Pick<WorkItemsStorage, 'findRunBindingBySession'>;
+  /** Projects storage used to authorize workspace-free supervisor sessions. */
+  projects?: Pick<FactoryProjectsStorage, 'get'>;
   /** Runtime workspace/token registrations invalidated when a session retires. */
   workspaceRegistry?: FactoryWorkspaceRegistry;
 }
@@ -279,7 +284,7 @@ export class FactoryWorkspaceRegistry {
 }
 
 export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = {}) {
-  const { sandbox: sandboxConfig, github, workItems } = options;
+  const { sandbox: sandboxConfig, github, projects, workItems } = options;
   const eagerSandboxStart = options.sandboxStart === 'eager';
   const workspaceRegistry = options.workspaceRegistry ?? new FactoryWorkspaceRegistry();
   type GithubTokenRegistration = {
@@ -304,6 +309,13 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
   return async ({ requestContext, mastra, skillExtension }: DynamicWorkspaceContext) => {
     const effectiveSkillExtension = skillExtension ?? factorySkillExtension;
     const ctx = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
+    const supervisorProjectId = parseSupervisorResourceId(ctx?.resourceId);
+    if (supervisorProjectId) {
+      const orgId = getFactoryAuthOrgId(getFactoryAuthUserFromContext(requestContext));
+      const project = orgId && projects ? await projects.get({ orgId, id: supervisorProjectId }) : null;
+      if (!project) throw new Error(`Factory supervisor ${supervisorProjectId} is not available to the current user`);
+      return undefined;
+    }
     const session =
       ctx?.resourceId && github ? await github.sourceControlStorage.sessions.getBySessionId(ctx.resourceId) : null;
 
@@ -388,19 +400,52 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         throw retiredError();
       }
       const target: SessionSandbox = requireExec(args.sandbox);
-      // The `gh` CLI needs a PAT when the org configured one (installation
-      // tokens 403 on integration-restricted endpoints); git clone/checkout
-      // keep using the minted installation token. Resolved per start so the
-      // installed credential never outlives rotation.
+      // Observability plus the post-checkout skill rescan run on every start
+      // (create or reconnect). Observability only — nothing reads these columns
+      // for decisions; the workdir was resolved (and memoized on the entry) by
+      // the guarded setup. The skill roots were reported empty by the
+      // unmaterialized-source guard before the checkout existed, so rescan now.
+      const publishStartSideEffects = () => {
+        void storage.sessions
+          .setSandbox({ id: session.id, sandboxId: target.id, sandboxWorkdir: sessionEntry.workdir ?? '' })
+          .catch(() => {});
+        void constructedWorkspaces
+          .get(workspaceId)
+          ?.skills?.refresh()
+          .catch(() => {});
+      };
+      const existingRegistration = githubTokenInjectors.get(workspaceId);
+      if (existingRegistration) {
+        // Reconnect: re-point the current registration's injection target at
+        // this (possibly provider-healed) sandbox and reinstall its
+        // reconcile-owned credential. Do NOT mint a new registration, bump
+        // authority, or re-register the constructing request context —
+        // reconcileGithubToken owns role/generation and the active context's
+        // injector, so replacing them here would reauthorize the stale
+        // constructing context and reject the current one.
+        existingRegistration.inject = freshToken => {
+          if (!target.setEnv) {
+            throw new Error('The active sandbox provider does not support runtime GitHub token refresh.');
+          }
+          target.setEnv(env => ({ ...env, GH_TOKEN: freshToken }));
+          existingRegistration.ghToken = freshToken;
+        };
+        // Install through inject (not optional-chained setEnv) so a provider
+        // that cannot accept the credential fails the reconnect here instead of
+        // deferring the failure to a later token refresh.
+        existingRegistration.inject(existingRegistration.ghToken);
+        publishStartSideEffects();
+        return;
+      }
+      // First start: resolve the credential and authorize the constructing
+      // request context. The `gh` CLI needs a PAT when the org configured one
+      // (installation tokens 403 on integration-restricted endpoints); git
+      // clone/checkout keep using the minted installation token. Resolved per
+      // start so the installed credential never outlives rotation.
       const patKind = await resolveGithubPatKind('default');
       const ghCliToken =
         (await getGithubPat(() => github.integrationStorage, session.orgId, patKind)) ?? (await getRepositoryToken());
       target.setEnv?.(env => ({ ...env, GH_TOKEN: ghCliToken }));
-      // Observability only — nothing reads these columns for decisions. The
-      // workdir was resolved (and memoized on the entry) by the guarded setup.
-      void storage.sessions
-        .setSandbox({ id: session.id, sandboxId: target.id, sandboxWorkdir: sessionEntry.workdir ?? '' })
-        .catch(() => {});
       const tokenRegistration: GithubTokenRegistration = {
         inject: freshToken => {
           if (!target.setEnv) {
@@ -416,12 +461,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       };
       githubTokenInjectors.set(workspaceId, tokenRegistration);
       registerGithubTokenContext(tokenRegistration);
-      // Project skill roots were reported empty by the unmaterialized-source
-      // guard before the checkout existed; rescan now. Fire-and-forget.
-      void constructedWorkspaces
-        .get(workspaceId)
-        ?.skills?.refresh()
-        .catch(() => {});
+      publishStartSideEffects();
     };
     const constructSessionEntry = () =>
       getSessionSandbox(session.id, repoFullName, () => {
@@ -455,9 +495,11 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     const fireEagerStart = () => {
       if (!startEagerly) return;
       startEagerly = false;
-      sessionEntry.sandbox.start?.().catch(error => {
-        console.warn(`[factory] Eager sandbox start for session ${session.id} failed:`, error);
-      });
+      Promise.resolve()
+        .then(() => sessionEntry.sandbox.start?.())
+        .catch(error => {
+          console.warn(`[factory] Eager sandbox start for session ${session.id} failed:`, error);
+        });
     };
     const sessionEntry = constructSessionEntry();
     const workdir = sessionEntry.workdir;
@@ -638,6 +680,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         baseBranch: session.baseBranch || projectRepository.branch || repository.defaultBranch,
         token,
         repoFullName: repoFullName,
+        pullRequestNumber: pullRequestNumberFromBranch(session.branch),
       });
       if (projectRepository.setupCommand && !gate.setupDone) {
         // A setup command that already failed this session is skipped rather

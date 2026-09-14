@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { server } from '../../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/ui/render';
 import type { WorkItemComment } from '../../../services/commentsWire';
-import type { CommentQuoteDraft } from '../CommentQuote';
+import type { CommentQuoteDraft } from '../quoteDraft';
 import { CommentComposer } from '../CommentComposer';
 
 if (!Element.prototype.scrollIntoView) {

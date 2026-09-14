@@ -1,4 +1,5 @@
 import { createSandboxLifecycleTests } from '@internal/workspace-test-utils';
+import { SandboxUnsupportedFeatureError } from '@mastra/core/workspace';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { CloudflareSandbox } from './sandbox';
@@ -49,6 +50,46 @@ describe('CloudflareSandbox', () => {
       timeout_ms: 300_000,
       cwd: '/workspace/app',
     });
+  });
+
+  it('runs a bare command string through a shell so pipes and chaining work', async () => {
+    const bridge = createFakeBridge({ apiToken: 'secret' });
+    const sandbox = createSandbox(bridge);
+    await sandbox._start();
+
+    await sandbox.executeCommand("printf '%s' native-tool-ok");
+
+    expect(bridge.execs[0]!.argv).toEqual(['/bin/bash', '-c', "printf '%s' native-tool-ok"]);
+  });
+
+  it('keeps the env prefix before the shell when running a bare command string', async () => {
+    const bridge = createFakeBridge({ apiToken: 'secret' });
+    const sandbox = createSandbox(bridge, { env: { BASE: '1' } });
+    await sandbox._start();
+
+    await sandbox.executeCommand('echo hi');
+
+    expect(bridge.execs[0]!.argv).toEqual(['env', 'BASE=1', '/bin/bash', '-c', 'echo hi']);
+  });
+
+  it('treats an empty args array as a bare shell command string', async () => {
+    const bridge = createFakeBridge({ apiToken: 'secret' });
+    const sandbox = createSandbox(bridge);
+    await sandbox._start();
+
+    await sandbox.executeCommand('echo hello && echo world', []);
+
+    expect(bridge.execs[0]!.argv).toEqual(['/bin/bash', '-c', 'echo hello && echo world']);
+  });
+
+  it('keeps explicit argument arrays literal', async () => {
+    const bridge = createFakeBridge({ apiToken: 'secret' });
+    const sandbox = createSandbox(bridge);
+    await sandbox._start();
+
+    await sandbox.executeCommand('printf', ['%s', 'direct-control-ok']);
+
+    expect(bridge.execs[0]!.argv).toEqual(['printf', '%s', 'direct-control-ok']);
   });
 
   it('per-command cwd overrides the configured workingDirectory', async () => {
@@ -147,6 +188,17 @@ describe('CloudflareSandbox', () => {
 
     await expect(sandbox.executeCommand('echo', ['hi'])).rejects.toThrow(/has not been started/);
     await expect(sandbox.writeFiles([{ path: 'a.txt', content: 'x' }])).rejects.toThrow(/has not been started/);
+  });
+
+  it('rejects an explicit per-file mode without writing', async () => {
+    const bridge = createFakeBridge({ apiToken: 'secret' });
+    const sandbox = createSandbox(bridge);
+    await sandbox._start();
+
+    await expect(sandbox.writeFiles([{ path: 'a.txt', content: 'x', mode: 0o600 }])).rejects.toThrow(
+      SandboxUnsupportedFeatureError,
+    );
+    expect(bridge.files.size).toBe(0);
   });
 });
 

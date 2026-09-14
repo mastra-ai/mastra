@@ -127,7 +127,11 @@ export function FactorySetupSection({ factory }: { factory: FactoryProject }) {
   if (rows.length === 0) return null;
 
   return (
-    <SettingsSubsection title="Sandbox" description="Shell commands each session runs in its own sandbox.">
+    <SettingsSubsection
+      scope="factory"
+      title="Sandbox"
+      description="Shell commands each session runs in its own sandbox."
+    >
       <div className="flex flex-col gap-4">
         {rows.map(row => (
           <RepositoryCommands

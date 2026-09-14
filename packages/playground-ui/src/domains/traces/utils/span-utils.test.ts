@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest';
 import {
   formatSpanDuration,
   formatSpanDurationExact,
-  formatSpanPanelTimestamp,
   formatSpanTimestamp,
   formatSpanTimestampExact,
   getInputPreview,
@@ -90,28 +89,6 @@ describe('formatSpanTimestampExact', () => {
   it('leaves the timestamp empty instead of throwing', () => {
     expect(formatSpanTimestampExact(undefined)).toBeUndefined();
     expect(formatSpanTimestampExact('not-a-date')).toBeUndefined();
-  });
-});
-
-describe('formatSpanPanelTimestamp', () => {
-  describe('when a span has a valid timestamp', () => {
-    it('formats the zero-padded day and 12-hour time with milliseconds', () => {
-      expect(formatSpanPanelTimestamp(TIMESTAMP)).toBe('Jan 05, 2:03:07.250 pm');
-      expect(formatSpanPanelTimestamp(MIDNIGHT)).toBe('Jan 05, 12:00:00.000 am');
-    });
-
-    it('accepts an ISO string', () => {
-      expect(formatSpanPanelTimestamp('2026-01-05T14:03:07.250Z')).toBe('Jan 05, 2:03:07.250 pm');
-    });
-  });
-
-  describe('when a span timestamp is missing or unparseable', () => {
-    it('leaves the timestamp empty instead of throwing', () => {
-      expect(formatSpanPanelTimestamp(undefined)).toBeUndefined();
-      expect(formatSpanPanelTimestamp(null)).toBeUndefined();
-      expect(formatSpanPanelTimestamp('not-a-date')).toBeUndefined();
-      expect(formatSpanPanelTimestamp(new Date('not-a-date'))).toBeUndefined();
-    });
   });
 });
 

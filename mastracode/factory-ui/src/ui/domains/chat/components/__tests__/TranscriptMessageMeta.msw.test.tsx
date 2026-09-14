@@ -109,7 +109,7 @@ describe('message meta', () => {
     expect(container.querySelectorAll('time')).toHaveLength(2);
   });
 
-  it('leaves a message with nothing to copy unstamped', () => {
+  it('leaves a message with nothing to copy unstamped, though its tool row still keeps its own clock', () => {
     const { container } = renderEntries([
       messageEntry('assistant-1', 'assistant', [
         {
@@ -119,7 +119,9 @@ describe('message meta', () => {
       ]),
     ]);
 
-    expect(container.querySelector('time')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Copy message' })).toBeNull();
+    const times = container.querySelectorAll('time');
+    expect(times).toHaveLength(1);
+    expect(screen.getByRole('group', { name: 'Tool: read' })).toContainElement(times[0]);
   });
 });

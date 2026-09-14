@@ -39,7 +39,15 @@ function resolveStep(step: ProcessorGraphStep, ctx: HydrationContext): Processor
     return undefined;
   }
 
-  const processor = provider.createProcessor(step.config);
+  const parsed = provider.configSchema.safeParse(step.config);
+  if (!parsed.success) {
+    throw new Error(
+      `Invalid configuration for processor graph step "${step.id}" ` +
+        `(provider "${step.providerId}"): ${parsed.error.message}`,
+    );
+  }
+
+  const processor = provider.createProcessor(parsed.data as Record<string, unknown>);
 
   // Wrap with phase filtering if only a subset of phases are enabled
   const allProviderPhases = provider.availablePhases;

@@ -57,6 +57,7 @@ export {
   hasResponseProviderItemId,
   getResponseProviderItemIdFromPart,
   findToolCallArgs,
+  dropCrossProviderExecutedParts,
 } from './utils/provider-compat';
 export {
   getResponseProviderItemId,

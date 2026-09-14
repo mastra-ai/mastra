@@ -89,8 +89,8 @@ export async function evaluateTaskCompletion(deps: {
   if (firstUserMessage) {
     if (typeof firstUserMessage.content === 'string') {
       originalTask = firstUserMessage.content;
-    } else if ((firstUserMessage.content as any)?.parts?.[0]?.type === 'text') {
-      originalTask = ((firstUserMessage.content as any).parts[0] as { text: string }).text;
+    } else if (firstUserMessage.content?.parts?.[0]?.type === 'text') {
+      originalTask = firstUserMessage.content.parts[0].text;
     }
   }
 

@@ -1,6 +1,4 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
-import { Button } from '@mastra/playground-ui/components/Button';
-import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { SettingsRow } from '@mastra/playground-ui/components/SettingsRow';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -15,6 +13,7 @@ import {
 import type { AvailableModelOption } from '../../../../hooks/useAvailableModels';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { ModelCombobox } from './ModelCombobox';
+import { Segmented } from './SettingsFields';
 
 type AttachmentChoice = 'auto' | 'on' | 'off';
 
@@ -23,6 +22,12 @@ function attachmentToChoice(value: 'auto' | boolean): AttachmentChoice {
   if (value === false) return 'off';
   return 'auto';
 }
+
+const ATTACHMENT_OPTIONS: { value: AttachmentChoice; label: string }[] = [
+  { value: 'auto', label: 'Auto' },
+  { value: 'on', label: 'On' },
+  { value: 'off', label: 'Off' },
+];
 
 function choiceToAttachment(choice: AttachmentChoice): 'auto' | boolean {
   if (choice === 'on') return true;
@@ -123,12 +128,6 @@ export function OMSection({
   }
 
   const attachmentChoice = attachmentToChoice(config?.observeAttachments ?? 'auto');
-  const attachmentOptions: { value: AttachmentChoice; label: string }[] = [
-    { value: 'auto', label: 'Auto' },
-    { value: 'on', label: 'On' },
-    { value: 'off', label: 'Off' },
-  ];
-
   return (
     <>
       {error && (
@@ -219,20 +218,13 @@ export function OMSection({
         label="Observe attachments"
         description="Whether attached files are included in observations"
       >
-        <ButtonsGroup spacing="close" role="group" aria-label="Observe attachments">
-          {attachmentOptions.map(option => (
-            <Button
-              key={option.value}
-              variant={attachmentChoice === option.value ? 'primary' : 'outline'}
-              size="sm"
-              aria-pressed={attachmentChoice === option.value}
-              disabled={busy || !config}
-              onClick={() => attachmentsMutation.mutate({ value: choiceToAttachment(option.value) })}
-            >
-              {option.label}
-            </Button>
-          ))}
-        </ButtonsGroup>
+        <Segmented
+          ariaLabel="Observe attachments"
+          value={attachmentChoice}
+          options={ATTACHMENT_OPTIONS}
+          disabled={busy || !config}
+          onChange={choice => attachmentsMutation.mutate({ value: choiceToAttachment(choice) })}
+        />
       </SettingsRow>
     </>
   );

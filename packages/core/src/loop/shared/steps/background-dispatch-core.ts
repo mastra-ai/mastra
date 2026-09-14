@@ -3,6 +3,8 @@ import type { BackgroundTaskManager } from '../../../background-tasks/manager';
 import { resolveBackgroundConfig } from '../../../background-tasks/resolve-config';
 import type {
   AgentBackgroundConfig,
+  BackgroundExecutionDisposition,
+  BackgroundTaskHandle,
   BackgroundTaskManagerConfig,
   CreateBackgroundTaskOptions,
   ToolBackgroundConfig,
@@ -13,8 +15,28 @@ export type BackgroundDispatchOutcome =
   /** Background execution does not apply (or dispatch fell through) — run the tool synchronously. */
   | { status: 'sync' }
   /** The tool call is now owned by a background task; engines return the
-   * placeholder as the tool result so the LLM can continue. */
-  | { status: 'started' | 'resumed' | 'restarted'; taskId: string; placeholder: string };
+   * placeholder as the tool result so the LLM can continue — unless the
+   * resolved `disposition` is `awaited`, in which case engines block the turn
+   * on `waitForCompletion()` and return the authoritative result instead. */
+  | {
+      status: 'started' | 'resumed' | 'restarted';
+      taskId: string;
+      placeholder: string;
+      /** The resolved execution disposition (never `foreground` here — that
+       * resolves to `runInBackground: false` and returns `sync` above). */
+      disposition: BackgroundExecutionDisposition;
+      /** Blocks until the dispatched task reaches a terminal state. Engines
+       * use this to honor the `awaited` disposition. */
+      waitForCompletion: BackgroundTaskHandle['waitForCompletion'];
+    };
+
+/** Per-dispatch info the ladder passes to the engine's lazy `taskContext`
+ * builder so engine hooks can see the resolved disposition and the task id
+ * (which only exists once the ladder has created/dispatched the task). */
+export interface BackgroundTaskContextInfo {
+  disposition: BackgroundExecutionDisposition;
+  getTaskId: () => string | undefined;
+}
 
 /**
  * Shared background dispatch ladder (PHASE3 Step 4): decide whether a tool
@@ -64,8 +86,10 @@ export async function dispatchBackgroundTool(deps: {
   /** Per-task hooks: executor + stream/result/execution injectors. Lazy: only
    * built once background dispatch is actually chosen (the main loop's
    * executor resolution can throw for tools its bg lookup can't see, which
-   * now degrades to sync execution instead of failing the call). */
-  taskContext: () => CreateBackgroundTaskOptions['context'];
+   * now degrades to sync execution instead of failing the call). Receives the
+   * resolved disposition and a task-id accessor so hooks can stamp background
+   * work context / terminal notifications. */
+  taskContext: (info: BackgroundTaskContextInfo) => CreateBackgroundTaskOptions['context'];
   /** Emit the background-task-started chunk over engine transport. */
   emitTaskStarted: (task: { id: string }) => void | Promise<void>;
   logger?: IMastraLogger;
@@ -99,7 +123,22 @@ export async function dispatchBackgroundTool(deps: {
     `Background task ${verb}. Task ID: ${taskId}. The tool "${toolName}" is running in the background. You will be notified when it completes.`;
 
   try {
-    const bgTask = createBackgroundTask(backgroundTaskManager, {
+    // The handle is created below, but engine hooks (built first, as task
+    // context) need lazy access to the task id — `bgTask.task` throws until
+    // the ladder has dispatched/resumed/restarted, by which point the hooks
+    // that read it (executor, onResult) are guaranteed to run post-dispatch.
+    let bgTask: BackgroundTaskHandle | undefined;
+    const info: BackgroundTaskContextInfo = {
+      disposition: bgResolved.disposition,
+      getTaskId: () => {
+        try {
+          return bgTask?.task.id;
+        } catch {
+          return undefined;
+        }
+      },
+    };
+    bgTask = createBackgroundTask(backgroundTaskManager, {
       toolName,
       toolCallId,
       args: deps.args as Record<string, unknown>,
@@ -109,7 +148,15 @@ export async function dispatchBackgroundTool(deps: {
       runId,
       timeoutMs: bgResolved.timeoutMs,
       maxRetries: bgResolved.maxRetries,
-      context: deps.taskContext(),
+      context: deps.taskContext(info),
+    });
+    const handle = bgTask;
+    const dispatched = (status: 'started' | 'resumed' | 'restarted', taskId: string) => ({
+      status,
+      taskId,
+      placeholder: placeholder(status, taskId),
+      disposition: bgResolved.disposition,
+      waitForCompletion: handle.waitForCompletion.bind(handle),
     });
 
     // Resuming this tool call with a previously-suspended background task for
@@ -119,7 +166,7 @@ export async function dispatchBackgroundTool(deps: {
       const isSuspended = await bgTask.checkIfSuspended({ toolCallId, runId, agentId, threadId, resourceId, toolName });
       if (isSuspended) {
         const task = await bgTask.resume(deps.resumeData);
-        return { status: 'resumed', taskId: task.id, placeholder: placeholder('resumed', task.id) };
+        return dispatched('resumed', task.id);
       }
     }
 
@@ -136,7 +183,7 @@ export async function dispatchBackgroundTool(deps: {
     });
     if (isPreviouslyRunning) {
       const task = await bgTask.restart();
-      return { status: 'restarted', taskId: task.id, placeholder: placeholder('restarted', task.id) };
+      return dispatched('restarted', task.id);
     }
 
     const { task, fallbackToSync } = await bgTask.dispatch();
@@ -153,7 +200,7 @@ export async function dispatchBackgroundTool(deps: {
       logger?.warn?.('Error emitting background-task-started', { toolCallId, toolName, error: emitError });
     }
 
-    return { status: 'started', taskId: task.id, placeholder: placeholder('started', task.id) };
+    return dispatched('started', task.id);
   } catch (bgError) {
     logger?.debug?.(`Background task dispatch failed for ${toolName}, falling back to sync: ${bgError}`);
     return { status: 'sync' };

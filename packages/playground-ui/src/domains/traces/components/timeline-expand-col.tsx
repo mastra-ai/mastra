@@ -55,7 +55,7 @@ export function TimelineExpandCol({
   return (
     <div
       className={cn('flex h-full items-center justify-end px-1.5', {
-        'opacity-30 [&:hover]:opacity-60': isFaded,
+        'opacity-40 [&:hover]:opacity-70 dark:opacity-30 dark:[&:hover]:opacity-60': isFaded,
         'bg-surface4': isSelected,
       })}
     >

@@ -1,3 +1,23 @@
+export {
+  BoardDefinitionError,
+  createBoardRegistry,
+  defaultBoards,
+  defineBoard,
+  reviewBoard,
+  workBoard,
+} from './boards/index.js';
+export type {
+  BoardDefinition,
+  BoardPhaseDefinition,
+  BoardRegistry,
+  BoardTransition,
+  BoardTransitionPolicy,
+  BoardTransitionPolicyContext,
+  BoardTransitionPolicyResult,
+  InstalledBoard,
+  ReviewBoardPhase,
+  WorkBoardPhase,
+} from './boards/index.js';
 export { MastraFactory } from './factory.js';
 export type { MastraArgs, MastraFactoryConfig, MastraFactorySandboxConfig, FactorySandboxStart } from './factory.js';
 export type { FactorySandboxContext, SessionSetupGate, SessionSetupRun } from './sandbox/session-sandbox.js';

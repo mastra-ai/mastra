@@ -1,0 +1,43 @@
+---
+extends: existence
+message: "AI overused verb: '%s'. Name the literal movement: is sent or is copied. Disable this rule for transit or physics prose."
+level: error
+nonword: true
+ignorecase: true
+# "Travels" is an AI fingerprint for turning transmission into a journey: a
+# request "travels through the stack," data "travels" between services, an
+# idea "travels well." Every token measured at zero across the Go and Python
+# standard libraries, whose networking prose says a packet is sent, routed,
+# or forwarded rather than that it travels. Literal travel (a person, a
+# wave, light) is the transit and physics register; writing in those domains
+# disables the rule.
+#
+# The subject gate began as a curated data-noun list, which a
+# documentation-corpus audit (2026-09) found leaking on every noun outside
+# it ("the precomputed digests travel into that bundle," "that identifier
+# travels into the export"). The open determiner-gated subject replaces
+# it, in the FigurativeLives mold, with the preposition set widened to the
+# destinations agent prose sends things to; the open token still measures
+# zero, because the corpora never put the verb after a determiner-fronted
+# noun at all. The literal subjects the open token admits (a family
+# travels to, light travels through) are the same transit and physics
+# register the message already names.
+tokens:
+  # --- Determiner-gated: any artifact on a journey ("the request travels
+  # through the stack," "the precomputed digests travel into that bundle,"
+  # "that identifier travels with the record"), with an optional modifier
+  # word and an optional adverb inside the span.
+  - "\\b(?:a|an|the|this|that|these|those|each|every|its|their|both|all|one|any|some|no) (?:[a-z'-]+ )?[a-z]+ (?:then |also |never |still |only |always )?travel(?:s|l?ed|l?ing)? (?:into|to|with|between|from|through|across|down|up|along|out|onward|onwards|as|in|inside|alongside|via|by|over|past|beyond|toward|towards|unchanged|intact|together|well)\\b"
+
+  # --- Determiner-less data subjects at a clause start ("state travels
+  # with the session," "data travels between services").
+  - "\\b(?:data|request|signal|message|information|payload|token|value|packet|traffic|event|change|write|read|state|digest|identifier|record|row|blob|hash|key)s? travels?\\b"
+
+  # --- Route complement: the journey through the architecture ("travels
+  # through the stack," "travels down the pipeline," "travels into the
+  # export").
+  - "\\btravel(?:s|l?ed|l?ing)? (?:through|across|down|up|along|into|to|between|with|out of|from|inside|alongside|via|as) (?:the|a|an|its|their|this|that|each|every|one|both)\\b"
+
+  # --- Portability idiom: an idea graded on how it ships ("the pattern
+  # travels well").
+  - "\\btravels? (?:well|together)\\b"

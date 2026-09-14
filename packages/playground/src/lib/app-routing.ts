@@ -76,7 +76,7 @@ export const paths: LinkComponentProviderProps['paths'] = {
   workflowRunLink: (workflowId: string, runId: string) => `/workflows/${workflowId}/graph/${runId}`,
   datasetLink: (datasetId: string) => `/datasets/${datasetId}`,
   datasetItemLink: (datasetId: string, itemId: string) => `/datasets/${datasetId}/items/${itemId}`,
-  datasetItemCompareLink: (datasetId: string, itemId: string, secondItemId: string) =>
-    `/datasets/${datasetId}/items/${itemId}/compare/${secondItemId}`,
   experimentLink: (experimentId: string) => `/experiments/${experimentId}`,
+  experimentItemLink: (experimentId: string, itemId: string) =>
+    `/experiments/${experimentId}/items/${encodeURIComponent(itemId)}`,
 };

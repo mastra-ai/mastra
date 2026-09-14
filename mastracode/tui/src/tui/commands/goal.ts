@@ -86,6 +86,14 @@ export async function handleGoalCommand(ctx: SlashCommandContext, args: string[]
     // startGoal, so the model receives a structured system-reminder rather than
     // a plain user message.
     const resumedGoal = goalManager.getGoal();
+    ctx.addUserMessage(
+      createGoalReminderMessage(
+        resumedGoal!.id,
+        resumedGoal!.objective,
+        resumedGoal!.maxTurns,
+        resumedGoal!.judgeModelId,
+      ),
+    );
     try {
       await state.session.sendSignal(createGoalReminderSignal(resumedGoal!)).accepted;
     } catch (err) {
@@ -369,6 +377,10 @@ async function startGoal(
   state.planStartedGoalId = undefined;
   await goalManager.saveToThread(state);
   ctx.updateStatusLine();
+
+  // Model-only reminders are not echoed to the live stream. Render the goal
+  // locally, including plan handoffs that start their run separately.
+  ctx.addUserMessage(createGoalReminderMessage(goal.id, goal.objective, goal.maxTurns, goal.judgeModelId));
 
   if (options.trigger === 'none') {
     return;

@@ -1,7 +1,7 @@
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ExperimentCombobox } from '../experiment-combobox';
+import { ALL_EXPERIMENTS, ExperimentCombobox } from '../experiment-combobox';
 import { experiment, experimentsResponse } from '@/domains/experiments/__tests__/fixtures/experiment-item-route';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
@@ -85,6 +85,24 @@ describe('ExperimentCombobox', () => {
       renderWithProviders(<ExperimentCombobox value={experiment.id} onValueChange={() => {}} />);
 
       await screen.findByTestId('experiments-icon');
+    });
+  });
+
+  describe('with the "All experiments" option', () => {
+    it('lists it first and selects it when no value is set', async () => {
+      renderWithProviders(<ExperimentCombobox allOption onValueChange={() => {}} />);
+
+      const all = await screen.findByRole('option', { name: 'All experiments' });
+      const options = screen.getAllByRole('option').filter(option => option.getAttribute('value') !== '');
+      expect(options[0]).toBe(all);
+      expect((screen.getByRole('combobox') as HTMLSelectElement).value).toBe(ALL_EXPERIMENTS);
+    });
+
+    it('is absent by default', async () => {
+      renderWithProviders(<ExperimentCombobox onValueChange={() => {}} />);
+
+      await screen.findByRole('option', { name: 'entity-extraction / model-a' });
+      expect(screen.queryByRole('option', { name: 'All experiments' })).toBeNull();
     });
   });
 

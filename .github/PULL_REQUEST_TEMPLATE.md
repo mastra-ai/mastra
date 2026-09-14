@@ -4,7 +4,7 @@
 
 ## Related issue(s)
 
-<!-- Required: Link to the issue(s) this PR addresses, e.g. with: Fixes #123. PRs without linked issues may be closed. -->
+<!-- Required: Link to the issue(s) this PR addresses, e.g. with: Fixes #123. PRs without linked issues will be closed. High-quality issues with reproductions are preferred to vague pull requests. -->
 
 ## Type of change
 

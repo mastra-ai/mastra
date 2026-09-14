@@ -14,6 +14,7 @@ import type { IntakeConfig } from '../../factory/services/intake';
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import { SourcePicker } from './IntakeSourcePicker';
 import type { SourcePickerGroup } from './IntakeSourcePicker';
+import { GithubLabelRouting } from './GithubLabelRouting';
 import { LinearRouting } from './LinearRouting';
 import { SettingsCard } from './SettingsCard';
 import { SettingsSubsection } from './SettingsSubsection';
@@ -38,8 +39,9 @@ interface SourceSectionProps {
 function GithubIntakeSection({ config, busy, update, slugs }: SourceSectionProps & { slugs: string[] }) {
   return (
     <SettingsSubsection
+      scope="personal"
       title="GitHub issues"
-      description="Open issues from the selected repositories. Pull requests always appear in Review."
+      description="Open issues from the repositories you select. Teammates choose their own. Pull requests always appear in Review."
     >
       <SettingsCard>
         <SettingsRow variant="factory" label="Sync GitHub issues">
@@ -112,7 +114,7 @@ function LinearIntakeSection({
       ? 'Connect a Linear workspace to sync its issues.'
       : reauthRequired
         ? 'Linear authorization expired. Reconnect to keep syncing issues.'
-        : 'Active issues from the selected projects.';
+        : 'Active issues from the projects you select. Teammates choose their own.';
 
   const action = !serverConfigured ? undefined : !connected ? (
     <Button size="sm" onClick={() => connectLinear(baseUrl)}>
@@ -134,7 +136,7 @@ function LinearIntakeSection({
   );
 
   return (
-    <SettingsSubsection title="Linear issues" description={description} action={action}>
+    <SettingsSubsection scope="personal" title="Linear issues" description={description} action={action}>
       <SettingsCard>
         <SettingsRow variant="factory" label="Sync Linear issues">
           <Switch
@@ -208,6 +210,25 @@ export function IntakeSection() {
   return (
     <div className="flex flex-col gap-8">
       <GithubIntakeSection config={config} busy={busy} update={update} slugs={linkedSlugs} />
+      {config.github.enabled && linkedSlugs.length > 0 && (factoriesQuery.data?.length ?? 0) > 0 && (
+        <SettingsSubsection
+          scope="org"
+          title="GitHub routing"
+          description="Issues carrying a routed label file onto that board in the Factory; everything else stays on Work."
+        >
+          {(factoriesQuery.data ?? [])
+            .filter(factory => factory.repositories.length > 0)
+            .map(factory => (
+              <SettingsCard key={factory.id}>
+                <GithubLabelRouting
+                  factoryProjectId={factory.id}
+                  name={factory.name}
+                  repositories={factory.repositories.map(r => r.slug)}
+                />
+              </SettingsCard>
+            ))}
+        </SettingsSubsection>
+      )}
       <LinearIntakeSection
         config={config}
         busy={busy}
@@ -221,6 +242,7 @@ export function IntakeSection() {
       />
       {linearReady && routedProjectIds.length > 0 && (
         <SettingsSubsection
+          scope="org"
           title="Linear routing"
           description="Each selected project feeds one factory. Until a project is routed, its issues are not picked up."
         >

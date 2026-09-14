@@ -110,6 +110,26 @@ export function createDurableLLMMappingStep() {
       const isDeniedApproval = (toolResult: { approval?: { approved?: boolean } }) =>
         toolResult?.approval?.approved === false;
 
+      // A pending client-side / HITL call: no result, no error, not provider-executed and
+      // not a resolved denial. The client answers it on a follow-up request, so it must
+      // stay in `call` state, must not appear as a tool result anywhere, and must end the
+      // turn — the durable counterpart of the non-durable llm-mapping-step's
+      // `hasPendingHITL` (issue #23295).
+      //
+      // Aborted calls also lack a result/error but were cancelled, not awaiting input,
+      // so they must not count as a HITL suspension (mirrors the non-durable predicate's
+      // `!tc.aborted`). Tripwire-blocked calls (`resultBlocked`) are resolved by policy,
+      // not awaiting a client answer, so they keep the pre-existing continuation
+      // semantics (isContinued follows tool errors / the model's stepResult) instead of
+      // force-ending the turn.
+      const isPendingClientCall = (toolResult: (typeof toolResults)[number]) =>
+        toolResult.result === undefined &&
+        !toolResult.error &&
+        !toolResult.aborted &&
+        !toolResult.resultBlocked &&
+        !toolResult.providerExecuted &&
+        !isDeniedApproval(toolResult);
+
       // 2. Add tool results to message list
       // Look up tools from the in-process registry for toModelOutput support
       const registryTools = registryEntry?.tools;
@@ -124,7 +144,7 @@ export function createDurableLLMMappingStep() {
         | undefined;
       if (llmOutput.stepSpanData) {
         try {
-          const observability = (mastra as Mastra | undefined)?.observability?.getSelectedInstance({ requestContext });
+          const observability = mastra?.observability?.getSelectedInstance({ requestContext });
           stepSpan = observability?.rebuildSpan(llmOutput.stepSpanData as ExportedSpan<SpanType.MODEL_STEP>);
         } catch {
           // Span bookkeeping must never break the merge step.
@@ -178,6 +198,12 @@ export function createDurableLLMMappingStep() {
             continue;
           }
 
+          // Recording a pending call as a `result` would overwrite the invocation with an
+          // undefined value and feed the model a fabricated tool output on the next turn.
+          if (isPendingClientCall(toolResult)) {
+            continue;
+          }
+
           // Compute toModelOutput for successful tool results (Bug 9 parity).
           // Start from the existing providerMetadata so it's preserved even when
           // toModelOutput is absent or fails — otherwise provider-executed tools
@@ -206,7 +232,7 @@ export function createDurableLLMMappingStep() {
               parentSpan: stepSpan,
               onMappingError: (err: unknown) => {
                 // toModelOutput errors are non-fatal — the tool result is still usable
-                (mastra as Mastra | undefined)
+                mastra
                   ?.getLogger?.()
                   ?.warn?.(`[DurableAgent] toModelOutput failed for tool "${toolResult.toolName}": ${err}`);
               },
@@ -289,7 +315,10 @@ export function createDurableLLMMappingStep() {
       // do not "fix" it to match main's gating without a pinning test for
       // tool-error recovery.
       const hasToolErrors = toolResults.some(r => r.error !== undefined);
-      const isContinued = hasToolErrors ? true : llmOutput.stepResult.isContinued;
+      // A pending client call ends the turn so the client can answer it. Without this the
+      // loop re-invoked the model on a result nobody produced.
+      const hasPendingHITL = toolResults.some(isPendingClientCall);
+      const isContinued = hasPendingHITL ? false : hasToolErrors ? true : llmOutput.stepResult.isContinued;
 
       // Check if any delegation hook called ctx.bail(). The bail flag is
       // communicated via requestContext because Zod output validation strips
@@ -348,9 +377,7 @@ export function createDurableLLMMappingStep() {
           });
         } catch (error) {
           // Span bookkeeping must never break the merge step.
-          (mastra as Mastra | undefined)
-            ?.getLogger?.()
-            ?.warn?.(`[DurableAgent] Failed to close model_step span: ${error}`);
+          mastra?.getLogger?.()?.warn?.(`[DurableAgent] Failed to close model_step span: ${error}`);
         }
       }
 
@@ -387,6 +414,9 @@ export function createDurableLLMMappingStep() {
             });
           }
           for (const tr of toolResults ?? []) {
+            // Public step content must not show a completed result for a call the client
+            // has not answered yet.
+            if (isPendingClientCall(tr)) continue;
             stepContent.push({
               type: 'tool-result',
               toolCallId: tr.toolCallId,
@@ -400,14 +430,21 @@ export function createDurableLLMMappingStep() {
             ...deferredChunk,
             payload: {
               ...deferredChunk.payload,
+              // Stamp the value the loop actually decided on — the same one this step returns on
+              // `output.stepResult` and the dowhile predicate reads. It can disagree with the model's
+              // finish reason, because a tool error forces another turn so the model can self-correct,
+              // and the chunk must not claim otherwise: ChatChannelOutputProcessor closes its render
+              // queue on the first step-finish whose isContinued is not `true` (#23341).
+              stepResult: {
+                ...deferredChunk.payload?.stepResult,
+                isContinued,
+              },
               _durableStepContent: stepContent,
             },
           };
           await emitChunkEvent(pubsub, _runId, enrichedChunk);
         } catch (error) {
-          (mastra as Mastra | undefined)
-            ?.getLogger?.()
-            ?.warn?.(`[DurableAgent] Failed to emit deferred step-finish: ${error}`);
+          mastra?.getLogger?.()?.warn?.(`[DurableAgent] Failed to emit deferred step-finish: ${error}`);
         }
       }
 

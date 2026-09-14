@@ -4,6 +4,7 @@ import { stopGoalActivity } from '../../../agent/goal';
 import { resolveDeclineReason } from '../../../agent/tool-approval';
 import type { BackgroundTaskProgressChunk, ToolBackgroundConfig } from '../../../background-tasks/types';
 import type { MastraDBMessage } from '../../../memory';
+import { BACKGROUND_WORK_CONTEXT, notifyBackgroundWorkTerminal } from '../../../processors/background-work-signals';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../../../schema';
 import { safeEnqueue } from '../../../stream/base';
 import { ChunkFrom } from '../../../stream/types';
@@ -16,6 +17,7 @@ import {
 import { findProviderToolByName } from '../../../tools/provider-tool-utils';
 import { getNeedsApprovalFn } from '../../../tools/toolchecks';
 import type { MastraToolInvocationOptions, ToolApprovalContext } from '../../../tools/types';
+import { ensureSerializable } from '../../../utils';
 import type { SuspendOptions } from '../../../workflows/step';
 import { createStep } from '../../../workflows/workflow';
 import type { RunScopeContext } from '../../run-scope-access';
@@ -31,6 +33,7 @@ import {
   RESOURCE_ID_KEY,
   SAVE_QUEUE_MANAGER_KEY,
   STEP_ACTIVE_TOOLS_KEY,
+  STEP_MODEL_MESSAGES_KEY,
   STEP_TOOLS_KEY,
   STEP_WORKSPACE_KEY,
   THREAD_EXISTS_KEY,
@@ -637,10 +640,11 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         const toolOptions: MastraToolInvocationOptions = {
           abortSignal: options?.abortSignal,
           toolCallId: inputData.toolCallId,
-          // Pass all messages (input + response + memory) so sub-agents (agent-* tools) receive
-          // the full conversation context and can make better decisions. Each sub-agent invocation
-          // uses a fresh unique thread, so storing this context in that thread is scoped and safe.
-          messages: isAgentTool ? messageList.get.all.aiV5.model() : messageList.get.input.aiV5.model(),
+          // Agent tools receive the exact processor-adjusted prompt visible to the parent model.
+          // Regular tools retain the input-only context expected by the AI SDK tool contract.
+          messages: isAgentTool
+            ? (readScoped(scopeCtx, STEP_MODEL_MESSAGES_KEY, 'stepModelMessages') ?? messageList.get.all.aiV5.model())
+            : messageList.get.input.aiV5.model(),
           outputWriter,
           // Pass current step span as parent for tool call spans
           tracingContext: modelSpanTracker?.getTracingContext(),
@@ -916,6 +920,14 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
 
         // --- Background task dispatch ---
         const agentBgConfig = readScoped(scopeCtx, AGENT_BACKGROUND_CONFIG_KEY, 'agentBackgroundConfig');
+        // Settled by `onResult` once the authoritative background result has
+        // been reconciled into the message list (or reconciliation threw).
+        // Lives outside `taskContext` because the `awaited` disposition below
+        // must block the turn on it after the ladder returns.
+        let resolveReconciliation!: (outcome: { error?: unknown }) => void;
+        const reconciliationComplete = new Promise<{ error?: unknown }>(resolve => {
+          resolveReconciliation = resolve;
+        });
         const bgOutcome = await dispatchBackgroundTool({
           backgroundTaskManager: readScoped(scopeCtx, BACKGROUND_TASK_MANAGER_KEY, 'backgroundTaskManager'),
           agentBackgroundConfig: agentBgConfig,
@@ -962,7 +974,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               });
             }
           },
-          taskContext: () => {
+          taskContext: info => {
             const toolBgConfig = (tool as any).backgroundConfig as ToolBackgroundConfig | undefined;
             // Resolve the tool executor from the current closure
             const stepTools = (readScoped(scopeCtx, STEP_TOOLS_KEY, 'stepTools') as Tools | undefined) || tools;
@@ -978,7 +990,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             return {
               // Executor — uses the tool from the current closure
               executor: {
-                execute: (
+                execute: async (
                   bgArgs: Record<string, unknown>,
                   opts?: {
                     abortSignal?: AbortSignal;
@@ -991,8 +1003,16 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                   // would suspend the AGENT run via tool-call-approval) with
                   // the bg-task workflow's, so calling `suspend()` from the
                   // tool pauses the bg-task run instead.
-                  return resolvedTool.execute!(bgArgs, {
+                  const rawResult = await resolvedTool.execute!(bgArgs, {
                     ...toolOptions,
+                    isBackgroundTask: true,
+                    [BACKGROUND_WORK_CONTEXT]: {
+                      originRunId: runId,
+                      originToolCallId: inputData.toolCallId,
+                      taskId: info.getTaskId(),
+                      invocationKind: isAgentTool ? 'agent' : 'tool',
+                      disposition: info.disposition === 'awaited' ? 'awaited' : 'deferred',
+                    },
                     ...(opts?.resumeData !== undefined ? { resumeData: opts.resumeData } : {}),
                     suspend: async (data?: unknown, options?: SuspendOptions) => {
                       await toolOptions.suspend?.(data, options);
@@ -1004,6 +1024,22 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                     },
                     abortSignal: opts?.abortSignal,
                   } as any);
+                  const result = ensureSerializable(rawResult);
+
+                  if ('onOutput' in resolvedTool && typeof (resolvedTool as any).onOutput === 'function') {
+                    try {
+                      await (resolvedTool as any).onOutput({
+                        toolCallId: inputData.toolCallId,
+                        toolName: inputData.toolName,
+                        output: result,
+                        abortSignal: opts?.abortSignal,
+                      });
+                    } catch (error) {
+                      logger?.error('Error calling onOutput', error);
+                    }
+                  }
+
+                  return result;
                 },
               },
 
@@ -1098,73 +1134,89 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               // the LLM on the next turn would re-dispatch the tool thinking
               // the research was still running.
               onResult: async params => {
-                await applyBackgroundToolResult({
-                  params,
-                  currentRunId: runId,
-                  hasResumeData: workflowResumeData != null,
-                  args,
-                  messageList,
-                  approvalGrant: approvalGrant as Record<string, unknown> | undefined,
-                  baseProviderMetadata: inputData.providerMetadata as ProviderMetadata | undefined,
-                  transformForTranscript: async result => {
-                    const transformCarrier = await applyToolPayloadTransformToChunk(
-                      {
-                        type: params.status === 'failed' ? 'tool-error' : 'tool-result',
-                        payload: {
-                          toolCallId: params.toolCallId,
-                          toolName: params.toolName,
-                          args,
-                          ...(params.status === 'failed' ? { error: params.error } : { result: params.result }),
+                try {
+                  await applyBackgroundToolResult({
+                    params,
+                    currentRunId: runId,
+                    hasResumeData: workflowResumeData != null,
+                    args,
+                    messageList,
+                    approvalGrant: approvalGrant as Record<string, unknown> | undefined,
+                    baseProviderMetadata: inputData.providerMetadata as ProviderMetadata | undefined,
+                    transformForTranscript: async result => {
+                      const transformCarrier = await applyToolPayloadTransformToChunk(
+                        {
+                          type: params.status === 'failed' ? 'tool-error' : 'tool-result',
+                          payload: {
+                            toolCallId: params.toolCallId,
+                            toolName: params.toolName,
+                            args,
+                            ...(params.status === 'failed' ? { error: params.error } : { result: params.result }),
+                          },
+                          metadata: {} as Record<string, any>,
                         },
-                        metadata: {} as Record<string, any>,
-                      },
-                      {
-                        policy: transformSource.policy,
-                        toolTransform: transformSource.toolTransform,
-                        logger,
-                        transformInput: {
-                          providerMetadata: inputData.providerMetadata as Record<string, unknown> | undefined,
+                        {
+                          policy: transformSource.policy,
+                          toolTransform: transformSource.toolTransform,
+                          logger,
+                          transformInput: {
+                            providerMetadata: inputData.providerMetadata as Record<string, unknown> | undefined,
+                          },
                         },
-                      },
-                    );
-                    const transcriptArgsTransform = getTransformedToolPayload(
-                      transformCarrier.metadata,
-                      'transcript',
-                      'input-available',
-                    );
-                    const transcriptResultTransform = getTransformedToolPayload(
-                      transformCarrier.metadata,
-                      'transcript',
-                      params.status === 'failed' ? 'error' : 'output-available',
-                    );
-                    return {
-                      transcriptArgs: hasTransformedToolPayload(transcriptArgsTransform)
-                        ? transcriptArgsTransform.transformed
-                        : args,
-                      transcriptResult: hasTransformedToolPayload(transcriptResultTransform)
-                        ? transcriptResultTransform.transformed
-                        : result,
-                      providerMetadata: withToolPayloadTransformProviderMetadata(
-                        inputData.providerMetadata as ProviderMetadata | undefined,
+                      );
+                      const transcriptArgsTransform = getTransformedToolPayload(
                         transformCarrier.metadata,
-                      ) as ProviderMetadata | undefined,
-                    };
-                  },
-                  toModelOutput: (resolvedTool as { toModelOutput?: (output: unknown) => unknown } | undefined)
-                    ?.toModelOutput,
-                  generateId: readScoped(scopeCtx, GENERATE_ID_KEY, 'generateId'),
-                  logger,
-                  flush: async () => {
-                    const sqm = readScoped(scopeCtx, SAVE_QUEUE_MANAGER_KEY, 'saveQueueManager');
-                    const tid = readScoped(scopeCtx, THREAD_ID_KEY, 'threadId');
-                    const mcfg = readScoped(scopeCtx, MEMORY_CONFIG_KEY, 'memoryConfig');
-                    // readOnly runs must not persist the patched background result
-                    // to memory — mirrors the durable engine's readOnly flush guard.
-                    if (sqm && tid && !mcfg?.readOnly) {
-                      await sqm.flushMessages(messageList, tid, mcfg);
-                    }
-                  },
-                });
+                        'transcript',
+                        'input-available',
+                      );
+                      const transcriptResultTransform = getTransformedToolPayload(
+                        transformCarrier.metadata,
+                        'transcript',
+                        params.status === 'failed' ? 'error' : 'output-available',
+                      );
+                      return {
+                        transcriptArgs: hasTransformedToolPayload(transcriptArgsTransform)
+                          ? transcriptArgsTransform.transformed
+                          : args,
+                        transcriptResult: hasTransformedToolPayload(transcriptResultTransform)
+                          ? transcriptResultTransform.transformed
+                          : result,
+                        providerMetadata: withToolPayloadTransformProviderMetadata(
+                          inputData.providerMetadata as ProviderMetadata | undefined,
+                          transformCarrier.metadata,
+                        ) as ProviderMetadata | undefined,
+                      };
+                    },
+                    toModelOutput: (resolvedTool as { toModelOutput?: (output: unknown) => unknown } | undefined)
+                      ?.toModelOutput,
+                    generateId: readScoped(scopeCtx, GENERATE_ID_KEY, 'generateId'),
+                    logger,
+                    flush: async () => {
+                      const sqm = readScoped(scopeCtx, SAVE_QUEUE_MANAGER_KEY, 'saveQueueManager');
+                      const tid = readScoped(scopeCtx, THREAD_ID_KEY, 'threadId');
+                      const mcfg = readScoped(scopeCtx, MEMORY_CONFIG_KEY, 'memoryConfig');
+                      // readOnly runs must not persist the patched background result
+                      // to memory — mirrors the durable engine's readOnly flush guard.
+                      if (sqm && tid && !mcfg?.readOnly) {
+                        await sqm.flushMessages(messageList, tid, mcfg);
+                      }
+                    },
+                  });
+
+                  resolveReconciliation({});
+                  void notifyBackgroundWorkTerminal(mastra, {
+                    originRunId: runId,
+                    originToolCallId: params.toolCallId,
+                    ...(params.runId !== runId ? { executorRunId: params.runId } : {}),
+                    taskId: params.taskId,
+                    invocationKind: isAgentTool ? 'agent' : 'tool',
+                    disposition: info.disposition === 'awaited' ? 'awaited' : 'deferred',
+                    status: params.status === 'failed' ? 'failed' : 'completed',
+                  });
+                } catch (error) {
+                  resolveReconciliation({ error });
+                  throw error;
+                }
               },
               // Execution injector — records background task lifecycle metadata on the
               // assistant message without changing the model-visible tool result.
@@ -1189,6 +1241,33 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         });
 
         if (bgOutcome.status !== 'sync') {
+          // `awaited` disposition: block the turn on the authoritative
+          // background result instead of returning the placeholder. The
+          // reconciliation promise gate ensures `onResult` has patched the
+          // message list before the result is returned to the model.
+          // Restarted tasks are included (main only had started/resumed —
+          // restart-reattach is this branch's hoisted extension, ledger L5):
+          // a replayed awaited call still owes the model the real result.
+          if (bgOutcome.disposition === 'awaited') {
+            const completedTask = await bgOutcome.waitForCompletion({ abortSignal: options?.abortSignal });
+            if (completedTask.status !== 'completed') {
+              throw new Error(
+                completedTask.error?.message ??
+                  `Background task ${completedTask.status.replace('_', ' ')}: ${completedTask.id}`,
+              );
+            }
+
+            const reconciliation = await reconciliationComplete;
+            if (reconciliation.error) {
+              throw reconciliation.error;
+            }
+
+            return {
+              result: ensureSerializable(completedTask.result),
+              ...inputData,
+              ...(approvalGrant ?? {}),
+            };
+          }
           if (bgOutcome.status === 'started') {
             // Return placeholder result so the LLM can continue
             return {

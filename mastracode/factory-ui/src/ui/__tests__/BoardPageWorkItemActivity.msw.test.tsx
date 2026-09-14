@@ -415,6 +415,13 @@ describe('Board work-item activity', () => {
           },
         }),
       ),
+      http.get(`${TEST_BASE_URL}/web/intake/bindings`, () =>
+        HttpResponse.json({
+          bindings: [
+            { integrationId: 'linear', sourceId: 'linear-project', factoryProjectId: FACTORY_ID, board: 'work' },
+          ],
+        }),
+      ),
       http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
         HttpResponse.json({ enabled: true, connected: true, workspace: { name: 'Acme', urlKey: 'acme' } }),
       ),
@@ -433,6 +440,7 @@ describe('Board work-item activity', () => {
               assignee: 'Linear Grace',
               creator: 'Linear Ada',
               team: 'Engineering',
+              sourceId: 'linear-project',
               labels: [],
               createdAt: '2026-08-01T09:00:00.000Z',
               updatedAt: '2026-08-01T09:00:00.000Z',

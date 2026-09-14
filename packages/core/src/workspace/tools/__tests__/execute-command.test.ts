@@ -321,6 +321,30 @@ describe('executeCommandTool data chunks', () => {
 
       expect(result).toBe('hello world\n');
     });
+
+    it('returns stderr for successful command with no stdout', async () => {
+      const { context } = createMockContext({
+        executeCommand: async () => {
+          return { success: true, exitCode: 0, stdout: '', stderr: 'warning', executionTimeMs: 5 };
+        },
+      });
+
+      const result = await execute({ command: 'warn', args: [], timeout: null, cwd: null }, context);
+
+      expect(result).toBe('stderr:\nwarning');
+    });
+
+    it('labels stdout and stderr for successful command with both streams', async () => {
+      const { context } = createMockContext({
+        executeCommand: async () => {
+          return { success: true, exitCode: 0, stdout: 'completed', stderr: 'warning', executionTimeMs: 5 };
+        },
+      });
+
+      const result = await execute({ command: 'build', args: [], timeout: null, cwd: null }, context);
+
+      expect(result).toBe('stdout:\ncompleted\n\nstderr:\nwarning');
+    });
   });
 
   describe('streaming chunks match return value', () => {
@@ -643,6 +667,94 @@ describe('executeCommandTool browser CLI logic', () => {
   });
 
   describe('CDP injection', () => {
+    it('routes Browser Use stdin to the managed browser with stable thread isolation', async () => {
+      const commands: string[] = [];
+      const browser = createMockBrowser({
+        getCdpUrl: vi.fn(thread => `ws://localhost/browser/${thread}`),
+      });
+      const command = `browser-use <<'PY'\nprint("hello; world")\nPY\n`;
+      for (const threadId of ['one', 'one', 'two']) {
+        const { context } = createMockContextWithBrowser({
+          browser,
+          threadId,
+          executeCommand: async cmd => {
+            commands.push(cmd);
+            return { success: true, exitCode: 0, stdout: '', stderr: '', executionTimeMs: 1 };
+          },
+        });
+        await execute({ command, timeout: null, cwd: null, tail: null }, context);
+      }
+      expect(commands).toHaveLength(3); // No Browser Use warmup commands.
+      expect(commands[0]).toBe(commands[1]);
+      expect(commands[0]).not.toBe(commands[2]);
+      expect(commands[0]).toContain('BU_CDP_WS=');
+      expect(commands[0]).toContain('ws://localhost/browser/one');
+      expect(commands[2]).toContain('ws://localhost/browser/two');
+      expect(commands[0]).toContain('BU_NAME=');
+      expect(commands[0]).not.toMatch(/--cdp-url|--session/);
+      expect(commands[0]).toContain('print("hello; world")\n');
+      expect(browser.launch).toHaveBeenCalledWith('one');
+      expect(browser.launch).toHaveBeenCalledWith('two');
+      expect(browser.connectToExternalCdp).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      'agent-browser open https://example.com && browser-use < script.py',
+      'browser-use < script.py &&\nagent-browser open https://example.com',
+      'browser-use < script.py ||\nagent-browser open https://example.com',
+      'browser-use < script.py;\nagent-browser open https://example.com',
+      'agent-browser open https://example.com;\nbrowser-use < script.py',
+    ])('warms up and scopes agent-browser in a mixed Browser Use stdin chain: %s', async command => {
+      const commands: string[] = [];
+      const browser = createMockBrowser();
+      const { context } = createMockContextWithBrowser({
+        browser,
+        executeCommand: async cmd => {
+          commands.push(cmd);
+          return { success: true, exitCode: 0, stdout: '', stderr: '', executionTimeMs: 1 };
+        },
+      });
+      await execute(
+        {
+          command,
+          timeout: null,
+          cwd: null,
+          tail: null,
+        },
+        context,
+      );
+      expect(commands).toHaveLength(2);
+      expect(commands[0]).toBe('agent-browser --session test-thread connect ws://localhost:9222/devtools/browser/abc');
+      expect(commands[1]).toContain(
+        'agent-browser --cdp ws://localhost:9222/devtools/browser/abc --session test-thread open',
+      );
+      expect(commands[1]).toContain('BU_CDP_WS=');
+      expect(commands[1]).toContain('BU_NAME=');
+      expect(commands[1]).toContain('browser-use < script.py');
+      expect(commands[1]).not.toContain('--cdp-url');
+      expect(browser.connectToExternalCdp).not.toHaveBeenCalled();
+    });
+
+    it('forwards Browser Use stdin transport to background execution', async () => {
+      const browser = createMockBrowser();
+      const foreground = vi.fn();
+      const { context, sandbox } = createMockContextWithBrowser({ browser, executeCommand: foreground });
+      const spawn = vi.fn(async () => ({ pid: '123' }));
+      Object.assign(sandbox, { processes: { spawn } });
+      const { executeCommandWithBackgroundTool } = await import('../execute-command');
+      const command = `bu <<'PY'\nprint("hello; world")\nPY\n`;
+      await executeCommandWithBackgroundTool.execute!(
+        { command, timeout: null, cwd: null, tail: null, background: true },
+        context,
+      );
+      expect(spawn).toHaveBeenCalledWith(
+        browserCliHandler.injectCdpUrl(command, 'ws://localhost:9222/devtools/browser/abc', 'test-thread'),
+        expect.any(Object),
+      );
+      expect(foreground).not.toHaveBeenCalled();
+      expect(browser.launch).toHaveBeenCalledWith('test-thread');
+    });
+
     it('injects CDP URL into browser CLI command', async () => {
       let executedCommand = '';
       const mockBrowser = createMockBrowser({

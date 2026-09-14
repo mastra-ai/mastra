@@ -8,6 +8,7 @@ import { PickMultiPanel } from './pick-multi-panel';
 import type { PropertyFilterField, PropertyFilterToken } from './types';
 import { Input } from '@/ds/components/Input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover/popover';
+import { MENU_SIDE_OFFSET } from '@/ds/primitives/menu-item';
 
 export type PropertyFilterAppliedProps = {
   fields: PropertyFilterField[];
@@ -173,7 +174,7 @@ function PickMultiTokenPill({ field, token, tokens, onChange, onRemove, disabled
             {stringifyTokenValue(token.value)}
           </Button>
         </PopoverTrigger>
-        <PopoverContent align="start" sideOffset={8} className="w-64 p-2" data-pick-multi-panel>
+        <PopoverContent align="start" sideOffset={MENU_SIDE_OFFSET} className="w-64 p-0" data-pick-multi-panel>
           <PickMultiPanel field={field} tokens={tokens} onChange={onChange} />
         </PopoverContent>
       </Popover>

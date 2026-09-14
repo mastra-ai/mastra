@@ -152,7 +152,7 @@ export function CardActions({
   const [main] = actions;
   return (
     <div className="mt-auto flex items-center justify-between gap-2">
-      <div className="board-card-actions relative z-10 flex">
+      <div className="board-card-actions relative z-10 flex shrink-0">
         {actions.map(action => (
           <CardActionButton key={action.label} action={action} main={action === main} beforeStart={beforeStart} />
         ))}
