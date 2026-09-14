@@ -83,6 +83,8 @@ export interface LinearWorkspace {
 export interface LinearIssue {
   id: string;
   projectId: string | null;
+  /** Raw Linear team id for exact team-source attribution. */
+  teamId: string | null;
   /** Human key like `ENG-123`. */
   identifier: string;
   title: string;
@@ -140,10 +142,7 @@ export interface LinearIssueComment {
 }
 
 /** Full issue payload for agent context: everything in {@link LinearIssue} plus description and discussion. */
-export interface LinearIssueDetail extends Omit<LinearIssue, 'projectId'> {
-  projectId: string | null;
-  /** Team id the issue belongs to, used to authorize team-sourced intake reads. */
-  teamId: string | null;
+export interface LinearIssueDetail extends LinearIssue {
   /** Markdown body of the issue, or `null` when empty. */
   description: string | null;
   /** Discussion comments, oldest first. */
@@ -198,7 +197,7 @@ interface IssuesQueryData {
       project: { id: string } | null;
       assignee: { name: string } | null;
       creator: { name: string } | null;
-      team: { key: string } | null;
+      team: { id: string; key: string } | null;
       labels: { nodes: Array<{ name: string }> };
     }>;
     pageInfo: { hasNextPage: boolean; endCursor: string | null };
@@ -739,13 +738,8 @@ export class LinearIntegration implements FactoryIntegration {
     const projectIssues = projectResult.issues.map(issue => linearIssueToIntakeIssue(issue));
     const selectedTeamSourceById = new Map(teamIds.map(teamId => [teamId, encodeSelfManagedTeamSourceId(teamId)]));
     const teamIssues = teamResult.issues.map(issue => {
-      // The self-managed issue carries the raw team key, not id, so we cannot
-      // map back to the specific selected team id when several are selected.
-      // With a single team selected this is exact; with several we attribute to
-      // the first selected team, which still routes to a team board the user
-      // chose. Board routing is per-source-id and dedupe is by issue id, so
-      // this stays deterministic.
-      const teamSourceId = selectedTeamSourceById.get(teamIds[0]!)!;
+      const teamSourceId = issue.teamId ? selectedTeamSourceById.get(issue.teamId) : undefined;
+      if (!teamSourceId) throw new Error('Linear returned an issue outside the selected teams.');
       return { ...linearIssueToIntakeIssue(issue), sourceId: teamSourceId };
     });
 
@@ -915,7 +909,7 @@ export class LinearIntegration implements FactoryIntegration {
             project { id }
             assignee { name }
             creator { name }
-            team { key }
+            team { id key }
             labels { nodes { name } }
           }
           pageInfo { hasNextPage endCursor }
@@ -946,6 +940,7 @@ export class LinearIntegration implements FactoryIntegration {
         labels: node.labels.nodes.map(label => label.name),
         createdAt: node.createdAt,
         updatedAt: node.updatedAt,
+        teamId: node.team?.id ?? null,
       })),
       nextCursor: pageInfo.hasNextPage ? pageInfo.endCursor : null,
     };

@@ -19,6 +19,7 @@ function integration(): LinearIntegration {
 const issue: LinearIssue = {
   id: 'issue-1',
   projectId: 'project-1',
+  teamId: 'team-1',
   identifier: 'ENG-42',
   title: 'Fix intake',
   url: 'https://linear.app/acme/issue/ENG-42',
@@ -205,8 +206,9 @@ describe('LinearIntegration capability surface', () => {
   it('lists team sources and dedupes an overlapping issue in favour of the project (most-specific-wins)', async () => {
     const linear = integration();
     const teamSourceId = `linear-team:team-1`;
+    const secondTeamSourceId = `linear-team:team-2`;
     const overlapping: LinearIssue = { ...issue, id: 'issue-1', projectId: 'project-1' };
-    const projectlessTeamIssue: LinearIssue = { ...issue, id: 'issue-2', identifier: 'ENG-99', projectId: null };
+    const projectlessTeamIssue: LinearIssue = { ...issue, id: 'issue-2', identifier: 'OPS-99', projectId: null, teamId: 'team-2', team: 'OPS' };
 
     const listActiveIssues = vi
       .spyOn(linear, 'listActiveIssues')
@@ -217,20 +219,20 @@ describe('LinearIntegration capability surface', () => {
 
     const result = await linear.intake.listIssues({
       connection,
-      sourceIds: ['project-1', teamSourceId],
+      sourceIds: ['project-1', teamSourceId, secondTeamSourceId],
     });
 
     // Project call: projectIds=['project-1'], no teamIds.
     expect(listActiveIssues).toHaveBeenNthCalledWith(1, 'linear-token', undefined, ['project-1'], undefined);
     // Team call: no projectIds, teamIds=['team-1'].
-    expect(listActiveIssues).toHaveBeenNthCalledWith(2, 'linear-token', undefined, undefined, undefined, ['team-1']);
+    expect(listActiveIssues).toHaveBeenNthCalledWith(2, 'linear-token', undefined, undefined, undefined, ['team-1', 'team-2']);
 
     // issue-1 appears once, attributed to the project source; issue-2 kept via team.
     expect(result.issues).toHaveLength(2);
     const overlap = result.issues.find(i => i.id === 'issue-1')!;
     expect(overlap.sourceId).toBe('project-1');
     const projectless = result.issues.find(i => i.id === 'issue-2')!;
-    expect(projectless.sourceId).toBe(teamSourceId);
+    expect(projectless.sourceId).toBe(secondTeamSourceId);
   });
 
   it('returns projectless team issues from the generic listItems surface', async () => {
