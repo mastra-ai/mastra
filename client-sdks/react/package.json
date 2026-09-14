@@ -36,6 +36,16 @@
         "default": "./dist/ui/index.cjs"
       }
     },
+    "./workflow-hooks": {
+      "import": {
+        "types": "./dist/workflow-hooks.d.ts",
+        "default": "./dist/workflow-hooks.js"
+      },
+      "require": {
+        "types": "./dist/workflow-hooks.d.ts",
+        "default": "./dist/workflow-hooks.cjs"
+      }
+    },
     "./styles.css": "./dist/react.css"
   },
   "scripts": {
@@ -47,6 +57,7 @@
     "dev": "tsdown --config tsdown.config.ts --watch",
     "test": "vitest",
     "test:unit": "vitest run",
+    "test:package": "node --test test/workflow-hooks-package.mjs && tsc --project test/tsconfig.json",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build"
   },
