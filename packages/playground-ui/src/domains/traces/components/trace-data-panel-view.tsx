@@ -367,7 +367,7 @@ export function TraceDataPanelView({
                 >
                   {/* min-h-16 keeps this header level with the two-line span panel header next to it. */}
                   <DataPanel.Header className="min-h-16 py-2">
-                    <TabList variant="pill-ghost" className="px-0">
+                    <TabList variant="pill-ghost">
                       <Tab value="details">Spans</Tab>
                       {feedbackTabSlot && <Tab value="feedback">Feedback{feedbackTabBadge}</Tab>}
                       {scoresTabSlot && (

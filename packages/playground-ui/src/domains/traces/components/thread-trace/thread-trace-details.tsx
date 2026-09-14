@@ -62,8 +62,8 @@ export function ThreadTraceDetailsHeader({
 
 export type ThreadTraceTabListProps = Omit<TabListProps, 'variant'> & { variant?: TabListProps['variant'] };
 
-export function ThreadTraceTabList({ className, variant = 'pill-ghost', ...props }: ThreadTraceTabListProps) {
-  return <TabList variant={variant} className={cn('px-0', className)} {...props} />;
+export function ThreadTraceTabList({ variant = 'pill-ghost', ...props }: ThreadTraceTabListProps) {
+  return <TabList variant={variant} {...props} />;
 }
 
 export type ThreadTraceDetailsActionsProps = ComponentProps<'div'>;

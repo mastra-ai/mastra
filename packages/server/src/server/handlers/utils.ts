@@ -1,7 +1,7 @@
 import type { MastraFGAPermissionInput } from '@mastra/core/auth/ee';
 import type { RequestContext } from '@mastra/core/di';
 import { MastraMemory } from '@mastra/core/memory';
-import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../constants';
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, isReservedRequestContextKey } from '../constants';
 import { MastraFGAPermissions } from '../fga-permissions';
 import { HTTPException } from '../http-exception';
 
@@ -60,6 +60,24 @@ export function parseFilters(filters: string | string[] | undefined): Record<str
       return [key, value];
     }),
   );
+}
+
+/**
+ * Merges a body-supplied requestContext into the trusted server RequestContext.
+ * The server context is authoritative: reserved keys are skipped and body values
+ * only fill keys the server context has not already set.
+ */
+export function mergeBodyRequestContext(serverRequestContext: RequestContext, bodyRequestContext: unknown): void {
+  if (!bodyRequestContext || typeof bodyRequestContext !== 'object') {
+    return;
+  }
+
+  for (const [key, value] of Object.entries(bodyRequestContext)) {
+    if (isReservedRequestContextKey(key)) continue;
+    if (serverRequestContext.get(key) === undefined) {
+      serverRequestContext.set(key, value);
+    }
+  }
 }
 
 // ============================================================================
