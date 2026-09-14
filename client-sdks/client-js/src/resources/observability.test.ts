@@ -1,7 +1,13 @@
 import { EntityType, SpanType } from '@mastra/core/observability';
-import type { TraceQueryGroupResponse, TraceQueryTraceResponse } from '@mastra/core/storage';
+import type {
+  TraceQueryGroupResponse,
+  TraceQueryRequest,
+  TraceQueryResponse,
+  TraceQueryTraceResponse,
+} from '@mastra/core/storage';
 import { describe, expect, expectTypeOf, beforeEach, it, vi } from 'vitest';
 import { MastraClient } from '../client';
+import { Observability } from './observability';
 import type { LegacyGroupedTraceQueryInput, QueryTraceThreadsResult } from './observability';
 
 // Mock fetch globally
@@ -528,6 +534,21 @@ describe('Observability Methods', () => {
         `${clientOptions.baseUrl}/api/observability/traces/query`,
         expect.objectContaining({ method: 'POST', body: JSON.stringify(request) }),
       );
+    });
+
+    it('keeps broadly typed trace queries compatible on both query surfaces', async () => {
+      mockSuccessfulResponse();
+      mockSuccessfulResponse();
+      const request: TraceQueryRequest = {
+        timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
+      };
+      const observability = new Observability(clientOptions);
+
+      const clientResult = await client.queryTraces(request);
+      const resourceResult = await observability.queryTraces(request);
+
+      expectTypeOf(clientResult).toEqualTypeOf<TraceQueryResponse>();
+      expectTypeOf(resourceResult).toEqualTypeOf<TraceQueryResponse>();
     });
   });
 

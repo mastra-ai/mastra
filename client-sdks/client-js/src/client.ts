@@ -10,6 +10,7 @@ import type {
   ListTracesResponse,
   ListTracesLightResponse,
   TraceQueryGroupResponse,
+  TraceQueryRequest,
   TraceQueryResponse,
   TraceQueryTraceResponse,
   ListBranchesArgs,
@@ -1124,7 +1125,11 @@ export class MastraClient extends BaseResource {
   queryTraces(params: QueryTracesInput): Promise<TraceQueryTraceResponse>;
   /** @deprecated Use {@link queryTraceThreads} for querying thread identities. */
   queryTraces(params: LegacyGroupedTraceQueryInput): Promise<TraceQueryGroupResponse>;
-  queryTraces(params: QueryTracesInput | LegacyGroupedTraceQueryInput): Promise<TraceQueryResponse> {
+  /** Compatibility overload for requests whose optional grouping is not statically known. */
+  queryTraces(params: TraceQueryRequest): Promise<TraceQueryResponse>;
+  queryTraces(
+    params: QueryTracesInput | LegacyGroupedTraceQueryInput | TraceQueryRequest,
+  ): Promise<TraceQueryResponse> {
     if (params.group) return this.observability.queryTraces(params);
     return this.observability.queryTraces(params);
   }
