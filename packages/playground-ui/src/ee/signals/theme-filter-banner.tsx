@@ -1,5 +1,5 @@
 import type { SignalCatalogEntry } from '@mastra/client-js';
-import { X } from 'lucide-react';
+import { X, Eye } from 'lucide-react';
 import { getSignalHue } from './signal-colors';
 import { signalLabel } from './signal-formatting';
 import type { ThemeSelection } from './theme-drilldown-data';
@@ -77,7 +77,7 @@ export function ThemeFilterBanner({
                 ? `Clear ${selection.kind} filter`
                 : `Clear filter ${selectionLabel(signalCatalog, selection)}`
             }
-            className="border-border1 bg-surface2 text-neutral6 hover:bg-surface4 text-ui-sm flex items-center gap-1.5 rounded-full border py-1 pr-2 pl-2.5 font-medium transition-colors"
+            className="border-border1 bg-surface2 text-ui-sm text-neutral6 hover:bg-surface4 flex items-center gap-1.5 rounded-full border py-1 pr-2 pl-2.5 font-medium transition-colors"
             onClick={() => onRemove(selection.signalName)}
             type="button"
           >
@@ -87,11 +87,12 @@ export function ThemeFilterBanner({
           </button>
         );
       })}
-      <span className="text-neutral4 text-ui-sm">
+      <span className="text-ui-sm text-neutral4">
         {filterSummary({ selections, filteredTraceCount, totalTraceCount, isUnavailable })}
       </span>
       {!isUnavailable && filteredTraceCount !== undefined && latestSelection ? (
         <Button
+          icon={<Eye />}
           aria-label={
             latestSelection.kind === 'theme'
               ? `View theme details for ${latestSelection.label}`
@@ -106,7 +107,7 @@ export function ThemeFilterBanner({
         </Button>
       ) : null}
       {selections.length > 1 ? (
-        <Button onClick={onClear} size="sm" type="button" variant="ghost">
+        <Button icon={<X />} onClick={onClear} size="sm" type="button" variant="ghost">
           Clear all
         </Button>
       ) : null}

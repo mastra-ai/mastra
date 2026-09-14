@@ -1299,11 +1299,13 @@ export class GeminiLiveVoice extends MastraVoice<
     } else if (data.toolCall) {
       this.log('Processing tool call message');
       await this.handleToolCall(data);
-    } else if (data.usageMetadata) {
+    }
+
+    // Usage metadata and session resumption updates can accompany any primary message.
+    // Handle them independently so content, setup, and tool frames do not suppress them.
+    if (data.usageMetadata) {
       this.log('Processing usage metadata message');
       this.handleUsageUpdate(data);
-      // sessionResumptionUpdate may arrive in the same frame as usageMetadata
-      // so we handle it here too, not in a separate else-if branch
     }
     if (data.sessionResumptionUpdate) {
       this.log('Processing session resumption update', data.sessionResumptionUpdate);

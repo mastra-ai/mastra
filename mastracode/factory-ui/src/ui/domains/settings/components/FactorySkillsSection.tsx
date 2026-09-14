@@ -10,7 +10,7 @@ import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { useFactorySkillsQuery } from '../../../../hooks/useFactorySkills';
 import type { FactorySkillInfo, InstalledBoardInfo } from '../../../../api/types';
 import { orderedBoards } from '../../factory/boardCatalog';
-import { SettingsCard } from './SettingsCard';
+import { SettingsContainer } from '@mastra/playground-ui/new/settings';
 import { SettingsSubsection } from './SettingsSubsection';
 
 interface DisplayedSkill {
@@ -18,12 +18,6 @@ interface DisplayedSkill {
   title: string;
 }
 
-/**
- * The built-in skills shown on the Skills page, grouped by the built-in board
- * whose lifecycle invokes them. This is an explicit association: the board
- * code names these skills directly, so the UI does not infer anything from
- * role names or lifecycle functions.
- */
 const BUILT_IN_BOARD_SKILLS: Record<'work' | 'review', DisplayedSkill[]> = {
   work: [
     { name: 'factory-triage', title: 'Triage' },
@@ -67,7 +61,7 @@ function SkillContent({ content }: { content: string }) {
 
 function SkillCard({ title, skill }: { title: string; skill: FactorySkillInfo }) {
   return (
-    <SettingsCard>
+    <SettingsContainer>
       <Collapsible>
         <CollapsibleTrigger className="group flex w-full items-center justify-between gap-4 px-4 py-3 text-left">
           <div className="flex min-w-0 flex-col gap-0.5">
@@ -90,7 +84,7 @@ function SkillCard({ title, skill }: { title: string; skill: FactorySkillInfo })
           <SkillContent content={skill.content} />
         </CollapsibleContent>
       </Collapsible>
-    </SettingsCard>
+    </SettingsContainer>
   );
 }
 
@@ -105,11 +99,10 @@ function SkillCards({ displayed, skills }: { displayed: DisplayedSkill[]; skills
   );
 }
 
-/** Working roles a code-defined board declares; its kickoff instructions live in code, not a skill. */
 function CustomBoardRoles({ board }: { board: InstalledBoardInfo }) {
   const roles = [...new Set(board.phases.flatMap(phase => (phase.role ? [phase.role] : [])))];
   return (
-    <SettingsCard>
+    <SettingsContainer>
       <div className="flex flex-col gap-2 px-4 py-3">
         {roles.length === 0 ? (
           <Txt as="p" variant="ui-sm" className="text-icon3">
@@ -131,7 +124,7 @@ function CustomBoardRoles({ board }: { board: InstalledBoardInfo }) {
           here.
         </Txt>
       </div>
-    </SettingsCard>
+    </SettingsContainer>
   );
 }
 
@@ -150,11 +143,6 @@ function BoardGroup({ board, skills }: { board: InstalledBoardInfo; skills: Fact
   );
 }
 
-/**
- * Read-only view of the Factory skills — the playbooks automated Factory runs
- * follow at each stage (Settings › Agent › Skills), grouped by installed board
- * when a factory is selected.
- */
 export function FactorySkillsSection({ factoryId }: { factoryId?: string }) {
   const skillsQuery = useFactorySkillsQuery();
   const catalog = useBoardCatalog(factoryId);

@@ -3,9 +3,10 @@ import { Check, ChevronsUpDown, Search, X } from 'lucide-react';
 import * as React from 'react';
 import { comboboxItemClass, comboboxStyles, comboboxTriggerClass } from './combobox-styles';
 import type { ComboboxVariant } from './combobox-styles';
-import { Button } from '@/ds/components/Button/Button';
-import type { TextButtonSize } from '@/ds/components/Button/Button';
+import { Button, isIconButtonSize } from '@/ds/components/Button/Button';
+import type { ButtonSize } from '@/ds/components/Button/Button';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
+import '@/ds/primitives/focus.css';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
 import { cn } from '@/lib/utils';
 
@@ -27,14 +28,16 @@ type ComboboxSharedProps = {
   className?: string;
   disabled?: boolean;
   variant?: ComboboxVariant;
-  size?: TextButtonSize;
+  /** Icon sizes show only a chevron; provide aria-label to name the trigger. */
+  size?: ButtonSize;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   container?: HTMLElement | ShadowRoot | null | React.RefObject<HTMLElement | ShadowRoot | null>;
   error?: string;
   'aria-label'?: string;
+  align?: 'start' | 'center' | 'end';
   allowCustomValue?: boolean;
-  /** Called with the search input text as it changes (and with `''` after a single-mode selection resets it). */
+  /** Single mode reports search edits and an empty string when selection clears the query. */
   onInputValueChange?: (value: string) => void;
 };
 
@@ -84,6 +87,7 @@ export function Combobox(props: ComboboxProps) {
     container,
     error,
     'aria-label': ariaLabel,
+    align = 'start',
     allowCustomValue = false,
     onInputValueChange,
   } = props;
@@ -104,9 +108,9 @@ export function Combobox(props: ComboboxProps) {
   const clearSelection = () => {
     if (isMultipleCombobox(props)) props.onValueChange?.([]);
   };
-  // Default to the nearest SideDialog/Drawer popup so the list stays
-  // interactive inside a modal drawer; an explicit `container` still wins.
+  // Keep the popup inside the modal's interaction boundary unless a container overrides it.
   const resolvedContainer = usePortalContainer(container);
+  const iconOnly = isIconButtonSize(size);
 
   const comboboxContent = (
     <>
@@ -114,12 +118,14 @@ export function Combobox(props: ComboboxProps) {
         aria-label={ariaLabel}
         className={comboboxTriggerClass({ variant, size, error: Boolean(error), className })}
       >
-        {multiple ? (
+        {iconOnly ? (
+          <span className="sr-only">{multiple ? triggerText : <BaseCombobox.Value placeholder={placeholder} />}</span>
+        ) : multiple ? (
           <span className={cn('truncate', selectedOptions.length === 0 && comboboxStyles.placeholder)}>
             {triggerText}
           </span>
         ) : (
-          // Keep truncation off the outer wrapper so start adornments are not clipped.
+          // Truncate only the label so start adornments are not clipped.
           <span className="flex min-w-0 flex-1 items-center gap-2">
             {selectedOption?.start}
             <span className="truncate">
@@ -127,16 +133,16 @@ export function Combobox(props: ComboboxProps) {
             </span>
           </span>
         )}
-        {/* Wrap the chevron in a `<span>` so the svg is one level deep and
-            escapes Button's `[&>svg]` adornments — mirrors Select's chevron wrap. */}
+
+        {/* Keep the chevron nested so Button's direct-SVG styles cannot distort it. */}
         <span className="flex shrink-0 items-center">
-          <ChevronsUpDown className={comboboxStyles.chevron} />
+          <ChevronsUpDown className={cn(comboboxStyles.chevron, iconOnly && 'ml-0')} />
         </span>
       </BaseCombobox.Trigger>
 
       <BaseCombobox.Portal container={resolvedContainer}>
         <BaseCombobox.Positioner
-          align="start"
+          align={align}
           sideOffset={4}
           positionMethod={FLOATING_POSITION_METHOD}
           className={comboboxStyles.positioner}
@@ -190,8 +196,8 @@ export function Combobox(props: ComboboxProps) {
                   size="sm"
                   className="w-full justify-start"
                   onClick={clearSelection}
+                  icon={<X />}
                 >
-                  <X />
                   {clearLabel}
                 </Button>
               </div>

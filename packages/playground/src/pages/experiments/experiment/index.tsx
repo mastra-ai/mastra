@@ -94,8 +94,7 @@ function ExperimentPage() {
         titleSlot="Experiment not found"
         descriptionSlot={`No experiment with id "${experimentId}".`}
         actionSlot={
-          <Button as={Link} to="/experiments">
-            <ArrowLeft />
+          <Button as={Link} to="/experiments" icon={<ArrowLeft />}>
             Back to Experiments
           </Button>
         }
@@ -140,7 +139,7 @@ function ExperimentPage() {
           </ExperimentTopArea>
 
           {/* Results take the remaining width; the rail keeps the pipeline and run metadata beside them. */}
-          <PageLayout.MainArea className="grid grid-cols-[1fr_auto] gap-6 overflow-visible">
+          <PageLayout.MainArea className="grid grid-cols-[1fr_auto] gap-4 overflow-visible">
             <ExperimentResultsSection
               experimentId={experimentId}
               experimentStatus={experiment.status}

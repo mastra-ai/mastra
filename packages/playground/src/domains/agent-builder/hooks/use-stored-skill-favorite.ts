@@ -45,7 +45,7 @@ export const useToggleStoredSkillFavorite = (skillId?: string) => {
       for (const [key, value] of listQueries) {
         previousLists.push([key, value]);
         if (!value?.skills) continue;
-        queryClient.setQueryData<ListStoredSkillsResponse>(key as readonly unknown[], {
+        queryClient.setQueryData<ListStoredSkillsResponse>(key, {
           ...value,
           skills: value.skills.map(s => (s.id === skillId ? applyFavoriteToSkill(s, favorited) : s)),
         });

@@ -1,22 +1,16 @@
-import { Button } from '@mastra/playground-ui/components/Button';
 import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
-import { Plus } from 'lucide-react';
 import { useCallback, useState } from 'react';
-import { Link } from 'react-router';
-import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
 import { useStoredPromptBlocks, PromptsList, NoPromptBlocksInfo } from '@/domains/prompt-blocks';
-import { useLinkComponent } from '@/lib/framework';
+import { PromptBlocksHeaderCreateAction } from '@/domains/prompt-blocks/prompt-blocks-header-actions';
 
 const PROMPT_BLOCKS_PER_PAGE = 50;
 
 export default function PromptBlocks() {
-  const { paths } = useLinkComponent();
-  const { isCmsAvailable } = useIsCmsAvailable();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
   const { data, isLoading, error, isPlaceholderData } = useStoredPromptBlocks({
@@ -65,6 +59,7 @@ export default function PromptBlocks() {
   if (promptBlocks.length === 0 && !isLoading && page === 0) {
     return (
       <NoDataPageLayout>
+        <PromptBlocksHeaderCreateAction />
         <NoPromptBlocksInfo />
       </NoDataPageLayout>
     );
@@ -72,6 +67,7 @@ export default function PromptBlocks() {
 
   return (
     <PageLayout height="full">
+      <PromptBlocksHeaderCreateAction />
       <PageLayout.TopArea>
         <PageLayout.Row align="center" stack="responsive">
           <div className="max-w-120 flex-1">
@@ -81,12 +77,6 @@ export default function PromptBlocks() {
               placeholder="Filter by name or description"
             />
           </div>
-          {isCmsAvailable && (
-            <Button as={Link} to={paths.cmsPromptBlockCreateLink()} variant="primary" className="shrink-0">
-              <Plus />
-              Create Prompt
-            </Button>
-          )}
         </PageLayout.Row>
       </PageLayout.TopArea>
 

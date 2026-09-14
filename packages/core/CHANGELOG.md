@@ -1,5 +1,218 @@
 # @mastra/core
 
+## 1.67.0-alpha.3
+
+### Minor Changes
+
+- Added per-call background execution dispositions, awaited background calls, caller-scoped completion signals, and bounded delegated background tool execution. ([#23026](https://github.com/mastra-ai/mastra/pull/23026))
+
+  Background-eligible tools continue to run deferred by default. Use `defaultDisposition: 'foreground'` when eligibility should only give the model the option to background individual calls:
+
+  ```ts
+  const tool = createTool({
+    id: 'research',
+    background: {
+      enabled: true,
+      defaultDisposition: 'foreground',
+    },
+    // ...
+  });
+  ```
+
+  Eligible calls can now override their execution mode with `_background.disposition`:
+
+  ```json
+  {
+    "topic": "distributed systems",
+    "_background": { "disposition": "awaited" }
+  }
+  ```
+
+  Add the background-work signal processor when tools need caller-scoped completion signals:
+
+  ```ts
+  import { Agent } from '@mastra/core/agent';
+  import { createBackgroundWorkSignalProcessor } from '@mastra/core/processors';
+
+  const agent = new Agent({
+    // ...
+    inputProcessors: [createBackgroundWorkSignalProcessor()],
+  });
+
+  const stream = await agent.stream('Research distributed systems');
+
+  for await (const part of stream.fullStream) {
+    if (
+      part.type === 'data-signal' &&
+      (part.data.tagName === 'work-completed' || part.data.tagName === 'work-failed')
+    ) {
+      handleBackgroundSignal(part.data);
+    }
+  }
+
+  function handleBackgroundSignal(signal: { tagName?: string }) {
+    if (signal.tagName === 'work-completed') {
+      // Handle successful background work.
+    } else if (signal.tagName === 'work-failed') {
+      // Handle failed background work.
+    }
+  }
+  ```
+
+  `deferred` returns a task placeholder while the run continues, `awaited` uses durable background execution while holding the current branch for the authoritative result, and `foreground` executes inline. The legacy `_background.enabled` field remains supported.
+
+- Added experimental tools for connecting Mastra Code agents and sending prioritized signals between freshly advertised peer threads. Cross-agent communication is off by default. Enable it with the "Experimental cross-agent communication" toggle in `/settings`, then restart Mastra Code. Embedded clients can enable it directly: ([#21986](https://github.com/mastra-ai/mastra/pull/21986))
+
+  ```typescript
+  import { createMastraCode } from 'mastracode';
+
+  const mastraCode = await createMastraCode({
+    crossAgentSignals: true,
+  });
+  ```
+
+  Use `agent_connections_list` to discover peers, `agent_connect` to save an exact peer endpoint, `agent_signal_send` to send a correlated message, and `agent_disconnect` to remove the saved connection. Sends require a currently advertised thread owner, return an error when delivery isn't acknowledged, and retain a bounded sender-side history so sequential retries can reuse the same `messageId`. A busy claimed owner acknowledges a safely queued wake immediately and delivers it after the active run finishes.
+
+- Added a storage contract for observability adapters to query thread identities using cross-trace predicates. ([#23558](https://github.com/mastra-ai/mastra/pull/23558))
+
+- Added an optional per-file `mode` to `WorkspaceSandbox.writeFiles` inputs so callers can set POSIX permissions (`0o001`–`0o777`) when provisioning files. The Docker sandbox applies the requested mode to each uploaded file, falling back to `0644` when omitted. Sandboxes that cannot honor an explicit mode (Vercel, E2B, Daytona, Cloudflare) reject the request with `SandboxUnsupportedFeatureError` instead of silently ignoring it. Closes #23580. ([#23652](https://github.com/mastra-ai/mastra/pull/23652))
+
+  ```ts
+  await sandbox.writeFiles([
+    { path: 'scripts/setup.sh', content: '#!/bin/sh\necho ready\n', mode: 0o755 },
+    { path: 'config/private.json', content: JSON.stringify({ token }), mode: 0o600 },
+    { path: 'README.md', content: 'Sandbox instructions' }, // defaults to 0644
+  ]);
+  ```
+
+  `@mastra/core` now exports `validateSandboxFileMode`, `assertModesUnsupported`, and `SandboxUnsupportedFeatureError` for sandbox providers; the built-in providers' `@mastra/core` peer dependency floor is raised to `1.67.0` accordingly.
+
+- Added an optional `abortSignal` to the `WorkspaceSandbox.writeFiles` contract so file uploads can be cancelled. Also added a `SandboxAbortError` (code `ABORTED`) that providers throw when a write is cancelled. ([#23644](https://github.com/mastra-ai/mastra/pull/23644))
+
+  ```ts
+  const controller = new AbortController();
+  await sandbox.writeFiles?.(files, { abortSignal: controller.signal });
+  ```
+
+  Observing the signal is provider-dependent. Providers that do not support cancellation ignore the option and run to completion.
+
+### Patch Changes
+
+- Channel adapters can now discard the agent's buffered reply when a run is aborted. A new `onAbort: 'flush' | 'discard'` option on the adapter config controls what the static (non-streaming) driver does with not-yet-posted text on an `abort` chunk: `'flush'` (the default) posts the partial reply as before, and `'discard'` drops it so nothing is posted. This supports human-takeover flows on non-streaming platforms, where an in-flight agent reply should not appear as a truncated message beside the operator's own reply. ([#23655](https://github.com/mastra-ai/mastra/pull/23655))
+
+  ```ts
+  const adapter = new MyChannelAdapter({
+    // ...existing config
+    onAbort: 'discard', // drop buffered text on abort instead of posting it
+  });
+  ```
+
+  Fixes #23640.
+
+- Fixed `Mastra.shutdown()` tearing down pub/sub before in-flight workflow runs could finish. Runs that were mid-step when `mastra.shutdown()` was called used to hang forever because the events they needed no longer had a consumer; durable agent runs were drained too late for the drain to help. ([#23168](https://github.com/mastra-ai/mastra/pull/23168))
+
+  `shutdown()` now waits for in-flight workflow runs (plain and durable agent) to reach a finished or suspended state before stopping workers, bounded by a new `drainTimeout` option (default 5 seconds). Workers also wait for events they are already processing before tearing down. The timeout is one shared deadline for the whole shutdown: the workflow drain, background task cancellation, and worker teardown all draw from it, so a stuck step can never hold `shutdown()` open for longer than `drainTimeout` before workspace and storage cleanup.
+
+  A durable agent whose terminal error event cannot be published (for example because the pub/sub client is already closing) now logs a warning instead of surfacing an unhandled rejection.
+
+  Note: the durable agent wait was previously unbounded. If you rely on `shutdown()` waiting longer than 5 seconds for durable agent runs, pass a larger `drainTimeout`.
+
+  ```typescript
+  await mastra.shutdown({ drainTimeout: 30_000 });
+  ```
+
+  Fixes https://github.com/mastra-ai/mastra/issues/22863
+
+- Fix AgentController Session turning missing/unknown token counts into false zeros. Step-finish now skips fabricating, persisting, and emitting a usage update when a step reports no usable primary counts (prompt/completion/total all absent), instead of folding a `{0,0,0}` tally into the running total. `loadMetadata()` no longer calls `resetTokenUsage()` when a persisted metadata read fails transiently, so a measured tally is preserved instead of being destroyed by a read error. Fixes #23471. ([#23657](https://github.com/mastra-ai/mastra/pull/23657))
+
+- Fixed background tasks whose initial dispatch is rejected by marking still-pending tasks as failed and freeing local capacity for queued work. Tasks already claimed by a worker are preserved when a transport reports an ambiguous publication failure. ([#23024](https://github.com/mastra-ai/mastra/pull/23024))
+
+- Fixed execute_command to include stderr when commands exit successfully. (#23679) ([#23683](https://github.com/mastra-ai/mastra/pull/23683))
+
+- Fixed durable agents continuing past a tool call that the client is meant to execute. ([#23612](https://github.com/mastra-ai/mastra/pull/23612))
+
+  A tool declared without `execute` runs on the client, which answers it on a follow-up request, so the run must end at the call. Durable agents instead recorded an empty result for it and called the model again — the agent answered as though the tool had returned nothing, and the client never received the call.
+
+  ```ts
+  const agent = new Agent({
+    model,
+    durable: true,
+    // No `execute`: the client runs this tool and sends the result back.
+    tools: { approveInvoice: createTool({ id: 'approveInvoice', inputSchema }) },
+  });
+
+  // The turn now ends at the call so the client can answer it.
+  const { output } = await agent.stream('Approve invoice 42');
+  ```
+
+  See [#23295](https://github.com/mastra-ai/mastra/issues/23295).
+
+- Fixed Unix socket pubsub clients hanging forever on startup when connecting to a broker from an older build that never acknowledges membership requests. Both `subscribe` and `unsubscribe` now proceed best-effort after a configurable timeout when no acknowledgement arrives, so newer clients no longer deadlock against legacy brokers. ([#23699](https://github.com/mastra-ai/mastra/pull/23699))
+
+  Configure the timeout via the new `membershipAckTimeoutMs` option (default 5000ms):
+
+  ```ts
+  const pubsub = new UnixSocketPubSub(socketPath, { membershipAckTimeoutMs: 5000 });
+  ```
+
+- Improved background task execution across multiple processes. Invocation-bound tasks stay on the process that owns their executor, cancellation reliably reaches local work, and queued tasks continue after dispatch failures. ([#23024](https://github.com/mastra-ai/mastra/pull/23024))
+
+  **Stale task recovery**
+
+  Startup recovery remains enabled by default. Disable it when multiple live managers share storage and task ownership cannot be verified across processes:
+
+  ```ts
+  const mastra = new Mastra({
+    backgroundTasks: {
+      enabled: true,
+      recoverStaleTasksOnStart: false,
+    },
+  });
+  ```
+
+- Fix background sub-agent tool approvals restarting the delegation instead of resuming it. When a sub-agent run as a background task suspends on a tool approval, the nested run id (carried in `suspendOptions.runId`) is now bridged into the background task's persisted suspend data, so `resume` restores it and the sub-agent continues its existing run and executes the approved tool — rather than starting a fresh run and re-suspending on the same approval. Fixes #23626. ([#23659](https://github.com/mastra-ai/mastra/pull/23659))
+
+- Added consumer groups to `UnixSocketPubSub`. ([#23020](https://github.com/mastra-ai/mastra/pull/23020))
+
+  **Usage**
+
+  ```typescript
+  // Every ungrouped subscriber receives each message.
+  await pubsub.subscribe('events', handleAllEvents);
+
+  // One subscriber in the group receives each message.
+  await pubsub.subscribe('events', handleWorkerEvent, { group: 'workers' });
+  ```
+
+  **Behavior**
+
+  - Delivers each message once per named group and rotates delivery among available group members.
+  - Restores group membership when a client reconnects.
+  - Retries rejected local deliveries a bounded number of times.
+
+- Improved workspace `grep` and `list_files` tool performance on remote filesystems. The `list_files` tree walk now issues directory listings concurrently instead of one at a time, and `WorkspaceFilesystem` providers can implement optional `walk()` and `grep()` methods to run tree walks and content searches natively in a single call. The workspace tools use these capabilities automatically when available and fall back to the existing host-side walk otherwise, so a grep over a remote sandbox filesystem no longer needs one network round trip per directory and file. When a native capability fails and the tools fall back to the host-side walk, the downgrade is logged through the workspace logger (`info` for an unsupported grep pattern, `warn` for any other failure) so unexpected per-file round trips are visible. `Workspace` now exposes a read-only `logger` getter. Fixes https://github.com/mastra-ai/mastra/issues/22285 ([#22317](https://github.com/mastra-ai/mastra/pull/22317))
+
+  ```ts
+  import { UnsupportedGrepPatternError } from '@mastra/core/workspace';
+  import type { WorkspaceFilesystem, WalkEntry, FilesystemGrepResult } from '@mastra/core/workspace';
+
+  class RemoteFilesystem implements WorkspaceFilesystem {
+    // ...required methods...
+
+    // Optional: return every entry under `path` in one call.
+    async walk(path: string, options?: { maxDepth?: number; includeHidden?: boolean }): Promise<WalkEntry[]> {
+      return this.api.listTree(path, options);
+    }
+
+    // Optional: run the search remotely. `column` must be a UTF-16 index.
+    // Throw UnsupportedGrepPatternError to let the tool fall back to the host walk.
+    async grep(options: { pattern: string; path: string; caseSensitive: boolean }): Promise<FilesystemGrepResult[]> {
+      if (!this.api.supportsRegex(options.pattern)) throw new UnsupportedGrepPatternError(options.pattern);
+      return this.api.search(options);
+    }
+  }
+  ```
+
 ## 1.67.0-alpha.2
 
 ### Minor Changes

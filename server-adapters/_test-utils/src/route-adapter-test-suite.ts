@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { HTTPException, SERVER_ROUTES, type ServerRoute } from '@mastra/server/server-adapter';
+import { createRoute, HTTPException, SERVER_ROUTES, type ServerRoute } from '@mastra/server/server-adapter';
+import { z } from 'zod';
+import { z as z3 } from 'zod/v3';
 
 import {
   AdapterTestContext,
@@ -36,6 +38,7 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
   describe(suiteName, () => {
     let context: AdapterTestContext;
     let app: any;
+    let setup: Awaited<ReturnType<typeof setupAdapter>>;
 
     beforeEach(async () => {
       // Create test context - use provided or default
@@ -47,8 +50,246 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
       }
 
       // Setup adapter and app
-      const setup = await setupAdapter(context);
+      setup = await setupAdapter(context);
       app = setup.app;
+    });
+
+    describe.each([
+      {
+        version: 'v3',
+        recordSchema: z3.record(z3.string(), z3.string()),
+        objectSchema: z3.object({ limit: z3.number().default(10) }),
+      },
+      {
+        version: 'v4',
+        recordSchema: z.record(z.string(), z.string()),
+        objectSchema: z.object({ limit: z.number().default(10) }),
+      },
+    ])('Zod $version record body validation', ({ recordSchema, objectSchema }) => {
+      beforeEach(async () => {
+        await setup.adapter.registerRoute(app, {
+          method: 'DELETE',
+          path: '/test/record-body',
+          responseType: 'json',
+          bodySchema: recordSchema,
+          handler: async () => ({ success: true }),
+        });
+        await setup.adapter.registerRoute(app, {
+          method: 'DELETE',
+          path: '/test/object-body',
+          responseType: 'json',
+          bodySchema: objectSchema,
+          handler: async ({ limit }: { limit: number }) => ({ limit }),
+        });
+      });
+
+      it('does not convert missing record bodies to empty objects', async () => {
+        const response = await executeHttpRequest(app, { method: 'DELETE', path: '/api/test/record-body' });
+        // Some framework parsers already supply {} before adapter validation runs.
+        const alreadyNormalized = config.emptyBodyNormalization?.withoutContentType === 'empty-object';
+        expect(response.status).toBe(alreadyNormalized ? 200 : 400);
+        if (!alreadyNormalized) {
+          expect(response.data).toMatchObject({ error: 'Invalid request body', issues: [{ field: 'root' }] });
+        }
+      });
+
+      it('accepts explicitly empty record bodies', async () => {
+        const response = await executeHttpRequest(app, { method: 'DELETE', path: '/api/test/record-body', body: {} });
+        expect(response.status).toBe(200);
+        expect(response.data).toEqual({ success: true });
+      });
+
+      it('keeps bodyless object field defaults', async () => {
+        const response = await executeHttpRequest(app, { method: 'DELETE', path: '/api/test/object-body' });
+        expect(response.status).toBe(200);
+        expect(response.data).toEqual({ limit: 10 });
+      });
+    });
+
+    describe('Whole-body defaults over HTTP', () => {
+      const normalization = config.emptyBodyNormalization ?? {
+        withoutContentType: 'undefined',
+        withJsonContentType: 'undefined',
+      };
+
+      beforeEach(async () => {
+        await setup.adapter.registerRoute(
+          app,
+          createRoute({
+            method: 'POST',
+            path: '/test/root-default',
+            responseType: 'json',
+            bodySchema: z.object({ marker: z.string().optional() }).default({ marker: 'root-default' }),
+            handler: async ({ marker }) => ({ marker }),
+          }),
+        );
+      });
+
+      it.each([
+        {
+          label: 'omitted body without Content-Type',
+          body: undefined,
+          headers: undefined,
+          normalized: normalization.withoutContentType,
+        },
+        {
+          label: 'zero-byte JSON body',
+          body: undefined,
+          headers: { 'Content-Type': 'application/json' },
+          normalized: normalization.withJsonContentType,
+        },
+        {
+          label: 'explicit empty JSON object',
+          body: {},
+          headers: { 'Content-Type': 'application/json' },
+          normalized: 'empty-object',
+        },
+      ])('$label respects framework normalization', async ({ body, headers, normalized }) => {
+        const response = await executeHttpRequest(app, {
+          method: 'POST',
+          path: '/api/test/root-default',
+          body,
+          headers,
+        });
+        if (normalized === 'empty-string') {
+          expect(response.status).toBe(400);
+          expect(response.data).toEqual({
+            error: 'Invalid request body',
+            issues: [{ field: 'root', message: expect.stringContaining('string') }],
+          });
+        } else {
+          expect(response.status).toBe(200);
+          expect(response.data).toEqual(normalized === 'undefined' ? { marker: 'root-default' } : {});
+        }
+      });
+    });
+
+    describe('Scalar JSON body validation', () => {
+      beforeEach(async () => {
+        const route = createRoute({
+          method: 'DELETE',
+          path: '/test/scalar-body',
+          responseType: 'json',
+          bodySchema: z
+            .union([z.null(), z.literal(false), z.literal(0), z.literal('')])
+            .transform(value => ({ value })),
+          handler: async ({ value }) => ({ value }),
+          onValidationError: () => ({ status: 400, body: { error: 'Scalar schema rejected body' } }),
+        });
+        await setup.adapter.registerRoute(app, route);
+      });
+      it.each([null, false, 0, ''])('validates scalar JSON through the route schema: %j', async body => {
+        const accepted = await executeHttpRequest(app, {
+          method: 'DELETE',
+          path: '/api/test/scalar-body',
+          body,
+        });
+        expect(accepted.status).toBe(200);
+        expect(accepted.data).toEqual({ value: body });
+      });
+      it('returns the route validation response for an invalid scalar', async () => {
+        const rejected = await executeHttpRequest(app, {
+          method: 'DELETE',
+          path: '/api/test/scalar-body',
+          body: true,
+        });
+        expect(rejected.status).toBe(400);
+        expect(rejected.data).toEqual({ error: 'Scalar schema rejected body' });
+      });
+    });
+
+    describe.each(['POST', 'PUT', 'PATCH', 'DELETE'] as const)('%s required body validation', method => {
+      beforeEach(async () => {
+        await setup.adapter.registerRoute(
+          app,
+          createRoute({
+            method,
+            path: '/test/required-body',
+            responseType: 'json',
+            bodySchema: z.object({ itemIds: z.array(z.string().min(1)).min(1) }),
+            handler: async ({ itemIds }) => ({ itemIds }),
+            onValidationError: () => ({ status: 400, body: { error: 'Required schema rejected body' } }),
+          }),
+        );
+        await setup.adapter.registerRoute(
+          app,
+          createRoute({
+            method,
+            path: '/test/optional-body',
+            responseType: 'json',
+            bodySchema: z.object({ name: z.string().optional(), limit: z.number().default(10) }),
+            handler: async ({ limit }) => ({ limit }),
+          }),
+        );
+      });
+
+      it.each([undefined, null, false, 0, '', {}, { itemIds: [] }, { itemIds: [''] }])(
+        'rejects missing or invalid required input %#',
+        async body => {
+          const response = await executeHttpRequest(app, {
+            method,
+            path: '/api/test/required-body',
+            body,
+          });
+          expect(response.status).toBe(400);
+          expect(response.data).toEqual({ error: 'Required schema rejected body' });
+        },
+      );
+
+      it('passes valid required input to the handler', async () => {
+        const body = { itemIds: ['item-1'] };
+        const response = await executeHttpRequest(app, {
+          method,
+          path: '/api/test/required-body',
+          body,
+        });
+        expect(response.status).toBe(200);
+        expect(response.data).toEqual(body);
+      });
+
+      it('applies field defaults when the body is omitted', async () => {
+        const response = await executeHttpRequest(app, {
+          method,
+          path: '/api/test/optional-body',
+        });
+        expect(response.status).toBe(200);
+        expect(response.data).toEqual({ limit: 10 });
+      });
+    });
+
+    it.each([
+      { body: {}, field: 'itemIds' },
+      { body: { itemIds: [''] }, field: 'itemIds.0' },
+    ])('returns standard validation issues for $field', async ({ body, field }) => {
+      await setup.adapter.registerRoute(
+        app,
+        createRoute({
+          method: 'DELETE',
+          path: '/test/default-validation-error',
+          responseType: 'json',
+          bodySchema: z.object({ itemIds: z.array(z.string().min(1)).min(1) }),
+          handler: async ({ itemIds }) => ({ itemIds }),
+        }),
+      );
+      const response = await executeHttpRequest(app, {
+        method: 'DELETE',
+        path: '/api/test/default-validation-error',
+        body,
+      });
+      expect(response.status).toBe(400);
+      expect(response.data).toEqual({
+        error: 'Invalid request body',
+        issues: [{ field, message: expect.any(String) }],
+      });
+    });
+
+    it('preserves bodyless create-run requests with optional fields', async () => {
+      const response = await executeHttpRequest(app, {
+        method: 'POST',
+        path: '/api/workflows/test-workflow/create-run',
+      });
+      expect(response.status).toBe(200);
+      expect(response.data).toMatchObject({ runId: expect.any(String) });
     });
 
     // Test deprecated routes separately - just verify they're marked correctly

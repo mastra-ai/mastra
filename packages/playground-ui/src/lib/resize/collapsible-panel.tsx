@@ -4,6 +4,7 @@ import type { PanelProps } from 'react-resizable-panels';
 import { Panel, usePanelRef } from 'react-resizable-panels';
 import { PanelEdgeIcon } from './panel-edge-icon';
 import { panelIconButtonClass } from './panel-icon-button';
+import { Kbd } from '@/ds/components/Kbd';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { Icon } from '@/ds/icons';
 import { cn } from '@/lib/utils';
@@ -13,10 +14,16 @@ export interface CollapsiblePanelHandle {
   collapse: () => void;
   /** Reopens at the width the panel had when `collapse()` was called, else at `defaultSize`. */
   expand: () => void;
+  /** Collapses when open, expands when collapsed (based on the panel's reported size). */
+  toggle: () => void;
 }
 
 export interface CollapsiblePanelProps extends PanelProps {
   direction: 'left' | 'right';
+  /** Key shown in the expand button tooltip when the caller binds a shortcut to `toggle()`. */
+  expandShortcut?: string;
+  /** Skip the floating "Expand panel" button when the caller provides its own expand control. */
+  hideExpandButton?: boolean;
   ref?: Ref<CollapsiblePanelHandle>;
 }
 
@@ -24,6 +31,8 @@ export const CollapsiblePanel = ({
   collapsedSize,
   children,
   direction,
+  expandShortcut,
+  hideExpandButton = false,
   className,
   onResize,
   style,
@@ -42,10 +51,17 @@ export const CollapsiblePanel = ({
   const internalPanelRef = usePanelRef();
   const panelRef = externalPanelRef ?? internalPanelRef;
 
+  const collapsedThreshold = typeof collapsedSize === 'number' ? collapsedSize : 0;
+  // Read the live size: `isCollapsed` only updates after the library's first `onResize`,
+  // so a toggle fired right after mount would otherwise act on stale state.
+  const isPanelCollapsed = (panel: NonNullable<typeof panelRef.current>) =>
+    panel.getSize().inPixels <= collapsedThreshold;
+
   const collapse = () => {
     const panel = panelRef.current;
     if (!panel) return;
-    sizeBeforeCollapseRef.current = panel.getSize().inPixels;
+    // Never remember a collapsed width as the restore target.
+    if (!isPanelCollapsed(panel)) sizeBeforeCollapseRef.current = panel.getSize().inPixels;
     panel.collapse();
   };
 
@@ -60,7 +76,13 @@ export const CollapsiblePanel = ({
     panel.resize(target);
   };
 
-  useImperativeHandle(ref, () => ({ collapse, expand }));
+  const toggle = () => {
+    const panel = panelRef.current;
+    if (!panel) return;
+    return isPanelCollapsed(panel) ? expand() : collapse();
+  };
+
+  useImperativeHandle(ref, () => ({ collapse, expand, toggle }));
 
   const numericMinSize = typeof minSize === 'number' ? minSize : null;
 
@@ -94,7 +116,7 @@ export const CollapsiblePanel = ({
         {children}
       </div>
 
-      {isCollapsed && (
+      {isCollapsed && !hideExpandButton && (
         <Tooltip>
           <TooltipTrigger asChild>
             <button
@@ -113,7 +135,12 @@ export const CollapsiblePanel = ({
               </Icon>
             </button>
           </TooltipTrigger>
-          <TooltipContent side={direction === 'left' ? 'right' : 'left'}>Expand panel</TooltipContent>
+          <TooltipContent side={direction === 'left' ? 'right' : 'left'}>
+            <span className="inline-flex items-center gap-1.5">
+              Expand panel
+              {expandShortcut && <Kbd size="xs">{expandShortcut}</Kbd>}
+            </span>
+          </TooltipContent>
         </Tooltip>
       )}
     </Panel>

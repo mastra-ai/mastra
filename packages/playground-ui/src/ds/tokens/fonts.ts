@@ -7,11 +7,11 @@ export const FontSizes = {
   'ui-lg': '1rem', // 16px - emphasized text
 
   // Header sizes
-  'header-xs': '1rem', // 16px
-  'header-sm': '1.125rem', // 18px
-  'header-md': '1.25rem', // 20px
-  'header-lg': '1.5rem', // 24px
-  'header-xl': '1.75rem', // 28px
+  'header-xs': '0.875rem', // 14px
+  'header-sm': '0.9375rem', // 15px
+  'header-md': '1rem', // 16px
+  'header-lg': '1.125rem', // 18px
+  'header-xl': '1.375rem', // 22px
 };
 
 export const LineHeights = {
@@ -20,11 +20,11 @@ export const LineHeights = {
   'ui-smd': '150%', // 20px
   'ui-md': '143%', // 20px
   'ui-lg': '150%', // 24px
-  'header-xs': '137%', // 22px
-  'header-sm': '133%', // 24px
-  'header-md': '140%', // 28px
-  'header-lg': '133%', // 32px
-  'header-xl': '129%', // 36px
+  'header-xs': '143%', // 20px
+  'header-sm': '133%', // 20px
+  'header-md': '150%', // 24px
+  'header-lg': '133%', // 24px
+  'header-xl': '127%', // 28px
 };
 
 /** SVG/canvas text can't read CSS tokens; these mirror `ui-xs` (10px) and `ui-sm` (12px). */

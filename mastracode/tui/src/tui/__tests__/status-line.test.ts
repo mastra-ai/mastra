@@ -91,9 +91,9 @@ function createState() {
         },
         bufferingMessages: false,
         bufferingObservations: false,
+        queuedFollowUps: 0,
       })),
     },
-    followUps: { count: vi.fn(() => 0) },
     identity: { getResourceId: vi.fn(() => 'resource-1') },
     thread: { getId: vi.fn(() => 'thread-1') },
     mode: {
@@ -154,7 +154,10 @@ describe('updateStatusLine', () => {
   it('shows queued count in the status line', () => {
     const state = createState();
     state.pendingQueuedActions = ['message', 'slash'];
-    state.session.followUps.count.mockReturnValue(1);
+    state.session.displayState.get.mockReturnValue({
+      ...state.session.displayState.get(),
+      queuedFollowUps: 1,
+    });
 
     updateStatusLine(state);
 

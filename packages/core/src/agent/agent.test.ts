@@ -3532,7 +3532,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       });
     }, 500000);
 
-    it('should not save any message if interrupted before any part is emitted', async () => {
+    it('persists a v2 terminal error when interrupted before any normal part is emitted', async () => {
       const mockMemory = new MockMemory();
       let saveCallCount = 0;
 
@@ -3572,8 +3572,19 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         resourceId: 'resource-3-generate',
       });
 
-      expect(result.messages.length).toBe(0);
-      expect(saveCallCount).toBe(0);
+      if (version === 'v1') {
+        expect(result.messages.length).toBe(0);
+        expect(saveCallCount).toBe(0);
+      } else {
+        expect(result.messages.map(message => message.role)).toEqual(['user', 'assistant']);
+        expect(result.messages[1].content.parts).toEqual([
+          {
+            type: 'error',
+            error: { name: 'Error', message: 'Immediate interruption' },
+            createdAt: expect.any(Number),
+          },
+        ]);
+      }
     });
 
     it('should save thread but not messages if error occurs during LLM generation', async () => {
