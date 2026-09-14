@@ -167,11 +167,18 @@ const isPendingMessage = (message: MastraDBMessage): boolean => {
   return message.content.parts.some(part => readField(readField(part, 'metadata'), 'status') === 'pending');
 };
 
-const CopyButton = ({ text }: { text: string }) => {
+const CopyButton = ({ text, className }: { text: string; className?: string }) => {
   const { isCopied, copyToClipboard } = useCopyToClipboard({ copiedDuration: 1500, showToast: false });
 
   return (
-    <Button variant="ghost" size="icon-xs" tooltip="Copy" aria-label="Copy" onClick={() => copyToClipboard(text)}>
+    <Button
+      variant="ghost"
+      size="icon-xs"
+      tooltip="Copy"
+      aria-label="Copy"
+      className={className}
+      onClick={() => copyToClipboard(text)}
+    >
       {isCopied ? <CheckIcon /> : <CopyIcon />}
     </Button>
   );
@@ -358,7 +365,7 @@ export const MessageRow = memo(function MessageRow({
           <div className="mt-1 flex items-center gap-2">
             {canCopy && (
               <div className="group-focus-within:opacity-100 group-hover:opacity-100 pointer-fine:opacity-0">
-                <CopyButton text={text} />
+                <CopyButton text={text} className="pointer-coarse:min-h-11 pointer-coarse:min-w-11" />
               </div>
             )}
             {footerSlot}
