@@ -1,13 +1,16 @@
 import assert from 'node:assert/strict';
 import { MCPServerBaseV2 } from '@mastra/core/mcp';
-import type { MCPServerHTTPOptions, MCPToolExecutionContextV2 } from '@mastra/core/mcp';
+import type { MCPServerHTTPOptions, MCPToolExecutionContextV2, MCPToolExecutionResultV2 } from '@mastra/core/mcp';
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
+import type { ToolsInput } from '@mastra/core/agent';
+import type { InternalCoreTool } from '@mastra/core/tools';
+import { makeCoreTool } from '@mastra/core/utils';
 import { z } from 'zod';
 
 // Packed-declaration proof of the Segment 1 contract: an ordinary `createTool` that suspends is a
-// v2 catalogue tool, an agent tool and a business-registry tool at once; there is no native family.
+// v2 server tool, an agent tool and a Mastra-registered tool at once; there is no native family.
 const confirmation = createTool({
   id: 'confirmation',
   description: 'Ask for confirmation',
@@ -29,6 +32,53 @@ const confirmation = createTool({
 });
 
 class Fixture extends MCPServerBaseV2 {
+  // Converts tools like the 1.x package does; the mcpv2 context flows through CoreToolBuilder.
+  convertTools(tools: ToolsInput) {
+    const converted: Record<string, InternalCoreTool> = {};
+    for (const [name, tool] of Object.entries(tools)) {
+      converted[name] = makeCoreTool(tool, {
+        name,
+        requestContext: new RequestContext(),
+        mastra: this.mastra,
+        logger: this.logger,
+      }) as InternalCoreTool;
+    }
+    return converted;
+  }
+  async executeTool(
+    toolId: string,
+    args: unknown,
+    executionContext: Parameters<MCPServerBaseV2['executeTool']>[2] = {},
+  ): Promise<MCPToolExecutionResultV2> {
+    const tool = this.convertedTools[toolId];
+    if (!tool?.execute) throw new Error(`Tool ${toolId} not found`);
+    let suspension: { payload: unknown } | undefined;
+    const round: Omit<MCPToolExecutionContextV2, 'suspend'> = executionContext.mcpv2 ?? {
+      protocolVersion: '2026-07-28',
+      requestId: 'rest',
+      signal: new AbortController().signal,
+      metadata: {},
+      log: async () => {},
+      progress: async () => {},
+    };
+    const output = await tool.execute(args, {
+      toolCallId: String(round.requestId),
+      messages: [],
+      requestContext: executionContext.requestContext,
+      abortSignal: round.signal,
+      mcpv2: { ...round, suspend: async payload => void (suspension = { payload }) },
+    });
+    if (suspension) {
+      const original = this.originalTools[toolId];
+      const resumeSchema = original && 'resumeSchema' in original ? original.resumeSchema : undefined;
+      return {
+        status: 'suspended',
+        suspendPayload: suspension.payload,
+        resumeSchema: resumeSchema ? z.toJSONSchema(resumeSchema as z.ZodType) : undefined,
+      };
+    }
+    return { status: 'completed', output };
+  }
   async startHTTP(_options: MCPServerHTTPOptions) {}
   async startStdio() {}
   async close() {}
@@ -89,4 +139,4 @@ const accepted = await server.executeTool(
   },
 );
 assert.deepEqual(accepted, { status: 'completed', output: true });
-console.log('PACKED CORE NATIVE PASS: createTool suspend/resume through a v2 catalogue, business registry shared');
+console.log('PACKED CORE NATIVE PASS: createTool suspend/resume through a v2 server, Mastra tool registry shared');
