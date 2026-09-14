@@ -25,9 +25,18 @@ afterAll(() => {
 
 const onSpanDetailRequest = vi.fn<(spanId: string) => void>();
 
-const installHandlers = () => {
+const threadTraceList = (count: number) => ({
+  spans: Array.from({ length: count }, (_, i) => ({ ...panelTraceSpans.spans[0], traceId: `thread-trace-${i}` })),
+  pagination: { page: 0, perPage: 25, total: count, hasMore: false },
+});
+
+const installHandlers = ({ threadTraceCount = 2 }: { threadTraceCount?: number } = {}) => {
   onSpanDetailRequest.mockClear();
   server.use(
+    // Registered before the `:traceId` route so the literal `traces/light` segment wins.
+    http.get(`${TEST_BASE_URL}/api/observability/traces/light`, () =>
+      HttpResponse.json(threadTraceList(threadTraceCount)),
+    ),
     http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId/spans/:spanId`, ({ params }) => {
       const spanId = String(params.spanId);
       onSpanDetailRequest(spanId);
@@ -81,7 +90,7 @@ describe('TraceSpanPanel', () => {
       installHandlers();
       const { queryClient } = renderPanel({ showPartialThread: true });
 
-      expect(await screen.findByRole('heading', { name: 'Messages' })).not.toBeNull();
+      expect(await screen.findByTestId('messages-panel')).not.toBeNull();
       expect(screen.queryByRole('tab', { name: 'Messages' })).toBeNull();
       expect(await screen.findByText('Will it rain?')).not.toBeNull();
       expect(screen.getByText('No rain is expected.')).not.toBeNull();
@@ -109,17 +118,25 @@ describe('TraceSpanPanel', () => {
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     });
 
-    it('when rendered, then a "View full thread" link points to the advanced thread view', async () => {
-      installHandlers();
+    it('when the thread has other traces, then a "View full thread" link points to the advanced thread view', async () => {
+      installHandlers({ threadTraceCount: 2 });
       const { queryClient } = renderPanel({ showPartialThread: true });
 
-      await screen.findByText('No rain is expected.');
-
-      const link = screen.getByRole('link', { name: 'View full thread' });
+      const link = await screen.findByRole('link', { name: 'View full thread' });
       expect(link.getAttribute('href')).toBe(
         '/agents/weather-agent/threads/weather-thread?variant=advanced&traceId=trace-panel',
       );
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    });
+
+    it('when this trace is the only one in its thread, then no "View full thread" link is shown', async () => {
+      installHandlers({ threadTraceCount: 1 });
+      const { queryClient } = renderPanel({ showPartialThread: true });
+
+      await screen.findByText('No rain is expected.');
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+
+      expect(screen.queryByRole('link', { name: 'View full thread' })).toBeNull();
     });
 
     it('does not render the highlight action when no handler is provided', async () => {

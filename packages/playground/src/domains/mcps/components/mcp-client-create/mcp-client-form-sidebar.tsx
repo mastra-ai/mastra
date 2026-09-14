@@ -72,7 +72,7 @@ export function MCPClientFormSidebar({
   return (
     <div className="flex h-full flex-col">
       <ScrollArea className="min-h-0 flex-1">
-        <div className="flex flex-col gap-6 p-4">
+        <div className="flex flex-col gap-4 p-4">
           <SectionHeader title="Identity" subtitle="Define the MCP client name and description." />
 
           <div className="flex flex-col gap-1.5">
@@ -246,8 +246,7 @@ export function MCPClientFormSidebar({
                     </div>
                   ))}
                   {!readOnly && (
-                    <Button variant="outline" size="sm" onClick={addEnvVar} className="w-fit">
-                      <PlusIcon className="mr-1 h-3 w-3" />
+                    <Button variant="outline" size="sm" onClick={addEnvVar} className="w-fit" icon={<PlusIcon />}>
                       Add variable
                     </Button>
                   )}

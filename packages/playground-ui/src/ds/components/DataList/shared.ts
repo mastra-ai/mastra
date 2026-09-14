@@ -17,6 +17,7 @@ export const dataListRowOuterStyles = [
  */
 export const dataListRowStateStyles = [
   'hover:bg-surface3 active:bg-surface4',
+  'focus-visible:bg-surface3 has-focus-visible:bg-surface3',
   'data-featured:bg-surface3 has-data-featured:bg-surface3 has-data-selected:bg-surface3',
   'data-featured:hover:bg-surface4 has-data-featured:hover:bg-surface4 has-data-selected:hover:bg-surface4',
   'data-[variant=error]:bg-notice-destructive/10 has-data-[variant=error]:bg-notice-destructive/10',
@@ -27,7 +28,7 @@ export const dataListRowStateStyles = [
  * outer row element so it sits inside the root surface.
  */
 export const dataListRowInteractiveStyles = [
-  'grid grid-cols-subgrid gap-8 px-5 cursor-pointer',
+  'grid grid-cols-subgrid gap-4 px-3 cursor-pointer',
   'outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-accent1',
 ] as const;
 
@@ -37,7 +38,7 @@ export const dataListRowStyles = [
   ...dataListRowStateStyles,
 ] as const;
 
-export const dataListRowStaticStyles = ['grid grid-cols-subgrid gap-8 px-5', ...dataListRowOuterStyles] as const;
+export const dataListRowStaticStyles = ['grid grid-cols-subgrid gap-4 px-3', ...dataListRowOuterStyles] as const;
 
 /**
  * Row actions that stay out of the way until the row is hovered or focused.

@@ -179,8 +179,8 @@ const DialogHeader = ({ className, ...props }: React.HTMLAttributes<HTMLDivEleme
     <div
       className={cn(
         variant === 'new'
-          ? 'flex min-w-0 shrink-0 flex-col gap-2 px-5 pt-4 pb-2'
-          : 'flex flex-col gap-0.5 px-4 py-3 text-left',
+          ? 'flex min-w-0 shrink-0 flex-col gap-2 px-4 pt-3 pb-2'
+          : 'flex flex-col gap-0.5 px-3 py-2.5 text-left',
         className,
       )}
       {...props}
@@ -195,8 +195,8 @@ const DialogFooter = ({ className, ...props }: React.HTMLAttributes<HTMLDivEleme
     <div
       className={cn(
         variant === 'new'
-          ? 'flex shrink-0 flex-wrap justify-end gap-2 px-5 pt-2 pb-4'
-          : 'flex flex-col-reverse gap-1.5 px-4 py-2.5 sm:flex-row sm:justify-end',
+          ? 'flex shrink-0 flex-wrap justify-end gap-2 px-4 pt-2 pb-3'
+          : 'flex flex-col-reverse gap-1.5 px-3 py-2 sm:flex-row sm:justify-end',
         className,
       )}
       {...props}
@@ -214,7 +214,7 @@ const DialogBody = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDiv
           <div
             ref={ref}
             className={cn(
-              'flex flex-col gap-4 px-5 py-2 text-ui-md leading-ui-md [overflow-wrap:anywhere] text-neutral4',
+              'flex flex-col gap-3 px-4 py-2 text-ui-md leading-ui-md [overflow-wrap:anywhere] text-neutral4',
               className,
             )}
             {...props}
@@ -225,7 +225,7 @@ const DialogBody = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDiv
       );
     }
     return (
-      <div ref={ref} className={cn('max-h-[50vh] overflow-y-auto px-4 py-3.5', className)} {...props}>
+      <div ref={ref} className={cn('max-h-[50vh] overflow-y-auto px-3 py-3', className)} {...props}>
         {children}
       </div>
     );
@@ -243,7 +243,7 @@ const DialogTitle = React.forwardRef<HTMLHeadingElement, DialogTitleProps>(({ cl
     <DialogPrimitive.Title
       ref={ref}
       className={cn(
-        'text-ui-md font-medium',
+        'text-header-xs font-medium',
         variant === 'new' && 'pr-8 leading-ui-md [overflow-wrap:anywhere] text-neutral6',
         className,
       )}

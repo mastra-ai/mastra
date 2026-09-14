@@ -6,8 +6,7 @@ import { isLeaseProvider, NoopLeaseProvider } from '../events/pubsub';
 import type { LeaseProvider, PubSub } from '../events/pubsub';
 import type { EventCallback } from '../events/types';
 import { parseMemoryRequestContext } from '../memory/types';
-import type { RequestContext } from '../request-context';
-import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '../request-context';
 import type { MastraModelOutput } from '../stream/base/output';
 import { isSignalChunkExcluded } from '../stream/signal-exclusions';
 import { ChunkFrom } from '../stream/types';
@@ -29,6 +28,10 @@ import type {
   AgentThreadSubscription,
   AgentUpdateThreadPeerOptions,
   DiscoverAgentThreadPeersOptions,
+  CancelQueuedAgentMessagesOptions,
+  CancelQueuedAgentMessagesResult,
+  AgentThreadEventListener,
+  SubscribeAgentThreadEventsOptions,
   QueueAgentMessageOptions,
   QueueAgentMessageResult,
   SendAgentMessageOptions,
@@ -184,6 +187,8 @@ type PendingIdleSignal<OUTPUT = unknown> = {
   resourceId: string;
   threadId: string;
   streamOptions?: AgentExecutionOptions<OUTPUT>;
+  queueOwnerId?: string;
+  cancelled?: boolean;
 };
 
 type PendingContinuation<OUTPUT = unknown> = {
@@ -213,6 +218,12 @@ type AdvertisedThreadPeer = AgentThreadPeerInfo & {
   unsubscribe: () => void;
 };
 
+type ThreadEventListenerRegistration = SubscribeAgentThreadEventsOptions & {
+  agent: Agent<any, any, any, any>;
+  listener: AgentThreadEventListener;
+  lastCount: number;
+};
+
 type AgentThreadRuntimeState = {
   threadRunsById: Map<string, AgentThreadRunRecord<any>>;
   threadRunsByStreamId: Map<string, AgentThreadRunRecord<any>>;
@@ -230,6 +241,8 @@ type AgentThreadRuntimeState = {
   // request; `pendingSignalsByThread` follow-ups instead become their own turn.
   preRunSignalsByThread: Map<string, CreatedAgentSignal[]>;
   pendingIdleSignalsByThread: Map<string, PendingIdleSignal<any>[]>;
+  /** A dequeued idle message retains its cancellation identity until execution begins. */
+  drainingIdleSignalsByThread: Map<string, PendingIdleSignal<any>>;
   pendingContinuationsByThread: Map<string, PendingContinuation<any>[]>;
   claimedThreadOwnerDiscoveries: Map<string, Promise<string | undefined>>;
   claimedThreadOwners: Map<string, ClaimedThreadOwner<any>>;
@@ -245,6 +258,7 @@ type AgentThreadRuntimeState = {
    * if `activeThreadRunIds` is rotated by a follow-up signal.
    */
   leaseRenewalTimers: Map<string, ReturnType<typeof setInterval>>;
+  threadEventListeners: Set<ThreadEventListenerRegistration>;
 };
 
 export type AgentThreadState = 'active' | 'idle';
@@ -328,6 +342,7 @@ function createRuntimeState(): AgentThreadRuntimeState {
     pendingSignalsByThread: new Map(),
     preRunSignalsByThread: new Map(),
     pendingIdleSignalsByThread: new Map(),
+    drainingIdleSignalsByThread: new Map(),
     pendingContinuationsByThread: new Map(),
     claimedThreadOwnerDiscoveries: new Map(),
     claimedThreadOwners: new Map(),
@@ -337,6 +352,7 @@ function createRuntimeState(): AgentThreadRuntimeState {
     resumeTailsByRunId: new Map(),
     abortedRunIds: new Set(),
     leaseRenewalTimers: new Map(),
+    threadEventListeners: new Set(),
   };
 }
 
@@ -540,6 +556,33 @@ export class AgentThreadStreamRuntime {
       this.#statesByPubSub.set(resolvedPubSub, state);
     }
     return state;
+  }
+
+  #queuedMessageCount(
+    state: AgentThreadRuntimeState,
+    scope: SubscribeAgentThreadEventsOptions & { agent: Agent<any, any, any, any> },
+  ): number {
+    const key = this.#threadKey(scope.resourceId, scope.threadId);
+    const matches = (pending: PendingIdleSignal<any> | undefined) =>
+      pending !== undefined &&
+      !pending.cancelled &&
+      (scope.queueOwnerId === undefined ||
+        (pending.agent === scope.agent && pending.queueOwnerId === scope.queueOwnerId));
+    return (
+      (state.pendingIdleSignalsByThread.get(key)?.filter(matches).length ?? 0) +
+      (matches(state.drainingIdleSignalsByThread.get(key)) ? 1 : 0)
+    );
+  }
+
+  #notifyThreadEvents(state: AgentThreadRuntimeState): void {
+    for (const registration of [...state.threadEventListeners]) {
+      const count = this.#queuedMessageCount(state, registration);
+      if (count === registration.lastCount) continue;
+      registration.lastCount = count;
+      try {
+        registration.listener({ type: 'queue-count-changed', count });
+      } catch {}
+    }
   }
 
   #threadKey(resourceId: string | undefined, threadId: string): string {
@@ -1378,6 +1421,18 @@ export class AgentThreadStreamRuntime {
 
     if (state.abortedRunIds.has(options.runId)) {
       abort();
+    }
+
+    const requestContext = options.requestContext;
+    const controllerContext = requestContext?.get('controller');
+    if (requestContext && typeof controllerContext === 'object' && controllerContext !== null) {
+      const preparedRequestContext = new RequestContext(requestContext.entries());
+      preparedRequestContext.set('controller', { ...controllerContext, abortSignal: abortController.signal });
+      return {
+        ...options,
+        abortSignal: abortController.signal,
+        requestContext: preparedRequestContext,
+      };
     }
 
     return {
@@ -2373,6 +2428,7 @@ export class AgentThreadStreamRuntime {
     if (idleQueue.length === 0) {
       state.pendingIdleSignalsByThread.delete(key);
     }
+    state.drainingIdleSignalsByThread.set(key, pendingIdle);
 
     state.activeThreadRunIds.set(key, pendingIdle.runId);
     state.threadKeysByRunId.set(pendingIdle.runId, key);
@@ -2383,15 +2439,45 @@ export class AgentThreadStreamRuntime {
     // now wants to wake the thread (it holds no lease — it must win one). Either
     // way the run must only start if this process owns the cross-process lease,
     // otherwise two processes could each start a competing idle run.
-    const owns = await this.#acquireOrTransferThreadLease(pubsub, key, pendingIdle.runId, fromRunId);
+    let owns: { acquired: boolean; owner?: string };
+    try {
+      owns = await this.#acquireOrTransferThreadLease(pubsub, key, pendingIdle.runId, fromRunId);
+    } catch (err) {
+      state.drainingIdleSignalsByThread.delete(key);
+      state.threadKeysByRunId.delete(pendingIdle.runId);
+      if (state.activeThreadRunIds.get(key) === pendingIdle.runId) {
+        state.activeThreadRunIds.delete(key);
+      }
+      this.#notifyThreadEvents(state);
+      this.#publish(pubsub, key, {
+        type: 'run-failed',
+        runId: pendingIdle.runId,
+        error: getErrorFromUnknown(err).message,
+      });
+      if (!(await this.#drainPendingIdleSignals(state, pubsub, key, fromRunId))) {
+        this.#releaseThreadLease(pubsub, key, fromRunId ?? pendingIdle.runId);
+      }
+      return true;
+    }
     if (!owns.acquired) {
+      // A cancellation during lease acquisition must not forward the signal.
+      if (pendingIdle.cancelled) {
+        state.drainingIdleSignalsByThread.delete(key);
+        state.threadKeysByRunId.delete(pendingIdle.runId);
+        if (state.activeThreadRunIds.get(key) === pendingIdle.runId) state.activeThreadRunIds.delete(key);
+        this.#notifyThreadEvents(state);
+        void this.#drainPendingIdleSignals(state, pubsub, key);
+        return true;
+      }
       // Roll back the optimistic local reservation. If another process owns the
       // lease, hand the already-accepted signal to that run.
       if (state.activeThreadRunIds.get(key) === pendingIdle.runId) {
         state.activeThreadRunIds.delete(key);
       }
+      state.drainingIdleSignalsByThread.delete(key);
       state.threadKeysByRunId.delete(pendingIdle.runId);
       state.preRunSignalsByThread.delete(key);
+      this.#notifyThreadEvents(state);
       if (owns.owner) {
         await this.#publishAndWait(pubsub, key, {
           type: 'signal-enqueued',
@@ -2410,7 +2496,21 @@ export class AgentThreadStreamRuntime {
       return drained || owns.acquired;
     }
 
+    if (pendingIdle.cancelled) {
+      state.drainingIdleSignalsByThread.delete(key);
+      state.threadKeysByRunId.delete(pendingIdle.runId);
+      if (state.activeThreadRunIds.get(key) === pendingIdle.runId) {
+        state.activeThreadRunIds.delete(key);
+      }
+      this.#releaseThreadLease(pubsub, key, pendingIdle.runId);
+      this.#notifyThreadEvents(state);
+      void this.#drainPendingIdleSignals(state, pubsub, key);
+      return true;
+    }
+
     try {
+      state.drainingIdleSignalsByThread.delete(key);
+      this.#notifyThreadEvents(state);
       const output = await pendingIdle.agent.stream(pendingIdle.signal, {
         ...(pendingIdle.streamOptions as any),
         runId: pendingIdle.runId,
@@ -2541,9 +2641,9 @@ export class AgentThreadStreamRuntime {
     const key = state.threadKeysByRunId.get(runId);
     if (!key) return;
     state.threadKeysByRunId.delete(runId);
-    if (state.activeThreadRunIds.get(key) === runId) {
-      state.activeThreadRunIds.delete(key);
-    }
+    if (state.activeThreadRunIds.get(key) !== runId) return;
+    state.activeThreadRunIds.delete(key);
+    void this.#drainPendingIdleSignals(state, pubsub, key);
   }
 
   async #waitForRemoteRunToFinish(pubsub: PubSub | undefined, key: string, runId: string) {
@@ -3197,6 +3297,66 @@ export class AgentThreadStreamRuntime {
     return this.sendSignal<OUTPUT>(agent, this.#createMessageSignalInput(message), target, pubsub);
   }
 
+  subscribeThreadEvents(
+    agent: Agent<any, any, any, any>,
+    scope: SubscribeAgentThreadEventsOptions,
+    listener: AgentThreadEventListener,
+    pubsub?: PubSub,
+  ): () => void {
+    const state = this.#getState(pubsub);
+    const registration: ThreadEventListenerRegistration = { ...scope, agent, listener, lastCount: 0 };
+    const count = this.#queuedMessageCount(state, registration);
+    registration.lastCount = count;
+    state.threadEventListeners.add(registration);
+    try {
+      listener({ type: 'queue-count-changed', count });
+    } catch {}
+    let subscribed = true;
+    return () => {
+      if (!subscribed) return;
+      subscribed = false;
+      state.threadEventListeners.delete(registration);
+    };
+  }
+
+  cancelQueuedMessages(
+    agent: Agent<any, any, any, any>,
+    target: CancelQueuedAgentMessagesOptions,
+    pubsub?: PubSub,
+  ): CancelQueuedAgentMessagesResult {
+    const state = this.#getState(pubsub);
+    const key = this.#threadKey(target.resourceId, target.threadId);
+    const hasSignalIds = Array.isArray((target as { signalIds?: unknown }).signalIds);
+    const hasQueueOwnerId = typeof (target as { queueOwnerId?: unknown }).queueOwnerId === 'string';
+    if (hasSignalIds === hasQueueOwnerId) {
+      throw new Error('cancelQueuedMessages requires exactly one of signalIds or queueOwnerId');
+    }
+    const matches = (pending: PendingIdleSignal<any>) =>
+      pending.agent === agent &&
+      (hasSignalIds
+        ? (target as { signalIds: string[] }).signalIds.includes(pending.signal.id)
+        : pending.queueOwnerId === (target as { queueOwnerId: string }).queueOwnerId);
+    const cancelledSignalIds: string[] = [];
+    const queue = state.pendingIdleSignalsByThread.get(key);
+    if (queue) {
+      const remaining = queue.filter(pending => {
+        if (!matches(pending)) return true;
+        cancelledSignalIds.push(pending.signal.id);
+        return false;
+      });
+      if (remaining.length === 0) state.pendingIdleSignalsByThread.delete(key);
+      else state.pendingIdleSignalsByThread.set(key, remaining);
+    }
+
+    const draining = state.drainingIdleSignalsByThread.get(key);
+    if (draining && matches(draining) && !draining.cancelled) {
+      draining.cancelled = true;
+      cancelledSignalIds.push(draining.signal.id);
+    }
+    if (cancelledSignalIds.length > 0) this.#notifyThreadEvents(state);
+    return { cancelledSignalIds };
+  }
+
   queueMessage<OUTPUT = unknown>(
     agent: Agent<any, any, any, any>,
     message: AgentMessageInput,
@@ -3241,11 +3401,22 @@ export class AgentThreadStreamRuntime {
     const queuedRunId = randomUUID();
     const queuedStreamOptions = target.ifIdle?.streamOptions ?? activeRecord?.streamOptions;
 
-    if (activeRecord) {
+    if (activeRecord || state.activeThreadRunIds.has(key)) {
       const idleQueue = state.pendingIdleSignalsByThread.get(key) ?? [];
-      idleQueue.push({ agent, signal, runId: queuedRunId, resourceId, threadId, streamOptions: queuedStreamOptions });
+      idleQueue.push({
+        agent,
+        signal,
+        runId: queuedRunId,
+        resourceId,
+        threadId,
+        streamOptions: queuedStreamOptions,
+        queueOwnerId: target.queueOwnerId,
+      });
       state.pendingIdleSignalsByThread.set(key, idleQueue);
-      this.#watchThreadRunCompletion(state, pubsub, key, activeRecord);
+      this.#notifyThreadEvents(state);
+      if (activeRecord) {
+        this.#watchThreadRunCompletion(state, pubsub, key, activeRecord);
+      }
       return {
         signal,
         accepted: Promise.resolve({ action: 'deliver' as const, runId: queuedRunId }),

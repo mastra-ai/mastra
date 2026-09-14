@@ -7,7 +7,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useObservationalMemory } from '@mastra/playground-ui/domains/memory/hooks/use-observational-memory';
 import { MemoryIcon } from '@mastra/playground-ui/icons/MemoryIcon';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ChevronDown, ChevronUp, Eye, MessageSquare, NotebookPen, Search } from 'lucide-react';
+import { ChevronDown, ChevronUp, Eye, MessageSquare, NotebookPen, Search, ExternalLink } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useLayoutEffect, useRef, useState } from 'react';
 import { AgentCapabilitiesFooter } from './agent-capabilities-footer';
@@ -239,6 +239,7 @@ export function MemorySidebarBody({
                 descriptionSlot="Conversations are only saved as threads when the agent has memory configured."
                 actionSlot={
                   <Button
+                    icon={<ExternalLink />}
                     as="a"
                     href="https://mastra.ai/docs/memory/overview"
                     target="_blank"

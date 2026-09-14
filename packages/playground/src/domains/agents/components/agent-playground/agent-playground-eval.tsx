@@ -20,6 +20,8 @@ import {
   ClipboardCheck,
   Award,
   ExternalLink,
+  ListChecks,
+  X,
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -330,7 +332,7 @@ export function ExperimentResultsPanel({
   onCreateScorer?: (items: Array<{ input: unknown; output: unknown }>) => void;
 }) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const experimentStatus = experiment.status as 'running' | 'pending' | 'completed' | 'failed';
+  const experimentStatus = experiment.status;
   const {
     data: results,
     isLoading,
@@ -475,7 +477,7 @@ export function ExperimentResultsPanel({
               Send to Review
             </Button>
           )}
-          <Button variant="ghost" size="sm" onClick={clearSelection}>
+          <Button icon={<X />} variant="ghost" size="sm" onClick={clearSelection}>
             Clear
           </Button>
         </div>
@@ -483,7 +485,7 @@ export function ExperimentResultsPanel({
 
       {results && results.length > 0 && selectedIds.size === 0 && (
         <div className="border-border1 flex items-center gap-2 border-b px-4 py-2">
-          <Button variant="ghost" size="sm" onClick={selectAllFailed}>
+          <Button icon={<ListChecks />} variant="ghost" size="sm" onClick={selectAllFailed}>
             Select all failures
           </Button>
         </div>
@@ -491,11 +493,11 @@ export function ExperimentResultsPanel({
 
       <ScrollArea className="min-h-0 flex-1">
         {isLoading ? (
-          <div className="flex items-center justify-center py-8">
+          <div className="flex items-center justify-center py-5">
             <Spinner className="h-5 w-5" />
           </div>
         ) : !results || results.length === 0 ? (
-          <div className="px-4 py-8 text-center">
+          <div className="px-4 py-5 text-center">
             <Txt variant="ui-sm" className="text-neutral2">
               No results yet
             </Txt>

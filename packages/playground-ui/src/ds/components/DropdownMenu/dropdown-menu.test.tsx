@@ -3,9 +3,74 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { DropdownMenu } from './dropdown-menu';
+import { Button } from '@/ds/components/Button';
 
 afterEach(() => {
   cleanup();
+});
+
+describe('DropdownMenu.Trigger', () => {
+  it('renders a design-system Button by default', () => {
+    render(
+      <DropdownMenu>
+        <DropdownMenu.Trigger>Open</DropdownMenu.Trigger>
+      </DropdownMenu>,
+    );
+
+    const trigger = screen.getByRole('button', { name: 'Open' });
+    expect(trigger.tagName).toBe('BUTTON');
+    expect(trigger.getAttribute('data-variant')).toBe('default');
+  });
+
+  it('forwards variant and size to the Button', () => {
+    render(
+      <DropdownMenu>
+        <DropdownMenu.Trigger variant="ghost" size="xs" className="tabular-nums">
+          Open
+        </DropdownMenu.Trigger>
+      </DropdownMenu>,
+    );
+
+    const trigger = screen.getByRole('button', { name: 'Open' });
+    expect(trigger.getAttribute('data-variant')).toBe('ghost');
+    expect(trigger.className).toContain('tabular-nums');
+  });
+
+  it('lets a custom render element own the look', () => {
+    render(
+      <DropdownMenu>
+        <DropdownMenu.Trigger variant="ghost" render={<Button variant="outline">Open</Button>} />
+      </DropdownMenu>,
+    );
+
+    expect(screen.getAllByRole('button')).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'Open' }).getAttribute('data-variant')).toBe('outline');
+  });
+
+  it('still supports the legacy asChild prop', () => {
+    render(
+      <DropdownMenu>
+        <DropdownMenu.Trigger asChild>
+          <Button variant="outline">Open</Button>
+        </DropdownMenu.Trigger>
+      </DropdownMenu>,
+    );
+
+    expect(screen.getAllByRole('button')).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'Open' }).getAttribute('data-variant')).toBe('outline');
+  });
+
+  it('uses tooltip as the accessible name of an icon-only trigger', () => {
+    render(
+      <DropdownMenu>
+        <DropdownMenu.Trigger size="icon-sm" tooltip="More actions">
+          <svg />
+        </DropdownMenu.Trigger>
+      </DropdownMenu>,
+    );
+
+    expect(screen.getByRole('button', { name: 'More actions' })).toBeTruthy();
+  });
 });
 
 describe('DropdownMenu', () => {

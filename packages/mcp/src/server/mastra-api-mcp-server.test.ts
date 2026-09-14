@@ -1,0 +1,580 @@
+import { MASTRA_AUTH_TOKEN_KEY, RequestContext } from '@mastra/core/request-context';
+import { describe, expect, it, vi } from 'vitest';
+
+import { makeMockExtra } from './__tests__/mock-extra';
+import { MastraApiMCPServer } from './mastra-api-mcp-server';
+import { MASTRA_API_OPERATIONS } from './mastra-api-operations.generated';
+
+type ManifestRoute = {
+  method: string;
+  path: string;
+  pathParamSchema?: Record<string, unknown>;
+  queryParamSchema?: Record<string, unknown>;
+  bodySchema?: Record<string, unknown>;
+};
+
+const objectSchema = (properties: Record<string, unknown>, required: string[] = []) => ({
+  type: 'object',
+  properties,
+  required,
+  additionalProperties: false,
+});
+
+const manifestResponse = (routes: ManifestRoute[]) =>
+  new Response(JSON.stringify({ version: 1, routes }), {
+    headers: { 'content-type': 'application/json' },
+  });
+
+const callTool = async (
+  server: MastraApiMCPServer,
+  name: string,
+  args: Record<string, unknown>,
+  authInfo?: Record<string, unknown>,
+  signal?: AbortSignal,
+) => {
+  const sdkServer = server.getServer();
+  // @ts-expect-error Access the SDK handler to test the complete MCP execution context.
+  const handler = sdkServer._requestHandlers.get('tools/call');
+  expect(handler).toBeDefined();
+  const extra = makeMockExtra({ authInfo });
+  if (signal) {
+    extra.signal = signal;
+    extra.mcpReq.signal = signal;
+  }
+  return handler!(
+    {
+      jsonrpc: '2.0' as const,
+      id: 'test-call',
+      method: 'tools/call' as const,
+      params: { name, arguments: args },
+    },
+    extra,
+  );
+};
+
+const listTools = async (server: MastraApiMCPServer) => {
+  const sdkServer = server.getServer();
+  // @ts-expect-error Access the SDK handler to inspect the tools exposed to MCP clients.
+  const handler = sdkServer._requestHandlers.get('tools/list');
+  expect(handler).toBeDefined();
+  return handler!(
+    { jsonrpc: '2.0' as const, id: 'test-list', method: 'tools/list' as const, params: {} },
+    makeMockExtra(),
+  );
+};
+
+describe('MastraApiMCPServer', () => {
+  it('loads the API manifest and exposes only curated operations', async () => {
+    const fetch = vi.fn(async () =>
+      manifestResponse([
+        { method: 'GET', path: '/agents', queryParamSchema: objectSchema({ limit: { type: 'number' } }) },
+        {
+          method: 'POST',
+          path: '/agents/:agentId/generate',
+          pathParamSchema: objectSchema({ agentId: { type: 'string' } }, ['agentId']),
+          bodySchema: objectSchema({ messages: { type: 'array' } }, ['messages']),
+        },
+        { method: 'DELETE', path: '/agents/:agentId' },
+        { method: 'POST', path: '/unapproved-operation', bodySchema: objectSchema({}) },
+      ]),
+    );
+
+    const server = await MastraApiMCPServer.create({ url: 'https://mastra.example', fetch });
+    const result = await listTools(server);
+
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(fetch.mock.calls[0]?.[0].toString()).toBe('https://mastra.example/api/system/api-schema');
+    expect(result.tools.map((tool: { name: string }) => tool.name)).toEqual(['agent_list', 'agent_run']);
+    expect(result.tools[0].inputSchema).toMatchObject({
+      type: 'object',
+      properties: { limit: { type: 'number' } },
+    });
+    expect(result.tools[0].annotations).toMatchObject({
+      title: 'List available agents',
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: true,
+    });
+    expect(result.tools[1].annotations).toMatchObject({
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: false,
+      openWorldHint: true,
+    });
+    expect((server as unknown as { protocolVersion: string }).protocolVersion).toBe('2026-07-28');
+  });
+
+  it('matches every command in the generated Mastra API CLI catalog', async () => {
+    const routes = MASTRA_API_OPERATIONS.map(operation => ({ method: operation.method, path: operation.path }));
+    const fetch = vi.fn(async () => manifestResponse(routes));
+    const server = await MastraApiMCPServer.create({ url: 'https://mastra.example', fetch });
+
+    const result = await listTools(server);
+
+    expect(MASTRA_API_OPERATIONS).toHaveLength(60);
+    expect(result.tools.map((tool: { name: string }) => tool.name)).toEqual(
+      MASTRA_API_OPERATIONS.map(operation => operation.name),
+    );
+  });
+
+  it('uses the full observability route when verbose output is requested', async () => {
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(
+        manifestResponse([
+          {
+            method: 'GET',
+            path: '/observability/traces/light',
+            queryParamSchema: objectSchema({ limit: { type: 'number' } }),
+          },
+          {
+            method: 'GET',
+            path: '/observability/traces',
+            queryParamSchema: objectSchema({ limit: { type: 'number' } }),
+          },
+        ]),
+      )
+      .mockResolvedValueOnce(new Response(JSON.stringify({ spans: [] })));
+    const server = await MastraApiMCPServer.create({ url: 'https://mastra.example', fetch });
+    const tools = await listTools(server);
+
+    expect(tools.tools[0].inputSchema.properties).toMatchObject({
+      verbose: { type: 'boolean', default: false },
+    });
+
+    await callTool(server, 'trace_list', { limit: 10, verbose: true });
+
+    const [requestUrl] = fetch.mock.calls[1]!;
+    const url = new URL(requestUrl.toString());
+    expect(url.pathname).toBe('/api/observability/traces');
+    expect(url.searchParams.get('limit')).toBe('10');
+    expect(url.searchParams.has('verbose')).toBe(false);
+  });
+
+  it('uses the full observability route when the lightweight route is unavailable', async () => {
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(
+        manifestResponse([
+          {
+            method: 'GET',
+            path: '/observability/traces',
+            queryParamSchema: objectSchema({ limit: { type: 'number' } }),
+          },
+        ]),
+      )
+      .mockResolvedValueOnce(new Response(JSON.stringify({ spans: [] })));
+    const server = await MastraApiMCPServer.create({ url: 'https://mastra.example', fetch });
+
+    const tools = await listTools(server);
+    expect(tools.tools.map((tool: { name: string }) => tool.name)).toEqual(['trace_list']);
+    expect(tools.tools[0].inputSchema.properties).not.toHaveProperty('verbose');
+
+    await callTool(server, 'trace_list', { limit: 10 });
+
+    const [requestUrl] = fetch.mock.calls[1]!;
+    expect(new URL(requestUrl.toString()).pathname).toBe('/api/observability/traces');
+  });
+
+  it('marks delete and cancel commands as destructive', async () => {
+    const fetch = vi.fn(async () =>
+      manifestResponse([
+        {
+          method: 'DELETE',
+          path: '/memory/threads/:threadId',
+          pathParamSchema: objectSchema({ threadId: { type: 'string' } }, ['threadId']),
+        },
+        {
+          method: 'POST',
+          path: '/workflows/:workflowId/runs/:runId/cancel',
+          pathParamSchema: objectSchema({ workflowId: { type: 'string' }, runId: { type: 'string' } }, [
+            'workflowId',
+            'runId',
+          ]),
+        },
+      ]),
+    );
+    const server = await MastraApiMCPServer.create({ url: 'https://mastra.example', fetch });
+
+    const result = await listTools(server);
+
+    expect(result.tools).toHaveLength(2);
+    for (const tool of result.tools) {
+      expect(tool.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true, openWorldHint: true });
+    }
+  });
+
+  it('encodes path arguments and splits query and body arguments', async () => {
+    const route: ManifestRoute = {
+      method: 'POST',
+      path: '/tools/:toolId/execute',
+      pathParamSchema: objectSchema({ toolId: { type: 'string' } }, ['toolId']),
+      queryParamSchema: objectSchema({ runId: { type: 'string' } }),
+      bodySchema: objectSchema({ data: { type: 'object' }, requestContext: { type: 'object' } }, ['data']),
+    };
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(manifestResponse([route]))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ result: 'ok' })));
+    const server = await MastraApiMCPServer.create({
+      url: 'https://mastra.example/',
+      headers: { Authorization: 'Bearer configured-token', 'x-tenant': 'acme' },
+      fetch,
+    });
+
+    const result = await callTool(
+      server,
+      'tool_execute',
+      {
+        toolId: 'weather/local',
+        runId: 'run 1',
+        data: { city: 'Paris' },
+        requestContext: { locale: 'fr' },
+      },
+      { token: 'caller-token' },
+    );
+
+    expect(result.isError).toBe(false);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    const [requestUrl, requestInit] = fetch.mock.calls[1]!;
+    const url = new URL(requestUrl.toString());
+    expect(url.pathname).toBe('/api/tools/weather%2Flocal/execute');
+    expect(url.searchParams.get('runId')).toBe('run 1');
+    expect(url.searchParams.has('toolId')).toBe(false);
+    expect(requestInit?.method).toBe('POST');
+    expect(JSON.parse(String(requestInit?.body))).toEqual({
+      data: { city: 'Paris' },
+      requestContext: { locale: 'fr' },
+    });
+    const headers = new Headers(requestInit?.headers);
+    expect(headers.get('authorization')).toBe('Bearer caller-token');
+    expect(headers.get('x-tenant')).toBe('acme');
+    expect(headers.get('content-type')).toBe('application/json');
+  });
+
+  it('advertises and validates nonempty string path arguments before fetching', async () => {
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(
+        manifestResponse([
+          {
+            method: 'POST',
+            path: '/tools/:toolId/execute',
+            pathParamSchema: objectSchema({ toolId: {} }),
+            queryParamSchema: objectSchema({ runId: { type: 'string' } }, ['runId']),
+            bodySchema: objectSchema({ data: { type: 'object' } }, ['data']),
+          },
+        ]),
+      )
+      .mockResolvedValueOnce(new Response('{}'));
+    const server = await MastraApiMCPServer.create({ url: 'https://mastra.example', fetch });
+    const listed = await listTools(server);
+    expect(listed.tools[0].inputSchema.properties.toolId).toMatchObject({ type: 'string', minLength: 1 });
+    expect(listed.tools[0].inputSchema.required).toEqual(['toolId', 'runId', 'data']);
+
+    for (const toolId of ['', 1, false, null, [], {}, undefined]) {
+      const result = await callTool(server, 'tool_execute', { toolId, runId: 'run', data: {} });
+      expect(result.isError).toBe(true);
+    }
+    for (const args of [
+      { toolId: 'valid', data: {} },
+      { toolId: 'valid', runId: 'run' },
+    ]) {
+      expect((await callTool(server, 'tool_execute', args)).isError).toBe(true);
+    }
+    expect(fetch).toHaveBeenCalledOnce();
+
+    const result = await callTool(server, 'tool_execute', { toolId: 'weather/local ?#', runId: 'run', data: {} });
+    expect(result.isError).toBe(false);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(new URL(String(fetch.mock.calls[1]?.[0])).pathname).toBe('/api/tools/weather%2Flocal%20%3F%23/execute');
+  });
+
+  it.each([
+    { type: 'string', minLength: 4, pattern: '^tool' },
+    { type: ['string', 'null'], minLength: 4, pattern: '^tool' },
+  ])('preserves stricter path constraints and colliding input properties: %j', async pathProperty => {
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(
+        manifestResponse([
+          {
+            method: 'POST',
+            path: '/tools/:toolId/execute',
+            pathParamSchema: objectSchema({ toolId: pathProperty }, ['toolId']),
+            queryParamSchema: objectSchema({ toolId: { maxLength: 8 } }, ['toolId']),
+            bodySchema: objectSchema({ toolId: { pattern: 'ok$' }, data: {} }, ['data']),
+          },
+        ]),
+      )
+      .mockResolvedValueOnce(new Response('{}'));
+    const server = await MastraApiMCPServer.create({ url: 'https://mastra.example', fetch });
+    const listed = await listTools(server);
+    expect(listed.tools[0].inputSchema.required).toEqual(['toolId', 'data']);
+    for (const toolId of ['', 'ok', 'failok', 'toolongok', 'toolbad', null, 1]) {
+      expect((await callTool(server, 'tool_execute', { toolId, data: {} })).isError).toBe(true);
+    }
+    expect(fetch).toHaveBeenCalledOnce();
+    expect((await callTool(server, 'tool_execute', { toolId: 'toolok', data: {} })).isError).toBe(false);
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not weaken conflicting path and body types', async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>(async () =>
+      manifestResponse([
+        {
+          method: 'POST',
+          path: '/tools/:toolId/execute',
+          pathParamSchema: objectSchema({ toolId: { type: 'string' } }, ['toolId']),
+          bodySchema: objectSchema({ toolId: { type: 'number' } }),
+        },
+      ]),
+    );
+    const server = await MastraApiMCPServer.create({ url: 'https://mastra.example', fetch });
+    for (const toolId of ['tool', 1, '']) {
+      expect((await callTool(server, 'tool_execute', { toolId })).isError).toBe(true);
+    }
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+
+  it('sends GET arguments as query parameters and uses configured authorization', async () => {
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(
+        manifestResponse([
+          {
+            method: 'GET',
+            path: '/agents',
+            queryParamSchema: objectSchema({ limit: { type: 'number' }, tags: { type: 'array' } }),
+          },
+        ]),
+      )
+      .mockResolvedValueOnce(new Response(JSON.stringify([{ id: 'agent-1' }])));
+    const server = await MastraApiMCPServer.create({
+      url: 'https://mastra.example/api',
+      headers: { Authorization: 'Bearer configured-token' },
+      fetch,
+    });
+    expect(new Headers(fetch.mock.calls[0]?.[1]?.headers).get('authorization')).toBe('Bearer configured-token');
+
+    await callTool(server, 'agent_list', { limit: 5, tags: ['public', 'stable'] });
+
+    const [requestUrl, requestInit] = fetch.mock.calls[1]!;
+    const url = new URL(requestUrl.toString());
+    expect(url.pathname).toBe('/api/agents');
+    expect(url.searchParams.get('limit')).toBe('5');
+    expect(url.searchParams.get('tags')).toBe('["public","stable"]');
+    expect(new Headers(requestInit?.headers).get('authorization')).toBe('Bearer configured-token');
+    expect(requestInit?.body).toBeUndefined();
+  });
+
+  it('forwards request authentication when the tool runs through the Mastra API', async () => {
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(manifestResponse([{ method: 'GET', path: '/agents' }]))
+      .mockResolvedValueOnce(new Response(JSON.stringify([])));
+    const server = await MastraApiMCPServer.create({
+      url: 'https://mastra.example',
+      headers: { Authorization: 'Bearer configured-token' },
+      fetch,
+    });
+    const requestContext = new RequestContext();
+    requestContext.set(MASTRA_AUTH_TOKEN_KEY, 'request-token');
+
+    await server.executeTool('agent_list', {}, { requestContext });
+
+    const requestHeaders = new Headers(fetch.mock.calls[1]?.[1]?.headers);
+    expect(requestHeaders.get('authorization')).toBe('Bearer request-token');
+  });
+
+  it('returns a clear API error and does not retry a failed mutation', async () => {
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(
+        manifestResponse([
+          {
+            method: 'POST',
+            path: '/agents/:agentId/generate',
+            pathParamSchema: objectSchema({ agentId: { type: 'string' } }, ['agentId']),
+            bodySchema: objectSchema({ messages: { type: 'array' } }, ['messages']),
+          },
+        ]),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ error: { message: 'Agent is unavailable' } }), { status: 503 }),
+      );
+    const server = await MastraApiMCPServer.create({ url: 'https://mastra.example', fetch });
+
+    const result = await callTool(server, 'agent_run', { agentId: 'support', messages: [] });
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain(
+      'Mastra API request POST /agents/:agentId/generate failed with status 503: Agent is unavailable',
+    );
+  });
+
+  it('does not send an API request after the MCP call is canceled', async () => {
+    const route: ManifestRoute = {
+      method: 'GET',
+      path: '/agents',
+      queryParamSchema: objectSchema({}),
+    };
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(manifestResponse([route]))
+      .mockImplementationOnce(async (_url, init) => {
+        expect(init?.signal?.aborted).toBe(true);
+        throw new DOMException('The operation was aborted.', 'AbortError');
+      });
+    const server = await MastraApiMCPServer.create({ url: 'https://mastra.example', fetch });
+    const controller = new AbortController();
+    controller.abort();
+
+    const result = await callTool(server, 'agent_list', {}, undefined, controller.signal);
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('Mastra API request GET /agents was canceled.');
+  });
+
+  it.each([
+    ['workflow_run_start', 'start-async', 'inputData'],
+    ['workflow_run_resume', 'resume-async', 'resumeData'],
+  ])('preserves null JSON inputs for %s', async (name, path, field) => {
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(
+        manifestResponse([
+          {
+            method: 'POST',
+            path: `/workflows/:workflowId/${path}`,
+            pathParamSchema: objectSchema({ workflowId: { type: 'string' } }, ['workflowId']),
+            queryParamSchema: objectSchema({ runId: { type: ['string', 'null'] } }),
+            bodySchema: objectSchema({ [field]: {}, optional: {} }, [field]),
+          },
+        ]),
+      )
+      .mockResolvedValueOnce(new Response('{}'));
+    const server = await MastraApiMCPServer.create({ url: 'https://mastra.example', fetch });
+
+    const result = await callTool(server, name, { workflowId: 'workflow', [field]: null, runId: null });
+
+    expect(result.isError).toBe(false);
+    expect(JSON.parse(String(fetch.mock.calls[1]?.[1]?.body))).toEqual({ [field]: null });
+    expect(new URL(String(fetch.mock.calls[1]?.[0])).search).toBe('');
+  });
+
+  it.each(['definitions', '$defs'])('isolates colliding %s and preserves recursive agent schemas', async keyword => {
+    const route: ManifestRoute = {
+      method: 'POST',
+      path: '/agents/:agentId/generate',
+      pathParamSchema: {
+        ...objectSchema({ agentId: { $ref: `#/${keyword}/value` } }, ['agentId']),
+        [keyword]: { value: { type: 'string', minLength: 4 } },
+      },
+      queryParamSchema: {
+        ...objectSchema({ limit: { $ref: `#/${keyword}/value` } }),
+        [keyword]: { value: { type: 'integer' } },
+      },
+      bodySchema: {
+        ...objectSchema(
+          {
+            messages: { type: 'array', items: { type: 'string' } },
+            tree: { $ref: `#/${keyword}/value` },
+            nested: { $ref: '#' },
+          },
+          ['messages'],
+        ),
+        [keyword]: {
+          value: objectSchema({ children: { type: 'array', items: { $ref: `#/${keyword}/value` } } }),
+        },
+      },
+    };
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(manifestResponse([route]))
+      .mockImplementation(async () => new Response('{}'));
+    const server = await MastraApiMCPServer.create({ url: 'https://mastra.example', fetch });
+    const listed = await listTools(server);
+    const schema = listed.tools[0].inputSchema;
+    expect(schema.properties.agentId).toMatchObject({
+      type: 'string',
+      minLength: 1,
+      allOf: [{ $ref: `#/definitions/pathParamSchema/${keyword}/value` }],
+    });
+    expect(schema.properties.limit.$ref).toBe(`#/definitions/queryParamSchema/${keyword}/value`);
+    expect(schema.properties.tree.$ref).toBe(`#/definitions/bodySchema/${keyword}/value`);
+    expect(schema.properties.nested.$ref).toBe('#/definitions/bodySchema');
+    expect(schema.definitions.bodySchema[keyword].value.properties.children.items.$ref).toBe(
+      `#/definitions/bodySchema/${keyword}/value`,
+    );
+
+    const minimal = await callTool(server, 'agent_run', { agentId: 'support', messages: ['Hello'] });
+    expect(minimal.isError).toBe(false);
+    const recursive = await callTool(server, 'agent_run', {
+      agentId: 'support',
+      limit: 2,
+      messages: ['Hello'],
+      tree: { children: [{ children: [{}] }] },
+      nested: { messages: [], nested: { messages: [] } },
+    });
+    expect(recursive.isError).toBe(false);
+    expect(fetch).toHaveBeenCalledTimes(3);
+
+    for (const invalid of [
+      { agentId: '' },
+      { agentId: 'abc' },
+      { agentId: 2 },
+      { limit: 'wrong' },
+      { tree: 'wrong' },
+      { nested: {} },
+    ]) {
+      const result = await callTool(server, 'agent_run', { agentId: 'support', messages: [], ...invalid });
+      expect(result.isError).toBe(true);
+    }
+    expect(fetch).toHaveBeenCalledTimes(3);
+  });
+
+  it.each([
+    ['', '/system/api-schema'],
+    ['/', '/system/api-schema'],
+    ['////', '/system/api-schema'],
+    ['///custom/api///', '/custom/api/system/api-schema'],
+    ['custom/api', '/custom/api/system/api-schema'],
+    [`/${'a'.repeat(10_000)}${'/'.repeat(10_000)}`, `/${'a'.repeat(10_000)}/system/api-schema`],
+  ])('normalizes API prefixes (case %#)', async (apiPrefix, expectedPath) => {
+    const fetch = vi.fn<typeof globalThis.fetch>(async () => manifestResponse([{ method: 'GET', path: '/agents' }]));
+    await MastraApiMCPServer.create({ url: 'https://mastra.example', apiPrefix, fetch });
+    expect(new URL(String(fetch.mock.calls[0]?.[0])).pathname).toBe(expectedPath);
+  });
+
+  it('rejects invalid targets and manifests', async () => {
+    await expect(MastraApiMCPServer.create({ url: 'not a URL' })).rejects.toThrow(
+      'The Mastra server URL must be a valid absolute URL.',
+    );
+    await expect(MastraApiMCPServer.create({ url: 'file:///tmp/mastra' })).rejects.toThrow(
+      'The Mastra server URL must use HTTP or HTTPS.',
+    );
+    await expect(MastraApiMCPServer.create({ url: 'https://user:secret@mastra.example' })).rejects.toThrow(
+      'The Mastra server URL cannot contain credentials.',
+    );
+    await expect(MastraApiMCPServer.create({ url: 'https://mastra.example', timeoutMs: 0 })).rejects.toThrow(
+      'The request timeout must be a positive integer in milliseconds.',
+    );
+
+    const fetch = vi.fn(async () => new Response(JSON.stringify({ version: 2, routes: [] })));
+    await expect(MastraApiMCPServer.create({ url: 'https://mastra.example', fetch })).rejects.toThrow(
+      'The Mastra server returned an invalid API schema manifest.',
+    );
+  });
+
+  it('rejects manifests without supported operations', async () => {
+    const fetch = vi.fn(async () => manifestResponse([{ method: 'GET', path: '/logs' }]));
+
+    await expect(MastraApiMCPServer.create({ url: 'https://mastra.example', fetch })).rejects.toThrow(
+      'The target Mastra server does not support any of the MCP server operations.',
+    );
+  });
+});

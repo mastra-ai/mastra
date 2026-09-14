@@ -14,6 +14,7 @@ import {
   AgentChatLoadingSkeleton,
   AgentSidebarLoadingSkeleton,
 } from '@/domains/agents/components/agent-loading-skeletons';
+import { ThreadsPanelShortcuts } from '@/domains/agents/components/threads-panel-shortcuts';
 import { ActivatedSkillsProvider } from '@/domains/agents/context/activated-skills-context';
 import { AgentSettingsProvider } from '@/domains/agents/context/agent-context';
 import { ObservationalMemoryProvider } from '@/domains/agents/context/agent-observational-memory-context';
@@ -137,6 +138,7 @@ function AgentThread() {
               <ObservationalMemoryProvider>
                 <MemoryTimelineProvider key={`memory-timeline-${agentId}-${actualThreadId}`}>
                   <ActivatedSkillsProvider key={`${agentId}-${actualThreadId}`}>
+                    <ThreadsPanelShortcuts panel={threadsPanel} />
                     <AgentLayout
                       agentId={agentId!}
                       leftPanel={threadsPanel}
@@ -191,7 +193,7 @@ function AgentThread() {
 export default AgentThread;
 
 const AgentThreadLoadingSkeleton = () => (
-  <div className="relative grid h-full overflow-y-auto pt-6" data-testid="agent-thread-skeleton" aria-busy="true">
+  <div className="relative grid h-full overflow-y-auto pt-4" data-testid="agent-thread-skeleton" aria-busy="true">
     <AgentChatLoadingSkeleton />
   </div>
 );

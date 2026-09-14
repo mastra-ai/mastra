@@ -65,6 +65,7 @@ function keepsSlot(part: MessagePart): boolean {
     case 'text':
     case 'reasoning':
     case 'file':
+    case 'error':
       return true;
     case 'tool-invocation':
       return !isTaskTool(part.toolInvocation.toolName);
@@ -87,6 +88,8 @@ export function draws(
     case 'tool-invocation':
       return !isTaskTool(part.toolInvocation.toolName) && !awaitsPrompt(part, suspensions, runtimeTools);
     case 'file':
+      return true;
+    case 'error':
       return true;
     default:
       return false;

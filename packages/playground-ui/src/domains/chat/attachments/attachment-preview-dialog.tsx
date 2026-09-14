@@ -169,8 +169,8 @@ export const TxtEntry = ({ data, name }: TxtEntryProps) => {
         type="button"
         aria-label={filename ? `Preview ${filename}` : 'Preview text attachment'}
         title={filename}
+        icon={<FileText />}
       >
-        <FileText className="shrink-0" />
         {filename && <span className="truncate">{filename}</span>}
       </Button>
       <TxtPreviewDialog data={formattedContent} title={filename} open={open} onOpenChange={setOpen} />

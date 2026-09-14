@@ -35,6 +35,15 @@ type UnixSocketPubSubOptions = {
    * memory without bound.
    */
   maxInboundFrameBytes?: number;
+  /**
+   * How long (ms) a client waits for the broker to acknowledge a
+   * subscribe/unsubscribe frame before proceeding best-effort. Brokers running
+   * an older protocol version never send `subscribed`/`unsubscribed` acks, so
+   * an unbounded wait would deadlock startup of any newer client that connects
+   * to them. On timeout the membership change is assumed applied — old brokers
+   * do honor the frames, they just never acknowledge them.
+   */
+  membershipAckTimeoutMs?: number;
 };
 
 type BrokerClient = {
@@ -51,6 +60,7 @@ type MembershipWaiter = {
 
 const DEFAULT_MAX_REMOTE_CLIENT_QUEUED_BYTES = 64 * 1024 * 1024;
 const DEFAULT_MAX_INBOUND_FRAME_BYTES = 64 * 1024 * 1024;
+const DEFAULT_MEMBERSHIP_ACK_TIMEOUT_MS = 5_000;
 const NEWLINE_BYTE = 0x0a;
 
 /**
@@ -226,6 +236,7 @@ export class UnixSocketPubSub extends PubSub {
   #recovering?: Promise<void>;
   #maxRemoteClientQueuedBytes: number;
   #maxInboundFrameBytes: number;
+  #membershipAckTimeoutMs: number;
 
   constructor(socketPath: string, options: UnixSocketPubSubOptions = {}) {
     super();
@@ -237,6 +248,12 @@ export class UnixSocketPubSub extends PubSub {
       throw new Error('UnixSocketPubSub maxInboundFrameBytes must be a positive finite number');
     }
     this.#maxInboundFrameBytes = maxInboundFrameBytes;
+
+    const membershipAckTimeoutMs = options.membershipAckTimeoutMs ?? DEFAULT_MEMBERSHIP_ACK_TIMEOUT_MS;
+    if (!Number.isFinite(membershipAckTimeoutMs) || membershipAckTimeoutMs <= 0) {
+      throw new Error('UnixSocketPubSub membershipAckTimeoutMs must be a positive finite number');
+    }
+    this.#membershipAckTimeoutMs = membershipAckTimeoutMs;
   }
 
   override get supportedModes(): ReadonlyArray<PubSubDeliveryMode> {
@@ -644,7 +661,21 @@ export class UnixSocketPubSub extends PubSub {
     } catch (error) {
       this.#settleMembershipWaiters(waiterMap, key, error instanceof Error ? error : new Error(String(error)));
     }
-    await acknowledged;
+    // Brokers on an older protocol version accept subscribe/unsubscribe frames
+    // but never acknowledge them. Waiting unboundedly would deadlock every
+    // newer client that connects to such a broker, so after the timeout we
+    // resolve best-effort: the membership change was applied broker-side, only
+    // the ack is missing. Settling clears the waiter map, so a late ack (or
+    // this timer firing after a real ack) is a no-op.
+    const ackTimeout = setTimeout(() => {
+      this.#settleMembershipWaiters(waiterMap, key);
+    }, this.#membershipAckTimeoutMs);
+    ackTimeout.unref?.();
+    try {
+      await acknowledged;
+    } finally {
+      clearTimeout(ackTimeout);
+    }
   }
 
   #waitForPendingMembershipAcknowledgement(waiterMap: Map<string, MembershipWaiter[]>, key: string): Promise<void> {

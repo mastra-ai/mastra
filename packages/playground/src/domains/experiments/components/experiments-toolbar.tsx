@@ -3,8 +3,10 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup, ButtonsGroupText } from '@mastra/playground-ui/components/ButtonsGroup';
 import { SelectFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
-import { GitCompare, Play, XIcon } from 'lucide-react';
+import { GitCompare, Play, XIcon, X } from 'lucide-react';
 import { EXPERIMENT_STATUS_OPTIONS } from './experiments-list-options';
+import type { DatasetTargetType } from '@/domains/datasets/components/target-type-options';
+import { TargetFilter } from '@/domains/shared/components/target-filter';
 
 export interface ExperimentsToolbarDatasetOption {
   value: string;
@@ -19,6 +21,10 @@ export interface ExperimentsToolbarProps {
   datasetFilter: string;
   onDatasetFilterChange: (value: string) => void;
   datasetOptions: ExperimentsToolbarDatasetOption[];
+  targetType: DatasetTargetType | '';
+  onTargetTypeChange: (type: DatasetTargetType | '') => void;
+  targetId: string;
+  onTargetIdChange: (id: string) => void;
   onReset?: () => void;
   hasActiveFilters?: boolean;
   onRunClick?: () => void;
@@ -45,6 +51,10 @@ export function ExperimentsToolbar({
   datasetFilter,
   onDatasetFilterChange,
   datasetOptions,
+  targetType,
+  onTargetTypeChange,
+  targetId,
+  onTargetIdChange,
   onReset,
   hasActiveFilters,
   onRunClick,
@@ -55,7 +65,7 @@ export function ExperimentsToolbar({
   const canCompare = selection?.selectedCount === 2 && !selection.compareDisabledReason;
 
   return (
-    <div className="flex min-h-9 flex-wrap items-center gap-2">
+    <div className="min-h-form-md flex flex-wrap items-center gap-2">
       <div className="max-w-120 min-w-48 flex-1">
         <ListSearch
           label="Search experiments"
@@ -83,9 +93,15 @@ export function ExperimentsToolbar({
           onValueChange={onDatasetFilterChange}
           className="whitespace-nowrap"
         />
+        <TargetFilter
+          targetType={targetType}
+          targetId={targetId}
+          onTargetTypeChange={onTargetTypeChange}
+          onTargetIdChange={onTargetIdChange}
+        />
         {onReset && hasActiveFilters && (
-          <Button onClick={onReset} size="sm" variant="default">
-            <XIcon className="size-3" /> Reset
+          <Button onClick={onReset} size="sm" variant="default" icon={<XIcon />}>
+            Reset
           </Button>
         )}
       </ButtonsGroup>
@@ -100,23 +116,26 @@ export function ExperimentsToolbar({
               <span className="text-accent2">· {selection.compareDisabledReason}</span>
             )}
           </ButtonsGroupText>
-          <Button variant="primary" disabled={!canCompare} onClick={selection.onExecuteCompare}>
-            <GitCompare />
+          <Button variant="primary" disabled={!canCompare} onClick={selection.onExecuteCompare} icon={<GitCompare />}>
             Compare Experiments
           </Button>
-          <Button onClick={selection.onCancelSelection}>Cancel</Button>
+          <Button icon={<X />} onClick={selection.onCancelSelection}>
+            Cancel
+          </Button>
         </ButtonsGroup>
       ) : (
         <ButtonsGroup className="ml-auto shrink-0">
           {onCompareClick && (
-            <Button onClick={onCompareClick} tooltip="Select two experiments of the same dataset to compare">
-              <GitCompare />
+            <Button
+              onClick={onCompareClick}
+              tooltip="Select two experiments of the same dataset to compare"
+              icon={<GitCompare />}
+            >
               Compare
             </Button>
           )}
           {onRunClick && (
-            <Button onClick={onRunClick} tooltip={runTooltip} variant="primary">
-              <Play />
+            <Button onClick={onRunClick} tooltip={runTooltip} variant="primary" icon={<Play />}>
               Run Experiment
             </Button>
           )}
