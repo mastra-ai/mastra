@@ -1,4 +1,5 @@
 import type { AgentCard, AgentCardSignature } from '@mastra/core/a2a';
+import { canonicalizeV1AgentCard } from '@mastra/core/a2a';
 import canonicalize from 'canonicalize';
 import { base64url, compactVerify, decodeProtectedHeader, importJWK, importSPKI, importX509 } from 'jose';
 import type { CryptoKey, JWK, ProtectedHeaderParameters } from 'jose';
@@ -42,6 +43,24 @@ function stripAgentCardSignatures(agentCard: AgentCard): AgentCard {
   const unsignedCard = structuredClone(agentCard) as AgentCard & { signatures?: AgentCardSignature[] };
   delete unsignedCard.signatures;
   return unsignedCard;
+}
+
+/**
+ * Canonicalize an Agent Card for signature verification, matching the server signer
+ * (`@mastra/server .../agent-card-signing.ts`).
+ *
+ * v1 cards use the SDK's `canonicalizeAgentCard` so verification is byte-identical to
+ * any `@a2a-js/sdk` v1 peer. 0.3 cards keep plain JCS (the v1 canonicalizer is lossy
+ * for the 0.3 shape). Discriminator: a v1 card omits the top-level `protocolVersion`
+ * (present as `"0.3.0"` on both 0.3 and hybrid cards); its absence marks a v1 card.
+ */
+function canonicalizeAgentCardForVerification(agentCard: AgentCard): string | undefined {
+  const isV1 = (agentCard as { protocolVersion?: string }).protocolVersion === undefined;
+  if (isV1) {
+    // The SDK canonicalizer strips `signatures` itself as part of its algorithm.
+    return canonicalizeV1AgentCard(agentCard as unknown as Parameters<typeof canonicalizeV1AgentCard>[0]);
+  }
+  return canonicalize(stripAgentCardSignatures(agentCard));
 }
 
 function isCryptoKey(value: unknown): value is CryptoKey {
@@ -97,7 +116,7 @@ export async function verifyAgentCardSignatureIfPresent(
     return agentCard;
   }
 
-  const canonicalPayload = canonicalize(stripAgentCardSignatures(agentCard));
+  const canonicalPayload = canonicalizeAgentCardForVerification(agentCard);
   if (!canonicalPayload) {
     throw new MastraClientError(200, 'OK', 'Failed to canonicalize A2A Agent Card for signature verification');
   }

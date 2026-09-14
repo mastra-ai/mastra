@@ -2,6 +2,7 @@ import * as crypto from 'node:crypto';
 import { openai } from '@ai-sdk/openai';
 import type { Task, MessageSendParams } from '@mastra/core/a2a';
 import { MastraA2AError } from '@mastra/core/a2a';
+import { AgentCard as AgentCardV1, SendMessageResponse as SendMessageResponseV1 } from '@mastra/core/a2a/v1';
 import type { AgentConfig } from '@mastra/core/agent';
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
@@ -19,7 +20,6 @@ import {
   getAgentCardByIdHandler,
   getAgentExecutionHandler,
   handleTaskGet,
-  handleTaskList,
   handleMessageSend,
   handleMessageStream,
   handleTaskCancel,
@@ -184,36 +184,20 @@ describe('A2A Handler', () => {
         requestContext: new RequestContext(),
         agentId: 'test-agent',
       });
-      expect(agentCard).toMatchInlineSnapshot(`
-        {
-          "additionalInterfaces": [],
-          "capabilities": {
-            "extensions": [],
-            "pushNotifications": false,
-            "stateTransitionHistory": false,
-            "streaming": true,
-          },
-          "defaultInputModes": [
-            "text/plain",
-          ],
-          "defaultOutputModes": [
-            "text/plain",
-          ],
-          "description": "test instructions",
-          "name": "test-agent",
-          "protocolVersion": "0.3.0",
-          "provider": {
-            "organization": "Mastra",
-            "url": "https://mastra.ai",
-          },
-          "security": [],
-          "securitySchemes": {},
-          "skills": [],
-          "supportsAuthenticatedExtendedCard": false,
-          "url": "/a2a/test-agent",
-          "version": "1.0",
-        }
-      `);
+      expect(agentCard).toMatchObject({
+        name: 'test-agent',
+        description: 'test instructions',
+        protocolVersion: '0.3.0',
+        url: '/a2a/test-agent',
+        supportedInterfaces: [
+          { url: '/a2a/test-agent', protocolBinding: 'JSONRPC', protocolVersion: '1.0' },
+          { url: '/a2a/test-agent', protocolBinding: 'JSONRPC', protocolVersion: '0.3' },
+        ],
+        capabilities: {
+          streaming: true,
+          pushNotifications: false,
+        },
+      });
     });
 
     it('should allow custom execution URL', async () => {
@@ -252,6 +236,52 @@ describe('A2A Handler', () => {
       expect(agentCard.version).toBe(customVersion);
     });
 
+    it('should render a v1 card with ordered dual-version interfaces', async () => {
+      const agentCard = await getAgentCardByIdHandler({
+        mastra: mockMastra,
+        requestContext: new RequestContext(),
+        agentId: 'test-agent',
+        protocolVersion: '1.0',
+      });
+
+      expect(agentCard).toMatchObject({
+        name: 'test-agent',
+        supportedInterfaces: [
+          { url: '/a2a/test-agent', protocolBinding: 'JSONRPC', protocolVersion: '1.0' },
+          { url: '/a2a/test-agent', protocolBinding: 'JSONRPC', protocolVersion: '0.3' },
+        ],
+        capabilities: {
+          streaming: true,
+          extendedAgentCard: false,
+        },
+      });
+      expect(agentCard).not.toHaveProperty('url');
+      expect(agentCard).not.toHaveProperty('protocolVersion');
+
+      const parsed = AgentCardV1.fromJSON(agentCard);
+      expect(parsed.supportedInterfaces.map(agentInterface => agentInterface.protocolVersion)).toEqual(['1.0', '0.3']);
+    });
+
+    it('should apply per-agent protocol version overrides', async () => {
+      mockMastra.setServer({
+        a2a: {
+          protocolVersions: ['1.0', '0.3'],
+          agents: {
+            'test-agent': { protocolVersions: ['0.3'] },
+          },
+        },
+      } as any);
+
+      await expect(
+        getAgentCardByIdHandler({
+          mastra: mockMastra,
+          requestContext: new RequestContext(),
+          agentId: 'test-agent',
+          protocolVersion: '1.0',
+        }),
+      ).rejects.toThrow('Version not supported: 1.0');
+    });
+
     it('should build an absolute execution url when request context is available', async () => {
       const response = await GET_AGENT_CARD_ROUTE.handler({
         mastra: mockMastra,
@@ -266,8 +296,10 @@ describe('A2A Handler', () => {
         }),
       } as any);
 
-      expect(response.url).toBe('http://localhost:4111/api/a2a/test-agent');
-      expect(response.capabilities.pushNotifications).toBe(true);
+      expect(response.headers.get('Vary')).toBe('A2A-Version');
+      const agentCard = await response.json();
+      expect(agentCard.url).toBe('http://localhost:4111/api/a2a/test-agent');
+      expect(agentCard.capabilities.pushNotifications).toBe(true);
     });
 
     it('should sign the agent card when A2A signing is configured', async () => {
@@ -3324,6 +3356,76 @@ describe('A2A Handler', () => {
       });
     });
 
+    it('stamps an inline v1 message/send push config with protocolVersion 1.0 (B4)', async () => {
+      // B4 regression: a v1 SendMessage with an inline push config must be stored
+      // with protocolVersion '1.0' so delivery re-encodes to the v1 wire shape.
+      // The pre-fix bug: getAgentExecutionHandler built the version-stamping wrapper
+      // (bindPushNotificationStoreVersion) but handleMessageSend's inner
+      // resolvePushNotificationPair dropped it for pushNotificationSender.getStore(),
+      // silently defaulting the inline config to '0.3'. This must go through
+      // getAgentExecutionHandler (not handleMessageSend directly) so the wrapper is
+      // actually built — a direct handleMessageSend call never exercises the bug.
+      const taskId = 'v1-push-task-id';
+      const pushNotificationStore = new InMemoryPushNotificationStore();
+      const pushNotificationSender = new DefaultPushNotificationSender(pushNotificationStore, {
+        fetch: vi.fn().mockResolvedValue(new Response(null, { status: 202 })),
+        lookup: vi.fn().mockResolvedValue([{ address: '93.184.216.34', family: 4 }]),
+      });
+      const generation = createDeferred<{ text: string }>();
+
+      const mockAgent = mockMastra.getAgentById('test-agent');
+      // @ts-expect-error - mockReturnValue is not available on the Agent class
+      mockAgent.generate.mockReturnValue(generation.promise);
+      await seedTask(mockTaskStore, taskId);
+
+      // v1 wire shape: SCREAMING_SNAKE role, push config under configuration.taskPushNotificationConfig.
+      const result = await getAgentExecutionHandler({
+        requestId: 'test-request-id',
+        mastra: mockMastra,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+        method: 'message/send' as any,
+        protocolVersion: '1.0',
+        params: {
+          message: {
+            messageId: 'v1-message-id',
+            taskId,
+            role: 'ROLE_USER',
+            parts: [{ text: 'Notify me when done' }],
+          },
+          configuration: {
+            returnImmediately: true,
+            taskPushNotificationConfig: {
+              url: 'https://example.com/webhook',
+              token: 'notification-token',
+            },
+          },
+        } as any,
+        taskStore: mockTaskStore,
+        pushNotificationStore,
+        pushNotificationSender,
+      });
+
+      expect('error' in result).toBe(false);
+
+      const stored = pushNotificationStore.listWithProtocolVersion({
+        agentId: 'test-agent',
+        params: { id: taskId },
+      });
+      expect(stored).toHaveLength(1);
+      expect(stored[0]!.protocolVersion).toBe('1.0');
+      expect(stored[0]!.config).toEqual({
+        taskId,
+        pushNotificationConfig: {
+          id: taskId,
+          token: 'notification-token',
+          url: 'https://example.com/webhook',
+        },
+      });
+
+      generation.resolve({ text: 'Done.' });
+    });
+
     it('returns task not found when configuring push notifications for an unknown task', async () => {
       const result = await getAgentExecutionHandler({
         requestId: 'test-request-id',
@@ -3937,7 +4039,7 @@ describe('A2A Handler', () => {
           headers: { 'A2A-Version': '1.0' },
         }),
         id: 2,
-        method: 'message/send',
+        method: 'SendMessage',
         params: {
           message: {
             messageId: 'v1-message',
@@ -3948,7 +4050,8 @@ describe('A2A Handler', () => {
         },
       });
 
-      expect(await response.json()).toMatchObject({
+      const payload = await response.json();
+      expect(payload).toMatchObject({
         jsonrpc: '2.0',
         id: 2,
         result: {
@@ -3958,6 +4061,38 @@ describe('A2A Handler', () => {
           },
         },
       });
+      expect(SendMessageResponseV1.fromJSON(payload.result).payload?.$case).toBe('task');
+    });
+
+    it.each([
+      ['1.0', 'message/send'],
+      ['0.3', 'SendMessage'],
+    ] as const)('rejects %s requests that use the other version method dialect', async (version, method) => {
+      const mockAgent = mockMastra.getAgentById('test-agent');
+      const response = await AGENT_EXECUTION_ROUTE.handler({
+        mastra: mockMastra,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+        taskStore: mockTaskStore,
+        abortSignal: AbortSignal.abort(),
+        request: new Request('http://localhost/api/a2a/test-agent', {
+          headers: { 'A2A-Version': version },
+        }),
+        id: 2,
+        method,
+        params: {
+          message: {
+            messageId: 'dialect-mismatch',
+            role: version === '1.0' ? 'user' : 'ROLE_USER',
+            parts: version === '1.0' ? [{ kind: 'text', text: 'Hello' }] : [{ text: 'Hello' }],
+          },
+        },
+      } as any);
+
+      expect(await response.json()).toMatchObject({
+        error: { code: -32601 },
+      });
+      expect(mockAgent.generate).not.toHaveBeenCalled();
     });
 
     it('lists tasks using the A2A v1 pagination response', async () => {
@@ -3969,14 +4104,18 @@ describe('A2A Handler', () => {
       };
       await mockTaskStore.save({ agentId: 'test-agent', data: task });
 
-      expect(
-        handleTaskList({
-          requestId: 3,
-          taskStore: mockTaskStore,
-          agentId: 'test-agent',
-          params: { contextId: 'context-1', pageSize: 10 },
-        }),
-      ).toEqual({
+      const result = await getAgentExecutionHandler({
+        requestId: 3,
+        mastra: mockMastra,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+        method: 'tasks/list',
+        params: { contextId: 'context-1', pageSize: 10 },
+        taskStore: mockTaskStore,
+        protocolVersion: '1.0',
+      });
+
+      expect(result).toEqual({
         jsonrpc: '2.0',
         id: 3,
         result: {
@@ -3989,6 +4128,48 @@ describe('A2A Handler', () => {
           nextPageToken: '',
           pageSize: 10,
           totalSize: 1,
+        },
+      });
+    });
+
+    it('uses the v1 push configuration method and flat wire shape', async () => {
+      await mockTaskStore.save({
+        agentId: 'test-agent',
+        data: {
+          id: 'task-1',
+          contextId: 'context-1',
+          kind: 'task',
+          status: { state: 'working', timestamp: '2026-08-06T12:00:00.000Z' },
+        },
+      });
+
+      const response = await AGENT_EXECUTION_ROUTE.handler({
+        mastra: mockMastra,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+        taskStore: mockTaskStore,
+        abortSignal: AbortSignal.abort(),
+        request: new Request('http://localhost/api/a2a/test-agent', {
+          headers: { 'A2A-Version': '1.0' },
+        }),
+        id: 4,
+        method: 'CreateTaskPushNotificationConfig',
+        params: {
+          taskId: 'task-1',
+          id: 'push-1',
+          url: 'https://example.com/webhook',
+          token: 'token-1',
+          authentication: { scheme: 'Bearer', credentials: 'secret' },
+        },
+      });
+
+      expect(response.headers.get('Content-Type')).toContain('application/a2a+json');
+      expect(await response.json()).toMatchObject({
+        result: {
+          taskId: 'task-1',
+          id: 'push-1',
+          url: 'https://example.com/webhook',
+          authentication: { scheme: 'Bearer', credentials: 'secret' },
         },
       });
     });

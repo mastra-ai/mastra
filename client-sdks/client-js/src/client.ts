@@ -1,3 +1,4 @@
+import { selectA2AInterface } from '@mastra/core/a2a/client';
 import type { ListScoresResponse, Trajectory } from '@mastra/core/evals';
 import type { ServerDetailInfo } from '@mastra/core/mcp';
 import type { RequestContext } from '@mastra/core/request-context';
@@ -872,12 +873,23 @@ export class MastraClient extends BaseResource {
   }
 
   /**
-   * Gets an A2A client for interacting with an agent via the A2A protocol
-   * @param agentId - ID of the agent to interact with
-   * @returns A2A client instance
+   * Gets an A2A client for interacting with an agent via the A2A protocol.
+   * Defaults to v0.3. Pass `{ protocolVersion: '1.0' }` for v1, or `{ protocolVersion: 'auto' }`
+   * to select from the agent card (async).
    */
-  public getA2A(agentId: string) {
-    return new A2A(this.options, agentId);
+  public getA2A(agentId: string): A2A;
+  public getA2A(agentId: string, options: { protocolVersion: '0.3' }): A2A;
+  public getA2A(agentId: string, options: { protocolVersion: '1.0' }): A2AV1;
+  public getA2A(agentId: string, options: { protocolVersion: 'auto' }): Promise<A2A | A2AV1>;
+  public getA2A(
+    agentId: string,
+    options?: { protocolVersion: '0.3' | '1.0' | 'auto' },
+  ): A2A | A2AV1 | Promise<A2A | A2AV1> {
+    const version = options?.protocolVersion ?? '0.3';
+    if (version === 'auto') {
+      return this.#resolveA2A(agentId);
+    }
+    return version === '1.0' ? new A2AV1(this.options, agentId) : new A2A(this.options, agentId);
   }
 
   /**
@@ -885,7 +897,13 @@ export class MastraClient extends BaseResource {
    * @param agentId - ID of the agent to interact with
    */
   public getA2AV1(agentId: string) {
-    return new A2AV1(this.options, agentId);
+    return this.getA2A(agentId, { protocolVersion: '1.0' });
+  }
+
+  async #resolveA2A(agentId: string): Promise<A2A | A2AV1> {
+    const card = await this.request<unknown>(`/.well-known/${agentId}/agent-card.json`);
+    const selected = selectA2AInterface(card, 'auto');
+    return selected.protocolVersion === '1.0' ? new A2AV1(this.options, agentId) : new A2A(this.options, agentId);
   }
 
   /**

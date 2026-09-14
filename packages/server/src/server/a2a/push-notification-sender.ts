@@ -5,6 +5,7 @@ import { isIP } from 'node:net';
 import type { Task } from '@mastra/core/a2a';
 import type { IMastraLogger } from '@mastra/core/logger';
 import type { InMemoryPushNotificationStore } from './push-notification-store';
+import { getA2AServerCodec } from './wire-protocol';
 
 export const DEFAULT_PUSH_NOTIFICATION_TOKEN_HEADER = 'X-A2A-Notification-Token';
 
@@ -192,7 +193,7 @@ export class DefaultPushNotificationSender {
     task: Task;
     logger?: IMastraLogger;
   }): Promise<void> {
-    const configs = this.pushNotificationStore.list({
+    const configs = this.pushNotificationStore.listWithProtocolVersion({
       agentId,
       params: { id: task.id },
     });
@@ -202,9 +203,10 @@ export class DefaultPushNotificationSender {
     }
 
     await Promise.allSettled(
-      configs.map(async config => {
+      configs.map(async ({ config, protocolVersion }) => {
+        const codec = getA2AServerCodec(protocolVersion);
         const headers = new Headers({
-          'content-type': 'application/json',
+          'content-type': codec.responseContentType,
         });
 
         if (config.pushNotificationConfig.token) {
@@ -231,7 +233,7 @@ export class DefaultPushNotificationSender {
           hostHeader,
           servername,
           headers,
-          body: JSON.stringify(task),
+          body: JSON.stringify(codec.encodePushBody(task)),
           timeout: this.options.timeout ?? 5_000,
         });
 

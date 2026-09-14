@@ -9,7 +9,7 @@ packages:
 
 # A2A (Agent-to-Agent)
 
-Mastra supports version 0.3.0 of the [Agent-to-Agent (A2A) protocol](https://a2a-protocol.org/latest/) for cross-platform multi-agent systems. Use A2A to expose Mastra agents as remote agents or consume remote A2A agents as Mastra subagents. You can also call A2A endpoints with the JavaScript client SDK.
+Mastra supports A2A Protocol versions 0.3 and 1.0 of the [Agent-to-Agent (A2A) protocol](https://a2a-protocol.org/latest/) for cross-platform multi-agent systems. Use A2A to expose Mastra agents as remote agents or consume remote A2A agents as Mastra subagents. You can also call A2A endpoints with the JavaScript client SDK.
 
 A2A is an open protocol for delegating work to agents across network, framework, vendor, and language boundaries. A remote agent keeps its own tools, prompts, memory, workflows, and infrastructure private while exposing a protocol endpoint that other systems can discover and call.
 
@@ -29,7 +29,7 @@ When using the default Mastra Server `apiPrefix` of `/api`, an agent registered 
 - Agent card: `/api/.well-known/weather-agent/agent-card.json`
 - Execution endpoint: `/api/a2a/weather-agent`
 
-An agent card includes fields like the agent name, description, endpoint URL, provider, capabilities, security metadata, and skills:
+An agent card includes fields like the agent name, description, endpoint URL, provider, capabilities, security metadata, and skills. Requests without `A2A-Version` receive a 0.3-compatible card that still advertises both interfaces when dual exposure is enabled:
 
 ```json title="agent-card.json"
 {
@@ -37,11 +37,24 @@ An agent card includes fields like the agent name, description, endpoint URL, pr
   "name": "Weather Agent",
   "description": "Provides weather information.",
   "url": "https://agent.example.com/api/a2a/weather-agent",
+  "preferredTransport": "JSONRPC",
   "version": "1.0",
   "provider": {
     "organization": "Acme",
     "url": "https://acme.example.com"
   },
+  "supportedInterfaces": [
+    {
+      "url": "https://agent.example.com/api/a2a/weather-agent",
+      "protocolBinding": "JSONRPC",
+      "protocolVersion": "1.0"
+    },
+    {
+      "url": "https://agent.example.com/api/a2a/weather-agent",
+      "protocolBinding": "JSONRPC",
+      "protocolVersion": "0.3"
+    }
+  ],
   "capabilities": {
     "streaming": true,
     "pushNotifications": true,
@@ -60,6 +73,8 @@ An agent card includes fields like the agent name, description, endpoint URL, pr
 }
 ```
 
+A request with `A2A-Version: 1.0` receives a v1 card that uses `supportedInterfaces` as the source of truth for execution URLs and protocol versions. Card responses include `Vary: A2A-Version`.
+
 A2A represents work as messages and tasks. Messages carry text, file, or structured data parts.
 
 Tasks are stateful units of work with IDs and lifecycle states. Clients can follow long-running work and send follow-up turns. They can also cancel work or resubscribe after a disconnect.
@@ -68,11 +83,37 @@ Tasks are stateful units of work with IDs and lifecycle states. Clients can foll
 
 Mastra supports A2A Protocol v0.3 and v1.0 on the same agent card and execution URLs. The `A2A-Version` request header selects the wire protocol:
 
-- Missing, empty, or `0.3`: Uses the existing v0.3 API.
-- `1.0`: Uses the v1.0 API.
+- Missing, empty, or `0.3`: Uses the v0.3 slash-style JSON-RPC methods such as `message/send`.
+- `1.0`: Uses the v1.0 PascalCase methods such as `SendMessage`, `SendStreamingMessage`, `GetTask`, `ListTasks`, and `SubscribeToTask`.
 - Any other value: Returns a `VersionNotSupported` protocol error.
 
-Existing `A2AAgent` and `MastraClient.getA2A()` integrations continue to use v0.3. Use `MastraClient.getA2AV1()` for v1.0 requests. The v1 client sends `A2A-Version: 1.0` automatically and adds the `tasks/list` operation.
+By default, Mastra exposes both versions in preference order `['1.0', '0.3']`. Configure exposure on the server, and optionally override it per agent:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+
+export const mastra = new Mastra({
+  server: {
+    a2a: {
+      protocolVersions: ['1.0', '0.3'],
+      agents: {
+        'legacy-agent': { protocolVersions: ['0.3'] },
+        'v1-only-agent': { protocolVersions: ['1.0'] },
+      },
+    },
+  },
+})
+```
+
+A per-agent list replaces the server list. Mastra only advertises versions it can serve for that agent. Requests for an unadvertised version return `VersionNotSupported`.
+
+Existing `MastraClient.getA2A(agentId)` calls continue to use v0.3. Prefer `getA2A(agentId, { protocolVersion: '1.0' })` for v1.0, or keep `getA2AV1()` as a compatibility alias. Use `await getA2A(agentId, { protocolVersion: 'auto' })` to select from the agent card. The v1 client sends `A2A-Version: 1.0` automatically and supports `ListTasks`.
+
+`A2AAgent` defaults to `protocolVersion: 'auto'` and selects a supported JSON-RPC interface from the remote card. Pin `0.3` or `1.0` when the remote agent must use one version.
+
+With `'auto'`, a remote that advertises both versions (for example another Mastra server) resolves to the first advertised interface, which is `1.0`. Pin `protocolVersion: '0.3'` to keep the 0.3 wire version against such a remote. A legacy 0.3 card that exposes only a top-level `url` (no `supportedInterfaces`, and `protocolVersion` absent or `0.3`) still resolves to 0.3, so bare-`url` 0.3 remotes work without extra configuration.
+
+Passing an `A2A-Version` header that conflicts with the resolved or pinned version, including the `'auto'` default, throws at construction. Pin `protocolVersion` instead of setting the header.
 
 Import v1.0 protocol types and codecs from `@mastra/core/a2a/v1`. The existing `@mastra/core/a2a/client` export remains on v0.3.
 
@@ -95,6 +136,7 @@ import { A2AAgent } from '@mastra/core/a2a'
 
 const remoteWeatherAgent = new A2AAgent({
   url: 'https://weather.example.com/api/.well-known/weather-agent/agent-card.json',
+  protocolVersion: 'auto',
   headers: {
     Authorization: `Bearer ${process.env.WEATHER_AGENT_TOKEN}`,
   },
@@ -116,8 +158,9 @@ If `url` points to a domain, `A2AAgent` fetches the agent card from `/.well-know
 During execution, `A2AAgent`:
 
 - Fetches and caches the remote agent card.
-- Reads the execution URL and capabilities from the card.
-- Calls `message/send` for non-streaming runs or `message/stream` when streaming is supported.
+- Selects a JSON-RPC interface from the card with `protocolVersion: 'auto'`, or uses a pinned `0.3` or `1.0` value.
+- Reads the execution URL and capabilities for the selected interface.
+- Calls the version-correct send, stream, get-task, and subscribe methods.
 - Converts remote messages, tasks, artifacts, and status updates into Mastra subagent results.
 - Supports `resumeGenerate()` and `resumeStream()` when the remote task requires follow-up input or resubscription.
 
@@ -176,7 +219,7 @@ for await (const event of updates) {
 
 ### Use the v1.0 client
 
-Use `getA2AV1()` to opt into the A2A v1.0 wire protocol. The protocol package provides codecs for creating v1 request values from JSON-shaped input:
+Use `getA2A(agentId, { protocolVersion: '1.0' })` to opt into the A2A v1.0 wire protocol. `getA2AV1()` remains available as a compatibility alias. The protocol package provides codecs for creating v1 request values from JSON-shaped input:
 
 ```typescript title="src/a2a-v1-client.ts"
 import { ListTasksRequest } from '@mastra/core/a2a/v1'
@@ -186,7 +229,7 @@ const client = new MastraClient({
   baseUrl: 'https://agent.example.com',
 })
 
-const a2a = client.getA2AV1('weather-agent')
+const a2a = client.getA2A('weather-agent', { protocolVersion: '1.0' })
 const response = await a2a.listTasks(
   ListTasksRequest.fromJSON({
     contextId: 'customer-support',
@@ -199,7 +242,7 @@ for (const task of response.tasks) {
 }
 ```
 
-The v1.0 client supports `getAgentCard()`, `sendMessage()`, `sendMessageStream()`, `getTask()`, `listTasks()`, `cancelTask()`, and `resubscribeTask()`.
+The v1.0 client supports `getAgentCard()`, `sendMessage()`, `sendMessageStream()`, `getTask()`, `listTasks()`, `cancelTask()`, `resubscribeTask()`, and the v1 push-notification configuration methods.
 
 ## Configure subagent calls
 
@@ -210,6 +253,7 @@ import { A2AAgent } from '@mastra/core/a2a'
 
 const remoteWeatherAgent = new A2AAgent({
   url: 'https://weather.example.com/api/.well-known/weather-agent/agent-card.json',
+  protocolVersion: '1.0',
   headers: {
     Authorization: `Bearer ${process.env.WEATHER_AGENT_TOKEN}`,
   },
@@ -220,7 +264,7 @@ const remoteWeatherAgent = new A2AAgent({
 })
 ```
 
-You can also pass `credentials`, `fetch`, and `abortSignal` when the runtime needs custom fetch behavior or request cancellation.
+You can also pass `credentials`, `fetch`, and `abortSignal` when the runtime needs custom fetch behavior or request cancellation. Use `protocolVersion: 'auto'` when the remote agent may advertise either version.
 
 ## Human-in-the-loop
 
@@ -272,7 +316,7 @@ await a2a.setTaskPushNotificationConfig({
 })
 ```
 
-Mastra Server sends the current task snapshot to registered callbacks when the task reaches `completed`, `failed`, `canceled`, `rejected`, `input-required`, or `auth-required`. Push notification delivery is best-effort. Protect callback URLs, validate notification tokens, and avoid exposing internal network targets as push notification destinations.
+Mastra Server sends the current task snapshot to registered callbacks when the task reaches `completed`, `failed`, `canceled`, `rejected`, `input-required`, or `auth-required`. Delivery uses the protocol version that registered the callback: 0.3 callbacks receive a bare 0.3 task with `application/json`, and v1 callbacks receive a v1 task wrapper with `application/a2a+json`. Push notification delivery is best-effort. Protect callback URLs, validate notification tokens, and avoid exposing internal network targets as push notification destinations.
 
 Push notification configurations are stored in memory and must be registered again after a server restart.
 
@@ -291,6 +335,7 @@ export const mastra = new Mastra({
         protectedHeader: {
           alg: 'ES256',
           kid: 'agent-card-key',
+          typ: 'JWT',
         },
       },
     },
@@ -299,6 +344,8 @@ export const mastra = new Mastra({
 ```
 
 When signing is configured, Mastra includes a `signatures` array on the agent card. Client verification is opt-in, and unsigned cards still return unchanged.
+
+Mastra canonicalizes the card for signing per version so signatures verify against any A2A peer: v1.0 cards use the `@a2a-js/sdk` canonicalization (which strips empty `securitySchemes`, `securityRequirements`, and `extensions` before hashing), and v0.3 cards use RFC 8785 JSON Canonicalization Scheme (JCS). To verify a signed v1.0 card against an `@a2a-js/sdk` peer, include `kid` and `typ` in `protectedHeader` alongside `alg`.
 
 Verify a signed card with `MastraClient.getA2A()`:
 

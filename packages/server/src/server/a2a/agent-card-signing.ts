@@ -1,7 +1,13 @@
 import * as crypto from 'node:crypto';
-import type { AgentCard, AgentCardSignature } from '@mastra/core/a2a';
+import type { AgentCardSignature } from '@mastra/core/a2a';
+import { canonicalizeV1AgentCard } from '@mastra/core/a2a';
 import type { A2AAgentCardSigningConfig } from '@mastra/core/server';
 import canonicalize from 'canonicalize';
+import type { A2AProtocolVersion } from './wire-protocol';
+
+type SignableAgentCard = Record<string, unknown> & {
+  signatures?: AgentCardSignature[];
+};
 
 const SUPPORTED_JWS_ALGORITHMS = new Set<string>([
   'ES256',
@@ -15,10 +21,34 @@ const SUPPORTED_JWS_ALGORITHMS = new Set<string>([
   'PS512',
 ]);
 
-function stripAgentCardSignatures(agentCard: AgentCard): AgentCard {
-  const unsignedCard = structuredClone(agentCard) as AgentCard & { signatures?: AgentCardSignature[] };
+function stripAgentCardSignatures<T extends SignableAgentCard>(agentCard: T): T {
+  const unsignedCard = structuredClone(agentCard);
   delete unsignedCard.signatures;
   return unsignedCard;
+}
+
+/**
+ * Canonicalize an Agent Card for signing/verification.
+ *
+ * v1 cards MUST use the SDK's `canonicalizeAgentCard` (RFC-8785 JCS after an
+ * `AgentCard` round-trip + `cleanEmpty`), otherwise Mastra-signed v1 cards fail
+ * verification against any `@a2a-js/sdk` v1 peer — the empties the v1 render emits
+ * (`securitySchemes: {}`, `securityRequirements: []`, `capabilities.extensions: []`)
+ * are stripped by the SDK before hashing but not by plain JCS.
+ *
+ * 0.3 cards keep plain JCS: the v1 canonicalizer is verified LOSSY for the 0.3
+ * shape (it drops top-level `url`/`protocolVersion`/`preferredTransport`/`skills`),
+ * so it cannot be reused there. The SDK exposes no 0.3 canonicalizer.
+ */
+export function canonicalizeAgentCardForSigning(
+  agentCard: SignableAgentCard,
+  protocolVersion: A2AProtocolVersion,
+): string | undefined {
+  if (protocolVersion === '1.0') {
+    // The SDK canonicalizer strips `signatures` itself as part of its algorithm.
+    return canonicalizeV1AgentCard(agentCard as unknown as Parameters<typeof canonicalizeV1AgentCard>[0]);
+  }
+  return canonicalize(stripAgentCardSignatures(agentCard));
 }
 
 function importSigningKey(signing: A2AAgentCardSigningConfig) {
@@ -71,14 +101,16 @@ function getDigestAlgorithm(algorithm: string): string {
   throw new Error(`Unsupported JWS algorithm for A2A Agent Card signing: ${algorithm}`);
 }
 
-export async function signAgentCard({
+export async function signAgentCard<T extends SignableAgentCard>({
   agentCard,
   signing,
+  protocolVersion,
 }: {
-  agentCard: AgentCard;
+  agentCard: T;
   signing: A2AAgentCardSigningConfig;
-}): Promise<AgentCard> {
-  const canonicalPayload = canonicalize(stripAgentCardSignatures(agentCard));
+  protocolVersion: A2AProtocolVersion;
+}): Promise<T & { signatures: AgentCardSignature[] }> {
+  const canonicalPayload = canonicalizeAgentCardForSigning(agentCard, protocolVersion);
 
   if (!canonicalPayload) {
     throw new Error('Failed to canonicalize A2A Agent Card for signing');

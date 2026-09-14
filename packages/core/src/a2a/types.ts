@@ -1,5 +1,6 @@
-import type { AgentCard, JSONRPCMessage, Message, Task } from '@a2a-js/sdk-v0_3';
+import type { JSONRPCMessage, Message, Task } from '@a2a-js/sdk-v0_3';
 import type { FullOutput, MastraModelOutput } from '../stream/base/output';
+import type { A2AProtocolSelection, A2AProtocolVersion, A2ARemoteAgentCard } from './wire-protocol';
 
 /**
  * Represents a JSON-RPC error object.
@@ -151,7 +152,7 @@ export interface A2AAgentCardVerificationContext {
 }
 
 export interface A2AAgentVerificationOptions {
-  verify: (card: AgentCard, context: A2AAgentCardVerificationContext) => Promise<void> | void;
+  verify: (card: A2ARemoteAgentCard, context: A2AAgentCardVerificationContext) => Promise<void> | void;
 }
 
 export interface A2AAgentOptions {
@@ -167,6 +168,11 @@ export interface A2AAgentOptions {
   fetch?: typeof fetch;
   abortSignal?: AbortSignal;
   timeoutMs?: number;
+  /**
+   * A2A protocol version to negotiate or pin.
+   * @default 'auto'
+   */
+  protocolVersion?: A2AProtocolSelection;
   verifyAgentCard?: A2AAgentVerificationOptions;
 }
 
@@ -176,6 +182,7 @@ export interface A2AAgentRunState {
   taskId?: string;
   executionUrl: string;
   cardUrl: string;
+  protocolVersion: A2AProtocolVersion;
   streamingSupported: boolean;
   waitingForInput: boolean;
   lastTask?: Task;

@@ -155,6 +155,27 @@ afterEach(() => {
 });
 
 describe('A2AAgent', () => {
+  it('rejects A2A-Version headers when protocolVersion is auto', () => {
+    expect(
+      () =>
+        new A2AAgent({
+          url: 'https://remote.example.com',
+          protocolVersion: 'auto',
+          headers: { 'A2A-Version': '1.0' },
+        }),
+    ).toThrow(/conflicts with protocolVersion "auto"/);
+  });
+
+  it('rejects A2A-Version headers that disagree with a pinned protocolVersion', () => {
+    expect(
+      () =>
+        new A2AAgent({
+          url: 'https://remote.example.com',
+          protocolVersion: '0.3',
+          headers: { 'A2A-Version': '1.0' },
+        }),
+    ).toThrow(/conflicts with protocolVersion "0.3"/);
+  });
   it('is assignable as a SubAgent and retains injected memory', async () => {
     const agent = new A2AAgent({
       url: 'https://remote.example.com',
@@ -392,6 +413,70 @@ describe('A2AAgent', () => {
 
     expect(output.text).toBe('Generate path response');
     expect(output.message?.kind).toBe('message');
+  });
+
+  it('discovers and delegates to a v1-only remote agent', async () => {
+    const v1Card = {
+      name: 'Remote v1 Agent',
+      description: 'A remote v1 agent',
+      version: '1.0',
+      supportedInterfaces: [
+        {
+          url: 'https://remote.example.com/a2a/v1',
+          protocolBinding: 'JSONRPC',
+          protocolVersion: '1.0',
+        },
+      ],
+      capabilities: { streaming: true },
+      defaultInputModes: ['text/plain'],
+      defaultOutputModes: ['text/plain'],
+      skills: [],
+    };
+    const fetchMock = createFetchMock([
+      new Response('Version not supported', { status: 400 }),
+      (input, init) => {
+        expect(String(input)).toBe('https://remote.example.com/.well-known/agent-card.json');
+        expect(new Headers(init?.headers).get('A2A-Version')).toBe('1.0');
+        return new Response(JSON.stringify(v1Card), { status: 200 });
+      },
+      (input, init) => {
+        expect(String(input)).toBe('https://remote.example.com/a2a/v1');
+        expect(new Headers(init?.headers).get('A2A-Version')).toBe('1.0');
+        const body = JSON.parse(String(init?.body ?? '{}'));
+        expect(body).toMatchObject({
+          method: 'SendMessage',
+          params: {
+            message: {
+              role: 'ROLE_USER',
+              parts: [{ text: 'Hello v1' }],
+            },
+          },
+        });
+        return jsonRpcResult({
+          task: {
+            id: 'task-v1',
+            contextId: 'ctx-v1',
+            status: { state: 'TASK_STATE_COMPLETED' },
+            artifacts: [{ artifactId: 'response', parts: [{ text: 'Remote v1 response' }] }],
+          },
+        });
+      },
+    ]);
+
+    const agent = new A2AAgent({
+      url: 'https://remote.example.com',
+      fetch: fetchMock as typeof fetch,
+    });
+
+    const result = await agent.generate('Hello v1', { runId: 'run-v1' });
+
+    expect(result.text).toBe('Remote v1 response');
+    expect(result.task).toMatchObject({
+      kind: 'task',
+      id: 'task-v1',
+      status: { state: 'completed' },
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
   it('preserves subagent memory identifiers on returned assistant messages', async () => {
@@ -662,6 +747,77 @@ describe('A2AAgent', () => {
       usage: {},
     });
     expect(await stream.text).toBe('Hello from stream');
+    expect((await stream.task)?.status.state).toBe('completed');
+  });
+
+  it('normalizes v1 streaming events into Mastra stream output', async () => {
+    const v1Card = {
+      name: 'Remote v1 Agent',
+      description: 'A remote v1 agent',
+      version: '1.0',
+      supportedInterfaces: [
+        {
+          url: 'https://remote.example.com/a2a/v1',
+          protocolBinding: 'JSONRPC',
+          protocolVersion: '1.0',
+        },
+      ],
+      capabilities: { streaming: true },
+      defaultInputModes: ['text/plain'],
+      defaultOutputModes: ['text/plain'],
+      skills: [],
+    };
+    const fetchMock = createFetchMock([
+      new Response(JSON.stringify(v1Card), { status: 200 }),
+      (input, init) => {
+        expect(String(input)).toBe('https://remote.example.com/a2a/v1');
+        expect(new Headers(init?.headers).get('A2A-Version')).toBe('1.0');
+        expect(JSON.parse(String(init?.body ?? '{}')).method).toBe('SendStreamingMessage');
+        return createSseResponse([
+          {
+            task: {
+              id: 'task-v1',
+              contextId: 'ctx-v1',
+              status: { state: 'TASK_STATE_WORKING' },
+              artifacts: [],
+            },
+          },
+          {
+            artifactUpdate: {
+              taskId: 'task-v1',
+              contextId: 'ctx-v1',
+              artifact: {
+                artifactId: 'response-v1',
+                parts: [{ text: 'Hello from v1 stream' }],
+              },
+              lastChunk: true,
+            },
+          },
+          {
+            statusUpdate: {
+              taskId: 'task-v1',
+              contextId: 'ctx-v1',
+              status: { state: 'TASK_STATE_COMPLETED' },
+            },
+          },
+        ]);
+      },
+    ]);
+
+    const agent = new A2AAgent({
+      url: 'https://remote.example.com',
+      protocolVersion: '1.0',
+      fetch: fetchMock as typeof fetch,
+    });
+
+    const stream = await agent.stream('Hello stream', { runId: 'stream-v1' });
+    const events = [];
+    for await (const event of stream.fullStream) {
+      events.push(event);
+    }
+
+    expect(events.map(event => event.type)).toEqual(['start', 'text-start', 'text-delta', 'text-end', 'finish']);
+    expect(await stream.text).toBe('Hello from v1 stream');
     expect((await stream.task)?.status.state).toBe('completed');
   });
 

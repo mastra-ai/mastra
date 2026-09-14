@@ -14,6 +14,7 @@ import { ListTasksRequest as ListTasksRequestV1 } from '@mastra/core/a2a/v1';
 import canonicalize from 'canonicalize';
 import { CompactSign, base64url, exportJWK } from 'jose';
 import { describe, it, beforeEach, afterEach, expect, expectTypeOf } from 'vitest';
+import { MastraClient } from '../client';
 import { MastraClientError } from '../types';
 import { A2A, A2AV1 } from './a2a';
 import type { A2AStreamEventData } from './a2a';
@@ -684,9 +685,62 @@ describe('A2AV1', () => {
     expect(receivedHeader).toBe('1.0');
     expect(receivedBody).toMatchObject({
       jsonrpc: '2.0',
-      method: 'tasks/list',
+      method: 'ListTasks',
       params: { contextId: 'context-1', pageSize: 10 },
     });
     expect(result.tasks).toEqual([]);
+  });
+
+  it('is available through the versioned getA2A entry point', () => {
+    const client = new MastraClient({ baseUrl: 'https://remote.example.com' });
+
+    expect(client.getA2A('test-agent')).toBeInstanceOf(A2A);
+    expect(client.getA2A('test-agent', { protocolVersion: '0.3' })).toBeInstanceOf(A2A);
+    expect(client.getA2A('test-agent', { protocolVersion: '1.0' })).toBeInstanceOf(A2AV1);
+    expect(client.getA2AV1('test-agent')).toBeInstanceOf(A2AV1);
+  });
+
+  it('resolves protocolVersion auto from the agent card', async () => {
+    const server = createServer(async (req, res) => {
+      if (req.url?.includes('/agent-card.json')) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(
+          JSON.stringify({
+            name: 'test-agent',
+            description: 'test',
+            url: 'http://127.0.0.1/a2a/test-agent',
+            version: '1.0',
+            protocolVersion: '0.3.0',
+            capabilities: {},
+            defaultInputModes: ['text'],
+            defaultOutputModes: ['text'],
+            skills: [],
+            supportedInterfaces: [
+              {
+                url: 'http://127.0.0.1/a2a/test-agent',
+                protocolBinding: 'JSONRPC',
+                protocolVersion: '1.0',
+              },
+            ],
+          }),
+        );
+        return;
+      }
+      res.writeHead(404);
+      res.end();
+    });
+
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', () => resolve()));
+    const address = server.address();
+    if (!address || typeof address === 'string') {
+      throw new Error('expected tcp address');
+    }
+    const client = new MastraClient({ baseUrl: `http://127.0.0.1:${address.port}` });
+    try {
+      const a2a = await client.getA2A('test-agent', { protocolVersion: 'auto' });
+      expect(a2a).toBeInstanceOf(A2AV1);
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close(error => (error ? reject(error) : resolve())));
+    }
   });
 });

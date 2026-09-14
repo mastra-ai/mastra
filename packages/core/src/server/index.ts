@@ -8,7 +8,9 @@ import type { ApiRoute, ApiRouteHandler, CorsOptions, MastraAuthConfig, Methods 
 export type {
   MastraAuthConfig,
   A2AAgentCardSigningConfig,
+  A2AAgentExposureConfig,
   A2AConfig,
+  A2AProtocolVersion,
   ContextWithMastra,
   CorsOptions,
   ApiRoute,

@@ -4,7 +4,6 @@ import type {
   MessageSendParams,
   TaskQueryParams,
   TaskIdParams,
-  AgentCard,
   TaskStatus,
   TaskState,
   Task,
@@ -18,13 +17,28 @@ import type { Agent } from '@mastra/core/agent';
 import type { IMastraLogger } from '@mastra/core/logger';
 import type { RequestContext } from '@mastra/core/request-context';
 import { z } from 'zod/v4';
+import { renderAgentCard, resolveAgentProtocolVersions } from '../a2a/agent-card';
 import { signAgentCard } from '../a2a/agent-card-signing';
+import {
+  bindPushNotificationStoreVersion,
+  createA2AJsonResponseHeaders,
+  encodeOptionsForOperation,
+} from '../a2a/executor';
 import { convertToCoreMessage, normalizeError, createSuccessResponse } from '../a2a/protocol';
 import { DefaultPushNotificationSender } from '../a2a/push-notification-sender';
 import { InMemoryPushNotificationStore } from '../a2a/push-notification-store';
 import { TaskStoreVersionConflictError, type InMemoryTaskStore } from '../a2a/store';
 import { isInterruptedTaskState, isTerminalTaskState } from '../a2a/task-state';
 import { applyUpdateToTask, loadOrCreateTask, resolveTaskMemory } from '../a2a/tasks';
+import {
+  getA2AServerCodec,
+  isA2AStreamingOperation,
+  resolveA2AOperation,
+  resolveA2AProtocolVersion,
+  type A2AOperation,
+  type A2AProtocolVersion,
+  type A2AWireMethod,
+} from '../a2a/wire-protocol';
 import {
   a2aAgentIdPathParams,
   agentExecutionBodySchema,
@@ -112,201 +126,6 @@ const messageSendParamsSchema = z.object({
 const defaultPushNotificationStore = new InMemoryPushNotificationStore();
 const defaultPushNotificationSender = new DefaultPushNotificationSender(defaultPushNotificationStore);
 
-const V1_TASK_STATES: Record<string, string> = {
-  submitted: 'TASK_STATE_SUBMITTED',
-  working: 'TASK_STATE_WORKING',
-  completed: 'TASK_STATE_COMPLETED',
-  failed: 'TASK_STATE_FAILED',
-  canceled: 'TASK_STATE_CANCELED',
-  'input-required': 'TASK_STATE_INPUT_REQUIRED',
-  rejected: 'TASK_STATE_REJECTED',
-  'auth-required': 'TASK_STATE_AUTH_REQUIRED',
-};
-
-function normalizeV1Part(part: Record<string, unknown>) {
-  if ('text' in part) {
-    return { kind: 'text', text: part.text, metadata: part.metadata };
-  }
-  if ('raw' in part) {
-    return {
-      kind: 'file',
-      file: { bytes: part.raw, mimeType: part.mediaType, name: part.filename },
-      metadata: part.metadata,
-    };
-  }
-  if ('url' in part) {
-    return {
-      kind: 'file',
-      file: { uri: part.url, mimeType: part.mediaType, name: part.filename },
-      metadata: part.metadata,
-    };
-  }
-  return { kind: 'data', data: part.data, metadata: part.metadata };
-}
-
-function normalizeV1Params(params: Record<string, any> | undefined): Record<string, any> | undefined {
-  if (!params?.message) {
-    return params;
-  }
-
-  const configuration = params.configuration;
-  return {
-    ...params,
-    message: {
-      ...params.message,
-      kind: 'message',
-      role: params.message.role === 'ROLE_AGENT' ? 'agent' : 'user',
-      parts: params.message.parts.map((part: Record<string, unknown>) => normalizeV1Part(part)),
-    },
-    configuration: configuration
-      ? {
-          ...configuration,
-          blocking: configuration.returnImmediately === undefined ? undefined : !configuration.returnImmediately,
-          pushNotificationConfig: configuration.taskPushNotificationConfig,
-        }
-      : undefined,
-  };
-}
-
-function toV1Part(part: any) {
-  if (part.kind === 'text') {
-    return { text: part.text, metadata: part.metadata };
-  }
-  if (part.kind === 'file') {
-    return 'uri' in part.file
-      ? { url: part.file.uri, filename: part.file.name, mediaType: part.file.mimeType, metadata: part.metadata }
-      : { raw: part.file.bytes, filename: part.file.name, mediaType: part.file.mimeType, metadata: part.metadata };
-  }
-  return { data: part.data, metadata: part.metadata };
-}
-
-function toV1Message(message: any) {
-  if (!message) return undefined;
-  return {
-    messageId: message.messageId,
-    contextId: message.contextId,
-    taskId: message.taskId,
-    role: message.role === 'agent' ? 'ROLE_AGENT' : 'ROLE_USER',
-    parts: message.parts?.map(toV1Part),
-    metadata: message.metadata,
-    extensions: message.extensions,
-    referenceTaskIds: message.referenceTaskIds,
-  };
-}
-
-function toV1Task(
-  task: any,
-  { includeArtifacts = true, historyLength }: { includeArtifacts?: boolean; historyLength?: number } = {},
-) {
-  return {
-    id: task.id,
-    contextId: task.contextId,
-    status: {
-      state: V1_TASK_STATES[task.status.state] ?? 'TASK_STATE_UNSPECIFIED',
-      message: toV1Message(task.status.message),
-      timestamp: task.status.timestamp,
-    },
-    artifacts: includeArtifacts
-      ? task.artifacts?.map((artifact: any) => ({
-          artifactId: artifact.artifactId,
-          name: artifact.name,
-          description: artifact.description,
-          parts: artifact.parts?.map(toV1Part),
-          metadata: artifact.metadata,
-          extensions: artifact.extensions,
-        }))
-      : undefined,
-    history: task.history?.slice(historyLength === undefined ? 0 : -historyLength).map(toV1Message),
-    metadata: task.metadata,
-  };
-}
-
-function toV1Result(result: any, method: string) {
-  if (method === 'message/send') {
-    return result?.kind === 'message' ? { message: toV1Message(result) } : { task: toV1Task(result) };
-  }
-  if (method === 'message/stream' || method === 'tasks/resubscribe') {
-    if (result?.kind === 'status-update') {
-      return {
-        statusUpdate: {
-          taskId: result.taskId,
-          contextId: result.contextId,
-          status: {
-            state: V1_TASK_STATES[result.status.state] ?? 'TASK_STATE_UNSPECIFIED',
-            message: toV1Message(result.status.message),
-            timestamp: result.status.timestamp,
-          },
-          final: result.final,
-          metadata: result.metadata,
-        },
-      };
-    }
-    if (result?.kind === 'artifact-update') {
-      return {
-        artifactUpdate: {
-          taskId: result.taskId,
-          contextId: result.contextId,
-          artifact: {
-            ...result.artifact,
-            parts: result.artifact.parts?.map(toV1Part),
-          },
-          append: result.append,
-          lastChunk: result.lastChunk,
-          metadata: result.metadata,
-        },
-      };
-    }
-    return result?.kind === 'message' ? { message: toV1Message(result) } : { task: toV1Task(result) };
-  }
-  if (method === 'tasks/get' || method === 'tasks/cancel') {
-    return toV1Task(result);
-  }
-  return result;
-}
-
-function convertV1Response(response: any, method: string) {
-  if (!response || !('result' in response)) return response;
-  return { ...response, result: toV1Result(response.result, method) };
-}
-
-async function* convertV1Stream(stream: AsyncIterable<any>, method: string) {
-  for await (const response of stream) {
-    yield convertV1Response(response, method);
-  }
-}
-
-function createAgentCardDefaults({
-  pushNotifications = false,
-}: {
-  pushNotifications?: boolean;
-} = {}): Pick<
-  AgentCard,
-  | 'protocolVersion'
-  | 'additionalInterfaces'
-  | 'supportsAuthenticatedExtendedCard'
-  | 'security'
-  | 'securitySchemes'
-  | 'capabilities'
-  | 'defaultInputModes'
-  | 'defaultOutputModes'
-> {
-  return {
-    protocolVersion: '0.3.0',
-    additionalInterfaces: [],
-    supportsAuthenticatedExtendedCard: false,
-    security: [],
-    securitySchemes: {},
-    capabilities: {
-      streaming: true,
-      pushNotifications,
-      stateTransitionHistory: false,
-      extensions: [],
-    },
-    defaultInputModes: ['text/plain'],
-    defaultOutputModes: ['text/plain'],
-  };
-}
-
 export async function getAgentCardByIdHandler({
   mastra,
   agentId,
@@ -317,6 +136,7 @@ export async function getAgentCardByIdHandler({
   },
   version = '1.0',
   pushNotifications = false,
+  protocolVersion = '0.3',
   requestContext,
 }: Context & {
   requestContext: RequestContext;
@@ -328,7 +148,8 @@ export async function getAgentCardByIdHandler({
     url: string;
   };
   pushNotifications?: boolean;
-}): Promise<AgentCard> {
+  protocolVersion?: A2AProtocolVersion;
+}) {
   const agent = await getAgentFromSystem({ mastra, agentId: agentId as string });
 
   const [instructions, tools]: [
@@ -336,25 +157,27 @@ export async function getAgentCardByIdHandler({
     Awaited<ReturnType<typeof agent.listTools>>,
   ] = await Promise.all([agent.getInstructions({ requestContext }), agent.listTools({ requestContext })]);
 
-  // Extract agent information to create the AgentCard
-  const agentCard: AgentCard = {
-    name: agent.id || (agentId as string),
-    description: convertInstructionsToString(instructions),
-    url: executionUrl,
-    provider,
-    version,
-    ...createAgentCardDefaults({ pushNotifications }),
-    // Convert agent tools to skills format for A2A protocol
-    skills: Object.entries(tools).map(([toolId, tool]) => ({
-      id: toolId,
-      name: toolId,
-      description: ('description' in tool && tool.description) || `Tool: ${toolId}`,
-      // Optional fields
-      tags: ['tool'],
-    })),
-  };
+  const a2aConfig = mastra.getServer?.()?.a2a;
+  const agentCard = renderAgentCard({
+    input: {
+      name: agent.id || (agentId as string),
+      description: convertInstructionsToString(instructions),
+      executionUrl,
+      provider,
+      version,
+      pushNotifications,
+      skills: Object.entries(tools).map(([toolId, tool]) => ({
+        id: toolId,
+        name: toolId,
+        description: ('description' in tool && tool.description) || `Tool: ${toolId}`,
+        tags: ['tool'],
+      })),
+    },
+    requestedVersion: protocolVersion,
+    protocolVersions: resolveAgentProtocolVersions(a2aConfig, agentId as string),
+  });
 
-  const signing = mastra.getServer?.()?.a2a?.agentCardSigning;
+  const signing = a2aConfig?.agentCardSigning;
   if (!signing) {
     return agentCard;
   }
@@ -362,6 +185,7 @@ export async function getAgentCardByIdHandler({
   return signAgentCard({
     agentCard,
     signing,
+    protocolVersion,
   });
 }
 
@@ -770,7 +594,13 @@ function resolvePushNotificationPair({
 }) {
   if (pushNotificationSender) {
     return {
-      pushNotificationStore: pushNotificationSender.getStore(),
+      // Prefer an explicitly-passed store over the sender's raw internal store:
+      // callers pass the version-stamping wrapper (bindPushNotificationStoreVersion)
+      // built around the sender's own store, so registration stamps the request
+      // version while delivery still reads from the same underlying store. Falling
+      // back to sender.getStore() here would drop the wrapper and default inline
+      // push configs to 0.3 (B4).
+      pushNotificationStore: pushNotificationStore ?? pushNotificationSender.getStore(),
       pushNotificationSender,
     };
   }
@@ -1369,12 +1199,7 @@ export function handleTaskList({
       task =>
         !timestampAfter || (task.status.timestamp !== undefined && Date.parse(task.status.timestamp) >= timestampAfter),
     );
-  const tasks = matchingTasks.slice(start, start + requestedPageSize).map(task =>
-    toV1Task(task, {
-      includeArtifacts: params.includeArtifacts ?? false,
-      historyLength: params.historyLength,
-    }),
-  );
+  const tasks = matchingTasks.slice(start, start + requestedPageSize);
   const nextOffset = start + tasks.length;
 
   return createSuccessResponse(requestId, {
@@ -2042,8 +1867,10 @@ function isAsyncIterable(value: unknown): value is AsyncIterable<unknown> {
   return !!value && typeof value === 'object' && Symbol.asyncIterator in value;
 }
 
-function createA2AJsonResponse(payload: unknown): Response {
-  return Response.json(payload);
+function createA2AJsonResponse(payload: unknown, protocolVersion: A2AProtocolVersion = '0.3'): Response {
+  return Response.json(payload, {
+    headers: createA2AJsonResponseHeaders(protocolVersion),
+  });
 }
 
 function createA2ASSEResponse(payload: AsyncIterable<unknown> | unknown): Response {
@@ -2165,18 +1992,7 @@ export async function getAgentExecutionHandler({
   requestId: number | string;
   requestContext: RequestContext;
   agentId: string;
-  method:
-    | 'message/send'
-    | 'message/stream'
-    | 'tasks/get'
-    | 'tasks/list'
-    | 'tasks/cancel'
-    | 'tasks/resubscribe'
-    | 'tasks/pushNotificationConfig/set'
-    | 'tasks/pushNotificationConfig/get'
-    | 'tasks/pushNotificationConfig/list'
-    | 'tasks/pushNotificationConfig/delete'
-    | 'agent/getAuthenticatedExtendedCard';
+  method: A2AOperation;
   params?: MessageSendParams | TaskQueryParams | TaskIdParams | Record<string, unknown>;
   taskStore: InMemoryTaskStore;
   pushNotificationStore?: InMemoryPushNotificationStore;
@@ -2185,8 +2001,10 @@ export async function getAgentExecutionHandler({
   abortSignal?: AbortSignal;
   protocolVersion?: A2AProtocolVersion;
 }): Promise<any> {
+  const codec = getA2AServerCodec(protocolVersion);
   const agent = await getAgentFromSystem({ mastra, agentId });
-  const protocolParams = protocolVersion === '1.0' ? normalizeV1Params(params) : params;
+  const protocolParams = codec.decodeParams(method, params as Record<string, any> | undefined);
+  const encodeOptions = encodeOptionsForOperation(method, protocolParams);
   const {
     pushNotificationStore: resolvedPushNotificationStore,
     pushNotificationSender: resolvedPushNotificationSender,
@@ -2194,124 +2012,33 @@ export async function getAgentExecutionHandler({
     pushNotificationStore,
     pushNotificationSender,
   });
+  const versionedPushStore = bindPushNotificationStoreVersion(resolvedPushNotificationStore, codec.version);
 
   let taskId: string | undefined; // For error context
 
   try {
     taskId = getTaskIdFromParams(protocolParams);
 
-    // 2. Route based on method
-    switch (method) {
-      case 'message/send': {
-        const result = await handleMessageSend({
-          requestId,
-          params: protocolParams as MessageSendParams,
-          taskStore,
-          pushNotificationStore: resolvedPushNotificationStore,
-          pushNotificationSender: resolvedPushNotificationSender,
-          agent,
-          agentId,
-          logger,
-          requestContext,
-        });
-        return protocolVersion === '1.0' ? convertV1Response(result, method) : result;
-      }
-      case 'message/stream': {
-        const result = await handleMessageStream({
-          requestId,
-          taskStore,
-          params: protocolParams as MessageSendParams,
-          pushNotificationStore: resolvedPushNotificationStore,
-          pushNotificationSender: resolvedPushNotificationSender,
-          agent,
-          agentId,
-          logger,
-          requestContext,
-          abortSignal,
-        });
-        return protocolVersion === '1.0' ? convertV1Stream(result, method) : result;
-      }
+    // Version-blind executor: handlers never encode wire shapes.
+    const result = await executeA2AOperation({
+      requestId,
+      method,
+      protocolParams,
+      taskStore,
+      pushNotificationStore: versionedPushStore,
+      pushNotificationSender: resolvedPushNotificationSender,
+      agent,
+      agentId,
+      logger,
+      requestContext,
+      abortSignal,
+      taskId,
+    });
 
-      case 'tasks/get': {
-        const result = await handleTaskGet({
-          requestId,
-          taskStore,
-          agentId,
-          taskId: taskId || 'No task ID provided',
-        });
-
-        return protocolVersion === '1.0' ? convertV1Response(result, method) : result;
-      }
-      case 'tasks/list': {
-        if (protocolVersion !== '1.0') {
-          throw MastraA2AError.methodNotFound(method);
-        }
-        return handleTaskList({
-          requestId,
-          taskStore,
-          agentId,
-          params: protocolParams ?? {},
-        });
-      }
-      case 'tasks/cancel': {
-        const result = await handleTaskCancel({
-          requestId,
-          taskStore,
-          pushNotificationSender: resolvedPushNotificationSender,
-          agentId,
-          taskId: taskId || 'No task ID provided',
-          logger,
-        });
-
-        return protocolVersion === '1.0' ? convertV1Response(result, method) : result;
-      }
-      case 'tasks/resubscribe': {
-        const result = handleTaskResubscribe({
-          requestId,
-          taskStore,
-          agentId,
-          taskId: taskId || 'No task ID provided',
-          abortSignal,
-        });
-        return protocolVersion === '1.0' ? convertV1Stream(result, method) : result;
-      }
-      case 'tasks/pushNotificationConfig/set':
-        return await handleSetTaskPushNotificationConfig({
-          requestId,
-          taskStore,
-          pushNotificationStore: resolvedPushNotificationStore,
-          agentId,
-          params: params as unknown as TaskPushNotificationConfig,
-        });
-      case 'tasks/pushNotificationConfig/get':
-        return await handleGetTaskPushNotificationConfig({
-          requestId,
-          taskStore,
-          pushNotificationStore: resolvedPushNotificationStore,
-          agentId,
-          params: params as GetTaskPushNotificationConfigParams,
-        });
-      case 'tasks/pushNotificationConfig/list':
-        return await handleListTaskPushNotificationConfig({
-          requestId,
-          taskStore,
-          pushNotificationStore: resolvedPushNotificationStore,
-          agentId,
-          params: params as ListTaskPushNotificationConfigParams,
-        });
-      case 'tasks/pushNotificationConfig/delete':
-        return await handleDeleteTaskPushNotificationConfig({
-          requestId,
-          taskStore,
-          pushNotificationStore: resolvedPushNotificationStore,
-          agentId,
-          params: params as DeleteTaskPushNotificationConfigParams,
-        });
-      case 'agent/getAuthenticatedExtendedCard':
-        throw MastraA2AError.extendedAgentCardNotConfigured();
-      default:
-        throw MastraA2AError.methodNotFound(method);
+    if (isA2AStreamingOperation(method)) {
+      return codec.encodeStream(method, result, encodeOptions);
     }
+    return codec.encodeResponse(method, result, encodeOptions);
   } catch (error) {
     if (error instanceof MastraA2AError && taskId && !error.taskId) {
       error.taskId = taskId; // Add task ID context if missing
@@ -2321,30 +2048,150 @@ export async function getAgentExecutionHandler({
   }
 }
 
+async function executeA2AOperation({
+  requestId,
+  method,
+  protocolParams,
+  taskStore,
+  pushNotificationStore,
+  pushNotificationSender,
+  agent,
+  agentId,
+  logger,
+  requestContext,
+  abortSignal,
+  taskId,
+}: {
+  requestId: number | string;
+  method: A2AOperation;
+  protocolParams: Record<string, any> | undefined;
+  taskStore: InMemoryTaskStore;
+  pushNotificationStore: InMemoryPushNotificationStore;
+  pushNotificationSender: DefaultPushNotificationSender;
+  agent: Agent;
+  agentId: string;
+  logger?: IMastraLogger;
+  requestContext: RequestContext;
+  abortSignal?: AbortSignal;
+  taskId?: string;
+}): Promise<any> {
+  switch (method) {
+    case 'message/send': {
+      return handleMessageSend({
+        requestId,
+        params: protocolParams as MessageSendParams,
+        taskStore,
+        pushNotificationStore,
+        pushNotificationSender,
+        agent,
+        agentId,
+        logger,
+        requestContext,
+      });
+    }
+    case 'message/stream': {
+      return handleMessageStream({
+        requestId,
+        taskStore,
+        params: protocolParams as MessageSendParams,
+        pushNotificationStore,
+        pushNotificationSender,
+        agent,
+        agentId,
+        logger,
+        requestContext,
+        abortSignal,
+      });
+    }
+    case 'tasks/get': {
+      return handleTaskGet({
+        requestId,
+        taskStore,
+        agentId,
+        taskId: taskId || 'No task ID provided',
+      });
+    }
+    case 'tasks/list': {
+      return handleTaskList({
+        requestId,
+        taskStore,
+        agentId,
+        params: protocolParams ?? {},
+      });
+    }
+    case 'tasks/cancel': {
+      return handleTaskCancel({
+        requestId,
+        taskStore,
+        pushNotificationSender,
+        agentId,
+        taskId: taskId || 'No task ID provided',
+        logger,
+      });
+    }
+    case 'tasks/resubscribe': {
+      return handleTaskResubscribe({
+        requestId,
+        taskStore,
+        agentId,
+        taskId: taskId || 'No task ID provided',
+        abortSignal,
+      });
+    }
+    case 'tasks/pushNotificationConfig/set': {
+      return handleSetTaskPushNotificationConfig({
+        requestId,
+        taskStore,
+        pushNotificationStore,
+        agentId,
+        params: protocolParams as unknown as TaskPushNotificationConfig,
+      });
+    }
+    case 'tasks/pushNotificationConfig/get': {
+      return handleGetTaskPushNotificationConfig({
+        requestId,
+        taskStore,
+        pushNotificationStore,
+        agentId,
+        params: protocolParams as GetTaskPushNotificationConfigParams,
+      });
+    }
+    case 'tasks/pushNotificationConfig/list': {
+      return handleListTaskPushNotificationConfig({
+        requestId,
+        taskStore,
+        pushNotificationStore,
+        agentId,
+        params: protocolParams as ListTaskPushNotificationConfigParams,
+      });
+    }
+    case 'tasks/pushNotificationConfig/delete': {
+      return handleDeleteTaskPushNotificationConfig({
+        requestId,
+        taskStore,
+        pushNotificationStore,
+        agentId,
+        params: protocolParams as DeleteTaskPushNotificationConfigParams,
+      });
+    }
+    case 'agent/getAuthenticatedExtendedCard':
+      throw MastraA2AError.extendedAgentCardNotConfigured();
+    default:
+      throw MastraA2AError.methodNotFound(method);
+  }
+}
+
 // ============================================================================
 // Route Definitions (new pattern - handlers defined inline with createRoute)
 // ============================================================================
 
-export type A2AProtocolVersion = '0.3' | '1.0';
-
-export function resolveA2AProtocolVersion(request?: Request): A2AProtocolVersion {
-  const version = request?.headers.get('A2A-Version')?.trim();
-
-  if (!version || version === '0.3') {
-    return '0.3';
-  }
-
-  if (version === '1.0') {
-    return '1.0';
-  }
-
-  throw MastraA2AError.versionNotSupported(version);
-}
+export { resolveA2AProtocolVersion };
+export type { A2AProtocolVersion };
 
 export const GET_AGENT_CARD_ROUTE = createRoute({
   method: 'GET',
   path: '/.well-known/:agentId/agent-card.json',
-  responseType: 'json',
+  responseType: 'datastream-response',
   pathParamSchema: a2aAgentIdPathParams,
   responseSchema: agentCardResponseSchema,
   summary: 'Get agent card',
@@ -2352,18 +2199,27 @@ export const GET_AGENT_CARD_ROUTE = createRoute({
   tags: ['Agent-to-Agent'],
   requiresAuth: true,
   handler: async ctx => {
+    const protocolVersion = resolveA2AProtocolVersion(ctx.request);
     const executionUrl = getA2AExecutionUrl({
       agentId: ctx.agentId as string,
       request: (ctx as typeof ctx & { request?: Request }).request,
       routePrefix: ctx.routePrefix,
     });
 
-    return getAgentCardByIdHandler({
+    const agentCard = await getAgentCardByIdHandler({
       mastra: ctx.mastra,
       requestContext: ctx.requestContext,
       agentId: ctx.agentId,
       executionUrl,
       pushNotifications: true,
+      protocolVersion,
+    });
+
+    return new Response(JSON.stringify(agentCard), {
+      headers: {
+        'Content-Type': 'application/json',
+        Vary: 'A2A-Version',
+      },
     });
   },
 });
@@ -2380,14 +2236,20 @@ export const AGENT_EXECUTION_ROUTE = createRoute({
   tags: ['Agent-to-Agent'],
   requiresAuth: true,
   handler: async ({ mastra, agentId, requestContext, taskStore, abortSignal, request, ...bodyParams }) => {
-    const { id: requestId, method } = bodyParams;
+    const { id: requestId, method: wireMethod } = bodyParams;
     const params = 'params' in bodyParams ? bodyParams.params : undefined;
 
-    let protocolVersion: A2AProtocolVersion;
+    let protocolVersion: A2AProtocolVersion = '0.3';
+    let method: A2AOperation;
     try {
       protocolVersion = resolveA2AProtocolVersion(request);
+      const supportedVersions = resolveAgentProtocolVersions(mastra.getServer?.()?.a2a, agentId as string);
+      if (!supportedVersions.includes(protocolVersion)) {
+        throw MastraA2AError.versionNotSupported(protocolVersion);
+      }
+      method = resolveA2AOperation(protocolVersion, wireMethod as A2AWireMethod);
     } catch (error) {
-      return createA2AJsonResponse(normalizeError(error, requestId));
+      return createA2AJsonResponse(normalizeError(error, requestId), protocolVersion);
     }
 
     const result = await getAgentExecutionHandler({
@@ -2402,10 +2264,10 @@ export const AGENT_EXECUTION_ROUTE = createRoute({
       protocolVersion,
     });
 
-    if (method === 'message/stream' || method === 'tasks/resubscribe') {
+    if (isA2AStreamingOperation(method)) {
       return createA2ASSEResponse(result);
     }
 
-    return createA2AJsonResponse(result);
+    return createA2AJsonResponse(result, protocolVersion);
   },
 });

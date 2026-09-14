@@ -109,4 +109,38 @@ describe('DefaultPushNotificationSender', () => {
     const [, requestInit] = fetchMock.mock.calls[0]!;
     expect((requestInit!.headers as Headers).get('host')).toBe('example.com');
   });
+
+  it('uses the registration protocol version for v1 delivery', async () => {
+    const store = new InMemoryPushNotificationStore();
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 202 }));
+    const sender = new DefaultPushNotificationSender(store, {
+      fetch: fetchMock,
+      lookup: vi.fn().mockResolvedValue([{ address: '93.184.216.34', family: 4 }]),
+    });
+
+    store.set({
+      agentId: 'test-agent',
+      protocolVersion: '1.0',
+      config: {
+        taskId: task.id,
+        pushNotificationConfig: {
+          url: 'https://example.com/webhook',
+        },
+      },
+    });
+
+    await sender.sendNotifications({
+      agentId: 'test-agent',
+      task,
+    });
+
+    const [, requestInit] = fetchMock.mock.calls[0]!;
+    expect((requestInit!.headers as Headers).get('content-type')).toBe('application/a2a+json');
+    expect(JSON.parse(String(requestInit!.body))).toMatchObject({
+      task: {
+        id: 'task-1',
+        status: { state: 'TASK_STATE_COMPLETED' },
+      },
+    });
+  });
 });

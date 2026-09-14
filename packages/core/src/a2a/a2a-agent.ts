@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { AgentCard, Message, Task, TaskArtifactUpdateEvent, TaskStatusUpdateEvent } from '@a2a-js/sdk-v0_3';
+import type { Message, Task, TaskArtifactUpdateEvent, TaskStatusUpdateEvent } from '@a2a-js/sdk-v0_3';
 import type { AgentExecutionOptionsBase } from '../agent/agent.types';
 import { MessageList } from '../agent/message-list';
 import type { MastraDBMessage, MessageListInput } from '../agent/message-list';
@@ -10,19 +10,25 @@ import type { MastraMemory } from '../memory/memory';
 import { RequestContext } from '../request-context';
 import type { ChunkType } from '../stream/types';
 import type { DynamicArgument } from '../types';
+import { A2ARemoteClient, type A2ARemoteBootstrap } from './a2a-remote-client';
 import { MastraA2AError } from './error';
 import type {
-  A2AAgentCardVerificationContext,
   A2AAgentGenerateResult,
   A2AAgentOptions,
   A2AAgentResumePayload,
   A2AAgentRunState,
   A2AAgentStreamResult,
   JSONRPCResponse,
-  RequestCredentialsMode,
 } from './types';
-
-type FetchLike = typeof fetch;
+import {
+  createA2AGetTaskRequest,
+  createA2ASendMessageRequest,
+  createA2ASubscribeRequest,
+  decodeA2AResult,
+  decodeA2AStreamEvent,
+  getA2ARequestHeaders,
+  type A2ARemoteAgentCard,
+} from './wire-protocol';
 
 type JSONRPCRequestBody = {
   jsonrpc: '2.0';
@@ -31,21 +37,7 @@ type JSONRPCRequestBody = {
   params?: Record<string, unknown>;
 };
 
-type RequestOptions = {
-  method?: string;
-  headers?: Record<string, string>;
-  body?: unknown;
-  stream?: boolean;
-  credentials?: RequestCredentialsMode;
-  signal?: AbortSignal;
-};
-
-type AgentBootstrap = {
-  card: AgentCard;
-  cardUrl: string;
-  executionUrl: string;
-  streamingSupported: boolean;
-};
+type AgentBootstrap = A2ARemoteBootstrap;
 
 type TerminalEvaluation =
   | {
@@ -515,41 +507,51 @@ export class A2AAgent implements SubAgent {
   readonly id: string;
   readonly name: string;
 
-  readonly #url: string;
+  readonly #remote: A2ARemoteClient;
   readonly #description: string;
-  readonly #headers: Record<string, string>;
-  readonly #fetch: FetchLike;
-  readonly #retries: number;
   readonly #backoffMs: number;
   readonly #maxBackoffMs: number;
-  readonly #credentials?: RequestCredentialsMode;
-  readonly #abortSignal?: AbortSignal;
-  readonly #timeoutMs?: number;
-  readonly #verifyAgentCard?: A2AAgentOptions['verifyAgentCard'];
 
-  #cachedBootstrap?: AgentBootstrap;
   readonly #runState = new Map<string, A2AAgentRunState>();
   #memory?: DynamicArgument<MastraMemory>;
   #mastra?: Mastra;
 
   constructor(options: A2AAgentOptions) {
-    this.#url = options.url.replace(/\/$/, '');
-    this.#description = options.description ?? `Remote A2A agent at ${this.#url}`;
-    this.#headers = options.headers ?? {};
-    this.#fetch = options.fetch ?? fetch;
-    this.#retries = options.retries ?? 0;
+    const protocolVersion = options.protocolVersion ?? 'auto';
     this.#backoffMs = options.backoffMs ?? 250;
     this.#maxBackoffMs = options.maxBackoffMs ?? 1_000;
-    this.#credentials = options.credentials;
-    this.#abortSignal = options.abortSignal;
-    this.#timeoutMs = options.timeoutMs;
-    this.#verifyAgentCard = options.verifyAgentCard;
+
+    const configuredVersionHeader = Object.entries(options.headers ?? {}).find(
+      ([name]) => name.toLowerCase() === 'a2a-version',
+    )?.[1];
+    if (configuredVersionHeader) {
+      const normalizedHeader =
+        configuredVersionHeader === '1.0' || configuredVersionHeader === '1.0.0'
+          ? '1.0'
+          : configuredVersionHeader === '0.3' || configuredVersionHeader === '0.3.0'
+            ? '0.3'
+            : configuredVersionHeader;
+      if (protocolVersion === 'auto') {
+        throw MastraA2AError.invalidParams(
+          `A2A-Version header "${configuredVersionHeader}" conflicts with protocolVersion "auto". Pin protocolVersion to "${normalizedHeader}" or omit the header.`,
+        );
+      }
+      if (normalizedHeader !== protocolVersion) {
+        throw MastraA2AError.invalidParams(
+          `A2A-Version header "${configuredVersionHeader}" conflicts with protocolVersion "${protocolVersion}".`,
+        );
+      }
+    }
+
+    this.#remote = new A2ARemoteClient(options);
+    this.#description = options.description ?? `Remote A2A agent at ${this.#remote.url}`;
+
     this.id = options.id ?? `a2a-${randomUUID()}`;
     this.name = options.name ?? options.description ?? 'A2A Agent';
   }
 
-  async getAgentCard({ forceRefresh = false }: { forceRefresh?: boolean } = {}): Promise<AgentCard> {
-    return (await this.#getBootstrap({ forceRefresh })).card;
+  async getAgentCard({ forceRefresh = false }: { forceRefresh?: boolean } = {}): Promise<A2ARemoteAgentCard> {
+    return (await this.#remote.getBootstrap({ forceRefresh })).card;
   }
 
   getDescription(): string {
@@ -592,7 +594,7 @@ export class A2AAgent implements SubAgent {
     messages: MessageListInput,
     options?: AgentExecutionOptionsBase<unknown>,
   ): Promise<A2AAgentGenerateResult> {
-    const bootstrap = await this.#getBootstrap();
+    const bootstrap = await this.#remote.getBootstrap();
     const runId = options?.runId ?? randomUUID();
     const prompt = messagesToPrompt(messages, options);
     const memoryInfo = resolveMemoryInfo(options);
@@ -620,7 +622,7 @@ export class A2AAgent implements SubAgent {
       throw MastraA2AError.invalidParams(`No resumable A2A run state found for runId "${runId}".`);
     }
 
-    const bootstrap = await this.#getBootstrap();
+    const bootstrap = await this.#remote.getBootstrap();
     const memoryInfo = resolveMemoryInfo(options);
 
     if (state.waitingForInput) {
@@ -660,7 +662,7 @@ export class A2AAgent implements SubAgent {
     messages: MessageListInput,
     options?: AgentExecutionOptionsBase<unknown>,
   ): Promise<A2AAgentStreamResult> {
-    const bootstrap = await this.#getBootstrap();
+    const bootstrap = await this.#remote.getBootstrap();
     const runId = options?.runId ?? randomUUID();
     const prompt = messagesToPrompt(messages, options);
     const memoryInfo = resolveMemoryInfo(options);
@@ -691,7 +693,7 @@ export class A2AAgent implements SubAgent {
       throw MastraA2AError.invalidParams(`No resumable A2A run state found for runId "${runId}".`);
     }
 
-    const bootstrap = await this.#getBootstrap();
+    const bootstrap = await this.#remote.getBootstrap();
     const memoryInfo = resolveMemoryInfo(options);
 
     if (state.waitingForInput) {
@@ -735,40 +737,6 @@ export class A2AAgent implements SubAgent {
     });
   }
 
-  async #getBootstrap({ forceRefresh = false }: { forceRefresh?: boolean } = {}): Promise<AgentBootstrap> {
-    if (!forceRefresh && this.#cachedBootstrap) {
-      return this.#cachedBootstrap;
-    }
-
-    const cardUrl = this.#resolveCardUrl();
-    const response = await this.#request(cardUrl, {
-      method: 'GET',
-      signal: this.#abortSignal,
-    });
-
-    const card = (await response.json()) as AgentCard;
-    const fetchedAt = new Date();
-
-    if (this.#verifyAgentCard) {
-      const context: A2AAgentCardVerificationContext = { cardUrl, fetchedAt };
-      await this.#verifyAgentCard.verify(card, context);
-    }
-
-    const bootstrap: AgentBootstrap = {
-      card,
-      cardUrl,
-      executionUrl: card.url,
-      streamingSupported: card.capabilities?.streaming ?? false,
-    };
-
-    this.#cachedBootstrap = bootstrap;
-    return bootstrap;
-  }
-
-  #resolveCardUrl() {
-    return this.#url.endsWith('/agent-card.json') ? this.#url : `${this.#url}/.well-known/agent-card.json`;
-  }
-
   async #sendMessage({
     bootstrap,
     prompt,
@@ -784,28 +752,21 @@ export class A2AAgent implements SubAgent {
     contextId?: string;
     taskId?: string;
   }): Promise<Message | Task> {
-    const response = await this.#request(bootstrap.executionUrl, {
+    const response = await this.#remote.request(bootstrap.executionUrl, {
       method: 'POST',
+      headers: getA2ARequestHeaders(bootstrap.protocolVersion),
       signal,
-      body: {
-        jsonrpc: '2.0',
-        id: randomUUID(),
-        method: 'message/send',
-        params: {
-          message: {
-            role: 'user',
-            kind: 'message',
-            messageId: randomUUID(),
-            parts: [{ kind: 'text', text: prompt }, ...(data ? [{ kind: 'data' as const, data }] : [])],
-            ...(contextId ? { contextId } : {}),
-            ...(taskId ? { taskId } : {}),
-          },
-        },
-      } satisfies JSONRPCRequestBody,
+      body: createA2ASendMessageRequest({
+        version: bootstrap.protocolVersion,
+        prompt,
+        data,
+        contextId,
+        taskId,
+      }) satisfies JSONRPCRequestBody,
     });
 
     const json = await response.json();
-    return unwrapA2AResult(json);
+    return decodeA2AResult(bootstrap.protocolVersion, unwrapA2AResult(json));
   }
 
   async #sendAndResolve({
@@ -868,19 +829,15 @@ export class A2AAgent implements SubAgent {
     taskId: string;
     signal?: AbortSignal;
   }): Promise<Task> {
-    const response = await this.#request(bootstrap.executionUrl, {
+    const response = await this.#remote.request(bootstrap.executionUrl, {
       method: 'POST',
+      headers: getA2ARequestHeaders(bootstrap.protocolVersion),
       signal,
-      body: {
-        jsonrpc: '2.0',
-        id: randomUUID(),
-        method: 'tasks/get',
-        params: { id: taskId },
-      } satisfies JSONRPCRequestBody,
+      body: createA2AGetTaskRequest(bootstrap.protocolVersion, taskId) satisfies JSONRPCRequestBody,
     });
 
     const json = await response.json();
-    const result = unwrapA2AResult(json);
+    const result = decodeA2AResult(bootstrap.protocolVersion, unwrapA2AResult(json));
 
     if (!isTask(result)) {
       throw MastraA2AError.invalidAgentResponse('Remote A2A agent returned a non-task response for tasks/get.');
@@ -931,6 +888,7 @@ export class A2AAgent implements SubAgent {
         taskId: evaluation.task.id,
         executionUrl: bootstrap.executionUrl,
         cardUrl: bootstrap.cardUrl,
+        protocolVersion: bootstrap.protocolVersion,
         streamingSupported: bootstrap.streamingSupported,
         waitingForInput: evaluation.resumePayload.waitingForInput,
         lastTask: evaluation.task,
@@ -1024,25 +982,19 @@ export class A2AAgent implements SubAgent {
     resourceId?: string;
     emitStart: boolean;
   }): Promise<A2AAgentStreamResult> {
-    const response = await this.#request(bootstrap.executionUrl, {
+    const response = await this.#remote.request(bootstrap.executionUrl, {
       method: 'POST',
+      headers: getA2ARequestHeaders(bootstrap.protocolVersion),
       signal,
       stream: true,
-      body: {
-        jsonrpc: '2.0',
-        id: randomUUID(),
-        method: 'message/stream',
-        params: {
-          message: {
-            role: 'user',
-            kind: 'message',
-            messageId: randomUUID(),
-            parts: [{ kind: 'text', text: prompt }, ...(data ? [{ kind: 'data' as const, data }] : [])],
-            ...(contextId ? { contextId } : {}),
-            ...(taskId ? { taskId } : {}),
-          },
-        },
-      } satisfies JSONRPCRequestBody,
+      body: createA2ASendMessageRequest({
+        version: bootstrap.protocolVersion,
+        prompt,
+        data,
+        contextId,
+        taskId,
+        stream: true,
+      }) satisfies JSONRPCRequestBody,
     });
 
     return this.#consumeA2AStream({
@@ -1072,16 +1024,12 @@ export class A2AAgent implements SubAgent {
     threadId?: string;
     resourceId?: string;
   }): Promise<A2AAgentStreamResult> {
-    const response = await this.#request(bootstrap.executionUrl, {
+    const response = await this.#remote.request(bootstrap.executionUrl, {
       method: 'POST',
+      headers: getA2ARequestHeaders(bootstrap.protocolVersion),
       signal,
       stream: true,
-      body: {
-        jsonrpc: '2.0',
-        id: randomUUID(),
-        method: 'tasks/resubscribe',
-        params: { id: taskId },
-      } satisfies JSONRPCRequestBody,
+      body: createA2ASubscribeRequest(bootstrap.protocolVersion, taskId) satisfies JSONRPCRequestBody,
     });
 
     return this.#consumeA2AStream({
@@ -1135,6 +1083,7 @@ export class A2AAgent implements SubAgent {
             taskId: consumed.task.id,
             executionUrl: bootstrap.executionUrl,
             cardUrl: bootstrap.cardUrl,
+            protocolVersion: bootstrap.protocolVersion,
             streamingSupported: bootstrap.streamingSupported,
             waitingForInput: consumed.suspended.payload.waitingForInput,
             lastTask: consumed.task,
@@ -1238,7 +1187,7 @@ export class A2AAgent implements SubAgent {
         }
 
         if ('event' in parsed && parsed.event) {
-          const event = parsed.event;
+          const event = decodeA2AStreamEvent(bootstrap.protocolVersion, parsed.event);
 
           if (isTask(event)) {
             task = event;
@@ -1375,7 +1324,7 @@ export class A2AAgent implements SubAgent {
         }
 
         if ('event' in parsed && parsed.event) {
-          const event = parsed.event;
+          const event = decodeA2AStreamEvent(bootstrap.protocolVersion, parsed.event);
 
           if (isTask(event)) {
             task = event;
@@ -1544,60 +1493,6 @@ export class A2AAgent implements SubAgent {
     return streamResult as unknown as A2AAgentStreamResult;
   }
 
-  async #request(
-    url: string,
-    { method = 'POST', headers = {}, body, stream = false, credentials, signal }: RequestOptions = {},
-  ): Promise<Response> {
-    let attempts = 0;
-    let lastError: unknown;
-
-    const finalHeaders = {
-      accept: stream ? 'text/event-stream' : 'application/json',
-      ...this.#headers,
-      ...headers,
-    };
-
-    while (attempts <= this.#retries) {
-      try {
-        const requestSignal = this.#resolveRequestSignal(signal);
-        const response = await this.#fetch(url, {
-          method,
-          headers: {
-            ...finalHeaders,
-            ...(body ? { 'content-type': 'application/json' } : {}),
-          },
-          body: body ? JSON.stringify(body) : undefined,
-          credentials: credentials ?? this.#credentials,
-          signal: requestSignal,
-        });
-
-        if (!response.ok) {
-          throw MastraA2AError.invalidAgentResponse(`Remote A2A request failed with status ${response.status}.`, {
-            status: response.status,
-            url,
-          });
-        }
-
-        return response;
-      } catch (error) {
-        lastError = error;
-
-        if (!shouldRetryRequest(error)) {
-          throw lastError;
-        }
-
-        if (attempts === this.#retries) {
-          break;
-        }
-
-        attempts += 1;
-        await this.#delay(attempts);
-      }
-    }
-
-    throw lastError;
-  }
-
   async #delay(attempt: number = 0) {
     const delayMs = Math.min(this.#backoffMs * Math.max(1, attempt), this.#maxBackoffMs);
     if (delayMs <= 0) {
@@ -1606,52 +1501,4 @@ export class A2AAgent implements SubAgent {
 
     await new Promise(resolve => setTimeout(resolve, delayMs));
   }
-
-  #resolveRequestSignal(signal?: AbortSignal) {
-    if (this.#timeoutMs == null) {
-      return signal ?? this.#abortSignal;
-    }
-
-    const timeoutSignal = AbortSignal.timeout(this.#timeoutMs);
-    const signals = [signal, this.#abortSignal, timeoutSignal].filter(Boolean) as AbortSignal[];
-
-    if (signals.length === 0) {
-      return undefined;
-    }
-
-    return signals.length === 1 ? signals[0] : AbortSignal.any(signals);
-  }
-}
-
-function shouldRetryRequest(error: unknown): boolean {
-  if (error instanceof TypeError) {
-    return true;
-  }
-
-  if (error instanceof DOMException && error.name === 'AbortError') {
-    return true;
-  }
-
-  if (error instanceof Error && error.name === 'AbortError') {
-    return true;
-  }
-
-  const status =
-    typeof error === 'object' && error !== null && 'status' in error && typeof error.status === 'number'
-      ? error.status
-      : typeof error === 'object' &&
-          error !== null &&
-          'data' in error &&
-          typeof error.data === 'object' &&
-          error.data !== null &&
-          'status' in error.data &&
-          typeof error.data.status === 'number'
-        ? error.data.status
-        : undefined;
-
-  if (status === undefined) {
-    return true;
-  }
-
-  return status === 408 || status === 429 || status >= 500;
 }

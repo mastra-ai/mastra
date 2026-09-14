@@ -25,7 +25,12 @@ import type {
 import {
   AgentCard as AgentCardV1Codec,
   CancelTaskRequest as CancelTaskRequestV1Codec,
+  DeleteTaskPushNotificationConfigRequest as DeleteTaskPushNotificationConfigRequestV1Codec,
+  GetExtendedAgentCardRequest as GetExtendedAgentCardRequestV1Codec,
   GetTaskRequest as GetTaskRequestV1Codec,
+  GetTaskPushNotificationConfigRequest as GetTaskPushNotificationConfigRequestV1Codec,
+  ListTaskPushNotificationConfigsRequest as ListTaskPushNotificationConfigsRequestV1Codec,
+  ListTaskPushNotificationConfigsResponse as ListTaskPushNotificationConfigsResponseV1Codec,
   ListTasksRequest as ListTasksRequestV1Codec,
   ListTasksResponse as ListTasksResponseV1Codec,
   SendMessageRequest as SendMessageRequestV1Codec,
@@ -33,11 +38,17 @@ import {
   StreamResponse as StreamResponseV1Codec,
   SubscribeToTaskRequest as SubscribeToTaskRequestV1Codec,
   Task as TaskV1Codec,
+  TaskPushNotificationConfig as TaskPushNotificationConfigV1Codec,
 } from '@mastra/core/a2a/v1';
 import type {
   AgentCard as AgentCardV1,
   CancelTaskRequest as CancelTaskRequestV1,
+  DeleteTaskPushNotificationConfigRequest as DeleteTaskPushNotificationConfigRequestV1,
+  GetExtendedAgentCardRequest as GetExtendedAgentCardRequestV1,
   GetTaskRequest as GetTaskRequestV1,
+  GetTaskPushNotificationConfigRequest as GetTaskPushNotificationConfigRequestV1,
+  ListTaskPushNotificationConfigsRequest as ListTaskPushNotificationConfigsRequestV1,
+  ListTaskPushNotificationConfigsResponse as ListTaskPushNotificationConfigsResponseV1,
   ListTasksRequest as ListTasksRequestV1,
   ListTasksResponse as ListTasksResponseV1,
   SendMessageRequest as SendMessageRequestV1,
@@ -45,6 +56,7 @@ import type {
   StreamResponse as StreamResponseV1,
   SubscribeToTaskRequest as SubscribeToTaskRequestV1,
   Task as TaskV1,
+  TaskPushNotificationConfig as TaskPushNotificationConfigV1,
 } from '@mastra/core/a2a/v1';
 import type { ClientOptions } from '../types';
 import { MastraClientError as MastraClientErrorClass } from '../types';
@@ -60,6 +72,11 @@ import { BaseResource } from './base';
 export type A2AStreamEventData = Message | Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent;
 export type SendMessageResult = Message | Task;
 export type { AgentCardSignatureKeyProviderInput, AgentCardVerificationKey, VerifyAgentCardSignatureOptions };
+
+const A2A_V1_HEADERS = {
+  'A2A-Version': '1.0',
+  'Content-Type': 'application/a2a+json',
+} as const;
 
 /**
  * @experimental Agent Card verification may evolve as A2A JS signing support settles.
@@ -368,7 +385,7 @@ export class A2AV1 extends BaseResource {
   private async rpc<TResult>(method: string, params?: unknown): Promise<TResult> {
     const response = await this.request<JSONRPCResponse>(`/a2a/${this.agentId}`, {
       method: 'POST',
-      headers: { 'A2A-Version': '1.0' },
+      headers: A2A_V1_HEADERS,
       body: {
         jsonrpc: '2.0',
         id: crypto.randomUUID(),
@@ -382,63 +399,103 @@ export class A2AV1 extends BaseResource {
 
   async getAgentCard(): Promise<AgentCardV1> {
     const card = await this.request<unknown>(`/.well-known/${this.agentId}/agent-card.json`, {
-      headers: { 'A2A-Version': '1.0' },
+      headers: A2A_V1_HEADERS,
     });
     return AgentCardV1Codec.fromJSON(card);
   }
 
   async sendMessage(params: SendMessageRequestV1): Promise<SendMessageResponseV1> {
-    const result = await this.rpc<unknown>('message/send', SendMessageRequestV1Codec.toJSON(params));
+    const result = await this.rpc<unknown>('SendMessage', SendMessageRequestV1Codec.toJSON(params));
     return SendMessageResponseV1Codec.fromJSON(result);
   }
 
   async *sendMessageStream(params: SendMessageRequestV1): AsyncGenerator<StreamResponseV1, void, undefined> {
     const response = await this.request<Response>(`/a2a/${this.agentId}`, {
       method: 'POST',
-      headers: { 'A2A-Version': '1.0' },
+      headers: A2A_V1_HEADERS,
       body: {
         jsonrpc: '2.0',
         id: crypto.randomUUID(),
-        method: 'message/stream',
+        method: 'SendStreamingMessage',
         params: SendMessageRequestV1Codec.toJSON(params),
       },
       stream: true,
     });
 
-    for await (const event of processA2AStream<unknown>(await requireResponseBody(response, 'message/stream'))) {
+    for await (const event of processA2AStream<unknown>(await requireResponseBody(response, 'SendStreamingMessage'))) {
       yield StreamResponseV1Codec.fromJSON(event);
     }
   }
 
   async getTask(params: GetTaskRequestV1): Promise<TaskV1> {
-    const result = await this.rpc<unknown>('tasks/get', GetTaskRequestV1Codec.toJSON(params));
+    const result = await this.rpc<unknown>('GetTask', GetTaskRequestV1Codec.toJSON(params));
     return TaskV1Codec.fromJSON(result);
   }
 
   async listTasks(params: ListTasksRequestV1): Promise<ListTasksResponseV1> {
-    const result = await this.rpc<unknown>('tasks/list', ListTasksRequestV1Codec.toJSON(params));
+    const result = await this.rpc<unknown>('ListTasks', ListTasksRequestV1Codec.toJSON(params));
     return ListTasksResponseV1Codec.fromJSON(result);
   }
 
   async cancelTask(params: CancelTaskRequestV1): Promise<TaskV1> {
-    const result = await this.rpc<unknown>('tasks/cancel', CancelTaskRequestV1Codec.toJSON(params));
+    const result = await this.rpc<unknown>('CancelTask', CancelTaskRequestV1Codec.toJSON(params));
     return TaskV1Codec.fromJSON(result);
+  }
+
+  async getExtendedAgentCard(params: GetExtendedAgentCardRequestV1): Promise<AgentCardV1> {
+    const result = await this.rpc<unknown>('GetExtendedAgentCard', GetExtendedAgentCardRequestV1Codec.toJSON(params));
+    return AgentCardV1Codec.fromJSON(result);
+  }
+
+  async createTaskPushNotificationConfig(params: TaskPushNotificationConfigV1): Promise<TaskPushNotificationConfigV1> {
+    const result = await this.rpc<unknown>(
+      'CreateTaskPushNotificationConfig',
+      TaskPushNotificationConfigV1Codec.toJSON(params),
+    );
+    return TaskPushNotificationConfigV1Codec.fromJSON(result);
+  }
+
+  async getTaskPushNotificationConfig(
+    params: GetTaskPushNotificationConfigRequestV1,
+  ): Promise<TaskPushNotificationConfigV1> {
+    const result = await this.rpc<unknown>(
+      'GetTaskPushNotificationConfig',
+      GetTaskPushNotificationConfigRequestV1Codec.toJSON(params),
+    );
+    return TaskPushNotificationConfigV1Codec.fromJSON(result);
+  }
+
+  async listTaskPushNotificationConfigs(
+    params: ListTaskPushNotificationConfigsRequestV1,
+  ): Promise<ListTaskPushNotificationConfigsResponseV1> {
+    const result = await this.rpc<unknown>(
+      'ListTaskPushNotificationConfigs',
+      ListTaskPushNotificationConfigsRequestV1Codec.toJSON(params),
+    );
+    return ListTaskPushNotificationConfigsResponseV1Codec.fromJSON(result);
+  }
+
+  async deleteTaskPushNotificationConfig(params: DeleteTaskPushNotificationConfigRequestV1): Promise<void> {
+    await this.rpc<unknown>(
+      'DeleteTaskPushNotificationConfig',
+      DeleteTaskPushNotificationConfigRequestV1Codec.toJSON(params),
+    );
   }
 
   async *resubscribeTask(params: SubscribeToTaskRequestV1): AsyncGenerator<StreamResponseV1, void, undefined> {
     const response = await this.request<Response>(`/a2a/${this.agentId}`, {
       method: 'POST',
-      headers: { 'A2A-Version': '1.0' },
+      headers: A2A_V1_HEADERS,
       body: {
         jsonrpc: '2.0',
         id: crypto.randomUUID(),
-        method: 'tasks/resubscribe',
+        method: 'SubscribeToTask',
         params: SubscribeToTaskRequestV1Codec.toJSON(params),
       },
       stream: true,
     });
 
-    for await (const event of processA2AStream<unknown>(await requireResponseBody(response, 'tasks/resubscribe'))) {
+    for await (const event of processA2AStream<unknown>(await requireResponseBody(response, 'SubscribeToTask'))) {
       yield StreamResponseV1Codec.fromJSON(event);
     }
   }
