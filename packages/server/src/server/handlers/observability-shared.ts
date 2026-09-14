@@ -109,7 +109,8 @@ export const NEW_ROUTE_DEFS = {
     method: 'POST',
     path: '/observability/traces/query',
     summary: 'Query traces',
-    description: 'Returns completed logical traces or distinct thread groups matching an advanced trace query',
+    description:
+      'Returns completed logical traces or distinct thread groups matching an advanced trace query. Thread grouping remains supported but is deprecated; use queryThreads instead.',
     requiresPermission: 'observability:read',
   },
 

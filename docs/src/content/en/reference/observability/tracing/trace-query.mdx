@@ -12,6 +12,12 @@ Use `POST /api/observability/traces/query` to find completed logical traces that
 
 The endpoint uses the same authentication as other observability routes and requires the `observability:read` permission. The configured observability store must support advanced trace queries.
 
+:::warning[Thread grouping is deprecated]
+
+The `group` option remains supported until the next major release. Use `queryThreads()` to retrieve matching thread identities in new code.
+
+:::
+
 ## Query traces with the client SDK
 
 Pass the query to `queryTraces()`:
@@ -75,7 +81,7 @@ curl --request POST \
 | - | - | - |
 | `timeRange` | Yes | Trace start-time boundary. `from` is inclusive, `to` is exclusive, and the range can span at most 31 days. Both values must be ISO timestamps. |
 | `where` | No | Recursive trace predicate. Supports scalar conditions and `spans.some`, `spans.none`, `scores.some`, and `scores.none`. |
-| `group` | No | Set to `{ by: ['threadId'] }` to return distinct non-null thread IDs. |
+| `group` | No | **Deprecated.** Set to `{ by: ['threadId'] }` to return distinct non-null thread IDs. Use `queryThreads()` for new code. |
 | `orderBy` | No | One item ordering ungrouped results by `startedAt` or `endedAt`, in `asc` or `desc` order. Defaults to `startedAt desc`. Not accepted with `group`. |
 | `page` | No | `{ limit, after }`. `limit` defaults to 100 and has a maximum of 1000. Pass the opaque `page.next` value as `after`. |
 
@@ -340,20 +346,31 @@ An ungrouped query returns only lightweight completed traces:
 }
 ```
 
-A grouped query returns distinct non-null thread IDs in ascending order:
+A grouped query still returns distinct non-null thread IDs in ascending order. Grouping remains supported until the next major release, but use `queryThreads()` for new code:
 
 ```typescript
-const result = await mastraClient.queryTraces({
-  timeRange: {
-    from: '2026-08-01T00:00:00.000Z',
-    to: '2026-08-08T00:00:00.000Z',
-  },
+const timeRange = {
+  from: '2026-08-01T00:00:00.000Z',
+  to: '2026-08-08T00:00:00.000Z',
+}
+
+// Deprecated
+const legacyResult = await mastraClient.queryTraces({
+  timeRange,
   group: { by: ['threadId'] },
 })
 // { groups: [{ threadId: 'thread-123' }], page: { next: null } }
+
+// Replacement
+const result = await mastraClient.queryThreads({
+  traces: {
+    timeRange,
+  },
+})
+// { threads: [{ threadId: 'thread-123' }], page: { next: null } }
 ```
 
-Related evidence isn't embedded in either response. Use the trace-detail and branch APIs to load spans after selecting a result.
+Related evidence isn't embedded in these responses. Use the trace-detail and branch APIs to load spans after selecting a result.
 
 ## Pagination and errors
 
