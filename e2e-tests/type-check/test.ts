@@ -42,7 +42,7 @@ async function main() {
   await setupTemplate(fixturePath, 'pnpm');
 
   try {
-    spawnSync('pnpm', ['vitest', 'run'], {
+    const result = spawnSync('pnpm', ['vitest', 'run'], {
       cwd: fixturePath,
       stdio: 'inherit',
       env: {
@@ -50,6 +50,9 @@ async function main() {
         pnpm_config_registry: providedContext.registry,
       },
     });
+    if (result.error) throw result.error;
+    if (result.signal) throw new Error(`Type checks terminated by ${result.signal}`);
+    if (result.status !== 0) process.exitCode = result.status ?? 1;
   } finally {
     await teardown();
   }

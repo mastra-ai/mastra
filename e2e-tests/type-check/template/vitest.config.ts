@@ -11,7 +11,20 @@ export default defineConfig({
           typecheck: {
             enabled: true,
             include: ['./**/*.test-d.ts'],
-            exclude: ['**/node_modules/**', './core/auth.test-d.ts', './core/agent-message-input.test-d.ts'],
+            exclude: ['**/node_modules/**', './core/auth.test-d.ts', './core/agent-message-input.test-d.ts', './mcp/**'],
+          },
+        },
+      },
+      {
+        test: {
+          name: 'typecheck:mcp',
+          environment: 'node',
+          include: [],
+          typecheck: {
+            enabled: true,
+            include: ['./mcp/**/*.test-d.ts'],
+            exclude: ['**/node_modules/**'],
+            tsconfig: './tsconfig.mcp.json',
           },
         },
       },
