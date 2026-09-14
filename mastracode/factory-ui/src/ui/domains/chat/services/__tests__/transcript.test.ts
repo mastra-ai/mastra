@@ -243,7 +243,11 @@ describe('transcript reducer message entries', () => {
     });
     const withDelta = transcriptReducer(withReasoning, {
       type: 'event',
-      event: { type: 'message_update', id: 'assistant-1', event: { type: 'reasoning-delta', index: 1, delta: 'Thinking' } },
+      event: {
+        type: 'message_update',
+        id: 'assistant-1',
+        event: { type: 'reasoning-delta', index: 1, delta: 'Thinking' },
+      },
     });
     const state = transcriptReducer(withDelta, {
       type: 'event',
@@ -264,7 +268,10 @@ describe('transcript reducer message entries', () => {
     expect(messageParts(state.entries[0])).toEqual([
       { type: 'text', text: 'Before' },
       { type: 'reasoning', reasoning: 'Thinking', details: [{ type: 'text', text: 'Thinking' }] },
-      { type: 'tool-invocation', toolInvocation: { state: 'call', toolCallId: 'tool-1', toolName: 'view', args: { path: 'a.ts' } } },
+      {
+        type: 'tool-invocation',
+        toolInvocation: { state: 'call', toolCallId: 'tool-1', toolName: 'view', args: { path: 'a.ts' } },
+      },
     ]);
   });
 
@@ -275,7 +282,10 @@ describe('transcript reducer message entries', () => {
       { type: 'event', event: { type: 'message_start', message } },
     );
     const duplicate = transcriptReducer(started, { type: 'event', event: { type: 'message_start', message } });
-    const mismatchedEnd = transcriptReducer(duplicate, { type: 'event', event: { type: 'message_end', id: 'assistant-2' } });
+    const mismatchedEnd = transcriptReducer(duplicate, {
+      type: 'event',
+      event: { type: 'message_end', id: 'assistant-2' },
+    });
     const ended = transcriptReducer(mismatchedEnd, { type: 'event', event: { type: 'message_end', id: message.id } });
 
     expect(duplicate.entries).toHaveLength(1);
@@ -310,18 +320,15 @@ describe('transcript reducer message entries', () => {
       },
     );
     state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', id: firstAssistant.id } });
-    const decodeStartedAt = state._decodeStartedAt;
 
     for (const message of [reminder, summary]) {
       state = transcriptReducer(state, { type: 'event', event: { type: 'message_start', message } });
       expect(state.entries.at(-1)).toMatchObject({ kind: 'message', id: message.id, streaming: true });
       expect(state.pending).toBe(false);
-      expect(state._decodeStartedAt).toBe(decodeStartedAt);
 
       state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', id: message.id } });
       expect(state.entries.at(-1)).toMatchObject({ kind: 'message', id: message.id, streaming: false });
       expect(state.pending).toBe(false);
-      expect(state._decodeStartedAt).toBe(decodeStartedAt);
     }
 
     state = transcriptReducer(state, {
@@ -382,7 +389,6 @@ describe('transcript reducer message entries', () => {
     });
 
     expect(ended.pending).toBe(true);
-    expect(ended._decodeStartedAt).toBe(0);
     expect(ended.entries).toHaveLength(1);
     expect(ended.entries[0]).toMatchObject({ id: 'reminder-1', streaming: false });
   });

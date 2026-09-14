@@ -224,6 +224,8 @@ type StreamState = {
   messageStarted: boolean;
   isSuspended: boolean;
   spans: MessagePartSpans;
+  announcedTextSpans: Set<string>;
+  announcedReasoningSpans: Set<string>;
   messageIdObserved: boolean;
   toolPartById: Map<string, number>;
   /** Response ids offered by `step-start` — an id binds to at most one display message. */
@@ -334,11 +336,7 @@ export class SessionRunEngine {
     });
   }
 
-  private emitEmptyTextPart(state: StreamState, index: number): void {
-    const currentPart = state.currentMessage.content.parts[index];
-    if (!currentPart || currentPart.type !== 'text') return;
-
-    const part = { ...currentPart, text: '' };
+  private emitInitialPart(state: StreamState, index: number, part: MastraMessagePart): void {
     if (!state.messageStarted) {
       const message = structuredClone(state.currentMessage);
       message.content.parts[index] = part;
@@ -368,6 +366,8 @@ export class SessionRunEngine {
     state.lastFinishedMessage = state.currentMessage;
     state.currentMessage = this.createEmptyAssistantMessage();
     state.spans.clear();
+    state.announcedTextSpans.clear();
+    state.announcedReasoningSpans.clear();
     state.messageIdObserved = false;
     state.toolPartById.clear();
     state.completedToolPrelude = false;
@@ -379,6 +379,8 @@ export class SessionRunEngine {
       messageStarted: false,
       isSuspended: false,
       spans: new MessagePartSpans({ providerMetadata: false }),
+      announcedTextSpans: new Set(),
+      announcedReasoningSpans: new Set(),
       messageIdObserved: false,
       toolPartById: new Map<string, number>(),
       offeredResponseIds: new Set<string>(),
@@ -545,6 +547,22 @@ export class SessionRunEngine {
     }
 
     if (isSpanChunk(chunk)) {
+      const partIndex = state.currentMessage.content.parts.length;
+      if (chunk.type === 'text-start') {
+        state.spans.fold(state.currentMessage.content.parts, chunk);
+        const part = state.spans.openTextSpan(state.currentMessage.content.parts, chunk.payload.id);
+        state.announcedTextSpans.add(chunk.payload.id);
+        this.emitInitialPart(state, partIndex, structuredClone(part));
+        return undefined;
+      }
+      if (chunk.type === 'reasoning-start') {
+        state.spans.fold(state.currentMessage.content.parts, chunk);
+        state.spans.openReasoningSpan(state.currentMessage.content.parts, chunk.payload.id);
+        state.announcedReasoningSpans.add(chunk.payload.id);
+        this.emitInitialPart(state, partIndex, { type: 'reasoning', reasoning: '', details: [] });
+        return undefined;
+      }
+
       const folded = state.spans.fold(state.currentMessage.content.parts, chunk);
       if (!folded) return undefined;
 
@@ -552,18 +570,24 @@ export class SessionRunEngine {
       if (index === -1) return undefined;
 
       if (chunk.type === 'text-delta' && folded.part.type === 'text') {
-        if (folded.created) this.emitEmptyTextPart(state, index);
+        if (!state.announcedTextSpans.delete(chunk.payload.id) && folded.created) {
+          this.emitInitialPart(state, index, { ...folded.part, text: '' });
+        }
         this.#session.emit({
           type: 'message_update',
           id: state.currentMessage.id,
           event: { type: 'text-delta', delta: chunk.payload.text },
         });
-      } else if (chunk.type === 'reasoning-delta' && folded.part.type === 'reasoning' && !folded.created) {
-        this.#session.emit({
-          type: 'message_update',
-          id: state.currentMessage.id,
-          event: { type: 'reasoning-delta', index, delta: chunk.payload.text },
-        });
+      } else if (chunk.type === 'reasoning-delta' && folded.part.type === 'reasoning') {
+        if (!state.announcedReasoningSpans.delete(chunk.payload.id) && folded.created) {
+          this.emitMessagePart(state, index);
+        } else {
+          this.#session.emit({
+            type: 'message_update',
+            id: state.currentMessage.id,
+            event: { type: 'reasoning-delta', index, delta: chunk.payload.text },
+          });
+        }
       } else {
         this.emitMessagePart(state, index);
       }

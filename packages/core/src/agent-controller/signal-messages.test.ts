@@ -1188,9 +1188,7 @@ describe('AgentController signal messages', () => {
     const signal = session.sendSignal({ content: 'run tool' });
     await signal.accepted;
     await waitFor(() =>
-      events.some(
-        event => event.type === 'message_update' && event.event.delta === 'approved through subscription',
-      ),
+      events.some(event => event.type === 'message_update' && event.event.delta === 'approved through subscription'),
     );
 
     expect(sendToolApproval).toHaveBeenCalledWith(expect.objectContaining({ approved: true, toolCallId: 'tool-1' }));
@@ -1661,9 +1659,22 @@ describe('AgentController signal messages', () => {
     const updates = events.filter(
       (event): event is Extract<AgentControllerEvent, { type: 'message_update' }> => event.type === 'message_update',
     );
-    expect(updates.at(-1)?.message.content.parts).toEqual([
-      { type: 'reasoning', reasoning: 'step one', details: [{ type: 'text', text: 'step one' }] },
-      { type: 'reasoning', reasoning: 'step two', details: [{ type: 'text', text: 'step two' }] },
+    expect(updates).toEqual([
+      {
+        type: 'message_update',
+        id: expect.any(String),
+        event: { type: 'reasoning-delta', index: 0, delta: 'step one' },
+      },
+      {
+        type: 'message_update',
+        id: expect.any(String),
+        event: { type: 'part', index: 1, part: { type: 'reasoning', reasoning: '', details: [] } },
+      },
+      {
+        type: 'message_update',
+        id: expect.any(String),
+        event: { type: 'reasoning-delta', index: 1, delta: 'step two' },
+      },
     ]);
   });
 
@@ -1690,9 +1701,14 @@ describe('AgentController signal messages', () => {
     const updates = events.filter(
       (event): event is Extract<AgentControllerEvent, { type: 'message_update' }> => event.type === 'message_update',
     );
-    expect(updates.at(-1)?.message.content.parts).toEqual([
-      { type: 'text', text: 'step one' },
-      { type: 'text', text: 'step two' },
+    expect(updates).toEqual([
+      { type: 'message_update', id: expect.any(String), event: { type: 'text-delta', delta: 'step one' } },
+      {
+        type: 'message_update',
+        id: expect.any(String),
+        event: { type: 'part', index: 1, part: { type: 'text', text: '' } },
+      },
+      { type: 'message_update', id: expect.any(String), event: { type: 'text-delta', delta: 'step two' } },
     ]);
   });
 
@@ -1889,7 +1905,7 @@ describe('AgentController message author', () => {
     await session.sendMessage({ content: 'hello', requestContext });
     await waitFor(() => events.some(event => event.type === 'agent_end'));
     for (const event of events) {
-      if (event.type !== 'message_end') continue;
+      if (event.type !== 'message_start') continue;
       const part = event.message.content.parts.find(part => part.type === 'data-user-message');
       if (part) return part.data;
     }

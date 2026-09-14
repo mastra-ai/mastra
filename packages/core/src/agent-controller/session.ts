@@ -3437,7 +3437,7 @@ export class Session<TState = unknown> {
         if (this.identity.getResourceId() === target.resourceId && this.thread.getId() === target.threadId) {
           const message = signal.toDBMessage(target);
           this.emit({ type: 'message_start', message });
-          this.emit({ type: 'message_end', message });
+          this.emit({ type: 'message_end', id: message.id });
         }
       }
 
@@ -3575,7 +3575,7 @@ export class Session<TState = unknown> {
             threadId,
           });
           this.emit({ type: 'message_start', message });
-          this.emit({ type: 'message_end', message });
+          this.emit({ type: 'message_end', id: message.id });
         }
         if (requireDelivery) {
           const acceptedResult = settled ?? (await result.accepted);
