@@ -188,6 +188,15 @@ export async function migrateSignalTables(db: DuckDBConnection, logger?: IMastra
               ? `COALESCE(NULLIF("${c}", ''), CAST(uuid() AS VARCHAR)) AS "${c}"`
               : `CAST(uuid() AS VARCHAR) AS "${c}"`;
           }
+          if (table === 'feedback_events' && c === 'feedbackSource') {
+            const candidates = ['feedbackSource', 'source']
+              .filter(column => currentColumns.has(column))
+              .map(column => `"${column}"`);
+            return `COALESCE(${[...candidates, "''"].join(', ')}) AS "${c}"`;
+          }
+          if (table === 'feedback_events' && c === 'reviewStatus') {
+            return currentColumns.has(c) ? `COALESCE("${c}", 'needs-review') AS "${c}"` : `'needs-review' AS "${c}"`;
+          }
           return currentColumns.has(c) ? `"${c}"` : `NULL AS "${c}"`;
         })
         .join(', ');
