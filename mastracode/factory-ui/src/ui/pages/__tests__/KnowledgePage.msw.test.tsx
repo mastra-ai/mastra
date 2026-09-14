@@ -10,6 +10,7 @@ import type { KnowledgeNodePayload, KnowledgeGraphPayload } from '../../domains/
 import { createAppRoutes } from '../../router';
 
 const FACTORY_ID = 'fp-1';
+const GRAPH_NODE_LABEL_SELECTOR = '[data-testid="knowledge-node"] span';
 
 const nodeFixture: KnowledgeNodePayload = {
   node: {
@@ -345,7 +346,7 @@ describe('KnowledgePage', () => {
     expect(await screen.findByText('Select a scope to explore its knowledge.')).toBeVisible();
     expect(subgraphReads).toBe(0);
     await user.click(screen.getByRole('button', { name: /fp-1 project/ }));
-    expect(await screen.findByText('Payments Service')).toBeVisible();
+    expect(await screen.findByText('Payments Service', { selector: GRAPH_NODE_LABEL_SELECTOR })).toBeVisible();
     expect(subgraphReads).toBe(1);
   });
 
@@ -381,7 +382,7 @@ describe('KnowledgePage', () => {
     // Even with a stale `knowledgeKey` in the URL, every request must omit it —
     // request input can never select a Knowledge runtime.
     renderRoute(`/factories/${FACTORY_ID}/knowledge?knowledgeKey=team&scope=resource`);
-    fireEvent.click(await screen.findByText('Payments Service'));
+    fireEvent.click(await screen.findByText('Payments Service', { selector: GRAPH_NODE_LABEL_SELECTOR }));
     await waitFor(() => expect(requests).toContain('node:null'));
     await user.click(screen.getByRole('tab', { name: 'activity' }));
     await waitFor(() => expect(requests).toContain('activity:null'));
@@ -526,7 +527,9 @@ describe('KnowledgePage', () => {
 
     // Content placed into the structural scope renders alongside child scopes
     // and opens the record flyout (scoped by the node's own rung) on click.
-    fireEvent.click(await within(graphContainer).findByText('Memory Extraction'));
+    fireEvent.click(
+      await within(graphContainer).findByText('Memory Extraction', { selector: GRAPH_NODE_LABEL_SELECTOR }),
+    );
     expect(router.state.location.search).toContain('scope=22222222-2222-4222-8222-222222222222');
     expect(await screen.findByText(/Handles charging flows/)).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Close details' }));
@@ -609,7 +612,10 @@ describe('KnowledgePage', () => {
 
     // A project-scoped content node reached through the org lens must
     // load detail at the node's own rung, not the lens marker's org rung.
-    fireEvent.click(await screen.findByText('Payments Service'));
+    const paymentsGraphNode = await screen.findByText('Payments Service', {
+      selector: GRAPH_NODE_LABEL_SELECTOR,
+    });
+    fireEvent.click(paymentsGraphNode);
     await waitFor(() => expect(nodeScopeLevels).toContain('resource'));
     expect(nodeScopeLevels).not.toContain('org');
 
@@ -780,8 +786,8 @@ describe('KnowledgePage', () => {
     expect(await screen.findByRole('region', { name: 'Knowledge graph' })).toBeInTheDocument();
     const nodes = await screen.findAllByTestId('knowledge-node');
     expect(nodes).toHaveLength(2);
-    expect(screen.getByText('Payments Service')).toBeInTheDocument();
-    expect(screen.getByText('Deploy Runbook')).toBeInTheDocument();
+    expect(screen.getByText('Payments Service', { selector: GRAPH_NODE_LABEL_SELECTOR })).toBeInTheDocument();
+    expect(screen.getByText('Deploy Runbook', { selector: GRAPH_NODE_LABEL_SELECTOR })).toBeInTheDocument();
     // Rung + pin filter chips render.
     expect(screen.getByRole('button', { name: 'Project' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Pinned' })).toBeInTheDocument();
@@ -920,7 +926,7 @@ describe('KnowledgePage', () => {
     fireEvent.click(boundaryNode);
     expect(router.state.location.search).not.toContain('node=ent-x');
 
-    fireEvent.click(screen.getByText('Payments Service'));
+    fireEvent.click(screen.getByText('Payments Service', { selector: GRAPH_NODE_LABEL_SELECTOR }));
     fireEvent.click(await screen.findByRole('button', { name: 'Elsewhere' }));
     await waitFor(() => {
       expect(router.state.location.search).toContain('scope=resource');
@@ -994,7 +1000,7 @@ describe('KnowledgePage', () => {
     );
     renderRoute();
 
-    const paymentsLabel = await screen.findByText('Payments Service');
+    const paymentsLabel = await screen.findByText('Payments Service', { selector: GRAPH_NODE_LABEL_SELECTOR });
     const paymentsNode = paymentsLabel.closest('[data-testid="knowledge-node"]');
     expect(paymentsNode).not.toBeNull();
     fireEvent.mouseEnter(paymentsNode!, { clientX: 120, clientY: 80 });
@@ -1016,8 +1022,12 @@ describe('KnowledgePage', () => {
 
     // Select by label so the whitespace-only node (ent-1) is definitely exercised,
     // regardless of render order.
-    const whitespaceNode = (await screen.findByText('Payments Service')).closest('[data-testid="knowledge-node"]');
-    const absentNode = (await screen.findByText('Deploy Runbook')).closest('[data-testid="knowledge-node"]');
+    const whitespaceNode = (
+      await screen.findByText('Payments Service', { selector: GRAPH_NODE_LABEL_SELECTOR })
+    ).closest('[data-testid="knowledge-node"]');
+    const absentNode = (await screen.findByText('Deploy Runbook', { selector: GRAPH_NODE_LABEL_SELECTOR })).closest(
+      '[data-testid="knowledge-node"]',
+    );
     expect(whitespaceNode).not.toBeNull();
     expect(absentNode).not.toBeNull();
     fireEvent.mouseEnter(whitespaceNode!, { clientX: 120, clientY: 80 });
@@ -1091,13 +1101,15 @@ describe('KnowledgePage', () => {
     // Thread view: breadcrumb renders and the thread-scoped node appears.
     const breadcrumb = await screen.findByRole('navigation', { name: 'Knowledge scope' });
     expect(breadcrumb).toHaveTextContent(`session ${'thread-abc-123'.slice(0, 8)}`);
-    expect(await screen.findByText('Session Scratchpad')).toBeInTheDocument();
+    expect(await screen.findByText('Session Scratchpad', { selector: GRAPH_NODE_LABEL_SELECTOR })).toBeInTheDocument();
     // Project baseline nodes are still present (thread view ADDS, never swaps).
-    expect(screen.getByText('Deploy Runbook')).toBeInTheDocument();
+    expect(screen.getByText('Deploy Runbook', { selector: GRAPH_NODE_LABEL_SELECTOR })).toBeInTheDocument();
 
     // Crumb back to the project view clears the thread state.
     await user.click(screen.getByRole('button', { name: 'project' }));
-    await waitFor(() => expect(screen.queryByText('Session Scratchpad')).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.queryByText('Session Scratchpad', { selector: GRAPH_NODE_LABEL_SELECTOR })).not.toBeInTheDocument(),
+    );
     expect(screen.queryByText(/session thread-a/)).not.toBeInTheDocument();
   });
 
@@ -1132,6 +1144,6 @@ describe('KnowledgePage', () => {
     // Crumb back works from the 404 state.
     const user = userEvent.setup();
     await user.click(screen.getByRole('button', { name: 'Back to the project view' }));
-    expect(await screen.findByText('Payments Service')).toBeInTheDocument();
+    expect(await screen.findByText('Payments Service', { selector: GRAPH_NODE_LABEL_SELECTOR })).toBeInTheDocument();
   });
 });
