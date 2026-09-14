@@ -165,6 +165,7 @@ describe('LinearIntegration capability surface', () => {
                   { id: 'team-1', key: 'ENG', name: 'Engineering' },
                   { id: 'team-2', key: 'OPS', name: 'Operations' },
                 ],
+                pageInfo: { hasNextPage: false, endCursor: null },
               },
             },
           }),
@@ -180,6 +181,48 @@ describe('LinearIntegration capability surface', () => {
     ]);
   });
 
+
+  it('follows team pagination cursors for the complete source catalog', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            data: {
+              teams: {
+                nodes: [{ id: 'team-1', key: 'ENG', name: 'Engineering' }],
+                pageInfo: { hasNextPage: true, endCursor: 'teams-page-2' },
+              },
+            },
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            data: {
+              teams: {
+                nodes: [{ id: 'team-101', key: 'OPS', name: 'Operations' }],
+                pageInfo: { hasNextPage: false, endCursor: null },
+              },
+            },
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+      );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(integration().listTeams('linear-token')).resolves.toEqual([
+      { id: 'team-1', key: 'ENG', name: 'Engineering', sourceId: 'linear-team:team-1' },
+      { id: 'team-101', key: 'OPS', name: 'Operations', sourceId: 'linear-team:team-101' },
+    ]);
+    const secondRequest = JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body)) as {
+      query: string;
+      variables: Record<string, unknown>;
+    };
+    expect(secondRequest.variables).toEqual({ first: 100, after: 'teams-page-2' });
+  });
   it('applies a team filter (and no project filter) when teamIds is provided', async () => {
     const fetchMock = vi.fn(
       async () =>

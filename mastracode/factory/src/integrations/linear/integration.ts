@@ -160,6 +160,8 @@ export interface LinearCreatedComment {
 
 const LINEAR_ISSUES_PAGE_SIZE = 30;
 const ISSUE_COMMENTS_PAGE_SIZE = 50;
+const LINEAR_TEAMS_PAGE_SIZE = 100;
+const LINEAR_TEAMS_MAX_PAGES = 20;
 /** Hard stop for comment pagination so a misbehaving cursor can't loop forever. */
 const ISSUE_COMMENTS_MAX_PAGES = 20;
 
@@ -851,10 +853,29 @@ export class LinearIntegration implements FactoryIntegration {
 
   /** List the workspace's teams (for the Settings intake-source picker). */
   async listTeams(accessToken: string): Promise<LinearTeam[]> {
-    const data = await linearGraphql<{
-      teams: { nodes: Array<{ id: string; key: string; name: string }> };
-    }>(accessToken, `query { teams(first: 100) { nodes { id key name } } }`);
-    return data.teams.nodes.map(team => ({
+    const teams: Array<{ id: string; key: string; name: string }> = [];
+    let after: string | undefined;
+    for (let page = 0; page < LINEAR_TEAMS_MAX_PAGES; page += 1) {
+      const data = await linearGraphql<{
+        teams: {
+          nodes: Array<{ id: string; key: string; name: string }>;
+          pageInfo: { hasNextPage: boolean; endCursor: string | null };
+        };
+      }>(
+        accessToken,
+        `query Teams($first: Int!, $after: String) {
+          teams(first: $first, after: $after) {
+            nodes { id key name }
+            pageInfo { hasNextPage endCursor }
+          }
+        }`,
+        { first: LINEAR_TEAMS_PAGE_SIZE, ...(after ? { after } : {}) },
+      );
+      teams.push(...data.teams.nodes);
+      if (!data.teams.pageInfo.hasNextPage || !data.teams.pageInfo.endCursor) break;
+      after = data.teams.pageInfo.endCursor;
+    }
+    return teams.map(team => ({
       id: team.id,
       key: team.key,
       name: team.name,
