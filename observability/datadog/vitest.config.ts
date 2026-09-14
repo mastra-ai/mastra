@@ -6,6 +6,6 @@ export default defineConfig({
     isolate: false,
     environment: 'node',
     include: ['src/**/*.test.ts'],
-    setupFiles: ['./tests/reset-modules.ts'],
+    setupFiles: ['./reset-test-modules.ts'],
   },
 });
