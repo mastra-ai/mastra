@@ -9,6 +9,7 @@ import {
   TraceStatus,
 } from '@mastra/core/storage';
 import type {
+  BatchCreateScoresArgs,
   SpanRecord,
   TracingStorageStrategy,
   ListTracesArgs,
@@ -32,12 +33,17 @@ import type {
   RetentionTablesDescriptor,
   TableRetentionPolicy,
   TABLE_NAMES,
+  CreateScoreArgs,
+  ListScoresArgs,
+  ListScoresResponse,
+  ScoreRecord,
 } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL, generateTimestampTriggerSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
 import { runPrune, resolveTargets } from '../../retention';
 import { transformFromSqlRow, getTableName, getSchemaName } from '../utils';
+import * as scoresOps from './scores-bridge';
 
 export class ObservabilityPG extends ObservabilityStorage {
   /**
@@ -290,6 +296,22 @@ export class ObservabilityPG extends ObservabilityStorage {
       order: ['spans'],
     });
     return runPrune({ db: this.#db, domain: 'observability', targets, options });
+  }
+
+  async listScores(args: ListScoresArgs): Promise<ListScoresResponse> {
+    return scoresOps.listScores(this.#db, this.#schema, args);
+  }
+
+  async createScore(args: CreateScoreArgs): Promise<void> {
+    return scoresOps.createScore(this.#db, this.#schema, args);
+  }
+
+  async batchCreateScores(args: BatchCreateScoresArgs): Promise<void> {
+    return scoresOps.batchCreateScores(this.#db, this.#schema, args);
+  }
+
+  async getScoreById(scoreId: string): Promise<ScoreRecord | null> {
+    return scoresOps.getScoreById(this.#db, this.#schema, scoreId);
   }
 
   public override get tracingStrategy(): {
