@@ -5,7 +5,7 @@ import { useRouteSidePanel } from '@/lib/route-side-panel';
 export const OVERVIEW_PANEL_SHORTCUT = ']';
 
 /**
- * `]` toggles the agent overview side panel. Rendered inside the agent
+ * `]` toggles the agent config side panel. Rendered inside the agent
  * `KeyboardScope`, so the binding only exists while an agent page is mounted.
  * On mobile the panel is a drawer and the handle is null, so it's a no-op there.
  */

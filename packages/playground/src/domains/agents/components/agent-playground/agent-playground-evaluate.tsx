@@ -13,13 +13,13 @@ import { toast } from '@mastra/playground-ui/utils/toast';
 import { CircleSlashIcon, ChevronLeft, Paperclip, SearchIcon } from 'lucide-react';
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useWatch } from 'react-hook-form';
-import { useNavigate } from 'react-router';
+import { useNavigate, useSearchParams } from 'react-router';
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
-import { useReviewQueue } from '../../context/review-queue-context';
 import { useAgentExperiments } from '../../hooks/use-agent-experiments';
 import type { AgentExperiment } from '../../hooks/use-agent-experiments';
 import { useStoredAgentMutations } from '../../hooks/use-stored-agents';
 import { mapScorersToApi, mapInstructionBlocksToApi } from '../../utils/agent-form-mappers';
+import { AgentTopBarRunOptions } from '../agent-top-bar-controls';
 import { ExperimentResultsPanel } from './agent-playground-eval';
 import { DatasetDetailView } from './dataset-detail-view';
 import { formatVersionLabel } from './format-version-label';
@@ -30,9 +30,15 @@ import { useGenerationTasks } from '@/domains/datasets/context/generation-contex
 import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
 import { useDatasets } from '@/domains/datasets/hooks/use-datasets';
 import { STATUS_LABEL, STATUS_VARIANT } from '@/domains/experiments/components/experiment-columns';
+import { DatasetReview } from '@/domains/review/components/dataset-review';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
 
-type AgentEvalTab = 'experiments' | 'datasets' | 'scorers';
+const AGENT_EVAL_TABS = ['experiments', 'datasets', 'scorers', 'review'] as const;
+type AgentEvalTab = (typeof AGENT_EVAL_TABS)[number];
+
+function isAgentEvalTab(value: string | null): value is AgentEvalTab {
+  return AGENT_EVAL_TABS.includes(value as AgentEvalTab);
+}
 
 type DetailView =
   | null
@@ -47,9 +53,7 @@ type DetailView =
 
 interface AgentPlaygroundEvaluateProps {
   agentId: string;
-  onSwitchToReview?: () => void;
-  pendingScorerItems?: Array<{ input: unknown; output: unknown }> | null;
-  onPendingScorerItemsConsumed?: () => void;
+  requestContextSchema?: string;
 }
 
 function parseIdList(ids: unknown): string[] {
@@ -77,14 +81,13 @@ function getExperimentStartedAtTime(startedAt: AgentExperiment['startedAt']): nu
   return startedAt instanceof Date ? startedAt.getTime() : new Date(startedAt).getTime();
 }
 
-export function AgentPlaygroundEvaluate({
-  agentId,
-  onSwitchToReview,
-  pendingScorerItems,
-  onPendingScorerItemsConsumed,
-}: AgentPlaygroundEvaluateProps) {
+export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: AgentPlaygroundEvaluateProps) {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<AgentEvalTab>('experiments');
+  const [searchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState<AgentEvalTab>(() => {
+    const requested = searchParams.get('tab');
+    return isAgentEvalTab(requested) ? requested : 'experiments';
+  });
   const [detailView, setDetailView] = useState<DetailView>(null);
   const [showAttachDialog, setShowAttachDialog] = useState(false);
   const [attachDatasetSearch, setAttachDatasetSearch] = useState('');
@@ -99,7 +102,6 @@ export function AgentPlaygroundEvaluate({
   const [scorersSearch, setScorersSearch] = useState('');
 
   const { form, isCodeAgentOverride } = useAgentEditFormContext();
-  const { addItems } = useReviewQueue();
 
   const agentScorers = useWatch({ control: form.control, name: 'scorers' }) ?? {};
   const agentInstructions = useWatch({ control: form.control, name: 'instructions' });
@@ -132,22 +134,6 @@ export function AgentPlaygroundEvaluate({
       }
     }
   }, [generationTasks]);
-
-  // Handle pending scorer items from Review tab
-  useEffect(() => {
-    if (pendingScorerItems?.length) {
-      setActiveTab('scorers');
-      setDetailView({
-        type: 'new-scorer',
-        prefillTestItems: pendingScorerItems.map(item => ({
-          input: item.input,
-          output: item.output,
-          expectedDirection: 'low' as const,
-        })),
-      });
-      onPendingScorerItemsConsumed?.();
-    }
-  }, [pendingScorerItems, onPendingScorerItemsConsumed]);
 
   // Filter datasets to those attached to this agent
   const datasets = allDatasets.filter(ds => {
@@ -238,19 +224,7 @@ export function AgentPlaygroundEvaluate({
   // --- Review actions ---
 
   const handleSendToReview = useCallback(
-    async (
-      selectedItems: Array<{
-        id: string;
-        input: unknown;
-        output: unknown;
-        error: unknown;
-        itemId: string;
-        datasetId: string;
-        scores?: Record<string, number>;
-        experimentId?: string;
-        traceId?: string;
-      }>,
-    ) => {
+    async (selectedItems: Array<{ id: string; datasetId: string; experimentId?: string }>) => {
       for (const item of selectedItems) {
         if (item.experimentId && item.datasetId) {
           try {
@@ -266,22 +240,11 @@ export function AgentPlaygroundEvaluate({
         }
       }
 
-      addItems(
-        selectedItems.map(item => ({
-          id: item.id,
-          itemId: item.itemId,
-          input: item.input,
-          output: item.output,
-          error: item.error,
-          scores: item.scores,
-          experimentId: item.experimentId,
-          datasetId: item.datasetId,
-          traceId: item.traceId,
-        })),
-      );
-      onSwitchToReview?.();
+      // updateExperimentResult invalidates the review queries, so DatasetReview picks the items up.
+      setActiveTab('review');
+      setDetailView(null);
     },
-    [addItems, onSwitchToReview, updateExperimentResult],
+    [updateExperimentResult],
   );
 
   const handleCreateScorerFromFailures = useCallback((items: Array<{ input: unknown; output: unknown }>) => {
@@ -870,6 +833,7 @@ export function AgentPlaygroundEvaluate({
             <Tab value="experiments">Experiments</Tab>
             <Tab value="datasets">Datasets</Tab>
             <Tab value="scorers">Scorers</Tab>
+            <Tab value="review">Review</Tab>
           </TabList>
 
           {/* Tab-specific actions */}
@@ -915,51 +879,54 @@ export function AgentPlaygroundEvaluate({
                 </CreateButton>
               </>
             )}
+            <AgentTopBarRunOptions requestContextSchema={requestContextSchema} />
           </div>
         </div>
 
-        {/* Search bar below tabs */}
-        <div className="border-border1 border-b py-2">
-          {activeTab === 'experiments' && (
-            <InputGroup variant="outline">
-              <InputGroupAddon align="inline-start">
-                <SearchIcon />
-              </InputGroupAddon>
-              <InputGroupInput
-                type="search"
-                aria-label="Search experiments"
-                placeholder="Search experiments..."
-                onChange={event => setExperimentsSearch(event.target.value)}
-              />
-            </InputGroup>
-          )}
-          {activeTab === 'datasets' && (
-            <InputGroup variant="outline">
-              <InputGroupAddon align="inline-start">
-                <SearchIcon />
-              </InputGroupAddon>
-              <InputGroupInput
-                type="search"
-                aria-label="Search datasets"
-                placeholder="Search datasets..."
-                onChange={event => setDatasetsSearch(event.target.value)}
-              />
-            </InputGroup>
-          )}
-          {activeTab === 'scorers' && (
-            <InputGroup variant="outline">
-              <InputGroupAddon align="inline-start">
-                <SearchIcon />
-              </InputGroupAddon>
-              <InputGroupInput
-                type="search"
-                aria-label="Search scorers"
-                placeholder="Search scorers..."
-                onChange={event => setScorersSearch(event.target.value)}
-              />
-            </InputGroup>
-          )}
-        </div>
+        {/* Search bar below tabs (Review owns its own toolbar) */}
+        {activeTab !== 'review' && (
+          <div className="border-border1 border-b py-2">
+            {activeTab === 'experiments' && (
+              <InputGroup variant="outline">
+                <InputGroupAddon align="inline-start">
+                  <SearchIcon />
+                </InputGroupAddon>
+                <InputGroupInput
+                  type="search"
+                  aria-label="Search experiments"
+                  placeholder="Search experiments..."
+                  onChange={event => setExperimentsSearch(event.target.value)}
+                />
+              </InputGroup>
+            )}
+            {activeTab === 'datasets' && (
+              <InputGroup variant="outline">
+                <InputGroupAddon align="inline-start">
+                  <SearchIcon />
+                </InputGroupAddon>
+                <InputGroupInput
+                  type="search"
+                  aria-label="Search datasets"
+                  placeholder="Search datasets..."
+                  onChange={event => setDatasetsSearch(event.target.value)}
+                />
+              </InputGroup>
+            )}
+            {activeTab === 'scorers' && (
+              <InputGroup variant="outline">
+                <InputGroupAddon align="inline-start">
+                  <SearchIcon />
+                </InputGroupAddon>
+                <InputGroupInput
+                  type="search"
+                  aria-label="Search scorers"
+                  placeholder="Search scorers..."
+                  onChange={event => setScorersSearch(event.target.value)}
+                />
+              </InputGroup>
+            )}
+          </div>
+        )}
 
         <div className="flex-1 overflow-hidden">
           <TabContent value="experiments" className="h-full overflow-hidden">
@@ -1009,6 +976,17 @@ export function AgentPlaygroundEvaluate({
                 detailView?.type === 'edit-scorer') &&
                 renderDetailPanel()}
             </Columns>
+          </TabContent>
+
+          <TabContent value="review" className="h-full overflow-hidden">
+            <div className="grid h-full grid-rows-[auto_minmax(0,1fr)] gap-4 overflow-hidden pt-4">
+              <DatasetReview
+                targetType="agent"
+                targetId={agentId}
+                detailPanelVariant="inline"
+                onCreateScorer={handleCreateScorerFromFailures}
+              />
+            </div>
           </TabContent>
         </div>
       </Tabs>

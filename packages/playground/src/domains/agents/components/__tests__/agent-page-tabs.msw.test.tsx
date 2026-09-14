@@ -64,14 +64,17 @@ function renderLayout(initialEntry = '/agents/agent-1/chat/new') {
               <RouteHeaderActionsSlot />
               <MemoryRouter initialEntries={[initialEntry]}>
                 <Routes>
-                  <Route
-                    path="/agents/:agentId/*"
-                    element={
-                      <AgentLayout>
-                        <div data-testid="agent-child" />
-                      </AgentLayout>
-                    }
-                  />
+                  {['/agents/:agentId/threads/:threadId', '/agents/:agentId/*'].map(path => (
+                    <Route
+                      key={path}
+                      path={path}
+                      element={
+                        <AgentLayout>
+                          <div data-testid="agent-child" />
+                        </AgentLayout>
+                      }
+                    />
+                  ))}
                 </Routes>
               </MemoryRouter>
             </RouteHeaderActionsProvider>
@@ -109,10 +112,13 @@ describe('AgentLayout tool tabs', () => {
 
     renderLayout();
 
-    expect(await screen.findByText('Agent traces')).not.toBeNull();
+    expect(await screen.findByRole('tab', { name: 'Traces' })).not.toBeNull();
     expect(screen.getByRole('tab', { name: 'Chat' })).not.toBeNull();
-    // Overview is now a side panel toggled from the header, not a tab.
+    // Review is a sub-tab of Evals, not a top-level tab.
+    expect(screen.queryByRole('tab', { name: 'Review' })).toBeNull();
+    // Config (formerly Overview) is a side panel toggled from the header, not a tab.
     expect(screen.queryByRole('tab', { name: 'Overview' })).toBeNull();
+    expect(screen.queryByRole('tab', { name: 'Config' })).toBeNull();
     expect(screen.getByTestId('agent-overview-panel-toggle')).not.toBeNull();
 
     // Channels is configuration, not a tool: no tab and no platforms fetch from the tab bar.
@@ -127,18 +133,19 @@ describe('AgentLayout tool tabs', () => {
 
     const chatTab = await screen.findByRole('tab', { name: 'Chat' });
     expect(chatTab.getAttribute('aria-selected')).toBe('true');
-    expect(screen.getByRole('tab', { name: 'Agent traces' }).getAttribute('aria-selected')).toBe('false');
+    expect(screen.getByRole('tab', { name: 'Traces' }).getAttribute('aria-selected')).toBe('false');
   });
 
   it('lets the tab list keep the full row width on mobile by wrapping the right-slot controls', async () => {
     server.use(...commonHandlers(enabledPackages));
 
-    renderLayout('/agents/agent-1/evaluate');
+    // A stored thread renders the "Show thread traces" toggle in the right slot.
+    renderLayout('/agents/agent-1/threads/thread-1');
 
     // Below lg the right-slot buttons wrap onto their own line, right-aligned,
     // instead of stealing width from the (scrollable) tab list.
-    const runOptionsTrigger = await screen.findByTestId('agent-top-bar-run-options-trigger');
-    const rightSlot = runOptionsTrigger.parentElement!;
+    const tracesToggle = await screen.findByText('Show thread traces');
+    const rightSlot = tracesToggle.parentElement!.parentElement!;
     expect(rightSlot.className).toContain('ml-auto');
 
     const tabsRow = rightSlot.parentElement!;
@@ -151,21 +158,41 @@ describe('AgentLayout tool tabs', () => {
     expect(tabsRoot.className).toContain('max-lg:flex-auto');
   });
 
-  it('keeps run options out of the Editor tab bar because the editor chat composer owns them', async () => {
+  it('shows Editor and Evals as icon-only placeholders on the right when not configured', async () => {
+    server.use(...commonHandlers());
+
+    renderLayout('/agents/agent-1/chat/new');
+
+    expect(await screen.findByRole('tab', { name: 'Chat' })).not.toBeNull();
+    expect(screen.queryByRole('tab', { name: 'Editor' })).toBeNull();
+    expect(screen.queryByRole('tab', { name: 'Evals' })).toBeNull();
+
+    const evalsIcon = screen.getByTestId('agent-tab-evals-unconfigured');
+    const editorIcon = screen.getByTestId('agent-tab-editor-unconfigured');
+    expect(evalsIcon.textContent).toBe('');
+    expect(editorIcon.textContent).toBe('');
+    expect(evalsIcon.parentElement!.parentElement!.className).toContain('ml-auto');
+    expect(editorIcon.parentElement!.parentElement!.className).toContain('ml-auto');
+  });
+
+  it('orders the tabs Chat, Traces, Evals, Editor on the left when everything is configured', async () => {
     server.use(...commonHandlers(enabledPackages));
 
     renderLayout('/agents/agent-1/editor');
 
-    expect(await screen.findByRole('tab', { name: /editor/i })).not.toBeNull();
-    expect(screen.queryByTestId('agent-top-bar-run-options-trigger')).toBeNull();
-    expect(screen.queryByTestId('agent-tracing-controls-trigger')).toBeNull();
+    await screen.findByRole('tab', { name: 'Editor' });
+    expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Chat', 'Traces', 'Evals', 'Editor']);
+    expect(screen.queryByTestId('agent-tab-evals-unconfigured')).toBeNull();
+    expect(screen.queryByTestId('agent-tab-editor-unconfigured')).toBeNull();
   });
 
-  it('keeps the top-bar run options control on Evaluate because there is no composer', async () => {
+  it('never renders run options in the top tab bar (they live on the Evals sub-tab row)', async () => {
     server.use(...commonHandlers(enabledPackages));
 
     renderLayout('/agents/agent-1/evaluate');
 
-    expect(await screen.findByTestId('agent-top-bar-run-options-trigger')).not.toBeNull();
+    expect(await screen.findByRole('tab', { name: 'Evals' })).not.toBeNull();
+    expect(screen.queryByTestId('agent-top-bar-run-options-trigger')).toBeNull();
+    expect(screen.queryByTestId('agent-tracing-controls-trigger')).toBeNull();
   });
 });

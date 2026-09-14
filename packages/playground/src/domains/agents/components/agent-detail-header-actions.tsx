@@ -16,7 +16,7 @@ export interface AgentDetailHeaderActionsProps {
   agentId: string;
 }
 
-/** Edit / Share / Overview-panel toggle shown in the route header on every agent sub-page. */
+/** Edit / Share / Config-panel toggle shown in the route header on every agent sub-page. */
 export function AgentDetailHeaderActions({ agentId }: AgentDetailHeaderActionsProps) {
   const { data: agent } = useAgent(agentId);
   const { canCreateAgent } = useCanCreateAgent();
@@ -56,11 +56,11 @@ export function AgentDetailHeaderActions({ agentId }: AgentDetailHeaderActionsPr
           size="icon-sm"
           type="button"
           className="max-lg:hidden"
-          aria-label="Toggle agent overview panel"
+          aria-label="Toggle agent config panel"
           aria-pressed={!isCollapsed}
           tooltip={
             <span className="inline-flex items-center gap-1.5">
-              {isCollapsed ? 'Show overview panel' : 'Hide overview panel'}
+              {isCollapsed ? 'Show config panel' : 'Hide config panel'}
               <Kbd size="xs">{OVERVIEW_PANEL_SHORTCUT}</Kbd>
             </span>
           }

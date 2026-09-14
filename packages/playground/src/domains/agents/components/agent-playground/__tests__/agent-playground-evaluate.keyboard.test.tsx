@@ -7,7 +7,6 @@ import { describe, expect, it } from 'vitest';
 
 import { AgentEditFormProvider } from '../../../context/agent-edit-form-context';
 import { PlaygroundModelProvider } from '../../../context/playground-model-context';
-import { ReviewQueueProvider } from '../../../context/review-queue-context';
 import type { AgentFormValues } from '../../agent-edit-page/utils/form-validation';
 import { AgentPlaygroundEvaluate } from '../agent-playground-evaluate';
 import { GenerationProvider } from '@/domains/datasets/context/generation-context';
@@ -69,9 +68,7 @@ function Harness() {
     <AgentEditFormProvider form={form} mode="edit" isSubmitting={false} handlePublish={async () => {}}>
       <PlaygroundModelProvider>
         <GenerationProvider>
-          <ReviewQueueProvider>
-            <AgentPlaygroundEvaluate agentId="chef-agent" />
-          </ReviewQueueProvider>
+          <AgentPlaygroundEvaluate agentId="chef-agent" />
         </GenerationProvider>
       </PlaygroundModelProvider>
     </AgentEditFormProvider>

@@ -41,7 +41,6 @@ import AgentSession from './pages/agents/agent/session';
 import AgentThread from './pages/agents/agent/thread';
 import AgentEvaluate from './pages/agents/agent-evaluate';
 import AgentPlayground from './pages/agents/agent-playground';
-import AgentReview from './pages/agents/agent-review';
 import AgentTraces from './pages/agents/agent-traces';
 import CmsAgentAgentsPage from './pages/cms/agents/agents';
 import { CreateLayoutWrapper } from './pages/cms/agents/create-layout';
@@ -489,7 +488,11 @@ export const routes: RouteObject[] = [
             ? [
                 { path: 'editor', element: <AgentPlayground /> },
                 { path: 'evaluate', element: <AgentEvaluate /> },
-                { path: 'review', element: <AgentReview /> },
+                {
+                  // Review now lives as a tab inside Evals. Keep old links working.
+                  path: 'review',
+                  loader: ({ params }: LoaderFunctionArgs) => redirect(`/agents/${params.agentId}/evaluate?tab=review`),
+                },
               ]
             : []),
           { path: 'traces', element: <AgentTraces /> },

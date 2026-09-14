@@ -1,14 +1,15 @@
+import { Button } from '@mastra/playground-ui/components/Button';
 import { Tab, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
-import { ExternalLink, FlaskConical, ClipboardCheck, GitBranch, MessageSquare } from 'lucide-react';
+import { ExternalLink, FlaskConical, GitBranch, MessageSquare } from 'lucide-react';
 
 import { useLinkComponent } from '@/lib/framework';
 
 /** Tabs that render a pill in the bar. Routes without a pill pass `'none'`. */
-export type AgentPageTab = 'chat' | 'versions' | 'evaluate' | 'review' | 'traces';
+export type AgentPageTab = 'chat' | 'versions' | 'evaluate' | 'traces';
 
 interface AgentPageTabsProps {
   agentId: string;
@@ -16,7 +17,6 @@ interface AgentPageTabsProps {
   activeTab: AgentPageTab | 'none';
   showPlayground?: boolean;
   showObservability?: boolean;
-  reviewBadge?: number;
   rightSlot?: React.ReactNode;
 }
 
@@ -38,14 +38,12 @@ function AgentTab({
   value,
   icon,
   label,
-  badge,
   disabled,
   disabledReason,
 }: {
   value: AgentPageTab;
   icon: React.ReactNode;
   label: string;
-  badge?: number;
   disabled?: boolean;
   disabledReason?: React.ReactNode;
 }) {
@@ -55,11 +53,6 @@ function AgentTab({
       <Txt variant="ui-sm" className="text-inherit">
         {label}
       </Txt>
-      {badge !== undefined && badge > 0 && (
-        <span className="bg-accent1 text-ui-sm ml-1 min-w-[18px] rounded-full px-1.5 py-0 text-center leading-[18px] font-medium text-white">
-          {badge}
-        </span>
-      )}
     </>
   );
 
@@ -81,22 +74,41 @@ function AgentTab({
   return <Tab value={value}>{tabContent}</Tab>;
 }
 
+/** Icon-only, disabled placeholder shown on the right when a feature isn't configured yet. */
+function UnconfiguredTabIcon({
+  icon,
+  label,
+  reason,
+  testId,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  reason: React.ReactNode;
+  testId: string;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span tabIndex={0} className="inline-flex">
+          <Button variant="ghost" size="icon-sm" type="button" disabled aria-label={label} data-testid={testId}>
+            {icon}
+          </Button>
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="bottom">{reason}</TooltipContent>
+    </Tooltip>
+  );
+}
+
 export function AgentPageTabs({
   agentId,
   activeTab,
   showPlayground = false,
   showObservability = false,
-  reviewBadge,
   rightSlot,
 }: AgentPageTabsProps) {
   const { navigate } = useLinkComponent();
 
-  const playgroundDisabledReason = !showPlayground ? (
-    <p>
-      Configure <code>@mastra/editor</code> to use the Editor.{' '}
-      <DocsLink href="https://mastra.ai/docs/editor/overview">Learn more</DocsLink>
-    </p>
-  ) : undefined;
   const observabilityDisabledReason = !showObservability ? (
     <p>
       Add <code>@mastra/observability</code> to enable this tab.{' '}
@@ -104,11 +116,17 @@ export function AgentPageTabs({
     </p>
   ) : undefined;
 
+  const playgroundDisabledReason = (
+    <p>
+      Configure <code>@mastra/editor</code> to use the Editor.{' '}
+      <DocsLink href="https://mastra.ai/docs/editor/overview">Learn more</DocsLink>
+    </p>
+  );
+
   const hrefMap: Record<AgentPageTab, string> = {
     chat: `/agents/${agentId}/threads/new`,
     versions: `/agents/${agentId}/editor`,
     evaluate: `/agents/${agentId}/evaluate`,
-    review: `/agents/${agentId}/review`,
     traces: `/agents/${agentId}/traces`,
   };
 
@@ -130,37 +148,37 @@ export function AgentPageTabs({
         <TabList variant="pill-ghost">
           <AgentTab value="chat" icon={<MessageSquare />} label="Chat" />
           <AgentTab
-            value="versions"
-            icon={<GitBranch />}
-            label="Editor"
-            disabled={!showPlayground}
-            disabledReason={playgroundDisabledReason}
-          />
-          <AgentTab
-            value="evaluate"
-            icon={<FlaskConical />}
-            label="Evaluate"
-            disabled={!showObservability}
-            disabledReason={observabilityDisabledReason}
-          />
-          <AgentTab
-            value="review"
-            icon={<ClipboardCheck />}
-            label="Review"
-            badge={reviewBadge}
-            disabled={!showObservability}
-            disabledReason={observabilityDisabledReason}
-          />
-          <AgentTab
             value="traces"
             icon={<TraceIcon />}
-            label="Agent traces"
+            label="Traces"
             disabled={!showObservability}
             disabledReason={observabilityDisabledReason}
           />
+          {showObservability && <AgentTab value="evaluate" icon={<FlaskConical />} label="Evals" />}
+          {showPlayground && <AgentTab value="versions" icon={<GitBranch />} label="Editor" />}
         </TabList>
       </Tabs>
-      {rightSlot && <div className="ml-auto flex items-center gap-2">{rightSlot}</div>}
+      {(rightSlot || !showObservability || !showPlayground) && (
+        <div className="ml-auto flex items-center gap-2">
+          {rightSlot}
+          {!showObservability && (
+            <UnconfiguredTabIcon
+              icon={<FlaskConical />}
+              label="Evals"
+              reason={observabilityDisabledReason}
+              testId="agent-tab-evals-unconfigured"
+            />
+          )}
+          {!showPlayground && (
+            <UnconfiguredTabIcon
+              icon={<GitBranch />}
+              label="Editor"
+              reason={playgroundDisabledReason}
+              testId="agent-tab-editor-unconfigured"
+            />
+          )}
+        </div>
+      )}
     </div>
   );
 }
