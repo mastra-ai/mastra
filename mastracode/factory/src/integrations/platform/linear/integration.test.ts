@@ -309,6 +309,42 @@ describe('PlatformLinearIntegration', () => {
     expect(projectless.sourceId).toBe(teamSourceId);
   });
 
+  it('keeps a selected-project issue out of an earlier team page', async () => {
+    const teamSourceId = `linear-team:${Buffer.from(
+      JSON.stringify({ workspaceId: 'workspace-1', teamId: 'team-1' }),
+    ).toString('base64url')}`;
+    const overlapping = { ...issue, project: { id: 'project-1' } };
+    const fetchImpl = vi.fn<typeof fetch>(async input => {
+      const url = String(input);
+      if (url.endsWith('/v1/server/linear/workspaces')) return json({ workspaces: [workspace] });
+      if (url.includes('/projects')) {
+        return json({ projects: [project], pageInfo: { hasNextPage: false, endCursor: null } });
+      }
+      if (url.includes('/teams')) {
+        return json({
+          teams: [{ id: 'team-1', key: 'ENG', name: 'Engineering' }],
+          pageInfo: { hasNextPage: false, endCursor: null },
+        });
+      }
+      if (url.includes('projectIds=project-1')) {
+        return json({ issues: [], pageInfo: { hasNextPage: true, endCursor: 'project-next' } });
+      }
+      if (url.includes('teamId=team-1')) {
+        return json({ issues: [overlapping], pageInfo: { hasNextPage: false, endCursor: null } });
+      }
+      throw new Error(`unexpected request: ${url}`);
+    });
+    const integration = createIntegration(fetchImpl);
+
+    const result = await integration.intake.listIssues({
+      connection: { type: 'oauth', accessToken: 'unused-provider-token' },
+      sourceIds: [project1SourceId, teamSourceId],
+    });
+
+    expect(result.issues).toEqual([]);
+    expect(result.nextCursor).not.toBeNull();
+  });
+
   it('fetches issue details with comments and creates comments through the source workspace', async () => {
     const comment = {
       id: 'comment-1',

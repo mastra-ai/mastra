@@ -268,6 +268,26 @@ describe('LinearIntegration capability surface', () => {
     ]);
   });
 
+  it('keeps a selected-project issue out of an earlier team page', async () => {
+    const linear = integration();
+    const overlapping: LinearIssue = { ...issue, projectId: 'project-1', teamId: 'team-1' };
+    vi.spyOn(linear, 'listActiveIssues')
+      // The project stream has not reached the overlapping issue yet.
+      .mockResolvedValueOnce({ issues: [], nextCursor: 'project-next' })
+      // The team stream sees it on this page.
+      .mockResolvedValueOnce({ issues: [overlapping], nextCursor: null });
+
+    const result = await linear.intake.listIssues({
+      connection,
+      sourceIds: ['project-1', 'linear-team:team-1'],
+    });
+
+    // The team stream is partitioned by selected projects, so the issue can
+    // only appear later under its more-specific project source.
+    expect(result.issues).toEqual([]);
+    expect(result.nextCursor).not.toBeNull();
+  });
+
   it('keeps the original single-query path for a project-only selection', async () => {
     const linear = integration();
     const listActiveIssues = vi

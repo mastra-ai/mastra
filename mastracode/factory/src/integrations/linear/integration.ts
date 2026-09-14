@@ -737,11 +737,14 @@ export class LinearIntegration implements FactoryIntegration {
     // reconciled by the dedupe step below (project wins).
     const projectIssues = projectResult.issues.map(issue => linearIssueToIntakeIssue(issue));
     const selectedTeamSourceById = new Map(teamIds.map(teamId => [teamId, encodeSelfManagedTeamSourceId(teamId)]));
-    const teamIssues = teamResult.issues.map(issue => {
-      const teamSourceId = issue.teamId ? selectedTeamSourceById.get(issue.teamId) : undefined;
-      if (!teamSourceId) throw new Error('Linear returned an issue outside the selected teams.');
-      return { ...linearIssueToIntakeIssue(issue), sourceId: teamSourceId };
-    });
+    const selectedProjectIds = new Set(projectIds);
+    const teamIssues = teamResult.issues
+      .filter(issue => issue.projectId === null || !selectedProjectIds.has(issue.projectId))
+      .map(issue => {
+        const teamSourceId = issue.teamId ? selectedTeamSourceById.get(issue.teamId) : undefined;
+        if (!teamSourceId) throw new Error('Linear returned an issue outside the selected teams.');
+        return { ...linearIssueToIntakeIssue(issue), sourceId: teamSourceId };
+      });
 
     const deduped = dedupeSelfManagedIssues([...projectIssues, ...teamIssues]);
     return {

@@ -602,8 +602,14 @@ export class PlatformLinearIntegration implements FactoryIntegration {
       teamSources.map(source => [encodeTeamSourceId(source.workspace.linearWorkspaceId, source.team.id), source]),
     );
 
-    type Descriptor = { sourceId: string; workspace: LinearWorkspace; query: URLSearchParams };
+    type Descriptor = {
+      kind: 'project' | 'team';
+      sourceId: string;
+      workspace: LinearWorkspace;
+      query: URLSearchParams;
+    };
     const descriptors: Descriptor[] = [];
+    const selectedProjectIdsByWorkspace = new Map<string, Set<string>>();
     for (const sourceId of sourceIds) {
       const projectSource = projectMap.get(sourceId);
       if (projectSource) {
@@ -613,7 +619,11 @@ export class PlatformLinearIntegration implements FactoryIntegration {
           stateType: 'triage,backlog,unstarted,started',
           orderBy: 'updatedAt',
         });
-        descriptors.push({ sourceId, workspace: projectSource.workspace, query });
+        const workspaceId = projectSource.workspace.linearWorkspaceId;
+        const selectedProjectIds = selectedProjectIdsByWorkspace.get(workspaceId) ?? new Set<string>();
+        selectedProjectIds.add(projectSource.project.id);
+        selectedProjectIdsByWorkspace.set(workspaceId, selectedProjectIds);
+        descriptors.push({ kind: 'project', sourceId, workspace: projectSource.workspace, query });
         continue;
       }
       const teamSource = teamMap.get(sourceId);
@@ -624,7 +634,7 @@ export class PlatformLinearIntegration implements FactoryIntegration {
           stateType: 'triage,backlog,unstarted,started',
           orderBy: 'updatedAt',
         });
-        descriptors.push({ sourceId, workspace: teamSource.workspace, query });
+        descriptors.push({ kind: 'team', sourceId, workspace: teamSource.workspace, query });
       }
     }
 
@@ -633,7 +643,7 @@ export class PlatformLinearIntegration implements FactoryIntegration {
     const nextState: Record<string, string | null> = {};
     let hasNextPage = false;
     const pages = await Promise.all(
-      descriptors.map(async ({ sourceId, workspace, query }) => {
+      descriptors.map(async ({ kind, sourceId, workspace, query }) => {
         if (cursors[sourceId] === null) {
           nextState[sourceId] = null;
           return [] as ListedIssue[];
@@ -650,6 +660,12 @@ export class PlatformLinearIntegration implements FactoryIntegration {
         return result.issues
           .filter(
             issue => normalizedLabels.length === 0 || issue.labels.some(label => normalizedLabels.includes(label.name)),
+          )
+          .filter(
+            issue =>
+              kind === 'project' ||
+              issue.project === null ||
+              !selectedProjectIdsByWorkspace.get(workspace.linearWorkspaceId)?.has(issue.project.id),
           )
           .map(issue => ({ issue, sourceId, workspace }));
       }),
