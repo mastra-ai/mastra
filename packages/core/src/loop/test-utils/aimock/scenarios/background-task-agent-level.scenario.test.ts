@@ -3,7 +3,12 @@ import { it, expect } from 'vitest';
 import { z } from 'zod';
 import type { ChunkType } from '../../../../stream/types';
 import { createTool } from '../../../../tools';
-import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
+import {
+  runLoopScenario,
+  useLoopScenarioAimock,
+  describeForAllEngines,
+  isDurableEngineVariant,
+} from '../aimock-scenario';
 
 /**
  * Tests agent-level background task opt-in and resolution order.
@@ -45,7 +50,7 @@ describeForAllEngines('background-task-agent-level scenario', engine => {
       stopWhen: stepCountIs(3),
       backgroundTasks: { enabled: true },
       collectChunks: true,
-      ...(engine !== 'durable'
+      ...(!isDurableEngineVariant(engine)
         ? {
             onChunk: (chunk: ChunkType) => {
               onChunks.push(chunk);
@@ -69,7 +74,7 @@ describeForAllEngines('background-task-agent-level scenario', engine => {
       toolName: 'plain-work',
     });
 
-    if (engine !== 'durable') {
+    if (!isDurableEngineVariant(engine)) {
       const onChunkStarted = onChunks.find(c => c.type === 'background-task-started');
       expect(onChunkStarted).toBeDefined();
       expect(onChunkStarted?.payload).toMatchObject({

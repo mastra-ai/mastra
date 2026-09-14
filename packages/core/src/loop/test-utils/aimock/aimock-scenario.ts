@@ -2,15 +2,18 @@ import { createOpenAI } from '@ai-sdk/openai-v5';
 import { LLMock } from '@copilotkit/aimock';
 import { afterAll, afterEach, beforeAll, describe } from 'vitest';
 import { Agent } from '../../../agent';
-import { createDurableAgent } from '../../../agent/durable';
+import { createDurableAgent, createEventedAgent } from '../../../agent/durable';
 import { assembleAgentFromFsEntry } from '../../../agent/fs-routing';
 import { isDurableAgentLike } from '../../../agent/types';
+import { EventEmitterPubSub } from '../../../events';
 import { Mastra } from '../../../mastra';
 import { InMemoryStore } from '../../../storage';
 import type { MastraModelOutput } from '../../../stream/base/output';
 import type { ChunkType } from '../../../stream/types';
 import type { EngineVariant, LoopScenarioResult, RunApprovalScenarioOptions, RunLoopScenarioOptions } from './types';
-import { ALL_ENGINE_VARIANTS, SCENARIO_MODEL_ID } from './types';
+import { ALL_ENGINE_VARIANTS, isDurableEngineVariant, SCENARIO_MODEL_ID } from './types';
+
+export { isDurableEngineVariant } from './types';
 
 /**
  * Start a shared AIMock server for the lifetime of a test suite and wire its
@@ -201,15 +204,25 @@ async function buildScenarioAgent({
       ...(goal ? { goal } : {}),
       ...(errorProcessors ? { errorProcessors } : {}),
       ...(defaultOptions ? { defaultOptions } : {}),
-      // For durable engine, inputProcessors must be on the agent constructor
+      // For durable engines, inputProcessors must be on the agent constructor
       // (not yet supported as call-time options for durable); outputProcessors
       // are forwarded at call-time via preparation.ts.
-      ...(engine === 'durable' && inputProcessors ? { inputProcessors } : {}),
+      ...(isDurableEngineVariant(engine) && inputProcessors ? { inputProcessors } : {}),
     });
   }
 
-  // Wrap with DurableAgent for the durable engine variant
-  const registrableAgent = engine === 'durable' ? createDurableAgent({ agent }) : agent;
+  // The evented engine publishes on `mastra.pubsub` and the agent's stream
+  // follows it (source-follower wiring at registration). Share one bus between
+  // the agent and the Mastra host, mirroring the evented conformance leg.
+  const eventedPubsub = engine === 'evented' ? (pubsub ?? new EventEmitterPubSub()) : undefined;
+
+  // Wrap with the durable/evented wrapper for those engine variants
+  const registrableAgent =
+    engine === 'durable'
+      ? createDurableAgent({ agent })
+      : engine === 'evented'
+        ? createEventedAgent({ agent, pubsub: eventedPubsub })
+        : agent;
 
   // Registering the agent on a Mastra instance with storage is required for the
   // suspended snapshot rows that approveToolCall/declineToolCall resume from.
@@ -221,7 +234,7 @@ async function buildScenarioAgent({
     logger: false,
     storage: new InMemoryStore(),
     ...(backgroundTasks ? { backgroundTasks } : {}),
-    ...(pubsub ? { pubsub } : {}),
+    ...(eventedPubsub ? { pubsub: eventedPubsub } : pubsub ? { pubsub } : {}),
   });
 
   if (isFs) {
@@ -314,13 +327,16 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
     // wrapper by checking `agent.agent !== agent`. See `Mastra.addAgent`.
     const sharedIsRealDurableWrapper =
       isDurableAgentLike(sharedAgent.agent) && (sharedAgent.agent as any).agent !== sharedAgent.agent;
-    if (engine === 'durable' && !sharedIsRealDurableWrapper) {
+    if (isDurableEngineVariant(engine) && !sharedIsRealDurableWrapper) {
       // sharedAgent provides a regular Agent on the first call; wrap it for
-      // the durable engine and re-register on the Mastra instance so
-      // .getAgent() returns the DurableAgent wrapper.  On subsequent calls
+      // the durable/evented engine and re-register on the Mastra instance so
+      // .getAgent() returns the wrapper.  On subsequent calls
       // (e.g. resume), the agent is already wrapped — skip re-wrapping to
       // preserve the run registry across calls.
-      const durableWrapper = createDurableAgent({ agent: sharedAgent.agent as any });
+      const durableWrapper =
+        engine === 'evented'
+          ? createEventedAgent({ agent: sharedAgent.agent as any })
+          : createDurableAgent({ agent: sharedAgent.agent as any });
       const agentId = sharedAgent.agent.name;
       sharedAgent.mastra.removeAgent(agentId);
       sharedAgent.mastra.addAgent(durableWrapper as any, agentId);
@@ -373,9 +389,10 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
         }
       : {};
 
-  // For durable engine, only pass options that DurableAgentStreamOptions supports.
-  // inputProcessors are on the agent constructor, not call-time options.
-  const isDurable = engine === 'durable';
+  // For durable engines (durable/evented), only pass options that
+  // DurableAgentStreamOptions supports. inputProcessors are on the agent
+  // constructor, not call-time options.
+  const isDurable = isDurableEngineVariant(engine);
 
   const streamOptions = {
     ...(stopWhen ? { stopWhen } : {}),

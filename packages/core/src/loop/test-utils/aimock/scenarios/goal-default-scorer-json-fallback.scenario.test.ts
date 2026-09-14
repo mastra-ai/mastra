@@ -60,5 +60,5 @@ describeForAllEngines(
       expect(record?.runsUsed).toBe(1);
     });
   },
-  { skip: ['durable'] },
+  { skip: ['durable', 'evented'] },
 );

@@ -14,7 +14,14 @@ import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '.
 describeForAllEngines('AIMock loop scenario: actor identity', engine => {
   const getMock = useLoopScenarioAimock();
 
-  it('actor is forwarded into the tool execution context', async () => {
+  // KNOWN GAP (evented): the evented workflow engine drops the actor signal.
+  // Its execute() params omit `actor` (evented/execution-engine.ts) and the
+  // workflow.start/resume event payloads carry requestContext but not actor,
+  // so tools on the evented engine never see the caller's actor identity.
+  // The default engine threads it (workflows/default.ts executeEntry). Real
+  // product gap recorded in the Phase 2 gap ledger — fix belongs in the
+  // evented engine, not this harness.
+  it.skipIf(engine === 'evented')('actor is forwarded into the tool execution context', async () => {
     let capturedActor: unknown = 'unset';
 
     const checkTool = createTool({
