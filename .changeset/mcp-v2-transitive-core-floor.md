@@ -11,4 +11,4 @@
 'mastra': patch
 ---
 
-Raise the `@mastra/core` peer floor to `1.67.0` so runtime dependencies on `@mastra/server`, `@mastra/hono` and `@mastra/deployer` resolve the MCP server registry union.
+Raise the `@mastra/core` peer floor to `1.68.0` so runtime dependencies on `@mastra/server`, `@mastra/hono` and `@mastra/deployer` resolve the MCP server registry union.
