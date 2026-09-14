@@ -1,5 +1,6 @@
-import { act, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
+import { useLocation } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
 
 import Metrics from '..';
@@ -57,12 +58,18 @@ function observeRequests() {
   return { onMetrics, onDiscovery };
 }
 
-function renderPage() {
+function LocationProbe() {
+  const location = useLocation();
+  return <output data-testid="location">{location.search}</output>;
+}
+
+function renderPage(path = '/metrics') {
   return renderWithProviders(
     <TestLinkProvider>
       <Metrics />
+      <LocationProbe />
     </TestLinkProvider>,
-    { router: { initialEntries: ['/metrics'] } },
+    { router: { initialEntries: [path] } },
   );
 }
 
@@ -98,6 +105,38 @@ describe('Metrics storage support', () => {
       const { queryClient } = renderPage();
 
       expect(await screen.findByText(unavailableTitle)).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Last 24 hours' })).toBeTruthy();
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      expect(onMetrics).not.toHaveBeenCalled();
+      expect(onDiscovery).not.toHaveBeenCalled();
+    });
+
+    it('preserves the active URL filter without requesting discovery', async () => {
+      server.use(http.get(`${TEST_BASE_URL}/api/system/packages`, () => HttpResponse.json(unsupportedStorage)));
+      const { onMetrics, onDiscovery } = observeRequests();
+
+      const { queryClient } = renderPage('/metrics?filterEnvironment=production');
+
+      expect(await screen.findByText(unavailableTitle)).toBeTruthy();
+      expect(screen.getByText('production')).toBeTruthy();
+      expect(screen.getByTestId('location').textContent).toBe('?filterEnvironment=production');
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      expect(onMetrics).not.toHaveBeenCalled();
+      expect(onDiscovery).not.toHaveBeenCalled();
+    });
+
+    it('updates the date preset in the URL without requesting metrics', async () => {
+      server.use(http.get(`${TEST_BASE_URL}/api/system/packages`, () => HttpResponse.json(unsupportedStorage)));
+      const { onMetrics, onDiscovery } = observeRequests();
+
+      const { queryClient } = renderPage();
+      expect(await screen.findByText(unavailableTitle)).toBeTruthy();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Last 24 hours' }));
+      fireEvent.click(await screen.findByRole('menuitem', { name: 'Last 7 days' }));
+
+      await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('?period=7d'));
+      expect(screen.getByRole('button', { name: 'Last 7 days' })).toBeTruthy();
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
       expect(onMetrics).not.toHaveBeenCalled();
       expect(onDiscovery).not.toHaveBeenCalled();

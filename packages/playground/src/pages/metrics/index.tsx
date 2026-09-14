@@ -1,31 +1,26 @@
 import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { MetricsFlexGrid } from '@mastra/playground-ui/components/MetricsFlexGrid';
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { NoDataPageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
-import { PropertyFilterCreator } from '@mastra/playground-ui/components/PropertyFilter';
 import type { PropertyFilterToken } from '@mastra/playground-ui/components/PropertyFilter';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
-import { DateRangeSelector } from '@mastra/playground-ui/domains/metrics/components/date-range-selector';
 import { useAgentRunsKpiMetrics } from '@mastra/playground-ui/domains/metrics/hooks/use-agent-runs-kpi-metrics';
-import { MetricsProvider, isValidPreset, useMetrics } from '@mastra/playground-ui/domains/metrics/hooks/use-metrics';
+import { MetricsProvider, isValidPreset } from '@mastra/playground-ui/domains/metrics/hooks/use-metrics';
 import type { DatePreset, DateRange } from '@mastra/playground-ui/domains/metrics/hooks/use-metrics';
 import {
   applyMetricsPropertyFilterTokens,
-  clearSavedMetricsFilters,
   createMetricsPropertyFilterFields,
   getMetricsPropertyFilterTokens,
   hasAnyMetricsFilterParams,
   loadMetricsFiltersFromStorage,
-  saveMetricsFiltersToStorage,
 } from '@mastra/playground-ui/domains/metrics/metrics-filters';
 import { useEntityNames } from '@mastra/playground-ui/domains/traces/hooks/use-entity-names';
 import { useEnvironments } from '@mastra/playground-ui/domains/traces/hooks/use-environments';
 import { useServiceNames } from '@mastra/playground-ui/domains/traces/hooks/use-service-names';
 import { useTags } from '@mastra/playground-ui/domains/traces/hooks/use-tags';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
-import { toast } from '@mastra/playground-ui/utils/toast';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router';
 import { useObservabilityStorageCapabilities } from '@/domains/configuration/hooks/use-observability-storage-capabilities';
 import { LatencyCard } from '@/domains/metrics/components/latency-card';
@@ -37,8 +32,8 @@ import {
   ModelCostKpiCard,
   TotalTokensKpiCard,
 } from '@/domains/metrics/components/metrics-kpi-cards';
+import { MetricsPageLayout } from '@/domains/metrics/components/metrics-page-layout';
 import { MetricsStorageGate } from '@/domains/metrics/components/metrics-storage-gate';
-import { MetricsToolbar } from '@/domains/metrics/components/metrics-toolbar';
 import { ModelUsageCostCard } from '@/domains/metrics/components/model-usage-cost-card';
 import { TokenUsageByAgentCard } from '@/domains/metrics/components/token-usage-by-agent-card';
 import { TokenUsageTimelineCard } from '@/domains/metrics/components/token-usage-timeline-card';
@@ -177,10 +172,7 @@ export default function Metrics() {
 }
 
 function MetricsContent() {
-  const [searchParams] = useSearchParams();
   const { error, isLoading: isMetricsLoading } = useAgentRunsKpiMetrics();
-  const { filterTokens, setFilterTokens } = useMetrics();
-  const [autoFocusFilterFieldId, setAutoFocusFilterFieldId] = useState<string | undefined>();
 
   const { isInMemory } = useObservabilityStorageCapabilities();
 
@@ -215,38 +207,6 @@ function MetricsContent() {
     ],
   );
 
-  const [hasSavedFilters, setHasSavedFilters] = useState(() => loadMetricsFiltersFromStorage() !== null);
-
-  const handleSave = useCallback(() => {
-    saveMetricsFiltersToStorage(searchParams);
-    setHasSavedFilters(true);
-    toast.success('Filters setting for Metrics saved');
-  }, [searchParams]);
-
-  const handleRemoveSaved = useCallback(() => {
-    clearSavedMetricsFilters();
-    setHasSavedFilters(false);
-    toast.success('Filters setting for Metrics cleared up');
-  }, []);
-
-  const handleRemoveAll = useCallback(() => {
-    setFilterTokens([]);
-  }, [setFilterTokens]);
-
-  const handleClear = useCallback(() => {
-    const neutralTokens: PropertyFilterToken[] = filterTokens.map(token => {
-      const field = filterFields.find(f => f.id === token.fieldId);
-      if (!field) return token;
-      if (field.kind === 'text') return { fieldId: token.fieldId, value: '' };
-      if (field.kind === 'pick-multi') {
-        return field.multi ? { fieldId: token.fieldId, value: [] } : { fieldId: token.fieldId, value: 'Any' };
-      }
-      if (field.kind === 'multi-select') return { fieldId: token.fieldId, value: [] };
-      return token;
-    });
-    setFilterTokens(neutralTokens);
-  }, [filterFields, filterTokens, setFilterTokens]);
-
   if (error && is401UnauthorizedError(error)) {
     return (
       <NoDataPageLayout>
@@ -272,34 +232,7 @@ function MetricsContent() {
   }
 
   return (
-    <PageLayout width="wide" height="full">
-      <PageLayout.TopArea>
-        <PageLayout.Row>
-          <PageLayout.Column className="flex flex-wrap items-start justify-start gap-2">
-            <DateRangeSelector />
-            <PropertyFilterCreator
-              fields={filterFields}
-              tokens={filterTokens}
-              onTokensChange={setFilterTokens}
-              disabled={isMetricsLoading}
-              onStartTextFilter={setAutoFocusFilterFieldId}
-            />
-          </PageLayout.Column>
-        </PageLayout.Row>
-
-        <MetricsToolbar
-          isLoading={isMetricsLoading}
-          filterFields={filterFields}
-          filterTokens={filterTokens}
-          onFilterTokensChange={setFilterTokens}
-          onClear={handleClear}
-          onRemoveAll={handleRemoveAll}
-          onSave={handleSave}
-          onRemoveSaved={hasSavedFilters ? handleRemoveSaved : undefined}
-          autoFocusFilterFieldId={autoFocusFilterFieldId}
-        />
-      </PageLayout.TopArea>
-
+    <MetricsPageLayout filterFields={filterFields} isLoading={isMetricsLoading}>
       <div className="grid content-start gap-4 pb-6">
         {isInMemory && (
           <Notice variant="info" title="Metrics are not persisted">
@@ -327,6 +260,6 @@ function MetricsContent() {
           <LatencyCard />
         </MetricsFlexGrid>
       </div>
-    </PageLayout>
+    </MetricsPageLayout>
   );
 }

@@ -1,10 +1,19 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { NoDataPageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { createMetricsPropertyFilterFields } from '@mastra/playground-ui/domains/metrics/metrics-filters';
 import { CircleSlashIcon, ExternalLinkIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { MetricsCapabilityError } from './metrics-capability-error';
+import { MetricsPageLayout } from './metrics-page-layout';
 import { useObservabilityStorageCapabilities } from '@/domains/configuration/hooks/use-observability-storage-capabilities';
+
+const filterFieldsWithoutDiscovery = createMetricsPropertyFilterFields({
+  availableTags: [],
+  availableEntityNames: [],
+  availableServiceNames: [],
+  availableEnvironments: [],
+});
 
 /** Keep dashboard queries unmounted until the observability store supports them. */
 export function MetricsStorageGate({ children }: { children: ReactNode }) {
@@ -21,7 +30,7 @@ export function MetricsStorageGate({ children }: { children: ReactNode }) {
   if (supportsMetrics) return children;
 
   return (
-    <PageLayout width="wide" height="full">
+    <MetricsPageLayout filterFields={filterFieldsWithoutDiscovery}>
       <div className="flex h-full items-center justify-center">
         <EmptyState
           iconSlot={<CircleSlashIcon />}
@@ -41,6 +50,6 @@ export function MetricsStorageGate({ children }: { children: ReactNode }) {
           }
         />
       </div>
-    </PageLayout>
+    </MetricsPageLayout>
   );
 }
