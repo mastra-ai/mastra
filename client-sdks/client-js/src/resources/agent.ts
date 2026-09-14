@@ -291,6 +291,7 @@ async function executeToolCallAndRespond<OUTPUT>({
           structuredOutput?: StructuredOutputOptions<OUTPUT>;
         } = {
           ...params,
+          clientTools: params.clientToolsResolver?.() ?? params.clientTools,
         };
 
         delete (respondOptions as { messages?: MessageListInput }).messages;
@@ -394,6 +395,7 @@ export class Agent extends BaseResource {
     options: ClientOptions,
     private agentId: string,
     private version?: AgentVersionIdentifier,
+    private routeOverrides?: { stream?: string },
   ) {
     super(options);
     this.voice = new AgentVoice(options, this.agentId, this.version);
@@ -498,7 +500,10 @@ export class Agent extends BaseResource {
           streamOptions: {
             ...streamOptions,
             requestContext: parseClientRequestContext(streamOptions.requestContext),
-            clientTools: processClientTools(streamOptions.clientTools),
+            clientTools: processClientTools(streamOptions.clientToolsResolver?.() ?? streamOptions.clientTools),
+            // Functions can't ride along to the server; the live resolver stays
+            // in the local signal runtime options for continuation rounds.
+            clientToolsResolver: undefined,
           },
         },
       } as Params,
@@ -729,7 +734,12 @@ export class Agent extends BaseResource {
           }
 
           const activeRuntimeOptions = agent.getSignalRuntimeOptions({ runId, resourceId, threadId });
-          const activeClientTools = activeRuntimeOptions?.clientTools;
+          if (!activeRuntimeOptions) {
+            agent.deleteSignalRuntimeOptions(runId);
+            return;
+          }
+
+          const activeClientTools = activeRuntimeOptions.clientToolsResolver?.() ?? activeRuntimeOptions.clientTools;
           if (!activeClientTools) {
             agent.deleteSignalRuntimeOptions(runId);
             return;
@@ -1135,7 +1145,7 @@ export class Agent extends BaseResource {
       output: params.output ? zodToJsonSchema(params.output) : undefined,
       experimental_output: params.experimental_output ? zodToJsonSchema(params.experimental_output) : undefined,
       requestContext: parseClientRequestContext(params.requestContext),
-      clientTools: processClientTools(params.clientTools),
+      clientTools: processClientTools(params.clientToolsResolver?.() ?? params.clientTools),
     };
 
     const { resourceId, threadId, requestContext } = processedParams as GenerateLegacyParams;
@@ -1158,7 +1168,7 @@ export class Agent extends BaseResource {
       }
 
       for (const toolCall of toolCalls) {
-        const clientTool = params.clientTools?.[toolCall.toolName] as Tool;
+        const clientTool = processedParams.clientTools?.[toolCall.toolName] as Tool;
 
         if (clientTool && clientTool.execute) {
           const { result, observability } = await executeClientToolWithObservability({
@@ -1228,10 +1238,11 @@ export class Agent extends BaseResource {
       ...options,
       messages: messages,
     } as StreamParams<OUTPUT>;
+    const resolvedClientTools = params.clientToolsResolver?.() ?? params.clientTools;
     const processedParams = {
       ...params,
       requestContext: parseClientRequestContext(params.requestContext),
-      clientTools: processClientTools(params.clientTools),
+      clientTools: processClientTools(resolvedClientTools),
       structuredOutput: params.structuredOutput
         ? {
             ...params.structuredOutput,
@@ -1256,7 +1267,9 @@ export class Agent extends BaseResource {
     if (response.finishReason === 'tool-calls') {
       return executeToolCallAndRespond<OUTPUT>({
         response,
-        params,
+        // Dispatch from the resolved tools so resolver-only calls execute; the
+        // continuation re-invokes the resolver per round via params.clientToolsResolver.
+        params: { ...params, clientTools: resolvedClientTools },
         agentId: this.agentId,
         resourceId,
         threadId,
@@ -1527,13 +1540,16 @@ export class Agent extends BaseResource {
         execUpdate();
       },
       async onToolCallPart(value) {
+        const partialToolCall = partialToolCalls[value.toolCallId];
+        const streamedArgs = partialToolCall?.text ? parsePartialJson(partialToolCall.text).value : undefined;
+        const toolCall = streamedArgs === undefined ? value : { ...value, args: streamedArgs };
         const invocation = {
           state: 'call',
           step,
-          ...value,
+          ...toolCall,
         } as const;
 
-        if (partialToolCalls[value.toolCallId] != null) {
+        if (partialToolCall != null) {
           // change the partial tool call to a full tool call
           message.toolInvocations![partialToolCalls[value.toolCallId]!.index] = invocation;
         } else {
@@ -1552,12 +1568,12 @@ export class Agent extends BaseResource {
         // In the future we should make this non-blocking, which
         // requires additional state management for error handling etc.
         if (onToolCall) {
-          const result = await onToolCall({ toolCall: value });
+          const result = await onToolCall({ toolCall });
           if (result != null) {
             const invocation = {
               state: 'result',
               step,
-              ...value,
+              ...toolCall,
               result,
             } as const;
 
@@ -1664,7 +1680,7 @@ export class Agent extends BaseResource {
       output: params.output ? zodToJsonSchema(params.output) : undefined,
       experimental_output: params.experimental_output ? zodToJsonSchema(params.experimental_output) : undefined,
       requestContext: parseClientRequestContext(params.requestContext),
-      clientTools: processClientTools(params.clientTools),
+      clientTools: processClientTools(params.clientToolsResolver?.() ?? params.clientTools),
     };
 
     // Create a readable stream that will handle the response processing
@@ -1912,13 +1928,16 @@ export class Agent extends BaseResource {
           }
 
           case 'tool-call': {
+            const partialToolCall = partialToolCalls[chunk.payload.toolCallId];
+            const streamedArgs = partialToolCall?.text ? parsePartialJson(partialToolCall.text).value : undefined;
+            const toolCall = streamedArgs === undefined ? chunk.payload : { ...chunk.payload, args: streamedArgs };
             const invocation = {
               state: 'call',
               step,
-              ...chunk.payload,
+              ...toolCall,
             } as const;
 
-            if (partialToolCalls[chunk.payload.toolCallId] != null) {
+            if (partialToolCall != null) {
               // change the partial tool call to a full tool call
               message.toolInvocations![partialToolCalls[chunk.payload.toolCallId]!.index] =
                 invocation as ToolInvocation;
@@ -1942,12 +1961,12 @@ export class Agent extends BaseResource {
             // In the future we should make this non-blocking, which
             // requires additional state management for error handling etc.
             if (onToolCall) {
-              const result = await onToolCall({ toolCall: chunk.payload as any });
+              const result = await onToolCall({ toolCall: toolCall as any });
               if (result != null) {
                 const invocation = {
                   state: 'result',
                   step,
-                  ...chunk.payload,
+                  ...toolCall,
                   result,
                 } as const;
 
@@ -2114,7 +2133,11 @@ export class Agent extends BaseResource {
       requestBody = resumeStreamBody;
     }
 
-    const response: Response = await this.request(`/agents/${this.agentId}/${route}`, {
+    const requestPath =
+      route === 'stream' && this.routeOverrides?.stream
+        ? this.routeOverrides.stream
+        : `/agents/${this.agentId}/${route}`;
+    const response: Response = await this.request(requestPath, {
       method: 'POST',
       body: requestBody,
       stream: true,
@@ -2390,6 +2413,9 @@ export class Agent extends BaseResource {
                   {
                     ...processedParams,
                     messages: updatedMessages,
+                    clientTools: processClientTools(
+                      processedParams.clientToolsResolver?.() ?? processedParams.clientTools,
+                    ),
                   },
                   controller,
                   recursionRoute,
@@ -2664,7 +2690,7 @@ export class Agent extends BaseResource {
     const processedParams: StreamParams<OUTPUT> = {
       ...params,
       requestContext: parseClientRequestContext(params.requestContext),
-      clientTools: processClientTools(params.clientTools),
+      clientTools: processClientTools(params.clientToolsResolver?.() ?? params.clientTools),
       structuredOutput,
     };
 
@@ -2786,7 +2812,7 @@ export class Agent extends BaseResource {
     const processedParams: StreamParams<OUTPUT> = {
       ...params,
       requestContext: parseClientRequestContext(params.requestContext),
-      clientTools: processClientTools(params.clientTools),
+      clientTools: processClientTools(params.clientToolsResolver?.() ?? params.clientTools),
       structuredOutput,
     };
 
@@ -3075,7 +3101,7 @@ export class Agent extends BaseResource {
       ...options,
       resumeData,
       requestContext: parseClientRequestContext(options.requestContext),
-      clientTools: processClientTools(options.clientTools),
+      clientTools: processClientTools(options.clientToolsResolver?.() ?? options.clientTools),
       structuredOutput: options.structuredOutput
         ? {
             ...options.structuredOutput,
@@ -3197,7 +3223,7 @@ export class Agent extends BaseResource {
       ...options,
       resumeData,
       requestContext: parseClientRequestContext(options.requestContext),
-      clientTools: processClientTools(options.clientTools),
+      clientTools: processClientTools(options.clientToolsResolver?.() ?? options.clientTools),
       structuredOutput: options.structuredOutput
         ? {
             ...options.structuredOutput,
@@ -3289,7 +3315,7 @@ export class Agent extends BaseResource {
 
     const response: Response & {
       processDataStream: (options?: Omit<Parameters<typeof processDataStream>[0], 'stream'>) => Promise<void>;
-    } = await this.request(`/agents/${this.agentId}/stream-legacy`, {
+    } = await this.request(this.routeOverrides?.stream ?? `/agents/${this.agentId}/stream-legacy`, {
       method: 'POST',
       body: processedParams,
       stream: true,
@@ -3408,10 +3434,14 @@ export class Agent extends BaseResource {
                       toolResultMessage,
                     ];
 
-                // Recursively call stream with updated messages
+                // Recursively call stream with updated messages, refreshing
+                // client tools from the resolver so continuations see current tools
                 this.processStreamResponseLegacy(
                   {
                     ...processedParams,
+                    clientTools: processClientTools(
+                      processedParams.clientToolsResolver?.() ?? processedParams.clientTools,
+                    ),
                     messages: updatedMessages,
                   },
                   writable,

@@ -328,10 +328,9 @@ export const ErrorMessage = ({ error, onRetry }: { error: ParsedStreamError; onR
               <Button
                 variant="default"
                 onClick={onRetry}
-                className="gap-1.5"
                 data-testid="agent-builder-chat-error-retry"
+                icon={<RefreshCw aria-hidden />}
               >
-                <RefreshCw className="size-3.5" aria-hidden />
                 Try again
               </Button>
             )}
@@ -357,10 +356,9 @@ export const ErrorMessage = ({ error, onRetry }: { error: ParsedStreamError; onR
             <Button
               variant="default"
               onClick={onRetry}
-              className="gap-1.5"
               data-testid="agent-builder-chat-error-retry"
+              icon={<RefreshCw aria-hidden />}
             >
-              <RefreshCw className="size-3.5" aria-hidden />
               Try again
             </Button>
           </div>

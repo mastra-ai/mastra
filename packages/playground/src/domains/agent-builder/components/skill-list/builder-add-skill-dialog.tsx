@@ -14,7 +14,7 @@ import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { SkillIcon } from '@mastra/playground-ui/icons/SkillIcon';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Check, Download, ExternalLink, Loader2, Package, Search } from 'lucide-react';
+import { Check, Download, ExternalLink, Loader2, Package, Search, X } from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
 
@@ -324,7 +324,7 @@ export function BuilderAddSkillDialog({
                 </div>
               )}
               <div className="flex items-center justify-end gap-2">
-                <Button variant="default" onClick={() => handleOpenChange(false)}>
+                <Button icon={<X />} variant="default" onClick={() => handleOpenChange(false)}>
                   Cancel
                 </Button>
                 <Button

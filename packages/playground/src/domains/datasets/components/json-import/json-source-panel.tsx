@@ -3,7 +3,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { FileJson, Upload } from 'lucide-react';
+import { FileJson, Upload, RefreshCw } from 'lucide-react';
 import { useCallback, useState } from 'react';
 
 import { MAX_IMPORT_LABEL } from '../../utils/json-validation';
@@ -183,7 +183,7 @@ function FileCard({
         <FileJson className="text-neutral4 size-4 shrink-0" />
         <span className="text-ui-sm text-neutral6 min-w-0 flex-1 truncate font-mono">{file.name}</span>
         <span className="text-ui-xs text-neutral3 shrink-0">{formatFileSize(file.size)}</span>
-        <Button variant="ghost" size="xs" onClick={onReplace} disabled={isImporting}>
+        <Button icon={<RefreshCw />} variant="ghost" size="xs" onClick={onReplace} disabled={isImporting}>
           Replace
         </Button>
       </div>

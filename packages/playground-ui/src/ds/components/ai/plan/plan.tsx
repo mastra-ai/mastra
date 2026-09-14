@@ -325,8 +325,8 @@ export function PlanExpandButton({ className, ...props }: PlanExpandButtonProps)
       size="sm"
       aria-label={isExpanded ? 'Collapse plan' : 'Expand plan'}
       onClick={toggleExpanded}
+      icon={isExpanded ? <Minimize2 /> : <Maximize2 />}
     >
-      {isExpanded ? <Minimize2 /> : <Maximize2 />}
       {isExpanded ? 'Collapse plan' : 'Expand plan'}
     </Button>
   );

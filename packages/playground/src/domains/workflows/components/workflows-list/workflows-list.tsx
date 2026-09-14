@@ -8,7 +8,8 @@ import {
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { truncateString } from '@mastra/playground-ui/utils/truncate-string';
 import { ChevronRightIcon, PauseIcon, WorkflowIcon } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
+import type { SyntheticEvent } from 'react';
 import { useWorkflowsRunCounts } from '@/domains/workflows/hooks/use-workflows-run-counts';
 import { flattenWorkflowTree } from '@/domains/workflows/utils/nested-workflows';
 import type { WorkflowTreeRow } from '@/domains/workflows/utils/nested-workflows';
@@ -73,7 +74,10 @@ function TreeToggleCell({
           aria-expanded={isExpanded}
           aria-label={`${isExpanded ? 'Collapse' : 'Expand'} nested workflows of ${workflowName}`}
           className="text-neutral4 hover:text-neutral2 relative grid size-5 shrink-0 place-items-center before:absolute before:-inset-1.5 before:content-['']"
-          onClick={onToggle}
+          onClick={event => {
+            event.stopPropagation();
+            onToggle();
+          }}
         >
           <ChevronRightIcon className={cn('size-4 transition-transform', isExpanded && 'rotate-90')} />
         </button>
@@ -84,8 +88,101 @@ function TreeToggleCell({
   );
 }
 
-export function WorkflowsList({ workflows, isLoading, search = '' }: WorkflowsListProps) {
+const stopPropagation = (event: SyntheticEvent) => event.stopPropagation();
+
+/**
+ * Wrapper owns focus/roving and activation so the expander gutter also
+ * navigates; the link and the toggle stop propagation to avoid double
+ * activation.
+ */
+function WorkflowRow({
+  row,
+  isExpanded,
+  onToggle,
+  runCount,
+  rowProps,
+}: {
+  row: Extract<WorkflowTreeRow, { kind: 'workflow' }>;
+  isExpanded: boolean;
+  onToggle: () => void;
+  runCount: { running?: number; suspended?: number } | undefined;
+  rowProps: ReturnType<ReturnType<typeof useDataListKeyboard>['getRowProps']>;
+}) {
   const { paths, Link } = useLinkComponent();
+  const linkRef = useRef<HTMLAnchorElement>(null);
+  const { workflow: wf, nestedIds } = row;
+  const name = truncateString(wf.name, 50);
+  const description = truncateString(wf.description ?? '', 200);
+  const stepsCount = Object.keys(wf.steps ?? {}).length;
+  const runningCount = runCount?.running ?? 0;
+  const suspendedCount = runCount?.suspended ?? 0;
+  const hasNested = nestedIds.length > 0;
+
+  return (
+    <EntityList.RowWrapper {...rowProps} onSelectRow={() => linkRef.current?.click()}>
+      <TreeToggleCell row={row} isExpanded={isExpanded} onToggle={onToggle} />
+      <EntityList.RowLink
+        ref={linkRef}
+        colStart={2}
+        to={paths.workflowLink(wf.id)}
+        LinkComponent={Link}
+        tabIndex={-1}
+        onClick={stopPropagation}
+      >
+        <EntityList.NameCell>
+          <span className="flex items-center gap-1.5">
+            {row.depth > 0 ? <TreeConnector guides={row.guides} isLastChild={row.isLastChild} /> : null}
+            <span className="truncate">{name}</span>
+            {wf.origin === 'dynamic' ? (
+              <Badge size="xs" variant="blue" title="Registered via the dynamic-workflows API">
+                Dynamic
+              </Badge>
+            ) : null}
+            {hasNested ? (
+              <span
+                title={`Nested workflows: ${nestedIds.join(', ')}`}
+                className="text-ui-smd text-neutral4 inline-flex shrink-0 items-center gap-1"
+              >
+                <WorkflowIcon aria-hidden className="size-3.5" />
+                {nestedIds.length}
+              </span>
+            ) : null}
+          </span>
+        </EntityList.NameCell>
+        <EntityList.DescriptionCell>{description}</EntityList.DescriptionCell>
+        <EntityList.TextCell className="text-center">
+          {runningCount > 0 ? (
+            <span
+              className="text-positive1 inline-flex items-center gap-1.5"
+              aria-label={`${runningCount} run${runningCount === 1 ? '' : 's'} in progress`}
+            >
+              <span aria-hidden className="bg-positive1 size-2 rounded-full motion-safe:animate-pulse" />
+              {runningCount}
+            </span>
+          ) : (
+            ''
+          )}
+        </EntityList.TextCell>
+        <EntityList.TextCell className="text-center">
+          {suspendedCount > 0 ? (
+            <span
+              className="text-warning1 inline-flex items-center gap-1.5"
+              aria-label={`${suspendedCount} run${suspendedCount === 1 ? '' : 's'} awaiting input`}
+            >
+              <PauseIcon aria-hidden className="size-3.5" />
+              {suspendedCount}
+            </span>
+          ) : (
+            ''
+          )}
+        </EntityList.TextCell>
+        <EntityList.TextCell className="text-center">{stepsCount || ''}</EntityList.TextCell>
+      </EntityList.RowLink>
+    </EntityList.RowWrapper>
+  );
+}
+
+export function WorkflowsList({ workflows, isLoading, search = '' }: WorkflowsListProps) {
   const [expandedPaths, setExpandedPaths] = useState<ReadonlySet<string>>(new Set());
 
   const workflowData = useMemo(
@@ -186,73 +283,15 @@ export function WorkflowsList({ workflows, isLoading, search = '' }: WorkflowsLi
           );
         }
 
-        const { workflow: wf, pathKey, nestedIds } = row;
-        const name = truncateString(wf.name, 50);
-        const description = truncateString(wf.description ?? '', 200);
-        const stepsCount = Object.keys(wf.steps ?? {}).length;
-        const runningCount = runCounts[wf.id]?.running ?? 0;
-        const suspendedCount = runCounts[wf.id]?.suspended ?? 0;
-        const hasNested = nestedIds.length > 0;
-
         return (
-          <EntityList.RowWrapper key={`workflow-${pathKey}`}>
-            <TreeToggleCell row={row} isExpanded={isExpanded} onToggle={toggle} />
-            <EntityList.RowLink
-              colStart={2}
-              to={paths.workflowLink(wf.id)}
-              LinkComponent={Link}
-              {...getRowProps(interactiveIndexByPathKey.get(pathKey) ?? -1)}
-            >
-              <EntityList.NameCell>
-                <span className="flex items-center gap-1.5">
-                  {row.depth > 0 ? <TreeConnector guides={row.guides} isLastChild={row.isLastChild} /> : null}
-                  <span className="truncate">{name}</span>
-                  {wf.origin === 'dynamic' ? (
-                    <Badge size="xs" variant="blue" title="Registered via the dynamic-workflows API">
-                      Dynamic
-                    </Badge>
-                  ) : null}
-                  {hasNested ? (
-                    <span
-                      title={`Nested workflows: ${nestedIds.join(', ')}`}
-                      className="text-ui-smd text-neutral4 inline-flex shrink-0 items-center gap-1"
-                    >
-                      <WorkflowIcon aria-hidden className="size-3.5" />
-                      {nestedIds.length}
-                    </span>
-                  ) : null}
-                </span>
-              </EntityList.NameCell>
-              <EntityList.DescriptionCell>{description}</EntityList.DescriptionCell>
-              <EntityList.TextCell className="text-center">
-                {runningCount > 0 ? (
-                  <span
-                    className="text-positive1 inline-flex items-center gap-1.5"
-                    aria-label={`${runningCount} run${runningCount === 1 ? '' : 's'} in progress`}
-                  >
-                    <span aria-hidden className="bg-positive1 size-2 rounded-full motion-safe:animate-pulse" />
-                    {runningCount}
-                  </span>
-                ) : (
-                  ''
-                )}
-              </EntityList.TextCell>
-              <EntityList.TextCell className="text-center">
-                {suspendedCount > 0 ? (
-                  <span
-                    className="text-warning1 inline-flex items-center gap-1.5"
-                    aria-label={`${suspendedCount} run${suspendedCount === 1 ? '' : 's'} awaiting input`}
-                  >
-                    <PauseIcon aria-hidden className="size-3.5" />
-                    {suspendedCount}
-                  </span>
-                ) : (
-                  ''
-                )}
-              </EntityList.TextCell>
-              <EntityList.TextCell className="text-center">{stepsCount || ''}</EntityList.TextCell>
-            </EntityList.RowLink>
-          </EntityList.RowWrapper>
+          <WorkflowRow
+            key={`workflow-${row.pathKey}`}
+            row={row}
+            isExpanded={isExpanded}
+            onToggle={toggle}
+            runCount={runCounts[row.workflow.id]}
+            rowProps={getRowProps(interactiveIndexByPathKey.get(row.pathKey) ?? -1)}
+          />
         );
       })}
     </EntityList>

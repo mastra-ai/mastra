@@ -11,6 +11,7 @@ import {
 } from '@mastra/playground-ui/components/Dialog';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { Check, Upload, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { useCallback, useState } from 'react';
 import type { ColumnMapping, FieldType } from '../../hooks/use-column-mapping';
 import { useColumnMapping } from '../../hooks/use-column-mapping';
@@ -438,13 +439,19 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
   const renderFooter = () => {
     switch (step) {
       case 'upload':
-        return <Button onClick={handleClose}>Cancel</Button>;
+        return (
+          <Button icon={<X />} onClick={handleClose}>
+            Cancel
+          </Button>
+        );
 
       case 'preview':
         return (
           <>
-            <Button onClick={() => setStep('upload')}>Back</Button>
-            <Button variant="primary" onClick={() => setStep('mapping')}>
+            <Button icon={<ChevronLeft />} onClick={() => setStep('upload')}>
+              Back
+            </Button>
+            <Button icon={<ChevronRight />} variant="primary" onClick={() => setStep('mapping')}>
               Next
             </Button>
           </>
@@ -453,8 +460,15 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
       case 'mapping':
         return (
           <>
-            <Button onClick={() => setStep('preview')}>Back</Button>
-            <Button variant="primary" onClick={handleValidateMapping} disabled={!columnMapping.isInputMapped}>
+            <Button icon={<ChevronLeft />} onClick={() => setStep('preview')}>
+              Back
+            </Button>
+            <Button
+              icon={<ChevronRight />}
+              variant="primary"
+              onClick={handleValidateMapping}
+              disabled={!columnMapping.isInputMapped}
+            >
               {dataset?.inputSchema || dataset?.groundTruthSchema ? 'Validate' : 'Next'}
             </Button>
           </>
@@ -463,8 +477,11 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
       case 'validation':
         return (
           <>
-            <Button onClick={() => setStep('mapping')}>Back</Button>
+            <Button icon={<ChevronLeft />} onClick={() => setStep('mapping')}>
+              Back
+            </Button>
             <Button
+              icon={<Upload />}
               variant="primary"
               onClick={handleImport}
               disabled={!schemaValidation || schemaValidation.validCount === 0}
@@ -481,7 +498,7 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
 
       case 'complete':
         return (
-          <Button variant="primary" onClick={handleDone}>
+          <Button icon={<Check />} variant="primary" onClick={handleDone}>
             Done
           </Button>
         );

@@ -4,7 +4,7 @@ import { expect, userEvent, within } from 'storybook/test';
 import { ReasoningPartRenderer } from '../messages/renderers/reasoning-part-renderer';
 
 const meta = {
-  title: 'Chat/Reasoning',
+  title: 'AI/Reasoning',
   component: ReasoningPartRenderer,
   parameters: {
     docs: {

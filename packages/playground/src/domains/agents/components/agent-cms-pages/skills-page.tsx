@@ -70,8 +70,7 @@ export function SkillsPage() {
           />
 
           {!readOnly && (
-            <Button variant="outline" size="sm" onClick={() => setDialogOpen(true)}>
-              <Plus className="size-3" />
+            <Button variant="outline" size="sm" onClick={() => setDialogOpen(true)} icon={<Plus />}>
               Add a skill
             </Button>
           )}
@@ -117,8 +116,7 @@ export function SkillsPage() {
               descriptionSlot="Create a skill to give your agent specialized knowledge."
               actionSlot={
                 !readOnly ? (
-                  <Button onClick={() => setDialogOpen(true)}>
-                    <Plus />
+                  <Button onClick={() => setDialogOpen(true)} icon={<Plus />}>
                     Add a skill
                   </Button>
                 ) : undefined

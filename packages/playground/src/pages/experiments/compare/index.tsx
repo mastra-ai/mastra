@@ -131,8 +131,8 @@ function CompareExperimentsPage() {
                   onClick={() =>
                     setSearchParams({ dataset: datasetId, baseline: experimentIdB, contender: experimentIdA })
                   }
+                  icon={<ArrowLeftRightIcon />}
                 >
-                  <ArrowLeftRightIcon />
                   Swap sides
                 </Button>
               </TooltipTrigger>

@@ -92,7 +92,7 @@ export const AgentBuilderStarter = () => {
           <Textarea
             ref={textareaRef}
             testId="agent-builder-starter-input"
-            size="default"
+            size="md"
             variant="unstyled"
             placeholder="Describe the agent you want to build…"
             value={message}

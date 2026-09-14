@@ -90,8 +90,8 @@ const AgentBuilderSkillViewPage = ({ skill }: PageProps) => {
               size="md"
               onClick={() => setCopyOpen(true)}
               data-testid="skill-view-copy-button"
+              icon={<PlusIcon />}
             >
-              <PlusIcon />
               Copy to my skills
             </Button>
           )}

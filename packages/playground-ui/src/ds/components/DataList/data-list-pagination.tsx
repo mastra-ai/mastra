@@ -19,15 +19,13 @@ export function DataListPagination({ currentPage, hasMore, onNextPage, onPrevPag
       {showNavigation && (
         <div className="flex gap-4">
           {typeof currentPage === 'number' && currentPage > 0 && (
-            <Button type="button" variant="outline" size="sm" onClick={onPrevPage}>
-              <ArrowLeftIcon />
+            <Button type="button" variant="outline" size="sm" onClick={onPrevPage} icon={<ArrowLeftIcon />}>
               Previous
             </Button>
           )}
           {hasMore && (
-            <Button type="button" variant="outline" size="sm" onClick={onNextPage}>
+            <Button type="button" variant="outline" size="sm" onClick={onNextPage} icon={<ArrowRightIcon />}>
               Next
-              <ArrowRightIcon />
             </Button>
           )}
         </div>

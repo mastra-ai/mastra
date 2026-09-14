@@ -1,7 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
-import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { AlertTriangle, BookOpen, CircleSlashIcon, Plus } from 'lucide-react';
+import type { SyntheticEvent } from 'react';
 import type { SkillMetadata } from '../types';
 import { SkillRemoveButton, SkillUpdateButton } from './skill-actions';
 import { useLinkComponent } from '@/lib/framework';
@@ -37,6 +37,8 @@ const baseColumns = [
 
 const columnsWithActions = [...baseColumns, { label: '', size: 'auto' }] as const;
 
+const stopPropagation = (event: SyntheticEvent) => event.stopPropagation();
+
 export function SkillsTable({
   skills,
   isLoading,
@@ -69,10 +71,7 @@ export function SkillsTable({
     <div className="space-y-4">
       {onAddSkill && (
         <div className="flex items-center gap-4">
-          <Button variant="default" size="sm" onClick={onAddSkill}>
-            <Icon>
-              <Plus className="h-4 w-4" />
-            </Icon>
+          <Button variant="default" size="sm" onClick={onAddSkill} icon={<Plus />}>
             Add Skill
           </Button>
         </div>
@@ -131,11 +130,18 @@ export function SkillsTable({
             }
 
             return (
-              <DataList.RowWrapper key={skill.path}>
-                <DataList.RowButton colEnd={-2} onClick={onClick} {...getRowProps(index)}>
+              <DataList.RowWrapper key={skill.path} {...getRowProps(index)} onSelectRow={onClick}>
+                <DataList.RowButton
+                  colEnd={-2}
+                  tabIndex={-1}
+                  onClick={event => {
+                    event.stopPropagation();
+                    onClick();
+                  }}
+                >
                   {rowContent}
                 </DataList.RowButton>
-                <DataList.ActionsCell className="pl-2">
+                <DataList.ActionsCell className="pl-2" onClick={stopPropagation}>
                   {isDownloaded(skill) && (
                     <>
                       {onUpdateSkill && (
@@ -182,17 +188,18 @@ function SkillsNotConfigured({ onAddSkill }: SkillsNotConfiguredProps) {
         </p>
         <div className="flex gap-3">
           {onAddSkill && (
-            <Button size="lg" variant="default" onClick={onAddSkill}>
-              <Icon>
-                <Plus className="h-4 w-4" />
-              </Icon>
+            <Button size="lg" variant="default" onClick={onAddSkill} icon={<Plus />}>
               Add Skill from skills.sh
             </Button>
           )}
-          <Button size="lg" variant="default" as="a" href="https://mastra.ai/en/docs/workspace/skills" target="_blank">
-            <Icon>
-              <BookOpen className="h-4 w-4" />
-            </Icon>
+          <Button
+            size="lg"
+            variant="default"
+            as="a"
+            href="https://mastra.ai/en/docs/workspace/skills"
+            target="_blank"
+            icon={<BookOpen />}
+          >
             Learn about Skills
           </Button>
         </div>

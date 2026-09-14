@@ -19,7 +19,7 @@ import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
-import { Check, ChevronDown, Download, GitPullRequest, Info, MessageSquare, Save } from 'lucide-react';
+import { Check, ChevronDown, Download, GitPullRequest, Info, MessageSquare, Save, X } from 'lucide-react';
 import { useMemo, useState, useCallback } from 'react';
 
 import { useAgentVersions } from '../../hooks/use-agent-versions';
@@ -172,17 +172,17 @@ export function AgentPlaygroundVersionBar({
       <div className="border-border1 bg-surface3 flex items-center justify-end border-t px-3 py-2">
         {showCodeModeActions ? (
           <ButtonsGroup className="flex-wrap justify-end">
-            <Button variant="default" size="md" onClick={() => void onDownloadJson?.()}>
-              <Icon size="sm">
-                <Download />
-              </Icon>
+            <Button variant="default" size="md" onClick={() => void onDownloadJson?.()} icon={<Download />}>
               Download JSON
             </Button>
             {canOpenPr ? (
-              <Button variant="primary" size="md" onClick={() => void onOpenPr?.()} title={openPrTitle}>
-                <Icon size="sm">
-                  <GitPullRequest />
-                </Icon>
+              <Button
+                variant="primary"
+                size="md"
+                onClick={() => void onOpenPr?.()}
+                title={openPrTitle}
+                icon={<GitPullRequest />}
+              >
                 Open PR
               </Button>
             ) : (
@@ -292,13 +292,16 @@ export function AgentPlaygroundVersionBar({
               </div>
             </DialogBody>
             <DialogFooter className="px-4">
-              <Button variant="default" size="sm" onClick={() => setShowMessageDialog(false)}>
+              <Button icon={<X />} variant="default" size="sm" onClick={() => setShowMessageDialog(false)}>
                 Cancel
               </Button>
-              <Button variant="primary" size="sm" onClick={handleSaveWithMessage} disabled={isSavingDraft}>
-                <Icon size="sm">
-                  <Save />
-                </Icon>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={handleSaveWithMessage}
+                disabled={isSavingDraft}
+                icon={<Save />}
+              >
                 Save Version
               </Button>
             </DialogFooter>

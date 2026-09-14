@@ -1,4 +1,4 @@
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, Bug, RefreshCw, RotateCcw } from 'lucide-react';
 import * as React from 'react';
 import { Button } from '../Button';
 import { cn } from '@/lib/utils';
@@ -176,13 +176,19 @@ function DefaultErrorFallback({
           {error.message}
         </p>
         <div className={cn('flex flex-wrap items-center justify-center gap-2', isInline ? 'mt-1' : 'mt-2')}>
-          <Button variant="primary" size={isInline ? 'sm' : 'lg'} onClick={reset}>
+          <Button icon={<RotateCcw />} variant="primary" size={isInline ? 'sm' : 'lg'} onClick={reset}>
             Try again
           </Button>
-          <Button variant="default" size={isInline ? 'sm' : 'lg'} onClick={() => window.location.reload()}>
+          <Button
+            icon={<RefreshCw />}
+            variant="default"
+            size={isInline ? 'sm' : 'lg'}
+            onClick={() => window.location.reload()}
+          >
             Reload page
           </Button>
           <Button
+            icon={<Bug />}
             as="a"
             variant="default"
             size={isInline ? 'sm' : 'lg'}

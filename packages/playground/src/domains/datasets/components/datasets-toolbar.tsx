@@ -67,14 +67,13 @@ export function DatasetsToolbar({
           />
         )}
         {onReset && hasActiveFilters && (
-          <Button onClick={onReset} size="sm" variant="default">
-            <XIcon className="size-3" /> Reset
+          <Button onClick={onReset} size="sm" variant="default" icon={<XIcon />}>
+            Reset
           </Button>
         )}
       </ButtonsGroup>
       {onCreateClick && (
-        <Button onClick={onCreateClick} variant="primary" className="ml-auto shrink-0">
-          <Plus />
+        <Button onClick={onCreateClick} variant="primary" className="ml-auto shrink-0" icon={<Plus />}>
           Create Dataset
         </Button>
       )}

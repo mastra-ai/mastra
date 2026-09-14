@@ -415,7 +415,7 @@ export const AgentMetadataWorkspaceToolsList = ({ tools }: AgentMetadataWorkspac
     <AgentMetadataList>
       {tools.map(tool => (
         <AgentMetadataListItem key={tool}>
-          <Badge icon={<Folder className="text-accent1 h-3 w-3" />}>{formatWorkspaceToolName(tool)}</Badge>
+          <Badge icon={<Folder className="text-accent1" />}>{formatWorkspaceToolName(tool)}</Badge>
         </AgentMetadataListItem>
       ))}
     </AgentMetadataList>
@@ -435,7 +435,7 @@ export const AgentMetadataBrowserToolsList = ({ tools }: AgentMetadataBrowserToo
     <AgentMetadataList>
       {tools.map(tool => (
         <AgentMetadataListItem key={tool}>
-          <Badge icon={<Globe className="h-3 w-3 text-cyan-500" />}>{tool}</Badge>
+          <Badge icon={<Globe className="text-cyan-500" />}>{tool}</Badge>
         </AgentMetadataListItem>
       ))}
     </AgentMetadataList>

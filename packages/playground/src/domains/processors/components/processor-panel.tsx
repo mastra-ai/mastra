@@ -9,6 +9,7 @@ import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import CodeMirror from '@uiw/react-codemirror';
+import { Play } from 'lucide-react';
 import { useState, useId, useEffect } from 'react';
 import type {
   ProcessorDetail,
@@ -181,6 +182,7 @@ function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
           </div>
 
           <Button
+            icon={<Play />}
             onClick={handleExecute}
             disabled={executeProcessor.isPending || selectedPhase === 'outputStream'}
             className="w-full"

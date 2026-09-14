@@ -24,6 +24,7 @@ import {
   Cloud,
   Database,
   HardDrive,
+  X,
 } from 'lucide-react';
 import { useState } from 'react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
@@ -545,7 +546,7 @@ export function FileViewer({ path, content, isLoading, mimeType, onClose }: File
         <div className="flex items-center gap-2">
           <CopyButton content={content} copyMessage="Copied file content" />
           {onClose && (
-            <Button variant="ghost" size="md" onClick={onClose}>
+            <Button icon={<X />} variant="ghost" size="md" onClick={onClose}>
               Close
             </Button>
           )}

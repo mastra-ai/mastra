@@ -4,7 +4,7 @@ import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { UserFilePartRenderer } from '../messages/renderers/user-file-part-renderer';
 
 const meta = {
-  title: 'Chat/Attachments',
+  title: 'AI/Attachments',
   component: UserFilePartRenderer,
   parameters: {
     docs: {

@@ -104,8 +104,7 @@ export const StudioConfigForm = ({ initialConfig, onSave, variant = 'default' }:
           )}
         </FieldsContainer>
 
-        <Button type="submit" className={isFactoryLayout ? 'ml-auto' : 'mt-10! ml-auto'}>
-          <SaveIcon />
+        <Button type="submit" className={isFactoryLayout ? 'ml-auto' : 'mt-10! ml-auto'} icon={<SaveIcon />}>
           Save Configuration
         </Button>
       </form>

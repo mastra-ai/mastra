@@ -20,7 +20,7 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import type { JsonSchema } from '@mastra/playground-ui/utils/json-schema';
 import type { RuleGroup } from '@mastra/playground-ui/utils/rule-engine';
 import type { ReactCodeMirrorRef } from '@uiw/react-codemirror';
-import { GripVertical, X, BookmarkPlus } from 'lucide-react';
+import { GripVertical, X, BookmarkPlus, Check } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { InstructionBlock, InlineInstructionBlock } from '../agent-edit-page/utils/form-validation';
@@ -123,10 +123,10 @@ const SaveAsPromptBlockDialog = ({
             )}
           </DialogBody>
           <DialogFooter className="px-4 pt-4">
-            <Button type="button" variant="outline" size="sm" onClick={() => onOpenChange(false)}>
+            <Button icon={<X />} type="button" variant="outline" size="sm" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" variant="primary" size="sm" disabled={!name.trim() || isPending}>
+            <Button icon={<Check />} type="submit" variant="primary" size="sm" disabled={!name.trim() || isPending}>
               {isPending ? 'Saving...' : 'Save'}
             </Button>
           </DialogFooter>

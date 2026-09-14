@@ -42,8 +42,8 @@ export const HeaderListForm = ({ headers, onAddHeader, onRemoveHeader, showHeadi
             type="button"
             onClick={() => onAddHeader({ name: '', value: '' })}
             size={headers.length === 0 ? 'md' : 'sm'}
+            icon={<Plus />}
           >
-            <Plus />
             {headers.length === 0 ? 'Add Header' : 'Add Another Header'}
           </Button>
         </div>

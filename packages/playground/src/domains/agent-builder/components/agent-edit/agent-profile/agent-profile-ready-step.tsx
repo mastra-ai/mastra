@@ -1,4 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
+import { Eye } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { AgentStepContainer } from './agent-step-container';
@@ -46,10 +48,10 @@ export const AgentProfileReadyStep = () => {
       panelOverlay={<span ref={sweepRef} className="ready-stage-sweep" aria-hidden="true" />}
       cta={
         <div className="relative z-[2] flex items-center justify-center gap-3">
-          <Button variant="outline" onClick={handleReview} data-testid="agent-builder-ready-review">
+          <Button icon={<Eye />} variant="outline" onClick={handleReview} data-testid="agent-builder-ready-review">
             Review my agent
           </Button>
-          <Button variant="primary" onClick={handleTry} data-testid="agent-builder-ready-try">
+          <Button icon={<AgentIcon />} variant="primary" onClick={handleTry} data-testid="agent-builder-ready-try">
             Try my agent
           </Button>
         </div>

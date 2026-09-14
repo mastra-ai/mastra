@@ -3,7 +3,7 @@ import { SignalBadge } from '../messages/signal-badge';
 import type { SignalData } from '../messages/signal-data';
 
 const meta = {
-  title: 'Chat/Signals',
+  title: 'AI/Signals',
   component: SignalBadge,
   parameters: {
     docs: {

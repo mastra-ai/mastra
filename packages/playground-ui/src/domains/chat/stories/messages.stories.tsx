@@ -3,7 +3,7 @@ import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { MessageText } from '../messages/renderers/message-text';
 
 const meta = {
-  title: 'Chat/Message Text',
+  title: 'AI/Message Text',
   component: MessageText,
   args: { metadata: undefined },
   parameters: {

@@ -2,6 +2,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { TextFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { Check, X } from 'lucide-react';
 import { useReducer } from 'react';
 import { useDatasetMutations } from '../hooks/use-dataset-mutations';
 import { DEFAULT_SCORERS_HELPER_TEXT, DEFAULT_SCORERS_LABEL } from './default-scorers-copy';
@@ -174,10 +175,15 @@ export function EditDatasetForm({ dataset, onSuccess, onCancel }: EditDatasetFor
       )}
 
       <div className="flex justify-end gap-2 pt-4">
-        <Button type="button" onClick={onCancel}>
+        <Button icon={<X />} type="button" onClick={onCancel}>
           Cancel
         </Button>
-        <Button type="submit" variant="primary" disabled={updateDataset.isPending || !formState.name.trim()}>
+        <Button
+          icon={<Check />}
+          type="submit"
+          variant="primary"
+          disabled={updateDataset.isPending || !formState.name.trim()}
+        >
           {updateDataset.isPending ? 'Saving...' : 'Save Changes'}
         </Button>
       </div>

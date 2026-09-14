@@ -3,7 +3,6 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { DataKeysAndValues } from '@mastra/playground-ui/components/DataKeysAndValues';
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
-import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { format } from 'date-fns/format';
 import { FileInputIcon, FileOutputIcon, GaugeIcon, ReceiptText, SaveIcon } from 'lucide-react';
@@ -102,10 +101,7 @@ export function ScoreDataPanel({ score, onClose, onPrevious, onNext }: ScoreData
           </DataKeysAndValues>
 
           <div className="mt-6 mb-6 flex justify-end">
-            <Button size="sm" onClick={() => setDatasetDialogOpen(true)}>
-              <Icon>
-                <SaveIcon />
-              </Icon>
+            <Button size="sm" onClick={() => setDatasetDialogOpen(true)} icon={<SaveIcon />}>
               Save as Dataset Item
             </Button>
           </div>
