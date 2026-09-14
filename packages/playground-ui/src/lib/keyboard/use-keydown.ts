@@ -1,5 +1,14 @@
-import { useEffect, useEffectEvent, useRef, useState, type RefObject } from 'react';
+import { useEffect, useEffectEvent, useState, type RefObject } from 'react';
 
+/**
+ * Map of key bindings to handlers.
+ *
+ * - Combos: `'cmd+k'`, `'ctrl+shift+p'`, `'mod+Home'`.
+ * - Timed sequences: `'g{300}+a'` — press `g`, then `a` within 300ms.
+ *   Chain as many steps as needed (`'a{100}+b{100}+c'`); the last step has no `{ms}`.
+ *   A sequence prefix takes precedence over a plain combo on the same key, and an
+ *   unexpected key resets the sequence before being evaluated normally.
+ */
 export type UseKeydownArgs = {
   [keySet: string]: () => void;
 };
@@ -47,10 +56,57 @@ export const parseKeyCombo = (combo: string): ParsedKeyCombo => {
   return parsed;
 };
 
+export type KeyStep = ParsedKeyCombo & {
+  /** Window (ms) during which the *next* step must be pressed. Absent on the last step. */
+  timeoutMs?: number;
+};
+
+/** A binding is a sequence of steps; a plain combo is a sequence of length 1. */
+export type ParsedKeyBinding = KeyStep[];
+
+const TIMED_TOKEN = /^(.+)\{(\d+)\}$/;
+
+/**
+ * Parses `cmd+k` (single step) or `g{300}+a` (sequence: `g`, then `a` within 300ms).
+ * A `key{ms}` token closes a step; the modifiers before it belong to that step.
+ */
+export const parseKeyBinding = (binding: string): ParsedKeyBinding => {
+  const steps: KeyStep[] = [];
+  let tokens: string[] = [];
+
+  for (const token of binding.split('+')) {
+    const [, timedKey, timeout] = TIMED_TOKEN.exec(token) ?? [];
+    if (timedKey && timeout) {
+      steps.push({ ...parseKeyCombo([...tokens, timedKey].join('+')), timeoutMs: Number(timeout) });
+      tokens = [];
+    } else {
+      tokens.push(token);
+    }
+  }
+
+  if (tokens.length === 0) {
+    throw new Error(`Invalid key binding "${binding}": the last step cannot have a timeout`);
+  }
+  steps.push(parseKeyCombo(tokens.join('+')));
+
+  for (const step of steps) {
+    if (!step.key) throw new Error(`Invalid key binding "${binding}": every step needs a key`);
+  }
+
+  return steps;
+};
+
+/**
+ * Printable symbols like `?`, `!` or `:` are typed with Shift on most layouts, and
+ * `event.key` already reflects the resulting character. For those, the Shift state
+ * is irrelevant unless the binding asks for it explicitly.
+ */
+const isShiftedSymbol = (key: string) => key.length === 1 && !/[a-z0-9]/i.test(key);
+
 export const matchesCombo = (event: KeyboardEvent, combo: ParsedKeyCombo): boolean =>
   event.metaKey === combo.meta &&
   event.ctrlKey === combo.ctrl &&
-  event.shiftKey === combo.shift &&
+  (event.shiftKey === combo.shift || (!combo.shift && isShiftedSymbol(combo.key))) &&
   event.altKey === combo.alt &&
   event.key.toLowerCase() === combo.key;
 
@@ -61,18 +117,99 @@ export type UseKeydownOptions = {
   enabled?: boolean;
   /**
    * Called before any combo is matched. Return `false` to leave the event
-   * untouched (no `preventDefault`, no handler).
+   * untouched (no `preventDefault`, no handler). Runs on top of the built-in
+   * rule that ignores unmodified keys coming from editable fields and keyboard
+   * widgets (see `isKeyboardConsumer`).
    */
   shouldHandle?: (event: KeyboardEvent) => boolean;
 };
 
+const KEYBOARD_CONSUMER_SELECTOR = [
+  'input',
+  'textarea',
+  'select',
+  '[contenteditable="true"]',
+  '[role="combobox"]',
+  '[role="listbox"]',
+  '[role="menu"]',
+  '[role="menuitem"]',
+  '[role="option"]',
+  '[role="dialog"]',
+  '[role="alertdialog"]',
+  '[data-radix-popper-content-wrapper]',
+].join(', ');
+
+const isKeyboardConsumer = (target: EventTarget | null): boolean =>
+  target instanceof Element && target.closest(KEYBOARD_CONSUMER_SELECTOR) !== null;
+
+/**
+ * Keys without meta/ctrl/alt (`?`, `g`, `Escape`, arrows…) belong to the
+ * focused field or widget, so they must keep typing/navigating there. Combos
+ * like `mod+k` are safe to intercept from anywhere.
+ */
+const isTypingInConsumer = (event: KeyboardEvent) =>
+  !event.metaKey && !event.ctrlKey && !event.altKey && isKeyboardConsumer(event.target);
+
+type PendingSequence = {
+  /** Steps already matched, as parsed combos (several bindings may share a prefix). */
+  matched: KeyStep[];
+  expiresAt: number;
+};
+
+const sameCombo = (a: ParsedKeyCombo, b: ParsedKeyCombo) =>
+  a.key === b.key && a.meta === b.meta && a.ctrl === b.ctrl && a.shift === b.shift && a.alt === b.alt;
+
+const hasPrefix = (steps: KeyStep[], prefix: KeyStep[]) =>
+  steps.length > prefix.length && prefix.every((step, i) => sameCombo(steps[i] as KeyStep, step));
+
 export const useKeydown = (opts: UseKeydownArgs, options: UseKeydownOptions = {}) => {
-  const { enabled = true } = options;
+  const { enabled = true, target } = options;
+  const [pending, setPending] = useState<PendingSequence | null>(null);
 
   const handlers = useEffectEvent((event: KeyboardEvent) => {
+    if (isTypingInConsumer(event)) return;
     if (options.shouldHandle && !options.shouldHandle(event)) return;
-    for (const [combo, handler] of Object.entries(opts)) {
-      if (matchesCombo(event, parseKeyCombo(combo))) {
+
+    const bindings = Object.entries(opts).map(([binding, handler]) => ({
+      binding,
+      steps: parseKeyBinding(binding),
+      handler,
+    }));
+    const now = Date.now();
+
+    if (pending) {
+      if (now < pending.expiresAt) {
+        const stepIndex = pending.matched.length;
+        for (const { steps, handler } of bindings) {
+          const step = steps[stepIndex];
+          if (!step || !hasPrefix(steps, pending.matched) || !matchesCombo(event, step)) continue;
+          event.preventDefault();
+          if (step.timeoutMs === undefined) {
+            setPending(null);
+            handler();
+          } else {
+            setPending({ matched: [...pending.matched, step], expiresAt: now + step.timeoutMs });
+          }
+          return;
+        }
+      }
+      // Expired or unexpected key: reset and evaluate the event normally below.
+      setPending(null);
+    }
+
+    // Sequence prefixes win over plain combos on the same key.
+    for (const { steps } of bindings) {
+      const [first] = steps;
+      if (first?.timeoutMs !== undefined && matchesCombo(event, first)) {
+        event.preventDefault();
+        setPending({ matched: [first], expiresAt: now + first.timeoutMs });
+        return;
+      }
+    }
+
+    for (const { steps, handler } of bindings) {
+      const [first] = steps;
+      if (steps.length === 1 && first && matchesCombo(event, first)) {
         event.preventDefault();
         handler();
         return;
@@ -80,12 +217,14 @@ export const useKeydown = (opts: UseKeydownArgs, options: UseKeydownOptions = {}
     }
   });
 
-  const targetRef = useRef(options.target);
-  targetRef.current = options.target;
+  useEffect(() => {
+    if (!pending) return;
+    const id = setTimeout(() => setPending(null), Math.max(0, pending.expiresAt - Date.now()));
+    return () => clearTimeout(id);
+  }, [pending]);
 
   useEffect(() => {
     if (!enabled) return;
-    const target = targetRef.current;
     const element: HTMLElement | Window | null = target ? (target.current ?? null) : window;
     if (!element) return;
 
@@ -94,8 +233,11 @@ export const useKeydown = (opts: UseKeydownArgs, options: UseKeydownOptions = {}
     };
 
     element.addEventListener('keydown', handleKeyDown);
-    return () => element.removeEventListener('keydown', handleKeyDown);
-  }, [enabled]);
+    return () => {
+      element.removeEventListener('keydown', handleKeyDown);
+      setPending(null);
+    };
+  }, [enabled, target]);
 };
 
 export type UseTableKeydownArgs = {
@@ -119,24 +261,6 @@ export type UseTableKeydownArgs = {
    */
   global?: boolean;
 };
-
-const KEYBOARD_CONSUMER_SELECTOR = [
-  'input',
-  'textarea',
-  'select',
-  '[contenteditable="true"]',
-  '[role="combobox"]',
-  '[role="listbox"]',
-  '[role="menu"]',
-  '[role="menuitem"]',
-  '[role="option"]',
-  '[role="dialog"]',
-  '[role="alertdialog"]',
-  '[data-radix-popper-content-wrapper]',
-].join(', ');
-
-const isKeyboardConsumer = (target: EventTarget | null): boolean =>
-  target instanceof Element && target.closest(KEYBOARD_CONSUMER_SELECTOR) !== null;
 
 export const useTableKeydown = ({
   count,
