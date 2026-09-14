@@ -84,6 +84,8 @@ export interface LinearWorkspace {
 export interface LinearIssue {
   id: string;
   projectId: string | null;
+  /** Backend workspace identity when source ids span multiple workspaces. */
+  workspaceId?: string;
   /** Raw Linear team id for exact team-source attribution. */
   teamId: string | null;
   /** Human key like `ENG-123`. */
@@ -985,7 +987,7 @@ export class LinearIntegration implements FactoryIntegration {
    * `null` when the issue doesn't exist (Linear reports it as an "Entity not
    * found" error).
    */
-  async fetchIssueDetail(accessToken: string, idOrIdentifier: string): Promise<LinearIssueDetail | null> {
+  async fetchIssueDetail(accessToken: string, idOrIdentifier: string, _sourceIds?: string[]): Promise<LinearIssueDetail | null> {
     let data: IssueDetailQueryData;
     try {
       data = await linearGraphql<IssueDetailQueryData>(

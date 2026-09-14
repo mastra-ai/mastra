@@ -489,14 +489,19 @@ export class PlatformLinearIntegration implements FactoryIntegration {
     }));
   }
 
-  async fetchIssueDetail(_accessToken: string, idOrIdentifier: string): Promise<LinearRouteIssueDetail | null> {
-    const located = await this.#findIssue(undefined, idOrIdentifier);
+  async fetchIssueDetail(
+    _accessToken: string,
+    idOrIdentifier: string,
+    sourceIds?: string[],
+  ): Promise<LinearRouteIssueDetail | null> {
+    const located = await this.#findIssue(undefined, idOrIdentifier, sourceIds);
     if (!located) return null;
     const comments = await this.#loadComments(located.workspaceId, located.issue.id, located.issue.comments);
     const issue = located.issue;
     return {
       id: issue.id,
       projectId: issue.project?.id ?? null,
+      workspaceId: located.workspaceId,
       teamId: issue.team.id,
       identifier: issue.identifier,
       title: issue.title,
@@ -521,9 +526,10 @@ export class PlatformLinearIntegration implements FactoryIntegration {
 
   sourceMatchesIssue(
     sourceId: string,
-    issue: Pick<LinearRouteIssueDetail, 'projectId' | 'teamId'>,
+    issue: Pick<LinearRouteIssueDetail, 'workspaceId' | 'projectId' | 'teamId'>,
   ): boolean {
     const source = parseSourceId(sourceId);
+    if (issue.workspaceId !== source.workspaceId) return false;
     return source.kind === 'team' ? issue.teamId === source.teamId : issue.projectId === source.projectId;
   }
 
@@ -680,11 +686,16 @@ export class PlatformLinearIntegration implements FactoryIntegration {
   async #findIssue(
     sourceId: string | undefined,
     issueId: string,
+    sourceIds?: string[],
   ): Promise<{
     workspaceId: string;
     issue: LinearIssue & { comments?: { nodes: LinearComment[]; pageInfo: PageInfo } };
   } | null> {
-    const workspaceIds = await this.#candidateWorkspaceIds(sourceId);
+    const scopedSourceIds = sourceIds ?? (sourceId ? [sourceId] : undefined);
+    const scopedSources = scopedSourceIds?.map(parseSourceId);
+    const workspaceIds = scopedSources
+      ? [...new Set(scopedSources.map(source => source.workspaceId))]
+      : await this.#candidateWorkspaceIds(undefined);
     for (const workspaceId of workspaceIds) {
       try {
         const issue = await this.#client.request<
@@ -693,6 +704,14 @@ export class PlatformLinearIntegration implements FactoryIntegration {
           'GET',
           `${API_PREFIX}/workspaces/${encodeURIComponent(workspaceId)}/issues/${encodeURIComponent(issueId)}?include=comments`,
         );
+        if (
+          scopedSources &&
+          !scopedSources.some(
+            source =>
+              source.workspaceId === workspaceId &&
+              (source.kind === 'team' ? issue.team.id === source.teamId : issue.project?.id === source.projectId),
+          )
+        ) continue;
         return { workspaceId, issue };
       } catch (error) {
         if (!isNotFound(error)) throw error;

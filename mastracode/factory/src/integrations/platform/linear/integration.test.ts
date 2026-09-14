@@ -66,6 +66,7 @@ const issue = {
   labels: [{ id: 'label-1', name: 'bug' }],
   state: { id: 'state-1', name: 'Todo', type: 'unstarted' },
   team: { id: 'team-1', key: 'ENG', name: 'Engineering' },
+  project: { id: 'project-1' },
   assignee: user,
   creator: user,
   createdAt: '2026-07-01T00:00:00Z',
@@ -543,6 +544,41 @@ describe('PlatformLinearIntegration', () => {
     expect(fetchImpl).toHaveBeenCalledTimes(3);
   });
 
+  it('continues across routed workspaces when an earlier duplicate identifier is outside its source', async () => {
+    const workspace1Source = sourceId('workspace-1', 'project-1');
+    const workspace2TeamSource = `linear-team:${Buffer.from(
+      JSON.stringify({ workspaceId: 'workspace-2', teamId: 'team-2' }),
+    ).toString('base64url')}`;
+    const wrongIssue = {
+      ...issue,
+      id: 'issue-wrong',
+      project: { id: 'other-project' },
+      team: { id: 'other-team', key: 'OTHER', name: 'Other' },
+    };
+    const expectedIssue = {
+      ...issue,
+      id: 'issue-correct',
+      project: null,
+      team: { id: 'team-2', key: 'ENG', name: 'Engineering' },
+    };
+    const fetchImpl = vi.fn<typeof fetch>(async input => {
+      const url = String(input);
+      if (url.includes('/workspace-1/issues/ENG-42')) {
+        return json({ ...wrongIssue, comments: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } } });
+      }
+      if (url.includes('/workspace-2/issues/ENG-42')) {
+        return json({ ...expectedIssue, comments: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } } });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    const integration = createIntegration(fetchImpl);
+
+    await expect(
+      integration.fetchIssueDetail('unused-provider-token', 'ENG-42', [workspace1Source, workspace2TeamSource]),
+    ).resolves.toMatchObject({ id: 'issue-correct', workspaceId: 'workspace-2', teamId: 'team-2' });
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
   it('tracks independent cursors when selected projects span workspaces', async () => {
     const workspace2 = { ...workspace, linearWorkspaceId: 'workspace-2', linearWorkspaceName: 'Second' };
     const project2 = { ...project, id: 'project-2', name: 'Product' };
@@ -697,7 +733,13 @@ describe('PlatformLinearIntegration', () => {
         },
       ],
     });
-    expect(integration.sourceMatchesIssue(teamSourceId, { projectId: null, teamId: 'team-1' })).toBe(true);
+    expect(
+      integration.sourceMatchesIssue(teamSourceId, {
+        workspaceId: 'workspace-1',
+        projectId: null,
+        teamId: 'team-1',
+      }),
+    ).toBe(true);
     const connect = await app.request('/auth/linear/connect');
     expect(connect.status).toBe(302);
     expect(connect.headers.get('location')).toBe('https://linear.app/oauth/authorize?state=abc');

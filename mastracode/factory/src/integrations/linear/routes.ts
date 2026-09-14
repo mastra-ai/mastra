@@ -473,7 +473,7 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions): ApiRoute[]
 
         try {
           const accessToken = await linear.getFreshAccessToken(connection);
-          const issue = await linear.fetchIssueDetail(accessToken, identifier);
+          const issue = await linear.fetchIssueDetail(accessToken, identifier, routedSourceIds);
           const isRouted = issue != null && routedSourceIds.some(sourceId => linear.sourceMatchesIssue(sourceId, issue));
           // Reads exactly like an issue that doesn't exist.
           if (!issue || !isRouted) {

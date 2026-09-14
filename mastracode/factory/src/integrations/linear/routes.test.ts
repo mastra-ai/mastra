@@ -686,7 +686,7 @@ describe('issue detail route', () => {
       url: 'https://linear.app/acme/issue/ENG-42',
       description: 'The sync runs the wrong way.',
     });
-    expect(fetchIssueDetail).toHaveBeenCalledWith('linear-token', 'ENG-42');
+    expect(fetchIssueDetail).toHaveBeenCalledWith('linear-token', 'ENG-42', ['proj-1']);
   });
 
   it("hides an issue outside the Factory project's own sources", async () => {
