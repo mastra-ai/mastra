@@ -118,21 +118,30 @@ function getRangeSegments(range: string): string[] {
 }
 
 export function combineObservationGroupRanges(groups: ObservationGroup[]): string {
-  const segments = groups.flatMap(group => getRangeSegments(group.range));
+  const segments = Array.from(new Set(groups.flatMap(group => getRangeSegments(group.range))));
   if (segments.length === 0) {
     return '';
   }
 
-  const firstSegment = segments[0];
-  const lastSegment = segments[segments.length - 1];
-  const firstStart = firstSegment?.split(':')[0]?.trim();
-  const lastEnd = lastSegment?.split(':').at(-1)?.trim();
+  const endpoints: Array<{ label: string; value: number }> = [];
+  for (const segment of segments) {
+    const parts = segment.split(':').map(part => part.trim());
+    if (parts.length !== 2 || parts.some(part => !/^\d+$/.test(part))) {
+      return segments.join(',');
+    }
 
-  if (firstStart && lastEnd) {
-    return `${firstStart}:${lastEnd}`;
+    for (const label of parts) {
+      const value = Number(label);
+      if (!Number.isSafeInteger(value)) {
+        return segments.join(',');
+      }
+      endpoints.push({ label, value });
+    }
   }
 
-  return Array.from(new Set(segments)).join(',');
+  const first = endpoints.reduce((lowest, endpoint) => (endpoint.value < lowest.value ? endpoint : lowest));
+  const last = endpoints.reduce((highest, endpoint) => (endpoint.value > highest.value ? endpoint : highest));
+  return `${first.label}:${last.label}`;
 }
 
 export function renderObservationGroupsForReflection(observations: string): string | null {
@@ -143,11 +152,10 @@ export function renderObservationGroupsForReflection(observations: string): stri
 
   // Walk the string positionally: keep ungrouped text in place, replace each
   // <observation-group> tag with the rendered ## Group heading.
-  const groupsByContent = new Map(groups.map(g => [g.content.trim(), g]));
-  const result = observations.replace(OBSERVATION_GROUP_PATTERN, (_match, _attrs: string, content: string) => {
-    const group = groupsByContent.get(content.trim());
-    if (!group) return content.trim();
-    return `## Group \`${group.id}\`\n_range: \`${group.range}\`_\n\n${group.content}`;
+  const result = observations.replace(OBSERVATION_GROUP_PATTERN, (_match, attributeString: string, content: string) => {
+    const attributes = parseObservationGroupAttributes(attributeString);
+    if (!attributes.id || !attributes.range) return content.trim();
+    return `## Group \`${attributes.id}\`\n_range: \`${attributes.range}\`_\n\n${content.trim()}`;
   });
 
   return result.replace(/\n{3,}/g, '\n\n').trim();

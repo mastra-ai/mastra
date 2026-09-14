@@ -134,7 +134,7 @@ The recall tool is limited to the current conversation thread.
 
   const base = `## Recall — looking up source messages
 
-Your memory is comprised of observations which are sometimes wrapped in <observation-group> xml tags containing ranges like <observation-group range="startId:endId">. These ranges point back to the raw messages that each observation group was derived from. The original messages are still available — use the **recall** tool to retrieve them.
+Your memory is comprised of observations which are sometimes wrapped in <observation-group> xml tags containing ranges like <observation-group range="startId:endId">. A range may contain comma-separated source segments when groups were merged. These ranges point back to the raw messages that each observation group was derived from. The original messages are still available — use the **recall** tool to retrieve them.
 
 ### When to use recall
 - The user asks you to **repeat, show, or reproduce** something from a past conversation
@@ -152,10 +152,10 @@ Your memory is comprised of observations which are sometimes wrapped in <observa
 ${modeSection}
 
 ### How to use recall with a cursor
-Each range has the format \`startId:endId\` where both are message IDs separated by a colon.
+Each range contains one or more \`startId:endId\` segments. Multiple source segments are separated by commas.
 
-1. Find the observation group relevant to the user's question and extract the start or end ID from its range.
-2. Call \`recall\` with that ID as the \`cursor\`.
+1. Find the observation group relevant to the user's question. If its range has multiple comma-separated segments, choose the relevant segment, then extract its start or end ID. Never pass the comma-separated list as an ID.
+2. Call \`recall\` with that single ID as the \`cursor\`.
 3. Use \`page: 1\` (or omit) to read forward from the cursor, \`page: -1\` to read backward.
 4. If the first page doesn't have what you need, increment the page number to keep paginating.
 5. Check \`hasNextPage\`/\`hasPrevPage\` in the result to know if more pages exist in each direction.
