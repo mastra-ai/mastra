@@ -65,7 +65,12 @@ export function KnowledgeSearch({ factoryProjectId, threadId, onSelect }: Knowle
                     setFocused(false);
                   }}
                 >
-                  <span className="text-icon6 truncate text-sm">{result.name}</span>
+                  <span className="min-w-0">
+                    <span className="text-icon6 block truncate text-sm">{result.name}</span>
+                    {result.type === 'scope' && result.address ? (
+                      <span className="text-icon3 block truncate text-xs">{result.address}</span>
+                    ) : null}
+                  </span>
                   <span className="text-icon3 shrink-0 text-xs">{result.type === 'scope' ? 'scope' : result.kind}</span>
                 </button>
               ))}
