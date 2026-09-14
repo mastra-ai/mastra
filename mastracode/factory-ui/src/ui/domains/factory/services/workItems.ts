@@ -33,6 +33,7 @@ export interface WorkItem {
   orgId: string;
   createdBy: string;
   githubProjectId: string;
+  board?: string | null;
   source: WorkItemSource;
   sourceKey: string | null;
   parentWorkItemId: string | null;
@@ -62,12 +63,13 @@ export interface WorkItemSessionInput {
 }
 
 export interface CreateWorkItemInput {
+  board?: string;
   source: WorkItemSource;
   sourceKey: string | null;
   parentWorkItemId?: string | null;
   title: string;
   url?: string | null;
-  stages: string[];
+  stages?: string[];
   sessions?: Record<string, WorkItemSessionInput>;
   metadata?: Record<string, unknown>;
 }
@@ -161,7 +163,7 @@ function fromWireWorkItem(item: WireWorkItem): WorkItem {
   };
 }
 
-export type FactoryBoard = 'work' | 'review';
+export type FactoryBoard = string;
 
 export type FactoryTransitionResult =
   | {
@@ -179,6 +181,8 @@ export interface UpdateWorkItemInput {
   title?: string;
   sessions?: Record<string, WorkItemSessionInput>;
   metadata?: Record<string, unknown>;
+  /** Hands-off: every plan this card parks is approved from here on. Stamped once. */
+  plansPreapproved?: true;
 }
 
 /**
@@ -189,6 +193,8 @@ export interface UpdateWorkItemInput {
 export interface BoardSnapshot {
   workItems: WorkItem[];
   runningSessionIds: string[];
+  /** Sessions parked on a tool until someone answers, read live with the cards. */
+  parkedSessionIds: string[];
 }
 
 /** List the org's work items for a Factory project. */
@@ -197,11 +203,16 @@ export async function listWorkItems(
   factoryProjectId: string,
   signal?: AbortSignal,
 ): Promise<BoardSnapshot> {
-  const data = await requestJson<{ workItems: WireWorkItem[]; runningSessionIds?: string[] }>(
-    `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/work-items`,
-    { signal },
-  );
-  return { workItems: data.workItems.map(fromWireWorkItem), runningSessionIds: data.runningSessionIds ?? [] };
+  const data = await requestJson<{
+    workItems: WireWorkItem[];
+    runningSessionIds?: string[];
+    parkedSessionIds?: string[];
+  }>(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/work-items`, { signal });
+  return {
+    workItems: data.workItems.map(fromWireWorkItem),
+    runningSessionIds: data.runningSessionIds ?? [],
+    parkedSessionIds: data.parkedSessionIds ?? [],
+  };
 }
 
 /** Create a work item; the server upserts on its external source identity so repeats reuse the card. */
@@ -221,7 +232,15 @@ export async function transitionWorkItem(
   baseUrl: string,
   githubProjectId: string,
   id: string,
-  input: { board: FactoryBoard; stage: FactoryRuleStage; expectedRevision: number; requestId: string; cause: string },
+  input: {
+    board: FactoryBoard;
+    stage: FactoryRuleStage;
+    expectedRevision: number;
+    requestId: string;
+    cause: string;
+    /** Re-enter the lane the card is already in, so its rule runs again. */
+    reenter?: boolean;
+  },
 ): Promise<FactoryTransitionResult> {
   const res = await fetch(
     `${baseUrl}/web/factory/projects/${encodeURIComponent(githubProjectId)}/work-items/${encodeURIComponent(id)}/transition`,
@@ -249,14 +268,9 @@ export async function updateWorkItem(baseUrl: string, id: string, patch: UpdateW
 export interface StartFactoryRunRequest {
   sessionId: string;
   threadTitle: string;
-  threadTags?: Record<string, string>;
   kickoffKey: string;
-  invocation?: { type: 'prompt'; prompt: string } | { type: 'skill'; skillName: string; arguments: string };
-  /** Hands-off run: the dispatcher approves this item's parked plans on the starter's behalf. */
-  preapprovePlans?: boolean;
-  destinationStage: FactoryRuleStage;
   workItem: {
-    id?: string;
+    id: string;
     role: string;
     input: CreateWorkItemInput;
   };

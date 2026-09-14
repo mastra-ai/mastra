@@ -1,9 +1,9 @@
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
+import { ToolCallProvider } from '@mastra/playground-ui/domains/chat/context/tool-call-context';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ToolBadge } from '../tool-badge';
-import { ToolCallProvider } from '@/services/tool-call-provider';
 
 const renderWithProviders = (node: ReactNode) =>
   render(
@@ -95,5 +95,26 @@ describe('ToolBadge', () => {
     fireEvent.click(screen.getByText('CheckAccess'));
 
     expect(screen.getByTestId('tool-result').textContent).toBe('false');
+  });
+});
+
+describe('ToolBadge edit body', () => {
+  it('shows an edit-style call as a diff instead of raw arguments', () => {
+    renderWithProviders(
+      <ToolBadge
+        toolName="mastra_workspace_edit_file"
+        args={{ path: 'a.ts', old_string: 'x', new_string: 'y' }}
+        result={undefined}
+        toolOutput={[]}
+        toolCallId="call-3"
+        toolApprovalMetadata={undefined}
+        isNetwork={false}
+      />,
+    );
+
+    fireEvent.click(screen.getByText('Edit'));
+
+    expect(screen.getByRole('group', { name: 'File change' })).toBeTruthy();
+    expect(screen.queryByTestId('tool-args')).toBeNull();
   });
 });

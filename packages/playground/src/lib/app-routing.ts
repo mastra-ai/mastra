@@ -6,7 +6,7 @@ import type { LinkComponentProviderProps } from '@/lib/framework';
 export const agentThreadsIndexLoader = ({ params }: LoaderFunctionArgs) =>
   redirect(`/agents/${params.agentId}/threads/new`);
 
-export const agentIndexLoader = ({ params }: LoaderFunctionArgs) => redirect(`/agents/${params.agentId}/overview`);
+export const agentIndexLoader = ({ params }: LoaderFunctionArgs) => redirect(`/agents/${params.agentId}/threads/new`);
 
 export const legacyAgentChatLoader = ({ params, request }: LoaderFunctionArgs) => {
   const search = new URL(request.url).search;
@@ -15,7 +15,7 @@ export const legacyAgentChatLoader = ({ params, request }: LoaderFunctionArgs) =
 
 export const legacyAgentSettingsLoader = ({ params, request }: LoaderFunctionArgs) => {
   const search = new URL(request.url).search;
-  return redirect(`/agents/${params.agentId}/overview${search}`);
+  return redirect(`/agents/${params.agentId}/threads/new${search}`);
 };
 
 export const REVIEW_QUEUE_PATH = '/experiments/review-queue';
@@ -30,7 +30,7 @@ export const experimentReviewQueueLink = (experimentId?: string, resultId?: stri
 };
 
 export const paths: LinkComponentProviderProps['paths'] = {
-  agentLink: (agentId: string) => `/agents/${agentId}/overview`,
+  agentLink: (agentId: string) => `/agents/${agentId}/threads/new`,
   agentToolLink: (agentId: string, toolId: string) => `/agents/${agentId}/tools/${toolId}`,
   agentSkillLink: (agentId: string, skillName: string, skillPath?: string, workspaceId?: string) =>
     workspaceId
@@ -76,7 +76,7 @@ export const paths: LinkComponentProviderProps['paths'] = {
   workflowRunLink: (workflowId: string, runId: string) => `/workflows/${workflowId}/graph/${runId}`,
   datasetLink: (datasetId: string) => `/datasets/${datasetId}`,
   datasetItemLink: (datasetId: string, itemId: string) => `/datasets/${datasetId}/items/${itemId}`,
-  datasetItemCompareLink: (datasetId: string, itemId: string, secondItemId: string) =>
-    `/datasets/${datasetId}/items/${itemId}/compare/${secondItemId}`,
   experimentLink: (experimentId: string) => `/experiments/${experimentId}`,
+  experimentItemLink: (experimentId: string, itemId: string) =>
+    `/experiments/${experimentId}/items/${encodeURIComponent(itemId)}`,
 };

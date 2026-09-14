@@ -27,6 +27,8 @@ import type {
   ListScoresResponse as ListScoresResponseNew,
   CreateScoreBody,
   CreateScoreResponse,
+  DeleteScoresArgs,
+  DeleteScoresResponse,
   GetScoreAggregateArgs,
   GetScoreAggregateResponse,
   GetScoreBreakdownArgs,
@@ -37,9 +39,10 @@ import type {
   GetScorePercentilesResponse,
   // Feedback
   ListFeedbackArgs,
-  ListFeedbackResponse,
   CreateFeedbackBody,
   CreateFeedbackResponse,
+  DeleteFeedbackArgs,
+  DeleteFeedbackResponse,
   UpdateFeedbackReviewStatusArgs,
   FeedbackRecord,
   GetFeedbackAggregateArgs,
@@ -74,7 +77,7 @@ import type {
   GetTagsArgs,
   GetTagsResponse,
 } from '@mastra/core/storage';
-import type { ClientOptions } from '../types';
+import type { ClientOptions, ListFeedbackResponse } from '../types';
 import { toQueryParams } from '../utils';
 import { BaseResource } from './base';
 
@@ -314,6 +317,22 @@ export class Observability extends BaseResource {
     });
   }
 
+  /**
+   * Deletes traces by ID, cascading to all associated data: spans, trace
+   * roots/branches, and signal events (scores, feedback, metrics, logs) that
+   * reference the deleted traces. Signals without a trace ID are untouched.
+   * On ClickHouse-backed stores, reads may briefly return deleted rows until
+   * the lightweight delete is fully applied.
+   * @param params - IDs of the traces to delete
+   * @returns Promise resolving to `{ success: true }` once the delete is issued
+   */
+  deleteTraces(params: { traceIds: string[] }): Promise<{ success: true }> {
+    return this.request(`/observability/traces/delete`, {
+      method: 'POST',
+      body: { traceIds: params.traceIds },
+    });
+  }
+
   // --------------------------------------------------------------------------
   // Logs
   // --------------------------------------------------------------------------
@@ -345,6 +364,18 @@ export class Observability extends BaseResource {
   createScore(params: CreateScoreBody): Promise<CreateScoreResponse> {
     return this.request(`/observability/scores`, {
       method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * Deletes score records by scoreId, optionally scoped to a tenant.
+   * Idempotent: deleting missing ids succeeds. Depending on the storage
+   * backend (e.g. ClickHouse), deletion may be eventually consistent.
+   */
+  deleteScores(params: DeleteScoresArgs): Promise<DeleteScoresResponse> {
+    return this.request(`/observability/scores`, {
+      method: 'DELETE',
       body: params,
     });
   }
@@ -417,6 +448,18 @@ export class Observability extends BaseResource {
     return this.request(`/observability/feedback/${encodeURIComponent(params.feedbackId)}/review-status`, {
       method: 'PATCH',
       body: { reviewStatus: params.reviewStatus },
+    });
+  }
+
+  /**
+   * Deletes feedback records by feedbackId, optionally scoped to a tenant.
+   * Idempotent: deleting missing ids succeeds. Depending on the storage
+   * backend (e.g. ClickHouse), deletion may be eventually consistent.
+   */
+  deleteFeedback(params: DeleteFeedbackArgs): Promise<DeleteFeedbackResponse> {
+    return this.request(`/observability/feedback`, {
+      method: 'DELETE',
+      body: params,
     });
   }
 

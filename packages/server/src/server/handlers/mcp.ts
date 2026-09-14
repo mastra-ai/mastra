@@ -53,7 +53,7 @@ export const LIST_MCP_SERVERS_ROUTE = createRoute({
       return { servers: [], total_count: 0, next: null };
     }
 
-    const serverList = Object.values(servers) as MastraMCPServerImplementation[];
+    const serverList = Object.values(servers);
     const totalCount = serverList.length;
 
     // Support both page/perPage and limit/offset for backwards compatibility

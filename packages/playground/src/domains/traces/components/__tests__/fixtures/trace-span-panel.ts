@@ -53,6 +53,6 @@ export const panelTraceSpans: GetTraceResponse = {
 
 export const spanDetailById: Record<string, GetSpanResponse> = {
   'span-root': { span: { ...rootSpan, input: { message: 'go' }, output: { text: 'done' } } },
-  'span-child-1': { span: { ...childSpanOne, input: { arg: 1 }, output: { ok: true } } },
+  'span-child-1': { span: { ...childSpanOne, sessionId: 'session-42', input: { arg: 1 }, output: { ok: true } } },
   'span-child-2': { span: { ...childSpanTwo, input: { arg: 2 }, output: { ok: true } } },
 };

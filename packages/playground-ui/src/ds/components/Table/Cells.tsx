@@ -21,7 +21,7 @@ export const Cell = ({ className, children, ...props }: CellProps) => {
 export const TxtCell = ({ className, children }: CellProps) => {
   return (
     <Cell className={className}>
-      <Txt as="span" variant="ui-md" className="w-full truncate">
+      <Txt as="span" variant="ui-smd" className="w-full truncate">
         {children}
       </Txt>
     </Cell>
@@ -67,15 +67,11 @@ export const EntryCell = ({ name, description, icon, meta, ...props }: EntryCell
         )}
 
         <div className="flex flex-col gap-0">
-          <Txt as="span" variant="ui-md" className="text-neutral6 !leading-tight">
+          <Txt as="span" variant="ui-md" className="text-neutral6">
             {name}
           </Txt>
           {description && (
-            <Txt
-              as="span"
-              variant="ui-xs"
-              className="max-w-dropdown-max-height text-neutral3 w-full truncate pt-1 !leading-tight"
-            >
+            <Txt as="span" variant="ui-xs" className="max-w-dropdown-max-height text-neutral3 w-full truncate pt-1">
               {description}
             </Txt>
           )}

@@ -47,7 +47,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
   models={[
   {
     "model": "nan/deepseek-v4-flash",
-    "imageInput": false,
+    "imageInput": true,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
@@ -70,13 +70,13 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "nan/glm5.2",
+    "model": "nan/glm5.3",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 500000,
+    "contextWindow": 1000000,
     "maxOutput": 131072,
     "inputCost": null,
     "outputCost": null
@@ -167,5 +167,4 @@ const agent = new Agent({
   }
 });
 ```
-
 

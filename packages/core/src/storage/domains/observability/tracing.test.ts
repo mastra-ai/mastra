@@ -1,12 +1,29 @@
 import { describe, it, expect } from 'vitest';
 import { SpanType } from '../../../observability/types';
 import {
+  BATCH_DELETE_TRACES_MAX_IDS,
+  batchDeleteTracesArgsSchema,
   buildInputPreview,
   extractBranchSpans,
   getTraceLightResponseSchema,
   INPUT_PREVIEW_MAX_LENGTH,
   lightSpanRecordSchema,
 } from './tracing';
+
+describe('batchDeleteTracesArgsSchema', () => {
+  it('limits the number of trace IDs in a batch', () => {
+    expect(
+      batchDeleteTracesArgsSchema.safeParse({
+        traceIds: Array.from({ length: BATCH_DELETE_TRACES_MAX_IDS }, (_, index) => `trace-${index}`),
+      }).success,
+    ).toBe(true);
+    expect(
+      batchDeleteTracesArgsSchema.safeParse({
+        traceIds: Array.from({ length: BATCH_DELETE_TRACES_MAX_IDS + 1 }, (_, index) => `trace-${index}`),
+      }).success,
+    ).toBe(false);
+  });
+});
 
 describe('lightSpanRecordSchema', () => {
   const validLightSpan = {

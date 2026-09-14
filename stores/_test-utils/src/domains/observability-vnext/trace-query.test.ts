@@ -1,11 +1,17 @@
-import { parseTraceQueryRequest, planTraceQuery } from '@mastra/core/storage';
+import { parseTraceQueryRequest, planThreadQuery, planTraceQuery } from '@mastra/core/storage';
 import { describe, expect, it } from 'vitest';
 import {
+  collectThreadQueryPages,
   collectTraceQueryPages,
+  evaluateThreadQuery,
+  evaluateThreadQueryRequest,
   evaluateTraceQuery,
   evaluateTraceQueryRequest,
   normalizeTraceQueryResponse,
+  THREAD_QUERY_CONFORMANCE_CASES,
+  THREAD_QUERY_FIXTURE_DATA,
   TRACE_QUERY_CONFORMANCE_CASES,
+  TRACE_QUERY_FEEDBACK_REPLACEMENT_SCENARIOS,
   TRACE_QUERY_FIXTURE_DATA,
   TRACE_QUERY_ORDINAL_FIXTURE_DATA,
   TRACE_QUERY_TIED_TIMESTAMP_CASES,
@@ -30,6 +36,21 @@ describe('trace-query reference evaluator', () => {
       ).toEqual(testCase.expected);
     });
   }
+
+  describe('feedback replacement contract', () => {
+    for (const scenario of TRACE_QUERY_FEEDBACK_REPLACEMENT_SCENARIOS) {
+      it(scenario.name, () => {
+        for (const assertion of scenario.assertions) {
+          expect
+            .soft(
+              normalizeTraceQueryResponse(evaluateTraceQueryRequest(scenario.fixture, assertion.request)),
+              assertion.name,
+            )
+            .toEqual(assertion.expected);
+        }
+      });
+    }
+  });
 
   it('projects only fixed lightweight fields', () => {
     const response = evaluateTraceQueryRequest(TRACE_QUERY_FIXTURE_DATA, {
@@ -125,5 +146,53 @@ describe('trace-query reference evaluator', () => {
     expect(
       normalizeTraceQueryResponse(evaluateTraceQuery(TRACE_QUERY_FIXTURE_DATA, planTraceQuery(normalized))),
     ).toEqual([{ traceId: 'trace-d' }, { traceId: 'trace-c' }]);
+  });
+});
+
+describe('thread-query reference evaluator', () => {
+  for (const testCase of THREAD_QUERY_CONFORMANCE_CASES) {
+    it(testCase.name, () => {
+      expect(evaluateThreadQueryRequest(THREAD_QUERY_FIXTURE_DATA, testCase.request).threads).toEqual(
+        testCase.expected,
+      );
+    });
+  }
+
+  it('returns only thread identities', () => {
+    expect(
+      evaluateThreadQueryRequest(THREAD_QUERY_FIXTURE_DATA, {
+        traces: { timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' } },
+        where: {
+          traces: {
+            some: { op: 'eq', left: { path: 'threadId' }, right: { literal: 'thread-1' } },
+          },
+        },
+      }),
+    ).toEqual({ threads: [{ threadId: 'thread-1' }], page: { next: null } });
+  });
+
+  it('traverses thread pages without duplicates or omissions', async () => {
+    const request = {
+      traces: { timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' } },
+      page: { limit: 1 },
+    };
+    const results = await collectThreadQueryPages(async normalized => {
+      return evaluateThreadQuery(THREAD_QUERY_FIXTURE_DATA, planThreadQuery(normalized));
+    }, request);
+
+    expect(results).toEqual([{ threadId: 'thread-1' }, { threadId: 'thread-2' }]);
+    expect(new Set(results.map(result => result.threadId)).size).toBe(results.length);
+  });
+
+  it('paginates mixed-case and non-ASCII threads using ordinal order', async () => {
+    const results = await collectThreadQueryPages(
+      async normalized => evaluateThreadQuery(TRACE_QUERY_ORDINAL_FIXTURE_DATA, planThreadQuery(normalized)),
+      {
+        traces: { timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' } },
+        page: { limit: 1 },
+      },
+    );
+
+    expect(results).toEqual([{ threadId: 'A' }, { threadId: 'a' }, { threadId: 'é' }, { threadId: 'Ω' }]);
   });
 });

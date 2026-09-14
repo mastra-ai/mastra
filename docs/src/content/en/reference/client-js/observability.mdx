@@ -96,6 +96,20 @@ The API limits predicate depth, nodes, related clauses, set members, literal byt
 
 See [Advanced trace queries](/reference/observability/tracing/trace-query) for the complete limits, request fields, predicates, grouping, cursor pagination, response shapes, and errors.
 
+## Deleting traces
+
+Delete traces and their associated spans, metrics, logs, scores, and feedback:
+
+```typescript
+const result = await mastraClient.deleteTraces({
+  traceIds: ['trace-1', 'trace-2'],
+})
+
+console.log(result.success)
+```
+
+Each request accepts up to 1,000 trace IDs. Signals that aren't linked to a trace are preserved. Deletion also includes traces created by experiments.
+
 ## Scoring traces
 
 Score specific traces using registered scorers for evaluation:
@@ -141,6 +155,24 @@ const response = await mastraClient.createFeedback({
     value: 1,
     comment: 'Helpful answer.',
   },
+})
+```
+
+### Deleting feedback and scores
+
+Delete feedback or score records by id. Deletion is idempotent, so missing ids are ignored. Each request accepts at most 1,000 `feedbackIds` or 1,000 `scoreIds`. Optional `organizationId` and `resourceId` fields restrict each deletion to records with matching scope fields:
+
+```typescript
+await mastraClient.deleteFeedback({
+  feedbackIds: ['feedback-1', 'feedback-2'],
+  organizationId: 'org-1',
+  resourceId: 'resource-1',
+})
+
+await mastraClient.deleteScores({
+  scoreIds: ['score-1', 'score-2'],
+  organizationId: 'org-1',
+  resourceId: 'resource-1',
 })
 ```
 

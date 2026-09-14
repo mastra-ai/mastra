@@ -52,6 +52,8 @@ const COLUMNS = [
   'entityId',
   'entityName',
   'entityVersionId',
+  'parentEntityVersionId',
+  'rootEntityVersionId',
   'userId',
   'organizationId',
   'resourceId',
@@ -98,6 +100,8 @@ const SPAN_RECONSTRUCT_SELECT = `
     ${argMaxNonNull('entityId')},
     ${argMaxNonNull('entityName')},
     ${argMaxNonNull('entityVersionId')},
+    ${argMaxNonNull('parentEntityVersionId')},
+    ${argMaxNonNull('rootEntityVersionId')},
     ${argMaxNonNull('userId')},
     ${argMaxNonNull('organizationId')},
     ${argMaxNonNull('resourceId')},
@@ -279,6 +283,8 @@ function rowToSpanRecord(row: Record<string, unknown>): SpanRecord {
     entityId: (row.entityId as string) ?? null,
     entityName: (row.entityName as string) ?? null,
     entityVersionId: (row.entityVersionId as string) ?? null,
+    parentEntityVersionId: (row.parentEntityVersionId as string) ?? null,
+    rootEntityVersionId: (row.rootEntityVersionId as string) ?? null,
     userId: (row.userId as string) ?? null,
     organizationId: (row.organizationId as string) ?? null,
     resourceId: (row.resourceId as string) ?? null,
@@ -492,6 +498,8 @@ interface SpanEventRow {
   entityId: string | null;
   entityName: string | null;
   entityVersionId: string | null;
+  parentEntityVersionId: string | null;
+  rootEntityVersionId: string | null;
   userId: string | null;
   organizationId: string | null;
   resourceId: string | null;
@@ -530,6 +538,8 @@ function toValuesTuple(row: SpanEventRow): string {
     v(row.entityId),
     v(row.entityName),
     v(row.entityVersionId),
+    v(row.parentEntityVersionId),
+    v(row.rootEntityVersionId),
     v(row.userId),
     v(row.organizationId),
     v(row.resourceId),
@@ -578,6 +588,8 @@ function createStartSpanRow(s: CreateSpanArgs['span']): SpanEventRow {
     entityId: s.entityId ?? null,
     entityName: s.entityName ?? null,
     entityVersionId: s.entityVersionId ?? null,
+    parentEntityVersionId: s.parentEntityVersionId ?? null,
+    rootEntityVersionId: s.rootEntityVersionId ?? null,
     userId: s.userId ?? null,
     organizationId: s.organizationId ?? null,
     resourceId: s.resourceId ?? null,
@@ -616,6 +628,8 @@ function createEndSpanRow(s: CreateSpanArgs['span']): SpanEventRow {
     entityId: s.entityId ?? null,
     entityName: s.entityName ?? null,
     entityVersionId: s.entityVersionId ?? null,
+    parentEntityVersionId: s.parentEntityVersionId ?? null,
+    rootEntityVersionId: s.rootEntityVersionId ?? null,
     userId: s.userId ?? null,
     organizationId: s.organizationId ?? null,
     resourceId: s.resourceId ?? null,
@@ -660,11 +674,35 @@ export async function batchCreateSpans(db: DuckDBConnection, args: BatchCreateSp
   await insertSpanEvents(db, rows);
 }
 
-/** Delete all span events for the given trace IDs. */
+/**
+ * Delete all span events for the given trace IDs, cascading to trace-linked
+ * signal events (metrics, logs, scores, feedback). Signal rows with a NULL
+ * traceId are never affected. When the optional tenant scope
+ * (`organizationId` / `resourceId`) is set, every DELETE additionally
+ * requires the row's tenant columns to match.
+ */
 export async function batchDeleteTraces(db: DuckDBConnection, args: BatchDeleteTracesArgs): Promise<void> {
   if (args.traceIds.length === 0) return;
   const placeholders = args.traceIds.map(() => '?').join(', ');
-  await db.execute(`DELETE FROM span_events WHERE traceId IN (${placeholders})`, args.traceIds);
+
+  const params: unknown[] = [...args.traceIds];
+  let scopeCondition = '';
+  if (args.organizationId !== undefined) {
+    scopeCondition += ` AND organizationId = ?`;
+    params.push(args.organizationId);
+  }
+  if (args.resourceId !== undefined) {
+    scopeCondition += ` AND resourceId = ?`;
+    params.push(args.resourceId);
+  }
+
+  const tables = ['span_events', 'metric_events', 'log_events', 'score_events', 'feedback_events'];
+  await db.executeTransaction(
+    tables.map(table => ({
+      sql: `DELETE FROM ${table} WHERE traceId IN (${placeholders})${scopeCondition}`,
+      params,
+    })),
+  );
 }
 
 // ============================================================================

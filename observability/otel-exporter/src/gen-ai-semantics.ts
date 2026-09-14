@@ -18,6 +18,14 @@ import type {
   RagEmbeddingAttributes,
   ToolCallAttributes,
   UsageStats,
+  WorkflowConditionalAttributes,
+  WorkflowConditionalEvalAttributes,
+  WorkflowLoopAttributes,
+  WorkflowParallelAttributes,
+  WorkflowRunAttributes,
+  WorkflowSleepAttributes,
+  WorkflowStepAttributes,
+  WorkflowWaitEventAttributes,
 } from '@mastra/core/observability';
 import type { Attributes } from '@opentelemetry/api';
 import {
@@ -171,6 +179,23 @@ function getSpanIdentifier(span: AnyExportedSpan): string | undefined {
       const attrs = span.attributes as RagEmbeddingAttributes;
       return attrs?.model;
     }
+
+    // Workflow step spans set their own entityId (the step id) but inherit
+    // entityName from the enclosing workflow, so identify them by entityId.
+    case SpanType.WORKFLOW_STEP:
+      return span.entityId;
+
+    // Control-flow spans set no entity of their own and would otherwise inherit
+    // the enclosing workflow's entityName, collapsing siblings onto one name.
+    // Fall through to the authored span name, which already carries the
+    // condition index / branch descriptor.
+    case SpanType.WORKFLOW_CONDITIONAL:
+    case SpanType.WORKFLOW_CONDITIONAL_EVAL:
+    case SpanType.WORKFLOW_PARALLEL:
+    case SpanType.WORKFLOW_LOOP:
+    case SpanType.WORKFLOW_SLEEP:
+    case SpanType.WORKFLOW_WAIT_EVENT:
+      return undefined;
 
     default:
       return span.entityName ?? span.entityId;
@@ -344,18 +369,21 @@ export function getAttributes(span: AnyExportedSpan): Attributes {
 
     // Attribute-dependent fields (description, type, MCP server)
     if (span.attributes) {
+      const toolAttrs = span.attributes as ToolCallAttributes;
+      if (toolAttrs.toolDescription) {
+        attributes[ATTR_GEN_AI_TOOL_DESCRIPTION] = toolAttrs.toolDescription;
+      }
+      if (toolAttrs.toolType) {
+        attributes['gen_ai.tool.type'] = toolAttrs.toolType;
+      }
       if (span.type === SpanType.MCP_TOOL_CALL) {
         const mcpAttrs = span.attributes as MCPToolCallAttributes;
         if (mcpAttrs.mcpServer) {
           attributes[ATTR_SERVER_ADDRESS] = mcpAttrs.mcpServer;
+          attributes[`mastra.${spanType}.server_name`] = mcpAttrs.mcpServer;
         }
-      } else {
-        const toolAttrs = span.attributes as ToolCallAttributes;
-        if (toolAttrs.toolDescription) {
-          attributes[ATTR_GEN_AI_TOOL_DESCRIPTION] = toolAttrs.toolDescription;
-        }
-        if (toolAttrs.toolType) {
-          attributes['gen_ai.tool.type'] = toolAttrs.toolType;
+        if (mcpAttrs.serverVersion) {
+          attributes[`mastra.${spanType}.server_version`] = mcpAttrs.serverVersion;
         }
       }
     }
@@ -385,6 +413,107 @@ export function getAttributes(span: AnyExportedSpan): Attributes {
     // attributes[ATTR_GEN_AI_REQUEST_MODEL] = agentAttrs.model.name;
 
     attributes[ATTR_GEN_AI_SYSTEM_INSTRUCTIONS] = agentAttrs.instructions;
+  }
+
+  // Add workflow-specific attributes. Control-flow spans carry native branch,
+  // loop, sleep and wait metadata that is otherwise dropped on export. Values
+  // are emitted under the existing `mastra.<span_type>.<snake_case>` convention;
+  // arrays/dates are serialized and false/0 are preserved (guard on !== undefined).
+  if (span.type === SpanType.WORKFLOW_RUN && span.attributes) {
+    const runAttrs = span.attributes as WorkflowRunAttributes;
+    if (runAttrs.status !== undefined) {
+      attributes[`mastra.${spanType}.status`] = runAttrs.status;
+    }
+  }
+
+  if (span.type === SpanType.WORKFLOW_STEP) {
+    if (span.entityId) {
+      attributes[`mastra.${spanType}.step_id`] = span.entityId;
+    }
+    if (span.attributes) {
+      const stepAttrs = span.attributes as WorkflowStepAttributes;
+      if (stepAttrs.status !== undefined) {
+        attributes[`mastra.${spanType}.status`] = stepAttrs.status;
+      }
+    }
+  }
+
+  if (span.type === SpanType.WORKFLOW_CONDITIONAL && span.attributes) {
+    const condAttrs = span.attributes as WorkflowConditionalAttributes;
+    if (condAttrs.conditionCount !== undefined) {
+      attributes[`mastra.${spanType}.condition_count`] = condAttrs.conditionCount;
+    }
+    if (condAttrs.truthyIndexes !== undefined) {
+      attributes[`mastra.${spanType}.truthy_indexes`] = JSON.stringify(condAttrs.truthyIndexes);
+    }
+    if (condAttrs.selectedSteps !== undefined) {
+      attributes[`mastra.${spanType}.selected_steps`] = JSON.stringify(condAttrs.selectedSteps);
+    }
+  }
+
+  if (span.type === SpanType.WORKFLOW_CONDITIONAL_EVAL && span.attributes) {
+    const evalAttrs = span.attributes as WorkflowConditionalEvalAttributes;
+    if (evalAttrs.conditionIndex !== undefined) {
+      attributes[`mastra.${spanType}.condition_index`] = evalAttrs.conditionIndex;
+    }
+    if (evalAttrs.result !== undefined) {
+      attributes[`mastra.${spanType}.result`] = evalAttrs.result;
+    }
+  }
+
+  if (span.type === SpanType.WORKFLOW_PARALLEL && span.attributes) {
+    const parallelAttrs = span.attributes as WorkflowParallelAttributes;
+    if (parallelAttrs.branchCount !== undefined) {
+      attributes[`mastra.${spanType}.branch_count`] = parallelAttrs.branchCount;
+    }
+    if (parallelAttrs.parallelSteps !== undefined) {
+      attributes[`mastra.${spanType}.parallel_steps`] = JSON.stringify(parallelAttrs.parallelSteps);
+    }
+  }
+
+  if (span.type === SpanType.WORKFLOW_LOOP && span.attributes) {
+    const loopAttrs = span.attributes as WorkflowLoopAttributes;
+    if (loopAttrs.loopType !== undefined) {
+      attributes[`mastra.${spanType}.loop_type`] = loopAttrs.loopType;
+    }
+    if (loopAttrs.iteration !== undefined) {
+      attributes[`mastra.${spanType}.iteration`] = loopAttrs.iteration;
+    }
+    if (loopAttrs.totalIterations !== undefined) {
+      attributes[`mastra.${spanType}.total_iterations`] = loopAttrs.totalIterations;
+    }
+    if (loopAttrs.concurrency !== undefined) {
+      attributes[`mastra.${spanType}.concurrency`] = loopAttrs.concurrency;
+    }
+  }
+
+  if (span.type === SpanType.WORKFLOW_SLEEP && span.attributes) {
+    const sleepAttrs = span.attributes as WorkflowSleepAttributes;
+    if (sleepAttrs.durationMs !== undefined) {
+      attributes[`mastra.${spanType}.duration_ms`] = sleepAttrs.durationMs;
+    }
+    if (sleepAttrs.untilDate !== undefined) {
+      attributes[`mastra.${spanType}.until_date`] = sleepAttrs.untilDate.toISOString();
+    }
+    if (sleepAttrs.sleepType !== undefined) {
+      attributes[`mastra.${spanType}.sleep_type`] = sleepAttrs.sleepType;
+    }
+  }
+
+  if (span.type === SpanType.WORKFLOW_WAIT_EVENT && span.attributes) {
+    const waitAttrs = span.attributes as WorkflowWaitEventAttributes;
+    if (waitAttrs.eventName !== undefined) {
+      attributes[`mastra.${spanType}.event_name`] = waitAttrs.eventName;
+    }
+    if (waitAttrs.timeoutMs !== undefined) {
+      attributes[`mastra.${spanType}.timeout_ms`] = waitAttrs.timeoutMs;
+    }
+    if (waitAttrs.eventReceived !== undefined) {
+      attributes[`mastra.${spanType}.event_received`] = waitAttrs.eventReceived;
+    }
+    if (waitAttrs.waitDurationMs !== undefined) {
+      attributes[`mastra.${spanType}.wait_duration_ms`] = waitAttrs.waitDurationMs;
+    }
   }
 
   // Add error information if present

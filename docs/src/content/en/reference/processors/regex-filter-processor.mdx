@@ -1,13 +1,13 @@
 ---
 title: "Reference: RegexFilterProcessor | Processors"
-description: "The RegexFilterProcessor applies zero-cost regex pattern matching to filter, redact, or block content in agent messages."
+description: "The RegexFilterProcessor uses regex pattern matching to filter, redact, or block content in agent messages."
 packages:
   - "@mastra/core"
 ---
 
 # RegexFilterProcessor
 
-The `RegexFilterProcessor` applies zero-cost regex pattern matching to filter, redact, or block content in agent messages. No LLM calls are made. All detection is regex-based.
+The `RegexFilterProcessor` uses regex pattern matching to filter, redact, or block content in agent messages. No LLM calls are made.
 
 Supports built-in presets for common patterns (PII, secrets, URLs) and custom regex rules. Can be applied to input, output, or both phases.
 

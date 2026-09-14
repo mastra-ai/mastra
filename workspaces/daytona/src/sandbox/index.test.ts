@@ -15,11 +15,13 @@
 import { createSandboxLifecycleTests, createMountOperationsTests } from '@internal/workspace-test-utils';
 import {
   SandboxNotReadyError,
+  SandboxUnsupportedFeatureError,
   WORKSPACE_TOOLS,
   Workspace,
   createWorkspaceTools,
   supportsComputer,
 } from '@mastra/core/workspace';
+import { S3Filesystem } from '@mastra/s3';
 import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vitest';
 
 import { DaytonaSandbox } from './index';
@@ -841,6 +843,101 @@ describe('DaytonaSandbox', () => {
   });
 
   describe('Mount Configuration', () => {
+    it.each(['/data/trailing', '/data/trailing/'])(
+      'matches kernel mount paths without a trailing slash: %s',
+      async path => {
+        const sandbox = new DaytonaSandbox();
+        await sandbox._start();
+        mockSandbox.process.executeCommand.mockClear();
+        await sandbox.unmount(path);
+        expect(
+          mockSandbox.process.executeCommand.mock.calls.some(([command]) =>
+            command.includes("grep -Fq -- ' /data/trailing ' /proc/mounts"),
+          ),
+        ).toBe(true);
+      },
+    );
+
+    it('rejects long repeated-slash paths before running unmount commands', async () => {
+      const sandbox = new DaytonaSandbox();
+      mockSandbox.process.executeCommand.mockClear();
+      await expect(sandbox.unmount(`/data/${'/'.repeat(100_000)}end`)).rejects.toThrow('Path traversal segments');
+      expect(mockSandbox.process.executeCommand).not.toHaveBeenCalled();
+    });
+
+    it('checks persisted S3 credentials after unmount even without an in-memory mount entry', async () => {
+      const sandbox = new DaytonaSandbox();
+      await sandbox._start();
+      mockSandbox.process.executeCommand.mockClear();
+      await sandbox.unmount('/data/reconnected');
+      const commands = mockSandbox.process.executeCommand.mock.calls.map(([command]) => command);
+      const detach = commands.findIndex(command => command.includes('sudo fusermount -u '));
+      const cleanup = commands.findIndex(command => command.includes('credentials_in_use()'));
+      const marker = commands.findIndex(command => command.includes('rm -f /tmp/.mastra-mounts/'));
+      expect(detach).toBeGreaterThanOrEqual(0);
+      expect(cleanup).toBeGreaterThan(detach);
+      expect(marker).toBeGreaterThan(cleanup);
+    });
+
+    it('recovers a disconnected S3 mount even when mountpoint cannot inspect it, then retries the same path', async () => {
+      const sandbox = new DaytonaSandbox();
+      await sandbox._start();
+      let attached = false;
+      let probeFails = true;
+      mockSandbox.process.executeCommand.mockImplementation(async (command: string) => {
+        if (command.startsWith('mountpoint -q ') && command.includes('echo "mounted"')) {
+          return { exitCode: 0, result: attached && !probeFails ? 'mounted' : 'not mounted' };
+        }
+        if (command.startsWith('s3fs ')) attached = true;
+        if (command.startsWith('timeout -k ') && probeFails) {
+          return { exitCode: 124, result: 'probe timed out' };
+        }
+        // Ordinary unmount attempts fail on this dead FUSE connection. The kernel-table
+        // check must reach the move-aside fallback despite mountpoint returning false.
+        if (
+          command.includes("grep -Fq -- ' /data/retry ' /proc/mounts") &&
+          command.includes('sudo mount --move /data/retry')
+        )
+          attached = false;
+        return { exitCode: 0, result: command === 'id -u && id -g' ? '1000\n1000' : '' };
+      });
+      const filesystem = new S3Filesystem({
+        bucket: 'test-bucket',
+        region: 'us-east-1',
+        accessKeyId: 'key',
+        secretAccessKey: 'secret',
+      });
+
+      const first = await sandbox.mount(filesystem, '/data/retry');
+      expect(first.success).toBe(false);
+      expect(first.error).toContain('probe timed out');
+      expect(sandbox.mounts.get('/data/retry')).toMatchObject({ state: 'error', error: first.error });
+      expect(attached).toBe(false);
+      expect(mockSandbox.process.executeCommand.mock.calls.some(([command]) => command.includes('pkill'))).toBe(false);
+
+      probeFails = false;
+      expect(await sandbox.mount(filesystem, '/data/retry')).toEqual({ success: true, mountPath: '/data/retry' });
+      expect(attached).toBe(true);
+    });
+
+    it('preserves the S3 probe error if unmount cleanup throws', async () => {
+      const sandbox = new DaytonaSandbox();
+      await sandbox._start();
+      mockSandbox.process.executeCommand.mockImplementation(async (command: string) => {
+        if (command.startsWith('timeout -k ')) return { exitCode: 124, result: 'probe timed out' };
+        if (command.includes('sudo fusermount -u ')) throw new Error('cleanup unavailable');
+        return { exitCode: 0, result: command === 'id -u && id -g' ? '1000\n1000' : '' };
+      });
+      const filesystem = new S3Filesystem({ bucket: 'test-bucket', region: 'us-east-1' });
+      const result = await sandbox.mount(filesystem, '/data/cleanup-failure');
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('probe timed out');
+      expect(
+        mockSandbox.process.executeCommand.mock.calls.some(([command]) => command.includes('sudo fusermount -u ')),
+      ).toBe(true);
+      expect(sandbox.mounts.get('/data/cleanup-failure')).toMatchObject({ state: 'error', error: result.error });
+    });
+
     it('S3 prefix mount uses bucket:/prefix syntax in mount command', async () => {
       mockSandbox.process.executeCommand.mockImplementation(async (command: string) => {
         if (command.includes('mountpoint -q') && command.includes('echo "mounted"')) {
@@ -1316,6 +1413,17 @@ describe('DaytonaSandbox', () => {
         { source: Buffer.from('hello'), destination: '/home/daytona/app/a.txt' },
         { source: Buffer.from([1, 2, 3]), destination: '/home/daytona/app/b.bin' },
       ]);
+    });
+
+    it('writeFiles rejects an explicit per-file mode without uploading', async () => {
+      const sandbox = new DaytonaSandbox();
+      await sandbox._start();
+      mockSandbox.fs.uploadFiles.mockClear();
+
+      await expect(
+        sandbox.writeFiles([{ path: '/home/daytona/app/a.txt', content: 'hello', mode: 0o600 }]),
+      ).rejects.toThrow(SandboxUnsupportedFeatureError);
+      expect(mockSandbox.fs.uploadFiles).not.toHaveBeenCalled();
     });
   });
 

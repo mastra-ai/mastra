@@ -2,6 +2,7 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type {
   BatchCreateFeedbackArgs,
   CreateFeedbackArgs,
+  DeleteFeedbackArgs,
   GetFeedbackAggregateArgs,
   GetFeedbackAggregateResponse,
   GetFeedbackBreakdownArgs,
@@ -35,6 +36,50 @@ type LegacyFeedbackRecord = CreateFeedbackArgs['feedback'] & {
   source?: string | null;
   userId?: string | null;
 };
+
+const FEEDBACK_UPSERT_COLUMNS = [
+  'timestamp',
+  'cursorId',
+  'traceId',
+  'spanId',
+  'experimentId',
+  'entityType',
+  'entityId',
+  'entityName',
+  'entityVersionId',
+  'parentEntityVersionId',
+  'parentEntityType',
+  'parentEntityId',
+  'parentEntityName',
+  'rootEntityVersionId',
+  'rootEntityType',
+  'rootEntityId',
+  'rootEntityName',
+  'userId',
+  'organizationId',
+  'resourceId',
+  'runId',
+  'sessionId',
+  'threadId',
+  'requestId',
+  'environment',
+  'executionSource',
+  'serviceName',
+  'feedbackUserId',
+  'sourceId',
+  'reviewStatus',
+  'feedbackSource',
+  'feedbackType',
+  'value',
+  'comment',
+  'tags',
+  'metadata',
+  'scope',
+] as const;
+
+const FEEDBACK_UPSERT_CLAUSE = `ON CONFLICT (feedbackId) DO UPDATE SET ${FEEDBACK_UPSERT_COLUMNS.map(
+  column => `${column} = excluded.${column}`,
+).join(', ')}`;
 
 const FEEDBACK_GROUP_BY_COLUMNS = new Set([
   'timestamp',
@@ -301,7 +346,7 @@ export async function createFeedback(db: DuckDBConnection, args: CreateFeedbackA
        jsonV(f.metadata),
        jsonV(f.scope ?? null),
      ].join(', ')})
-     ON CONFLICT DO NOTHING`,
+     ${FEEDBACK_UPSERT_CLAUSE}`,
   );
 }
 
@@ -309,7 +354,8 @@ export async function createFeedback(db: DuckDBConnection, args: CreateFeedbackA
 export async function batchCreateFeedback(db: DuckDBConnection, args: BatchCreateFeedbackArgs): Promise<void> {
   if (args.feedbacks.length === 0) return;
 
-  const tuples = args.feedbacks.map(f => {
+  const currentFeedback = new Map(args.feedbacks.map(feedback => [feedback.feedbackId, feedback]));
+  const tuples = [...currentFeedback.values()].map(f => {
     const legacyFeedback = f as LegacyFeedbackRecord;
     const feedbackSource = legacyFeedback.feedbackSource ?? legacyFeedback.source ?? '';
     const feedbackUserId = legacyFeedback.feedbackUserId ?? legacyFeedback.userId ?? null;
@@ -363,8 +409,29 @@ export async function batchCreateFeedback(db: DuckDBConnection, args: BatchCreat
       feedbackUserId, sourceId, reviewStatus, feedbackSource, feedbackType, value, comment, tags, metadata, scope
     )
      VALUES ${tuples.join(',\n       ')}
-     ON CONFLICT DO NOTHING`,
+     ${FEEDBACK_UPSERT_CLAUSE}`,
   );
+}
+
+/**
+ * Delete feedback events by feedbackId. Optional `organizationId` and
+ * `resourceId` values are ANDed into the predicate to restrict deletion to
+ * records with matching scope fields.
+ */
+export async function deleteFeedback(db: DuckDBConnection, args: DeleteFeedbackArgs): Promise<void> {
+  if (args.feedbackIds.length === 0) return;
+  const placeholders = args.feedbackIds.map(() => '?').join(', ');
+  const conditions = [`feedbackId IN (${placeholders})`];
+  const params: unknown[] = [...args.feedbackIds];
+  if (args.organizationId !== undefined) {
+    conditions.push('organizationId = ?');
+    params.push(args.organizationId);
+  }
+  if (args.resourceId !== undefined) {
+    conditions.push('resourceId = ?');
+    params.push(args.resourceId);
+  }
+  await db.execute(`DELETE FROM feedback_events WHERE ${conditions.join(' AND ')}`, params);
 }
 
 /** Update the review workflow status of a single feedback event. */

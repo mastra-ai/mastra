@@ -1,5 +1,11 @@
+import { writeFile } from 'node:fs/promises';
 import { copy } from 'fs-extra';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
+vi.mock('node:fs/promises', async importOriginal => ({
+  ...(await importOriginal<typeof import('node:fs/promises')>()),
+  writeFile: vi.fn().mockResolvedValue(undefined),
+}));
 
 // Mock fs-extra/esm - parent Bundler uses this import path
 vi.mock('fs-extra/esm', () => ({
@@ -14,6 +20,10 @@ vi.mock('fs-extra', () => ({
   copy: vi.fn(),
 }));
 
+const { extractMastraOption } = vi.hoisted(() => ({
+  extractMastraOption: vi.fn().mockResolvedValue(null),
+}));
+
 vi.mock('@mastra/deployer/build', () => {
   class MockFileService {
     getFirstExistingFile = vi.fn().mockReturnValue('.env');
@@ -21,6 +31,7 @@ vi.mock('@mastra/deployer/build', () => {
   }
 
   return {
+    extractMastraOption,
     FileService: MockFileService,
   };
 });
@@ -79,6 +90,25 @@ describe('BuildBundler', () => {
       const { BuildBundler } = await import('./BuildBundler');
 
       await expect(new BuildBundler().getEnvFiles()).resolves.toEqual(['.env', '.env.local', '.env.production']);
+    });
+  });
+
+  describe('bundle', () => {
+    it('does not execute worker introspection outside environment deploys', async () => {
+      const { BuildBundler } = await import('./BuildBundler');
+      const bundler = new BuildBundler();
+      const bundleSpy = vi.spyOn(bundler as any, '_bundle').mockResolvedValue(undefined);
+      const loadEnvVarsSpy = vi
+        .spyOn(bundler as any, 'loadEnvVars')
+        .mockRejectedValue(new Error('must not load env vars'));
+
+      await expect(
+        bundler.bundle('/entry.ts', '/output', { toolsPaths: [], projectRoot: '/project' }),
+      ).resolves.toBeUndefined();
+      expect(extractMastraOption).not.toHaveBeenCalled();
+      expect(bundleSpy).toHaveBeenCalledOnce();
+      expect(writeFile).not.toHaveBeenCalledWith('/output/output/worker-manifest.mjs', expect.any(String));
+      expect(loadEnvVarsSpy).not.toHaveBeenCalled();
     });
   });
 
@@ -167,6 +197,7 @@ describe('BuildBundler', () => {
       expect(entries.worker).toContain("import { mastra } from '#mastra'");
       expect(entries.worker).toContain("request.url !== '/health'");
       expect(entries.worker).toContain('await mastra.startWorkers()');
+      expect(entries).not.toHaveProperty('worker-manifest');
     });
 
     it('should include studio: true when studio is enabled', async () => {

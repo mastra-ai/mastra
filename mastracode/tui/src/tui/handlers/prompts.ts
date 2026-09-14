@@ -419,7 +419,13 @@ export async function handlePlanApproval(
         releaseApprovalFocus();
         firePermissionResult('approved');
         await prepareApprovedPlan(ctx, resolvedTitle, plan, planPath);
-        await resumeApprovedPlan(ctx, toolCallId, resolvedTitle, plan, snapshotKey);
+        const resumed = resumeApprovedPlan(ctx, toolCallId, resolvedTitle, plan, snapshotKey);
+        // The controller emits the resumed tool's terminal events while this
+        // handler owns its serialized event queue. Let those events reach their
+        // render boundaries immediately, but wait for the plan-mode run to
+        // finish before starting the fresh goal run below.
+        resolve();
+        await resumed;
 
         // The plan-mode resume reaches its idle boundary before `startGoal` sends
         // the canonical goal reminder, so this starts a fresh build-mode run.
@@ -430,8 +436,6 @@ export async function handlePlanApproval(
         if (goal?.id) {
           state.planStartedGoalId = goal.id;
         }
-
-        resolve();
       },
       onReject: () => {
         releaseApprovalFocus();

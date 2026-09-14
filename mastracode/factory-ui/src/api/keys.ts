@@ -19,6 +19,7 @@ export const queryKeys = {
   serverFeatures: () => ['server-features'] as const,
   factoryAuth: () => ['factory-auth'] as const,
   factories: () => ['factories'] as const,
+  boardCatalog: (factoryProjectId: string | undefined) => ['factory', 'boards', factoryProjectId ?? null] as const,
   persistedFactories: () => ['factories', 'persisted'] as const,
   factoryCreateFlow: () => ['factories', 'create-flow'] as const,
   factoryProject: (factoryProjectId: string | undefined) => ['factory', 'project', factoryProjectId ?? null] as const,
@@ -45,6 +46,8 @@ export const queryKeys = {
     ['linear', 'issue', factoryProjectId ?? null, identifier ?? null] as const,
   intakeConfig: () => ['intake', 'config'] as const,
   intakeBindings: () => ['intake', 'bindings'] as const,
+  intakeLabelRoutes: (factoryProjectId: string | undefined) =>
+    ['intake', 'label-routes', factoryProjectId ?? null] as const,
   channelAccounts: () => ['channel-accounts'] as const,
   workItems: (factoryProjectId: string | undefined) => ['factory', 'work-items', factoryProjectId ?? null] as const,
   /** Every comment read, all work items — the catch-up target after a stream drop. */
@@ -69,8 +72,8 @@ export const queryKeys = {
     ['factory', 'decisions', githubProjectId ?? null, statusKey] as const,
   factoryAttentionRoot: (factoryProjectId: string | undefined) =>
     ['factory', 'attention', factoryProjectId ?? null] as const,
-  factoryAttention: (factoryProjectId: string | undefined, view: string, limit: number, tier = 'all') =>
-    [...queryKeys.factoryAttentionRoot(factoryProjectId), view, limit, tier] as const,
+  factoryAttention: (factoryProjectId: string | undefined, view: string, limit: number, group = 'all') =>
+    [...queryKeys.factoryAttentionRoot(factoryProjectId), view, limit, group] as const,
   factorySupervisorHealth: (factoryProjectId: string | undefined) =>
     ['factory', 'supervisor', 'health', factoryProjectId ?? null] as const,
   factoryAudit: (githubProjectId: string | undefined, group: string, actorKey?: string) =>

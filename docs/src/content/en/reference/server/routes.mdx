@@ -2,7 +2,7 @@
 title: "Reference: Server routes | Server"
 description: "Server adapters register these routes when you call server.init(). All routes are prefixed with the prefix option if configured."
 packages:
-  - "@mastra/server"
+  - '@mastra/server'
 ---
 
 # Server routes
@@ -384,7 +384,9 @@ On authenticated servers, the read routes require the `stored-workflows:read` pe
 | `DELETE` | `/api/datasets/:datasetId` | Delete a dataset |
 | `GET` | `/api/datasets/:datasetId/items` | List dataset items |
 | `POST` | `/api/datasets/:datasetId/items` | Add a dataset item |
+| `DELETE` | `/api/datasets/:datasetId/items/:itemId/purge` | Permanently scrub an item's content from every dataset version and linked experiment result |
 | `GET` | `/api/experiments` | List experiments across datasets |
+| `DELETE` | `/api/experiments/:experimentId` | Delete an experiment, including one orphaned by dataset deletion |
 | `GET` | `/api/datasets/:datasetId/experiments` | List experiments for a dataset |
 | `POST` | `/api/datasets/:datasetId/experiments` | Trigger an experiment, or create one without starting it (`start: false`) |
 | `POST` | `/api/datasets/:datasetId/experiments/:experimentId/items/:itemId/run` | Execute one experiment item server-side |
@@ -392,8 +394,31 @@ On authenticated servers, the read routes require the `stored-workflows:read` pe
 | `POST` | `/api/datasets/:datasetId/experiments/:experimentId/finalize` | Finalize a caller-driven experiment |
 | `GET` | `/api/datasets/:datasetId/experiments/:experimentId` | Get experiment by ID |
 | `PATCH` | `/api/datasets/:datasetId/experiments/:experimentId` | Update an experiment's name, description or metadata |
+| `DELETE` | `/api/datasets/:datasetId/experiments/:experimentId` | Delete an experiment that belongs to the dataset |
 | `GET` | `/api/datasets/:datasetId/experiments/:experimentId/results` | List experiment results |
 | `POST` | `/api/datasets/:datasetId/compare` | Compare two experiments |
+
+### Delete an experiment
+
+Both delete routes remove the experiment and its result records. When storage supports observability and trace deletion, Mastra also removes the traces produced by the experiment together with their spans and trace-linked signals.
+
+Use the dataset-scoped route when you know the owning dataset:
+
+```bash
+curl -X DELETE http://localhost:4111/api/datasets/dataset-id/experiments/experiment-id
+```
+
+The route accepts optional `organizationId` and `projectId` query parameters. It returns `404` if the dataset is outside the supplied tenancy, the experiment doesn't exist, or the experiment doesn't belong to the dataset.
+
+Use the top-level route when you don't have a dataset reference, including when dataset deletion has orphaned the experiment by clearing its `datasetId`:
+
+```bash
+curl -X DELETE http://localhost:4111/api/experiments/experiment-id
+```
+
+The top-level route accepts optional `organizationId` and `projectId` query parameters. When either is present, deletion is limited to that tenancy. A tenancy mismatch returns `{ "success": true }` without deleting the experiment. Without tenancy parameters, a missing experiment returns `404`.
+
+A successful deletion returns `{ "success": true }`. The top-level route returns the same response for a tenancy mismatch, but doesn't delete anything. Both routes return `501` unless the installed `@mastra/core` advertises support through the `experiment-deletion` feature flag, including when an older version predates this support. When storage lacks observability or trace deletion support, Mastra logs a warning, leaves the traces in place, and still deletes the experiment with its result records. If trace cleanup fails after an earlier batch succeeds, the route returns `500` and preserves the experiment and result records even though some traces may already have been removed.
 
 ### Caller-driven experiment routes
 

@@ -19,6 +19,31 @@ describe('workspace_read_file', () => {
     await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
   });
 
+  it.each([25, 100])('returns well-formed Unicode with a %s-token budget', async maxOutputTokens => {
+    const content = 'a'.repeat(100) + '😀' + 'b'.repeat(100);
+    await fs.writeFile(path.join(tempDir, 'unicode.txt'), content, 'utf8');
+    const workspace = new Workspace({
+      filesystem: new LocalFilesystem({ basePath: tempDir }),
+      tools: { [WORKSPACE_TOOLS.FILESYSTEM.READ_FILE]: { maxOutputTokens } },
+    });
+    const tools = await createWorkspaceTools(workspace);
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute(
+      { path: 'unicode.txt', showLineNumbers: false },
+      { workspace },
+    );
+
+    expect(typeof result).toBe('string');
+    if (typeof result !== 'string') throw new Error('Expected text output');
+    expect(() => encodeURIComponent(result)).not.toThrow();
+    if (maxOutputTokens === 25) {
+      expect(result).toContain('a'.repeat(100) + '\uFFFD');
+      expect(result).toContain('[output truncated:');
+    } else {
+      expect(result).toContain(content);
+      expect(result).not.toContain('[output truncated:');
+    }
+  });
+
   it('should read file content with line numbers by default', async () => {
     await fs.writeFile(path.join(tempDir, 'test.txt'), 'Hello World');
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });

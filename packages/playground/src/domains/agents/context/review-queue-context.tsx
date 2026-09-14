@@ -58,7 +58,6 @@ interface ReviewQueueState {
   completeItem: (id: string) => Promise<void>;
   setItemTags: (id: string, tags: string[]) => void;
   rateItem: (id: string, rating: 'positive' | 'negative' | undefined) => void;
-  commentItem: (id: string, comment: string) => void;
   setClusters: (clusters: FailureCluster[]) => void;
   setActiveClusterId: (id: string | null) => void;
   assignCluster: (itemId: string, clusterId: string) => void;
@@ -196,43 +195,6 @@ export function ReviewQueueProvider({ children }: { children: ReactNode }) {
     [items, client],
   );
 
-  const commentItem = useCallback(
-    (id: string, comment: string) => {
-      const item = items.find(i => i.id === id);
-      if (item?.experimentId && item?.datasetId) {
-        // Persist comment on the experiment result so it survives reloads
-        updateExperimentResult.mutate({
-          datasetId: item.datasetId,
-          experimentId: item.experimentId,
-          resultId: item.id,
-          comment,
-        });
-      }
-      // Also record the comment via feedback API if we have a traceId
-      if (item?.traceId) {
-        client
-          .createFeedback({
-            feedback: {
-              traceId: item.traceId,
-              source: 'studio',
-              feedbackSource: 'studio',
-              feedbackType: 'comment',
-              value: comment,
-              comment,
-              reviewStatus: 'reviewed',
-              experimentId: item.experimentId ?? undefined,
-              sourceId: item.id, // experiment result ID
-            },
-          })
-          .catch(() => {
-            // Silently fail — local state is still updated
-          });
-      }
-      setItems(prev => prev.map(i => (i.id === id ? { ...i, comment } : i)));
-    },
-    [items, client, updateExperimentResult],
-  );
-
   const assignCluster = useCallback((itemId: string, clusterId: string) => {
     setItems(prev => prev.map(i => (i.id === itemId ? { ...i, clusterId } : i)));
   }, []);
@@ -254,7 +216,6 @@ export function ReviewQueueProvider({ children }: { children: ReactNode }) {
         completeItem,
         setItemTags,
         rateItem,
-        commentItem,
         setClusters,
         setActiveClusterId,
         assignCluster,
@@ -267,6 +228,7 @@ export function ReviewQueueProvider({ children }: { children: ReactNode }) {
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components -- context hook intentionally co-located with its provider
 export function useReviewQueue() {
   const ctx = useContext(ReviewQueueContext);
   if (!ctx) throw new Error('useReviewQueue must be used within ReviewQueueProvider');

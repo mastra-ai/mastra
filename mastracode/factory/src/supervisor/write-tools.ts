@@ -1,10 +1,12 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
+import { boardForWorkItem } from '../boards/index.js';
 import type { IntegrationTools } from '../integrations/base.js';
 import type { FactoryTransitionService } from '../rules/transition-service.js';
-import { FACTORY_RULE_STAGES, factoryRuleStage } from '../rules/types.js';
-import type { AuditStorage } from '../storage/domains/audit/base.js';
+import { BOARD_IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from '../rules/validation.js';
+import type { AuditAction } from '../storage/domains/audit/actions.js';
+import type { AuditRecorder } from '../storage/domains/audit/domain.js';
 import type { WorkItemRow, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { SupervisorScope } from './read-tools.js';
 
@@ -12,7 +14,7 @@ interface SupervisorWriteDependencies {
   scope: SupervisorScope;
   userId: string;
   workItems: WorkItemsStorage;
-  audit: AuditStorage;
+  audit: AuditRecorder;
   transitionService: FactoryTransitionService;
   reconcileAcceptanceLabels?: (input: { orgId: string; factoryProjectId: string; item: WorkItemRow }) => Promise<void>;
   signalSession?: (input: { sessionId: string; message: string; userId: string }) => Promise<unknown>;
@@ -21,7 +23,11 @@ interface SupervisorWriteDependencies {
 
 export function createFactorySupervisorWriteTools(deps: SupervisorWriteDependencies): IntegrationTools {
   const now = deps.now ?? (() => new Date());
-  const audit = async (action: string, target: { type: string; id: string }, metadata: Record<string, unknown> = {}) =>
+  const audit = async (
+    action: AuditAction,
+    target: { type: string; id: string },
+    metadata: Record<string, unknown> = {},
+  ) =>
     deps.audit.record({
       orgId: deps.scope.orgId,
       actorId: deps.userId,
@@ -113,31 +119,27 @@ export function createFactorySupervisorWriteTools(deps: SupervisorWriteDependenc
     factory_transition_work_item: createTool({
       id: 'factory_transition_work_item',
       description: 'Move or accept one Factory work item after the person confirms the destination stage.',
-      inputSchema: z.object({ workItemId: z.string().min(1), stage: z.enum(FACTORY_RULE_STAGES) }),
+      inputSchema: z.object({
+        workItemId: z.string().min(1),
+        stage: z.string().max(MAX_BOARD_IDENTIFIER_LENGTH).regex(BOARD_IDENTIFIER_RE),
+      }),
       requireApproval: true,
       execute: async ({ workItemId, stage }) => {
         const item = await deps.workItems.get({ orgId: deps.scope.orgId, id: workItemId });
         if (!item || item.factoryProjectId !== deps.scope.factoryProjectId) throw new Error('Work item not found.');
-        const from = factoryRuleStage(item.stages);
+        const from = item.stages.length === 1 ? item.stages[0] : undefined;
         if (!from) throw new Error('The work item does not have one valid Factory stage.');
         const result = await deps.transitionService.transition({
           orgId: deps.scope.orgId,
           factoryProjectId: deps.scope.factoryProjectId,
           workItemId,
-          board: item.externalSource?.type === 'pull-request' ? 'review' : 'work',
+          board: boardForWorkItem(item),
           stage,
           expectedRevision: item.revision,
           actor: { type: 'human', id: deps.userId },
           ingress: { type: 'human', identity: `supervisor:${deps.userId}:${workItemId}:${item.revision}:${stage}` },
           cause: 'supervisor',
         });
-        await audit(
-          result.status === 'accepted' ? 'factory.work_item.stage_moved' : 'factory.work_item.transition_rejected',
-          { type: 'work_item', id: workItemId },
-          result.status === 'accepted'
-            ? { from, to: result.stage, revision: result.revision, transitionId: result.transitionId }
-            : { from, to: stage, code: result.code, reason: result.reason, transitionId: result.transitionId },
-        );
         if (result.status !== 'accepted') {
           throw new Error(`The transition was rejected (${result.code}): ${result.reason}`);
         }

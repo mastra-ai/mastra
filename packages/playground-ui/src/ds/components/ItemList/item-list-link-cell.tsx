@@ -16,7 +16,7 @@ export function ItemListLinkCell({ children, href, className, LinkComponent: Lin
     <Link
       href={href}
       className={cn(
-        'flex w-full items-center justify-center gap-6 rounded-lg px-3 py-[0.6rem] text-left',
+        'flex w-full items-center justify-center gap-4 rounded-lg px-3 py-2 text-left',
         'hover:bg-surface4',
         transitions.colors,
         focusRing.visible,

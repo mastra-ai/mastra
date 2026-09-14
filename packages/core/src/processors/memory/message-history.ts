@@ -133,6 +133,8 @@ export class MessageHistory implements Processor {
           page: 0,
           perPage: this.lastMessages,
           orderBy: { field: 'createdAt', direction: 'DESC' },
+          // Last-N history read only consumes `messages`; skip the COUNT(*) work.
+          includeTotal: false,
         });
         return result.messages;
       };

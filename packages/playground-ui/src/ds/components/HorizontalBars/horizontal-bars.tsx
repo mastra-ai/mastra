@@ -1,8 +1,26 @@
-import type { ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import { ScrollArea } from '@/ds/components/ScrollArea/scroll-area';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/ds/components/Tooltip';
 import type { LinkComponent } from '@/ds/types/link-component';
 import { cn } from '@/lib/utils';
+
+/** Relative luminance (WCAG) of a hex color, or `undefined` for anything else (e.g. `var(--token)`). */
+function hexLuminance(color: string): number | undefined {
+  const hex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(color.trim())?.[1];
+  if (!hex) return undefined;
+  const full = hex.length === 3 ? [...hex].map(c => c + c).join('') : hex;
+  const linear = (offset: number) => {
+    const channel = parseInt(full.slice(offset, offset + 2), 16) / 255;
+    return channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * linear(0) + 0.7152 * linear(2) + 0.0722 * linear(4);
+}
+
+/** Bright fills (yellow, orange, green, red) swallow the light label; dark text reads better on them. */
+function needsDarkLabel(color: string | undefined): boolean {
+  const luminance = color ? hexLuminance(color) : undefined;
+  return luminance !== undefined && luminance > 0.25;
+}
 
 type Segment = { label: string; color: string };
 
@@ -58,14 +76,18 @@ export function HorizontalBars({
       <div className="grid gap-3.5">
         {sorted.map(d => {
           const total = d.values.reduce((s, v) => s + v, 0);
+          const barWidth = `${maxVal > 0 ? (total / maxVal) * 100 : 0}%`;
+          // The label starts over the first filled segment; that fill decides the label tone in dark mode.
+          // Light mode fades every fill to 40% (see below), so the default label already reads there.
+          const darkLabelOnFill = needsDarkLabel(segments[d.values.findIndex(v => v > 0)]?.color);
           const rowBody = (
             <>
-              <div className="relative h-full min-w-0 flex-1">
+              <div className="relative h-full min-w-0 flex-1" style={{ '--bar-width': barWidth } as CSSProperties}>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <div
                       className={cn('absolute inset-y-0 left-0', d.href ? 'cursor-pointer' : 'cursor-default')}
-                      style={{ width: `${maxVal > 0 ? (total / maxVal) * 100 : 0}%` }}
+                      style={{ width: barWidth }}
                     >
                       {segments.map((seg, si) => {
                         const val = d.values[si] ?? 0;
@@ -120,9 +142,26 @@ export function HorizontalBars({
                     </div>
                   </TooltipContent>
                 </Tooltip>
-                <span className="text-ui-sm text-neutral4 pointer-events-none absolute inset-y-0 left-2.5 z-10 flex items-center truncate">
-                  {d.name}
-                </span>
+                <div
+                  className={cn(
+                    'pointer-events-none absolute inset-0 z-10',
+                    darkLabelOnFill && 'dark:[clip-path:inset(0_0_0_var(--bar-width))]',
+                  )}
+                >
+                  <span className="text-ui-sm text-neutral4 absolute inset-y-0 left-2.5 flex items-center truncate">
+                    {d.name}
+                  </span>
+                </div>
+                {darkLabelOnFill && (
+                  <div
+                    aria-hidden
+                    className="pointer-events-none absolute inset-y-0 left-0 z-10 hidden w-(--bar-width) overflow-hidden dark:block"
+                  >
+                    <span className="text-ui-sm text-neutral1 absolute inset-y-0 left-2.5 flex items-center whitespace-nowrap">
+                      {d.name}
+                    </span>
+                  </div>
+                )}
               </div>
               <span className="text-ui-md text-neutral4 shrink-0 pr-3 tabular-nums">{fmt(total)}</span>
             </>

@@ -36,8 +36,8 @@ export class FavoritesPG extends FavoritesStorage {
 
   constructor(config: PgDomainConfig) {
     super();
-    const { client, schemaName, skipDefaultIndexes } = resolvePgConfig(config);
-    this.#db = new PgDB({ client, schemaName, skipDefaultIndexes });
+    const { client, readClient, schemaName, skipDefaultIndexes } = resolvePgConfig(config);
+    this.#db = new PgDB({ client, readClient, schemaName, skipDefaultIndexes });
     this.#schema = schemaName || 'public';
   }
 
@@ -195,7 +195,7 @@ export class FavoritesPG extends FavoritesStorage {
   async isFavorited(input: StorageFavoriteKey): Promise<boolean> {
     const fullFavoritesTable = getTableName({ indexName: TABLE_FAVORITES, schemaName: getSchemaName(this.#schema) });
     try {
-      const result = await this.#db.client.oneOrNone(
+      const result = await this.#db.readClient.oneOrNone(
         `SELECT 1 FROM ${fullFavoritesTable} WHERE "userId" = $1 AND "entityType" = $2 AND "entityId" = $3 LIMIT 1`,
         [input.userId, input.entityType, input.entityId],
       );
@@ -221,7 +221,7 @@ export class FavoritesPG extends FavoritesStorage {
     const fullFavoritesTable = getTableName({ indexName: TABLE_FAVORITES, schemaName: getSchemaName(this.#schema) });
     try {
       const placeholders = entityIds.map((_, i) => `$${i + 3}`).join(', ');
-      const rows = await this.#db.client.manyOrNone<{ entityId: string }>(
+      const rows = await this.#db.readClient.manyOrNone<{ entityId: string }>(
         `SELECT "entityId" FROM ${fullFavoritesTable} WHERE "userId" = $1 AND "entityType" = $2 AND "entityId" IN (${placeholders})`,
         [userId, entityType, ...entityIds],
       );
@@ -246,7 +246,7 @@ export class FavoritesPG extends FavoritesStorage {
   async listFavoritedIds(input: StorageListFavoritesInput): Promise<string[]> {
     const fullFavoritesTable = getTableName({ indexName: TABLE_FAVORITES, schemaName: getSchemaName(this.#schema) });
     try {
-      const rows = await this.#db.client.manyOrNone<{ entityId: string }>(
+      const rows = await this.#db.readClient.manyOrNone<{ entityId: string }>(
         `SELECT "entityId" FROM ${fullFavoritesTable} WHERE "userId" = $1 AND "entityType" = $2 ORDER BY "createdAt" DESC, "entityId" ASC`,
         [input.userId, input.entityType],
       );

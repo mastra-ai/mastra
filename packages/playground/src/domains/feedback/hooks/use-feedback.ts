@@ -50,6 +50,12 @@ export function useUpdateFeedbackReviewStatus() {
   return useMutation({
     mutationFn: ({ feedbackId, reviewStatus }: { feedbackId: string; reviewStatus: FeedbackReviewStatus }) =>
       client.updateFeedbackReviewStatus({ feedbackId, reviewStatus }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['feedback'] }),
+    // Trace/span threads render the same records, so refresh them alongside the inbox list.
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['feedback'] }),
+        queryClient.invalidateQueries({ queryKey: ['trace-feedback'] }),
+        queryClient.invalidateQueries({ queryKey: ['span-feedback'] }),
+      ]),
   });
 }

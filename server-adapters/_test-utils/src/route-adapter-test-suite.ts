@@ -161,6 +161,10 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
       // Tool-provider connections list relies on storage rows being seeded
       // for the test author. Covered by tool-providers.test.ts.
       '/tool-providers/:providerId/connections',
+      // Experiment deletion requires a persisted experiment matching the generated
+      // experimentId. The generic test context does not seed dataset storage;
+      // deletion behavior is covered by datasets.test.ts.
+      '/experiments/:experimentId',
     ];
     // Routes under these prefixes are excluded (e.g. /datasets needs a datasets storage domain)
     const excludedPrefixes = [

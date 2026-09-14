@@ -1299,6 +1299,7 @@ describe('GithubSignals', () => {
     expect((savedThread.metadata?.mastra as any)[GITHUB_SIGNALS_METADATA_KEY].subscriptions).toEqual([]);
     expect(chunks).toContainEqual(
       expect.objectContaining({
+        type: 'data-signal',
         data: expect.objectContaining({
           tagName: GITHUB_SYNC_STATUS_TAG,
           attributes: expect.objectContaining({

@@ -125,32 +125,30 @@ const ACCEPTED_MODERN_ERA_HTTP_OPTION_KEYS = new Set([
 ]);
 
 /**
- * MCPServer exposes Mastra tools, agents, and workflows as a Model Context Protocol (MCP) server.
- *
- * This class allows any MCP client (like Cursor, Windsurf, or Claude Desktop) to connect and use your
- * Mastra capabilities. It supports both stdio (subprocess) and SSE (HTTP) MCP transports.
+ * Exposes Mastra tools, agents, and workflows to Model Context Protocol (MCP) clients.
+ * Supports stdio, SSE, and Streamable HTTP transports; start or mount a transport
+ * to accept client connections.
  *
  * @example
+ * `yourTool` is a tool you have already configured.
  * ```typescript
  * import { MCPServer } from '@mastra/mcp';
- * import { createTool } from '@mastra/core/tools';
- * import { z } from 'zod';
- *
- * const weatherTool = createTool({
- *   id: 'getWeather',
- *   description: 'Gets the current weather for a location.',
- *   inputSchema: z.object({ location: z.string() }),
- *   execute: async (inputData) => `Weather in ${inputData.location} is sunny.`,
- * });
  *
  * const server = new MCPServer({
- *   name: 'My Weather Server',
+ *   id: 'my-server',
+ *   name: 'My Server',
  *   version: '1.0.0',
- *   tools: { weatherTool },
+ *   tools: { yourTool },
  * });
- *
- * await server.startStdio();
  * ```
+ *
+ * @see For documentation bundled with your installed package, locate
+ * `@mastra/mcp/package.json` with your project's resolver or package-manager
+ * tooling, then read `dist/docs/SKILL.md` from that package root and follow its
+ * reference links. Use package-manager tools for virtual or archived packages.
+ *
+ * @see [MCP server documentation](https://mastra.ai/reference/tools/mcp-server)
+ * if packaged docs are unavailable.
  */
 export class MCPServer extends MCPServerBase {
   private server: Server;

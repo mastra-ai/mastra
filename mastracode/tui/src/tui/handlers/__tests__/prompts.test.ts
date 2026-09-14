@@ -225,6 +225,35 @@ describe('handlePlanApproval goal mode', () => {
     expect(state.planStartedGoalId).toBe('goal-123');
   });
 
+  it('releases the event queue while waiting for the plan resume before starting the goal', async () => {
+    const projectPath = createTmpProjectWithPlan(PLAN_TITLE, 'Build the feature');
+    const { state, ctx } = createPlanApprovalCtx(projectPath);
+    let releaseResume!: () => void;
+    const resume = new Promise<void>(resolve => {
+      releaseResume = resolve;
+    });
+    state.session.respondToToolSuspension = vi.fn().mockReturnValue(resume);
+
+    const { promise, component } = await renderPlanApproval(ctx, state, PLAN_PATH);
+    const approval = (component as any).onGoal();
+
+    await vi.waitFor(() => expect(state.session.respondToToolSuspension).toHaveBeenCalledTimes(1));
+    let handlerResolved = false;
+    void promise.then(() => {
+      handlerResolved = true;
+    });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(handlerResolved).toBe(true);
+    expect(ctx.startGoal).not.toHaveBeenCalled();
+
+    releaseResume();
+    await approval;
+    await promise;
+
+    expect(ctx.startGoal).toHaveBeenCalledWith('# Test Plan\n\nBuild the feature', 'Goal cancelled.');
+    expect(state.planStartedGoalId).toBe('goal-123');
+  });
+
   it('does not set planStartedGoalId if startGoal does not set a goal', async () => {
     const projectPath = createTmpProjectWithPlan(PLAN_TITLE, 'Build the feature');
     const { state, ctx } = createPlanApprovalCtx(projectPath);

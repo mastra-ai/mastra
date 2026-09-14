@@ -54,6 +54,29 @@ export class SandboxNotReadyError extends SandboxError {
   }
 }
 
+/**
+ * Thrown when a caller requests a sandbox feature that the active provider
+ * cannot honor (e.g. an explicit per-file permission mode on a provider whose
+ * upload mechanism does not support one).
+ */
+export class SandboxUnsupportedFeatureError extends SandboxError {
+  constructor(message: string, details?: Record<string, unknown>) {
+    super(message, 'UNSUPPORTED_FEATURE', details);
+    this.name = 'SandboxUnsupportedFeatureError';
+  }
+}
+
+/**
+ * Thrown when a sandbox operation is cancelled via an {@link AbortSignal}.
+ * Carries a stable `code` of `ABORTED` so callers can reliably detect cancellation.
+ */
+export class SandboxAbortError extends SandboxError {
+  constructor(operation: string = 'operation') {
+    super(`Sandbox operation aborted: ${operation}`, 'ABORTED', { operation });
+    this.name = 'SandboxAbortError';
+  }
+}
+
 export class IsolationUnavailableError extends SandboxError {
   constructor(
     public readonly backend: string,

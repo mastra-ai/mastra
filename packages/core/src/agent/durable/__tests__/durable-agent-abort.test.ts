@@ -231,6 +231,7 @@ describe('DurableAgent abort signal', () => {
     const assistantMessage = messages.find(message => message.role === 'assistant');
     expect(assistantMessage, 'partial assistant message was not persisted to memory after abort').toBeDefined();
     expect(JSON.stringify(assistantMessage?.content)).toContain('Hello');
+    expect(assistantMessage?.content.parts?.some(part => part.type === 'error')).toBe(false);
 
     cleanup();
   });

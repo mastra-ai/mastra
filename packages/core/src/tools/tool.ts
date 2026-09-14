@@ -708,6 +708,31 @@ type CreateToolOpts<
   resumeSchema?: TResumeSchema;
   execute?: ToolExecuteFunction<InferSchema<TInputSchema>, InferSchema<TOutputSchema>, TContext, TRequestContext>;
 };
+/**
+ * Defines a tool with a description, input/output schemas, and an execution function.
+ *
+ * @example
+ * ```typescript
+ * import { createTool } from '@mastra/core/tools';
+ * import { z } from 'zod';
+ *
+ * const greet = createTool({
+ *   id: 'greet',
+ *   description: 'Greet someone by name.',
+ *   inputSchema: z.object({ name: z.string() }),
+ *   outputSchema: z.string(),
+ *   execute: async ({ name }) => `Hello, ${name}!`,
+ * });
+ * ```
+ *
+ * @see For documentation bundled with your installed package, locate
+ * `@mastra/core/package.json` with your project's resolver or package-manager
+ * tooling, then read `dist/docs/SKILL.md` from that package root and follow its
+ * reference links. Use package-manager tools for virtual or archived packages.
+ *
+ * @see [Tool documentation](https://mastra.ai/reference/tools/create-tool)
+ * if packaged docs are unavailable.
+ */
 export function createTool<
   TId extends string = string,
   TInputSchema extends SchemaLike = undefined,

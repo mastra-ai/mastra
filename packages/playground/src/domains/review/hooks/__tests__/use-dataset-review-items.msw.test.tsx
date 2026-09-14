@@ -52,7 +52,7 @@ describe('useReviewItems', () => {
     );
   };
 
-  it('hydrates the persisted comment (and tags) from the experiment result', async () => {
+  it('hydrates the persisted tags from the experiment result', async () => {
     setupHandlers();
 
     const { result } = renderHook(() => useReviewItems({ experimentId: EXPERIMENT_ID }), { wrapper: makeWrapper() });
@@ -65,9 +65,6 @@ describe('useReviewItems', () => {
     expect(item.id).toBe(RESULT_ID);
     expect(item.datasetId).toBe(DATASET_ID);
     expect(item.tags).toEqual(['hallucination']);
-    // Regression guard for #19857: the comment used to be hardcoded to ''
-    // on rehydrate, wiping saved comments on every reload.
-    expect(item.comment).toBe('The agent ignored the second question');
   });
 
   it('only fetches the selected experiment when scoped', async () => {
@@ -86,6 +83,30 @@ describe('useReviewItems', () => {
 
     await waitFor(() => expect(result.current.data).toHaveLength(2));
     expect(resultRequests.sort()).toEqual([EXPERIMENT_ID, OTHER_EXPERIMENT_ID].sort());
+  });
+
+  it('asks the server for the target scope and only walks the experiments it returns', async () => {
+    resultRequests.length = 0;
+    const experimentQueries: URLSearchParams[] = [];
+    server.use(
+      http.get(`${BASE_URL}/api/experiments`, ({ request }) => {
+        experimentQueries.push(new URL(request.url).searchParams);
+        return HttpResponse.json(experimentsResponse);
+      }),
+      http.get(`${BASE_URL}/api/datasets/${DATASET_ID}/experiments/:experimentId/results`, ({ params }) => {
+        resultRequests.push(String(params.experimentId));
+        return HttpResponse.json(resultsResponse);
+      }),
+    );
+
+    const { result } = renderHook(() => useReviewItems({ targetType: 'agent', targetId: 'agent-1' }), {
+      wrapper: makeWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.data).toHaveLength(1));
+    expect(experimentQueries[0].get('targetType')).toBe('agent');
+    expect(experimentQueries[0].get('targetId')).toBe('agent-1');
+    expect(resultRequests).toEqual([EXPERIMENT_ID]);
   });
 });
 

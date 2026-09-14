@@ -24,7 +24,7 @@ export function SelectedToolList({ providerId, selectedTools, onToggle }: Select
 
   if (tools.length === 0) {
     return (
-      <div className="flex items-center justify-center py-12">
+      <div className="flex items-center justify-center py-8">
         <Txt variant="ui-sm" className="text-neutral3">
           No tools selected
         </Txt>

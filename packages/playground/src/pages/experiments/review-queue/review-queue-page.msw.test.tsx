@@ -12,6 +12,7 @@ import {
   experiment,
   results,
 } from '@/domains/experiments/__tests__/fixtures/experiment-item-route';
+import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { TEST_BASE_URL } from '@/test/render';
 
@@ -97,9 +98,21 @@ beforeEach(() => {
 
 const renderPage = (search = '') => {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const router = createMemoryRouter([{ path: '/experiments/review-queue', element: <ReviewQueuePage /> }], {
-    initialEntries: [`/experiments/review-queue${search}`],
-  });
+  const router = createMemoryRouter(
+    [
+      {
+        path: '/experiments/review-queue',
+        element: (
+          <TestLinkProvider>
+            <ReviewQueuePage />
+          </TestLinkProvider>
+        ),
+      },
+    ],
+    {
+      initialEntries: [`/experiments/review-queue${search}`],
+    },
+  );
 
   render(
     <MastraReactProvider baseUrl={TEST_BASE_URL}>
@@ -117,7 +130,7 @@ describe('Review Queue page', () => {
     it('lists items awaiting review across every experiment', async () => {
       renderPage();
 
-      const select = (await screen.findByRole('combobox')) as HTMLSelectElement;
+      const select = (await screen.findByRole('combobox', { name: 'Select experiment' })) as HTMLSelectElement;
       await screen.findByRole('option', { name: 'All experiments' });
       expect(select.value).toBe('all');
 
@@ -131,12 +144,28 @@ describe('Review Queue page', () => {
     it('preselects it in the combobox and shows only its review queue', async () => {
       renderPage(`?experiment=${EXPERIMENT_ID}`);
 
-      const select = (await screen.findByRole('combobox')) as HTMLSelectElement;
+      const select = (await screen.findByRole('combobox', { name: 'Select experiment' })) as HTMLSelectElement;
       await waitFor(() => expect(select.value).toBe(EXPERIMENT_ID));
 
       await screen.findByText(/third question/);
       expect(screen.queryByText(/other question/)).toBeNull();
       expect(requestedExperiments()).toEqual([EXPERIMENT_ID]);
+    });
+
+    it('links back to the experiment page', async () => {
+      renderPage(`?experiment=${EXPERIMENT_ID}`);
+
+      const link = await screen.findByRole('link', { name: /See experiment/ });
+      expect(link.getAttribute('href')).toBe(`/experiments/${EXPERIMENT_ID}`);
+    });
+  });
+
+  describe('when no experiment is selected', () => {
+    it('does not show the "See experiment" link', async () => {
+      renderPage();
+
+      await screen.findByText(/third question/);
+      expect(screen.queryByRole('link', { name: /See experiment/ })).toBeNull();
     });
   });
 
@@ -153,7 +182,7 @@ describe('Review Queue page', () => {
     it('clears ?experiment and shows every queue', async () => {
       const { router } = renderPage(`?experiment=${EXPERIMENT_ID}`);
 
-      const select = await screen.findByRole('combobox');
+      const select = await screen.findByRole('combobox', { name: 'Select experiment' });
       await screen.findByRole('option', { name: 'All experiments' });
       fireEvent.change(select, { target: { value: 'all' } });
 
@@ -167,7 +196,7 @@ describe('Review Queue page', () => {
     it('updates ?experiment and drops ?review', async () => {
       const { router } = renderPage(`?experiment=${EXPERIMENT_ID}&review=res-3`);
 
-      const select = await screen.findByRole('combobox');
+      const select = await screen.findByRole('combobox', { name: 'Select experiment' });
       await screen.findByRole('option', { name: 'entity-extraction / model-b' });
       fireEvent.change(select, { target: { value: OTHER_EXPERIMENT_ID } });
 
@@ -175,6 +204,40 @@ describe('Review Queue page', () => {
         expect(router.state.location.search).toBe(`?experiment=${OTHER_EXPERIMENT_ID}`);
       });
       await screen.findByText(/other question/);
+    });
+  });
+
+  describe('when ?targetType and ?targetId are set', () => {
+    it('forwards them to the experiments request', async () => {
+      const experimentQueries: URLSearchParams[] = [];
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/experiments`, ({ request }) => {
+          experimentQueries.push(new URL(request.url).searchParams);
+          return HttpResponse.json(experimentsResponse);
+        }),
+      );
+
+      renderPage('?targetType=agent&targetId=agent-1');
+
+      await screen.findByText(/third question/);
+      const lastQuery = experimentQueries.at(-1)!;
+      expect(lastQuery.get('targetType')).toBe('agent');
+      expect(lastQuery.get('targetId')).toBe('agent-1');
+    });
+
+    it('keeps the target params when picking an experiment', async () => {
+      const { router } = renderPage('?targetType=agent&targetId=agent-1');
+
+      const select = await screen.findByRole('combobox', { name: 'Select experiment' });
+      await screen.findByRole('option', { name: 'entity-extraction / model-b' });
+      fireEvent.change(select, { target: { value: OTHER_EXPERIMENT_ID } });
+
+      await waitFor(() => {
+        const params = new URLSearchParams(router.state.location.search);
+        expect(params.get('experiment')).toBe(OTHER_EXPERIMENT_ID);
+        expect(params.get('targetType')).toBe('agent');
+        expect(params.get('targetId')).toBe('agent-1');
+      });
     });
   });
 

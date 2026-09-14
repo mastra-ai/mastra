@@ -57,6 +57,19 @@ describe('createServerProject', () => {
     await expect(createServerProject('tok', 'org-1', 'New')).resolves.toEqual(project);
     expect(mockPOST).toHaveBeenCalledWith('/v1/server/projects', { body: { name: 'New' } });
   });
+
+  it('sends the factory flag and region when provided', async () => {
+    const project = { id: 'p1', name: 'Factory', slug: 'factory', organizationId: 'org-1' };
+    mockPOST.mockResolvedValue({ data: { project }, error: undefined, response: { status: 200 } });
+
+    const { createServerProject } = await import('./platform-api.js');
+    await expect(
+      createServerProject('tok', 'org-1', 'Factory', { factoryEnabled: true, region: 'eu' }),
+    ).resolves.toEqual(project);
+    expect(mockPOST).toHaveBeenCalledWith('/v1/server/projects', {
+      body: { name: 'Factory', factoryEnabled: true, region: 'eu' },
+    });
+  });
 });
 
 describe('fetchServerDeployStatus', () => {
@@ -455,6 +468,147 @@ describe('pollServerDeploy', () => {
     expect(result.instanceUrl).toBe('https://app.example');
   });
 
+  it('waits the poll interval after a 401 on the logs endpoint and gives up after three', async () => {
+    let logsCalls = 0;
+    let deployStatusCalls = 0;
+    mockGET.mockImplementation(async (path: string) => {
+      if (String(path).includes('/logs')) {
+        logsCalls++;
+        return { data: undefined, error: { detail: 'expired' }, response: { status: 401 } };
+      }
+      deployStatusCalls++;
+      return {
+        data: { id: 'd1', status: deployStatusCalls >= 6 ? 'running' : 'building', instanceUrl: null, error: null },
+        error: undefined,
+        response: { status: 200 },
+      };
+    });
+    vi.spyOn(process.stdout, 'write').mockImplementation((() => true) as typeof process.stdout.write);
+
+    vi.useFakeTimers();
+    const { pollServerDeploy } = await import('./platform-api.js');
+    const pollPromise = pollServerDeploy('d1', 'tok', 'org-1', 60_000);
+    // 3s initial delay, then one logs call per 2s interval.
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(logsCalls).toBe(1);
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(logsCalls).toBe(2);
+    await vi.advanceTimersByTimeAsync(20_000);
+    await vi.advanceTimersByTimeAsync(5000);
+    await pollPromise;
+    vi.useRealTimers();
+
+    expect(logsCalls).toBe(3);
+  });
+
+  it('holds back a partial trailing line in the combined logs until a later snapshot completes it', async () => {
+    let logsCalls = 0;
+    let deployStatusCalls = 0;
+    const snapshots = [
+      '[build] first\n[build] second is cut he',
+      '[build] first\n[build] second is cut here and now complete\n[build] third\n',
+      '[build] first\n[build] second is cut here and now complete\n[build] third\n[build] final without newline',
+    ];
+    mockGET.mockImplementation(async (path: string) => {
+      if (String(path).includes('/logs')) {
+        logsCalls++;
+        return {
+          data: { logs: snapshots[Math.min(logsCalls, snapshots.length) - 1], buildLogs: [], deployLogs: [] },
+          error: undefined,
+          response: { status: 200 },
+        };
+      }
+      deployStatusCalls++;
+      return {
+        data: { id: 'd1', status: deployStatusCalls >= 3 ? 'running' : 'building', instanceUrl: null, error: null },
+        error: undefined,
+        response: { status: 200 },
+      };
+    });
+
+    const writes: string[] = [];
+    const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(((chunk: string | Uint8Array) => {
+      writes.push(String(chunk));
+      return true;
+    }) as typeof process.stdout.write);
+
+    vi.useFakeTimers();
+    const { pollServerDeploy } = await import('./platform-api.js');
+    const pollPromise = pollServerDeploy('d1', 'tok', 'org-1', 60_000);
+    await vi.advanceTimersByTimeAsync(3000);
+    const afterFirst = writes.join('');
+    await vi.advanceTimersByTimeAsync(10_000);
+    const result = await pollPromise;
+    vi.useRealTimers();
+    writeSpy.mockRestore();
+
+    expect(result.status).toBe('running');
+    // eslint-disable-next-line no-control-regex
+    const strip = (text: string) => text.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '');
+    expect(strip(afterFirst)).toContain('first');
+    expect(strip(afterFirst)).not.toContain('second is cut');
+    const output = strip(writes.join(''));
+    expect(output).toContain('second is cut here and now complete');
+    expect(output).not.toContain('second is cut he\n');
+    expect(output.match(/second is cut/g)).toHaveLength(1);
+    expect(output).toContain('third');
+    // The closing fetch prints the last partial line rather than dropping it.
+    expect(output).toContain('final without newline');
+  });
+
+  it('prints the combined logs string when the build and deploy arrays are empty', async () => {
+    let logsCalls = 0;
+    let deployStatusCalls = 0;
+    mockGET.mockImplementation(async (path: string) => {
+      if (String(path).includes('/logs')) {
+        logsCalls++;
+        return {
+          data: {
+            logs:
+              logsCalls === 1
+                ? '[build] Starting Docker image build\n[2026-09-10T05:06:22.906072526Z] [info] load metadata\n'
+                : '[build] Starting Docker image build\n[2026-09-10T05:06:22.906072526Z] [info] load metadata\n[2026-09-10T05:09:09.504760317Z] [info] Healthcheck succeeded!\n',
+            buildLogs: [],
+            deployLogs: [],
+          },
+          error: undefined,
+          response: { status: 200 },
+        };
+      }
+      deployStatusCalls++;
+      return {
+        data: { id: 'd1', status: deployStatusCalls >= 3 ? 'running' : 'building', instanceUrl: null, error: null },
+        error: undefined,
+        response: { status: 200 },
+      };
+    });
+
+    const writes: string[] = [];
+    const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(((chunk: string | Uint8Array) => {
+      writes.push(String(chunk));
+      return true;
+    }) as typeof process.stdout.write);
+
+    vi.useFakeTimers();
+    const { pollServerDeploy } = await import('./platform-api.js');
+    const pollPromise = pollServerDeploy('d1', 'tok', 'org-1', 60_000);
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(5000);
+    await vi.advanceTimersByTimeAsync(5000);
+    const result = await pollPromise;
+    vi.useRealTimers();
+    writeSpy.mockRestore();
+
+    expect(result.status).toBe('running');
+    // eslint-disable-next-line no-control-regex
+    const output = writes.join('').replace(/\x1b\[[0-9;]*[A-Za-z]/g, '');
+    expect(output).toContain('build Starting Docker image build');
+    expect(output).toContain('info  load metadata');
+    expect(output).toContain('info  Healthcheck succeeded!');
+    // Each line is printed once across polls.
+    expect(output.match(/Starting Docker image build/g)).toHaveLength(1);
+  });
+
   it('retries transient polling failures up to 3 times', async () => {
     vi.useFakeTimers();
 
@@ -562,6 +716,27 @@ describe('pollServerDeploy', () => {
 });
 
 describe('uploadServerDeploy', () => {
+  it('sends the factory flag on the deploy request for Factory builds', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true }));
+    mockPOST
+      .mockResolvedValueOnce({
+        data: { id: 'dep-1', uploadUrl: 'https://signed.example/put', status: 'queued' },
+        error: undefined,
+        response: { status: 202 },
+      })
+      .mockResolvedValueOnce({ data: { id: 'dep-1', status: 'queued' }, error: undefined, response: { status: 200 } });
+
+    const { uploadServerDeploy } = await import('./platform-api.js');
+    await uploadServerDeploy('tok', 'org-1', 'proj-1', Buffer.from('zip'), {
+      projectName: 'goo',
+      factoryEnabled: true,
+    });
+
+    expect(mockPOST).toHaveBeenCalledWith('/v1/server/deploys', {
+      body: expect.objectContaining({ projectId: 'proj-1', projectName: 'goo', factoryEnabled: true }),
+    });
+  });
+
   it('throws platform detail on 402 from deploy create', async () => {
     mockPOST.mockResolvedValue({
       data: undefined,

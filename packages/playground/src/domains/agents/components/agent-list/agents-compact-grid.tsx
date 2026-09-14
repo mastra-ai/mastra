@@ -38,7 +38,7 @@ export function AgentsCompactGrid({ agents, isLoading, hasSearch }: AgentsCompac
       {isLoading ? <AgentsCompactGridSkeleton /> : null}
 
       {!isLoading && agents.length === 0 && hasSearch ? (
-        <Txt className="py-8 text-center">No Agents match your search</Txt>
+        <Txt className="py-5 text-center">No Agents match your search</Txt>
       ) : null}
 
       {!isLoading && agents.length > 0 ? (

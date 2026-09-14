@@ -9,7 +9,7 @@ import { useFactoryAuth } from '../../../../../hooks/useFactoryAuth';
 import type { WorkItem } from '../../services/workItems';
 import { CommentComposer } from './CommentComposer';
 import { CommentList } from './CommentList';
-import type { CommentQuoteDraft } from './CommentQuote';
+import type { CommentQuoteDraft } from './quoteDraft';
 
 /** Thread-surface feed view; chrome mirrors WorkspaceChangesPanel. */
 export function WorkItemFeedPanel({

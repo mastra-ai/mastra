@@ -109,6 +109,66 @@ export interface CopyOptions {
 }
 
 // =============================================================================
+// Optional Bulk Capabilities (walk / grep)
+// =============================================================================
+
+/**
+ * A single entry returned by the optional `walk()` capability.
+ * `path` is relative to the walk root and uses POSIX (`/`) separators.
+ */
+export interface WalkEntry extends FileEntry {
+  /** Path relative to the walk root, POSIX separators, no leading `./` */
+  path: string;
+}
+
+export interface WalkOptions {
+  /** Maximum directory depth to descend (root entries are depth 1) */
+  maxDepth?: number;
+  /** Include entries whose names start with "." (default: false) */
+  includeHidden?: boolean;
+}
+
+export interface FilesystemGrepOptions {
+  /** JS regex source to search for */
+  pattern: string;
+  /** File or directory root to search within */
+  path: string;
+  /** Whether matching is case-sensitive */
+  caseSensitive: boolean;
+  /** Include hidden files and directories in the search */
+  includeHidden: boolean;
+  /** Maximum matches per file (like grep -m) */
+  maxCountPerFile?: number;
+  /** Global cap on total matches across all files */
+  maxTotalMatches?: number;
+  /** Lines of context to include before/after each match */
+  contextLines?: number;
+}
+
+export interface FilesystemGrepMatch {
+  /** 1-based line number */
+  line: number;
+  /**
+   * 0-based column of the match start, as a UTF-16 (JS string) index into
+   * the line — NOT a byte offset. Providers using byte-offset engines
+   * (e.g. ripgrep) must convert.
+   */
+  column: number;
+  /** The full text of the matching line (no trailing newline) */
+  text: string;
+  /** Context lines before the match (when contextLines > 0) */
+  before?: string[];
+  /** Context lines after the match (when contextLines > 0) */
+  after?: string[];
+}
+
+export interface FilesystemGrepResult {
+  /** File path relative to the search root (the `path` option), POSIX separators, no leading `./` */
+  path: string;
+  matches: FilesystemGrepMatch[];
+}
+
+// =============================================================================
 // Filesystem Info
 // =============================================================================
 
@@ -286,6 +346,37 @@ export interface WorkspaceFilesystem extends FilesystemLifecycle<FilesystemInfo>
    * @throws {NotDirectoryError} if path is a file
    */
   readdir(path: string, options?: ListOptions): Promise<FileEntry[]>;
+
+  // ---------------------------------------------------------------------------
+  // Optional Bulk Capabilities
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Bulk recursive listing in as few provider calls as possible.
+   *
+   * Optional capability for remote filesystems where per-directory `readdir`
+   * round trips are expensive. Returns every entry under `path` (up to
+   * `maxDepth`) with paths relative to the walk root using POSIX separators.
+   *
+   * Results are unfiltered by gitignore — callers apply their own filtering.
+   * Absence of this method means callers fall back to a `readdir` walk.
+   *
+   * @throws {DirectoryNotFoundError} if path doesn't exist
+   * @throws {NotDirectoryError} if path is a file
+   */
+  walk?(path: string, options?: WalkOptions): Promise<WalkEntry[]>;
+
+  /**
+   * Native content search executed by the provider in as few calls as possible.
+   *
+   * Optional capability for remote filesystems. Providers MUST report
+   * `column` as a UTF-16 (JS string) index, not a byte offset. Results are
+   * unfiltered by gitignore — callers apply their own filtering.
+   *
+   * @throws {UnsupportedGrepPatternError} if the pattern can't run natively;
+   *   callers catch this and fall back to the host-side implementation.
+   */
+  grep?(options: FilesystemGrepOptions): Promise<FilesystemGrepResult[]>;
 
   // ---------------------------------------------------------------------------
   // Path Operations

@@ -1,3 +1,4 @@
+import { CreateButton } from '@mastra/playground-ui/components/Button';
 import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
@@ -9,13 +10,15 @@ import { DatasetsList, DatasetsToolbar, getDatasetTagOptions } from '@/domains/d
 import { NoDatasetsInfo } from '@/domains/datasets/components/datasets-list/no-datasets-info';
 import { useInfiniteDatasets } from '@/domains/datasets/hooks/use-datasets';
 import { useExperiments } from '@/domains/datasets/hooks/use-experiments';
+import { useTargetFilterParams } from '@/domains/shared/hooks/use-target-filter-params';
+import { RouteHeaderActions } from '@/lib/route-header';
 
 export default function Datasets() {
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
-  const [targetFilter, setTargetFilter] = useState('all');
   const [experimentFilter, setExperimentFilter] = useState('all');
   const [tagFilter, setTagFilter] = useState('all');
+  const { targetType, targetId, setTargetType, setTargetId, clear: clearTarget } = useTargetFilterParams();
 
   const {
     data: datasets = [],
@@ -24,7 +27,7 @@ export default function Datasets() {
     isFetchingNextPage,
     hasNextPage,
     setEndOfListElement,
-  } = useInfiniteDatasets();
+  } = useInfiniteDatasets({ targetType, targetId });
   const { data: experimentsData, isLoading: isLoadingExperiments, error: errorExperiments } = useExperiments();
 
   const experiments = useMemo(() => experimentsData?.experiments ?? [], [experimentsData?.experiments]);
@@ -34,6 +37,14 @@ export default function Datasets() {
   const error = errorDatasets || errorExperiments;
 
   const openCreatePage = () => void navigate('/datasets/new');
+
+  const headerCreateAction = (
+    <RouteHeaderActions owner="dataset-list">
+      <CreateButton onClick={openCreatePage} tooltip="Create a dataset" variant="ghost" size="sm">
+        New dataset
+      </CreateButton>
+    </RouteHeaderActions>
+  );
 
   if (error && is401UnauthorizedError(error)) {
     return (
@@ -59,39 +70,43 @@ export default function Datasets() {
     );
   }
 
-  if (datasets.length === 0 && !isLoading) {
+  // With a target filter active, keep the toolbar so the user can reset it.
+  if (datasets.length === 0 && !isLoading && !targetType) {
     return (
       <NoDataPageLayout>
+        {headerCreateAction}
         <NoDatasetsInfo onCreateClick={openCreatePage} />
       </NoDataPageLayout>
     );
   }
 
-  const hasFilters = targetFilter !== 'all' || experimentFilter !== 'all' || tagFilter !== 'all' || search !== '';
+  const hasFilters = experimentFilter !== 'all' || tagFilter !== 'all' || search !== '' || targetType !== '';
 
   const resetFilters = () => {
     setSearch('');
-    setTargetFilter('all');
     setExperimentFilter('all');
     setTagFilter('all');
+    clearTarget();
   };
 
   return (
     <PageLayout height="full">
+      {headerCreateAction}
       <PageLayout.TopArea>
         <DatasetsToolbar
           search={search}
           onSearchChange={setSearch}
-          targetFilter={targetFilter}
-          onTargetFilterChange={setTargetFilter}
           experimentFilter={experimentFilter}
           onExperimentFilterChange={setExperimentFilter}
           tagFilter={tagFilter}
           onTagFilterChange={setTagFilter}
           tagOptions={datasetTagOptions}
+          targetType={targetType}
+          onTargetTypeChange={setTargetType}
+          targetId={targetId}
+          onTargetIdChange={setTargetId}
           onReset={resetFilters}
           hasActiveFilters={hasFilters}
-          onCreateClick={openCreatePage}
         />
       </PageLayout.TopArea>
 
@@ -100,7 +115,6 @@ export default function Datasets() {
         experiments={experiments}
         isLoading={isLoading}
         search={search}
-        targetFilter={targetFilter}
         experimentFilter={experimentFilter}
         tagFilter={tagFilter}
         isFetchingNextPage={isFetchingNextPage}

@@ -36,6 +36,7 @@ function sourceControlRow(): SourceControlSession {
     userId: 'user-1',
     branch: 'user/session-1',
     title: null,
+    visibility: 'private',
     baseBranch: 'main',
     sandboxId: null,
     sandboxWorkdir: null,
@@ -65,12 +66,25 @@ function memorySettingsRow(overrides: Partial<MemorySettingsRecord> = {}): Memor
 function createDependencies({
   row = sourceControlRow(),
   settings = memorySettingsRow(),
+  projectDefaultModelId = 'anthropic/claude-sonnet-4-5',
 }: {
   row?: SourceControlSession | null;
   settings?: MemorySettingsRecord | null;
+  projectDefaultModelId?: string | null;
 } = {}): MemorySettingsHydrationDependencies {
   return {
     sourceControl: { sessions: { getBySessionId: vi.fn().mockResolvedValue(row) } },
+    projects: {
+      get: vi.fn().mockResolvedValue(
+        projectDefaultModelId === null
+          ? null
+          : {
+              id: 'project-1',
+              orgId: 'org-1',
+              defaultModelId: projectDefaultModelId,
+            },
+      ),
+    } as MemorySettingsHydrationDependencies['projects'],
     memorySettings: { get: vi.fn().mockResolvedValue(settings) },
   };
 }
@@ -256,29 +270,156 @@ describe('hydrateSessionMemorySettings', () => {
     expect(session.state.set).toHaveBeenCalledWith({ factoryOrgUnresolved: true });
   });
 
-  it('seeds the org on a tagged session that never went through the coordinator', async () => {
-    // A web chat session persists `factoryProjectId` from its browser seed, so on
-    // resume it carries the tag with no org. Skipping on the tag alone would leave
-    // it mis-scoped forever. Settings still belong to the coordinator.
+  it('applies project-scoped settings to a tagged web session that never went through the coordinator', async () => {
     const session = createSession({ factoryProjectId: 'project-1' });
-    const dependencies = createDependencies();
+    const dependencies = createDependencies({
+      settings: memorySettingsRow({
+        userId: 'factory-project:project-1',
+        observerModelId: 'openai/gpt-5.6-sol',
+        reflectorModelId: 'openai/gpt-5.6-sol',
+      }),
+    });
 
     await hydrateSessionMemorySettings(session, dependencies);
 
-    expect(session.state.set).toHaveBeenCalledExactlyOnceWith({ factoryOrgId: 'org-1' });
-    expect(dependencies.memorySettings.get).not.toHaveBeenCalled();
-    expect(session.om.observer.switchModel).not.toHaveBeenCalled();
+    expect(session.state.set).toHaveBeenCalledWith({ factoryOrgId: 'org-1' });
+    expect(dependencies.memorySettings.get).toHaveBeenCalledExactlyOnceWith({
+      orgId: 'org-1',
+      userId: 'factory-project:project-1',
+    });
+    expect(session.om.observer.switchModel).toHaveBeenCalledExactlyOnceWith({ modelId: 'openai/gpt-5.6-sol' });
+    expect(session.om.reflector.switchModel).toHaveBeenCalledExactlyOnceWith({ modelId: 'openai/gpt-5.6-sol' });
   });
 
-  it('skips fully hydrated factory-run sessions, which the start coordinator owns', async () => {
-    const session = createSession({ factoryProjectId: 'project-1', factoryOrgId: 'org-1' });
-    const dependencies = createDependencies();
+  it('uses the project provider fallback when a project settings row only configures thresholds', async () => {
+    const session = createSession(
+      { factoryProjectId: 'project-1', factoryOrgId: 'org-1' },
+      { observer: 'anthropic/claude-haiku-4-5', reflector: 'anthropic/claude-haiku-4-5' },
+    );
+    const dependencies = createDependencies({
+      settings: memorySettingsRow({
+        userId: 'factory-project:project-1',
+        observerModelId: null,
+        reflectorModelId: null,
+        observationThreshold: 12_000,
+      }),
+    });
 
     await hydrateSessionMemorySettings(session, dependencies);
 
-    expect(dependencies.sourceControl.sessions.getBySessionId).not.toHaveBeenCalled();
-    expect(session.state.set).not.toHaveBeenCalled();
+    expect(dependencies.projects.get).toHaveBeenCalledExactlyOnceWith({ orgId: 'org-1', id: 'project-1' });
     expect(session.om.observer.switchModel).not.toHaveBeenCalled();
+    expect(session.om.reflector.switchModel).not.toHaveBeenCalled();
+    expect(session.state.set).toHaveBeenCalledExactlyOnceWith({
+      observationThreshold: 12_000,
+      reflectionThreshold: DEFAULT_REFLECTION_THRESHOLD,
+    });
+  });
+
+  it('preserves current models for threshold-only settings when the project has no default model', async () => {
+    const session = createSession(
+      { factoryProjectId: 'project-1', factoryOrgId: 'org-1' },
+      { observer: 'anthropic/claude-haiku-4-5', reflector: 'openai/gpt-5.4-mini' },
+    );
+    const dependencies = createDependencies({
+      projectDefaultModelId: null,
+      settings: memorySettingsRow({
+        userId: 'factory-project:project-1',
+        observerModelId: null,
+        reflectorModelId: null,
+        observationThreshold: 12_000,
+      }),
+    });
+
+    await hydrateSessionMemorySettings(session, dependencies);
+
+    expect(session.om.observer.switchModel).not.toHaveBeenCalled();
+    expect(session.om.reflector.switchModel).not.toHaveBeenCalled();
+    expect(session.state.set).toHaveBeenCalledExactlyOnceWith({
+      observationThreshold: 12_000,
+      reflectionThreshold: DEFAULT_REFLECTION_THRESHOLD,
+    });
+  });
+
+  it('applies an explicit role model without replacing the unset role when the project has no default model', async () => {
+    const session = createSession(
+      { factoryProjectId: 'project-1', factoryOrgId: 'org-1' },
+      { observer: 'anthropic/claude-haiku-4-5', reflector: 'openai/gpt-5.4-mini' },
+    );
+    const dependencies = createDependencies({
+      projectDefaultModelId: null,
+      settings: memorySettingsRow({
+        userId: 'factory-project:project-1',
+        observerModelId: 'openai/gpt-5.6-sol',
+        reflectorModelId: null,
+      }),
+    });
+
+    await hydrateSessionMemorySettings(session, dependencies);
+
+    expect(session.om.observer.switchModel).toHaveBeenCalledExactlyOnceWith({ modelId: 'openai/gpt-5.6-sol' });
+    expect(session.om.reflector.switchModel).not.toHaveBeenCalled();
+  });
+
+  it('uses an explicit project role model and the project provider fallback for the unset role', async () => {
+    const session = createSession(
+      { factoryProjectId: 'project-1', factoryOrgId: 'org-1' },
+      { observer: 'anthropic/claude-haiku-4-5', reflector: 'openai/gpt-5.4-mini' },
+    );
+    const dependencies = createDependencies({
+      settings: memorySettingsRow({
+        userId: 'factory-project:project-1',
+        observerModelId: 'openai/gpt-5.6-sol',
+        reflectorModelId: null,
+      }),
+    });
+
+    await hydrateSessionMemorySettings(session, dependencies);
+
+    expect(session.om.observer.switchModel).toHaveBeenCalledExactlyOnceWith({ modelId: 'openai/gpt-5.6-sol' });
+    expect(session.om.reflector.switchModel).toHaveBeenCalledExactlyOnceWith({
+      modelId: 'anthropic/claude-haiku-4-5',
+    });
+  });
+
+  it('repairs a tagged web session whose org was previously seeded without project settings', async () => {
+    const session = createSession(
+      { factoryProjectId: 'project-1', factoryOrgId: 'org-1' },
+      { observer: 'openai/gpt-5.4-mini', reflector: 'openai/gpt-5.4-mini' },
+    );
+    const dependencies = createDependencies({
+      settings: memorySettingsRow({
+        userId: 'factory-project:project-1',
+        observerModelId: 'openai/gpt-5.6-sol',
+        reflectorModelId: 'openai/gpt-5.6-sol',
+      }),
+    });
+
+    await hydrateSessionMemorySettings(session, dependencies);
+
+    expect(dependencies.memorySettings.get).toHaveBeenCalledExactlyOnceWith({
+      orgId: 'org-1',
+      userId: 'factory-project:project-1',
+    });
+    expect(session.om.observer.switchModel).toHaveBeenCalledExactlyOnceWith({ modelId: 'openai/gpt-5.6-sol' });
+    expect(session.om.reflector.switchModel).toHaveBeenCalledExactlyOnceWith({ modelId: 'openai/gpt-5.6-sol' });
+  });
+
+  it('preserves a coordinator-hydrated provider fallback when the project has no stored settings', async () => {
+    const session = createSession(
+      { factoryProjectId: 'project-1', factoryOrgId: 'org-1' },
+      { observer: 'anthropic/claude-haiku-4-5', reflector: 'anthropic/claude-haiku-4-5' },
+    );
+    const dependencies = createDependencies({ settings: null });
+
+    await hydrateSessionMemorySettings(session, dependencies);
+
+    expect(dependencies.memorySettings.get).toHaveBeenCalledExactlyOnceWith({
+      orgId: 'org-1',
+      userId: 'factory-project:project-1',
+    });
+    expect(session.om.observer.switchModel).not.toHaveBeenCalled();
+    expect(session.om.reflector.switchModel).not.toHaveBeenCalled();
   });
 
   it('skips sessions without a source-control row', async () => {

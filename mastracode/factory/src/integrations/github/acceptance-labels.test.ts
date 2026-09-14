@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { NEEDS_APPROVAL_LABEL } from '../../rules/types.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
-import { NEEDS_APPROVAL_LABEL, reconcileGithubAcceptanceLabels } from './acceptance-labels.js';
+import { reconcileGithubAcceptanceLabels } from './acceptance-labels.js';
 import type { GithubIntegration } from './integration.js';
 
 async function setup(metadata: Record<string, unknown>, source: 'issue' | 'pull-request' = 'issue') {

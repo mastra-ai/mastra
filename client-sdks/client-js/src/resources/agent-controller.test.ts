@@ -287,52 +287,56 @@ describe('AgentController Resource', () => {
       '2026-01-01T00:00:00.000Z',
       '2026-01-01T00:00:01.000Z',
     ]);
-    expect(lastCall()[0]).toBe('http://localhost:4111/api/agent-controller/code/sessions/user-1/threads/t-1/messages');
+    expect(lastCall()[0]).toBe(
+      'http://localhost:4111/api/agent-controller/code/sessions/user-1/threads/t-1/messages?perPage=false',
+    );
   });
 
-  it('hydrates message timestamps from SSE events while skipping heartbeats', async () => {
-    const createdAt = '2026-01-01T00:00:00.000Z';
-    const message = {
+  it('lists paginated messages and preserves the legacy numeric limit overload', async () => {
+    const session = client.getAgentController('code').session('user-1');
+    const sourceMessage = {
       id: 'm1',
-      role: 'assistant',
-      content: { format: 2, parts: [{ type: 'text', text: 'hi' }] },
-      createdAt,
+      role: 'user',
+      content: { format: 2, parts: [{ type: 'text', text: 'hello' }] },
+      createdAt: '2026-01-01T00:00:00.000Z',
     };
-    const events = [
-      { type: 'agent_start' },
-      { type: 'message_start', message },
-      { type: 'message_update', message },
-      { type: 'message_end', message },
-    ];
-    mockSse([
-      `data: ${JSON.stringify(events[0])}\n\n`,
-      `: heartbeat\n\n`,
-      ...events.slice(1).map(event => `data: ${JSON.stringify(event)}\n\n`),
-    ]);
 
-    const received: KnownAgentControllerEvent[] = [];
-    const sub = await client
-      .getAgentController('code')
-      .session('user-1')
-      .subscribe({
-        onEvent: e => {
-          if (isKnownAgentControllerEvent(e)) received.push(e);
-        },
-      });
+    mockJson({ messages: [sourceMessage], total: 5, page: 1, perPage: 2, hasMore: true });
+    const page = await session.listMessages('t-1', {
+      page: 1,
+      perPage: 2,
+      orderBy: { field: 'createdAt', direction: 'DESC' },
+      filter: { metadata: { category: 'support' } },
+      include: [{ id: 'm1', withPreviousMessages: 1 }],
+    });
 
-    // Allow the async pump to drain the (already-closed) stream.
-    await new Promise(r => setTimeout(r, 10));
-    sub.unsubscribe();
+    expect(page).toMatchObject({ total: 5, page: 1, perPage: 2, hasMore: true });
+    expect(page.messages[0]?.createdAt).toEqual(new Date('2026-01-01T00:00:00.000Z'));
+    const paginatedUrl = new URL(lastCall()[0] as string);
+    expect(paginatedUrl.searchParams.get('page')).toBe('1');
+    expect(paginatedUrl.searchParams.get('limit')).toBeNull();
+    expect(paginatedUrl.searchParams.get('perPage')).toBe('2');
+    expect(paginatedUrl.searchParams.get('orderBy')).toBe(JSON.stringify({ field: 'createdAt', direction: 'DESC' }));
+    expect(paginatedUrl.searchParams.get('filter')).toBe(JSON.stringify({ metadata: { category: 'support' } }));
+    expect(paginatedUrl.searchParams.get('include')).toBe(JSON.stringify([{ id: 'm1', withPreviousMessages: 1 }]));
 
-    const [url] = lastCall();
-    expect(url).toBe('http://localhost:4111/api/agent-controller/code/sessions/user-1/stream');
-    expect(received.map(e => e.type)).toEqual(['agent_start', 'message_start', 'message_update', 'message_end']);
-    for (const event of received.slice(1)) {
-      if (event.type !== 'message_start' && event.type !== 'message_update' && event.type !== 'message_end') continue;
-      expect(event.message.createdAt).toBeInstanceOf(Date);
-      expect(event.message.createdAt.toISOString()).toBe(createdAt);
-      expect(agentControllerMessageText(event.message)).toBe('hi');
-    }
+    mockJson({ messages: [sourceMessage], total: 1, page: 0, perPage: 1, hasMore: false });
+    const legacyPaged = await session.listMessages('t-1', { limit: 1, page: 0 });
+    expect(legacyPaged).toMatchObject({ total: 1, page: 0, perPage: 1, hasMore: false });
+    expect(lastCall()[0]).toBe(
+      'http://localhost:4111/api/agent-controller/code/sessions/user-1/threads/t-1/messages?limit=1&page=0',
+    );
+
+    await expect(
+      session.listMessages('t-1', { limit: 1, orderBy: { field: 'createdAt', direction: 'DESC' } } as any),
+    ).rejects.toThrow('limit can only be combined with page');
+
+    mockJson({ messages: [sourceMessage], total: 1, page: 0, perPage: 1, hasMore: false });
+    const messages = await session.listMessages('t-1', 1);
+    expect(messages).toHaveLength(1);
+    expect(lastCall()[0]).toBe(
+      'http://localhost:4111/api/agent-controller/code/sessions/user-1/threads/t-1/messages?limit=1',
+    );
   });
 
   it('hydrates thread timestamps from SSE events', async () => {
@@ -741,6 +745,132 @@ describe('AgentController Resource', () => {
     } finally {
       process.removeListener('unhandledRejection', unhandled);
     }
+  });
+
+  // A controllable stream: the test decides when frames arrive and when the
+  // body closes, so it can drive events precisely around unsubscribe().
+  const controlledSseResponse = () => {
+    let controller!: ReadableStreamDefaultController<Uint8Array>;
+    let cancelled = false;
+    const response = new Response(
+      new ReadableStream<Uint8Array>({
+        start(c) {
+          controller = c;
+        },
+        cancel() {
+          cancelled = true;
+        },
+      }),
+      { status: 200, headers: new Headers({ 'Content-Type': 'text/event-stream' }) },
+    );
+    const enqueue = (frame: string) => controller.enqueue(new TextEncoder().encode(frame));
+    const close = () => controller.close();
+    return { response, enqueue, close, wasCancelled: () => cancelled };
+  };
+
+  it('does not deliver events read after unsubscribe', async () => {
+    const { response, enqueue } = controlledSseResponse();
+    (global.fetch as any).mockResolvedValueOnce(response);
+
+    const received: AgentControllerEvent[] = [];
+    const sub = await client
+      .getAgentController('probe')
+      .session('user-1')
+      .subscribe({
+        onEvent: event => received.push(event),
+        reconnect: true,
+      });
+
+    // Frame resolves the pending reader.read(); unsubscribe() lands in the same
+    // tick before the pump dispatches it.
+    enqueue(`data: ${JSON.stringify({ type: 'agent_start' })}\n\n`);
+    sub.unsubscribe();
+    await new Promise(r => setTimeout(r, 0));
+
+    expect(received).toEqual([]);
+  });
+
+  it('stops delivering buffered frames when onEvent unsubscribes mid-chunk', async () => {
+    const { response, enqueue } = controlledSseResponse();
+    (global.fetch as any).mockResolvedValueOnce(response);
+
+    const received: AgentControllerEvent[] = [];
+    let sub: { unsubscribe: () => void } | undefined;
+    sub = await client
+      .getAgentController('probe')
+      .session('user-1')
+      .subscribe({
+        onEvent: event => {
+          received.push(event);
+          sub?.unsubscribe();
+        },
+      });
+
+    // Two frames in a single chunk: the first handler unsubscribes, so the
+    // second must not be delivered.
+    enqueue(
+      `data: ${JSON.stringify({ type: 'agent_start' })}\n\n` +
+        `data: ${JSON.stringify({ type: 'agent_end', reason: 'complete' })}\n\n`,
+    );
+    await new Promise(r => setTimeout(r, 10));
+
+    expect(received).toEqual([{ type: 'agent_start' }]);
+  });
+
+  it('cancels the reconnect response body when onReconnect unsubscribes', async () => {
+    const first = controlledSseResponse();
+    const second = controlledSseResponse();
+    (global.fetch as any).mockResolvedValueOnce(first.response).mockResolvedValueOnce(second.response);
+
+    let sub: { unsubscribe: () => void } | undefined;
+    sub = await noRetryClient()
+      .getAgentController('probe')
+      .session('user-1')
+      .subscribe({
+        onEvent: () => {},
+        onReconnect: () => sub?.unsubscribe(),
+        reconnect: { maxRetries: 5, delayMs: 0 },
+      });
+
+    // Drop the first stream to trigger reconnect; onReconnect unsubscribes.
+    first.enqueue(`data: ${JSON.stringify({ type: 'agent_start' })}\n\n`);
+    await new Promise(r => setTimeout(r, 10));
+    // Closing the first stream ends its pump, driving the reconnect.
+    first.close();
+    await new Promise(r => setTimeout(r, 30));
+
+    expect(second.wasCancelled()).toBe(true);
+  });
+
+  it('does not call onError when a reconnect request rejects after unsubscribe', async () => {
+    let rejectRequest!: (error: Error) => void;
+    const first = controlledSseResponse();
+    (global.fetch as any).mockResolvedValueOnce(first.response).mockImplementationOnce(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectRequest = reject;
+        }),
+    );
+
+    const onError = vi.fn();
+    const sub = await noRetryClient()
+      .getAgentController('probe')
+      .session('user-1')
+      .subscribe({
+        onEvent: () => {},
+        onError,
+        reconnect: { maxRetries: 1, delayMs: 0 },
+      });
+
+    // Drop the first stream so the loop issues the reconnect request.
+    first.close();
+    await new Promise(r => setTimeout(r, 10));
+    // Unsubscribe while the reconnect request is in flight, then reject it.
+    sub.unsubscribe();
+    rejectRequest(new Error('reconnect refused'));
+    await new Promise(r => setTimeout(r, 10));
+
+    expect(onError).not.toHaveBeenCalled();
   });
 
   it('sends a notification signal', async () => {

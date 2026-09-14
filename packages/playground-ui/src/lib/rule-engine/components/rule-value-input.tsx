@@ -91,7 +91,7 @@ const BooleanValueInput: React.FC<BaseInputProps> = ({ value, onChange, classNam
         <ToggleLeft />
       </Icon>
       <Select value={stringValue} onValueChange={handleChange}>
-        <SelectTrigger className="bg-surface4 min-w-35 pl-7" size="sm">
+        <SelectTrigger className="bg-surface4 pl-7" size="sm">
           <SelectValue placeholder="Select value" />
         </SelectTrigger>
         <SelectContent>

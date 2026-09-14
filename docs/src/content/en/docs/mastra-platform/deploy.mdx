@@ -1,16 +1,16 @@
 ---
-title: "Deploy | Mastra platform"
-description: "Deploy a Mastra application to Mastra platform with mastra deploy, including project creation, environment selection, regions, variables, and preflight checks."
+title: 'Deploy | Mastra platform'
+description: 'Deploy a Mastra application to Mastra platform with mastra deploy, including project creation, environment selection, regions, variables, and preflight checks.'
 ---
 
-import Steps from "@site/src/components/Steps";
-import StepItem from "@site/src/components/StepItem";
+import Steps from '@site/src/components/Steps';
+import StepItem from '@site/src/components/StepItem';
 
 # Deploy to Mastra platform
 
 [`mastra deploy`](/reference/cli/mastra#mastra-deploy) is the single command for releasing a Mastra application to the [Mastra platform](/docs/mastra-platform/overview).
 
-One command builds your project and validates it before anything includes, plus creates the platform project and environment on your first run, deploys, streams build logs, and prints your public URL once the deploy is serving traffic.
+One command builds your project and validates it before deploying, plus creates the platform project and environment on your first run, deploys, streams build logs, and prints your public URL once the deploy is serving traffic.
 
 ```bash
 mastra deploy
@@ -75,10 +75,16 @@ A local `.env` file is optional. Environment variables stored on the platform ar
     ```
 
     :::
+
+    If the build statically finds `backgroundTasks.enabled: true`, the deploy artifact includes a worker manifest. Mastra Cloud automatically provisions or updates a dedicated worker service from the same artifact. No separate toggle or add-on is required.
+
+    Removing `backgroundTasks` or setting `enabled: false` in a later deploy removes the manifest and spins down the existing worker service. Values that can't be determined statically are omitted from the manifest display, but the worker process still reads the complete configuration from your bundled code.
   </StepItem>
 
   <StepItem>
-    Run `mastra deploy` again. Preflight passes, the build uploads, and the CLI streams build logs until the deploy is live. Expect the full build and deploy to take between 30 seconds and a few minutes. The success message prints only when the new version is serving traffic.
+    Run `mastra deploy` again. Preflight passes, the build uploads, and the CLI streams build logs until the deploy is
+    live. Expect the full build and deploy to take between 30 seconds and a few minutes. The success message prints only
+    when the new version is serving traffic.
   </StepItem>
 
   <StepItem>
@@ -108,7 +114,7 @@ See [Environments](/docs/mastra-platform/environments) for the full model.
 
 ## Choose a region
 
-Pass `--region` when a deploy creates a new environment to control where it runs. Use the `us` or `eu` shorthand:
+When a deploy creates an environment interactively, select the United States or Europe from the region prompt. To skip the prompt, pass `--region` with the `us` or `eu` shorthand:
 
 ```bash
 mastra deploy --env production --region eu
@@ -118,7 +124,7 @@ The region is fixed when the environment is created. Databases attached to an en
 
 ## Preflight checks
 
-Preflight validates the built output before anything includes, and only flags issues in your own code:
+Preflight validates the built output before the deploy uploads and only flags issues in your own code:
 
 - **Local storage paths**: A hard block. File-backed storage (for example `file:./mastra.db`) is lost on every deploy. Preflight passes when the path is guarded by an environment variable that's set locally or stored on the platform, including values provided by a managed database:
 
@@ -281,7 +287,8 @@ The deploy log is the source of truth: the legacy pipeline prints a deprecation 
   </StepItem>
 
   <StepItem>
-    Deploy once. Your project is auto-adopted onto the environment pipeline and the `production` environment is created on first deploy. See [Environments](/docs/mastra-platform/environments) for the full model.
+    Deploy once. Your project is auto-adopted onto the environment pipeline and the `production` environment is created on
+    first deploy. See [Environments](/docs/mastra-platform/environments) for the full model.
   </StepItem>
 
   <StepItem>

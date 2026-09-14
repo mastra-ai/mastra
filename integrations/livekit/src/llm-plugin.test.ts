@@ -156,6 +156,17 @@ describe('MastraLLMStream — message extraction', () => {
     expect(calls[0]!.memory).toEqual({ thread: 't1', resource: 'r1' });
   });
 
+  it('hands memory.options through to the generator unchanged', async () => {
+    const { gen, calls } = capturingGenerator();
+    const memory = { thread: 't1', resource: 'r1', options: { readOnly: true } };
+    const mastraLLM = new MastraLLM({ generate: gen, memory });
+    const ctx = llm.ChatContext.empty();
+    ctx.addMessage({ role: 'user', content: 'question', id: 'u1' });
+    await readChunks(mastraLLM.chat({ chatCtx: ctx }));
+
+    expect(calls[0]!.memory).toEqual(memory);
+  });
+
   it('sends the full context when memory is disabled (chatContextToMessages)', async () => {
     const { gen, calls } = capturingGenerator();
     const mastraLLM = new MastraLLM({ generate: gen, memory: false });

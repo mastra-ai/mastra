@@ -9,6 +9,8 @@
  */
 
 import { createSandboxTestSuite } from '@internal/workspace-test-utils';
+import { SandboxAbortError } from '@mastra/core/workspace';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { DockerSandbox } from './index';
 
@@ -49,4 +51,85 @@ createSandboxTestSuite({
     supportsStdin: true,
     supportsCloseStdin: true,
   },
+});
+
+/**
+ * writeFiles — validates bulk file upload against a real container.
+ */
+describe('DockerSandbox writeFiles (integration)', () => {
+  let sandbox: DockerSandbox;
+
+  beforeAll(async () => {
+    sandbox = new DockerSandbox({
+      id: `writefiles-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      image: 'node:22-slim',
+      workingDirectory: '/workspace',
+      timeout: 60000,
+    });
+    await sandbox._start();
+  }, 120000);
+
+  afterAll(async () => {
+    try {
+      await sandbox._destroy();
+    } catch {
+      // Ignore cleanup errors
+    }
+  });
+
+  it('writes text and binary files, resolving relative paths and creating parent dirs', async () => {
+    const binary = Buffer.from([0x00, 0x01, 0x02, 0xff]);
+    await sandbox.writeFiles([
+      { path: 'src/index.js', content: 'console.log("hello")\n' },
+      { path: '/tmp/absolute.txt', content: 'absolute path\n' },
+      { path: 'assets/data.bin', content: binary },
+    ]);
+
+    const text = await sandbox.executeCommand!('cat', ['/workspace/src/index.js']);
+    expect(text.exitCode).toBe(0);
+    expect(text.stdout).toContain('hello');
+
+    const abs = await sandbox.executeCommand!('cat', ['/tmp/absolute.txt']);
+    expect(abs.exitCode).toBe(0);
+    expect(abs.stdout).toContain('absolute path');
+
+    const size = await sandbox.executeCommand!('stat', ['-c', '%s', '/workspace/assets/data.bin']);
+    expect(size.exitCode).toBe(0);
+    expect(size.stdout.trim()).toBe(String(binary.length));
+  }, 120000);
+
+  it('overwrites existing files', async () => {
+    await sandbox.writeFiles([{ path: 'overwrite.txt', content: 'first\n' }]);
+    await sandbox.writeFiles([{ path: 'overwrite.txt', content: 'second\n' }]);
+
+    const result = await sandbox.executeCommand!('cat', ['/workspace/overwrite.txt']);
+    expect(result.stdout.trim()).toBe('second');
+  }, 120000);
+
+  it('applies an explicit file mode on creation and overwrite', async () => {
+    await sandbox.writeFiles([{ path: 'run.sh', content: '#!/bin/sh\necho hi\n', mode: 0o755 }]);
+
+    const created = await sandbox.executeCommand!('stat', ['-c', '%a', '/workspace/run.sh']);
+    expect(created.exitCode).toBe(0);
+    expect(created.stdout.trim()).toBe('755');
+
+    await sandbox.writeFiles([{ path: 'run.sh', content: '#!/bin/sh\necho bye\n', mode: 0o600 }]);
+
+    const overwritten = await sandbox.executeCommand!('stat', ['-c', '%a', '/workspace/run.sh']);
+    expect(overwritten.stdout.trim()).toBe('600');
+  }, 120000);
+
+  it('rejects with SandboxAbortError when the signal is already aborted', async () => {
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      sandbox.writeFiles([{ path: 'never.txt', content: 'nope\n' }], { abortSignal: controller.signal }),
+    ).rejects.toBeInstanceOf(SandboxAbortError);
+
+    // Container remains usable after a cancelled write.
+    await sandbox.writeFiles([{ path: 'after-abort.txt', content: 'ok\n' }]);
+    const result = await sandbox.executeCommand!('cat', ['/workspace/after-abort.txt']);
+    expect(result.stdout.trim()).toBe('ok');
+  }, 120000);
 });

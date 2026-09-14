@@ -1,4 +1,5 @@
 import { describeFactoryStorageContract } from '@internal/storage-test-utils';
+import { Pool } from 'pg';
 import { describe, expect, it, vi } from 'vitest';
 
 import { PgFactoryStorage } from './factory-storage';
@@ -122,6 +123,29 @@ describe('PgFactoryStorage capabilities', () => {
       }
     } finally {
       await storage.ops.deleteMany(table, {}).catch(() => {});
+      await storage.close();
+    }
+  });
+
+  it('widens an integer column to bigint on a table created before the schema changed', async () => {
+    const storage = new PgFactoryStorage({ connectionString });
+    const pool = new Pool({ connectionString });
+    const table = 'bigint_widening';
+    const epochMs = 1_780_000_000_000;
+    const columnsAs = (type: 'integer' | 'bigint') => ({ id: { type: 'uuid-pk' as const }, stamp: { type } });
+
+    try {
+      await pool.query(`DROP TABLE IF EXISTS "${table}"`);
+      await storage.ensureCollections([{ name: table, columns: columnsAs('integer') }]);
+      await storage.ensureCollections([{ name: table, columns: columnsAs('bigint') }]);
+
+      const inserted = await storage.ops.insertOne(table, { stamp: epochMs });
+      expect(inserted.stamp).toBe(epochMs);
+      const found = await storage.ops.findOne<{ stamp: number }>(table, { stamp: epochMs });
+      expect(found?.stamp).toBe(epochMs);
+    } finally {
+      await pool.query(`DROP TABLE IF EXISTS "${table}"`).catch(() => {});
+      await pool.end();
       await storage.close();
     }
   });

@@ -1,26 +1,40 @@
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 import type { ReviewItem } from '../components/review-item-card';
-import { useExperimentsForDatasetFilter } from '@/domains/experiments/hooks/use-experiments-for-dataset-filter';
+import {
+  useExperimentsForDatasetFilter,
+  type ExperimentTargetFilter,
+} from '@/domains/experiments/hooks/use-experiments-for-dataset-filter';
 
 type ReviewStatus = 'needs-review' | 'complete';
 
-export interface ReviewItemsOptions {
+export interface ReviewItemsOptions extends ExperimentTargetFilter {
   /** When set, only this experiment's results are loaded; otherwise every experiment in the project. */
   experimentId?: string;
 }
 
 /**
- * Loads experiment results with the given review status, across the project or scoped to one experiment.
+ * Loads experiment results with the given review status, across the project, scoped to a target,
+ * or scoped to one experiment.
  */
-const useReviewItemsByStatus = (status: ReviewStatus, experimentId: string | undefined) => {
+const useReviewItemsByStatus = (status: ReviewStatus, { experimentId, targetType, targetId }: ReviewItemsOptions) => {
   const client = useMastraClient();
-  const { data: experimentsData, isLoading: isLoadingExperiments } = useExperimentsForDatasetFilter(undefined);
+  const { data: experimentsData, isLoading: isLoadingExperiments } = useExperimentsForDatasetFilter(undefined, {
+    targetType,
+    targetId,
+  });
   const experiments = experimentsData?.experiments;
   const scopedExperiments = experimentId ? experiments?.filter(exp => exp.id === experimentId) : experiments;
 
   const query = useQuery({
-    queryKey: ['review-items', status, experimentId ?? 'all', scopedExperiments?.map(e => e.id)],
+    queryKey: [
+      'review-items',
+      status,
+      experimentId ?? 'all',
+      targetType || 'all',
+      targetId || 'all',
+      scopedExperiments?.map(e => e.id),
+    ],
     queryFn: async () => {
       if (!scopedExperiments || scopedExperiments.length === 0) return [] as ReviewItem[];
 
@@ -42,7 +56,10 @@ const useReviewItemsByStatus = (status: ReviewStatus, experimentId: string | und
                 traceId: r.traceId ?? undefined,
                 scores: r.scores ? Object.fromEntries(r.scores.map(s => [s.scorerId, s.score ?? 0])) : {},
                 tags: r.tags ?? [],
-                comment: r.comment ?? '',
+                createdAt: r.createdAt,
+                status: r.status,
+                groundTruth: r.groundTruth,
+                toolMockReport: r.toolMockReport,
               }));
           } catch {
             return [];
@@ -61,10 +78,8 @@ const useReviewItemsByStatus = (status: ReviewStatus, experimentId: string | und
   return { ...query, isLoading: query.isLoading || isLoadingExperiments };
 };
 
-/** Loads persisted review items (status='needs-review'), project-wide or for one experiment. */
-export const useReviewItems = ({ experimentId }: ReviewItemsOptions = {}) =>
-  useReviewItemsByStatus('needs-review', experimentId);
+/** Loads persisted review items (status='needs-review'), project-wide, per target or for one experiment. */
+export const useReviewItems = (options: ReviewItemsOptions = {}) => useReviewItemsByStatus('needs-review', options);
 
-/** Loads completed review items (status='complete'), project-wide or for one experiment. */
-export const useCompletedItems = ({ experimentId }: ReviewItemsOptions = {}) =>
-  useReviewItemsByStatus('complete', experimentId);
+/** Loads completed review items (status='complete'), project-wide, per target or for one experiment. */
+export const useCompletedItems = (options: ReviewItemsOptions = {}) => useReviewItemsByStatus('complete', options);

@@ -72,32 +72,6 @@ const LANG_ALIASES: Record<string, string> = {
   yml: 'yaml',
 };
 
-/** Map a file extension to a Shiki language. */
-const EXT_LANG: Record<string, string> = {
-  ts: 'typescript',
-  tsx: 'tsx',
-  js: 'javascript',
-  jsx: 'jsx',
-  mjs: 'javascript',
-  cjs: 'javascript',
-  json: 'json',
-  py: 'python',
-  sh: 'bash',
-  bash: 'bash',
-  zsh: 'bash',
-  css: 'css',
-  scss: 'css',
-  html: 'html',
-  htm: 'html',
-  xml: 'xml',
-  svg: 'xml',
-  yml: 'yaml',
-  yaml: 'yaml',
-  sql: 'sql',
-  md: 'markdown',
-  markdown: 'markdown',
-};
-
 function escapeHtml(s: string): string {
   return s
     .replace(/&/g, '&amp;')
@@ -111,13 +85,6 @@ function normalizeLanguage(language: string | undefined): string | undefined {
   if (!language) return undefined;
   const normalized = LANG_ALIASES[language.toLowerCase()];
   return normalized && LANGUAGES.has(normalized) ? normalized : undefined;
-}
-
-/** Resolve a Shiki language from a file path's extension. */
-export function languageForPath(path: string | undefined): string | undefined {
-  if (!path) return undefined;
-  const ext = path.split('.').pop()?.toLowerCase();
-  return ext ? EXT_LANG[ext] : undefined;
 }
 
 function codeContent(html: string): string {

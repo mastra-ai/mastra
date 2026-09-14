@@ -2,9 +2,12 @@
  * @license Mastra Enterprise License - see ee/LICENSE
  */
 import { PassThrough } from 'node:stream';
+import { Agent } from '@mastra/core/agent';
 import type { IFGAProvider } from '@mastra/core/auth/ee';
 import { Mastra } from '@mastra/core/mastra';
+import { RequestContext } from '@mastra/core/request-context';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { GENERATE_AGENT_ROUTE, STREAM_GENERATE_ROUTE } from '../handlers/agents';
 import { HTTPException } from '../http-exception';
 import { MastraServer, getCustomHTTPExceptionResponse } from './index';
 
@@ -75,6 +78,67 @@ function createMockFGAProvider(authorized = true): IFGAProvider {
     filterAccessible: vi.fn(),
   };
 }
+
+describe.each([
+  ['generate', GENERATE_AGENT_ROUTE],
+  ['stream', STREAM_GENERATE_ROUTE],
+] as const)('agent %s providerOptions forwarding', (method, route) => {
+  function setup() {
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'test-agent',
+      instructions: 'test',
+      model: 'openai/gpt-4o-mini',
+    });
+    const generate = vi.spyOn(agent, 'generate').mockResolvedValue({ text: 'ok' } as any);
+    const stream = vi.spyOn(agent, 'stream').mockResolvedValue({
+      fullStream: new ReadableStream({ start: controller => controller.close() }),
+    } as any);
+    const mastra = new Mastra({ agents: { 'test-agent': agent }, logger: false });
+    const adapter = new TestMastraServer({ app: {}, mastra });
+    const execute = async (body: unknown) => {
+      const parsedBody = await adapter.parseBody(route, JSON.parse(JSON.stringify(body)));
+      return route.handler({
+        ...(parsedBody as any),
+        agentId: 'test-agent',
+        mastra,
+        requestContext: new RequestContext(),
+        abortSignal: new AbortController().signal,
+      });
+    };
+    return { execute, generate, stream, execution: method === 'generate' ? generate : stream };
+  }
+
+  it('preserves arbitrary provider options through parsing and execution with memory identifiers', async () => {
+    const { execute, execution } = setup();
+    const providerOptions = {
+      deepseek: { thinking: { type: 'disabled' } },
+      bedrock: { reasoningConfig: { type: 'enabled', budgetTokens: 1024 } },
+      'custom-provider': { values: [null, true, 42, 'value', { enabled: false }] },
+      openai: { reasoningEffort: 'low' },
+    };
+    const memory = { resource: 'resource', thread: 'thread' };
+    await execute({ messages: 'hello', memory, providerOptions });
+    expect(execution).toHaveBeenCalledExactlyOnceWith('hello', expect.objectContaining({ providerOptions, memory }));
+  });
+
+  it('accepts requests without provider options', async () => {
+    const { execute, execution } = setup();
+    await execute({ messages: 'hello' });
+    expect(execution).toHaveBeenCalledOnce();
+    expect(execution.mock.calls[0]?.[1]?.providerOptions).toBeUndefined();
+  });
+
+  it.each([null, 'invalid', 42, true, []].map(value => ({ value })))(
+    'rejects invalid namespace $value before execution',
+    async ({ value }) => {
+      const { execute, generate, stream } = setup();
+      await expect(execute({ messages: 'hello', providerOptions: { deepseek: value } })).rejects.toThrow();
+      expect(generate).not.toHaveBeenCalled();
+      expect(stream).not.toHaveBeenCalled();
+    },
+  );
+});
 
 describe('custom route forwarding', () => {
   it('should forward DELETE JSON bodies to custom routes', async () => {

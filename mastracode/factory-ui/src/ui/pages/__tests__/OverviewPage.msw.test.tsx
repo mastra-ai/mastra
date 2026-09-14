@@ -39,12 +39,10 @@ function card(stageHistory: WorkItemStageEntry[], overrides: Record<string, unkn
 
 function stubBoard(workItems: unknown[], runningSessionIds: string[] = [], findings: unknown[] = []) {
   const counts = {
-    'decision-failed': 0,
     'decision-stuck': 0,
     'start-stalled': 0,
     'seat-orphaned': 0,
     'seat-missing': 0,
-    'proposal-waiting': 0,
     'held-waiting': 0,
     'label-drift': 0,
   };

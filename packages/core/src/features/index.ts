@@ -20,6 +20,8 @@ export const coreFeatures = new Set<string>([
   'request-response-id-rotation',
   'workspaces-v1',
   'datasets',
+  // Dataset item data can be permanently purged from history and linked experiment results.
+  'dataset-item-purge',
   'observability:v1.13.2',
   'observability-delta-polling',
   'channels',
@@ -27,6 +29,10 @@ export const coreFeatures = new Set<string>([
   'model-inference-span',
   'internal-usage-rollup',
   'json-prompt-injection:inline',
+  'observability-signal-deletion',
+  // Experiments can be deleted, including experiments orphaned by dataset
+  // deletion, and the deletion cascades to the experiment's observability traces.
+  'experiment-deletion',
   // Processors can declare the span type they are traced as, and the built-in
   // subsystems declare theirs: SKILL_ACTION, AGENT_SIGNAL, and the memory and
   // workspace types for skills, state signals, memory and workspace

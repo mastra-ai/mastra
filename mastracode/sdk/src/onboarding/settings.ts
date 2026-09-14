@@ -295,6 +295,8 @@ export interface GlobalSettings {
     theme: 'auto' | 'dark' | 'light';
     /** Default reasoning effort level used for all threads/models unless overridden in-session. */
     thinkingLevel: ThinkingLevelSetting;
+    /** Whether native subagents are enabled for Mastra Code TUI sessions. */
+    subagentsEnabled: boolean;
     /** When true, components like subagent output collapse to compact summaries on completion. */
     quietMode: boolean;
     /** Maximum quiet-mode detail preview lines for compact tool calls. Set to 0 to hide previews. */
@@ -347,6 +349,8 @@ export interface SignalSettings {
   unixSocketPubSub: boolean;
   /** Experimental: enable GitHub PR subscription signals backed by gitcrawl. */
   experimentalGithubSignals: boolean;
+  /** Experimental: enable cross-agent communication (thread ownership advertisement, peer discovery, and agent connection tools). */
+  experimentalCrossAgentSignals: boolean;
   /** Poll interval for GitHub PR subscriptions. */
   githubPollIntervalMs: number;
 }
@@ -413,6 +417,7 @@ const DEFAULTS: GlobalSettings = {
     yolo: null,
     theme: 'auto',
     thinkingLevel: 'off',
+    subagentsEnabled: false,
     quietMode: false,
     quietModeMaxToolPreviewLines: 2,
     webSearchProvider: 'auto',
@@ -436,6 +441,7 @@ const DEFAULTS: GlobalSettings = {
   signals: {
     unixSocketPubSub: false,
     experimentalGithubSignals: false,
+    experimentalCrossAgentSignals: false,
     githubPollIntervalMs: GITHUB_POLL_INTERVAL_DEFAULT_MS,
   },
   mcp: { claudeCodeGlobal: false, codexGlobal: false },
@@ -459,6 +465,7 @@ function signalSettingsEqual(left: SignalSettings, right: SignalSettings): boole
   return (
     left.unixSocketPubSub === right.unixSocketPubSub &&
     left.experimentalGithubSignals === right.experimentalGithubSignals &&
+    left.experimentalCrossAgentSignals === right.experimentalCrossAgentSignals &&
     left.githubPollIntervalMs === right.githubPollIntervalMs
   );
 }
@@ -512,6 +519,8 @@ function parsePreferences(rawPreferences: unknown): GlobalSettings['preferences'
     ...DEFAULTS.preferences,
     ...raw,
     thinkingLevel: parseThinkingLevel(raw.thinkingLevel),
+    subagentsEnabled:
+      typeof raw.subagentsEnabled === 'boolean' ? raw.subagentsEnabled : DEFAULTS.preferences.subagentsEnabled,
     quietModeMaxToolPreviewLines: parseQuietModeMaxToolPreviewLines(raw.quietModeMaxToolPreviewLines),
     webSearchProvider: parseWebSearchProvider(raw.webSearchProvider),
   };
@@ -533,6 +542,10 @@ function parseSignalSettings(rawSignals: unknown): SignalSettings {
       typeof raw.experimentalGithubSignals === 'boolean'
         ? raw.experimentalGithubSignals
         : DEFAULTS.signals.experimentalGithubSignals,
+    experimentalCrossAgentSignals:
+      typeof raw.experimentalCrossAgentSignals === 'boolean'
+        ? raw.experimentalCrossAgentSignals
+        : DEFAULTS.signals.experimentalCrossAgentSignals,
     githubPollIntervalMs: parseGithubPollIntervalMs(raw.githubPollIntervalMs),
   };
 }

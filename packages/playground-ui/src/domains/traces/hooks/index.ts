@@ -23,8 +23,6 @@ export {
   type UseTraceUrlStateOptions,
   type SetURLSearchParamsLike,
 } from './use-trace-url-state';
-export {
-  useTraceFilterPersistence,
-  type UseTraceFilterPersistenceResult,
-  type TraceFilterPersistenceOptions,
-} from './use-trace-filter-persistence';
+export { useTraceFilterPersistence, type TraceFilterPersistenceOptions } from './use-trace-filter-persistence';
+export { useExpandedSpanIds } from './use-expanded-span-ids';
+export { useVisibleTraceRows } from './use-visible-trace-rows';

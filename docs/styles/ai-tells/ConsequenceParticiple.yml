@@ -1,0 +1,69 @@
+---
+extends: existence
+message: "AI consequence tail: '%s'. End the sentence there and state the effect as its own claim."
+level: error
+nonword: true
+ignorecase: true
+# The consequence participle tail: a clause ends, then a comma and a
+# present participle restate the clause's effect ("the sweeper drops the
+# row, leaving the cache cold"; "the index is rebuilt on every write,
+# making every read a miss"; "the join reverses, giving the caller one row
+# per blob"; "the write lands after the read, meaning the index is stale";
+# "the table is small, letting the reader skip the scan"; "forcing a
+# second pass"; "saving a round-trip"; "costing one extra read"; "turning
+# every lookup into a scan"). It is "which means" with "which means"
+# deleted: the sentence is done, and the participle says its consequence
+# again as a trailing afterthought. ParticipialPadding catches the
+# press-release lexicon ("highlighting the importance," "cementing its
+# role") and never sees this plainer register.
+#
+# The plain form is a new sentence with the consequence as its own claim:
+# "The sweeper drops the row. The cache stays cold."
+#
+# The gate is the participle plus a determiner, pronoun, or quantifier
+# right after it, "one" included for "costing one extra read," so
+# "leaving early," "making sure," "leaving aside,"
+# "giving up," and "meaning of" stay out. "Making it possible" stays out
+# by lookahead as ordinary docs English. "Thereby" and "thus" may sit
+# ahead of the participle.
+#
+# Costs across the Go and Python standard libraries, ripgrep counts on
+# corpus lines broken mid-sentence: "leaving" seven ("leaving the buffer
+# uninitialized," "leaving the protocol stream in a bad state"), "giving"
+# nine ("giving the hook the chance to"), "letting" five ("letting the
+# allocations live on the stack"), "keeping" four, "forcing" two, "saving"
+# three ("saving a few cycles"), "costing" and "turning" and "ending up
+# with" zero, "ensuring" six ("ensuring the GC makes progress"),
+# "preventing" six ("preventing it from being moved"), "resulting in"
+# eleven ("resulting in an empty map"), "leading to" five ("leading to a
+# RuntimeError"). Every one is the construction itself and fires by
+# design. Two tokens are louder: "making" measures thirty-four ("making it
+# impossible to emit," "making the value higher than the order") once
+# "making a" and "making an" are dropped for "making a best effort" and
+# "making a guess," and "meaning" measures thirty-six with "meaning that"
+# ("meaning it has a type," "meaning that the timer was modified"). Both
+# are the construction in human hands and stay.
+#
+# Measured out: "allowing" at twenty-five ("allowing the use of,"
+# "allowing it to be patched") and "causing" at thirty-three ("causing a
+# deadlock," "causing the runtime to think") are the ordinary docs
+# spelling of a side effect, and "creating" at twenty-six is almost always
+# "creating it if needed," which is an action, not a consequence.
+tokens:
+  # --- The plain consequence participles, determiner-gated ("leaving the
+  # cache cold," "giving the caller one row," "letting the reader skip").
+  - ", (?:thereby |thus )?(?:leaving|giving|letting|keeping|forcing|saving|costing|turning|ensuring|preventing) (?:the|a|an|it|them|you|every|each|all|no|one)\\b"
+
+  # --- "Making" without the indefinite article, which is "making a best
+  # effort" and "making a guess" in the corpora; "making it possible"
+  # stays out.
+  - ", (?:thereby |thus )?making (?:it|them|you|the|every|each|all|no|one)\\b(?! possible\\b)"
+
+  # --- "Meaning" with the optional "that" ("meaning the index is stale,"
+  # "meaning that each report can be a match").
+  - ", (?:thereby |thus )?meaning (?:that )?(?:the|a|an|it|them|you|every|each|all|no|one)\\b"
+
+  # --- The prepositional consequence phrases nothing else in the package
+  # catches ("resulting in a second pass," "leading to a full scan,"
+  # "ending up with an empty map").
+  - ", (?:thereby |thus )?(?:resulting in|leading to|ending up with) (?:the|a|an|it|them|you|every|each|all|no|one)\\b"

@@ -1,7 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { DatabaseIcon } from 'lucide-react';
+import { DatabaseIcon, X } from 'lucide-react';
 import { useMemo } from 'react';
 import { useParams } from 'react-router';
 
@@ -29,7 +29,7 @@ function DatasetItemPage() {
   return (
     <RouteItemOverlay label={`Dataset item ${itemId}`}>
       {item ? (
-        <div className="[&>section]:bg-surface3 flex min-h-full flex-col p-3 [&>section]:min-h-0 [&>section]:flex-1 [&>section]:rounded-lg [&>section]:shadow-lg">
+        <div className="[&>section]:bg-surface3 flex h-full min-h-0 flex-col p-3 [&>section]:min-h-0 [&>section]:flex-1 [&>section]:rounded-lg [&>section]:shadow-lg">
           <DatasetItemPanel datasetId={datasetId} item={item} items={items} onItemChange={openItem} onClose={close} />
         </div>
       ) : isLoadingItems || isFetchingItem ? (
@@ -45,7 +45,11 @@ function DatasetItemPage() {
               iconSlot={<DatabaseIcon />}
               titleSlot="Item not found"
               descriptionSlot={`No loaded item "${itemId}".`}
-              actionSlot={<Button onClick={close}>Close</Button>}
+              actionSlot={
+                <Button icon={<X />} onClick={close}>
+                  Close
+                </Button>
+              }
             />
           </div>
         </div>

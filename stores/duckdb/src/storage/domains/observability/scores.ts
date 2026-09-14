@@ -1,6 +1,7 @@
 import type {
   BatchCreateScoresArgs,
   CreateScoreArgs,
+  DeleteScoresArgs,
   GetScoreAggregateArgs,
   GetScoreAggregateResponse,
   GetScoreBreakdownArgs,
@@ -31,6 +32,49 @@ import {
 type LegacyScoreRecord = CreateScoreArgs['score'] & {
   source?: string | null;
 };
+
+// Preserve cursorId on retries so replacing the current score does not emit a new delta event.
+const SCORE_UPSERT_COLUMNS = [
+  'timestamp',
+  'traceId',
+  'spanId',
+  'experimentId',
+  'scoreTraceId',
+  'entityType',
+  'entityId',
+  'entityName',
+  'entityVersionId',
+  'parentEntityVersionId',
+  'parentEntityType',
+  'parentEntityId',
+  'parentEntityName',
+  'rootEntityVersionId',
+  'rootEntityType',
+  'rootEntityId',
+  'rootEntityName',
+  'userId',
+  'organizationId',
+  'resourceId',
+  'runId',
+  'sessionId',
+  'threadId',
+  'requestId',
+  'environment',
+  'executionSource',
+  'serviceName',
+  'scorerId',
+  'scorerVersion',
+  'scoreSource',
+  'score',
+  'reason',
+  'tags',
+  'metadata',
+  'scope',
+] as const;
+
+const SCORE_UPSERT_CLAUSE = `ON CONFLICT (scoreId) DO UPDATE SET ${SCORE_UPSERT_COLUMNS.map(
+  column => `${column} = excluded.${column}`,
+).join(', ')}`;
 
 const SCORE_GROUP_BY_COLUMNS = new Set([
   'timestamp',
@@ -240,7 +284,7 @@ export async function createScore(db: DuckDBConnection, args: CreateScoreArgs): 
   const s = args.score as LegacyScoreRecord;
   const scoreSource = s.scoreSource ?? s.source ?? null;
   await db.execute(
-    `INSERT OR REPLACE INTO score_events (
+    `INSERT INTO score_events (
       scoreId, timestamp, cursorId, traceId, spanId, experimentId, scoreTraceId,
       entityType, entityId, entityName, entityVersionId, parentEntityVersionId, parentEntityType, parentEntityId, parentEntityName, rootEntityVersionId, rootEntityType, rootEntityId, rootEntityName,
       userId, organizationId, resourceId, runId, sessionId, threadId, requestId, environment, executionSource, serviceName,
@@ -284,7 +328,8 @@ export async function createScore(db: DuckDBConnection, args: CreateScoreArgs): 
        jsonV(s.tags ?? null),
        jsonV(s.metadata),
        jsonV(s.scope ?? null),
-     ].join(', ')})`,
+     ].join(', ')})
+     ${SCORE_UPSERT_CLAUSE}`,
   );
 }
 
@@ -337,14 +382,36 @@ export async function batchCreateScores(db: DuckDBConnection, args: BatchCreateS
   });
 
   await db.execute(
-    `INSERT OR REPLACE INTO score_events (
+    `INSERT INTO score_events (
       scoreId, timestamp, cursorId, traceId, spanId, experimentId, scoreTraceId,
       entityType, entityId, entityName, entityVersionId, parentEntityVersionId, parentEntityType, parentEntityId, parentEntityName, rootEntityVersionId, rootEntityType, rootEntityId, rootEntityName,
       userId, organizationId, resourceId, runId, sessionId, threadId, requestId, environment, executionSource, serviceName,
       scorerId, scorerVersion, scoreSource, score, reason, tags, metadata, scope
     )
-     VALUES ${tuples.join(',\n       ')}`,
+     VALUES ${tuples.join(',\n       ')}
+     ${SCORE_UPSERT_CLAUSE}`,
   );
+}
+
+/**
+ * Delete score events by scoreId. Optional `organizationId` and `resourceId`
+ * values are ANDed into the predicate to restrict deletion to records with
+ * matching scope fields.
+ */
+export async function deleteScores(db: DuckDBConnection, args: DeleteScoresArgs): Promise<void> {
+  if (args.scoreIds.length === 0) return;
+  const placeholders = args.scoreIds.map(() => '?').join(', ');
+  const conditions = [`scoreId IN (${placeholders})`];
+  const params: unknown[] = [...args.scoreIds];
+  if (args.organizationId !== undefined) {
+    conditions.push('organizationId = ?');
+    params.push(args.organizationId);
+  }
+  if (args.resourceId !== undefined) {
+    conditions.push('resourceId = ?');
+    params.push(args.resourceId);
+  }
+  await db.execute(`DELETE FROM score_events WHERE ${conditions.join(' AND ')}`, params);
 }
 
 /** Query score events with filtering, ordering, and pagination. */
