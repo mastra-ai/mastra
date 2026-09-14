@@ -693,7 +693,7 @@ export const routes: RouteObject[] = [
               path: '/experiments/review-queue',
               element: <ReviewQueuePage />,
               handle: {
-                crumbs: () => [navCrumb('/experiments'), navCrumb('/experiments/review-queue')],
+                crumbs: () => [navCrumb('/experiments/review-queue')],
               } satisfies RouteHeaderHandle,
             },
             {

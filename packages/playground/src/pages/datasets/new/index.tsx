@@ -3,6 +3,7 @@ import { MainHeader } from '@mastra/playground-ui/components/MainHeader';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { DatabaseIcon } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router';
+import { agentEvalsLink } from '@/domains/agents/agent-evals-link';
 import { CreateDatasetForm } from '@/domains/datasets/components/create-dataset-form';
 import { isDatasetTargetType } from '@/domains/datasets/components/target-type-options';
 
@@ -13,6 +14,8 @@ function CreateDatasetPage() {
   const targetTypeParam = searchParams.get('targetType');
   const targetType = isDatasetTargetType(targetTypeParam) ? targetTypeParam : undefined;
   const targetIdsParam = searchParams.get('targetIds');
+  // Set when coming from an agent's Evals > Datasets tab: go back there after creating.
+  const agentId = searchParams.get('agentId');
   const targetIds =
     targetType && targetIdsParam
       ? targetIdsParam
@@ -40,7 +43,9 @@ function CreateDatasetPage() {
             <CreateDatasetForm
               targetType={targetType}
               targetIds={targetIds}
-              onSuccess={datasetId => void navigate(`/datasets/${datasetId}`)}
+              onSuccess={datasetId =>
+                void navigate(agentId ? agentEvalsLink(agentId, 'datasets') : `/datasets/${datasetId}`)
+              }
               onCancel={() => void navigate(-1)}
             />
           </Card>

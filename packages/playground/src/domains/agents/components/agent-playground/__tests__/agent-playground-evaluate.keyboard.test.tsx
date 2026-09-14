@@ -1,8 +1,8 @@
-import type { DatasetExperiment, DatasetRecord } from '@mastra/client-js';
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import type { DatasetExperiment, DatasetRecord, GetScorerResponse } from '@mastra/client-js';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { useForm } from 'react-hook-form';
-import { Route, Routes } from 'react-router';
+import { Route, Routes, useLocation } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
 import { AgentEditFormProvider } from '../../../context/agent-edit-form-context';
@@ -10,7 +10,9 @@ import { PlaygroundModelProvider } from '../../../context/playground-model-conte
 import type { AgentFormValues } from '../../agent-edit-page/utils/form-validation';
 import { AgentPlaygroundEvaluate } from '../agent-playground-evaluate';
 import { GenerationProvider } from '@/domains/datasets/context/generation-context';
+import { emptyReviewSummary } from '@/domains/experiments/components/__tests__/fixtures/experiments';
 import { expectArrowNavigation, expectRovingTabindex, interactiveRows } from '@/test/keyboard';
+import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { renderWithProviders } from '@/test/render';
 
@@ -68,14 +70,33 @@ function Harness() {
     <AgentEditFormProvider form={form} mode="edit" isSubmitting={false} handlePublish={async () => {}}>
       <PlaygroundModelProvider>
         <GenerationProvider>
-          <AgentPlaygroundEvaluate agentId="chef-agent" />
+          <TestLinkProvider>
+            <AgentPlaygroundEvaluate agentId="chef-agent" />
+          </TestLinkProvider>
         </GenerationProvider>
       </PlaygroundModelProvider>
     </AgentEditFormProvider>
   );
 }
 
-const setupHandlers = (experiments: DatasetExperiment[] = []) => {
+const unattachedScorer = {
+  scorer: { config: { id: 'scorer-a', name: 'Scorer A', description: 'Scorer A description' } },
+  source: 'code',
+  agentIds: [],
+  workflowIds: [],
+} as unknown as GetScorerResponse;
+
+function LocationProbe({ label }: { label: string }) {
+  const { search } = useLocation();
+  return (
+    <div>
+      {label}
+      <span data-testid="location-search">{search}</span>
+    </div>
+  );
+}
+
+const setupHandlers = (experiments: DatasetExperiment[] = [], scorers: Record<string, GetScorerResponse> = {}) => {
   server.use(
     http.get('*/api/datasets', () =>
       HttpResponse.json({ datasets, pagination: { total: 3, page: 0, perPage: 100, hasMore: false } }),
@@ -87,7 +108,14 @@ const setupHandlers = (experiments: DatasetExperiment[] = []) => {
         pagination: { total: datasetExperiments.length, page: 0, perPage: 100, hasMore: false },
       });
     }),
-    http.get('*/api/scores/scorers', () => HttpResponse.json({})),
+    http.get('*/api/scores/scorers', () => HttpResponse.json(scorers)),
+    http.get('*/api/experiments/review-summary', () => HttpResponse.json(emptyReviewSummary)),
+    // Fetched by the Run experiment dialog's target selector.
+    http.get('*/api/agents', () =>
+      HttpResponse.json({ 'chef-agent': { name: 'Chef Agent', instructions: '', tools: {}, workflows: {} } }),
+    ),
+    http.get('*/api/workflows', () => HttpResponse.json({})),
+    http.get('*/api/processors', () => HttpResponse.json({})),
   );
 };
 
@@ -118,7 +146,7 @@ describe('AgentPlaygroundEvaluate', () => {
       renderWithProviders(
         <Routes>
           <Route path="/" element={<Harness />} />
-          <Route path="/datasets/new" element={<div>Create dataset page</div>} />
+          <Route path="/datasets/new" element={<LocationProbe label="Create dataset page" />} />
         </Routes>,
         { router: { initialEntries: ['/'] } },
       );
@@ -130,14 +158,19 @@ describe('AgentPlaygroundEvaluate', () => {
       fireEvent.keyDown(window, { key: 'c' });
 
       expect(await screen.findByText('Create dataset page')).toBeTruthy();
+      // The create page uses agentId to come back to this tab once the dataset exists.
+      expect(screen.getByTestId('location-search').textContent).toBe(
+        '?targetType=agent&targetIds=chef-agent&agentId=chef-agent',
+      );
     });
 
-    it('shows New scorer on the Scorers tab and opens the new scorer view on C', async () => {
+    it('shows New scorer on the Scorers tab and navigates to the scorer create page on C', async () => {
       setupHandlers();
       renderWithProviders(
         <Routes>
           <Route path="/" element={<Harness />} />
           <Route path="/datasets/new" element={<div>Create dataset page</div>} />
+          <Route path="/cms/scorers/create" element={<LocationProbe label="Create scorer page" />} />
         </Routes>,
         { router: { initialEntries: ['/'] } },
       );
@@ -148,8 +181,31 @@ describe('AgentPlaygroundEvaluate', () => {
 
       fireEvent.keyDown(window, { key: 'c' });
 
-      expect(await screen.findByRole('button', { name: 'Back to Scorers' })).toBeTruthy();
+      expect(await screen.findByText('Create scorer page')).toBeTruthy();
       expect(screen.queryByText('Create dataset page')).toBeNull();
+      expect(screen.getByTestId('location-search').textContent).toBe('?agentId=chef-agent');
+    });
+
+    it('attaches the scorer named by ?attachScorer on arrival, then drops the param', async () => {
+      setupHandlers([], { 'scorer-a': unattachedScorer });
+      let patchBody: Record<string, unknown> | undefined;
+      server.use(
+        http.patch('*/api/stored/agents/chef-agent', async ({ request }) => {
+          patchBody = (await request.json()) as Record<string, unknown>;
+          return HttpResponse.json({ id: 'chef-agent' });
+        }),
+      );
+      renderWithProviders(
+        <Routes>
+          <Route path="/" element={<Harness />} />
+          <Route path="/agents/:agentId/evaluate" element={<Harness />} />
+        </Routes>,
+        { router: { initialEntries: ['/agents/chef-agent/evaluate?tab=scorers&attachScorer=scorer-a'] } },
+      );
+
+      await waitFor(() => expect(patchBody).toBeDefined());
+      expect(patchBody?.scorers).toHaveProperty('scorer-a');
+      await waitFor(() => expect(window.location.search).not.toContain('attachScorer'));
     });
 
     it('does not bind C on the Experiments tab', async () => {
@@ -166,6 +222,59 @@ describe('AgentPlaygroundEvaluate', () => {
       fireEvent.keyDown(window, { key: 'c' });
 
       expect(screen.queryByText('Create dataset page')).toBeNull();
+    });
+  });
+
+  describe('shortcuts', () => {
+    it('opens the Run experiment dialog with R on the Experiments tab, pre-targeting the agent', async () => {
+      setupHandlers();
+      renderWithProviders(<Harness />, { router: true });
+
+      await screen.findByRole('button', { name: /run experiment/i });
+      fireEvent.keyDown(window, { key: 'r' });
+
+      const dialog = await screen.findByRole('dialog', { name: /run experiment/i });
+      // Target type + target are preselected from the current agent.
+      await waitFor(() => expect(within(dialog).getByText('Chef Agent')).toBeDefined());
+    });
+
+    it('toggles Run options with U', async () => {
+      setupHandlers();
+      renderWithProviders(<Harness />, { router: true });
+
+      const trigger = screen.getByTestId('agent-top-bar-run-options-trigger');
+      expect(trigger.getAttribute('aria-expanded')).toBe('false');
+
+      fireEvent.keyDown(window, { key: 'u' });
+      await waitFor(() => expect(trigger.getAttribute('aria-expanded')).toBe('true'));
+
+      fireEvent.keyDown(window, { key: 'u' });
+      await waitFor(() => expect(trigger.getAttribute('aria-expanded')).toBe('false'));
+    });
+
+    it('opens the Attach scorer combobox with A on the Scorers tab', async () => {
+      setupHandlers([], { 'scorer-a': unattachedScorer });
+      renderWithProviders(<Harness />, { router: true });
+
+      fireEvent.click(screen.getByRole('tab', { name: 'Scorers' }));
+      const attach = await screen.findByRole('combobox', { name: 'Attach scorer' });
+      expect(attach.getAttribute('aria-expanded')).toBe('false');
+
+      // Base UI popups don't render in jsdom; the trigger state is the observable contract.
+      fireEvent.keyDown(window, { key: 'a' });
+      await waitFor(() => expect(attach.getAttribute('aria-expanded')).toBe('true'));
+
+      fireEvent.keyDown(window, { key: 'a' });
+      await waitFor(() => expect(attach.getAttribute('aria-expanded')).toBe('false'));
+    });
+
+    it('does not bind A on the Experiments tab', async () => {
+      setupHandlers([], { 'scorer-a': unattachedScorer });
+      renderWithProviders(<Harness />, { router: true });
+
+      expect(screen.queryByRole('combobox', { name: 'Attach scorer' })).toBeNull();
+      fireEvent.keyDown(window, { key: 'a' });
+      expect(screen.queryByRole('combobox', { name: 'Attach scorer' })).toBeNull();
     });
   });
 

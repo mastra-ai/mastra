@@ -1,8 +1,12 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Kbd } from '@mastra/playground-ui/components/Kbd';
 import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
+import { useKeydown } from '@mastra/playground-ui/keyboard/use-keydown';
 import { Settings2 } from 'lucide-react';
+import { useState } from 'react';
 
 import { AgentRunOptionsContent } from './agent-run-options';
+import { RUN_OPTIONS_SHORTCUT } from './agent-top-bar-controls';
 
 interface ComposerRunOptionsProps {
   requestContextSchema?: string;
@@ -20,14 +24,23 @@ const RUN_OPTIONS_COLLISION_AVOIDANCE = {
  * Requires SchemaRequestContextProvider and TracingSettingsProvider.
  */
 export function ComposerRunOptions({ requestContextSchema }: ComposerRunOptionsProps) {
+  const [open, setOpen] = useState(false);
+
+  useKeydown({ [RUN_OPTIONS_SHORTCUT]: () => setOpen(prev => !prev) });
+
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
           variant="default"
           size="icon-md"
           type="button"
-          tooltip="Run options"
+          tooltip={
+            <span className="inline-flex items-center gap-1.5">
+              Run options
+              <Kbd size="xs">U</Kbd>
+            </span>
+          }
           data-testid="composer-run-options-trigger"
         >
           <Settings2 className="text-neutral3 hover:text-neutral6 h-5 w-5" />

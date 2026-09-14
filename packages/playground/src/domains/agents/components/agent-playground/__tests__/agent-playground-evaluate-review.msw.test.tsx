@@ -10,6 +10,7 @@ import type { AgentFormValues } from '../../agent-edit-page/utils/form-validatio
 import { AgentPlaygroundEvaluate } from '../agent-playground-evaluate';
 import { routes } from '@/App';
 import { GenerationProvider } from '@/domains/datasets/context/generation-context';
+import { emptyReviewSummary } from '@/domains/experiments/components/__tests__/fixtures/experiments';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 
@@ -44,6 +45,7 @@ const setupHandlers = () => {
     ),
     http.get(`${TEST_BASE_URL}/api/experiments`, () => HttpResponse.json({ experiments: [], ...emptyList })),
     http.get(`${TEST_BASE_URL}/api/scores/scorers`, () => HttpResponse.json({})),
+    http.get(`${TEST_BASE_URL}/api/experiments/review-summary`, () => HttpResponse.json(emptyReviewSummary)),
   );
 };
 
@@ -57,6 +59,19 @@ describe('AgentPlaygroundEvaluate review sub-tab', () => {
     expect(screen.getByRole('tab', { name: 'Experiments' }).getAttribute('aria-selected')).toBe('false');
 
     expect(await screen.findByText('No items to review')).not.toBeNull();
+  });
+
+  it('shows the same empty states as the Experiments, Datasets and Scorers pages', async () => {
+    setupHandlers();
+    renderWithProviders(<Harness />, { router: true });
+
+    expect(await screen.findByText('No Experiments yet')).not.toBeNull();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Datasets' }));
+    expect(await screen.findByText('No Datasets yet')).not.toBeNull();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Scorers' }));
+    expect(await screen.findByText('No Scorers yet')).not.toBeNull();
   });
 
   it('falls back to Experiments for an unknown ?tab value', async () => {

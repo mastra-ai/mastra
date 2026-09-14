@@ -395,38 +395,51 @@ export function DatasetReview({
 
   const hasSelection = !showCompleted && selectedItemIds.size > 0;
   const showCreateScorer = Boolean(onCreateScorer) && !showCompleted && filteredItems.length > 0;
+  // Filters only make sense once something has been sent to the queue. Scope
+  // controls passed via toolbarStart/toolbarEnd stay so users can change scope.
+  const isQueueEmpty = !isLoadingCompleted && items.length === 0 && (completedItems?.length ?? 0) === 0;
 
-  const toolbar = (
+  // When a scope (target / experiment) is applied, keep its selectors on an empty
+  // queue so the user can widen the scope; otherwise hide the whole toolbar.
+  const hasScope = Boolean(experimentId || targetType || targetId);
+  const hasScopeControls = hasScope && (Boolean(toolbarStart) || Boolean(toolbarEnd));
+  const showToolbar = !isQueueEmpty || hasScopeControls;
+
+  const toolbar = showToolbar && (
     <div className="flex flex-wrap items-center gap-2">
       <ButtonsGroup>
         {toolbarStart}
-        <SelectFieldBlock
-          label="Status"
-          labelIsHidden
-          name="filter-status"
-          options={STATUS_OPTIONS}
-          value={showCompleted ? 'completed' : 'review'}
-          onValueChange={value => {
-            setShowCompleted(value === 'completed');
-            setFeaturedItemId(null);
-          }}
-          className="whitespace-nowrap"
-        />
-        {tagOptions.length > 1 && (
-          <SelectFieldBlock
-            label="Tags"
-            labelIsHidden
-            name="filter-tags"
-            options={tagOptions}
-            value={activeTagFilter ?? ALL_TAGS}
-            onValueChange={value => setActiveTagFilter(value === ALL_TAGS ? null : value)}
-            className="whitespace-nowrap"
-          />
-        )}
-        {hasActiveFilters && (
-          <Button onClick={resetFilters} size="sm" variant="default" icon={<XIcon />}>
-            Reset
-          </Button>
+        {!isQueueEmpty && (
+          <>
+            <SelectFieldBlock
+              label="Status"
+              labelIsHidden
+              name="filter-status"
+              options={STATUS_OPTIONS}
+              value={showCompleted ? 'completed' : 'review'}
+              onValueChange={value => {
+                setShowCompleted(value === 'completed');
+                setFeaturedItemId(null);
+              }}
+              className="whitespace-nowrap"
+            />
+            {tagOptions.length > 1 && (
+              <SelectFieldBlock
+                label="Tags"
+                labelIsHidden
+                name="filter-tags"
+                options={tagOptions}
+                value={activeTagFilter ?? ALL_TAGS}
+                onValueChange={value => setActiveTagFilter(value === ALL_TAGS ? null : value)}
+                className="whitespace-nowrap"
+              />
+            )}
+            {hasActiveFilters && (
+              <Button onClick={resetFilters} size="sm" variant="default" icon={<XIcon />}>
+                Reset
+              </Button>
+            )}
+          </>
         )}
       </ButtonsGroup>
 
@@ -484,11 +497,15 @@ export function DatasetReview({
     </div>
   );
 
+  // PageLayout's grid is [auto, minmax(0,1fr)]; without a top area the main
+  // area must be pinned to the second row to keep filling the height.
+  const mainAreaRowClass = toolbar ? undefined : 'row-start-2';
+
   if (isLoadingReview) {
     return (
       <>
-        <PageLayout.TopArea>{toolbar}</PageLayout.TopArea>
-        <PageLayout.MainArea isCentered>
+        {toolbar && <PageLayout.TopArea>{toolbar}</PageLayout.TopArea>}
+        <PageLayout.MainArea isCentered className={mainAreaRowClass}>
           <Spinner className="h-6 w-6" />
         </PageLayout.MainArea>
       </>
@@ -525,7 +542,7 @@ export function DatasetReview({
 
   return (
     <>
-      <PageLayout.TopArea>{toolbar}</PageLayout.TopArea>
+      {toolbar && <PageLayout.TopArea>{toolbar}</PageLayout.TopArea>}
 
       {/* Analyze config dialog */}
       <Dialog open={showAnalyzeDialog} onOpenChange={setShowAnalyzeDialog}>
@@ -652,6 +669,7 @@ export function DatasetReview({
       <PageLayout.MainArea
         className={cn(
           'grid h-full min-h-0 w-full grid-cols-1 gap-4',
+          mainAreaRowClass,
           detailPanelVariant === 'overlay' ? 'overflow-visible' : 'overflow-hidden',
           featuredItem && detailPanelVariant === 'inline' && 'grid-cols-[1fr_1fr]',
         )}
