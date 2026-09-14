@@ -45,13 +45,7 @@ export function SettingsTitle({
 
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-2">
-      <Txt
-        as="h2"
-        id={titleId}
-        variant="ui-sm"
-        className={cn('text-icon6 leading-ui-md font-semibold', className)}
-        {...props}
-      />
+      <Txt as="h2" id={titleId} variant="ui-md" className={cn('text-icon6 font-semibold', className)} {...props} />
       {accessory}
     </div>
   );

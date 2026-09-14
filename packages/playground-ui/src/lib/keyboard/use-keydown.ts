@@ -22,8 +22,8 @@ export type UseKeydownOptions = {
   /**
    * Called before any combo is matched. Return `false` to leave the event
    * untouched (no `preventDefault`, no handler). Runs on top of the built-in
-   * rule that ignores unmodified keys coming from editable fields and keyboard
-   * widgets (see `isKeyboardConsumer`).
+   * rule that leaves unmodified keys to editable fields and keyboard widgets,
+   * unless the listener targets that field directly.
    */
   shouldHandle?: (event: KeyboardEvent) => boolean;
 };

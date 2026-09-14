@@ -2784,9 +2784,24 @@ export interface ExperimentGrouping {
   trialIndex?: number;
 }
 
+export type ExperimentTargetType = 'agent' | 'workflow' | 'scorer' | 'processor';
+
 export interface ListExperimentsParams extends ExperimentGrouping {
   page?: number;
   perPage?: number;
+  /** Only return experiments run against targets of this type */
+  targetType?: ExperimentTargetType;
+  /** Only return experiments run against this target ID */
+  targetId?: string;
+}
+
+export interface ListDatasetsParams {
+  page?: number;
+  perPage?: number;
+  /** Only return datasets attached to targets of this type */
+  targetType?: ExperimentTargetType;
+  /** Only return datasets attached to at least one of these target IDs */
+  targetIds?: string[];
 }
 
 export interface DatasetExperiment {

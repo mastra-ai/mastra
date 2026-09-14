@@ -17861,7 +17861,14 @@ export interface GetSystemApiSchema_RouteContract {
 // ============================================================================
 // Route: GET /datasets
 // ============================================================================
-export type GetDatasets_QueryParams = GetScoresRunRunId_QueryParams;
+export type GetDatasets_QueryParams = {
+  page: number | undefined;
+  perPage: number | undefined;
+  /** Only return records attached to targets of this type */
+  targetType?: ('agent' | 'workflow' | 'scorer' | 'processor') | undefined;
+  /** Only return datasets attached to at least one of these target IDs */
+  targetIds?: string[] | undefined;
+};
 
 export type GetDatasets_Response = {
   datasets: Shared_Type_127[];
@@ -18559,6 +18566,10 @@ export type GetExperiments_QueryParams = {
   comparisonId?: string | undefined;
   variantId?: string | undefined;
   trialIndex?: number | undefined;
+  /** Only return records attached to targets of this type */
+  targetType?: ('agent' | 'workflow' | 'scorer' | 'processor') | undefined;
+  /** Only return experiments run against this target ID */
+  targetId?: string | undefined;
 };
 
 export type GetExperiments_Response = {
