@@ -158,7 +158,6 @@ function ScopeTree({
   scopes,
   selection,
   onSelect,
-  onSearchSelect,
   onNodesLoaded,
 }: {
   factoryProjectId: string | undefined;
@@ -166,7 +165,6 @@ function ScopeTree({
   scopes: KnowledgeScopeTreePayload | undefined;
   selection: KnowledgeSelection | undefined;
   onSelect: (selection: KnowledgeSelection) => void;
-  onSearchSelect: (result: KnowledgeSearchResult) => void;
   onNodesLoaded: (nodes: KnowledgeScopeNode[]) => void;
 }) {
   const scopePage = useKnowledgeScopePage(factoryProjectId, threadId);
@@ -306,13 +304,12 @@ function ScopeTree({
   return (
     <aside
       aria-label="Knowledge scopes"
-      className="border-surface5 bg-surface2 relative z-30 flex w-56 shrink-0 flex-col overflow-visible rounded-lg border p-3"
+      className="border-surface5 bg-surface2 w-56 shrink-0 overflow-y-auto rounded-lg border p-3"
     >
       <Txt as="h2" variant="ui-sm" className="text-icon5 mb-2 font-semibold">
         Scopes
       </Txt>
-      <KnowledgeSearch factoryProjectId={factoryProjectId} threadId={threadId} onSelect={onSearchSelect} />
-      <div className="text-icon4 mt-2 flex min-h-0 flex-col gap-1 overflow-y-auto text-xs">
+      <div className="text-icon4 flex flex-col gap-1 text-xs">
         {treeRoots.map(node => renderScopeNode(node, 0, new Set()))}
         {rootCursor ? (
           <button
@@ -788,21 +785,24 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
         <Txt as="p" variant="ui-md" className="text-icon3 mt-1">
           Explore captured knowledge and review how it changes over time.
         </Txt>
-        <div className="mt-3 flex gap-1" role="tablist" aria-label="Knowledge views">
-          {(['explore', 'activity'] as const).map(view => (
-            <button
-              key={view}
-              type="button"
-              role="tab"
-              aria-selected={activeView === view}
-              className={`rounded-md px-3 py-1.5 text-sm capitalize ${
-                activeView === view ? 'bg-surface4 text-icon6' : 'text-icon3 hover:text-icon5'
-              }`}
-              onClick={() => setView(view)}
-            >
-              {view}
-            </button>
-          ))}
+        <div className="mt-3 flex items-start justify-between gap-3">
+          <div className="flex gap-1" role="tablist" aria-label="Knowledge views">
+            {(['explore', 'activity'] as const).map(view => (
+              <button
+                key={view}
+                type="button"
+                role="tab"
+                aria-selected={activeView === view}
+                className={`rounded-md px-3 py-1.5 text-sm capitalize ${
+                  activeView === view ? 'bg-surface4 text-icon6' : 'text-icon3 hover:text-icon5'
+                }`}
+                onClick={() => setView(view)}
+              >
+                {view}
+              </button>
+            ))}
+          </div>
+          <KnowledgeSearch factoryProjectId={factoryProjectId} threadId={threadId} onSelect={selectSearchResult} />
         </div>
         <Breadcrumb
           threadId={threadId}
@@ -827,7 +827,6 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
           scopes={scopesQuery.data}
           selection={selection}
           onSelect={selectScope}
-          onSearchSelect={selectSearchResult}
           onNodesLoaded={nodes =>
             setLoadedScopeNodesByView(current => ({
               ...current,

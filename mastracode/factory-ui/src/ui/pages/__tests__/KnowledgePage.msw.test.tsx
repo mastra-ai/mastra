@@ -547,7 +547,9 @@ describe('KnowledgePage', () => {
     const user = userEvent.setup();
     const { router } = renderRoute(`/factories/${FACTORY_ID}/knowledge`);
     const scopes = await screen.findByRole('complementary', { name: 'Knowledge scopes' });
-    const search = within(scopes).getByRole('textbox', { name: 'Search knowledge' });
+    const search = screen.getByRole('textbox', { name: 'Search knowledge' });
+    expect(search).toHaveAttribute('placeholder', 'Search');
+    expect(within(scopes).queryByRole('textbox', { name: 'Search knowledge' })).not.toBeInTheDocument();
 
     await user.type(search, 'payments');
     const payments = await screen.findByRole('option', { name: /Payments Service/ });
