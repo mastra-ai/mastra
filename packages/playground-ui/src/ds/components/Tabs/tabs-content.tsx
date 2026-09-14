@@ -1,7 +1,7 @@
 import { Tabs as BaseTabs } from '@base-ui/react/tabs';
 import { useContext, useEffect, useState } from 'react';
 import { TabsContext } from './tabs-context';
-import { focusRing } from '@/ds/primitives/transitions';
+import { useKeyboardNavigation } from '@/ds/primitives/focus/use-keyboard-navigation';
 import { cn } from '@/lib/utils';
 
 export type TabContentProps = {
@@ -13,6 +13,7 @@ export type TabContentProps = {
 };
 
 export const TabContent = ({ children, value, flush = false, keepMounted = false, className }: TabContentProps) => {
+  useKeyboardNavigation();
   const tabs = useContext(TabsContext);
   const selected = tabs?.value === value;
   const [visited, setVisited] = useState(selected);
@@ -25,7 +26,7 @@ export const TabContent = ({ children, value, flush = false, keepMounted = false
       keepMounted={keepMounted}
       data-slot="tabs-content"
       data-flush={flush || undefined}
-      className={cn('ring-offset-background grid overflow-y-auto py-2', focusRing.visible, className)}
+      className={cn('ds-focus ds-focus-line grid overflow-y-auto py-2', className)}
     >
       <div data-slot="tabs-content-body" className="contents">
         {!keepMounted || selected || visited ? children : null}

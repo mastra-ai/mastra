@@ -3,7 +3,8 @@ import { useContext, useEffect, useRef } from 'react';
 import { buttonVariants } from '../Button/Button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../Tooltip/tooltip';
 import { TabListContext } from './tabs-context';
-import { transitions, focusRing } from '@/ds/primitives/transitions';
+import { useKeyboardNavigation } from '@/ds/primitives/focus/use-keyboard-navigation';
+import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
 export type TabProps = {
@@ -27,6 +28,7 @@ export const Tab = ({
   attention = false,
   className,
 }: TabProps) => {
+  useKeyboardNavigation();
   const list = useContext(TabListContext);
   const ref = useRef<HTMLDivElement>(null);
   const register = list?.register;
@@ -52,8 +54,6 @@ export const Tab = ({
     return () => observer.disconnect();
   }, [register, value, children, disabled, onClick, onClose]);
   useEffect(() => () => unregister?.(value), [unregister, value]);
-  // The tab renders as a <div>, so the recipe's `disabled:` pseudo never matches; mirror it on the
-  // aria/data attributes Base UI sets.
   const tabClassName =
     list?.variant === 'pill-ghost'
       ? cn(
@@ -69,7 +69,6 @@ export const Tab = ({
           attention && 'relative',
           'flex cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap outline-none',
           transitions.colors,
-          focusRing.visible,
           'hover:text-neutral4',
           'data-[active]:text-neutral5',
           'disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:text-neutral3',
@@ -88,10 +87,11 @@ export const Tab = ({
       disabled={disabled || overflowed}
       data-slot="tab"
       data-closable={onClose ? '' : undefined}
-      className={tabClassName}
+      className={cn(tabClassName, 'ds-focus ds-focus-contour')}
       onClick={onClick}
     >
       {children}
+      <span aria-hidden="true" data-slot="focus-decoration" />
       {attention && (
         <>
           <span aria-hidden="true" data-slot="tab-attention" />

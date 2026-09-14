@@ -5,19 +5,23 @@ import * as React from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/ds/components/Dialog';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import type { ScrollAreaMask } from '@/ds/components/ScrollArea';
+import { useKeyboardNavigation } from '@/ds/primitives/focus/use-keyboard-navigation';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
 const Command = React.forwardRef<
   React.ElementRef<typeof CommandPrimitive>,
   React.ComponentPropsWithoutRef<typeof CommandPrimitive>
->(({ className, ...props }, ref) => (
-  <CommandPrimitive
-    ref={ref}
-    className={cn('flex size-full flex-col overflow-hidden rounded-xl bg-surface3 text-neutral4', className)}
-    {...props}
-  />
-));
+>(({ className, ...props }, ref) => {
+  useKeyboardNavigation();
+  return (
+    <CommandPrimitive
+      ref={ref}
+      className={cn('flex size-full flex-col overflow-hidden rounded-xl bg-surface3 text-neutral4', className)}
+      {...props}
+    />
+  );
+});
 Command.displayName = CommandPrimitive.displayName;
 
 type CommandDialogProps = Omit<React.ComponentPropsWithoutRef<typeof Dialog>, 'children'> & {
@@ -42,20 +46,15 @@ const CommandDialog = ({
   overlayClassName,
   ...props
 }: CommandDialogProps) => {
-  // Custom filter that preserves DOM order by returning 1 for all matches
-  // This prevents cmdk from reordering items by match score
   const filter = React.useCallback((value: string, search: string) => {
     const normalizedValue = value.toLowerCase();
     const normalizedSearch = search.toLowerCase();
     const searchTerms = normalizedSearch.split(/\s+/).filter(Boolean);
 
-    // All search terms must be found in the value
     const matches = searchTerms.every(term => normalizedValue.includes(term));
     return matches ? 1 : 0;
   }, []);
 
-  // Stop propagation to prevent keyboard events from reaching
-  // global document-level listeners (e.g., table keyboard nav)
   const handleKeyDown = React.useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Escape') return;
 
@@ -108,7 +107,7 @@ const CommandInput = React.forwardRef<React.ElementRef<typeof CommandPrimitive.I
       <CommandPrimitive.Input
         ref={ref}
         className={cn(
-          'flex h-8 min-w-0 flex-1 rounded-md bg-transparent py-2 text-ui-smd leading-ui-sm text-neutral6',
+          'ds-focus ds-focus-line flex h-8 min-w-0 flex-1 rounded-md bg-transparent py-2 text-ui-smd leading-ui-sm text-neutral6',
           'placeholder:text-neutral3 disabled:cursor-not-allowed disabled:opacity-50',
           'outline-none focus:outline-none focus-visible:outline-none',
           transitions.colors,
@@ -204,7 +203,7 @@ const CommandItem = React.forwardRef<
   <CommandPrimitive.Item
     ref={ref}
     className={cn(
-      'relative flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 text-ui-smd leading-ui-sm text-neutral4 select-none',
+      'ds-focus ds-focus-line ds-focus-command-item relative flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 text-ui-smd leading-ui-sm text-neutral4 select-none',
       'outline-none focus:outline-none focus-visible:outline-none',
       transitions.colors,
       'data-[selected=true]:bg-surface4 data-[selected=true]:text-neutral6',

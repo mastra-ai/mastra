@@ -3,6 +3,7 @@ import type { MenuPopupProps, MenuPositionerProps } from '@base-ui/react/menu';
 import { CheckIcon, ChevronDown } from 'lucide-react';
 import * as React from 'react';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
+import { useKeyboardNavigation } from '@/ds/primitives/focus/use-keyboard-navigation';
 import {
   MENU_SIDE_OFFSET,
   menuItemCheckClass,
@@ -33,11 +34,6 @@ const DropdownMenuRadioGroup = MenuPrimitive.RadioGroup;
 
 export type DropdownMenuTriggerProps = Omit<MenuPrimitive.Trigger.Props, 'className'> & TriggerButtonProps;
 
-/**
- * The button that opens the menu. Renders a design-system `<Button>` by
- * default, so it takes Button's `variant` / `size` / `tooltip`. Pass `render`
- * to project the behavior onto your own element (then the look is yours).
- */
 const DropdownMenuTrigger = React.forwardRef<HTMLButtonElement, DropdownMenuTriggerProps>(
   ({ className, asChild, render, children, variant, size, tooltip, ...props }, ref) => {
     const resolved = resolveTriggerRender({ render, asChild, children, variant, size, tooltip, className });
@@ -100,8 +96,7 @@ const DropdownMenuSubContent = React.forwardRef<HTMLDivElement, DropdownMenuSubC
     },
     ref,
   ) => {
-    // Default to the nearest SideDialog/Drawer popup so the submenu stays
-    // interactive inside a modal drawer.
+    useKeyboardNavigation();
     const resolvedContainer = usePortalContainer();
     const positionerProps: DropdownMenuContentPositionerProps = {
       align,
@@ -160,8 +155,7 @@ const DropdownMenuContent = React.forwardRef<HTMLDivElement, DropdownMenuContent
     },
     ref,
   ) => {
-    // Default to the nearest SideDialog/Drawer popup so the menu stays
-    // interactive inside a modal drawer; an explicit `container` still wins.
+    useKeyboardNavigation();
     const resolvedContainer = usePortalContainer(container);
     const positionerProps: DropdownMenuContentPositionerProps = {
       align,
@@ -197,7 +191,6 @@ DropdownMenuContent.displayName = 'DropdownMenuContent';
 type DropdownMenuItemProps = MenuPrimitive.Item.Props & {
   inset?: boolean;
   variant?: 'default' | 'destructive';
-  /** Alias for `onClick`, kept for compatibility with the previous Radix API. */
   onSelect?: MenuPrimitive.Item.Props['onClick'];
 };
 
@@ -269,12 +262,6 @@ const DropdownMenuShortcut = ({ className, ...props }: React.HTMLAttributes<HTML
 };
 DropdownMenuShortcut.displayName = 'DropdownMenuShortcut';
 
-/**
- *
- * Right now, these are the props mostly used for the menu
- * if we find out, consumers need more props, we can just extend it
- * with componentProps
- */
 function DropdownMenu({
   open,
   defaultOpen,

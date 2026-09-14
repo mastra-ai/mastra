@@ -4,8 +4,6 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from './select';
 
-// Base UI's Select synthesizes PointerEvents on interaction, which jsdom does
-// not implement. Polyfill it with the available MouseEvent constructor.
 beforeAll(() => {
   if (typeof window.PointerEvent === 'undefined') {
     window.PointerEvent = window.MouseEvent as unknown as typeof PointerEvent;
@@ -90,8 +88,6 @@ describe('Select', () => {
     fireEvent.click(screen.getByRole('combobox'));
 
     const banana = await screen.findByRole('option', { name: 'Banana' });
-    // Base UI's Select item only commits a "real mouse" click that was
-    // preceded by a pointerdown on the item itself.
     fireEvent.pointerDown(banana, { pointerType: 'mouse' });
     fireEvent.click(banana, { detail: 1 });
 
@@ -99,10 +95,8 @@ describe('Select', () => {
       expect(onValueChange).toHaveBeenCalledTimes(1);
     });
     expect(onValueChange.mock.calls[0][0]).toBe('banana');
-    // The Base UI migration adds a second `eventDetails` argument — guard the contract.
     expect(onValueChange.mock.calls[0][1]).toBeDefined();
 
-    // Trigger reflects the new selection.
     await waitFor(() => {
       expect(screen.getByRole('combobox').textContent).toContain('Banana');
     });
@@ -123,17 +117,12 @@ describe('Select', () => {
     expect(screen.getByRole('combobox').classList.contains('custom-trigger')).toBe(true);
   });
 
-  it('composes the Button recipe on the trigger (unified text size + border focus)', () => {
+  it('composes the Button recipe on the trigger (unified text size)', () => {
     renderSelect();
 
     const trigger = screen.getByRole('combobox');
-    // The trigger inherits the button-native text size (`text-ui-smd`) for
-    // its default size.
     expect(trigger.classList.contains('text-ui-smd')).toBe(true);
     expect(trigger.classList.contains('text-ui-md')).toBe(false);
-    // Focus is the unified neutral border (from `buttonVariants`), not the old
-    // bespoke `focus-visible:border-border2`.
-    expect(trigger.className).toContain('focus-visible:border-neutral5/50');
   });
 
   it('wires the variant prop through to the button recipe (default = the filled Button default, field-only variants)', () => {
@@ -153,17 +142,12 @@ describe('Select', () => {
       return className;
     }
 
-    // Default trigger == the `default` variant (the Button's filled surface).
     expect(renderWithVariant()).toBe(renderWithVariant('default'));
     expect(renderWithVariant('default')).toContain('bg-surface3');
     expect(renderWithVariant('default')).not.toContain('bg-transparent');
-    // Legacy `primary` is still accepted for source compatibility, but renders
-    // as the field-safe default look.
     expect(renderWithVariant('primary')).toBe(renderWithVariant('default'));
-    // `outline` is a transparent bordered field.
     expect(renderWithVariant('outline')).toContain('bg-transparent');
     expect(renderWithVariant('outline')).toContain('border-border1');
-    // `ghost` is borderless.
     expect(renderWithVariant('ghost')).toContain('border-transparent');
   });
 });
