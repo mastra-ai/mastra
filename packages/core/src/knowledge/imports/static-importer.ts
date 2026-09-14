@@ -181,6 +181,18 @@ class StaticKnowledgeNodeHandleImpl implements StaticKnowledgeNodeHandle {
     return records;
   }
 
+  async refreshTrackedRecordsAfterNodeUpdate(): Promise<void> {
+    const records = await this.listRecords();
+    await Promise.all(
+      records.map(async record => {
+        const tracked = await this.#getTrackedRecord(record.id);
+        if (tracked?.recordId === record.id && tracked.version + 1 === record.version) {
+          await this.#setTrackedRecord(record);
+        }
+      }),
+    );
+  }
+
   async removeRecord(id: string): Promise<KnowledgeRecord | null> {
     await this.#assertRunActive();
     if (this.#importer.role !== 'owner') {
@@ -313,7 +325,7 @@ class StaticKnowledgeImporterOperationsImpl implements StaticKnowledgeImporterOp
         return this.#handle(binding.address, node);
       }),
     );
-    return handles.filter((handle): handle is StaticKnowledgeNodeHandle => handle !== null);
+    return handles.filter((handle): handle is StaticKnowledgeNodeHandleImpl => handle !== null);
   }
 
   async upsertNode(address: string, input: StaticKnowledgeNodeInput): Promise<StaticKnowledgeNodeHandle> {
@@ -370,7 +382,9 @@ class StaticKnowledgeImporterOperationsImpl implements StaticKnowledgeImporterOp
       expectedAccessEpoch,
     });
     await this.#setTrackedNode(normalized, updated);
-    return this.#handle(normalized, updated);
+    const handle = this.#handle(normalized, updated);
+    await handle.refreshTrackedRecordsAfterNodeUpdate();
+    return handle;
   }
 
   async removeNode(address: string): Promise<{ node: KnowledgeNode; deleted: boolean } | null> {
@@ -466,7 +480,7 @@ class StaticKnowledgeImporterOperationsImpl implements StaticKnowledgeImporterOp
     }
   }
 
-  #handle(address: string, node: KnowledgeNode): StaticKnowledgeNodeHandle {
+  #handle(address: string, node: KnowledgeNode): StaticKnowledgeNodeHandleImpl {
     return new StaticKnowledgeNodeHandleImpl({
       address,
       node,

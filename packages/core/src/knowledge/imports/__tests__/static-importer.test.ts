@@ -132,6 +132,27 @@ describe('static Knowledge importer operations', () => {
     );
   });
 
+  it('refreshes record ownership after importer-owned node updates without claiming external edits', async () => {
+    const { knowledge, operations, projectScopeId } = await createFixture('owner');
+    const initial = await operations.upsertNode('event:42', { name: 'Planning' });
+    const record = await initial.appendRecord({ id: 'record-imported', text: 'Initial details' });
+
+    const updated = await operations.upsertNode('event:42', { name: 'Planning updated' });
+    await expect(updated.removeRecord(record.id)).resolves.toMatchObject({ id: record.id });
+    await expect(knowledge.getRecordInternal({ id: record.id, includeDeleted: true })).resolves.toBeNull();
+
+    const externallyChanged = await updated.appendRecord({ id: 'record-edited', text: 'Importer-owned before edit' });
+    await (
+      await knowledge.getStorageInternal()
+    ).setRecordScopes({ id: externallyChanged.id, version: externallyChanged.version, scopeIds: [projectScopeId] });
+    const updatedAgain = await operations.upsertNode('event:42', { name: 'Planning updated again' });
+
+    await expect(updatedAgain.removeRecord(externallyChanged.id)).resolves.toBeNull();
+    await expect(knowledge.getRecordInternal({ id: externallyChanged.id })).resolves.toMatchObject({
+      id: externallyChanged.id,
+    });
+  });
+
   it('keeps reads scoped to the runtime destination binding', async () => {
     const { knowledge, operations, orgScopeId } = await createFixture('owner');
     const node = await operations.upsertNode('event:42', { name: 'Planning' });
