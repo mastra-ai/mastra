@@ -7,14 +7,15 @@ import type { ButtonProps } from '@/ds/components/Button/Button';
 import { controlHeight } from '@/ds/primitives/control-size';
 import type { ControlSize } from '@/ds/primitives/control-size';
 import '@/ds/primitives/focus.css';
-import { inputHoverBorderWithin } from '@/ds/primitives/form-element';
+import { inputFocusBorderWithin, inputHoverBorderWithin } from '@/ds/primitives/form-element';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
 // Preserve the root's content minimum so flex layouts cannot collapse the control.
 const inputGroupBaseClassName = cn(
   'group/input-group relative flex w-full flex-1 items-center',
-  'border border-border1 text-neutral6',
+  'ds-focus ds-focus-within border border-border1 text-neutral6',
+  inputFocusBorderWithin,
   transitions.all,
   'has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-50',
   'has-[[aria-invalid=true]]:border-error',
@@ -36,10 +37,8 @@ const inputGroupRoundedTextareaClassName = cn(
 
 const inputGroupFilledVariant = cn(
   'rounded-full bg-surface-overlay-soft',
-  'hover:bg-surface-overlay-strong',
+  'hover:bg-surface-overlay-strong has-[:focus-visible]:bg-surface-overlay-strong',
   inputHoverBorderWithin,
-  'outline-hidden focus-within:outline-hidden',
-  'ds-focus ds-focus-line ds-focus-within',
   inputGroupRoundedTextareaClassName,
 );
 
@@ -48,13 +47,7 @@ const inputGroupVariants = cva(inputGroupBaseClassName, {
     variant: {
       default: inputGroupFilledVariant,
       filled: inputGroupFilledVariant,
-      outline: cn(
-        'rounded-full bg-transparent',
-        inputHoverBorderWithin,
-        'outline-hidden focus-within:outline-hidden',
-        'ds-focus ds-focus-line ds-focus-within',
-        inputGroupRoundedTextareaClassName,
-      ),
+      outline: cn('rounded-full bg-transparent', inputHoverBorderWithin, inputGroupRoundedTextareaClassName),
     },
   },
   defaultVariants: {

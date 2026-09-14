@@ -1,4 +1,6 @@
 import { buttonVariants } from '@/ds/components/Button/Button';
+import { inputFocusBorderWithin } from '@/ds/primitives/form-element';
+import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
 // Block-level items keep w-max popups from measuring options side by side.
@@ -51,8 +53,12 @@ export const menuEmptyClass =
   'flex h-form-md items-center gap-[.75em] px-[.9em] py-0.5 text-ui-smd leading-ui-sm text-neutral3 box-content';
 
 export const menuSearchClasses = {
-  container: 'flex items-center gap-[.75em] border-b border-border1 px-[.9em] py-0.5 text-ui-smd',
+  container: cn(
+    'ds-focus ds-focus-within flex items-center gap-[.75em] border-b border-border1 px-[.9em] py-0.5 text-ui-smd',
+    inputFocusBorderWithin,
+    transitions.colors,
+  ),
   icon: 'size-[1.1em] shrink-0 text-neutral3',
   input:
-    'ds-focus ds-focus-line h-form-md w-full bg-transparent text-ui-smd leading-ui-sm text-neutral6 outline-none placeholder:text-neutral3',
+    'h-form-md w-full bg-transparent text-ui-smd leading-ui-sm text-neutral6 outline-none placeholder:text-neutral3',
 };

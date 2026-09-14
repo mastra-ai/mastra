@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/ds/comp
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import type { ScrollAreaMask } from '@/ds/components/ScrollArea';
 import '@/ds/primitives/focus.css';
+import { inputFocusBorderWithin } from '@/ds/primitives/form-element';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
@@ -100,13 +101,18 @@ const CommandInput = React.forwardRef<React.ElementRef<typeof CommandPrimitive.I
   ({ className, rightSlot, wrapperClassName, ...props }, ref) => (
     <div
       data-slot="command-input-wrapper"
-      className={cn('flex items-center border-b border-border1 px-3', transitions.colors, wrapperClassName)}
+      className={cn(
+        'ds-focus ds-focus-within flex items-center border-b border-border1 px-3',
+        inputFocusBorderWithin,
+        transitions.colors,
+        wrapperClassName,
+      )}
     >
       <Search className={cn('mr-2 size-4 shrink-0 text-neutral3', transitions.colors)} />
       <CommandPrimitive.Input
         ref={ref}
         className={cn(
-          'ds-focus ds-focus-line flex h-8 min-w-0 flex-1 rounded-md bg-transparent py-2 text-ui-smd leading-ui-sm text-neutral6',
+          'flex h-8 min-w-0 flex-1 rounded-md bg-transparent py-2 text-ui-smd leading-ui-sm text-neutral6',
           'placeholder:text-neutral3 disabled:cursor-not-allowed disabled:opacity-50',
           'outline-none focus:outline-none focus-visible:outline-none',
           transitions.colors,

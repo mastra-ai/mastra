@@ -149,8 +149,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .ds-focus-line,
-  .ds-focus-row,
+  .ds-focus,
   .ds-focus::before,
   .ds-focus::after,
   [data-slot='focus-decoration'] {
