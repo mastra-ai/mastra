@@ -32,6 +32,16 @@ The resolver discovers active project connections. Where multiple connections ma
 | Resend      | Generated HTTP tools | Emails and attachments, domains, templates, audiences, contacts, segments, topics, broadcasts, webhooks, and metrics                                      |
 | incident.io | Generated HTTP tools | Incidents, updates, actions, follow-ups, timelines, alerts, on-call schedules, teams, users, postmortems, catalog reads, and incident configuration reads |
 
+### MCP integrations
+
+`connect()` also discovers any attached integration that advertises `capabilities.mcp: true` in the Platform catalog. No provider-specific registration or release of `@mastra/connect` is required. Discovered tools use the same flat dynamic-tool contract and are namespaced as `<integration-id>_<tool-name>`.
+
+Every MCP provider uses `/v2/connections/:connectionId/mcp` for discovery and invocation. The adapter reuses each provider's MCP session across refreshes and closes sessions when the connection changes, is detached, or `disconnect()` is called. If an integration has both checked-in HTTP tools and an MCP capability, the MCP catalog is preferred.
+
+The application sends only its Mastra Platform token. The transport is locked to the selected Platform connection URL. Platform removes caller authentication before Nango injects the provider credential and proxies each protocol request to the MCP server configured for that Nango integration.
+
+MCP tool catalogs can change independently of this package. Use `allowTools` to give an agent the smallest useful subset. Tools with `destructiveHint: true`, or without an explicit non-destructive hint, require tool approval. For multiple connections, the derived environment variable is `MASTRA_<INTEGRATION_ID>_CONNECTION_ID`, with punctuation converted to underscores.
+
 ### Generated HTTP providers
 
 Resend and incident.io use checked-in tools generated from their provider contracts. Tool inputs preserve provider field names. Mutations put their JSON request payload under `body`. The one exception is `resend_create_contact_import`, whose `body` fields are sent as a multipart form upload with the CSV text in `body.file`.
@@ -59,7 +69,7 @@ Resend and incident.io are generated from integration-template contributions [#6
 ## Documentation
 
 - [Mastra Platform](https://mastra.ai/docs/mastra-platform/overview)
-- [Maintainer generation commands](./scripts/README.md) and [third-party notices](./NOTICE.md). Generated-provider tests use OpenAPI examples and synthetic fixtures.
+- [Maintainer generation commands](./scripts/README.md) and [third-party notices](./NOTICE.md). Generated-provider tests use OpenAPI examples and synthetic fixtures. MCP tests exercise catalog discovery and the protocol lifecycle with a provider-neutral Platform gateway.
 
 ## Changelog
 

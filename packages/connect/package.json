@@ -70,5 +70,8 @@
     "typescript": "catalog:",
     "vitest": "catalog:",
     "zod": "catalog:"
+  },
+  "dependencies": {
+    "@mastra/mcp": "workspace:^"
   }
 }
