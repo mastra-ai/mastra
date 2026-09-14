@@ -510,6 +510,30 @@ describe('checkoutSessionBranch', () => {
     expect(sandbox.calls.join('\n')).not.toContain('fetch');
   });
 
+  it('installs the credential helper on a non-PR session', async () => {
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('branch --show-current')) return { exitCode: 0, stdout: 'main\n', stderr: '' };
+      if (script.includes('show-ref')) return { exitCode: 1, stdout: '', stderr: '' };
+      return OK;
+    });
+
+    await checkoutSessionBranch(sandbox, '/workspace/repo', opts);
+
+    expect(sandbox.calls).toContain("git -C '/workspace/repo' config credential.helper '!gh auth git-credential'");
+  });
+
+  it('installs the credential helper on a non-PR session already on its branch', async () => {
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('branch --show-current')) return { exitCode: 0, stdout: 'factory/pr-1\n', stderr: '' };
+      return OK;
+    });
+
+    await checkoutSessionBranch(sandbox, '/workspace/repo', opts);
+
+    expect(sandbox.calls).toContain("git -C '/workspace/repo' config credential.helper '!gh auth git-credential'");
+    expect(sandbox.calls.join('\n')).not.toContain('fetch');
+  });
+
   it('surfaces the collision when the wedged ref cannot be dropped', async () => {
     const sandbox = new FakeSandbox(script => {
       if (script.includes('branch --show-current')) return { exitCode: 0, stdout: 'main\n', stderr: '' };

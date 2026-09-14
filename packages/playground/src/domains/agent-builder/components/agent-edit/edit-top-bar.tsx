@@ -58,8 +58,8 @@ export const EditTopBar = ({
             className="hidden shrink-0 lg:inline-flex"
             data-testid="agent-builder-mode-toggle"
             aria-label={toggleLabel}
+            icon={<RefreshCwIcon />}
           >
-            <RefreshCwIcon />
             {toggleLabel}
           </Button>
         )}

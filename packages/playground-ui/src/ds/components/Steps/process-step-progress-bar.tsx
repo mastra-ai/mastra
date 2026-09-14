@@ -41,7 +41,7 @@ export function ProcessStepProgressBar({ steps }: ProcessStepProgressBarProps) {
           );
         })}
       </div>
-      <div className={cn('text-center text-xs text-neutral3', transitions.colors)}>
+      <div className={cn('text-center text-ui-sm text-neutral3', transitions.colors)}>
         {completedSteps} of {totalSteps} steps completed
       </div>
     </div>

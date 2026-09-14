@@ -147,7 +147,11 @@ Deleting an item hides it from the current dataset version but retains its conte
 await dataset.purgeItem({ itemId: 'item-abc-123' })
 ```
 
-Purging replaces content in every historical row and deletion tombstone present during the operation with redacted values, and scrubs linked experiment-result payloads, tags, and comments. Later experiment-result submissions for the item are also stored with redacted content, and later `updateItem()` calls reject with `DATASET_ITEM_PURGED`. Don't run purge concurrently with dataset item updates or deletions because a write that started before purge can commit a stale revision afterward. Purging keeps version, identity, experiment counters, and review status so pinned dataset versions and experiment records remain structurally consistent. It doesn't create a dataset version and can't be undone. Avoid storing sensitive data in `externalId`, which remains unchanged as the item's identity key.
+Purging replaces content in every historical row and deletion tombstone with redacted values, and scrubs linked experiment-result payloads, tags, and comments. Later experiment-result submissions for the item are also stored with redacted content.
+
+Purge serializes or conflicts with concurrent dataset item writers without guaranteeing which operation completes first. If a mutating `updateItem()` call loses the race, it re-reads the purge marker and rejects with `DATASET_ITEM_PURGED`. `deleteItem()` remains idempotent, and any deletion tombstone created during the race stays redacted.
+
+Normal item mutations use Slowly Changing Dimension Type 2 (SCD-2) versioning. Permanent purge intentionally overrides historical immutability for erasure while preserving item identity and the dataset version timeline. It doesn't create a dataset version and can't be undone. Experiment counters and review status are also preserved. Avoid storing sensitive data in `externalId`, which remains unchanged as the item's identity key.
 
 MongoDB storage requires a replica set or sharded deployment with transaction support for this operation. Purging fails before changing data when MongoDB transactions aren't available.
 

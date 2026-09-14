@@ -1,11 +1,15 @@
+import type { CollapsiblePanelHandle } from '@mastra/playground-ui/resize/collapsible-panel';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode, Ref } from 'react';
+import { createRef, useImperativeHandle } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { WorkflowLayout } from '../../../workflows/components/workflow-layout';
 import type * as MemoryTimelineContext from '../../context/memory-timeline-context';
 import { AgentLayout } from '../agent-layout';
 
 const resizeLeftPanel = vi.hoisted(() => vi.fn());
+const collapseLeftPanel = vi.hoisted(() => vi.fn());
+const expandLeftPanel = vi.hoisted(() => vi.fn());
 const memoryTimelineState = vi.hoisted(() => ({ isPanelOpen: false }));
 const defaultLayoutId = vi.hoisted(() => ({ value: '' }));
 
@@ -72,13 +76,38 @@ vi.mock('../../context/memory-timeline-context', async () => {
   };
 });
 
-vi.mock('@mastra/playground-ui/resize/collapsible-panel', () => ({
-  CollapsiblePanel: ({ id, className, children }: { id?: string; className?: string; children: ReactNode }) => (
-    <aside data-testid={`collapsible-${id}`} className={className}>
-      {children}
-    </aside>
-  ),
-}));
+vi.mock('@mastra/playground-ui/resize/collapsible-panel', async () => {
+  const { Panel } = await import('react-resizable-panels');
+
+  return {
+    CollapsiblePanel: ({
+      direction,
+      collapsible,
+      collapsedSize,
+      ref,
+      ...props
+    }: {
+      direction: 'left' | 'right';
+      collapsible?: boolean;
+      collapsedSize?: number;
+      ref?: Ref<CollapsiblePanelHandle>;
+      [key: string]: unknown;
+    }) => {
+      useImperativeHandle(ref, () => ({ collapse: collapseLeftPanel, expand: expandLeftPanel }));
+      return (
+        <aside
+          data-testid={`collapsible-${props.id}`}
+          data-direction={direction}
+          data-collapsible={collapsible}
+          data-collapsed-size={collapsedSize}
+          className={props.className as string}
+        >
+          <Panel {...(props as Parameters<typeof Panel>[0])} />
+        </aside>
+      );
+    },
+  };
+});
 
 vi.mock('@mastra/playground-ui/resize/separator', () => ({
   PanelSeparator: () => <div data-testid="panel-separator" />,
@@ -87,6 +116,8 @@ vi.mock('@mastra/playground-ui/resize/separator', () => ({
 afterEach(() => {
   cleanup();
   resizeLeftPanel.mockClear();
+  collapseLeftPanel.mockClear();
+  expandLeftPanel.mockClear();
   memoryTimelineState.isPanelOpen = false;
 });
 
@@ -112,7 +143,7 @@ function expectMainPanelContract(mainPanelClassNames: string[]) {
 }
 
 describe('resizable service layouts', () => {
-  it('renders the agent layout as a two-panel group with a non-collapsible left slot', () => {
+  it('renders the agent layout as a two-panel group with a collapsible left slot', () => {
     render(
       <AgentLayout agentId="chef-agent" leftSlot={<div>threads</div>}>
         <div>chat</div>
@@ -122,12 +153,31 @@ describe('resizable service layouts', () => {
     expectPanelGroupsShrinkable();
     expectMainPanelContract(['grid', 'overflow-y-auto']);
 
-    // The left slot is a plain resizable panel (no collapse affordance) …
-    expect(screen.getByTestId('panel-left-slot').className).toContain('min-w-0');
-    expect(screen.queryByTestId('collapsible-left-slot')).toBeNull();
+    // The left slot can be hidden entirely (collapsed to 0) and restored from its edge …
+    const leftSlot = screen.getByTestId('collapsible-left-slot');
+    expect(leftSlot.className).toContain('min-w-0');
+    expect(leftSlot.getAttribute('data-direction')).toBe('left');
+    expect(leftSlot.getAttribute('data-collapsible')).toBe('true');
+    expect(leftSlot.getAttribute('data-collapsed-size')).toBe('0');
+    expect(leftSlot.textContent).toContain('threads');
 
     // … and the right slot only appears when a rightSlot is provided.
     expect(screen.queryByTestId('panel-right-slot')).toBeNull();
+  });
+
+  it('hands the parent a handle to collapse and expand the left slot', () => {
+    const leftPanel = createRef<CollapsiblePanelHandle>();
+
+    render(
+      <AgentLayout agentId="chef-agent" leftPanel={leftPanel} leftSlot={<div>threads</div>}>
+        <div>chat</div>
+      </AgentLayout>,
+    );
+
+    leftPanel.current?.collapse();
+    expect(collapseLeftPanel).toHaveBeenCalledTimes(1);
+    leftPanel.current?.expand();
+    expect(expandLeftPanel).toHaveBeenCalledTimes(1);
   });
 
   it('expands the single left slot to 50% when observational memory opens and restores it on close', async () => {
@@ -159,6 +209,8 @@ describe('resizable service layouts', () => {
 
     // Closing OM restores the previously captured size.
     resizeLeftPanel.mockClear();
+    collapseLeftPanel.mockClear();
+    expandLeftPanel.mockClear();
     memoryTimelineState.isPanelOpen = false;
     rerender(
       <AgentLayout agentId="chef-agent" leftSlot={<div>threads and observational memory</div>}>

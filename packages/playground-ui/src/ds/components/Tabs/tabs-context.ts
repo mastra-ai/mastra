@@ -8,6 +8,7 @@ export type TabMeasurement = {
   width: number;
   element: HTMLElement;
   onClick?: () => void;
+  onClose?: () => void;
 };
 
 export const TabsContext = createContext<{

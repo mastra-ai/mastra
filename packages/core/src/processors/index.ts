@@ -1,21 +1,22 @@
 import type { LanguageModelV2, LanguageModelV2CallWarning, LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import type { CoreMessage as CoreMessageV4 } from '@internal/ai-sdk-v4';
-import type { CallSettings, StepResult, ToolChoice } from '@internal/ai-sdk-v5';
+import type { StepResult, ToolChoice } from '@internal/ai-sdk-v5';
 import type { Agent } from '../agent';
 import type { MessageList, MastraDBMessage } from '../agent/message-list';
 import type { AgentSignalInput, AgentStateSignalInput, CreatedAgentSignal } from '../agent/signals';
 import type { ApplyStateSignalResult } from '../agent/state-signals';
 import type { TripWireOptions } from '../agent/trip-wire';
-import type { ModelRouterModelId } from '../llm/model';
+import type { ModelRouterModelId, MastraModelSettings } from '../llm/model';
 import type { MastraLanguageModel, OpenAICompatibleConfig, SharedProviderOptions } from '../llm/model/shared.types';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
-import type { ObservabilityContext, ProcessorSpanType, SpanTypeMap } from '../observability';
+import type { ObservabilityContext, ProcessorSpanType, SpanTypeMap, TracingContext } from '../observability';
 import type { RequestContext } from '../request-context';
 import type { InferStandardSchemaOutput, StandardSchemaWithJSON } from '../schema';
 import type { ChunkType } from '../stream';
 import type { DataChunkType, LanguageModelUsage, LLMStepResult, ProviderMetadata } from '../stream/types';
 import type { Workflow } from '../workflows';
+import type { OutputWriter } from '../workflows/types';
 import type { StructuredOutputOptions } from './processors';
 import type { ProcessorStepOutput } from './step-schema';
 
@@ -172,6 +173,8 @@ export interface ProcessOutputResultArgs<
  * The actual schema type is only known at the generate()/stream() call site.
  */
 export interface ProcessInputStepArgs<TTripwireMetadata = unknown> extends ProcessorMessageContext<TTripwireMetadata> {
+  /** The active agent run ID, when this processor is running inside an agent loop */
+  runId?: string;
   /** The current step number (0-indexed) */
   stepNumber: number;
   steps: Array<StepResult<any>>;
@@ -196,7 +199,7 @@ export interface ProcessInputStepArgs<TTripwireMetadata = unknown> extends Proce
   activeTools?: string[];
 
   providerOptions?: SharedProviderOptions;
-  modelSettings?: Omit<CallSettings, 'abortSignal'>;
+  modelSettings?: MastraModelSettings;
   /**
    * Structured output configuration. The schema type is StandardSchemaWithJSON (not the specific OUTPUT)
    * because processors can modify it, and the actual type is only known at runtime.
@@ -244,7 +247,7 @@ export type ProcessInputStepResult = {
    */
   systemMessages?: CoreMessageV4[];
   providerOptions?: SharedProviderOptions;
-  modelSettings?: Omit<CallSettings, 'abortSignal'>;
+  modelSettings?: MastraModelSettings;
   /**
    * Structured output configuration. The schema type is StandardSchemaWithJSON (not the specific OUTPUT)
    * because processors can modify it, and the actual type is only known at runtime.
@@ -923,6 +926,14 @@ export type ProcessorTypes<TTripwireMetadata = unknown> =
   | OutputProcessor<TTripwireMetadata>
   | ErrorProcessor<TTripwireMetadata>;
 
+/** @internal Context consumed by processor step adapters, without workflow engine machinery. */
+export type ProcessorStepExecutor<TInput = ProcessorStepOutput> = (args: {
+  inputData: TInput;
+  requestContext?: RequestContext;
+  tracingContext?: TracingContext;
+  outputWriter?: OutputWriter;
+}) => Promise<ProcessorStepOutput>;
+
 /**
  * A Workflow that can be used as a processor.
  * The workflow must accept ProcessorStepInput and return ProcessorStepOutput.
@@ -932,6 +943,8 @@ export type ProcessorWorkflow = Workflow<any, any, string, any, ProcessorStepOut
   __stateSignalProcessors?: Processor[];
   /** @internal Whether a framework-generated workflow needs per-chunk execution. Unknown workflows always execute. */
   __processOutputStream?: boolean;
+  /** @internal Direct adapter execution, only for framework-generated plain processor chains. */
+  __executeOutputStream?: ProcessorStepExecutor;
 };
 
 /**
@@ -972,6 +985,13 @@ export {
 export type { CompatRule } from './provider-history-compat';
 export { ProcessorState, ProcessorRunner } from './runner';
 export { createProcessorSendSignal } from './send-signal';
+export { createBackgroundWorkSignalProcessor } from './background-work-signals';
+export type {
+  BackgroundWorkDisposition,
+  BackgroundWorkInvocationKind,
+  BackgroundWorkLifecyclePayload,
+  BackgroundWorkTerminalStatus,
+} from './background-work-signals';
 export * from './memory';
 export type { TripWireOptions } from '../agent/trip-wire';
 export {

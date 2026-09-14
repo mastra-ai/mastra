@@ -173,6 +173,32 @@ async function queryJson<T>(client: ClickHouseClient, query: string, params: Rec
 // Write
 // ============================================================================
 
+async function feedbackRowsWithWriteVersions(
+  client: ClickHouseClient,
+  feedbacks: BatchCreateFeedbackArgs['feedbacks'],
+) {
+  const identifiedFeedback = feedbacks.map(feedback => ({
+    ...feedback,
+    feedbackId: feedback.feedbackId ?? '',
+  }));
+  const feedbackIds = [...new Set(identifiedFeedback.map(feedback => feedback.feedbackId))];
+  const existingVersions = await queryJson<{ feedbackId: string; writeVersion: string }>(
+    client,
+    `SELECT feedbackId, toString(max(writeVersion)) AS writeVersion
+     FROM ${TABLE_FEEDBACK_EVENTS}
+     WHERE feedbackId IN ({feedbackIds:Array(String)})
+     GROUP BY feedbackId`,
+    { feedbackIds },
+  );
+  const versions = new Map(existingVersions.map(row => [row.feedbackId, BigInt(row.writeVersion)]));
+
+  return identifiedFeedback.map(feedback => {
+    const writeVersion = (versions.get(feedback.feedbackId) ?? 0n) + 1n;
+    versions.set(feedback.feedbackId, writeVersion);
+    return { ...feedbackRecordToRow(feedback), writeVersion: writeVersion.toString() };
+  });
+}
+
 export async function createFeedback(client: ClickHouseClient, args: CreateFeedbackArgs): Promise<void> {
   await batchCreateFeedback(client, { feedbacks: [args.feedback] });
 }
@@ -182,7 +208,7 @@ export async function batchCreateFeedback(client: ClickHouseClient, args: BatchC
 
   await client.insert({
     table: TABLE_FEEDBACK_EVENTS,
-    values: args.feedbacks.map(feedbackRecordToRow),
+    values: await feedbackRowsWithWriteVersions(client, args.feedbacks),
     format: 'JSONEachRow',
     clickhouse_settings: CH_INSERT_SETTINGS,
   });
@@ -288,7 +314,10 @@ export async function updateFeedbackReviewStatus(
 
   const existing = await queryJson<Record<string, any>>(
     client,
-    `SELECT * FROM ${TABLE_FEEDBACK_EVENTS} FINAL WHERE feedbackId = {feedbackId:String} LIMIT 1`,
+    `SELECT * FROM ${TABLE_FEEDBACK_EVENTS} FINAL
+     WHERE feedbackId = {feedbackId:String}
+     ORDER BY writeVersion DESC, timestamp DESC
+     LIMIT 1`,
     { feedbackId },
   );
   const existingRow = existing[0];
@@ -300,18 +329,8 @@ export async function updateFeedbackReviewStatus(
     throw feedbackNotFoundError(feedbackId);
   }
 
-  // ClickHouse is append-only in practice: never mutate a written row. Instead
-  // insert a replacement row with the same ReplacingMergeTree key
-  // (traceId, timestamp, feedbackId). Background merges collapse the
-  // duplicates keeping the last inserted row, and every read on this table
-  // uses FINAL so the latest version wins before merges happen.
   const updated = rowToFeedbackRecord({ ...existingRow, reviewStatus });
-  await client.insert({
-    table: TABLE_FEEDBACK_EVENTS,
-    values: [feedbackRecordToRow(updated)],
-    format: 'JSONEachRow',
-    clickhouse_settings: CH_INSERT_SETTINGS,
-  });
+  await batchCreateFeedback(client, { feedbacks: [updated] });
 
   if (await hasFeedbackDeletionRequest(client, feedbackId, existingRow.organizationId, existingRow.resourceId)) {
     await deleteFeedback(

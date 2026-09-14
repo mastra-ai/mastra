@@ -50,7 +50,7 @@ export function WorkflowNestedGraph({ stepGraph, open, workflowName }: WorkflowN
           onNodesChange={onNodesChange}
         >
           <ZoomSlider position="bottom-left" />
-          <Background variant={BackgroundVariant.Lines} gap={12} size={0.5} />
+          <Background variant={BackgroundVariant.Lines} gap={12} size={0.5} color="var(--border1)" />
         </ReactFlow>
       ) : (
         <div className="flex h-full w-full items-center justify-center">

@@ -134,7 +134,7 @@ export default function AgentBuilderLibraryPage() {
               <div className="border-border1 flex overflow-hidden rounded-lg border">
                 <button
                   onClick={() => setTab('agents')}
-                  className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                  className={`text-ui-sm px-3 py-1.5 font-medium transition-colors ${
                     tab === 'agents' ? 'bg-surface4 text-neutral6' : 'bg-surface2 text-neutral3 hover:text-neutral5'
                   }`}
                 >
@@ -142,7 +142,7 @@ export default function AgentBuilderLibraryPage() {
                 </button>
                 <button
                   onClick={() => setTab('skills')}
-                  className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                  className={`text-ui-sm px-3 py-1.5 font-medium transition-colors ${
                     tab === 'skills' ? 'bg-surface4 text-neutral6' : 'bg-surface2 text-neutral3 hover:text-neutral5'
                   }`}
                 >

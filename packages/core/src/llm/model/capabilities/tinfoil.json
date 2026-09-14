@@ -1,5 +1,5 @@
 {
-  "attachment": ["gemma4-31b", "glm-5-3-flash", "kimi-k3", "llama3-3-70b"],
+  "attachment": ["gemma4-31b", "glm-5-3-flash", "kimi-k3"],
   "temperature": [
     "deepseek-v4-flash",
     "gemma4-31b",

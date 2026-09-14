@@ -20,7 +20,7 @@ import {
 } from '@mastra/playground-ui/components/Comment';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { format } from 'date-fns';
-import { Trash2Icon } from 'lucide-react';
+import { Trash2Icon, Trash2, ChevronRight, ChevronLeft, ClipboardCheck } from 'lucide-react';
 import { useState } from 'react';
 
 import { ReviewStatusBadge } from '@/domains/review/components/review-status-badge';
@@ -91,6 +91,7 @@ function FeedbackItems({
     const status = <FeedbackReviewStatusBadge status={fb.reviewStatus} />;
     const markReviewed = onMarkReviewed && feedbackId && fb.reviewStatus !== 'reviewed' && (
       <Button
+        icon={<ClipboardCheck />}
         variant="ghost"
         size="sm"
         disabled={pendingFeedbackId === feedbackId}
@@ -158,7 +159,7 @@ function FeedbackItems({
 }
 
 /**
- * Feedback rendered as a comment thread: existing records above, a composer below.
+ * Feedback rendered as a comment thread: a composer above, existing records below.
  * Pagination, submission, deletion, and review status are driven by the caller.
  */
 export function FeedbackThread({
@@ -194,43 +195,6 @@ export function FeedbackThread({
 
   return (
     <Comment variant={variant} className="min-h-0 gap-4 px-3">
-      <div className="min-h-0 overflow-y-auto">
-        {isLoadingFeedbackData ? (
-          <Txt variant="ui-md" className="text-neutral3">
-            Loading feedback...
-          </Txt>
-        ) : feedbackItems.length === 0 ? (
-          <Txt variant="ui-md" className="text-neutral3">
-            No feedback yet
-          </Txt>
-        ) : (
-          <FeedbackItems
-            variant={variant}
-            items={feedbackItems}
-            onRequestDelete={onDelete ? setFeedbackIdToDelete : undefined}
-            isDeleting={isDeleting}
-            onMarkReviewed={onMarkReviewed}
-            pendingFeedbackId={pendingFeedbackId}
-          />
-        )}
-      </div>
-
-      {(hasMore || currentPage > 0) && (
-        <div className="flex items-center gap-2">
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={currentPage === 0}
-            onClick={() => onPageChange?.(currentPage - 1)}
-          >
-            Previous
-          </Button>
-          <Button size="sm" variant="ghost" disabled={!hasMore} onClick={() => onPageChange?.(currentPage + 1)}>
-            Next
-          </Button>
-        </div>
-      )}
-
       <CommentComposer
         aria-label="Leave feedback"
         onSubmit={async event => {
@@ -254,6 +218,50 @@ export function FeedbackThread({
         </CommentComposerInput>
       </CommentComposer>
 
+      <div className="min-h-0 overflow-y-auto">
+        {isLoadingFeedbackData ? (
+          <Txt variant="ui-md" className="text-neutral3">
+            Loading feedback...
+          </Txt>
+        ) : feedbackItems.length === 0 ? (
+          <Txt variant="ui-md" className="text-neutral3 text-center">
+            No feedback yet
+          </Txt>
+        ) : (
+          <FeedbackItems
+            variant={variant}
+            items={feedbackItems}
+            onRequestDelete={onDelete ? setFeedbackIdToDelete : undefined}
+            isDeleting={isDeleting}
+            onMarkReviewed={onMarkReviewed}
+            pendingFeedbackId={pendingFeedbackId}
+          />
+        )}
+      </div>
+
+      {(hasMore || currentPage > 0) && (
+        <div className="flex items-center gap-2">
+          <Button
+            icon={<ChevronLeft />}
+            size="sm"
+            variant="ghost"
+            disabled={currentPage === 0}
+            onClick={() => onPageChange?.(currentPage - 1)}
+          >
+            Previous
+          </Button>
+          <Button
+            icon={<ChevronRight />}
+            size="sm"
+            variant="ghost"
+            disabled={!hasMore}
+            onClick={() => onPageChange?.(currentPage + 1)}
+          >
+            Next
+          </Button>
+        </div>
+      )}
+
       <AlertDialog
         open={feedbackIdToDelete !== undefined}
         onOpenChange={open => {
@@ -269,7 +277,7 @@ export function FeedbackThread({
           </AlertDialog.Header>
           <AlertDialog.Footer>
             <AlertDialog.Cancel disabled={isDeleting}>Cancel</AlertDialog.Cancel>
-            <Button variant="primary" disabled={isDeleting} onClick={handleDeleteConfirm}>
+            <Button icon={<Trash2 />} variant="primary" disabled={isDeleting} onClick={handleDeleteConfirm}>
               {isDeleting ? 'Deleting…' : 'Delete'}
             </Button>
           </AlertDialog.Footer>

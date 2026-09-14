@@ -159,9 +159,9 @@ const inputGroupControlHeightBySize = cn(
 const inputGroupControlTextBySize = cn(
   'group-data-[size=xs]/input-group:text-ui-xs',
   'group-data-[size=sm]/input-group:text-ui-sm',
-  'group-data-[size=md]/input-group:text-ui-md',
-  'group-data-[size=default]/input-group:text-ui-md',
-  'group-data-[size=lg]/input-group:text-ui-lg',
+  'group-data-[size=md]/input-group:text-ui-smd',
+  'group-data-[size=default]/input-group:text-ui-smd',
+  'group-data-[size=lg]/input-group:text-ui-md',
 );
 
 export type InputGroupInputProps = Omit<React.InputHTMLAttributes<HTMLInputElement>, 'size'> & {
@@ -184,7 +184,7 @@ const InputGroupInput = React.forwardRef<HTMLInputElement, InputGroupInputProps>
           'min-w-0 flex-1 bg-transparent px-3 text-neutral6 outline-hidden',
           inputGroupControlHeightBySize,
           inputGroupControlTextBySize,
-          'placeholder:duration-normal placeholder:text-neutral2 placeholder:transition-opacity',
+          'placeholder:text-neutral2 placeholder:transition-opacity placeholder:duration-normal',
           'focus:placeholder:opacity-70',
           'disabled:cursor-not-allowed',
           // Hide native number-spinner arrows so consumers can compose their own
@@ -221,7 +221,7 @@ const InputGroupTextarea = React.forwardRef<HTMLTextAreaElement, InputGroupTexta
         className={cn(
           'min-h-15 min-w-0 flex-1 resize-y bg-transparent px-3 py-2 text-neutral6 outline-hidden',
           inputGroupControlTextBySize,
-          'placeholder:duration-normal placeholder:text-neutral2 placeholder:transition-opacity',
+          'placeholder:text-neutral2 placeholder:transition-opacity placeholder:duration-normal',
           'focus:placeholder:opacity-70',
           'disabled:cursor-not-allowed',
           className,

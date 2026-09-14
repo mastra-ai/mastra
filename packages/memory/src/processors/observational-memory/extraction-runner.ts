@@ -129,7 +129,7 @@ ${extractorInstructions}${priorLines.length > 0 ? `\n\n## Prior Extracted Values
   }
 
   for (const extractor of structuredExtractors) {
-    const value = (object as Record<string, unknown>)[extractor.slug];
+    const value = object[extractor.slug];
     if (value === undefined || value === null || value === '') {
       continue;
     }

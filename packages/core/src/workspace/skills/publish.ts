@@ -183,7 +183,7 @@ function buildSkillFileNodes(files: WalkedFile[]): StorageSkillFileNode[] {
 
     const fileName = segments[segments.length - 1]!;
     const content = file.isBinary
-      ? (Buffer.isBuffer(file.content) ? file.content : Buffer.from(file.content as string)).toString('base64')
+      ? (Buffer.isBuffer(file.content) ? file.content : Buffer.from(file.content)).toString('base64')
       : (file.content as string);
     cursor.push({ name: fileName, type: 'file', content });
   }
@@ -273,7 +273,7 @@ export async function collectSkillForPublish(source: SkillSource, skillPath: str
 
     if (file.isBinary) {
       // Binary file: store as base64-encoded string
-      const buf = Buffer.isBuffer(file.content) ? file.content : Buffer.from(file.content as string);
+      const buf = Buffer.isBuffer(file.content) ? file.content : Buffer.from(file.content);
       const size = buf.length;
       const base64Content = buf.toString('base64');
 

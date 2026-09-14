@@ -23,7 +23,7 @@ type ReadReply = { name: string; messages: typeof entries }[] | null;
 describe('unsubscribe acquired batches', () => {
   let ps: RedisStreamsPubSub;
   let read: ReturnType<typeof deferred<ReadReply>>;
-  let claim: ReturnType<typeof deferred<{ messages: ((typeof entries)[number] | null)[] }>>;
+  let claim: ReturnType<typeof deferred<((typeof entries)[number] | null)[]>>;
   let writer: {
     isOpen: boolean;
     on: ReturnType<typeof vi.fn>;
@@ -31,7 +31,8 @@ describe('unsubscribe acquired batches', () => {
     quit: ReturnType<typeof vi.fn>;
     xGroupCreate: ReturnType<typeof vi.fn>;
     xGroupDestroy: ReturnType<typeof vi.fn>;
-    xAutoClaim: ReturnType<typeof vi.fn>;
+    xPendingRange: ReturnType<typeof vi.fn>;
+    xClaim: ReturnType<typeof vi.fn>;
   };
   let reader: {
     on: ReturnType<typeof vi.fn>;
@@ -42,7 +43,7 @@ describe('unsubscribe acquired batches', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     read = deferred<ReadReply>();
-    claim = deferred<{ messages: ((typeof entries)[number] | null)[] }>();
+    claim = deferred<((typeof entries)[number] | null)[]>();
     writer = {
       isOpen: true,
       on: vi.fn(),
@@ -50,7 +51,10 @@ describe('unsubscribe acquired batches', () => {
       quit: vi.fn(),
       xGroupCreate: vi.fn(),
       xGroupDestroy: vi.fn(),
-      xAutoClaim: vi.fn(() => claim.promise),
+      xPendingRange: vi.fn(async () =>
+        entries.map(e => ({ id: e.id, consumer: 'c', millisecondsSinceLastDelivery: 1, deliveriesCounter: 1 })),
+      ),
+      xClaim: vi.fn(() => claim.promise),
     };
     reader = { on: vi.fn(), connect: vi.fn(), quit: vi.fn(), xReadGroup: vi.fn(() => read.promise) };
     clients.create.mockReset().mockReturnValueOnce(writer).mockReturnValueOnce(reader);
@@ -58,7 +62,7 @@ describe('unsubscribe acquired batches', () => {
   });
   afterEach(async () => {
     read.resolve(null);
-    claim.resolve({ messages: [] });
+    claim.resolve([]);
     await ps.close();
     vi.useRealTimers();
   });
@@ -117,7 +121,7 @@ describe('unsubscribe acquired batches', () => {
     };
     await ps.subscribe('topic', cb, { group: 'workers' });
     await vi.advanceTimersByTimeAsync(10);
-    expect(writer.xAutoClaim).toHaveBeenCalledTimes(1);
+    expect(writer.xClaim).toHaveBeenCalledTimes(1);
     if (mode === 'before-reply') {
       stop = Promise.all([ps.unsubscribe('topic', cb), ps.close()]).then(() => {});
       read.resolve(null);
@@ -129,12 +133,12 @@ describe('unsubscribe acquired batches', () => {
       expect(finished).toBe(false);
       expect(writer.quit).not.toHaveBeenCalled();
     }
-    claim.resolve({ messages: [null, ...entries] });
+    claim.resolve([null, ...entries]);
     await vi.advanceTimersByTimeAsync(0);
     await stop;
     expect(delivered).toHaveLength(10);
     await vi.advanceTimersByTimeAsync(100);
-    expect(writer.xAutoClaim).toHaveBeenCalledTimes(1);
+    expect(writer.xClaim).toHaveBeenCalledTimes(1);
     expect(writer.xGroupDestroy).not.toHaveBeenCalled();
   });
 
@@ -147,7 +151,7 @@ describe('unsubscribe acquired batches', () => {
     claim.reject(new Error('connection lost'));
     await stop;
     await vi.advanceTimersByTimeAsync(100);
-    expect(writer.xAutoClaim).toHaveBeenCalledTimes(1);
+    expect(writer.xClaim).toHaveBeenCalledTimes(1);
     expect(cb).not.toHaveBeenCalled();
   });
 });

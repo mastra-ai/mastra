@@ -1365,6 +1365,24 @@ export const API_ROUTE_METADATA = {
       "listProperty": "clonedMessages"
     }
   },
+  "POST /memory/threads/:threadId/transfer": {
+    "method": "POST",
+    "path": "/memory/threads/:threadId/transfer",
+    "pathParams": [
+      "threadId"
+    ],
+    "queryParams": [
+      "agentId"
+    ],
+    "bodyParams": [
+      "resourceId"
+    ],
+    "hasQuery": true,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "POST /memory/threads/:threadId/working-memory": {
     "method": "POST",
     "path": "/memory/threads/:threadId/working-memory",
@@ -6360,7 +6378,12 @@ export const API_ROUTE_METADATA = {
       "threadId"
     ],
     "queryParams": [
+      "filter",
+      "include",
       "limit",
+      "orderBy",
+      "page",
+      "perPage",
       "sessionScope"
     ],
     "bodyParams": [],
@@ -6368,7 +6391,8 @@ export const API_ROUTE_METADATA = {
     "hasBody": false,
     "responseShape": {
       "kind": "object-property",
-      "listProperty": "messages"
+      "listProperty": "messages",
+      "paginationProperty": "page"
     }
   },
   "POST /agent-controller/:controllerId/sessions/:resourceId/messages": {

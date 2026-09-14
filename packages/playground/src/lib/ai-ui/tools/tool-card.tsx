@@ -1,13 +1,8 @@
-import { useCallback, useContext } from 'react';
-import { AskUserTool } from './ask-user-tool';
-import { AgentBadgeWrapper } from './badges/agent-badge-wrapper';
-import { CodeModeBadge } from './badges/code-mode-badge';
-import { FileTreeBadge } from './badges/file-tree-badge';
-import { ObservationMarkerBadge } from './badges/observation-marker-badge';
-import { SandboxExecutionBadge } from './badges/sandbox-execution-badge';
-import { ToolBadge } from './badges/tool-badge';
-import { useWorkflowStream, WorkflowBadge } from './badges/workflow-badge';
-import { SubmitPlanTool } from './submit-plan-tool';
+import type { MessageMetadata } from '@mastra/playground-ui/domains/chat';
+import { ChatAgentContext, useChatRunning, useChatSend } from '@mastra/playground-ui/domains/chat/context/chat-context';
+import { AskUserTool } from '@mastra/playground-ui/domains/chat/tools/ask-user-tool';
+import { CodeModeBadge } from '@mastra/playground-ui/domains/chat/tools/badges/code-mode-badge';
+import { ObservationMarkerBadge } from '@mastra/playground-ui/domains/chat/tools/badges/observation-marker-badge';
 import {
   badgeStatus,
   codeModeCall,
@@ -16,12 +11,17 @@ import {
   isWorkflowCall,
   toolCardKind,
   toolInteraction,
-} from './tool-card-kind';
+} from '@mastra/playground-ui/domains/chat/tools/tool-card-kind';
+import { useCallback, useContext } from 'react';
+import { AgentBadgeWrapper } from './badges/agent-badge-wrapper';
+import { FileTreeBadge } from './badges/file-tree-badge';
+import { SandboxExecutionBadge } from './badges/sandbox-execution-badge';
+import { ToolBadge } from './badges/tool-badge';
+import { useWorkflowStream, WorkflowBadge } from './badges/workflow-badge';
+import { SubmitPlanTool } from './submit-plan-tool';
 import { McpAppToolResult } from '@/domains/mcps/components/mcp-app-tool-result';
 import { useMcpAppTools } from '@/domains/mcps/hooks';
 import { WorkflowRunProvider } from '@/domains/workflows';
-import { ChatAgentContext, useChatRunning, useChatSend } from '@/lib/ai-ui/chat/chat-context';
-import type { MessageMetadata } from '@/lib/ai-ui/messages/message-metadata';
 
 /** A `data`-typed part the agent wrote via `writer.custom`, scoped to a call by `data.toolCallId`. */
 export interface DataMessagePart {

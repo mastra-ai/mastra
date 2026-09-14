@@ -128,6 +128,7 @@ describe('ClickHouse deletion lifecycle', () => {
     query
       .mockResolvedValueOnce(queryResult([existingRow]))
       .mockResolvedValueOnce(queryResult([]))
+      .mockResolvedValueOnce(queryResult([{ feedbackId: 'feedback-1', writeVersion: '0' }]))
       .mockResolvedValueOnce(queryResult([{ found: 1 }]));
 
     await expect(
@@ -147,6 +148,13 @@ describe('ClickHouse deletion lifecycle', () => {
     );
     expect(query.mock.calls[1]?.[0].query).toContain("predicateType = 'itemIds'");
     expect(query.mock.calls[1]?.[0].query).toContain('has(predicateValues, {feedbackId:String})');
+    expect(query).toHaveBeenNthCalledWith(
+      3,
+      expect.objectContaining({
+        query: expect.stringContaining('toString(max(writeVersion)) AS writeVersion'),
+        query_params: { feedbackIds: ['feedback-1'] },
+      }),
+    );
     expect(insert).toHaveBeenCalledTimes(2);
     expect(insert).toHaveBeenNthCalledWith(
       2,

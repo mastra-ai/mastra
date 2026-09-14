@@ -18,7 +18,7 @@ function buildSideDialogDarkTheme(): Extension {
   return draculaInit({
     settings: {
       fontFamily: 'var(--font-mono)',
-      fontSize: '0.8125rem',
+      fontSize: 'var(--text-ui-smd)',
       lineHighlight: 'transparent',
       gutterBackground: 'transparent',
       gutterForeground: '#939393',
@@ -34,7 +34,7 @@ function buildSideDialogLightTheme(): Extension {
     '&': {
       backgroundColor: 'transparent',
       color: 'var(--neutral6)',
-      fontSize: '0.8125rem',
+      fontSize: 'var(--text-ui-smd)',
     },
     '&.cm-editor .cm-scroller': {
       fontFamily: 'var(--font-mono)',
@@ -119,7 +119,7 @@ export function SideDialogCodeSection({ codeStr = '', title, icon, simplified = 
         </ButtonsGroup>
       </Section.Header>
       {codeStr && (
-        <div className="border-border1 bg-surface3 text-ui-md text-neutral4 max-h-[30vh] overflow-hidden overflow-y-auto rounded-xl border p-4 break-all dark:border-white/10 dark:bg-black/20">
+        <div className="border-border1 bg-surface3 text-ui-md text-neutral4 max-h-[30vh] overflow-hidden overflow-y-auto rounded-xl border p-3 break-all dark:border-white/10 dark:bg-black/20">
           {simplified ? (
             <div className="text-neutral4 px-2 font-mono break-all">
               <pre className="text-wrap">{codeStr}</pre>

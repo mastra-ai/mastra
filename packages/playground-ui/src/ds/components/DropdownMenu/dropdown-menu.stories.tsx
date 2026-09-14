@@ -29,19 +29,63 @@ const meta: Meta<typeof DropdownMenu> = {
 export default meta;
 type Story = StoryObj<typeof DropdownMenu>;
 
+const menuItems = (
+  <DropdownMenu.Content>
+    <DropdownMenu.Item>Profile</DropdownMenu.Item>
+    <DropdownMenu.Item>Settings</DropdownMenu.Item>
+    <DropdownMenu.Item>Billing</DropdownMenu.Item>
+    <DropdownMenu.Separator />
+    <DropdownMenu.Item>Log out</DropdownMenu.Item>
+  </DropdownMenu.Content>
+);
+
 export const Default: Story = {
   render: () => (
     <DropdownMenu>
-      <DropdownMenu.Trigger asChild>
-        <Button>Open Menu</Button>
-      </DropdownMenu.Trigger>
-      <DropdownMenu.Content>
-        <DropdownMenu.Item>Profile</DropdownMenu.Item>
-        <DropdownMenu.Item>Settings</DropdownMenu.Item>
-        <DropdownMenu.Item>Billing</DropdownMenu.Item>
-        <DropdownMenu.Separator />
-        <DropdownMenu.Item>Log out</DropdownMenu.Item>
-      </DropdownMenu.Content>
+      <DropdownMenu.Trigger>Open Menu</DropdownMenu.Trigger>
+      {menuItems}
+    </DropdownMenu>
+  ),
+};
+
+/** The trigger is a design-system Button: `variant`, `size` and `tooltip` apply directly. */
+export const Variants: Story = {
+  render: () => (
+    <div className="grid gap-4">
+      {(['default', 'outline', 'ghost', 'primary'] as const).map(variant => (
+        <div key={variant} className="flex items-center gap-2">
+          {(['xs', 'sm', 'md', 'lg'] as const).map(size => (
+            <DropdownMenu key={size}>
+              <DropdownMenu.Trigger variant={variant} size={size}>
+                {variant} / {size}
+              </DropdownMenu.Trigger>
+              {menuItems}
+            </DropdownMenu>
+          ))}
+          <DropdownMenu>
+            <DropdownMenu.Trigger variant={variant} size="icon-md" tooltip="More actions">
+              <Settings />
+            </DropdownMenu.Trigger>
+            {menuItems}
+          </DropdownMenu>
+        </div>
+      ))}
+    </div>
+  ),
+};
+
+/** Pass `render` to project the menu behavior onto your own element; the trigger's `variant`/`size` are then ignored. */
+export const CustomRender: Story = {
+  render: () => (
+    <DropdownMenu>
+      <DropdownMenu.Trigger
+        render={
+          <Button variant="outline" size="md">
+            Open Menu
+          </Button>
+        }
+      />
+      {menuItems}
     </DropdownMenu>
   ),
 };

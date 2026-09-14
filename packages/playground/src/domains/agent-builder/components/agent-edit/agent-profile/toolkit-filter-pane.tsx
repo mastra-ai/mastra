@@ -209,11 +209,11 @@ export const ToolkitFilterPane = ({
 
   return (
     <div
-      className="border-border1 flex h-full min-h-0 flex-col gap-3 border-r px-6 py-6"
+      className="border-border1 flex h-full min-h-0 flex-col gap-3 border-r px-4 py-4"
       data-testid={`${TEST_ID_PREFIX}-filter`}
     >
       <div className="bg-surface3 shrink-0 rounded-full" data-testid={`${TEST_ID_PREFIX}-filter-search`}>
-        <InputGroup variant="outline" size="lg">
+        <InputGroup variant="outline" size="default">
           <InputGroupAddon align="inline-start">
             <SearchIcon />
           </InputGroupAddon>

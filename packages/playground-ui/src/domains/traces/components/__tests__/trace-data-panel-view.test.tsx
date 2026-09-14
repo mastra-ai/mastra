@@ -332,8 +332,9 @@ describe('TraceDataPanelView — the header', () => {
   it('names the trace by a shortened id in the side panel', () => {
     render(<TraceDataPanelView {...baseProps} traceId="0123456789abcdef0123" />);
 
-    expect(screen.getByText(/# 0123456789ab/)).toBeTruthy();
-    expect(screen.queryByText(/0123456789abcdef0123/)).toBeNull();
+    const heading = screen.getByRole('heading', { name: /^Trace 0123456789ab…/ });
+    expect(heading.textContent).not.toContain('#');
+    expect(screen.queryByText('0123456789abcdef0123')).toBeNull();
   });
 
   it('drops the trace id, and every side-panel control, on the trace page', () => {
@@ -342,7 +343,7 @@ describe('TraceDataPanelView — the header', () => {
     );
 
     expect(screen.getByText('Trace Timeline')).toBeTruthy();
-    expect(screen.queryByText(/# trace-1/)).toBeNull();
+    expect(screen.queryByRole('heading', { name: /trace-1/ })).toBeNull();
     expect(screen.queryByRole('button', { name: /previous trace/i })).toBeNull();
     expect(screen.queryByRole('button', { name: /collapse panel/i })).toBeNull();
     openTraceActions();
@@ -378,7 +379,7 @@ describe('TraceDataPanelView — the header', () => {
 
     expect(screen.queryByText('agent run')).toBeNull();
     // The header stays, so the panel can be expanded again.
-    expect(screen.getByText(/# trace-1/)).toBeTruthy();
+    expect(screen.getByRole('heading', { name: /trace-1/ })).toBeTruthy();
   });
 
   it('offers trace-to-trace navigation as soon as either direction exists', () => {

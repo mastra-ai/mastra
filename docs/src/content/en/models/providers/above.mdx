@@ -7,7 +7,7 @@ description: "Browse above.dev model IDs, capabilities, context windows, and pri
 
 # <img src="https://models.dev/logos/above.svg" alt="above.dev logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />above.dev
 
-Access 9 above.dev models through Mastra's model router. Authentication is handled automatically using the `ABOVE_API_KEY` environment variable.
+Access 8 above.dev models through Mastra's model router. Authentication is handled automatically using the `ABOVE_API_KEY` environment variable.
 
 Learn more in the [above.dev documentation](https://above.dev/docs).
 
@@ -47,15 +47,15 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
   models={[
   {
     "model": "above/deepseek-v4-flash",
-    "imageInput": false,
+    "imageInput": true,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 384000,
-    "inputCost": 0.242,
-    "outputCost": 0.726
+    "inputCost": 0.165,
+    "outputCost": 0.66
   },
   {
     "model": "above/deepseek-v4-flash-vision-exp",
@@ -128,18 +128,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131072,
     "inputCost": 0.5077,
     "outputCost": 1.0154
-  },
-  {
-    "model": "above/mimo-v2.5-pro-ultraspeed",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1048576,
-    "maxOutput": 131072,
-    "inputCost": 1.5231,
-    "outputCost": 3.0462
   },
   {
     "model": "above/qwen3.8-max",

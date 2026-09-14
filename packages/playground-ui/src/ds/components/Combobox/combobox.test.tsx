@@ -1,12 +1,14 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { useRef } from 'react';
+import type { FormEvent } from 'react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { Combobox } from './combobox';
 
 beforeAll(() => {
   if (typeof window.PointerEvent === 'undefined') {
-    window.PointerEvent = window.MouseEvent as unknown as typeof PointerEvent;
+    Object.defineProperty(window, 'PointerEvent', { configurable: true, value: window.MouseEvent });
   }
 });
 
@@ -19,6 +21,12 @@ const options = [
   { label: 'Anthropic', value: 'anthropic' },
   { label: 'Google', value: 'google' },
 ];
+
+function getFirstHTMLElement(element: Element): HTMLElement {
+  const firstElement = element.firstElementChild;
+  if (!(firstElement instanceof HTMLElement)) throw new Error('Expected an HTML element');
+  return firstElement;
+}
 
 function renderCombobox(props?: {
   onValueChange?: (value: string) => void;
@@ -103,6 +111,63 @@ describe('Combobox', () => {
     await waitFor(() => {
       expect(onValueChange).toHaveBeenCalledWith(['openai', 'anthropic']);
     });
+  });
+
+  it('clears a multi-selection from the popup footer', async () => {
+    const onValueChange = vi.fn();
+    render(
+      <Combobox
+        multiple
+        options={options}
+        value={['openai', 'anthropic']}
+        onValueChange={onValueChange}
+        clearLabel="Clear"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('combobox'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Clear' }));
+
+    expect(onValueChange).toHaveBeenCalledWith([]);
+  });
+
+  it('does not submit a form when clearing a multi-selection from its portal', async () => {
+    const onSubmit = vi.fn((event: FormEvent) => event.preventDefault());
+    const onValueChange = vi.fn();
+
+    function FormCombobox() {
+      const formRef = useRef<HTMLFormElement>(null);
+
+      return (
+        <form ref={formRef} onSubmit={onSubmit}>
+          <Combobox
+            multiple
+            container={formRef}
+            options={options}
+            value={['openai']}
+            onValueChange={onValueChange}
+            clearLabel="Clear"
+          />
+        </form>
+      );
+    }
+
+    render(<FormCombobox />);
+    fireEvent.click(screen.getByRole('combobox'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Clear' }));
+
+    expect(onValueChange).toHaveBeenCalledWith([]);
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it('shows the clear action only when a selected multi-combobox provides its label', async () => {
+    const { rerender } = render(<Combobox multiple options={options} value={[]} clearLabel="Clear" />);
+
+    fireEvent.click(screen.getByRole('combobox'));
+    expect(screen.queryByRole('button', { name: 'Clear' })).toBeNull();
+
+    rerender(<Combobox multiple options={options} value={['openai']} />);
+    expect(screen.queryByRole('button', { name: 'Clear' })).toBeNull();
   });
 
   it('selects the first filtered item when pressing Enter after searching', async () => {
@@ -249,13 +314,13 @@ describe('Combobox', () => {
   it('says what went wrong under the field, and nothing when nothing did', () => {
     const withError = render(<Combobox options={options} error="Required" />);
     expect(screen.getByText('Required')).toBeTruthy();
-    const withErrorCount = (withError.container.firstElementChild as HTMLElement).childElementCount;
+    const withErrorCount = getFirstHTMLElement(withError.container).childElementCount;
 
     cleanup();
 
     const withoutError = render(<Combobox options={options} />);
 
-    expect((withoutError.container.firstElementChild as HTMLElement).childElementCount).toBe(withErrorCount - 1);
+    expect(getFirstHTMLElement(withoutError.container).childElementCount).toBe(withErrorCount - 1);
   });
 
   it('takes the medium size unless the caller asks otherwise', () => {
@@ -295,7 +360,7 @@ describe('Combobox', () => {
 
   it('greys out the invitation only while nothing is chosen', () => {
     const { rerender } = render(<Combobox multiple options={options} value={[]} placeholder="Pick providers" />);
-    const label = () => screen.getByRole('combobox').firstElementChild as HTMLElement;
+    const label = () => getFirstHTMLElement(screen.getByRole('combobox'));
     expect(label().classList.contains('text-neutral3')).toBe(true);
 
     rerender(<Combobox multiple options={options} value={['openai']} placeholder="Pick providers" />);
@@ -330,13 +395,13 @@ describe('Combobox', () => {
   it('says what went wrong under a multi-select field too', () => {
     const withError = render(<Combobox multiple options={options} value={[]} error="Required" />);
     expect(screen.getByText('Required')).toBeTruthy();
-    const withErrorCount = (withError.container.firstElementChild as HTMLElement).childElementCount;
+    const withErrorCount = getFirstHTMLElement(withError.container).childElementCount;
 
     cleanup();
 
     const withoutError = render(<Combobox multiple options={options} value={[]} />);
 
-    expect((withoutError.container.firstElementChild as HTMLElement).childElementCount).toBe(withErrorCount - 1);
+    expect(getFirstHTMLElement(withoutError.container).childElementCount).toBe(withErrorCount - 1);
   });
 
   it('picks a single value with nobody listening', async () => {

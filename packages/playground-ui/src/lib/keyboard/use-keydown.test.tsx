@@ -151,6 +151,56 @@ describe('useKeydown', () => {
 
     expect(onArrowUp).not.toHaveBeenCalled();
   });
+
+  it('does not attach a listener when enabled is false', () => {
+    const onArrowUp = vi.fn();
+    renderHook(() => useKeydown({ ArrowUp: onArrowUp }, { enabled: false }));
+
+    pressKey('ArrowUp');
+
+    expect(onArrowUp).not.toHaveBeenCalled();
+  });
+
+  it('attaches and detaches the listener when enabled toggles', () => {
+    const onArrowUp = vi.fn();
+    const { rerender } = renderHook(({ enabled }) => useKeydown({ ArrowUp: onArrowUp }, { enabled }), {
+      initialProps: { enabled: false },
+    });
+
+    pressKey('ArrowUp');
+    expect(onArrowUp).not.toHaveBeenCalled();
+
+    rerender({ enabled: true });
+    pressKey('ArrowUp');
+    expect(onArrowUp).toHaveBeenCalledTimes(1);
+
+    rerender({ enabled: false });
+    pressKey('ArrowUp');
+    expect(onArrowUp).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves the event untouched when shouldHandle returns false', () => {
+    const onArrowUp = vi.fn();
+    renderHook(() => useKeydown({ ArrowUp: onArrowUp }, { shouldHandle: () => false }));
+
+    const event = new KeyboardEvent('keydown', { key: 'ArrowUp', cancelable: true });
+    window.dispatchEvent(event);
+
+    expect(onArrowUp).not.toHaveBeenCalled();
+    expect(event.defaultPrevented).toBe(false);
+  });
+
+  it('passes the event to shouldHandle', () => {
+    const onArrowUp = vi.fn();
+    const shouldHandle = vi.fn((event: KeyboardEvent) => !event.repeat);
+    renderHook(() => useKeydown({ ArrowUp: onArrowUp }, { shouldHandle }));
+
+    pressKey('ArrowUp', { repeat: true });
+    expect(onArrowUp).not.toHaveBeenCalled();
+
+    pressKey('ArrowUp');
+    expect(onArrowUp).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('useKeydown with a scoped target', () => {
@@ -199,9 +249,10 @@ type TableHarnessProps = {
   pageSize?: number;
   onActivate?: (index: number) => void;
   onNavigate?: (index: number) => void;
+  global?: boolean;
 };
 
-const TableHarness = ({ count, pageSize, onActivate, onNavigate }: TableHarnessProps) => {
+const TableHarness = ({ count, pageSize, onActivate, onNavigate, global }: TableHarnessProps) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const { activeIndex, getRowProps, getContainerProps } = useTableKeydown({
     count,
@@ -209,6 +260,7 @@ const TableHarness = ({ count, pageSize, onActivate, onNavigate }: TableHarnessP
     pageSize,
     onActivate,
     onNavigate,
+    global,
   });
 
   return (
@@ -372,5 +424,92 @@ describe('useTableKeydown', () => {
     rerender(<TableHarness count={2} />);
 
     expect(activeIndexOf()).toBe(1);
+  });
+});
+
+describe('useTableKeydown global', () => {
+  it('focuses the current row on the first ArrowDown from body, then moves', () => {
+    render(<TableHarness count={3} global />);
+    expect(document.activeElement).toBe(document.body);
+
+    fireEvent.keyDown(document.body, { key: 'ArrowDown' });
+    expect(document.activeElement).toBe(row(0));
+    expect(activeIndexOf()).toBe(0);
+
+    fireEvent.keyDown(document.body, { key: 'ArrowDown' });
+    expect(document.activeElement).toBe(row(1));
+    expect(activeIndexOf()).toBe(1);
+  });
+
+  it('ignores arrows typed into an input outside the list', () => {
+    render(
+      <div>
+        <TableHarness count={3} global />
+        <input data-testid="search" />
+      </div>,
+    );
+    const search = screen.getByTestId('search');
+    search.focus();
+
+    const prevented = !fireEvent.keyDown(search, { key: 'ArrowDown' });
+
+    expect(prevented).toBe(false);
+    expect(document.activeElement).toBe(search);
+    expect(activeIndexOf()).toBe(0);
+  });
+
+  it('ignores arrows from inside a dialog', () => {
+    render(
+      <div>
+        <TableHarness count={3} global />
+        <div role="dialog">
+          <button data-testid="in-dialog">ok</button>
+        </div>
+      </div>,
+    );
+
+    fireEvent.keyDown(screen.getByTestId('in-dialog'), { key: 'ArrowDown' });
+
+    expect(activeIndexOf()).toBe(0);
+  });
+
+  it('moves only once when the key is pressed on a focused row', () => {
+    render(<TableHarness count={3} global />);
+    row(0).focus();
+
+    pressOnRow(0, 'ArrowDown');
+
+    expect(activeIndexOf()).toBe(1);
+    expect(document.activeElement).toBe(row(1));
+  });
+
+  it('does not handle Home/End from body but still does from a row', () => {
+    render(<TableHarness count={3} global />);
+
+    fireEvent.keyDown(document.body, { key: 'End' });
+    expect(activeIndexOf()).toBe(0);
+
+    row(0).focus();
+    pressOnRow(0, 'End');
+    expect(activeIndexOf()).toBe(2);
+  });
+
+  it('does nothing from body when global is not set', () => {
+    render(<TableHarness count={3} />);
+
+    fireEvent.keyDown(document.body, { key: 'ArrowDown' });
+
+    expect(activeIndexOf()).toBe(0);
+    expect(document.activeElement).toBe(document.body);
+  });
+
+  it('stops handling global keys after unmount', () => {
+    const { unmount } = render(<TableHarness count={3} global />);
+
+    unmount();
+    const event = new KeyboardEvent('keydown', { key: 'ArrowDown', cancelable: true, bubbles: true });
+    document.body.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(false);
   });
 });

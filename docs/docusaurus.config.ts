@@ -266,7 +266,7 @@ const config: Config = {
           items: [
             { label: 'Contact Us', href: 'https://mastra.ai/contact' },
             { label: 'GitHub', href: 'https://github.com/mastra-ai/mastra' },
-            { label: 'Discord', href: 'https://discord.gg/BTYqqHKUrf' },
+            { label: 'Discord', href: 'https://discord.gg/mastra-ai' },
             { label: 'YouTube', href: 'https://www.youtube.com/@mastra-ai' },
             { label: 'X (Twitter)', href: 'https://x.com/@mastra' },
           ],

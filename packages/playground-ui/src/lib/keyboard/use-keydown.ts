@@ -57,10 +57,20 @@ export const matchesCombo = (event: KeyboardEvent, combo: ParsedKeyCombo): boole
 export type UseKeydownOptions = {
   /** Attach the listener to this element instead of `window`. */
   target?: RefObject<HTMLElement | null>;
+  /** When `false`, no listener is attached. Defaults to `true`. */
+  enabled?: boolean;
+  /**
+   * Called before any combo is matched. Return `false` to leave the event
+   * untouched (no `preventDefault`, no handler).
+   */
+  shouldHandle?: (event: KeyboardEvent) => boolean;
 };
 
 export const useKeydown = (opts: UseKeydownArgs, options: UseKeydownOptions = {}) => {
+  const { enabled = true } = options;
+
   const handlers = useEffectEvent((event: KeyboardEvent) => {
+    if (options.shouldHandle && !options.shouldHandle(event)) return;
     for (const [combo, handler] of Object.entries(opts)) {
       if (matchesCombo(event, parseKeyCombo(combo))) {
         event.preventDefault();
@@ -74,6 +84,7 @@ export const useKeydown = (opts: UseKeydownArgs, options: UseKeydownOptions = {}
   targetRef.current = options.target;
 
   useEffect(() => {
+    if (!enabled) return;
     const target = targetRef.current;
     const element: HTMLElement | Window | null = target ? (target.current ?? null) : window;
     if (!element) return;
@@ -84,7 +95,7 @@ export const useKeydown = (opts: UseKeydownArgs, options: UseKeydownOptions = {}
 
     element.addEventListener('keydown', handleKeyDown);
     return () => element.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [enabled]);
 };
 
 export type UseTableKeydownArgs = {
@@ -100,7 +111,32 @@ export type UseTableKeydownArgs = {
   onActivate?: (index: number) => void;
   /** Called with the next index before focus moves (e.g. virtualizer.scrollToIndex). */
   onNavigate?: (index: number) => void;
+  /**
+   * Also listen for ArrowUp/ArrowDown/PageUp/PageDown on `document`, so the
+   * list can be navigated before any row has focus. Keys are ignored when the
+   * event originates from an editable field, a keyboard widget (combobox, menu,
+   * listbox…) or an open dialog/popover. Enable on at most one list per page.
+   */
+  global?: boolean;
 };
+
+const KEYBOARD_CONSUMER_SELECTOR = [
+  'input',
+  'textarea',
+  'select',
+  '[contenteditable="true"]',
+  '[role="combobox"]',
+  '[role="listbox"]',
+  '[role="menu"]',
+  '[role="menuitem"]',
+  '[role="option"]',
+  '[role="dialog"]',
+  '[role="alertdialog"]',
+  '[data-radix-popper-content-wrapper]',
+].join(', ');
+
+const isKeyboardConsumer = (target: EventTarget | null): boolean =>
+  target instanceof Element && target.closest(KEYBOARD_CONSUMER_SELECTOR) !== null;
 
 export const useTableKeydown = ({
   count,
@@ -109,6 +145,7 @@ export const useTableKeydown = ({
   initialIndex = 0,
   onActivate,
   onNavigate,
+  global = false,
 }: UseTableKeydownArgs) => {
   const [activeIndex, setActiveIndex] = useState(initialIndex);
 
@@ -148,6 +185,24 @@ export const useTableKeydown = ({
       }
     }
   };
+
+  // When focus is outside the list, the first ArrowUp/ArrowDown press lands on
+  // the current row instead of skipping past it.
+  const focusIsInList = () => containerRef.current?.contains(document.activeElement) ?? false;
+  const step = (delta: number) => navigateTo(focusIsInList() ? activeIndex + delta : activeIndex);
+
+  useKeydown(
+    {
+      ArrowUp: () => step(-1),
+      ArrowDown: () => step(1),
+      PageUp: () => navigateTo(activeIndex - pageSize),
+      PageDown: () => navigateTo(activeIndex + pageSize),
+    },
+    {
+      enabled: global,
+      shouldHandle: event => !event.defaultPrevented && count > 0 && !isKeyboardConsumer(event.target),
+    },
+  );
 
   useEffect(() => {
     if (activeIndex >= count) {

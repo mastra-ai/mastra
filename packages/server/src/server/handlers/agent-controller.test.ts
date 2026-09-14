@@ -483,7 +483,7 @@ describe('agent-controller routes', () => {
       expect(received.type).toBe('agent_start');
     });
 
-    it('preserves live streamed messages across the SSE boundary without cloning', async () => {
+    it('preserves compact message lifecycle payloads across the SSE boundary', async () => {
       const stream = (await STREAM_AGENT_CONTROLLER_SESSION_ROUTE.handler({
         mastra,
         controllerId: 'code',
@@ -503,22 +503,31 @@ describe('agent-controller routes', () => {
         id: 'assistant-live-1',
         role: 'assistant',
         createdAt: new Date('2026-01-02T03:04:05.000Z'),
-        content: { format: 2, parts: [{ type: 'text', text: 'first' }] },
+        content: { format: 2, parts: [{ type: 'text', text: '' }] },
       } as any;
 
-      session.emit({ type: 'message_update', message });
-      message.content.parts[0].text = 'later';
+      session.emit({ type: 'message_start', message });
+      session.emit({ type: 'message_update', id: message.id, event: { type: 'text-delta', delta: 'later' } });
+      session.emit({ type: 'message_end', id: message.id });
 
-      let received: any;
-      for (let i = 0; i < 10 && received === undefined; i++) {
+      const received: any[] = [];
+      for (let i = 0; i < 20 && received.length < 3; i++) {
         const { value } = await reader.read();
-        if (value && typeof value === 'object' && (value as any).type === 'message_update') received = value;
+        if (
+          value &&
+          typeof value === 'object' &&
+          ['message_start', 'message_update', 'message_end'].includes((value as any).type)
+        ) {
+          received.push(value);
+        }
       }
       await reader.cancel();
 
-      expect(received.message).toBe(message);
-      expect(received.message.content.parts[0].text).toBe('later');
-      expect(received.message.createdAt).toEqual(new Date('2026-01-02T03:04:05.000Z'));
+      expect(received).toEqual([
+        { type: 'message_start', message },
+        { type: 'message_update', id: message.id, event: { type: 'text-delta', delta: 'later' } },
+        { type: 'message_end', id: message.id },
+      ]);
     });
 
     it('flattens Error instances on error events so the message survives JSON serialization', async () => {
@@ -757,6 +766,180 @@ describe('agent-controller routes', () => {
       expect(message.content.format).toBe(2);
       expect(message.content.parts).toEqual([{ type: 'text', text: 'hello world' }]);
       expect(message.createdAt).toBe('2026-01-01T00:00:00.000Z');
+    });
+
+    it('delegates unlimited and limited reads to the controller against inherited Mastra storage', async () => {
+      const mastraStorage = new InMemoryStore();
+      const controller = new AgentController({
+        id: 'storage-fallback',
+        storage: new InMemoryStore(),
+        workspace: new Workspace({ name: 'storage-fallback-workspace', skills: ['/tmp/test-skills'] }),
+        modes: [{ id: 'build', name: 'Build', default: true, agent: makeAgent() }],
+      });
+      const fallbackMastra = new Mastra({
+        agentControllers: { 'storage-fallback': controller },
+        storage: mastraStorage,
+      });
+      const memory = await mastraStorage.getStore('memory');
+      const threadId = 'storage-fallback-thread';
+      await memory!.saveThread({
+        thread: {
+          id: threadId,
+          resourceId: 'storage-user',
+          title: 'storage fallback',
+          metadata: {},
+          createdAt: new Date('2026-01-01T00:00:00.000Z'),
+          updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+        },
+      });
+      await memory!.saveMessages({
+        messages: [
+          ['first', '2026-01-01T00:00:00.000Z'],
+          ['second', '2026-01-02T00:00:00.000Z'],
+          ['third', '2026-01-03T00:00:00.000Z'],
+        ].map(([id, createdAt]) => ({
+          id,
+          role: 'user',
+          threadId,
+          resourceId: 'storage-user',
+          createdAt: new Date(createdAt),
+          content: {
+            format: 2,
+            parts: [{ type: 'text', text: id }],
+            metadata: { category: id === 'second' ? 'discard' : 'keep' },
+          },
+        })) as any,
+      });
+      const initStorage = vi.spyOn(controller, 'initStorage');
+      const queryThreadMessages = vi.spyOn(controller, 'queryThreadMessages');
+
+      try {
+        const unlimited = (await LIST_AGENT_CONTROLLER_THREAD_MESSAGES_ROUTE.handler({
+          mastra: fallbackMastra,
+          controllerId: 'storage-fallback',
+          resourceId: 'storage-user',
+          threadId,
+        } as any)) as { messages: { id: string }[]; total: number; page: number; perPage: number; hasMore: boolean };
+        const paged = (await LIST_AGENT_CONTROLLER_THREAD_MESSAGES_ROUTE.handler({
+          mastra: fallbackMastra,
+          controllerId: 'storage-fallback',
+          resourceId: 'storage-user',
+          threadId,
+          page: 1,
+          perPage: 1,
+          orderBy: { field: 'createdAt', direction: 'DESC' },
+        } as any)) as { messages: { id: string }[]; total: number; page: number; perPage: number; hasMore: boolean };
+        const filtered = (await LIST_AGENT_CONTROLLER_THREAD_MESSAGES_ROUTE.handler({
+          mastra: fallbackMastra,
+          controllerId: 'storage-fallback',
+          resourceId: 'storage-user',
+          threadId,
+          perPage: false,
+          filter: { metadata: { category: 'keep' } },
+        } as any)) as { messages: { id: string }[]; total: number; page: number; perPage: false; hasMore: boolean };
+        const limited = (await LIST_AGENT_CONTROLLER_THREAD_MESSAGES_ROUTE.handler({
+          mastra: fallbackMastra,
+          controllerId: 'storage-fallback',
+          resourceId: 'storage-user',
+          threadId,
+          limit: 2,
+        } as any)) as { messages: { id: string }[]; total: number; page: number; perPage: number; hasMore: boolean };
+        const limitPaged = (await LIST_AGENT_CONTROLLER_THREAD_MESSAGES_ROUTE.handler({
+          mastra: fallbackMastra,
+          controllerId: 'storage-fallback',
+          resourceId: 'storage-user',
+          threadId,
+          limit: 2,
+          page: 0,
+        } as any)) as { messages: { id: string }[]; total: number; page: number; perPage: number; hasMore: boolean };
+
+        expect(unlimited).toMatchObject({ total: 3, page: 0, perPage: 40, hasMore: false });
+        expect(unlimited.messages.map(message => message.id)).toEqual(['third', 'second', 'first']);
+        expect(paged).toMatchObject({ total: 3, page: 1, perPage: 1, hasMore: true });
+        expect(paged.messages.map(message => message.id)).toEqual(['second']);
+        expect(filtered).toMatchObject({ total: 2, page: 0, perPage: false, hasMore: false });
+        expect(filtered.messages.map(message => message.id)).toEqual(['third', 'first']);
+        expect(limited).toMatchObject({ total: 3, page: 0, perPage: 2, hasMore: true });
+        expect(limited.messages.map(message => message.id)).toEqual(['second', 'third']);
+        expect(limitPaged).toMatchObject({ total: 3, page: 0, perPage: 2, hasMore: true });
+        expect(limitPaged.messages.map(message => message.id)).toEqual(['second', 'third']);
+        expect(queryThreadMessages).toHaveBeenNthCalledWith(1, { threadId, resourceId: 'storage-user' });
+        expect(queryThreadMessages).toHaveBeenNthCalledWith(2, {
+          threadId,
+          resourceId: 'storage-user',
+          page: 1,
+          perPage: 1,
+          orderBy: { field: 'createdAt', direction: 'DESC' },
+        });
+        expect(queryThreadMessages).toHaveBeenNthCalledWith(3, {
+          threadId,
+          resourceId: 'storage-user',
+          perPage: false,
+          filter: { metadata: { category: 'keep' } },
+        });
+        expect(queryThreadMessages).toHaveBeenNthCalledWith(4, {
+          threadId,
+          resourceId: 'storage-user',
+          perPage: 2,
+          page: 0,
+          orderBy: { field: 'createdAt', direction: 'DESC' },
+        });
+        expect(queryThreadMessages).toHaveBeenNthCalledWith(5, {
+          threadId,
+          resourceId: 'storage-user',
+          perPage: 2,
+          page: 0,
+          orderBy: { field: 'createdAt', direction: 'DESC' },
+        });
+        expect(initStorage).toHaveBeenCalled();
+      } finally {
+        initStorage.mockRestore();
+        queryThreadMessages.mockRestore();
+      }
+    });
+
+    it('accepts limit with page as a deprecated perPage alias and rejects other modern options', () => {
+      const querySchema = (LIST_AGENT_CONTROLLER_THREAD_MESSAGES_ROUTE as any).queryParamSchema;
+
+      expect(querySchema.parse({ limit: 2, page: 1 })).toMatchObject({ limit: 2, page: 1 });
+      expect(querySchema.safeParse({ limit: 2, perPage: 1 }).success).toBe(false);
+      expect(querySchema.safeParse({ limit: 2, orderBy: { field: 'createdAt', direction: 'DESC' } }).success).toBe(
+        false,
+      );
+      expect(querySchema.safeParse({ limit: 2, include: [{ id: 'message-1' }] }).success).toBe(false);
+      expect(querySchema.safeParse({ limit: 2, filter: { metadata: { category: 'support' } } }).success).toBe(false);
+      expect(querySchema.parse({ perPage: 'false' })).toMatchObject({ perPage: false });
+    });
+
+    it('forwards request context to memory FGA checks', async () => {
+      const created = (await CREATE_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'fga-user',
+      } as any)) as { threadId: string };
+      const require = vi.fn().mockResolvedValue(undefined);
+      vi.spyOn(mastra, 'getServer').mockReturnValue({ fga: { require } } as any);
+      const requestContext = new RequestContext();
+      const user = {
+        id: 'user-1',
+        organizationMembershipId: 'om-1',
+        memberships: [{ id: 'om-1', organizationId: 'org-1' }],
+      };
+      requestContext.set('user', user);
+
+      await LIST_AGENT_CONTROLLER_THREAD_MESSAGES_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'fga-user',
+        threadId: created.threadId,
+        requestContext,
+      } as any);
+
+      expect(require).toHaveBeenCalledWith(user, {
+        resource: { type: 'thread', id: created.threadId },
+        permission: 'memory:read',
+        context: expect.objectContaining({ resourceId: 'fga-user' }),
+      });
     });
 
     it('preserves signal-role messages with their data parts', async () => {
@@ -1094,7 +1277,7 @@ describe('agent-controller routes', () => {
       ).rejects.toThrow('Thread not found');
     });
 
-    it('LIST messages rejects a thread owned by another resource', async () => {
+    it('LIST messages does not disclose a thread owned by another resource', async () => {
       const { victimThreadId } = await setupTwoSessions();
       await expect(
         LIST_AGENT_CONTROLLER_THREAD_MESSAGES_ROUTE.handler({

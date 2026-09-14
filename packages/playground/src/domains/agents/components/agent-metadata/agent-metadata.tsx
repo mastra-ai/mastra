@@ -6,6 +6,8 @@ import { codeLanguages, useCodemirrorTheme } from '@mastra/playground-ui/compone
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { LoadingBadge } from '@mastra/playground-ui/domains/chat/components/loading-badge';
+import { WORKSPACE_TOOLS_PREFIX } from '@mastra/playground-ui/domains/chat/tools/workspace-tool-constants';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { ProcessorIcon } from '@mastra/playground-ui/icons/ProcessorIcon';
 import { SkillIcon } from '@mastra/playground-ui/icons/SkillIcon';
@@ -22,8 +24,6 @@ import { AgentMetadataModelList } from './agent-metadata-model-list';
 import { AgentMetadataSection } from './agent-metadata-section';
 import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
 import { useScorers } from '@/domains/scores';
-import { WORKSPACE_TOOLS_PREFIX } from '@/domains/workspace/constants';
-import { LoadingBadge } from '@/lib/ai-ui/tools/badges/loading-badge';
 import { useLinkComponent } from '@/lib/framework';
 
 export interface AgentMetadataProps {
@@ -415,7 +415,7 @@ export const AgentMetadataWorkspaceToolsList = ({ tools }: AgentMetadataWorkspac
     <AgentMetadataList>
       {tools.map(tool => (
         <AgentMetadataListItem key={tool}>
-          <Badge icon={<Folder className="text-accent1 h-3 w-3" />}>{formatWorkspaceToolName(tool)}</Badge>
+          <Badge icon={<Folder className="text-accent1" />}>{formatWorkspaceToolName(tool)}</Badge>
         </AgentMetadataListItem>
       ))}
     </AgentMetadataList>
@@ -435,7 +435,7 @@ export const AgentMetadataBrowserToolsList = ({ tools }: AgentMetadataBrowserToo
     <AgentMetadataList>
       {tools.map(tool => (
         <AgentMetadataListItem key={tool}>
-          <Badge icon={<Globe className="h-3 w-3 text-cyan-500" />}>{tool}</Badge>
+          <Badge icon={<Globe className="text-cyan-500" />}>{tool}</Badge>
         </AgentMetadataListItem>
       ))}
     </AgentMetadataList>

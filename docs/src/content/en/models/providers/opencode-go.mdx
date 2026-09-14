@@ -22,7 +22,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "opencode-go/deepseek-flash"
+  model: "opencode-go/deepseek-v4-flash"
 });
 
 // Generate a response
@@ -45,18 +45,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 <ProviderModelsTable
   models={[
-  {
-    "model": "opencode-go/deepseek-flash",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1000000,
-    "maxOutput": 384000,
-    "inputCost": 0.15,
-    "outputCost": 0.6
-  },
   {
     "model": "opencode-go/deepseek-v4-flash",
     "imageInput": false,
@@ -92,6 +80,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 384000,
     "inputCost": 0.66,
     "outputCost": 1.98
+  },
+  {
+    "model": "opencode-go/deepseek-v4.1-flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 384000,
+    "inputCost": 0.15,
+    "outputCost": 0.6
   },
   {
     "model": "opencode-go/glm-5.1",
@@ -384,7 +384,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://opencode.ai/zen/go/v1",
-    id: "opencode-go/deepseek-flash",
+    id: "opencode-go/deepseek-v4-flash",
     apiKey: process.env.OPENCODE_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -403,7 +403,7 @@ const agent = new Agent({
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "opencode-go/qwen3.8-max"
-      : "opencode-go/deepseek-flash";
+      : "opencode-go/deepseek-v4-flash";
   }
 });
 ```

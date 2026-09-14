@@ -72,7 +72,7 @@ export const ToolPanel = ({ toolId }: ToolPanelProps) => {
 
   if (isLoading) {
     return (
-      <div className="p-6">
+      <div className="p-4">
         <Skeleton className="mb-4 h-8 w-48" />
         <Skeleton className="h-32 w-full" />
       </div>
@@ -83,7 +83,7 @@ export const ToolPanel = ({ toolId }: ToolPanelProps) => {
 
   if (!tool)
     return (
-      <div className="px-6 py-12 text-center">
+      <div className="px-4 py-8 text-center">
         <Txt variant="header-md" className="text-neutral3">
           Tool not found
         </Txt>
@@ -92,7 +92,7 @@ export const ToolPanel = ({ toolId }: ToolPanelProps) => {
 
   if (!canExecuteTool)
     return (
-      <div className="px-6 py-12 text-center">
+      <div className="px-4 py-8 text-center">
         <Txt variant="ui-sm" className="text-neutral3">
           You don't have permission to execute tools.
         </Txt>

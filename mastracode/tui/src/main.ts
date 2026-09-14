@@ -17,6 +17,7 @@ import {
 import { setupDebugLogging, truncateLogFile } from '@mastra/code-sdk/utils/debug-log';
 import { drainPipedStdin, reopenStdinFromTTY } from '@mastra/code-sdk/utils/stdin-pipe';
 import { releaseAllThreadLocks } from '@mastra/code-sdk/utils/thread-lock';
+import { TUI_CO_AUTHOR } from './commit-attribution.js';
 import {
   createOneShotFatalErrorHandler,
   createShutdownCoordinator,
@@ -80,6 +81,7 @@ async function tuiMain(pipedInput?: string | null) {
 
   const initialState = resolveInitialStateFromEnv();
   const result = await createMastraCode({
+    coAuthor: TUI_CO_AUTHOR,
     unixSocketPubSub: !isTruthyEnv('MASTRACODE_DISABLE_UNIX_SOCKET_PUBSUB'),
     disableMcp: isTruthyEnv('MASTRACODE_DISABLE_MCP'),
     disableHooks: isTruthyEnv('MASTRACODE_DISABLE_HOOKS'),
@@ -351,12 +353,15 @@ async function main() {
   }
 
   if (hasHeadlessFlag(process.argv) || process.argv.includes('--help') || process.argv.includes('-h')) {
-    return runMCCli();
+    return runMCCli(undefined, { coAuthor: TUI_CO_AUTHOR });
   }
 
   if (process.argv.includes('--acp')) {
     const { acpMain } = await import('@mastra/code-sdk/acp/index');
-    return acpMain({ dangerousAutoApprove: process.argv.includes('--dangerous-auto-approve') });
+    return acpMain({
+      dangerousAutoApprove: process.argv.includes('--dangerous-auto-approve'),
+      coAuthor: TUI_CO_AUTHOR,
+    });
   }
 
   // When stdin is piped (e.g. `cat foo | mastracode`), drain the pipe fully
@@ -372,7 +377,7 @@ async function main() {
     const reopenedStdin = reopenStdinFromTTY();
     if (!reopenedStdin) {
       process.stderr.write('No TTY available — falling back to headless mode.\n');
-      return runMCCli(pipedInput);
+      return runMCCli(pipedInput, { coAuthor: TUI_CO_AUTHOR });
     }
   }
 

@@ -336,82 +336,110 @@ export const create = async (args: CreateOptions): Promise<void> => {
   let selectedApiKeyWritten = false;
   let materializationError: unknown;
 
-  try {
-    if (mode === 'empty') {
-      await writeEmptyScaffold({
-        projectPath: staging.projectPath,
-        projectName,
-        versionTag: versionTag ?? 'latest',
-        packageManager,
-      });
-      materializationController.signal.throwIfAborted();
-    } else {
-      const isManaged = mode === 'managed';
-      const branch = isManaged && versionTag === 'beta' ? 'beta' : undefined;
-      await cloneTemplate({
-        template: selectedTemplate!,
-        projectName,
-        targetDir: staging.rootPath,
-        branch,
-        signal: materializationController.signal,
-        ...(observabilityEnabled ? { silent: true } : {}),
-      });
-
-      if (isManaged) {
-        const providerConfig = await adaptDefaultTemplate({
+  const materializationPromise = (async () => {
+    try {
+      if (mode === 'empty') {
+        await writeEmptyScaffold({
           projectPath: staging.projectPath,
           projectName,
-          packageManager,
-          provider: llmProvider!,
-          apiKey: llmApiKey,
           versionTag: versionTag ?? 'latest',
+          packageManager,
         });
-        selectedApiKeyEnv = providerConfig.apiKeyEnv;
-        selectedApiKeyWritten = providerConfig.apiKeyWritten;
-        if (providerConfig.adaptationFailed) {
-          p.log.warn('Some provider setup could not be applied. Review the generated project before running it.');
-        }
         materializationController.signal.throwIfAborted();
-      }
-    }
-
-    if (options.install) {
-      if (observabilityEnabled) {
-        await installDependencies(
-          staging.projectPath,
-          packageManager,
-          options.timeout,
-          materializationController.signal,
-          true,
-        );
       } else {
-        await installDependencies(
-          staging.projectPath,
-          packageManager,
-          options.timeout,
-          materializationController.signal,
+        const isManaged = mode === 'managed';
+        const branch = isManaged && versionTag === 'beta' ? 'beta' : undefined;
+        await cloneTemplate({
+          template: selectedTemplate!,
+          projectName,
+          targetDir: staging.rootPath,
+          branch,
+          signal: materializationController.signal,
+          ...(observabilityEnabled ? { silent: true } : {}),
+        });
+
+        if (isManaged) {
+          const providerConfig = await adaptDefaultTemplate({
+            projectPath: staging.projectPath,
+            projectName,
+            packageManager,
+            provider: llmProvider!,
+            apiKey: llmApiKey,
+            versionTag: versionTag ?? 'latest',
+          });
+          selectedApiKeyEnv = providerConfig.apiKeyEnv;
+          selectedApiKeyWritten = providerConfig.apiKeyWritten;
+          if (providerConfig.adaptationFailed) {
+            p.log.warn('Some provider setup could not be applied. Review the generated project before running it.');
+          }
+          materializationController.signal.throwIfAborted();
+        }
+      }
+
+      if (options.install) {
+        if (observabilityEnabled) {
+          await installDependencies(
+            staging.projectPath,
+            packageManager,
+            options.timeout,
+            materializationController.signal,
+            true,
+          );
+        } else {
+          await installDependencies(
+            staging.projectPath,
+            packageManager,
+            options.timeout,
+            materializationController.signal,
+          );
+        }
+      }
+      materializationController.signal.throwIfAborted();
+      await publishStagedProject({ projectPath: staging.projectPath, targetPath, projectName });
+    } catch (error) {
+      materializationError = error;
+      platformSetupController?.abort();
+    } finally {
+      if (process.cwd() !== invocationCwd) {
+        process.chdir(invocationCwd);
+      }
+      try {
+        await cleanupOwnedStagingDirectory(staging.rootPath);
+      } catch (cleanupError) {
+        console.error(
+          `Warning: Failed to clean up staging directory: ${cleanupError instanceof Error ? cleanupError.message : 'Unknown error'}`,
         );
       }
     }
-    materializationController.signal.throwIfAborted();
-    await publishStagedProject({ projectPath: staging.projectPath, targetPath, projectName });
-  } catch (error) {
-    materializationError = error;
-    platformSetupController?.abort();
-  } finally {
-    if (process.cwd() !== invocationCwd) {
-      process.chdir(invocationCwd);
+  })();
+
+  let platformSetup: PlatformSetupResult | undefined;
+  if (platformSetupPromise) {
+    // Wait for the interactive platform setup to finish first, then keep the
+    // terminal visibly alive with a spinner while the background scaffold
+    // (clone/install) completes — otherwise the CLI looks frozen.
+    platformSetup = await platformSetupPromise;
+    if (platformSetup.status === 'cancelled' && !interruptionSignal) {
+      // A SIGINT also cancels platform setup; in that case the interruption
+      // branch below reports the 'cancelled' outcome instead.
+      analytics?.trackEvent('cli_observability_outcome', { command: 'create', outcome: 'skipped' });
+      p.log.info('Skipping Mastra platform setup.');
     }
-    try {
-      await cleanupOwnedStagingDirectory(staging.rootPath);
-    } catch (cleanupError) {
-      console.error(
-        `Warning: Failed to clean up staging directory: ${cleanupError instanceof Error ? cleanupError.message : 'Unknown error'}`,
+    const scaffoldSpinner = p.spinner();
+    scaffoldSpinner.start(options.install ? 'Cloning template and installing dependencies...' : 'Cloning template...');
+    await materializationPromise;
+    if (materializationError || interruptionSignal) {
+      scaffoldSpinner.stop('Project setup interrupted.');
+    } else {
+      scaffoldSpinner.stop(
+        options.install
+          ? 'Default template cloned and dependencies installed.'
+          : 'Default template cloned. Dependency installation was skipped.',
       );
     }
+  } else {
+    await materializationPromise;
   }
-
-  const platformSetup = await platformSetupPromise;
   process.removeListener('SIGINT', handleSigint);
   process.removeListener('SIGTERM', handleSigterm);
 
@@ -423,16 +451,6 @@ export const create = async (args: CreateOptions): Promise<void> => {
   }
   if (interruptionSignal === 'SIGTERM') throw new Error('Operation terminated by SIGTERM');
   if (materializationError) throw materializationError;
-  if (platformSetup?.status === 'cancelled') {
-    analytics?.trackEvent('cli_observability_outcome', { command: 'create', outcome: 'skipped' });
-    p.log.info('Skipping Mastra platform setup.');
-  } else if (observabilityEnabled) {
-    p.log.success(
-      options.install
-        ? 'Default template cloned and dependencies installed.'
-        : 'Default template cloned. Dependency installation was skipped.',
-    );
-  }
 
   const postSetup = await runPostCreateSetup({
     projectPath: targetPath,

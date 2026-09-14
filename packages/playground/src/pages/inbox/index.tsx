@@ -1,6 +1,5 @@
 import type { FeedbackItem } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
-import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Tabs, Tab, TabList, TabContent } from '@mastra/playground-ui/components/Tabs';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -102,14 +101,7 @@ export default function InboxPage() {
 
   return (
     <div className="relative h-full overflow-hidden">
-      <PageLayout height="full">
-        <PageLayout.TopArea>
-          <PageHeader>
-            <PageHeader.Title>Inbox</PageHeader.Title>
-            <PageHeader.Description>Items waiting for review</PageHeader.Description>
-          </PageHeader>
-        </PageLayout.TopArea>
-
+      <PageLayout height="full" className="grid-rows-[minmax(0,1fr)]">
         <PageLayout.MainArea className="min-h-0 overflow-hidden">
           {isInboxEmpty ? (
             <InboxEmptyState />

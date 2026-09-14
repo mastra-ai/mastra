@@ -7,7 +7,11 @@ import {
   ThreadListItems,
   ThreadListNewItem,
 } from '@mastra/playground-ui/components/ThreadList';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { PanelEdgeIcon } from '@mastra/playground-ui/resize/panel-edge-icon';
+import { panelIconButtonClass } from '@mastra/playground-ui/resize/panel-icon-button';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { Plus } from 'lucide-react';
 import { useState } from 'react';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
@@ -20,6 +24,8 @@ export interface ChatThreadsProps {
   resourceId: string;
   resourceType: 'agent' | 'network';
   embedded?: boolean;
+  /** When provided, renders a "Hide threads panel" control next to "New Chat". */
+  onHidePanel?: () => void;
 }
 
 export const ChatThreads = ({
@@ -29,6 +35,7 @@ export const ChatThreads = ({
   resourceId,
   resourceType,
   embedded = false,
+  onHidePanel,
 }: ChatThreadsProps) => {
   const { Link, paths } = useLinkComponent();
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -41,12 +48,32 @@ export const ChatThreads = ({
   return (
     <>
       <ThreadList embedded={embedded}>
-        <ThreadListNewItem as={Link} to={newThreadLink}>
-          <Icon>
-            <Plus />
-          </Icon>
-          New Chat
-        </ThreadListNewItem>
+        {/* pt-[3px] lines the hide button up with the collapsed panel's expand button (top-2 vs border+p-1) */}
+        <div className="flex items-center gap-1 pt-[3px]">
+          <ThreadListNewItem as={Link} to={newThreadLink}>
+            <Icon>
+              <Plus />
+            </Icon>
+            New Chat
+          </ThreadListNewItem>
+          {onHidePanel && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="Hide threads panel"
+                  className={cn(panelIconButtonClass, 'shrink-0')}
+                  onClick={onHidePanel}
+                >
+                  <Icon>
+                    <PanelEdgeIcon side="left" />
+                  </Icon>
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="right">Hide threads panel</TooltipContent>
+            </Tooltip>
+          )}
+        </div>
 
         {threads.length === 0 ? (
           <ThreadListEmpty>Your conversations will appear here once you start chatting!</ThreadListEmpty>

@@ -20,11 +20,11 @@ import { nodeColor, nodeColorVivid } from './sankeyColor';
 import { useSankeyChartMeasurements } from './use-sankey-chart-measurements';
 import { useSankeyGeometryTransition } from './use-sankey-geometry-transition';
 import { useSankeyHoverTooltip } from './use-sankey-hover-tooltip';
-import { Colors } from '@/ds/tokens';
+import { CHART_LABEL_FONT_SIZE, CHART_TICK_FONT_SIZE, Colors } from '@/ds/tokens';
 import { cn } from '@/lib/utils';
 
-const NODE_LABEL_FONT_SIZE = 11;
-const COLUMN_LABEL_FONT_SIZE = 12;
+const NODE_LABEL_FONT_SIZE = CHART_TICK_FONT_SIZE;
+const COLUMN_LABEL_FONT_SIZE = CHART_LABEL_FONT_SIZE;
 // pre-measurement cap, kept so wide charts read unchanged
 const NODE_LABEL_MAX_CHARACTERS = 23;
 

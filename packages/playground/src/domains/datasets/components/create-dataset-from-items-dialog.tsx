@@ -5,7 +5,9 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@mastra/playground-ui/components/Dialog';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Label } from '@mastra/playground-ui/components/Label';
+import { DatasetsIcon } from '@mastra/playground-ui/icons/DatasetsIcon';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { X } from 'lucide-react';
 import { useState } from 'react';
 import { useDatasetMutations } from '../hooks/use-dataset-mutations';
 
@@ -115,7 +117,7 @@ export function CreateDatasetFromItemsDialog({
               />
             </div>
 
-            <p className="text-muted-foreground text-sm">
+            <p className="text-muted-foreground text-ui-md">
               {items.length} item{items.length !== 1 ? 's' : ''} will be copied to the new dataset
             </p>
 
@@ -127,17 +129,17 @@ export function CreateDatasetFromItemsDialog({
                     style={{ width: `${progressPercent}%` }}
                   />
                 </div>
-                <p className="text-muted-foreground text-sm">
+                <p className="text-muted-foreground text-ui-md">
                   Copying items: {progress} / {items.length}
                 </p>
               </div>
             )}
 
             <div className="flex justify-end gap-2 pt-4">
-              <Button type="button" onClick={handleCancel} disabled={isCreating}>
+              <Button icon={<X />} type="button" onClick={handleCancel} disabled={isCreating}>
                 Cancel
               </Button>
-              <Button type="submit" variant="primary" disabled={isCreating || !name.trim()}>
+              <Button icon={<DatasetsIcon />} type="submit" variant="primary" disabled={isCreating || !name.trim()}>
                 {isCreating ? `Creating... (${progress}/${items.length})` : 'Create Dataset'}
               </Button>
             </div>

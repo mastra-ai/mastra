@@ -226,6 +226,13 @@ export interface AgentToolExecutionContext<TSuspend, TResume> {
    * See `MastraToolInvocationOptions.flushMessages` for details.
    */
   flushMessages?: () => Promise<void>;
+
+  /**
+   * True when the tool is running as a dispatched background task rather than
+   * inline in the agent loop. The parent model has already received a
+   * placeholder result by the time the tool executes.
+   */
+  isBackgroundTask?: boolean;
 }
 
 // Workflow tool execution context - properties specific when tools are executed in workflows
@@ -323,6 +330,8 @@ export type MastraToolInvocationOptions = ToolInvocationOptions &
     flushMessages?: () => Promise<void>;
     /** Observability helper to expose on the final tool execution context. */
     observe?: ToolObserve;
+    /** Set by the agent tool-call step when the tool runs as a background task. */
+    isBackgroundTask?: boolean;
   };
 
 /**

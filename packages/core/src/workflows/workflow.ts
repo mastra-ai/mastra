@@ -31,7 +31,13 @@ import {
   resolveObservabilityContext,
 } from '../observability';
 import { executeWithContext } from '../observability/utils';
-import type { OutputResult, Processor, ProcessorStreamWriter, ProcessorStreamWriterOptions } from '../processors';
+import type {
+  OutputResult,
+  Processor,
+  ProcessorStepExecutor,
+  ProcessorStreamWriter,
+  ProcessorStreamWriterOptions,
+} from '../processors';
 import { ProcessorRunner, ProcessorState } from '../processors/runner';
 import { createProcessorSendSignal } from '../processors/send-signal';
 import {
@@ -294,6 +300,27 @@ function findStepInGraph(graph: SerializedStepFlowEntry[], stepId: string): Seri
  * @param params.outputSchema Zod schema defining the output structure
  * @param params.execute Function that performs the step's operations
  * @returns A Step object that can be added to the workflow
+ *
+ * @example
+ * ```typescript
+ * import { createStep } from '@mastra/core/workflows';
+ * import { z } from 'zod';
+ *
+ * const greet = createStep({
+ *   id: 'greet',
+ *   inputSchema: z.string(),
+ *   outputSchema: z.string(),
+ *   execute: async ({ inputData }) => `Hello, ${inputData}!`,
+ * });
+ * ```
+ *
+ * @see For documentation bundled with your installed package, locate
+ * `@mastra/core/package.json` with your project's resolver or package-manager
+ * tooling, then read `dist/docs/SKILL.md` from that package root and follow its
+ * reference links. Use package-manager tools for virtual or archived packages.
+ *
+ * @see [Workflow documentation](https://mastra.ai/docs/workflows/overview)
+ * if packaged docs are unavailable.
  */
 export function createStep<
   TStepId extends string,
@@ -450,11 +477,7 @@ export function createStep(params: any, agentOrToolOptions?: any): Step<any, any
   }
 
   if (isProcessor(params)) {
-    const step = createStepFromProcessor(params) as ReturnType<typeof createStepFromProcessor> & {
-      providesSkillDiscovery?: Processor['providesSkillDiscovery'];
-    };
-    step.providesSkillDiscovery = params.providesSkillDiscovery;
-    return step;
+    return createStepFromProcessor(params);
   }
 
   throw new Error('Invalid input: expected StepParams, Agent, ToolStep, or Processor');
@@ -629,7 +652,8 @@ function toEntryOptionFields(options?: StepFlowEntryOptions): StepFlowEntryOptio
   return out;
 }
 
-function createStepFromProcessor<TProcessorId extends string>(
+/** @internal Builds the adapter shared by processor workflows and direct stream execution. */
+export function createStepFromProcessor<TProcessorId extends string>(
   processor: Processor<TProcessorId>,
 ): Step<
   `processor:${TProcessorId}`,
@@ -639,7 +663,10 @@ function createStepFromProcessor<TProcessorId extends string>(
   unknown,
   unknown,
   DefaultEngineType
-> {
+> & {
+  execute: ProcessorStepExecutor<ProcessorStepInput | ProcessorStepOutput>;
+  providesSkillDiscovery?: Processor['providesSkillDiscovery'];
+} {
   type ProcessorLoadedToolsProvider = {
     getLoadedToolsForRequestContext?: (args: { requestContext: RequestContext }) => unknown | Promise<unknown>;
   };
@@ -712,7 +739,13 @@ function createStepFromProcessor<TProcessorId extends string>(
     description: processor.name ?? `Processor ${processor.id}`,
     inputSchema: toStandardSchema(ProcessorStepInputSchema) as StandardSchemaWithJSON<ProcessorStepInput>,
     outputSchema: toStandardSchema(ProcessorStepOutputSchema) as StandardSchemaWithJSON<ProcessorStepOutput>,
-    execute: async ({ inputData, requestContext, tracingContext, outputWriter }) => {
+    providesSkillDiscovery: processor.providesSkillDiscovery,
+    execute: async ({
+      inputData,
+      requestContext,
+      tracingContext,
+      outputWriter,
+    }: Parameters<ProcessorStepExecutor<ProcessorStepInput | ProcessorStepOutput>>[0]) => {
       // Cast to output type for easier property access - the discriminated union
       // ensures type safety at the schema level, but inside the execute function
       // we need access to all possible properties
@@ -726,6 +759,7 @@ function createStepFromProcessor<TProcessorId extends string>(
         messages,
         messageList,
         stepNumber,
+        runId: agentRunId,
         systemMessages,
         part,
         streamParts,
@@ -1043,6 +1077,7 @@ function createStepFromProcessor<TProcessorId extends string>(
       // This enables processor workflows to use .then(), .parallel(), .branch(), etc.
       const passThrough = {
         phase,
+        runId: agentRunId,
         // Auto-create MessageList from messages if not provided
         // This enables running processor workflows from the UI where messageList can't be serialized
         messageList: processorMessageList,
@@ -1204,6 +1239,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 messages: messages as MastraDBMessage[],
                 messageList: checkedMessageList,
                 stepNumber: stepNumber ?? 0,
+                runId: agentRunId,
                 systemMessages: (systemMessages ?? []) as CoreMessage[],
                 // Pass model/tools configuration fields - types match ProcessInputStepArgs
                 model: model!,
@@ -1243,6 +1279,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 ...passThrough,
                 messages,
                 ...validatedResult,
+                runId: agentRunId,
                 systemMessages: checkedMessageList.getSystemMessages(),
                 ...(currentMessageId ? { messageId: validatedResult.messageId ?? currentMessageId } : {}),
               };
@@ -1581,7 +1618,7 @@ function createStepFromProcessor<TProcessorId extends string>(
     unknown,
     unknown,
     DefaultEngineType
-  >;
+  > & { providesSkillDiscovery?: Processor['providesSkillDiscovery'] };
 
   const toolProvider = processor as ProcessorLoadedToolsProvider;
   if (typeof toolProvider.getLoadedToolsForRequestContext === 'function') {

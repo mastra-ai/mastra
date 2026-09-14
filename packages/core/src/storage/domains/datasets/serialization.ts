@@ -44,7 +44,7 @@ function findSerializationIssue(
       // Date, Map, Set, class instances, custom toJSON() objects, etc. change
       // shape during JSON persistence, so identical retries would no longer
       // deep-equal the persisted payload. Require explicit conversion instead.
-      const constructorName = (value as object).constructor?.name || 'unknown class';
+      const constructorName = value.constructor?.name || 'unknown class';
       return { path, reason: `non-plain object (${constructorName}) at ${path} would change during JSON persistence` };
     }
   }

@@ -12,6 +12,7 @@ type TraceTimelineSpanProps = {
   depth?: number;
   onSpanClick?: (id: string) => void;
   selectedSpanId?: string;
+  revealSpanId?: string;
   isLastChild?: boolean;
   overallLatency?: number;
   overallStartTime?: string;
@@ -29,6 +30,7 @@ export function TraceTimelineSpan({
   depth = 0,
   onSpanClick,
   selectedSpanId,
+  revealSpanId,
   isLastChild,
   overallLatency,
   overallStartTime,
@@ -126,6 +128,7 @@ export function TraceTimelineSpan({
         depth={depth}
         onSpanClick={onSpanClick}
         selectedSpanId={selectedSpanId}
+        revealSpanId={revealSpanId}
         isLastChild={isLastChild}
         hasChildren={hasChildren}
         isRootSpan={isRootSpan}
@@ -172,6 +175,7 @@ export function TraceTimelineSpan({
               depth={depth + 1}
               onSpanClick={onSpanClick}
               selectedSpanId={selectedSpanId}
+              revealSpanId={revealSpanId}
               isLastChild={isLast}
               overallLatency={overallLatency}
               overallStartTime={overallStartTime}

@@ -648,64 +648,83 @@ export class DatasetsLibSQL extends DatasetsStorage {
 
   protected async _doUpdateItem(args: UpdateDatasetItemInput): Promise<DatasetItem> {
     try {
-      // Verify item exists and belongs to dataset
-      const existing = await this.getItemById({ id: args.id });
-      if (!existing) {
-        throw new MastraError({
-          id: createStorageErrorId('LIBSQL', 'UPDATE_ITEM', 'NOT_FOUND'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-          details: { itemId: args.id },
-        });
-      }
-      if (existing.datasetId !== args.datasetId) {
-        throw new MastraError({
-          id: createStorageErrorId('LIBSQL', 'UPDATE_ITEM', 'DATASET_MISMATCH'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-          details: { itemId: args.id, expectedDatasetId: args.datasetId, actualDatasetId: existing.datasetId },
-        });
-      }
-      // Fetch parent dataset for fresh tenancy returned to caller (Option B)
-      const dataset = await this.getDatasetById({ id: args.datasetId });
+      return await withClientWriteLock(this.#client, async () => {
+        const tx = await this.#client.transaction('write');
+        try {
+          const itemResult = await tx.execute({
+            sql: `SELECT ${buildSelectColumns(TABLE_DATASET_ITEMS)} FROM ${TABLE_DATASET_ITEMS} WHERE id = ? AND validTo IS NULL AND isDeleted = 0`,
+            args: [args.id],
+          });
+          const existing = itemResult.rows[0] ? this.transformItemRow(itemResult.rows[0]) : null;
+          if (!existing) {
+            throw new MastraError({
+              id: createStorageErrorId('LIBSQL', 'UPDATE_ITEM', 'NOT_FOUND'),
+              domain: ErrorDomain.STORAGE,
+              category: ErrorCategory.USER,
+              details: { itemId: args.id },
+            });
+          }
+          if (existing.datasetId !== args.datasetId) {
+            throw new MastraError({
+              id: createStorageErrorId('LIBSQL', 'UPDATE_ITEM', 'DATASET_MISMATCH'),
+              domain: ErrorDomain.STORAGE,
+              category: ErrorCategory.USER,
+              details: { itemId: args.id, expectedDatasetId: args.datasetId, actualDatasetId: existing.datasetId },
+            });
+          }
+          if (existing.metadata?.__purged === true) {
+            throw new MastraError({
+              id: 'DATASET_ITEM_PURGED',
+              domain: ErrorDomain.STORAGE,
+              category: ErrorCategory.USER,
+              details: { datasetId: args.datasetId, itemId: args.id },
+              text: `Purged dataset item cannot be updated: ${args.id}`,
+            });
+          }
+          const datasetResult = await tx.execute({
+            sql: `SELECT organizationId, projectId FROM ${TABLE_DATASETS} WHERE id = ?`,
+            args: [args.datasetId],
+          });
+          const dataset = datasetResult.rows[0];
+          const organizationId = typeof dataset?.organizationId === 'string' ? dataset.organizationId : null;
+          const projectId = typeof dataset?.projectId === 'string' ? dataset.projectId : null;
 
-      const versionId = crypto.randomUUID();
-      const now = new Date();
-      const nowIso = now.toISOString();
+          const versionId = crypto.randomUUID();
+          const now = new Date();
+          const nowIso = now.toISOString();
 
-      // Merge fields: use new value if provided (including null to clear), else keep existing
-      const mergedInput = args.input !== undefined ? args.input : existing.input;
-      const mergedGroundTruth = args.groundTruth !== undefined ? args.groundTruth : existing.groundTruth;
-      const mergedExpectedTrajectory =
-        args.expectedTrajectory !== undefined ? args.expectedTrajectory : existing.expectedTrajectory;
-      const mergedToolMocks = args.toolMocks !== undefined ? args.toolMocks : existing.toolMocks;
-      const mergedUnmockedToolPolicy =
-        args.unmockedToolPolicy !== undefined ? args.unmockedToolPolicy : existing.unmockedToolPolicy;
-      const mergedScorerIds = args.scorerIds !== undefined ? (args.scorerIds ?? undefined) : existing.scorerIds;
-      const mergedRequestContext = args.requestContext !== undefined ? args.requestContext : existing.requestContext;
-      const mergedMetadata = args.metadata !== undefined ? args.metadata : existing.metadata;
-      const mergedSource = args.source !== undefined ? args.source : existing.source;
+          // Merge fields: use new value if provided (including null to clear), else keep existing
+          const mergedInput = args.input !== undefined ? args.input : existing.input;
+          const mergedGroundTruth = args.groundTruth !== undefined ? args.groundTruth : existing.groundTruth;
+          const mergedExpectedTrajectory =
+            args.expectedTrajectory !== undefined ? args.expectedTrajectory : existing.expectedTrajectory;
+          const mergedToolMocks = args.toolMocks !== undefined ? args.toolMocks : existing.toolMocks;
+          const mergedUnmockedToolPolicy =
+            args.unmockedToolPolicy !== undefined ? args.unmockedToolPolicy : existing.unmockedToolPolicy;
+          const mergedScorerIds = args.scorerIds !== undefined ? (args.scorerIds ?? undefined) : existing.scorerIds;
+          const mergedRequestContext =
+            args.requestContext !== undefined ? args.requestContext : existing.requestContext;
+          const mergedMetadata = args.metadata !== undefined ? args.metadata : existing.metadata;
+          const mergedSource = args.source !== undefined ? args.source : existing.source;
 
-      // T3.8, T3.21 — atomic batch: bump version, close old row, insert new row, insert dataset_version
-      const results = await this.#client.batch(
-        [
-          {
+          const versionResult = await tx.execute({
             sql: `UPDATE ${TABLE_DATASETS} SET version = version + 1 WHERE id = ? RETURNING version`,
             args: [args.datasetId],
-          },
-          {
-            sql: `UPDATE ${TABLE_DATASET_ITEMS} SET validTo = (SELECT version FROM ${TABLE_DATASETS} WHERE id = ?) WHERE id = ? AND validTo IS NULL AND isDeleted = 0`,
-            args: [args.datasetId, args.id],
-          },
-          {
-            sql: `INSERT INTO ${TABLE_DATASET_ITEMS} (id,datasetId,datasetVersion,externalId,organizationId,projectId,validTo,isDeleted,input,groundTruth,expectedTrajectory,toolMocks,unmockedToolPolicy,scorerIds,requestContext,metadata,source,createdAt,updatedAt) VALUES (?,?,(SELECT version FROM ${TABLE_DATASETS} WHERE id = ?),?,(SELECT organizationId FROM ${TABLE_DATASETS} WHERE id = ?),(SELECT projectId FROM ${TABLE_DATASETS} WHERE id = ?),NULL,0,jsonb(?),jsonb(?),jsonb(?),jsonb(?),?,jsonb(?),jsonb(?),jsonb(?),jsonb(?),?,?)`,
+          });
+          const newVersion = Number(versionResult.rows[0]!.version);
+          await tx.execute({
+            sql: `UPDATE ${TABLE_DATASET_ITEMS} SET validTo = ? WHERE id = ? AND validTo IS NULL AND isDeleted = 0`,
+            args: [newVersion, args.id],
+          });
+          await tx.execute({
+            sql: `INSERT INTO ${TABLE_DATASET_ITEMS} (id,datasetId,datasetVersion,externalId,organizationId,projectId,validTo,isDeleted,input,groundTruth,expectedTrajectory,toolMocks,unmockedToolPolicy,scorerIds,requestContext,metadata,source,createdAt,updatedAt) VALUES (?,?,?,?,?,?,NULL,0,jsonb(?),jsonb(?),jsonb(?),jsonb(?),?,jsonb(?),jsonb(?),jsonb(?),jsonb(?),?,?)`,
             args: [
               args.id,
               args.datasetId,
-              args.datasetId,
+              newVersion,
               existing.externalId ?? null,
-              args.datasetId,
-              args.datasetId,
+              organizationId,
+              projectId,
               jsonbArg(mergedInput)!,
               jsonbArg(mergedGroundTruth),
               jsonbArg(mergedExpectedTrajectory),
@@ -718,33 +737,38 @@ export class DatasetsLibSQL extends DatasetsStorage {
               existing.createdAt.toISOString(),
               nowIso,
             ],
-          },
-          {
-            sql: `INSERT INTO ${TABLE_DATASET_VERSIONS} (id, datasetId, version, createdAt) VALUES (?, ?, (SELECT version FROM ${TABLE_DATASETS} WHERE id = ?), ?)`,
-            args: [versionId, args.datasetId, args.datasetId, nowIso],
-          },
-        ],
-        'write',
-      );
+          });
+          await tx.execute({
+            sql: `INSERT INTO ${TABLE_DATASET_VERSIONS} (id, datasetId, version, createdAt) VALUES (?, ?, ?, ?)`,
+            args: [versionId, args.datasetId, newVersion, nowIso],
+          });
+          await tx.commit();
 
-      const newVersion = Number(results[0]!.rows[0]!.version);
-
-      return {
-        ...existing,
-        datasetVersion: newVersion,
-        organizationId: dataset?.organizationId ?? null,
-        projectId: dataset?.projectId ?? null,
-        input: mergedInput,
-        groundTruth: mergedGroundTruth,
-        expectedTrajectory: mergedExpectedTrajectory,
-        toolMocks: mergedToolMocks,
-        unmockedToolPolicy: mergedUnmockedToolPolicy,
-        scorerIds: mergedScorerIds,
-        requestContext: mergedRequestContext,
-        metadata: mergedMetadata,
-        source: mergedSource,
-        updatedAt: now,
-      };
+          return {
+            ...existing,
+            datasetVersion: newVersion,
+            organizationId,
+            projectId,
+            input: mergedInput,
+            groundTruth: mergedGroundTruth,
+            expectedTrajectory: mergedExpectedTrajectory,
+            toolMocks: mergedToolMocks,
+            unmockedToolPolicy: mergedUnmockedToolPolicy,
+            scorerIds: mergedScorerIds,
+            requestContext: mergedRequestContext,
+            metadata: mergedMetadata,
+            source: mergedSource,
+            updatedAt: now,
+          };
+        } catch (error) {
+          if (!tx.closed) {
+            await tx.rollback().catch(rollbackError => {
+              throw new AggregateError([error, rollbackError], 'Transaction and rollback both failed');
+            });
+          }
+          throw error;
+        }
+      });
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
@@ -760,41 +784,49 @@ export class DatasetsLibSQL extends DatasetsStorage {
 
   protected async _doDeleteItem({ id, datasetId }: DeleteDatasetItemInput): Promise<void> {
     try {
-      // Get current item — no-op if not found
-      const existing = await this.getItemById({ id });
-      if (!existing) return;
-      if (existing.datasetId !== datasetId) {
-        throw new MastraError({
-          id: createStorageErrorId('LIBSQL', 'DELETE_ITEM', 'DATASET_MISMATCH'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-          details: { itemId: id, expectedDatasetId: datasetId, actualDatasetId: existing.datasetId },
-        });
-      }
+      await withClientWriteLock(this.#client, async () => {
+        const tx = await this.#client.transaction('write');
+        try {
+          const itemResult = await tx.execute({
+            sql: `SELECT ${buildSelectColumns(TABLE_DATASET_ITEMS)} FROM ${TABLE_DATASET_ITEMS} WHERE id = ? AND validTo IS NULL AND isDeleted = 0`,
+            args: [id],
+          });
+          const existing = itemResult.rows[0] ? this.transformItemRow(itemResult.rows[0]) : null;
+          if (!existing) {
+            await tx.commit();
+            return;
+          }
+          if (existing.datasetId !== datasetId) {
+            throw new MastraError({
+              id: createStorageErrorId('LIBSQL', 'DELETE_ITEM', 'DATASET_MISMATCH'),
+              domain: ErrorDomain.STORAGE,
+              category: ErrorCategory.USER,
+              details: { itemId: id, expectedDatasetId: datasetId, actualDatasetId: existing.datasetId },
+            });
+          }
 
-      const versionId = crypto.randomUUID();
-      const nowIso = new Date().toISOString();
+          const versionId = crypto.randomUUID();
+          const nowIso = new Date().toISOString();
 
-      // T3.9, T3.21 — atomic batch: bump version, close old row, insert tombstone, insert dataset_version
-      await this.#client.batch(
-        [
-          {
-            sql: `UPDATE ${TABLE_DATASETS} SET version = version + 1 WHERE id = ? RETURNING version`,
+          const datasetResult = await tx.execute({
+            sql: `UPDATE ${TABLE_DATASETS} SET version = version + 1 WHERE id = ? RETURNING version, organizationId, projectId`,
             args: [datasetId],
-          },
-          {
-            sql: `UPDATE ${TABLE_DATASET_ITEMS} SET validTo = (SELECT version FROM ${TABLE_DATASETS} WHERE id = ?) WHERE id = ? AND validTo IS NULL AND isDeleted = 0`,
-            args: [datasetId, id],
-          },
-          {
-            sql: `INSERT INTO ${TABLE_DATASET_ITEMS} (id,datasetId,datasetVersion,externalId,organizationId,projectId,validTo,isDeleted,input,groundTruth,expectedTrajectory,toolMocks,unmockedToolPolicy,scorerIds,requestContext,metadata,source,createdAt,updatedAt) VALUES (?,?,(SELECT version FROM ${TABLE_DATASETS} WHERE id = ?),?,(SELECT organizationId FROM ${TABLE_DATASETS} WHERE id = ?),(SELECT projectId FROM ${TABLE_DATASETS} WHERE id = ?),NULL,1,jsonb(?),jsonb(?),jsonb(?),jsonb(?),?,jsonb(?),jsonb(?),jsonb(?),jsonb(?),?,?)`,
+          });
+          const dataset = datasetResult.rows[0]!;
+          const newVersion = Number(dataset.version);
+          await tx.execute({
+            sql: `UPDATE ${TABLE_DATASET_ITEMS} SET validTo = ? WHERE id = ? AND validTo IS NULL AND isDeleted = 0`,
+            args: [newVersion, id],
+          });
+          await tx.execute({
+            sql: `INSERT INTO ${TABLE_DATASET_ITEMS} (id,datasetId,datasetVersion,externalId,organizationId,projectId,validTo,isDeleted,input,groundTruth,expectedTrajectory,toolMocks,unmockedToolPolicy,scorerIds,requestContext,metadata,source,createdAt,updatedAt) VALUES (?,?,?,?,?,?,NULL,1,jsonb(?),jsonb(?),jsonb(?),jsonb(?),?,jsonb(?),jsonb(?),jsonb(?),jsonb(?),?,?)`,
             args: [
               id,
               datasetId,
-              datasetId,
+              newVersion,
               existing.externalId ?? null,
-              datasetId,
-              datasetId,
+              dataset.organizationId ?? null,
+              dataset.projectId ?? null,
               jsonbArg(existing.input)!,
               jsonbArg(existing.groundTruth),
               jsonbArg(existing.expectedTrajectory),
@@ -807,14 +839,21 @@ export class DatasetsLibSQL extends DatasetsStorage {
               existing.createdAt.toISOString(),
               nowIso,
             ],
-          },
-          {
-            sql: `INSERT INTO ${TABLE_DATASET_VERSIONS} (id, datasetId, version, createdAt) VALUES (?, ?, (SELECT version FROM ${TABLE_DATASETS} WHERE id = ?), ?)`,
-            args: [versionId, datasetId, datasetId, nowIso],
-          },
-        ],
-        'write',
-      );
+          });
+          await tx.execute({
+            sql: `INSERT INTO ${TABLE_DATASET_VERSIONS} (id, datasetId, version, createdAt) VALUES (?, ?, ?, ?)`,
+            args: [versionId, datasetId, newVersion, nowIso],
+          });
+          await tx.commit();
+        } catch (error) {
+          if (!tx.closed) {
+            await tx.rollback().catch(rollbackError => {
+              throw new AggregateError([error, rollbackError], 'Transaction and rollback both failed');
+            });
+          }
+          throw error;
+        }
+      });
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
@@ -1278,76 +1317,97 @@ export class DatasetsLibSQL extends DatasetsStorage {
 
   protected async _doBatchDeleteItems(input: BatchDeleteItemsInput): Promise<void> {
     try {
-      const dataset = await this.getDatasetById({ id: input.datasetId });
-      if (!dataset) {
-        throw new MastraError({
-          id: createStorageErrorId('LIBSQL', 'BULK_DELETE_ITEMS', 'DATASET_NOT_FOUND'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-          details: { datasetId: input.datasetId },
-        });
-      }
+      await withClientWriteLock(this.#client, async () => {
+        const tx = await this.#client.transaction('write');
+        try {
+          const datasetResult = await tx.execute({
+            sql: `SELECT organizationId, projectId FROM ${TABLE_DATASETS} WHERE id = ?`,
+            args: [input.datasetId],
+          });
+          const dataset = datasetResult.rows[0];
+          if (!dataset) {
+            throw new MastraError({
+              id: createStorageErrorId('LIBSQL', 'BULK_DELETE_ITEMS', 'DATASET_NOT_FOUND'),
+              domain: ErrorDomain.STORAGE,
+              category: ErrorCategory.USER,
+              details: { datasetId: input.datasetId },
+            });
+          }
 
-      // Fetch current items for tombstone data
-      const currentItems: DatasetItem[] = [];
-      for (const itemId of input.itemIds) {
-        const item = await this.getItemById({ id: itemId });
-        if (item && item.datasetId === input.datasetId) {
-          currentItems.push(item);
+          const currentItems: DatasetItem[] = [];
+          for (const itemId of input.itemIds) {
+            const itemResult = await tx.execute({
+              sql: `SELECT ${buildSelectColumns(TABLE_DATASET_ITEMS)} FROM ${TABLE_DATASET_ITEMS} WHERE id = ? AND validTo IS NULL AND isDeleted = 0`,
+              args: [itemId],
+            });
+            const item = itemResult.rows[0] ? this.transformItemRow(itemResult.rows[0]) : null;
+            if (item && item.datasetId === input.datasetId) currentItems.push(item);
+          }
+
+          if (currentItems.length === 0) {
+            await tx.commit();
+            return;
+          }
+
+          const nowIso = new Date().toISOString();
+          const versionId = crypto.randomUUID();
+
+          // T3.20 — single version increment
+          const statements: { sql: string; args: InValue[] }[] = [
+            {
+              sql: `UPDATE ${TABLE_DATASETS} SET version = version + 1 WHERE id = ? RETURNING version`,
+              args: [input.datasetId],
+            },
+          ];
+
+          for (const item of currentItems) {
+            // Close old row
+            statements.push({
+              sql: `UPDATE ${TABLE_DATASET_ITEMS} SET validTo = (SELECT version FROM ${TABLE_DATASETS} WHERE id = ?) WHERE id = ? AND validTo IS NULL AND isDeleted = 0`,
+              args: [input.datasetId, item.id],
+            });
+            // Insert tombstone
+            statements.push({
+              sql: `INSERT INTO ${TABLE_DATASET_ITEMS} (id,datasetId,datasetVersion,externalId,organizationId,projectId,validTo,isDeleted,input,groundTruth,expectedTrajectory,toolMocks,unmockedToolPolicy,scorerIds,requestContext,metadata,source,createdAt,updatedAt) VALUES (?,?,(SELECT version FROM ${TABLE_DATASETS} WHERE id = ?),?,?,?,NULL,1,jsonb(?),jsonb(?),jsonb(?),jsonb(?),?,jsonb(?),jsonb(?),jsonb(?),jsonb(?),?,?)`,
+              args: [
+                item.id,
+                input.datasetId,
+                input.datasetId,
+                item.externalId ?? null,
+                dataset.organizationId ?? null,
+                dataset.projectId ?? null,
+                jsonbArg(item.input)!,
+                jsonbArg(item.groundTruth),
+                jsonbArg(item.expectedTrajectory),
+                jsonbArg(item.toolMocks),
+                item.unmockedToolPolicy ?? null,
+                jsonbArg(item.scorerIds),
+                jsonbArg(item.requestContext),
+                jsonbArg(item.metadata),
+                jsonbArg(item.source),
+                item.createdAt.toISOString(),
+                nowIso,
+              ],
+            });
+          }
+
+          // T3.11 — single dataset_version
+          statements.push({
+            sql: `INSERT INTO ${TABLE_DATASET_VERSIONS} (id, datasetId, version, createdAt) VALUES (?, ?, (SELECT version FROM ${TABLE_DATASETS} WHERE id = ?), ?)`,
+            args: [versionId, input.datasetId, input.datasetId, nowIso],
+          });
+
+          for (const statement of statements) await tx.execute(statement);
+          await tx.commit();
+        } catch (error) {
+          if (!tx.closed) {
+            await tx.rollback().catch(rollbackError => {
+              throw new AggregateError([error, rollbackError], 'Transaction and rollback both failed');
+            });
+          }
+          throw error;
         }
-      }
-
-      if (currentItems.length === 0) return;
-
-      const nowIso = new Date().toISOString();
-      const versionId = crypto.randomUUID();
-
-      // T3.20 — single version increment
-      const statements: { sql: string; args: InValue[] }[] = [
-        {
-          sql: `UPDATE ${TABLE_DATASETS} SET version = version + 1 WHERE id = ? RETURNING version`,
-          args: [input.datasetId],
-        },
-      ];
-
-      for (const item of currentItems) {
-        // Close old row
-        statements.push({
-          sql: `UPDATE ${TABLE_DATASET_ITEMS} SET validTo = (SELECT version FROM ${TABLE_DATASETS} WHERE id = ?) WHERE id = ? AND validTo IS NULL AND isDeleted = 0`,
-          args: [input.datasetId, item.id],
-        });
-        // Insert tombstone
-        statements.push({
-          sql: `INSERT INTO ${TABLE_DATASET_ITEMS} (id,datasetId,datasetVersion,externalId,organizationId,projectId,validTo,isDeleted,input,groundTruth,expectedTrajectory,toolMocks,unmockedToolPolicy,scorerIds,requestContext,metadata,source,createdAt,updatedAt) VALUES (?,?,(SELECT version FROM ${TABLE_DATASETS} WHERE id = ?),?,?,?,NULL,1,jsonb(?),jsonb(?),jsonb(?),jsonb(?),?,jsonb(?),jsonb(?),jsonb(?),jsonb(?),?,?)`,
-          args: [
-            item.id,
-            input.datasetId,
-            input.datasetId,
-            item.externalId ?? null,
-            dataset.organizationId ?? null,
-            dataset.projectId ?? null,
-            jsonbArg(item.input)!,
-            jsonbArg(item.groundTruth),
-            jsonbArg(item.expectedTrajectory),
-            jsonbArg(item.toolMocks),
-            item.unmockedToolPolicy ?? null,
-            jsonbArg(item.scorerIds),
-            jsonbArg(item.requestContext),
-            jsonbArg(item.metadata),
-            jsonbArg(item.source),
-            item.createdAt.toISOString(),
-            nowIso,
-          ],
-        });
-      }
-
-      // T3.11 — single dataset_version
-      statements.push({
-        sql: `INSERT INTO ${TABLE_DATASET_VERSIONS} (id, datasetId, version, createdAt) VALUES (?, ?, (SELECT version FROM ${TABLE_DATASETS} WHERE id = ?), ?)`,
-        args: [versionId, input.datasetId, input.datasetId, nowIso],
       });
-
-      await this.#client.batch(statements, 'write');
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(

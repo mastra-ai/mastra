@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import { createObservabilityVNextTests } from '@internal/storage-test-utils';
+import { createObservabilityVNextTests, normalizeTraceQueryResponse } from '@internal/storage-test-utils';
+import { SpanType } from '@mastra/core/observability';
+import { parseTraceQueryRequest, planTraceQuery } from '@mastra/core/storage';
 import { Pool } from 'pg';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
@@ -209,5 +211,104 @@ describe.skipIf(!integrationEnabled)('PostgresStoreVNext / shared observability 
     cleanup: async storage => {
       await storage.dangerouslyClearAll();
     },
+  });
+
+  it('retains changed-timestamp feedback versions while querying only the latest accepted write', async () => {
+    if (!sharedStorage || !sharedClient || !sharedSchema)
+      throw new Error('shared observability storage was not initialized');
+    await sharedStorage.dangerouslyClearAll();
+    try {
+      await sharedStorage.createSpan({
+        span: {
+          traceId: 'feedback-physical-trace',
+          spanId: 'feedback-physical-root',
+          parentSpanId: null,
+          name: 'feedback-physical-root',
+          spanType: SpanType.AGENT_RUN,
+          isEvent: false,
+          startedAt: new Date('2026-08-10T00:00:00Z'),
+          endedAt: new Date('2026-08-10T00:00:01Z'),
+        },
+      });
+      const feedback = {
+        feedbackId: 'feedback-physical-supersession',
+        timestamp: new Date('2026-08-10T02:00:00Z'),
+        traceId: 'feedback-physical-trace',
+        spanId: null,
+        feedbackSource: 'old-physical-source',
+        feedbackType: 'rating',
+        value: 1,
+        comment: null,
+        experimentId: null,
+        sourceId: null,
+        metadata: null,
+      };
+      await sharedStorage.createFeedback({ feedback });
+      await sharedStorage.createFeedback({
+        feedback: {
+          ...feedback,
+          timestamp: new Date('2026-08-10T01:00:00Z'),
+          feedbackSource: 'current-physical-source',
+        },
+      });
+
+      const rows = await sharedClient.any<{ cursorId: string; feedbackSource: string }>(
+        `SELECT "cursorId", "feedbackSource" FROM "${sharedSchema}"."mastra_feedback_events" WHERE "feedbackId" = $1 ORDER BY "cursorId"`,
+        [feedback.feedbackId],
+      );
+      expect(rows.map(row => row.feedbackSource)).toEqual(['old-physical-source', 'current-physical-source']);
+
+      const queryBySource = async (feedbackSource: string) => {
+        const response = await sharedStorage!.queryTraces(
+          planTraceQuery(
+            parseTraceQueryRequest({
+              timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
+              where: {
+                feedback: {
+                  some: { op: 'eq', left: { path: 'feedbackSource' }, right: { literal: feedbackSource } },
+                },
+              },
+            }),
+          ),
+        );
+        return normalizeTraceQueryResponse(response);
+      };
+      await expect(queryBySource('old-physical-source')).resolves.toEqual([]);
+      await expect(queryBySource('current-physical-source')).resolves.toEqual([{ traceId: 'feedback-physical-trace' }]);
+
+      await sharedStorage.createFeedback({
+        feedback: {
+          ...feedback,
+          timestamp: new Date('2026-08-10T01:00:00Z'),
+          feedbackSource: 'same-timestamp-current-source',
+          value: 'updated value',
+          comment: 'updated comment',
+        },
+      });
+      const updatedRows = await sharedClient.any<{
+        comment: string | null;
+        cursorId: string;
+        feedbackSource: string;
+        valueNumber: number | null;
+        valueString: string | null;
+      }>(
+        `SELECT "cursorId", "feedbackSource", "valueString", "valueNumber", "comment" FROM "${sharedSchema}"."mastra_feedback_events" WHERE "feedbackId" = $1 ORDER BY "cursorId"`,
+        [feedback.feedbackId],
+      );
+      expect(updatedRows).toHaveLength(2);
+      expect(updatedRows[1]).toMatchObject({
+        feedbackSource: 'same-timestamp-current-source',
+        valueString: 'updated value',
+        valueNumber: null,
+        comment: 'updated comment',
+      });
+      expect(BigInt(updatedRows[1]!.cursorId)).toBeGreaterThan(BigInt(rows[1]!.cursorId));
+      await expect(queryBySource('current-physical-source')).resolves.toEqual([]);
+      await expect(queryBySource('same-timestamp-current-source')).resolves.toEqual([
+        { traceId: 'feedback-physical-trace' },
+      ]);
+    } finally {
+      await sharedStorage.dangerouslyClearAll();
+    }
   });
 });

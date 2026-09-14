@@ -1,16 +1,16 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
+import type { MessageMetadata } from '@mastra/playground-ui/domains/chat';
+import { SectionLabel } from '@mastra/playground-ui/domains/chat/components/section-label';
+import type { ToolApprovalButtonsProps } from '@mastra/playground-ui/domains/chat/tools/badges/tool-approval-buttons';
+import { ToolApprovalButtons } from '@mastra/playground-ui/domains/chat/tools/badges/tool-approval-buttons';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { ChevronUpIcon, CopyIcon, CheckIcon, FolderTree, HardDrive } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
 import type { DataMessagePart } from '../tool-card';
-import { SectionLabel } from './section-label';
-import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
-import { ToolApprovalButtons } from './tool-approval-buttons';
-import type { MessageMetadata } from '@/lib/ai-ui/messages/message-metadata';
 import { useLinkComponent } from '@/lib/framework';
 
 // Matches the shape returned by workspace.getInfo()
@@ -149,7 +149,7 @@ export const FileTreeBadge = ({
         {wsMeta?.filesystem && (
           <Link
             href={wsMeta.id ? `/workspaces/${wsMeta.id}?path=${encodeURIComponent(path)}` : '/workspaces'}
-            className="text-neutral6 bg-surface3 border-border1 hover:bg-surface4 hover:border-border2 flex items-center gap-1.5 rounded border px-1.5 py-0.5 text-xs transition-colors"
+            className="text-neutral6 bg-surface3 border-border1 hover:bg-surface4 hover:border-border2 text-ui-sm flex items-center gap-1.5 rounded border px-1.5 py-0.5 transition-colors"
           >
             <HardDrive className="size-3" />
             <span>{wsMeta.name || wsMeta.filesystem.name}</span>
@@ -157,7 +157,7 @@ export const FileTreeBadge = ({
         )}
 
         {/* Summary - show in header when collapsed */}
-        {isCollapsed && hasResult && summary && <span className="text-neutral6 text-xs">{summary}</span>}
+        {isCollapsed && hasResult && summary && <span className="text-neutral6 text-ui-sm">{summary}</span>}
       </div>
 
       {/* Content area */}
@@ -185,7 +185,7 @@ export const FileTreeBadge = ({
             <div className="border-border1 bg-surface2 overflow-hidden rounded-md border">
               {/* Panel header with summary and copy button */}
               <div className="border-border1 bg-surface3 flex items-center justify-between border-b px-3 py-1.5">
-                {summary && <span className="text-neutral6 text-xs">{summary}</span>}
+                {summary && <span className="text-neutral6 text-ui-sm">{summary}</span>}
                 <Button variant="default" size="icon-sm" tooltip="Copy tree" onClick={onCopy} disabled={!treeOutput}>
                   <span className="grid">
                     <span
@@ -205,7 +205,7 @@ export const FileTreeBadge = ({
               </div>
 
               {/* Tree content */}
-              <pre className="text-mastra-el-6 max-h-dropdown-max-height overflow-x-auto overflow-y-auto p-3 font-mono text-xs whitespace-pre">
+              <pre className="text-mastra-el-6 max-h-dropdown-max-height text-ui-sm overflow-x-auto overflow-y-auto p-3 font-mono whitespace-pre">
                 {treeOutput}
               </pre>
             </div>
@@ -214,7 +214,7 @@ export const FileTreeBadge = ({
           {/* Loading state */}
           {toolCalled && !hasResult && (
             <div className="border-border1 bg-surface2 rounded-md border px-3 py-2">
-              <span className="text-neutral6 text-xs">Loading...</span>
+              <span className="text-neutral6 text-ui-sm">Loading...</span>
             </div>
           )}
         </div>

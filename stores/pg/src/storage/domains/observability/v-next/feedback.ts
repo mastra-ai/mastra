@@ -48,8 +48,16 @@ import {
 } from './olap';
 import { assertDeltaPollingEnabled, deltaPollingFeatureEnabled } from './polling';
 import { parseUpdateFeedbackReviewStatusArgs } from './review-status';
-import { FEEDBACK_TYPED_COLUMNS } from './signal-schema';
+import { FEEDBACK_EVENT_COLUMNS, FEEDBACK_TYPED_COLUMNS } from './signal-schema';
 import { buildInsert, FEEDBACK_SELECT_COLUMNS } from './sql';
+
+const FEEDBACK_CONFLICT_KEYS = new Set(['feedbackId', 'timestamp']);
+const FEEDBACK_UPSERT_CLAUSE = `ON CONFLICT ("feedbackId", "timestamp") DO UPDATE SET ${FEEDBACK_EVENT_COLUMNS.map(
+  column => column.name,
+)
+  .filter(column => !FEEDBACK_CONFLICT_KEYS.has(column))
+  .map(column => `"${column}" = EXCLUDED."${column}"`)
+  .join(', ')}`;
 
 // ---------------------------------------------------------------------------
 // Filter helpers specific to the feedback signal
@@ -99,7 +107,7 @@ function pushFeedbackIdentity(
 
 export async function createFeedback(client: DbClient, schema: string, args: CreateFeedbackArgs): Promise<void> {
   const row = feedbackRecordToRow(args.feedback);
-  const insert = buildInsert(schema, TABLE_FEEDBACK_EVENTS, [row]);
+  const insert = buildInsert(schema, TABLE_FEEDBACK_EVENTS, [row], FEEDBACK_UPSERT_CLAUSE);
   if (insert) await client.query(insert.text, insert.values);
 }
 
@@ -109,8 +117,9 @@ export async function batchCreateFeedback(
   args: BatchCreateFeedbackArgs,
 ): Promise<void> {
   if (args.feedbacks.length === 0) return;
-  const rows = args.feedbacks.map(feedbackRecordToRow);
-  const insert = buildInsert(schema, TABLE_FEEDBACK_EVENTS, rows);
+  const currentFeedback = new Map(args.feedbacks.map(feedback => [feedback.feedbackId, feedback]));
+  const rows = [...currentFeedback.values()].map(feedbackRecordToRow);
+  const insert = buildInsert(schema, TABLE_FEEDBACK_EVENTS, rows, FEEDBACK_UPSERT_CLAUSE);
   if (insert) await client.query(insert.text, insert.values);
 }
 
