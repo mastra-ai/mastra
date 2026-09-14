@@ -1,16 +1,15 @@
 import type { RequestContext } from '@mastra/core/request-context';
 import type { WorkflowInfo } from '@mastra/core/workflows';
+import type { Body, QueryParams, RouteResponse } from '../route-types.generated.js';
 import type { ClientOptions, ListWorkflowRunsParams } from '../types';
 import { parseClientRequestContext } from '../utils';
 import { createRecordSeparatorJsonTransform } from '../utils/stream-transforms';
 import { BaseResource } from './base';
 
-export interface AgentBuilderActionRequest {
-  /** Input data specific to the workflow type */
-  inputData: any;
-  /** Request context for the action execution */
+export type AgentBuilderActionRequest = Omit<Body<'POST /agent-builder/:actionId/start-async'>, 'requestContext'> & {
+  /** SDK convenience input serialized before the route request. */
   requestContext?: RequestContext;
-}
+};
 
 export interface AgentBuilderActionResult {
   success: boolean;
@@ -72,7 +71,9 @@ export class AgentBuilder extends BaseResource {
    * Creates a new agent builder action run and returns the runId.
    * This calls `/agent-builder/:actionId/create-run`.
    */
-  async createRun(params?: { runId?: string }): Promise<{ runId: string }> {
+  async createRun(
+    params?: QueryParams<'POST /agent-builder/:actionId/create-run'>,
+  ): Promise<RouteResponse<'POST /agent-builder/:actionId/create-run'>> {
     const searchParams = new URLSearchParams();
 
     if (!!params?.runId) {
