@@ -219,6 +219,20 @@ function createFailingObserverModel() {
   };
 }
 
+function createTransientFailingObserverModel(onAttempt: () => void) {
+  return {
+    ...createFailingObserverModel(),
+    async doGenerate() {
+      onAttempt();
+      throw new TypeError('fetch failed');
+    },
+    async doStream() {
+      onAttempt();
+      throw new TypeError('fetch failed');
+    },
+  };
+}
+
 function createMockReflectorModel() {
   return {
     specificationVersion: 'v2' as const,
@@ -371,6 +385,45 @@ describe('OM Error State', { timeout: 30_000 }, () => {
     expect(result.text).toBe('');
     expect(result.tripwire).toBeDefined();
     expect(result.tripwire?.reason).toContain('Encountered error during memory observation');
+  });
+
+  it('continues without retrying transient observer failures under continue policy', async () => {
+    let attempts = 0;
+    const continuingMemory = new Memory({
+      storage: store,
+      options: {
+        observationalMemory: {
+          enabled: true,
+          observation: {
+            model: createTransientFailingObserverModel(() => attempts++) as any,
+            messageTokens: 20,
+            bufferTokens: false,
+            onFailure: 'continue',
+          },
+          reflection: {
+            model: createMockReflectorModel() as any,
+            observationTokens: 50000,
+          },
+        },
+      },
+    });
+    const continuingAgent = new Agent({
+      id: 'test-continue-agent',
+      name: 'Test Continue Agent',
+      instructions: 'You are a helpful assistant. Always use the test tool first.',
+      model: createMockOmModel(longResponseText) as any,
+      tools: { test: omTriggerTool },
+      memory: continuingMemory,
+    });
+
+    const result = await continuingAgent.generate('Hello, I need help.', {
+      memory: { thread: 'test-continue-thread', resource: 'test-resource' },
+    });
+
+    // The tool-driven turn triggers two observation cycles. Each fails once; neither enters retry backoff.
+    expect(attempts).toBe(2);
+    expect(result.tripwire).toBeUndefined();
+    expect(result.text).toBe(longResponseText);
   });
 
   it('should emit tripwire in response when observer fails during streaming', async () => {
