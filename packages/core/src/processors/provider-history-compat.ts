@@ -543,9 +543,7 @@ export const anthropicStripForeignReasoningContent: CompatRule = {
 /**
  * Replays of signed `thinking`/`redacted_thinking` blocks to a provider other
  * than the one that signed them are rejected — Anthropic returns
- * `Invalid \`signature\` in \`thinking\` block` (and, when dropping the block
- * leaves a `tool_use` leading a modified continuation, the accompanying
- * "thinking blocks in the latest assistant message cannot be modified").
+ * `Invalid \`signature\` in \`thinking\` block`.
  *
  * Several providers are served through `@ai-sdk/anthropic` and therefore write
  * their reasoning metadata under the same `anthropic` key — Kimi For Coding
@@ -554,37 +552,15 @@ export const anthropicStripForeignReasoningContent: CompatRule = {
  * provenance is the `provider` each assistant turn was stamped with by
  * `buildResponseModelMetadata`, which only the persisted message list carries.
  *
- * The rule works in two passes:
- *
- * - **Preemptively** (`applyToPrompt`): reasoning parts whose signature came
- *   from a turn stamped with a provider different from the current target are
- *   dropped from the outbound prompt, so the rejection never happens.
- *   Unstamped history is left untouched.
- *
- * - **Reactively** (`fix`): as a backstop for anything the preemptive pass
- *   could not see (e.g. no message list on the call path), the signature is
- *   stripped off the *persisted* turn that provoked the rejection, so the
- *   retry succeeds and the thread stays repaired on later turns.
- *   `ProcessAPIErrorArgs` does not carry the model, so the true target
- *   provider is unavailable there. What *is* provable from the stamps is the
- *   signer: the most recent assistant turn is the one the failing request was
- *   continuing, and the rejection is itself proof that its signatures are not
- *   valid for whoever rejected it. So the reactive pass strips the signature
- *   off that turn only, and never touches any other turn — it cannot guess at
- *   (and must not destroy) the signatures that belong to the provider the
- *   request is actually going to. When that turn carries tool invocations,
- *   the rejection is the unrecoverable continuation shape below and `fix`
- *   declines rather than destroy the signature for a retry that cannot help.
- *
- * Scope: this prevents and repairs the "replayed foreign signature"
- * rejection. It does not recover the trailing `tool_use`-first continuation
- * shape (where the thinking was already dropped and Anthropic then rejects
- * the modified continuation) — stripping a signature cannot put a thinking
- * block back.
+ * Reasoning parts whose signature came from a turn stamped with a provider
+ * different from the current target are dropped from the outbound prompt, so
+ * the rejection never happens. Unstamped history is left untouched — turns
+ * persisted before their provider had a distinct identity stay ambiguous and
+ * are forwarded as-is. Turns emptied of all content by the drop are removed
+ * from the prompt (Anthropic rejects empty assistant content).
  */
 export const anthropicStripForeignSignedReasoning: CompatRule = {
   name: 'anthropic-strip-foreign-signed-reasoning',
-  errorPatterns: [/signature.*thinking/i, /thinking.*cannot be modified/i],
   applyToPrompt({ prompt, model, messageList }) {
     if (!messageList) return undefined;
     const targetProvider = getModelProviderId(model);
@@ -643,48 +619,7 @@ export const anthropicStripForeignSignedReasoning: CompatRule = {
 
     return dropped > 0 ? next : undefined;
   },
-  fix(messages) {
-    // The most recent assistant turn is the one that provoked the error; its
-    // stamp names the signer, which is provably foreign to whoever rejected it.
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const message = messages[i]!;
-      if (message.role !== 'assistant') continue;
-
-      // If the turn carries tool invocations, the failure is the
-      // tool_use-first continuation shape — stripping a signature cannot put
-      // a thinking block back, so the retry would fail identically while
-      // permanently destroying the signature the origin provider needs.
-      // Decline instead of mutating.
-      if (message.content.parts?.some(part => part.type === 'tool-invocation')) return false;
-
-      let changed = false;
-      for (const part of message.content.parts ?? []) {
-        if (stripReasoningSignature(part)) changed = true;
-      }
-      return changed;
-    }
-    return false;
-  },
 };
-
-/**
- * Remove the `anthropic` signature / redacted payload from a signed reasoning
- * part, leaving the unsigned text (Anthropic's converter already discards
- * unsigned reasoning at the boundary). Returns `true` when something was
- * removed. No-op on anything that is not a signed reasoning part.
- */
-function stripReasoningSignature(part: MastraMessagePart): boolean {
-  if (part.type !== 'reasoning') return false;
-  const anthropic = part.providerMetadata?.anthropic as { signature?: unknown; redactedData?: unknown } | undefined;
-  if (!anthropic) return false;
-  if (anthropic.signature === undefined && anthropic.redactedData === undefined) return false;
-  delete anthropic.signature;
-  delete anthropic.redactedData;
-  if (Object.keys(anthropic).length === 0) {
-    delete (part.providerMetadata as Record<string, unknown>).anthropic;
-  }
-  return true;
-}
 
 const SYSTEM_REMINDER_OPEN_TAG = /<system-reminder(?=\s|\/?>)([^>]*)>/g;
 const SYSTEM_REMINDER_CLOSE_TAG = /<\/system-reminder>/g;
@@ -781,14 +716,9 @@ export const DEFAULT_COMPAT_RULES: CompatRule[] = [
  *   resolved model is Anthropic. Anthropic-native reasoning parts are kept.
  * - **anthropic-strip-foreign-signed-reasoning** — drops signed thinking
  *   blocks from the outbound prompt when their origin turn was stamped with a
- *   provider different from the current target (preemptive), and as a reactive
- *   backstop strips the signature / redacted payload off the persisted turn
- *   that provoked a replayed-signature rejection (`Invalid \`signature\` in
- *   \`thinking\` block`), so the retry succeeds. Only the offending (most
- *   recent assistant) turn is touched reactively; other turns' signatures are
- *   kept. Turns emptied of all content by the preemptive drop are removed
- *   from the prompt, and the trailing `tool_use`-first continuation shape is
- *   declined rather than repaired (a strip cannot put a thinking block back).
+ *   provider different from the current target (preemptive). Turns emptied of
+ *   all content by the drop are removed from the prompt. Unstamped history is
+ *   left untouched.
  *
  * To add custom rules, pass them to the constructor:
  * ```ts
