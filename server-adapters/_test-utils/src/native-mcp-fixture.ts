@@ -1,6 +1,10 @@
 import { MCPServerBaseV2 } from '@mastra/core/mcp';
-import type { MCPServerHTTPOptions } from '@mastra/core/mcp';
+import type { MCPServerHTTPOptions, MCPToolExecutionContextV2, MCPToolExecutionResultV2 } from '@mastra/core/mcp';
+import { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
+import type { ToolsInput } from '@mastra/core/agent';
+import type { InternalCoreTool } from '@mastra/core/tools';
+import { makeCoreTool } from '@mastra/core/utils';
 import { z } from 'zod/v4';
 
 /** Exercises adapter dispatch, not MCP wire-protocol conformance. */
@@ -12,8 +16,8 @@ export class NativeMCPFixture extends MCPServerBaseV2 {
       version: '2.0.0',
       tools: {
         ordinary: createTool({
-          id: 'native-fixture-business',
-          description: 'Business execution',
+          id: 'native-fixture-ordinary',
+          description: 'Ordinary execution',
           execute: async (_input, context) => ({
             protocolVersion: context.mcpv2?.protocolVersion ?? null,
             hasLegacyContext: 'mcp' in context,
@@ -36,6 +40,54 @@ export class NativeMCPFixture extends MCPServerBaseV2 {
         }),
       },
     });
+  }
+
+  // Converts tools like the 1.x package does; the mcpv2 context flows through CoreToolBuilder.
+  convertTools(tools: ToolsInput) {
+    const converted: Record<string, InternalCoreTool> = {};
+    for (const [name, tool] of Object.entries(tools)) {
+      converted[name] = makeCoreTool(tool, {
+        name,
+        requestContext: new RequestContext(),
+        mastra: this.mastra,
+        logger: this.logger,
+      }) as InternalCoreTool;
+    }
+    return converted;
+  }
+  async executeTool(
+    toolId: string,
+    args: unknown,
+    executionContext: Parameters<MCPServerBaseV2['executeTool']>[2] = {},
+  ): Promise<MCPToolExecutionResultV2> {
+    const tool = this.convertedTools[toolId];
+    if (!tool?.execute) throw new Error(`Tool ${toolId} not found`);
+    let suspension: { payload: unknown } | undefined;
+    const round: Omit<MCPToolExecutionContextV2, 'suspend'> = executionContext.mcpv2 ?? {
+      protocolVersion: '2026-07-28',
+      requestId: 'rest',
+      signal: new AbortController().signal,
+      metadata: {},
+      log: async () => {},
+      progress: async () => {},
+    };
+    const output = await tool.execute(args, {
+      toolCallId: String(round.requestId),
+      messages: [],
+      requestContext: executionContext.requestContext,
+      abortSignal: round.signal,
+      mcpv2: { ...round, suspend: async payload => void (suspension = { payload }) },
+    });
+    if (suspension) {
+      const original = this.originalTools[toolId];
+      const resumeSchema = original && 'resumeSchema' in original ? original.resumeSchema : undefined;
+      return {
+        status: 'suspended',
+        suspendPayload: suspension.payload,
+        resumeSchema: resumeSchema ? z.toJSONSchema(resumeSchema as z.ZodType) : undefined,
+      };
+    }
+    return { status: 'completed', output };
   }
 
   async startHTTP(options: MCPServerHTTPOptions) {

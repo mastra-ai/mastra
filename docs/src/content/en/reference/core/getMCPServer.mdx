@@ -62,7 +62,7 @@ const serverById = mastra.getMCPServerById('my-mcp-server')
 
 `MCPServerRegistryEntry` is the union of `MCPServerBase` and `MCPServerBaseV2`, exported from `@mastra/core/mcp`. Existing MCP 1.x servers don't need new properties or methods. Use `isMCPServerV2(server)` after checking that the lookup returned a server to narrow the union.
 
-`MCPServerBaseV2` accepts the same `MCPServerConfig` as `MCPServerBase`, including tools, agents, workflows, metadata and FGA options, so a configured `id` is slugified and tools, agents and workflows are registered with Mastra exactly like a 1.x server. The differences are limited to what the 2026-07-28 protocol changed, which means the base has no `startSSE` or `startHonoSSE` methods, its `executeTool` reports a suspended tool rather than a bare result, and it carries `mcpVersion` set to `2`. None of this changes the behavior of an installed `@mastra/mcp` 1.x server.
+`MCPServerBaseV2` is a copy of `MCPServerBase` with the same `MCPServerConfig`, id handling, `convertTools`, `tools()` and Mastra registration of tools, agents and workflows. The differences are limited to what the 2026-07-28 protocol changed, which means the base has no `startSSE` or `startHonoSSE` methods, its `executeTool` reports a suspended tool rather than a bare result, and it carries `mcpVersion` set to `2`. None of this changes the behavior of an installed `@mastra/mcp` 1.x server.
 
 ### Tools that ask for input
 
@@ -102,7 +102,7 @@ When an `@mastra/mcp` 2.x server executes a tool, `context.mcpv2` is an `MCPTool
 
 ### Registration and execution
 
-Every catalogue tool is registered as an ordinary business tool on the Mastra instance. `executeTool(toolId, input, context?)` runs a tool outside a protocol client and returns `{ status: 'completed', output }` or, when the tool suspended, `{ status: 'suspended', suspendPayload, resumeSchema }` with `resumeSchema` as JSON Schema. Shared REST execution endpoints return the suspended shape instead of pretending the tool finished. Legacy SSE routes remain available only to v1 server instances.
+Tools are registered on the Mastra instance exactly as a 1.x server registers them. `executeTool(toolId, args, context?)` returns `{ status: 'completed', output }` or, when the tool suspended, `{ status: 'suspended', suspendPayload, resumeSchema }` with `resumeSchema` as JSON Schema. Shared REST execution endpoints return the suspended shape instead of pretending the tool finished. Legacy SSE routes remain available only to v1 server instances.
 
 Registering another server under an occupied registry key keeps the existing instance. Registry keys and intrinsic server IDs remain distinct.
 
