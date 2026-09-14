@@ -18,9 +18,10 @@ import {
   CommentItemTimestamp,
   CommentList,
 } from '@mastra/playground-ui/components/Comment';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { format } from 'date-fns';
-import { Trash2Icon, Trash2, ChevronRight, ChevronLeft, ClipboardCheck } from 'lucide-react';
+import { Trash2Icon, Trash2, ChevronRight, ChevronLeft, CircleSlashIcon, ClipboardCheck } from 'lucide-react';
 import { useState } from 'react';
 
 import { ReviewStatusBadge } from '@/domains/review/components/review-status-badge';
@@ -194,7 +195,8 @@ export function FeedbackThread({
   };
 
   return (
-    <Comment variant={variant} className="min-h-0 gap-4 px-3">
+    // Same offsets as the span search field so the input doesn't jump when switching tabs.
+    <Comment variant={variant} className="h-full min-h-0 gap-4 px-2 pt-1.5">
       <CommentComposer
         aria-label="Leave feedback"
         onSubmit={async event => {
@@ -218,15 +220,18 @@ export function FeedbackThread({
         </CommentComposerInput>
       </CommentComposer>
 
-      <div className="min-h-0 overflow-y-auto">
+      <div className="min-h-0 flex-1 overflow-y-auto">
         {isLoadingFeedbackData ? (
           <Txt variant="ui-md" className="text-neutral3">
             Loading feedback...
           </Txt>
         ) : feedbackItems.length === 0 ? (
-          <Txt variant="ui-md" className="text-neutral3 text-center">
-            No feedback yet
-          </Txt>
+          <EmptyState
+            className="h-full"
+            iconSlot={<CircleSlashIcon />}
+            titleSlot="No feedback yet"
+            descriptionSlot="Leave feedback to start the discussion."
+          />
         ) : (
           <FeedbackItems
             variant={variant}

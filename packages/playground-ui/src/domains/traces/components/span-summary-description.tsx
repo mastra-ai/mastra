@@ -1,4 +1,4 @@
-import { CalendarClockIcon, FlagIcon, HashIcon, TimerIcon } from 'lucide-react';
+import { CalendarClockIcon, HashIcon, TimerIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { formatSpanDurationSeconds, formatSpanTimestamp, formatSpanTimestampExact } from '../utils/span-utils';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
@@ -35,8 +35,6 @@ function SummaryItem({ label, children }: { label: string; children: ReactNode }
 export function SpanSummaryDescription({ span, className }: SpanSummaryDescriptionProps) {
   const startedAt = formatSpanTimestamp(span.startedAt);
   const exactStartedAt = formatSpanTimestampExact(span.startedAt);
-  const endedAt = formatSpanTimestamp(span.endedAt);
-  const exactEndedAt = formatSpanTimestampExact(span.endedAt);
   const duration = formatSpanDurationSeconds(span.startedAt, span.endedAt);
 
   return (
@@ -50,12 +48,6 @@ export function SpanSummaryDescription({ span, className }: SpanSummaryDescripti
         <SummaryItem label={`Started at ${exactStartedAt}`}>
           <CalendarClockIcon className="size-3.5 shrink-0" aria-hidden="true" />
           <span>{startedAt}</span>
-        </SummaryItem>
-      )}
-      {endedAt && exactEndedAt && (
-        <SummaryItem label={`Ended at ${exactEndedAt}`}>
-          <FlagIcon className="size-3.5 shrink-0" aria-hidden="true" />
-          <span>{endedAt}</span>
         </SummaryItem>
       )}
       {duration && (

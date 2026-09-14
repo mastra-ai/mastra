@@ -24,6 +24,7 @@ export function SpanScoresList({ scoresData, isLoadingScoresData, onPageChange, 
   if (!scoresData?.scores || scoresData.scores.length === 0) {
     return (
       <EmptyState
+        className="h-full"
         iconSlot={<CircleSlashIcon />}
         titleSlot="No scores yet"
         descriptionSlot="Score this trace to see results here."
