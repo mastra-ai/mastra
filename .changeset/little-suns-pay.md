@@ -9,3 +9,5 @@ Added `POST /agents/:agentId/threads/signals/cancel` to cancel selected process-
 ```
 
 The response contains `cancelledSignalIds`, listing only IDs cancelled by the call. Thread abort requests also accept `clearPendingSignals: true` to clear pending input before aborting. Omitting the flag preserves existing behavior.
+
+Both cancellation routes enforce thread write access when fine-grained authorization is configured, even before a thread is saved. Thread-wide cancellation and clear-on-abort return HTTP 501 when the Agent's core version doesn't support them. Upgrade `@mastra/core` alongside `@mastra/server` on every worker.

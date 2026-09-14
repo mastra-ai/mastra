@@ -105,7 +105,7 @@ When the thread is idle, `queueMessage()` starts a run immediately. When the thr
 
 ### Cancel pending input
 
-Use [`cancelPendingSignals()`](/reference/agents/agent#cancelpendingsignalsoptions) to remove selected pending input without stopping the active run. Cancellation is scoped to the memory thread, including input submitted by other Agents sharing the same runtime and PubSub instance.
+Use [`cancelQueuedMessages()`](/reference/agents/agent#cancelqueuedmessagesoptions) to remove selected pending input without stopping the active run. Cancellation is scoped to the memory thread, including input submitted by other Agents sharing the same runtime and PubSub instance.
 
 The thread must still have a pending message to cancel. This example assumes a run is active when you queue the message. An idle thread starts the message immediately instead.
 
@@ -113,7 +113,7 @@ The thread must still have a pending message to cancel. This example assumes a r
 const queued = agent.queueMessage('Also check the tests.', thread)
 await queued.accepted
 
-const { cancelledSignalIds } = agent.cancelPendingSignals({
+const { cancelledSignalIds } = agent.cancelQueuedMessages({
   ...thread,
   signalIds: [queued.signal.id],
 })

@@ -8,7 +8,7 @@ import type { Body } from '../route-types.generated';
 import type {
   ClientOptions,
   AbortAgentThreadParams,
-  CancelPendingAgentSignalsParams,
+  CancelQueuedAgentMessagesParams,
   QueueAgentMessageParams,
   SendAgentMessageParams,
   SendAgentSignalParams,
@@ -488,9 +488,9 @@ describe('Agent signal routes', () => {
       resourceId: 'resource-123',
       threadId: 'thread-123',
       signalIds: ['first', 'missing', 'first'],
-    } satisfies CancelPendingAgentSignalsParams;
+    } satisfies CancelQueuedAgentMessagesParams;
     const routeBody: Body<'POST /agents/:agentId/threads/signals/cancel'> = params;
-    await expect(agent.cancelPendingSignals(params)).resolves.toEqual({ cancelledSignalIds: ['first'] });
+    await expect(agent.cancelQueuedMessages(params)).resolves.toEqual({ cancelledSignalIds: ['first'] });
     expect(mockRequest).toHaveBeenCalledWith('/agents/test-agent/threads/signals/cancel', {
       method: 'POST',
       body: routeBody,

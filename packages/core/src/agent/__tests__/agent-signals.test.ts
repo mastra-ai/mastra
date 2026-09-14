@@ -2920,6 +2920,97 @@ describe('Agent signals', () => {
   });
 
   describe('thread-scoped pending signal cancellation', () => {
+    it('preserves a queued continuation when clear-on-abort removes pending and idle signals', async () => {
+      const scope = { resourceId: 'clear-continuation-user', threadId: 'clear-continuation-thread' };
+      const pubsub = new ControlledLeasePubSub();
+      const { model, releaseFirst, getStreamCount } = createBlockingFirstTextStreamModel(
+        'first',
+        'continuation answer',
+      );
+      const memory = new MockMemory();
+      const agent = new Agent({
+        id: 'clear-continuation',
+        name: 'Clear continuation',
+        instructions: 'Test',
+        model,
+        memory,
+        pubsub,
+      });
+      const subscription = await agent.subscribeToThread(scope);
+      try {
+        const first = await agent.stream('initial', { memory: { resource: scope.resourceId, thread: scope.threadId } });
+        await vi.waitFor(() => expect(getStreamCount()).toBe(1));
+        await agent.sendSignal({ type: 'user-message', contents: 'cleared pending input' }, scope).accepted;
+        await agent.queueMessage('cleared idle input', scope).accepted;
+        agentThreadStreamRuntime.continueWithMessages(agent, 'surviving continuation', scope, pubsub);
+        expect(subscription.abort({ clearPendingSignals: true })).toBe(true);
+        releaseFirst();
+        await first.text;
+        await vi.waitFor(() => expect(getStreamCount()).toBe(2));
+        await vi.waitFor(() => expect(pubsub.owners.get(`${scope.resourceId}\u0000${scope.threadId}`)).toBeUndefined());
+        const prompt = JSON.stringify(model.doStreamCalls[1]?.prompt);
+        expect(prompt).toContain('surviving continuation');
+        expect(prompt).not.toContain('cleared pending input');
+        expect(prompt).not.toContain('cleared idle input');
+        const { messages } = await memory.recall(scope);
+        expect(messages.at(-1)).toMatchObject({
+          role: 'assistant',
+          content: {
+            parts: expect.arrayContaining([expect.objectContaining({ type: 'text', text: 'continuation answer' })]),
+          },
+        });
+        expect(getStreamCount()).toBe(2);
+      } finally {
+        releaseFirst();
+        subscription.unsubscribe();
+      }
+    });
+
+    it('clears requeued input without reporting an active-run abort', async () => {
+      const scope = { resourceId: 'inactive-clear-user', threadId: 'inactive-clear-thread' };
+      const pubsub = new ControlledLeasePubSub();
+      const { model, releaseFirst, getStreamCount } = createBlockingFirstTextStreamModel('first', 'new answer');
+      let preparations = 0;
+      const agent = new Agent({
+        id: 'inactive-clear',
+        name: 'Inactive clear',
+        model,
+        memory: new MockMemory(),
+        pubsub,
+        instructions: () => {
+          if (++preparations === 2) throw new Error('Queued preparation failed');
+          return 'Test';
+        },
+      });
+      const subscription = await agent.subscribeToThread(scope);
+      try {
+        const first = await agent.stream('initial', { memory: { resource: scope.resourceId, thread: scope.threadId } });
+        await vi.waitFor(() => expect(getStreamCount()).toBe(1));
+        await agent.sendSignal({ type: 'user-message', contents: 'requeued input to clear' }, scope).accepted;
+        expect(subscription.abort()).toBe(true);
+        releaseFirst();
+        await first.text;
+        await vi.waitFor(() =>
+          expect(pubsub.publishedData.some(data => data.type === 'run-failed' && data.error.includes('requeued'))).toBe(
+            true,
+          ),
+        );
+        await vi.waitFor(() => expect(agentThreadStreamRuntime.getActiveThreadRunId(scope, pubsub)).toBeUndefined());
+        expect(agent.abortThreadStream({ ...scope, clearPendingSignals: true })).toBe(false);
+        const next = await agent.stream('new input', {
+          memory: { resource: scope.resourceId, thread: scope.threadId },
+        });
+        await next.text;
+        expect(getStreamCount()).toBe(2);
+        expect(JSON.stringify(model.doStreamCalls[1]?.prompt)).toContain('new input');
+        expect(JSON.stringify(model.doStreamCalls[1]?.prompt)).not.toContain('requeued input to clear');
+        await vi.waitFor(() => expect(pubsub.owners.get(`${scope.resourceId}\u0000${scope.threadId}`)).toBeUndefined());
+      } finally {
+        releaseFirst();
+        subscription.unsubscribe();
+      }
+    });
+
     it('ignores remote clear after ownership changes during lease verification', async () => {
       const scope = { resourceId: 'stale-clear-user', threadId: 'stale-clear-thread' };
       const key = `${scope.resourceId}\u0000${scope.threadId}`;
@@ -3006,13 +3097,13 @@ describe('Agent signals', () => {
           },
         });
         await vi.waitFor(() =>
-          expect(owner.cancelPendingSignals({ ...scope, signalIds: [marker.id] }, pubsub)).toEqual({
+          expect(owner.cancelQueuedMessages(agent, { ...scope, signalIds: [marker.id] }, pubsub)).toEqual({
             cancelledSignalIds: [marker.id],
           }),
         );
         expect(owner.isRunAborted('new-clear-run', pubsub)).toBe(false);
         expect(owner.isRunAborted('old-clear-run', pubsub)).toBe(false);
-        expect(owner.cancelPendingSignals({ ...scope, signalIds: [survivor.signal.id] }, pubsub)).toEqual({
+        expect(owner.cancelQueuedMessages(agent, { ...scope, signalIds: [survivor.signal.id] }, pubsub)).toEqual({
           cancelledSignalIds: [survivor.signal.id],
         });
         expect(pubsub.owners.get(key)).toBe('new-clear-run');
@@ -3155,7 +3246,7 @@ describe('Agent signals', () => {
           await first.text;
           await prepared;
           // Execution handoff already happened: selective cancellation must not claim success.
-          expect(agent.cancelPendingSignals({ ...scope, signalIds: [queued.signal.id] })).toEqual({
+          expect(agent.cancelQueuedMessages({ ...scope, signalIds: [queued.signal.id] })).toEqual({
             cancelledSignalIds: [],
           });
           expect(subscription.abort({ clearPendingSignals })).toBe(true);
@@ -3278,22 +3369,22 @@ describe('Agent signals', () => {
         await other.queueMessage('keep other idle', { ...scope, queueOwnerId: 'keep' }).accepted;
         expect(agent.cancelQueuedMessages({ ...scope, queueOwnerId: 'group' })).toEqual({ cancelledSignalIds: [] });
         expect(
-          agent.cancelPendingSignals({
+          agent.cancelQueuedMessages({
             ...scope,
             threadId: 'wrong-thread',
             signalIds: [preRun.signal.id, idle.signal.id],
           }),
         ).toEqual({ cancelledSignalIds: [] });
         expect(
-          agent.cancelPendingSignals({ ...scope, resourceId: 'wrong-user', signalIds: [preRun.signal.id] }),
+          agent.cancelQueuedMessages({ ...scope, resourceId: 'wrong-user', signalIds: [preRun.signal.id] }),
         ).toEqual({ cancelledSignalIds: [] });
         expect(
-          other.cancelPendingSignals({
+          other.cancelQueuedMessages({
             ...scope,
             signalIds: [preRun.signal.id, idle.signal.id, preRun.signal.id, 'missing'],
           }),
         ).toEqual({ cancelledSignalIds: [preRun.signal.id, idle.signal.id] });
-        expect(other.cancelPendingSignals({ ...scope, signalIds: [preRun.signal.id] })).toEqual({
+        expect(other.cancelQueuedMessages({ ...scope, signalIds: [preRun.signal.id] })).toEqual({
           cancelledSignalIds: [],
         });
         expect(counts.at(-1)).toBe(1);
@@ -3359,7 +3450,7 @@ describe('Agent signals', () => {
         releaseFirst();
         await output.text;
         await forwarded;
-        expect(agent.cancelPendingSignals({ ...scope, signalIds: [queued.signal.id] })).toEqual({
+        expect(agent.cancelQueuedMessages({ ...scope, signalIds: [queued.signal.id] })).toEqual({
           cancelledSignalIds: [],
         });
         release();
@@ -3420,10 +3511,10 @@ describe('Agent signals', () => {
         releaseFirst();
         await output.text;
         await transferring;
-        expect(agent.cancelPendingSignals({ ...scope, signalIds: [queued.signal.id, queued.signal.id] })).toEqual({
+        expect(agent.cancelQueuedMessages({ ...scope, signalIds: [queued.signal.id, queued.signal.id] })).toEqual({
           cancelledSignalIds: [queued.signal.id],
         });
-        expect(agent.cancelPendingSignals({ ...scope, signalIds: [queued.signal.id] })).toEqual({
+        expect(agent.cancelQueuedMessages({ ...scope, signalIds: [queued.signal.id] })).toEqual({
           cancelledSignalIds: [],
         });
         if (outcome === 'lost') pubsub.owners.set(key, 'new-owner');
@@ -6133,12 +6224,12 @@ describe('Agent signals', () => {
     expect(
       runtime.cancelQueuedMessages(otherAgent, { resourceId, threadId, signalIds: [untagged.signal.id] }, pubsub),
     ).toEqual({
-      cancelledSignalIds: [],
+      cancelledSignalIds: [untagged.signal.id],
     });
     expect(
       runtime.cancelQueuedMessages(agent, { resourceId, threadId, signalIds: [untagged.signal.id] }, pubsub),
     ).toEqual({
-      cancelledSignalIds: [untagged.signal.id],
+      cancelledSignalIds: [],
     });
     expect(counts).toEqual([0, 1, 0]);
     expect(events).toEqual([

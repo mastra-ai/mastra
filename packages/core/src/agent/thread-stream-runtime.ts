@@ -29,8 +29,6 @@ import type {
   DiscoverAgentThreadPeersOptions,
   CancelQueuedAgentMessagesOptions,
   CancelQueuedAgentMessagesResult,
-  CancelPendingAgentSignalsOptions,
-  CancelPendingAgentSignalsResult,
   AgentAbortThreadOptions,
   AgentThreadEventListener,
   SubscribeAgentThreadEventsOptions,
@@ -3400,11 +3398,13 @@ export class AgentThreadStreamRuntime {
     if (hasSignalIds === hasQueueOwnerId) {
       throw new Error('cancelQueuedMessages requires exactly one of signalIds or queueOwnerId');
     }
+    if (hasSignalIds) {
+      const result = this.#cancelPendingSignals(state, key, new Set(target.signalIds));
+      if (result.cancelledSignalIds.length) this.#notifyThreadEvents(state);
+      return result;
+    }
     const matches = (pending: PendingIdleSignal<any>) =>
-      pending.agent === agent &&
-      (hasSignalIds
-        ? (target as { signalIds: string[] }).signalIds.includes(pending.signal.id)
-        : pending.queueOwnerId === (target as { queueOwnerId: string }).queueOwnerId);
+      pending.agent === agent && pending.queueOwnerId === target.queueOwnerId;
     const cancelledSignalIds = this.#cancelIdleSignals(state, key, matches);
     if (cancelledSignalIds.length > 0) this.#notifyThreadEvents(state);
     return { cancelledSignalIds };
@@ -3435,22 +3435,11 @@ export class AgentThreadStreamRuntime {
     return cancelledSignalIds;
   }
 
-  cancelPendingSignals(target: CancelPendingAgentSignalsOptions, pubsub?: PubSub): CancelPendingAgentSignalsResult {
-    const state = this.#getState(pubsub);
-    const result = this.#cancelPendingSignals(
-      state,
-      this.#threadKey(target.resourceId, target.threadId),
-      new Set(target.signalIds),
-    );
-    if (result.cancelledSignalIds.length) this.#notifyThreadEvents(state);
-    return result;
-  }
-
   #cancelPendingSignals(
     state: AgentThreadRuntimeState,
     key: string,
     signalIds?: ReadonlySet<string>,
-  ): CancelPendingAgentSignalsResult {
+  ): CancelQueuedAgentMessagesResult {
     const matches = (signal: CreatedAgentSignal) => signalIds === undefined || signalIds.has(signal.id);
     const cancelled = new Set<string>();
     for (const queues of [state.preRunSignalsByThread, state.pendingSignalsByThread]) {

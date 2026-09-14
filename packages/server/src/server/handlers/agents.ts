@@ -2211,6 +2211,12 @@ export const ABORT_AGENT_THREAD_ROUTE = createRoute({
           message: 'agent thread aborts are not supported by this Mastra core version',
         });
       }
+      if (clearPendingSignals && agent.__supportsThreadSignalCancellation !== true) {
+        throw new HTTPException(501, {
+          message:
+            'clear-on-abort requires a newer @mastra/core version. Upgrade @mastra/core alongside @mastra/server.',
+        });
+      }
 
       const effectiveResourceId = getEffectiveResourceId(serverRequestContext, resourceId);
       const effectiveThreadId = getEffectiveThreadId(serverRequestContext, threadId);
@@ -2219,13 +2225,16 @@ export const ABORT_AGENT_THREAD_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'threadId is required' });
       }
 
-      if (effectiveResourceId) {
-        const memory = await agent.getMemory({ requestContext: serverRequestContext });
-        if (memory) {
-          const thread = await memory.getThreadById({ threadId: effectiveThreadId });
-          await validateThreadOwnership(thread, effectiveResourceId);
-        }
-      }
+      const memory = await agent.getMemory({ requestContext: serverRequestContext });
+      const thread = await memory?.getThreadById({ threadId: effectiveThreadId });
+      await enforceThreadAccess({
+        mastra,
+        requestContext: serverRequestContext,
+        threadId: effectiveThreadId,
+        thread,
+        effectiveResourceId,
+        permission: MastraFGAPermissions.MEMORY_WRITE,
+      });
 
       const aborted = await agent.abortThreadStream({
         resourceId: effectiveResourceId,
@@ -2254,22 +2263,29 @@ export const CANCEL_AGENT_PENDING_SIGNALS_ROUTE = createRoute({
   handler: async ({ mastra, agentId, resourceId, threadId, signalIds, requestContext }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId, requestContext });
-      if (typeof (agent as { cancelPendingSignals?: unknown }).cancelPendingSignals !== 'function') {
+      if (
+        typeof (agent as { cancelQueuedMessages?: unknown }).cancelQueuedMessages !== 'function' ||
+        agent.__supportsThreadSignalCancellation !== true
+      ) {
         throw new HTTPException(501, {
-          message: 'pending signal cancellation is not supported by this Mastra core version',
+          message:
+            'thread-wide cancellation requires a newer @mastra/core version. Upgrade @mastra/core alongside @mastra/server.',
         });
       }
       const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
       const effectiveThreadId = getEffectiveThreadId(requestContext, threadId);
       if (!effectiveThreadId) throw new HTTPException(400, { message: 'threadId is required' });
-      if (effectiveResourceId) {
-        const memory = await agent.getMemory({ requestContext });
-        if (memory) {
-          const thread = await memory.getThreadById({ threadId: effectiveThreadId });
-          await validateThreadOwnership(thread, effectiveResourceId);
-        }
-      }
-      return agent.cancelPendingSignals({ resourceId: effectiveResourceId, threadId: effectiveThreadId, signalIds });
+      const memory = await agent.getMemory({ requestContext });
+      const thread = await memory?.getThreadById({ threadId: effectiveThreadId });
+      await enforceThreadAccess({
+        mastra,
+        requestContext,
+        threadId: effectiveThreadId,
+        thread,
+        effectiveResourceId,
+        permission: MastraFGAPermissions.MEMORY_WRITE,
+      });
+      return agent.cancelQueuedMessages({ resourceId: effectiveResourceId, threadId: effectiveThreadId, signalIds });
     } catch (error) {
       return handleError(error, 'error cancelling pending thread signals');
     }

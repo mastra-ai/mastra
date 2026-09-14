@@ -2,22 +2,27 @@
 '@mastra/core': minor
 ---
 
-Added thread-scoped pending signal cancellation and optional clear-on-abort.
+Expanded `cancelQueuedMessages({ signalIds })` to cancel pending input across all Agents sharing the runtime and memory thread. Added `clearPendingSignals` to thread abort options.
 
-- Cancel selected local signals across Agents without stopping the active run.
-- Pass `clearPendingSignals: true` to clear pending input before aborting. Default abort behavior still preserves queued input.
-- Keep cancellation effective while a queued signal waits for its lease, including failed or contested handoffs.
-- Prevent queued input from being restored if preparation fails after clear-on-abort.
-- Notify queue-count listeners after applying clear-on-abort so newly submitted input survives.
+**Changed behavior**
+
+- Signal-ID cancellation previously matched only the calling Agent's queued messages. It now also covers other Agents' messages, pre-run signals, and signals pending in an active run.
+- The `queueOwnerId` selector still cancels only the calling Agent's queued messages in that owner group.
+- Cancellation remains effective during lease handoffs. Clear-on-abort prevents queued input from returning after a preparation failure.
 
 ```typescript
 const thread = { resourceId: 'user-123', threadId: 'thread-abc' };
 
-agent.cancelPendingSignals({ ...thread, signalIds: ['signal-123'] });
+// Selected pending input across Agents sharing the thread.
+agent.cancelQueuedMessages({ ...thread, signalIds: ['signal-123'] });
+
+// Existing Agent-scoped owner-group behavior.
+agent.cancelQueuedMessages({ ...thread, queueOwnerId: 'session-123' });
+
 agent.abortThreadStream({ ...thread, clearPendingSignals: true });
 
 // Existing behavior: abort without clearing pending input.
 agent.abortThreadStream(thread);
 ```
 
-Selected-ID cancellation is process-local. Clear-on-abort also forwards the clear flag to the active owner, but doesn't clear every process's queues. Neither operation cancels `continueWithMessages()` continuations or undoes persisted effects.
+Selected-ID cancellation is process-local. Clear-on-abort forwards the clear flag to the active owner, but doesn't clear every process's queues. Neither operation cancels `continueWithMessages()` continuations or undoes persisted effects.

@@ -322,7 +322,9 @@ export type AgentThreadEventListener = (event: AgentThreadEvent) => void;
  * @experimental Agent message APIs are experimental and may change in a future release.
  */
 export type CancelQueuedAgentMessagesOptions =
-  | { resourceId: string; threadId: string; signalIds: string[]; queueOwnerId?: never }
+  /** Cancel selected pending input across all Agents sharing this runtime and thread. */
+  | { resourceId?: string; threadId: string; signalIds: string[]; queueOwnerId?: never }
+  /** Cancel only the calling Agent's queued messages in this owner group. */
   | { resourceId: string; threadId: string; queueOwnerId: string; signalIds?: never };
 
 /**
@@ -432,16 +434,6 @@ export interface AgentThreadIdentityOptions {
 export interface AgentAbortThreadOptions extends AgentThreadIdentityOptions {
   /** Clear this runtime's pending signals before aborting. Forwarded aborts also clear the receiving owner's queues. */
   clearPendingSignals?: boolean;
-}
-
-/** @experimental Cancels process-local pending signals across all Agents on the thread. */
-export interface CancelPendingAgentSignalsOptions extends AgentThreadIdentityOptions {
-  signalIds: string[];
-}
-
-/** @experimental IDs actually removed or cancelled while waiting for a lease. */
-export interface CancelPendingAgentSignalsResult {
-  cancelledSignalIds: string[];
 }
 
 /** @experimental Agent signals are experimental and may change in a future release. */

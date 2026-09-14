@@ -216,8 +216,6 @@ import type {
   DiscoverAgentThreadPeersOptions,
   CancelQueuedAgentMessagesOptions,
   CancelQueuedAgentMessagesResult,
-  CancelPendingAgentSignalsOptions,
-  CancelPendingAgentSignalsResult,
   AgentAbortThreadOptions,
   AgentThreadEventListener,
   SubscribeAgentThreadEventsOptions,
@@ -8474,6 +8472,11 @@ export class Agent<
     return { runs: matchedRuns, total };
   }
 
+  /** @internal Allows server adapters to detect thread-wide cancellation and clear-on-abort support. */
+  get __supportsThreadSignalCancellation(): boolean {
+    return true;
+  }
+
   abortThreadStream(options: AgentAbortThreadOptions): boolean {
     return agentThreadStreamRuntime.abortThread(options, this.getPubSub());
   }
@@ -8517,11 +8520,6 @@ export class Agent<
    */
   cancelQueuedMessages(target: CancelQueuedAgentMessagesOptions): CancelQueuedAgentMessagesResult {
     return agentThreadStreamRuntime.cancelQueuedMessages(this as Agent<any, any, any, any>, target, this.getPubSub());
-  }
-
-  /** @experimental Cancels pending signals on this process, across Agents sharing the thread. */
-  cancelPendingSignals(target: CancelPendingAgentSignalsOptions): CancelPendingAgentSignalsResult {
-    return agentThreadStreamRuntime.cancelPendingSignals(target, this.getPubSub());
   }
 
   /**

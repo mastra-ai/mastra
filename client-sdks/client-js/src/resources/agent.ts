@@ -44,8 +44,8 @@ import type {
   QueueAgentMessageParams,
   SubscribeAgentThreadParams,
   AbortAgentThreadParams,
-  CancelPendingAgentSignalsParams,
-  CancelPendingAgentSignalsResponse,
+  CancelQueuedAgentMessagesParams,
+  CancelQueuedAgentMessagesResponse,
   ListAgentSuspendedRunsParams,
   ListAgentSuspendedRunsResponse,
   GetAgentPlanResponse,
@@ -973,9 +973,9 @@ export class Agent extends BaseResource {
   }
 
   /** @experimental Cancels process-local pending signals across Agents sharing the thread. */
-  cancelPendingSignals(params: CancelPendingAgentSignalsParams): Promise<CancelPendingAgentSignalsResponse> {
+  cancelQueuedMessages(params: CancelQueuedAgentMessagesParams): Promise<CancelQueuedAgentMessagesResponse> {
     const { resourceId, threadId, signalIds } = params;
-    return this.request<CancelPendingAgentSignalsResponse>(`/agents/${this.agentId}/threads/signals/cancel`, {
+    return this.request<CancelQueuedAgentMessagesResponse>(`/agents/${this.agentId}/threads/signals/cancel`, {
       method: 'POST',
       body: { resourceId, threadId, signalIds },
     });

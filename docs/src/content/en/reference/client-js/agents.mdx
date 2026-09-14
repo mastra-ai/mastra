@@ -379,12 +379,12 @@ const { aborted } = await agent.abortThread({
 
 Returns `{ aborted: boolean }`. For a remote active owner, `aborted: true` means the request was sent, not acknowledged. Clear-on-abort affects the receiving server's local queues and is forwarded to the active owner. It isn't a global queue clear. Local pending signals are still cleared if no active run is found and `aborted` is `false`.
 
-### `cancelPendingSignals()`
+### `cancelQueuedMessages()`
 
-Cancels selected pending signals without stopping the active run. The operation covers pending input across Agents sharing the same memory thread on the server process handling this request.
+Cancels selected pending signals without stopping the active run. The operation covers pending input across Agents sharing the same memory thread on the server process handling this request. Unlike the core method, the SDK accepts only signal IDs, not `queueOwnerId`.
 
 ```typescript
-const { cancelledSignalIds } = await agent.cancelPendingSignals({
+const { cancelledSignalIds } = await agent.cancelQueuedMessages({
   resourceId: 'user-123',
   threadId: 'thread-abc',
   signalIds: ['signal-123', 'signal-456'],
@@ -406,6 +406,8 @@ const { cancelledSignalIds } = await agent.cancelPendingSignals({
 Returns `{ cancelledSignalIds: string[] }` with each ID cancelled by this call once. Signals already handed to execution or another owner aren't included. Missing, empty, or oversized ID lists return HTTP 400. Thread ownership restrictions apply to both cancellation routes.
 
 Selective cancellation isn't forwarded to another process. With multiple server instances, send the request to the instance holding the pending input. Cancellation doesn't undo saved messages, state updates, notification records, or acceptance acknowledgements. It doesn't cancel continuations from `continueWithMessages()`.
+
+The server must use a core version supporting thread-wide cancellation and clear-on-abort. Upgrade `@mastra/core` alongside `@mastra/server`. Unsupported requests return HTTP 501 rather than using older cancellation behavior. With fine-grained authorization enabled, both cancellation routes require `memory:write` permission on the thread in addition to Agent execution permission.
 
 ### `streamUntilIdle()`
 

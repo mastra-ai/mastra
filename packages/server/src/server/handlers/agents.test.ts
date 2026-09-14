@@ -2849,6 +2849,83 @@ describe('Agent Routes Authorization', () => {
       },
     );
 
+    it.each(
+      (['cancel', 'abort'] as const).flatMap(operation =>
+        (['owned', 'unscoped', 'missing', 'no-memory'] as const).flatMap(scope =>
+          [false, true].map(allowed => [operation, scope, allowed] as const),
+        ),
+      ),
+    )('enforces thread write access for %s with %s scope and allowed=%s', async (operation, scope, allowed) => {
+      if (scope === 'owned' || scope === 'unscoped') {
+        await mockMemory.createThread({ threadId: 'fga-cancel', resourceId: 'user-a', title: 'Private' });
+      }
+      if (scope === 'no-memory') vi.spyOn(mockAgent, 'getMemory').mockResolvedValue(undefined);
+      const require = vi.fn();
+      if (allowed) require.mockResolvedValue(undefined);
+      else require.mockRejectedValue(Object.assign(new Error('FGA denied'), { status: 403 }));
+      vi.spyOn(mastra, 'getServer').mockReturnValue({ fga: { require } } as any);
+      const requestContext = createContextWithReservedKeys(scope === 'unscoped' ? {} : { resourceId: 'user-a' });
+      const user = { id: 'user-a' };
+      requestContext.set('user', user);
+      const cancel = vi
+        .spyOn(mockAgent, 'cancelQueuedMessages')
+        .mockReturnValue({ cancelledSignalIds: ['private-input'] });
+      const abort = vi.spyOn(mockAgent, 'abortThreadStream').mockReturnValue(true);
+      const params = {
+        mastra,
+        agentId: 'test-agent',
+        requestContext,
+        threadId: 'fga-cancel',
+        signalIds: ['private-input'],
+        clearPendingSignals: true,
+        abortSignal: new AbortController().signal,
+      };
+      const result =
+        operation === 'cancel'
+          ? CANCEL_AGENT_PENDING_SIGNALS_ROUTE.handler(params)
+          : ABORT_AGENT_THREAD_ROUTE.handler(params);
+      if (allowed) {
+        await expect(result).resolves.toEqual(
+          operation === 'cancel' ? { cancelledSignalIds: ['private-input'] } : { aborted: true },
+        );
+        expect(operation === 'cancel' ? cancel : abort).toHaveBeenCalledOnce();
+      } else {
+        await expect(result).rejects.toThrow('FGA denied');
+        expect(cancel).not.toHaveBeenCalled();
+        expect(abort).not.toHaveBeenCalled();
+      }
+      expect(require).toHaveBeenCalledWith(user, {
+        resource: { type: 'thread', id: 'fga-cancel' },
+        permission: 'memory:write',
+        context: expect.objectContaining({ resourceId: 'user-a' }),
+      });
+    });
+
+    it('rejects enhanced cancellation without core support while preserving ordinary abort', async () => {
+      vi.spyOn(mockAgent, '__supportsThreadSignalCancellation', 'get').mockReturnValue(false);
+      const cancel = vi.spyOn(mockAgent, 'cancelQueuedMessages');
+      const abort = vi.spyOn(mockAgent, 'abortThreadStream').mockReturnValue(true);
+      const params = {
+        mastra,
+        agentId: 'test-agent',
+        requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
+        threadId: 'legacy-core-thread',
+        signalIds: ['pending-input'],
+        abortSignal: new AbortController().signal,
+      };
+      await expect(CANCEL_AGENT_PENDING_SIGNALS_ROUTE.handler(params)).rejects.toMatchObject({ status: 501 });
+      await expect(ABORT_AGENT_THREAD_ROUTE.handler({ ...params, clearPendingSignals: true })).rejects.toMatchObject({
+        status: 501,
+      });
+      expect(cancel).not.toHaveBeenCalled();
+      expect(abort).not.toHaveBeenCalled();
+      await expect(ABORT_AGENT_THREAD_ROUTE.handler(params)).resolves.toEqual({ aborted: true });
+      await expect(ABORT_AGENT_THREAD_ROUTE.handler({ ...params, clearPendingSignals: false })).resolves.toEqual({
+        aborted: true,
+      });
+      expect(abort).toHaveBeenCalledTimes(2);
+    });
+
     it('validates bounded nonempty signal IDs before selective cancellation', () => {
       const body = { threadId: 'thread', signalIds: ['first', 'first', 'second'] };
       expect(cancelPendingAgentSignalsBodySchema.parse(body)).toEqual(body);
@@ -2864,8 +2941,8 @@ describe('Agent Routes Authorization', () => {
 
     it('cancels selected signals using the authenticated resource and thread scope', async () => {
       await mockMemory.createThread({ threadId: 'cancel-owned', resourceId: 'user-a', title: 'Owned' });
-      const cancelPendingSignals = vi
-        .spyOn(mockAgent, 'cancelPendingSignals')
+      const cancelQueuedMessages = vi
+        .spyOn(mockAgent, 'cancelQueuedMessages')
         .mockReturnValue({ cancelledSignalIds: ['first'] });
       const result = await CANCEL_AGENT_PENDING_SIGNALS_ROUTE.handler({
         mastra,
@@ -2877,7 +2954,7 @@ describe('Agent Routes Authorization', () => {
         signalIds: ['first', 'missing', 'first'],
       });
       expect(result).toEqual({ cancelledSignalIds: ['first'] });
-      expect(cancelPendingSignals).toHaveBeenCalledWith({
+      expect(cancelQueuedMessages).toHaveBeenCalledWith({
         resourceId: 'user-a',
         threadId: 'cancel-owned',
         signalIds: ['first', 'missing', 'first'],
@@ -2886,7 +2963,7 @@ describe('Agent Routes Authorization', () => {
 
     it('rejects cancellation on a thread belonging to another resource without mutating the queue', async () => {
       await mockMemory.createThread({ threadId: 'cancel-forbidden', resourceId: 'user-b', title: 'Other' });
-      const cancelPendingSignals = vi.spyOn(mockAgent, 'cancelPendingSignals');
+      const cancelQueuedMessages = vi.spyOn(mockAgent, 'cancelQueuedMessages');
       await expect(
         CANCEL_AGENT_PENDING_SIGNALS_ROUTE.handler({
           mastra,
@@ -2898,7 +2975,7 @@ describe('Agent Routes Authorization', () => {
           signalIds: ['first'],
         }),
       ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }));
-      expect(cancelPendingSignals).not.toHaveBeenCalled();
+      expect(cancelQueuedMessages).not.toHaveBeenCalled();
     });
 
     it('should reject subscribing to a thread owned by a different resource', async () => {
