@@ -5,7 +5,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { useIntakeBindingsQuery, useSaveIntakeBindingMutation } from '../../../../hooks/useIntakeConfig';
-import { isLinearTeamSourceId, LINEAR_TEAM_SOURCE_PREFIX } from '../../factory/services/linear';
+import { isLinearTeamSourceId, linearTeamSourceId } from '../../factory/services/linear';
 import type { LinearProject, LinearTeam } from '../../factory/services/linear';
 
 const UNROUTED = '__unrouted__';
@@ -27,11 +27,10 @@ export function LinearRouting({
   const bindings = bindingsQuery.data ?? [];
   const busy = saveBinding.isPending;
 
-  const teamById = new Map(teams.map(team => [team.id, team]));
+  const teamBySourceId = new Map(teams.map(team => [linearTeamSourceId(team), team]));
   const labelFor = (sourceId: string): string => {
     if (isLinearTeamSourceId(sourceId)) {
-      const teamId = sourceId.slice(LINEAR_TEAM_SOURCE_PREFIX.length);
-      const team = teamById.get(teamId);
+      const team = teamBySourceId.get(sourceId);
       return team ? `All issues in ${team.name}` : sourceId;
     }
     return projects.find(project => project.id === sourceId)?.name ?? sourceId;

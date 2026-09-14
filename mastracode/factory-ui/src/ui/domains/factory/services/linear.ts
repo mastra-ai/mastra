@@ -160,6 +160,10 @@ export interface LinearTeam {
   /** Short team key, e.g. `ENG`. */
   key: string;
   name: string;
+  /** Opaque backend-generated intake source id. */
+  sourceId?: string;
+  /** Present when a backend spans more than one Linear workspace. */
+  workspaceId?: string;
 }
 
 /** List the connected workspace's teams (Settings intake-source picker). */
@@ -169,14 +173,13 @@ export async function listLinearTeams(baseUrl: string): Promise<LinearTeam[]> {
 }
 
 /**
- * Intake source id for a whole Linear team. Mirrors the self-managed
- * integration's scheme (`linear-team:<teamId>`); a raw project id (no prefix)
- * is the source id for a single project, so the two never collide.
+ * Resolve the opaque intake source id for a whole Linear team. New backends
+ * provide it explicitly; the raw-id form preserves older self-managed DTOs.
  */
 export const LINEAR_TEAM_SOURCE_PREFIX = 'linear-team:';
 
-export function linearTeamSourceId(teamId: string): string {
-  return `${LINEAR_TEAM_SOURCE_PREFIX}${teamId}`;
+export function linearTeamSourceId(team: Pick<LinearTeam, 'id' | 'sourceId'>): string {
+  return team.sourceId ?? `${LINEAR_TEAM_SOURCE_PREFIX}${team.id}`;
 }
 
 export function isLinearTeamSourceId(sourceId: string): boolean {

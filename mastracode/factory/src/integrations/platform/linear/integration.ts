@@ -12,7 +12,11 @@ import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '.
 import { buildLinearAgentTools } from '../../linear/agent-tools.js';
 import type { LinearEventRules, LinearRuleOverrides } from '../../linear/default-rules.js';
 import { resolveLinearRules } from '../../linear/default-rules.js';
-import type { LinearConnectionCheck, LinearIntegration } from '../../linear/integration.js';
+import type {
+  LinearConnectionCheck,
+  LinearIntegration,
+  LinearIssueDetail as LinearRouteIssueDetail,
+} from '../../linear/integration.js';
 import { attachLinearIssueReconciler } from '../../linear/issue-reconciler.js';
 import {
   linearIssueReconciliationEnabled,
@@ -474,8 +478,52 @@ export class PlatformLinearIntegration implements FactoryIntegration {
     }));
   }
 
-  async listTeams(_accessToken: string): Promise<LinearTeam[]> {
-    return (await this.#listTeamSources()).map(({ team }) => team);
+  async listTeams(
+    _accessToken: string,
+  ): Promise<Array<LinearTeam & { workspaceId: string; sourceId: string }>> {
+    return (await this.#listTeamSources()).map(({ workspace, team }) => ({
+      ...team,
+      workspaceId: workspace.linearWorkspaceId,
+      sourceId: encodeTeamSourceId(workspace.linearWorkspaceId, team.id),
+    }));
+  }
+
+  async fetchIssueDetail(_accessToken: string, idOrIdentifier: string): Promise<LinearRouteIssueDetail | null> {
+    const located = await this.#findIssue(undefined, idOrIdentifier);
+    if (!located) return null;
+    const comments = await this.#loadComments(located.workspaceId, located.issue.id, located.issue.comments);
+    const issue = located.issue;
+    return {
+      id: issue.id,
+      projectId: issue.project?.id ?? null,
+      teamId: issue.team.id,
+      identifier: issue.identifier,
+      title: issue.title,
+      description: issue.description?.trim() ? issue.description : null,
+      url: issue.url,
+      state: issue.state.name,
+      stateType: issue.state.type,
+      priorityLabel: issue.priorityLabel,
+      assignee: issue.assignee?.displayName ?? issue.assignee?.name ?? null,
+      creator: issue.creator?.displayName ?? issue.creator?.name ?? null,
+      team: issue.team.key,
+      labels: issue.labels.map(label => label.name),
+      createdAt: issue.createdAt,
+      updatedAt: issue.updatedAt,
+      comments: comments.map(comment => ({
+        author: comment.user?.displayName ?? comment.user?.name ?? null,
+        body: comment.body,
+        createdAt: comment.createdAt,
+      })),
+    };
+  }
+
+  sourceMatchesIssue(
+    sourceId: string,
+    issue: Pick<LinearRouteIssueDetail, 'projectId' | 'teamId'>,
+  ): boolean {
+    const source = parseSourceId(sourceId);
+    return source.kind === 'team' ? issue.teamId === source.teamId : issue.projectId === source.projectId;
   }
 
   async #listProjectSources(): Promise<ProjectSource[]> {

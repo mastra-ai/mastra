@@ -29,7 +29,12 @@ const connectedStatus: LinearStatus = {
   reason: 'ready',
 };
 
-const engTeam = { id: 'team-eng', key: 'ENG', name: 'Engineering' };
+const engTeam = {
+  id: 'team-eng',
+  key: 'ENG',
+  name: 'Engineering',
+  sourceId: 'linear-team:opaque-eng',
+};
 const designTeam = { id: 'team-des', key: 'DES', name: 'Design' };
 
 const linearProjects: LinearProject[] = [
@@ -252,14 +257,14 @@ describe('IntakeSection', () => {
       await userEvent.click(await screen.findByRole('checkbox', { name: 'All issues in Engineering' }));
 
       await waitFor(() => expect(saved).toHaveLength(1));
-      expect(saved[0]!.linear.sourceIds).toEqual(['linear-team:team-eng']);
+      expect(saved[0]!.linear.sourceIds).toEqual(['linear-team:opaque-eng']);
     });
 
     it('marks projects under a selected team as redundant and disables them', async () => {
       useIntakeHandlers({
         config: {
           github: { enabled: true, sourceIds: null },
-          linear: { enabled: true, sourceIds: ['linear-team:team-eng'] },
+          linear: { enabled: true, sourceIds: ['linear-team:opaque-eng'] },
         },
       });
 

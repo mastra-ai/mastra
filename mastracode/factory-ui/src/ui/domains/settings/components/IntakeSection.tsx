@@ -273,7 +273,7 @@ function groupLinearSourcesByTeam(
     const existing = byTeam.get(teamId);
     if (existing) return existing;
     // The whole team is selectable as its own source, listed first in the group.
-    const teamSourceId = linearTeamSourceId(teamId);
+    const teamSourceId = linearTeamSourceId(teamById.get(teamId) ?? { id: teamId });
     const group: SourcePickerGroup = {
       id: teamId,
       label: teamName,
@@ -294,7 +294,7 @@ function groupLinearSourcesByTeam(
     for (const team of project.teams) {
       const group = ensureGroup(team.id, teamById.get(team.id)?.name ?? team.name);
       // A project is redundant when its whole team is already selected.
-      const teamSelected = selected.has(linearTeamSourceId(team.id));
+      const teamSelected = selected.has(linearTeamSourceId(teamById.get(team.id) ?? { id: team.id }));
       group.items.push({
         id: project.id,
         label: project.name,

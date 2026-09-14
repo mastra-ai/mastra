@@ -587,6 +587,9 @@ describe('PlatformLinearIntegration', () => {
       ]),
     );
     expect(routes.some(route => route.path === '/auth/linear/callback')).toBe(false);
+    const teamSourceId = `linear-team:${Buffer.from(
+      JSON.stringify({ workspaceId: 'workspace-1', teamId: 'team-1' }),
+    ).toString('base64url')}`;
     await expect(app.request('/web/linear/status').then(res => res.json())).resolves.toMatchObject({
       enabled: true,
       connected: true,
@@ -596,8 +599,14 @@ describe('PlatformLinearIntegration', () => {
     const teams = await app.request('/web/linear/teams');
     expect(teams.status).toBe(200);
     await expect(teams.json()).resolves.toEqual({
-      teams: [{ id: 'team-1', key: 'ENG', name: 'Engineering' }],
+      teams: [
+        {
+          id: 'team-1', key: 'ENG', name: 'Engineering',
+          workspaceId: 'workspace-1', sourceId: teamSourceId,
+        },
+      ],
     });
+    expect(integration.sourceMatchesIssue(teamSourceId, { projectId: null, teamId: 'team-1' })).toBe(true);
     const connect = await app.request('/auth/linear/connect');
     expect(connect.status).toBe(302);
     expect(connect.headers.get('location')).toBe('https://linear.app/oauth/authorize?state=abc');
@@ -619,6 +628,13 @@ describe('PlatformLinearIntegration', () => {
       if (url.endsWith('/workspaces')) return json({ workspaces: [workspace] });
       if (url.includes('/workspaces/workspace-1/projects?')) {
         return json({ projects: [project], pageInfo: { hasNextPage: false, endCursor: null } });
+      }
+      if (url.includes('/workspaces/workspace-1/issues/ENG-42?include=comments')) {
+        return json({
+          ...issue,
+          project: { id: 'project-1' },
+          comments: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } },
+        });
       }
       if (url.includes('/workspaces/workspace-1/issues?')) {
         return json({ issues: [issue], pageInfo: { hasNextPage: false, endCursor: null } });
@@ -683,6 +699,13 @@ describe('PlatformLinearIntegration', () => {
         issue: expect.objectContaining({ id: 'issue-1', identifier: 'ENG-42' }),
       }),
     );
+    const detail = await app.request(`/web/linear/issues/ENG-42?factoryProjectId=${projectRecord.id}`);
+    expect(detail.status).toBe(200);
+    await expect(detail.json()).resolves.toMatchObject({
+      identifier: 'ENG-42',
+      title: 'Fix intake',
+      description: 'Issue body',
+    });
   });
 
   it('defaults the integrations API URL and requires a platform credential', () => {

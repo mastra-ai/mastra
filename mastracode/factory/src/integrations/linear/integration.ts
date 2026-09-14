@@ -129,6 +129,8 @@ export interface LinearTeam {
   /** Short team key, e.g. `ENG`. */
   key: string;
   name: string;
+  /** Opaque intake source identifier. Optional on the wire for compatibility. */
+  sourceId?: string;
 }
 
 export interface LinearIssueComment {
@@ -852,7 +854,21 @@ export class LinearIntegration implements FactoryIntegration {
     const data = await linearGraphql<{
       teams: { nodes: Array<{ id: string; key: string; name: string }> };
     }>(accessToken, `query { teams(first: 100) { nodes { id key name } } }`);
-    return data.teams.nodes.map(team => ({ id: team.id, key: team.key, name: team.name }));
+    return data.teams.nodes.map(team => ({
+      id: team.id,
+      key: team.key,
+      name: team.name,
+      sourceId: encodeSelfManagedTeamSourceId(team.id),
+    }));
+  }
+
+  sourceMatchesIssue(
+    sourceId: string,
+    issue: Pick<LinearIssueDetail, 'projectId' | 'teamId'>,
+  ): boolean {
+    return isSelfManagedTeamSourceId(sourceId)
+      ? issue.teamId === decodeSelfManagedTeamSourceId(sourceId)
+      : issue.projectId === sourceId;
   }
 
   /**

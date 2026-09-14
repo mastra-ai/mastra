@@ -463,21 +463,12 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions): ApiRoute[]
         );
         if (routedSourceIds.length === 0) return c.json({ error: 'issue_not_found' }, 404);
 
-        // Split routed sources into project ids and team ids. An issue is
-        // visible if it belongs to a routed project, or (for team sources) if
-        // its team is routed — which also covers projectless team issues.
-        const routedProjectIds = new Set(routedSourceIds.filter(id => !id.startsWith('linear-team:')));
-        const routedTeamIds = new Set(
-          routedSourceIds.filter(id => id.startsWith('linear-team:')).map(id => id.slice('linear-team:'.length)),
-        );
-
         try {
           const accessToken = await linear.getFreshAccessToken(connection);
           const issue = await linear.fetchIssueDetail(accessToken, identifier);
-          const inRoutedProject = issue?.projectId != null && routedProjectIds.has(issue.projectId);
-          const inRoutedTeam = issue?.teamId != null && routedTeamIds.has(issue.teamId);
+          const isRouted = issue != null && routedSourceIds.some(sourceId => linear.sourceMatchesIssue(sourceId, issue));
           // Reads exactly like an issue that doesn't exist.
-          if (!issue || (!inRoutedProject && !inRoutedTeam)) {
+          if (!issue || !isRouted) {
             return c.json({ error: 'issue_not_found' }, 404);
           }
           return c.json({

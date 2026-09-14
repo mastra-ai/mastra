@@ -175,8 +175,8 @@ describe('LinearIntegration capability surface', () => {
     const linear = integration();
 
     await expect(linear.listTeams('linear-token')).resolves.toEqual([
-      { id: 'team-1', key: 'ENG', name: 'Engineering' },
-      { id: 'team-2', key: 'OPS', name: 'Operations' },
+      { id: 'team-1', key: 'ENG', name: 'Engineering', sourceId: 'linear-team:team-1' },
+      { id: 'team-2', key: 'OPS', name: 'Operations', sourceId: 'linear-team:team-2' },
     ]);
   });
 

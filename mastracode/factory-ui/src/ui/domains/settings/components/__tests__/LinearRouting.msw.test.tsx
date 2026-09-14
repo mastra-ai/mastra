@@ -15,7 +15,9 @@ import type { LinearProject, LinearTeam } from '../../../factory/services/linear
 import { LinearRouting } from '../LinearRouting';
 
 const projects: LinearProject[] = [{ id: 'proj-1', name: 'Releases', state: 'started', teams: [] }];
-const teams: LinearTeam[] = [{ id: 'team-1', key: 'ENG', name: 'Engineering' }];
+const teams: LinearTeam[] = [
+  { id: 'team-1', key: 'ENG', name: 'Engineering', sourceId: 'linear-team:opaque-team-1' },
+];
 const factories = [
   { id: 'fp-1', name: 'Acme' },
   { id: 'fp-2', name: 'Globex' },
@@ -110,7 +112,7 @@ describe('LinearRouting board target', () => {
   it('renders a team source with its friendly team label', async () => {
     stub([]);
     renderWithProviders(
-      <LinearRouting sourceIds={['linear-team:team-1']} projects={projects} teams={teams} factories={factories} />,
+      <LinearRouting sourceIds={['linear-team:opaque-team-1']} projects={projects} teams={teams} factories={factories} />,
     );
     await waitFor(() =>
       expect(screen.getByRole('combobox', { name: 'Factory for All issues in Engineering' })).toBeInTheDocument(),
