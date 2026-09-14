@@ -18,4 +18,4 @@ const mastra = new Mastra({ agents: { agent }, toolPolicy });
 
 Global policy applies to delegated and late-registered agents and registered direct tools. Native activation and execution checks preserve accepted schema input, cold resume state, and existing skill loading.
 
-Preserve native Controller approval and custom suspension targets when dependencies are unavailable. Add `ToolPolicyError` and retain its recovery fields in native server/client events. Saved declines and cancellation do not require permission to execute a tool.
+Preserve native Controller approval and custom suspension targets when dependencies are unavailable. Add `ToolPolicyError` and retain its recovery fields in native server/client events. Saved declines do not require permission to execute a tool.
