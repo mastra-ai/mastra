@@ -43,7 +43,9 @@ describe('JiraApiClient construction', () => {
 
 describe('JiraApiClient requests', () => {
   it('lists projects with Basic auth and classic paging params', async () => {
-    const fetchMock = stubFetch(jsonResponse({ values: [{ id: '1', key: 'ENG', name: 'Eng' }], startAt: 0, isLast: true }));
+    const fetchMock = stubFetch(
+      jsonResponse({ values: [{ id: '1', key: 'ENG', name: 'Eng' }], startAt: 0, isLast: true }),
+    );
 
     const page = await client().listProjects({ startAt: 50 });
 
@@ -151,7 +153,9 @@ describe('JiraApiClient requests', () => {
     const fetchMock = vi.fn(async (_url: URL, init?: RequestInit) =>
       init?.method === 'POST'
         ? new Response(null, { status: 204 })
-        : jsonResponse({ transitions: [{ id: '31', name: 'Done', to: { name: 'Done', statusCategory: { key: 'done' } } }] }),
+        : jsonResponse({
+            transitions: [{ id: '31', name: 'Done', to: { name: 'Done', statusCategory: { key: 'done' } } }],
+          }),
     );
     vi.stubGlobal('fetch', fetchMock);
     const jira = client();

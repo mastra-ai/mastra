@@ -119,9 +119,7 @@ describe('PlatformJiraIntegration discovery', () => {
 
     await expect(integration().listConnections()).resolves.toEqual(connections);
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(String(fetchMock.mock.calls[0]?.[0])).toBe(
-      `${PLATFORM_BASE}/v2/connections?providerKey=factory-jira`,
-    );
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe(`${PLATFORM_BASE}/v2/connections?providerKey=factory-jira`);
   });
 
   it('reports active connections only when a discovered connection is active', async () => {
@@ -138,9 +136,7 @@ describe('PlatformJiraIntegration discovery', () => {
     } satisfies Partial<JiraApiError>);
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(String(fetchMock.mock.calls[0]?.[0])).toBe(
-      `${PLATFORM_BASE}/v2/connections?providerKey=factory-jira`,
-    );
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe(`${PLATFORM_BASE}/v2/connections?providerKey=factory-jira`);
     expect(String(fetchMock.mock.calls[1]?.[0])).toBe(`${PLATFORM_BASE}/v2/connections/a1b_acme/context`);
   });
 });

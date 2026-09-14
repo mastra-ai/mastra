@@ -118,7 +118,11 @@ describe('status route', () => {
 
   it('requires an organization', async () => {
     const res = await buildApp({ workosId: 'u1' }).request('/web/jira/status');
-    expect(await res.json()).toMatchObject({ enabled: true, organizationRequired: true, reason: 'organization_required' });
+    expect(await res.json()).toMatchObject({
+      enabled: true,
+      organizationRequired: true,
+      reason: 'organization_required',
+    });
   });
 
   it('401s unauthenticated users when enabled', async () => {
