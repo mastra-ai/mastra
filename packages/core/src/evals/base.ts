@@ -85,6 +85,8 @@ export interface ScorerJudgeConfig {
    * Defaults to automatic capability-based routing.
    */
   jsonPromptInjection?: boolean | 'system' | 'inline' | 'auto';
+  /** @internal Injection placement for the format-error retry; leaves the initial request unchanged. */
+  fallbackJsonPromptInjection?: 'system' | 'inline';
   /** Optional tools the judge agent may call while evaluating (e.g. readonly verification tools). */
   tools?: ToolsInput;
   /** Optional memory instance for the internal judge agent. */
@@ -1372,6 +1374,8 @@ class MastraScorer<
     const instructions = originalStep.judge?.instructions ?? this.config.judge?.instructions;
     const jsonPromptInjection =
       originalStep.judge?.jsonPromptInjection ?? this.config.judge?.jsonPromptInjection ?? 'auto';
+    const fallbackJsonPromptInjection =
+      originalStep.judge?.fallbackJsonPromptInjection ?? this.config.judge?.fallbackJsonPromptInjection;
     // Step-level tools override scorer-level tools. When present, the judge agent
     // can call them (in its own tool-call loop) before producing the step output.
     const tools = originalStep.judge?.tools ?? this.config.judge?.tools;
@@ -1655,6 +1659,7 @@ class MastraScorer<
         let result;
         if (isSupportedLanguageModel(resolvedModel)) {
           result = await tryStreamWithJsonFallback(judge, prompt, {
+            fallbackJsonPromptInjection,
             structuredOutput: {
               schema: z.object({ score: z.number() }),
               jsonPromptInjection,
@@ -1712,6 +1717,7 @@ class MastraScorer<
         if (isSupportedLanguageModel(resolvedModel)) {
           // Use type assertion to any to bypass complex type checking - runtime schema is validated by toStandardSchema
           result = await tryStreamWithJsonFallback(judge, prompt, {
+            fallbackJsonPromptInjection,
             structuredOutput: {
               schema: standardSchema as any,
               jsonPromptInjection,

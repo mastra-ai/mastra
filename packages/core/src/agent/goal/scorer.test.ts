@@ -1,6 +1,7 @@
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
+import { createScorer } from '../../evals/base';
 import { createMockModel } from '../../test-utils/llm-mock';
 import { createTool } from '../../tools';
 import type { MastraDBMessage, MastraMessageContentV2 } from '../message-list';
@@ -172,7 +173,7 @@ describe('createGoalScorer tool support', () => {
 
 describe('createGoalScorer native structured output', () => {
   it.each([undefined, 'Custom judge prompt.'])(
-    'requests a JSON verdict without disabling native output (prompt: %s)',
+    'keeps native output on the first attempt without handwritten JSON instructions (prompt: %s)',
     async prompt => {
       const model = new MockLanguageModelV2({
         provider: 'crof',
@@ -204,11 +205,132 @@ describe('createGoalScorer native structured output', () => {
       const request = stream.mock.calls[0]![0];
       expect(request.responseFormat).toMatchObject({ type: 'json', schema: { required: ['decision', 'reason'] } });
       const userMessage = request.prompt.findLast(message => message.role === 'user');
-      expect(userMessage?.content).toMatchObject([
-        { type: 'text', text: expect.stringContaining('Return your final verdict as a JSON object') },
-      ]);
-      expect(JSON.stringify(userMessage?.content)).toContain('Do not include Markdown');
+      expect(JSON.stringify(userMessage?.content)).not.toContain('Return your final verdict as a JSON object');
+      expect(JSON.stringify(request.prompt)).not.toContain('Return your response as JSON matching this schema');
       expect(scorer.config.judge?.instructions).toBe(prompt ?? DEFAULT_GOAL_JUDGE_PROMPT);
+    },
+  );
+});
+
+describe('goal-only JSON fallback placement', () => {
+  const instruction = 'Return your response as JSON matching this schema';
+
+  it.each([
+    { goal: true, withTools: false },
+    { goal: true, withTools: true },
+    { goal: false, withTools: false },
+    { goal: false, withTools: true },
+  ])('keeps native first and scopes inline fallback (goal: $goal, tools: $withTools)', async ({ goal, withTools }) => {
+    let calls = 0;
+    const attemptLength = withTools ? 2 : 1;
+    const model = new MockLanguageModelV2({
+      provider: 'crof',
+      modelId: 'glm-5.3-flash',
+      doStream: async () => {
+        calls++;
+        const toolCall = withTools && calls % 2 === 1;
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            ...(toolCall
+              ? [
+                  {
+                    type: 'tool-call' as const,
+                    toolCallId: `view-${calls}`,
+                    toolName: 'view',
+                    input: '{"path":"README.md"}',
+                  },
+                ]
+              : [
+                  { type: 'text-start' as const, id: 'verdict' },
+                  {
+                    type: 'text-delta' as const,
+                    id: 'verdict',
+                    delta:
+                      calls <= attemptLength
+                        ? '**Decision: continue**\nTests have not run.'
+                        : JSON.stringify({ decision: 'continue', reason: 'Tests have not run.' }),
+                  },
+                  { type: 'text-end' as const, id: 'verdict' },
+                ]),
+            {
+              type: 'finish',
+              finishReason: toolCall ? 'tool-calls' : 'stop',
+              usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 },
+            },
+          ]),
+        };
+      },
+    });
+    const stream = vi.spyOn(model, 'doStream');
+    const tools = withTools ? { view: viewTool } : undefined;
+    const scorer = goal
+      ? createGoalScorer({ judgeModel: model, prompt: 'Custom judge prompt.', tools })
+      : createScorer({
+          id: 'ordinary-scorer',
+          description: 'Review documentation',
+          judge: { model, instructions: 'Custom judge prompt.', tools },
+        })
+          .analyze({
+            description: 'Review the work',
+            outputSchema: z.object({ decision: z.enum(['done', 'continue', 'waiting']), reason: z.string() }),
+            createPrompt: () => 'Review the documentation and tests.',
+          })
+          .generateScore(() => 0);
+
+    const result = await scorer.run({
+      input: { originalTask: 'Update documentation and run tests.', currentText: 'Documentation is updated.' },
+      output: 'Documentation is updated.',
+    });
+    expect(result.score).toBe(0);
+    expect(stream).toHaveBeenCalledTimes(attemptLength * 2);
+    for (const [request] of stream.mock.calls.slice(0, attemptLength)) {
+      expect(request.responseFormat).toMatchObject({ type: 'json' });
+      expect(JSON.stringify(request.prompt)).not.toContain(instruction);
+      expect(JSON.stringify(request.prompt)).not.toContain('Return your final verdict as a JSON object');
+    }
+    for (const [request] of stream.mock.calls.slice(attemptLength)) {
+      expect(request.responseFormat).toBeUndefined();
+      const user = request.prompt.findLast(message => message.role === 'user');
+      const system = request.prompt.filter(message => message.role === 'system');
+      expect(JSON.stringify(user)).toContain(goal ? instruction : 'Review the documentation');
+      if (goal) {
+        expect(JSON.stringify(system)).not.toContain('JSON schema:');
+        expect(JSON.stringify(system)).not.toContain(instruction);
+      } else {
+        expect(JSON.stringify(user)).not.toContain(instruction);
+        expect(JSON.stringify(system)).toContain(
+          'You MUST answer with a JSON object that matches the JSON schema above.',
+        );
+      }
+    }
+    if (withTools) {
+      expect(stream.mock.calls.at(-1)![0].prompt.some(message => message.role === 'tool')).toBe(true);
+    }
+  });
+
+  it.each(['**Decision: done**', '{"decision":"invalid","reason":"because"}'])(
+    'rejects invalid fallback output without inventing a verdict: %s',
+    async text => {
+      const model = new MockLanguageModelV2({
+        provider: 'crof',
+        modelId: 'glm-5.3-flash',
+        doStream: async () => ({
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'text-start', id: 'verdict' },
+            { type: 'text-delta', id: 'verdict', delta: text },
+            { type: 'text-end', id: 'verdict' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 } },
+          ]),
+        }),
+      });
+      const stream = vi.spyOn(model, 'doStream');
+      const scorer = createGoalScorer({ judgeModel: model });
+      await expect(scorer.run({ input: 'Update docs', output: 'Done' })).rejects.toThrow(
+        'Structured output validation failed',
+      );
+      expect(stream).toHaveBeenCalledTimes(2);
     },
   );
 });
