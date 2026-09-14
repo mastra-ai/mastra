@@ -155,7 +155,7 @@ jobs:
             || true)
 
           if [ -z "$CHANGED" ]; then
-            echo "No source file changes found — skipping unit and E2E test selection."
+            echo "No source file changes found — skipping module-graph test selection."
             printf '{"affectedTests":[],"count":0,"testFiles":1}\n' > /tmp/affected.json
           else
             echo "Changed source files:"
@@ -168,11 +168,44 @@ jobs:
           # Parse results, split unit/E2E files, and compute downstream gates.
           node <<'NODE'
           const fs = require('fs');
+          const { execFileSync } = require('child_process');
+          const {
+            discoverWorkspacePackages,
+            selectWorkspacePackages,
+            testsForChangedPackageManifests,
+          } = require('./.github/scripts/ci-routing.cjs');
           const data = JSON.parse(fs.readFileSync('/tmp/affected.json', 'utf-8'));
           const changedFiles = fs.readFileSync('/tmp/changed-files.txt', 'utf-8').split(/\r?\n/).filter(Boolean);
           const nonMarkdownChangedFiles = changedFiles.filter(file => !file.endsWith('.md'));
-          const affectedTests = (data.affectedTests || []).sort();
-          const count = data.count || 0;
+          const repoTestFiles = execFileSync(
+            'git',
+            [
+              'ls-files',
+              '*.test.ts',
+              '**/*.test.ts',
+              '*.test.tsx',
+              '**/*.test.tsx',
+              '*.spec.ts',
+              '**/*.spec.ts',
+              '*.spec.tsx',
+              '**/*.spec.tsx',
+              '*.test-d.ts',
+              '**/*.test-d.ts',
+              '*.test-d.tsx',
+              '**/*.test-d.tsx',
+              '*.spec-d.ts',
+              '**/*.spec-d.ts',
+              '*.spec-d.tsx',
+              '**/*.spec-d.tsx',
+            ],
+            { encoding: 'utf8' },
+          )
+            .split(/\r?\n/)
+            .filter(Boolean);
+          const affectedTests = [
+            ...new Set([...(data.affectedTests || []), ...testsForChangedPackageManifests(changedFiles, repoTestFiles)]),
+          ].sort();
+          const count = affectedTests.length;
           const total = data.testFiles || 1;
           const ratio = count / total;
           const hasChangedSource = changedFiles.some(file => /\/src\/.*\.(ts|tsx)$/.test(file) && !/__fixtures__|\/fixtures\//.test(file));
@@ -200,10 +233,6 @@ jobs:
           const affectedStoreTests = affected(file => file.startsWith('stores/'));
           const affectedWorkspaceTests = affected(file => file.startsWith('workspaces/'));
           const affectedMemoryTests = affected(file => file.startsWith('packages/memory/integration-tests/'));
-          const {
-            discoverWorkspacePackages,
-            selectWorkspacePackages,
-          } = require('./.github/scripts/ci-routing.cjs');
           const workspaceSelection = selectWorkspacePackages({
             affectedTests,
             changedFiles,

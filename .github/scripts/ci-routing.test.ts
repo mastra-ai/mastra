@@ -5,8 +5,13 @@ import { discoverPackages } from './check-package-readmes.mjs';
 import { describe, expect, test } from 'vitest';
 import routing from './ci-routing.cjs';
 
-const { discoverWorkspacePackages, qualityAssuranceInputs, selectWorkspacePackages, validateWorkspacePackages } =
-  routing;
+const {
+  discoverWorkspacePackages,
+  qualityAssuranceInputs,
+  selectWorkspacePackages,
+  testsForChangedPackageManifests,
+  validateWorkspacePackages,
+} = routing;
 const majorVersionWorkflow = readFileSync(new URL('../workflows/major-version-check.yml', import.meta.url), 'utf8');
 const prebuildWorkflow = readFileSync(new URL('../workflows/prebuild.yml', import.meta.url), 'utf8');
 const workspaceCloudWorkflow = readFileSync(
@@ -254,6 +259,65 @@ describe('workspace cloud workflow routing', () => {
     expect(workspaceCloudWorkflow).toContain('DIFF_RANGE="origin/main...$HEAD_SHA"');
     expect(workspaceCloudWorkflow).not.toMatch(/DIFF_RANGE=.*ARTIFACT_(?:BASE|HEAD)_SHA/);
     expect(workspaceCloudWorkflow).not.toMatch(/git ls-tree[^\n]*ARTIFACT_HEAD_SHA/);
+  });
+});
+
+describe('package.json dependency-bump unit test routing', () => {
+  const arizeTests = ['observability/arize/src/tracing.config.test.ts', 'observability/arize/src/tracing.test.ts'];
+  const otherTests = [
+    'packages/core/src/agent/agent.test.ts',
+    'docs/src/ignored.test.ts',
+    'examples/agent/src/example.test.ts',
+    'observability/arize/src/__fixtures__/skip.test.ts',
+  ];
+  const inventory = [...arizeTests, ...otherTests];
+
+  test('maps a workspace package.json bump to that package own tests (#20950 / #19783 shape)', () => {
+    expect(
+      testsForChangedPackageManifests(
+        ['observability/arize/package.json', 'pnpm-lock.yaml', '.changeset/arize-bump.md'],
+        inventory,
+      ),
+    ).toEqual(arizeTests);
+  });
+
+  test('does not select tests for lockfile, changeset, or root package.json only', () => {
+    expect(testsForChangedPackageManifests(['pnpm-lock.yaml', '.changeset/x.md'], inventory)).toEqual([]);
+    expect(testsForChangedPackageManifests(['package.json', 'pnpm-lock.yaml'], inventory)).toEqual([]);
+  });
+
+  test('ignores docs, examples, explorations, and prefix-overlapping package names', () => {
+    expect(testsForChangedPackageManifests(['docs/package.json'], inventory)).toEqual([]);
+    expect(testsForChangedPackageManifests(['examples/agent/package.json'], inventory)).toEqual([]);
+    expect(
+      testsForChangedPackageManifests(
+        ['observability/arize/package.json'],
+        [...inventory, 'observability/arize-extra/src/extra.test.ts'],
+      ),
+    ).toEqual(arizeTests);
+  });
+
+  test('unions tests from multiple changed package manifests', () => {
+    expect(
+      testsForChangedPackageManifests(['observability/arize/package.json', 'packages/core/package.json'], inventory),
+    ).toEqual([
+      'observability/arize/src/tracing.config.test.ts',
+      'observability/arize/src/tracing.test.ts',
+      'packages/core/src/agent/agent.test.ts',
+    ]);
+  });
+
+  test.each([undefined, [123], 'observability/arize/package.json'])(
+    'returns no tests when changed files are malformed: %j',
+    changedFiles => {
+      expect(testsForChangedPackageManifests(changedFiles, inventory)).toEqual([]);
+    },
+  );
+
+  test('wires package-manifest tests into prebuild affected-test selection without a full suite on lockfile', () => {
+    expect(prebuildWorkflow).toContain("grep -E '/src/.*\\.(ts|tsx)$'");
+    expect(prebuildWorkflow).toContain('testsForChangedPackageManifests(changedFiles, repoTestFiles)');
+    expect(prebuildWorkflow).toContain('const runFull = hasChangedSource && ratio > 0.5;');
   });
 });
 

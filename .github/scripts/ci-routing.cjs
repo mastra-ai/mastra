@@ -198,9 +198,60 @@ function qualityAssuranceInputs(changedFiles, packageReadmePaths = []) {
   };
 }
 
+const IGNORED_MANIFEST_PREFIXES = ['docs/', 'examples/', 'explorations/'];
+const TEST_FILE_RE = /\.(?:test|spec)(?:-d)?\.tsx?$/;
+
+function packageDirFromChangedManifest(file) {
+  if (typeof file !== 'string') {
+    return null;
+  }
+
+  if (file === 'package.json' || !file.endsWith('/package.json')) {
+    return null;
+  }
+
+  if (file.includes('/node_modules/') || IGNORED_MANIFEST_PREFIXES.some(prefix => file.startsWith(prefix))) {
+    return null;
+  }
+
+  return file.slice(0, -'package.json'.length);
+}
+
+function testsForChangedPackageManifests(changedFiles, testFiles) {
+  if (!Array.isArray(changedFiles) || !Array.isArray(testFiles)) {
+    return [];
+  }
+
+  const dirs = changedFiles.flatMap(file => {
+    const dir = packageDirFromChangedManifest(file);
+    return dir ? [dir] : [];
+  });
+
+  if (dirs.length === 0) {
+    return [];
+  }
+
+  return [
+    ...new Set(
+      testFiles.filter(testFile => {
+        if (typeof testFile !== 'string' || !TEST_FILE_RE.test(testFile)) {
+          return false;
+        }
+
+        if (testFile.includes('__fixtures__') || testFile.includes('/fixtures/')) {
+          return false;
+        }
+
+        return dirs.some(dir => testFile.startsWith(dir));
+      }),
+    ),
+  ].sort();
+}
+
 module.exports = {
   discoverWorkspacePackages,
   qualityAssuranceInputs,
   selectWorkspacePackages,
+  testsForChangedPackageManifests,
   validateWorkspacePackages,
 };
