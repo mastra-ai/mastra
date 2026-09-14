@@ -181,7 +181,6 @@ describe('LinearIntegration capability surface', () => {
     ]);
   });
 
-
   it('follows team pagination cursors for the complete source catalog', async () => {
     const fetchMock = vi
       .fn()
@@ -250,7 +249,14 @@ describe('LinearIntegration capability surface', () => {
     const teamSourceId = `linear-team:team-1`;
     const secondTeamSourceId = `linear-team:team-2`;
     const overlapping: LinearIssue = { ...issue, id: 'issue-1', projectId: 'project-1' };
-    const projectlessTeamIssue: LinearIssue = { ...issue, id: 'issue-2', identifier: 'OPS-99', projectId: null, teamId: 'team-2', team: 'OPS' };
+    const projectlessTeamIssue: LinearIssue = {
+      ...issue,
+      id: 'issue-2',
+      identifier: 'OPS-99',
+      projectId: null,
+      teamId: 'team-2',
+      team: 'OPS',
+    };
 
     const listActiveIssues = vi
       .spyOn(linear, 'listActiveIssues')
@@ -267,7 +273,10 @@ describe('LinearIntegration capability surface', () => {
     // Project call: projectIds=['project-1'], no teamIds.
     expect(listActiveIssues).toHaveBeenNthCalledWith(1, 'linear-token', undefined, ['project-1'], undefined);
     // Team call: no projectIds, teamIds=['team-1'].
-    expect(listActiveIssues).toHaveBeenNthCalledWith(2, 'linear-token', undefined, undefined, undefined, ['team-1', 'team-2']);
+    expect(listActiveIssues).toHaveBeenNthCalledWith(2, 'linear-token', undefined, undefined, undefined, [
+      'team-1',
+      'team-2',
+    ]);
 
     // issue-1 appears once, attributed to the project source; issue-2 kept via team.
     expect(result.issues).toHaveLength(2);
@@ -298,13 +307,7 @@ describe('LinearIntegration capability surface', () => {
       sourceIds: [teamSourceId],
     });
 
-    expect(listActiveIssues).toHaveBeenCalledWith(
-      'linear-token',
-      undefined,
-      undefined,
-      undefined,
-      ['team-1'],
-    );
+    expect(listActiveIssues).toHaveBeenCalledWith('linear-token', undefined, undefined, undefined, ['team-1']);
     expect(result.items).toEqual([
       expect.objectContaining({ sourceId: teamSourceId, source: expect.objectContaining({ externalId: 'issue-2' }) }),
     ]);
@@ -330,6 +333,25 @@ describe('LinearIntegration capability surface', () => {
     expect(result.nextCursor).not.toBeNull();
   });
 
+  it('uses complete attribution while fetching only the routed team source', async () => {
+    const linear = integration();
+    const teamSourceId = 'linear-team:team-1';
+    const overlapping: LinearIssue = { ...issue, projectId: 'project-1', teamId: 'team-1' };
+    const listActiveIssues = vi
+      .spyOn(linear, 'listActiveIssues')
+      .mockResolvedValue({ issues: [overlapping], nextCursor: null });
+
+    const result = await linear.intake.listIssues({
+      connection,
+      sourceIds: [teamSourceId],
+      attributionSourceIds: ['project-1', teamSourceId],
+    });
+
+    expect(listActiveIssues).toHaveBeenCalledTimes(1);
+    expect(listActiveIssues).toHaveBeenCalledWith('linear-token', undefined, undefined, undefined, ['team-1']);
+    expect(result.issues).toEqual([]);
+  });
+
   it('keeps one project query while binding its cursor to the selected sources', async () => {
     const linear = integration();
     const listActiveIssues = vi
@@ -344,7 +366,13 @@ describe('LinearIntegration capability surface', () => {
       cursor: first.nextCursor!,
     });
 
-    expect(listActiveIssues).toHaveBeenNthCalledWith(1, 'linear-token', undefined, ['project-1', 'project-2'], undefined);
+    expect(listActiveIssues).toHaveBeenNthCalledWith(
+      1,
+      'linear-token',
+      undefined,
+      ['project-1', 'project-2'],
+      undefined,
+    );
     expect(listActiveIssues).toHaveBeenNthCalledWith(2, 'linear-token', 'next', ['project-1', 'project-2'], undefined);
     expect(first.nextCursor).toEqual(expect.any(String));
     expect(second.nextCursor).toBeNull();
@@ -353,6 +381,14 @@ describe('LinearIntegration capability surface', () => {
       linear.intake.listIssues({
         connection,
         sourceIds: ['project-1', 'project-3'],
+        cursor: first.nextCursor!,
+      }),
+    ).rejects.toMatchObject({ code: 'invalid_cursor' });
+    await expect(
+      linear.intake.listIssues({
+        connection,
+        sourceIds: ['project-1', 'project-2'],
+        attributionSourceIds: ['project-1', 'project-2', 'project-3'],
         cursor: first.nextCursor!,
       }),
     ).rejects.toMatchObject({ code: 'invalid_cursor' });

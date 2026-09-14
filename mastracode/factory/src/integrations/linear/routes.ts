@@ -156,7 +156,6 @@ function winningLinearSourceId(
   return matching.find(sourceId => !sourceId.startsWith('linear-team:')) ?? matching[0] ?? null;
 }
 
-
 /** Map a Linear read failure to the API response for the SPA. */
 function linearFetchError(c: RouteContext, err: unknown) {
   if ((err as { code?: unknown }).code === 'invalid_cursor') {
@@ -400,7 +399,8 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions): ApiRoute[]
           const accessToken = await linear.getFreshAccessToken(connection);
           const { issues, nextCursor } = await linear.intake.listIssues({
             connection: { type: 'oauth', accessToken },
-            sourceIds: selectedIds,
+            sourceIds: routedSourceIds,
+            attributionSourceIds: selectedIds,
             cursor: after,
           });
           // Source precedence must be resolved against the complete selection,

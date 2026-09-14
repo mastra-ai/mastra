@@ -710,8 +710,9 @@ export class LinearIntegration implements FactoryIntegration {
   async #listIntakeIssues(input: ListIntakeIssuesInput): Promise<{ issues: IntakeIssue[]; nextCursor: string | null }> {
     const accessToken = getLinearAccessToken(input.connection);
     if (input.sourceIds.length === 0) return { issues: [], nextCursor: null };
+    const attributionSourceIds = input.attributionSourceIds ?? input.sourceIds;
     const { projectIds, teamIds } = splitSelfManagedSourceIds(input.sourceIds);
-    const cursors = decodeSelfManagedListCursor(input.cursor, input.sourceIds);
+    const cursors = decodeSelfManagedListCursor(input.cursor, input.sourceIds, attributionSourceIds);
 
     // Project-only intake still uses one Linear query, but its provider cursor
     // is wrapped so a later source-selection change cannot reinterpret it.
@@ -720,7 +721,11 @@ export class LinearIntegration implements FactoryIntegration {
       const result = await this.listActiveIssues(accessToken, cursors.projects, projectIds, input.labels);
       return {
         issues: result.issues.map(issue => linearIssueToIntakeIssue(issue)),
-        nextCursor: encodeSelfManagedListCursor({ projects: result.nextCursor, teams: null }, input.sourceIds),
+        nextCursor: encodeSelfManagedListCursor(
+          { projects: result.nextCursor, teams: null },
+          input.sourceIds,
+          attributionSourceIds,
+        ),
       };
     }
 
@@ -742,7 +747,7 @@ export class LinearIntegration implements FactoryIntegration {
     // reconciled by the dedupe step below (project wins).
     const projectIssues = projectResult.issues.map(issue => linearIssueToIntakeIssue(issue));
     const selectedTeamSourceById = new Map(teamIds.map(teamId => [teamId, encodeSelfManagedTeamSourceId(teamId)]));
-    const selectedProjectIds = new Set(projectIds);
+    const selectedProjectIds = new Set(splitSelfManagedSourceIds(attributionSourceIds).projectIds);
     const teamIssues = teamResult.issues
       .filter(issue => issue.projectId === null || !selectedProjectIds.has(issue.projectId))
       .map(issue => {
@@ -757,6 +762,7 @@ export class LinearIntegration implements FactoryIntegration {
       nextCursor: encodeSelfManagedListCursor(
         { projects: projectResult.nextCursor, teams: teamResult.nextCursor },
         input.sourceIds,
+        attributionSourceIds,
       ),
     };
   }
@@ -883,10 +889,7 @@ export class LinearIntegration implements FactoryIntegration {
     }));
   }
 
-  sourceMatchesIssue(
-    sourceId: string,
-    issue: Pick<LinearIssueDetail, 'projectId' | 'teamId'>,
-  ): boolean {
+  sourceMatchesIssue(sourceId: string, issue: Pick<LinearIssueDetail, 'projectId' | 'teamId'>): boolean {
     return isSelfManagedTeamSourceId(sourceId)
       ? issue.teamId === decodeSelfManagedTeamSourceId(sourceId)
       : issue.projectId === sourceId;
@@ -1211,9 +1214,12 @@ type SelfManagedListCursor = {
   teams: string | null;
 };
 
-function linearSourceSetFingerprint(sourceIds: string[]): string {
-  const canonical = [...new Set(sourceIds)].sort();
-  return createHash('sha256').update(JSON.stringify(canonical)).digest('base64url');
+function linearSourceSetFingerprint(sourceIds: string[], attributionSourceIds: string[]): string {
+  const scope = {
+    sourceIds: [...new Set(sourceIds)].sort(),
+    attributionSourceIds: [...new Set(attributionSourceIds)].sort(),
+  };
+  return createHash('sha256').update(JSON.stringify(scope)).digest('base64url');
 }
 
 function invalidLinearCursor(): Error {
@@ -1227,6 +1233,7 @@ function isCursorValue(value: unknown): value is string | null {
 function decodeSelfManagedListCursor(
   cursor: string | undefined,
   sourceIds: string[],
+  attributionSourceIds: string[],
 ): { projects: string | null | undefined; teams: string | null | undefined } {
   const { projectIds, teamIds } = splitSelfManagedSourceIds(sourceIds);
   if (!cursor) {
@@ -1239,7 +1246,7 @@ function decodeSelfManagedListCursor(
     const parsed = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) as Partial<SelfManagedListCursor>;
     if (
       parsed.v !== 1 ||
-      parsed.sourceSet !== linearSourceSetFingerprint(sourceIds) ||
+      parsed.sourceSet !== linearSourceSetFingerprint(sourceIds, attributionSourceIds) ||
       !isCursorValue(parsed.projects) ||
       !isCursorValue(parsed.teams)
     ) {
@@ -1257,10 +1264,15 @@ function decodeSelfManagedListCursor(
 function encodeSelfManagedListCursor(
   state: Pick<SelfManagedListCursor, 'projects' | 'teams'>,
   sourceIds: string[],
+  attributionSourceIds: string[],
 ): string | null {
   if (state.projects === null && state.teams === null) return null;
   return Buffer.from(
-    JSON.stringify({ v: 1, sourceSet: linearSourceSetFingerprint(sourceIds), ...state } satisfies SelfManagedListCursor),
+    JSON.stringify({
+      v: 1,
+      sourceSet: linearSourceSetFingerprint(sourceIds, attributionSourceIds),
+      ...state,
+    } satisfies SelfManagedListCursor),
   ).toString('base64url');
 }
 

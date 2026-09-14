@@ -152,8 +152,8 @@ export class PlatformLinearIntegration implements FactoryIntegration {
       }));
       return [...projects, ...teams];
     },
-    listItems: async ({ sourceIds, cursor }) => {
-      const result = await this.#listIssues(sourceIds, cursor);
+    listItems: async ({ sourceIds, attributionSourceIds, cursor }) => {
+      const result = await this.#listIssues(sourceIds, cursor, undefined, attributionSourceIds);
       return {
         items: result.issues.map(({ issue, sourceId, workspace }) => ({
           source: { type: 'issue', externalId: issue.id, url: issue.url },
@@ -176,9 +176,9 @@ export class PlatformLinearIntegration implements FactoryIntegration {
         nextCursor: result.nextCursor,
       };
     },
-    listIssues: async ({ connection, sourceIds, labels, cursor }) => {
+    listIssues: async ({ connection, sourceIds, attributionSourceIds, labels, cursor }) => {
       requireLinearConnection(connection);
-      const result = await this.#listIssues(sourceIds, cursor, labels);
+      const result = await this.#listIssues(sourceIds, cursor, labels, attributionSourceIds);
       return {
         issues: result.issues.map(({ issue, sourceId }) => ({
           ...parseIssue(issue),
@@ -479,9 +479,7 @@ export class PlatformLinearIntegration implements FactoryIntegration {
     }));
   }
 
-  async listTeams(
-    _accessToken: string,
-  ): Promise<Array<LinearTeam & { workspaceId: string; sourceId: string }>> {
+  async listTeams(_accessToken: string): Promise<Array<LinearTeam & { workspaceId: string; sourceId: string }>> {
     return (await this.#listTeamSources()).map(({ workspace, team }) => ({
       ...team,
       workspaceId: workspace.linearWorkspaceId,
@@ -589,7 +587,7 @@ export class PlatformLinearIntegration implements FactoryIntegration {
     return result.workspaces.filter(workspace => workspace.connected);
   }
 
-  async #listIssues(sourceIds: string[], cursor?: string, labels?: string[]) {
+  async #listIssues(sourceIds: string[], cursor?: string, labels?: string[], attributionSourceIds = sourceIds) {
     type ListedIssue = { issue: LinearIssue; sourceId: string; workspace: LinearWorkspace };
     if (sourceIds.length === 0) return { issues: [] as ListedIssue[], nextCursor: null };
 
@@ -618,6 +616,13 @@ export class PlatformLinearIntegration implements FactoryIntegration {
     };
     const descriptors: Descriptor[] = [];
     const selectedProjectIdsByWorkspace = new Map<string, Set<string>>();
+    for (const attributionSourceId of attributionSourceIds) {
+      const source = parseSourceId(attributionSourceId);
+      if (source.kind !== 'project') continue;
+      const selectedProjectIds = selectedProjectIdsByWorkspace.get(source.workspaceId) ?? new Set<string>();
+      selectedProjectIds.add(source.projectId);
+      selectedProjectIdsByWorkspace.set(source.workspaceId, selectedProjectIds);
+    }
     for (const sourceId of sourceIds) {
       const projectSource = projectMap.get(sourceId);
       if (projectSource) {
@@ -646,7 +651,7 @@ export class PlatformLinearIntegration implements FactoryIntegration {
       }
     }
 
-    const cursors = decodeCursor(cursor, sourceIds);
+    const cursors = decodeCursor(cursor, sourceIds, attributionSourceIds);
     const normalizedLabels = normalizeLabels(labels);
     const nextState: Record<string, string | null> = {};
     let hasNextPage = false;
@@ -680,7 +685,7 @@ export class PlatformLinearIntegration implements FactoryIntegration {
     );
     return {
       issues: dedupeIssuesBySource(pages.flat(), sourceIds),
-      nextCursor: hasNextPage ? encodeCursor(nextState, sourceIds) : null,
+      nextCursor: hasNextPage ? encodeCursor(nextState, sourceIds, attributionSourceIds) : null,
     };
   }
 
@@ -929,22 +934,30 @@ function canonicalSourceIds(sourceIds: string[]): string[] {
   return [...new Set(sourceIds)].sort();
 }
 
-function linearSourceSetFingerprint(sourceIds: string[]): string {
-  return createHash('sha256').update(JSON.stringify(canonicalSourceIds(sourceIds))).digest('base64url');
+function linearSourceSetFingerprint(sourceIds: string[], attributionSourceIds: string[]): string {
+  const scope = {
+    sourceIds: canonicalSourceIds(sourceIds),
+    attributionSourceIds: canonicalSourceIds(attributionSourceIds),
+  };
+  return createHash('sha256').update(JSON.stringify(scope)).digest('base64url');
 }
 
 function invalidLinearCursor(): Error {
   return Object.assign(new Error('Linear cursor is invalid or stale.'), { code: 'invalid_cursor' as const });
 }
 
-function decodeCursor(cursor: string | undefined, sourceIds: string[]): Record<string, string | null | undefined> {
+function decodeCursor(
+  cursor: string | undefined,
+  sourceIds: string[],
+  attributionSourceIds: string[],
+): Record<string, string | null | undefined> {
   if (!cursor) return {};
   try {
     const parsed = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) as Partial<PlatformListCursor>;
     const canonical = canonicalSourceIds(sourceIds);
     if (
       parsed.v !== 1 ||
-      parsed.sourceSet !== linearSourceSetFingerprint(sourceIds) ||
+      parsed.sourceSet !== linearSourceSetFingerprint(sourceIds, attributionSourceIds) ||
       !Array.isArray(parsed.cursors) ||
       parsed.cursors.length !== canonical.length ||
       !parsed.cursors.every(value => value === null || typeof value === 'string')
@@ -957,11 +970,15 @@ function decodeCursor(cursor: string | undefined, sourceIds: string[]): Record<s
   }
 }
 
-function encodeCursor(state: Record<string, string | null>, sourceIds: string[]): string {
+function encodeCursor(
+  state: Record<string, string | null>,
+  sourceIds: string[],
+  attributionSourceIds: string[],
+): string {
   const canonical = canonicalSourceIds(sourceIds);
   const cursor: PlatformListCursor = {
     v: 1,
-    sourceSet: linearSourceSetFingerprint(sourceIds),
+    sourceSet: linearSourceSetFingerprint(sourceIds, attributionSourceIds),
     cursors: canonical.map(sourceId => state[sourceId] ?? null),
   };
   return Buffer.from(JSON.stringify(cursor)).toString('base64url');

@@ -219,6 +219,50 @@ describe('PlatformLinearIntegration', () => {
     expect(issuesUrl).toContain('projectIds=project-1');
     expect(issuesUrl).toContain('stateType=triage%2Cbacklog%2Cunstarted%2Cstarted');
   });
+  it('does not fetch issues from attribution-only workspaces', async () => {
+    const workspace2 = {
+      ...workspace,
+      linearWorkspaceId: 'workspace-2',
+      linearWorkspaceName: 'Other',
+      urlKey: 'other',
+    };
+    const project2 = {
+      ...project,
+      id: 'project-2',
+      name: 'Other project',
+    };
+    const fetchImpl = vi.fn<typeof fetch>(async input => {
+      const url = String(input);
+      if (url.endsWith('/v1/server/linear/workspaces')) {
+        return json({ workspaces: [workspace, workspace2] });
+      }
+      if (url.includes('/workspaces/workspace-1/projects')) {
+        return json({ projects: [project], pageInfo: { hasNextPage: false, endCursor: null } });
+      }
+      if (url.includes('/workspaces/workspace-2/projects')) {
+        return json({ projects: [project2], pageInfo: { hasNextPage: false, endCursor: null } });
+      }
+      if (url.includes('/workspaces/workspace-1/issues')) {
+        return json({ issues: [issue], pageInfo: { hasNextPage: false, endCursor: null } });
+      }
+      if (url.includes('/workspaces/workspace-2/issues')) {
+        return json({ error: 'unavailable' }, 503);
+      }
+      throw new Error(`unexpected request: ${url}`);
+    });
+    const integration = createIntegration(fetchImpl);
+
+    const result = await integration.intake.listIssues({
+      connection: { type: 'oauth', accessToken: 'unused-provider-token' },
+      sourceIds: [project1SourceId],
+      attributionSourceIds: [project1SourceId, project2SourceId],
+    });
+
+    expect(result.issues).toEqual([expect.objectContaining({ id: 'issue-1', sourceId: project1SourceId })]);
+    expect(fetchImpl.mock.calls.map(call => String(call[0]))).not.toContain(
+      expect.stringContaining('/workspaces/workspace-2/issues'),
+    );
+  });
 
   it('lists a team source with teamId (no projectIds) and returns projectless issues', async () => {
     const teamSourceId = `linear-team:${Buffer.from(
@@ -383,7 +427,6 @@ describe('PlatformLinearIntegration', () => {
       expect.objectContaining({ method: 'POST', body: JSON.stringify({ body: 'Done' }) }),
     );
   });
-
 
   it('uses an opaque team source for issue reads, comments, and updates', async () => {
     const teamSourceId = `linear-team:${Buffer.from(
@@ -730,8 +773,11 @@ describe('PlatformLinearIntegration', () => {
     await expect(teams.json()).resolves.toEqual({
       teams: [
         {
-          id: 'team-1', key: 'ENG', name: 'Engineering',
-          workspaceId: 'workspace-1', sourceId: teamSourceId,
+          id: 'team-1',
+          key: 'ENG',
+          name: 'Engineering',
+          workspaceId: 'workspace-1',
+          sourceId: teamSourceId,
         },
       ],
     });
