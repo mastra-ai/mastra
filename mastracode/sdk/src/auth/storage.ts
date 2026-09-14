@@ -3,8 +3,8 @@
  * Handles loading, saving, and refreshing credentials from auth.json.
  */
 
-import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync } from 'node:fs';
+import { createHash, randomUUID } from 'node:crypto';
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { getAppDataDir } from '../utils/project.js';
 import { anthropicOAuthProvider } from './providers/anthropic.js';
@@ -178,8 +178,18 @@ export class AuthStorage {
     if (!existsSync(dir)) {
       mkdirSync(dir, { recursive: true, mode: 0o700 });
     }
-    writeFileSync(this.authPath, JSON.stringify(this.data, null, 2), 'utf-8');
-    chmodSync(this.authPath, 0o600);
+    // Write to a sibling file, then atomically replace auth.json. Provider
+    // fetch wrappers reload this file on every request, including in older
+    // Mastra Code processes; writing in place lets them observe truncated JSON
+    // and temporarily treat every provider as logged out.
+    const tempPath = `${this.authPath}.${process.pid}.${randomUUID()}.tmp`;
+    try {
+      writeFileSync(tempPath, JSON.stringify(this.data, null, 2), { encoding: 'utf-8', mode: 0o600 });
+      chmodSync(tempPath, 0o600);
+      renameSync(tempPath, this.authPath);
+    } finally {
+      rmSync(tempPath, { force: true });
+    }
   }
 
   /**
@@ -561,18 +571,31 @@ export class AuthStorage {
   }
 
   /**
-   * Persist refreshed credentials for the currently active account into both
-   * homes — the legacy slot and the active registry entry (the slot is the
-   * home while active; the entry mirrors it so a later activation has fresh
-   * tokens to move back).
+   * Persist refreshed credentials for the account that initiated the refresh.
+   * The legacy slot is updated only if that account is still active when the
+   * refresh completes; otherwise a delayed refresh could overwrite a newer
+   * activation.
    */
-  private persistActiveCredential(providerId: string, creds: OAuthCredentials): void {
+  private persistRefreshedCredential(
+    providerId: string,
+    instanceId: string | undefined,
+    creds: OAuthCredentials,
+  ): void {
     this.reload();
-    const slot = this.data[providerId];
-    this.data[providerId] = slot?.type === 'oauth' ? { ...slot, ...creds, type: 'oauth' } : { type: 'oauth', ...creds };
-    const active = this.getActiveAccount(providerId);
-    if (active) {
-      this.data[this.accountKeyFor(active.id)] = { ...active, ...creds, type: 'oauth-account' };
+    if (instanceId) {
+      const key = this.accountKeyFor(instanceId);
+      const entry = this.data[key];
+      if (!isOAuthAccountRecord(entry)) return;
+      this.data[key] = { ...entry, ...creds, type: 'oauth-account' };
+      if (entry.active) {
+        const slot = this.data[providerId];
+        this.data[providerId] =
+          slot?.type === 'oauth' ? { ...slot, ...creds, type: 'oauth' } : { type: 'oauth', ...creds };
+      }
+    } else {
+      const slot = this.data[providerId];
+      this.data[providerId] =
+        slot?.type === 'oauth' ? { ...slot, ...creds, type: 'oauth' } : { type: 'oauth', ...creds };
     }
     this.save();
   }
@@ -597,7 +620,7 @@ export class AuthStorage {
     const refresh = (async () => {
       try {
         const fresh = await provider.refreshToken(creds);
-        this.persistActiveCredential(providerId, fresh);
+        this.persistRefreshedCredential(providerId, instanceId, fresh);
         return fresh;
       } catch {
         return undefined;
@@ -647,7 +670,7 @@ export class AuthStorage {
       const refresh = (async (): Promise<OAuthCredentials | undefined> => {
         try {
           const fresh = await provider.refreshToken(cred);
-          this.persistActiveCredential(providerId, fresh);
+          this.persistRefreshedCredential(providerId, activeEntry?.id, fresh);
           return fresh;
         } catch {
           // Refresh failed. Rotate through the pool: try each remaining
