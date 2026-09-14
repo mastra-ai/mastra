@@ -337,3 +337,61 @@ export const WithDisabledItems: Story = {
     </DropdownMenu>
   ),
 };
+
+/** Every item kind side by side, to compare against ContextMenu / Select / Combobox. */
+export const KitchenSink: Story = {
+  render: () => {
+    const [checked, setChecked] = useState(true);
+    const [radio, setRadio] = useState('medium');
+    return (
+      <DropdownMenu defaultOpen>
+        <DropdownMenu.Trigger asChild>
+          <Button variant="outline">Open Menu</Button>
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Content className="w-56">
+          <DropdownMenu.Label>Account</DropdownMenu.Label>
+          <DropdownMenu.Item>Plain item</DropdownMenu.Item>
+          <DropdownMenu.Item>
+            <User />
+            <span>With icon</span>
+            <DropdownMenu.Shortcut>⇧⌘P</DropdownMenu.Shortcut>
+          </DropdownMenu.Item>
+          <DropdownMenu.Item disabled>
+            <CreditCard />
+            <span>Disabled</span>
+          </DropdownMenu.Item>
+          <DropdownMenu.Separator />
+          <DropdownMenu.CheckboxItem checked={checked} onCheckedChange={setChecked}>
+            Checkbox item
+          </DropdownMenu.CheckboxItem>
+          <DropdownMenu.RadioGroup value={radio} onValueChange={setRadio}>
+            <DropdownMenu.RadioItem value="small">Radio small</DropdownMenu.RadioItem>
+            <DropdownMenu.RadioItem value="medium">Radio medium</DropdownMenu.RadioItem>
+          </DropdownMenu.RadioGroup>
+          <DropdownMenu.Separator />
+          <DropdownMenu.Sub>
+            <DropdownMenu.SubTrigger>
+              <UserPlus />
+              <span>Sub menu</span>
+            </DropdownMenu.SubTrigger>
+            <DropdownMenu.SubContent>
+              <DropdownMenu.Item>
+                <Mail />
+                <span>Email</span>
+              </DropdownMenu.Item>
+              <DropdownMenu.Item>
+                <MessageSquare />
+                <span>Message</span>
+              </DropdownMenu.Item>
+            </DropdownMenu.SubContent>
+          </DropdownMenu.Sub>
+          <DropdownMenu.Separator />
+          <DropdownMenu.Item variant="destructive">
+            <LogOut />
+            <span>Destructive</span>
+          </DropdownMenu.Item>
+        </DropdownMenu.Content>
+      </DropdownMenu>
+    );
+  },
+};
