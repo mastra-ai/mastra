@@ -474,6 +474,10 @@ export class PlatformLinearIntegration implements FactoryIntegration {
     }));
   }
 
+  async listTeams(_accessToken: string): Promise<LinearTeam[]> {
+    return (await this.#listTeamSources()).map(({ team }) => team);
+  }
+
   async #listProjectSources(): Promise<ProjectSource[]> {
     const workspaces = await this.#listWorkspaces();
     const projectGroups = await Promise.all(

@@ -536,6 +536,12 @@ describe('PlatformLinearIntegration', () => {
           headers: { location: 'https://linear.app/oauth/authorize?state=abc' },
         });
       }
+      if (url.includes('/v1/server/linear/workspaces/workspace-1/teams?')) {
+        return json({
+          teams: [{ id: 'team-1', key: 'ENG', name: 'Engineering' }],
+          pageInfo: { hasNextPage: false, endCursor: null },
+        });
+      }
       return json({ workspaces: [workspace] });
     });
     const integration = createIntegration(fetchImpl);
@@ -576,6 +582,7 @@ describe('PlatformLinearIntegration', () => {
         '/auth/linear/connect',
         '/web/linear/status',
         '/web/linear/projects',
+        '/web/linear/teams',
         '/web/linear/issues',
       ]),
     );
@@ -585,6 +592,11 @@ describe('PlatformLinearIntegration', () => {
       connected: true,
       reason: 'ready',
       workspace: { name: 'Acme', urlKey: 'acme' },
+    });
+    const teams = await app.request('/web/linear/teams');
+    expect(teams.status).toBe(200);
+    await expect(teams.json()).resolves.toEqual({
+      teams: [{ id: 'team-1', key: 'ENG', name: 'Engineering' }],
     });
     const connect = await app.request('/auth/linear/connect');
     expect(connect.status).toBe(302);
