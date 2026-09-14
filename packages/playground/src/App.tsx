@@ -1,4 +1,5 @@
 import { coreFeatures } from '@mastra/core/features';
+import { KeyboardShortcutsProvider } from '@mastra/playground-ui/keyboard/keyboard-shortcuts-context';
 import { MastraReactProvider } from '@mastra/react';
 import { CalendarClockIcon } from 'lucide-react';
 import { useMemo } from 'react';
@@ -109,6 +110,7 @@ import { PlaygroundConfigGuard } from '@/domains/configuration/components/playgr
 import { StudioConfigProvider } from '@/domains/configuration/context/studio-config-context';
 import { useStudioConfig } from '@/domains/configuration/context/studio-config-state';
 import { McpServerCrumb, McpServerToolCrumb } from '@/domains/mcps/mcp-crumbs';
+import { GlobalShortcuts } from '@/domains/navigation/components/global-shortcuts';
 import { ProcessorCrumb } from '@/domains/processors/processor-crumb';
 import { PromptBlockCrumb } from '@/domains/prompt-blocks/prompt-block-crumb';
 import { StoredScorerCrumb, ScorerCrumb } from '@/domains/scores/scorer-crumb';
@@ -152,11 +154,14 @@ const RootLayout = () => {
 
   return (
     <LinkComponentProvider Link={Link} navigate={frameworkNavigate} paths={paths}>
-      <Layout>
-        <RoutePermissionGuard>
-          <Outlet />
-        </RoutePermissionGuard>
-      </Layout>
+      <KeyboardShortcutsProvider>
+        <GlobalShortcuts />
+        <Layout>
+          <RoutePermissionGuard>
+            <Outlet />
+          </RoutePermissionGuard>
+        </Layout>
+      </KeyboardShortcutsProvider>
     </LinkComponentProvider>
   );
 };
