@@ -265,7 +265,7 @@ describe('InMemorySkillsStorage', () => {
   });
 
   describe('list pagination with empty entity IDs', () => {
-    it.each([NaN, Infinity, -Infinity, 0.5, -0.5])(
+    it.each([NaN, Infinity, -Infinity, 0.5, -0.5, -1])(
       'rejects invalid page %s before returning no candidates',
       async page => {
         for (const perPage of [undefined, 0, 10, false] as const) {
