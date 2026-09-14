@@ -1,5 +1,7 @@
-import type { ListScoresResponse, Trajectory } from '@mastra/core/evals';
 import type { SpanType } from '@mastra/core/observability';
+import type { ClientOptions, ListFeedbackResponse } from '../types';
+import { toQueryParams } from '../utils';
+import { BaseResource } from './base';
 import type {
   TraceRecord,
   GetTraceLightResponse,
@@ -19,12 +21,12 @@ import type {
   PaginationInfo,
   ScoreTracesRequest,
   ScoreTracesResponse,
-  // Logs
+  ListScoresResponse,
+  Trajectory,
   ListLogsArgs,
   ListLogsResponse,
-  // Scores (observability)
   ListScoresArgs,
-  ListScoresResponse as ListScoresResponseNew,
+  ListScoresResponseNew,
   CreateScoreBody,
   CreateScoreResponse,
   DeleteScoresArgs,
@@ -37,7 +39,6 @@ import type {
   GetScoreTimeSeriesResponse,
   GetScorePercentilesArgs,
   GetScorePercentilesResponse,
-  // Feedback
   ListFeedbackArgs,
   CreateFeedbackBody,
   CreateFeedbackResponse,
@@ -53,7 +54,6 @@ import type {
   GetFeedbackTimeSeriesResponse,
   GetFeedbackPercentilesArgs,
   GetFeedbackPercentilesResponse,
-  // Metrics OLAP
   GetMetricAggregateArgs,
   GetMetricAggregateResponse,
   GetMetricBreakdownArgs,
@@ -62,7 +62,6 @@ import type {
   GetMetricTimeSeriesResponse,
   GetMetricPercentilesArgs,
   GetMetricPercentilesResponse,
-  // Discovery
   GetMetricNamesArgs,
   GetMetricNamesResponse,
   GetMetricLabelKeysArgs,
@@ -76,10 +75,7 @@ import type {
   GetEnvironmentsResponse,
   GetTagsArgs,
   GetTagsResponse,
-} from '@mastra/core/storage';
-import type { ClientOptions, ListFeedbackResponse } from '../types';
-import { toQueryParams } from '../utils';
-import { BaseResource } from './base';
+} from './observability-route-types.js';
 
 // ============================================================================
 // Legacy Types (for backward compatibility with main branch API)
