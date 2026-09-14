@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useRef, useState } from 'react';
 
+import { KeyboardScope, KeyboardShortcutsProvider } from './keyboard-shortcuts-context';
 import { useKeydown, useTableKeydown } from './use-keydown';
 import { Kbd } from '@/ds/components/Kbd';
 
@@ -266,6 +267,96 @@ const EnabledToggleDemo = () => {
 };
 
 export const EnabledToggle: Story = { render: () => <EnabledToggleDemo /> };
+
+const LayoutShortcuts = ({ log }: { log: (message: string) => void }) => {
+  useKeydown({
+    'g$+a': () => log('layout: g then a → /agents'),
+    'g$+t': () => log('layout: g then t → /traces'),
+  });
+  return null;
+};
+
+const AgentPageShortcuts = ({ log }: { log: (message: string) => void }) => {
+  useKeydown({ 'g$+t': () => log('agent page: g then t → /agents/:id/traces') });
+  return null;
+};
+
+const ScopedOverrideDemo = () => {
+  const out = useLog();
+  const [agentPageMounted, setAgentPageMounted] = useState(false);
+
+  return (
+    <KeyboardShortcutsProvider>
+      <LayoutShortcuts log={out.log} />
+      <Layout
+        title="Shortcuts declared inside a KeyboardScope shadow the layout's while mounted. Only one window listener runs."
+        log={out}
+      >
+        <Legend
+          items={[
+            ['g then a', 'layout only'],
+            ['g then t', 'layout, or agent page when mounted'],
+          ]}
+        />
+        <label className="text-ui-sm text-neutral4 flex items-center gap-2">
+          <input type="checkbox" checked={agentPageMounted} onChange={e => setAgentPageMounted(e.target.checked)} />
+          mount the agent page
+        </label>
+        {agentPageMounted && (
+          <KeyboardScope>
+            <div className="border-accent1 text-ui-sm text-neutral4 rounded-lg border border-dashed p-3">
+              agent page mounted — <Keys keys="g then t" /> now targets the agent's traces
+            </div>
+            <AgentPageShortcuts log={out.log} />
+          </KeyboardScope>
+        )}
+      </Layout>
+    </KeyboardShortcutsProvider>
+  );
+};
+
+export const ScopedOverride: Story = { render: () => <ScopedOverrideDemo /> };
+
+const LevelShortcuts = ({ level, log }: { level: string; log: (message: string) => void }) => {
+  useKeydown({ k: () => log(`k handled by ${level}`), 'g$+a': () => log(`g then a handled by ${level}`) });
+  return null;
+};
+
+const Level = ({ index, maxDepth, log }: { index: number; maxDepth: number; log: (message: string) => void }) => {
+  if (index > maxDepth) return null;
+  return (
+    <KeyboardScope>
+      <div className="border-border1 text-ui-sm text-neutral4 rounded-lg border p-3">
+        scope depth {index}
+        <LevelShortcuts level={`depth ${index}`} log={log} />
+        <div className="mt-3">
+          <Level index={index + 1} maxDepth={maxDepth} log={log} />
+        </div>
+      </div>
+    </KeyboardScope>
+  );
+};
+
+const NestedScopesDemo = () => {
+  const out = useLog();
+  const [levels, setLevels] = useState(3);
+
+  return (
+    <KeyboardShortcutsProvider>
+      <LevelShortcuts level="root (depth 0)" log={out.log} />
+      <Layout title="Every level binds k and g then a; the deepest mounted scope wins." log={out}>
+        <label className="text-ui-sm text-neutral4 flex items-center gap-2">
+          mounted depth
+          <input type="range" min={0} max={3} value={levels} onChange={e => setLevels(Number(e.target.value))} />
+          {levels}
+        </label>
+        <Level index={1} maxDepth={levels} log={out.log} />
+      </Layout>
+    </KeyboardShortcutsProvider>
+  );
+};
+
+export const NestedScopes: Story = { render: () => <NestedScopesDemo /> };
 
 const rows = Array.from({ length: 25 }, (_, i) => `Row ${i + 1}`);
 

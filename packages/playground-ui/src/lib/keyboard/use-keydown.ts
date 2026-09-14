@@ -1,112 +1,18 @@
-import { useEffect, useEffectEvent, useState, type RefObject } from 'react';
+import { useEffect, useRef, useState, type RefObject } from 'react';
 
-/**
- * Map of key bindings to handlers.
- *
- * - Combos: `'cmd+k'`, `'ctrl+shift+p'`, `'mod+Home'`.
- * - Timed sequences: `'g$+a'` — press `g`, then `a` within 500ms.
- *   Chain as many steps as needed (`'a$+b$+c'`); the last step has no `$`.
- *   A sequence prefix takes precedence over a plain combo on the same key, and an
- *   unexpected key resets the sequence before being evaluated normally.
- */
-export type UseKeydownArgs = {
-  [keySet: string]: () => void;
-};
+import {
+  createKeyboardDispatcher,
+  isKeyboardConsumer,
+  matchesCombo,
+  parseKeyCombo,
+  type KeyboardLayer,
+  type ParsedKeyCombo,
+  type UseKeydownArgs,
+} from './keyboard-dispatcher';
+import { useKeyboardScopeDepth, useKeyboardShortcutsContext } from './keyboard-shortcuts-context';
 
-type ParsedKeyCombo = {
-  meta: boolean;
-  ctrl: boolean;
-  shift: boolean;
-  alt: boolean;
-  key: string;
-};
-
-const isMacPlatform = () =>
-  typeof navigator !== 'undefined' && /mac/i.test(navigator.platform || navigator.userAgent || '');
-
-export const parseKeyCombo = (combo: string): ParsedKeyCombo => {
-  const parsed: ParsedKeyCombo = { meta: false, ctrl: false, shift: false, alt: false, key: '' };
-
-  for (const token of combo.split('+')) {
-    switch (token.toLowerCase()) {
-      case 'cmd':
-      case 'meta':
-        parsed.meta = true;
-        break;
-      case 'ctrl':
-      case 'control':
-        parsed.ctrl = true;
-        break;
-      case 'shift':
-        parsed.shift = true;
-        break;
-      case 'alt':
-      case 'option':
-        parsed.alt = true;
-        break;
-      case 'mod':
-        if (isMacPlatform()) parsed.meta = true;
-        else parsed.ctrl = true;
-        break;
-      default:
-        parsed.key = token.toLowerCase();
-    }
-  }
-
-  return parsed;
-};
-
-export type KeyStep = ParsedKeyCombo;
-
-/** A binding is a sequence of steps; a plain combo is a sequence of length 1. */
-export type ParsedKeyBinding = KeyStep[];
-
-const SEQUENCE_TIMEOUT_MS = 500;
-const SEQUENCE_TOKEN = /^(.+)\$$/;
-
-/**
- * Parses `cmd+k` (single step) or `g$+a` (sequence: `g`, then `a` within 500ms).
- * A `key$` token closes a step; the modifiers before it belong to that step.
- */
-export const parseKeyBinding = (binding: string): ParsedKeyBinding => {
-  const steps: KeyStep[] = [];
-  let tokens: string[] = [];
-
-  for (const token of binding.split('+')) {
-    const [, sequenceKey] = SEQUENCE_TOKEN.exec(token) ?? [];
-    if (sequenceKey) {
-      steps.push(parseKeyCombo([...tokens, sequenceKey].join('+')));
-      tokens = [];
-    } else {
-      tokens.push(token);
-    }
-  }
-
-  if (tokens.length === 0) {
-    throw new Error(`Invalid key binding "${binding}": the last step cannot end with $`);
-  }
-  steps.push(parseKeyCombo(tokens.join('+')));
-
-  for (const step of steps) {
-    if (!step.key) throw new Error(`Invalid key binding "${binding}": every step needs a key`);
-  }
-
-  return steps;
-};
-
-/**
- * Printable symbols like `?`, `!` or `:` are typed with Shift on most layouts, and
- * `event.key` already reflects the resulting character. For those, the Shift state
- * is irrelevant unless the binding asks for it explicitly.
- */
-const isShiftedSymbol = (key: string) => key.length === 1 && !/[a-z0-9]/i.test(key);
-
-export const matchesCombo = (event: KeyboardEvent, combo: ParsedKeyCombo): boolean =>
-  event.metaKey === combo.meta &&
-  event.ctrlKey === combo.ctrl &&
-  (event.shiftKey === combo.shift || (!combo.shift && isShiftedSymbol(combo.key))) &&
-  event.altKey === combo.alt &&
-  event.key.toLowerCase() === combo.key;
+export { parseKeyCombo, parseKeyBinding, matchesCombo } from './keyboard-dispatcher';
+export type { UseKeydownArgs, KeyStep, ParsedKeyBinding } from './keyboard-dispatcher';
 
 export type UseKeydownOptions = {
   /** Attach the listener to this element instead of `window`. */
@@ -122,122 +28,48 @@ export type UseKeydownOptions = {
   shouldHandle?: (event: KeyboardEvent) => boolean;
 };
 
-const KEYBOARD_CONSUMER_SELECTOR = [
-  'input',
-  'textarea',
-  'select',
-  '[contenteditable=""]',
-  '[contenteditable="true" i]',
-  '[contenteditable="plaintext-only" i]',
-  '[role="combobox"]',
-  '[role="listbox"]',
-  '[role="menu"]',
-  '[role="menuitem"]',
-  '[role="option"]',
-  '[role="dialog"]',
-  '[role="alertdialog"]',
-  '[data-radix-popper-content-wrapper]',
-].join(', ');
-
-const isKeyboardConsumer = (target: EventTarget | null): boolean =>
-  target instanceof Element && target.closest(KEYBOARD_CONSUMER_SELECTOR) !== null;
-
 /**
- * Keys without meta/ctrl/alt (`?`, `g`, `Escape`, arrows…) belong to the
- * focused field or widget, so they must keep typing/navigating there. Combos
- * like `mod+k` are safe to intercept from anywhere.
+ * Binds keyboard shortcuts (see `UseKeydownArgs` for the syntax).
+ *
+ * Inside a `KeyboardShortcutsProvider`, bindings join a shared registry: the
+ * nearest `KeyboardScope` decides which declaration wins when several bind the
+ * same keys, and bindings are dropped as soon as the component unmounts.
+ * Without a provider, or with a `target`, the hook listens on its own and no
+ * shadowing takes place.
  */
-const isTypingInConsumer = (event: KeyboardEvent) =>
-  !event.metaKey && !event.ctrlKey && !event.altKey && isKeyboardConsumer(event.target);
-
-type PendingSequence = {
-  /** Steps already matched, as parsed combos (several bindings may share a prefix). */
-  matched: KeyStep[];
-  expiresAt: number;
-};
-
-const sameCombo = (a: ParsedKeyCombo, b: ParsedKeyCombo) =>
-  a.key === b.key && a.meta === b.meta && a.ctrl === b.ctrl && a.shift === b.shift && a.alt === b.alt;
-
-const hasPrefix = (steps: KeyStep[], prefix: KeyStep[]) =>
-  steps.length > prefix.length && prefix.every((step, i) => sameCombo(steps[i] as KeyStep, step));
-
 export const useKeydown = (opts: UseKeydownArgs, options: UseKeydownOptions = {}) => {
   const { enabled = true, target } = options;
-  const [pending, setPending] = useState<PendingSequence | null>(null);
+  const shortcuts = useKeyboardShortcutsContext();
+  const depth = useKeyboardScopeDepth();
 
-  const handlers = useEffectEvent((event: KeyboardEvent) => {
-    if (isTypingInConsumer(event)) return;
-    if (options.shouldHandle && !options.shouldHandle(event)) return;
+  // Kept fresh on every render so the dispatcher always calls the latest handlers.
+  const layerRef = useRef<KeyboardLayer>({ depth, bindings: opts, shouldHandle: options.shouldHandle });
+  layerRef.current.bindings = opts;
+  layerRef.current.shouldHandle = options.shouldHandle;
+  layerRef.current.depth = depth;
 
-    const bindings = Object.entries(opts).map(([binding, handler]) => ({
-      binding,
-      steps: parseKeyBinding(binding),
-      handler,
-    }));
-    const now = Date.now();
-
-    if (pending) {
-      if (now < pending.expiresAt) {
-        const stepIndex = pending.matched.length;
-        for (const { steps, handler } of bindings) {
-          const step = steps[stepIndex];
-          if (!step || !hasPrefix(steps, pending.matched) || !matchesCombo(event, step)) continue;
-          event.preventDefault();
-          if (stepIndex === steps.length - 1) {
-            setPending(null);
-            handler();
-          } else {
-            setPending({ matched: [...pending.matched, step], expiresAt: now + SEQUENCE_TIMEOUT_MS });
-          }
-          return;
-        }
-      }
-      // Expired or unexpected key: reset and evaluate the event normally below.
-      setPending(null);
-    }
-
-    // Sequence prefixes win over plain combos on the same key.
-    for (const { steps } of bindings) {
-      const [first] = steps;
-      if (steps.length > 1 && first && matchesCombo(event, first)) {
-        event.preventDefault();
-        setPending({ matched: [first], expiresAt: now + SEQUENCE_TIMEOUT_MS });
-        return;
-      }
-    }
-
-    for (const { steps, handler } of bindings) {
-      const [first] = steps;
-      if (steps.length === 1 && first && matchesCombo(event, first)) {
-        event.preventDefault();
-        handler();
-        return;
-      }
-    }
-  });
-
-  useEffect(() => {
-    if (!pending) return;
-    const id = setTimeout(() => setPending(null), Math.max(0, pending.expiresAt - Date.now()));
-    return () => clearTimeout(id);
-  }, [pending]);
+  const shared = !target && shortcuts.status === 'ready' ? shortcuts.dispatcher : undefined;
 
   useEffect(() => {
     if (!enabled) return;
+    if (shared) return shared.register(layerRef.current);
+
     const element: HTMLElement | Window | null = target ? (target.current ?? null) : window;
     if (!element) return;
 
+    const dispatcher = createKeyboardDispatcher();
+    const unregister = dispatcher.register(layerRef.current);
     const handleKeyDown = (event: Event) => {
-      handlers(event as KeyboardEvent);
+      if (event instanceof KeyboardEvent) dispatcher.handleKeydown(event);
     };
 
     element.addEventListener('keydown', handleKeyDown);
     return () => {
       element.removeEventListener('keydown', handleKeyDown);
-      setPending(null);
+      unregister();
+      dispatcher.reset();
     };
-  }, [enabled, target]);
+  }, [enabled, target, shared]);
 };
 
 export type UseTableKeydownArgs = {
