@@ -731,7 +731,7 @@ export class PlatformLinearIntegration implements FactoryIntegration {
   }
 
   async #candidateWorkspaceIds(sourceId: string | undefined): Promise<string[]> {
-    if (sourceId) return [decodeSourceId(sourceId).workspaceId];
+    if (sourceId) return [parseSourceId(sourceId).workspaceId];
     return (await this.#listWorkspaces()).map(workspace => workspace.linearWorkspaceId);
   }
 

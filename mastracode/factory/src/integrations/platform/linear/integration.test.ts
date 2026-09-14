@@ -383,6 +383,48 @@ describe('PlatformLinearIntegration', () => {
     );
   });
 
+
+  it('uses an opaque team source for issue reads, comments, and updates', async () => {
+    const teamSourceId = `linear-team:${Buffer.from(
+      JSON.stringify({ workspaceId: 'workspace-1', teamId: 'team-1' }),
+    ).toString('base64url')}`;
+    const comment = {
+      id: 'comment-1',
+      body: 'Done',
+      url: 'https://linear.app/acme/issue/ENG-42#comment-comment-1',
+      issue: { id: 'issue-1', identifier: 'ENG-42' },
+      user,
+      parent: null,
+      createdAt: '2026-07-03T00:00:00Z',
+      updatedAt: '2026-07-03T00:00:00Z',
+    };
+    const fetchImpl = vi.fn<typeof fetch>(async (_input, init) => {
+      if (init?.method === 'POST') return json(comment);
+      return json({ ...issue, comments: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } } });
+    });
+    const integration = createIntegration(fetchImpl);
+    const connection = { type: 'oauth' as const, accessToken: 'unused-provider-token' };
+
+    await expect(
+      integration.intake.getIssue({ connection, sourceId: teamSourceId, issueId: 'ENG-42' }),
+    ).resolves.toMatchObject({ id: 'issue-1' });
+    await expect(
+      integration.intake.createComment({ connection, sourceId: teamSourceId, issueId: 'ENG-42', body: 'Done' }),
+    ).resolves.toEqual({ id: 'comment-1', url: comment.url });
+    await expect(
+      integration.intake.updateIssue({
+        connection,
+        sourceId: teamSourceId,
+        issueId: 'ENG-42',
+        state: { kind: 'byType', stateType: 'unstarted' },
+      }),
+    ).resolves.toMatchObject({ id: 'issue-1', stateType: 'unstarted' });
+
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+    expect(fetchImpl.mock.calls.every(call => String(call[0]).includes('/workspaces/workspace-1/issues/ENG-42'))).toBe(
+      true,
+    );
+  });
   it('resolves a byType target to a workflow state and PATCHes the Linear issue', async () => {
     const workflowStates = [
       { id: 'state-todo', name: 'Todo', type: 'unstarted', position: 1, teamId: 'team-1' },
