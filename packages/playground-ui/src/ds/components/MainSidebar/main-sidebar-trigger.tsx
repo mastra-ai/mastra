@@ -3,6 +3,7 @@ import type { ComponentPropsWithoutRef } from 'react';
 import { useMainSidebar } from './main-sidebar-context';
 import { Kbd } from '@/ds/components/Kbd';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import '@/ds/primitives/focus.css';
 import { cn } from '@/lib/utils';
 
 export type MainSidebarTriggerProps = ComponentPropsWithoutRef<'button'>;
@@ -32,7 +33,7 @@ export function MainSidebarTrigger({ className, onClick, ...props }: MainSidebar
               isCollapsed ? 'mx-auto' : 'ml-auto',
               'hover:bg-sidebar-nav-hover hover:text-neutral6',
               'transition-all duration-normal ease-out-custom',
-              'focus-visible:shadow-focus-ring focus-visible:ring-1 focus-visible:ring-accent1 focus-visible:outline-hidden',
+              'ds-focus ds-focus-orbit',
               '[&_svg]:size-4 [&_svg]:text-neutral3 [&_svg]:transition-transform [&_svg]:duration-normal [&:hover_svg]:text-neutral5',
               className,
             )}

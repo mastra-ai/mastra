@@ -75,7 +75,7 @@ const Slider = ({
               'after:absolute after:-inset-2 after:content-[""]',
               'transition-shadow duration-normal',
               'hover:ring-2 hover:ring-neutral6/30',
-              'ds-focus ds-focus-notch ds-focus-within',
+              'ds-focus ds-focus-within has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-neutral6/60',
               'data-[orientation=vertical]:h-2.5 data-[orientation=vertical]:w-5',
               'data-[disabled]:pointer-events-none',
             )}

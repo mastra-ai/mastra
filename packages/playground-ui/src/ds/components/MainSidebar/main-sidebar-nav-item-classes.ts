@@ -1,5 +1,6 @@
 import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
+import '@/ds/primitives/focus.css';
 import { cn } from '@/lib/utils';
 
 const navItemVariants = cva('flex min-w-0 cursor-pointer items-center rounded-lg whitespace-nowrap', {
@@ -53,30 +54,20 @@ const featuredSurface = cn(
   '[&_svg]:text-accent1 dark:[&_svg]:text-black/75 [&:hover_svg]:text-accent1 dark:[&:hover_svg]:text-black',
 );
 
-/**
- * Color chrome of a nav row: background, text, and icon states. Belongs on
- * whatever element spans the whole row box — the interactive element itself, or
- * the flex wrapper holding it next to a trailing action.
- */
 export const navRowSurfaceClasses = ({ isActive, isFeatured }: NavRowSurfaceOptions) =>
   cn(idleSurface, isActive && activeSurface, isFeatured && featuredSurface);
 
-/** Box and typography of a nav row, without the colour chrome. */
 export const navItemLayoutClasses = ({ isCollapsed, level = 0, size }: NavItemLayoutOptions) =>
   cn(
     navItemVariants({ size }),
     'transition-all duration-normal ease-out-custom motion-reduce:transition-none',
     '[&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:transition-colors [&_svg]:duration-normal motion-reduce:[&_svg]:transition-none',
-    'focus-visible:shadow-focus-ring focus-visible:ring-1 focus-visible:ring-accent1 focus-visible:outline-hidden',
+    'ds-focus',
+    isCollapsed ? 'ds-focus-orbit' : 'ds-focus-row',
     !isCollapsed && nestedExpandedItemClasses(level),
     isCollapsed && 'w-full justify-center p-0',
   );
 
-/**
- * Shared classes for any sidebar nav row element (anchor, button, custom).
- * Apply directly to the interactive element so `asChild` and custom slotted
- * elements all receive the same styling.
- */
 export const navItemClasses = ({ isActive, isCollapsed, isFeatured, level, size }: ItemStyleOptions = {}) =>
   cn(
     navItemLayoutClasses({ isCollapsed, level, size }),

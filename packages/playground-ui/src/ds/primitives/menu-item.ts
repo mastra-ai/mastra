@@ -6,7 +6,6 @@ import { cn } from '@/lib/utils';
 // Block-level items keep w-max popups from measuring options side by side.
 const MENU_ITEM_OVERRIDES = cn(
   'flex w-full justify-start rounded-lg text-left select-none',
-  'ds-focus-item',
   'data-highlighted:bg-neutral6/5 data-highlighted:text-neutral6',
   'data-selected:text-neutral6',
   'data-disabled:pointer-events-none data-disabled:cursor-not-allowed data-disabled:opacity-50',
@@ -35,7 +34,7 @@ export const MENU_SIDE_OFFSET = 4;
 export const menuPositionerClass = 'z-50 outline-none data-[anchor-hidden]:hidden';
 
 export const menuPopupClass = cn(
-  'ds-focus-menu z-50 max-h-[min(var(--max-height-dropdown-max-height),var(--available-height))]',
+  'z-50 max-h-[min(var(--max-height-dropdown-max-height),var(--available-height))]',
   'w-max max-w-(--available-width) min-w-[max(11rem,var(--anchor-width))]',
   'origin-[var(--transform-origin)] overflow-x-hidden overflow-y-auto',
   'rounded-xl border border-border1 bg-surface3 p-1 text-neutral4 shadow-dialog outline-none',

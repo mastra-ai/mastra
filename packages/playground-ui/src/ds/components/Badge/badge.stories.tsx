@@ -185,3 +185,18 @@ export const Sizes: Story = {
     </div>
   ),
 };
+
+export const Linked: Story = {
+  args: {
+    children: 'Preview status',
+    render: <a href="#preview-status" />,
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Use render to put the badge styling and keyboard focus on the link itself, including router links. Plain badges remain non-interactive spans.',
+      },
+    },
+  },
+};

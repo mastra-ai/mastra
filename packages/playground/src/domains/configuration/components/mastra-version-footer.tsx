@@ -13,6 +13,7 @@ import {
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { controlFocusStyle } from '@mastra/playground-ui/primitives/form-element';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { MoveRight, ExternalLink, Info } from 'lucide-react';
 import { useState } from 'react';
@@ -85,7 +86,7 @@ export const MastraVersionFooter = ({ collapsed }: MastraVersionFooterProps) => 
         <DialogTrigger asChild>
           <button
             type="button"
-            className="hover:bg-sidebar-nav-hover focus-visible:ring-accent1 focus-visible:shadow-focus-ring flex rounded-lg p-1 transition-colors focus-visible:ring-1 focus-visible:outline-hidden"
+            className={cn(controlFocusStyle, 'hover:bg-sidebar-nav-hover flex rounded-lg p-1 transition-colors')}
           >
             <span className="relative inline-flex">
               {(isLoadingUpdates || outdatedCount > 0 || deprecatedCount > 0) && (

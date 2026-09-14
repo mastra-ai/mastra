@@ -58,8 +58,7 @@ export const DataListRowWrapper = forwardRef<HTMLDivElement, DataListRowWrapperP
             'grid grid-cols-subgrid gap-0',
             ...dataListRowOuterStyles,
             ...dataListRowStateStyles,
-            isSelectable &&
-              'cursor-pointer outline-none focus-visible:ring-1 focus-visible:ring-accent1 focus-visible:ring-inset',
+            isSelectable && 'cursor-pointer',
             className,
           )}
           onClick={handleClick}

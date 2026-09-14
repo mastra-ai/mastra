@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Badge } from './Badge';
 import type { BadgeSize, BadgeVariant } from './Badge';
@@ -26,6 +26,22 @@ afterEach(() => {
 });
 
 describe('Badge', () => {
+  it('renders a link as the badge itself and preserves both click handlers', () => {
+    const onBadgeClick = vi.fn();
+    const onLinkClick = vi.fn();
+    render(
+      <Badge render={<a href="#workflow" onClick={onLinkClick} />} onClick={onBadgeClick}>
+        Workflow
+      </Badge>,
+    );
+    const link = screen.getByRole('link', { name: 'Workflow' });
+    expect(link.getAttribute('href')).toBe('#workflow');
+    expect(link.querySelector('a, button')).toBeNull();
+    fireEvent.click(link);
+    expect(onBadgeClick).toHaveBeenCalledTimes(1);
+    expect(onLinkClick).toHaveBeenCalledTimes(1);
+  });
+
   describe('when rendered inside text', () => {
     it('uses phrasing content and forwards span attributes', () => {
       render(

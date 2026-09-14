@@ -418,7 +418,6 @@ describe('ThemeToggle', () => {
     expect(radios.every(radio => radio.style.width === '28px')).toBe(true);
     expect(radios.every(radio => radio.classList.contains('rounded-full'))).toBe(true);
     expect(radios.every(radio => radio.classList.contains('data-[checked]:text-icon6'))).toBe(true);
-    expect(radios.every(radio => radio.classList.contains('focus-visible:outline-hidden'))).toBe(true);
     expect(radios.every(radio => radio.classList.contains('active:scale-90'))).toBe(true);
   });
 

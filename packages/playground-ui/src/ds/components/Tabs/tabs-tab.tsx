@@ -33,6 +33,7 @@ export const Tab = ({
   const register = list?.register;
   const unregister = list?.unregister;
   const overflowed = list?.hiddenValues.has(value) ?? false;
+  const showDisabledTooltip = Boolean(disabled && disabledTooltip);
   useEffect(() => {
     const element = ref.current;
     if (!element || !register) return;
@@ -85,6 +86,7 @@ export const Tab = ({
       aria-hidden={overflowed || undefined}
       value={value}
       disabled={disabled || overflowed}
+      {...(showDisabledTooltip && !overflowed ? { tabIndex: 0 } : {})}
       data-slot="tab"
       data-closable={onClose ? '' : undefined}
       className={cn(tabClassName, 'ds-focus ds-focus-contour')}
@@ -100,10 +102,10 @@ export const Tab = ({
       )}
     </BaseTabs.Tab>
   );
-  if (disabled && disabledTooltip) {
+  if (showDisabledTooltip) {
     return (
       <Tooltip>
-        <TooltipTrigger asChild>{tab}</TooltipTrigger>
+        <TooltipTrigger render={tab} />
         <TooltipContent>{disabledTooltip}</TooltipContent>
       </Tooltip>
     );

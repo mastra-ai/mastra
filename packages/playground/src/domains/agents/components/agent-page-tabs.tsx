@@ -1,5 +1,4 @@
 import { Tab, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
@@ -63,22 +62,11 @@ function AgentTab({
     </>
   );
 
-  if (disabled) {
-    return (
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <span tabIndex={0} className="inline-flex">
-            <Tab value={value} disabled>
-              {tabContent}
-            </Tab>
-          </span>
-        </TooltipTrigger>
-        {disabledReason && <TooltipContent side="bottom">{disabledReason}</TooltipContent>}
-      </Tooltip>
-    );
-  }
-
-  return <Tab value={value}>{tabContent}</Tab>;
+  return (
+    <Tab value={value} disabled={disabled} disabledTooltip={disabledReason}>
+      {tabContent}
+    </Tab>
+  );
 }
 
 export function AgentPageTabs({
