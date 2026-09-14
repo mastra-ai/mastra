@@ -8,7 +8,7 @@ export type ThreadSignalDelivery = {
 
 type RunSignalDeliveries = {
   handled: Set<string>;
-  deferred: Map<string, ThreadSignalDelivery>;
+  deferred: Map<string, { delivery: ThreadSignalDelivery; observedAt: number }>;
   terminal: boolean;
 };
 
@@ -24,7 +24,15 @@ const MAX_TRACKED_RUNS = 10_000;
 export class ThreadSignalDeliveryLedger {
   #runs = new Map<string, RunSignalDeliveries>();
   #settledRunIds = new Set<string>();
+  #nextDeferredExpiry = Number.POSITIVE_INFINITY;
 
+  /** Creates a ledger whose in-memory deferred payloads expire after the recovery window. */
+  constructor(
+    private readonly recoveryWindowMs: number,
+    private readonly now: () => number = Date.now,
+  ) {}
+
+  /** Records a signal already queued by this runtime so retained replay cannot queue it again. */
   markHandled(runId: string, signalId: string): void {
     const run = this.#get(runId);
     run.deferred.delete(signalId);
@@ -32,10 +40,12 @@ export class ThreadSignalDeliveryLedger {
     this.#trackSettled(runId, run);
   }
 
+  /** Defers a replay until ownership exists, or returns it immediately for an owned run. */
   observe(runId: string, delivery: ThreadSignalDelivery, ownsRun: boolean): ThreadSignalDelivery | undefined {
+    this.#sweepExpiredDeferred();
     const run = this.#get(runId);
     if (run.handled.has(delivery.signal.id)) return undefined;
-    const deferred = run.deferred.get(delivery.signal.id);
+    const deferred = run.deferred.get(delivery.signal.id)?.delivery;
     if (ownsRun) {
       run.deferred.delete(delivery.signal.id);
       run.handled.add(delivery.signal.id);
@@ -43,16 +53,21 @@ export class ThreadSignalDeliveryLedger {
       return deferred ?? delivery;
     }
     if (deferred) return undefined;
-    run.deferred.set(delivery.signal.id, delivery);
+    const observedAt = this.now();
+    run.deferred.set(delivery.signal.id, { delivery, observedAt });
+    this.#nextDeferredExpiry = Math.min(this.#nextDeferredExpiry, observedAt + this.recoveryWindowMs);
     this.#settledRunIds.delete(runId);
     return undefined;
   }
 
+  /** Promotes every warm deferred delivery for the specified run and thread. */
   claim(runId: string, key: string): ThreadSignalDelivery[] {
+    this.#sweepExpiredDeferred();
     const run = this.#runs.get(runId);
     if (!run) return [];
     const claimed: ThreadSignalDelivery[] = [];
-    for (const [signalId, delivery] of run.deferred) {
+    for (const [signalId, deferred] of run.deferred) {
+      const { delivery } = deferred;
       if (delivery.key !== key) continue;
       run.deferred.delete(signalId);
       if (run.handled.has(signalId)) continue;
@@ -63,6 +78,7 @@ export class ThreadSignalDeliveryLedger {
     return claimed;
   }
 
+  /** Marks a run terminal so its replay tombstones become eligible for bounded retention. */
   settle(runId: string): void {
     const run = this.#runs.get(runId);
     if (!run) return;
@@ -70,15 +86,21 @@ export class ThreadSignalDeliveryLedger {
     this.#trackSettled(runId, run);
   }
 
+  /** Clears all deferred deliveries and replay tombstones. */
   clear(): void {
     this.#runs.clear();
     this.#settledRunIds.clear();
+    this.#nextDeferredExpiry = Number.POSITIVE_INFINITY;
   }
 
   #get(runId: string): RunSignalDeliveries {
     const existing = this.#runs.get(runId);
     if (existing) return existing;
-    const created = { handled: new Set<string>(), deferred: new Map<string, ThreadSignalDelivery>(), terminal: false };
+    const created = {
+      handled: new Set<string>(),
+      deferred: new Map<string, { delivery: ThreadSignalDelivery; observedAt: number }>(),
+      terminal: false,
+    };
     this.#runs.set(runId, created);
     return created;
   }
@@ -93,5 +115,25 @@ export class ThreadSignalDeliveryLedger {
       this.#settledRunIds.delete(oldestRunId);
       this.#runs.delete(oldestRunId);
     }
+  }
+
+  #sweepExpiredDeferred(): void {
+    const now = this.now();
+    if (now < this.#nextDeferredExpiry) return;
+
+    let nextExpiry = Number.POSITIVE_INFINITY;
+    for (const [runId, run] of this.#runs) {
+      for (const [signalId, deferred] of run.deferred) {
+        const expiresAt = deferred.observedAt + this.recoveryWindowMs;
+        if (expiresAt <= now) {
+          run.deferred.delete(signalId);
+        } else {
+          nextExpiry = Math.min(nextExpiry, expiresAt);
+        }
+      }
+      this.#trackSettled(runId, run);
+      if (run.handled.size === 0 && run.deferred.size === 0) this.#runs.delete(runId);
+    }
+    this.#nextDeferredExpiry = nextExpiry;
   }
 }

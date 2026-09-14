@@ -174,6 +174,10 @@ class RetainedAsyncCallbackPubSub extends PubSub {
     this.#subscribers.get(topic)?.delete(cb);
   }
 
+  override async getHistory(topic: string): Promise<any[]> {
+    return [...(this.#history.get(topic) ?? [])];
+  }
+
   async flush(): Promise<void> {
     await Promise.all([...this.#pending]);
   }
@@ -191,10 +195,14 @@ class ControlledLeasePubSub extends RetainedAsyncCallbackPubSub implements Lease
   denyLeaseAcquisition = false;
   denyLeaseTransfer = false;
   rejectPublishedTypes = new Set<string>();
+  rejectPublishedTypesBeforeDelivery = new Set<string>();
   unsubscribeCount = 0;
 
   override async publish(topic: string, event: any): Promise<void> {
     this.publishedData.push(event.data);
+    if (this.rejectPublishedTypesBeforeDelivery.has(event.data?.type)) {
+      throw new Error(`publish rejected before delivery: ${event.data.type}`);
+    }
     await super.publish(topic, event);
     if (this.rejectPublishedTypes.has(event.data?.type)) {
       throw new Error(`publish rejected after delivery: ${event.data.type}`);
@@ -6544,8 +6552,9 @@ describe('Agent signals', () => {
     subscription.unsubscribe();
   });
 
-  it('never evicts unclaimed signal payloads while bounding settled replay history', () => {
-    const ledger = new ThreadSignalDeliveryLedger();
+  it('retains unclaimed payloads through the recovery window while bounding settled replay history', () => {
+    let now = 0;
+    const ledger = new ThreadSignalDeliveryLedger(1_000, () => now);
     const targetRunId = 'unclaimed-run';
     ledger.observe(
       targetRunId,
@@ -6567,6 +6576,18 @@ describe('Agent signals', () => {
     expect(ledger.claim(targetRunId, 'resource\u0000thread').map(delivery => delivery.signal.id)).toEqual([
       'unclaimed-signal',
     ]);
+
+    ledger.observe(
+      'expired-run',
+      {
+        key: 'resource\u0000thread',
+        signal: createSignal({ id: 'expired-signal', type: 'notification', contents: 'follow up' }),
+        scope: 'pending',
+      },
+      false,
+    );
+    now = 1_000;
+    expect(ledger.claim('expired-run', 'resource\u0000thread')).toEqual([]);
   });
 
   it('does not replay a signal that its publisher already queued locally', async () => {
@@ -6694,6 +6715,57 @@ describe('Agent signals', () => {
       'initial-signal',
       'early-signal',
     ]);
+  });
+
+  it('retains accepted pre-run signals when lease handoff publishing fails', async () => {
+    const pubsub = new ControlledLeasePubSub();
+    const runtime = new AgentThreadStreamRuntime();
+    const target = { resourceId: 'failed-forward-resource', threadId: 'failed-forward-thread' };
+    const key = `${target.resourceId}\u0000${target.threadId}`;
+    const winnerRunId = 'failed-forward-winner';
+    const recoveryRunId = 'failed-forward-recovery';
+    const acquireStarted = Promise.withResolvers<void>();
+    const releaseAcquire = Promise.withResolvers<void>();
+    pubsub.owners.set(key, winnerRunId);
+    pubsub.onAcquireLease = () => acquireStarted.resolve();
+    pubsub.acquireLeaseWait = releaseAcquire.promise;
+    pubsub.rejectPublishedTypesBeforeDelivery.add('signal-enqueued');
+    const agent = {
+      id: 'failed-forward-agent',
+      stream: vi.fn(async () => {
+        throw new Error('The losing runtime must not start a run');
+      }),
+    } as unknown as Agent<any, any, any, any>;
+
+    const initial = runtime.sendSignal(
+      agent,
+      { id: 'failed-forward-initial', type: 'user-message', contents: 'initial' },
+      target,
+      pubsub,
+    );
+    await acquireStarted.promise;
+    const early = runtime.sendSignal(
+      agent,
+      { id: 'failed-forward-early', type: 'user-message', contents: 'early' },
+      target,
+      pubsub,
+    );
+    await early.accepted;
+    releaseAcquire.resolve();
+    await expect(initial.accepted).resolves.toMatchObject({ action: 'deliver', runId: winnerRunId });
+
+    pubsub.rejectPublishedTypesBeforeDelivery.delete('signal-enqueued');
+    await pubsub.releaseLease(key, winnerRunId);
+    await runtime.waitForCrossAgentThreadRun(
+      agent,
+      { runId: recoveryRunId, memory: { resource: target.resourceId, thread: target.threadId } },
+      pubsub,
+    );
+    expect(runtime.drainPendingSignals(recoveryRunId, pubsub, 'pre-run').map(signal => signal.id)).toEqual([
+      'failed-forward-initial',
+      'failed-forward-early',
+    ]);
+    expect(agent.stream).not.toHaveBeenCalled();
   });
 
   it('routes active-run signals across runtime instances through PubSub', async () => {

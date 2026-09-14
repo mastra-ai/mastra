@@ -342,7 +342,7 @@ function createRuntimeState(): AgentThreadRuntimeState {
     suspensionMetadataByRunId: new Map(),
     pendingSignalsByThread: new Map(),
     preRunSignalsByThread: new Map(),
-    signalDeliveries: new ThreadSignalDeliveryLedger(),
+    signalDeliveries: new ThreadSignalDeliveryLedger(AGENT_SUSPENDED_RUN_TTL_MS),
     pendingIdleSignalsByThread: new Map(),
     drainingIdleSignalsByThread: new Map(),
     pendingContinuationsByThread: new Map(),
@@ -583,10 +583,65 @@ export class AgentThreadStreamRuntime {
     this.#appendSignalDelivery(state, key, signal, scope);
   }
 
-  #claimDeferredSignals(state: AgentThreadRuntimeState, key: string, runId: string): void {
+  /** Claims warm deliveries and rehydrates older ones from retained PubSub history. */
+  async #claimDeferredSignals(
+    state: AgentThreadRuntimeState,
+    pubsub: PubSub | undefined,
+    key: string,
+    runId: string,
+  ): Promise<void> {
     for (const delivery of state.signalDeliveries.claim(runId, key)) {
       this.#appendSignalDelivery(state, key, delivery.signal, delivery.scope);
     }
+
+    // In-memory deferred payloads use the same recovery horizon as warm
+    // suspended runs. A retained transport remains the durable source for a
+    // later claim, so re-read its history after ownership is established.
+    const history = await this.#getPubSub(pubsub)
+      .getHistory(this.#threadTopic(key))
+      .catch(() => []);
+    for (const event of history) {
+      const data = event.data as AgentThreadStreamRuntimeEvent | undefined;
+      if (data?.type !== 'signal-enqueued' || data.runId !== runId) continue;
+      const delivery = state.signalDeliveries.observe(
+        runId,
+        {
+          key,
+          signal: createSignal(data.signal),
+          scope: data.preRun ? 'pre-run' : 'pending',
+        },
+        true,
+      );
+      if (delivery) this.#appendSignalDelivery(state, key, delivery.signal, delivery.scope);
+    }
+  }
+
+  /** Forwards queued signals in order, removing each only after publish succeeds. */
+  async #forwardQueuedSignals(
+    state: AgentThreadRuntimeState,
+    pubsub: PubSub | undefined,
+    key: string,
+    runId: string,
+    scope: 'pending' | 'pre-run',
+  ): Promise<boolean> {
+    const signalsByThread = scope === 'pre-run' ? state.preRunSignalsByThread : state.pendingSignalsByThread;
+    const queue = signalsByThread.get(key);
+    while (queue?.length) {
+      const signal = queue[0]!;
+      try {
+        await this.#publishAndWait(pubsub, key, {
+          type: 'signal-enqueued',
+          runId,
+          signal: this.#serializeSignal(signal),
+          sourceId: this.#getSourceId(),
+        });
+      } catch {
+        return false;
+      }
+      queue.shift();
+    }
+    if (queue?.length === 0) signalsByThread.delete(key);
+    return true;
   }
 
   #queuedMessageCount(
@@ -1922,7 +1977,7 @@ export class AgentThreadStreamRuntime {
         .acquireLease(key, output.runId, AGENT_THREAD_LEASE_TTL_MS)
         .catch(() => ({ acquired: true as boolean }));
       if (lease.acquired) this.#startLeaseRenewal(resolvedPubSub, key, output.runId);
-      this.#claimDeferredSignals(state, key, output.runId);
+      await this.#claimDeferredSignals(state, pubsub, key, output.runId);
       await this.#publishAndWait(pubsub, key, {
         type: 'run-registered',
         runId: output.runId,
@@ -2083,7 +2138,7 @@ export class AgentThreadStreamRuntime {
     } else {
       this.#clearSuspendedRun(state, output.runId);
     }
-    this.#claimDeferredSignals(state, key, output.runId);
+    await this.#claimDeferredSignals(state, pubsub, key, output.runId);
     this.#watchThreadRunCompletion(state, pubsub, key, record, undefined, () => completionWatcherDisabled);
     startBroadcast();
     return { rollback };
@@ -2216,30 +2271,13 @@ export class AgentThreadStreamRuntime {
             state.activeThreadRunIds.delete(key);
           }
           state.threadKeysByRunId.delete(nextRunId);
-          const earlySignals = state.preRunSignalsByThread.get(key) ?? [];
-          state.preRunSignalsByThread.delete(key);
           // Put the signal back at the head so a later drain (or the winner) runs
           // it, and forward it to the current lease owner.
           const restored = state.pendingSignalsByThread.get(key) ?? [];
           state.pendingSignalsByThread.set(key, [signal, ...restored]);
           if (owns.owner) {
-            await this.#publishAndWait(pubsub, key, {
-              type: 'signal-enqueued',
-              runId: owns.owner,
-              signal: this.#serializeSignal(signal),
-              sourceId: this.#getSourceId(),
-            }).catch(() => {});
-            for (const earlySignal of earlySignals) {
-              await this.#publishAndWait(pubsub, key, {
-                type: 'signal-enqueued',
-                runId: owns.owner,
-                signal: this.#serializeSignal(earlySignal),
-                sourceId: this.#getSourceId(),
-              }).catch(() => {});
-            }
-            state.pendingSignalsByThread.get(key)?.shift();
-            if ((state.pendingSignalsByThread.get(key)?.length ?? 0) === 0) {
-              state.pendingSignalsByThread.delete(key);
+            if (await this.#forwardQueuedSignals(state, pubsub, key, owns.owner, 'pending')) {
+              await this.#forwardQueuedSignals(state, pubsub, key, owns.owner, 'pre-run');
             }
           }
           return;
@@ -2354,17 +2392,8 @@ export class AgentThreadStreamRuntime {
           state.activeThreadRunIds.delete(key);
         }
         state.threadKeysByRunId.delete(pending.runId);
-        const earlySignals = state.preRunSignalsByThread.get(key) ?? [];
-        state.preRunSignalsByThread.delete(key);
         if (owns.owner) {
-          for (const earlySignal of earlySignals) {
-            await this.#publishAndWait(pubsub, key, {
-              type: 'signal-enqueued',
-              runId: owns.owner,
-              signal: this.#serializeSignal(earlySignal),
-              sourceId: this.#getSourceId(),
-            }).catch(() => {});
-          }
+          await this.#forwardQueuedSignals(state, pubsub, key, owns.owner, 'pre-run');
         }
         const restored = state.pendingContinuationsByThread.get(key) ?? [];
         state.pendingContinuationsByThread.set(key, [pending, ...restored]);
@@ -2519,24 +2548,10 @@ export class AgentThreadStreamRuntime {
       }
       state.drainingIdleSignalsByThread.delete(key);
       state.threadKeysByRunId.delete(pendingIdle.runId);
-      const earlySignals = state.preRunSignalsByThread.get(key) ?? [];
-      state.preRunSignalsByThread.delete(key);
+      state.preRunSignalsByThread.set(key, [pendingIdle.signal, ...(state.preRunSignalsByThread.get(key) ?? [])]);
       this.#notifyThreadEvents(state);
       if (owns.owner) {
-        await this.#publishAndWait(pubsub, key, {
-          type: 'signal-enqueued',
-          runId: owns.owner,
-          signal: this.#serializeSignal(pendingIdle.signal),
-          sourceId: this.#getSourceId(),
-        }).catch(() => {});
-        for (const earlySignal of earlySignals) {
-          await this.#publishAndWait(pubsub, key, {
-            type: 'signal-enqueued',
-            runId: owns.owner,
-            signal: this.#serializeSignal(earlySignal),
-            sourceId: this.#getSourceId(),
-          }).catch(() => {});
-        }
+        await this.#forwardQueuedSignals(state, pubsub, key, owns.owner, 'pre-run');
       }
       const drained = await this.#drainPendingIdleSignals(
         state,
@@ -2646,7 +2661,7 @@ export class AgentThreadStreamRuntime {
         if (options.runId) {
           state.activeThreadRunIds.set(key, options.runId);
           state.threadKeysByRunId.set(options.runId, key);
-          this.#claimDeferredSignals(state, key, options.runId);
+          await this.#claimDeferredSignals(state, pubsub, key, options.runId);
         }
         return;
       }
@@ -3870,8 +3885,7 @@ export class AgentThreadStreamRuntime {
           state.activeThreadRunIds.delete(reservedKey);
         }
         state.threadKeysByRunId.delete(reservedRunId);
-        const earlySignals = state.preRunSignalsByThread.get(reservedKey) ?? [];
-        state.preRunSignalsByThread.delete(reservedKey);
+        state.preRunSignalsByThread.set(reservedKey, [signal, ...(state.preRunSignalsByThread.get(reservedKey) ?? [])]);
 
         // Forward the user signal to the winning runId so the message is not dropped.
         // Await the publish so that callers using `accepted` resolution as their
@@ -3879,20 +3893,7 @@ export class AgentThreadStreamRuntime {
         // via waitUntil) don't tear down before the enqueue lands on the broker.
         const winnerRunId = lease.owner;
         if (winnerRunId) {
-          await this.#publishAndWait(pubsub, reservedKey, {
-            type: 'signal-enqueued',
-            runId: winnerRunId,
-            signal: this.#serializeSignal(signal),
-            sourceId: this.#getSourceId(),
-          }).catch(() => {});
-          for (const earlySignal of earlySignals) {
-            await this.#publishAndWait(pubsub, reservedKey, {
-              type: 'signal-enqueued',
-              runId: winnerRunId,
-              signal: this.#serializeSignal(earlySignal),
-              sourceId: this.#getSourceId(),
-            }).catch(() => {});
-          }
+          await this.#forwardQueuedSignals(state, pubsub, reservedKey, winnerRunId, 'pre-run');
         }
         return { action: 'deliver' as const, runId: winnerRunId ?? reservedRunId };
       }
