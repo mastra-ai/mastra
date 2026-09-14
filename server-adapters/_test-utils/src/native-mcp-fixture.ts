@@ -1,5 +1,5 @@
 import { MCPServerBaseV2 } from '@mastra/core/mcp';
-import type { MCPServerHTTPOptionsV2 } from '@mastra/core/mcp';
+import type { MCPServerHTTPOptions } from '@mastra/core/mcp';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod/v4';
 
@@ -38,10 +38,10 @@ export class NativeMCPFixture extends MCPServerBaseV2 {
     });
   }
 
-  async startHTTP(options: MCPServerHTTPOptionsV2) {
+  async startHTTP(options: MCPServerHTTPOptions) {
     options.res.statusCode = 200;
     options.res.setHeader('Content-Type', 'application/json');
-    options.res.end(JSON.stringify({ native: true, hasLegacyOptions: 'options' in options }));
+    options.res.end(JSON.stringify({ native: true, httpPath: options.httpPath }));
   }
   async startStdio() {}
   async close() {}

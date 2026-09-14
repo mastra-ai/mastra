@@ -182,10 +182,10 @@ export function createMCPTransportTestSuite(config: MCPTransportTestConfig) {
     }, 30000);
 
     describe('native MCP v2 adapter dispatch', () => {
-      it('dispatches HTTP without legacy transport options', async () => {
+      it('dispatches HTTP through the shared adapter path', async () => {
         const response = await fetch(`http://localhost:${port}/api/mcp/native-fixture/mcp`, { method: 'POST' });
         expect(response.status).toBe(200);
-        expect(await response.json()).toEqual({ native: true, hasLegacyOptions: false });
+        expect(await response.json()).toEqual({ native: true, httpPath: '/api/mcp/native-fixture/mcp' });
       });
 
       it.each([

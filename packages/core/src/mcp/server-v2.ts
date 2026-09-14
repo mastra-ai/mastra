@@ -13,7 +13,6 @@ import type { MCPServerConfig, MCPServerHTTPOptions, ServerDetailInfo, ServerInf
 import type { MCPServerBase } from './index';
 
 export type MCPServerRegistryEntry = MCPServerBase | MCPServerBaseV2;
-export type MCPServerHTTPOptionsV2 = Pick<MCPServerHTTPOptions, 'url' | 'httpPath' | 'req' | 'res'>;
 export type MCPServerToolV2 = Tool<any, any, any, any, any, any, any>;
 export type MCPServerToolsV2 = Record<string, MCPServerToolV2>;
 
@@ -206,7 +205,12 @@ export abstract class MCPServerBaseV2 extends MastraBase {
   }
 
   abstract startStdio(): Promise<void>;
-  abstract startHTTP(options: MCPServerHTTPOptionsV2): Promise<void>;
+  /**
+   * Serve one Streamable HTTP request. Accepts the same shape as a 1.x server so
+   * shared HTTP adapters call both families identically; the legacy transport
+   * `options` bag has no meaning on a 2026-07-28 server and is ignored.
+   */
+  abstract startHTTP(options: MCPServerHTTPOptions): Promise<void>;
   abstract close(): Promise<void>;
   abstract getServerInfo(): ServerInfo;
   abstract getServerDetail(): ServerDetailInfo;

@@ -1,6 +1,6 @@
-import { isMCPServerV2 } from '@mastra/core/mcp';
 import type {
   MCPServerBase as MastraMCPServerImplementation,
+  MCPServerBaseV2,
   MCPServerRegistryEntry,
   ServerInfo,
 } from '@mastra/core/mcp';
@@ -25,6 +25,12 @@ import {
 import type { ServerContext } from '../server-adapter';
 import type { SetMcpRequestAuth } from '../server-adapter/mcp-auth';
 import { createRoute } from '../server-adapter/routes/route-builder';
+
+// Mirrors core's `isMCPServerV2` without a value import, so this package keeps
+// its existing core peer floor: only 2026-07-28 servers carry `mcpVersion`.
+function isV2Server(server: MCPServerRegistryEntry): server is MCPServerBaseV2 {
+  return 'mcpVersion' in server && server.mcpVersion === 2;
+}
 
 // ============================================================================
 // Route Definitions (createRoute pattern for server adapters)
@@ -239,7 +245,7 @@ export const EXECUTE_MCP_SERVER_TOOL_ROUTE = createRoute({
       throw new HTTPException(501, { message: `Server '${serverId}' cannot execute tools in this way.` });
     }
 
-    if (isMCPServerV2(server)) {
+    if (isV2Server(server)) {
       // A 2026-07-28 server runs the tool with no protocol client attached: a tool
       // that suspends for input is reported as such instead of pretending it finished.
       const execution = await server.executeTool(toolId, data, { requestContext });
@@ -427,7 +433,7 @@ export const MCP_SSE_TRANSPORT_ROUTE = createRoute({
       throw new HTTPException(404, { message: `MCP server '${serverId}' not found` });
     }
 
-    if (isMCPServerV2(server)) {
+    if (isV2Server(server)) {
       throw new HTTPException(404, { message: 'Legacy SSE transport is unavailable for MCP v2 servers' });
     }
 

@@ -2,4 +2,4 @@
 '@mastra/server': patch
 ---
 
-Support the core MCP v1/v2 server registry. Keep legacy transports available for v1 servers; reject v2 SSE routes and explain why native interactions require an MCP protocol client rather than REST execution.
+Accept both MCP server families from the core registry. Legacy SSE routes stay available for MCP 1.x servers and return 404 for 2.x servers, and the REST tool execute route reports a tool that suspended for input as `{ status: 'suspended', suspendPayload, resumeSchema }` instead of pretending it completed.

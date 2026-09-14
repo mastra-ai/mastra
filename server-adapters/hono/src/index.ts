@@ -1,6 +1,5 @@
 import type { ToolsInput } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
-import { isMCPServerV2 } from '@mastra/core/mcp';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
 
@@ -407,7 +406,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           httpPath: `${resolvedPrefix}${httpPath}`,
           req,
           res,
-          ...(isMCPServerV2(server) ? {} : { options: Object.keys(options).length > 0 ? options : undefined }),
+          options: Object.keys(options).length > 0 ? options : undefined,
         })
         .catch((e: unknown) => {
           this.mastra.getLogger()?.error('[MCP HTTP] Error in background startHTTP:', {
