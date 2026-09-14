@@ -596,7 +596,32 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
 
   async getScopeAddress(address: string): Promise<KnowledgeScopeAddress | null> {
     const row = await (await this.#collection(TABLE_KNOWLEDGE_SCOPE_ADDRESSES)).findOne({ address });
-    return row ? { address: String(row.address), scopeNodeId: String(row.scopeNodeId) } : null;
+    if (!row) return null;
+    const scope = await this.getNode(String(row.scopeNodeId));
+    return scope?.isScope ? { address: String(row.address), scopeNodeId: String(row.scopeNodeId) } : null;
+  }
+
+  async listScopeAddresses(input: { after?: string; limit?: number } = {}): Promise<KnowledgeScopeAddress[]> {
+    const limit = Math.max(1, Math.min(input.limit ?? 100, 1000));
+    const rows = await (
+      await this.#collection(TABLE_KNOWLEDGE_SCOPE_ADDRESSES)
+    )
+      .aggregate([
+        ...(input.after ? [{ $match: { address: { $gt: input.after } } }] : []),
+        {
+          $lookup: {
+            from: TABLE_KNOWLEDGE_NODES,
+            localField: 'scopeNodeId',
+            foreignField: 'id',
+            as: 'scope',
+          },
+        },
+        { $match: { scope: { $elemMatch: { isScope: true, deletedAt: { $exists: false } } } } },
+        { $sort: { address: 1 } },
+        { $limit: limit },
+      ])
+      .toArray();
+    return rows.map(row => ({ address: String(row.address), scopeNodeId: String(row.scopeNodeId) }));
   }
 
   async getNodeAddress(input: { source: string; address: string }): Promise<KnowledgeNodeAddress | null> {
