@@ -104,6 +104,31 @@ describe('connect', () => {
     );
   });
 
+  it('rejects duplicate tool keys from different providers', async () => {
+    const duplicateTools = { shared_tool: { id: 'shared_tool' } } as never;
+    installProvider({ createTools: vi.fn().mockReturnValue(duplicateTools) });
+    installProvider({
+      integrationId: 'notion',
+      envVar: 'MASTRA_NOTION_CONNECTION_ID',
+      createTools: vi.fn().mockReturnValue(duplicateTools),
+    });
+    const fetchMock = vi.fn().mockResolvedValue(
+      Response.json({
+        connections: [makeConnection(), makeConnection({ id: 'c_not1', integrationId: 'notion' })],
+      }),
+    );
+
+    await expect(
+      connect({
+        projectId: 'proj_1',
+        client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as never },
+      })(),
+    ).rejects.toMatchObject({
+      code: 'invalid_options',
+      message: "Duplicate tool key 'shared_tool' from providers 'linear' and 'notion'.",
+    });
+  });
+
   it('warns and skips when there are no connections for a provider', async () => {
     installProvider();
     const fetchMock = vi.fn().mockResolvedValue(Response.json({ connections: [] }));

@@ -163,7 +163,7 @@ function buildRequests(integrations: ConnectOptions['integrations']): Normalized
   return requests;
 }
 
-/** Maps one platform connection list snapshot to a flat tool record, downgrading per-provider failures to warn+skip. */
+/** Maps one platform connection list snapshot to a flat tool record without allowing ambiguous tool ownership. */
 function mapTools(
   connections: ProjectConnection[],
   requests: NormalizedRequest[],
@@ -173,8 +173,10 @@ function mapTools(
   const byIntegrationId = groupByIntegrationId(connections);
 
   const result: ResolvedConnectTools = {};
+  const toolOwners = new Map<string, string>();
   for (const request of requests) {
     const integrationId = request.registration.integrationId;
+    let providerTools: ReturnType<ProviderRegistration['createTools']> | undefined;
     try {
       const candidates = byIntegrationId.get(integrationId) ?? [];
       if (candidates.length === 0) {
@@ -188,19 +190,29 @@ function mapTools(
       }
       const connectionId = resolveProviderConnection(request, candidates);
       if (!connectionId) continue; // warned + skipped
-      Object.assign(
-        result,
-        request.registration.createTools({
-          connectionId,
-          allowTools: request.options.allowTools,
-          client: options.client,
-        }),
-      );
+      providerTools = request.registration.createTools({
+        connectionId,
+        allowTools: request.options.allowTools,
+        client: options.client,
+      });
     } catch (error) {
       console.warn(
         `[@mastra/connect] Skipping ${integrationId}: ${error instanceof Error ? error.message : String(error)}`,
       );
+      continue;
     }
+
+    for (const toolKey of Object.keys(providerTools)) {
+      const existingOwner = toolOwners.get(toolKey);
+      if (existingOwner) {
+        throw new MastraConnectError(
+          'invalid_options',
+          `Duplicate tool key '${toolKey}' from providers '${existingOwner}' and '${integrationId}'.`,
+        );
+      }
+      toolOwners.set(toolKey, integrationId);
+    }
+    Object.assign(result, providerTools);
   }
   return result;
 }
