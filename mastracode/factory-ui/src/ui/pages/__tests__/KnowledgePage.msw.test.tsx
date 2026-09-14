@@ -51,12 +51,20 @@ const scopeTreeFixture: KnowledgeScopeTreePayload = {
     id: `resource:${FACTORY_ID}`,
     name: 'Acme Factory',
     kind: 'project',
+    memberCount: 0,
+    memberCountTruncated: false,
+    contentNodeCount: 0,
+    childScopeCount: 0,
   },
   children: [
     {
       id: 'scope:payments',
       name: 'Payments',
       kind: 'feature',
+      memberCount: 0,
+      memberCountTruncated: false,
+      contentNodeCount: 0,
+      childScopeCount: 0,
     },
   ],
 };
