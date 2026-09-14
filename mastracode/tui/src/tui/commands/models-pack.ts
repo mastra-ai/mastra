@@ -534,7 +534,14 @@ export function upsertCustomPackInSettings(
   if (!pack.id.startsWith('custom:')) return;
 
   if (previousPackId && previousPackId.startsWith('custom:') && previousPackId !== pack.id) {
+    const migratedFallbacks = Object.fromEntries(
+      Object.entries(settings.models.packFallbacks ?? {}).map(([sourcePackId, targetPackId]) => [
+        sourcePackId === previousPackId ? pack.id : sourcePackId,
+        targetPackId === previousPackId ? pack.id : targetPackId,
+      ]),
+    );
     removeCustomPackFromSettings(settings, previousPackId);
+    settings.models.packFallbacks = migratedFallbacks;
   }
 
   const customName = pack.id.slice('custom:'.length);
@@ -578,6 +585,7 @@ async function applyPack(ctx: SlashCommandContext, pack: ModePack, previousPackI
   }
 
   await ctx.state.session.thread.setSetting({ key: THREAD_ACTIVE_MODEL_PACK_ID_KEY, value: pack.id });
+  await ctx.state.session.state.set({ activeModelPackId: pack.id });
 
   const s = loadSettings();
   const modeDefaults: Record<string, string> = {};

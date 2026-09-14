@@ -63,9 +63,12 @@ describe('getDynamicModel fallback chain', () => {
     );
   }
 
-  function requestWithSession(modelId: string, modeId = 'build') {
+  function requestWithSession(modelId: string, modeId = 'build', activeModelPackId?: string) {
     const requestContext = new RequestContext();
-    requestContext.set('controller', { session: { modelId, modeId } });
+    requestContext.set('controller', {
+      session: { modelId, modeId },
+      getState: () => ({ activeModelPackId }),
+    });
     return { requestContext };
   }
 
@@ -95,6 +98,27 @@ describe('getDynamicModel fallback chain', () => {
     const entries = model as Array<{ id?: string; model: { modelId?: string } }>;
     expect(entries.map(entry => entry.id)).toEqual(['anthropic', 'openai', 'github-copilot']);
     expect(entries.map(entry => entry.model.modelId)).toEqual(['claude-fable-5', 'gpt-5.6-sol', 'gpt-4.1']);
+  });
+
+  it('uses the explicit active pack when another pack has the same mode model', () => {
+    seedSettings({ 'custom:Shared Model': 'openai' });
+    const raw = JSON.parse(readFileSync(join(appDataDir, 'settings.json'), 'utf-8'));
+    // Simulate another TUI instance changing the global pack while this
+    // request's thread still explicitly owns the custom pack.
+    raw.models.activeModelPackId = 'anthropic';
+    raw.customModelPacks = [
+      {
+        name: 'Shared Model',
+        models: { build: 'anthropic/claude-fable-5' },
+        createdAt: '2026-01-01T00:00:00.000Z',
+      },
+    ];
+    writeFileSync(join(appDataDir, 'settings.json'), JSON.stringify(raw), 'utf-8');
+
+    const model = getDynamicModel(requestWithSession('anthropic/claude-fable-5', 'build', 'custom:Shared Model'));
+    const entries = model as Array<{ id?: string }>;
+
+    expect(entries.map(entry => entry.id)).toEqual(['custom:Shared Model', 'openai']);
   });
 
   it('truncates the chain at a fallback pack that lacks the session mode model', () => {

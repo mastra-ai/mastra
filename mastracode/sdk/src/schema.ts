@@ -62,6 +62,8 @@ export interface MastraCodeState {
   cavemanObservations: boolean;
   observeAttachments: 'auto' | boolean;
   omScope?: 'thread' | 'resource';
+  /** Explicit model-pack identity for the current thread. */
+  activeModelPackId?: string | null;
   /**
    * Session-level reasoning-effort override. When unset, the effective level is
    * resolved at request time from settings (`models.modeThinkingDefaults[mode]`
@@ -111,6 +113,7 @@ export const stateSchema = z.object({
   // seeded model and leave the controller with no model selected.
   currentModelId: z.string().optional(),
   modeId: z.string().optional(),
+  activeModelPackId: z.string().nullable().optional(),
   subagentModelId: z.string().optional(),
   projectPath: z.string().optional(),
   projectName: z.string().optional(),

@@ -1004,6 +1004,7 @@ export class MastraTUI {
       packs,
       resolvedThread?.metadata as Record<string, unknown> | undefined,
     );
+    await this.state.session.state.set({ activeModelPackId: resolvedPackId });
 
     if (resolvedPackId && settings.models.activeModelPackId !== resolvedPackId) {
       // Re-read settings to avoid overwriting concurrent changes
@@ -1521,6 +1522,7 @@ export class MastraTUI {
     if (this.state.session.thread.getId()) {
       await this.state.session.thread.setSetting({ key: THREAD_ACTIVE_MODEL_PACK_ID_KEY, value: activeModePackId });
     }
+    await this.state.session.state.set({ activeModelPackId: activeModePackId });
 
     settings.models.activeOmPackId = omPack?.id ?? null;
     settings.models.omModelOverride = omPack?.id === 'custom' ? omPack.modelId : null;

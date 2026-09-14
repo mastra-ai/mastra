@@ -342,6 +342,7 @@ export async function handlePackFallbackState(
   if (ectx.state.session.thread.getId()) {
     await ectx.state.session.thread.setSetting({ key: THREAD_ACTIVE_MODEL_PACK_ID_KEY, value: pending.toPackId });
   }
+  await ectx.state.session.state.set({ activeModelPackId: pending.toPackId });
 
   if (pending.toPackId.startsWith('custom:')) {
     settings.models.modeDefaults = { ...packModels };
