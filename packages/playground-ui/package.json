@@ -118,6 +118,12 @@
         "default": "./dist/new/settings.es.js"
       }
     },
+    "./new/sidebar": {
+      "import": {
+        "types": "./dist/new/sidebar.d.ts",
+        "default": "./dist/new/sidebar.es.js"
+      }
+    },
     "./layout/tabbed-container": {
       "import": {
         "types": "./dist/layout/tabbed-container.d.ts",

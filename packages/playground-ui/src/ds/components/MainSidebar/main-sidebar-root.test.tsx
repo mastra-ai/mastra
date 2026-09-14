@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MainSidebar } from './main-sidebar';
 import { MainSidebarProvider } from './main-sidebar-provider';
+import { SidebarNew, useSidebarNew } from '@/ds/new/sidebar';
 
 const mockMatchMedia = (matches: boolean) => {
   Object.defineProperty(window, 'matchMedia', {
@@ -764,5 +766,71 @@ describe('MainSidebar mobile drawer closing', () => {
     fireEvent.click(screen.getByTestId('no-href'), { button: 0 });
 
     expect(screen.getByRole('dialog', { name: 'Navigation' })).toBeTruthy();
+  });
+});
+
+function SidebarNewStackFixture() {
+  const { expand } = useSidebarNew();
+  const [view, setView] = useState('root');
+  const returnFocusRef = useRef<HTMLButtonElement>(null);
+
+  function openSettings() {
+    expand();
+    setView('account-settings');
+  }
+
+  return (
+    <SidebarNew>
+      <SidebarNew.Header>
+        <SidebarNew.Brand logo={<span aria-label="Mastra logo">M</span>} title="Mastra" />
+      </SidebarNew.Header>
+      <SidebarNew.Nav>
+        <SidebarNew.NavStack value={view} onValueChange={setView}>
+          <SidebarNew.NavStack.Root>Grouped navigation</SidebarNew.NavStack.Root>
+          <SidebarNew.NavStack.View value="account-settings" title="Account settings" returnFocusRef={returnFocusRef}>
+            Account navigation
+          </SidebarNew.NavStack.View>
+        </SidebarNew.NavStack>
+      </SidebarNew.Nav>
+      <SidebarNew.Footer>
+        <button ref={returnFocusRef} type="button" onClick={openSettings}>
+          Open account settings
+        </button>
+      </SidebarNew.Footer>
+    </SidebarNew>
+  );
+}
+
+describe('SidebarNew', () => {
+  it('composes a header, navigation body, and single footer', () => {
+    mockMatchMedia(false);
+    render(
+      <SidebarNew.Provider storageKey="sidebar-new-slots-test">
+        <SidebarNewStackFixture />
+      </SidebarNew.Provider>,
+    );
+
+    expect(screen.getByRole('banner').textContent).toContain('Mastra');
+    expect(screen.getByRole('navigation', { name: 'Main' }).textContent).toContain('Grouped navigation');
+    expect(screen.getByRole('contentinfo').textContent).toContain('Open account settings');
+  });
+
+  it('opens a settings takeover and returns focus to the footer trigger', async () => {
+    mockMatchMedia(false);
+    render(
+      <SidebarNew.Provider storageKey="sidebar-new-stack-test">
+        <SidebarNewStackFixture />
+      </SidebarNew.Provider>,
+    );
+    const trigger = screen.getByRole('button', { name: 'Open account settings' });
+
+    fireEvent.click(trigger);
+    const back = await screen.findByRole('button', { name: 'Back to main navigation: Account settings' });
+    await waitFor(() => expect(document.activeElement).toBe(back));
+
+    fireEvent.click(back);
+
+    await waitFor(() => expect(document.activeElement).toBe(trigger));
+    expect(screen.getByText('Grouped navigation')).toBeDefined();
   });
 });
