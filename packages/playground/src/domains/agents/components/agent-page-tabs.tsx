@@ -68,7 +68,7 @@ function AgentTab({
       <Tooltip>
         <TooltipTrigger asChild>
           <span tabIndex={0} className="inline-flex">
-            <Tab value={value} disabled className="px-3 py-2.5">
+            <Tab value={value} disabled>
               {tabContent}
             </Tab>
           </span>
@@ -78,11 +78,7 @@ function AgentTab({
     );
   }
 
-  return (
-    <Tab value={value} className="px-3 py-2.5">
-      {tabContent}
-    </Tab>
-  );
+  return <Tab value={value}>{tabContent}</Tab>;
 }
 
 export function AgentPageTabs({

@@ -310,7 +310,7 @@ function TraceThreadRow({
         <div ref={tabsHeader.ref}>
           {/* Explicit border: the measuring wrapper makes the header the "last" child. */}
           <DataPanel.Header className="border-border1 min-h-0 border-b py-1.5">
-            <TabList variant="pill-ghost" className="px-0">
+            <TabList variant="pill-ghost">
               <Tab value="spans">Spans</Tab>
               <Tab value="feedback">
                 Feedback
