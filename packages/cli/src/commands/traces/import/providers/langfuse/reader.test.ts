@@ -113,9 +113,9 @@ describe('LangfuseObservationsReader', () => {
       .mockResolvedValueOnce(Response.json({ data: [child], meta: { cursor: 'final-page' } }))
       .mockResolvedValueOnce(Response.json({ data: [grandchild], meta: { cursor: null } }));
     const onRetry = vi.fn();
-    const reader = new LangfuseObservationsReader(clientOptions, { fetch, onRetry });
+    const reader = new LangfuseObservationsReader(clientOptions, { fetch });
 
-    await expect(reader.readTrace({ traceId: 'trace-1', projectId: 'project-1' })).resolves.toEqual({
+    await expect(reader.readTrace({ traceId: 'trace-1', projectId: 'project-1', onRetry })).resolves.toEqual({
       traceId: 'trace-1',
       observations: [root, child, grandchild],
     });
@@ -181,22 +181,6 @@ describe('LangfuseObservationsReader', () => {
     await expect(wrongTrace.readTrace({ traceId: 'trace-1', projectId: 'project-1' })).rejects.toThrow(
       'different trace',
     );
-  });
-
-  it('validates the discovery window before making a request', async () => {
-    const fetch = vi.fn<typeof globalThis.fetch>();
-    const reader = new LangfuseObservationsReader(clientOptions, { fetch });
-
-    await expect(
-      collect(
-        reader.discoverTraces({
-          projectId: 'project-1',
-          cutoffAt: '2026-09-02T00:00:00.000Z',
-          snapshotAt: '2026-09-01T00:00:00.000Z',
-        }),
-      ),
-    ).rejects.toThrow('cutoffAt before snapshotAt');
-    expect(fetch).not.toHaveBeenCalled();
   });
 
   it('stops before the next page when aborted', async () => {

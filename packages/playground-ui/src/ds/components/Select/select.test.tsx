@@ -127,10 +127,10 @@ describe('Select', () => {
     renderSelect();
 
     const trigger = screen.getByRole('combobox');
-    // The trigger now inherits the button-native text size (`text-ui-md`) for
-    // its default size, not the legacy `text-ui-smd`.
-    expect(trigger.classList.contains('text-ui-md')).toBe(true);
-    expect(trigger.classList.contains('text-ui-smd')).toBe(false);
+    // The trigger inherits the button-native text size (`text-ui-smd`) for
+    // its default size.
+    expect(trigger.classList.contains('text-ui-smd')).toBe(true);
+    expect(trigger.classList.contains('text-ui-md')).toBe(false);
     // Focus is the unified neutral border (from `buttonVariants`), not the old
     // bespoke `focus-visible:border-border2`.
     expect(trigger.className).toContain('focus-visible:border-neutral5/50');

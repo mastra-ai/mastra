@@ -15,8 +15,9 @@ export const NoAgentsInfo = () => (
           href="https://mastra.ai/docs/agents/overview"
           target="_blank"
           rel="noopener noreferrer"
+          icon={<ExternalLinkIcon />}
         >
-          Agents Documentation <ExternalLinkIcon />
+          Agents Documentation
         </Button>
       }
     />

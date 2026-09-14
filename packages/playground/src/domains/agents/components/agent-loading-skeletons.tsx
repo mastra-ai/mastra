@@ -80,7 +80,7 @@ function SidebarLoadingRow({ children }: { children: ReactNode }) {
 
 export function ChatMessagesLoadingSkeleton() {
   return (
-    <div className="min-h-0 space-y-4 overflow-hidden pt-6">
+    <div className="min-h-0 space-y-4 overflow-hidden pt-4">
       <div className="flex justify-start">
         <Skeleton className="h-10 w-2/3 rounded-2xl" />
       </div>
@@ -100,7 +100,7 @@ export function ChatMessagesLoadingSkeleton() {
 
 export function AgentChatLoadingSkeleton() {
   return (
-    <div className="grid h-full min-h-0 w-full overflow-hidden px-4 py-6 md:px-10">
+    <div className="grid h-full min-h-0 w-full overflow-hidden px-4 py-4 md:px-10">
       <div className="mx-auto grid h-full min-h-0 w-full max-w-[80ch] grid-rows-[1fr_auto]">
         <ChatMessagesLoadingSkeleton />
 

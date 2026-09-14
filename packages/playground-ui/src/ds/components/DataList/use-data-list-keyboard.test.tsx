@@ -3,8 +3,8 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { useDataListKeyboard } from './use-data-list-keyboard';
 
-const Subject = ({ count }: { count: number }) => {
-  const { containerRef, getRowProps } = useDataListKeyboard({ count });
+const Subject = ({ count, global }: { count: number; global?: boolean }) => {
+  const { containerRef, getRowProps } = useDataListKeyboard({ count, global });
 
   return (
     <div ref={containerRef} data-testid="container">
@@ -54,5 +54,13 @@ describe('useDataListKeyboard', () => {
 
     fireEvent.keyDown(row(2), { key: 'ArrowUp' });
     expect(document.activeElement).toBe(row(1));
+  });
+
+  it('forwards global so ArrowDown from body focuses the first row', () => {
+    render(<Subject count={3} global />);
+
+    fireEvent.keyDown(document.body, { key: 'ArrowDown' });
+
+    expect(document.activeElement).toBe(row(0));
   });
 });

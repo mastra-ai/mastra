@@ -7,11 +7,19 @@ import { controlHeight, controlSizeClasses } from '@/ds/primitives/control-size'
 import { controlFocusBorderVisible, sharedFormElementDisabledStyle } from '@/ds/primitives/form-element';
 import { cn } from '@/lib/utils';
 
-// Adornments for text-mode buttons: gap between icon+label, larger radius, and SVG sizing for
-// inline `<svg>` children. Excluded from icon-mode because icon-mode wraps children in `<Icon>`
-// (so `[&>svg]` selectors don't match) and uses its own `rounded-full` (circle).
+// Adornments for text-mode buttons: gap between icon+label and larger radius.
+// - `[data-slot=button-icon]` styles the `<Icon>` wrapper rendered by the `icon` prop — the only
+//   supported way to pair an icon with a label (always on the left, fixed gap).
+// - `[&>svg]` only remains for label-less text-mode buttons (e.g. CopyButton) that pass a bare
+//   SVG as children.
+// Excluded from icon-mode because icon-mode wraps children in `<Icon>` and uses its own
+// `rounded-full` (circle).
 const TEXT_MODE_ADORNMENTS = cn(
   'gap-[.75em] rounded-full',
+  '[&>[data-slot=button-icon]]:-ml-[.3em] [&>[data-slot=button-icon]]:opacity-50',
+  '[&:hover>[data-slot=button-icon]]:opacity-100',
+  '[&>[data-slot=button-icon]]:transition-opacity [&>[data-slot=button-icon]]:duration-normal',
+  '[&>[data-slot=button-icon]]:ease-out-custom',
   '[&>svg]:mx-[-.3em] [&>svg]:size-[1.1em]',
   '[&:hover>svg]:opacity-100 [&>svg]:opacity-50',
   '[&>svg]:transition-opacity [&>svg]:duration-normal [&>svg]:ease-out-custom',
@@ -45,13 +53,14 @@ export const buttonVariants = cva(
         xs: cn(controlSizeClasses.xs, 'px-[.8em]', TEXT_MODE_ADORNMENTS),
         sm: cn(controlSizeClasses.sm, 'px-[.9em]', TEXT_MODE_ADORNMENTS),
         md: cn(controlSizeClasses.md, 'px-[.9em]', TEXT_MODE_ADORNMENTS),
-        lg: cn(controlSizeClasses.default, 'px-[1em]', TEXT_MODE_ADORNMENTS),
+        lg: cn(controlSizeClasses.lg, 'px-[1em]', TEXT_MODE_ADORNMENTS),
         // Icon sizes: square dimensions, fully rounded → circle. Active state inherits from variant
         // (e.g. `active:bg-surface5`) — same press feedback as text-mode for consistency.
+        // `icon-lg` is intentionally 32px (larger than text-mode `lg`, which shares the 28px `md` height).
         'icon-xs': cn(controlHeight.xs, 'w-form-xs rounded-full'),
         'icon-sm': cn(controlHeight.sm, 'w-form-sm rounded-full'),
         'icon-md': cn(controlHeight.md, 'w-form-md rounded-full'),
-        'icon-lg': cn(controlHeight.lg, 'w-form-lg rounded-full'),
+        'icon-lg': 'size-8 rounded-full',
       },
     },
     defaultVariants: {
@@ -77,6 +86,8 @@ export interface ButtonProps
   to?: string;
   prefetch?: boolean | null;
   children: React.ReactNode;
+  /** Leading icon, always rendered on the left of the label inside `<Icon>`. Ignored in icon-mode sizes. */
+  icon?: React.ReactNode;
   tooltip?: React.ReactNode;
   target?: string;
   type?: 'button' | 'submit' | 'reset';
@@ -89,6 +100,14 @@ const iconChildSizeMap: Record<IconButtonSize, 'sm' | 'default' | 'lg'> = {
   'icon-sm': 'sm',
   'icon-md': 'default',
   'icon-lg': 'lg',
+};
+
+// `<Icon>` size for the `icon` prop in text-mode, keyed by button size.
+const textIconSizeMap: Record<TextButtonSize, 'sm' | 'default'> = {
+  xs: 'sm',
+  sm: 'sm',
+  md: 'default',
+  lg: 'default',
 };
 
 // Walks React children, expanding `<></>` fragments so `isIconOnly` can inspect the real
@@ -114,13 +133,25 @@ function isIconOnly(children: React.ReactNode): boolean {
 
 // Type guard: narrows `ButtonSize` to `IconButtonSize` so consumers (e.g. `iconChildSizeMap`)
 // can index into icon-only structures without a cast.
-function isIconButtonSize(size: ButtonSize | null | undefined): size is IconButtonSize {
+// eslint-disable-next-line react-refresh/only-export-components -- shared with Combobox's icon-only trigger
+export function isIconButtonSize(size: ButtonSize | null | undefined): size is IconButtonSize {
   return typeof size === 'string' && size.startsWith('icon-');
 }
 
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   (
-    { className, as, size, variant = 'default', disabled, children, tooltip, 'aria-label': ariaLabelProp, ...props },
+    {
+      className,
+      as,
+      size,
+      variant = 'default',
+      disabled,
+      children,
+      icon,
+      tooltip,
+      'aria-label': ariaLabelProp,
+      ...props
+    },
     ref,
   ) => {
     const Component = as || 'button';
@@ -131,7 +162,18 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     // Icon-only buttons need an a11y label. If a string tooltip is provided, reuse it.
     const ariaLabel = ariaLabelProp ?? ((iconMode || isLabelless) && typeof tooltip === 'string' ? tooltip : undefined);
 
-    const content = iconMode ? <Icon size={iconChildSizeMap[size as IconButtonSize]}>{children}</Icon> : children;
+    const content = iconMode ? (
+      <Icon size={iconChildSizeMap[size]}>{children}</Icon>
+    ) : (
+      <>
+        {icon ? (
+          <Icon data-slot="button-icon" size={textIconSizeMap[resolvedSize as TextButtonSize]}>
+            {icon}
+          </Icon>
+        ) : null}
+        {children}
+      </>
+    );
 
     const button = (
       <Component

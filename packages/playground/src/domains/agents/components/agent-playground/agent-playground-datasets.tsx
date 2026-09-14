@@ -45,8 +45,8 @@ export function AgentPlaygroundDatasets({ agentId }: AgentPlaygroundDatasetsProp
           variant="primary"
           size="sm"
           onClick={() => void navigate(`/datasets/new?targetType=agent&targetIds=${encodeURIComponent(agentId)}`)}
+          icon={<Plus />}
         >
-          <Plus className="mr-1 h-3.5 w-3.5" />
           Create
         </Button>
       </div>
@@ -54,11 +54,11 @@ export function AgentPlaygroundDatasets({ agentId }: AgentPlaygroundDatasetsProp
       <ScrollArea className="flex-1">
         <div className="space-y-2 p-4">
           {isDatasetsLoading ? (
-            <div className="flex items-center justify-center py-12">
+            <div className="flex items-center justify-center py-8">
               <Loader2 className="text-neutral3 h-5 w-5 animate-spin" />
             </div>
           ) : datasets.length === 0 ? (
-            <div className="space-y-3 py-12 text-center">
+            <div className="space-y-3 py-8 text-center">
               <Icon size="lg" className="text-neutral3 mx-auto">
                 <Database />
               </Icon>

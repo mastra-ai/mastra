@@ -97,6 +97,7 @@ export function TracesListView({
     count: traces.length,
     containerRef: scrollRef,
     onNavigate: index => virtualizer.scrollToIndex(index),
+    global: true,
   });
 
   // Reset scroll to top whenever a fresh query resolves (filter / date range change).

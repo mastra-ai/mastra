@@ -1,5 +1,29 @@
 # @mastra/playground-ui
 
+## 55.0.0-alpha.4
+
+### Minor Changes
+
+- Added an `onSelectRow` prop to `DataList.RowWrapper` so a whole row (including trailing cells) can be focused, clicked, or activated with Enter. `DataList.RowLink` now forwards its ref. ([#23762](https://github.com/mastra-ai/mastra/pull/23762))
+
+### Patch Changes
+
+- Button: add an `icon` prop. The icon is always rendered on the left of the label, wrapped in `<Icon>`, with a fixed gap, size, opacity and hover transition defined once in `Button`. All icon+label buttons in `@mastra/playground-ui` and `@mastra/playground` now use `icon={...}` instead of composing the icon inside `children`. ([#23764](https://github.com/mastra-ai/mastra/pull/23764))
+
+- Give every text-only Button an icon via `icon={...}`: entity icons from the sidebar (Agent, Workflow, Dataset, Scorer, Trace, Memory, Tools, …) when the action targets a Mastra entity, lucide icons by action verb otherwise (Cancel → `X`, Save → `Check`, Delete → `Trash2`, Connect → `Plug`, Publish → `Rocket`, …). Buttons whose label is data (ids, values, zoom level) and pass-through wrappers are left unchanged. ([#23764](https://github.com/mastra-ai/mastra/pull/23764))
+
+- Added a `global` option to `useDataListKeyboard` / `useTableKeydown`. When enabled, ArrowUp/ArrowDown/PageUp/PageDown move the list selection from anywhere on the page, without first focusing a row. Keys typed into inputs, comboboxes, menus or open dialogs are left untouched. Enable it on the single main list of a page: ([#23760](https://github.com/mastra-ai/mastra/pull/23760))
+
+  ```ts
+  const { containerRef, getRowProps } = useDataListKeyboard({ count: items.length, global: true });
+  ```
+
+  Studio list pages (agents, tools, workflows, MCP servers, processors, prompts, scorers, datasets, experiments, schedules, inbox, skills, logs, traces) now use it, so pressing ArrowUp/ArrowDown moves the selection right away without having to click or tab into the list first.
+
+- Studio lists with cells outside the main link/button (agents, datasets, experiments, workflows, inbox, skills) now activate from anywhere on the row: clicking a trailing cell navigates or selects, and keyboard focus lands on the row itself instead of the inner link. Buttons, popovers and expanders inside those rows keep their own behavior without triggering the row. ([#23762](https://github.com/mastra-ai/mastra/pull/23762))
+
+- Tighten Studio's visual density: smaller controls, headings, table rows and badges, plus reduced page gutters, section gaps, card and dialog insets to match a denser layout scale. ([#23741](https://github.com/mastra-ai/mastra/pull/23741))
+
 ## 55.0.0-alpha.3
 
 ### Patch Changes

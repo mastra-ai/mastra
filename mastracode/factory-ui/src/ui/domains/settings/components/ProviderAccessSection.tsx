@@ -1,7 +1,7 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Input } from '@mastra/playground-ui/components/Input';
-import { SettingsRow } from '@mastra/playground-ui/components/SettingsRow';
+import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
 import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -22,7 +22,7 @@ import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { AddApiKeyDialog } from './AddApiKeyDialog';
 import { ProviderOAuthDialog } from './ProviderOAuthDialog';
 import { providerDisplayName } from './provider-display-name';
-import { SettingsCard } from './SettingsCard';
+
 import { ScopeSwap, useScopeControl } from './SettingsScope';
 import type { SettingsScope } from './SettingsScope';
 import { SettingsSubsection } from './SettingsSubsection';
@@ -42,10 +42,6 @@ function mutationErrorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
 }
 
-/**
- * Credential held at one scope. The legacy `source` field stands in for the
- * per-scope fields in local mode and while /auth/me is still loading.
- */
 function credentialAt(provider: ProviderInfo, scope: CredentialScope): Credential | undefined {
   if (scope === 'org') {
     if (provider.orgCredential) return provider.orgCredential;
@@ -98,11 +94,6 @@ function StatusBadge({ provider, rowScope }: { provider: ProviderInfo; rowScope:
   );
 }
 
-/**
- * Provider credential management: OAuth sign-in on one tab, API keys on the
- * other. The section's scope switch decides whether rows show and edit the
- * caller's personal credentials or the org-wide ones (admins only).
- */
 export function ProviderAccessSection({ description }: { description?: string }) {
   const providersQuery = useProvidersQuery();
   const authQuery = useFactoryAuth();
@@ -129,8 +120,6 @@ export function ProviderAccessSection({ description }: { description?: string })
     .filter(provider => provider.oauth?.supported === true)
     .sort((left, right) => left.provider.localeCompare(right.provider));
 
-  // OAuth-capable providers usually accept API keys too, so the API-key tab
-  // lists every provider, credentialed-first.
   const apiKeyProviders = providers.toSorted((left, right) => {
     const leftHas = credentialAt(left, scope) !== undefined;
     const rightHas = credentialAt(right, scope) !== undefined;
@@ -211,7 +200,7 @@ export function ProviderAccessSection({ description }: { description?: string })
 
           <TabContent value="oauth" className="flex flex-col gap-3">
             <ScopeSwap control={scopeControl}>
-              <SettingsCard>
+              <SettingsContainer>
                 {providersQuery.isPending ? (
                   <div className="px-4 py-3">
                     <SkeletonRows label="Loading providers" rows={3} rowClassName="h-9 w-full" />
@@ -227,7 +216,7 @@ export function ProviderAccessSection({ description }: { description?: string })
                     const signedIn = own === 'oauth';
                     const covered = own !== undefined || orgCoverage(provider, rowScope) !== undefined;
                     return (
-                      <SettingsRow key={provider.provider} variant="factory" label={displayName}>
+                      <SettingsRow key={provider.provider} label={displayName}>
                         <span className="flex items-center gap-2">
                           <StatusBadge provider={provider} rowScope={rowScope} />
                           {signedIn ? (
@@ -260,7 +249,7 @@ export function ProviderAccessSection({ description }: { description?: string })
                     );
                   })
                 )}
-              </SettingsCard>
+              </SettingsContainer>
             </ScopeSwap>
           </TabContent>
 
@@ -278,7 +267,7 @@ export function ProviderAccessSection({ description }: { description?: string })
             </div>
 
             <ScopeSwap control={scopeControl}>
-              <SettingsCard className="max-h-[280px] overflow-y-auto">
+              <SettingsContainer className="max-h-[280px] overflow-y-auto">
                 {providersQuery.isPending ? (
                   <div className="px-4 py-3">
                     <SkeletonRows label="Loading providers" rows={3} rowClassName="h-9 w-full" />
@@ -292,7 +281,7 @@ export function ProviderAccessSection({ description }: { description?: string })
                     const displayName = providerDisplayName(provider.provider);
                     const storedKey = credentialAt(provider, scope) === 'api_key';
                     return (
-                      <SettingsRow key={provider.provider} variant="factory" label={displayName}>
+                      <SettingsRow key={provider.provider} label={displayName}>
                         <span className="flex items-center gap-2">
                           <StatusBadge provider={provider} rowScope={rowScope} />
                           <Button
@@ -319,7 +308,7 @@ export function ProviderAccessSection({ description }: { description?: string })
                     );
                   })
                 )}
-              </SettingsCard>
+              </SettingsContainer>
             </ScopeSwap>
           </TabContent>
 

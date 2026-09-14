@@ -81,13 +81,21 @@ export const Disabled: Story = {
 
 export const WithIcon: Story = {
   args: {
-    children: (
-      <>
-        <Plus />
-        Add Item
-      </>
-    ),
+    icon: <Plus />,
+    children: 'Add Item',
   },
+};
+
+export const WithIconSizes: Story = {
+  render: () => (
+    <div className="flex items-center gap-4">
+      {(['xs', 'sm', 'md', 'lg'] as const).map(size => (
+        <Button key={size} size={size} icon={<Plus />}>
+          Add Item
+        </Button>
+      ))}
+    </div>
+  ),
 };
 
 export const WithTooltip: Story = {

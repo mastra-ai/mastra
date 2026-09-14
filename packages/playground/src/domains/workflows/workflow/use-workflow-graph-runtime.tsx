@@ -1,4 +1,6 @@
 import type { SerializedStepFlowEntry } from '@mastra/core/workflows';
+import { WorkflowBoundaryNode, WORKFLOW_DATA_EDGE_TYPE } from '@mastra/playground-ui/components/Workflow';
+
 import type { EdgeProps, NodeProps } from '@xyflow/react';
 import { useContext, useMemo } from 'react';
 
@@ -6,8 +8,7 @@ import { useCurrentRun } from '../context/use-current-run';
 import { WorkflowRunContext } from '../context/workflow-run-context';
 import { buildStepSuccessors, buildStepsFlow, collectGraphStepFlags, isBranchArmBypassed } from './utils';
 import type { WorkflowGraphEdge } from './utils';
-import { WorkflowBoundaryNode } from './workflow-boundary-node';
-import { WorkflowDataEdge, WORKFLOW_DATA_EDGE_TYPE } from './workflow-data-edge';
+import { WorkflowDataEdge } from './workflow-data-edge';
 import { WorkflowGraphNode } from './workflow-graph-node';
 import { WORKFLOW_BOUNDARY_NODE_TYPE, WORKFLOW_STEP_NODE_TYPE } from './workflow-step-node-utils';
 import type { WorkflowBoundaryNode as WorkflowBoundaryNodeType, WorkflowStepNode } from './workflow-step-node-utils';

@@ -306,7 +306,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         onStartTextFilter={setAutoFocusFilterFieldId}
         hiddenFieldIds={hiddenCreatorFieldIds}
       />
-      <div className="min-h-form-default ml-auto flex max-w-full flex-wrap items-center justify-end gap-2">
+      <div className="min-h-form-md ml-auto flex max-w-full flex-wrap items-center justify-end gap-2">
         <TraceColumnsMenu
           preferences={traceColumns.preferences}
           usageDisabledReason={usageDisabledReason}

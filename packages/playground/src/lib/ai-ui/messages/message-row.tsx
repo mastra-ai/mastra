@@ -341,7 +341,7 @@ export const MessageRow = memo(function MessageRow({
         <DatasetSaveAction messageText={getTextFromParts(message)} />
         <div
           className={cn(
-            'max-w-[max(366px,70%)] break-words px-4 py-2 text-neutral6 text-ui-lg leading-ui-lg rounded-xl bg-surface3',
+            'max-w-[max(366px,70%)] break-words px-4 py-2 text-neutral6 text-ui-md leading-ui-md rounded-xl bg-surface3',
             isPending && 'opacity-60 animate-pulse',
           )}
         >
@@ -356,7 +356,7 @@ export const MessageRow = memo(function MessageRow({
 
   return (
     <div className={cn('group max-w-full', className)} {...rootProps} data-message-id={message.id}>
-      <div className="text-neutral6 text-ui-lg leading-ui-lg pt-2">
+      <div className="text-neutral6 text-ui-md leading-ui-md pt-2">
         <MessageFactory message={shownMessage} {...assistantRenderers} status={messageStatusRenderers} />
       </div>
       {(showActionBar || footerSlot) && (

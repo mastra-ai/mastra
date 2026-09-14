@@ -106,17 +106,11 @@ const RuleGroupView: React.FC<RuleGroupViewProps> = ({ schema, group, onChange, 
       ))}
 
       <div className="flex gap-1 p-2">
-        <Button type="button" onClick={handleAddRule} variant="ghost" size="sm">
-          <Icon>
-            <Plus />
-          </Icon>
+        <Button type="button" onClick={handleAddRule} variant="ghost" size="sm" icon={<Plus />}>
           Add rule
         </Button>
         {depth < maxDepth - 1 && (
-          <Button type="button" onClick={handleAddGroup} variant="ghost" size="sm">
-            <Icon>
-              <Component />
-            </Icon>
+          <Button type="button" onClick={handleAddGroup} variant="ghost" size="sm" icon={<Component />}>
             Add group
           </Button>
         )}
