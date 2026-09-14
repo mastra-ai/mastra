@@ -3,10 +3,7 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 export type RouteItemOverlayProps = {
   /** Accessible label for the floating dialog. */
   label: string;
-  /**
-   * Widens the panel column (e.g. when a detail split is shown inside),
-   * mirroring the `sidePanelWidth="wide"` behavior of `TracesLayout` on the traces page.
-   */
+  /** Widens the panel column (e.g. when a detail split is shown inside). */
   wide?: boolean;
   children: React.ReactNode;
 };
@@ -17,8 +14,7 @@ export type RouteItemOverlayProps = {
  * frame. It stays click-through except for the panel, so the list beneath remains
  * interactive. The panel is transparent — the cards carry the visible frames.
  *
- * Same layout pattern as `TracesLayout`: a 2-column CSS grid whose column
- * template animates between normal and wide.
+ * A 2-column CSS grid whose column template animates between normal and wide.
  */
 export function RouteItemOverlay({ label, wide = false, children }: RouteItemOverlayProps) {
   return (

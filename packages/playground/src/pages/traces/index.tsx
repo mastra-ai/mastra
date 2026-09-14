@@ -42,7 +42,6 @@ import { SpanFeedbackTab } from '@/domains/traces/components/span-feedback-tab';
 import { TraceFeedbackTab } from '@/domains/traces/components/trace-feedback-tab';
 import { TraceScoresTab } from '@/domains/traces/components/trace-scores-tab';
 import { TraceSpanPanel } from '@/domains/traces/components/trace-span-panel';
-import { getTraceThreadId } from '@/domains/traces/components/trace-thread-context';
 import { useSpanFeedback } from '@/domains/traces/hooks/use-span-feedback';
 import { useTraceFeedback } from '@/domains/traces/hooks/use-trace-feedback';
 
@@ -277,17 +276,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   // Tool mocks only make sense for agent runs — gate the "Add tool mocks to item" action
   // on the displayed root/anchor span being an agent.
   const isAgentTrace = anchorSpan?.entityType === 'agent';
-  // The side panel widens per column shown: Messages (agent turn) and/or span detail.
-  const hasMessagesColumn = !!getTraceThreadId(anchorSpan, anchorSpanId ?? undefined);
-  const hasSpanColumn = !!url.spanIdParam;
-  // The full thread view embeds its own columns (messages, spans, span detail), so it takes the whole frame.
   const isFullThreadOpen = !!url.traceIdParam && fullThreadTraceId === url.traceIdParam;
-  const sidePanelWidth =
-    isFullThreadOpen || (hasMessagesColumn && hasSpanColumn)
-      ? 'full'
-      : hasMessagesColumn || hasSpanColumn
-        ? 'wide'
-        : 'half';
 
   const filtersApplied =
     !!url.selectedEntityOption ||
@@ -420,7 +409,6 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
       {pageTopArea}
 
       <TracesLayout
-        sidePanelWidth={sidePanelWidth}
         listSlot={
           <TracesListView
             // Remount on mode switch: the virtualizer caches measurements / scroll state from

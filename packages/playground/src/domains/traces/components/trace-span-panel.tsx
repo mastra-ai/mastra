@@ -1,8 +1,11 @@
 import { SpanDataPanelView } from '@mastra/playground-ui/domains/traces/components/span-data-panel-view';
-import type { TraceDataPanelView } from '@mastra/playground-ui/domains/traces/components/trace-data-panel-view';
+import type {
+  TraceDataPanelTab,
+  TraceDataPanelView,
+} from '@mastra/playground-ui/domains/traces/components/trace-data-panel-view';
 import { useSpanDetail } from '@mastra/playground-ui/domains/traces/hooks/use-span-detail';
 import { useTraceSpanNavigation } from '@mastra/playground-ui/domains/traces/hooks/use-trace-span-navigation';
-import type { ComponentProps, ReactNode } from 'react';
+import { useState, type ComponentProps, type ReactNode } from 'react';
 
 import { TraceDataPanel } from '@/domains/traces/components/trace-data-panel';
 import { TraceMessagesPanel } from '@/domains/traces/components/trace-messages-panel';
@@ -111,6 +114,9 @@ export function TraceSpanPanel({
 }: TraceSpanPanelProps) {
   const { data: spanDetailData, isLoading: isLoadingSpanDetail } = useSpanDetail(traceId, selectedSpanId ?? '');
   const { handlePreviousSpan, handleNextSpan } = useTraceSpanNavigation(spans, selectedSpanId, onSpanSelect);
+  // Controlled so highlighting spans from a message can land the reader on the Spans tab,
+  // where the featured spans are actually shown.
+  const [traceTab, setTraceTab] = useState<TraceDataPanelTab>('details');
 
   // The trace summary links the entity to its Studio page; only Studio knows the routes.
   const rootSpan = anchorSpanId
@@ -161,6 +167,8 @@ export function TraceSpanPanel({
       feedbackTabBadge={feedbackTabBadge}
       feedbackTabSlot={feedbackTabSlot}
       featuredSpanIds={featuredSpanIds}
+      activeTab={traceTab}
+      onTabChange={setTraceTab}
       messagesPanelSlot={
         showPartialThread && threadId ? (
           <TraceMessagesPanel
@@ -168,7 +176,14 @@ export function TraceSpanPanel({
             threadId={threadId}
             fullThreadHref={fullThreadHref}
             onViewFullThread={onFullThreadOpenChange ? () => onFullThreadOpenChange(true) : undefined}
-            onHighlightSpans={onHighlightSpans}
+            onHighlightSpans={
+              onHighlightSpans
+                ? spanIds => {
+                    setTraceTab('details');
+                    onHighlightSpans(spanIds);
+                  }
+                : undefined
+            }
           />
         ) : undefined
       }

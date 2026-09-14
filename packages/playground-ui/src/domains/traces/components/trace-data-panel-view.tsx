@@ -330,7 +330,6 @@ export function TraceDataPanelView({
                   value={query}
                   onChange={e => setQuery(e.target.value)}
                   onReset={() => setQuery('')}
-                  size="sm"
                   variant="outline"
                   className="w-full"
                 />
@@ -346,7 +345,7 @@ export function TraceDataPanelView({
                   onValueChange={handleTabChange}
                   className="grid h-full min-h-0 grid-rows-[auto_1fr]"
                 >
-                  <DataPanel.Header className="min-h-0 px-2 py-1">
+                  <DataPanel.Header className="min-h-0 p-1">
                     <TabList variant="pill-ghost">
                       <Tab value="details">Spans</Tab>
                       <Tab value="timeline">Timeline</Tab>
@@ -456,7 +455,26 @@ function TracePanelColumns({
   // The timeline column must never be scrolled by this.
   const { ref: scrollToMatchRef } = useScrollToFirstHighlight<HTMLDivElement>(highlightQuery, spanPanelKey);
 
-  const showMessages = !!messagesPanelSlot && !messagesCollapsed;
+  const hasMessages = !!messagesPanelSlot;
+  // The messages slot only exists once the spans have loaded, so its first appearance is
+  // part of the initial load and must snap into place instead of sliding the span tree
+  // sideways. Later column changes (tab switch, span panel) keep the transition.
+  const [messagesSettled, setMessagesSettled] = useState(hasMessages);
+  useEffect(() => {
+    if (!hasMessages || messagesSettled) return;
+    // Two frames so the snapped layout is painted before the transition is re-enabled.
+    let inner: number | undefined;
+    const outer = requestAnimationFrame(() => {
+      inner = requestAnimationFrame(() => setMessagesSettled(true));
+    });
+    return () => {
+      cancelAnimationFrame(outer);
+      if (inner !== undefined) cancelAnimationFrame(inner);
+    };
+  }, [hasMessages, messagesSettled]);
+  const animateColumns = messagesSettled || !hasMessages;
+
+  const showMessages = hasMessages && !messagesCollapsed;
   const columns =
     showMessages && spanPanelSlot
       ? 'grid-cols-[1fr_1fr_1fr]'
@@ -470,7 +488,11 @@ function TracePanelColumns({
     <div
       ref={highlightRef}
       data-trace-columns
-      className={cn('grid min-h-0 flex-1 transition-[grid-template-columns] duration-300 ease-in-out', columns)}
+      className={cn(
+        'grid min-h-0 flex-1',
+        animateColumns && 'transition-[grid-template-columns] duration-300 ease-in-out',
+        columns,
+      )}
     >
       <div
         className={cn(

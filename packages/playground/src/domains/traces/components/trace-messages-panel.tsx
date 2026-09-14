@@ -2,7 +2,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
 import { cn } from '@mastra/playground-ui/utils/cn';
 
-import { Eye } from 'lucide-react';
+import { MessagesSquareIcon } from 'lucide-react';
 import { TraceThreadItemView } from '@/domains/traces/components/trace-thread-item-view';
 import { useThreadHasOtherTraces } from '@/domains/traces/hooks/use-thread-has-other-traces';
 import { Link } from '@/lib/link';
@@ -41,11 +41,11 @@ export function TraceMessagesPanel({
         {showFullThreadAction && (
           <div className="flex justify-center pb-3">
             {onViewFullThread ? (
-              <Button icon={<Eye />} variant="default" size="xs" onClick={onViewFullThread}>
+              <Button icon={<MessagesSquareIcon />} variant="ghost" size="xs" onClick={onViewFullThread}>
                 View full thread
               </Button>
             ) : (
-              <Button icon={<Eye />} as={Link} href={fullThreadHref!} variant="default" size="xs">
+              <Button icon={<MessagesSquareIcon />} as={Link} href={fullThreadHref!} variant="ghost" size="xs">
                 View full thread
               </Button>
             )}

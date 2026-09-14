@@ -119,6 +119,21 @@ describe('TraceSpanPanel', () => {
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     });
 
+    it('when spans are highlighted from the Timeline tab, then the Spans tab becomes active', async () => {
+      installHandlers();
+      const { queryClient } = renderPanel({ showPartialThread: true, onHighlightSpans: vi.fn() });
+
+      await screen.findByText('No rain is expected.');
+      fireEvent.click(screen.getByRole('tab', { name: 'Timeline' }));
+      expect(screen.getByRole('tab', { name: 'Timeline' }).getAttribute('aria-selected')).toBe('true');
+
+      // The featured spans are shown in the Spans tab, so highlighting lands the reader there.
+      fireEvent.click(screen.getAllByRole('button', { name: 'Highlight spans' })[0]!);
+
+      expect(screen.getByRole('tab', { name: 'Spans' }).getAttribute('aria-selected')).toBe('true');
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    });
+
     it('when the thread has other traces and the panel can swap in place, then "View full thread" asks to open it', async () => {
       installHandlers({ threadTraceCount: 2 });
       const onFullThreadOpenChange = vi.fn();

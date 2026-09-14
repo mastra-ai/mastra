@@ -829,6 +829,16 @@ describe('TraceDataPanelView — messages column', () => {
       expect(columns(container).className).toContain('transition-[grid-template-columns]');
     });
 
+    it('snaps the messages column into place when it appears after the initial load', () => {
+      // The slot only exists once spans have loaded; animating the grid template at that
+      // point would slide the span tree sideways while the panel is still loading.
+      const { container, rerender } = render(<TraceDataPanelView {...baseProps} />);
+      rerender(<TraceDataPanelView {...baseProps} messagesPanelSlot={messages} />);
+
+      expect(columns(container).className).toContain('grid-cols-[1fr_1fr_0fr]');
+      expect(columns(container).className).not.toContain('transition-[grid-template-columns]');
+    });
+
     it('orders the columns messages → trace → span', () => {
       const { container } = render(
         <TraceDataPanelView {...baseProps} messagesPanelSlot={messages} spanPanelSlot={spanDetail} />,
