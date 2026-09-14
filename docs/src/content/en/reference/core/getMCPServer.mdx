@@ -62,7 +62,7 @@ const serverById = mastra.getMCPServerById('my-mcp-server')
 
 `MCPServerRegistryEntry` is the union of `MCPServerBase` and `MCPServerBaseV2`, exported from `@mastra/core/mcp`. Existing MCP 1.x servers don't need new properties or methods. Use `isMCPServerV2(server)` after checking that the lookup returned a server to narrow the union.
 
-`MCPServerBaseV2` takes the same `MCPServerConfig` as `MCPServerBase` (tools, agents, workflows, metadata, FGA options), slugifies a configured `id`, and registers its tools, agents and workflows with Mastra the same way. It differs only where the 2026-07-28 protocol does: there are no `startSSE`/`startHonoSSE` methods, `executeTool` reports a suspended tool instead of a bare result, and `mcpVersion` is `2`. Adding these core contracts doesn't change the behavior of an installed `@mastra/mcp` 1.x server.
+`MCPServerBaseV2` accepts the same `MCPServerConfig` as `MCPServerBase`, including tools, agents, workflows, metadata and FGA options, so a configured `id` is slugified and tools, agents and workflows are registered with Mastra exactly like a 1.x server. The differences are limited to what the 2026-07-28 protocol changed, which means the base has no `startSSE` or `startHonoSSE` methods, its `executeTool` reports a suspended tool rather than a bare result, and it carries `mcpVersion` set to `2`. None of this changes the behavior of an installed `@mastra/mcp` 1.x server.
 
 ### Tools that ask for input
 
