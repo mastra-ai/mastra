@@ -45,6 +45,10 @@ import type {
   AgentControllerSessionState,
   AgentControllerThreadInfo,
 } from '../src/index.js';
+import type {
+  ListTracesArgs as ObservabilityListTracesArgs,
+  ListTracesResponse as ObservabilityListTracesResponse,
+} from '../src/resources/observability-route-types.js';
 
 type Equal<Actual, Expected> =
   (<T>() => T extends Actual ? 1 : 2) extends <T>() => T extends Expected ? 1 : 2 ? true : false;
@@ -142,6 +146,20 @@ type _ObservabilityTraceQuery = Expect<Equal<QueryParams<'GET /observability/tra
 type _ObservabilityTraceResponse = Expect<
   Equal<NonNullable<RouteResponse<'GET /observability/traces'>['pagination']>['page'], number>
 >;
+type _ObservabilityNestedFilter = Expect<
+  Equal<
+    NonNullable<ObservabilityListTracesArgs['filters']>['dateRange'],
+    QueryParams<'GET /observability/traces'>['dateRange']
+  >
+>;
+type _ObservabilitySerializedResponse = Expect<
+  Equal<ObservabilityListTracesResponse['spans'][number]['startedAt'], string>
+>;
+const observabilityTraceQuery = {
+  filters: { dateRange: { start: new Date() } },
+  pagination: { page: 1 },
+  orderBy: { field: 'startedAt', direction: 'DESC' },
+} satisfies ObservabilityListTracesArgs;
 type _ScoreListInput = Expect<
   ListScoresByRunIdParams extends PathParams<'GET /scores/run/:runId'> & QueryParams<'GET /scores/run/:runId'>
     ? true
