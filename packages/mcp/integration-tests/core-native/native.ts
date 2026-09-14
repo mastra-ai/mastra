@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { MCPServerBaseV2 } from '@mastra/core/mcp';
-import type { MCPServerHTTPOptionsV2, MCPToolExecutionContextV2 } from '@mastra/core/mcp';
+import type { MCPServerHTTPOptions, MCPToolExecutionContextV2 } from '@mastra/core/mcp';
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
@@ -29,7 +29,7 @@ const confirmation = createTool({
 });
 
 class Fixture extends MCPServerBaseV2 {
-  async startHTTP(_options: MCPServerHTTPOptionsV2) {}
+  async startHTTP(_options: MCPServerHTTPOptions) {}
   async startStdio() {}
   async close() {}
   getServerInfo() {
