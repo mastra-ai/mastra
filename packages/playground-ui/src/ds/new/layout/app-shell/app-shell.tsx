@@ -39,7 +39,7 @@ export function AppShell({
         aria-label={mainLabel}
         role="group"
         tabIndex={0}
-        className="min-h-0 overflow-y-auto"
+        className="min-h-0 overflow-y-auto outline-none"
       >
         {children}
       </div>
