@@ -170,7 +170,7 @@ export function createGoalScorer({
         const recentUser = lastUserContent
           ? `\n\nLatest user message:\n${truncateForJudge(lastUserContent)}\n\nAssistant steps since that user message: ${assistantStepsSinceLastUser}`
           : '';
-        return `Goal: ${objective}${recentUser}\n\nLatest assistant message:\n${output}`;
+        return `Goal: ${objective}${recentUser}\n\nLatest assistant message:\n${output}\n\nReturn your final verdict as a JSON object with a "decision" field ("done", "continue", or "waiting") and a "reason" string. Do not include Markdown or text outside the JSON object.`;
       },
     })
     .generateScore(({ results }) => {

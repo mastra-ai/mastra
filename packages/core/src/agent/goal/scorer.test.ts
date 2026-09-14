@@ -1,4 +1,5 @@
-import { describe, it, expect } from 'vitest';
+import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
 import { createMockModel } from '../../test-utils/llm-mock';
 import { createTool } from '../../tools';
@@ -167,6 +168,49 @@ describe('createGoalScorer tool support', () => {
     const instructions = scorer.config.judge?.instructions ?? '';
     expect(instructions).toBe(customPrompt);
   });
+});
+
+describe('createGoalScorer native structured output', () => {
+  it.each([undefined, 'Custom judge prompt.'])(
+    'requests a JSON verdict without disabling native output (prompt: %s)',
+    async prompt => {
+      const model = new MockLanguageModelV2({
+        provider: 'crof',
+        modelId: 'glm-5.3-flash',
+        doStream: async () => ({
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'text-start', id: 'verdict' },
+            {
+              type: 'text-delta',
+              id: 'verdict',
+              delta: JSON.stringify({ decision: 'continue', reason: 'Tests have not run.' }),
+            },
+            { type: 'text-end', id: 'verdict' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 } },
+          ]),
+        }),
+      });
+      const stream = vi.spyOn(model, 'doStream');
+      const scorer = createGoalScorer({ judgeModel: model, prompt });
+      const result = await scorer.run({
+        input: { originalTask: 'Update documentation and run tests.', currentText: 'Documentation is updated.' },
+        output: 'Documentation is updated.',
+      });
+
+      expect(result.score).toBe(0);
+      expect(result.reason).toBe('Tests have not run.');
+      expect(stream).toHaveBeenCalledTimes(1);
+      const request = stream.mock.calls[0]![0];
+      expect(request.responseFormat).toMatchObject({ type: 'json', schema: { required: ['decision', 'reason'] } });
+      const userMessage = request.prompt.findLast(message => message.role === 'user');
+      expect(userMessage?.content).toMatchObject([
+        { type: 'text', text: expect.stringContaining('Return your final verdict as a JSON object') },
+      ]);
+      expect(JSON.stringify(userMessage?.content)).toContain('Do not include Markdown');
+      expect(scorer.config.judge?.instructions).toBe(prompt ?? DEFAULT_GOAL_JUDGE_PROMPT);
+    },
+  );
 });
 
 describe('createGoalScorer JSON prompt injection', () => {
