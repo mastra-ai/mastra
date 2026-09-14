@@ -130,9 +130,11 @@ export function MessageBubble({
   };
 
   const renderers = {
-    Error: (part: MastraErrorPart) => <Notice variant="destructive" title={part.error.name ?? 'Error'}>
-      <Notice.Message>{part.error.message}</Notice.Message>
-    </Notice>,
+    Error: (part: MastraErrorPart) => (
+      <Notice variant="destructive" title={part.error.name ?? 'Error'}>
+        <Notice.Message>{part.error.message}</Notice.Message>
+      </Notice>
+    ),
     Text: (part: TextPart) => {
       if (!part.text.trim()) return null;
       if (entry.message.role === 'user') {

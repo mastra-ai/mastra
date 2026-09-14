@@ -102,8 +102,8 @@ export function TranscriptEntries({
     entries.flatMap(entry =>
       entry.kind === 'message'
         ? entry.message.content.parts.flatMap(part =>
-          part.type === 'tool-invocation' ? [part.toolInvocation.toolCallId] : [],
-        )
+            part.type === 'tool-invocation' ? [part.toolInvocation.toolCallId] : [],
+          )
         : [],
     ),
   );
@@ -139,9 +139,9 @@ export function TranscriptEntries({
         const reply = runningTurn
           ? undefined
           : steps
-            .map(step => messageText(renderableParts(step)))
-            .filter(Boolean)
-            .join('\n\n');
+              .map(step => messageText(renderableParts(step)))
+              .filter(Boolean)
+              .join('\n\n');
 
         return (
           <ChatShell.Turn
