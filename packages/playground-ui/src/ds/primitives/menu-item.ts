@@ -6,8 +6,11 @@ import { cn } from '@/lib/utils';
 // left-aligned, with `rounded-lg` instead of the pill radius so stacked items sit
 // concentrically inside a `rounded-xl p-1` popup. Base UI drives keyboard/pointer
 // highlight via `data-highlighted`, which `:hover` alone does not cover.
+// `flex` (not Button's `inline-flex`): popups size to their content (`w-max`), and
+// inline-level items would be measured side by side on one line, stretching the popup
+// to the full available width instead of the widest item.
 const MENU_ITEM_OVERRIDES = cn(
-  'w-full justify-start rounded-lg text-left select-none',
+  'flex w-full justify-start rounded-lg text-left select-none',
   // Button brightens its border on focus-visible; inside a menu the highlight is the focus cue.
   'focus-visible:border-transparent',
   'data-highlighted:bg-neutral6/5 data-highlighted:text-neutral6',
@@ -39,8 +42,11 @@ export const MENU_SIDE_OFFSET = 4;
 // A hidden anchor makes Floating UI fall back to the top-left corner, so the popup goes with it.
 export const menuPositionerClass = 'z-50 outline-none data-[anchor-hidden]:hidden';
 
+// Width: at least the anchor (or 11rem), otherwise as wide as the widest item, never
+// wider than the space Floating UI reports. Shared by every menu-like popup.
 export const menuPopupClass = cn(
-  'z-50 max-h-[min(var(--max-height-dropdown-max-height),var(--available-height))] min-w-[max(11rem,var(--anchor-width))]',
+  'z-50 max-h-[min(var(--max-height-dropdown-max-height),var(--available-height))]',
+  'w-max max-w-(--available-width) min-w-[max(11rem,var(--anchor-width))]',
   'origin-[var(--transform-origin)] overflow-x-hidden overflow-y-auto',
   'rounded-xl border border-border1 bg-surface3 p-1 text-neutral4 shadow-dialog outline-none',
   'data-[closed]:animate-out data-[closed]:fade-out-0 data-[closed]:zoom-out-95 data-[open]:animate-in data-[open]:fade-in-0 data-[open]:zoom-in-95',

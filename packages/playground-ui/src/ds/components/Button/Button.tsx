@@ -133,7 +133,8 @@ function isIconOnly(children: React.ReactNode): boolean {
 
 // Type guard: narrows `ButtonSize` to `IconButtonSize` so consumers (e.g. `iconChildSizeMap`)
 // can index into icon-only structures without a cast.
-function isIconButtonSize(size: ButtonSize | null | undefined): size is IconButtonSize {
+// eslint-disable-next-line react-refresh/only-export-components -- shared with Combobox's icon-only trigger
+export function isIconButtonSize(size: ButtonSize | null | undefined): size is IconButtonSize {
   return typeof size === 'string' && size.startsWith('icon-');
 }
 

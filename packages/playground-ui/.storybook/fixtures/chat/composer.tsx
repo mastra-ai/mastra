@@ -1,5 +1,6 @@
 import { ArrowUp, Paperclip, Square, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { reviewCommands } from './commands';
 import type { ChatFile, Phase } from './data';
 import { UserFilePartRenderer } from '@/domains/chat/messages/renderers/user-file-part-renderer';
 import { Button } from '@/ds/components/Button';
@@ -10,6 +11,8 @@ import {
   ComposerBox,
   ComposerInput,
   ComposerRing,
+  ComposerSuggestions,
+  useComposerCommands,
 } from '@/ds/components/Composer';
 import { Notice } from '@/ds/components/Notice';
 import { Txt } from '@/ds/components/Txt';
@@ -48,6 +51,14 @@ export function ConversationComposer({ phase, busy, onSend, onStop }: Conversati
   const reading = files.some(file => !file.part && !file.error);
   const readyFiles = files.flatMap(file => (file.part ? [file.part] : []));
   const canSend = !busy && files.every(file => file.part) && (text.trim().length > 0 || readyFiles.length > 0);
+  const commands = useComposerCommands({
+    commands: reviewCommands,
+    value: text,
+    onValueChange: setText,
+    onSubmit: submitMessage,
+    inputRef: messageInput,
+    enabled: !busy,
+  });
 
   useEffect(() => {
     const pending = readers.current;
@@ -93,9 +104,9 @@ export function ConversationComposer({ phase, busy, onSend, onStop }: Conversati
     setFiles(current => current.filter(file => file.id !== id));
   }
 
-  function submitMessage() {
+  function submitMessage(message = text) {
     if (!canSend) return;
-    onSend(text, readyFiles);
+    onSend(message, readyFiles);
     setText('');
     setFiles([]);
     setSentCount(current => current + 1);
@@ -123,6 +134,7 @@ export function ConversationComposer({ phase, busy, onSend, onStop }: Conversati
       />
       <ComposerRing busy={phase === 'streaming'}>
         <ComposerBox sendingPulseKey={sentCount}>
+          <ComposerSuggestions {...commands.suggestionsProps} />
           {files.length > 0 && (
             <ComposerAttachments aria-label="Draft attachments" className="flex flex-wrap gap-2 px-3 pt-3">
               {files.map(file => (
@@ -154,13 +166,15 @@ export function ConversationComposer({ phase, busy, onSend, onStop }: Conversati
             </ComposerAttachments>
           )}
           <ComposerInput
+            {...commands.inputProps}
             ref={messageInput}
             aria-label="Message"
-            placeholder="Ask a follow-up…"
-            value={text}
-            onChange={event => setText(event.target.value)}
+            placeholder="Ask a follow-up, or / for commands…"
             onKeyDown={event => {
-              const shouldSend = event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing;
+              commands.inputProps.onKeyDown(event);
+              if (event.defaultPrevented) return;
+              const composing = event.nativeEvent.isComposing || event.keyCode === 229;
+              const shouldSend = event.key === 'Enter' && !event.shiftKey && !composing;
               if (shouldSend) {
                 event.preventDefault();
                 submitMessage();
