@@ -47,6 +47,7 @@ const installHandlers = ({ threadTraceCount = 2 }: { threadTraceCount?: number }
     http.get(`${TEST_BASE_URL}/api/observability/feedback`, () =>
       HttpResponse.json({ feedback: [], pagination: { page: 0, perPage: 10, total: 0, hasMore: false } }),
     ),
+    http.get(`${TEST_BASE_URL}/api/mcp/v0/servers`, () => HttpResponse.json({ servers: [], totalCount: 0 })),
   );
 };
 
@@ -118,7 +119,18 @@ describe('TraceSpanPanel', () => {
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     });
 
-    it('when the thread has other traces, then a "View full thread" link points to the advanced thread view', async () => {
+    it('when the thread has other traces and the panel can swap in place, then "View full thread" asks to open it', async () => {
+      installHandlers({ threadTraceCount: 2 });
+      const onFullThreadOpenChange = vi.fn();
+      const { queryClient } = renderPanel({ showPartialThread: true, onFullThreadOpenChange });
+
+      fireEvent.click(await screen.findByRole('button', { name: 'View full thread' }));
+      expect(onFullThreadOpenChange).toHaveBeenCalledWith(true);
+      expect(screen.queryByRole('link', { name: 'View full thread' })).toBeNull();
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    });
+
+    it('when the thread has other traces and no in-place swap is wired, then "View full thread" links to the advanced thread view', async () => {
       installHandlers({ threadTraceCount: 2 });
       const { queryClient } = renderPanel({ showPartialThread: true });
 
@@ -129,14 +141,40 @@ describe('TraceSpanPanel', () => {
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     });
 
-    it('when this trace is the only one in its thread, then no "View full thread" link is shown', async () => {
+    it('when this trace is the only one in its thread, then no "View full thread" action is shown', async () => {
       installHandlers({ threadTraceCount: 1 });
-      const { queryClient } = renderPanel({ showPartialThread: true });
+      const { queryClient } = renderPanel({ showPartialThread: true, onFullThreadOpenChange: vi.fn() });
 
       await screen.findByText('No rain is expected.');
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
       expect(screen.queryByRole('link', { name: 'View full thread' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'View full thread' })).toBeNull();
+    });
+
+    describe('when the full thread is open', () => {
+      it('replaces the trace timeline with the thread view and can go back or close', async () => {
+        installHandlers({ threadTraceCount: 2 });
+        const onFullThreadOpenChange = vi.fn();
+        const onClose = vi.fn();
+        const { queryClient } = renderPanel({
+          showPartialThread: true,
+          isFullThreadOpen: true,
+          onFullThreadOpenChange,
+          onClose,
+        });
+
+        expect(await screen.findByTestId('thread-view-by-trace')).not.toBeNull();
+        expect(screen.queryByText(`Trace ${TRACE_ID}`)).toBeNull();
+        expect(screen.queryByTestId('messages-panel')).toBeNull();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Back to trace' }));
+        expect(onFullThreadOpenChange).toHaveBeenCalledWith(false);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Close Panel' }));
+        expect(onClose).toHaveBeenCalledTimes(1);
+        await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      });
     });
 
     it('does not render the highlight action when no handler is provided', async () => {

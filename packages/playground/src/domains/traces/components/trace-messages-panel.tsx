@@ -12,8 +12,10 @@ export interface TraceMessagesPanelProps {
   /** Memory thread the trace belongs to; used to decide whether a full-thread link is worth showing. */
   threadId?: string;
   className?: string;
-  /** Link to the advanced thread view showing every turn of the thread. */
+  /** Link to the advanced thread view showing every turn of the thread. Used when `onViewFullThread` is absent. */
   fullThreadHref?: string;
+  /** Opens the full thread in place. Takes precedence over `fullThreadHref`. */
+  onViewFullThread?: () => void;
   /** Called with the span ids behind a reconstructed message when the user asks to highlight them. */
   onHighlightSpans?: (spanIds: string[]) => void;
 }
@@ -24,23 +26,31 @@ export function TraceMessagesPanel({
   threadId,
   className,
   fullThreadHref,
+  onViewFullThread,
   onHighlightSpans,
 }: TraceMessagesPanelProps) {
   // A single-trace thread would show exactly what this column already shows.
   const hasOtherTraces = useThreadHasOtherTraces(threadId);
+  const showFullThreadAction = hasOtherTraces && (onViewFullThread || fullThreadHref);
 
   return (
     <div data-testid="messages-panel" className={cn('flex h-full min-h-0 flex-col', className)}>
-      {/* Compact, same height as the tab bar it sits next to. */}
-      {fullThreadHref && hasOtherTraces && (
-        <DataPanel.Header className="flex min-h-0 items-center justify-center px-2 py-1">
-          <Button icon={<Eye />} as={Link} href={fullThreadHref} variant="default" size="xs">
-            View full thread
-          </Button>
-        </DataPanel.Header>
-      )}
       {/* DataPanel.Content already scrolls (`overflow-y-auto`) and pads with `p-3`, matching the span tree. */}
       <DataPanel.Content>
+        {/* Sits at the top of the conversation, scrolling with it; no bordered section of its own. */}
+        {showFullThreadAction && (
+          <div className="flex justify-center pb-3">
+            {onViewFullThread ? (
+              <Button icon={<Eye />} variant="default" size="xs" onClick={onViewFullThread}>
+                View full thread
+              </Button>
+            ) : (
+              <Button icon={<Eye />} as={Link} href={fullThreadHref!} variant="default" size="xs">
+                View full thread
+              </Button>
+            )}
+          </div>
+        )}
         <TraceThreadItemView traceId={traceId} onHighlightSpans={onHighlightSpans} />
       </DataPanel.Content>
     </div>

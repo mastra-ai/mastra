@@ -1,5 +1,5 @@
 import { z } from 'zod/v4';
-import { paginationInfoSchema } from './common';
+import { paginationInfoSchema, createPagePaginationSchema } from './common';
 
 // ============================================================================
 // JSON Schema Types (for inputSchema/groundTruthSchema fields)
@@ -262,10 +262,7 @@ export const datasetAndItemIdPathParams = z.object({
 // Query Parameter Schemas
 // ============================================================================
 
-export const paginationQuerySchema = z.object({
-  page: z.coerce.number().optional().default(0),
-  perPage: z.coerce.number().optional().default(10),
-});
+export const paginationQuerySchema = createPagePaginationSchema(10);
 
 export const listExperimentResultsQuerySchema = paginationQuerySchema.extend({
   tags: z
@@ -312,9 +309,7 @@ export const tenancyQuerySchema = z.object({
   projectId: z.string().optional().describe('Restrict lookup to the given project'),
 });
 
-export const listItemsQuerySchema = z.object({
-  page: z.coerce.number().optional().default(0),
-  perPage: z.coerce.number().optional().default(10),
+export const listItemsQuerySchema = createPagePaginationSchema(10).extend({
   version: z.coerce.number().int().optional(), // Optional version filter for snapshot semantics
   search: z.string().optional(),
 });

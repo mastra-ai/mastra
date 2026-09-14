@@ -1,7 +1,7 @@
 {
   "name": "@mastra/playground-ui",
   "type": "module",
-  "version": "55.0.0-alpha.4",
+  "version": "55.0.0-alpha.5",
   "description": "Mastra Playground components",
   "sideEffects": [
     "**/*.css"
@@ -116,6 +116,12 @@
       "import": {
         "types": "./dist/new/settings.d.ts",
         "default": "./dist/new/settings.es.js"
+      }
+    },
+    "./new/layout/app-shell": {
+      "import": {
+        "types": "./dist/new/layout/app-shell.d.ts",
+        "default": "./dist/new/layout/app-shell.es.js"
       }
     },
     "./layout/tabbed-container": {

@@ -1,5 +1,11 @@
 # @mastra/schema-compat
 
+## 1.3.10-alpha.1
+
+### Patch Changes
+
+- Reduced TypeScript memory usage for applications that define many tools with Zod schemas. ([#23677](https://github.com/mastra-ai/mastra/pull/23677))
+
 ## 1.3.10-alpha.0
 
 ### Patch Changes
