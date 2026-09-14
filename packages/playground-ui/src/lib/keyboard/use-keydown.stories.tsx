@@ -120,9 +120,9 @@ export const SimpleCombos: Story = { render: () => <SimpleCombosDemo /> };
 const TimedSequencesDemo = () => {
   const out = useLog();
   useKeydown({
-    'g{500}+a': () => out.log('g then a → go to Agents'),
-    'g{500}+w': () => out.log('g then w → go to Workflows'),
-    'g{500}+t': () => out.log('g then t → go to Tools'),
+    'g$+a': () => out.log('g then a → go to Agents'),
+    'g$+w': () => out.log('g then w → go to Workflows'),
+    'g$+t': () => out.log('g then t → go to Tools'),
     '?': () => out.log('? → show shortcuts'),
   });
 
@@ -145,16 +145,16 @@ export const TimedSequences: Story = { render: () => <TimedSequencesDemo /> };
 const ChainedSequenceDemo = () => {
   const out = useLog();
   useKeydown({
-    'a{300}+b{300}+c': () => out.log('a → b → c completed (each within 300ms)'),
-    'mod+k{800}+mod+s': () => out.log('mod+k then mod+s (chord with modifiers)'),
+    'a$+b$+c': () => out.log('a → b → c completed (each within 500ms)'),
+    'mod+k$+mod+s': () => out.log('mod+k then mod+s (chord with modifiers)'),
   });
 
   return (
     <Layout title="Longer chains and chords with modifiers on each step." log={out}>
       <Legend
         items={[
-          ['a then b then c', 'three steps, 300ms between each'],
-          ['mod+k then mod+s', 'two chords, 800ms window'],
+          ['a then b then c', 'three steps, 500ms between each'],
+          ['mod+k then mod+s', 'two chords, 500ms window'],
         ]}
       />
     </Layout>
@@ -167,7 +167,7 @@ const PrefixVsPlainDemo = () => {
   const out = useLog();
   useKeydown({
     g: () => out.log('plain g (never fires: the sequence prefix wins)'),
-    'g{500}+a': () => out.log('g then a'),
+    'g$+a': () => out.log('g then a'),
     x: () => out.log('plain x'),
   });
 
@@ -194,7 +194,7 @@ const ScopedTargetDemo = () => {
   const ref = useRef<HTMLDivElement | null>(null);
   useKeydown(
     {
-      'g{500}+a': () => out.log('g then a (inside the panel)'),
+      'g$+a': () => out.log('g then a (inside the panel)'),
       Enter: () => out.log('Enter (inside the panel)'),
     },
     { target: ref },
@@ -228,7 +228,7 @@ const TypingInFieldsDemo = () => {
 
   useKeydown(
     {
-      'g{500}+a': () => out.log('g then a'),
+      'g$+a': () => out.log('g then a'),
       '?': () => out.log('? → show shortcuts'),
       'mod+k': () => out.log('mod+k → still fires from inside the input'),
     },
@@ -253,7 +253,7 @@ export const TypingInFields: Story = { render: () => <TypingInFieldsDemo /> };
 const EnabledToggleDemo = () => {
   const out = useLog();
   const [enabled, setEnabled] = useState(true);
-  useKeydown({ 'g{500}+a': () => out.log('g then a'), 'mod+k': () => out.log('mod+k') }, { enabled });
+  useKeydown({ 'g$+a': () => out.log('g then a'), 'mod+k': () => out.log('mod+k') }, { enabled });
 
   return (
     <Layout title="enabled: detaching the listener also cancels any armed sequence." log={out}>

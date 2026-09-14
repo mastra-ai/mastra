@@ -4,8 +4,8 @@ import { useEffect, useEffectEvent, useState, type RefObject } from 'react';
  * Map of key bindings to handlers.
  *
  * - Combos: `'cmd+k'`, `'ctrl+shift+p'`, `'mod+Home'`.
- * - Timed sequences: `'g{300}+a'` — press `g`, then `a` within 300ms.
- *   Chain as many steps as needed (`'a{100}+b{100}+c'`); the last step has no `{ms}`.
+ * - Timed sequences: `'g$+a'` — press `g`, then `a` within 500ms.
+ *   Chain as many steps as needed (`'a$+b$+c'`); the last step has no `$`.
  *   A sequence prefix takes precedence over a plain combo on the same key, and an
  *   unexpected key resets the sequence before being evaluated normally.
  */
@@ -56,28 +56,26 @@ export const parseKeyCombo = (combo: string): ParsedKeyCombo => {
   return parsed;
 };
 
-export type KeyStep = ParsedKeyCombo & {
-  /** Window (ms) during which the *next* step must be pressed. Absent on the last step. */
-  timeoutMs?: number;
-};
+export type KeyStep = ParsedKeyCombo;
 
 /** A binding is a sequence of steps; a plain combo is a sequence of length 1. */
 export type ParsedKeyBinding = KeyStep[];
 
-const TIMED_TOKEN = /^(.+)\{(\d+)\}$/;
+const SEQUENCE_TIMEOUT_MS = 500;
+const SEQUENCE_TOKEN = /^(.+)\$$/;
 
 /**
- * Parses `cmd+k` (single step) or `g{300}+a` (sequence: `g`, then `a` within 300ms).
- * A `key{ms}` token closes a step; the modifiers before it belong to that step.
+ * Parses `cmd+k` (single step) or `g$+a` (sequence: `g`, then `a` within 500ms).
+ * A `key$` token closes a step; the modifiers before it belong to that step.
  */
 export const parseKeyBinding = (binding: string): ParsedKeyBinding => {
   const steps: KeyStep[] = [];
   let tokens: string[] = [];
 
   for (const token of binding.split('+')) {
-    const [, timedKey, timeout] = TIMED_TOKEN.exec(token) ?? [];
-    if (timedKey && timeout) {
-      steps.push({ ...parseKeyCombo([...tokens, timedKey].join('+')), timeoutMs: Number(timeout) });
+    const [, sequenceKey] = SEQUENCE_TOKEN.exec(token) ?? [];
+    if (sequenceKey) {
+      steps.push(parseKeyCombo([...tokens, sequenceKey].join('+')));
       tokens = [];
     } else {
       tokens.push(token);
@@ -85,7 +83,7 @@ export const parseKeyBinding = (binding: string): ParsedKeyBinding => {
   }
 
   if (tokens.length === 0) {
-    throw new Error(`Invalid key binding "${binding}": the last step cannot have a timeout`);
+    throw new Error(`Invalid key binding "${binding}": the last step cannot end with $`);
   }
   steps.push(parseKeyCombo(tokens.join('+')));
 
@@ -128,7 +126,9 @@ const KEYBOARD_CONSUMER_SELECTOR = [
   'input',
   'textarea',
   'select',
-  '[contenteditable="true"]',
+  '[contenteditable=""]',
+  '[contenteditable="true" i]',
+  '[contenteditable="plaintext-only" i]',
   '[role="combobox"]',
   '[role="listbox"]',
   '[role="menu"]',
@@ -184,11 +184,11 @@ export const useKeydown = (opts: UseKeydownArgs, options: UseKeydownOptions = {}
           const step = steps[stepIndex];
           if (!step || !hasPrefix(steps, pending.matched) || !matchesCombo(event, step)) continue;
           event.preventDefault();
-          if (step.timeoutMs === undefined) {
+          if (stepIndex === steps.length - 1) {
             setPending(null);
             handler();
           } else {
-            setPending({ matched: [...pending.matched, step], expiresAt: now + step.timeoutMs });
+            setPending({ matched: [...pending.matched, step], expiresAt: now + SEQUENCE_TIMEOUT_MS });
           }
           return;
         }
@@ -200,9 +200,9 @@ export const useKeydown = (opts: UseKeydownArgs, options: UseKeydownOptions = {}
     // Sequence prefixes win over plain combos on the same key.
     for (const { steps } of bindings) {
       const [first] = steps;
-      if (first?.timeoutMs !== undefined && matchesCombo(event, first)) {
+      if (steps.length > 1 && first && matchesCombo(event, first)) {
         event.preventDefault();
-        setPending({ matched: [first], expiresAt: now + first.timeoutMs });
+        setPending({ matched: [first], expiresAt: now + SEQUENCE_TIMEOUT_MS });
         return;
       }
     }

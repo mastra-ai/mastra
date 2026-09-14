@@ -17,34 +17,34 @@ afterEach(() => {
 describe('parseKeyBinding', () => {
   const noMods = { meta: false, ctrl: false, shift: false, alt: false };
 
-  it('given a plain combo, then returns a single step without timeout', () => {
+  it('given a plain combo, then returns a single step', () => {
     expect(parseKeyBinding('cmd+k')).toEqual([{ ...noMods, meta: true, key: 'k' }]);
   });
 
-  it('given "g{300}+a", then returns two steps with a 300ms window after the first', () => {
-    expect(parseKeyBinding('g{300}+a')).toEqual([
-      { ...noMods, key: 'g', timeoutMs: 300 },
+  it('given "g$+a", then returns two steps', () => {
+    expect(parseKeyBinding('g$+a')).toEqual([
+      { ...noMods, key: 'g' },
       { ...noMods, key: 'a' },
     ]);
   });
 
   it('given modifiers around a timed token, then modifiers belong to their own step', () => {
-    expect(parseKeyBinding('cmd+k{500}+cmd+s')).toEqual([
-      { ...noMods, meta: true, key: 'k', timeoutMs: 500 },
+    expect(parseKeyBinding('cmd+k$+cmd+s')).toEqual([
+      { ...noMods, meta: true, key: 'k' },
       { ...noMods, meta: true, key: 's' },
     ]);
   });
 
   it('given three timed tokens, then returns three steps', () => {
-    expect(parseKeyBinding('a{100}+b{100}+c')).toEqual([
-      { ...noMods, key: 'a', timeoutMs: 100 },
-      { ...noMods, key: 'b', timeoutMs: 100 },
+    expect(parseKeyBinding('a$+b$+c')).toEqual([
+      { ...noMods, key: 'a' },
+      { ...noMods, key: 'b' },
       { ...noMods, key: 'c' },
     ]);
   });
 
-  it('given a timeout on the last step, then throws', () => {
-    expect(() => parseKeyBinding('g{300}')).toThrow();
+  it('given a sequence marker on the last step, then throws', () => {
+    expect(() => parseKeyBinding('g$')).toThrow();
   });
 });
 
@@ -89,13 +89,58 @@ describe('useKeydown', () => {
 
     it('when a sequence prefix is typed in a textarea, then the sequence is not armed', () => {
       const onGoAgents = vi.fn();
-      renderHook(() => useKeydown({ 'g{300}+a': onGoAgents }));
+      renderHook(() => useKeydown({ 'g$+a': onGoAgents }));
 
       const armed = typeInField('textarea', 'g');
       typeInField('textarea', 'a');
 
       expect(armed.defaultPrevented).toBe(false);
       expect(onGoAgents).not.toHaveBeenCalled();
+    });
+
+    describe.each(['', 'true', 'plaintext-only'])('given contenteditable="%s"', contentEditable => {
+      it('when typing in a descendant, then plain keys and sequence prefixes remain untouched', () => {
+        const onHelp = vi.fn();
+        const onGo = vi.fn();
+        renderHook(() => useKeydown({ '?': onHelp, 'g$+a': onGo }));
+        const { getByText } = render(
+          <div contentEditable={contentEditable} suppressContentEditableWarning>
+            <span>Editable text</span>
+          </div>,
+        );
+        const field = getByText('Editable text');
+
+        expect(fireEvent.keyDown(field, { key: '?', shiftKey: true })).toBe(true);
+        expect(fireEvent.keyDown(field, { key: 'g' })).toBe(true);
+        pressKey('a');
+
+        expect(onHelp).not.toHaveBeenCalled();
+        expect(onGo).not.toHaveBeenCalled();
+      });
+
+      it('when a modified shortcut is pressed, then it still fires', () => {
+        const onSearch = vi.fn();
+        renderHook(() => useKeydown({ 'ctrl+k': onSearch }));
+        const { getByText } = render(
+          <div contentEditable={contentEditable} suppressContentEditableWarning>
+            <span>Editable text</span>
+          </div>,
+        );
+
+        fireEvent.keyDown(getByText('Editable text'), { key: 'k', ctrlKey: true });
+
+        expect(onSearch).toHaveBeenCalledTimes(1);
+      });
+    });
+
+    it('when a field is explicitly non-editable, then plain shortcuts still fire', () => {
+      const onGo = vi.fn();
+      renderHook(() => useKeydown({ g: onGo }));
+      const { getByText } = render(<div contentEditable={false}>Non-editable text</div>);
+
+      fireEvent.keyDown(getByText('Non-editable text'), { key: 'g' });
+
+      expect(onGo).toHaveBeenCalledTimes(1);
     });
 
     it('when a modifier combo is pressed in an input, then it still fires', () => {
@@ -347,10 +392,10 @@ describe('useKeydown sequences', () => {
     vi.useRealTimers();
   });
 
-  describe('given a "g{300}+a" binding', () => {
-    it('when g then a within 300ms, then the handler fires once', () => {
+  describe('given a "g$+a" binding', () => {
+    it('when g then a within 500ms, then the handler fires once', () => {
       const onGoAgents = vi.fn();
-      renderHook(() => useKeydown({ 'g{300}+a': onGoAgents }));
+      renderHook(() => useKeydown({ 'g$+a': onGoAgents }));
 
       pressKey('g');
       vi.advanceTimersByTime(100);
@@ -359,23 +404,23 @@ describe('useKeydown sequences', () => {
       expect(onGoAgents).toHaveBeenCalledTimes(1);
     });
 
-    it('when g then a after 300ms, then the handler does not fire', () => {
+    it('when g then a after 500ms, then the handler does not fire', () => {
       const onGoAgents = vi.fn();
-      renderHook(() => useKeydown({ 'g{300}+a': onGoAgents }));
+      renderHook(() => useKeydown({ 'g$+a': onGoAgents }));
 
       pressKey('g');
-      vi.advanceTimersByTime(300);
+      vi.advanceTimersByTime(500);
       pressKey('a');
 
       expect(onGoAgents).not.toHaveBeenCalled();
     });
 
-    it('when g then a at 299ms, then the handler fires', () => {
+    it('when g then a at 499ms, then the handler fires', () => {
       const onGoAgents = vi.fn();
-      renderHook(() => useKeydown({ 'g{300}+a': onGoAgents }));
+      renderHook(() => useKeydown({ 'g$+a': onGoAgents }));
 
       pressKey('g');
-      vi.advanceTimersByTime(299);
+      vi.advanceTimersByTime(499);
       pressKey('a');
 
       expect(onGoAgents).toHaveBeenCalledTimes(1);
@@ -383,7 +428,7 @@ describe('useKeydown sequences', () => {
 
     it('when a alone is pressed, then the handler does not fire', () => {
       const onGoAgents = vi.fn();
-      renderHook(() => useKeydown({ 'g{300}+a': onGoAgents }));
+      renderHook(() => useKeydown({ 'g$+a': onGoAgents }));
 
       pressKey('a');
 
@@ -392,7 +437,7 @@ describe('useKeydown sequences', () => {
 
     it('when an unexpected key interrupts the sequence, then the handler does not fire', () => {
       const onGoAgents = vi.fn();
-      renderHook(() => useKeydown({ 'g{300}+a': onGoAgents }));
+      renderHook(() => useKeydown({ 'g$+a': onGoAgents }));
 
       pressKey('g');
       pressKey('x');
@@ -404,7 +449,7 @@ describe('useKeydown sequences', () => {
     it('when an unexpected key is itself a plain binding, then that binding fires', () => {
       const onGoAgents = vi.fn();
       const onX = vi.fn();
-      renderHook(() => useKeydown({ 'g{300}+a': onGoAgents, x: onX }));
+      renderHook(() => useKeydown({ 'g$+a': onGoAgents, x: onX }));
 
       pressKey('g');
       pressKey('x');
@@ -414,7 +459,7 @@ describe('useKeydown sequences', () => {
     });
 
     it('when g is pressed, then the prefix event is default-prevented', () => {
-      renderHook(() => useKeydown({ 'g{300}+a': vi.fn() }));
+      renderHook(() => useKeydown({ 'g$+a': vi.fn() }));
 
       const event = new KeyboardEvent('keydown', { key: 'g', cancelable: true });
       window.dispatchEvent(event);
@@ -425,7 +470,7 @@ describe('useKeydown sequences', () => {
     it('given also a plain "g" binding, when g is pressed, then the prefix wins', () => {
       const onGoAgents = vi.fn();
       const onG = vi.fn();
-      renderHook(() => useKeydown({ g: onG, 'g{300}+a': onGoAgents }));
+      renderHook(() => useKeydown({ g: onG, 'g$+a': onGoAgents }));
 
       pressKey('g');
       expect(onG).not.toHaveBeenCalled();
@@ -436,7 +481,7 @@ describe('useKeydown sequences', () => {
 
     it('when the sequence completes twice, then the handler fires twice', () => {
       const onGoAgents = vi.fn();
-      renderHook(() => useKeydown({ 'g{300}+a': onGoAgents }));
+      renderHook(() => useKeydown({ 'g$+a': onGoAgents }));
 
       pressKey('g');
       pressKey('a');
@@ -449,7 +494,7 @@ describe('useKeydown sequences', () => {
     it('given shouldHandle rejects the second key, then the sequence stays armed', () => {
       const onGoAgents = vi.fn();
       const shouldHandle = vi.fn((event: KeyboardEvent) => !event.repeat);
-      renderHook(() => useKeydown({ 'g{300}+a': onGoAgents }, { shouldHandle }));
+      renderHook(() => useKeydown({ 'g$+a': onGoAgents }, { shouldHandle }));
 
       pressKey('g');
       pressKey('a', { repeat: true });
@@ -461,7 +506,7 @@ describe('useKeydown sequences', () => {
 
     it('when enabled flips to false mid-sequence, then the handler does not fire', () => {
       const onGoAgents = vi.fn();
-      const { rerender } = renderHook(({ enabled }) => useKeydown({ 'g{300}+a': onGoAgents }, { enabled }), {
+      const { rerender } = renderHook(({ enabled }) => useKeydown({ 'g$+a': onGoAgents }, { enabled }), {
         initialProps: { enabled: true },
       });
 
@@ -474,7 +519,7 @@ describe('useKeydown sequences', () => {
     });
 
     it('when unmounted mid-sequence, then no timer is left behind', () => {
-      const { unmount } = renderHook(() => useKeydown({ 'g{300}+a': vi.fn() }));
+      const { unmount } = renderHook(() => useKeydown({ 'g$+a': vi.fn() }));
 
       pressKey('g');
       expect(vi.getTimerCount()).toBe(1);
@@ -484,15 +529,15 @@ describe('useKeydown sequences', () => {
     });
   });
 
-  describe('given a three-step "a{100}+b{100}+c" binding', () => {
+  describe('given a three-step "a$+b$+c" binding', () => {
     it('when each key is pressed within its window, then the handler fires', () => {
       const handler = vi.fn();
-      renderHook(() => useKeydown({ 'a{100}+b{100}+c': handler }));
+      renderHook(() => useKeydown({ 'a$+b$+c': handler }));
 
       pressKey('a');
-      vi.advanceTimersByTime(50);
+      vi.advanceTimersByTime(499);
       pressKey('b');
-      vi.advanceTimersByTime(50);
+      vi.advanceTimersByTime(499);
       pressKey('c');
 
       expect(handler).toHaveBeenCalledTimes(1);
@@ -500,11 +545,11 @@ describe('useKeydown sequences', () => {
 
     it('when the last window expires, then the handler does not fire', () => {
       const handler = vi.fn();
-      renderHook(() => useKeydown({ 'a{100}+b{100}+c': handler }));
+      renderHook(() => useKeydown({ 'a$+b$+c': handler }));
 
       pressKey('a');
       pressKey('b');
-      vi.advanceTimersByTime(150);
+      vi.advanceTimersByTime(500);
       pressKey('c');
 
       expect(handler).not.toHaveBeenCalled();
@@ -512,11 +557,27 @@ describe('useKeydown sequences', () => {
   });
 
   describe('given several sequences sharing the "g" prefix', () => {
+    it.each([499, 500])('when the second key arrives at %i ms, then every binding uses the fixed window', delay => {
+      const agents = vi.fn();
+      const tools = vi.fn();
+      renderHook(() => useKeydown({ 'g$+a': agents, 'g$+t': tools }));
+
+      pressKey('g');
+      vi.advanceTimersByTime(delay);
+      pressKey('a');
+      pressKey('g');
+      vi.advanceTimersByTime(delay);
+      pressKey('t');
+
+      expect(agents).toHaveBeenCalledTimes(delay < 500 ? 1 : 0);
+      expect(tools).toHaveBeenCalledTimes(delay < 500 ? 1 : 0);
+    });
+
     it('when g then the key of a later binding, then that binding fires', () => {
       const agents = vi.fn();
       const workflows = vi.fn();
       const tools = vi.fn();
-      renderHook(() => useKeydown({ 'g{300}+a': agents, 'g{300}+w': workflows, 'g{300}+t': tools }));
+      renderHook(() => useKeydown({ 'g$+a': agents, 'g$+w': workflows, 'g$+t': tools }));
 
       pressKey('g');
       pressKey('t');
@@ -529,10 +590,10 @@ describe('useKeydown sequences', () => {
     });
   });
 
-  describe('given a "cmd+k{500}+cmd+s" binding', () => {
+  describe('given a "cmd+k$+cmd+s" binding', () => {
     it('when cmd+k then cmd+s, then the handler fires', () => {
       const handler = vi.fn();
-      renderHook(() => useKeydown({ 'cmd+k{500}+cmd+s': handler }));
+      renderHook(() => useKeydown({ 'cmd+k$+cmd+s': handler }));
 
       pressKey('k', { metaKey: true });
       pressKey('s', { metaKey: true });
@@ -542,7 +603,7 @@ describe('useKeydown sequences', () => {
 
     it('when cmd+k then plain s, then the handler does not fire', () => {
       const handler = vi.fn();
-      renderHook(() => useKeydown({ 'cmd+k{500}+cmd+s': handler }));
+      renderHook(() => useKeydown({ 'cmd+k$+cmd+s': handler }));
 
       pressKey('k', { metaKey: true });
       pressKey('s');
@@ -554,7 +615,7 @@ describe('useKeydown sequences', () => {
   describe('given a scoped target', () => {
     const SequenceHarness = ({ onHit }: { onHit: () => void }) => {
       const ref = useRef<HTMLDivElement | null>(null);
-      useKeydown({ 'g{300}+a': onHit }, { target: ref });
+      useKeydown({ 'g$+a': onHit }, { target: ref });
       return (
         <div>
           <div ref={ref}>
