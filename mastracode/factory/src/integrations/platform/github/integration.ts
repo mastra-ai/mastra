@@ -12,6 +12,7 @@ import type {
   IntakeIssueDetail,
   UpdateIntakeIssueInput,
 } from '../../../capabilities/intake.js';
+import { readPullRequestStack } from '../../../capabilities/pull-request-stack.js';
 import type {
   CreatePullRequestCommentInput,
   CreatePullRequestInput,
@@ -117,6 +118,7 @@ type GithubComment = {
 };
 
 type GithubPullRequest = {
+  stack?: unknown;
   number: number;
   title: string;
   body: string | null;
@@ -354,6 +356,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
                   author: pullRequest.author,
                   baseBranch: pullRequest.baseBranch,
                   headBranch: pullRequest.headBranch,
+                  stack: pullRequest.stack,
                 },
               })),
             ],
@@ -845,6 +848,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         merged_by?: { login?: string } | null;
         head?: { ref?: string };
         base?: { ref?: string };
+        stack?: unknown;
       }>(
         'GET',
         `${API_PREFIX}/github/repos/${encodeURIComponent(repository.owner)}/${encodeURIComponent(repository.repo)}/pulls/${input.number}`,
@@ -864,6 +868,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         ),
         headBranch: result.head?.ref ?? '',
         baseBranch: result.base?.ref ?? '',
+        stack: readPullRequestStack(result.stack),
         ...(result.user?.login ? { author: result.user.login } : {}),
         ...(result.created_at ? { createdAt: result.created_at } : {}),
         ...(result.merged_by?.login ? { mergedBy: result.merged_by.login } : {}),
@@ -1554,6 +1559,7 @@ function parsePullRequest(pullRequest: GithubPullRequest): PullRequest {
     baseBranch: pullRequest.base.ref,
     headBranch: pullRequest.head.ref,
     headSha: pullRequest.head.sha,
+    stack: readPullRequestStack(pullRequest.stack),
     createdAt: pullRequest.createdAt,
     updatedAt: pullRequest.updatedAt,
   };

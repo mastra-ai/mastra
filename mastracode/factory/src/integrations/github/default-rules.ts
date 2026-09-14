@@ -127,6 +127,7 @@ function materializePullRequestIntake(
       labels: context.pullRequest.labels ?? [],
       headBranch: context.pullRequest.headBranch,
       baseBranch: context.pullRequest.baseBranch,
+      stack: context.pullRequest.stack ?? null,
       ...(context.pullRequest.author ? { author: context.pullRequest.author } : {}),
     },
   } as const;

@@ -264,6 +264,7 @@ const listRepoOpenPullRequests = vi.fn(async (_installationId: number, _repoFull
       requestedReviewers: ['octocat'],
       baseBranch: 'main',
       headBranch: 'feat/factory',
+      stack: { id: 100, number: 7, position: 2, base: { ref: 'main' } },
       createdAt: '2026-07-03T00:00:00Z',
       updatedAt: '2026-07-04T00:00:00Z',
     },
@@ -1544,6 +1545,7 @@ describe('prs route', () => {
       title: 'Add factory pages',
       assignees: ['ada'],
       requestedReviewers: ['octocat'],
+      stack: { id: 100, number: 7, position: 2, base: { ref: 'main' } },
       headBranch: 'feat/factory',
     });
     expect(json.nextPage).toBeNull();

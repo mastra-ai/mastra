@@ -1,9 +1,14 @@
 import type { WorkItemRow } from '@mastra/factory';
+import type { PullRequestStack } from '@mastra/factory/capabilities/pull-request-stack';
 import { pullRequestCandidate } from '../../boardCandidates';
 import type { GithubPullRequest } from '../../services/factory';
 import type { WorkItem } from '../../services/workItems';
 
-export function pullRequest(number: number, baseBranch = 'main', repository = 'acme/app'): GithubPullRequest {
+export function pullRequestStack(position: number, id = 100, number = 7): PullRequestStack {
+  return { id, number, position, base: { ref: 'main' } };
+}
+
+export function pullRequest(number: number, stack?: PullRequestStack, repository = 'acme/app'): GithubPullRequest {
   return {
     number,
     title: `Pull request ${number}`,
@@ -11,7 +16,8 @@ export function pullRequest(number: number, baseBranch = 'main', repository = 'a
     author: 'alice',
     assignees: [],
     requestedReviewers: [],
-    baseBranch,
+    baseBranch: 'main',
+    stack,
     headBranch: `feature-${number}`,
     createdAt: '2026-09-14T08:00:00.000Z',
     updatedAt: '2026-09-14T08:00:00.000Z',

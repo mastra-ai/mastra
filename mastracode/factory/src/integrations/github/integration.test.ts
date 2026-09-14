@@ -28,6 +28,7 @@ function validConfig() {
 function pullRequestData() {
   return {
     number: 34,
+    stack: { id: 100, number: 7, position: 2, base: { ref: 'main' } },
     title: 'Ship intake',
     html_url: 'https://github.com/acme/app/pull/34',
     user: { login: 'ada' },
@@ -505,7 +506,13 @@ describe('GithubIntegration capability surface', () => {
       }),
     ).resolves.toEqual({
       pullRequests: [
-        expect.objectContaining({ id: '34', baseBranch: 'main', headBranch: 'feat/intake', headSha: 'abc123' }),
+        expect.objectContaining({
+          id: '34',
+          baseBranch: 'main',
+          headBranch: 'feat/intake',
+          headSha: 'abc123',
+          stack: { id: 100, number: 7, position: 2, base: { ref: 'main' } },
+        }),
       ],
       nextCursor: null,
     });
@@ -801,6 +808,7 @@ describe('GithubIntegration merge reconciler', () => {
       labels: [],
       headBranch: 'feat/intake',
       baseBranch: 'main',
+      stack: { id: 100, number: 7, position: 2, base: { ref: 'main' } },
       author: 'ada',
       createdAt: '2026-07-01T00:00:00Z',
     });

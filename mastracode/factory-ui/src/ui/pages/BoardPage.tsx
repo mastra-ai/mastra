@@ -45,7 +45,6 @@ import { useBoardItems } from '../domains/factory/hooks/useBoardItems';
 import { useBoardRuns } from '../domains/factory/hooks/useBoardRuns';
 import { useItemSessionStatuses } from '../domains/factory/hooks/useItemSessionStatuses';
 import { ReviewColumnCards } from '../domains/factory/review-stacks/ReviewColumnCards';
-import { buildReviewStackIndex, reviewCards } from '../domains/factory/review-stacks/reviewStacks';
 import { relatedWorkItemIndex } from '../domains/factory/services/relationships';
 import type { WorkItem } from '../domains/factory/services/workItems';
 import { workItemHumanActorIds } from '../domains/factory/workItemActivity';
@@ -136,7 +135,6 @@ function BoardContent({
   });
   const runs = useBoardRuns({ factoryProjectId, refetchItems: items.refetch });
   const relatedItemsFor = relatedWorkItemIndex(items.all);
-  const reviewStacks = buildReviewStackIndex(review ? reviewCards(items.visible, intake.candidates) : []);
   const sessionStatuses = useItemSessionStatuses({
     factoryProjectId,
     projectRepositoryId: repository.projectRepositoryId,
@@ -398,7 +396,6 @@ function BoardContent({
                       <ReviewColumnCards
                         workItems={stageWorkItems}
                         candidates={stageCandidates}
-                        stacks={reviewStacks}
                         targetItemId={filters.targetItemId}
                         renderWorkItem={renderWorkItem(stage.id)}
                         renderCandidate={renderCandidate}

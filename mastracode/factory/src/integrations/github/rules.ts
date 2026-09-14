@@ -1,6 +1,9 @@
+import { isDeepStrictEqual } from 'node:util';
 import { boardForWorkItem, workItemPhaseSemantics } from '../../boards/index.js';
 import type { BoardRegistry } from '../../boards/index.js';
 import { cardLabels, moveCardToBoard } from '../../boards/relocate.js';
+import type { PullRequestStack } from '../../capabilities/pull-request-stack.js';
+import { readPullRequestStack } from '../../capabilities/pull-request-stack.js';
 import type {
   FactoryGithubEventName,
   FactoryGithubRuleContext,
@@ -384,15 +387,58 @@ export class GithubRules {
     return { status: changed || outcome === 'moved' ? 'committed' : 'ignored' };
   }
 
+  async #syncPullRequestStack(
+    parsed: ParsedGithubWebhook,
+    repositoryId: number,
+    repositoryName: string,
+    project: ExternalRepositoryProjectTarget,
+  ): Promise<{ status: 'ignored' | 'committed' }> {
+    const pullRequest = object(parsed.payload.pull_request);
+    const item = await this.#relatedItem(
+      project.orgId,
+      project.factoryProjectId,
+      repositoryId,
+      repositoryName,
+      undefined,
+      number(pullRequest?.number),
+      undefined,
+      null,
+    );
+    if (item?.externalSource?.type !== 'pull-request') return { status: 'ignored' };
+    const stack = readPullRequestStack(pullRequest?.stack);
+    if (isDeepStrictEqual(item.metadata?.stack ?? undefined, stack)) return { status: 'ignored' };
+    try {
+      await this.options.storage.update({
+        orgId: item.orgId,
+        id: item.id,
+        userId: LABEL_ROUTE_USER_ID,
+        patch: { metadata: { stack: stack ?? null } },
+        expectedRevision: item.revision,
+      });
+    } catch (error) {
+      if (!(error instanceof WorkItemUpdateConflictError)) throw error;
+      return { status: 'ignored' };
+    }
+    return { status: 'committed' };
+  }
+
   async ingest(parsed: ParsedGithubWebhook): Promise<{ status: 'ignored' | 'committed' | 'replayed' | 'missing' }> {
     const event = eventName(parsed);
     const labelChange = issueLabelChange(parsed);
+    const pullRequestChange =
+      parsed.event === 'pull_request' && number(object(parsed.payload.pull_request)?.number) !== undefined;
     const repository = object(parsed.payload.repository);
     const installationId = number(object(parsed.payload.installation)?.id);
     const repositoryId = number(repository?.id);
     const repositoryName = string(repository?.full_name);
     const login = string(object(parsed.payload.sender)?.login);
-    if ((!event && !labelChange) || !installationId || !repositoryId || !repositoryName || !login) {
+    if (
+      (!event && !labelChange && !pullRequestChange) ||
+      !installationId ||
+      !repositoryId ||
+      !repositoryName ||
+      !login
+    ) {
       return { status: 'ignored' };
     }
 
@@ -403,11 +449,16 @@ export class GithubRules {
     if (projects.length === 0) return { status: 'ignored' };
     const results = [];
     for (const project of projects) {
-      results.push(
-        event
-          ? await this.#ingestProject(parsed, event, installationId, repositoryId, repositoryName, login, project)
-          : await this.#relocateLabeledIssue(parsed, repositoryId, repositoryName, project),
-      );
+      if (pullRequestChange) {
+        results.push(await this.#syncPullRequestStack(parsed, repositoryId, repositoryName, project));
+      }
+      if (event) {
+        results.push(
+          await this.#ingestProject(parsed, event, installationId, repositoryId, repositoryName, login, project),
+        );
+      } else if (labelChange) {
+        results.push(await this.#relocateLabeledIssue(parsed, repositoryId, repositoryName, project));
+      }
     }
     if (results.some(result => result.status === 'committed')) return { status: 'committed' };
     if (results.some(result => result.status === 'replayed')) return { status: 'replayed' };
@@ -603,6 +654,7 @@ export class GithubRules {
                 factoryAuthored: pullRequestFactoryAuthored,
                 headBranch: string(object(pullRequest?.head)?.ref) ?? '',
                 baseBranch: string(object(pullRequest?.base)?.ref) ?? '',
+                stack: readPullRequestStack(pullRequest?.stack),
               },
             }
           : {}),
@@ -812,6 +864,7 @@ export class GithubRules {
 }
 
 export interface ReconcilePullRequestState {
+  stack?: PullRequestStack;
   title: string;
   url: string;
   state: 'open' | 'closed';
@@ -994,6 +1047,7 @@ export function reconciledClosedEvent(
         labels: (state.labels ?? []).map(name => ({ name })),
         head: { ref: state.headBranch },
         base: { ref: state.baseBranch },
+        stack: state.stack,
       },
     },
   };
@@ -1008,6 +1062,7 @@ function reconciledPullRequestMetadata(
     state: state.state,
     draft: state.draft,
     merged: state.merged,
+    stack: state.stack ?? null,
     ...(state.author ? { author: state.author } : {}),
     ...(state.assignees ? { assignees: state.assignees } : {}),
     ...(state.requestedReviewers ? { requestedReviewers: state.requestedReviewers } : {}),
@@ -1173,8 +1228,15 @@ export function createGithubPullRequestReconciler(
             const reviewersChanged = !sameStrings(metadata.requestedReviewers, state.requestedReviewers);
             const labelsChanged = !sameStrings(metadata.labels, state.labels);
             const trustStale = authorTrusted !== undefined && metadata.authorTrusted !== authorTrusted;
+            const stackChanged = !isDeepStrictEqual(metadata.stack ?? undefined, state.stack);
             const metadataChanged =
-              statusChanged || authorChanged || assigneesChanged || reviewersChanged || labelsChanged || trustStale;
+              statusChanged ||
+              authorChanged ||
+              assigneesChanged ||
+              reviewersChanged ||
+              labelsChanged ||
+              trustStale ||
+              stackChanged;
             const reconciliation = metadata[FACTORY_PULL_REQUEST_RECONCILIATION_KEY];
             if (!metadataChanged && reconciliation !== 'merged' && reconciliation !== 'closed') continue;
             try {
