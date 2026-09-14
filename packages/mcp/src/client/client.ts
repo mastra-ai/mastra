@@ -31,7 +31,12 @@ import type {
 } from '@modelcontextprotocol/client';
 import { getDefaultEnvironment, StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { asyncExitHook, gracefulExit } from 'exit-hook';
-import { JSON_SCHEMA_2020_12, MAX_JSON_SCHEMA_DEPTH, MAX_JSON_SCHEMA_NODES, toJsonSchema2020 } from '../shared/json-schema-dialect';
+import {
+  JSON_SCHEMA_2020_12,
+  MAX_JSON_SCHEMA_DEPTH,
+  MAX_JSON_SCHEMA_NODES,
+  toJsonSchema2020,
+} from '../shared/json-schema-dialect';
 import { getMastraToolStrictMeta } from '../shared/mastra-tool-meta';
 import { UnauthorizedError } from '../shared/oauth-types';
 import { traceContextToMeta } from '../shared/trace-context';
@@ -39,6 +44,7 @@ import { ProgressClientActions } from './actions/progress';
 import { PromptClientActions } from './actions/prompt';
 import { ResourceClientActions } from './actions/resource';
 import { isReconnectableMCPError } from './error-utils';
+import { validateInputSchema } from './input-schema-validation';
 import { MCP_CLIENT_PROTOCOL_VERSION } from './types';
 import type {
   FetchLike,
@@ -196,7 +202,12 @@ function shouldDetachPersistentTransportRequest(init?: RequestInit): boolean {
   if (typeof init?.body !== 'string' || !init.body.includes('subscriptions/listen')) return false;
   try {
     const message: unknown = JSON.parse(init.body);
-    return typeof message === 'object' && message !== null && 'method' in message && message.method === 'subscriptions/listen';
+    return (
+      typeof message === 'object' &&
+      message !== null &&
+      'method' in message &&
+      message.method === 'subscriptions/listen'
+    );
   } catch {
     return false;
   }
@@ -292,9 +303,9 @@ export function getMcpCallToolMeta(output: unknown): Record<string, unknown> | u
   return (output as Record<PropertyKey, unknown>)[MCP_CALL_TOOL_META] as Record<string, unknown> | undefined;
 }
 
-function createStructuredToolToModelOutput(): (output: unknown) =>
-  | { type: 'text'; value: string }
-  | { type: 'json'; value: unknown } {
+function createStructuredToolToModelOutput(): (
+  output: unknown,
+) => { type: 'text'; value: string } | { type: 'json'; value: unknown } {
   return output => {
     const modelText = extractModelTextFromToolContent(getMcpCallToolContent(output));
     if (modelText !== undefined) {
@@ -306,8 +317,7 @@ function createStructuredToolToModelOutput(): (output: unknown) =>
 
 function getDatadogScope(): DatadogScopeLike | null {
   const testTracer = (globalThis as Record<PropertyKey, unknown>)[DATADOG_TRACER_TEST_SYMBOL] as
-    | DatadogTracerLike
-    | undefined;
+    DatadogTracerLike | undefined;
   const tracer = testTracer ?? loadDatadogTracer();
 
   if (typeof tracer?.scope === 'function') {
@@ -440,7 +450,12 @@ export class InternalMastraMCPClient extends MastraBase {
   /**
    * @internal
    */
-  constructor({ name, version = '1.0.0', server, timeout = DEFAULT_REQUEST_TIMEOUT_MSEC }: InternalMastraMCPClientOptions) {
+  constructor({
+    name,
+    version = '1.0.0',
+    server,
+    timeout = DEFAULT_REQUEST_TIMEOUT_MSEC,
+  }: InternalMastraMCPClientOptions) {
     super({ name: 'MastraMCPClient' });
     this.name = name;
     this.timeout = timeout;
@@ -1093,10 +1108,7 @@ export class InternalMastraMCPClient extends MastraBase {
    */
   async getPrompt({ name, args }: { name: string; args?: Record<string, any> }): Promise<GetPromptResult> {
     this.log('debug', `Requesting prompt from MCP server: ${name}`);
-    return await this.client.getPrompt(
-      { name, arguments: args, _meta: this.requestMeta() },
-      { timeout: this.timeout },
-    );
+    return await this.client.getPrompt({ name, arguments: args, _meta: this.requestMeta() }, { timeout: this.timeout });
   }
 
   private hasSubscriptionInterest(): boolean {
@@ -1257,7 +1269,9 @@ export class InternalMastraMCPClient extends MastraBase {
   }
 
   private convertInputSchema(inputSchema: MCPToolListEntry['inputSchema']): StandardSchemaWithJSON {
-    const schema = withDefaultDialect(('jsonSchema' in inputSchema ? inputSchema.jsonSchema : inputSchema) as JSONSchema7);
+    const schema = withDefaultDialect(
+      ('jsonSchema' in inputSchema ? inputSchema.jsonSchema : inputSchema) as JSONSchema7,
+    );
     const standardSchema = toStandardSchema(schema);
     const complexityError = getJsonSchemaComplexityError(schema);
     if (!complexityError) return standardSchema;
@@ -1280,7 +1294,9 @@ export class InternalMastraMCPClient extends MastraBase {
    */
   private convertOutputSchema(outputSchema: MCPToolListEntry['outputSchema']): StandardSchemaWithJSON | undefined {
     if (!outputSchema) return outputSchema;
-    const schema = withDefaultDialect(('jsonSchema' in outputSchema ? outputSchema.jsonSchema : outputSchema) as JSONSchema7);
+    const schema = withDefaultDialect(
+      ('jsonSchema' in outputSchema ? outputSchema.jsonSchema : outputSchema) as JSONSchema7,
+    );
     const standardSchema = toStandardSchema(schema)['~standard'];
     return {
       '~standard': {
@@ -1385,6 +1401,21 @@ export class InternalMastraMCPClient extends MastraBase {
     tool: MCPToolListEntry,
     serverMeta: { version?: string; instructions?: string; connectFirst?: boolean },
   ): Tool<any, any, any, any> | undefined {
+    const inputSchemaValidation = validateInputSchema(tool.inputSchema);
+    if (!inputSchemaValidation.success) {
+      const details = { serverName: this.name, toolName: tool.name, reason: inputSchemaValidation.reason };
+      this.log('warning', 'Skipping MCP tool with invalid input schema', details);
+      if (serverMeta.connectFirst) {
+        throw new MastraError({
+          id: 'MCP_CLIENT_INVALID_TOOL_INPUT_SCHEMA',
+          domain: ErrorDomain.MCP,
+          category: ErrorCategory.THIRD_PARTY,
+          text: `Invalid input schema for MCP tool "${tool.name}": ${inputSchemaValidation.reason}`,
+          details,
+        });
+      }
+      return undefined;
+    }
     try {
       let requireApproval: boolean | undefined;
       let needsApprovalFn: NeedsApprovalFn | undefined;
@@ -1425,7 +1456,9 @@ export class InternalMastraMCPClient extends MastraBase {
       // structuredContent success path should be validated, not envelope returns. It uses
       // the SDK validator so live and cache-hydrated tools enforce the same dialect.
       const outputSchema = tool.outputSchema
-        ? withDefaultDialect(('jsonSchema' in tool.outputSchema ? tool.outputSchema.jsonSchema : tool.outputSchema) as JSONSchema7)
+        ? withDefaultDialect(
+            ('jsonSchema' in tool.outputSchema ? tool.outputSchema.jsonSchema : tool.outputSchema) as JSONSchema7,
+          )
         : undefined;
       const outputSchemaComplexityError = outputSchema ? getJsonSchemaComplexityError(outputSchema) : undefined;
       let outputValidationSchema: StandardSchemaWithJSON | undefined;
