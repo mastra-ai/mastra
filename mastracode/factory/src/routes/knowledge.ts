@@ -51,9 +51,9 @@ function truncateRecordText(text: string): string {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** Visible events returned per activity window. */
-const ACTIVITY_LIMIT = 100;
-/** Events fetched per `listActivity` batch while filling the visible window. */
+/** Authorized visible events returned per activity page. */
+const ACTIVITY_PAGE_SIZE = 25;
+/** Events fetched per `listActivity` batch while filling a visible page. */
 const ACTIVITY_BATCH = 100;
 /** Hard scan cap so a huge hidden backlog cannot spin the request. */
 const ACTIVITY_SCAN_CAP = 1000;
@@ -268,6 +268,7 @@ export interface KnowledgeActivityPayload {
     };
     createdAt: string;
   }>;
+  nextCursor?: string;
 }
 
 interface VisibleKnowledgeActivity {
@@ -1345,9 +1346,13 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
             if (!selected) return c.json({ error: 'scope_not_found' }, 404);
             view = selected;
           }
-          const activity = await this.#visibleActivity(view, memberIds);
+          const cursor = loose(c).req.query('cursor');
+          if (cursor && cursor.length > 128) return c.json({ error: 'invalid_activity_cursor' }, 400);
+          const activity = await this.#visibleActivity(view, memberIds, cursor, ACTIVITY_PAGE_SIZE + 1);
+          const visiblePage = activity.slice(0, ACTIVITY_PAGE_SIZE);
+          const lastVisible = visiblePage.at(-1);
           const payload: KnowledgeActivityPayload = {
-            events: activity.map(({ event, node }) => {
+            events: visiblePage.map(({ event, node }) => {
               const rung = deepestRung(node.scope);
               const threadId =
                 rung === 'thread' ? node.scope.find(address => address.startsWith('thread:'))?.slice(7) : undefined;
@@ -1366,6 +1371,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
                 createdAt: event.createdAt.toISOString(),
               };
             }),
+            ...(activity.length > ACTIVITY_PAGE_SIZE && lastVisible ? { nextCursor: lastVisible.event.id } : {}),
           };
           return c.json(payload);
         },
@@ -1374,16 +1380,21 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
   }
 
   /**
-   * Newest-first activity window where EVERY returned event targets a record
+   * Newest-first activity page where EVERY returned event targets a node
    * visible in the view. Visibility is decided BEFORE window shaping: hidden
    * rows are skipped entirely (no action/type/id/time metadata leaks) and a
    * hidden backlog can never displace visible events from the window.
    */
-  async #visibleActivity(view: ResolvedView, memberIds?: Set<string>): Promise<VisibleKnowledgeActivity[]> {
+  async #visibleActivity(
+    view: ResolvedView,
+    memberIds: Set<string> | undefined,
+    cursor: string | undefined,
+    limit: number,
+  ): Promise<VisibleKnowledgeActivity[]> {
     const out: VisibleKnowledgeActivity[] = [];
-    let after: string | undefined;
+    let after = cursor;
     let scanned = 0;
-    while (out.length < ACTIVITY_LIMIT && scanned < ACTIVITY_SCAN_CAP) {
+    while (out.length < limit && scanned < ACTIVITY_SCAN_CAP) {
       const batch = await view.store.listActivity({ scope: view.scope, after, limit: ACTIVITY_BATCH });
       if (batch.length === 0) break;
       for (const event of batch) {
@@ -1404,7 +1415,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
         ) {
           out.push({ event, node: targetNode });
         }
-        if (out.length >= ACTIVITY_LIMIT) break;
+        if (out.length >= limit || scanned >= ACTIVITY_SCAN_CAP) break;
       }
     }
     return out;
