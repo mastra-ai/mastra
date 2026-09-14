@@ -25,6 +25,17 @@ describe('collectInngestFunctions', () => {
     expect(ids.some(id => id.includes('durable-agentic-loop'))).toBe(true);
   });
 
+  it('registers the loop workflow once when several Inngest agents are registered', () => {
+    const first = makeInngestAgent(inngest, 'collect-multi-a');
+    const second = makeInngestAgent(inngest, 'collect-multi-b');
+    const mastra = new Mastra({ agents: { first, second }, logger: false });
+
+    const functions = collectInngestFunctions({ mastra });
+    const ids = functions.map(fn => (fn as { id: (prefix?: string) => string }).id());
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(ids.filter(id => id.includes('durable-agentic-loop'))).toHaveLength(1);
+  });
+
   it('does not duplicate functions when the loop workflow is also registered under workflows', () => {
     const durableAgent = makeInngestAgent(inngest, 'collect-explicit-loop');
     const loop = durableAgent.getDurableWorkflows()[0]!;
