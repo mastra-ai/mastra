@@ -44,7 +44,6 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
   private useAgent = false;
   private errorStrategy: 'strict' | 'warn' | 'fallback';
   private fallbackValue?: OUTPUT;
-  private isStructuringAgentStreamStarted = false;
   private jsonPromptInjection?: boolean | 'system' | 'inline' | 'auto';
   private providerOptions?: ProviderOptions;
   private logger?: IMastraLogger;
@@ -130,7 +129,7 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
     if (typeof state.structuredOutputError === 'string') {
       const reason = state.structuredOutputError;
       delete state.structuredOutputError;
-      this.isStructuringAgentStreamStarted = false;
+      state.isStructuringAgentStreamStarted = false;
       abort(reason, { retry: true });
     }
     return messages;
@@ -144,8 +143,8 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
     requestContext?: RequestContext,
     messageList?: ProcessOutputStreamArgs['messageList'],
   ): Promise<void> {
-    if (this.isStructuringAgentStreamStarted) return;
-    this.isStructuringAgentStreamStarted = true;
+    if (state.isStructuringAgentStreamStarted) return;
+    state.isStructuringAgentStreamStarted = true;
     try {
       const structuringAgentStream = await this.getStructuringStream(
         streamParts,
