@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { MCPServerBaseV2 } from '@mastra/core/mcp';
+import { MCPServerBase } from '@mastra/core/mcp';
 import type { MCPServerHTTPOptions, MCPToolExecutionContextV2, MCPToolExecutionResultV2 } from '@mastra/core/mcp';
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
@@ -31,7 +31,8 @@ const confirmation = createTool({
   },
 });
 
-class Fixture extends MCPServerBaseV2 {
+class Fixture extends MCPServerBase {
+  override readonly mcpVersion = 2 as const;
   // Converts tools like the 1.x package does; the mcpv2 context flows through CoreToolBuilder.
   convertTools(tools: ToolsInput) {
     const converted: Record<string, InternalCoreTool> = {};
@@ -48,7 +49,7 @@ class Fixture extends MCPServerBaseV2 {
   async executeTool(
     toolId: string,
     args: unknown,
-    executionContext: Parameters<MCPServerBaseV2['executeTool']>[2] = {},
+    executionContext: Parameters<MCPServerBase['executeTool']>[2] = {},
   ): Promise<MCPToolExecutionResultV2> {
     const tool = this.convertedTools[toolId];
     if (!tool?.execute) throw new Error(`Tool ${toolId} not found`);
