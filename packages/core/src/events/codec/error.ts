@@ -39,7 +39,7 @@ export function serializeError(err: Error, depth = 0): SerializedError {
 export function rehydrateError(s: SerializedError): Error {
   const cause =
     s.cause !== undefined
-      ? s.cause && typeof s.cause === 'object' && 'message' in (s.cause as object) && 'name' in (s.cause as object)
+      ? s.cause && typeof s.cause === 'object' && 'message' in s.cause && 'name' in s.cause
         ? rehydrateError(s.cause as SerializedError)
         : s.cause
       : undefined;
