@@ -3,11 +3,13 @@ import { createTestAgent, createTestController } from '../../agent-controller/te
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import type { MastraModelOutput } from '../../stream/base/output';
 import type { Agent } from '../agent';
+import { MessageList } from '../message-list';
+import { createMessageSignal, createSignal, signalToMastraDBMessage } from '../signals';
 import { agentThreadStreamRuntime, AgentThreadStreamRuntime } from '../thread-stream-runtime';
 
 const fakeAgent = { id: 'list-active-runs-test-agent' } as unknown as Agent<any, any, any, any>;
 
-function createFakeRun(runId: string) {
+function createFakeRun(runId: string, messageList?: MessageList) {
   let status: 'running' | 'success' = 'running';
   let streamController!: ReadableStreamDefaultController<unknown>;
   let finish!: () => void;
@@ -17,6 +19,7 @@ function createFakeRun(runId: string) {
 
   const output = {
     runId,
+    messageList,
     get status() {
       return status;
     },
@@ -78,6 +81,45 @@ describe('listActiveThreadRuns', () => {
       ]),
     );
   });
+
+  it('returns only user-authored input, not recalled history, other signals, or synthetic run output', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const target = { threadId: 'input-thread', resourceId: 'input-resource' };
+    const messageList = new MessageList(target);
+    const input = signalToMastraDBMessage(createMessageSignal('Current user input'));
+    messageList.add(input, 'input');
+    messageList.add(signalToMastraDBMessage(createMessageSignal('Recalled user input')), 'memory');
+    messageList.add(
+      signalToMastraDBMessage(createSignal({ type: 'reactive', contents: 'Internal reminder' })),
+      'input',
+    );
+    messageList.add({ role: 'assistant', content: 'Current response' }, 'response');
+    const run = createFakeRun('input-run', messageList);
+    const synthetic = createFakeRun('synthetic-run');
+    try {
+      await runtime.registerRun(
+        fakeAgent,
+        run.output,
+        { memory: { thread: target.threadId, resource: target.resourceId } },
+        pubsub,
+      );
+      await runtime.registerRun(
+        fakeAgent,
+        synthetic.output,
+        { memory: { thread: 'synthetic-thread', resource: target.resourceId } },
+        pubsub,
+      );
+
+      expect(runtime.getActiveThreadInputMessages(target, pubsub).map(message => message.id)).toEqual([input.id]);
+      expect(runtime.getActiveThreadInputMessages({ ...target, threadId: 'synthetic-thread' }, pubsub)).toEqual([]);
+      expect(new AgentThreadStreamRuntime().getActiveThreadInputMessages(target, pubsub)).toEqual([]);
+      run.settle();
+      expect(runtime.getActiveThreadInputMessages(target, pubsub)).toEqual([]);
+    } finally {
+      if (run.output.status === 'running') run.settle();
+      synthetic.settle();
+    }
+  });
 });
 
 describe('AgentController.listActiveThreadRuns', () => {
@@ -98,7 +140,10 @@ describe('AgentController.listActiveThreadRuns', () => {
     await controller.init();
 
     const buildRun = createFakeRun('run-build');
-    const planRun = createFakeRun('run-plan');
+    const planInput = signalToMastraDBMessage(createMessageSignal('Plan mode input'));
+    const planMessages = new MessageList({ threadId: 'thread-plan', resourceId: 'resource-plan' });
+    planMessages.add(planInput, 'input');
+    const planRun = createFakeRun('run-plan', planMessages);
     try {
       await agentThreadStreamRuntime.registerRun(
         buildAgent,
@@ -121,6 +166,14 @@ describe('AgentController.listActiveThreadRuns', () => {
           { runId: 'run-plan', resourceId: 'resource-plan', threadId: 'thread-plan' },
         ]),
       );
+      expect(
+        controller
+          .getActiveThreadInputMessages({ threadId: 'thread-plan', resourceId: 'resource-plan' })
+          .map(message => message.id),
+      ).toEqual([planInput.id]);
+      expect(
+        controller.getActiveThreadInputMessages({ threadId: 'thread-plan', resourceId: 'resource-build' }),
+      ).toEqual([]);
     } finally {
       buildRun.settle();
       planRun.settle();

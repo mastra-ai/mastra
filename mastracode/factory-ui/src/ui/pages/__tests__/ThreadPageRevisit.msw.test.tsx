@@ -100,7 +100,10 @@ function stubThreadRoute(initialMessages: MastraDBMessage[]) {
     http.get(`${AC}/sessions/:resourceId/threads`, () => HttpResponse.json({ threads: [{ id: SESSION_ID }] })),
     http.get(`${AC}/sessions/:resourceId/threads/:threadId/messages`, ({ request }) => {
       const limit = Number(new URL(request.url).searchParams.get('limit'));
-      return HttpResponse.json({ messages: messages.slice(Math.max(0, messages.length - limit)) });
+      return HttpResponse.json({
+        messages: messages.slice(Math.max(0, messages.length - limit)),
+        activeInputMessages: [],
+      });
     }),
     http.get(`${AC}/modes`, () => HttpResponse.json({ modes: [] })),
     http.get(`${TEST_BASE_URL}/web/workspace/rendered/list`, () =>

@@ -1,3 +1,4 @@
+import type { AgentControllerWireEvent } from '@mastra/core/agent-controller';
 import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, beforeEach, it, vi } from 'vitest';
 
@@ -290,6 +291,48 @@ describe('AgentController Resource', () => {
     expect(lastCall()[0]).toBe(
       'http://localhost:4111/api/agent-controller/code/sessions/user-1/threads/t-1/messages?perPage=false',
     );
+  });
+
+  it('merges active inputs chronologically by canonical ID, preferring the stored copy', async () => {
+    type WireMessage = Extract<AgentControllerWireEvent, { type: 'message_start' }>['message'];
+    const message = (id: string, text: string, createdAt: string): WireMessage => ({
+      id,
+      role: 'signal',
+      content: {
+        format: 2,
+        parts: [{ type: 'text', text }],
+        metadata: { signal: { type: 'user' } },
+      },
+      createdAt,
+    });
+    const stored = message('input-1', 'stored copy', '2026-01-01T00:00:01.000Z');
+    const active = message('input-2', 'still pending', '2026-01-01T00:00:02.000Z');
+    mockJson({
+      messages: [stored, message('older', 'previous input', '2026-01-01T00:00:00.000Z')],
+      activeInputMessages: [active, message('input-1', 'live copy', '2026-01-01T00:00:03.000Z')],
+    });
+
+    const messages = await client.getAgentController('code').session('user-1').listMessagesWithActiveInput('t-1', 2);
+
+    expect(messages.map(message => [message.id, agentControllerMessageText(message), message.createdAt])).toEqual([
+      ['older', 'previous input', new Date('2026-01-01T00:00:00.000Z')],
+      ['input-1', 'stored copy', new Date('2026-01-01T00:00:01.000Z')],
+      ['input-2', 'still pending', new Date('2026-01-01T00:00:02.000Z')],
+    ]);
+    const url = new URL(lastCall()[0]);
+    expect(url.searchParams.get('includeActiveInput')).toBe('true');
+    expect(url.searchParams.get('limit')).toBe('2');
+  });
+
+  it('requires the active input response contract instead of treating an older server as empty', async () => {
+    mockJson({ messages: [] });
+
+    await expect(
+      client.getAgentController('code').session('user-1').listMessagesWithActiveInput('t-1'),
+    ).rejects.toThrow();
+    const url = new URL(lastCall()[0]);
+    expect(url.searchParams.get('includeActiveInput')).toBe('true');
+    expect(url.searchParams.get('perPage')).toBe('false');
   });
 
   it('lists paginated messages and preserves the legacy numeric limit overload', async () => {

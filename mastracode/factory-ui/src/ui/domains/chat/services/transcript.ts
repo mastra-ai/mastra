@@ -457,9 +457,16 @@ function claimOnScreenEntries(
     const toolCallIds = toolCallIdsOf(displayed.content.parts);
     const texts = drawableTexts(message);
     const textClaim = (index: number) => `${index} ${texts.join('\n')}`;
+    const canonicalUserIndex =
+      displayed.role === 'user'
+        ? entries.findIndex(
+            entry => entry.kind === 'message' && (entry.id === message.id || entry.message.id === message.id),
+          )
+        : -1;
 
     for (const [index, candidate] of onScreen.entries()) {
       if (!candidate || (eligible && !eligible(candidate.entry))) continue;
+      if (canonicalUserIndex !== -1 && canonicalUserIndex !== index) continue;
       const sameMessage =
         candidate.entry.id === message.id ||
         candidate.entry.message.id === message.id ||
@@ -467,7 +474,10 @@ function claimOnScreenEntries(
       const alreadyDrawn = redrawsEntry(candidate, displayed, texts, toolCallIds);
 
       const claimsIdentity = sameMessage && !claimedEntries.has(index);
-      const claimsText = alreadyDrawn && !claimedTexts.has(textClaim(index));
+      const claimsText =
+        alreadyDrawn &&
+        !claimedTexts.has(textClaim(index)) &&
+        (displayed.role !== 'user' || !claimedEntries.has(index));
       if (!claimsIdentity && !claimsText) continue;
 
       anchors.set(message, index);
@@ -484,11 +494,15 @@ function isUnconfirmedSteer(entry: MessageEntry): boolean {
   return entry.deliveryStatus === 'pending' || entry.deliveryStatus === 'failed';
 }
 
+function isOptimisticUserMessage(entry: MessageEntry): boolean {
+  return entry.message.role === 'user' && (entry.message.id.startsWith('local-') || isUnconfirmedSteer(entry));
+}
+
 function confirmPendingUserMessages(state: TranscriptState, anchors: Map<MastraDBMessage, number>): TranscriptState {
   const confirmed = new Map<number, MessageEntry>();
   for (const [message, index] of anchors) {
     const current = state.entries[index];
-    if (current?.kind !== 'message' || !isUnconfirmedSteer(current)) continue;
+    if (current?.kind !== 'message' || !isOptimisticUserMessage(current)) continue;
     const canonical = toMessageEntry(preserveOptimisticUserContent(message, current.message), {
       streaming: current.streaming,
       runtimeTools: current.runtimeTools,
@@ -510,6 +524,7 @@ function redrawsEntry(
   toolCallIds: string[],
 ): boolean {
   if (texts.length === 0 || candidate.entry.message.role !== displayed.role) return false;
+  if (displayed.role === 'user' && !isOptimisticUserMessage(candidate.entry)) return false;
   if (!texts.every(text => drawsText(candidate, text))) return false;
   return toolCallIds.length === 0 || windowCopyCovers(candidate.entry.message.content.parts, displayed.content.parts);
 }
@@ -672,7 +687,6 @@ function toMessageEntry(
     steer?: boolean;
     deliveryStatus?: MessageEntry['deliveryStatus'];
     runtimeTools?: Record<string, ToolCall>;
-    viewerId?: string;
   } = {},
 ): MessageEntry {
   const signalMetadata = message.role === 'signal' ? message.content.metadata?.signal : undefined;
@@ -685,8 +699,7 @@ function toMessageEntry(
     signal?.attributes && typeof signal.attributes === 'object' && !Array.isArray(signal.attributes)
       ? (signal.attributes as Record<string, unknown>)
       : undefined;
-  const normalized =
-    isUserSignal && sentByOther(message, options.viewerId) ? withRenderableSignalText(message) : message;
+  const normalized = isUserSignal ? withRenderableSignalText(message) : message;
   const displayMessage = isUserSignal ? { ...normalized, role: 'user' as const } : normalized;
   const steer = options.steer ?? (isUserSignal ? attributes?.delivery === 'while-active' : undefined);
 
@@ -723,7 +736,7 @@ function upsertMessage(
   );
   if (message.role === 'assistant' && idx === -1) idx = indexOfSameTurn(entries, message);
   if (message.role === 'signal' && idx === -1 && !sentByOther(message, viewerId)) {
-    idx = claimOnScreenEntries(entries, [message], isUnconfirmedSteer).get(message) ?? -1;
+    idx = claimOnScreenEntries(entries, [message], isOptimisticUserMessage).get(message) ?? -1;
   }
   const prev = idx !== -1 ? entries[idx] : undefined;
   const prevEntry = prev?.kind === 'message' ? prev : undefined;
@@ -731,7 +744,7 @@ function upsertMessage(
     message.role === 'assistant'
       ? withoutToolPartsDrawnElsewhere(preserveRuntimeToolParts(message, prevEntry?.message), entries, idx)
       : preserveOptimisticUserContent(message, prevEntry?.message, viewerId);
-  const canonicalEntry = toMessageEntry(nextMessage, { streaming, runtimeTools: prevEntry?.runtimeTools, viewerId });
+  const canonicalEntry = toMessageEntry(nextMessage, { streaming, runtimeTools: prevEntry?.runtimeTools });
   // Changing the entry id remounts open cards.
   const entry = prevEntry ? { ...canonicalEntry, id: prevEntry.id } : canonicalEntry;
 

@@ -109,7 +109,9 @@ describe('useRouteThreadSync', () => {
               : [{ id: LATEST_THREAD_ID, updatedAt: '2026-08-12T00:00:00.000Z' }],
         });
       }),
-      http.get(`${API}/sessions/:resourceId/threads/:threadId/messages`, () => HttpResponse.json({ messages: [] })),
+      http.get(`${API}/sessions/:resourceId/threads/:threadId/messages`, () =>
+        HttpResponse.json({ messages: [], activeInputMessages: [] }),
+      ),
       http.get(`${API}/sessions/:resourceId`, ({ params }) =>
         HttpResponse.json({
           controllerId: 'code',

@@ -789,6 +789,19 @@ Returns an `AgentThreadSubscription` object with these members:
 ]}
 />
 
+### `getActiveThreadInputMessages(options)`
+
+Read user-authored input from the current local run for a thread, before it necessarily appears in stored history.
+
+```typescript
+const activeInput = agent.getActiveThreadInputMessages({
+  resourceId: 'user-123',
+  threadId: 'thread-abc',
+})
+```
+
+Returns `MastraDBMessage[]` with canonical message IDs and signal metadata. Recalled history, assistant output, and system signals are excluded. This doesn't read or write storage and returns an empty array when no local active run has input, including after completion or a server restart.
+
 ## Constructor parameters
 
 <PropertiesTable

@@ -3631,6 +3631,23 @@ type Shared_Type_157 = {
   updatedAt: number;
 };
 
+type Shared_Type_158 = {
+  id: string;
+  role: 'user' | 'assistant' | 'system' | 'tool' | 'signal';
+  content: {
+    format: 2;
+    parts: {
+      type: string;
+      [x: string]: unknown;
+    }[];
+    [x: string]: unknown;
+  };
+  createdAt?: string | undefined;
+  threadId?: string | undefined;
+  resourceId?: string | undefined;
+  type?: string | undefined;
+};
+
 // ============================================================================
 // Route: GET /agents
 // ============================================================================
@@ -21351,25 +21368,12 @@ export type GetAgentControllerControllerIdSessionsResourceIdThreadsThreadIdMessa
     | undefined;
   filter?: Shared_Type_66 | undefined;
   sessionScope?: string | undefined;
+  includeActiveInput?: boolean | undefined;
 };
 
 export type GetAgentControllerControllerIdSessionsResourceIdThreadsThreadIdMessages_Response = {
-  messages: {
-    id: string;
-    role: 'user' | 'assistant' | 'system' | 'tool' | 'signal';
-    content: {
-      format: 2;
-      parts: {
-        type: string;
-        [x: string]: unknown;
-      }[];
-      [x: string]: unknown;
-    };
-    createdAt?: string | undefined;
-    threadId?: string | undefined;
-    resourceId?: string | undefined;
-    type?: string | undefined;
-  }[];
+  messages: Shared_Type_158[];
+  activeInputMessages?: Shared_Type_158[] | undefined;
   total: number;
   page: number;
   perPage: number | false;

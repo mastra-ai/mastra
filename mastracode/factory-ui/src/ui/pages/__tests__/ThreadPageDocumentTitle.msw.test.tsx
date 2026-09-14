@@ -93,7 +93,9 @@ function stubBase({ workItems, threads }: { workItems: unknown[]; threads: unkno
     ),
     http.get(`${AC}/sessions/:resourceId/permissions`, () => HttpResponse.json({})),
     http.get(`${AC}/sessions/:resourceId/threads`, () => HttpResponse.json({ threads })),
-    http.get(`${AC}/sessions/:resourceId/threads/:threadId/messages`, () => HttpResponse.json({ messages: [] })),
+    http.get(`${AC}/sessions/:resourceId/threads/:threadId/messages`, () =>
+      HttpResponse.json({ messages: [], activeInputMessages: [] }),
+    ),
     http.get(`${AC}/modes`, () => HttpResponse.json({ modes: [] })),
     http.get(`${TEST_BASE_URL}/web/workspace/rendered/list`, () =>
       HttpResponse.json({ workspacePath: `/ws/${SESSION_ID}`, root: '.artifacts', rootPath: '', entries: [] }),

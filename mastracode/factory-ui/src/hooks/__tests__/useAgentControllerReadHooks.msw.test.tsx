@@ -1,9 +1,12 @@
-import { act, waitFor } from '@testing-library/react';
+import type { AgentControllerWireEvent } from '@mastra/core/agent-controller';
+import { act, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
-import { renderHookWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
+import { renderHookWithProviders, renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
+import { TranscriptEntries } from '../../ui/domains/chat/components/Transcript';
+import { createInitialTranscript } from '../../ui/domains/chat/services/transcript';
 import { useAvailableModelsQuery } from '../useAvailableModels';
 import { useAgentControllerThreadMessages } from '../useAgentControllerThreadMessages';
 import { AGENT_CONTROLLER_THREAD_PAGE_SIZE, useAgentControllerThreads } from '../useAgentControllerThreads';
@@ -12,6 +15,13 @@ const controllerId = 'code';
 const resourceId = 'resource-test';
 const sessionUrl = `${TEST_BASE_URL}/api/agent-controller/${controllerId}/sessions/${resourceId}`;
 const hookArgs = { agentControllerId: controllerId, resourceId, baseUrl: TEST_BASE_URL, enabled: true };
+
+function RecoveredTranscript() {
+  const query = useAgentControllerThreadMessages({ ...hookArgs, threadId: 'thread-one' });
+  if (!query.data) return undefined;
+  const transcript = createInitialTranscript({ messages: query.data, threadId: 'thread-one' });
+  return <TranscriptEntries entries={transcript.entries} onApprove={() => {}} onRespond={() => {}} />;
+}
 
 describe('agent-controller read hooks', () => {
   it('loads the session-independent model catalog from the config endpoint', async () => {
@@ -56,6 +66,53 @@ describe('agent-controller read hooks', () => {
     });
   });
 
+  it('recovers the submitted message on a fresh mount before the first answer is stored', async () => {
+    const payload = {
+      id: 'canonical-input',
+      type: 'user',
+      tagName: 'user',
+      contents: 'Inspect the pending change',
+      createdAt: '2026-09-14T10:00:00.000Z',
+      providerOptions: { mastra: { author: { id: 'viewer', name: 'Me' } } },
+    };
+    const input: Extract<AgentControllerWireEvent, { type: 'message_start' }>['message'] = {
+      id: payload.id,
+      role: 'signal',
+      createdAt: payload.createdAt,
+      content: {
+        format: 2,
+        parts: [{ type: 'data-user-message', data: payload }],
+        metadata: { signal: payload },
+      },
+    };
+    let finished = false;
+    server.use(
+      http.get(`${sessionUrl}/threads/thread-one/messages`, ({ request }) => {
+        if (new URL(request.url).searchParams.get('includeActiveInput') !== 'true') {
+          return HttpResponse.json({ messages: [] });
+        }
+        return HttpResponse.json({
+          messages: finished
+            ? [{ ...input, content: { ...input.content, parts: [{ type: 'text', text: payload.contents }] } }]
+            : [],
+          activeInputMessages: [input],
+        });
+      }),
+    );
+
+    const firstMount = renderWithProviders(<RecoveredTranscript />);
+    expect(await screen.findByText(payload.contents)).toBeInTheDocument();
+    firstMount.unmount();
+    const refreshed = renderWithProviders(<RecoveredTranscript />);
+    expect(await screen.findByText(payload.contents)).toBeInTheDocument();
+    expect(screen.getAllByText(payload.contents)).toHaveLength(1);
+
+    finished = true;
+    await act(async () => {
+      await refreshed.client.invalidateQueries();
+    });
+    expect(screen.getAllByText(payload.contents)).toHaveLength(1);
+  });
   it('keeps persisted thread messages from refetching on window focus', async () => {
     const onReadMessages = vi.fn();
 
@@ -64,6 +121,7 @@ describe('agent-controller read hooks', () => {
         onReadMessages();
         return HttpResponse.json({
           messages: [{ id: 'message-one', role: 'assistant', content: 'Persisted reply' }],
+          activeInputMessages: [],
         });
       }),
     );
@@ -94,7 +152,7 @@ describe('agent-controller read hooks', () => {
       http.get(`${sessionUrl}/threads/thread-one/messages`, ({ request }) => {
         const limit = Number(new URL(request.url).searchParams.get('limit'));
         seenLimits.push(limit);
-        return HttpResponse.json({ messages: all.slice(Math.max(0, all.length - limit)) });
+        return HttpResponse.json({ messages: all.slice(Math.max(0, all.length - limit)), activeInputMessages: [] });
       }),
     );
 
@@ -124,7 +182,10 @@ describe('agent-controller read hooks', () => {
     server.use(
       http.get(`${sessionUrl}/threads/:threadId/messages`, ({ params }) => {
         const id = params.threadId as string;
-        return HttpResponse.json({ messages: [{ id: `${id}-msg`, role: 'assistant', content: id }] });
+        return HttpResponse.json({
+          messages: [{ id: `${id}-msg`, role: 'assistant', content: id }],
+          activeInputMessages: [],
+        });
       }),
     );
 
@@ -154,6 +215,7 @@ describe('agent-controller read hooks', () => {
         const limit = Number(new URL(request.url).searchParams.get('limit'));
         requests.push({ threadId, limit });
         return HttpResponse.json({
+          activeInputMessages: [],
           // Return a full page so hasMore stays true and loadMore is allowed.
           messages: Array.from({ length: limit }, (_, i) => ({
             id: `${threadId}-m${i}`,

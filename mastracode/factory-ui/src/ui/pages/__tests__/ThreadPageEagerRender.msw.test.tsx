@@ -108,7 +108,7 @@ function stubThreadRoute(): ThreadRouteController {
     http.get(`${AC}/sessions/:resourceId/threads`, () => HttpResponse.json({ threads: [{ id: SESSION_ID }] })),
     http.get(`${AC}/sessions/:resourceId/threads/:threadId/messages`, async () => {
       await messagesReady;
-      return HttpResponse.json({ messages: [] });
+      return HttpResponse.json({ messages: [], activeInputMessages: [] });
     }),
     http.get(`${AC}/modes`, () => HttpResponse.json({ modes: [] })),
     http.get(`${TEST_BASE_URL}/web/workspace/rendered/list`, () =>

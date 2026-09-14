@@ -496,6 +496,21 @@ interface ActiveThreadRun {
 }
 ```
 
+#### `getActiveThreadInputMessages({ resourceId, threadId })`
+
+Read user-authored input from the thread's current local run across the controller's backing agents. Use this alongside stored history to recover a submitted message while its reply is still pending.
+
+```typescript
+const activeInput = controller.getActiveThreadInputMessages({
+  resourceId: 'project-43',
+  threadId: 'thread-abc',
+})
+```
+
+This reads the live run's input messages without constructing a Session or writing to storage. Messages retain their canonical IDs and signal metadata; duplicate IDs across backing agents appear once. It returns an empty array when no local run owns input for that resource and thread, including after completion or a server restart.
+
+Returns: `MastraDBMessage[]`
+
 ### Lifecycle
 
 #### `init()`

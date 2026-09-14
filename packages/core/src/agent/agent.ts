@@ -8305,6 +8305,10 @@ export class Agent<
     return agentThreadStreamRuntime.getActiveThreadRunId(options, this.getPubSub());
   }
 
+  getActiveThreadInputMessages(options: AgentThreadIdentityOptions): MastraDBMessage[] {
+    return agentThreadStreamRuntime.getActiveThreadInputMessages(options, this.getPubSub());
+  }
+
   listActiveThreadRuns(): ActiveThreadRun[] {
     return agentThreadStreamRuntime.listActiveThreadRuns(this.getPubSub());
   }

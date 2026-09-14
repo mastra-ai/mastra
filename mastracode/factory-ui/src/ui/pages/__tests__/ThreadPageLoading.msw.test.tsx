@@ -137,7 +137,7 @@ function stubThreadRoute({
     http.get(`${AC}/sessions/:resourceId/threads`, () => HttpResponse.json({ threads })),
     http.get(`${AC}/sessions/:resourceId/threads/:threadId/messages`, async () => {
       await messagesGate.promise;
-      return HttpResponse.json({ messages });
+      return HttpResponse.json({ messages, activeInputMessages: [] });
     }),
     http.get(`${AC}/modes`, () => HttpResponse.json({ modes: [] })),
     // Right workspace-files panel, which appears once workspacePath resolves.

@@ -771,6 +771,26 @@ export class AgentControllerSession extends BaseResource {
     return { ...body, messages };
   }
 
+  async listMessagesWithActiveInput(threadId: string, limit?: number): Promise<MastraDBMessage[]> {
+    const queryParams = new URLSearchParams({ includeActiveInput: 'true' });
+    if (limit === undefined) queryParams.set('perPage', 'false');
+    else queryParams.set('limit', String(limit));
+
+    const body = await this.request<
+      SerializedAgentControllerListMessagesResult & { activeInputMessages: SerializedMastraDBMessage[] }
+    >(this.url(`${this.base()}/threads/${encodeURIComponent(threadId)}/messages?${queryParams}`));
+    if (!Array.isArray(body.activeInputMessages)) {
+      throw new Error('The messages response is missing activeInputMessages');
+    }
+
+    const messages = new Map<string, MastraDBMessage>();
+    for (const message of body.messages) messages.set(message.id, hydrateMessage(message));
+    for (const message of body.activeInputMessages) {
+      if (!messages.has(message.id)) messages.set(message.id, hydrateMessage(message));
+    }
+    return [...messages.values()].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+  }
+
   /**
    * Queue a follow-up message. If the session is idle it sends immediately;
    * if a run is active it queues for after completion.

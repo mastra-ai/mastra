@@ -114,7 +114,9 @@ export function useOverlayControllerHandlers() {
       HttpResponse.json({ categories: { read: 'ask' }, tools: {} }),
     ),
     http.get(`${API}/sessions/:resourceId/threads`, () => HttpResponse.json({ threads: [] })),
-    http.get(`${API}/sessions/:resourceId/threads/thread-test/messages`, () => HttpResponse.json({ messages: [] })),
+    http.get(`${API}/sessions/:resourceId/threads/thread-test/messages`, () =>
+      HttpResponse.json({ messages: [], activeInputMessages: [] }),
+    ),
     http.get(
       `${API}/sessions/:resourceId/stream`,
       () =>

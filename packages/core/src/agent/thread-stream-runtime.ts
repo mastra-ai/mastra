@@ -15,8 +15,8 @@ import type { ChunkType } from '../stream/types';
 import { readPositiveIntEnv } from '../utils';
 import type { Agent } from './agent';
 import type { AgentExecutionOptions } from './agent.types';
-import type { MessageListInput } from './message-list';
-import { createMessageSignal, createSignal, resolveDeliveryAttributes } from './signals';
+import type { MastraDBMessage, MessageListInput } from './message-list';
+import { createMessageSignal, createSignal, isUserAuthoredMessage, resolveDeliveryAttributes } from './signals';
 import type { AgentMessageInput, AgentStateSignalInput, CreatedAgentSignal } from './signals';
 import { applyStateSignal } from './state-signals';
 import type {
@@ -1403,6 +1403,14 @@ export class AgentThreadStreamRuntime {
     if (record && !this.#isThreadBlockingRun(state, record)) return undefined;
 
     return activeRunId;
+  }
+
+  /** User-authored input owned by the current local run; remote runs have no local MessageList. */
+  getActiveThreadInputMessages(options: AgentThreadIdentityOptions, pubsub?: PubSub): MastraDBMessage[] {
+    const runId = this.getActiveThreadRunId(options, pubsub);
+    if (!runId) return [];
+    const messageList = this.#getState(pubsub).threadRunsById.get(runId)?.output.messageList;
+    return messageList?.get.input.db().filter(isUserAuthoredMessage) ?? [];
   }
 
   /** Same predicate as {@link getActiveThreadRunId}, over every tracked thread. */

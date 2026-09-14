@@ -149,7 +149,7 @@ function stubDraftRoute({ factoryProjectGate, failModeSwitch = false }: DraftRou
     http.get(`${AGENT_CONTROLLER_API}/sessions/:resourceId/threads`, () => HttpResponse.json({ threads: [] })),
     http.get(`${AGENT_CONTROLLER_API}/sessions/:resourceId/threads/:threadId/messages`, ({ params }) =>
       threadCreated
-        ? HttpResponse.json({ messages: [] })
+        ? HttpResponse.json({ messages: [], activeInputMessages: [] })
         : HttpResponse.json({ error: `Thread not found: ${String(params.threadId)}` }, { status: 500 }),
     ),
     http.get(

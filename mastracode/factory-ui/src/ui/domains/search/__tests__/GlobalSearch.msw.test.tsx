@@ -231,7 +231,7 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
       }),
     ),
     http.get(`${AGENT_CONTROLLER_API}/sessions/:resourceId/threads/:threadId/messages`, () =>
-      HttpResponse.json({ messages: [] }),
+      HttpResponse.json({ messages: [], activeInputMessages: [] }),
     ),
     http.get(
       `${AGENT_CONTROLLER_API}/sessions/:resourceId/stream`,

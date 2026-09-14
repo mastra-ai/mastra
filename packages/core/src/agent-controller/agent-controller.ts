@@ -1549,6 +1549,16 @@ export class AgentController<TState = {}> {
     return [...byRunId.values()];
   }
 
+  getActiveThreadInputMessages(options: { resourceId: string; threadId: string }): MastraDBMessage[] {
+    const byId = new Map<string, MastraDBMessage>();
+    for (const agent of this.backingAgents()) {
+      for (const message of this.propagateRuntimeServicesToAgent(agent).getActiveThreadInputMessages(options)) {
+        byId.set(message.id, message);
+      }
+    }
+    return [...byId.values()];
+  }
+
   /**
    * Check if the current model's provider has authentication configured.
    * Delegates to the {@link GatewayManager} auth chain (the same resolution

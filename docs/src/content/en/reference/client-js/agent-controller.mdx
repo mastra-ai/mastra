@@ -129,7 +129,7 @@ Subscribes to the session's event stream over SSE. The promise resolves once the
     type: '() => void',
     isOptional: true,
     description:
-      'Called each time the stream is re-established after a drop. The server does not replay events missed while disconnected, so re-sync from here with `session.state()` and, for the message gap, `session.listMessages()`.',
+      'Called each time the stream is re-established after a drop. The server does not replay events missed while disconnected, so re-sync from here with `session.state()` and, for stored history plus active user inputs, `session.listMessagesWithActiveInput(threadId)`.',
   },
   {
     name: 'reconnect',
@@ -230,6 +230,20 @@ Deletes a thread. If it's the active thread, the session unbinds.
 ### `listMessages(threadId, limit?)`
 
 Lists the messages of a thread with `createdAt` hydrated to `Date`.
+
+Returns: `Promise<MastraDBMessage[]>`
+
+### `listMessagesWithActiveInput(threadId, limit?)`
+
+Restores a submitted user message after a refresh while the server is still generating its reply. Returns stored history together with user inputs from the thread's active run on the server handling the request.
+
+```typescript
+const messages = await session.listMessagesWithActiveInput('thread-abc', 100)
+```
+
+The SDK hydrates `createdAt` to `Date`, merges messages by ID with the stored copy taking precedence, and sorts them chronologically. `limit` caps stored history, not active inputs. Omitting it loads all stored history.
+
+This doesn't save messages early or recover inputs from another process or a restarted server. Use `listMessages()` when you need stored history only.
 
 Returns: `Promise<MastraDBMessage[]>`
 

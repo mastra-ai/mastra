@@ -1,4 +1,5 @@
 import type { Agent } from '@mastra/core/agent';
+import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import type {
   AgentController,
   AgentControllerDisplayState,
@@ -228,6 +229,13 @@ const listMessagesQuerySchema = z
     include: includeSchema,
     filter: filterSchema,
     sessionScope: z.string().optional(),
+    includeActiveInput: z
+      .preprocess(value => {
+        if (value === 'true') return true;
+        if (value === 'false') return false;
+        return value;
+      }, z.boolean())
+      .optional(),
   })
   .superRefine((value, ctx) => {
     if (value.limit === undefined) return;
@@ -379,23 +387,35 @@ const messageContentV2Schema = z
     parts: z.array(messagePartSchema),
   })
   .passthrough();
+const controllerMessageResponseSchema = z.object({
+  id: z.string(),
+  role: z.enum(['user', 'assistant', 'system', 'tool', 'signal']),
+  content: messageContentV2Schema,
+  createdAt: z.string().optional(),
+  threadId: z.string().optional(),
+  resourceId: z.string().optional(),
+  type: z.string().optional(),
+});
 const listMessagesResponseSchema = z.object({
-  messages: z.array(
-    z.object({
-      id: z.string(),
-      role: z.enum(['user', 'assistant', 'system', 'tool', 'signal']),
-      content: messageContentV2Schema,
-      createdAt: z.string().optional(),
-      threadId: z.string().optional(),
-      resourceId: z.string().optional(),
-      type: z.string().optional(),
-    }),
-  ),
+  messages: z.array(controllerMessageResponseSchema),
+  activeInputMessages: z.array(controllerMessageResponseSchema).optional(),
   total: z.number(),
   page: z.number(),
   perPage: z.union([z.number(), z.literal(false)]),
   hasMore: z.boolean(),
 });
+
+function serializeControllerMessage(message: MastraDBMessage) {
+  return {
+    id: message.id,
+    role: message.role,
+    content: message.content,
+    createdAt: message.createdAt instanceof Date ? message.createdAt.toISOString() : undefined,
+    threadId: message.threadId,
+    resourceId: message.resourceId,
+    type: message.type,
+  };
+}
 const listModelsResponseSchema = z.object({
   models: z.array(
     z.object({
@@ -1237,7 +1257,7 @@ export const LIST_AGENT_CONTROLLER_THREAD_MESSAGES_ROUTE = createRoute({
   responseSchema: listMessagesResponseSchema,
   summary: 'List thread messages',
   description:
-    'Returns a paginated list of messages in a specific thread. The deprecated limit parameter may only be combined with page.',
+    'Returns stored messages with pagination. includeActiveInput adds user-authored input from the current local active run separately. The deprecated limit parameter may only be combined with page and includeActiveInput.',
   tags: ['AgentController', 'Threads'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:read',
@@ -1252,6 +1272,7 @@ export const LIST_AGENT_CONTROLLER_THREAD_MESSAGES_ROUTE = createRoute({
     orderBy,
     include,
     filter,
+    includeActiveInput,
     requestContext,
   }) => {
     try {
@@ -1277,6 +1298,10 @@ export const LIST_AGENT_CONTROLLER_THREAD_MESSAGES_ROUTE = createRoute({
 
       // Read-only route: delegate storage retrieval to the controller without
       // constructing a Session, which would initialize the workspace/sandbox.
+      // Capture before awaiting history: completion may clear the active run during that read.
+      const activeInputMessages = includeActiveInput
+        ? controller.getActiveThreadInputMessages({ resourceId, threadId }).map(serializeControllerMessage)
+        : undefined;
       const isLegacyLimitQuery = limit !== undefined;
       const result = await controller.queryThreadMessages(
         limit !== undefined
@@ -1301,15 +1326,8 @@ export const LIST_AGENT_CONTROLLER_THREAD_MESSAGES_ROUTE = createRoute({
 
       return {
         ...result,
-        messages: messages.map(m => ({
-          id: m.id,
-          role: m.role,
-          content: m.content as { format: 2; parts: Array<{ type: string; [key: string]: unknown }> },
-          createdAt: m.createdAt instanceof Date ? m.createdAt.toISOString() : undefined,
-          threadId: m.threadId,
-          resourceId: m.resourceId,
-          type: m.type,
-        })),
+        messages: messages.map(serializeControllerMessage),
+        ...(activeInputMessages !== undefined ? { activeInputMessages } : {}),
       };
     } catch (error) {
       return handleError(error, 'error listing controller thread messages');

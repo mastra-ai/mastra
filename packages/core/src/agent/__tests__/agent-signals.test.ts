@@ -2646,6 +2646,70 @@ describe('Agent signals', () => {
     subscription.unsubscribe();
   });
 
+  it('recovers the canonical user input before the first provider response without persisting it early', async () => {
+    const target = { threadId: 'active-input-thread', resourceId: 'active-input-user' };
+    const memory = new MockMemory();
+    await memory.createThread(target);
+    const saveMessages = vi.spyOn(memory, 'saveMessages');
+    let releaseProvider!: () => void;
+    let providerStarted!: () => void;
+    const providerGate = new Promise<void>(resolve => {
+      releaseProvider = resolve;
+    });
+    const providerPending = new Promise<void>(resolve => {
+      providerStarted = resolve;
+    });
+    const responseModel = createTextStreamModel('recovered response');
+    const agent = new Agent({
+      id: 'active-input-agent',
+      name: 'Active Input Agent',
+      instructions: 'Test',
+      memory,
+      model: new MockLanguageModelV2({
+        doStream: async options => {
+          providerStarted();
+          await providerGate;
+          return responseModel.doStream(options);
+        },
+      }),
+    });
+    const result = agent.sendMessage('Keep this pending message', target);
+    const accepted = await result.accepted;
+    if (accepted.action !== 'wake') throw new Error('Expected a new local run');
+    const finished = accepted.output.consumeStream();
+
+    try {
+      await providerPending;
+      const activeInput = agent.getActiveThreadInputMessages(target);
+      expect(activeInput).toEqual([
+        expect.objectContaining({
+          id: result.signal.id,
+          role: 'signal',
+          threadId: target.threadId,
+          resourceId: target.resourceId,
+          content: expect.objectContaining({
+            parts: [expect.objectContaining({ type: 'text', text: 'Keep this pending message' })],
+            metadata: expect.objectContaining({ signal: expect.objectContaining({ type: 'user' }) }),
+          }),
+        }),
+      ]);
+      expect(agent.getActiveThreadInputMessages({ ...target, threadId: 'another-thread' })).toEqual([]);
+      expect(agent.getActiveThreadInputMessages({ ...target, resourceId: 'another-user' })).toEqual([]);
+      expect((await memory.recall(target)).messages).toEqual([]);
+      expect(saveMessages).not.toHaveBeenCalled();
+
+      releaseProvider();
+      await finished;
+      expect(agent.getActiveThreadInputMessages(target)).toEqual([]);
+      const stored = await memory.recall(target);
+      expect(stored.messages.filter(message => message.id === result.signal.id)).toEqual(activeInput);
+    } finally {
+      releaseProvider();
+      await finished;
+      saveMessages.mockRestore();
+    }
+  });
+
   it('uses the configured message ID generator for persisted sendMessage signal rows', async () => {
     const memory = new MockMemory();
     const threadId = 'configured-send-message-thread';

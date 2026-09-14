@@ -1,4 +1,5 @@
 import { Agent } from '@mastra/core/agent';
+import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { AgentController } from '@mastra/core/agent-controller';
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
@@ -724,6 +725,85 @@ describe('agent-controller routes', () => {
   });
 
   describe('LIST_AGENT_CONTROLLER_THREAD_MESSAGES_ROUTE message shape', () => {
+    it('keeps an active input snapshot when completion persists it during the history read', async () => {
+      const controller = mastra.getAgentController('code')!;
+      await controller.initStorage();
+      const memory = await mastra.getStorage()!.getStore('memory');
+      const input: MastraDBMessage = {
+        id: 'canonical-pending-input',
+        role: 'signal',
+        threadId: 'pending-input-thread',
+        resourceId: 'pending-input-user',
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        content: {
+          format: 2,
+          parts: [{ type: 'text', text: 'Recover my pending input' }],
+          metadata: { signal: { type: 'user', tagName: 'user' } },
+        },
+      };
+      await memory!.saveThread({
+        thread: {
+          id: 'pending-input-thread',
+          resourceId: 'pending-input-user',
+          title: 'Pending input',
+          createdAt: input.createdAt,
+          updatedAt: input.createdAt,
+        },
+      });
+      let activeInput = [input];
+      const getActiveInput = vi.spyOn(controller, 'getActiveThreadInputMessages').mockImplementation(() => activeInput);
+      const createSession = vi.spyOn(controller, 'createSession');
+      const request = {
+        mastra,
+        controllerId: 'code',
+        resourceId: 'pending-input-user',
+        threadId: 'pending-input-thread',
+        requestContext: new RequestContext(),
+        abortSignal: new AbortController().signal,
+        limit: 1,
+      };
+      const queryThreadMessages = controller.queryThreadMessages.bind(controller);
+      const query = vi.spyOn(controller, 'queryThreadMessages');
+      try {
+        const legacy = await LIST_AGENT_CONTROLLER_THREAD_MESSAGES_ROUTE.handler(request);
+        expect(legacy).toEqual({ messages: [], total: 0, page: 0, perPage: 1, hasMore: false });
+        expect(
+          await LIST_AGENT_CONTROLLER_THREAD_MESSAGES_ROUTE.handler({ ...request, includeActiveInput: false }),
+        ).toEqual(legacy);
+        expect(getActiveInput).not.toHaveBeenCalled();
+
+        query.mockImplementationOnce(async options => {
+          const historySnapshot = await queryThreadMessages(options);
+          activeInput = [];
+          await memory!.saveMessages({ messages: [input] });
+          return historySnapshot;
+        });
+        const recovering = await LIST_AGENT_CONTROLLER_THREAD_MESSAGES_ROUTE.handler({
+          ...request,
+          includeActiveInput: true,
+        });
+        const wireInput = { ...input, createdAt: input.createdAt.toISOString() };
+        expect(recovering).toEqual({ ...legacy, activeInputMessages: [wireInput] });
+        const completed = await LIST_AGENT_CONTROLLER_THREAD_MESSAGES_ROUTE.handler({
+          ...request,
+          includeActiveInput: true,
+        });
+        expect(completed).toEqual({
+          messages: [expect.objectContaining(wireInput)],
+          activeInputMessages: [],
+          total: 1,
+          page: 0,
+          perPage: 1,
+          hasMore: false,
+        });
+        expect(createSession).not.toHaveBeenCalled();
+      } finally {
+        getActiveInput.mockRestore();
+        createSession.mockRestore();
+        query.mockRestore();
+      }
+    });
+
     it('returns persisted messages in the MastraDBMessage shape (nested content.parts)', async () => {
       // Given a session/thread with a persisted assistant DB message
       const created = (await CREATE_AGENT_CONTROLLER_SESSION_ROUTE.handler({
@@ -909,6 +989,12 @@ describe('agent-controller routes', () => {
       expect(querySchema.safeParse({ limit: 2, include: [{ id: 'message-1' }] }).success).toBe(false);
       expect(querySchema.safeParse({ limit: 2, filter: { metadata: { category: 'support' } } }).success).toBe(false);
       expect(querySchema.parse({ perPage: 'false' })).toMatchObject({ perPage: false });
+      expect(querySchema.parse({ limit: 2, includeActiveInput: 'true' })).toMatchObject({
+        limit: 2,
+        includeActiveInput: true,
+      });
+      expect(querySchema.parse({ includeActiveInput: 'false' })).toMatchObject({ includeActiveInput: false });
+      expect(querySchema.safeParse({ includeActiveInput: 'unexpected' }).success).toBe(false);
     });
 
     it('forwards request context to memory FGA checks', async () => {
@@ -1195,6 +1281,7 @@ describe('agent-controller routes', () => {
           controllerId: 'code',
           resourceId: 'read-only',
           threadId: seeded.id,
+          includeActiveInput: true,
         } as any);
 
         expect(workspaceInit).not.toHaveBeenCalled();
@@ -1285,6 +1372,7 @@ describe('agent-controller routes', () => {
           controllerId: 'code',
           resourceId: 'attacker',
           threadId: victimThreadId,
+          includeActiveInput: true,
         } as any),
       ).rejects.toThrow('Thread not found');
     });

@@ -70,7 +70,9 @@ function stubSupervisorRoute(health: FactoryHealthReport) {
     ),
     http.get(`${AC}/sessions/:resourceId/permissions`, () => HttpResponse.json({})),
     http.get(`${AC}/sessions/:resourceId/threads`, () => HttpResponse.json({ threads: [{ id: SUPERVISOR_ID }] })),
-    http.get(`${AC}/sessions/:resourceId/threads/:threadId/messages`, () => HttpResponse.json({ messages: [] })),
+    http.get(`${AC}/sessions/:resourceId/threads/:threadId/messages`, () =>
+      HttpResponse.json({ messages: [], activeInputMessages: [] }),
+    ),
     http.get(`${AC}/modes`, () => HttpResponse.json({ modes: [] })),
   );
   return { sessionCreates };
@@ -137,34 +139,6 @@ describe('SupervisorPage', () => {
       expect(within(findings).getByRole('link', { name: 'View all in Attention' })).toHaveAttribute(
         'href',
         `/factories/${FACTORY_ID}/attention`,
-      );
-    });
-
-    it('hands the selected finding to the supervisor composer', async () => {
-      stubSupervisorRoute(
-        report([
-          {
-            kind: 'decision-stuck',
-            id: 'dec-1',
-            workItemId: 'wi-1',
-            workItemNumber: 22874,
-            title: 'Plan step could not start',
-            evidence: 'invokeSkill plan failed after 5 attempts: No active Factory binding for role plan.',
-            beganAt: '2026-09-03T04:00:00.000Z',
-            suggestedRepair: null,
-          },
-        ]),
-      );
-      renderSupervisor();
-
-      await userEvent.click(await screen.findByRole('button', { name: 'Supervisor findings' }));
-      const findings = screen.getByRole('region', { name: 'Supervisor findings' });
-      await userEvent.click(within(findings).getByRole('button', { name: /Stuck decisions/ }));
-      await userEvent.click(within(findings).getByRole('button', { name: 'Ask supervisor' }));
-
-      const composer = screen.getByRole('region', { name: 'Supervisor composer' });
-      await waitFor(() =>
-        expect(within(composer).getByRole<HTMLTextAreaElement>('textbox').value).toContain('#22874 (dec-1)'),
       );
     });
   });

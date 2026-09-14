@@ -92,7 +92,7 @@ function stubThreadRoute(messages: MastraDBMessage[]) {
       HttpResponse.json({ threads: [{ id: SESSION_ID, title: 'Factory thread' }] }),
     ),
     http.get(`${AGENT_CONTROLLER_API}/sessions/:resourceId/threads/:threadId/messages`, () =>
-      HttpResponse.json({ messages }),
+      HttpResponse.json({ messages, activeInputMessages: [] }),
     ),
     http.get(`${AGENT_CONTROLLER_API}/modes`, () => HttpResponse.json({ modes: [] })),
     http.get(`${TEST_BASE_URL}/web/workspace/rendered/list`, () =>

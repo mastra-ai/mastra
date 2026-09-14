@@ -1281,7 +1281,7 @@ describe('live user-signal events render the same as their persisted copy', () =
       createdAt: new Date(payload.createdAt),
       content: {
         format: 2,
-        parts: [{ type: 'data-user-message', data: payload }] as unknown as MastraMessagePart[],
+        parts: [{ type: 'data-user-message', data: payload }],
         metadata: { signal: payload },
       },
     };
@@ -1302,7 +1302,7 @@ describe('live user-signal events render the same as their persisted copy', () =
       createdAt: new Date(composerPayload.createdAt),
       content: {
         format: 2,
-        parts: [{ type: 'data-user-message', data: composerPayload }] as unknown as MastraMessagePart[],
+        parts: [{ type: 'data-user-message', data: composerPayload }],
         metadata: { signal: composerPayload },
       },
     };
@@ -1338,9 +1338,10 @@ describe('live user-signal events render the same as their persisted copy', () =
 
     expect(firstEntryParts(state)).toEqual([{ type: 'text', text: 'hello from slack' }]);
   });
-  it('keeps a normal composer signal hidden behind its optimistic message', () => {
+  it('replaces the ordinary optimistic row with its canonical signal exactly once', () => {
     let state = createInitialTranscript({ messages: [], threadId: 't1' });
     state = transcriptReducer(state, { type: 'localUser', text: 'hello from the composer' });
+    const localId = state.entries[0]?.id;
     state = transcriptReducer(state, {
       type: 'event',
       event: { type: 'message_start', message: liveComposerSignal() },
@@ -1350,13 +1351,50 @@ describe('live user-signal events render the same as their persisted copy', () =
       event: { type: 'message_end', message: liveComposerSignal() },
     });
 
-    const drawable = state.entries.filter(
-      entry =>
-        entry.kind === 'message' &&
-        entry.message.content.parts.some(part => part.type === 'text' && part.text.includes('hello from the composer')),
-    );
-    expect(drawable).toHaveLength(1);
-    expect(drawable[0]?.id).toMatch(/^local-/);
+    expect(state.entries).toHaveLength(1);
+    expect(state.entries[0]).toMatchObject({
+      id: localId,
+      message: {
+        id: 'sig-web',
+        role: 'user',
+        content: { parts: [{ type: 'text', text: 'hello from the composer' }] },
+      },
+    });
+    state = transcriptReducer(state, {
+      type: 'mergeWindow',
+      messages: [signalMessage({ id: 'sig-web', type: 'user', tagName: 'user', text: 'hello from the composer' })],
+    });
+    expect(state.entries).toHaveLength(1);
+    expect(messageParts(state.entries[0])).toEqual([{ type: 'text', text: 'hello from the composer' }]);
+  });
+
+  it('renders an active native input on a fresh transcript without an optimistic row', () => {
+    const state = createInitialTranscript({ messages: [liveComposerSignal()], threadId: 't1' });
+
+    expect(state.entries).toHaveLength(1);
+    expect(messageParts(state.entries[0])).toEqual([{ type: 'text', text: 'hello from the composer' }]);
+  });
+
+  it('confirms repeated identical submissions separately across live events and history refresh', () => {
+    let state = createInitialTranscript({ threadId: 't1' });
+    const first = liveComposerSignal();
+    const second = { ...liveComposerSignal(), id: 'sig-web-2' };
+    state = transcriptReducer(state, { type: 'localUser', text: 'hello from the composer' });
+    state = transcriptReducer(state, { type: 'localUser', text: 'hello from the composer' });
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_start', message: first } });
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', message: first } });
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_start', message: second } });
+    state = transcriptReducer(state, { type: 'mergeWindow', messages: [first, second] });
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', message: second } });
+
+    expect(state.entries.filter(entry => entry.kind === 'message').map(entry => entry.message.id)).toEqual([
+      'sig-web',
+      'sig-web-2',
+    ]);
+    expect(state.entries.map(messageParts)).toEqual([
+      [{ type: 'text', text: 'hello from the composer' }],
+      [{ type: 'text', text: 'hello from the composer' }],
+    ]);
   });
 
   it('confirms the optimistic composer message with the streamed signal', () => {
@@ -1567,7 +1605,7 @@ describe('live user signals sent by someone else', () => {
       createdAt: new Date(payload.createdAt),
       content: {
         format: 2,
-        parts: [{ type: 'data-user-message', data: payload }] as unknown as MastraMessagePart[],
+        parts: [{ type: 'data-user-message', data: payload }],
         metadata: { signal: payload },
       },
     };
@@ -1583,17 +1621,15 @@ describe('live user signals sent by someone else', () => {
     expect(messageParts(entry)).toEqual([{ type: 'text', text: 'hello from Ada' }]);
   });
 
-  it("keeps the viewer's own message a single bubble behind its optimistic echo", () => {
+  it("reconciles the viewer's own canonical message into its optimistic bubble", () => {
     let state = createInitialTranscript({ messages: [], threadId: 't1' });
     state = transcriptReducer(state, { type: 'localUser', text: 'hello from me' });
     const message = liveSignal('sig-2', 'hello from me', { id: 'user_me', name: 'Me' });
 
     state = transcriptReducer(state, { type: 'event', event: { type: 'message_start', message }, viewerId: 'user_me' });
 
-    const drawable = state.entries.filter(
-      entry => entry.kind === 'message' && messageParts(entry).some(part => (part as { text?: string }).text),
-    );
-    expect(drawable).toHaveLength(1);
-    expect(drawable[0]?.id).toMatch(/^local-/);
+    expect(state.entries).toHaveLength(1);
+    expect(state.entries[0]).toMatchObject({ message: { id: 'sig-2', role: 'user' } });
+    expect(messageParts(state.entries[0])).toEqual([{ type: 'text', text: 'hello from me' }]);
   });
 });

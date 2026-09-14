@@ -4,18 +4,6 @@ import { useCallback, useState } from 'react';
 import { INITIAL_THREAD_MESSAGE_LIMIT, queryKeys } from '../api/keys';
 import { createAgentControllerClient } from '../ui/domains/chat/services/agentControllerClient';
 
-/**
- * Cap the initial transcript fetch so opening a long thread doesn't pull (and
- * render) its entire history at once, which freezes the browser. The message
- * list is not virtualized yet, so this bound is the primary guard against the
- * lag on long Mastra Code sessions.
- *
- * Older history is loaded on demand by *growing* this limit (100 -> 200 -> ...)
- * and refetching the newest-N window, which reuses the existing `limit`-only
- * `listMessages` surface without needing an offset/cursor param through core,
- * server, and the SDK. If a refetch returns exactly `limit` messages the thread
- * may have more older history; if it returns fewer we have reached the top.
- */
 const DEFAULT_INITIAL_MESSAGE_LIMIT = INITIAL_THREAD_MESSAGE_LIMIT;
 const LOAD_MORE_PAGE_SIZE = INITIAL_THREAD_MESSAGE_LIMIT;
 
@@ -70,7 +58,7 @@ export function useAgentControllerThreadMessages({
 
   const query = useQuery({
     queryKey: queryKeys.agentControllerThreadMessages(agentControllerId, resourceId, threadId, limit),
-    queryFn: () => session!.listMessages(threadId!, limit),
+    queryFn: () => session!.listMessagesWithActiveInput(threadId!, limit),
     enabled: enabled && Boolean(session) && Boolean(threadId),
     refetchOnWindowFocus: false,
     // Live stream only reaches a mounted transcript — re-entering the route must
