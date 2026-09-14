@@ -84,6 +84,24 @@ describe('MessageRow', () => {
     expect(screen.getByText('world')).toBeTruthy();
   });
 
+  it('renders a persisted terminal error part as a destructive notice', () => {
+    renderRow(
+      baseMessage({
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            { type: 'text', text: 'partial answer' },
+            { type: 'error', error: { name: 'APICallError', message: 'The model request failed.' } },
+          ],
+        },
+      }),
+    );
+    expect(screen.getByText('partial answer')).toBeTruthy();
+    expect(screen.getByText('APICallError')).toBeTruthy();
+    expect(screen.getByText('The model request failed.')).toBeTruthy();
+  });
+
   // The reveal only paces if the factory keeps the text part mounted as the
   // reply grows; a remount would show every chunk whole again.
   describe('when a streaming reply grows', () => {
