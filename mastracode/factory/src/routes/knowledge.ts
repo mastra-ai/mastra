@@ -264,6 +264,13 @@ function compareScopeNodes(a: KnowledgeScopeTreeNode, b: KnowledgeScopeTreeNode)
   return a.name.localeCompare(b.name) || a.id.localeCompare(b.id);
 }
 
+function knowledgeSearchRank(name: string, query: string): number {
+  const normalized = name.toLocaleLowerCase();
+  if (normalized === query) return 0;
+  if (normalized.startsWith(query)) return 1;
+  return 2;
+}
+
 const MAX_TRANSCRIPT_MESSAGE_PREVIEW_BYTES = 2_000;
 
 function previewTranscriptMessage(content: unknown): { preview: string; truncated: boolean; omittedBytes: number } {
@@ -1402,6 +1409,65 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           }
         },
       }),
+      registerApiRoute('/web/factory/projects/:id/knowledge/search', {
+        method: 'GET',
+        requiresAuth: false,
+        handler: async raw => {
+          const c = loose(raw);
+          const view = await this.#resolveView(c);
+          if ('response' in view) return view.response;
+          const query = (c.req.query('q') ?? '').trim().slice(0, SEARCH_QUERY_LIMIT).toLocaleLowerCase();
+          if (query.length < 2) return c.json({ results: [], truncated: false } satisfies KnowledgeSearchPayload);
+
+          const scanLimit = Math.min(SEARCH_SCAN_CAP, this.#limits.maxNodes);
+          const [prefixNodes, scannedNodes] = await Promise.all([
+            view.knowledge.listNodes({ scopeIds: view.scopeIds, namePrefix: query, limit: SEARCH_RESULT_LIMIT + 1 }),
+            view.knowledge.listNodes({ scopeIds: view.scopeIds, limit: scanLimit }),
+          ]);
+          const visibleById = new Map<string, KnowledgeNode>();
+          for (const node of [...prefixNodes, ...scannedNodes]) {
+            if (node.name.toLocaleLowerCase().includes(query)) visibleById.set(node.id, node);
+          }
+          const results = await Promise.all(
+            [...visibleById.values()].map(async node => {
+              const description = metadataString(node.metadata, 'description');
+              if (node.isScope) {
+                return {
+                  id: this.#mintHandle(view.projectId, view.perspectiveKey, 'scope', node.id),
+                  name: node.name,
+                  kind: node.kind ?? 'scope',
+                  type: 'scope' as const,
+                  rung: null,
+                  ...(description ? { description } : {}),
+                };
+              }
+              const rung = rungForScopeIds(await view.store.getNodeScopeIds(node.id), view);
+              return {
+                id: this.#mintHandle(view.projectId, view.perspectiveKey, 'node', node.id),
+                name: node.name,
+                kind: node.kind ?? 'concept',
+                type: 'node' as const,
+                rung,
+                ...(rung === 'thread' && view.threadId ? { threadId: view.threadId } : {}),
+                ...(description ? { description } : {}),
+              };
+            }),
+          );
+          results.sort(
+            (a, b) =>
+              knowledgeSearchRank(a.name, query) - knowledgeSearchRank(b.name, query) ||
+              a.name.localeCompare(b.name) ||
+              a.id.localeCompare(b.id),
+          );
+          return c.json({
+            results: results.slice(0, SEARCH_RESULT_LIMIT),
+            truncated:
+              results.length > SEARCH_RESULT_LIMIT ||
+              prefixNodes.length > SEARCH_RESULT_LIMIT ||
+              scannedNodes.length >= scanLimit,
+          } satisfies KnowledgeSearchPayload);
+        },
+      }),
       registerApiRoute('/web/factory/projects/:id/knowledge/scopes', {
         method: 'GET',
         requiresAuth: false,
@@ -1504,6 +1570,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           if (scopeHandle && !scopeId) return loose(c).json({ error: 'scope_not_found' }, 404);
           const selected = await this.#resolveSelectedScope(view, scopeId, true);
           if (!selected) return loose(c).json({ error: 'scope_not_found' }, 404);
+          const structuralLens = Boolean(scopeHandle);
           const { store } = view;
           const scopeIds = [selected.id];
           const resolutionScopeIds = view.scopeIds;
@@ -1514,16 +1581,17 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           const fetched = await view.knowledge.listNodes({
             scopeIds: view.scopeIds,
             membershipScopeIds: scopeIds,
-            limit: this.#limits.maxNodes,
+            ...(structuralLens ? {} : { isScope: false }),
+            limit: this.#limits.maxNodes + (structuralLens ? 0 : 1),
           });
-          let truncated = fetched.length >= this.#limits.maxNodes;
+          let truncated = fetched.length > this.#limits.maxNodes - (structuralLens ? 1 : 0);
           const pinnedNodeIds = await this.#pinnedNodeIds(selectedView);
           const pinnedNodeIdSet = new Set(pinnedNodeIds.map(value => value.id));
           const members = fetched
             .filter(node => node.id !== selected.id && !pinnedNodeIdSet.has(node.id))
-            .slice(0, Math.max(0, this.#limits.maxNodes - 1));
+            .slice(0, Math.max(0, this.#limits.maxNodes - (structuralLens ? 1 : 0)));
           const nodes = members.filter(node => !node.isScope);
-          const scopeNodes = members.filter(node => node.isScope);
+          const scopeNodes = structuralLens ? members.filter(node => node.isScope) : [];
           const recordWindow: KnowledgeRecord[] = [];
           for (const node of nodes) {
             if (recordWindow.length > this.#limits.maxRecords) break;
@@ -1541,12 +1609,14 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
             recordWindow.length = this.#limits.maxRecords;
           }
           const resolver = await WikilinkResolver.create(view.knowledge, store, nodes, this.#limits.maxFallbackLookups);
-          const edges: KnowledgeGraphEdge[] = members.map(member => ({
-            id: `contains:${selected.id}:${member.id}`,
-            source: selected.id,
-            target: member.id,
-            type: 'contains',
-          }));
+          const edges: KnowledgeGraphEdge[] = structuralLens
+            ? members.map(member => ({
+                id: `contains:${selected.id}:${member.id}`,
+                source: selected.id,
+                target: member.id,
+                type: 'contains',
+              }))
+            : [];
           const boundaryNodes = new Map<string, KnowledgeNode>();
           const edgeSeen = new Set<string>();
           const recordCounts = new Map<string, number>();
@@ -1557,7 +1627,10 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
               const target = await resolver.resolve(name, resolutionScopeIds);
               if (!target || target.id === record.nodeId) continue;
               if (!resolver.inWindowId(target.id)) {
-                if (!boundaryNodes.has(target.id) && members.length + 1 + boundaryNodes.size >= this.#limits.maxNodes)
+                if (
+                  !boundaryNodes.has(target.id) &&
+                  members.length + (structuralLens ? 1 : 0) + boundaryNodes.size >= this.#limits.maxNodes
+                )
                   continue;
                 boundaryNodes.set(target.id, target);
               }
@@ -1604,7 +1677,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
             membershipScopeIds: [selected.id],
             limit: 1,
           });
-          const structuralNodes = [selected, ...scopeNodes];
+          const structuralNodes = structuralLens ? [selected, ...scopeNodes] : [];
           const scopeCounts = new Map<
             string,
             Pick<
