@@ -3,6 +3,7 @@ import { X } from 'lucide-react';
 
 import { useKnowledgeActivity } from '../../../../../hooks/useKnowledgeGraph';
 import type { KnowledgeScopeNode, KnowledgeSelection } from '../../services/knowledge';
+import { knowledgeActivityLabel } from './activityLabel';
 
 interface KnowledgeScopeFlyoutProps {
   factoryProjectId: string;
@@ -25,6 +26,7 @@ export function KnowledgeScopeFlyout({
   onClose,
 }: KnowledgeScopeFlyoutProps) {
   const activity = useKnowledgeActivity(factoryProjectId, selection, threadId);
+  const recentActivity = activity.data?.pages[0]?.events.slice(0, 5) ?? [];
   const displayAddress =
     scope.address === `resource:${factoryProjectId}` ? `project:${factoryProjectId}` : scope.address;
   return (
@@ -38,7 +40,7 @@ export function KnowledgeScopeFlyout({
           <Txt as="h2" variant="header-sm" className="text-icon6 truncate font-semibold">
             {scope.name}
           </Txt>
-          <div className="mt-1 text-xs text-purple-300">Structural scope</div>
+          <div className="mt-1 text-xs text-purple-300">scope</div>
         </div>
         <button
           type="button"
@@ -73,14 +75,13 @@ export function KnowledgeScopeFlyout({
             <p className="text-icon3 mt-2 text-xs">Loading…</p>
           ) : activity.isError ? (
             <p className="text-icon3 mt-2 text-xs">Unable to load recent activity.</p>
-          ) : activity.data.events.length === 0 ? (
+          ) : recentActivity.length === 0 ? (
             <p className="text-icon3 mt-2 text-xs">No recent activity.</p>
           ) : (
             <ol className="mt-2 space-y-2">
-              {activity.data.events.slice(0, 5).map(event => (
+              {recentActivity.map(event => (
                 <li key={event.id} className="border-surface5 border-l pl-2 text-xs">
-                  <span className="text-icon5 font-medium">{event.action}</span>
-                  <span className="text-icon3 ml-1">{event.recordType}</span>
+                  <span className="text-icon5 font-medium">{knowledgeActivityLabel(event)}</span>
                   <time className="text-icon3 mt-0.5 block" dateTime={event.createdAt}>
                     {new Date(event.createdAt).toLocaleString()}
                   </time>
