@@ -6,7 +6,7 @@ Prepared `MCPServerBase` for MCP 2026-07-28 servers while preserving MCP 1.x con
 
 The 1.x-only surfaces are now `@deprecated` and will be removed in the next core major: `startSSE`, `startHonoSSE`, `MCPServerSSEOptions`, `MCPServerHonoSSEOptions`, `MCPServerHTTPOptions.options`, `MCPServerContext`, `MCPToolExecutionContext` and `context.mcp`.
 
-Tools that need input mid-execution use the suspend/resume primitives `createTool` already has. On a 2026-07-28 server they receive `context.mcpv2` with per-request `log`, `progress`, `metadata`, `signal`, `suspend`, `resumeData`, and the new `suspendPayload`:
+Tools that need input mid-execution use the suspend/resume primitives `createTool` already has. `suspend`, `resumeData` and the new `suspendPayload` are now typed at the top level of the tool context for direct and MCP 2.x execution (agents and workflows keep nesting them under `agent`/`workflow` until the next core major). On a 2026-07-28 server the tool also receives `context.mcpv2`, an `MCPRequestContextV2` with per-request `log`, `progress`, `_meta` and `signal`; `log` and `progress` keep their 1.x signatures:
 
 ```ts
 import { createTool } from '@mastra/core/tools';
@@ -20,12 +20,12 @@ const confirm = createTool({
   suspendSchema: z.object({ phase: z.literal('confirm'), amount: z.number() }),
   resumeSchema: z.object({ confirmed: z.boolean() }),
   execute: async ({ amount }, context) => {
-    const round = context.mcpv2;
-    if (!round?.resumeData) {
-      await round?.suspend({ phase: 'confirm', amount });
+    await context.mcpv2?.log('info', 'asking for confirmation', { amount });
+    if (!context.resumeData) {
+      await context.suspend?.({ phase: 'confirm', amount });
       return;
     }
-    return round.resumeData.confirmed;
+    return context.resumeData.confirmed;
   },
 });
 ```

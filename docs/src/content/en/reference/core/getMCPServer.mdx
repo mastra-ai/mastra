@@ -80,25 +80,22 @@ const confirm = createTool({
   suspendSchema: z.object({ phase: z.literal('confirm'), amount: z.number() }),
   resumeSchema: z.object({ confirmed: z.boolean() }),
   execute: async ({ amount }, context) => {
-    const round = context.mcpv2
-    if (!round?.resumeData) {
-      await round?.suspend({ phase: 'confirm', amount })
+    if (!context.resumeData) {
+      await context.suspend?.({ phase: 'confirm', amount })
       return
     }
-    return round.resumeData.confirmed
+    return context.resumeData.confirmed
   },
 })
 ```
 
-The same tool keeps working from agents and workflows, which surface the suspension through their own resume paths. `resumeSchema` must be a flat object of primitive fields so it can be presented as an input form.
+On a 2026-07-28 server and in direct execution, `suspend`, `resumeData` and `suspendPayload` sit at the top level of the tool context. Agents and workflows still nest them under `context.agent` and `context.workflow` until the next major release of `@mastra/core`. `resumeSchema` must be a flat object of primitive fields so it can be presented as an input form.
+
+Each round is a separate request. `resumeData` carries only the current round's answer, validated against `resumeSchema`, and `suspendPayload` carries what the tool last suspended with. Because the framework never replays earlier rounds, handlers branch on explicit named phases, every round is re-authorized, and writes rely on domain-owned idempotency. `suspendPayload` is also handed back to tools resumed by agents and workflows.
 
 ### The `mcpv2` context
 
-When an `@mastra/mcp` 2.x server executes a tool, `context.mcpv2` is an `MCPToolExecutionContextV2`. The legacy `context.mcp` shape provided by `@mastra/mcp` 1.x is unchanged and is never present on a 2.x server. The `v2` suffix is temporary: the next major release of `@mastra/core` renames it to `context.mcp`.
-
-`mcpv2` contains `protocolVersion: '2026-07-28'`, `requestId`, `signal`, optional request `metadata`, request-scoped `log(level, data, logger?)` and `progress(progress, total?, message?)`, and the suspend/resume trio: `suspend(payload)`, `resumeData` (the current round's answer, validated against `resumeSchema`), and `suspendPayload` (what the tool last suspended with). Because the framework never replays earlier rounds, handlers branch on explicit named phases, every round is re-authorized, and writes rely on domain-owned idempotency.
-
-`suspendPayload` is also handed back to tools resumed by agents and workflows.
+When an `@mastra/mcp` 2.x server executes a tool, `context.mcpv2` is an `MCPRequestContextV2` with the per-request facilities: `protocolVersion: '2026-07-28'`, `requestId`, `signal`, the request's `_meta`, and request-scoped `log(level, message, data?)` and `progress({ progress, total?, message? })`. `log` and `progress` keep the `@mastra/mcp` 1.x signatures, so a tool that only uses them works unchanged on either version. The legacy `context.mcp` shape is never present on a 2.x server. The `v2` suffix is temporary: the next major release of `@mastra/core` renames it to `context.mcp`.
 
 ### Registration and execution
 

@@ -12,7 +12,7 @@ import type { InternalCoreTool } from '../tools';
 import { makeCoreTool } from '../utils';
 import { Workflow } from '../workflows';
 import { MCPServerBase } from './index';
-import type { MCPToolExecutionContextV2, MCPToolExecutionResultV2 } from './index';
+import type { MCPRequestContextV2, MCPToolExecutionResultV2 } from './index';
 
 class NativeServer extends MCPServerBase {
   override readonly mcpVersion = 2 as const;
@@ -39,11 +39,15 @@ class NativeServer extends MCPServerBase {
     let suspension: { payload: unknown } | undefined;
     const round = executionContext.mcpv2 ?? request();
     const output = await tool.execute(args, {
-      toolCallId: String(round.requestId),
+      // Same idiom as the 1.x package: an empty toolCallId keeps CoreToolBuilder on the MCP path.
+      toolCallId: '',
       messages: [],
       requestContext: executionContext.requestContext,
       abortSignal: round.signal,
-      mcpv2: { ...round, suspend: async payload => void (suspension = { payload }) },
+      mcpv2: round,
+      suspend: async (payload: unknown) => void (suspension = { payload }),
+      resumeData: executionContext.resumeData,
+      suspendPayload: executionContext.suspendPayload,
     });
     if (suspension) {
       const original = this.originalTools[toolId];
@@ -121,12 +125,11 @@ class LegacyServer extends MCPServerBase {
   }
 }
 
-function request(): Omit<MCPToolExecutionContextV2, 'suspend'> {
+function request(): MCPRequestContextV2 {
   return {
     protocolVersion: '2026-07-28',
     requestId: 'round',
     signal: new AbortController().signal,
-    metadata: {},
     log: async () => {},
     progress: async () => {},
   };
@@ -141,13 +144,12 @@ function suspendingTool() {
     suspendSchema: z.object({ phase: z.literal('confirm'), amount: z.number() }),
     resumeSchema: z.object({ confirmed: z.boolean() }),
     execute: async ({ amount }, context) => {
-      const round = context.mcpv2;
-      if (!round?.resumeData) {
-        await round?.suspend({ phase: 'confirm', amount });
+      if (!context.resumeData) {
+        await context.suspend?.({ phase: 'confirm', amount });
         return;
       }
-      if (!round.resumeData.confirmed) throw new Error('declined');
-      return { charged: round.suspendPayload?.amount ?? amount };
+      if (!context.resumeData.confirmed) throw new Error('declined');
+      return { charged: context.suspendPayload?.amount ?? amount };
     },
   });
 }
@@ -262,8 +264,9 @@ describe('MCP v1/v2 registry boundaries', () => {
     const execute = vi.fn(async (_input, received) => {
       expect(received.requestContext.get('tenant')).toBe('north');
       expect(received.abortSignal).toBe(round.signal);
-      expect(received.mcpv2).toMatchObject({ protocolVersion: '2026-07-28', requestId: 'round' });
-      expect(received.mcpv2.suspend).toBeTypeOf('function');
+      expect(received.mcpv2).toBe(round);
+      expect(received.mcpv2).not.toHaveProperty('suspend');
+      expect(received.suspend).toBeTypeOf('function');
       expect(received).not.toHaveProperty('mcp');
       return 1;
     });
@@ -291,17 +294,15 @@ describe('MCP v1/v2 registry boundaries', () => {
       'confirm',
       { amount: 990 },
       {
-        mcpv2: {
-          ...request(),
-          resumeData: { confirmed: true },
-          suspendPayload: { phase: 'confirm', amount: 990 },
-        },
+        mcpv2: request(),
+        resumeData: { confirmed: true },
+        suspendPayload: { phase: 'confirm', amount: 990 },
       },
     );
     expect(resumed).toEqual({ status: 'completed', output: { charged: 990 } });
 
     await expect(
-      server.executeTool('confirm', { amount: 990 }, { mcpv2: { ...request(), resumeData: { confirmed: false } } }),
+      server.executeTool('confirm', { amount: 990 }, { mcpv2: request(), resumeData: { confirmed: false } }),
     ).rejects.toThrow('declined');
   });
 
@@ -318,7 +319,7 @@ describe('MCP v1/v2 registry boundaries', () => {
     const invalidResume = await server.executeTool(
       'confirm',
       { amount: 1 },
-      { mcpv2: { ...request(), resumeData: { confirmed: 'yes' } } },
+      { mcpv2: request(), resumeData: { confirmed: 'yes' } },
     );
     expect(invalidResume.status).toBe('completed');
     expect((invalidResume as { output: { error: boolean } }).output).toMatchObject({ error: true });

@@ -429,12 +429,7 @@ export class Tool<
         // validation. The original args were already validated during the initial
         // execution, and during resume the tool's execute function checks resumeData
         // and returns early without using the input args.
-        const isResuming = !!(
-          context?.resumeData ||
-          context?.agent?.resumeData ||
-          context?.workflow?.resumeData ||
-          context?.mcpv2?.resumeData
-        );
+        const isResuming = !!(context?.resumeData || context?.agent?.resumeData || context?.workflow?.resumeData);
         const wasBuilderValidated = consumeBuilderValidatedInput(context);
         const skipInputValidation = isResuming || wasBuilderValidated;
 
@@ -571,25 +566,13 @@ export class Tool<
                     },
                   }
                 : baseContext.workflow,
-              mcpv2: baseContext.mcpv2
-                ? {
-                    ...baseContext.mcpv2,
-                    suspend: (args: any) => {
-                      suspendData = args;
-                      return baseContext.mcpv2.suspend(args);
-                    },
-                  }
-                : baseContext.mcpv2,
               requestContext: executionRequestContext ?? new RequestContext(),
             };
           }
         }
 
         const resumeData =
-          organizedContext.agent?.resumeData ??
-          organizedContext.workflow?.resumeData ??
-          organizedContext.mcpv2?.resumeData ??
-          organizedContext?.resumeData;
+          organizedContext.agent?.resumeData ?? organizedContext.workflow?.resumeData ?? organizedContext?.resumeData;
 
         if (resumeData) {
           const resumeValidation = validateToolInput(this.resumeSchema, resumeData, this.id);

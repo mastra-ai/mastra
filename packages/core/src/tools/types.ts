@@ -14,7 +14,7 @@ import type { ActorSignal } from '../auth/ee';
 import type { ToolBackgroundConfig } from '../background-tasks';
 import type { MastraBrowser } from '../browser/browser';
 import type { Mastra } from '../mastra';
-import type { MCPToolExecutionContextV2 } from '../mcp/request-v2';
+import type { MCPRequestContextV2 } from '../mcp/request-v2';
 import type { ObservabilityContext } from '../observability';
 import type { RequestContext } from '../request-context';
 import type { PublicSchema } from '../schema';
@@ -270,7 +270,7 @@ export type MCPServerContext = ServerContext & {
 
 /**
  * MCP tool execution context - properties specific when tools are executed via an `@mastra/mcp` 1.x server.
- * @deprecated 1.x-only; MCP 2026-07-28 servers provide `MCPToolExecutionContextV2` (`context.mcpv2`) instead.
+ * @deprecated 1.x-only; MCP 2026-07-28 servers provide `MCPRequestContextV2` (`context.mcpv2`) instead.
  * Removed in the next core major, when `mcpv2` becomes `mcp`.
  */
 export interface MCPToolExecutionContext {
@@ -318,7 +318,7 @@ export type MastraToolInvocationOptions = ToolInvocationOptions &
      */
     mcp?: MCPToolExecutionContext;
     /** The 2026-07-28 request context when an `@mastra/mcp` 2.x server executes the tool. Becomes `mcp` in the next core major. */
-    mcpv2?: MCPToolExecutionContextV2;
+    mcpv2?: MCPRequestContextV2;
     /**
      * Workspace for tool execution. When provided at execution time, this overrides
      * any workspace configured at tool build time. Allows dynamic workspace selection
@@ -611,10 +611,19 @@ export interface ToolExecutionContext<
 
   /**
    * The 2026-07-28 request an `@mastra/mcp` 2.x server is running this tool in:
-   * per-request log/progress/metadata plus suspend/resume for `input_required` rounds.
-   * Becomes `mcp` in the next core major.
+   * per-request `log`, `progress`, `_meta` and `signal`. Becomes `mcp` in the next core major.
    */
-  mcpv2?: MCPToolExecutionContextV2<TSuspend, TResume>;
+  mcpv2?: MCPRequestContextV2;
+
+  // ============ Suspend/resume for direct and MCP 2.x execution ============
+  // Agents and workflows nest these under `agent` / `workflow` until the next core major.
+
+  /** Suspends the tool with a payload validated against `suspendSchema`. On an MCP 2.x server this ends the request as `input_required`. */
+  suspend?: (suspendPayload: TSuspend, suspendOptions?: SuspendOptions) => Promise<void>;
+  /** The answer to the last suspension, validated against `resumeSchema`. Present only when resuming. */
+  resumeData?: TResume;
+  /** The payload the tool last suspended with. Present only when resuming. */
+  suspendPayload?: TSuspend;
 
   /**
    * Observability helpers for recording child spans and structured logs

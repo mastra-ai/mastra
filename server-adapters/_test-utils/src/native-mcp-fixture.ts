@@ -1,5 +1,5 @@
 import { MCPServerBase } from '@mastra/core/mcp';
-import type { MCPServerHTTPOptions, MCPToolExecutionContextV2, MCPToolExecutionResultV2 } from '@mastra/core/mcp';
+import type { MCPRequestContextV2, MCPServerHTTPOptions, MCPToolExecutionResultV2 } from '@mastra/core/mcp';
 import { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import type { ToolsInput } from '@mastra/core/agent';
@@ -32,8 +32,8 @@ export class NativeMCPFixture extends MCPServerBase {
           suspendSchema: z.object({ phase: z.literal('confirm') }),
           resumeSchema: z.object({ confirmed: z.boolean() }),
           execute: async (_input, context) => {
-            if (!context.mcpv2?.resumeData) {
-              await context.mcpv2?.suspend({ phase: 'confirm' });
+            if (!context.resumeData) {
+              await context.suspend?.({ phase: 'confirm' });
               return;
             }
             return 1;
@@ -64,20 +64,23 @@ export class NativeMCPFixture extends MCPServerBase {
     const tool = this.convertedTools[toolId];
     if (!tool?.execute) throw new Error(`Tool ${toolId} not found`);
     let suspension: { payload: unknown } | undefined;
-    const round: Omit<MCPToolExecutionContextV2, 'suspend'> = executionContext.mcpv2 ?? {
+    const round: MCPRequestContextV2 = executionContext.mcpv2 ?? {
       protocolVersion: '2026-07-28',
       requestId: 'rest',
       signal: new AbortController().signal,
-      metadata: {},
       log: async () => {},
       progress: async () => {},
     };
     const output = await tool.execute(args, {
-      toolCallId: String(round.requestId),
+      // Same idiom as the 1.x package: an empty toolCallId keeps CoreToolBuilder on the MCP path.
+      toolCallId: '',
       messages: [],
       requestContext: executionContext.requestContext,
       abortSignal: round.signal,
-      mcpv2: { ...round, suspend: async payload => void (suspension = { payload }) },
+      mcpv2: round,
+      suspend: async (payload: unknown) => void (suspension = { payload }),
+      resumeData: executionContext.resumeData,
+      suspendPayload: executionContext.suspendPayload,
     });
     if (suspension) {
       const original = this.originalTools[toolId];
