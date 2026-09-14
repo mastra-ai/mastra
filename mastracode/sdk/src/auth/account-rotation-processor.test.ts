@@ -642,11 +642,16 @@ describe('pack-fallback parts', () => {
     );
   }
 
-  function makeControllerArgs(modelId: string, modeId = 'build') {
+  function makeControllerArgs(modelId: string, modeId = 'build', activeModelPackId?: string) {
     const emitEvent = vi.fn();
     const setState = vi.fn(async () => {});
     const requestContext = new RequestContext();
-    requestContext.set('controller', { session: { modelId, modeId }, emitEvent, setState });
+    requestContext.set('controller', {
+      session: { modelId, modeId },
+      getState: () => ({ activeModelPackId }),
+      emitEvent,
+      setState,
+    });
     return makeArgs({ requestContext, emitEvent, setState });
   }
 
@@ -682,6 +687,34 @@ describe('pack-fallback parts', () => {
         reason: 'pool-exhausted',
       }),
     });
+  });
+
+  it('attributes the hop to the explicit active pack when packs share a model', async () => {
+    const seeded = makeTwoAccountStorage();
+    seedSettingsWithFallbacks({ 'custom:Shared Model': 'openai' });
+    const settingsPath = join(process.env.MASTRA_APP_DATA_DIR!, 'settings.json');
+    const raw = JSON.parse(readFileSync(settingsPath, 'utf-8'));
+    raw.models.activeModelPackId = 'anthropic';
+    raw.customModelPacks = [
+      {
+        name: 'Shared Model',
+        models: { build: 'anthropic/claude-fable-5' },
+        createdAt: '2026-01-01T00:00:00.000Z',
+      },
+    ];
+    writeFileSync(settingsPath, JSON.stringify(raw), 'utf-8');
+    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
+    const args = makeControllerArgs('anthropic/claude-fable-5', 'build', 'custom:Shared Model');
+
+    for (let attempt = 0; attempt < 2; attempt++) {
+      await processor.processAPIError({ ...args, error: apiError(429) } as never);
+    }
+
+    const packPart = args.writer.custom.mock.calls
+      .map(call => call[0])
+      .find(part => part.type === PACK_FALLBACK_PART_TYPE);
+    expect(packPart?.data.from).toEqual({ packId: 'custom:Shared Model', label: 'Shared Model' });
+    expect(packPart?.data.to).toEqual({ packId: 'openai', label: 'OpenAI' });
   });
 
   it('advances the cascade position on a second hop in the same request', async () => {
@@ -759,11 +792,16 @@ describe('Q14 chain gate (400/unknown never hop packs)', () => {
     );
   }
 
-  function makeControllerArgs(modelId: string, modeId = 'build') {
+  function makeControllerArgs(modelId: string, modeId = 'build', activeModelPackId?: string) {
     const emitEvent = vi.fn();
     const setState = vi.fn(async () => {});
     const requestContext = new RequestContext();
-    requestContext.set('controller', { session: { modelId, modeId }, emitEvent, setState });
+    requestContext.set('controller', {
+      session: { modelId, modeId },
+      getState: () => ({ activeModelPackId }),
+      emitEvent,
+      setState,
+    });
     return makeArgs({ requestContext, emitEvent, setState });
   }
 
@@ -875,11 +913,16 @@ describe('cross-provider cascades', () => {
     );
   }
 
-  function makeControllerArgs(modelId: string, modeId = 'build') {
+  function makeControllerArgs(modelId: string, modeId = 'build', activeModelPackId?: string) {
     const emitEvent = vi.fn();
     const setState = vi.fn(async () => {});
     const requestContext = new RequestContext();
-    requestContext.set('controller', { session: { modelId, modeId }, emitEvent, setState });
+    requestContext.set('controller', {
+      session: { modelId, modeId },
+      getState: () => ({ activeModelPackId }),
+      emitEvent,
+      setState,
+    });
     return makeArgs({ requestContext, emitEvent, setState });
   }
 

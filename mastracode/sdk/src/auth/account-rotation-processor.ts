@@ -554,7 +554,7 @@ export class AccountRotationProcessor implements Processor {
       return (args.state.packCascade as PackCascade | null) ?? null;
     }
     const controller = args.requestContext?.get('controller') as
-      | { session?: { modelId?: unknown; modeId?: unknown } }
+      | { session?: { modelId?: unknown; modeId?: unknown }; getState?: () => { activeModelPackId?: unknown } }
       | undefined;
     const modelId = controller?.session?.modelId;
     if (typeof modelId !== 'string' || modelId.length === 0) {
@@ -567,7 +567,14 @@ export class AccountRotationProcessor implements Processor {
         : 'build';
     const settings = loadSettings(this.options.settingsPath);
     const packs = listResolvableModePacks(settings);
-    const activePack = findModePackForModel(settings, packs, modelId, modeId);
+    const statePackId = controller?.getState?.()?.activeModelPackId;
+    const activePack = findModePackForModel(
+      settings,
+      packs,
+      modelId,
+      modeId,
+      typeof statePackId === 'string' ? statePackId : undefined,
+    );
     const chain = activePack
       ? resolveModePackFallbackChain(settings.models.packFallbacks ?? {}, activePack.id, settings.customModelPacks)
       : [];

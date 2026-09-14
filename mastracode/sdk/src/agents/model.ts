@@ -268,7 +268,14 @@ export function getDynamicModel(
 
   const modeId = agentControllerContext?.session?.modeId ?? 'build';
   const packs = listResolvableModePacks(settings);
-  const activePack = findModePackForModel(settings, packs, modelId, modeId);
+  const statePackId = agentControllerContext?.getState?.()?.activeModelPackId;
+  const activePack = findModePackForModel(
+    settings,
+    packs,
+    modelId,
+    modeId,
+    typeof statePackId === 'string' ? statePackId : undefined,
+  );
   if (!activePack) return primary;
 
   const chain = resolveModePackFallbackChain(fallbacks, activePack.id, settings.customModelPacks);

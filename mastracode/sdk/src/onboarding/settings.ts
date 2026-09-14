@@ -1180,17 +1180,23 @@ export function resolveModePackModels(
 }
 
 /**
- * The pack a session's current model came from: the pack whose model for the
- * session's mode (builtin overrides applied) is exactly the session model id.
- * Sessions on a manual /model override match no pack — callers treat that as
- * "no fallback chain".
+ * The pack a session's current model came from. Prefer the explicitly active
+ * pack when its model matches: multiple packs may intentionally use the same
+ * model, and first-match inference would otherwise attach the wrong fallback
+ * chain. Sessions on a manual /model override match no pack — callers treat
+ * that as "no fallback chain".
  */
 export function findModePackForModel(
   settings: GlobalSettings,
   packs: Array<{ id: string; models: Record<string, string> }>,
   modelId: string,
   modeId: string,
+  activePackId = settings.models.activeModelPackId,
 ): { id: string; models: Record<string, string> } | undefined {
+  const activePack = packs.find(pack => pack.id === activePackId);
+  if (activePack && resolveModePackModels(settings, activePack)[modeId] === modelId) {
+    return activePack;
+  }
   return packs.find(pack => resolveModePackModels(settings, pack)[modeId] === modelId);
 }
 

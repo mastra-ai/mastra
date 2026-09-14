@@ -94,6 +94,7 @@ async function switchCurrentModeModel(ctx: SlashCommandContext, selectedModelId:
     globalSettingsWriteStarted = true;
     saveSettings(nextSettings);
     await ctx.state.session.model.switch({ modelId, scope: 'global' });
+    await ctx.state.session.state.set({ activeModelPackId: nextPackId });
   } catch (error) {
     if (globalSettingsWriteStarted) {
       try {

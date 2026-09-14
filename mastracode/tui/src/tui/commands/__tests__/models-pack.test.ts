@@ -114,6 +114,10 @@ describe('upsertCustomPackInSettings', () => {
       models: {
         ...createSettings().models,
         activeModelPackId: 'custom:Alpha',
+        packFallbacks: {
+          'custom:Alpha': 'openai',
+          anthropic: 'custom:Alpha',
+        },
       },
       onboarding: {
         ...createSettings().onboarding,
@@ -134,6 +138,10 @@ describe('upsertCustomPackInSettings', () => {
     expect(settings.customModelPacks.find(p => p.name === 'Alpha')).toBeUndefined();
     expect(settings.models.activeModelPackId).toBe('custom:Renamed');
     expect(settings.onboarding.modePackId).toBeNull();
+    expect(settings.models.packFallbacks).toEqual({
+      'custom:Renamed': 'openai',
+      anthropic: 'custom:Renamed',
+    });
   });
 
   it('single-mode edit preserves untouched model assignments', () => {
@@ -461,6 +469,11 @@ describe('removeCustomPackFromSettings', () => {
         ...createSettings().models,
         activeModelPackId: 'custom:Alpha',
         modeDefaults: { ...alphaPack.models },
+        packFallbacks: {
+          'custom:Alpha': 'openai',
+          anthropic: 'custom:Alpha',
+          openai: 'github-copilot',
+        },
       },
       onboarding: {
         ...createSettings().onboarding,
@@ -473,6 +486,7 @@ describe('removeCustomPackFromSettings', () => {
     expect(settings.customModelPacks).toEqual([]);
     expect(settings.models.activeModelPackId).toBeNull();
     expect(settings.models.modeDefaults).toEqual({});
+    expect(settings.models.packFallbacks).toEqual({ openai: 'github-copilot' });
     expect(settings.onboarding.modePackId).toBeNull();
   });
 

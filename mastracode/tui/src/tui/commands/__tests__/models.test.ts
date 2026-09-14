@@ -388,6 +388,7 @@ describe('handleModelCommand', () => {
         session: {
           mode: { get: vi.fn(() => 'build') },
           model: { get: vi.fn(() => 'anthropic/claude-sonnet-4-6'), switch: switchModel },
+          state: { set: vi.fn(async () => undefined) },
           thread: {
             getId: vi.fn(() => 'thread-1'),
             list: vi.fn(async () => [{ id: 'thread-1', metadata: { ...threadSettings } }]),
@@ -482,6 +483,7 @@ describe('handleModelCommand', () => {
           },
           session: {
             mode: { get: vi.fn(() => modeId) },
+            state: { set: vi.fn(async () => undefined) },
             model: {
               get: vi.fn(() => currentModelId),
               switch: vi.fn(async ({ modelId }: { modelId: string }) => {

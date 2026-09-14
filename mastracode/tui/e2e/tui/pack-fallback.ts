@@ -153,11 +153,12 @@ export const packFallbackScenario: McE2eScenario = {
     const originalFetch = globalThis.fetch.bind(globalThis);
     patches.setProperty(globalThis, 'fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = requestUrl(input);
-      if (url.includes('api.kimi.com')) {
+      const hostname = new URL(url).hostname;
+      if (hostname === 'api.kimi.com') {
         outbound.push({ host: 'kimi', bearer: '' });
         return rateLimitResponse();
       }
-      if (url.includes('api.anthropic.com')) {
+      if (hostname === 'api.anthropic.com') {
         outbound.push({ host: 'anthropic', bearer: '' });
         return completionResponse();
       }
