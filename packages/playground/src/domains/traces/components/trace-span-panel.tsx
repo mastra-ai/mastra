@@ -145,7 +145,12 @@ export function TraceSpanPanel({
       featuredSpanIds={featuredSpanIds}
       messagesPanelSlot={
         showPartialThread && threadId ? (
-          <TraceMessagesPanel traceId={traceId} fullThreadHref={fullThreadHref} onHighlightSpans={onHighlightSpans} />
+          <TraceMessagesPanel
+            traceId={traceId}
+            threadId={threadId}
+            fullThreadHref={fullThreadHref}
+            onHighlightSpans={onHighlightSpans}
+          />
         ) : undefined
       }
       scoresTabBadge={scoresTabBadge}

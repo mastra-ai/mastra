@@ -495,6 +495,11 @@ export class AIV5Adapter {
               transformToolPayloads,
             ),
           });
+        } else if (part.type === 'error') {
+          // Mastra-only record of a terminal failure. Preserved for DB/UI history
+          // (see sanitizeV5UIMessages, which strips it from provider prompts).
+          parts.push(part as unknown as AIV5Type.UIMessage['parts'][number]);
+          hasNonToolReasoningParts = true;
         } else {
           // Other parts (step-start, etc.) can be pushed as-is
           parts.push(part);
@@ -753,6 +758,14 @@ export class AIV5Adapter {
 
         if (p.type === 'step-start') {
           return p;
+        }
+
+        // Mastra-only record of a terminal failure. Round-trips through UI
+        // history unchanged; sanitizeV5UIMessages strips it from provider
+        // prompts. AIV6Adapter.fromUIMessage pairs its output with the incoming
+        // parts by index, so dropping it here would misalign every later part.
+        if ((p as { type: string }).type === 'error') {
+          return p as unknown as MastraMessagePart;
         }
 
         // Handle data-* parts (custom parts emitted by tools via writer.custom())

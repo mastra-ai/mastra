@@ -4967,7 +4967,9 @@ export const API_ROUTE_METADATA = {
     "pathParams": [],
     "queryParams": [
       "page",
-      "perPage"
+      "perPage",
+      "targetIds",
+      "targetType"
     ],
     "bodyParams": [],
     "hasQuery": true,
@@ -5274,6 +5276,8 @@ export const API_ROUTE_METADATA = {
       "experimentSetId",
       "page",
       "perPage",
+      "targetId",
+      "targetType",
       "trialIndex",
       "variantId"
     ],
@@ -5327,6 +5331,8 @@ export const API_ROUTE_METADATA = {
       "experimentSetId",
       "page",
       "perPage",
+      "targetId",
+      "targetType",
       "trialIndex",
       "variantId"
     ],

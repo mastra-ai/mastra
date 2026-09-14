@@ -85,10 +85,14 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
         tracingPolicy: { internal: InternalSpans.ALL },
       },
     });
+    if (this.logger) {
+      this.structuringAgent.__registerPrimitives({ logger: this.logger });
+    }
   }
 
   __registerMastra(mastra: Mastra) {
     this.structuringAgent.__registerMastra(mastra);
+    this.structuringAgent.__registerPrimitives({ logger: this.logger ?? mastra.getLogger() });
   }
 
   setAgent(agent: Agent<any, any, any>) {
@@ -190,6 +194,7 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
         const newChunk = {
           ...chunk,
           metadata: {
+            ...chunk.metadata,
             from: 'structured-output',
           },
         } as unknown as ChunkType<OUTPUT>;
@@ -210,6 +215,16 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
     messageList?: ProcessOutputStreamArgs['messageList'],
     observabilityContext?: ObservabilityContext,
   ) {
+    const structuredOutput: StructuredOutputOptions<OUTPUT> = {
+      schema: this.schema,
+      jsonPromptInjection: this.jsonPromptInjection,
+      ...(this.errorStrategy === 'fallback' && this.fallbackValue !== undefined
+        ? { errorStrategy: 'fallback', fallbackValue: this.fallbackValue }
+        : {
+            // Without a fallback value, preserve the processor's existing error handling.
+            errorStrategy: this.errorStrategy === 'fallback' ? 'strict' : this.errorStrategy,
+          }),
+    };
     const requestThreadId = requestContext?.get(MASTRA_THREAD_ID_KEY);
     const requestResourceId = requestContext?.get(MASTRA_RESOURCE_ID_KEY);
     const serializedMemoryInfo = messageList?.serialize().memoryInfo;
@@ -252,10 +267,7 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
         model: this.structuringModel,
         requestContext: structuringRequestContext,
         toolChoice: 'none',
-        structuredOutput: {
-          schema: this.schema,
-          jsonPromptInjection: this.jsonPromptInjection,
-        },
+        structuredOutput,
         memory: {
           thread: threadId,
           ...(resourceId ? { resource: resourceId } : {}),
@@ -270,10 +282,7 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
     return this.structuringAgent.stream(
       `Extract and structure the key information from the following text according to the specified schema. Keep the original meaning and details. Rely on the provided text and conversation history.\n\n${this.buildStructuringPrompt(streamParts)}`,
       {
-        structuredOutput: {
-          schema: this.schema,
-          jsonPromptInjection: this.jsonPromptInjection,
-        },
+        structuredOutput,
         providerOptions: this.providerOptions,
         ...observabilityContext,
       },

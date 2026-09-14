@@ -1,6 +1,6 @@
 import { cva } from 'class-variance-authority';
-import { buttonVariants } from '../Button/Button';
-import type { TextButtonSize } from '../Button/Button';
+import { buttonVariants, isIconButtonSize } from '../Button/Button';
+import type { ButtonSize } from '../Button/Button';
 import { controlTriggerOpenState } from '@/ds/primitives/control-size';
 import type { ControlTriggerVisualVariant } from '@/ds/primitives/control-size';
 import {
@@ -42,7 +42,7 @@ export function comboboxTriggerClass({
   className,
 }: {
   variant: ComboboxVariant;
-  size: TextButtonSize;
+  size: ButtonSize;
   error?: boolean;
   className?: string;
 }): string {
@@ -51,8 +51,9 @@ export function comboboxTriggerClass({
   return cn(
     buttonVariants({ variant: visualVariant, size }),
     // Fill the field and push the value left / chevron right (Button's base
-    // centers its content with `justify-center`).
-    'w-full justify-between',
+    // centers its content with `justify-center`). Icon sizes are a fixed square
+    // showing only the chevron, so they keep Button's centering.
+    !isIconButtonSize(size) && 'w-full justify-between',
     // Read as "active" while the popup is open, per variant (see map above).
     controlTriggerOpenState[visualVariant],
     'data-[placeholder]:text-neutral3',
@@ -91,7 +92,7 @@ export const comboboxStyles = {
    * Popup container — shared menu popup, but the search row sits edge-to-edge
    * above the list, so padding/scrolling move to the list itself.
    */
-  popup: cn(menuPopupClass, 'max-h-none w-max max-w-(--available-width) overflow-hidden p-0'),
+  popup: cn(menuPopupClass, 'max-h-none overflow-hidden p-0'),
 
   /** Positioner */
   positioner: cn(menuPositionerClass, 'pointer-events-auto'),

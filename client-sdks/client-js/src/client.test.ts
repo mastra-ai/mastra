@@ -992,6 +992,36 @@ describe('MastraClient', () => {
       );
     });
 
+    it('serializes target filters for experiment listings', async () => {
+      mockSuccess();
+
+      await client.listExperiments({ targetType: 'agent', targetId: 'agent-1' });
+      mockSuccess();
+      await client.listDatasetExperiments('dataset-1', { targetType: 'workflow', targetId: 'wf 1' });
+
+      expect(global.fetch).toHaveBeenNthCalledWith(
+        1,
+        'http://localhost:4111/api/experiments?targetType=agent&targetId=agent-1',
+        expect.any(Object),
+      );
+      expect(global.fetch).toHaveBeenNthCalledWith(
+        2,
+        'http://localhost:4111/api/datasets/dataset-1/experiments?targetType=workflow&targetId=wf+1',
+        expect.any(Object),
+      );
+    });
+
+    it('serializes target filters as repeated targetIds for dataset listings', async () => {
+      mockSuccess();
+
+      await client.listDatasets({ page: 0, perPage: 20, targetType: 'agent', targetIds: ['a1', 'a 2'] });
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        'http://localhost:4111/api/datasets?page=0&perPage=20&targetType=agent&targetIds=a1&targetIds=a+2',
+        expect.any(Object),
+      );
+    });
+
     it('serializes tags as repeated query params for experiment result listings', async () => {
       mockSuccess();
 

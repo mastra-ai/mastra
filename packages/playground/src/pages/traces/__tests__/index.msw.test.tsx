@@ -180,7 +180,7 @@ describe('Traces page usage columns', () => {
 
       const { queryClient } = renderPage('/traces?traceId=trace-a');
 
-      expect(await screen.findByRole('heading', { name: 'Messages' })).not.toBeNull();
+      expect(await screen.findByTestId('messages-panel')).not.toBeNull();
       expect(screen.queryByRole('tab', { name: 'Messages' })).toBeNull();
       expect(screen.getByRole('dialog', { name: 'Trace details' }).className).toContain('w-4/5');
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
@@ -191,7 +191,7 @@ describe('Traces page usage columns', () => {
 
       const { queryClient } = renderPage('/traces?traceId=trace-a&spanId=span-a');
 
-      expect(await screen.findByRole('heading', { name: 'Messages' })).not.toBeNull();
+      expect(await screen.findByTestId('messages-panel')).not.toBeNull();
       await waitFor(() => expect(screen.getByRole('dialog', { name: 'Trace details' }).className).toContain('w-full'));
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     });
@@ -203,7 +203,7 @@ describe('Traces page usage columns', () => {
       const { queryClient } = renderPage('/traces?traceId=trace-a');
 
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
-      expect(screen.queryByRole('heading', { name: 'Messages' })).toBeNull();
+      expect(screen.queryByTestId('messages-panel')).toBeNull();
       expect(screen.getByRole('dialog', { name: 'Trace details' }).className).toContain('w-1/2');
     });
   });

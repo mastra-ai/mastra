@@ -49,4 +49,27 @@ describe('useInfiniteDatasets', () => {
     expect(onRequest.mock.calls[1][0].searchParams.get('page')).toBe('1');
     expect(result.current.hasNextPage).toBe(false);
   });
+
+  it('forwards the target filter as targetType / targetIds query params', async () => {
+    const onRequest = vi.fn<(url: URL) => void>();
+    server.use(
+      http.get('*/api/datasets', ({ request }) => {
+        onRequest(new URL(request.url));
+        return HttpResponse.json({
+          datasets: [makeDataset('ds-agent')],
+          pagination: { total: 1, page: 0, perPage: 20, hasMore: false },
+        });
+      }),
+    );
+
+    const { wrapper } = makeWrapper();
+    const { result } = renderHook(() => useInfiniteDatasets({ targetType: 'agent', targetId: 'agent-1' }), {
+      wrapper,
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    const url = onRequest.mock.calls[0][0];
+    expect(url.searchParams.get('targetType')).toBe('agent');
+    expect(url.searchParams.getAll('targetIds')).toEqual(['agent-1']);
+  });
 });

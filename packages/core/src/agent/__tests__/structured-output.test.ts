@@ -4,11 +4,16 @@ import {
   convertArrayToReadableStream as convertArrayToReadableStreamV3,
   MockLanguageModelV3,
 } from '@internal/ai-v6/test';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { MastraModelGateway } from '../../llm/model/gateways/base';
 import type { ProviderConfig } from '../../llm/model/gateways/base';
+import type { IMastraLogger } from '../../logger';
 import { Mastra } from '../../mastra';
+import { MockMemory } from '../../memory/mock';
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '../../request-context';
+import { InMemoryStore } from '../../storage';
+import type { ChunkType } from '../../stream';
 import { Agent } from '../agent';
 
 class StructuredOutputTestGateway extends MastraModelGateway {
@@ -882,3 +887,207 @@ function structuredOutputTests({ version }: { version: 'v1' | 'v2' | 'v3' }) {
 structuredOutputTests({ version: 'v1' });
 structuredOutputTests({ version: 'v2' });
 structuredOutputTests({ version: 'v3' });
+
+describe('separate-model structured output logging', () => {
+  const schema = z.object({ answer: z.string() });
+  const fallbackValue = { answer: 'fallback' };
+
+  function textModel(text: string) {
+    return new MockLanguageModelV2({
+      doGenerate: async () => ({
+        content: [{ type: 'text', text }],
+        finishReason: 'stop',
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+        warnings: [],
+      }),
+      doStream: async () => ({
+        warnings: [],
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'text-start', id: 'text-1' },
+          { type: 'text-delta', id: 'text-1', delta: text },
+          { type: 'text-end', id: 'text-1' },
+          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+        ]),
+      }),
+    });
+  }
+
+  function capturingLogger() {
+    return {
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      trackException: vi.fn(),
+      getTransports: vi.fn().mockReturnValue(new Map()),
+      listLogs: vi.fn().mockResolvedValue({ logs: [], total: 0, page: 1, perPage: 10, hasMore: false }),
+      listLogsByRunId: vi.fn().mockResolvedValue({ logs: [], total: 0, page: 1, perPage: 10, hasMore: false }),
+    } satisfies IMastraLogger;
+  }
+
+  beforeEach(() => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  describe.each(['primitives', 'mastra'] as const)('%s logger registration', registration => {
+    describe.each(['generate', 'stream'] as const)('%s', method => {
+      it.each(['warn', 'fallback', 'strict'] as const)('honors %s for invalid nested output', async errorStrategy => {
+        const logger = capturingLogger();
+        const agent = new Agent({
+          id: 'structured-output-logging',
+          name: 'Structured output logging',
+          instructions: 'Answer the question.',
+          model: textModel('The answer is forty-two.'),
+        });
+        if (registration === 'mastra') {
+          new Mastra({ agents: { agent }, logger, storage: new InMemoryStore() });
+        } else {
+          agent.__registerPrimitives({ logger });
+        }
+        const options = {
+          structuredOutput: { schema, model: textModel('[1,2,3]'), errorStrategy, fallbackValue },
+        };
+        const chunks: ChunkType[] = [];
+        const result = await agent[method]('What is the answer?', options);
+        if ('fullStream' in result) {
+          for await (const chunk of result.fullStream) chunks.push(chunk);
+        }
+        const object = await result.object;
+
+        if (errorStrategy === 'strict') {
+          expect(result.tripwire).toBeDefined();
+          expect(object).toBeUndefined();
+          expect(logger.error).toHaveBeenCalled();
+          expect(logger.warn).not.toHaveBeenCalled();
+        } else {
+          expect(result.tripwire).toBeUndefined();
+          expect(object).toEqual(errorStrategy === 'fallback' ? fallbackValue : undefined);
+          expect(logger.error).not.toHaveBeenCalled();
+          expect(logger.warn).toHaveBeenCalledTimes(errorStrategy === 'warn' ? 1 : 0);
+          if (method === 'stream' && errorStrategy === 'fallback') {
+            expect(chunks.filter(chunk => chunk.type === 'object-result')).toEqual([
+              expect.objectContaining({
+                object: fallbackValue,
+                metadata: expect.objectContaining({ from: 'structured-output', fallback: true }),
+              }),
+            ]);
+          }
+        }
+        expect(console.error).not.toHaveBeenCalled();
+        expect(console.warn).not.toHaveBeenCalled();
+      });
+    });
+  });
+
+  it.each(['warn', 'fallback'] as const)(
+    'honors %s when reusing the parent agent with thread context',
+    async errorStrategy => {
+      const logger = capturingLogger();
+      const agent = new Agent({
+        id: 'structured-output-parent',
+        name: 'Structured output parent',
+        memory: new MockMemory(),
+        instructions: 'Answer the question.',
+        model: textModel('Forty-two.'),
+      });
+      new Mastra({ agents: { agent }, logger, storage: new InMemoryStore() });
+      const streamSpy = vi.spyOn(agent, 'stream');
+      const requestContext = new RequestContext();
+      requestContext.set(MASTRA_THREAD_ID_KEY, 'structured-thread');
+      requestContext.set(MASTRA_RESOURCE_ID_KEY, 'structured-resource');
+      const model = textModel('[1,2,3]');
+      const result = await agent.generate('What is the answer?', {
+        requestContext,
+        structuredOutput: { schema, model, useAgent: true, errorStrategy, fallbackValue },
+      });
+      expect(result.object).toEqual(errorStrategy === 'fallback' ? fallbackValue : undefined);
+      expect(result.tripwire).toBeUndefined();
+      expect(streamSpy).toHaveBeenCalledWith(
+        expect.any(Array),
+        expect.objectContaining({
+          model,
+          toolChoice: 'none',
+          memory: { thread: 'structured-thread', resource: 'structured-resource', options: { readOnly: true } },
+        }),
+      );
+      expect(logger.warn).toHaveBeenCalledTimes(errorStrategy === 'warn' ? 1 : 0);
+      expect(logger.error).not.toHaveBeenCalled();
+      expect(console.error).not.toHaveBeenCalled();
+      expect(console.warn).not.toHaveBeenCalled();
+    },
+  );
+
+  it('keeps genuine nested provider failures visible through the configured logger', async () => {
+    const logger = capturingLogger();
+    const providerError = new Error('Structuring provider unavailable');
+    const agent = new Agent({
+      id: 'structured-output-provider-error',
+      name: 'Structured output provider error',
+      instructions: 'Answer the question.',
+      model: textModel('Forty-two.'),
+    });
+    new Mastra({ agents: { agent }, logger, storage: new InMemoryStore() });
+    const model = new MockLanguageModelV2({
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'error', error: providerError },
+          { type: 'finish', finishReason: 'error', usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+        ]),
+      }),
+    });
+    const result = await agent.generate('What is the answer?', {
+      structuredOutput: { schema, model, errorStrategy: 'warn' },
+    });
+    expect(result.object).toBeUndefined();
+    expect(logger.error).toHaveBeenCalledWith(
+      'Error in agent stream',
+      expect.objectContaining({ error: providerError }),
+    );
+    expect(logger.warn).toHaveBeenCalled();
+    expect(console.error).not.toHaveBeenCalled();
+  });
+
+  it('keeps successful nested output unchanged', async () => {
+    const logger = capturingLogger();
+    const agent = new Agent({
+      id: 'structured-output-success',
+      name: 'Structured output success',
+      instructions: 'Answer the question.',
+      model: textModel('Forty-two.'),
+    });
+    new Mastra({ agents: { agent }, logger, storage: new InMemoryStore() });
+    const result = await agent.generate('What is the answer?', {
+      structuredOutput: { schema, model: textModel('{"answer":"42"}'), errorStrategy: 'warn' },
+    });
+    expect(result.object).toEqual({ answer: '42' });
+    expect(result.tripwire).toBeUndefined();
+    expect(logger.warn).not.toHaveBeenCalled();
+    expect(logger.error).not.toHaveBeenCalled();
+    expect(console.error).not.toHaveBeenCalled();
+    expect(console.warn).not.toHaveBeenCalled();
+  });
+
+  it.each(['warn', 'fallback'] as const)('respects logger:false with %s', async errorStrategy => {
+    const agent = new Agent({
+      id: 'structured-output-disabled-logger',
+      name: 'Structured output disabled logger',
+      instructions: 'Answer the question.',
+      model: textModel('Forty-two.'),
+    });
+    new Mastra({ agents: { agent }, logger: false });
+    const result = await agent.generate('What is the answer?', {
+      structuredOutput: { schema, model: textModel('[1,2,3]'), errorStrategy, fallbackValue },
+    });
+    expect(result.object).toEqual(errorStrategy === 'fallback' ? fallbackValue : undefined);
+    expect(result.tripwire).toBeUndefined();
+    expect(console.error).not.toHaveBeenCalled();
+    expect(console.warn).not.toHaveBeenCalled();
+  });
+});

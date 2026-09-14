@@ -4,6 +4,7 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { z } from 'zod/v4';
 import type { Agent } from '../../agent';
 import { MessageList } from '../../agent/message-list';
+import { ConsoleLogger } from '../../logger';
 import { Mastra } from '../../mastra';
 import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../../request-context';
 import type { ChunkType } from '../../stream/types';
@@ -89,6 +90,132 @@ describe('StructuredOutputProcessor', () => {
       (processor as any).__registerMastra(mastra);
 
       expect((processor as any).structuringAgent.getMastraInstance()).toBe(mastra);
+    });
+  });
+
+  describe('logger and recovery propagation', () => {
+    it('registers the explicit logger immediately and preserves it over the Mastra logger', () => {
+      const logger = new ConsoleLogger({ level: 'error' });
+      const child = vi.spyOn(logger, 'child');
+      const mastra = new Mastra({ logger: new ConsoleLogger({ level: 'error' }) });
+      const loggingProcessor = new StructuredOutputProcessor({ schema: testSchema, model: mockModel, logger });
+
+      expect(child).toHaveBeenLastCalledWith({ component: 'AGENT' });
+      expect(loggingProcessor['structuringAgent']['logger']).toBe(child.mock.results.at(-1)?.value);
+      loggingProcessor.__registerMastra(mastra);
+      expect(child).toHaveBeenCalledTimes(2);
+      expect(loggingProcessor['structuringAgent']['logger']).toBe(child.mock.results.at(-1)?.value);
+      expect(loggingProcessor['structuringAgent'].getMastraInstance()).toBe(mastra);
+    });
+
+    it('inherits the Mastra logger when no processor logger was supplied', () => {
+      const logger = new ConsoleLogger({ level: 'error' });
+      const child = vi.spyOn(logger, 'child');
+      processor.__registerMastra(new Mastra({ logger }));
+      expect(child).toHaveBeenLastCalledWith({ component: 'AGENT' });
+      expect(processor['structuringAgent']['logger']).toBe(child.mock.results.at(-1)?.value);
+    });
+
+    it('preserves upstream error chunks when fallback has no value', async () => {
+      const recoveryProcessor = new StructuredOutputProcessor({
+        schema: testSchema,
+        model: mockModel,
+        errorStrategy: 'fallback',
+      });
+      const errorChunk: ChunkType = {
+        runId: 'test-run',
+        from: ChunkFrom.AGENT,
+        type: 'error',
+        payload: { error: new Error('Invalid structured output') },
+      };
+      vi.spyOn(recoveryProcessor['structuringAgent'], 'stream').mockResolvedValue({
+        fullStream: convertArrayToReadableStream([errorChunk]),
+      } as any);
+      const { controller, enqueuedChunks } = createMockController();
+      await recoveryProcessor.processOutputStream({
+        part: {
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          type: 'finish',
+          payload: {
+            stepResult: { reason: 'stop' },
+            output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+            metadata: {},
+            messages: { all: [], user: [], nonUser: [] },
+          },
+        },
+        streamParts: [],
+        state: { controller },
+        abort: createMockAbort(),
+        retryCount: 0,
+      });
+      expect(enqueuedChunks).toEqual([{ ...errorChunk, metadata: { from: 'structured-output' } }]);
+    });
+
+    describe.each([false, true])('useAgent: %s', useAgent => {
+      it.each(['warn', 'fallback', 'missing-fallback'] as const)(
+        'forwards %s policy and preserves nested metadata',
+        async policy => {
+          const fallbackValue = { color: 'default', intensity: 'medium' };
+          const recoveryProcessor = new StructuredOutputProcessor({
+            schema: testSchema,
+            model: mockModel,
+            useAgent,
+            errorStrategy: policy === 'warn' ? 'warn' : 'fallback',
+            ...(policy === 'fallback' ? { fallbackValue } : {}),
+          });
+          const resultChunk: ChunkType = {
+            runId: 'test-run',
+            from: ChunkFrom.AGENT,
+            type: 'object-result',
+            object: fallbackValue,
+            metadata: { fallback: true, from: 'nested', custom: 'preserved' },
+          };
+          const stream = { fullStream: convertArrayToReadableStream([resultChunk]) };
+          const internalStream = vi.spyOn(recoveryProcessor['structuringAgent'], 'stream');
+          const agent = { stream: vi.fn().mockResolvedValue(stream) } as unknown as Agent;
+          recoveryProcessor.setAgent(agent);
+          if (!useAgent) internalStream.mockResolvedValue(stream as any);
+          const requestContext = new RequestContext();
+          requestContext.set(MASTRA_THREAD_ID_KEY, 'thread-123');
+          const { controller, enqueuedChunks } = createMockController();
+          await recoveryProcessor.processOutputStream({
+            part: {
+              runId: 'test-run',
+              from: ChunkFrom.AGENT,
+              type: 'finish',
+              payload: {
+                stepResult: { reason: 'stop' },
+                output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+                metadata: {},
+                messages: { all: [], user: [], nonUser: [] },
+              },
+            },
+            streamParts: [],
+            state: { controller },
+            abort: createMockAbort(),
+            retryCount: 0,
+            requestContext,
+          });
+
+          const selectedStream = useAgent ? agent.stream : internalStream;
+          expect(selectedStream).toHaveBeenCalledWith(
+            expect.anything(),
+            expect.objectContaining({
+              structuredOutput: {
+                schema: testSchema,
+                jsonPromptInjection: undefined,
+                errorStrategy: policy === 'missing-fallback' ? 'strict' : policy,
+                ...(policy === 'fallback' ? { fallbackValue } : {}),
+              },
+            }),
+          );
+          expect(useAgent ? internalStream : agent.stream).not.toHaveBeenCalled();
+          expect(enqueuedChunks).toEqual([
+            { ...resultChunk, metadata: { fallback: true, from: 'structured-output', custom: 'preserved' } },
+          ]);
+        },
+      );
     });
   });
 
@@ -306,6 +433,7 @@ describe('StructuredOutputProcessor', () => {
           structuredOutput: {
             schema: testSchema,
             jsonPromptInjection: undefined,
+            errorStrategy: 'strict',
           },
           memory: {
             thread: 'thread-123',
@@ -395,6 +523,7 @@ describe('StructuredOutputProcessor', () => {
           structuredOutput: {
             schema: testSchema,
             jsonPromptInjection: undefined,
+            errorStrategy: 'strict',
           },
           memory: {
             thread: 'thread-123',
@@ -491,6 +620,7 @@ describe('StructuredOutputProcessor', () => {
           structuredOutput: {
             schema: testSchema,
             jsonPromptInjection: undefined,
+            errorStrategy: 'strict',
           },
           memory: {
             thread: 'thread-123',
@@ -611,6 +741,7 @@ describe('StructuredOutputProcessor', () => {
           structuredOutput: {
             schema: testSchema,
             jsonPromptInjection: undefined,
+            errorStrategy: 'strict',
           },
           memory: {
             thread: 'thread-123',

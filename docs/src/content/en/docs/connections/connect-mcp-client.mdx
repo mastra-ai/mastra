@@ -1,0 +1,194 @@
+---
+title: "Connect your MCP client to Mastra"
+description: "Draft proposal for a local MCP launcher that connects your client to a running Mastra API and exposes supported server operations."
+packages:
+  - "@mastra/mcp"
+---
+
+# Connect your MCP client to Mastra
+
+The proposed launcher would connect an external [Model Context Protocol (MCP)](/docs/connections/mcp) client to your running Mastra API. Your client would start one local process and communicate with it through standard input and output (stdio). That process would forward tool calls to Mastra over HTTP. You wouldn't need to host a separate MCP service.
+
+One launcher would expose the supported subset of the 60 tools listed below. You wouldn't configure a separate process for each agent, workflow, or tool.
+
+## Start your Mastra API
+
+You need an existing Mastra project and Node.js with `npx` available. In your project directory, start the development server with the existing command:
+
+```bash npm2yarn
+npx mastra dev
+```
+
+Keep that terminal process running. The proposed configuration below assumes the default API port, `4111`. The API must stay running for the MCP client to connect, but you can close the Studio browser tab.
+
+## Proposed client configuration
+
+This configuration is for review only. It won't work until the launcher is implemented.
+
+In a client that accepts an `mcpServers` configuration, the proposed stdio entry would be:
+
+```json
+{
+  "mcpServers": {
+    "mastra": {
+      "command": "npx",
+      "args": ["-y", "mastra", "mcp", "--url", "http://localhost:4111"]
+    }
+  }
+}
+```
+
+The client would launch the command itself. The `--url` value would point to the Mastra server base URL, not a Studio page or an MCP endpoint. Configuration locations vary by client. Use your client's instructions for adding a local stdio server.
+
+Here, `localhost` refers to the machine running the launcher. A client running in a container or on another machine would need a URL that can reach your Mastra API from that environment.
+
+### Proposed optional authentication
+
+For an API protected by bearer-token authentication, the proposed launcher would read `MASTRA_API_TOKEN` from its environment. A client entry could include an `env` object alongside `command` and `args`:
+
+```json
+{
+  "mcpServers": {
+    "mastra": {
+      "command": "npx",
+      "args": ["-y", "mastra", "mcp", "--url", "http://localhost:4111"],
+      "env": {
+        "MASTRA_API_TOKEN": "your-api-token"
+      }
+    }
+  }
+}
+```
+
+This environment-variable behavior isn't implemented in a launcher. The existing programmatic API accepts authentication through its `headers` option. Keep real tokens out of version control and shared configuration. Omit the proposed `env` entry for an API that doesn't require authentication.
+
+## Tool discovery and permissions
+
+The implemented API bridge reads the target server's API schema at startup and registers matching operations from its generated catalog. The proposed launcher would use this bridge, so the available tools would depend on the target server. The catalog covers API-prefixed Mastra routes, not Factory or platform commands outside that scope.
+
+Once a launcher is implemented, the first verification would be to open the client's tool list and call `agent_list`. An empty agent list can be valid if the project has no agents. A missing tool is different: its route might not be supported by the target API.
+
+Review client approvals before allowing tool calls. Some tools create, update, or delete data; agent, workflow, experiment, and tool execution can also have external effects. The current bridge marks all non-GET operations as potentially destructive. MCP annotations are hints, not authorization checks. The target API must enforce access permissions.
+
+## Full tool catalog
+
+These are all 60 tools in the generated Mastra API operations catalog, grouped by function. This is the catalog inventory, not a promise that every target server exposes every tool. Inputs come from the target server's route schemas.
+
+### Agents
+
+| Tool | Purpose |
+| :- | :- |
+| `agent_list` | List available agents |
+| `agent_get` | Get agent details |
+| `agent_run` | Run an agent with JSON input |
+
+### Workflows
+
+| Tool | Purpose |
+| :- | :- |
+| `workflow_list` | List available workflows |
+| `workflow_get` | Get workflow details |
+| `workflow_run_start` | Start a workflow run |
+| `workflow_run_list` | List workflow runs |
+| `workflow_run_get` | Get workflow run details |
+| `workflow_run_resume` | Resume a suspended workflow run |
+| `workflow_run_cancel` | Cancel a workflow run |
+
+### Tools and MCP servers
+
+| Tool | Purpose |
+| :- | :- |
+| `tool_list` | List available tools |
+| `tool_get` | Get tool details and input schema |
+| `tool_execute` | Execute a tool with JSON input |
+| `mcp_list` | List MCP servers |
+| `mcp_get` | Get MCP server details |
+| `mcp_tool_list` | List tools for an MCP server |
+| `mcp_tool_get` | Get MCP tool details |
+| `mcp_tool_execute` | Execute an MCP tool with JSON input |
+
+For `tool_execute` and `mcp_tool_execute`, pass the tool's input inside the `data` field.
+
+### Threads and memory
+
+| Tool | Purpose |
+| :- | :- |
+| `thread_list` | List memory threads |
+| `thread_get` | Get thread details |
+| `thread_create` | Create a memory thread |
+| `thread_update` | Update a memory thread |
+| `thread_delete` | Delete a memory thread |
+| `thread_messages` | List messages in a memory thread |
+| `memory_search` | Search long-term memory |
+| `memory_current_get` | Get current working memory |
+| `memory_current_update` | Update current working memory |
+| `memory_status` | Get memory system status |
+
+### Traces and logs
+
+| Tool | Purpose |
+| :- | :- |
+| `trace_list` | List observability traces |
+| `trace_get` | Get trace details |
+| `trace_span` | Get a trace span |
+| `log_list` | List runtime logs |
+
+Trace list and get operations support `verbose` when the target schema includes both the light and full routes.
+
+### Metrics
+
+| Tool | Purpose |
+| :- | :- |
+| `metric_aggregate` | Get an aggregate metric value |
+| `metric_breakdown` | Get metric values grouped by a label or field |
+| `metric_timeseries` | Get metric values over time |
+| `metric_percentiles` | Get metric percentile values over time |
+| `metric_names` | List discovered metric names |
+| `metric_label_keys` | List label keys for a metric |
+| `metric_label_values` | List label values for a metric label key |
+
+### Scores, datasets, and experiments
+
+| Tool | Purpose |
+| :- | :- |
+| `score_create` | Create a score |
+| `score_list` | List scores |
+| `score_get` | Get score details |
+| `dataset_list` | List datasets |
+| `dataset_get` | Get dataset details |
+| `dataset_create` | Create a dataset |
+| `dataset_items` | List dataset items |
+| `experiment_list` | List dataset experiments |
+| `experiment_get` | Get experiment details |
+| `experiment_run` | Run a dataset experiment |
+| `experiment_results` | List experiment results |
+
+### Trace Intelligence
+
+| Tool | Purpose |
+| :- | :- |
+| `learning_entities` | List entities with Trace Intelligence output |
+| `learning_snapshots` | List analysis snapshots for an entity and ordered trace signals |
+| `learning_flow` | Get the cross-signal theme flow for one snapshot |
+| `learning_paths` | Get per-trace theme assignments for one snapshot |
+| `learning_theme_list` | List themes for one trace signal in one snapshot |
+| `learning_theme_get` | Get one theme in one snapshot |
+| `learning_theme_examples` | List trace examples for one theme in one snapshot |
+| `learning_theme_history` | Get lifecycle history for one durable theme |
+| `learning_noise_get` | Get the noise bucket for one trace signal in one snapshot |
+| `learning_noise_examples` | List trace examples for the noise bucket in one snapshot |
+
+## Troubleshooting
+
+The launcher-specific checks below describe the proposed experience. For a connection you can implement today, follow the [programmatic MCP server API](/reference/tools/mcp-server#operate-a-remote-mastra-server).
+
+| Symptom | What to check |
+| :- | :- |
+| `mastra mcp` isn't recognized | This is expected today. The launcher is proposed and not implemented. Changing client settings won't enable it. |
+| The client can't find `npx` | Check that Node.js and `npx` are available in the environment used by the client, which may differ from your terminal. |
+| The API connection is refused | Keep `npx mastra dev` running. Check the server's actual port and network access from the process running the client. An open browser tab isn't sufficient. |
+| The API returns `401` or `403` | Check the API's authentication requirements and token permissions. The proposed launcher token variable isn't a replacement for configuring authentication on the server. |
+| Schema discovery fails | The target must support `GET /api/system/api-schema` with a valid version-1 manifest. Check server compatibility and access to that route. |
+| Fewer than 60 tools are listed | Only catalog operations with matching target API routes are registered. The catalog excludes Factory and platform routes. |
+| A tool call fails input validation | Use the tool schema returned by the target server. Execution tools require the underlying tool input in `data`. |
+| A call times out | Check API logs and operation status before retrying. A timed-out mutation may already have changed data. |
