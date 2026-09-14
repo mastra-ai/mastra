@@ -359,6 +359,38 @@ describe('AuthStorage multi-account registry', () => {
     });
   });
 
+  it('binds a forced refresh to the account that initiated it', async () => {
+    const entry1 = accountRecord('r1', 'a1', { active: true });
+    const entry2 = accountRecord('r2', 'a2');
+    const { storage } = makeStorage({
+      [PROVIDER]: oauthCred('r1', 'a1'),
+      [`accounts:${entry1.id}`]: entry1,
+      [`accounts:${entry2.id}`]: entry2,
+    });
+
+    let resolveRefresh!: (creds: OAuthCredentials) => void;
+    vi.spyOn(anthropicOAuthProvider, 'refreshToken').mockImplementation(
+      () =>
+        new Promise<OAuthCredentials>(resolve => {
+          resolveRefresh = resolve;
+        }),
+    );
+
+    const pendingRefresh = storage.forceRefreshActiveAccount(PROVIDER);
+    expect(storage.activateAccount(PROVIDER, entry2.id)?.id).toBe(entry2.id);
+    resolveRefresh({ refresh: 'r1-forced', access: 'a1-forced', expires: FUTURE });
+
+    expect(await pendingRefresh).toBe('a1-forced');
+    storage.reload();
+    expect(storage.getActiveAccount(PROVIDER)).toMatchObject({ id: entry2.id, refresh: 'r2', access: 'a2' });
+    expect(storage.get(PROVIDER)).toMatchObject({ refresh: 'r2', access: 'a2' });
+    expect(storage.listAccounts(PROVIDER).find(account => account.id === entry1.id)).toMatchObject({
+      active: false,
+      refresh: 'r1-forced',
+      access: 'a1-forced',
+    });
+  });
+
   it('dedupes concurrent refreshes per instance', async () => {
     const { storage } = makeStorage({ [PROVIDER]: oauthCred('r1', 'a1', PAST) }); // migrated: one active entry
 

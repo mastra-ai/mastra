@@ -22,6 +22,29 @@ let scenarioAppDataDir = '';
 let outbound: Array<{ bearer: string; deviceId: string }> = [];
 let restartApp: (() => Promise<void>) | undefined;
 
+type AuthSnapshot = Record<
+  string,
+  { access?: unknown; deviceId?: unknown; label?: unknown; active?: unknown } | undefined
+>;
+
+function outboundSummary() {
+  return outbound.map(request => ({
+    account: request.bearer === ACCOUNT_A_ACCESS ? 'A' : request.bearer === ACCOUNT_B_ACCESS ? 'B' : 'unrecognized',
+    device: request.deviceId === ACCOUNT_A_DEVICE ? 'A' : request.deviceId === ACCOUNT_B_DEVICE ? 'B' : 'unrecognized',
+  }));
+}
+
+function authSummary(auth: AuthSnapshot) {
+  const accounts = Object.entries(auth)
+    .filter(([key]) => key.startsWith('accounts:kimi-for-coding:'))
+    .map(([, value]) => ({ label: value?.label, active: value?.active }));
+  return {
+    accountCount: accounts.length,
+    accounts,
+    slotMatchesAccountB: auth[PROVIDER]?.access === ACCOUNT_B_ACCESS && auth[PROVIDER]?.deviceId === ACCOUNT_B_DEVICE,
+  };
+}
+
 function requestUrl(input: RequestInfo | URL): string {
   if (typeof input === 'string') return input;
   if (input instanceof URL) return input.href;
@@ -163,7 +186,7 @@ export const accountRotationScenario: McE2eScenario = {
     outbound = [];
     const originalFetch = globalThis.fetch.bind(globalThis);
     patches.setProperty(globalThis, 'fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
-      if (requestUrl(input).includes('api.kimi.com')) {
+      if (new URL(requestUrl(input)).hostname === 'api.kimi.com') {
         const headers = requestHeaders(init);
         const bearer = (headers.get('authorization') ?? '').replace(/^Bearer\s+/i, '');
         const deviceId = headers.get('x-msh-device-id') ?? '';
@@ -211,9 +234,9 @@ export const accountRotationScenario: McE2eScenario = {
         30_000,
       );
     } catch (error) {
-      const auth = JSON.parse(readFileSync(join(scenarioAppDataDir, 'auth.json'), 'utf-8')) as Record<string, unknown>;
+      const auth = JSON.parse(readFileSync(join(scenarioAppDataDir, 'auth.json'), 'utf-8')) as AuthSnapshot;
       throw new Error(
-        `${error instanceof Error ? error.message : String(error)}\nAUTH_ON_DISK=${JSON.stringify(auth)}\nOUTBOUND=${JSON.stringify(outbound)}`,
+        `${error instanceof Error ? error.message : String(error)}\nAUTH_STATE=${JSON.stringify(authSummary(auth))}\nOUTBOUND=${JSON.stringify(outboundSummary())}`,
         { cause: error },
       );
     }
@@ -223,34 +246,38 @@ export const accountRotationScenario: McE2eScenario = {
     // Raw outbound requests: account A was tried first, account B served the
     // completion, and the device header followed the rotation with the token.
     if (outbound.length === 0 || outbound[0]!.bearer !== ACCOUNT_A_ACCESS) {
-      throw new Error(`Expected the first Kimi request to use account A, saw: ${JSON.stringify(outbound)}`);
+      throw new Error(`Expected the first Kimi request to use account A, saw: ${JSON.stringify(outboundSummary())}`);
     }
     const lastSuccess = outbound[outbound.length - 1]!;
     if (lastSuccess.bearer !== ACCOUNT_B_ACCESS) {
-      throw new Error(`Expected the last Kimi request to use account B, saw: ${JSON.stringify(outbound)}`);
+      throw new Error(`Expected the last Kimi request to use account B, saw: ${JSON.stringify(outboundSummary())}`);
     }
     if (lastSuccess.deviceId !== ACCOUNT_B_DEVICE) {
       throw new Error(
-        `Expected the account B request to carry account B's device header, saw: ${JSON.stringify(outbound)}`,
+        `Expected the account B request to carry account B's device header, saw: ${JSON.stringify(outboundSummary())}`,
       );
     }
     if (!outbound.some(request => request.bearer === ACCOUNT_A_ACCESS && request.deviceId === ACCOUNT_A_DEVICE)) {
-      throw new Error(`Expected account A's requests to carry its device header, saw: ${JSON.stringify(outbound)}`);
+      throw new Error(
+        `Expected account A's requests to carry its device header, saw: ${JSON.stringify(outboundSummary())}`,
+      );
     }
     const firstB = outbound.findIndex(request => request.bearer === ACCOUNT_B_ACCESS);
     if (firstB === -1 || outbound.slice(firstB).some(request => request.bearer === ACCOUNT_A_ACCESS)) {
-      throw new Error(`Expected no account A request after the rotation, saw: ${JSON.stringify(outbound)}`);
+      throw new Error(`Expected no account A request after the rotation, saw: ${JSON.stringify(outboundSummary())}`);
     }
 
     // On disk: the isolated auth.json slot now holds account B's tokens.
-    const auth = JSON.parse(readFileSync(join(scenarioAppDataDir, 'auth.json'), 'utf-8')) as Record<string, any>;
+    const auth = JSON.parse(readFileSync(join(scenarioAppDataDir, 'auth.json'), 'utf-8')) as AuthSnapshot;
     if (auth[PROVIDER]?.access !== ACCOUNT_B_ACCESS || auth[PROVIDER]?.deviceId !== ACCOUNT_B_DEVICE) {
-      throw new Error(`Expected the legacy slot to hold account B's tokens, saw: ${JSON.stringify(auth[PROVIDER])}`);
+      throw new Error(`Expected the legacy slot to hold account B's credentials: ${JSON.stringify(authSummary(auth))}`);
     }
     const registryEntries = Object.entries(auth).filter(([key]) => key.startsWith('accounts:kimi-for-coding:'));
     const activeEntries = registryEntries.filter(([, value]) => value?.active === true);
     if (registryEntries.length !== 2 || activeEntries.length !== 1 || activeEntries[0]![1].label !== 'Kimi Account B') {
-      throw new Error(`Expected the registry to hold both accounts with B active, saw: ${JSON.stringify(auth)}`);
+      throw new Error(
+        `Expected the registry to hold both accounts with B active: ${JSON.stringify(authSummary(auth))}`,
+      );
     }
 
     // Restart the app on the same app data and reload the thread: the persisted

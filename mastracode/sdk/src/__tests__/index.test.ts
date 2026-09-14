@@ -1359,7 +1359,7 @@ describe('createMastraCode', () => {
     expect(startNotice!.processAPIError).toBeUndefined();
   });
 
-  it('sets a shared error-processor retry budget that transient retries cannot starve', async () => {
+  it('sets a shared error-processor retry budget that cannot starve an arbitrary account pool', async () => {
     const { createMastraCode } = await import('../index.js');
 
     await createMastraCode();
@@ -1368,19 +1368,14 @@ describe('createMastraCode', () => {
       .map(call => call[0] as { maxProcessorRetries?: number } | undefined)
       .find(config => typeof config?.maxProcessorRetries === 'number');
     const budget = agentConfig?.maxProcessorRetries;
-    expect(budget).toBe(22);
+    expect(budget).toBe(Number.MAX_SAFE_INTEGER);
 
-    // Walk simulation: core stops honoring retry:true once retryCount reaches
-    // maxProcessorRetries. Worst-case interleaving for a realistic pool (8
-    // accounts): the full transient budget (10) is spent first, then every
-    // pool rotation consumes one shared retry. A rotation must never be
-    // starved by the transient budget alone, and a 2-account pool completes
-    // its full rotation (plus a revisit pass) with margin.
+    // Core shares this ceiling across transient and account-rotation retries.
+    // The individual processors retain their finite limits, while the shared
+    // cap leaves even a very large account pool reachable.
     const transientRetries = 10;
-    const twoAccountPoolRotations = 1; // A → B switch; the failure on B declares exhaustion
-    expect(transientRetries + twoAccountPoolRotations).toBeLessThan(budget!);
-    const realisticPool = 8;
-    expect(transientRetries + realisticPool).toBeLessThanOrEqual(budget!);
+    const largePool = 10_000;
+    expect(transientRetries + largePool).toBeLessThan(budget!);
   });
 
   it('prepends embedding input processors without replacing mandatory built-ins', async () => {

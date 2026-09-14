@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { providerFromError } from '../../auth/account-rotation-processor.js';
+
 const fetchMock = vi.fn();
 vi.stubGlobal('fetch', fetchMock);
 
@@ -278,9 +280,14 @@ describe('gateway oauth fetch wrappers', () => {
     const { buildGitHubCopilotOAuthFetch } = await import('../github-copilot.js');
     const fetchWithOAuth = buildGitHubCopilotOAuthFetch({ authStorage: githubCopilotStorage as any });
 
-    await expect(fetchWithOAuth('https://api.openai.com/v1/chat/completions', { headers: {} })).rejects.toMatchObject({
+    const error = await fetchWithOAuth('https://api.openai.com/v1/chat/completions', { headers: {} }).catch(
+      (caught: unknown) => caught,
+    );
+
+    expect(error).toMatchObject({
       requestUrl: 'https://api.individual.githubcopilot.com/chat/completions',
     });
+    expect(providerFromError(error)).toBe('github-copilot');
   });
 
   it('strips the `/v1` prefix from the request path for non-completions endpoints too', async () => {

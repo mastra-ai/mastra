@@ -22,6 +22,8 @@ import {
   AccountRotationProcessor,
   AccountStartNoticeProcessor,
   classifyRotationError,
+  providerFromError,
+  providerFromModelId,
 } from './account-rotation-processor.js';
 import { ProviderAuthRequiredError } from './provider-auth-error.js';
 import { anthropicOAuthProvider } from './providers/anthropic.js';
@@ -133,6 +135,37 @@ describe('classifyRotationError (locked Q7 taxonomy)', () => {
     expect(classifyRotationError(networkError)).toEqual({ kind: 'hop' });
     expect(classifyRotationError(apiError(400))).toEqual({ kind: 'never' });
     expect(classifyRotationError(new Error('something odd'))).toEqual({ kind: 'never' });
+  });
+
+  it.each([
+    [429, { kind: 'rotate', reason: 'rate-limit' }],
+    [401, { kind: 'rotate', reason: 'auth-failed' }],
+    [503, { kind: 'hop' }],
+  ] as const)('classifies HTTP %d from a nested provider error', (statusCode, expected) => {
+    const wrapper = new Error('provider request failed', { cause: apiError(statusCode) });
+    expect(classifyRotationError(wrapper)).toEqual(expected);
+  });
+
+  it('classifies a nested ProviderAuthRequiredError', () => {
+    const wrapper = new Error('provider request failed', { cause: new ProviderAuthRequiredError('Login required') });
+    expect(classifyRotationError(wrapper)).toEqual({ kind: 'rotate', reason: 'auth-failed' });
+  });
+});
+
+describe('provider attribution', () => {
+  it('maps built-in OpenAI model ids to the Codex OAuth provider', () => {
+    expect(providerFromModelId('openai/gpt-5.6-sol')).toBe('openai-codex');
+    expect(providerFromModelId('mastracode/openai/gpt-5.6-sol')).toBe('openai-codex');
+  });
+
+  it('reads rewritten requestUrl fields and rejects lookalike hosts', () => {
+    expect(providerFromError({ requestUrl: 'https://api.individual.githubcopilot.com/chat/completions' })).toBe(
+      'github-copilot',
+    );
+    expect(
+      providerFromError({ requestUrl: 'https://api.githubcopilot.com.evil.example/chat/completions' }),
+    ).toBeUndefined();
+    expect(providerFromError({ requestUrl: 'https://evilchatgpt.com/backend-api/codex/responses' })).toBeUndefined();
   });
 });
 
