@@ -263,6 +263,52 @@ describe('PlatformLinearIntegration', () => {
       expect.stringContaining('/workspaces/workspace-2/issues'),
     );
   });
+  it('does not discover sources from attribution-only workspaces during team intake', async () => {
+    const workspace2 = {
+      ...workspace,
+      linearWorkspaceId: 'workspace-2',
+      linearWorkspaceName: 'Other',
+      urlKey: 'other',
+    };
+    const teamSourceId = `linear-team:${Buffer.from(
+      JSON.stringify({ workspaceId: 'workspace-1', teamId: 'team-1' }),
+    ).toString('base64url')}`;
+    const projectlessIssue = { ...issue, project: null };
+    const fetchImpl = vi.fn<typeof fetch>(async input => {
+      const url = String(input);
+      if (url.endsWith('/v1/server/linear/workspaces')) {
+        return json({ workspaces: [workspace, workspace2] });
+      }
+      if (url.includes('/workspaces/workspace-1/teams')) {
+        return json({
+          teams: [{ id: 'team-1', key: 'ENG', name: 'Engineering' }],
+          pageInfo: { hasNextPage: false, endCursor: null },
+        });
+      }
+      if (url.includes('/workspaces/workspace-2/teams')) {
+        return json({ error: 'unavailable' }, 503);
+      }
+      if (url.includes('/projects')) {
+        throw new Error(`project discovery must not run for team-only intake: ${url}`);
+      }
+      if (url.includes('/workspaces/workspace-1/issues')) {
+        return json({ issues: [projectlessIssue], pageInfo: { hasNextPage: false, endCursor: null } });
+      }
+      throw new Error(`unexpected request: ${url}`);
+    });
+    const integration = createIntegration(fetchImpl);
+
+    const result = await integration.intake.listIssues({
+      connection: { type: 'oauth', accessToken: 'unused-provider-token' },
+      sourceIds: [teamSourceId],
+      attributionSourceIds: [teamSourceId, project2SourceId],
+    });
+
+    expect(result.issues).toEqual([expect.objectContaining({ id: 'issue-1', sourceId: teamSourceId })]);
+    const requestedUrls = fetchImpl.mock.calls.map(call => String(call[0]));
+    expect(requestedUrls.some(url => url.includes('/workspaces/workspace-2/teams'))).toBe(false);
+    expect(requestedUrls.some(url => url.includes('/projects'))).toBe(false);
+  });
 
   it('lists a team source with teamId (no projectIds) and returns projectless issues', async () => {
     const teamSourceId = `linear-team:${Buffer.from(

@@ -532,10 +532,13 @@ export class PlatformLinearIntegration implements FactoryIntegration {
     return source.kind === 'team' ? issue.teamId === source.teamId : issue.projectId === source.projectId;
   }
 
-  async #listProjectSources(): Promise<ProjectSource[]> {
+  async #listProjectSources(workspaceIds?: ReadonlySet<string>): Promise<ProjectSource[]> {
     const workspaces = await this.#listWorkspaces();
+    const scopedWorkspaces = workspaceIds
+      ? workspaces.filter(workspace => workspaceIds.has(workspace.linearWorkspaceId))
+      : workspaces;
     const projectGroups = await Promise.all(
-      workspaces.map(async workspace => {
+      scopedWorkspaces.map(async workspace => {
         const projects: LinearProject[] = [];
         let after: string | undefined;
         for (let page = 0; page < MAX_REFERENCE_PAGES; page += 1) {
@@ -555,10 +558,13 @@ export class PlatformLinearIntegration implements FactoryIntegration {
     return projectGroups.flat();
   }
 
-  async #listTeamSources(): Promise<TeamSource[]> {
+  async #listTeamSources(workspaceIds?: ReadonlySet<string>): Promise<TeamSource[]> {
     const workspaces = await this.#listWorkspaces();
+    const scopedWorkspaces = workspaceIds
+      ? workspaces.filter(workspace => workspaceIds.has(workspace.linearWorkspaceId))
+      : workspaces;
     const teamGroups = await Promise.all(
-      workspaces.map(async workspace => {
+      scopedWorkspaces.map(async workspace => {
         const teams: LinearTeam[] = [];
         let after: string | undefined;
         for (let page = 0; page < MAX_REFERENCE_PAGES; page += 1) {
@@ -595,11 +601,18 @@ export class PlatformLinearIntegration implements FactoryIntegration {
     // and team sources are listed separately: a project source filters by
     // `projectIds`, a team source filters by `teamId` (and returns projectless
     // issues too). Filters are never combined on one request.
+    const parsedSources = sourceIds.map(sourceId => parseSourceId(sourceId));
+    const projectWorkspaceIds = new Set(
+      parsedSources.flatMap(source => (source.kind === 'project' ? [source.workspaceId] : [])),
+    );
+    const teamWorkspaceIds = new Set(
+      parsedSources.flatMap(source => (source.kind === 'team' ? [source.workspaceId] : [])),
+    );
     const [projectSources, teamSources] = await Promise.all([
-      this.#listProjectSources(),
-      sourceIds.some(id => parseSourceId(id).kind === 'team')
-        ? this.#listTeamSources()
-        : Promise.resolve([] as TeamSource[]),
+      projectWorkspaceIds.size > 0
+        ? this.#listProjectSources(projectWorkspaceIds)
+        : Promise.resolve([] as ProjectSource[]),
+      teamWorkspaceIds.size > 0 ? this.#listTeamSources(teamWorkspaceIds) : Promise.resolve([] as TeamSource[]),
     ]);
     const projectMap = new Map(
       projectSources.map(source => [encodeSourceId(source.workspace.linearWorkspaceId, source.project.id), source]),
