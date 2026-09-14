@@ -142,12 +142,18 @@ describe('Board card error tooltip', () => {
     expect(await screen.findByText(DECISION_ERROR)).toBeVisible();
   });
 
-  it('links a run the provider rejected to the Factory memory settings', async () => {
-    stubBoardEndpoints([{ ...failedDecision, failureCode: 'run_configuration_invalid', canRetry: false }]);
+  it('says how to fix a run the provider rejected, links there, and keeps Retry for afterwards', async () => {
+    stubBoardEndpoints([{ ...failedDecision, failureCode: 'run_configuration_invalid', canRetry: true }]);
+    const user = userEvent.setup();
     renderWorkBoard();
 
     const fix = await screen.findByRole('link', { name: 'Memory settings' });
     expect(fix).toHaveAttribute('href', `/factories/${FACTORY_ID}/settings/memory?scope=factory`);
-    expect(screen.queryByRole('button', { name: /retry/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
+    expect(screen.queryByText(/Pick another one, then retry/)).not.toBeInTheDocument();
+
+    await user.hover(screen.getByRole('alert'));
+
+    expect(await screen.findByText(/Pick another one, then retry/)).toBeVisible();
   });
 });

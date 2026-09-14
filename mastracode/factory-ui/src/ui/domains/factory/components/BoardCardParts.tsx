@@ -6,9 +6,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastr
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Hand, Maximize2, Sparkles, TriangleAlert } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { Link, useParams } from 'react-router';
+import { Link } from 'react-router';
 
-import { SETTINGS_SECTION_LABELS, settingsSectionPath } from '../../settings/settingsSections';
 import type { BoardCardStatus } from '../boardCardStatus';
 import { HIDDEN_CARD_LABELS, SOURCE_LABELS } from '../boardItems';
 import type { CardAction } from '../cardPrimaryAction';
@@ -49,7 +48,6 @@ export function CardDetailsHint() {
 }
 
 export function CardStatus({ status }: { status: BoardCardStatus }) {
-  const { factoryId } = useParams<{ factoryId: string }>();
   if (status.kind === 'idle') return null;
 
   // A parked run is the one idle state the card cannot whisper: it needs the
@@ -79,36 +77,31 @@ export function CardStatus({ status }: { status: BoardCardStatus }) {
     );
   }
 
+  const explained = status.detail !== undefined || status.hint !== undefined;
   const message = (
     <span
       role="alert"
-      tabIndex={status.detail === undefined ? undefined : 0}
+      tabIndex={explained ? 0 : undefined}
       className={cn(
         'text-ui-xs text-error flex w-full min-w-0 items-start gap-1.5',
-        status.detail !== undefined &&
+        explained &&
           'focus-visible:outline-accent1 relative cursor-help underline decoration-dotted underline-offset-2 outline-none focus-visible:outline-2',
       )}
     >
       <TriangleAlert size={11} aria-hidden className="mt-0.5 shrink-0" />
       <span className="min-w-0 wrap-anywhere">{status.label}</span>
-      {status.settingsSection && factoryId && (
-        <Link
-          to={`${settingsSectionPath(factoryId, status.settingsSection)}?scope=factory`}
-          className="text-icon4 hover:text-icon5 relative z-10 shrink-0 underline underline-offset-2"
-        >
-          {SETTINGS_SECTION_LABELS[status.settingsSection]} settings
-        </Link>
-      )}
     </span>
   );
 
-  if (status.detail === undefined) return message;
-  // Raw failure text stays one hover away instead of costing a row.
+  if (!explained) return message;
+  // Raw failure text and what to do about it stay one hover away instead of costing a row.
+  // A failure earns that hover at once, ahead of the board's crossing-pointer delay.
   return (
     <Tooltip>
-      <TooltipTrigger render={message} />
-      <TooltipContent side="top" className="max-w-80">
-        <span className="wrap-anywhere whitespace-pre-wrap">{status.detail}</span>
+      <TooltipTrigger delay={0} render={message} />
+      <TooltipContent side="top" className="max-w-80 gap-1.5">
+        {status.detail !== undefined && <span className="wrap-anywhere whitespace-pre-wrap">{status.detail}</span>}
+        {status.hint && <span>{status.hint.text}</span>}
       </TooltipContent>
     </Tooltip>
   );

@@ -68,7 +68,7 @@ export function FactoryMemoryModelRow({ models }: { models: AvailableModelOption
           </dl>
         )}
         <Link
-          to={`${settingsSectionPath(factoryId, 'memory')}?scope=factory`}
+          to={settingsSectionPath(factoryId, 'memory', 'factory')}
           className="text-ui-sm text-icon4 hover:text-icon5 flex items-center gap-1"
         >
           Memory settings

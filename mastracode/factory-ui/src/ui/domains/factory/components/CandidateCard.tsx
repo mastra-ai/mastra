@@ -38,7 +38,7 @@ export function CandidateCard({
 
   const moves = cardMoves(candidate, candidate.column);
   const [defaultMove] = moves;
-  const status = boardCardStatus({});
+  const status = boardCardStatus({ factoryId: factoryProjectId });
 
   const fileFromDetails = () => {
     morph.closeDetails();

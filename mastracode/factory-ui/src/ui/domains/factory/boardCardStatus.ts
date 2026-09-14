@@ -1,5 +1,6 @@
-import type { SettingsSection } from '../settings/settingsSections';
+import { settingsSectionPath } from '../settings/settingsSections';
 import type { SessionRowStatus } from '../workspaces/services/sessionStatus';
+import type { CardAction } from './cardPrimaryAction';
 import type { FactoryDecisionSummary } from './services/decisions';
 
 /** A card has one status row, so every announcement it could make resolves to one of these. */
@@ -14,16 +15,28 @@ export type BoardCardStatus =
       label: string;
       detail?: string;
       retryDecisionId?: string;
-      /** Where the person fixes a failure the server will not retry. */
-      settingsSection?: SettingsSection;
+      /** What to do about the failure, and the way there. */
+      hint?: CardStatusHint;
     };
 
+export interface CardStatusHint {
+  text: string;
+  action?: CardAction;
+}
+
 // Only raised for observational-memory rejections (rules/dispatcher.ts), so Memory is where it is fixed.
-const SETTINGS_FOR_FAILURE: Partial<Record<NonNullable<FactoryDecisionSummary['failureCode']>, SettingsSection>> = {
-  run_configuration_invalid: 'memory',
+const FAILURE_HINTS: Partial<
+  Record<NonNullable<FactoryDecisionSummary['failureCode']>, (factoryId: string) => CardStatusHint>
+> = {
+  run_configuration_invalid: factoryId => ({
+    text: 'The provider refused the observational-memory model Factory runs use. Pick another one, then retry.',
+    action: { label: 'Memory settings', href: settingsSectionPath(factoryId, 'memory', 'factory') },
+  }),
 };
 
 export interface BoardCardStatusInput {
+  /** The factory the card sits in: a hint's way out is a link into its settings. */
+  factoryId: string;
   /** Run a rule parked on this card, held until someone releases it. */
   proposal?: { label: string; decisionId: string };
   /** Destination of an in-flight stage move. */
@@ -116,12 +129,12 @@ export function boardCardStatus(input: BoardCardStatusInput): BoardCardStatus {
   if (input.preparing !== undefined) return { kind: 'busy', label: input.preparing };
   if (input.transitionReason !== undefined) return { kind: 'error', label: input.transitionReason };
   if (decision?.status === 'failed') {
-    const settingsSection = decision.failureCode ? SETTINGS_FOR_FAILURE[decision.failureCode] : undefined;
+    const hint = decision.failureCode ? FAILURE_HINTS[decision.failureCode]?.(input.factoryId) : undefined;
     return {
       kind: 'error',
       label: automationCopy(decision).failed,
       ...(decision.canRetry ? { retryDecisionId: decision.id } : {}),
-      ...(settingsSection ? { settingsSection } : {}),
+      ...(hint ? { hint } : {}),
       detail: decision.lastError ?? undefined,
     };
   }

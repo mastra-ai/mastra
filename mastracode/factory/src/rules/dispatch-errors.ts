@@ -4,9 +4,13 @@ import type {
 } from '../storage/domains/work-items/base.js';
 
 interface FactoryDispatchFailureMetadata {
+  /** A person may press Retry. */
   canRetry: boolean;
   label: string;
 }
+
+// `manual`: a person retries once they fixed what the run tripped on; the dispatcher never redelivers it.
+type RetryPolicy = boolean | 'manual';
 
 const FAILURE_METADATA = {
   session_unavailable: { canRetry: true, label: 'Factory session unavailable' },
@@ -23,12 +27,12 @@ const FAILURE_METADATA = {
   repository_commit_failed: { canRetry: true, label: 'Repository commit failed' },
   repository_cli_missing: { canRetry: false, label: 'GitHub CLI is unavailable in the workspace' },
   repository_pr_failed: { canRetry: true, label: 'Pull request creation failed' },
-  run_configuration_invalid: { canRetry: false, label: 'Run configuration rejected by provider' },
+  run_configuration_invalid: { canRetry: 'manual', label: 'Run configuration rejected by provider' },
   unknown: { canRetry: true, label: 'Factory automation failed' },
   // Retired: no path writes these any more, stored rows still read through here.
   plan_awaiting_approval: { canRetry: false, label: 'Plan waiting for review' },
   run_awaiting_input: { canRetry: false, label: 'Agent is waiting for an answer' },
-} satisfies Record<StoredFactoryDispatchFailureCode, FactoryDispatchFailureMetadata>;
+} satisfies Record<StoredFactoryDispatchFailureCode, { canRetry: RetryPolicy; label: string }>;
 
 export class FactoryDispatchError extends Error {
   constructor(
@@ -48,5 +52,10 @@ export function factoryDispatchFailureCode(error: unknown): FactoryDispatchFailu
 export function factoryDispatchFailureMetadata(
   code: StoredFactoryDispatchFailureCode | null,
 ): FactoryDispatchFailureMetadata {
-  return code === null ? FAILURE_METADATA.unknown : FAILURE_METADATA[code];
+  const { canRetry, label } = code === null ? FAILURE_METADATA.unknown : FAILURE_METADATA[code];
+  return { canRetry: canRetry !== false, label };
+}
+
+export function dispatcherRedelivers(code: FactoryDispatchFailureCode): boolean {
+  return FAILURE_METADATA[code].canRetry === true;
 }

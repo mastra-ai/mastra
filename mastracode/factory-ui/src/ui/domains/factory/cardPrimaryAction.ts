@@ -212,6 +212,7 @@ export function cardActions({
   session,
   retry,
   run,
+  fix,
 }: {
   running: boolean;
   /** The run is a parked suggestion or a held card's decision: it needs the user, so it lights up once nothing is running. */
@@ -219,13 +220,15 @@ export function cardActions({
   session?: CardAction;
   retry?: CardAction;
   run?: CardAction;
+  /** The way out of a failure a person fixes before retrying; rides right behind Retry. */
+  fix?: CardAction;
 }): CardAction[] {
   // A running session owns the branch, so no retry, rival run, or parked suggestion can start beside it.
   const nextRetry = running ? undefined : retry;
   const nextRun = running ? undefined : run;
   const main = nextRetry ?? nextRun ?? session;
   if (main === undefined) return [];
-  const rest = [session, nextRun].filter(action => action !== undefined).filter(action => action !== main);
+  const rest = [fix, session, nextRun].filter(action => action !== undefined).filter(action => action !== main);
   const urgent = (action: CardAction) => action === nextRetry || (waiting && action === nextRun);
   return [main, ...rest].map(action => ({ ...action, urgent: urgent(action) }));
 }
