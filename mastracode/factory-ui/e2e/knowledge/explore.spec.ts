@@ -461,4 +461,11 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
       JSON.stringify({ tests: [{ title: 'explores scoped knowledge and activity', status: 'passed' }] }, null, 2),
     );
   }
+
+  const scopeFlyout = page.getByTestId('knowledge-scope-flyout');
+  await scopeFlyout.getByRole('button', { name: 'Payments Service' }).click();
+  await expect(page).toHaveURL(/scope=resource/);
+  await expect(page).toHaveURL(/node=payments/);
+  await expect(page).toHaveURL(/record=rec-1/);
+  await expect(scopeFlyout).toHaveCount(0);
 });
