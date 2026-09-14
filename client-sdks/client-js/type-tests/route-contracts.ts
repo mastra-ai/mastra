@@ -42,6 +42,7 @@ import type {
   InfrastructureStatusResponse,
   BuilderRegistrySearchResponse,
   BuilderRegistryInstallBody,
+  GetAgentBuilderActionsResponse,
   AgentControllerSessionState,
   AgentControllerThreadInfo,
 } from '../src/index.js';
@@ -186,6 +187,7 @@ type _StoredScorer = Expect<
 type _StoredPromptBlock = Expect<
   Equal<StoredPromptBlockResponse['id'], RouteResponse<'GET /stored/prompt-blocks/:storedPromptBlockId'>['id']>
 >;
+type _BuilderActions = Expect<Equal<GetAgentBuilderActionsResponse, RouteResponse<'GET /agent-builder'>>>;
 type _BuilderSettings = Expect<Equal<BuilderSettingsResponse, RouteResponse<'GET /editor/builder/settings'>>>;
 type _BuilderInfrastructure = Expect<
   Equal<InfrastructureStatusResponse, RouteResponse<'GET /editor/builder/infrastructure'>>
