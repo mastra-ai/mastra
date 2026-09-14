@@ -18,7 +18,7 @@ import type { Tool, ToolObserve } from '@mastra/core/tools';
 import { standardSchemaToJSONSchema, toStandardSchema } from '@mastra/schema-compat/schema';
 import type { JSONSchema7 } from 'json-schema';
 import { createObservabilityCollector } from '../observability/collector';
-import type { PathParams } from '../route-types.generated.js';
+import type { PathParams, RouteResponse } from '../route-types.generated.js';
 import type {
   ZodSchema,
   GenerateLegacyParams,
@@ -355,7 +355,7 @@ export class AgentVoice extends BaseResource {
    * @param options - Optional provider-specific options
    * @returns Promise containing the transcribed text
    */
-  listen(audio: Blob, options?: Record<string, any>): Promise<{ text: string }> {
+  listen(audio: Blob, options?: Record<string, any>): Promise<RouteResponse<'POST /agents/:agentId/voice/listen'>> {
     const formData = new FormData();
     formData.append('audio', audio);
 
@@ -387,7 +387,9 @@ export class AgentVoice extends BaseResource {
    * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing a check if the agent has listening capabilities
    */
-  getListener(requestContext?: RequestContext | Record<string, any>): Promise<{ enabled: boolean }> {
+  getListener(
+    requestContext?: RequestContext | Record<string, any>,
+  ): Promise<RouteResponse<'GET /agents/:agentId/voice/listener'> & { enabled: boolean }> {
     return this.request(`/agents/${this.agentId}/voice/listener${this.getQueryString(requestContext)}`);
   }
 }
@@ -595,7 +597,10 @@ export class Agent extends BaseResource {
     });
   }
 
-  enhanceInstructions(instructions: string, comment: string): Promise<{ explanation: string; new_prompt: string }> {
+  enhanceInstructions(
+    instructions: string,
+    comment: string,
+  ): Promise<RouteResponse<'POST /agents/:agentId/instructions/enhance'>> {
     return this.request(`/agents/${this.agentId}/instructions/enhance`, {
       method: 'POST',
       body: { instructions, comment },
@@ -605,21 +610,21 @@ export class Agent extends BaseResource {
   /**
    * @experimental Agent message APIs are experimental and may change in a future release.
    */
-  sendMessage(params: SendAgentMessageParams): Promise<{ accepted: true; runId: string; signal?: unknown }> {
+  sendMessage(params: SendAgentMessageParams): Promise<RouteResponse<'POST /agents/:agentId/send-message'>> {
     return this.requestSignalRoute(`/agents/${this.agentId}/send-message`, params);
   }
 
   /**
    * @experimental Agent message APIs are experimental and may change in a future release.
    */
-  queueMessage(params: QueueAgentMessageParams): Promise<{ accepted: true; runId: string; signal?: unknown }> {
+  queueMessage(params: QueueAgentMessageParams): Promise<RouteResponse<'POST /agents/:agentId/queue-message'>> {
     return this.requestSignalRoute(`/agents/${this.agentId}/queue-message`, params);
   }
 
   /**
    * @experimental Agent signals are experimental and may change in a future release.
    */
-  sendSignal(params: SendAgentSignalParams): Promise<{ accepted: true; runId: string }> {
+  sendSignal(params: SendAgentSignalParams): Promise<RouteResponse<'POST /agents/:agentId/signals'>> {
     return this.requestSignalRoute(`/agents/${this.agentId}/signals`, params);
   }
 
