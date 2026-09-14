@@ -61,6 +61,20 @@ export function providerRegistrationName(localId: string): string {
   return `${/^\d/.test(camel) ? `_${camel}` : camel}Provider`;
 }
 
+export function providerConnectionEnvVar(localId: string): string {
+  return `MASTRA_${localId.replace(/-/g, '_').toUpperCase()}_CONNECTION_ID`;
+}
+
+export function assertProviderEnvVarAvailable(localId: string): void {
+  const envVar = providerConnectionEnvVar(localId);
+  const collision = listInstalledProviderIds().find(
+    installedId => installedId !== localId && providerConnectionEnvVar(installedId) === envVar,
+  );
+  if (collision) {
+    throw new Error(`Local ID '${localId}' conflicts with installed provider '${collision}' via ${envVar}.`);
+  }
+}
+
 export function updateProviderIndex(): void {
   const installed = listInstalledProviderIds();
   const imports = installed.map(id => `import { ${providerRegistrationName(id)} } from './${id}/index.js';`);

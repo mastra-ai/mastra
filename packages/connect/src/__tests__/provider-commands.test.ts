@@ -200,6 +200,21 @@ describe('maintainer provider commands', () => {
     ).rejects.toThrow("Local ID 'shared' is already assigned to template provider 'first-provider'");
   });
 
+  it('rejects aliases that normalize to an installed provider connection env var', async () => {
+    await addProvider({
+      providerId: 'first-provider',
+      localId: 'foo-bar',
+      yes: true,
+      expectedTemplateSha: templateSha,
+    });
+
+    await expect(
+      addProvider({ providerId: 'second-provider', localId: 'foo_bar', yes: true, expectedTemplateSha: templateSha }),
+    ).rejects.toThrow(
+      "Local ID 'foo_bar' conflicts with installed provider 'foo-bar' via MASTRA_FOO_BAR_CONNECTION_ID",
+    );
+  });
+
   it('refuses to overwrite an unmanaged provider directory', async () => {
     const unmanagedDir = resolve(packageRoot, 'src/providers/shared');
     mkdirSync(unmanagedDir, { recursive: true });
