@@ -372,25 +372,39 @@ export const environmentRoute = registerApiRoute('/environment', {
           const controller = new AbortController();
           const timeout = setTimeout(() => controller.abort(), 10_000);
           try {
-            const page = await fetch(`http://localhost:${port}/`, { signal: controller.signal });
-            expect(page.status).toBe(200);
-            const html = await page.text();
-            const response = await fetch(`http://localhost:${port}/refresh-events`, { signal: controller.signal });
-            expect(response.status).toBe(200);
-            if (!response.body) throw new Error('Missing refresh stream');
-            const reader = response.body.getReader();
-            const decoder = new TextDecoder();
-            let event = '';
-            while (!event.includes('\n\n')) {
-              const chunk = await reader.read();
-              if (chunk.done) throw new Error('Refresh stream ended before the handshake');
-              event += decoder.decode(chunk.value, { stream: true });
+            const instanceIdPattern = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
+            while (!controller.signal.aborted) {
+              const page = await fetch(`http://localhost:${port}/`, { signal: controller.signal });
+              expect(page.status).toBe(200);
+              const html = await page.text();
+              const htmlId = html.match(/window\.MASTRA_DEV_SERVER_INSTANCE_ID = "([^"]+)";/)?.[1];
+              expect(htmlId).toMatch(instanceIdPattern);
+              const response = await fetch(`http://localhost:${port}/refresh-events`, { signal: controller.signal });
+              expect(response.status).toBe(200);
+              if (!response.body) throw new Error('Missing refresh stream');
+              const reader = response.body.getReader();
+              const decoder = new TextDecoder();
+              let event = '';
+              try {
+                while (!event.includes('\n\n')) {
+                  const chunk = await reader.read();
+                  if (chunk.done) throw new Error('Refresh stream ended before the handshake');
+                  event += decoder.decode(chunk.value, { stream: true });
+                }
+              } finally {
+                await reader.cancel();
+              }
+              expect(event).toContain('data: connected');
+              const id = event.match(/^id: (.+)$/m)?.[1];
+              expect(id).toMatch(instanceIdPattern);
+              if (htmlId === id) {
+                expect(html).toContain(`window.MASTRA_DEV_SERVER_INSTANCE_ID = "${id}";`);
+                return id;
+              }
+              // A restart between requests is valid; retry both snapshots, not just the stream.
+              await new Promise(resolve => setTimeout(resolve, 100));
             }
-            expect(event).toContain('data: connected');
-            const id = event.match(/^id: (.+)$/m)?.[1];
-            expect(id).toBeTruthy();
-            expect(html).toContain(`window.MASTRA_DEV_SERVER_INSTANCE_ID = "${id}";`);
-            return id;
+            throw new Error('Timed out waiting for matching Studio HTML and refresh-stream generations');
           } finally {
             clearTimeout(timeout);
             controller.abort();
