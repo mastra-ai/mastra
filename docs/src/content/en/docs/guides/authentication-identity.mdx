@@ -203,6 +203,8 @@ The same pattern applies to an external MCP server. Use the authenticated user's
 
 ## Forward identity to MCP tools
 
+For the distinction between MCP credentials, delegated access, and tool permissions, see [Authentication and authorization with MCP](/docs/guides/mcp-authentication-authorization).
+
 By default, when an `MCPServer` runs behind `server.auth`, Mastra places the authenticated caller in the MCP `authInfo` object. Server tools can use this identity without parsing the request again:
 
 ```typescript title="src/mastra/tools/get-customer-record.ts"
