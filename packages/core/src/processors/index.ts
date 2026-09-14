@@ -64,6 +64,7 @@ export interface ProcessorContext<TTripwireMetadata = unknown> extends Partial<O
   /**
    * Add a signal to the message list, rotate the response message id when supported,
    * and emit the signal as a data-* stream part when a writer is available.
+   * @param signal - Signal to add to the current execution.
    *
    * @experimental Agent signals are experimental and may change in a future release.
    */
@@ -71,11 +72,17 @@ export interface ProcessorContext<TTripwireMetadata = unknown> extends Partial<O
   /**
    * Add a named state signal to the message list, stream it when possible, and update
    * thread-level state tracking metadata.
+   * @param signal - State update to apply and emit.
    *
    * @experimental Agent state signals are experimental and may change in a future release.
    */
   sendStateSignal?: (
-    signal: AgentStateSignalInput | (Omit<AgentStateSignalInput, 'id'> & { id?: string }),
+    signal:
+      | AgentStateSignalInput
+      | (Omit<AgentStateSignalInput, 'id'> & {
+          /** Optional identifier for the state signal. */
+          id?: string;
+        }),
   ) => Promise<CreatedAgentSignal | ApplyStateSignalResult>;
   /**
    * Number of times processors have triggered retry for this generation.
@@ -174,6 +181,7 @@ export interface ProcessOutputResultArgs<
 export interface ProcessInputStepArgs<TTripwireMetadata = unknown> extends ProcessorMessageContext<TTripwireMetadata> {
   /** The current step number (0-indexed) */
   stepNumber: number;
+  /** Results of the model steps preceding the current step. */
   steps: Array<StepResult<any>>;
   /** The active assistant response message ID for this step, when this processor is running inside an agent loop */
   messageId?: string;
@@ -192,10 +200,14 @@ export interface ProcessInputStepArgs<TTripwireMetadata = unknown> extends Proce
   model: MastraLanguageModel;
   /** Current tools available for this step */
   tools?: Record<string, unknown>;
+  /** Current tool-selection policy for the model call. */
   toolChoice?: ToolChoice<any>;
+  /** Names of tools enabled for the current step. */
   activeTools?: string[];
 
+  /** Provider-specific options for the current model call. */
   providerOptions?: SharedProviderOptions;
+  /** Model call settings, excluding the execution's abort signal. */
   modelSettings?: Omit<CallSettings, 'abortSignal'>;
   /**
    * Structured output configuration. The schema type is StandardSchemaWithJSON (not the specific OUTPUT)
@@ -228,22 +240,29 @@ export type RunProcessInputStepArgs = Omit<
  * processors can modify it dynamically, and the actual type is only known at runtime.
  */
 export type ProcessInputStepResult = {
+  /** Model override for the upcoming step. */
   model?: LanguageModelV2 | ModelRouterModelId | OpenAICompatibleConfig | MastraLanguageModel;
   /** Override the active assistant response message ID for this step */
   messageId?: string;
   /** Replace tools for this step - accepts both AI SDK tools and Mastra createTool results */
   tools?: Record<string, unknown>;
+  /** Replacement tool-selection policy for the model call. */
   toolChoice?: ToolChoice<any>;
+  /** Replacement list of enabled tool names. */
   activeTools?: string[];
 
+  /** Replacement messages for the upcoming step. */
   messages?: MastraDBMessage[];
+  /** Replacement message-list instance for the upcoming step. */
   messageList?: MessageList;
   /**
    * Replace untagged system messages with these while preserving tagged system messages
    * owned by other processors.
    */
   systemMessages?: CoreMessageV4[];
+  /** Provider-specific options for the upcoming model call. */
   providerOptions?: SharedProviderOptions;
+  /** Replacement model call settings, excluding the execution's abort signal. */
   modelSettings?: Omit<CallSettings, 'abortSignal'>;
   /**
    * Structured output configuration. The schema type is StandardSchemaWithJSON (not the specific OUTPUT)
@@ -885,9 +904,10 @@ export abstract class BaseProcessor<TId extends string = string, TTripwireMetada
   }
 }
 
+/** Makes the selected properties required and non-nullable while retaining the other fields. */
 type WithRequired<T, K extends keyof T> = T & { [P in K]-?: NonNullable<T[P]> };
 
-// InputProcessor requires processInput, processInputStep, computeStateSignal, processLLMRequest, or processLLMResponse (or any combination)
+/** Processor with an ID and at least one input, state-signal or LLM request/response handler. */
 export type InputProcessor<TTripwireMetadata = unknown> =
   | (WithRequired<Processor<string, TTripwireMetadata>, 'id' | 'processInput'> & Processor<string, TTripwireMetadata>)
   | (WithRequired<Processor<string, TTripwireMetadata>, 'id' | 'processInputStep'> &
@@ -899,8 +919,7 @@ export type InputProcessor<TTripwireMetadata = unknown> =
   | (WithRequired<Processor<string, TTripwireMetadata>, 'id' | 'processLLMResponse'> &
       Processor<string, TTripwireMetadata>);
 
-// OutputProcessor requires processOutputStream OR processOutputResult OR processOutputStep
-// OR processToolResult (or any combination)
+/** Processor with an ID and at least one stream, result, step-output or tool-result handler. */
 export type OutputProcessor<TTripwireMetadata = unknown> =
   | (WithRequired<Processor<string, TTripwireMetadata>, 'id' | 'processOutputStream'> &
       Processor<string, TTripwireMetadata>)
@@ -911,7 +930,7 @@ export type OutputProcessor<TTripwireMetadata = unknown> =
   | (WithRequired<Processor<string, TTripwireMetadata>, 'id' | 'processToolResult'> &
       Processor<string, TTripwireMetadata>);
 
-// ErrorProcessor requires processAPIError
+/** Processor with an ID and a handler for model API errors. */
 export type ErrorProcessor<TTripwireMetadata = unknown> = WithRequired<
   Processor<string, TTripwireMetadata>,
   'id' | 'processAPIError'

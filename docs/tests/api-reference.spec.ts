@@ -65,6 +65,48 @@ for (const width of [996, 997]) {
   })
 }
 
+for (const theme of ['light', 'dark']) {
+  test(`migrated method keeps declarations, options and appendix geometry in ${theme}`, async ({ page }) => {
+    await page.addInitScript(theme => localStorage.setItem('theme', theme), theme)
+    await page.goto('/reference/agents/generate')
+    expect((await probeApiDeclarations(page)).C1declarations).toBe(true)
+    expect((await probeApiOptions(page)).C2destinations).toBe(true)
+    expect((await probeApiOutput(page)).C6output).toBe(true)
+    const method = await apiArticleBox(page)
+    await page.goto('/reference/agents/generate/types')
+    await expect(page.locator('main[data-api-parent-sidebar]')).toHaveCount(1)
+    const appendix = await apiArticleBox(page)
+    expect(Math.abs(method.left - appendix.left)).toBeLessThanOrEqual(8)
+    expect(Math.abs(method.width - appendix.width)).toBeLessThanOrEqual(8)
+    await page.getByRole('link', { name: 'Back to the method reference', exact: true }).click()
+    await expect(page).toHaveURL(/\/reference\/agents\/generate\/?$/)
+  })
+}
+
+for (const width of [996, 997]) {
+  test(`migrated appendix matches its sidebar-bearing parent at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 })
+    await page.goto('/reference/agents/generate')
+    await expect(page.locator('.theme-doc-sidebar-container')).toBeVisible()
+    // At 996px Docusaurus omits sidebar contents; the theme already uses desktop navbar links.
+    const navigation =
+      width === 996
+        ? page.getByRole('link', { name: 'Reference', exact: true })
+        : page.locator('.theme-doc-sidebar-container').getByRole('link').first()
+    await expect(navigation).toBeVisible()
+    await navigation.click()
+    await expect(page).not.toHaveURL(/\/reference\/agents\/generate\/?$/)
+    await page.goBack()
+    await expect(page).toHaveURL(/\/reference\/agents\/generate\/?$/)
+    const method = await apiArticleBox(page)
+    await page.goto('/reference/agents/generate/types')
+    const appendix = await apiArticleBox(page)
+    expect(Math.abs(method.left - appendix.left)).toBeLessThanOrEqual(8)
+    expect(Math.abs(method.width - appendix.width)).toBeLessThanOrEqual(8)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width)
+  })
+}
+
 const preview = '/reference/api-visual-review'
 const staticPreview = '/reference/api-static-review'
 
@@ -240,11 +282,11 @@ for (const theme of ['light', 'dark']) {
   })
 }
 
-test('retains nested data and all overloads with JavaScript disabled', async ({ browser }) => {
+test('retains nested data and all overloads with JavaScript disabled', async ({ browser, baseURL }) => {
   const context = await browser.newContext({ javaScriptEnabled: false })
   try {
     const page = await context.newPage()
-    await page.goto(`http://localhost:4444${preview}`)
+    await page.goto(`${baseURL}${preview}`)
     const region = page.getByRole('region', { name: 'Method', exact: true })
     expect((await probeApiNoScriptDeclarations(page)).C1noScript).toBe(true)
     await expect(region.getByRole('heading', { name: 'Parameters', exact: true })).toHaveCount(4)

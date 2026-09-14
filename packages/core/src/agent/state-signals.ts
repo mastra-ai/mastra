@@ -9,14 +9,31 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+/** Per-state tracking metadata used for deduplication and snapshot recovery. */
 export type StateSignalTracking = {
+  /** Cache key of the most recently applied state signal. */
   currentCacheKey?: string;
+  /** Whether the most recently applied signal is a snapshot or delta. */
   currentMode?: 'snapshot' | 'delta';
+  /** Version of the most recently applied state update. */
   version?: number;
+  /** Identifier of the most recently applied signal. */
   lastSignalId?: string;
+  /** Identifier of the most recent snapshot signal. */
   lastSnapshotSignalId?: string;
+  /** ISO timestamp of the last tracking update. */
   updatedAt?: string;
-  activeCopies?: Array<{ id: string; cacheKey?: string; mode?: 'snapshot' | 'delta'; version?: number }>;
+  /** Signal copies retained for reconstructing the active state history. */
+  activeCopies?: Array<{
+    /** Identifier of the retained signal. */
+    id: string;
+    /** Cache key associated with the retained signal. */
+    cacheKey?: string;
+    /** Whether the retained signal is a snapshot or delta. */
+    mode?: 'snapshot' | 'delta';
+    /** State version represented by the retained signal. */
+    version?: number;
+  }>;
 };
 
 export type ActiveStateSignal = CreatedAgentSignal & {
@@ -41,9 +58,30 @@ export type StateSignalHistory = {
   deltasSinceSnapshot: ActiveStateSignal[];
 };
 
+/** Outcome of applying a state signal, including deduplicated updates. */
 export type ApplyStateSignalResult =
-  | { skipped: true; reason: 'unchanged'; stateId: string; tracking?: StateSignalTracking }
-  | { skipped: false; signal: CreatedAgentSignal; stateId: string; version: number; tracking: StateSignalTracking };
+  | {
+      /** Indicates that no new signal was applied. */
+      skipped: true;
+      /** The tracked state and any required active copy already match. */
+      reason: 'unchanged';
+      /** Logical state identifier, distinct from an individual signal identifier. */
+      stateId: string;
+      /** Existing tracking metadata for this state. */
+      tracking?: StateSignalTracking;
+    }
+  | {
+      /** Indicates that the signal was applied. */
+      skipped: false;
+      /** Signal carrying the applied state metadata. */
+      signal: CreatedAgentSignal;
+      /** Logical state identifier, distinct from an individual signal identifier. */
+      stateId: string;
+      /** State version associated with the applied signal. */
+      version: number;
+      /** Updated tracking metadata saved on the thread. */
+      tracking: StateSignalTracking;
+    };
 
 export function getStateSignalsMetadata(threadMetadata?: Record<string, unknown>): Record<string, StateSignalTracking> {
   if (!threadMetadata) return {};

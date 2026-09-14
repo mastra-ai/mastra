@@ -12,7 +12,11 @@ import { discoverSurfaces, prepareReference } from '../remark-api-reference'
 
 const contentSchema = v.object({
   loadedVersions: v.array(
-    v.object({ docs: v.array(v.object({ source: v.string(), permalink: v.string(), title: v.string() })) }),
+    v.object({
+      docs: v.array(
+        v.object({ source: v.string(), permalink: v.string(), title: v.string(), sidebar: v.optional(v.string()) }),
+      ),
+    }),
   ),
 })
 
@@ -54,6 +58,7 @@ export default function apiAppendix(context: LoadContext): Plugin {
             JSON.stringify({
               surface: partition.appendix,
               methodPath: partition.methodPath,
+              hasSidebar: Boolean(doc.sidebar),
               title: `${doc.title}: supporting types`,
             }),
           )

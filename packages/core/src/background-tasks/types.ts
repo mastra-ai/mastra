@@ -8,6 +8,7 @@ import type {
   AgentChunkType,
 } from '../stream/types';
 
+/** Persisted lifecycle state of a background tool task. */
 export type BackgroundTaskStatus =
   | 'pending'
   | 'running'
@@ -17,40 +18,63 @@ export type BackgroundTaskStatus =
   | 'cancelled'
   | 'timed_out';
 
+/** Stored background tool invocation, including execution context, lifecycle and result. */
 export interface BackgroundTask {
+  /** Unique task identifier. */
   id: string;
+  /** Current persisted lifecycle state. */
   status: BackgroundTaskStatus;
 
   // What to execute
+  /** Name of the tool to execute. */
   toolName: string;
+  /** Tool-call identifier associated with this task. */
   toolCallId: string;
+  /** Arguments supplied to the tool. */
   args: Record<string, unknown>;
 
   // Context
+  /** Agent that scheduled the tool invocation. */
   agentId: string;
+  /** Conversation thread associated with the task, when present. */
   threadId?: string;
+  /** Resource associated with the task, when present. */
   resourceId?: string;
+  /** Agent run that submitted the task. */
   runId: string;
 
   // Result
+  /** Tool result retained after successful completion. */
   result?: unknown;
-  error?: { message: string; stack?: string };
+  /** Serialized task failure information. */
+  error?: {
+    /** Failure message. */
+    message: string;
+    /** Stack trace, when available. */
+    stack?: string;
+  };
 
   // Timing
+  /** Time the task record was created. */
   createdAt: Date;
+  /** Start time of the latest execution attempt or resumed run. */
   startedAt?: Date;
   /**
    * When the task was last suspended (i.e. the tool called `suspend()`).
    * Cleared on resume.
    */
   suspendedAt?: Date;
+  /** Time the task entered a terminal state, including failure or cancellation. */
   completedAt?: Date;
 
   // Retry
+  /** Recorded retry count, initialized to zero for a new task. */
   retryCount: number;
+  /** Maximum retry attempts configured for this task. */
   maxRetries: number;
 
   // Timeout
+  /** Execution timeout in milliseconds. */
   timeoutMs: number;
 
   /**
@@ -124,6 +148,7 @@ export interface TaskListResult {
 
 // --- Configuration ---
 
+/** Default retry policy for background task execution. */
 export interface RetryConfig {
   /** Maximum retry attempts. Default: 0 (no retries) */
   maxRetries?: number;
@@ -134,9 +159,13 @@ export interface RetryConfig {
   /** Maximum delay between retries regardless of backoff. Default: 30_000 */
   maxRetryDelayMs?: number;
   /** Which errors should be retried. Default: all errors */
-  retryableErrors?: (error: Error) => boolean;
+  retryableErrors?: (
+    /** Execution error evaluated by the retry policy. */
+    error: Error,
+  ) => boolean;
 }
 
+/** Retention periods and cleanup interval for completed and failed task records. */
 export interface CleanupConfig {
   /** How long to keep completed task records in ms. Default: 3_600_000 (1 hour) */
   completedTtlMs?: number;
@@ -146,6 +175,7 @@ export interface CleanupConfig {
   cleanupIntervalMs?: number;
 }
 
+/** Background task execution, concurrency, retention and lifecycle callback settings. */
 export interface BackgroundTaskManagerConfig {
   /** Whether background tasks are enabled. Default: false */
   enabled: boolean;
@@ -197,9 +227,15 @@ export interface BackgroundTaskManagerConfig {
    */
   waitTimeoutMs?: number;
   /** Optional callback invoked when a task completes (in addition to stream + message list injection) */
-  onTaskComplete?: (task: BackgroundTask) => void | Promise<void>;
+  onTaskComplete?: (
+    /** Task record associated with the completion notification. */
+    task: BackgroundTask,
+  ) => void | Promise<void>;
   /** Optional callback invoked when a task fails (in addition to stream + message list injection) */
-  onTaskFailed?: (task: BackgroundTask) => void | Promise<void>;
+  onTaskFailed?: (
+    /** Task record associated with the failure notification. */
+    task: BackgroundTask,
+  ) => void | Promise<void>;
 }
 
 // --- Tool-level and agent-level config ---

@@ -294,7 +294,7 @@ export interface Config<
   /**
    * Logger implementation for application logging and debugging.
    * Set to `false` to disable logging entirely.
-   * @default `INFO` level in development, `WARN` in production.
+   * @default `ConsoleLogger` with `INFO` level in development and `WARN` in production, unless `MASTRA_DEV` is `true`.
    */
   logger?: TLogger | false;
 
@@ -484,9 +484,20 @@ export interface Config<
    * Maps event topics to handler functions for event-driven architectures.
    */
   events?: {
-    // Listeners receive only the event. Acknowledgement is handled for them:
-    // the delivery is acked once the listener resolves and nacked if it throws.
-    [topic: string]: ((event: Event) => Promise<void> | void) | ((event: Event) => Promise<void> | void)[];
+    /**
+     * Listeners receive only the event. Delivery is acknowledged when the listener resolves
+     * and negatively acknowledged when it throws.
+     * @param topic - Event topic to subscribe to.
+     */
+    [topic: string]:
+      | ((
+          /** Event delivered to this listener. */
+          event: Event,
+        ) => Promise<void> | void)
+      | ((
+          /** Event delivered to this listener. */
+          event: Event,
+        ) => Promise<void> | void)[];
   };
 
   /**
@@ -537,6 +548,7 @@ export interface Config<
    * Notification runtime configuration. Notification dispatch is scheduled automatically by default.
    */
   notifications?: {
+    /** Automatic notification dispatch schedule and batch settings. */
     dispatch?: NotificationDispatchConfig;
   };
 

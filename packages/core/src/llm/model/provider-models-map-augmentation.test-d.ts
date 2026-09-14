@@ -6,6 +6,7 @@ import type { ModelForProvider, ModelRouterModelId, Provider } from '../index.js
 // `declare module '@mastra/core/llm'`.
 declare module '../index.js' {
   interface ProviderModelsMap {
+    /** Compile-time fixture verifying that custom providers can augment the model map. */
     'augmentation-test-provider': readonly ['model-1', 'model-2'];
   }
 }

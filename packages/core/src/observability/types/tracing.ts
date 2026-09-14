@@ -179,11 +179,17 @@ export interface AgentRunAttributes extends AIBaseAttributes {
  * Scorer Run attributes
  */
 export interface ScorerRunAttributes extends AIBaseAttributes {
+  /** Identifier of the scorer being executed. */
   scorerId?: string;
+  /** Display name of the scorer. */
   scorerName?: string;
+  /** Origin of the scoring request, such as live execution or an experiment. */
   scoreSource?: ScorerScoreSource;
+  /** Scope of the evaluated target, such as a span or trajectory. */
   targetScope?: ScorerTargetScope;
+  /** Entity category of the evaluated target. */
   targetEntityType?: EntityType;
+  /** Source of the scorer definition used for this execution. */
   scorerDefinition?: DefinitionSource;
 }
 
@@ -191,9 +197,13 @@ export interface ScorerRunAttributes extends AIBaseAttributes {
  * Scorer Step attributes
  */
 export interface ScorerStepAttributes extends AIBaseAttributes {
+  /** Name of the scorer pipeline step. */
   step?: string;
+  /** Whether the step executes a prompt or a function. */
   stepType?: ScorerStepType;
+  /** Prompt prepared for a model-based scoring step. */
   prompt?: string;
+  /** Model identifier used to judge the scoring step. */
   judgeModel?: string;
 }
 
@@ -254,7 +264,9 @@ export interface UsageStats {
 export interface ModelToolDefinition {
   /** Tool type: 'function' for standard tools, or the provider tool type (e.g. 'provider-defined') */
   type: string;
+  /** Tool name exposed to the model. */
   name: string;
+  /** Description supplied to the model to explain the tool's purpose. */
   description?: string;
   /** JSON schema of the tool's input parameters (function tools) */
   parameters?: Record<string, unknown>;
@@ -284,16 +296,27 @@ export interface ModelGenerationAttributes extends AIBaseAttributes {
   costContext?: CostContext;
   /** Model parameters */
   parameters?: {
+    /** Configured upper limit on generated tokens. */
     maxOutputTokens?: number;
+    /** Sampling temperature requested for generation. */
     temperature?: number;
+    /** Cumulative probability threshold requested for nucleus sampling. */
     topP?: number;
+    /** Number of highest-probability tokens considered when sampling. */
     topK?: number;
+    /** Requested penalty for tokens already present in the generated text. */
     presencePenalty?: number;
+    /** Requested penalty based on how frequently a token has appeared. */
     frequencyPenalty?: number;
+    /** Sequences configured to stop generation. */
     stopSequences?: string[];
+    /** Random seed requested for generation, subject to provider support. */
     seed?: number;
+    /** Configured limit on retries for a model call. */
     maxRetries?: number;
+    /** Cancellation signal supplied to the generation. */
     abortSignal?: any;
+    /** Additional HTTP headers supplied for model requests. */
     headers?: Record<string, string | undefined>;
   };
   /** Whether this was a streaming response */
@@ -379,12 +402,30 @@ export interface ModelInferenceAttributes extends AIBaseAttributes {
    * or a specific tool selection. Distinguishes "model could have called a
    * tool but didn't" from "model was blocked/forced".
    */
-  toolChoice?: 'auto' | 'none' | 'required' | { type: 'tool'; toolName: string };
+  toolChoice?:
+    | 'auto'
+    | 'none'
+    | 'required'
+    | {
+        /** Selects the named-tool form of the tool-choice setting. */
+        type: 'tool';
+        /** Name of the specific tool the model is instructed to call. */
+        toolName: string;
+      };
   /**
    * Requested response format. Distinguishes plain text generation from
    * structured-output (JSON / JSON schema) runs.
    */
-  responseFormat?: 'text' | 'json' | 'json_schema' | { type: string; name?: string };
+  responseFormat?:
+    | 'text'
+    | 'json'
+    | 'json_schema'
+    | {
+        /** Kind of response format requested from the model. */
+        type: string;
+        /** Optional name associated with the requested response format. */
+        name?: string;
+      };
 }
 
 /**
@@ -401,9 +442,13 @@ export interface ModelChunkAttributes extends AIBaseAttributes {
  * Tool Call attributes
  */
 export interface ToolCallAttributes extends AIBaseAttributes {
+  /** Category of the executed tool. */
   toolType?: string;
+  /** Description from the tool definition. */
   toolDescription?: string;
+  /** Identifier of this tool invocation. */
   toolCallId?: string;
+  /** Whether the tool execution was reported as successful. */
   success?: boolean;
 }
 
@@ -458,6 +503,7 @@ export interface MCPToolCallAttributes extends AIBaseAttributes {
   serverVersion?: string;
   /** Tool description */
   toolDescription?: string;
+  /** Identifier of the MCP tool invocation. */
   toolCallId?: string;
   /** Whether tool execution was successful */
   success?: boolean;
@@ -475,19 +521,16 @@ export interface MappingAttributes extends AIBaseAttributes {
 }
 
 /**
- * Skill resolution attributes.
+ * Legacy attributes for skill resolution and catalog injection, retained for existing traces.
  *
- * Emitted from two places, distinguished by `phase`:
- *  - `'resolver'` — a dynamic agent skills resolver run (`skills` configured as
- *    a function), spanning the resolver call itself.
- *  - `'injection'` — the skills processor injecting the catalog into the system
- *    message. This fires for static skills too, so a misconfigured skills path
- *    surfaces as `skillCount: 0` instead of producing no skill span at all.
+ * The `phase` distinguishes a dynamic agent skills resolver call (`resolver`)
+ * from catalog injection into system messages (`injection`). Injection records
+ * also carry processor pipeline attributes.
  *
- * Extends `ProcessorPipelineAttributes` because the injection phase is emitted
- * by a processor and must still carry the runner's pipeline facts.
+ * New skill spans use `SkillActionAttributes` with an `operation` instead of `phase`.
+ *
+ * @deprecated Use {@link SkillActionAttributes}.
  */
-/** @deprecated Use {@link SkillActionAttributes}. */
 export interface SkillResolutionAttributes extends AIBaseAttributes, ProcessorPipelineAttributes {
   /** Agent whose skills resolver ran */
   agentId?: string;
@@ -550,12 +593,19 @@ export interface ProcessorPipelineAttributes {
   processorIndex?: number;
   /** MessageList mutations performed by this processor */
   messageListMutations?: Array<{
+    /** Message-list operation recorded during processor execution. */
     type: 'add' | 'addSystem' | 'removeByIds' | 'clear';
+    /** Message source associated with the operation, when recorded. */
     source?: string;
+    /** Number of messages added, removed or cleared by the recorded operation. */
     count?: number;
+    /** Message identifiers supplied to a removal operation. */
     ids?: string[];
+    /** Optional text associated with the recorded mutation. */
     text?: string;
+    /** Group tag supplied when adding a tagged system message. */
     tag?: string;
+    /** System message added by an addSystem operation. */
     message?: any;
   }>;
   /** Tripwire abort details when a processor triggered a tripwire */
@@ -695,11 +745,17 @@ export interface MemoryOperationAttributes extends AIBaseAttributes, ProcessorPi
    * are the read/write operations on stored memory.
    */
   operationType?: 'recall' | 'save' | 'delete' | 'update' | 'observe' | 'reflect';
+  /** Number of messages associated with the memory operation. */
   messageCount?: number;
+  /** Token usage reported for memory embeddings. */
   embeddingTokens?: number;
+  /** Whether semantic recall is enabled for the operation. */
   semanticRecallEnabled?: boolean;
+  /** Number of vector-search results returned during recall. */
   vectorResultCount?: number;
+  /** Whether working memory is enabled for the operation. */
   workingMemoryEnabled?: boolean;
+  /** Configured recent-message limit, or false when conversation history is disabled. */
   lastMessages?: number | false;
   /** Tokens fed to the observational-memory pass (observe / reflect) */
   inputTokens?: number;
@@ -807,7 +863,9 @@ export interface RagChunkAction extends AIBaseAttributes {
   action: 'chunk';
   /** Chunking strategy / transformer name */
   strategy?: string;
+  /** Chunk size configured for the selected splitting strategy. */
   chunkSize?: number;
+  /** Overlap configured between consecutive chunks. */
   chunkOverlap?: number;
 }
 
@@ -816,7 +874,9 @@ export interface RagExtractMetadataAction extends AIBaseAttributes {
   action: 'extract_metadata';
   /** Metadata extractor name */
   extractor?: string;
+  /** Model identifier associated with metadata extraction. */
   model?: string;
+  /** Model provider associated with metadata extraction. */
   provider?: string;
 }
 
@@ -831,6 +891,7 @@ export interface RagRerankAction extends AIBaseAttributes {
   scorer?: string;
 }
 
+/** Attributes for chunking, metadata extraction or reranking, distinguished by action. */
 export type RagActionAttributes = RagChunkAction | RagExtractMetadataAction | RagRerankAction;
 
 /**
@@ -858,37 +919,69 @@ export interface GraphActionAttributes extends AIBaseAttributes {
  * AI-specific span types mapped to their attributes
  */
 export interface SpanTypeMap {
+  /** Attributes describing an agent execution and its conversation context. */
   [SpanType.AGENT_RUN]: AgentRunAttributes;
+  /** Attributes identifying a scorer and the target being evaluated. */
   [SpanType.SCORER_RUN]: ScorerRunAttributes;
+  /** Attributes describing an individual scorer pipeline step. */
   [SpanType.SCORER_STEP]: ScorerStepAttributes;
+  /** Attributes describing a workflow run and its execution status. */
   [SpanType.WORKFLOW_RUN]: WorkflowRunAttributes;
+  /** Attributes recording generation settings, tools and aggregate model usage. */
   [SpanType.MODEL_GENERATION]: ModelGenerationAttributes;
+  /** Attributes recording a model step's index, usage and finish reason. */
   [SpanType.MODEL_STEP]: ModelStepAttributes;
+  /** Attributes recording a provider inference call within a model step. */
   [SpanType.MODEL_INFERENCE]: ModelInferenceAttributes;
+  /** Attributes identifying an individual streamed model chunk. */
   [SpanType.MODEL_CHUNK]: ModelChunkAttributes;
+  /** Attributes identifying a tool invocation and its reported outcome. */
   [SpanType.TOOL_CALL]: ToolCallAttributes;
+  /** Attributes describing a server-side marker for client tool execution. */
   [SpanType.CLIENT_TOOL_CALL]: ClientToolCallAttributes;
+  /** Attributes describing a tool invocation executed by the model provider. */
   [SpanType.PROVIDER_TOOL_CALL]: ProviderToolCallAttributes;
+  /** Attributes identifying an MCP tool invocation and its server. */
   [SpanType.MCP_TOOL_CALL]: MCPToolCallAttributes;
+  /** Attributes describing a processor and its message-list mutations. */
   [SpanType.PROCESSOR_RUN]: ProcessorRunAttributes;
+  /** Attributes recording a workflow step's identity and status. */
   [SpanType.WORKFLOW_STEP]: WorkflowStepAttributes;
+  /** Attributes describing a conditional branch operation in a workflow. */
   [SpanType.WORKFLOW_CONDITIONAL]: WorkflowConditionalAttributes;
+  /** Attributes describing one workflow condition evaluation. */
   [SpanType.WORKFLOW_CONDITIONAL_EVAL]: WorkflowConditionalEvalAttributes;
+  /** Attributes describing parallel workflow execution. */
   [SpanType.WORKFLOW_PARALLEL]: WorkflowParallelAttributes;
+  /** Attributes describing workflow loop execution. */
   [SpanType.WORKFLOW_LOOP]: WorkflowLoopAttributes;
+  /** Attributes describing a workflow sleep operation. */
   [SpanType.WORKFLOW_SLEEP]: WorkflowSleepAttributes;
+  /** Attributes recording a workflow event wait and whether an event arrived. */
   [SpanType.WORKFLOW_WAIT_EVENT]: WorkflowWaitEventAttributes;
+  /** Attributes describing workspace operations and processor context. */
   [SpanType.WORKSPACE_ACTION]: WorkspaceActionAttributes;
+  /** Shared attributes available to custom spans without a specialized type. */
   [SpanType.GENERIC]: AIBaseAttributes;
+  /** Attributes recording memory operations, retrieval settings and usage. */
   [SpanType.MEMORY_OPERATION]: MemoryOperationAttributes;
+  /** Attributes describing a RAG ingestion pipeline. */
   [SpanType.RAG_INGESTION]: RagIngestionAttributes;
+  /** Attributes describing an embedding model call. */
   [SpanType.RAG_EMBEDDING]: RagEmbeddingAttributes;
+  /** Attributes describing vector-store reads and writes. */
   [SpanType.RAG_VECTOR_OPERATION]: RagVectorOperationAttributes;
+  /** Action-specific attributes for chunking, metadata extraction or reranking. */
   [SpanType.RAG_ACTION]: RagActionAttributes;
+  /** Attributes describing graph construction, traversal or modification. */
   [SpanType.GRAPH_ACTION]: GraphActionAttributes;
+  /** Attributes identifying an inline data transformation. */
   [SpanType.MAPPING]: MappingAttributes;
+  /** Legacy skill-resolution attributes retained for existing traces. */
   [SpanType.SKILL_RESOLUTION]: SkillResolutionAttributes;
+  /** Attributes describing skill resolution, injection or tool-driven actions. */
   [SpanType.SKILL_ACTION]: SkillActionAttributes;
+  /** Attributes describing a point-in-time agent signal. */
   [SpanType.AGENT_SIGNAL]: AgentSignalAttributes;
 }
 

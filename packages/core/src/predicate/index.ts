@@ -47,15 +47,59 @@ export const predicateSchema: z.ZodType<Predicate> = z.lazy(() =>
   ]),
 );
 
-export type PathOrLiteral = { path: string } | { literal: string | number | boolean | null };
+/** Predicate operand resolved from a context path or supplied as a scalar literal. */
+export type PathOrLiteral =
+  | {
+      /** Context path interpreted by the domain's path resolver. */
+      path: string;
+    }
+  | {
+      /** Scalar value used directly without path resolution. */
+      literal: string | number | boolean | null;
+    };
 
+/** JSON-safe predicate supporting comparisons, membership and boolean composition. */
 export type Predicate =
-  | { op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte'; left: PathOrLiteral; right: PathOrLiteral }
-  | { op: 'in' | 'notIn'; value: PathOrLiteral; set: Array<string | number | boolean | null> }
-  | { op: 'exists' | 'notExists'; path: string }
-  | { op: 'truthy' | 'falsy'; value: PathOrLiteral }
-  | { op: 'and' | 'or'; args: Predicate[] }
-  | { op: 'not'; arg: Predicate };
+  | {
+      /** Equality or ordered comparison to apply to the resolved operands. */
+      op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
+      /** Left comparison operand. */
+      left: PathOrLiteral;
+      /** Right comparison operand. */
+      right: PathOrLiteral;
+    }
+  | {
+      /** Test membership in, or exclusion from, the literal set. */
+      op: 'in' | 'notIn';
+      /** Operand whose resolved value is tested for membership. */
+      value: PathOrLiteral;
+      /** Scalar values against which membership is tested. */
+      set: Array<string | number | boolean | null>;
+    }
+  | {
+      /** Test whether the path resolves or is missing. */
+      op: 'exists' | 'notExists';
+      /** Context path whose existence is tested. */
+      path: string;
+    }
+  | {
+      /** Test the resolved value's truthiness or falsiness. */
+      op: 'truthy' | 'falsy';
+      /** Operand whose truthiness is tested. */
+      value: PathOrLiteral;
+    }
+  | {
+      /** Require all child predicates or at least one child predicate to pass. */
+      op: 'and' | 'or';
+      /** Child predicates evaluated for boolean composition. */
+      args: Predicate[];
+    }
+  | {
+      /** Invert the child predicate's result. */
+      op: 'not';
+      /** Child predicate to negate. */
+      arg: Predicate;
+    };
 
 const PATH_PLACEHOLDER = /^\$\{([^}]+)\}$/;
 

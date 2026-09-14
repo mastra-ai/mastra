@@ -1,13 +1,22 @@
 /**
  * Selects a specific version of a primitive by ID or by publication status.
  */
-export type VersionSelector = { versionId: string } | { status: 'draft' | 'published' };
+export type VersionSelector =
+  | {
+      /** Exact stored version identifier to resolve. */
+      versionId: string;
+    }
+  | {
+      /** Publication status used to select a version. */
+      status: 'draft' | 'published';
+    };
 
 /**
  * Per-primitive version overrides.
  * Keys are primitive IDs, values select which version to resolve.
  */
 export type VersionOverrides = {
+  /** Per-agent version selections keyed by agent identifier. */
   agents?: Record<string, VersionSelector>;
   /** Fallback status for sub-agents (and future primitives) without an explicit entry. */
   defaultStatus?: 'draft' | 'published';

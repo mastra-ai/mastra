@@ -146,7 +146,9 @@ export type FullOutput<OUTPUT = undefined> = {
   tripwire: StepTripwireData | undefined;
   /** Scoring data for evals (when returnScorerData is enabled) */
   scoringData?: {
+    /** Input, remembered and system messages supplied to scorers for this run. */
     input: Omit<ScorerRunInputForAgent, 'runId'>;
+    /** Response messages supplied to scorers as the agent's output. */
     output: ScorerRunOutputForAgent;
   };
   /** Trace ID for this execution. */

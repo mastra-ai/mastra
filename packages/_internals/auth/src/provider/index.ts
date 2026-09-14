@@ -45,6 +45,7 @@ export interface MastraAuthProviderOptions<TUser = unknown> {
  * assignable to `IMastraAuthProvider<unknown>`.
  */
 export interface IMastraAuthProvider<TUser = unknown> {
+  /** Name identifying the authentication provider. */
   name?: string;
   /**
    * Protected paths for the auth provider
@@ -55,15 +56,20 @@ export interface IMastraAuthProvider<TUser = unknown> {
    */
   public?: MastraAuthConfig['public'];
   /**
-   * Authenticate a token and return the payload
+   * Authenticate a token and return the payload.
+   * @param token - Token to authenticate.
+   * @param request - Request associated with the token.
    */
   authenticateToken(token: string, request: MastraAuthRequest): Promise<TUser | null>;
   /**
-   * Authorize a user for a path and method
+   * Authorize a user for a path and method.
+   * @param user - Authenticated user to authorize.
+   * @param request - Request being authorized.
    */
   authorizeUser(user: TUser, request: MastraAuthRequest): Promise<boolean> | boolean;
   /**
-   * Map an authenticated user to a memory resource id
+   * Map an authenticated user to a memory resource id.
+   * @param user - Authenticated user whose resource is being resolved.
    */
   mapUserToResourceId?(user: TUser): string | undefined | null;
 }

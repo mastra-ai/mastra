@@ -6,11 +6,11 @@ import styles from './styles.module.css'
 export default function ApiAppendixPage({
   data,
 }: {
-  data: { surface: ApiSurface; methodPath: string; title: string }
+  data: { surface: ApiSurface; methodPath: string; title: string; hasSidebar: boolean }
 }) {
   return (
     <Layout title={data.title} description="Source-backed supporting API type definitions.">
-      <main className={styles.appendixMain}>
+      <main className={styles.appendixMain} data-api-parent-sidebar={data.hasSidebar || undefined}>
         <div className="padding-top--md padding-bottom--lg container">
           <div className={`row ${styles.appendixRow}`}>
             <div className={`col ${styles.appendixColumn}`}>

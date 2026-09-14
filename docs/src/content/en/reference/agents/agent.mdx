@@ -966,31 +966,7 @@ SystemMessage types: string | string[] | CoreSystemMessage | CoreSystemMessage[]
 
 ## `generate()` memory options
 
-Pass `memory` when you call `agent.generate()` to choose which conversation thread the run should read from and write to. The common shape is `memory: { resource: string, thread: string }`, where `resource` identifies the owner and `thread` identifies the conversation. See [Threads and resources](/docs/memory/message-history#threads-and-resources) for the concept model.
-
-```typescript title="src/mastra/run.ts"
-const response = await agent.generate('What did we decide about retries?', {
-  memory: {
-    resource: 'user-123',
-    thread: 'support-thread-456',
-  },
-})
-```
-
-Use a thread object when you need to create or update thread metadata during the call:
-
-```typescript title="src/mastra/run.ts"
-const response = await agent.generate('Continue the support conversation.', {
-  memory: {
-    resource: 'user-123',
-    thread: {
-      id: 'support-thread-456',
-      title: 'Billing support',
-      metadata: { category: 'billing' },
-    },
-  },
-})
-```
+See [`Agent.generate()` with memory](/reference/agents/generate#with-memory) for conversation thread, resource, and thread-metadata examples.
 
 ## Tool hooks
 

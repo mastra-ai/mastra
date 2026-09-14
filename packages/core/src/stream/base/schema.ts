@@ -8,6 +8,7 @@ import { isStandardSchemaWithJSON, standardSchemaToJSONSchema } from '../../sche
 export type PartialSchemaOutput<OUTPUT = undefined> = OUTPUT extends undefined ? undefined : Partial<OUTPUT>;
 
 /**
+ * Legacy structured-output schema formats, including an omitted schema.
  * @deprecated Use StandardSchemaWithJSON from '../../schema' instead
  */
 export type OutputSchema<OBJECT = any> =
@@ -24,8 +25,8 @@ export type OutputSchema<OBJECT = any> =
 export type SchemaWithValidation<T = any> = z4.ZodType<T, any> | z3.Schema<T, z3.ZodTypeDef, any>;
 
 /**
+ * Infers the result type of a supported legacy schema, or unknown for other schemas.
  * @deprecated Use InferPublicSchema or InferStandardSchemaOutput from '../../schema' instead
- * Infer the output type from a schema
  */
 export type InferSchemaOutput<T> =
   T extends z4.ZodType<infer O, any>

@@ -23,7 +23,9 @@ export type ScheduleStreamOptions = {
  * shape `agent.sendSignal` allows.
  */
 export type ScheduleIfActive = {
+  /** Whether to deliver, persist or discard the signal when the target thread is active. */
   behavior?: AgentSignalActiveBehavior;
+  /** Attributes merged into the signal when the active-thread branch applies. */
   attributes?: AgentSignalAttributes;
 };
 
@@ -34,8 +36,11 @@ export type ScheduleIfActive = {
  * persisted to schedule storage.
  */
 export type ScheduleIfIdle = {
+  /** Whether to wake the agent, persist the signal or discard it when the thread is idle. */
   behavior?: AgentSignalIdleBehavior;
+  /** Attributes merged into the signal when the idle-thread branch applies. */
   attributes?: AgentSignalAttributes;
+  /** Serializable execution options used when this branch wakes an agent run. */
   streamOptions?: ScheduleStreamOptions;
 };
 
@@ -163,44 +168,68 @@ export type ScheduleOutput = z.infer<typeof ScheduleOutputSchema>;
 
 /** Effective parameters the agent-schedule worker uses on a single fire. */
 export type ScheduleEffective = {
+  /** Target thread for signal delivery. Omitted for an unthreaded run. */
   threadId?: string;
+  /** Resource associated with the target thread or run. */
   resourceId?: string;
+  /** Prompt content submitted for this fire. */
   prompt: string;
+  /** Signal category or legacy alias used for threaded delivery. */
   signalType?: AgentSignalType;
+  /** XML tag name used for the schedule signal. */
   tagName?: string;
+  /** Delivery policy applied when the target thread is active. */
   ifActive?: ScheduleIfActive;
+  /** Delivery policy and wake options applied when the target thread is idle. */
   ifIdle?: ScheduleIfIdle;
+  /** XML attributes attached to the schedule signal. */
   attributes?: AgentSignalAttributes;
+  /** Provider options attached to the schedule signal. */
   providerOptions?: Record<string, unknown>;
 };
 
 /** Trigger context passed to every hook. */
 export type ScheduleTriggerInfo = {
+  /** Whether this fire was scheduled or manually requested. */
   kind: 'cron' | 'manual';
+  /** Actual fire time supplied by the worker, or the execution time when omitted. */
   firedAt: Date;
 };
 
 /** Limited terminal-state snapshot for a schedule-driven agent run. */
 export type ScheduleRunResultSnapshot = {
+  /** Generated text, when present on the completed result. */
   text?: string;
+  /** Usage object retained from the completed result. */
   usage?: Record<string, unknown>;
+  /** Finish reason reported by the completed result. */
   finishReason?: string;
 };
 
 /** Forward-declared so this file does not import from `./schedules`. */
 interface ScheduleRef {
+  /** Schedule identifier for this fire. */
   id: string;
+  /** Agent targeted by the schedule. */
   agentId: string;
+  /** Schedule display name, when available. */
   name?: string;
+  /**
+   * Additional fields from the stored schedule, when loading succeeds.
+   * @param key - Name of an additional schedule field.
+   */
   [key: string]: unknown;
 }
 
 /** Argument passed to `schedules.prepare`. */
 export type SchedulePrepareContext<TMastra = unknown> = {
+  /** Mastra instance executing the schedule. */
   mastra: TMastra;
   /** The agent this schedule fires. Convenience alias for `schedule.agentId`. */
   agentId: string;
+  /** Stored schedule or a minimal fallback containing its identity. */
   schedule: ScheduleRef;
+  /** Trigger kind and actual fire time. */
   trigger: ScheduleTriggerInfo;
 };
 
@@ -216,30 +245,41 @@ export type SchedulePrepareResult = Partial<ScheduleEffective>;
 
 /** Argument passed to `schedules.onFinish` for any non-error, non-abort outcome. */
 export type ScheduleFinishContext<TMastra = unknown> = {
+  /** Mastra instance executing the schedule. */
   mastra: TMastra;
   /** The agent this schedule fires. Convenience alias for `schedule.agentId`. */
   agentId: string;
+  /** Stored schedule or a minimal fallback containing its identity. */
   schedule: ScheduleRef;
+  /** Trigger kind and actual fire time. */
   trigger: ScheduleTriggerInfo;
+  /** Dispatch outcome. A threaded `succeeded` wake does not wait for the agent run to finish. */
   outcome: 'succeeded' | 'delivered' | 'persisted' | 'discarded' | 'skipped';
-  /** Present for `succeeded` and `delivered` outcomes. */
+  /** Run identifier when available, including a blocked run for a skipped wake. */
   runId?: string;
   /** True when `outcome === 'delivered'` and the signal joined an active run. */
   joinedExistingRun?: boolean;
-  /** Best-effort terminal snapshot; populated for `succeeded` runs. */
+  /** Best-effort terminal snapshot from a completed unthreaded run. Threaded wakes do not wait for a result. */
   result?: ScheduleRunResultSnapshot;
+  /** Parameters used for this fire after merging preparation overrides. */
   effective: ScheduleEffective;
 };
 
 /** Argument passed to `schedules.onError` whenever `prepare`, `sendSignal`, or the agent run threw. */
 export type ScheduleErrorContext<TMastra = unknown> = {
+  /** Mastra instance executing the schedule. */
   mastra: TMastra;
   /** The agent this schedule fires. Convenience alias for `schedule.agentId`. */
   agentId: string;
+  /** Stored schedule or a minimal fallback containing its identity. */
   schedule: ScheduleRef;
+  /** Trigger kind and actual fire time. */
   trigger: ScheduleTriggerInfo;
+  /** Whether preparation or dispatch/execution failed. */
   phase: 'prepare' | 'run';
+  /** Error reported by the failed phase. */
   error: Error;
+  /** Associated run identifier, when available. */
   runId?: string;
   /** Best-effort effective view; may be partial if `prepare` threw before merging. */
   effective?: ScheduleEffective;
@@ -247,12 +287,17 @@ export type ScheduleErrorContext<TMastra = unknown> = {
 
 /** Argument passed to `schedules.onAbort` when the run was aborted mid-stream. */
 export type ScheduleAbortContext<TMastra = unknown> = {
+  /** Mastra instance executing the schedule. */
   mastra: TMastra;
   /** The agent this schedule fires. Convenience alias for `schedule.agentId`. */
   agentId: string;
+  /** Stored schedule or a minimal fallback containing its identity. */
   schedule: ScheduleRef;
+  /** Trigger kind and actual fire time. */
   trigger: ScheduleTriggerInfo;
+  /** Aborted run's identifier, falling back to the schedule ID when the error has none. */
   runId: string;
+  /** Parameters used for this fire after merging preparation overrides. */
   effective: ScheduleEffective;
 };
 
@@ -270,12 +315,26 @@ export type ScheduleAbortContext<TMastra = unknown> = {
  * recurse into another hook.
  */
 export type ScheduleHooks<TMastra = unknown> = {
+  /** Computes per-fire overrides, returns null to skip, or undefined to retain defaults. */
   prepare?: (
+    /** Schedule identity, trigger and Mastra instance for this fire. */
     ctx: SchedulePrepareContext<TMastra>,
   ) => Promise<SchedulePrepareResult | null | undefined> | SchedulePrepareResult | null | undefined;
-  onFinish?: (ctx: ScheduleFinishContext<TMastra>) => Promise<void> | void;
-  onError?: (ctx: ScheduleErrorContext<TMastra>) => Promise<void> | void;
-  onAbort?: (ctx: ScheduleAbortContext<TMastra>) => Promise<void> | void;
+  /** Runs after threaded signal dispatch or unthreaded generation completes, including skipped fires. */
+  onFinish?: (
+    /** Dispatch outcome and effective parameters, with a result only when available. */
+    ctx: ScheduleFinishContext<TMastra>,
+  ) => Promise<void> | void;
+  /** Handles preparation, validation or execution failures. */
+  onError?: (
+    /** Failure phase, error and available execution context. */
+    ctx: ScheduleErrorContext<TMastra>,
+  ) => Promise<void> | void;
+  /** Handles abort errors thrown by unthreaded generation. */
+  onAbort?: (
+    /** Aborted run identity and effective fire parameters. */
+    ctx: ScheduleAbortContext<TMastra>,
+  ) => Promise<void> | void;
 };
 
 /**

@@ -1,9 +1,14 @@
+/** Event envelope delivered through the pubsub system. */
 export type Event = {
+  /** Event type identifying the payload's meaning. */
   type: string;
+  /** Identifier of the event. */
   id: string;
-  // TODO: we'll want to type this better
+  /** Event-specific payload. */
   data: any;
+  /** Execution run associated with the event. */
   runId: string;
+  /** Time the event was created. */
   createdAt: Date;
   /**
    * Sequential index for position tracking.

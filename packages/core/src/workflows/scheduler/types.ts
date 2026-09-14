@@ -80,8 +80,16 @@ export type SchedulerConfig = {
   batchSize?: number;
   /**
    * Optional callback invoked when a tick fails to publish a schedule.
+   * @param err - Error raised while publishing the schedule.
+   * @param context - Identifies the schedule whose publication failed.
    */
-  onError?: (err: unknown, context: { scheduleId: string }) => void;
+  onError?: (
+    err: unknown,
+    context: {
+      /** Identifier of the affected schedule. */
+      scheduleId: string;
+    },
+  ) => void;
   /**
    * Predicate used to check whether a schedule's target is currently
    * registered with the host Mastra instance. For workflow targets the
@@ -93,6 +101,7 @@ export type SchedulerConfig = {
    * Wired up by `SchedulerWorker` from `mastra.getWorkflowById(...)` and
    * `mastra.getAgentById(...)`, with an editor fallback for stored agents
    * that have not been hydrated into the registry yet.
+   * @param target - Scheduled agent or workflow invocation to resolve.
    */
   isTargetReady?: (target: ScheduleTarget) => boolean | Promise<boolean>;
   /**
@@ -111,6 +120,7 @@ export type SchedulerConfig = {
    *
    * Wired up by `SchedulerWorker` from the registered workflow's serialized
    * step graph.
+   * @param target - Scheduled invocation whose definition is checked.
    */
   isTargetCurrent?: (target: ScheduleTarget) => boolean;
   /**

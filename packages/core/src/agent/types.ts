@@ -113,7 +113,10 @@ export type ZodSchema = ZodSchemaV3 | ZodTypev4;
  * which already demands a string `id`, and is what keeps non-tool values out of
  * `ToolsInput` without narrowing the public type.
  */
-type ProviderDefinedToolInput = ProviderDefinedTool & { id: string };
+type ProviderDefinedToolInput = ProviderDefinedTool & {
+  /** Provider-assigned identifier required to recognize the tool. */
+  id: string;
+};
 
 /**
  * Accepts Mastra tools, Vercel AI SDK tools, and provider-defined tools
@@ -372,12 +375,25 @@ export interface AgentThreadSubscription<OUTPUT = unknown> {
   unsubscribe: () => void;
 }
 
+/** Named groups of tools available to the agent. */
 export type ToolsetsInput = Record<string, ToolsInput>;
 
+/** Structured-output error handling with a fallback value required only for fallback mode. */
 type FallbackFields<OUTPUT = undefined> =
-  | { errorStrategy?: 'strict' | 'warn'; fallbackValue?: never }
-  | { errorStrategy: 'fallback'; fallbackValue: OUTPUT };
+  | {
+      /** Throws on invalid output in strict mode, or logs a warning in warn mode. */
+      errorStrategy?: 'strict' | 'warn';
+      /** Not accepted unless the error strategy is fallback. */
+      fallbackValue?: never;
+    }
+  | {
+      /** Returns the supplied fallback value when structured output fails. */
+      errorStrategy: 'fallback';
+      /** Value returned when structured output fails. */
+      fallbackValue: OUTPUT;
+    };
 
+/** Shared model, prompt and error-handling options for structured output. */
 export type StructuredOutputOptionsBase<OUTPUT = {}> = {
   /** Model to use for the internal structuring agent. If not provided, falls back to the agent's model */
   model?: MastraModelConfig;
@@ -422,12 +438,15 @@ export type StructuredOutputOptionsBase<OUTPUT = {}> = {
   providerOptions?: ProviderOptions;
 } & FallbackFields<OUTPUT>;
 
+/** Structured-output configuration with a normalized Standard Schema validator. */
 export type StructuredOutputOptions<OUTPUT = {}> = StructuredOutputOptionsBase<OUTPUT> & {
   /** Zod schema to validate the output against */
   schema: StandardSchemaWithJSON<OUTPUT>;
 };
 
+/** Structured-output configuration accepting the public schema formats. */
 export type PublicStructuredOutputOptions<OUTPUT = {}> = StructuredOutputOptionsBase<OUTPUT> & {
+  /** Schema describing and validating the structured result. */
   schema: PublicSchema<OUTPUT>;
 };
 
@@ -444,15 +463,24 @@ export interface AgentCreateOptions {
   tracingPolicy?: TracingPolicy;
 }
 
+/** Model settings accepted for an entry in the fallback model list. */
 export type ModelFallbackSettings = ModelConfigModelSettings;
 
+/** Model entry with optional retry, enablement and request overrides. */
 export type ModelWithRetries = {
+  /** Identifier for this model entry. */
   id?: string;
+  /** Model or context-dependent model resolver. */
   model: DynamicArgument<MastraModelConfig>;
-  maxRetries?: number; // defaults to agent-level maxRetries
-  enabled?: boolean; // defaults to true
+  /** Retry limit for this model, overriding the agent-level setting. */
+  maxRetries?: number;
+  /** Whether this model entry is enabled. Defaults to true. */
+  enabled?: boolean;
+  /** Model call settings or a context-dependent settings resolver. */
   modelSettings?: DynamicArgument<ModelFallbackSettings>;
+  /** Provider options or a context-dependent options resolver. */
   providerOptions?: DynamicArgument<ProviderOptions>;
+  /** Additional request headers or a context-dependent headers resolver. */
   headers?: DynamicArgument<Record<string, string>>;
 };
 
@@ -963,11 +991,23 @@ export type AgentConfig<
   editor?: TEditor;
 } & AgentEditableFieldConfig<TTools, TRequestContext, TEditor>;
 
+/** Thread, resource and memory settings for an agent execution. */
 export type AgentMemoryOption = {
-  thread: string | (Partial<StorageThreadType> & { id: string });
+  /** Thread identifier or thread properties with a required identifier. */
+  thread:
+    | string
+    | (Partial<StorageThreadType> & {
+        /** Identifier of the conversation thread. */
+        id: string;
+      });
+  /** Resource identifier used to scope memory. */
   resource?: string;
+  /** Memory configuration overrides for this execution. */
   options?: MemoryConfigInternal;
-  /** Callback fired when a thread title is generated and persisted to storage. */
+  /**
+   * Callback fired when a thread title is generated and persisted to storage.
+   * @param title - Generated title saved for the thread.
+   */
   onTitleGenerated?: (title: string) => void | Promise<void>;
 };
 

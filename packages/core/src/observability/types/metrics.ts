@@ -58,10 +58,15 @@ export interface Histogram {
  * Typed context used for cost estimations.
  */
 export interface CostContext {
+  /** Provider identifier used for cost attribution. */
   provider?: string;
+  /** Model identifier used for cost attribution. */
   model?: string;
+  /** Estimated cost associated with the operation. */
   estimatedCost?: number;
+  /** Unit in which the estimated cost is expressed. */
   costUnit?: string;
+  /** Additional context for estimating or attributing cost. */
   costMetadata?: Record<string, unknown>;
 }
 

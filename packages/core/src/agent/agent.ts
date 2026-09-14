@@ -8015,8 +8015,12 @@ export class Agent<
   >(
     messages: MessageListInput,
     options: AgentExecutionOptionsBase<T> & {
+      /** Schema and generation settings for the structured result. */
       structuredOutput: PublicStructuredOutputOptions<T>;
-    } & { model?: DynamicArgument<MastraModelConfig> },
+    } & {
+      /** Model override or context-dependent model resolver for this execution. */
+      model?: DynamicArgument<MastraModelConfig>;
+    },
   ): Promise<FullOutput<T>>;
   /**
    * Generates a complete response with an explicitly typed structured object.
@@ -8029,8 +8033,12 @@ export class Agent<
   async generate<OUTPUT extends {}>(
     messages: MessageListInput,
     options: AgentExecutionOptionsBase<OUTPUT> & {
+      /** Schema and generation settings for the structured result. */
       structuredOutput: PublicStructuredOutputOptions<OUTPUT>;
-    } & { model?: DynamicArgument<MastraModelConfig> },
+    } & {
+      /** Model override or context-dependent model resolver for this execution. */
+      model?: DynamicArgument<MastraModelConfig>;
+    },
   ): Promise<FullOutput<OUTPUT>>;
   /**
    * Generates a complete response without a per-call structured output override.
@@ -8042,8 +8050,12 @@ export class Agent<
   async generate(
     messages: MessageListInput,
     options: AgentExecutionOptionsBase<unknown> & {
+      /** This overload does not accept a structured-output override. */
       structuredOutput?: never;
-    } & { model?: DynamicArgument<MastraModelConfig> },
+    } & {
+      /** Model override or context-dependent model resolver for this execution. */
+      model?: DynamicArgument<MastraModelConfig>;
+    },
   ): Promise<FullOutput<TOutput>>;
   /**
    * Generates a complete response using the agent's default execution options.

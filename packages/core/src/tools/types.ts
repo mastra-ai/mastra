@@ -22,7 +22,9 @@ import type { Workspace } from '../workspace/workspace';
 import type { ToolStream } from './stream';
 import type { ValidationError } from './validation';
 
+/** AI SDK tool type re-exported through Mastra's external type compatibility layer. */
 export type VercelTool = Tool;
+/** AI SDK v5 tool type accepted by Mastra's tool compatibility layer. */
 export type VercelToolV5 = ToolV5;
 
 export type ToolInvocationOptions = ToolExecutionOptions | ToolCallOptions;
@@ -46,7 +48,10 @@ export type ToolApprovalContext = {
  * return `true` to require approval for that call, `false` to allow it. Enables
  * conditional, per-call approval policies (e.g. regex matching on `toolName`).
  */
-export type RequireToolApprovalFn = (ctx: ToolApprovalContext) => boolean | Promise<boolean>;
+export type RequireToolApprovalFn = (
+  /** Tool-call identity, input and runtime context used to decide approval. */
+  ctx: ToolApprovalContext,
+) => boolean | Promise<boolean>;
 
 /**
  * Global tool approval setting. `true` requires approval for every tool call,
@@ -79,6 +84,7 @@ export type NeedsApprovalContext = {
  */
 export type NeedsApprovalFn = (input: any, ctx?: NeedsApprovalContext) => boolean | Promise<boolean>;
 
+/** Tool-call identity, input and execution context available to lifecycle hooks. */
 export interface ToolHookContext<
   TInput = unknown,
   TContext = unknown,
@@ -94,12 +100,15 @@ export interface ToolHookContext<
   metadata?: TMetadata;
 }
 
+/** Replacement result returned by a hook that skips tool execution. */
 export interface ToolBeforeHookResult<TOutput = unknown> {
   /** Set to false to skip the tool execution and return `output` instead. */
   proceed: false;
+  /** Replacement output returned instead of executing the tool. */
   output: TOutput;
 }
 
+/** Tool-call context extended with the execution output or error. */
 export interface ToolAfterHookContext<
   TInput = unknown,
   TOutput = unknown,
@@ -112,20 +121,29 @@ export interface ToolAfterHookContext<
   error?: unknown;
 }
 
+/** Callbacks around tool execution, including optional pre-execution replacement output. */
 export interface ToolHooks<
   TInput = unknown,
   TOutput = unknown,
   TContext = unknown,
   TMetadata extends Record<string, unknown> = Record<string, unknown>,
 > {
+  /** Inspect a tool call and optionally skip execution with a replacement output. */
   beforeToolCall?: (
+    /** Tool-call input and execution context. */
     context: ToolHookContext<TInput, TContext, TMetadata>,
   ) => void | ToolBeforeHookResult<TOutput> | Promise<void | ToolBeforeHookResult<TOutput>>;
-  afterToolCall?: (context: ToolAfterHookContext<TInput, TOutput, TContext, TMetadata>) => void | Promise<void>;
+  /** Observe the tool output or execution error. */
+  afterToolCall?: (
+    /** Tool-call context with its output or error. */
+    context: ToolAfterHookContext<TInput, TOutput, TContext, TMetadata>,
+  ) => void | Promise<void>;
 }
 
+/** Payload destination: client-facing display or stored conversation transcript. */
 export type ToolPayloadTransformTarget = 'display' | 'transcript';
 
+/** Tool lifecycle phase whose payload is being transformed. */
 export type ToolPayloadTransformPhase =
   | 'input-delta'
   | 'input-available'
@@ -135,24 +153,40 @@ export type ToolPayloadTransformPhase =
   | 'suspend'
   | 'resume';
 
+/** Tool payload and lifecycle context supplied to a destination-specific transform. */
 export type ToolPayloadTransformContext<TInput = unknown, TOutput = unknown, TError = unknown> = {
+  /** Destination receiving the transformed payload. */
   target: ToolPayloadTransformTarget;
+  /** Tool lifecycle phase being transformed. */
   phase: ToolPayloadTransformPhase;
+  /** Name of the tool associated with this payload. */
   toolName: string;
+  /** Identifier of the tool call associated with this payload. */
   toolCallId: string;
+  /** Available tool input. */
   input?: TInput;
+  /** Incremental tool-input text for an input-delta phase. */
   inputTextDelta?: string;
+  /** Available tool output. */
   output?: TOutput;
+  /** Tool error supplied to the transform. */
   error?: TError;
+  /** Payload associated with tool suspension. */
   suspendPayload?: unknown;
+  /** Data supplied when resuming a suspended tool. */
   resumeData?: unknown;
+  /** Provider-specific metadata associated with the payload. */
   providerMetadata?: Record<string, unknown>;
+  /** Additional context supplied by the transform caller. */
   context?: Record<string, unknown>;
 };
 
+/** Value returned by a tool payload transform. */
 export type ToolPayloadTransformResult = unknown;
 
+/** Callback that produces a transformed payload for one target and lifecycle phase. */
 export type ToolPayloadTransformFunction<TInput = unknown, TOutput = unknown, TError = unknown> = (
+  /** Current target, phase and available tool payload. */
   context: ToolPayloadTransformContext<TInput, TOutput, TError>,
 ) => ToolPayloadTransformResult | Promise<ToolPayloadTransformResult>;
 
@@ -170,8 +204,11 @@ export type ToolPayloadTransform<TInput = unknown, TOutput = unknown, TError = u
   Record<ToolPayloadTransformTarget, ToolPayloadTransformTargetConfig<TInput, TOutput, TError>>
 >;
 
+/** Shared payload transform and the destinations to which it applies. */
 export type ToolPayloadTransformPolicy = {
+  /** Callback applied to tool payloads for the selected destinations. */
   transformToolPayload?: ToolPayloadTransformFunction;
+  /** Payload destinations enabled for this policy. */
   targets?: ToolPayloadTransformTarget[];
 };
 
@@ -252,24 +289,45 @@ export type MCPServerContext = ServerContext & {
   _meta?: ServerContext['mcpReq']['_meta'];
 };
 
-// MCP tool execution context - properties specific when tools are executed via Model Context Protocol
+/** Protocol context and client interaction helpers for tools executed through MCP. */
 export interface MCPToolExecutionContext {
   /** MCP protocol context passed by the server */
   extra: MCPServerContext;
   /** Elicitation handler for interactive user input during tool execution */
   elicitation: {
-    sendRequest: (request: ElicitRequest['params']) => Promise<ElicitResult>;
+    /** Request input from the calling client and return its elicitation response. */
+    sendRequest: (
+      /** Elicitation request parameters sent to the client. */
+      request: ElicitRequest['params'],
+    ) => Promise<ElicitResult>;
   };
   /**
    * Sends a `notifications/message` log notification to the calling client.
    * Messages below the client's minimum level (set via `logging/setLevel`) are dropped.
    */
-  log?: (level: MCPLoggingLevel, message: string, data?: Record<string, unknown>) => Promise<void>;
+  log?: (
+    /** Severity of the client log notification. */
+    level: MCPLoggingLevel,
+    /** Human-readable log message. */
+    message: string,
+    /** Additional structured log data. */
+    data?: Record<string, unknown>,
+  ) => Promise<void>;
   /**
    * Sends a `notifications/progress` notification to the calling client.
    * No-op if the caller did not request progress tracking (no progressToken in `_meta`).
    */
-  progress?: (params: { progress: number; total?: number; message?: string }) => Promise<void>;
+  progress?: (
+    /** Progress update delivered to the calling client. */
+    params: {
+      /** Amount of work completed. */
+      progress: number;
+      /** Total amount of work, when known. */
+      total?: number;
+      /** Human-readable progress status. */
+      message?: string;
+    },
+  ) => Promise<void>;
 }
 
 /**

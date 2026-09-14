@@ -49,7 +49,10 @@ export interface RoleDefinition {
  * ```
  */
 export type RoleMapping = {
-  /** Map role name to array of permission patterns */
+  /**
+   * Map role name to array of permission patterns.
+   * @param role - Provider role name, or the default-role selector.
+   */
   [role: string]: PermissionPattern[];
 };
 
@@ -162,7 +165,14 @@ export interface IRBACProvider<TUser = unknown> {
    *
    * @returns Array of role descriptors
    */
-  getAvailableRoles?(): Promise<{ id: string; name: string }[]>;
+  getAvailableRoles?(): Promise<
+    {
+      /** Role identifier. */
+      id: string;
+      /** Display name of the role. */
+      name: string;
+    }[]
+  >;
 
   /**
    * Get the resolved permissions for a specific role.

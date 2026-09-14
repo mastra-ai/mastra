@@ -33,36 +33,59 @@ type QueryOperator =
   | ElementOperator
   | RegexOperator;
 
+/** Empty object accepted as a value by the shared filter type. */
 type EmptyObject = Record<string, never>;
 
+/** Scalar, date, nullish or empty-object operand accepted by the shared filter type. */
 type FilterValue = string | number | boolean | Date | null | undefined | EmptyObject;
 
 // Logical operators are handled at the top level as objects, not as values here
 // $and, $or, $nor, $not are handled in LogicalCondition
+/** Operand types for the shared field operators. Individual vector stores may support a subset. */
 type OperatorValueMap<Op extends string = string, ValueMap extends Record<string, any> = any> = {
+  /** Value that the field must equal. */
   $eq: FilterValue;
+  /** Value that the field must not equal. */
   $ne: FilterValue;
+  /** Exclusive lower bound for the field. */
   $gt: number | string | Date;
+  /** Inclusive lower bound for the field. */
   $gte: number | string | Date;
+  /** Exclusive upper bound for the field. */
   $lt: number | string | Date;
+  /** Inclusive upper bound for the field. */
   $lte: number | string | Date;
+  /** Values that must all occur in an array field. */
   $all: FilterValue[];
+  /** Candidate values matched by membership. */
   $in: FilterValue[];
+  /** Candidate values excluded by membership. */
   $nin: FilterValue[];
+  /** Criteria that an element of an array field must satisfy. */
   $elemMatch: Record<string, unknown>;
+  /** Whether the field must exist. */
   $exists: boolean;
+  /** Regular expression pattern for the field. */
   $regex: string | RegExp;
+  /** Regular expression flags associated with the pattern. */
   $options: string;
+  /** Field operator condition or regular expression to negate. */
   $not: OperatorCondition<Op, ValueMap> | RegExp;
 };
 
+/** Whether each logical operator receives a list of branches or a single branch. */
 type LogicalOperatorValueMap = {
+  /** List of branches that must all match. */
   $and: 'array';
+  /** List of branches of which at least one must match. */
   $or: 'array';
+  /** List of branches of which none may match. */
   $nor: 'array';
+  /** Single branch whose match is negated. */
   $not: 'object';
 };
 
+/** Field operators prohibited at the filter root rather than beneath a field name. */
 type BlacklistedRootOperators =
   | '$eq'
   | '$ne'
@@ -78,9 +101,10 @@ type BlacklistedRootOperators =
   | '$options'
   | '$elemMatch';
 
+/** Direct field match value, either one operand or an array of operands. */
 type VectorFieldValue = FilterValue | FilterValue[];
 
-// Vector filter parameterized by operator set
+/** Metadata filter parameterized by operator support, operand types and forbidden root operators. */
 type VectorFilter<
   Op extends keyof ValueMap = keyof OperatorValueMap,
   ValueMap extends Record<string, any> = OperatorValueMap,
@@ -89,6 +113,7 @@ type VectorFilter<
   FieldValue = VectorFieldValue,
 > = FilterCondition<Op, ValueMap, LogicalValueMap, Blacklisted, FieldValue> | null | undefined;
 
+/** Field or logical condition intersected with the set of forbidden root operators. */
 type FilterCondition<
   Op extends keyof ValueMap = keyof OperatorValueMap,
   ValueMap extends Record<string, any> = OperatorValueMap,
@@ -98,20 +123,25 @@ type FilterCondition<
 > = (FieldCondition<Op, ValueMap, FieldValue> | LogicalCondition<Op, ValueMap, LogicalValueMap>) &
   ForbiddenRootOperators<Blacklisted>;
 
-// Field condition can be a value or an operator condition
+/** Map of field names to direct values or operator conditions. */
 type FieldCondition<
   Op extends keyof ValueMap = keyof OperatorValueMap,
   ValueMap extends Record<string, any> = OperatorValueMap,
   FieldValue = VectorFieldValue,
 > = {
+  /**
+   * Match condition for a metadata field.
+   * @param field - Metadata field name interpreted by the vector store's translator.
+   */
   [field: string]: OperatorCondition<Op, ValueMap> | FieldValue;
 };
 
+/** Marks prohibited root operator keys as optional properties with no permitted value. */
 type ForbiddenRootOperators<Blacklisted extends string> = {
   [K in Blacklisted]?: never;
 };
 
-// Logical conditions
+/** Recursive logical condition whose branch shape follows the configured logical operator map. */
 type LogicalCondition<
   Op extends keyof ValueMap = keyof OperatorValueMap,
   ValueMap extends Record<string, any> = OperatorValueMap,
@@ -126,13 +156,14 @@ type LogicalCondition<
       };
 }[keyof LogicalValueMap];
 
+/** A field condition or another nested logical condition. */
 type LogicalBranch<
   Op extends keyof ValueMap = keyof OperatorValueMap,
   ValueMap extends Record<string, any> = OperatorValueMap,
   LogicalValueMap extends Record<string, any> = LogicalOperatorValueMap,
 > = FieldCondition<Op, ValueMap> | LogicalCondition<Op, ValueMap, LogicalValueMap>;
 
-// Base operator condition, parameterized by operator set
+/** Optional field operators mapped to their operand types, excluding branch-list logical operators. */
 type OperatorCondition<
   Op extends keyof ValueMap = keyof OperatorValueMap,
   ValueMap extends Record<string, any> = OperatorValueMap,

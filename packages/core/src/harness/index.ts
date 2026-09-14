@@ -75,11 +75,13 @@ export type {
 export type { MastraDBMessage, MastraMessageContentV2, MastraMessagePart } from '../agent/message-list/state/types';
 
 /**
+ * Compatibility alias for the agent controller.
  * @deprecated Use {@link AgentController} instead. `Harness` is retained as a
  * backwards-compatible alias and will be removed in a future major release.
  */
 export const Harness = AgentController;
 /**
+ * Compatibility alias for the agent controller.
  * @deprecated Use {@link AgentController} instead. `Harness` is retained as a
  * backwards-compatible alias and will be removed in a future major release.
  */

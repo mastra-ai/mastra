@@ -1,16 +1,24 @@
 import type { Mastra } from '../mastra';
 import type { RequestContext } from '../request-context';
 
+/** Static value or callback resolving a value from the current request context. */
+// Preserve the source-derived identity of the destructured binding.
+// oxfmt-ignore
 export type DynamicArgument<T, TRequestContext extends Record<string, any> | unknown = unknown> =
   | T
-  | (({
+  | ((
+    /** Request-scoped dependencies available when resolving the value. */
+    {
       requestContext,
       mastra,
     }: {
+      /** Request context passed to the dynamic value resolver. */
       requestContext: RequestContext<TRequestContext>;
+      /** Mastra instance, when available to the resolver. */
       mastra?: Mastra;
     }) => Promise<T> | T);
 
+/** Excludes the empty string literal from a string type. */
 export type NonEmpty<T extends string> = T extends '' ? never : T;
 
 /**
@@ -80,4 +88,7 @@ export type IdGeneratorContext = {
  * });
  * ```
  */
-export type MastraIdGenerator = (context?: IdGeneratorContext) => NonEmpty<string>;
+export type MastraIdGenerator = (
+  /** Identity category and originating primitive, when supplied. */
+  context?: IdGeneratorContext,
+) => NonEmpty<string>;

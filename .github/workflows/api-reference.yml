@@ -1,0 +1,37 @@
+name: API reference validation
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: api-reference-validation-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate API reference
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      API_REFERENCE_SOURCE_REVISION: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Verify checked-out revision
+        run: test "$(git rev-parse HEAD)" = "$API_REFERENCE_SOURCE_REVISION"
+      - uses: ./.github/actions/setup-pnpm-node
+      - name: Build extraction prerequisites
+        run: pnpm turbo build --filter ./packages/core
+      - name: Check API artifact freshness
+        run: pnpm --filter mastra-docs run api:check
+      - name: Validate source-backed pages
+        run: pnpm --filter mastra-docs run api:validate
+      - name: Verify public source revision
+        run: pnpm --filter mastra-docs exec tsx scripts/api-reference/publication.ts

@@ -11,7 +11,18 @@ import type { StepResult } from '../workflows/types';
 // Sampling Config
 // ============================================================================
 
-export type ScoringSamplingConfig = { type: 'none' } | { type: 'ratio'; rate: number };
+/** Sampling applied to eligible scoring runs, after trace and eligibility checks. */
+export type ScoringSamplingConfig =
+  | {
+      /** Scores every eligible run without ratio sampling. */
+      type: 'none';
+    }
+  | {
+      /** Selects runs deterministically using the trace ID, or run ID when untraced. */
+      type: 'ratio';
+      /** Fraction of eligible runs to score, from zero to one. */
+      rate: number;
+    };
 
 // ============================================================================
 // Scoring Source & Entity Type
@@ -272,13 +283,19 @@ export type ScorerOptions = {
   isLLMScorer?: boolean;
 };
 
+/** Agent input messages and context provided to a scorer. */
 export type ScorerRunInputForAgent = {
+  /** Input messages supplied for the run. */
   inputMessages: MastraDBMessage[];
+  /** Messages recalled from memory for the run. */
   rememberedMessages: MastraDBMessage[];
+  /** System messages used as agent instructions. */
   systemMessages: CoreMessage[];
+  /** Additional system messages grouped by their source tag. */
   taggedSystemMessages: Record<string, CoreSystemMessage[]>;
 };
 
+/** Agent response messages provided as scorer output. */
 export type ScorerRunOutputForAgent = MastraDBMessage[];
 
 // ============================================================================

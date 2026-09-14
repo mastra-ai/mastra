@@ -11,27 +11,62 @@ import type { Mastra } from '../mastra';
 import type { RequestContext } from '../request-context';
 import type { IMastraAuthProvider } from './auth';
 
+/** Fine-grained resource authorization requirements for a custom route. */
 type RouteFGAConfig = FGARouteConfig;
 
+/** HTTP methods accepted by custom routes, including ALL to match every method. */
 export type Methods = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'ALL';
 
+/**
+ * Custom route handler that receives the request context and returns an HTTP response.
+ * @param c - Request context passed to the custom handler.
+ */
 export type ApiRouteHandler = (c: any) => Response | Promise<Response>;
 
+/** Path, method and authorization settings shared by custom route formats. */
 type ApiRouteBase = {
+  /** URL path or path pattern registered for the route. */
   path: string;
+  /** HTTP method matched by the route. */
   method: Methods;
+  /** Whether the route requires authentication when server authentication is configured. */
   requiresAuth?: boolean;
+  /** Required permission, or alternative permissions accepted by the authorization middleware. */
   requiresPermission?: MastraFGAPermissionInput | MastraFGAPermissionInput[];
+  /** Resource-level fine-grained authorization requirements. */
   fga?: RouteFGAConfig;
   /** Framework-generated route. Bypasses the apiPrefix collision check. Mastra-internal — do not use. */
   _mastraInternal?: true;
 };
 
+/** Hono custom route with a direct handler or an asynchronous Mastra-aware handler factory. */
 type HonoApiRoute = ApiRouteBase & {
+  /** Middleware applied to this route. */
   middleware?: MiddlewareHandler | MiddlewareHandler[];
+  /** OpenAPI metadata describing this route. */
   openapi?: DescribeRouteOptions;
+  /** Cross-origin request settings for this route. */
   cors?: CorsOptions;
-} & ({ handler: Handler } | { createHandler: ({ mastra }: { mastra: Mastra }) => Promise<ApiRouteHandler> });
+} & (
+    | {
+        /** Hono handler invoked for matching requests. */
+        handler: Handler;
+      }
+    | {
+        /**
+         * Creates the route handler with access to the Mastra instance.
+         */
+        // Preserve the source-derived identity of the destructured binding.
+        // oxfmt-ignore
+        createHandler: (
+          /** Factory context containing the hosting Mastra instance. */
+          { mastra }: {
+            /** Mastra instance hosting the route. */
+            mastra: Mastra;
+          },
+        ) => Promise<ApiRouteHandler>;
+      }
+  );
 
 /**
  * Structural mirror of the generated OpenAPI metadata attached to a
@@ -40,28 +75,45 @@ type HonoApiRoute = ApiRouteBase & {
  * `generateRouteOpenAPI()` in `packages/server/src/server/server-adapter/routes/route-builder.ts`.
  */
 type SchemaApiRouteOpenAPI = {
+  /** Whether to omit the route from the OpenAPI document. */
   hide?: boolean;
+  /** Short summary of the operation. */
   summary?: string;
+  /** Detailed description of the operation. */
   description?: string;
+  /** Tags used to group the operation in API documentation. */
   tags?: string[];
+  /** Whether the operation is deprecated. */
   deprecated?: boolean;
+  /** Schemas describing URL parameters. */
   requestParams?: {
+    /** Schema for path parameters. */
     path?: unknown;
+    /** Schema for query parameters. */
     query?: unknown;
   };
+  /** Generated request-body documentation. */
   requestBody?: {
+    /** Request-body schemas keyed by media type. */
     content: {
+      /** JSON request-body definition. */
       'application/json': {
+        /** Schema describing the JSON request body. */
         schema: unknown;
       };
     };
   };
+  /** Response definitions keyed by HTTP status code. */
   responses: Record<
     string,
     {
+      /** Description of the response. */
       description: string;
+      /** Response-body schemas keyed by media type. */
       content?: {
+        /** JSON response-body definition. */
         'application/json': {
+          /** Schema describing the JSON response body. */
           schema: unknown;
         };
       };
@@ -82,36 +134,68 @@ type SchemaApiRouteOpenAPI = {
 type SchemaApiRoute = ApiRouteBase & {
   /** Runtime discriminator attached by `createRoute()`. */
   readonly _mastraSchemaRoute: true;
+  /** Response handling mode used by the server adapter. */
   responseType: 'stream' | 'json' | 'datastream-response' | 'mcp-http' | 'mcp-sse';
+  /**
+   * Handles validated route parameters and server context, returning the route result.
+   * @param params - Validated request parameters combined with the adapter's server context.
+   */
   handler(params: any): Promise<unknown>;
+  /** Encoding for a streaming response: server-sent events or the default stream format. */
   streamFormat?: 'sse' | 'stream';
+  /** Sends an initial connection comment when the response uses server-sent events. */
   sseFlushOnConnect?: boolean;
+  /** Schema used to validate URL path parameters. */
   pathParamSchema?: unknown;
+  /** Schema used to validate URL query parameters. */
   queryParamSchema?: unknown;
+  /** Schema used to validate the request body. */
   bodySchema?: unknown;
+  /** Schema describing the response body. */
   responseSchema?: unknown;
+  /** Generated OpenAPI metadata for the route. */
   openapi?: SchemaApiRouteOpenAPI;
+  /** Route-specific maximum request-body size in bytes. */
   maxBodySize?: number;
+  /** Whether this route is deprecated. */
   deprecated?: boolean;
+  /** Customizes the response to invalid path, query or body input. */
   onValidationError?: ValidationErrorHook;
 };
 
+/** Custom API route registered as a Hono handler or a schema-aware server-adapter route. */
 export type ApiRoute = HonoApiRoute | SchemaApiRoute;
 
-export type Middleware = MiddlewareHandler | { path: string; handler: MiddlewareHandler };
+/** Server middleware applied globally or restricted to a path pattern. */
+export type Middleware =
+  | MiddlewareHandler
+  | {
+      /** Path pattern matched by this middleware. */
+      path: string;
+      /** Middleware invoked for matching requests. */
+      handler: MiddlewareHandler;
+    };
 
+/** Options accepted by Hono's cross-origin resource sharing middleware. */
 export type CorsOptions = Parameters<typeof cors>[0];
 
+/** Hono request context containing Mastra and request-scoped server variables. */
 export type ContextWithMastra = Context<{
+  /** Variables available through the Hono context. */
   Variables: {
+    /** Mastra instance serving the request. */
     mastra: Mastra;
+    /** Request-scoped context passed to Mastra operations. */
     requestContext: RequestContext;
+    /** Custom-route authentication requirements indexed by route key. */
     customRouteAuthConfig?: Map<string, boolean>;
   };
 }>;
 
+/** Authentication configuration parameterized by the user type and Mastra's Hono context. */
 export type MastraAuthConfig<TUser = unknown> = InternalMastraAuthConfig<TUser, ContextWithMastra>;
 
+/** Controls HTTP request logging and which request details are included. */
 export type HttpLoggingConfig = {
   /**
    * Enable HTTP request logging
@@ -144,13 +228,18 @@ export type HttpLoggingConfig = {
   redactHeaders?: string[];
 };
 
+/** Request section whose schema validation failed. */
 export type ValidationErrorContext = 'query' | 'body' | 'path';
 
+/** Custom HTTP response returned by a request-validation error hook. */
 export type ValidationErrorResponse = {
+  /** HTTP status code for the validation error response. */
   status: number;
+  /** Response body describing the validation failure. */
   body: unknown;
 };
 
+/** Signing key and JSON Web Signature headers for a served A2A Agent Card. */
 export type A2AAgentCardSigningConfig = {
   /**
    * Private signing key used to sign the Agent Card.
@@ -162,7 +251,12 @@ export type A2AAgentCardSigningConfig = {
    * Optional fields like `kid` and `jku` can be supplied here.
    */
   protectedHeader: {
+    /** Signing algorithm identified in the protected JSON Web Signature header. */
     alg: string;
+    /**
+     * Additional protected JSON Web Signature headers.
+     * @param key - Name of an additional protected header.
+     */
     [key: string]: unknown;
   };
   /**
@@ -171,6 +265,7 @@ export type A2AAgentCardSigningConfig = {
   header?: Record<string, unknown>;
 };
 
+/** Server settings for Agent-to-Agent protocol integration. */
 export type A2AConfig = {
   /**
    * Optional Agent Card signing configuration.
@@ -179,11 +274,17 @@ export type A2AConfig = {
   agentCardSigning?: A2AAgentCardSigningConfig;
 };
 
+/**
+ * Returns a custom validation error response, or no value to use default error handling.
+ * @param error - Schema validation error for the request.
+ * @param context - Request section that failed validation.
+ */
 export type ValidationErrorHook = (
   error: ZodError,
   context: ValidationErrorContext,
 ) => ValidationErrorResponse | undefined | void;
 
+/** Enables stored-resource scoping or configures how each request's scope is resolved. */
 export type StoredResourceScopeConfig =
   | boolean
   | {
@@ -196,9 +297,12 @@ export type StoredResourceScopeConfig =
       /**
        * Resolve the stored-resource scope for the current request. When omitted,
        * Mastra uses MASTRA_RESOURCE_ID_KEY from the request context.
+       * @param context - Request context and authenticated user used to resolve the resource scope.
        */
       resolve?: (context: {
+        /** Context values associated with the current request. */
         requestContext?: RequestContext;
+        /** Authenticated user associated with the current request, when available. */
         user?: unknown;
       }) => string | undefined | null | Promise<string | undefined | null>;
       /**
@@ -209,6 +313,7 @@ export type StoredResourceScopeConfig =
       requireScope?: boolean;
     };
 
+/** Server behavior for persisted resources such as stored agents and tools. */
 export type StoredResourcesConfig = {
   /**
    * Opt-in tenant/resource scoping for stored resources. When enabled, stored
@@ -217,6 +322,7 @@ export type StoredResourcesConfig = {
   scope?: StoredResourceScopeConfig;
 };
 
+/** Server binding, routing, authentication and request-handling configuration. */
 export type ServerConfig = {
   /**
    * Port for the server
@@ -260,7 +366,8 @@ export type ServerConfig = {
    */
   apiPrefix?: string;
   /**
-   * Timeout for the server
+   * Request timeout in milliseconds for the generated server.
+   * @default 180000
    */
   timeout?: number;
   /**
@@ -301,8 +408,15 @@ export type ServerConfig = {
    */
   middleware?: Middleware | Middleware[];
   /**
-   * CORS configuration for the server.
-   * @default { origin: '*', allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'], allowHeaders: ['Content-Type', 'Authorization', 'A2A-Version', 'x-mastra-client-type', 'x-mastra-dev-playground'], exposeHeaders: ['Content-Length', 'X-Requested-With'], credentials: false }
+   * CORS configuration for the server. Set to `false` to disable CORS.
+   * `origin` selects allowed origins, `allowMethods` selects HTTP methods, and
+   * `allowHeaders` selects request headers. `exposeHeaders` selects headers readable
+   * by browsers, `credentials` permits credentials, and `maxAge` sets the preflight
+   * cache duration in seconds. The generated server merges custom allowed/exposed
+   * headers with its built-in headers. With authentication enabled, its global
+   * policy defaults to credentials enabled and reflecting the requesting origin;
+   * explicit origin and credentials settings override those defaults.
+   * @default Without authentication: { origin: '*', allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'], allowHeaders: ['Content-Type', 'Authorization', 'A2A-Version', 'x-mastra-client-type', 'x-mastra-dev-playground'], exposeHeaders: ['Content-Length', 'X-Requested-With'], credentials: false, maxAge: 3600 }
    */
   cors?: CorsOptions | false;
   /**
@@ -310,7 +424,8 @@ export type ServerConfig = {
    */
   build?: {
     /**
-     * Enable Swagger UI
+     * Enable Swagger UI at `/swagger-ui` for interactive API exploration.
+     * Also enable `openAPIDocs` so the UI can load the API specification.
      * @default false
      */
     swaggerUI?: boolean;
@@ -333,7 +448,9 @@ export type ServerConfig = {
      */
     apiReqLogs?: boolean | HttpLoggingConfig;
     /**
-     * Enable OpenAPI documentation
+     * Enable the OpenAPI specification at `/api/openapi.json` with the default API prefix.
+     * Built-in routes use the API prefix as their server URL; custom routes use
+     * a per-path server URL of `/`.
      * @default false
      */
     openAPIDocs?: boolean;
@@ -366,6 +483,8 @@ export type ServerConfig = {
      * When omitted, the principal resolved by `server.auth` is bridged
      * automatically. Provide this hook when your own middleware performs the
      * verification and you want full control over the resulting `AuthInfo`.
+     * @param req - Incoming request whose auth field is passed to the MCP transport.
+     * @param requestContext - Context associated with the current Mastra request.
      */
     setRequestAuth?: (req: IncomingMessage, requestContext: RequestContext) => void | Promise<void>;
   };
@@ -449,7 +568,9 @@ export type ServerConfig = {
    * If you want to run `mastra dev` with HTTPS, you can run it with the `--https` flag and provide the key and cert files here.
    */
   https?: {
+    /** Private key bytes used by the local HTTPS server. */
     key: Buffer;
+    /** Certificate bytes used by the local HTTPS server. */
     cert: Buffer;
   };
 

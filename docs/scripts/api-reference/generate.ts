@@ -6,12 +6,14 @@ import {
   Application,
   Context,
   Converter,
+  DeclarationReflection,
   FileRegistry,
   ReflectionKind,
   Type,
   makeRecursiveVisitor,
   normalizePath,
   type ProjectReflection,
+  type Comment,
   type ReferenceType,
   type Reflection,
 } from 'typedoc'
@@ -61,7 +63,60 @@ export async function convertPilot() {
     excludeProtected: true,
     excludeInternal: true,
   })
-  const convertType = app.converter.convertType.bind(app.converter)
+  const methodComments = new Map<DeclarationReflection, Comment>()
+  const functionParameterComments = new Map<DeclarationReflection, (Comment | undefined)[]>()
+  app.converter.on(Converter.EVENT_CREATE_DECLARATION, (context, reflection) => {
+    const declaration = context.getSymbolFromReflection(reflection)?.declarations?.find(ts.isFunctionTypeNode)
+    if (
+      !declaration ||
+      ![...ownedPackages.values()].some(directory =>
+        declaration.getSourceFile().fileName.startsWith(path.join(repositoryRoot, directory, 'src/')),
+      )
+    )
+      return
+    // Nested function-type conversion bypasses the public convertType/signature hooks.
+    functionParameterComments.set(
+      reflection,
+      declaration.parameters.map(node => context.getNodeComment(node, false)),
+    )
+  })
+  app.converter.on(Converter.EVENT_CREATE_SIGNATURE, (context, signature, declaration) => {
+    if (!declaration || ts.isJSDocSignature(declaration)) return
+    if (
+      ![...ownedPackages.values()].some(directory =>
+        declaration.getSourceFile().fileName.startsWith(path.join(repositoryRoot, directory, 'src/')),
+      )
+    )
+      return
+    // TypeDoc's node-based signature conversion omits inline parameter comments.
+    signature.parameters?.forEach((parameter, index) => {
+      const node = declaration.parameters[index]
+      if (node && !parameter.comment) parameter.comment = context.getNodeComment(node, false)
+    })
+    const parent = signature.parent
+    if (ts.isMethodSignature(declaration) && parent instanceof DeclarationReflection) {
+      const comment = context.getNodeComment(declaration, false)
+      if (comment) methodComments.set(parent, comment)
+    }
+  })
+  app.converter.on(
+    Converter.EVENT_RESOLVE_BEGIN,
+    () => {
+      for (const [reflection, comments] of functionParameterComments) {
+        reflection.signatures?.[0]?.parameters?.forEach((parameter, index) => {
+          if (!parameter.comment && comments[index]) parameter.comment = comments[index].clone()
+        })
+      }
+      // A single source method signature also documents its distinct method owner.
+      for (const [method, comment] of methodComments) {
+        if (!method.comment && method.signatures?.length === 1) method.comment = comment.clone()
+      }
+    },
+    9_000,
+  )
+  const originalConvertType = app.converter.convertType.bind(app.converter)
+  const convertType = (context: Context, type: ts.Type | ts.TypeNode | undefined, node?: ts.TypeNode) =>
+    type && 'kind' in type ? originalConvertType(context, type) : originalConvertType(context, type, node)
   app.converter.convertType = (context, type: ts.Type | ts.TypeNode | undefined, node?: ts.TypeNode) => {
     const annotation = node ?? (type && 'kind' in type ? type : undefined)
     if (annotation && ts.isIndexedAccessTypeNode(annotation) && ts.isTypeReferenceNode(annotation.objectType)) {

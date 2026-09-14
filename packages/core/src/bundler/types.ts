@@ -1,13 +1,19 @@
+/** Dependency handling and output settings for the Mastra bundler. */
 export type BundlerConfig = {
   /**
    * Controls which dependencies are excluded from the bundle and installed separately.
    * - `true`: Excludes all non-workspace packages from bundling
-   * - `string[]`: Specifies custom packages to exclude (merged with global externals like 'pg', '@libsql/client')
+   * - `false`: Disables the all-dependencies preset; built-in global externals still apply.
+   * - `string[]`: Specifies custom packages to exclude (merged with global externals like 'pg', '@libsql/client').
+   * The `mastra build` CLI also retains array entries as runtime dependencies and
+   * enables the all-dependencies preset. Use `false` to disable that preset.
+   * @default true for `mastra build`
    */
   externals?: boolean | string[];
   /**
    * Enables source map generation for debugging bundled code.
    * Generates `.mjs.map` files alongside bundled output.
+   * @default false
    */
   sourcemap?: boolean;
   /**
@@ -17,6 +23,7 @@ export type BundlerConfig = {
    *
    * Enable it when packaging for production — a smaller bundle is cheaper to
    * ship in a container image or to an on-prem target.
+   * @default false
    *
    * @example
    * ```typescript
@@ -29,6 +36,7 @@ export type BundlerConfig = {
   /**
    * Packages requiring TypeScript/modern JS transpilation during bundling.
    * Automatically includes workspace packages.
+   * @default [] for the explicitly configured package list
    */
   transpilePackages?: string[];
   /**
@@ -47,5 +55,8 @@ export type BundlerConfig = {
    */
   dynamicPackages?: string[];
 
+  /** Symbol-keyed bundler flags.
+   * @param key - Symbol identifying a bundler flag.
+   */
   [key: symbol]: boolean | undefined;
 };

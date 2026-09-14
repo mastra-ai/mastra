@@ -22,6 +22,24 @@
   }
 }
 
+/* Keep the theme's 996px desktop sidebar without DocRoot's one-pixel sizing gap. */
+@media (min-width: 996px) and (max-width: 996px) {
+  :global(.theme-doc-sidebar-container:has(+ main [data-api-surface])) {
+    flex-shrink: 0;
+  }
+  :global(.theme-doc-sidebar-container + main:has([data-api-surface])) {
+    min-width: 0;
+    max-width: calc(100% - var(--doc-sidebar-width, 280px));
+  }
+}
+
+@media (min-width: 996px) {
+  .appendixMain[data-api-parent-sidebar] {
+    margin-inline-start: var(--doc-sidebar-width, 280px);
+    width: calc(100% - var(--doc-sidebar-width, 280px));
+  }
+}
+
 @media (min-width: 997px) {
   .appendixMain {
     width: calc(100% - var(--doc-sidebar-hidden-width, 30px));

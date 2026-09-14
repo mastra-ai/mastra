@@ -210,6 +210,7 @@ export type TimeTravelContext<P, R, S, T> = Record<
   }
 >;
 
+/** Status of a workflow step result. */
 export type WorkflowStepStatus = StepResult<any, any, any, any>['status'];
 
 export type StepsRecord<T extends readonly Step<any, any, any, any, any, any, any>[]> = {
@@ -279,6 +280,7 @@ export type StreamEvent =
   // vnext events
   | WorkflowStreamEvent;
 
+/** Lifecycle status of a workflow execution. */
 export type WorkflowRunStatus =
   | 'running'
   | 'success'

@@ -37,12 +37,19 @@ export type MastraMessageV1 = {
  */
 export type MessageType = MastraMessageV1;
 
+/** Stored conversation thread identity, timestamps and metadata. */
 export type StorageThreadType = {
+  /** Unique conversation thread identifier. */
   id: string;
+  /** Human-readable thread title, when set. */
   title?: string;
+  /** Resource that owns the thread. */
   resourceId: string;
+  /** Time the thread was created. */
   createdAt: Date;
+  /** Time the thread was last updated. */
   updatedAt: Date;
+  /** Application and Mastra metadata associated with the thread. */
   metadata?: Record<string, unknown>;
 };
 
@@ -177,7 +184,9 @@ export type MessageResponse<T extends 'raw' | 'core_message'> = {
   core_message: CoreMessage[];
 }[T];
 
+/** Shared enablement, storage scope and delivery settings for working memory. */
 type BaseWorkingMemory = {
+  /** Whether working memory is enabled. */
   enabled: boolean;
   /**
    * Scope for working memory storage.
@@ -207,33 +216,51 @@ type BaseWorkingMemory = {
    * @default true
    */
   agentManaged?: boolean;
-  /** @deprecated The `use` option has been removed. Working memory always uses tool-call mode. */
+  /**
+   * Removed working-memory update mode selector.
+   * @deprecated The `use` option has been removed. Working memory always uses tool-call mode.
+   */
   use?: never;
 };
 
+/** Template-based working memory with stable or next-generation update behavior. */
 type TemplateWorkingMemory =
   | (BaseWorkingMemory & {
+      /** Text template defining the working-memory structure. */
       template: string;
+      /** Schema-based configuration is excluded when a template is supplied. */
       schema?: never;
+      /** Selects stable template working-memory behavior. */
       version?: 'stable';
     })
   | (Omit<BaseWorkingMemory, 'useStateSignals'> & {
+      /** Text template defining the working-memory structure. */
       template: string;
+      /** Schema-based configuration is excluded when a template is supplied. */
       schema?: never;
+      /** Selects next-generation template working-memory behavior. */
       version: 'vnext';
+      /** State-signal delivery is unsupported with next-generation templates. */
       useStateSignals?: false;
     });
 
+/** Working memory described by a structured schema instead of a text template. */
 type SchemaWorkingMemory = BaseWorkingMemory & {
+  /** Schema defining the working-memory data. */
   schema: PublicSchema;
+  /** Text templates cannot be combined with a working-memory schema. */
   template?: never;
 };
 
+/** Working-memory settings without a custom template or schema. */
 type WorkingMemoryNone = BaseWorkingMemory & {
+  /** No custom text template is supplied for this configuration. */
   template?: never;
+  /** No custom schema is supplied for this configuration. */
   schema?: never;
 };
 
+/** Working-memory configuration using a template, schema or neither. */
 export type WorkingMemory = TemplateWorkingMemory | SchemaWorkingMemory | WorkingMemoryNone;
 
 /**
@@ -354,7 +381,14 @@ export type SemanticRecall = {
    * messageRange: { before: 1, after: 3 } // 1 before, 3 after
    * ```
    */
-  messageRange: number | { before: number; after: number };
+  messageRange:
+    | number
+    | {
+        /** Number of messages preceding each semantic match to include. */
+        before: number;
+        /** Number of messages following each semantic match to include. */
+        after: number;
+      };
 
   /**
    * Scope for semantic search queries.
@@ -429,6 +463,7 @@ export type SemanticRecall = {
  */
 export type ObservationalMemoryModelSettings = AgentExecutionOptions['modelSettings'];
 
+/** Idle-duration setting for activating buffered observations or reflections. */
 export type ObservationalMemoryActivationTTL = number | string | 'auto' | false;
 
 /**
@@ -898,7 +933,16 @@ export interface ObservationalMemoryOptions {
    *
    * @default false
    */
-  retrieval?: boolean | { vector?: boolean; scope?: 'thread' | 'resource'; instructions?: string };
+  retrieval?:
+    | boolean
+    | {
+        /** Enable semantic search using the memory vector store and embedder. */
+        vector?: boolean;
+        /** Restrict recall to the current thread or allow browsing across the resource. */
+        scope?: 'thread' | 'resource';
+        /** Application guidance appended after the built-in retrieval instructions. */
+        instructions?: string;
+      };
 }
 
 /**
@@ -1081,17 +1125,21 @@ type BaseMemoryConfig = {
    */
   threads?: {
     /**
+     * Legacy thread-title generation configuration.
      * @deprecated Moved to top-level `generateTitle`. Using `threads.generateTitle` will throw an error.
      */
     generateTitle?:
       | boolean
       | {
+          /** Model configured for legacy title generation. */
           model: DynamicArgument<MastraModelConfig>;
+          /** Instructions configured for legacy title generation. */
           instructions?: DynamicArgument<string>;
         };
   };
 };
 
+/** Internal memory configuration combining retrieval settings and working-memory options. */
 export type MemoryConfigInternal = BaseMemoryConfig & {
   /**
    * Working memory configuration for persistent user data and preferences.

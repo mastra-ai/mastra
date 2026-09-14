@@ -13,38 +13,104 @@ import type { StructuredOutputOptions } from './processors';
 // (Prevents TypeScript from expanding Zod generics in .d.ts output)
 // =========================================================================
 
-export type TextPartType = { type: 'text'; text: string };
+/** Text content accepted by the processor message schema. */
+export type TextPartType = {
+  /** Identifies a text part. */
+  type: 'text';
+  /** Text carried by the part. */
+  text: string;
+};
 
-export type ImagePartType = { type: 'image'; image: string | URL | Uint8Array; mimeType?: string };
+/** Image content accepted by the processor message schema. */
+export type ImagePartType = {
+  /** Identifies an image part. */
+  type: 'image';
+  /** Image represented as a string, URL or bytes. */
+  image: string | URL | Uint8Array;
+  /** Media type of the image, when provided. */
+  mimeType?: string;
+};
 
-export type FilePartType = { type: 'file'; data: string | URL | Uint8Array; mimeType: string };
+/** File content accepted by the processor message schema. */
+export type FilePartType = {
+  /** Identifies a file part. */
+  type: 'file';
+  /** File represented as a string, URL or bytes. */
+  data: string | URL | Uint8Array;
+  /** Media type of the file. */
+  mimeType: string;
+};
 
+/** Tool invocation carried in a processor message. */
 export type ToolInvocationPartType = {
+  /** Identifies a tool-invocation part. */
   type: 'tool-invocation';
+  /** Tool identity, arguments and current execution state. */
   toolInvocation: {
+    /** Identifier of this tool invocation. */
     toolCallId: string;
+    /** Name of the invoked tool. */
     toolName: string;
+    /** Tool arguments, when available. */
     args?: unknown;
+    /** Whether arguments are still arriving, the call is ready or a result is available. */
     state: 'partial-call' | 'call' | 'result';
+    /** Tool result, when available. */
     result?: unknown;
   };
 };
 
+/** Reasoning text and provider reasoning details carried in a processor message. */
 export type ReasoningPartType = {
+  /** Identifies a reasoning part. */
   type: 'reasoning';
+  /** Reasoning text associated with the part. */
   reasoning: string;
-  details: Array<{ type: 'text' | 'redacted'; text?: string; data?: string }>;
+  /** Individual text or redacted reasoning details. */
+  details: Array<{
+    /** Whether this detail contains readable text or redacted data. */
+    type: 'text' | 'redacted';
+    /** Readable reasoning text, when present. */
+    text?: string;
+    /** Redacted reasoning data, when present. */
+    data?: string;
+  }>;
 };
 
+/** Source citation carried in a processor message. */
 export type SourcePartType = {
+  /** Identifies a source citation part. */
   type: 'source';
-  source: { sourceType: string; id: string; url?: string; title?: string };
+  /** Source identity and optional display information. */
+  source: {
+    /** Category of the cited source. */
+    sourceType: string;
+    /** Identifier assigned to the source. */
+    id: string;
+    /** Source URL, when provided. */
+    url?: string;
+    /** Display title of the source, when provided. */
+    title?: string;
+  };
 };
 
-export type StepStartPartType = { type: 'step-start' };
+/** Marker separating model steps in processor message content. */
+export type StepStartPartType = {
+  /** Identifies the beginning of a model step. */
+  type: 'step-start';
+};
 
-export type DataPartType = { type: string; id?: string; data?: unknown };
+/** Custom data part accepted by the processor message schema. */
+export type DataPartType = {
+  /** Data part's type identifier. */
+  type: string;
+  /** Optional identifier associated with this data part. */
+  id?: string;
+  /** Custom payload associated with the part. */
+  data?: unknown;
+};
 
+/** Content-part shapes accepted by the processor message schema. */
 export type MessagePartType =
   | TextPartType
   | ImagePartType
@@ -55,11 +121,17 @@ export type MessagePartType =
   | StepStartPartType
   | DataPartType;
 
+/** Version 2 message content accepted by processor workflow steps. */
 export type MessageContentType = {
+  /** Identifies Mastra's version 2 message-content format. */
   format: 2;
+  /** Ordered message parts. */
   parts: MessagePartType[];
+  /** Optional plain-text representation of the content. */
   content?: string;
+  /** Application metadata attached to the message content. */
   metadata?: Record<string, unknown>;
+  /** Provider-specific metadata attached to the message content. */
   providerMetadata?: Record<string, unknown>;
 };
 
@@ -71,18 +143,29 @@ export type SystemMessageType = {
   experimental_providerMetadata?: Record<string, unknown>;
 };
 
+/** Role and content accepted for system-message context in processor steps. */
 type CoreMessageType = {
+  /** Message author role. */
   role: 'system' | 'user' | 'assistant' | 'tool';
+  /** Message content passed through the workflow schema. */
   content?: unknown;
 };
 
+/** Stored-message shape exchanged by processor workflow steps. */
 export type ProcessorMessageType = {
+  /** Unique message identifier. */
   id: string;
+  /** Message author or signal role. */
   role: 'user' | 'assistant' | 'system' | 'tool' | 'signal';
+  /** Time the message was created. */
   createdAt: Date;
+  /** Conversation thread associated with the message. */
   threadId?: string;
+  /** Resource associated with the message. */
   resourceId?: string;
+  /** Optional message category. */
   type?: string;
+  /** Version 2 message content with ordered parts and metadata. */
   content: MessageContentType;
 };
 
@@ -144,9 +227,13 @@ export type ProcessorOutputStreamPhaseType = {
  * because zod schemas need to serialize across workflow step boundaries.
  */
 export type SerializableOutputResult = {
+  /** Generated response text. */
   text: string;
+  /** Token usage represented as a serializable record. */
   usage: Record<string, unknown>;
+  /** Reason generation finished. */
   finishReason: string;
+  /** Completed generation steps passed through the workflow schema. */
   steps: unknown[];
 };
 
@@ -196,38 +283,74 @@ export type ProcessorStepInputType =
   | ProcessorOutputStepPhaseType
   | ProcessorToolResultPhaseType;
 
+/** Output exchanged by processor workflow steps, with fields selected by the processing phase. */
 export type ProcessorStepOutputType = {
+  /** Processing phase associated with this output. */
   phase: 'input' | 'inputStep' | 'outputStream' | 'outputResult' | 'outputStep' | 'toolResult';
+  /** Messages returned by the processor step. */
   messages?: ProcessorMessageType[];
+  /** Message list shared with the processor pipeline. */
   messageList?: MessageList;
+  /** Untagged system messages available for modification. */
   systemMessages?: CoreMessageType[];
+  /** Zero-based model step number. */
   stepNumber?: number;
+  /** Current stream chunk, or null when filtered out. */
   part?: unknown | null;
+  /** Stream chunks accumulated during output processing. */
   streamParts?: unknown[];
+  /** Mutable processor state shared across calls within the request. */
   state?: Record<string, unknown>;
+  /** Generation summary for the output-result phase, not the raw tool result. */
   result?: SerializableOutputResult;
+  /** Reason the model step finished. */
   finishReason?: string;
   /** Provider-specific metadata for the step (e.g. Bedrock guardrail trace). */
   providerMetadata?: Record<string, unknown>;
-  toolCalls?: Array<{ toolName: string; toolCallId: string; args?: unknown }>;
+  /** Tool calls produced by the model step. */
+  toolCalls?: Array<{
+    /** Name of the invoked tool. */
+    toolName: string;
+    /** Identifier of the tool invocation. */
+    toolCallId: string;
+    /** Arguments supplied to the tool, when available. */
+    args?: unknown;
+  }>;
+  /** Text produced by the model step. */
   text?: string;
+  /** Token usage for the model step. */
   usage?: Record<string, unknown>;
+  /** Number of processor-triggered retries for this generation. */
   retryCount?: number;
-  // Tool-result phase fields (toolResult inputs carry the raw tool return value as `toolResultValue`)
+  /** Name of the tool in the tool-result phase. */
   toolName?: string;
+  /** Identifier of the invocation in the tool-result phase. */
   toolCallId?: string;
+  /** Arguments supplied to the tool in the tool-result phase. */
   args?: unknown;
+  /** Raw tool return value, separate from the output-result generation summary. */
   toolResultValue?: unknown;
+  /** Whether the model provider executed the tool rather than Mastra. */
   providerExecuted?: boolean;
+  /** Model selected for the next model call. */
   model?: MastraLanguageModel;
+  /** Tool definitions available to the model step. */
   tools?: ProcessorStepToolsConfig;
+  /** Tool-selection policy for the model step. */
   toolChoice?: ToolChoice<ToolSet>;
+  /** Names of tools enabled for the model step. */
   activeTools?: string[];
+  /** Provider-specific options for the model step. */
   providerOptions?: SharedProviderOptions;
+  /** Model call settings, excluding the abort signal. */
   modelSettings?: Omit<CallSettings, 'abortSignal'>;
+  /** Structured-output schema and processing options. */
   structuredOutput?: StructuredOutputOptions<InferSchemaOutput<OutputSchema>>;
+  /** Completed model steps available to the processor. */
   steps?: Array<StepResult<ToolSet>>;
+  /** Active assistant response message identifier, when supplied by the agent loop. */
   messageId?: string;
+  /** Seals the current response message and returns a fresh response message identifier. */
   rotateResponseMessageId?: () => string;
 };
 

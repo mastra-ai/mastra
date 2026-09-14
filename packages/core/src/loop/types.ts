@@ -47,6 +47,7 @@ import type { MastraIdGenerator } from '../types';
 import type { OutputWriter } from '../workflows/types';
 import type { Workspace } from '../workspace/workspace';
 
+/** AI SDK-compatible predicate for deciding when multi-step generation should stop. */
 type StopCondition = StopConditionV5<any> | StopConditionV6<any>;
 
 /**
@@ -70,7 +71,14 @@ export type ToolCallConcurrencyStrategy = 'available' | 'called';
  * - `number`: the concurrency limit, using the default `'available'` strategy.
  * - object: pick the `limit` and/or `strategy` explicitly.
  */
-export type ToolCallConcurrency = number | { limit?: number; strategy?: ToolCallConcurrencyStrategy };
+export type ToolCallConcurrency =
+  | number
+  | {
+      /** Maximum concurrent tool calls, subject to approval and suspension constraints. */
+      limit?: number;
+      /** Determines which available or called tools constrain concurrency. */
+      strategy?: ToolCallConcurrencyStrategy;
+    };
 
 /**
  * Goal configuration threaded into the loop, resolved from the agent's `goal`
@@ -175,21 +183,37 @@ export type PrepareStepResult<TOOLS extends ToolSet = ToolSet> = {
 
 /**
  * Function called before each step of multi-step execution.
+ * @param args - Current step messages, model, tools and processor context.
  */
 export type PrepareStepFunction = (
   args: ProcessInputStepArgs,
 ) => Promise<ProcessInputStepResult | undefined | void> | ProcessInputStepResult | undefined | void;
 
 export type LoopConfig<OUTPUT = undefined> = {
+  /**
+   * Receives a chunk emitted by the generation loop.
+   * @param chunk - Stream chunk to observe.
+   */
   onChunk?: (chunk: ChunkType<OUTPUT>) => Promise<void> | void;
-  onError?: ({ error }: { error: Error | string }) => Promise<void> | void;
+  // Preserve the source-derived identity of the destructured callback parameter.
+  // oxfmt-ignore
+  onError?: ({ error }: {
+    /** Error reported by the generation loop. */
+    error: Error | string;
+  }) => Promise<void> | void;
   onFinish?: MastraOnFinishCallback<OUTPUT>;
   onStepFinish?: MastraOnStepFinishCallback<OUTPUT>;
   /**
    * Called when the run is cancelled mid-stream. `steps` holds the steps that completed before the
    * abort; `text` holds the assistant text streamed so far for the step that was in flight.
+   * @param event - Completed steps and text available at cancellation.
    */
-  onAbort?: (event: { steps: any[]; text?: string }) => Promise<void> | void;
+  onAbort?: (event: {
+    /** Steps completed before cancellation. */
+    steps: any[];
+    /** Assistant text streamed for the interrupted step. */
+    text?: string;
+  }) => Promise<void> | void;
   abortSignal?: AbortSignal;
   returnScorerData?: boolean;
   prepareStep?: PrepareStepFunction;

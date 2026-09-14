@@ -219,15 +219,16 @@ export function generateTypesContent(models: Record<string, string[]>): string {
       const providerKey = needsQuotes ? `'${provider}'` : provider;
 
       // Format array based on the repository printWidth of 120.
+      const description = '  /** Model identifiers registered for this provider. */\n';
       const singleLine = `  readonly ${providerKey}: readonly [${modelsList.join(', ')}];`;
 
       // If single line exceeds 120 chars, format as multi-line
       if (singleLine.length > 120) {
         const formattedModels = modelList.map(m => `    '${m}',`).join('\n');
-        return `  readonly ${providerKey}: readonly [\n${formattedModels}\n  ];`;
+        return `${description}  readonly ${providerKey}: readonly [\n${formattedModels}\n  ];`;
       }
 
-      return singleLine;
+      return `${description}${singleLine}`;
     })
     .join('\n');
 

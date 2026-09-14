@@ -1,0 +1,72 @@
+name: API reference result
+
+on:
+  workflow_run:
+    workflows: [API reference validation]
+    types: [requested, in_progress, completed]
+
+permissions:
+  actions: read
+  checks: write
+
+concurrency:
+  group: api-reference-result-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: false
+
+jobs:
+  report:
+    name: Report API reference result
+    if: ${{ github.event.workflow_run.event == 'pull_request' || github.event.workflow_run.event == 'push' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      # This privileged workflow never checks out or executes PR code, downloads
+      # artifacts, or restores caches. Only GitHub API run/job metadata is read.
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const runId = context.payload.workflow_run.id;
+            const { data: run } = await github.rest.actions.getWorkflowRun({ owner, repo, run_id: runId });
+            if (run.repository.full_name !== `${owner}/${repo}` ||
+                run.path.split('@')[0] !== '.github/workflows/api-reference.yml' ||
+                !['pull_request', 'push'].includes(run.event) ||
+                !/^[0-9a-f]{40}$/.test(run.head_sha)) {
+              throw new Error('Unexpected API validation workflow identity');
+            }
+            const externalId = `api-reference:${run.id}:${run.run_attempt}`;
+            let conclusion;
+            if (run.status === 'completed') {
+              conclusion = run.conclusion === 'success' ? 'success' :
+                run.conclusion === 'cancelled' ? 'cancelled' : 'failure';
+              if (conclusion === 'success') {
+                const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRun, {
+                  owner, repo, run_id: run.id, filter: 'latest', per_page: 100,
+                });
+                const validations = jobs.filter(job => job.name === 'Validate API reference');
+                const required = ['Verify checked-out revision', 'Build extraction prerequisites',
+                  'Check API artifact freshness', 'Validate source-backed pages', 'Verify public source revision'];
+                if (validations.length !== 1 || validations[0].head_sha !== run.head_sha ||
+                    validations[0].conclusion !== 'success' ||
+                    required.some(name => validations[0].steps.filter(step =>
+                      step.name === name && step.conclusion === 'success').length !== 1)) {
+                  conclusion = 'failure';
+                }
+              }
+            }
+            const checks = await github.paginate(github.rest.checks.listForRef, {
+              owner, repo, ref: run.head_sha, check_name: 'api-reference', filter: 'all', per_page: 100,
+            });
+            const existing = checks.find(check => check.external_id === externalId && check.app?.slug === 'github-actions');
+            const fields = {
+              owner, repo, name: 'api-reference', external_id: externalId,
+              details_url: run.html_url,
+              status: run.status === 'completed' ? 'completed' : 'in_progress',
+              ...(conclusion ? { conclusion, completed_at: new Date().toISOString() } : {}),
+              output: {
+                title: `API reference validation: ${conclusion || 'in progress'}`,
+                summary: `Revision ${run.head_sha}; run ${run.id}, attempt ${run.run_attempt}. No deployment or promotion validation is implied.`,
+              },
+            };
+            if (existing) await github.rest.checks.update({ ...fields, check_run_id: existing.id });
+            else await github.rest.checks.create({ ...fields, head_sha: run.head_sha });

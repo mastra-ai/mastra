@@ -33,40 +33,77 @@ export type ScoringProperties = {
   scoringData?: ScoringData;
 };
 
+/** Model routing configuration with a combined identifier or separate provider and model identifiers. */
 export type OpenAICompatibleConfig =
   | {
-      id: `${string}/${string}`; // Model ID like "openai/gpt-4o" or "custom-provider/my-model"
-      url?: string; // Optional custom URL endpoint
-      apiKey?: string; // Optional API key (falls back to env vars)
-      headers?: Record<string, string>; // Additional headers
+      /** Provider and model identifiers separated by a slash. */
+      id: `${string}/${string}`;
+      /** Custom provider endpoint URL. */
+      url?: string;
+      /** API key supplied to the provider. */
+      apiKey?: string;
+      /** Additional provider request headers. */
+      headers?: Record<string, string>;
     }
   | {
-      providerId: string; // Provider ID like "openai" or "custom-provider"
-      modelId: string; // Model ID like "gpt-4o" or "my-model"
-      url?: string; // Optional custom URL endpoint
-      apiKey?: string; // Optional API key (falls back to env vars)
-      headers?: Record<string, string>; // Additional headers
+      /** Provider identifier used to route the request. */
+      providerId: string;
+      /** Model identifier within the provider. */
+      modelId: string;
+      /** Custom provider endpoint URL. */
+      url?: string;
+      /** API key supplied to the provider. */
+      apiKey?: string;
+      /** Additional provider request headers. */
+      headers?: Record<string, string>;
     };
 
+/** Asynchronous stream result from a V2 language model. */
 type DoStreamResultPromiseV2 = PromiseLike<Awaited<ReturnType<LanguageModelV2['doStream']>>>;
+/** Asynchronous stream result from a V3 language model. */
 type DoStreamResultPromiseV3 = PromiseLike<Awaited<ReturnType<LanguageModelV3['doStream']>>>;
+/** Asynchronous stream result from a V4 language model. */
 type DoStreamResultPromiseV4 = PromiseLike<Awaited<ReturnType<LanguageModelV4['doStream']>>>;
 
 /** Wrapped V2 model with unified doGenerate/doStream that returns streams */
 export type MastraLanguageModelV2 = Omit<LanguageModelV2, 'doGenerate' | 'doStream'> & {
+  /**
+   * Generates a response through the wrapped model's stream-result interface.
+   * @param options - Model call settings, prompt and cancellation signal.
+   */
   doGenerate: (options: LanguageModelV2CallOptions) => DoStreamResultPromiseV2;
+  /**
+   * Starts a streaming model call.
+   * @param options - Model call settings, prompt and cancellation signal.
+   */
   doStream: (options: LanguageModelV2CallOptions) => DoStreamResultPromiseV2;
 };
 
 /** Wrapped V3 model with unified doGenerate/doStream that returns streams */
 export type MastraLanguageModelV3 = Omit<LanguageModelV3, 'doGenerate' | 'doStream'> & {
+  /**
+   * Generates a response through the wrapped model's stream-result interface.
+   * @param options - Model call settings, prompt and cancellation signal.
+   */
   doGenerate: (options: LanguageModelV3CallOptions) => DoStreamResultPromiseV3;
+  /**
+   * Starts a streaming model call.
+   * @param options - Model call settings, prompt and cancellation signal.
+   */
   doStream: (options: LanguageModelV3CallOptions) => DoStreamResultPromiseV3;
 };
 
 /** Wrapped V4 model with unified doGenerate/doStream that returns streams */
 export type MastraLanguageModelV4 = Omit<LanguageModelV4, 'doGenerate' | 'doStream'> & {
+  /**
+   * Generates a response through the wrapped model's stream-result interface.
+   * @param options - Model call settings, prompt and cancellation signal.
+   */
   doGenerate: (options: LanguageModelV4CallOptions) => DoStreamResultPromiseV4;
+  /**
+   * Starts a streaming model call.
+   * @param options - Model call settings, prompt and cancellation signal.
+   */
   doStream: (options: LanguageModelV4CallOptions) => DoStreamResultPromiseV4;
 };
 
@@ -76,6 +113,7 @@ export type MastraLegacyLanguageModel = LanguageModelV1;
 /** Union of modern language models (V2/V3/V4) */
 export type MastraLanguageModel = MastraLanguageModelV2 | MastraLanguageModelV3 | MastraLanguageModelV4;
 
+/** Provider-keyed options accepted by the supported modern AI SDK model interfaces. */
 export type SharedProviderOptions = SharedV2ProviderOptions | SharedV3ProviderOptions | SharedV4ProviderOptions;
 
 // Support for:
@@ -83,6 +121,7 @@ export type SharedProviderOptions = SharedV2ProviderOptions | SharedV3ProviderOp
 // - { id: "openai/gpt-4o", apiKey: "..." } (config object)
 // - { id: "custom", url: "...", apiKey: "..." } (custom endpoint)
 // - LanguageModelV1/V2/V3/V4 (existing AI SDK models)
+/** Model selected by router identifier, connection configuration or a supported model instance. */
 export type MastraModelConfig =
   | LanguageModelV1
   | LanguageModelV2

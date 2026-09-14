@@ -12,8 +12,10 @@ export type AgentSignalCategory = 'user' | 'state' | 'reactive' | 'notification'
  * @experimental Agent signals are experimental and may change in a future release.
  */
 export type AgentLegacySignalType = 'user-message' | 'system-reminder';
+/** Supported signal categories and their legacy input aliases. */
 export type AgentSignalType = AgentSignalCategory | AgentLegacySignalType;
 
+/** XML element name used when formatting a signal for the model. */
 export type AgentSignalTagName = string;
 
 export type SignalPart = TextPart | SignalFilePart;
@@ -29,19 +31,32 @@ type SignalFilePart = {
  * @experimental Agent signals are experimental and may change in a future release.
  */
 export type AgentSignalContents = string | Array<TextPart | FilePart>;
+/** XML attributes for the model-facing signal tag. Null and undefined values are omitted. */
 export type AgentSignalAttributes = Record<string, string | number | boolean | null | undefined>;
+/** Whether a state signal represents a complete snapshot or a change to prior state. */
 export type AgentStateSignalMode = 'snapshot' | 'delta';
 
+/** Input for a state update tracked across turns by state ID and cache key. */
 export type AgentStateSignalInput = {
+  /** Stable state ID identifying the update's tracking lane, not the generated message ID. */
   id: string;
+  /** Nonempty key compared with tracked state to skip unchanged updates. */
   cacheKey: string;
+  /** Text or text/file parts delivered as the state signal's content. */
   contents: AgentSignalContents;
+  /** State representation mode. Defaults to `snapshot`. */
   mode?: AgentStateSignalMode;
+  /** State value retained in signal metadata, separately from model-facing contents. */
   value?: unknown;
+  /** State change retained in signal metadata, separately from model-facing contents. */
   delta?: unknown;
+  /** Attributes rendered on the signal's XML tag. */
   attributes?: AgentSignalAttributes;
+  /** Additional metadata retained with the signal and its state-tracking fields. */
   metadata?: Record<string, unknown>;
+  /** Provider options attached to the signal's model message and stored message. */
   providerOptions?: MastraProviderMetadata;
+  /** XML tag name for the state signal. Defaults to `state`. */
   tagName?: AgentSignalTagName;
 };
 
@@ -54,13 +69,21 @@ export type AgentMessageInput =
       providerOptions?: MastraProviderMetadata;
     };
 
+/** Content, identity and metadata shared by all signal inputs. */
 type AgentSignalInputBase = {
+  /** Signal ID, also used as its stored message ID. Generated when omitted. */
   id?: string;
+  /** Creation time as a Date or parseable date string. Defaults to the current time. */
   createdAt?: Date | string;
+  /** Time the signal was accepted, when supplied by its delivery path. */
   acceptedAt?: Date | string;
+  /** XML tag name override. Reactive signals default to `system-reminder`; other categories use their name. */
   tagName?: AgentSignalTagName;
+  /** Text or text/file parts carried by the signal. */
   contents: AgentSignalContents;
+  /** Attributes rendered on the signal's XML tag. */
   attributes?: AgentSignalAttributes;
+  /** Application metadata retained with the signal, not rendered as XML attributes. */
   metadata?: Record<string, unknown>;
   /**
    * Provider options attached to the resulting prompt turn. Surfaces as `providerOptions` on the
@@ -70,8 +93,10 @@ type AgentSignalInputBase = {
   providerOptions?: MastraProviderMetadata;
 };
 
+/** Signal input, with transient delivery available only for non-state categories. */
 export type AgentSignalInput =
   | (AgentSignalInputBase & {
+      /** Identifies a state signal whose tracking depends on persisted history. */
       type: 'state';
       /**
        * State signals cannot be transient: they maintain cross-turn tracking
@@ -81,6 +106,7 @@ export type AgentSignalInput =
       transient?: never;
     })
   | (AgentSignalInputBase & {
+      /** Non-state category or legacy alias, normalized when the signal is created. */
       type: Exclude<AgentSignalType, 'state'>;
       /**
        * Whether this signal is transient. Defaults to `false`.
@@ -101,29 +127,58 @@ export type AgentSignalInput =
  * @experimental Agent signals are experimental and may change in a future release.
  */
 export type AgentSignalDataPart = {
+  /** User signals use `data-user-message`; other categories use `data-signal`. */
   type: 'data-user-message' | 'data-signal';
+  /** Serialized signal content and identity. */
   data: {
+    /** Signal ID, matching its stored message ID when persisted. */
     id: string;
+    /** Normalized signal category, without legacy aliases. */
     type: AgentSignalCategory;
+    /** XML tag name used in the model-facing projection. */
     tagName?: AgentSignalTagName;
+    /** Content reconstructed from the signal's normalized text/file parts. */
     contents: AgentSignalContents;
+    /** Creation time serialized as an ISO date string. */
     createdAt: string;
+    /** Acceptance time serialized as an ISO date string, when present. */
     acceptedAt?: string;
+    /** XML attributes attached to the signal. */
     attributes?: AgentSignalAttributes;
+    /** Application metadata retained with the signal. */
     metadata?: Record<string, unknown>;
+    /** Provider options associated with the signal's model message. */
     providerOptions?: MastraProviderMetadata;
+    /** Whether the signal itself is delivery-only, distinct from the outer data part's transient flag. */
     transient?: boolean;
   };
+  /** Marks this transport data part as transient, even when the signal itself is persisted. */
   transient: true;
 };
 
+/** Normalized signal identity and projections for storage, model input and transport. */
 type CreatedAgentSignalBase = Omit<AgentSignalInputBase, 'id' | 'createdAt' | 'acceptedAt'> & {
+  /** Marker checked by `isCreatedAgentSignal`. */
   __isCreatedSignal: true;
+  /** Supplied or generated signal ID, also used for the stored message. */
   id: string;
+  /** Signal creation time normalized to a Date. */
   createdAt: Date;
+  /** Signal acceptance time normalized to a Date, when supplied. */
   acceptedAt?: Date;
-  toDBMessage: (options?: { threadId?: string; resourceId?: string }) => MastraDBMessage;
+  /** Creates a format-2 signal message without writing it to storage. */
+  toDBMessage: (
+    /** Optional thread and resource identifiers attached to the projected message. */
+    options?: {
+      /** Thread receiving the projected message. */
+      threadId?: string;
+      /** Resource associated with the projected message. */
+      resourceId?: string;
+    },
+  ) => MastraDBMessage;
+  /** Projects the signal into a user-role model message, preserving text/file content and provider options. */
   toLLMMessage: () => UserModelMessage;
+  /** Projects the signal into a transient transport data part. */
   toDataPart: () => AgentSignalDataPart;
 };
 
@@ -133,9 +188,16 @@ type CreatedAgentSignalBase = Omit<AgentSignalInputBase, 'id' | 'createdAt' | 'a
  * @experimental Agent signals are experimental and may change in a future release.
  */
 export type CreatedAgentSignal =
-  | (CreatedAgentSignalBase & { type: 'state'; transient?: never })
   | (CreatedAgentSignalBase & {
+      /** State category retained after signal normalization. */
+      type: 'state';
+      /** State signals cannot be transient because tracking is rebuilt from persisted history. */
+      transient?: never;
+    })
+  | (CreatedAgentSignalBase & {
+      /** Normalized non-state signal category. */
       type: Exclude<AgentSignalCategory, 'state'>;
+      /** Delivery-only signal flag. Such signals are excluded from stored and later-turn history. */
       transient?: boolean;
     });
 

@@ -23,9 +23,11 @@ export type {
   XaiProviderOptions,
 };
 
-// Alias for consistency
+/** Options passed to Google's generative AI provider. */
 export type GoogleProviderOptions = GoogleGenerativeAIProviderOptions;
+/** Streaming transport selection for the Responses API. */
 export type OpenAITransport = 'auto' | 'websocket' | 'fetch';
+/** Connection settings for Responses API WebSocket streaming. */
 export type ResponsesWebSocketOptions = {
   /**
    * WebSocket endpoint URL.
@@ -43,7 +45,9 @@ export type ResponsesWebSocketOptions = {
    */
   closeOnFinish?: boolean;
 };
+/** OpenAI Responses WebSocket connection settings. */
 export type OpenAIWebSocketOptions = ResponsesWebSocketOptions;
+/** OpenAI Responses options with Mastra's streaming transport configuration. */
 export type OpenAIProviderOptions = OpenAIResponsesProviderOptions & {
   /**
    * Select the transport used for streaming responses.
@@ -57,6 +61,7 @@ export type OpenAIProviderOptions = OpenAIResponsesProviderOptions & {
    */
   websocket?: OpenAIWebSocketOptions;
 };
+/** Azure Responses WebSocket settings with an Azure-specific endpoint override. */
 export type AzureWebSocketOptions = Omit<ResponsesWebSocketOptions, 'url'> & {
   /**
    * WebSocket endpoint URL.
@@ -64,6 +69,7 @@ export type AzureWebSocketOptions = Omit<ResponsesWebSocketOptions, 'url'> & {
    */
   url?: string;
 };
+/** Azure Responses options with Mastra's streaming transport configuration. */
 export type AzureProviderOptions = OpenAIResponsesProviderOptions & {
   /**
    * Select the transport used for streaming responses.
@@ -77,6 +83,7 @@ export type AzureProviderOptions = OpenAIResponsesProviderOptions & {
    */
   websocket?: AzureWebSocketOptions;
 };
+/** Provider-specific options for DeepSeek chat models. */
 export type DeepSeekProviderOptions = DeepSeekChatOptions;
 
 /**
@@ -101,11 +108,17 @@ export type DeepSeekProviderOptions = DeepSeekChatOptions;
  * ```
  */
 export type ProviderOptions = (SharedV2ProviderOptions | SharedV3ProviderOptions) & {
+  /** Anthropic options, including additional provider-supported keys. */
   anthropic?: AnthropicProviderOptions & Record<string, any>;
+  /** DeepSeek options, including additional provider-supported keys. */
   deepseek?: DeepSeekProviderOptions & Record<string, any>;
+  /** Google options, including additional provider-supported keys. */
   google?: GoogleProviderOptions & Record<string, any>;
+  /** OpenAI options and streaming transport settings. */
   openai?: OpenAIProviderOptions & Record<string, any>;
+  /** Azure OpenAI options and streaming transport settings. */
   azure?: AzureProviderOptions & Record<string, any>;
+  /** xAI options, including additional provider-supported keys. */
   xai?: XaiProviderOptions & Record<string, any>;
 };
 

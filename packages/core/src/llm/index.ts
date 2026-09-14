@@ -28,6 +28,7 @@ export type LanguageModel = MastraLanguageModel;
 
 export type CoreMessage = AiCoreMessage;
 
+/** System-role message in the legacy AI SDK core message format. */
 export type CoreSystemMessage = AiCoreSystemMessage;
 
 export type CoreAssistantMessage = AiCoreAssistantMessage;
@@ -133,6 +134,7 @@ export { resolveModelConfig } from './model/resolve-model';
 
 export type OutputType = StructuredOutput | StandardSchemaWithJSON | undefined;
 
+/** Agent instructions as text, system messages or arrays of either supported form. */
 export type SystemMessage =
   | string
   | string[]

@@ -13,11 +13,17 @@ import { StorageDomain } from '../base';
  */
 export type ScheduleTarget = WorkflowScheduleTarget | AgentScheduleTarget;
 
+/** Workflow invocation and initial data stored as a schedule target. */
 export type WorkflowScheduleTarget = {
+  /** Selects workflow execution for this schedule. */
   type: 'workflow';
+  /** Identifier of the registered workflow to run. */
   workflowId: string;
+  /** Input data passed to the scheduled workflow run. */
   inputData?: unknown;
+  /** Initial state supplied to the workflow run. */
   initialState?: unknown;
+  /** Serialized request context restored for the scheduled run. */
   requestContext?: Record<string, unknown>;
   /**
    * Content hash of the target workflow's serialized step graph, written by
@@ -46,8 +52,11 @@ export type { ScheduleIfActive, ScheduleIfIdle } from '../../../schedules/types'
  * UI linkability into chat / observability traces.
  */
 export type AgentScheduleTarget = {
+  /** Selects agent execution for this schedule. */
   type: 'agent';
+  /** Identifier of the registered agent to invoke. */
   agentId: string;
+  /** Prompt sent to the agent or included in the scheduled signal. */
   prompt: string;
   /**
    * Free-form label for distinguishing multiple schedules on the same
@@ -73,6 +82,7 @@ export type AgentScheduleTarget = {
   ifIdle?: ScheduleIfIdle;
   /** Arbitrary metadata stored alongside the schedule row. */
   metadata?: Record<string, unknown>;
+  /** Serialized request context restored for the scheduled agent execution. */
   requestContext?: Record<string, unknown>;
 };
 

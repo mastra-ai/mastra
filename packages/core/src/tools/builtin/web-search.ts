@@ -10,7 +10,9 @@ export type WebSearchProviderToolId =
   | 'google.google_search'
   | 'xai.web_search';
 
+/** Placeholder resolved to a provider-native web search tool for the selected model. */
 export type WebSearchToolPlaceholder = {
+  /** Symbol marker used to recognize the built-in web search placeholder. */
   readonly [WEB_SEARCH_TOOL_MARKER]: true;
 };
 

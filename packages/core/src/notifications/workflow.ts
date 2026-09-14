@@ -25,10 +25,13 @@ export const NOTIFICATION_DISPATCH_DEFAULT_BATCH_SIZE = 100;
  */
 const NOTIFICATION_DISPATCH_SHOULD_PERSIST_SNAPSHOT = () => false;
 
+/** Schedule and batch settings for dispatching due notifications. */
 export type NotificationDispatchConfig = {
   /** Defaults to true. Set false to opt out of automatic scheduled dispatch. */
   enabled?: boolean;
+  /** Dispatcher cron expression. Defaults to once per minute. */
   cron?: string;
+  /** Maximum due notifications processed per dispatch. Defaults to 100. */
   batchSize?: number;
 };
 

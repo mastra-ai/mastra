@@ -138,7 +138,8 @@ export interface CompletionConfig {
   parallel?: boolean;
 
   /**
-   * Called after scorers run with results
+   * Called after scorers run with results.
+   * @param results - Completion decision and the individual scorer results.
    */
   onComplete?: (results: CompletionRunResult) => void | Promise<void>;
 

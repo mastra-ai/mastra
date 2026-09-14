@@ -1,19 +1,68 @@
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, readFileSync, readdirSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs'
+import {
+  copyFileSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  utimesSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import remarkMdx from 'remark-mdx'
 import remarkParse from 'remark-parse'
 import { unified } from 'unified'
 import { afterAll, describe, expect, it } from 'vitest'
 import { artifactDirectory, repositoryRoot } from '../../scripts/api-reference/config'
+import { validatePages } from '../../scripts/api-reference/validate'
 import remarkApiReference, { discoverSurfaces } from '../plugins/remark-api-reference'
 import type { ApiContract } from './model'
+import { parseContract } from './schema'
 
 const directory = mkdtempSync(join(tmpdir(), 'api-reference-discovery-'))
 afterAll(() => rmSync(directory, { recursive: true, force: true }))
 const parser = () => unified().use(remarkParse).use(remarkMdx)
 const revision = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repositoryRoot, encoding: 'utf8' }).trim()
+
+function pinSource(name: string, contracts: ApiContract[]) {
+  const cwd = join(directory, name)
+  const sources = new Set<string>()
+  for (const contract of contracts) {
+    JSON.stringify(contract, (key, value) => {
+      if ((key === 'source' || key === 'targetSource') && typeof value?.path === 'string') sources.add(value.path)
+      return value
+    })
+  }
+  for (const source of sources) {
+    const target = join(cwd, source)
+    mkdirSync(dirname(target), { recursive: true })
+    copyFileSync(join(repositoryRoot, source), target)
+  }
+  const git = (...args: string[]) => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim()
+  git('init', '--quiet')
+  const origin = execFileSync('git', ['remote', 'get-url', 'origin'], { cwd: repositoryRoot, encoding: 'utf8' }).trim()
+  git('remote', 'add', 'origin', origin)
+  git('add', '.')
+  git(
+    '-c',
+    'user.name=API test',
+    '-c',
+    'user.email=api-test@example.invalid',
+    '-c',
+    'commit.gpgsign=false',
+    '-c',
+    'core.hooksPath=/dev/null',
+    'commit',
+    '--quiet',
+    '-m',
+    'Pin source bytes for publication validation\n\nCo-Authored-By: mastra-platform[bot] <284800079+mastra-platform[bot]@users.noreply.github.com>',
+  )
+  return { cwd, revision: git('rev-parse', 'HEAD') }
+}
 
 function writeFixture() {
   const contract: ApiContract = {
@@ -51,6 +100,50 @@ function writeFixture() {
 }
 
 describe('static API block discovery', () => {
+  it('validates the migrated pages without extraction and rejects MDX-only or description regressions', async () => {
+    const files = ['configuration.json', 'agent-generate.json']
+    const contracts = files.map(file => parseContract(JSON.parse(readFileSync(join(artifactDirectory, file), 'utf8'))))
+    const snapshot = pinSource('complete-page-validator', contracts)
+    const data = join(snapshot.cwd, 'docs/src/data/api-reference')
+    const content = join(snapshot.cwd, 'docs/src/content/en/reference')
+    mkdirSync(data, { recursive: true })
+    mkdirSync(join(content, 'agents'), { recursive: true })
+    for (const file of files) copyFileSync(join(artifactDirectory, file), join(data, file))
+    for (const file of ['configuration.mdx', 'agents/generate.mdx'])
+      copyFileSync(join(repositoryRoot, 'docs/src/content/en/reference', file), join(content, file))
+    const before = files.map(file => readFileSync(join(data, file), 'utf8'))
+    const pages = await validatePages(snapshot.cwd, snapshot.revision)
+    expect(pages).toHaveLength(2)
+    const entry = pathToFileURL(join(repositoryRoot, 'docs/scripts/api-reference/validate.ts')).href
+    execFileSync(
+      process.execPath,
+      [
+        '--import',
+        'tsx',
+        '--input-type=module',
+        '--eval',
+        `import { validatePages } from ${JSON.stringify(entry)}; await validatePages(${JSON.stringify(snapshot.cwd)}, ${JSON.stringify(snapshot.revision)});`,
+      ],
+      { cwd: join(repositoryRoot, 'docs'), maxBuffer: 4 * 1024 * 1024, stdio: 'pipe' },
+    )
+    expect(files.map(file => readFileSync(join(data, file), 'utf8'))).toEqual(before)
+
+    const methodPath = join(content, 'agents/generate.mdx')
+    const method = readFileSync(methodPath, 'utf8')
+    writeFileSync(methodPath, method.replace('section="method"', 'section="signatures"'))
+    await expect(validatePages(snapshot.cwd, snapshot.revision)).rejects.toThrow('complete source-backed method')
+    expect(files.map(file => readFileSync(join(data, file), 'utf8'))).toEqual(before)
+    writeFileSync(methodPath, method.replace('<ApiReference root="Agent.generate" section="method" />', ''))
+    await expect(validatePages(snapshot.cwd, snapshot.revision)).rejects.toThrow('complete source-backed method')
+    writeFileSync(methodPath, method)
+
+    const config = contracts[0]!
+    const child = config.declarations[config.root]!.children[0]!
+    delete config.declarations[child]!.comment
+    writeFileSync(join(data, files[0]!), JSON.stringify(config))
+    await expect(validatePages(snapshot.cwd, snapshot.revision)).rejects.toThrow(/description/i)
+  })
+
   it('requires a registered appendix route before compiling a documented method in production', async () => {
     const template = writeFixture().declarations.field
     const root = '@mastra/core/agent!Agent.generate'
@@ -123,18 +216,36 @@ describe('static API block discovery', () => {
   it.each([
     ['Config', 'properties'],
     ['Agent.generate', 'method'],
-  ])('blocks the real %s %s surface from production until descriptions are complete', async (root, section) => {
-    const outputDirectory = join(directory, `real-rejected-${section}`)
-    const processor = parser().use(remarkApiReference, {
-      inputDirectory: artifactDirectory,
-      outputDirectory,
-      cwd: repositoryRoot,
-      revision,
-      production: true,
+  ])('publishes the complete real %s %s surface but rejects a removed source description', async (root, section) => {
+    const filename = root === 'Config' ? 'configuration.json' : 'agent-generate.json'
+    const contract = parseContract(JSON.parse(readFileSync(join(artifactDirectory, filename), 'utf8')))
+    const source = pinSource(`source-${section}`, [contract])
+    const path = join(directory, `${section}.mdx`)
+    const routeRegistry = join(directory, `${section}-routes.json`)
+    writeFileSync(routeRegistry, JSON.stringify({ [path]: `/reference/${section}` }))
+    const inputDirectory = join(directory, `input-${section}`)
+    mkdirSync(inputDirectory)
+    writeFileSync(join(inputDirectory, filename), JSON.stringify(contract))
+    const options = { ...source, inputDirectory, routeRegistry, production: true }
+    const page = root === 'Config' ? 'configuration.mdx' : 'agents/generate.mdx'
+    const markup = readFileSync(join(repositoryRoot, 'docs/src/content/en/reference', page), 'utf8')
+    expect(discoverSurfaces(parser().parse(markup))).toHaveLength(1)
+    const outputDirectory = join(directory, `real-complete-${section}`)
+    const complete = parser().use(remarkApiReference, { ...options, outputDirectory })
+    await expect(complete.run(complete.parse(markup), { path })).resolves.toBeDefined()
+    expect(readdirSync(outputDirectory)).toHaveLength(1)
+    const payload = readFileSync(join(outputDirectory, readdirSync(outputDirectory)[0]), 'utf8')
+    expect(payload).not.toContain('Missing description')
+
+    const declaration = contract.declarations[contract.root]!
+    const owner = section === 'method' ? declaration.signatures[0]! : declaration.children[0]!
+    contract.declarations[owner]!.comment = undefined
+    writeFileSync(join(inputDirectory, filename), JSON.stringify(contract))
+    const rejected = parser().use(remarkApiReference, {
+      ...options,
+      outputDirectory: join(directory, `real-rejected-${section}`),
     })
-    await expect(
-      processor.run(processor.parse(`<ApiReference root="${root}" section="${section}" />`)),
-    ).rejects.toThrow('Missing description')
+    await expect(rejected.run(rejected.parse(markup), { path })).rejects.toThrow('Missing description')
     expect(readdirSync(directory)).not.toContain(`real-rejected-${section}`)
   })
 
@@ -220,16 +331,16 @@ describe('static API block discovery', () => {
     }
     writeFileSync(join(directory, 'configuration.json'), JSON.stringify(contract))
     const outputDirectory = join(directory, 'source-comment-output')
+    const source = pinSource('comment-source', [contract])
     const processor = parser().use(remarkApiReference, {
       inputDirectory: directory,
       outputDirectory,
-      cwd: repositoryRoot,
-      revision,
+      ...source,
       production: true,
     })
     await processor.run(processor.parse('<ApiReference root="Config" section="properties" />'))
     const payload = readFileSync(join(outputDirectory, readdirSync(outputDirectory)[0]), 'utf8')
-    expect(payload).toContain(`/blob/${revision}/packages/core/src/mastra/index.ts#L1`)
+    expect(payload).toContain(`/blob/${source.revision}/packages/core/src/mastra/index.ts#L1`)
     expect(payload).not.toContain('Missing description')
     expect(contract.declarations['owned-method']).toBeUndefined()
   })
@@ -295,17 +406,63 @@ describe('static API block discovery', () => {
     await expect(processor.run(processor.parse('A handwritten page.'))).resolves.toBeDefined()
   })
 
-  it('accepts the real documented signatures without validating unconsumed parameter data', async () => {
-    const processor = parser().use(remarkApiReference, {
-      inputDirectory: artifactDirectory,
-      outputDirectory: join(directory, 'real-output'),
-      cwd: repositoryRoot,
-      revision,
-      production: true,
+  it('accepts real documented signatures at a matching revision and rejects subsequent source edits', async () => {
+    const contract = parseContract(JSON.parse(readFileSync(join(artifactDirectory, 'agent-generate.json'), 'utf8')))
+    const cwd = join(directory, 'real-source')
+    const sources = new Set<string>()
+    JSON.stringify(contract, (key, value) => {
+      if ((key === 'source' || key === 'targetSource') && typeof value?.path === 'string') sources.add(value.path)
+      return value
     })
-    await expect(
-      processor.run(processor.parse('<ApiReference root="Agent.generate" section="signatures" />')),
-    ).resolves.toBeDefined()
+    for (const source of sources) {
+      const target = join(cwd, source)
+      mkdirSync(dirname(target), { recursive: true })
+      copyFileSync(join(repositoryRoot, source), target)
+    }
+    const git = (...args: string[]) => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim()
+    git('init', '--quiet')
+    const origin = execFileSync('git', ['remote', 'get-url', 'origin'], {
+      cwd: repositoryRoot,
+      encoding: 'utf8',
+    }).trim()
+    git('remote', 'add', 'origin', origin)
+    git('add', '.')
+    git(
+      '-c',
+      'user.name=API test',
+      '-c',
+      'user.email=api-test@example.invalid',
+      '-c',
+      'commit.gpgsign=false',
+      '-c',
+      'core.hooksPath=/dev/null',
+      'commit',
+      '--quiet',
+      '-m',
+      'Pin real source bytes for publication validation\n\nCo-Authored-By: mastra-platform[bot] <284800079+mastra-platform[bot]@users.noreply.github.com>',
+    )
+    const options = {
+      inputDirectory: artifactDirectory,
+      cwd,
+      revision: git('rev-parse', 'HEAD'),
+      production: true,
+    }
+    const source = '<ApiReference root="Agent.generate" section="signatures" />'
+    const processor = parser().use(remarkApiReference, {
+      ...options,
+      outputDirectory: join(directory, 'real-output'),
+    })
+    await expect(processor.run(processor.parse(source))).resolves.toBeDefined()
     expect(readdirSync(join(directory, 'real-output'))).toHaveLength(1)
+
+    const signature = contract.declarations[contract.declarations[contract.root]!.signatures[0]!]!
+    const file = join(cwd, signature.source!.path)
+    writeFileSync(file, `${readFileSync(file, 'utf8')}\n// Uncommitted source change.\n`)
+    const changed = parser().use(remarkApiReference, {
+      ...options,
+      outputDirectory: join(directory, 'dirty-real-output'),
+    })
+    await expect(changed.run(changed.parse(source))).rejects.toThrow('Source file differs from revision')
+    expect(readdirSync(directory)).not.toContain('dirty-real-output')
   })
 })

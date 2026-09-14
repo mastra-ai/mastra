@@ -12,6 +12,17 @@ afterEach(async () => {
 
 describe('registry-generator', () => {
   describe('generateTypesContent', () => {
+    it('documents provider members in both compact and multiline tuples', () => {
+      const content = generateTypesContent({
+        compact: ['model-1'],
+        'long-provider': ['a'.repeat(120)],
+      });
+      const description = '/** Model identifiers registered for this provider. */';
+      expect(content.split(description)).toHaveLength(3);
+      expect(content).toContain(`${description}\n  readonly compact: readonly ['model-1'];`);
+      expect(content).toContain(`${description}\n  readonly 'long-provider': readonly [\n`);
+    });
+
     it('should not quote valid JS identifiers', () => {
       const models = {
         openai: ['gpt-4'],

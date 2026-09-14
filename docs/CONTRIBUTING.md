@@ -72,6 +72,21 @@ Before submitting a PR, make sure to:
 
 6. **Add redirect** (optional): If you've renamed or deleted a doc, add a redirect to `vercel.redirects.json` and run `pnpm run generate-vercel-redirects` to update the generated `vercel.json`.
 
+## Source-backed API reference
+
+For the `Config` and `Agent.generate()` pilot, edit JSDoc in the owning source files and regenerate the API artifacts rather than editing their JSON or maintaining field tables in MDX.
+
+From the repository root, after installing dependencies and building core:
+
+```sh
+pnpm --filter mastra-docs api:generate
+pnpm --filter mastra-docs api:check
+```
+
+Review the artifact diff, then preview the page. Ordinary docs dev/build reads committed JSON and never runs extraction. Freshness checks do not replace production description or source-revision validation.
+
+See the [API reference author workflow](scripts/api-reference/README.md) for setup, complete-surface selectors, supported comments and source-link requirements.
+
 ## Documentation structure
 
 The Mastra documentation is organized into several sections:

@@ -4,6 +4,7 @@ import type { Context } from 'hono';
  * A platform-provided callback that keeps the current serverless invocation alive
  * until the given promise settles. Without it, serverless runtimes freeze the
  * invocation as soon as the handler returns, killing any in-flight background work.
+ * @param promise - Background work whose settlement extends the invocation lifetime.
  */
 export type WaitUntilFn = (promise: Promise<unknown>) => void;
 

@@ -25,7 +25,9 @@ import type { MastraFGAPermissionInput } from './permissions.generated';
 export type ActorSignal =
   | true
   | {
+      /** Identifies a system actor rather than an authenticated end user. */
       actorKind: 'system';
+      /** Workflow identified as the source of this actor signal. */
       sourceWorkflow?: string;
       /**
        * Identity of the acting system agent. Unlike the check `resource` (the
@@ -82,7 +84,12 @@ export interface FGACheckContext {
  */
 export interface FGACheckParams {
   /** The resource being accessed */
-  resource: { type: string; id: string };
+  resource: {
+    /** Resource type to authorize. */
+    type: string;
+    /** Identifier of the target resource. */
+    id: string;
+  };
   /**
    * The permission(s) being checked.
    * When an array is provided, the user needs ANY ONE of the listed permissions
@@ -102,7 +109,17 @@ export interface FGARouteConfig {
   /** Path/body/query parameter name that contains the resource ID. */
   resourceIdParam?: string;
   /** Static or dynamic resource ID resolver. */
-  resourceId?: string | ((params: Record<string, unknown>, context: { requestContext?: any }) => string | undefined);
+  resourceId?:
+    | string
+    | ((
+        /** Route parameters used to resolve the resource. */
+        params: Record<string, unknown>,
+        /** Request-scoped context for resource resolution. */
+        context: {
+          /** Request context available to the resolver. */
+          requestContext?: any;
+        },
+      ) => string | undefined);
   /**
    * Permission(s) to check for this route. Falls back to the route permission when omitted.
    * When an array is provided, the user needs ANY ONE of the listed permissions.
@@ -114,14 +131,18 @@ export interface FGARouteConfig {
  * Minimal route information exposed to global FGA route resolvers.
  */
 export interface FGARouteInfo {
+  /** Registered route path. */
   path: string;
+  /** HTTP method for the route. */
   method: string;
+  /** Whether the route requires authentication. */
   requiresAuth?: boolean;
   /**
    * Permission(s) required by this route.
    * When an array is provided, the user needs ANY ONE of the listed permissions.
    */
   requiresPermission?: MastraFGAPermissionInput | MastraFGAPermissionInput[];
+  /** Fine-grained authorization requirements for the route. */
   fga?: FGARouteConfig;
 }
 
@@ -129,13 +150,17 @@ export interface FGARouteInfo {
  * Context passed to global FGA route resolvers.
  */
 export interface FGARouteResolverContext {
+  /** Route being authorized. */
   route: FGARouteInfo;
+  /** Parameters available for resolving the target resource. */
   params: Record<string, unknown>;
+  /** Request-scoped data available to the resolver. */
   requestContext?: any;
 }
 
 /**
  * Resolves route-level FGA metadata without mutating each route registration.
+ * @param context - Route, parameters and request context for the authorization check.
  */
 export type FGARouteResolver = (
   context: FGARouteResolverContext,
@@ -335,6 +360,7 @@ export interface IFGAProvider<TUser = unknown> {
   /**
    * Optional startup validation for provider-specific permission mappings.
    * Providers can throw when a permission Mastra may emit is not mapped.
+   * @param permissions - Permission identifiers the provider must support.
    */
   validatePermissions?: (permissions: MastraFGAPermissionInput[]) => void | Promise<void>;
 
@@ -366,7 +392,12 @@ export interface IFGAProvider<TUser = unknown> {
    * @param permission - The permission to check for
    * @returns The filtered list of resources the user can access
    */
-  filterAccessible<T extends { id: string }>(
+  filterAccessible<
+    T extends {
+      /** Identifier of the resource being filtered. */
+      id: string;
+    },
+  >(
     user: TUser,
     resources: T[],
     resourceType: string,

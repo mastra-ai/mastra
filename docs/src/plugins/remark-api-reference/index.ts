@@ -155,7 +155,7 @@ export async function prepareReference(
   return surfaces
 }
 
-export default function remarkApiReference(options: Options = {}) {
+export function remarkApiReference(options: Options = {}) {
   return async (tree: Root, file: { path: string; message: (message: string) => unknown }) => {
     const selections = discoverSurfaces(tree)
     if (!selections.length) return
@@ -216,3 +216,5 @@ export default function remarkApiReference(options: Options = {}) {
     tree.children.unshift(...imports)
   }
 }
+
+export default remarkApiReference

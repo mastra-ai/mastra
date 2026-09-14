@@ -1896,8 +1896,11 @@ export function createScorer(config: any): any {
   });
 }
 
+/** Scorer and the eligibility and sampling policies controlling its execution. */
 export type MastraScorerEntry = {
+  /** Scorer instance to execute. */
   scorer: MastraScorer<any, any, any, any>;
+  /** Sampling policy applied after the eligibility filter. */
   sampling?: ScoringSamplingConfig;
   /**
    * Declarative eligibility filter, evaluated before sampling (filter →
@@ -1907,6 +1910,7 @@ export type MastraScorerEntry = {
   filter?: ScoringFilter;
 };
 
+/** Scorers and their execution policies, keyed by registration name. */
 export type MastraScorers = Record<string, MastraScorerEntry>;
 
 // ============================================================================

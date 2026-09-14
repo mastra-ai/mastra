@@ -25,10 +25,11 @@ export type {
   UIMessageWithMetadata,
 } from './state/types';
 
-// MessageList input types
+/** Assistant and tool response messages in the AI SDK v5 model format. */
 export type AIV5ResponseMessage = AIV5.AssistantModelMessage | AIV5.ToolModelMessage;
 export type AIV6ResponseMessage = AIV6.AssistantModelMessage | AIV6.ToolModelMessage;
 
+/** Message accepted from supported AI SDK formats or Mastra's stored message formats. */
 export type MessageInput =
   | AIV7.UIMessage
   | AIV7.ModelMessage
@@ -42,7 +43,11 @@ export type MessageInput =
   | MastraMessageV1
   | MastraDBMessage;
 
+/** A text prompt or supported message object. */
 export type BaseMessageListItem = string | MessageInput;
+/** Text, one message or a list of text and message inputs. */
 export type BaseMessageListInput = string | MessageInput | BaseMessageListItem[];
+/** One message-list item, including a created agent signal. */
 export type MessageListItem = BaseMessageListItem | CreatedAgentSignal;
+/** Agent input as text, messages, created signals or a list combining these forms. */
 export type MessageListInput = BaseMessageListInput | CreatedAgentSignal | MessageListItem[];

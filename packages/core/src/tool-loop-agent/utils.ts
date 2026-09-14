@@ -7,7 +7,9 @@ import type { ToolLoopAgentSettings } from '@internal/ai-v6';
  * well with private properties across different package declarations.
  */
 export interface ToolLoopAgentLike {
+  /** Identifier exposed by the agent instance. */
   readonly id?: string;
+  /** Agent interface version used for runtime compatibility detection. */
   readonly version?: string;
   // The settings property is private in ToolLoopAgent but accessible at runtime
   // We don't declare it here since we access it via type casting

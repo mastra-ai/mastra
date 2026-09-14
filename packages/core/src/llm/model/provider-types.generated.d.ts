@@ -8,7 +8,9 @@
  * This is derived from the JSON data and provides type-safe access
  */
 export type ProviderModelsMap = {
+  /** Model identifiers registered for this provider. */
   readonly subconscious: readonly ['subconscious/glm-5.2', 'subconscious/tim-qwen3.6-27b'];
+  /** Model identifiers registered for this provider. */
   readonly tokengo: readonly [
     'deepseek/deepseek-v3.1',
     'deepseek/deepseek-v3.2',
@@ -24,6 +26,7 @@ export type ProviderModelsMap = {
     'z-ai/glm-5.3',
     'z-ai/glm-5.3-flash',
   ];
+  /** Model identifiers registered for this provider. */
   readonly modelis: readonly [
     'claude-fable-5',
     'claude-opus-4-8',
@@ -35,7 +38,9 @@ export type ProviderModelsMap = {
     'qwen/qwen3.7-max',
     'qwen/qwen3.7-plus',
   ];
+  /** Model identifiers registered for this provider. */
   readonly bothub: readonly ['gemma-4-31b-it:free', 'nemotron-3-ultra-550b-a55b:free'];
+  /** Model identifiers registered for this provider. */
   readonly greenpt: readonly [
     'deepseek-v4-flash-0731',
     'devstral-2-123b-instruct-2512',
@@ -77,6 +82,7 @@ export type ProviderModelsMap = {
     'qwen3.6-35b-a3b',
     'voxtral-small-24b-2507',
   ];
+  /** Model identifiers registered for this provider. */
   readonly 'qiniu-ai': readonly [
     'MiniMax-M1',
     'claude-3.5-haiku',
@@ -170,6 +176,7 @@ export type ProviderModelsMap = {
     'z-ai/glm-4.7',
     'z-ai/glm-5',
   ];
+  /** Model identifiers registered for this provider. */
   readonly ambient: readonly [
     'ambient/large',
     'deepseek/deepseek-v4-flash',
@@ -182,7 +189,9 @@ export type ProviderModelsMap = {
     'zai-org/GLM-5.1-FP8',
     'zai-org/GLM-5.2-FP8',
   ];
+  /** Model identifiers registered for this provider. */
   readonly agentrouter: readonly ['claude-opus-4-8', 'claude-opus-5', 'gpt-5.6-sol'];
+  /** Model identifiers registered for this provider. */
   readonly 'xiaomi-token-plan-cn': readonly [
     'mimo-v2-pro',
     'mimo-v2-tts',
@@ -192,6 +201,7 @@ export type ProviderModelsMap = {
     'mimo-v2.5-tts-voiceclone',
     'mimo-v2.5-tts-voicedesign',
   ];
+  /** Model identifiers registered for this provider. */
   readonly 'nano-gpt': readonly [
     'Doctor-Shotgun/MS3.2-24B-Magnum-Diamond',
     'EVA-UNIT-01/EVA-LLaMA-3.33-70B-v0.0',
@@ -781,6 +791,7 @@ export type ProviderModelsMap = {
     'z-ai/glm-5v-turbo:thinking',
     'z-ai/glm-latest',
   ];
+  /** Model identifiers registered for this provider. */
   readonly digitalocean: readonly [
     'alibaba-qwen3-32b',
     'all-mini-lm-l6-v2',
@@ -879,6 +890,7 @@ export type ProviderModelsMap = {
     'stable-diffusion-3.5-large',
     'wan2-2-t2v-a14b',
   ];
+  /** Model identifiers registered for this provider. */
   readonly vivgrid: readonly [
     'claude-fable-5',
     'claude-fable-5-1',
@@ -908,6 +920,7 @@ export type ProviderModelsMap = {
     'gpt-6-astra',
     'kimi-k3',
   ];
+  /** Model identifiers registered for this provider. */
   readonly auriko: readonly [
     'claude-opus-4-6',
     'claude-opus-4-7',
@@ -925,6 +938,7 @@ export type ProviderModelsMap = {
     'minimax-m2-7-highspeed',
     'qwen-3.6-plus',
   ];
+  /** Model identifiers registered for this provider. */
   readonly 'siliconflow-cn': readonly [
     'ByteDance-Seed/Seed-OSS-36B-Instruct',
     'PaddlePaddle/PaddleOCR-VL-1.5',
@@ -974,13 +988,16 @@ export type ProviderModelsMap = {
     'zai-org/GLM-4.5-Air',
     'zai-org/GLM-5.2',
   ];
+  /** Model identifiers registered for this provider. */
   readonly nova: readonly ['nova-2-lite-v1', 'nova-2-pro-v1'];
+  /** Model identifiers registered for this provider. */
   readonly inceptron: readonly [
     'deepseek-ai/DeepSeek-V4-Flash-0731',
     'moonshotai/Kimi-K2.6',
     'moonshotai/Kimi-K2.7-Code',
     'zai-org/GLM-5.2',
   ];
+  /** Model identifiers registered for this provider. */
   readonly vultr: readonly [
     'MiniMaxAI/MiniMax-M2.7',
     'Qwen/Qwen3.5-397B-A17B',
@@ -993,6 +1010,7 @@ export type ProviderModelsMap = {
     'nvidia/Nemotron-Cascade-2-30B-A3B',
     'zai-org/GLM-5.2-FP8',
   ];
+  /** Model identifiers registered for this provider. */
   readonly 'ollama-cloud': readonly [
     'deepseek-v4-flash',
     'deepseek-v4-flash:0731',
@@ -1017,6 +1035,7 @@ export type ProviderModelsMap = {
     'nemotron-3-ultra',
     'qwen3.5:397b',
   ];
+  /** Model identifiers registered for this provider. */
   readonly freemodel: readonly [
     'claude-fable-5',
     'claude-haiku-4-5-20251001',
@@ -1029,6 +1048,7 @@ export type ProviderModelsMap = {
     'gpt-5.4-mini',
     'gpt-5.5',
   ];
+  /** Model identifiers registered for this provider. */
   readonly iflowcn: readonly [
     'deepseek-r1',
     'deepseek-v3',
@@ -1045,7 +1065,9 @@ export type ProviderModelsMap = {
     'qwen3-max-preview',
     'qwen3-vl-plus',
   ];
+  /** Model identifiers registered for this provider. */
   readonly 'scx-ai': readonly ['GLM-5.2', 'MiniMax-M2.7', 'Qwen3.8-Max', 'gpt-oss-120b'];
+  /** Model identifiers registered for this provider. */
   readonly evroc: readonly [
     'KBLab/kb-whisper-large',
     'Qwen/Qwen3-Embedding-8B',
@@ -1064,8 +1086,11 @@ export type ProviderModelsMap = {
     'openai/whisper-large-v3-turbo',
     'zai-org/GLM-5.2',
   ];
+  /** Model identifiers registered for this provider. */
   readonly echo: readonly ['echo'];
+  /** Model identifiers registered for this provider. */
   readonly aixy: readonly ['openai/gpt-4.1-mini'];
+  /** Model identifiers registered for this provider. */
   readonly impossibl: readonly [
     'anthropic/claude-fable-5',
     'anthropic/claude-haiku-4-5',
@@ -1144,6 +1169,7 @@ export type ProviderModelsMap = {
     'zai/glm-5.1',
     'zai/glm-5.2',
   ];
+  /** Model identifiers registered for this provider. */
   readonly 'llmgateway-providers': readonly [
     'alibaba/deepseek-v4-flash',
     'alibaba/deepseek-v4-pro',
@@ -1517,6 +1543,7 @@ export type ProviderModelsMap = {
     'zai/glm-5.3',
     'zai/glm-5.3-flash',
   ];
+  /** Model identifiers registered for this provider. */
   readonly llama: readonly [
     'cerebras-llama-4-maverick-17b-128e-instruct',
     'cerebras-llama-4-scout-17b-16e-instruct',
@@ -1526,6 +1553,7 @@ export type ProviderModelsMap = {
     'llama-4-maverick-17b-128e-instruct-fp8',
     'llama-4-scout-17b-16e-instruct-fp8',
   ];
+  /** Model identifiers registered for this provider. */
   readonly 'alibaba-token-plan': readonly [
     'MiniMax-M2.5',
     'deepseek-v3.2',
@@ -1554,6 +1582,7 @@ export type ProviderModelsMap = {
     'wan2.7-image',
     'wan2.7-image-pro',
   ];
+  /** Model identifiers registered for this provider. */
   readonly neuralwatt: readonly [
     'deepseek-v4-flash',
     'deepseek-v4-flash-flex',
@@ -1577,7 +1606,9 @@ export type ProviderModelsMap = {
     'qwen3.6-35b',
     'qwen3.6-35b-fast',
   ];
+  /** Model identifiers registered for this provider. */
   readonly 'abliteration-ai': readonly ['abliterated-model', 'abliterated-model-large', 'abliterated-model-large-v2'];
+  /** Model identifiers registered for this provider. */
   readonly clarifai: readonly [
     'arcee_ai/AFM/models/trinity-mini',
     'clarifai/main/models/mm-poly-8b',
@@ -1592,7 +1623,9 @@ export type ProviderModelsMap = {
     'qwen/qwenLM/models/Qwen3-30B-A3B-Instruct-2507',
     'qwen/qwenLM/models/Qwen3-30B-A3B-Thinking-2507',
   ];
+  /** Model identifiers registered for this provider. */
   readonly morph: readonly ['auto', 'morph-v3-fast', 'morph-v3-large'];
+  /** Model identifiers registered for this provider. */
   readonly chutes: readonly [
     'Nemotron-3-Nano-Omni-30B-TEE',
     'Qwen/Qwen3-235B-A22B-Thinking-2507-TEE',
@@ -1609,6 +1642,7 @@ export type ProviderModelsMap = {
     'zai-org/GLM-5.1-TEE',
     'zai-org/GLM-5.2-TEE',
   ];
+  /** Model identifiers registered for this provider. */
   readonly groq: readonly [
     'allam-2-7b',
     'canopylabs/orpheus-arabic-saudi',
@@ -1627,6 +1661,7 @@ export type ProviderModelsMap = {
     'whisper-large-v3',
     'whisper-large-v3-turbo',
   ];
+  /** Model identifiers registered for this provider. */
   readonly 'zai-coding-plan': readonly [
     'glm-4.7',
     'glm-5-turbo',
@@ -1636,6 +1671,7 @@ export type ProviderModelsMap = {
     'glm-5.3-flash',
     'glm-5.3-highspeed',
   ];
+  /** Model identifiers registered for this provider. */
   readonly volcengine: readonly [
     'deepseek-v4-flash-ga-260731',
     'deepseek-v4-pro-ga-260813',
@@ -1653,6 +1689,7 @@ export type ProviderModelsMap = {
     'doubao-seed-evolving',
     'glm-5-2-260617',
   ];
+  /** Model identifiers registered for this provider. */
   readonly sensenova: readonly [
     'deepseek-v4-flash',
     'deepseek-v4-pro',
@@ -1660,6 +1697,7 @@ export type ProviderModelsMap = {
     'kimi-k3',
     'sensenova-6.8-flash-lite',
   ];
+  /** Model identifiers registered for this provider. */
   readonly orcarouter: readonly [
     'anthropic/claude-fable-5',
     'anthropic/claude-haiku-4.5',
@@ -1779,6 +1817,7 @@ export type ProviderModelsMap = {
     'z-ai/glm-5.3-flash',
     'z-ai/glm-5.3-flash-free',
   ];
+  /** Model identifiers registered for this provider. */
   readonly 'routing-run': readonly [
     'claude-opus-4-8',
     'claude-sonnet-4-6',
@@ -1796,7 +1835,9 @@ export type ProviderModelsMap = {
     'nemotron-3-ultra',
     'qwen3.5-9b',
   ];
+  /** Model identifiers registered for this provider. */
   readonly llmtech: readonly ['unsloth/Qwen3.8-27B-NVFP4'];
+  /** Model identifiers registered for this provider. */
   readonly 'alibaba-coding-plan-cn': readonly [
     'MiniMax-M2.5',
     'glm-4.7',
@@ -1811,6 +1852,7 @@ export type ProviderModelsMap = {
     'qwen3.7-max',
     'qwen3.7-plus',
   ];
+  /** Model identifiers registered for this provider. */
   readonly 'regolo-ai': readonly [
     'apertus-70b',
     'brick-complexity-pro',
@@ -1831,6 +1873,7 @@ export type ProviderModelsMap = {
     'qwen3.5-9b',
     'qwen3.8-27b',
   ];
+  /** Model identifiers registered for this provider. */
   readonly kenari: readonly [
     'claude-fable-5',
     'claude-opus-4-7',
@@ -1892,6 +1935,7 @@ export type ProviderModelsMap = {
     'step-3-7-flash:free',
     'whisper-large-v3-turbo',
   ];
+  /** Model identifiers registered for this provider. */
   readonly 'the-grid-ai': readonly [
     'agent-max',
     'agent-prime',
@@ -1903,6 +1947,7 @@ export type ProviderModelsMap = {
     'text-prime',
     'text-standard',
   ];
+  /** Model identifiers registered for this provider. */
   readonly 'stepfun-ai': readonly [
     'step-1-32k',
     'step-2-16k',
@@ -1913,6 +1958,7 @@ export type ProviderModelsMap = {
     'stepaudio-2.5-asr',
     'stepaudio-2.5-tts',
   ];
+  /** Model identifiers registered for this provider. */
   readonly pendra: readonly [
     'deepseek-v4-flash',
     'glm-4.7-flash',
@@ -1921,6 +1967,7 @@ export type ProviderModelsMap = {
     'qwen3-coder:30b',
     'qwen3.6:27b',
   ];
+  /** Model identifiers registered for this provider. */
   readonly above: readonly [
     'deepseek-v4-flash',
     'deepseek-v4-flash-vision-exp',
@@ -1932,6 +1979,7 @@ export type ProviderModelsMap = {
     'mimo-v2.5-pro-ultraspeed',
     'qwen3.8-max',
   ];
+  /** Model identifiers registered for this provider. */
   readonly scaleway: readonly [
     'bge-multilingual-gemma2',
     'deepseek-v4-flash-0731',
@@ -1949,6 +1997,7 @@ export type ProviderModelsMap = {
     'qwen3.6-35b-a3b',
     'whisper-large-v3',
   ];
+  /** Model identifiers registered for this provider. */
   readonly 'alibaba-cn': readonly [
     'MiniMax-M2.5',
     'MiniMax/MiniMax-M2.7',
@@ -2038,6 +2087,7 @@ export type ProviderModelsMap = {
     'siliconflow/deepseek-v3.2',
     'tongyi-intent-detect-v3',
   ];
+  /** Model identifiers registered for this provider. */
   readonly poe: readonly [
     'anthropic/claude-haiku-3',
     'anthropic/claude-haiku-3.5',
@@ -2177,6 +2227,7 @@ export type ProviderModelsMap = {
     'xai/grok-4.20-multi-agent',
     'xai/grok-code-fast-1',
   ];
+  /** Model identifiers registered for this provider. */
   readonly modelscope: readonly [
     'Qwen/Qwen3-235B-A22B-Instruct-2507',
     'Qwen/Qwen3-235B-A22B-Thinking-2507',
@@ -2186,8 +2237,11 @@ export type ProviderModelsMap = {
     'ZhipuAI/GLM-4.5',
     'ZhipuAI/GLM-4.6',
   ];
+  /** Model identifiers registered for this provider. */
   readonly poolside: readonly ['poolside/laguna-m.1', 'poolside/laguna-s-2.1', 'poolside/laguna-xs-2.1'];
+  /** Model identifiers registered for this provider. */
   readonly claudinio: readonly ['claudinio', 'claudius'];
+  /** Model identifiers registered for this provider. */
   readonly 'novita-ai': readonly [
     'baichuan/baichuan-m2-32b',
     'baidu/ernie-4.5-21B-a3b',
@@ -2297,6 +2351,7 @@ export type ProviderModelsMap = {
     'zai-org/glm-5.1',
     'zai-org/glm-5.2',
   ];
+  /** Model identifiers registered for this provider. */
   readonly nebius: readonly [
     'MiniMaxAI/MiniMax-M3',
     'NousResearch/Hermes-4-405B',
@@ -2316,6 +2371,7 @@ export type ProviderModelsMap = {
     'zai-org/GLM-5.2',
     'zai-org/GLM-5.3-Flash',
   ];
+  /** Model identifiers registered for this provider. */
   readonly 'minimax-cn-coding-plan': readonly [
     'MiniMax-M2',
     'MiniMax-M2.1',
@@ -2325,6 +2381,7 @@ export type ProviderModelsMap = {
     'MiniMax-M2.7-highspeed',
     'MiniMax-M3',
   ];
+  /** Model identifiers registered for this provider. */
   readonly 'xiaomi-token-plan-ams': readonly [
     'mimo-v2-pro',
     'mimo-v2-tts',
@@ -2334,8 +2391,11 @@ export type ProviderModelsMap = {
     'mimo-v2.5-tts-voiceclone',
     'mimo-v2.5-tts-voicedesign',
   ];
+  /** Model identifiers registered for this provider. */
   readonly zeldoc: readonly ['zdev'];
+  /** Model identifiers registered for this provider. */
   readonly dinference: readonly ['glm-4.7', 'glm-5', 'glm-5.1', 'glm-5.2', 'gpt-oss-120b', 'minimax-m2.5'];
+  /** Model identifiers registered for this provider. */
   readonly pioneer: readonly [
     'HuggingFaceTB/SmolLM3-3B-Base',
     'LiquidAI/LFM2-24B-A2B',
@@ -2441,6 +2501,7 @@ export type ProviderModelsMap = {
     'zai-org/GLM-5.1',
     'zai-org/GLM-5.2',
   ];
+  /** Model identifiers registered for this provider. */
   readonly helicone: readonly [
     'chatgpt-4o-latest',
     'claude-3-haiku-20240307',
@@ -2533,6 +2594,7 @@ export type ProviderModelsMap = {
     'sonar-reasoning',
     'sonar-reasoning-pro',
   ];
+  /** Model identifiers registered for this provider. */
   readonly 'cloudferro-sherlock': readonly [
     'MiniMaxAI/MiniMax-M2.5',
     'meta-llama/Llama-3.3-70B-Instruct',
@@ -2540,6 +2602,7 @@ export type ProviderModelsMap = {
     'speakleash/Bielik-11B-v2.6-Instruct',
     'speakleash/Bielik-11B-v3.0-Instruct',
   ];
+  /** Model identifiers registered for this provider. */
   readonly stepfun: readonly [
     'step-1-32k',
     'step-2-16k',
@@ -2550,6 +2613,7 @@ export type ProviderModelsMap = {
     'stepaudio-2.5-asr',
     'stepaudio-2.5-tts',
   ];
+  /** Model identifiers registered for this provider. */
   readonly unorouter: readonly [
     'claude-haiku-4-5-20251001',
     'claude-opus-4-8',
@@ -2575,7 +2639,9 @@ export type ProviderModelsMap = {
     'qwen3.5-397b-a17b:free',
     'step-3.7-flash:free',
   ];
+  /** Model identifiers registered for this provider. */
   readonly coralbricks: readonly ['glm-5.3-fp4', 'gpt-oss-120b', 'kimi-k3'];
+  /** Model identifiers registered for this provider. */
   readonly hyper: readonly [
     'deepseek-v4-flash',
     'deepseek-v4-flash-0731',
@@ -2611,6 +2677,7 @@ export type ProviderModelsMap = {
     'qwen3.8-flash',
     'qwen3.8-max',
   ];
+  /** Model identifiers registered for this provider. */
   readonly requesty: readonly [
     'claude-fable-5',
     'claude-fable-5.1',
@@ -2766,6 +2833,7 @@ export type ProviderModelsMap = {
     'thinkingcap-qwen3.6-27b',
     'thinkingcap-qwen3.6-27b@eu',
   ];
+  /** Model identifiers registered for this provider. */
   readonly llmtr: readonly [
     'gemma-4',
     'google/gemini-2.5-flash-lite',
@@ -2800,6 +2868,7 @@ export type ProviderModelsMap = {
     'upstage/solar-pro3',
     'upstage/solar-pro4',
   ];
+  /** Model identifiers registered for this provider. */
   readonly xiaomi: readonly [
     'mimo-v2-flash',
     'mimo-v2-omni',
@@ -2808,6 +2877,7 @@ export type ProviderModelsMap = {
     'mimo-v2.5-pro',
     'mimo-v2.5-pro-ultraspeed',
   ];
+  /** Model identifiers registered for this provider. */
   readonly huggingface: readonly [
     'MiniMaxAI/MiniMax-M2',
     'MiniMaxAI/MiniMax-M2.1',
@@ -2883,6 +2953,7 @@ export type ProviderModelsMap = {
     'zai-org/GLM-5.3',
     'zai-org/GLM-5.3-Flash',
   ];
+  /** Model identifiers registered for this provider. */
   readonly 'zhipuai-coding-plan': readonly [
     'glm-4.6v',
     'glm-4.7',
@@ -2895,6 +2966,7 @@ export type ProviderModelsMap = {
     'glm-5.3-highspeed',
     'glm-5v-turbo',
   ];
+  /** Model identifiers registered for this provider. */
   readonly daoxe: readonly [
     'claude-haiku-4-5-20251001',
     'claude-opus-4-8',
@@ -2906,6 +2978,7 @@ export type ProviderModelsMap = {
     'grok-4.5',
     'kimi-k2.5',
   ];
+  /** Model identifiers registered for this provider. */
   readonly crossmodel: readonly [
     'anthropic/claude-fable-5',
     'anthropic/claude-fable-5-1',
@@ -2967,6 +3040,7 @@ export type ProviderModelsMap = {
     'z-ai/glm-5.3',
     'z-ai/glm-5.3-flash',
   ];
+  /** Model identifiers registered for this provider. */
   readonly minimax: readonly [
     'MiniMax-M2',
     'MiniMax-M2.1',
@@ -2976,6 +3050,7 @@ export type ProviderModelsMap = {
     'MiniMax-M2.7-highspeed',
     'MiniMax-M3',
   ];
+  /** Model identifiers registered for this provider. */
   readonly 'aki-io': readonly [
     'deepseek-v4-flash-0731-284b',
     'gemma4-26b',
@@ -2985,6 +3060,7 @@ export type ProviderModelsMap = {
     'qwen3.6-35b',
     'qwen3.8-27b',
   ];
+  /** Model identifiers registered for this provider. */
   readonly trustedrouter: readonly [
     'trustedrouter/auto',
     'trustedrouter/cheap',
@@ -2994,6 +3070,7 @@ export type ProviderModelsMap = {
     'trustedrouter/synth-code',
     'trustedrouter/zdr',
   ];
+  /** Model identifiers registered for this provider. */
   readonly alibaba: readonly [
     'deepseek-v4-flash-0731',
     'glm-5.2',
@@ -3051,6 +3128,7 @@ export type ProviderModelsMap = {
     'qwen3.8-max',
     'qwq-plus',
   ];
+  /** Model identifiers registered for this provider. */
   readonly nvidia: readonly [
     'abacusai/dracarys-llama-3.1-70b-instruct',
     'baai/bge-m3',
@@ -3156,6 +3234,7 @@ export type ProviderModelsMap = {
     'upstage/solar-10.7b-instruct',
     'z-ai/glm-5.2',
   ];
+  /** Model identifiers registered for this provider. */
   readonly jiekou: readonly [
     'baidu/ernie-4.5-300b-a47b-paddle',
     'baidu/ernie-4.5-vl-424b-a47b',
@@ -3219,6 +3298,7 @@ export type ProviderModelsMap = {
     'zai-org/glm-4.7',
     'zai-org/glm-4.7-flash',
   ];
+  /** Model identifiers registered for this provider. */
   readonly frogbot: readonly [
     'claude-haiku-4-5',
     'claude-opus-4-6',
@@ -3247,6 +3327,7 @@ export type ProviderModelsMap = {
     'qwen-3-6-plus',
     'zai-glm-5-1',
   ];
+  /** Model identifiers registered for this provider. */
   readonly ovhcloud: readonly [
     'gpt-oss-120b',
     'gpt-oss-20b',
@@ -3264,6 +3345,7 @@ export type ProviderModelsMap = {
     'qwen3guard-gen-0.6b',
     'qwen3guard-gen-8b',
   ];
+  /** Model identifiers registered for this provider. */
   readonly xpersona: readonly [
     'claude-fable-5',
     'claude-haiku-4-5',
@@ -3279,6 +3361,7 @@ export type ProviderModelsMap = {
     'xpersona-frieren-coder',
     'xpersona-gpt-5.5',
   ];
+  /** Model identifiers registered for this provider. */
   readonly anthropic: readonly [
     'claude-fable-5',
     'claude-fable-5-1',
@@ -3295,6 +3378,7 @@ export type ProviderModelsMap = {
     'claude-sonnet-4-6',
     'claude-sonnet-5',
   ];
+  /** Model identifiers registered for this provider. */
   readonly google: readonly [
     'deep-research-max-preview-04-2026',
     'deep-research-preview-04-2026',
@@ -3336,6 +3420,7 @@ export type ProviderModelsMap = {
     'veo-3.1-generate-preview',
     'veo-3.1-lite-generate-preview',
   ];
+  /** Model identifiers registered for this provider. */
   readonly baseten: readonly [
     'MiniMaxAI/MiniMax-M2.5',
     'deepseek-ai/DeepSeek-V3.1',
@@ -3360,6 +3445,7 @@ export type ProviderModelsMap = {
     'zai-org/GLM-5.3-Fast',
     'zai-org/GLM-5.3-Flash',
   ];
+  /** Model identifiers registered for this provider. */
   readonly vercel: readonly [
     'alibaba/qwen-3-14b',
     'alibaba/qwen-3-235b',
@@ -3734,6 +3820,7 @@ export type ProviderModelsMap = {
     'zai/glm-5.3-flash',
     'zai/glm-5v-turbo',
   ];
+  /** Model identifiers registered for this provider. */
   readonly wandb: readonly [
     'JetBrains/Mellum2-12B-A2.5B-Instruct',
     'MiniMaxAI/MiniMax-M3',
@@ -3763,6 +3850,7 @@ export type ProviderModelsMap = {
     'zai-org/GLM-5.2',
     'zai-org/GLM-5.3-Flash',
   ];
+  /** Model identifiers registered for this provider. */
   readonly friendli: readonly [
     'MiniMaxAI/MiniMax-M2.5',
     'deepseek-ai/DeepSeek-V3.2',
@@ -3771,9 +3859,13 @@ export type ProviderModelsMap = {
     'zai-org/GLM-5.2',
     'zai-org/GLM-5.3',
   ];
+  /** Model identifiers registered for this provider. */
   readonly tokenrouter: readonly ['z-ai/glm-5.3-free'];
+  /** Model identifiers registered for this provider. */
   readonly thinkingmachines: readonly ['thinkingmachines/Inkling', 'thinkingmachines/Inkling:peft:262144'];
+  /** Model identifiers registered for this provider. */
   readonly standardcompute: readonly ['standardcompute'];
+  /** Model identifiers registered for this provider. */
   readonly tensorx: readonly [
     'deepseek/deepseek-chat-v3.1',
     'deepseek/deepseek-r1-0528',
@@ -3801,6 +3893,7 @@ export type ProviderModelsMap = {
     'z-ai/glm-5.2',
     'z-ai/glm-5v-turbo',
   ];
+  /** Model identifiers registered for this provider. */
   readonly meta: readonly [
     'muse-spark-1.1',
     'muse-spark-1.2',
@@ -3808,6 +3901,7 @@ export type ProviderModelsMap = {
     'muse-spark-1.3',
     'muse-spark-1.3-contributor',
   ];
+  /** Model identifiers registered for this provider. */
   readonly gmicloud: readonly [
     'MiniMaxAI/MiniMax-M2.7',
     'MiniMaxAI/MiniMax-M3',
@@ -3825,6 +3919,7 @@ export type ProviderModelsMap = {
     'zai-org/GLM-5.1-FP8',
     'zai-org/GLM-5.2-FP8',
   ];
+  /** Model identifiers registered for this provider. */
   readonly 'io-net': readonly [
     'Intel/Qwen3-Coder-480B-A35B-Instruct-int4-mixed-ar',
     'Qwen/Qwen2.5-VL-32B-Instruct',
@@ -3844,6 +3939,7 @@ export type ProviderModelsMap = {
     'openai/gpt-oss-20b',
     'zai-org/GLM-4.6',
   ];
+  /** Model identifiers registered for this provider. */
   readonly llmgateway: readonly [
     'Qwen3.8-27B',
     'auto',
@@ -4032,6 +4128,7 @@ export type ProviderModelsMap = {
     'sonar-pro',
     'sonar-reasoning-pro',
   ];
+  /** Model identifiers registered for this provider. */
   readonly infomaniak: readonly [
     'Qwen/Qwen3.5-122B-A10B-FP8',
     'Qwen/Qwen3.5-397B-A17B-FP8',
@@ -4044,8 +4141,11 @@ export type ProviderModelsMap = {
     'nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8',
     'swiss-ai/Apertus-v1.5-70B',
   ];
+  /** Model identifiers registered for this provider. */
   readonly inception: readonly ['mercury-2', 'mercury-edit-2'];
+  /** Model identifiers registered for this provider. */
   readonly lilac: readonly ['google/gemma-4-31b-it', 'minimaxai/minimax-m3', 'moonshotai/kimi-k2.6', 'zai-org/glm-5.2'];
+  /** Model identifiers registered for this provider. */
   readonly fastrouter: readonly [
     'anthropic/claude-opus-4.1',
     'anthropic/claude-opus-4.8',
@@ -4095,6 +4195,7 @@ export type ProviderModelsMap = {
     'z-ai/glm-5',
     'z-ai/glm-5.1',
   ];
+  /** Model identifiers registered for this provider. */
   readonly zhipuai: readonly [
     'glm-4.5',
     'glm-4.5-air',
@@ -4112,6 +4213,7 @@ export type ProviderModelsMap = {
     'glm-5.3-flash',
     'glm-5v-turbo',
   ];
+  /** Model identifiers registered for this provider. */
   readonly jalapeno: readonly [
     'DeepSeek-V4-Flash',
     'DeepSeek-V4-Pro',
@@ -4131,6 +4233,7 @@ export type ProviderModelsMap = {
     'Qwen3.5-35B-A3B',
     'Qwen3.5-397B-A17B',
   ];
+  /** Model identifiers registered for this provider. */
   readonly 'perplexity-agent': readonly [
     'anthropic/claude-haiku-4-5',
     'anthropic/claude-opus-4-5',
@@ -4155,6 +4258,7 @@ export type ProviderModelsMap = {
     'xai/grok-4-1-fast-non-reasoning',
     'xai/grok-4.6',
   ];
+  /** Model identifiers registered for this provider. */
   readonly 'fireworks-ai': readonly [
     'accounts/fireworks/models/deepseek-v4-flash-0731',
     'accounts/fireworks/models/deepseek-v4-flash-vision-exp',
@@ -4178,6 +4282,7 @@ export type ProviderModelsMap = {
     'accounts/fireworks/routers/glm-5p3-fast',
     'accounts/fireworks/routers/kimi-k3-fast',
   ];
+  /** Model identifiers registered for this provider. */
   readonly opper: readonly [
     'anthropic/claude-fable-5',
     'anthropic/claude-haiku-4-5',
@@ -4220,6 +4325,7 @@ export type ProviderModelsMap = {
     'xai/grok-4.6',
     'xai/grok-build-0.1',
   ];
+  /** Model identifiers registered for this provider. */
   readonly stackit: readonly [
     'Qwen/Qwen3-VL-235B-A22B-Instruct-FP8',
     'Qwen/Qwen3-VL-Embedding-8B',
@@ -4230,6 +4336,7 @@ export type ProviderModelsMap = {
     'openai/gpt-oss-120b',
     'openai/gpt-oss-20b',
   ];
+  /** Model identifiers registered for this provider. */
   readonly crof: readonly [
     'deepseek-v3.2',
     'deepseek-v4-flash',
@@ -4256,6 +4363,7 @@ export type ProviderModelsMap = {
     'qwen3.6-27b',
     'qwen3.8-27b',
   ];
+  /** Model identifiers registered for this provider. */
   readonly crusoe: readonly [
     'Qwen/Qwen3-235B-A22B-Instruct-2507',
     'deepseek-ai/DeepSeek-V3-0324',
@@ -4269,6 +4377,7 @@ export type ProviderModelsMap = {
     'zai/GLM-5.1',
     'zai/GLM-5.2',
   ];
+  /** Model identifiers registered for this provider. */
   readonly empiriolabs: readonly [
     'deepseek-v3-2',
     'deepseek-v4-flash',
@@ -4329,7 +4438,9 @@ export type ProviderModelsMap = {
     'step-3-5-flash-2603',
     'step-3-7-flash',
   ];
+  /** Model identifiers registered for this provider. */
   readonly klokintegration: readonly ['Kloker', 'Kloker-Integration-Architect', 'Kloker-Integration-Developer'];
+  /** Model identifiers registered for this provider. */
   readonly 'privatemode-ai': readonly [
     'deepseek-ocr-2',
     'glm-5.3',
@@ -4341,6 +4452,7 @@ export type ProviderModelsMap = {
     'voxtral-mini-3b',
     'whisper-large-v3',
   ];
+  /** Model identifiers registered for this provider. */
   readonly 'minimax-coding-plan': readonly [
     'MiniMax-M2',
     'MiniMax-M2.1',
@@ -4350,6 +4462,7 @@ export type ProviderModelsMap = {
     'MiniMax-M2.7-highspeed',
     'MiniMax-M3',
   ];
+  /** Model identifiers registered for this provider. */
   readonly inferx: readonly [
     'Agents-A1',
     'Devstral-2-123B-Instruct-2512-int4-AutoRound',
@@ -4364,6 +4477,7 @@ export type ProviderModelsMap = {
     'gemma-4-31B-it-fp8',
     'mimo-v25',
   ];
+  /** Model identifiers registered for this provider. */
   readonly 'umans-ai-coding-plan': readonly [
     'umans-coder',
     'umans-deepseek-v4-flash-0731',
@@ -4374,6 +4488,7 @@ export type ProviderModelsMap = {
     'umans-kimi-k3',
     'umans-qwen3.6-35b-a3b',
   ];
+  /** Model identifiers registered for this provider. */
   readonly databricks: readonly [
     'databricks-claude-haiku-4-5',
     'databricks-claude-opus-4-1',
@@ -4406,18 +4521,21 @@ export type ProviderModelsMap = {
     'databricks-gpt-oss-20b',
     'databricks-kimi-k2-7-code',
   ];
+  /** Model identifiers registered for this provider. */
   readonly modal: readonly [
     'Qwen/Qwen3.8-2.4T-A95B',
     'moonshotai/Kimi-K3',
     'thinkingmachines/Inkling-NVFP4',
     'zai-org/GLM-5.3-Flash',
   ];
+  /** Model identifiers registered for this provider. */
   readonly lucidquery: readonly [
     'lucidnova-rf1-100b',
     'lucidquery-agi-01-frontier',
     'lucidquery-agi-01-swift',
     'lucidquery-nexus-coder',
   ];
+  /** Model identifiers registered for this provider. */
   readonly 'atomic-chat': readonly [
     'Meta-Llama-3_1-8B-Instruct-GGUF',
     'Qwen3_5-9B-MLX-4bit',
@@ -4425,6 +4543,7 @@ export type ProviderModelsMap = {
     'gemma-4-E4B-it-IQ4_XS',
     'gemma-4-E4B-it-MLX-4bit',
   ];
+  /** Model identifiers registered for this provider. */
   readonly 'umans-ai': readonly [
     'umans-coder',
     'umans-deepseek-v4-flash-0731',
@@ -4434,7 +4553,9 @@ export type ProviderModelsMap = {
     'umans-kimi-k2.7',
     'umans-kimi-k3',
   ];
+  /** Model identifiers registered for this provider. */
   readonly sakana: readonly ['fugu', 'fugu-ultra', 'fugu-ultra-20260615', 'sakana-namazu'];
+  /** Model identifiers registered for this provider. */
   readonly deepinfra: readonly [
     'ByteDance/Seed-2.0-code',
     'ByteDance/Seed-2.0-mini',
@@ -4500,7 +4621,9 @@ export type ProviderModelsMap = {
     'zai-org/GLM-5.3',
     'zai-org/GLM-5.3-Flash',
   ];
+  /** Model identifiers registered for this provider. */
   readonly 'wafer.ai': readonly ['GLM-5.1', 'GLM-5.2', 'Kimi-K2.6', 'MiniMax-M3', 'glm5.2-fast'];
+  /** Model identifiers registered for this provider. */
   readonly kilo: readonly [
     'aion-labs/aion-2.0',
     'aion-labs/aion-3.0',
@@ -4870,6 +4993,7 @@ export type ProviderModelsMap = {
     '~z-ai/glm-flash-latest',
     '~z-ai/glm-latest',
   ];
+  /** Model identifiers registered for this provider. */
   readonly 'alibaba-coding-plan': readonly [
     'MiniMax-M2.5',
     'glm-4.7',
@@ -4884,6 +5008,7 @@ export type ProviderModelsMap = {
     'qwen3.7-max',
     'qwen3.7-plus',
   ];
+  /** Model identifiers registered for this provider. */
   readonly submodel: readonly [
     'Qwen/Qwen3-235B-A22B-Instruct-2507',
     'Qwen/Qwen3-235B-A22B-Thinking-2507',
@@ -4895,11 +5020,13 @@ export type ProviderModelsMap = {
     'zai-org/GLM-4.5-Air',
     'zai-org/GLM-4.5-FP8',
   ];
+  /** Model identifiers registered for this provider. */
   readonly openreason: readonly [
     'deepseek-ai/deepseek-v4-flash-0731',
     'moonshotai/kimi-k2.7-code',
     'openai/gpt-oss-120b',
   ];
+  /** Model identifiers registered for this provider. */
   readonly 'merge-gateway': readonly [
     'anthropic/claude-3-7-sonnet-20250219',
     'anthropic/claude-fable-5',
@@ -5083,7 +5210,9 @@ export type ProviderModelsMap = {
     'zai/glm-5.3',
     'zai/glm-5.3-flash',
   ];
+  /** Model identifiers registered for this provider. */
   readonly deepseek: readonly ['deepseek-v4-flash', 'deepseek-v4-flash-vision-exp', 'deepseek-v4-pro'];
+  /** Model identifiers registered for this provider. */
   readonly abacus: readonly [
     'MiniMaxAI/MiniMax-M2.7',
     'MiniMaxAI/MiniMax-M3',
@@ -5194,8 +5323,11 @@ export type ProviderModelsMap = {
     'zai-org/GLM-5.1',
     'zai-org/GLM-5.2',
   ];
+  /** Model identifiers registered for this provider. */
   readonly blueclaw: readonly ['Qwen/Qwen3.6-35B-A3B-FP8', 'Qwen3.6-27B'];
+  /** Model identifiers registered for this provider. */
   readonly kosmik: readonly ['qwen/qwen3.8-27b'];
+  /** Model identifiers registered for this provider. */
   readonly opencode: readonly [
     'big-pickle',
     'claude-3-5-haiku',
@@ -5300,8 +5432,11 @@ export type ProviderModelsMap = {
     'trinity-large-preview-free',
     'x-preview-f-free',
   ];
+  /** Model identifiers registered for this provider. */
   readonly 'moonshotai-cn': readonly ['kimi-k2.6', 'kimi-k2.7-code', 'kimi-k2.7-code-highspeed', 'kimi-k3'];
+  /** Model identifiers registered for this provider. */
   readonly 'stepfun-step-plan': readonly ['step-3.5-flash', 'step-3.5-flash-2603', 'step-3.7-flash', 'step-router-v1'];
+  /** Model identifiers registered for this provider. */
   readonly nearai: readonly [
     'Qwen/Qwen3-Embedding-0.6B',
     'Qwen/Qwen3-Reranker-0.6B',
@@ -5336,6 +5471,7 @@ export type ProviderModelsMap = {
     'openai/whisper-large-v3',
     'zai-org/GLM-5.1-FP8',
   ];
+  /** Model identifiers registered for this provider. */
   readonly openrouter: readonly [
     'aion-labs/aion-2.0',
     'aion-labs/aion-3.0',
@@ -5696,6 +5832,7 @@ export type ProviderModelsMap = {
     '~z-ai/glm-flash-latest',
     '~z-ai/glm-latest',
   ];
+  /** Model identifiers registered for this provider. */
   readonly 'cline-pass': readonly [
     'cline-pass/deepseek-v4-flash',
     'cline-pass/deepseek-v4-pro',
@@ -5712,7 +5849,9 @@ export type ProviderModelsMap = {
     'cline-pass/qwen3.7-plus',
     'cline-pass/qwen3.8-max',
   ];
+  /** Model identifiers registered for this provider. */
   readonly iteracompute: readonly ['iteracompute/ornith-1.5-35b-a3b', 'iteracompute/qwen3.8-27b'];
+  /** Model identifiers registered for this provider. */
   readonly 'model-oracle-ai': readonly [
     'auto',
     'claude-fable-5',
@@ -5730,6 +5869,7 @@ export type ProviderModelsMap = {
     'gpt-5.5',
     'o4-mini',
   ];
+  /** Model identifiers registered for this provider. */
   readonly ofox: readonly [
     'anthropic/claude-fable-5',
     'anthropic/claude-fable-5.1',
@@ -5847,6 +5987,7 @@ export type ProviderModelsMap = {
     'z-ai/glm-5.3-flash',
     'z-ai/glm-5v-turbo',
   ];
+  /** Model identifiers registered for this provider. */
   readonly arcee: readonly [
     'deepseek/deepseek-v4-flash-latest',
     'deepseek/deepseek-v4-pro',
@@ -5856,10 +5997,15 @@ export type ProviderModelsMap = {
     'trinity-large-thinking',
     'zai-org/glm-5.2',
   ];
+  /** Model identifiers registered for this provider. */
   readonly 'kuae-cloud-coding-plan': readonly ['GLM-4.7'];
+  /** Model identifiers registered for this provider. */
   readonly ebcloud: readonly ['DeepSeek-V4-Flash', 'DeepSeek-V4-Pro', 'GLM-5.1', 'Kimi-K2.6'];
+  /** Model identifiers registered for this provider. */
   readonly agnes: readonly ['agnes-2.0-flash', 'agnes-2.5-flash', 'agnes-2.5-pro-alpha'];
+  /** Model identifiers registered for this provider. */
   readonly amd: readonly ['DeepSeek-V4-Flash', 'DeepSeek-V4-Flash-Vision-Exp', 'MiniCPM5-1B', 'Qwen3.8-Flash-Next'];
+  /** Model identifiers registered for this provider. */
   readonly 'xiaomi-token-plan-sgp': readonly [
     'mimo-v2-pro',
     'mimo-v2-tts',
@@ -5869,6 +6015,7 @@ export type ProviderModelsMap = {
     'mimo-v2.5-tts-voiceclone',
     'mimo-v2.5-tts-voicedesign',
   ];
+  /** Model identifiers registered for this provider. */
   readonly neon: readonly [
     'claude-fable-5',
     'claude-fable-5-1',
@@ -5917,6 +6064,7 @@ export type ProviderModelsMap = {
     'qwen3-next-80b-a3b-instruct',
     'qwen35-122b-a10b',
   ];
+  /** Model identifiers registered for this provider. */
   readonly 'qihang-ai': readonly [
     'claude-haiku-4-5-20251001',
     'claude-opus-4-5-20251101',
@@ -5928,6 +6076,7 @@ export type ProviderModelsMap = {
     'gpt-5.2',
     'gpt-5.2-codex',
   ];
+  /** Model identifiers registered for this provider. */
   readonly 'scnet-token-plan': readonly [
     'DeepSeek-V3.2',
     'DeepSeek-V4-Flash',
@@ -5950,6 +6099,7 @@ export type ProviderModelsMap = {
     'Qwen3.8-Flash',
     'Qwen3.8-Max',
   ];
+  /** Model identifiers registered for this provider. */
   readonly inference: readonly [
     'google/gemma-3',
     'meta/llama-3.1-8b-instruct',
@@ -5961,6 +6111,7 @@ export type ProviderModelsMap = {
     'qwen/qwen-2.5-7b-vision-instruct',
     'qwen/qwen3-embedding-4b',
   ];
+  /** Model identifiers registered for this provider. */
   readonly openai: readonly [
     'chatgpt-image-latest',
     'gpt-3.5-turbo',
@@ -6011,6 +6162,7 @@ export type ProviderModelsMap = {
     'text-embedding-3-small',
     'text-embedding-ada-002',
   ];
+  /** Model identifiers registered for this provider. */
   readonly aiand: readonly [
     'deepseek-ai/deepseek-v4-flash',
     'deepseek-ai/deepseek-v4-pro',
@@ -6024,6 +6176,7 @@ export type ProviderModelsMap = {
     'zai-org/glm-5.2',
     'zai-org/glm-5.3',
   ];
+  /** Model identifiers registered for this provider. */
   readonly siliconflow: readonly [
     'ByteDance-Seed/Seed-OSS-36B-Instruct',
     'MiniMaxAI/MiniMax-M2.5',
@@ -6075,8 +6228,11 @@ export type ProviderModelsMap = {
     'zai-org/GLM-5.2',
     'zai-org/GLM-5V-Turbo',
   ];
+  /** Model identifiers registered for this provider. */
   readonly 'stepfun-ai-step-plan': readonly ['step-3.5-flash', 'step-3.5-flash-2603', 'step-3.7-flash'];
+  /** Model identifiers registered for this provider. */
   readonly hetzner: readonly ['Qwen/Qwen3.6-35B-A3B-FP8', 'Qwen3.8-27B'];
+  /** Model identifiers registered for this provider. */
   readonly 'snowflake-cortex': readonly [
     'claude-fable-5',
     'claude-haiku-4-5',
@@ -6104,6 +6260,7 @@ export type ProviderModelsMap = {
     'openai-gpt-5.6-terra',
     'snowflake-llama3.3-70b',
   ];
+  /** Model identifiers registered for this provider. */
   readonly meganova: readonly [
     'MiniMaxAI/MiniMax-M2.1',
     'MiniMaxAI/MiniMax-M2.5',
@@ -6125,7 +6282,9 @@ export type ProviderModelsMap = {
     'zai-org/GLM-4.7',
     'zai-org/GLM-5',
   ];
+  /** Model identifiers registered for this provider. */
   readonly moonshotai: readonly ['kimi-k2.6', 'kimi-k2.7-code', 'kimi-k2.7-code-highspeed', 'kimi-k3'];
+  /** Model identifiers registered for this provider. */
   readonly 'volcengine-coding-plan': readonly [
     'deepseek-v4-flash',
     'deepseek-v4-pro',
@@ -6136,6 +6295,7 @@ export type ProviderModelsMap = {
     'kimi-k2.7-code',
     'minimax-m3',
   ];
+  /** Model identifiers registered for this provider. */
   readonly '302ai': readonly [
     'MiniMax-M1',
     'MiniMax-M2',
@@ -6254,8 +6414,11 @@ export type ProviderModelsMap = {
     'qwen3.8-flash',
     'qwen3.8-max',
   ];
+  /** Model identifiers registered for this provider. */
   readonly upstage: readonly ['solar-mini', 'solar-pro2', 'solar-pro3', 'solar-pro4'];
+  /** Model identifiers registered for this provider. */
   readonly sarvam: readonly ['sarvam-105b', 'sarvam-30b'];
+  /** Model identifiers registered for this provider. */
   readonly xai: readonly [
     'grok-4.20-0309-non-reasoning',
     'grok-4.20-0309-reasoning',
@@ -6270,7 +6433,9 @@ export type ProviderModelsMap = {
     'grok-imagine-video',
     'grok-imagine-video-1.5',
   ];
+  /** Model identifiers registered for this provider. */
   readonly zenifra: readonly ['alibaba/qwen3.6-35b-a3b'];
+  /** Model identifiers registered for this provider. */
   readonly zai: readonly [
     'glm-4.5',
     'glm-4.5-air',
@@ -6289,8 +6454,11 @@ export type ProviderModelsMap = {
     'glm-5.3-flash',
     'glm-5v-turbo',
   ];
+  /** Model identifiers registered for this provider. */
   readonly bailing: readonly ['Ling-1T', 'Ring-1T'];
+  /** Model identifiers registered for this provider. */
   readonly 'tencent-tokenhub': readonly ['hy3', 'hy3-preview', 'hy4-preview'];
+  /** Model identifiers registered for this provider. */
   readonly runinfra: readonly [
     'Inferact/Qwen3.8-2.4T-A95B-NVFP4',
     'Qwen/Qwen3.8-27B',
@@ -6300,7 +6468,9 @@ export type ProviderModelsMap = {
     'ornith-ai/Ornith-1.5-35B-A3B',
     'zai-org/GLM-5.3-Flash',
   ];
+  /** Model identifiers registered for this provider. */
   readonly 'ai-router': readonly ['gpt-5.4', 'gpt-5.5', 'gpt-5.6-luna', 'gpt-5.6-sol', 'gpt-5.6-terra'];
+  /** Model identifiers registered for this provider. */
   readonly berget: readonly [
     'Qwen/Qwen3.8-27B-FP8',
     'google/gemma-4-31B-it',
@@ -6309,6 +6479,7 @@ export type ProviderModelsMap = {
     'zai-org/GLM-5.2',
     'zai-org/GLM-5.3-Flash',
   ];
+  /** Model identifiers registered for this provider. */
   readonly mistral: readonly [
     'codestral-latest',
     'devstral-2512',
@@ -6345,6 +6516,7 @@ export type ProviderModelsMap = {
     'voxtral-small-latest',
     'zai-glm-5-2',
   ];
+  /** Model identifiers registered for this provider. */
   readonly synthetic: readonly [
     'hf:MiniMaxAI/MiniMax-M3',
     'hf:Qwen/Qwen3.6-27B',
@@ -6356,6 +6528,7 @@ export type ProviderModelsMap = {
     'hf:zai-org/GLM-5.2',
     'hf:zai-org/GLM-5.3-Flash',
   ];
+  /** Model identifiers registered for this provider. */
   readonly mixlayer: readonly [
     'qwen/qwen3.5-122b-a10b',
     'qwen/qwen3.5-27b',
@@ -6363,8 +6536,11 @@ export type ProviderModelsMap = {
     'qwen/qwen3.5-397b-a17b',
     'qwen/qwen3.5-9b',
   ];
+  /** Model identifiers registered for this provider. */
   readonly longcat: readonly ['LongCat-2.0'];
+  /** Model identifiers registered for this provider. */
   readonly cerebras: readonly ['gpt-oss-120b', 'qwen-3.8-27b'];
+  /** Model identifiers registered for this provider. */
   readonly togetherai: readonly [
     'LiquidAI/LFM2-24B-A2B',
     'MiniMaxAI/MiniMax-M2.5',
@@ -6405,6 +6581,7 @@ export type ProviderModelsMap = {
     'zai-org/GLM-5.3',
     'zai-org/GLM-5.3-Flash',
   ];
+  /** Model identifiers registered for this provider. */
   readonly 'cloudflare-workers-ai': readonly [
     '@cf/aisingapore/gemma-sea-lion-v4-27b-it',
     '@cf/deepseek-ai/deepseek-r1-distill-qwen-32b',
@@ -6434,7 +6611,9 @@ export type ProviderModelsMap = {
     '@cf/zai-org/glm-5.3',
     '@cf/zai-org/glm-5.3-flash',
   ];
+  /** Model identifiers registered for this provider. */
   readonly moark: readonly ['GLM-4.7', 'MiniMax-M2.1'];
+  /** Model identifiers registered for this provider. */
   readonly zenmux: readonly [
     'anthropic/claude-3.5-haiku',
     'anthropic/claude-3.7-sonnet',
@@ -6557,6 +6736,7 @@ export type ProviderModelsMap = {
     'z-ai/glm-5.2-free',
     'z-ai/glm-5v-turbo',
   ];
+  /** Model identifiers registered for this provider. */
   readonly vancine: readonly [
     'MiniMax-M3',
     'deepseek-v4-flash',
@@ -6569,6 +6749,7 @@ export type ProviderModelsMap = {
     'qwen3.8-flash',
     'qwen3.8-max',
   ];
+  /** Model identifiers registered for this provider. */
   readonly 'minimax-cn': readonly [
     'MiniMax-M2',
     'MiniMax-M2.1',
@@ -6578,6 +6759,7 @@ export type ProviderModelsMap = {
     'MiniMax-M2.7-highspeed',
     'MiniMax-M3',
   ];
+  /** Model identifiers registered for this provider. */
   readonly cortecs: readonly [
     'apertus-70b',
     'claude-4-5-sonnet',
@@ -6686,6 +6868,7 @@ export type ProviderModelsMap = {
     'qwen3guard-gen-8b',
     'voxtral-small-2507',
   ];
+  /** Model identifiers registered for this provider. */
   readonly 'hpc-ai': readonly [
     'anthropic/claude-opus-4.7',
     'deepseek/deepseek-v4-flash',
@@ -6697,6 +6880,7 @@ export type ProviderModelsMap = {
     'zai-org/glm-5.1',
     'zai-org/glm-5.2',
   ];
+  /** Model identifiers registered for this provider. */
   readonly 'tencent-coding-plan': readonly [
     'glm-5',
     'hunyuan-2.0-instruct',
@@ -6707,6 +6891,7 @@ export type ProviderModelsMap = {
     'minimax-m2.5',
     'tc-code-latest',
   ];
+  /** Model identifiers registered for this provider. */
   readonly nan: readonly [
     'deepseek-v4-flash',
     'gemma4',
@@ -6716,8 +6901,11 @@ export type ProviderModelsMap = {
     'qwen3.6',
     'qwen3.8-flash',
   ];
+  /** Model identifiers registered for this provider. */
   readonly perplexity: readonly ['sonar', 'sonar-deep-research', 'sonar-pro', 'sonar-reasoning-pro'];
+  /** Model identifiers registered for this provider. */
   readonly 'kimi-for-coding': readonly ['k3', 'k3-256k', 'kimi-for-coding', 'kimi-for-coding-highspeed'];
+  /** Model identifiers registered for this provider. */
   readonly 'alibaba-token-plan-cn': readonly [
     'MiniMax-M2.5',
     'deepseek-v3.2',
@@ -6746,7 +6934,9 @@ export type ProviderModelsMap = {
     'wan2.7-image',
     'wan2.7-image-pro',
   ];
+  /** Model identifiers registered for this provider. */
   readonly drun: readonly ['public/deepseek-r1', 'public/deepseek-v3', 'public/minimax-m25'];
+  /** Model identifiers registered for this provider. */
   readonly anyapi: readonly [
     'anthropic/claude-haiku-4-5',
     'anthropic/claude-opus-4-6',
@@ -6779,6 +6969,7 @@ export type ProviderModelsMap = {
     'perplexity/sonar-reasoning-pro',
     'xai/grok-4.3',
   ];
+  /** Model identifiers registered for this provider. */
   readonly 'opencode-go': readonly [
     'deepseek-flash',
     'deepseek-v4-flash',
@@ -6817,13 +7008,16 @@ export type ProviderModelsMap = {
     'qwen3.8-flash',
     'qwen3.8-max',
   ];
+  /** Model identifiers registered for this provider. */
   readonly 'tencent-token-plan': readonly ['hy3', 'hy4-preview'];
+  /** Model identifiers registered for this provider. */
   readonly neosmith: readonly [
     'neosmith.intelligent-basic',
     'neosmith.intelligent-maestro',
     'neosmith.intelligent-pro',
     'neosmith.neolite',
   ];
+  /** Model identifiers registered for this provider. */
   readonly tinfoil: readonly [
     'deepseek-v4-flash',
     'gemma4-31b',
@@ -6834,6 +7028,7 @@ export type ProviderModelsMap = {
     'llama3-3-70b',
     'nomic-embed-text',
   ];
+  /** Model identifiers registered for this provider. */
   readonly edenai: readonly [
     'amazon/amazon.nova-lite-v1:0',
     'amazon/amazon.nova-lite-v1:0@us',
@@ -7095,8 +7290,11 @@ export type ProviderModelsMap = {
     'zai/glm-5.3-flash',
     'zai/glm-5v-turbo',
   ];
+  /** Model identifiers registered for this provider. */
   readonly lmstudio: readonly ['openai/gpt-oss-20b', 'qwen/qwen3-30b-a3b-2507', 'qwen/qwen3-coder-30b'];
+  /** Model identifiers registered for this provider. */
   readonly lynkr: readonly ['lynkr-auto'];
+  /** Model identifiers registered for this provider. */
   readonly netlify: readonly [
     'anthropic/claude-fable-5',
     'anthropic/claude-fable-5-1',
