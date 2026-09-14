@@ -15,9 +15,14 @@ import { KnowledgeGraph } from '../domains/factory/components/knowledge/Knowledg
 import { KnowledgeFlyout } from '../domains/factory/components/knowledge/KnowledgeFlyout';
 import { KnowledgeApprovals } from '../domains/factory/components/knowledge/KnowledgeApprovals';
 import { KnowledgeImports } from '../domains/factory/components/knowledge/KnowledgeImports';
+import { KnowledgeSearch } from '../domains/factory/components/knowledge/KnowledgeSearch';
 import type { Arrivals, DiffBaseline } from '../domains/factory/components/knowledge/graphDiff';
 import { computeArrivals } from '../domains/factory/components/knowledge/graphDiff';
-import type { KnowledgeRung, KnowledgeScopeTreePayload } from '../domains/factory/services/knowledge';
+import type {
+  KnowledgeRung,
+  KnowledgeScopeTreePayload,
+  KnowledgeSearchResult,
+} from '../domains/factory/services/knowledge';
 import { RequestError } from '../domains/factory/services/request';
 import { useInteractionIdle } from '../domains/factory/components/knowledge/useInteractionIdle';
 
@@ -426,6 +431,14 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
       return copy;
     });
   };
+  const selectSearchResult = (result: KnowledgeSearchResult) => {
+    if (result.type === 'scope') {
+      selectScope(result.id);
+      return;
+    }
+    setSelected({ nodeId: result.id, name: result.name, rung: result.rung });
+    setView('explore');
+  };
 
   let body: React.ReactNode;
   if (scopeQuery.isError) {
@@ -564,21 +577,26 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
         <Txt as="p" variant="ui-md" className="text-icon3 mt-1">
           Explore captured knowledge and review how it changes over time.
         </Txt>
-        <div className="mt-3 flex gap-1" role="tablist" aria-label="Knowledge views">
-          {(['explore', 'activity', 'approvals', 'imports'] as const).map(view => (
-            <button
-              key={view}
-              type="button"
-              role="tab"
-              aria-selected={activeView === view}
-              className={`rounded-md px-3 py-1.5 text-sm capitalize ${
-                activeView === view ? 'bg-surface4 text-icon6' : 'text-icon3 hover:text-icon5'
-              }`}
-              onClick={() => setView(view)}
-            >
-              {view}
-            </button>
-          ))}
+        <div className="mt-3 flex items-start justify-between gap-3">
+          <div className="flex gap-1" role="tablist" aria-label="Knowledge views">
+            {(['explore', 'activity', 'approvals', 'imports'] as const).map(view => (
+              <button
+                key={view}
+                type="button"
+                role="tab"
+                aria-selected={activeView === view}
+                className={`rounded-md px-3 py-1.5 text-sm capitalize ${
+                  activeView === view ? 'bg-surface4 text-icon6' : 'text-icon3 hover:text-icon5'
+                }`}
+                onClick={() => setView(view)}
+              >
+                {view}
+              </button>
+            ))}
+          </div>
+          <div className="w-full max-w-sm">
+            <KnowledgeSearch factoryProjectId={factoryProjectId} threadId={threadId} onSelect={selectSearchResult} />
+          </div>
         </div>
         <Breadcrumb
           threadId={threadId}

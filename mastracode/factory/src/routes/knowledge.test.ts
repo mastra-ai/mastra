@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import type {
+  KnowledgeActivityPayload,
   KnowledgeNodePayload,
   KnowledgeAccessProfileResolver,
   KnowledgeGraphPayload,

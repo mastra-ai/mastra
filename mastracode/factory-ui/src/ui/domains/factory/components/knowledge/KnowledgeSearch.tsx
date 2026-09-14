@@ -36,7 +36,7 @@ export function KnowledgeSearch({ factoryProjectId, threadId, onSelect }: Knowle
   };
 
   return (
-    <div className="relative w-full max-w-sm">
+    <div className="relative w-full">
       <div className="border-surface5 bg-surface2 flex items-center gap-2 rounded-md border px-2">
         <Search className="text-icon3 size-4 shrink-0" />
         <Input

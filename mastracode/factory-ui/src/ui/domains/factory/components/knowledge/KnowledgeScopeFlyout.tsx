@@ -90,7 +90,7 @@ export function KnowledgeScopeFlyout({
                     className="text-icon6 font-medium hover:text-purple-300 hover:underline"
                     onClick={() => onSelectActivity(event)}
                   >
-                    {event.node.name}
+                    {event.targetType}
                   </button>
                   <time className="text-icon3 mt-0.5 block" dateTime={event.createdAt}>
                     {new Date(event.createdAt).toLocaleString()}
