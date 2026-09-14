@@ -5,7 +5,7 @@ import type { ComponentProps } from 'react';
 import { useExpandedSpanIds } from '../../hooks/use-expanded-span-ids';
 import { useTraceSpans } from '../../hooks/use-trace-spans';
 import { formatHierarchicalSpans } from '../format-hierarchical-spans';
-import { TraceTimeline } from '../trace-timeline';
+import { TraceSpanTree } from '../trace-span-tree';
 import { useThreadTrace } from './thread-trace-context';
 import { THREAD_TRACE_SPANS_TAB } from './thread-trace-row';
 import { useThreadTraceRow } from './thread-trace-row-context';
@@ -72,7 +72,7 @@ export function ThreadTraceSpansTab({
         {...props}
       >
         <div ref={timelineRef} className={cn('px-4 pt-2 pb-4', timelineClassName)}>
-          <TraceTimeline
+          <TraceSpanTree
             hierarchicalSpans={hierarchicalSpans}
             selectedSpanId={selectedSpanId}
             featuredSpanIds={featuredSpanIds}

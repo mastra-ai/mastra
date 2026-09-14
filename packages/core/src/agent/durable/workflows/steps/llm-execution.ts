@@ -10,6 +10,7 @@ import { buildLlmPromptArgs } from '../../../../loop/shared/build-llm-prompt-arg
 import { composeStepInput } from '../../../../loop/shared/compose-step-input';
 import { injectBackgroundTaskPrompt } from '../../../../loop/shared/inject-background-task-prompt';
 import { buildMemoryHeaders, mergeLlmCallHeaders } from '../../../../loop/shared/merge-llm-call-headers';
+import { recordTerminalErrorMessage } from '../../../../loop/shared/record-terminal-error-message';
 import { buildMessagesFromChunks } from '../../../../loop/workflows/agentic-execution/build-messages-from-chunks';
 import type { CollectedChunk } from '../../../../loop/workflows/agentic-execution/build-messages-from-chunks';
 import { endPendingProviderToolSpan } from '../../../../loop/workflows/agentic-execution/provider-tool-spans';
@@ -314,12 +315,32 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
         currentMessageId = messageList.rotateResponseMessageId(currentMessageId);
         return currentMessageId;
       };
+      let terminalAttemptContext:
+        | {
+            recordTerminalError: (error: unknown) => void;
+          }
+        | undefined;
 
       for (let modelIndex = 0; modelIndex < modelList.length; modelIndex++) {
         const modelEntry = modelList[modelIndex]!;
         const maxRetries = modelEntry.maxRetries || 0;
 
         for (let attempt = 0; attempt <= maxRetries; attempt++) {
+          // Capture this attempt before processors can rotate the active id. The
+          // fallback callback covers failures before a stream can materialize;
+          // it resolves currentMessageId only when the terminal error is known.
+          const attemptMessageId = currentMessageId;
+          terminalAttemptContext = {
+            recordTerminalError: error => {
+              recordTerminalErrorMessage({
+                messageList,
+                attemptId: attemptMessageId,
+                activeId: currentMessageId,
+                error,
+              });
+            },
+          };
+
           // Declared outside the try so the outer catch can persist
           // already-streamed partial output on abort (#22593). Assigned inside
           // once streaming state exists; undefined means nothing streamed yet.
@@ -950,7 +971,10 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // Called on the success path AND both abort returns: the
             // serialized messageListState is the only channel to finalize-run
             // persistence, so skipping this on abort would drop
-            // already-streamed partial output (#22593).
+            // already-streamed partial output (#22593). Keep this attempt's
+            // materialization id stable if an error processor later rotates the
+            // active id before the terminal-error branch runs.
+            const materializationMessageId = currentMessageId;
             materializeStreamedMessages = () => {
               const responseModelId = currentModel.modelId ?? responseMetadata?.modelId;
               const responseTraceId = getRootExportSpan(
@@ -968,7 +992,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   : undefined;
               const builtMessages = buildMessagesFromChunks({
                 chunks: collectedChunks,
-                messageId: currentMessageId,
+                messageId: materializationMessageId,
                 tools: currentTools,
                 responseModelMetadata,
               });
@@ -984,6 +1008,17 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   registryEntry.messageList = messageList;
                 }
               }
+            };
+            terminalAttemptContext = {
+              recordTerminalError: error => {
+                materializeStreamedMessages?.();
+                recordTerminalErrorMessage({
+                  messageList,
+                  attemptId: materializationMessageId,
+                  activeId: currentMessageId,
+                  error,
+                });
+              },
             };
 
             // 10. Execute LLM call (or replay cached response)
@@ -1880,6 +1915,11 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
       // a deferred error chunk rather than crashing the loop.
       const fatalError =
         lastError ?? new Error('Exhausted all fallback models and reached the maximum number of retries.');
+
+      // Materialize only the final attempt before serializing MessageList. Its
+      // callback preserves partial parts and model metadata, then appends the
+      // Mastra-only error part; recovered attempts never reach this branch.
+      terminalAttemptContext?.recordTerminalError(fatalError);
 
       // End the root spans here too — this is the only error path that covers EventedAgent,
       // whose fire-and-forget launch never sees the failure (so emitError never runs).

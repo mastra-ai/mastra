@@ -4,7 +4,8 @@ import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { formatHierarchicalSpans } from '../format-hierarchical-spans';
-import { TraceTimeline } from '../trace-timeline';
+import type { SpanRowContext } from '../span-rows';
+import { TraceSpanTree } from '../trace-span-tree';
 import { nestedSpanFixture } from './fixtures/trace-data-panel-view';
 
 // jsdom has no layout, so it ships no scrollIntoView.
@@ -18,23 +19,30 @@ afterEach(() => {
 
 const hierarchicalSpans = formatHierarchicalSpans(nestedSpanFixture);
 
-// The timeline reveals rows only once their ancestors expand, and expansion is owned by the
+// The tree reveals rows only once their ancestors expand, and expansion is owned by the
 // caller, so the harness holds that state the way the trace panel and the thread view do.
-function Harness({ revealSpanId }: { revealSpanId?: string }) {
+function Harness({
+  revealSpanId,
+  renderTrailing,
+}: {
+  revealSpanId?: string;
+  renderTrailing?: (ctx: SpanRowContext) => React.ReactNode;
+}) {
   const [expandedSpanIds, setExpandedSpanIds] = useState<string[]>([]);
   return (
-    <TraceTimeline
+    <TraceSpanTree
       hierarchicalSpans={hierarchicalSpans}
       onSpanClick={() => {}}
       expandedSpanIds={expandedSpanIds}
       setExpandedSpanIds={setExpandedSpanIds}
       featuredSpanIds={['root', 'child']}
       revealSpanId={revealSpanId}
+      renderTrailing={renderTrailing}
     />
   );
 }
 
-describe('TraceTimeline — revealing a span', () => {
+describe('TraceSpanTree — revealing a span', () => {
   it('scrolls the reveal span into view once its parent expands', () => {
     render(<Harness revealSpanId="child" />);
 
@@ -59,5 +67,24 @@ describe('TraceTimeline — revealing a span', () => {
 
     screen.getByLabelText('View details for span weather tool');
     expect(scrollIntoView).not.toHaveBeenCalled();
+  });
+});
+
+describe('TraceSpanTree — trailing cell', () => {
+  it('shows the span duration as seconds at the end of each row by default', () => {
+    render(<Harness />);
+
+    // Both fixture spans last exactly one second.
+    const durations = screen.getAllByText((_, el) => el?.textContent === '1.000\u00a0s' && el.tagName === 'DIV');
+    expect(durations).toHaveLength(2);
+  });
+
+  it('renders a custom trailing cell with the row context', () => {
+    const renderTrailing = vi.fn((ctx: SpanRowContext) => <span>{`${ctx.span.id}@${ctx.depth}`}</span>);
+    render(<Harness renderTrailing={renderTrailing} />);
+
+    screen.getByText('root@0');
+    screen.getByText('child@1');
+    expect(screen.queryByText((_, el) => el?.textContent === '1.000\u00a0s')).toBeNull();
   });
 });

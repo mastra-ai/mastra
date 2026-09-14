@@ -95,13 +95,19 @@ export function sanitizeAIV4UIMessages(messages: UIMessageV4[]): UIMessageV4[] {
   const msgs = messages
     .map(m => {
       if (m.parts.length === 0) return false;
-      const safeParts = m.parts.filter(
-        p =>
+      const safeParts = m.parts.filter(p => {
+        // Mastra-only record of a terminal failure. It exists for DB/UI history
+        // and must never reach a provider. Cast because the v4 UI part union has
+        // no `error` member even though the adapter passes the part through.
+        if ((p as { type: string }).type === 'error') return false;
+
+        return (
           p.type !== `tool-invocation` ||
           // calls and partial-calls should be updated to be results at this point
           // if they haven't we can't send them back to the llm and need to remove them.
-          (p.toolInvocation.state !== `call` && p.toolInvocation.state !== `partial-call`),
-      );
+          (p.toolInvocation.state !== `call` && p.toolInvocation.state !== `partial-call`)
+        );
+      });
 
       // fully remove this message if it has an empty parts array after stripping out incomplete tool calls.
       if (!safeParts.length) return false;
@@ -154,6 +160,15 @@ export function sanitizeV5UIMessages(
       // If not filtered, convertToModelMessages produces empty content arrays
       // which causes some models to fail with "must include at least one parts field"
       if (typeof p.type === 'string' && p.type.startsWith('data-')) {
+        return false;
+      }
+
+      // Filter out Mastra-only `error` parts (persisted terminal-failure records).
+      // Like data-* parts they are not provider content: an error-only assistant
+      // message therefore drops out below instead of reaching the model as an
+      // empty turn. Cast because the v5 UI part union has no `error` member even
+      // though the adapter passes the part through.
+      if ((p as { type: string }).type === 'error') {
         return false;
       }
 
