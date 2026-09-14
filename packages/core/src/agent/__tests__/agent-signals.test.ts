@@ -28,6 +28,7 @@ import {
   signalToDataPartFormat,
   signalToMastraDBMessage,
 } from '../signals';
+import { ThreadSignalDeliveryLedger } from '../thread-signal-delivery-ledger';
 import { AgentThreadStreamRuntime, agentThreadStreamRuntime } from '../thread-stream-runtime';
 
 function createTextStreamModel(responseText: string) {
@@ -5062,6 +5063,56 @@ describe('Agent signals', () => {
     }
   });
 
+  it('forwards follow-ups that arrive while a queued idle run loses its lease handoff', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new ControlledLeasePubSub();
+    const resourceId = 'idle-handoff-followup-resource';
+    const threadId = 'idle-handoff-followup-thread';
+    const key = `${resourceId}\u0000${threadId}`;
+    const activeRunId = 'idle-handoff-followup-active';
+    const winnerRunId = 'idle-handoff-followup-winner';
+    const activeRunFinished = Promise.withResolvers<void>();
+    const transferStarted = Promise.withResolvers<void>();
+    const releaseTransfer = Promise.withResolvers<void>();
+    const agent = {
+      id: 'idle-handoff-followup-agent',
+      stream: vi.fn(async () => {
+        throw new Error('The losing runtime must not start the queued run');
+      }),
+    } as unknown as Agent<any, any, any, any>;
+    pubsub.owners.set(key, activeRunId);
+    pubsub.onTransferLease = () => transferStarted.resolve();
+    pubsub.transferLeaseWait = releaseTransfer.promise;
+
+    runtime.registerRun(
+      agent,
+      createFakeThreadRun(activeRunId, activeRunFinished.promise),
+      { runId: activeRunId, memory: { resource: resourceId, thread: threadId } } as any,
+      pubsub,
+    );
+    const queued = runtime.queueMessage(agent, 'queued wake', { resourceId, threadId }, pubsub);
+    activeRunFinished.resolve();
+    await transferStarted.promise;
+
+    const followUp = runtime.sendSignal(
+      agent,
+      { type: 'user-message', contents: 'arrived during idle handoff' },
+      { resourceId, threadId },
+      pubsub,
+    );
+    await followUp.accepted;
+    pubsub.owners.set(key, winnerRunId);
+    releaseTransfer.resolve();
+
+    await waitForCondition(() => runtime.getActiveThreadRunId({ resourceId, threadId }, pubsub) === undefined);
+    expect(agent.stream).not.toHaveBeenCalled();
+    expect(
+      pubsub.publishedData
+        .filter(data => data?.type === 'signal-enqueued' && data.runId === winnerRunId)
+        .map(data => data.signal.id),
+    ).toEqual([queued.signal.id, followUp.signal.id]);
+  });
+
   it('removes observed messages after lease acquisition failure', async () => {
     const runtime = new AgentThreadStreamRuntime();
     const pubsub = new ControlledLeasePubSub();
@@ -5786,7 +5837,7 @@ describe('Agent signals', () => {
     liveSubscription.unsubscribe();
   });
 
-  it('discards local pre-run copies when a drained run loses its reserved lease', async () => {
+  it('forwards local pre-run copies when a drained run loses its reserved lease', async () => {
     const pubsub = new ControlledLeasePubSub();
     const runtime = new AgentThreadStreamRuntime();
     const resourceId = 'drained-reservation-resource';
@@ -5821,7 +5872,7 @@ describe('Agent signals', () => {
       { runId: oldRunId, memory: { resource: resourceId, thread: threadId } } as any,
       pubsub,
     );
-    runtime.sendSignal(
+    const initial = runtime.sendSignal(
       agent,
       { type: 'user-message', contents: 'start drained run' },
       { resourceId, threadId },
@@ -5843,6 +5894,11 @@ describe('Agent signals', () => {
     pubsub.owners.set(key, winnerRunId);
     releaseTransfer();
     await waitForCondition(() => runtime.getActiveThreadRunId({ resourceId, threadId }, pubsub) === undefined);
+    expect(
+      pubsub.publishedData
+        .filter(data => data?.type === 'signal-enqueued' && data.runId === winnerRunId)
+        .map(data => data.signal.id),
+    ).toEqual([initial.signal.id, followUp.signal.id]);
 
     const recoveryRunId = 'drained-reservation-recovery';
     let finishRecovery!: () => void;
@@ -6330,6 +6386,314 @@ describe('Agent signals', () => {
     expect(pubsub.publishedData.filter(data => data?.type === 'run-aborted')).toHaveLength(terminalCount);
     ownerSubscription.unsubscribe();
     followerSubscription.unsubscribe();
+  });
+
+  it('queues a retained forwarded signal once when its publisher takes over', async () => {
+    const pubsub = new ControlledLeasePubSub();
+    const runtime = new AgentThreadStreamRuntime();
+    const target = { resourceId: 'replay-takeover-resource', threadId: 'replay-takeover-thread' };
+    const key = `${target.resourceId}\u0000${target.threadId}`;
+    const runId = 'replay-takeover-run';
+    const agent = { id: 'replay-takeover-agent' } as Agent<any, any, any, any>;
+
+    pubsub.owners.set(key, runId);
+    const liveSubscription = await runtime.subscribeToThread(agent, target, pubsub);
+    const sent = runtime.sendSignal(
+      agent,
+      { id: 'replayed-notification', type: 'notification', tagName: 'notification', contents: 'follow up' },
+      target,
+      pubsub,
+    );
+    await expect(sent.accepted).resolves.toMatchObject({ action: 'deliver', runId });
+    await pubsub.flush();
+    await nextTick();
+    expect(runtime.drainPendingSignals(runId, pubsub)).toEqual([]);
+    liveSubscription.unsubscribe();
+    await pubsub.releaseLease(key, runId);
+
+    const replayBeforeReservation = await runtime.subscribeToThread(agent, target, pubsub);
+    await nextTick();
+    expect(runtime.drainPendingSignals(runId, pubsub)).toEqual([]);
+    replayBeforeReservation.unsubscribe();
+
+    await runtime.waitForCrossAgentThreadRun(
+      agent,
+      { runId, memory: { resource: target.resourceId, thread: target.threadId } },
+      pubsub,
+    );
+    expect(runtime.drainPendingSignals(runId, pubsub).map(signal => signal.id)).toEqual(['replayed-notification']);
+
+    const subscriptions = await Promise.all([
+      runtime.subscribeToThread(agent, target, pubsub),
+      runtime.subscribeToThread(agent, target, pubsub),
+    ]);
+    await nextTick();
+    expect(runtime.drainPendingSignals(runId, pubsub)).toEqual([]);
+    for (const subscription of subscriptions) subscription.unsubscribe();
+
+    const coldRuntime = new AgentThreadStreamRuntime();
+    await coldRuntime.waitForCrossAgentThreadRun(
+      agent,
+      { runId, memory: { resource: target.resourceId, thread: target.threadId } },
+      pubsub,
+    );
+    const coldSubscriptions = await Promise.all([
+      coldRuntime.subscribeToThread(agent, target, pubsub),
+      coldRuntime.subscribeToThread(agent, target, pubsub),
+    ]);
+    await nextTick();
+    expect(coldRuntime.drainPendingSignals(runId, pubsub).map(signal => signal.id)).toEqual(['replayed-notification']);
+    for (const subscription of coldSubscriptions) subscription.unsubscribe();
+
+    const wrongRunRuntime = new AgentThreadStreamRuntime();
+    const wrongRunSubscription = await wrongRunRuntime.subscribeToThread(agent, target, pubsub);
+    await nextTick();
+    wrongRunSubscription.unsubscribe();
+    await wrongRunRuntime.waitForCrossAgentThreadRun(
+      agent,
+      { runId: 'different-run', memory: { resource: target.resourceId, thread: target.threadId } },
+      pubsub,
+    );
+    expect(wrongRunRuntime.drainPendingSignals('different-run', pubsub)).toEqual([]);
+    wrongRunRuntime.releaseThreadRunReservation('different-run', pubsub);
+    await wrongRunRuntime.waitForCrossAgentThreadRun(
+      agent,
+      { runId, memory: { resource: target.resourceId, thread: target.threadId } },
+      pubsub,
+    );
+    expect(wrongRunRuntime.drainPendingSignals(runId, pubsub).map(signal => signal.id)).toEqual([
+      'replayed-notification',
+    ]);
+  });
+
+  for (const strict of [false, true]) {
+    it(`claims a retained signal when a ${strict ? 'strict' : 'normal'} registration establishes ownership`, async () => {
+      const pubsub = new ControlledLeasePubSub();
+      const runtime = new AgentThreadStreamRuntime();
+      const target = { resourceId: `registration-claim-resource-${strict}`, threadId: 'registration-claim-thread' };
+      const key = `${target.resourceId}\u0000${target.threadId}`;
+      const topic = `agent.thread-stream.${encodeURIComponent(key)}`;
+      const runId = `registration-claim-run-${strict}`;
+      const signalId = `registration-claim-signal-${strict}`;
+      const agent = { id: `registration-claim-agent-${strict}` } as Agent<any, any, any, any>;
+      const finished = Promise.withResolvers<void>();
+
+      await pubsub.publish(topic, {
+        type: 'signal-enqueued',
+        runId,
+        data: {
+          type: 'signal-enqueued',
+          runId,
+          signal: { id: signalId, type: 'notification', tagName: 'notification', contents: 'follow up' },
+          sourceId: 'remote-runtime',
+        },
+      });
+      const subscription = await runtime.subscribeToThread(agent, target, pubsub);
+      await nextTick();
+
+      const output = createFakeThreadRun(runId, finished.promise);
+      const options = { runId, memory: { resource: target.resourceId, thread: target.threadId } } as any;
+      let rollback: (() => Promise<void>) | undefined;
+      if (strict) {
+        ({ rollback } = await runtime.registerRun(agent, output, options, pubsub, { strict: true }));
+      } else {
+        await runtime.registerRun(agent, output, options, pubsub);
+      }
+      expect(runtime.drainPendingSignals(runId, pubsub).map(signal => signal.id)).toEqual([signalId]);
+
+      await rollback?.();
+      finished.resolve();
+      subscription.unsubscribe();
+    });
+  }
+
+  it('keeps a deferred signal claimable after its source run terminates', async () => {
+    const pubsub = new ControlledLeasePubSub();
+    const runtime = new AgentThreadStreamRuntime();
+    const target = { resourceId: 'terminal-deferred-resource', threadId: 'terminal-deferred-thread' };
+    const key = `${target.resourceId}\u0000${target.threadId}`;
+    const topic = `agent.thread-stream.${encodeURIComponent(key)}`;
+    const runId = 'terminal-deferred-run';
+    const signalId = 'terminal-deferred-signal';
+    const agent = { id: 'terminal-deferred-agent' } as Agent<any, any, any, any>;
+
+    await pubsub.publish(topic, {
+      type: 'signal-enqueued',
+      runId,
+      data: {
+        type: 'signal-enqueued',
+        runId,
+        signal: { id: signalId, type: 'notification', tagName: 'notification', contents: 'follow up' },
+        sourceId: 'remote-runtime',
+      },
+    });
+    await pubsub.publish(topic, {
+      type: 'run-completed',
+      runId,
+      data: { type: 'run-completed', runId, streamId: runId, persisted: true },
+    });
+    const subscription = await runtime.subscribeToThread(agent, target, pubsub);
+    await nextTick();
+
+    await runtime.waitForCrossAgentThreadRun(
+      agent,
+      { runId, memory: { resource: target.resourceId, thread: target.threadId } },
+      pubsub,
+    );
+    expect(runtime.drainPendingSignals(runId, pubsub).map(signal => signal.id)).toEqual([signalId]);
+    subscription.unsubscribe();
+  });
+
+  it('never evicts unclaimed signal payloads while bounding settled replay history', () => {
+    const ledger = new ThreadSignalDeliveryLedger();
+    const targetRunId = 'unclaimed-run';
+    ledger.observe(
+      targetRunId,
+      {
+        key: 'resource\u0000thread',
+        signal: createSignal({ id: 'unclaimed-signal', type: 'notification', contents: 'follow up' }),
+        scope: 'pending',
+      },
+      false,
+    );
+    ledger.settle(targetRunId);
+
+    for (let index = 0; index <= 10_000; index++) {
+      const runId = `settled-run-${index}`;
+      ledger.markHandled(runId, `signal-${index}`);
+      ledger.settle(runId);
+    }
+
+    expect(ledger.claim(targetRunId, 'resource\u0000thread').map(delivery => delivery.signal.id)).toEqual([
+      'unclaimed-signal',
+    ]);
+  });
+
+  it('does not replay a signal that its publisher already queued locally', async () => {
+    const pubsub = new ControlledLeasePubSub();
+    const runtime = new AgentThreadStreamRuntime();
+    const target = { resourceId: 'local-replay-resource', threadId: 'local-replay-thread' };
+    const runId = 'local-replay-run';
+    const agent = { id: 'local-replay-agent' } as Agent<any, any, any, any>;
+
+    await runtime.waitForCrossAgentThreadRun(
+      agent,
+      { runId, memory: { resource: target.resourceId, thread: target.threadId } },
+      pubsub,
+    );
+    const liveSubscription = await runtime.subscribeToThread(agent, target, pubsub);
+    const sent = runtime.sendSignal(
+      agent,
+      { id: 'local-notification', type: 'notification', tagName: 'notification', contents: 'follow up' },
+      target,
+      pubsub,
+    );
+    await expect(sent.accepted).resolves.toMatchObject({ action: 'deliver', runId });
+    expect(runtime.drainPendingSignals(runId, pubsub, 'pre-run').map(signal => signal.id)).toEqual([
+      'local-notification',
+    ]);
+    liveSubscription.unsubscribe();
+
+    const replaySubscription = await runtime.subscribeToThread(agent, target, pubsub);
+    await nextTick();
+    expect(runtime.drainPendingSignals(runId, pubsub, 'pre-run')).toEqual([]);
+    replaySubscription.unsubscribe();
+  });
+
+  it('does not replay a consumed local pending signal', async () => {
+    const pubsub = new ControlledLeasePubSub();
+    const runtime = new AgentThreadStreamRuntime();
+    const target = { resourceId: 'local-pending-resource', threadId: 'local-pending-thread' };
+    const runId = 'local-pending-run';
+    const agent = { id: 'local-pending-agent' } as Agent<any, any, any, any>;
+    const finished = Promise.withResolvers<void>();
+    const liveSubscription = await runtime.subscribeToThread(agent, target, pubsub);
+    runtime.registerRun(
+      agent,
+      {
+        runId,
+        status: 'running',
+        fullStream: (async function* () {})(),
+        _waitUntilFinished: () => finished.promise,
+      } as any,
+      { runId, memory: { resource: target.resourceId, thread: target.threadId } } as any,
+      pubsub,
+    );
+    await pubsub.flush();
+
+    const sent = runtime.sendSignal(
+      agent,
+      { id: 'local-pending-notification', type: 'notification', tagName: 'notification', contents: 'follow up' },
+      target,
+      pubsub,
+    );
+    await expect(sent.accepted).resolves.toMatchObject({ action: 'deliver', runId });
+    expect(runtime.drainPendingSignals(runId, pubsub).map(signal => signal.id)).toEqual(['local-pending-notification']);
+    liveSubscription.unsubscribe();
+
+    const replaySubscription = await runtime.subscribeToThread(agent, target, pubsub);
+    await nextTick();
+    expect(runtime.drainPendingSignals(runId, pubsub)).toEqual([]);
+    replaySubscription.unsubscribe();
+    finished.resolve();
+  });
+
+  it('forwards early pre-run signals when an optimistic wake loses its lease', async () => {
+    const pubsub = new ControlledLeasePubSub();
+    const runtime = new AgentThreadStreamRuntime();
+    const target = { resourceId: 'early-forward-resource', threadId: 'early-forward-thread' };
+    const key = `${target.resourceId}\u0000${target.threadId}`;
+    const winnerRunId = 'early-forward-winner';
+    const acquireStarted = Promise.withResolvers<void>();
+    const releaseAcquire = Promise.withResolvers<void>();
+    pubsub.owners.set(key, winnerRunId);
+    pubsub.onAcquireLease = () => acquireStarted.resolve();
+    pubsub.acquireLeaseWait = releaseAcquire.promise;
+    const agent = {
+      id: 'early-forward-agent',
+      stream: async () => {
+        throw new Error('The losing runtime must not start a run');
+      },
+    } as unknown as Agent<any, any, any, any>;
+    const subscription = await runtime.subscribeToThread(agent, target, pubsub);
+
+    const initial = runtime.sendSignal(
+      agent,
+      { id: 'initial-signal', type: 'user-message', contents: 'initial' },
+      target,
+      pubsub,
+    );
+    await acquireStarted.promise;
+    const early = runtime.sendSignal(
+      agent,
+      { id: 'early-signal', type: 'user-message', contents: 'early follow-up' },
+      target,
+      pubsub,
+    );
+    const optimisticRunId = (await early.accepted).runId;
+    expect(optimisticRunId).not.toBe(winnerRunId);
+
+    releaseAcquire.resolve();
+    await expect(initial.accepted).resolves.toMatchObject({ action: 'deliver', runId: winnerRunId });
+    await pubsub.flush();
+    await nextTick();
+    expect(
+      pubsub.publishedData
+        .filter(data => data?.type === 'signal-enqueued' && data.runId === winnerRunId)
+        .map(data => data.signal.id),
+    ).toEqual(['initial-signal', 'early-signal']);
+
+    subscription.unsubscribe();
+    await pubsub.releaseLease(key, winnerRunId);
+    await runtime.waitForCrossAgentThreadRun(
+      agent,
+      { runId: winnerRunId, memory: { resource: target.resourceId, thread: target.threadId } },
+      pubsub,
+    );
+    expect(runtime.drainPendingSignals(winnerRunId, pubsub).map(signal => signal.id)).toEqual([
+      'initial-signal',
+      'early-signal',
+    ]);
   });
 
   it('routes active-run signals across runtime instances through PubSub', async () => {
