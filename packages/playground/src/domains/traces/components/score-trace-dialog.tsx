@@ -1,31 +1,51 @@
 import type { GetScorerResponse } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
+import {
+  Dialog,
+  DialogBody,
+  DialogCancel,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@mastra/playground-ui/components/Dialog';
 import { SelectFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { TextAndIcon } from '@mastra/playground-ui/components/Text';
-import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { InfoIcon } from 'lucide-react';
+import { GaugeIcon, InfoIcon } from 'lucide-react';
 import { useState } from 'react';
 import { useTriggerScorer } from '../hooks/use-trigger-scorer';
 
-export interface SpanScoringProps {
+export interface ScoreTraceDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   traceId?: string;
   spanId?: string;
   entityType?: string;
   isTopLevelSpan?: boolean;
   scorers?: Record<string, GetScorerResponse>;
   isLoadingScorers?: boolean;
+  /** Called once the scorer run has been triggered (the dialog closes itself). */
+  onTriggered?: () => void;
 }
 
-export function SpanScoring({
+/**
+ * Picks a registered scorer and triggers it on the trace's anchor span. Opened from the
+ * "Score trace" header action; the results land in the Scores tab.
+ */
+export function ScoreTraceDialog({
+  open,
+  onOpenChange,
   traceId,
   spanId,
   entityType,
   isTopLevelSpan,
   scorers,
   isLoadingScorers,
-}: SpanScoringProps) {
+  onTriggered,
+}: ScoreTraceDialogProps) {
   const [selectedScorer, setSelectedScorer] = useState<string | null>(null);
   const { mutate: triggerScorer, isPending } = useTriggerScorer();
 
@@ -51,10 +71,13 @@ export function SpanScoring({
       triggerScorer(
         { scorerName: selectedScorer, traceId, spanId },
         {
-          onSuccess: () =>
+          onSuccess: () => {
             toast.info('Scorer triggered', {
               description: 'Results will appear once scoring completes.',
-            }),
+            });
+            onOpenChange(false);
+            onTriggered?.();
+          },
         },
       );
     }
@@ -62,16 +85,13 @@ export function SpanScoring({
 
   const selectedScorerDescription = scorerList.find(s => s.id === selectedScorer)?.description || '';
 
+  let body;
   if (scorers === undefined && !isLoadingScorers) {
-    return <Notice variant="destructive">Failed to load scorers.</Notice>;
-  }
-
-  if (!isLoadingScorers && scorerList.length === 0) {
-    return <Notice variant="info">No eligible scorers have been defined to run.</Notice>;
-  }
-
-  return (
-    <div className="grid grid-cols-[3fr_1fr] items-start gap-4">
+    body = <Notice variant="destructive">Failed to load scorers.</Notice>;
+  } else if (!isLoadingScorers && scorerList.length === 0) {
+    body = <Notice variant="info">No eligible scorers have been defined to run.</Notice>;
+  } else {
+    body = (
       <div className="grid gap-2">
         <SelectFieldBlock
           name="select-scorer"
@@ -84,7 +104,6 @@ export function SpanScoring({
           }))}
           onValueChange={setSelectedScorer}
           value={selectedScorer || ''}
-          className="min-w-80"
           disabled={isWaiting}
         />
         {selectedScorerDescription && (
@@ -93,10 +112,29 @@ export function SpanScoring({
           </TextAndIcon>
         )}
       </div>
+    );
+  }
 
-      <Button icon={<ScorersIcon />} disabled={!selectedScorer || isWaiting} onClick={handleStartScoring}>
-        {isPending ? 'Starting...' : 'Start Scoring'}
-      </Button>
-    </div>
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="w-[480px] max-w-[calc(100vw-2rem)]">
+        <DialogHeader>
+          <DialogTitle>Score trace</DialogTitle>
+          <DialogDescription>Run a scorer on this trace. Results appear in the Scores tab.</DialogDescription>
+        </DialogHeader>
+        <DialogBody>{body}</DialogBody>
+        <DialogFooter>
+          <DialogCancel disabled={isPending}>Cancel</DialogCancel>
+          <Button
+            variant="primary"
+            icon={<GaugeIcon />}
+            disabled={!selectedScorer || isWaiting}
+            onClick={handleStartScoring}
+          >
+            {isPending ? 'Starting...' : 'Start scoring'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

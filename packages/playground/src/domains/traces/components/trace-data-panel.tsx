@@ -4,7 +4,7 @@ import {
 } from '@mastra/playground-ui/domains/traces/components/trace-data-panel-view';
 import { useState, type ComponentProps } from 'react';
 
-type TraceDataPanelProps = Omit<ComponentProps<typeof TraceDataPanelView>, 'onEvaluateTrace'>;
+type TraceDataPanelProps = ComponentProps<typeof TraceDataPanelView>;
 
 /**
  * Owns the trace panel's active tab unless `activeTab` is provided. Mount it with a `key` on
@@ -18,13 +18,5 @@ export function TraceDataPanel({ activeTab, onTabChange, ...props }: TraceDataPa
     onTabChange?.(next);
   };
 
-  return (
-    <TraceDataPanelView
-      {...props}
-      // "Evaluate Trace" surfaces the scores it produces, so it switches to the Scores tab.
-      onEvaluateTrace={() => setTab('scores')}
-      activeTab={tab}
-      onTabChange={setTab}
-    />
-  );
+  return <TraceDataPanelView {...props} activeTab={tab} onTabChange={setTab} />;
 }

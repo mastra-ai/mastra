@@ -15,18 +15,16 @@ const baseProps: SpanDataPanelViewProps = {
 
 afterEach(cleanup);
 
-describe('SpanDataPanelView — header summary', () => {
-  it('shows started and duration in the header, not in the details list', () => {
+describe('SpanDataPanelView — timing details', () => {
+  it('shows started and duration in the details list, not in the header', () => {
     render(<SpanDataPanelView {...baseProps} />);
 
-    expect(screen.getByLabelText(/^Started at/)).toBeTruthy();
-    // End time is redundant with start + duration.
-    expect(screen.queryByLabelText(/^Ended at/)).toBeNull();
+    expect(screen.getByText('Started at')).toBeTruthy();
     // Same `X.XXX s` format as the timeline timing column.
-    expect(screen.getByLabelText(/^Duration/).textContent).toBe('1.000 s');
-    expect(screen.queryByText('Started')).toBeNull();
-    expect(screen.queryByText('Ended')).toBeNull();
-    expect(screen.queryByText('Duration')).toBeNull();
+    expect(screen.getByText('Duration').nextElementSibling?.textContent).toBe('1.000 s');
+    // End time is redundant with start + duration.
+    expect(screen.queryByText('Ended at')).toBeNull();
+    expect(screen.getByRole('heading', { name: /^Span/ }).textContent).not.toContain('1.000 s');
   });
 
   it('drops Name, Type, Trace Id, Thread Id and Resource Id from the details list', () => {
@@ -39,13 +37,12 @@ describe('SpanDataPanelView — header summary', () => {
     }
   });
 
-  it('shows the run id truncated to 8 characters in the header', () => {
+  it('shows the full run id in the details list with a copy action', () => {
     render(<SpanDataPanelView {...baseProps} span={{ ...spanFixture, runId: 'run-abcdefghijklmnop' }} />);
 
-    const runId = screen.getByLabelText('Run Id run-abcdefghijklmnop');
-    expect(runId.textContent).toContain('run-abcd');
-    expect(runId.textContent).not.toContain('run-abcdefghijklmnop');
-    expect(screen.queryByText('Run Id')).toBeNull();
+    expect(screen.getByText('Run Id')).toBeTruthy();
+    expect(screen.getByText('run-abcdefghijklmnop')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Copy Run Id to clipboard' })).toBeTruthy();
   });
 });
 

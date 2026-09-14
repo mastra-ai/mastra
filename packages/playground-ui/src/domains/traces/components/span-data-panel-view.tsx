@@ -1,8 +1,13 @@
 import type { SpanRecord } from '@mastra/core/storage';
 import { BracesIcon, FileInputIcon, FileOutputIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { getTokenLimitMessage, isTokenLimitExceeded } from '../utils/span-utils';
-import { SpanSummaryDescription } from './span-summary-description';
+import {
+  formatSpanDurationSeconds,
+  formatSpanTimestamp,
+  formatSpanTimestampExact,
+  getTokenLimitMessage,
+  isTokenLimitExceeded,
+} from '../utils/span-utils';
 import { SpanTokenUsage } from './span-token-usage';
 import type { TokenUsage } from './span-token-usage';
 import { TraceIdButton } from './trace-id-button';
@@ -10,6 +15,7 @@ import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
 import { DataPanel } from '@/ds/components/DataPanel';
 import { Notice } from '@/ds/components/Notice';
+import { PageHeader } from '@/ds/components/PageHeader';
 import { Tab, TabContent, TabList, Tabs } from '@/ds/components/Tabs';
 
 function buildDialogTitle(sectionTitle: string, icon: ReactNode, span: { spanId: string; traceId: string }) {
@@ -74,24 +80,24 @@ export function SpanDataPanelView({
 }: SpanDataPanelViewProps) {
   return (
     <DataPanel className={className}>
-      {/* Two-line header (heading + summary); neighbouring panel headers use min-h-16 to stay level. */}
-      <DataPanel.Header className="min-h-16 py-2">
-        <div className="flex min-w-0 flex-1 flex-col gap-1">
-          <DataPanel.Heading className="items-center whitespace-nowrap">
+      <DataPanel.Header>
+        <PageHeader className="min-w-0 flex-1">
+          <PageHeader.Title size="sm" className="whitespace-nowrap">
             Span
             <TraceIdButton id={spanId} />
-          </DataPanel.Heading>
-          {span && <SpanSummaryDescription span={span} />}
-        </div>
-        <ButtonsGroup className="ml-auto shrink-0 self-start">
-          <DataPanel.NextPrevNav
-            onPrevious={onPrevious}
-            onNext={onNext}
-            previousLabel="Previous span"
-            nextLabel="Next span"
-          />
-          <DataPanel.CloseButton onClick={onClose} />
-        </ButtonsGroup>
+          </PageHeader.Title>
+          <PageHeader.Action>
+            <ButtonsGroup>
+              <DataPanel.NextPrevNav
+                onPrevious={onPrevious}
+                onNext={onNext}
+                previousLabel="Previous span"
+                nextLabel="Next span"
+              />
+              <DataPanel.CloseButton onClick={onClose} />
+            </ButtonsGroup>
+          </PageHeader.Action>
+        </PageHeader>
       </DataPanel.Header>
 
       {isLoading ? (
@@ -134,6 +140,9 @@ function SpanDataPanelContent({
   isAnchor?: boolean;
 }) {
   const usage = span.attributes?.usage as TokenUsage | undefined;
+  const startedAt = formatSpanTimestamp(span.startedAt);
+  const exactStartedAt = formatSpanTimestampExact(span.startedAt);
+  const duration = formatSpanDurationSeconds(span.startedAt, span.endedAt);
 
   const detailsBody = (
     <>
@@ -148,6 +157,28 @@ function SpanDataPanelContent({
       {usage && <SpanTokenUsage usage={usage} className="mb-3" />}
 
       <DataKeysAndValues>
+        {startedAt && exactStartedAt && (
+          <>
+            <DataKeysAndValues.Key>Started at</DataKeysAndValues.Key>
+            <DataKeysAndValues.ValueWithTooltip tooltip={exactStartedAt}>
+              {startedAt}
+            </DataKeysAndValues.ValueWithTooltip>
+          </>
+        )}
+        {duration && (
+          <>
+            <DataKeysAndValues.Key>Duration</DataKeysAndValues.Key>
+            <DataKeysAndValues.Value>{duration}</DataKeysAndValues.Value>
+          </>
+        )}
+        {span.runId && (
+          <>
+            <DataKeysAndValues.Key>Run Id</DataKeysAndValues.Key>
+            <DataKeysAndValues.ValueWithCopyBtn copyTooltip="Copy Run Id to clipboard" copyValue={span.runId}>
+              {span.runId}
+            </DataKeysAndValues.ValueWithCopyBtn>
+          </>
+        )}
         {/* Anchor-only: rich trace-context fields. Live on the full SpanRecord, not on the
          *  lightweight payload, so they only have values once the full span is loaded. */}
         {(isAnchor ?? span.parentSpanId == null) && (

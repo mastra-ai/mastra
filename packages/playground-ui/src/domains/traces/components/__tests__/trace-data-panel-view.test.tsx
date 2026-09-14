@@ -203,16 +203,34 @@ describe('TraceDataPanelView — Add tool mocks to item', () => {
 });
 
 describe('TraceDataPanelView — header actions', () => {
-  it('keeps navigation and close visible while secondary actions stay in the menu', () => {
-    render(<TraceDataPanelView {...baseProps} onPrevious={vi.fn()} onNext={vi.fn()} onEvaluateTrace={vi.fn()} />);
+  it('keeps navigation, close and "Score trace" visible while secondary actions stay in the menu', () => {
+    render(
+      <TraceDataPanelView
+        {...baseProps}
+        onPrevious={vi.fn()}
+        onNext={vi.fn()}
+        onEvaluateTrace={vi.fn()}
+        onSaveAsDatasetItem={vi.fn()}
+      />,
+    );
 
     expect(screen.getByRole('button', { name: /previous trace/i })).toBeTruthy();
     expect(screen.getByRole('button', { name: /next trace/i })).toBeTruthy();
     expect(screen.getByRole('button', { name: /close panel/i })).toBeTruthy();
-    expect(screen.queryByRole('menuitem', { name: /evaluate trace/i })).toBeNull();
+    expect(screen.getByRole('button', { name: /score trace/i })).toBeTruthy();
+    expect(screen.queryByRole('menuitem', { name: /add full trace to dataset/i })).toBeNull();
 
     openTraceActions();
-    expect(screen.getByRole('menuitem', { name: /evaluate trace/i })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: /add full trace to dataset/i })).toBeTruthy();
+    expect(screen.queryByRole('menuitem', { name: /evaluate trace/i })).toBeNull();
+  });
+
+  it('shows the shortcut in the "Score trace" tooltip when one is provided', async () => {
+    render(<TraceDataPanelView {...baseProps} onEvaluateTrace={vi.fn()} evaluateTraceShortcut="s" />);
+
+    fireEvent.focus(screen.getByRole('button', { name: /score trace/i }));
+    const tooltip = await screen.findByRole('tooltip');
+    expect(tooltip.querySelector('kbd')?.textContent).toBe('s');
   });
 
   it('keeps the trace actions reachable in the header even while the panel is collapsed', () => {
@@ -227,10 +245,10 @@ describe('TraceDataPanelView — header actions', () => {
       />,
     );
 
-    // The body is hidden while collapsed, so these can only come from the header menu.
+    // The body is hidden while collapsed, so these can only come from the header.
     expect(screen.queryByText('agent run')).toBeNull();
+    expect(screen.getByRole('button', { name: /score trace/i })).toBeTruthy();
     openTraceActions();
-    expect(screen.getByRole('menuitem', { name: /evaluate trace/i })).toBeTruthy();
     expect(screen.getByRole('menuitem', { name: /add full trace to dataset/i })).toBeTruthy();
     expect(screen.getByRole('menuitem', { name: /add tool mocks to item/i })).toBeTruthy();
   });
@@ -491,15 +509,13 @@ describe('TraceDataPanelView — the actions row', () => {
     render(<TraceDataPanelView {...baseProps} onEvaluateTrace={vi.fn()} />);
 
     expect(screen.queryByText(/available in Mastra Studio/)).toBeNull();
-    openTraceActions();
-    expect(screen.getByRole('menuitem', { name: /evaluate trace/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /score trace/i })).toBeTruthy();
   });
 
   it('never shows the actions row on the trace page', () => {
     render(<TraceDataPanelView {...baseProps} placement="trace-page" onEvaluateTrace={vi.fn()} />);
 
-    openTraceActions();
-    expect(screen.queryByRole('menuitem', { name: /evaluate trace/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /score trace/i })).toBeNull();
     expect(screen.queryByText(/available in Mastra Studio/)).toBeNull();
   });
 
@@ -517,8 +533,7 @@ describe('TraceDataPanelView — the actions row', () => {
     const onEvaluateTrace = vi.fn();
     render(<TraceDataPanelView {...baseProps} onEvaluateTrace={onEvaluateTrace} />);
 
-    openTraceActions();
-    fireEvent.click(screen.getByRole('menuitem', { name: /evaluate trace/i }));
+    fireEvent.click(screen.getByRole('button', { name: /score trace/i }));
 
     expect(onEvaluateTrace).toHaveBeenCalledTimes(1);
   });

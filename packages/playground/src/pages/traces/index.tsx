@@ -38,11 +38,9 @@ import { TraceAsItemDialog } from '@/domains/observability/components/trace-as-i
 import { useTraceSpanScores } from '@/domains/scores/hooks/use-trace-span-scores';
 import { NeedsReviewDot } from '@/domains/traces/components/needs-review-dot';
 import { ScoreDataPanel } from '@/domains/traces/components/score-data-panel';
-import { SpanFeedbackTab } from '@/domains/traces/components/span-feedback-tab';
 import { TraceFeedbackTab } from '@/domains/traces/components/trace-feedback-tab';
 import { TraceScoresTab } from '@/domains/traces/components/trace-scores-tab';
 import { TraceSpanPanel } from '@/domains/traces/components/trace-span-panel';
-import { useSpanFeedback } from '@/domains/traces/hooks/use-span-feedback';
 import { useTraceFeedback } from '@/domains/traces/hooks/use-trace-feedback';
 
 type TracesPageProps = {
@@ -106,7 +104,6 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   // Counts for the tab badges. The tab bodies own their pagination and re-use these
   // first-page queries through React Query's cache.
   const { data: traceFeedbackData } = useTraceFeedback({ traceId: url.traceIdParam });
-  const { data: spanFeedbackData } = useSpanFeedback({ traceId: url.traceIdParam, spanId: url.spanIdParam });
 
   // Trace + span detail fetched at the page level (was inside the old smart components).
   // In branches mode the data source is `getBranch` (subtree rooted at the selected span);
@@ -136,9 +133,6 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
     traceId: url.traceIdParam,
     spanId: anchorSpan?.spanId,
   });
-
-  const anchorSpanEntityType =
-    anchorSpan?.entityType === 'agent' ? 'Agent' : anchorSpan?.entityType === 'workflow_run' ? 'Workflow' : undefined;
 
   // Derived from URL + query data — no local state, so a span change (which clears scoreIdParam
   // in the URL) or a direct URL edit always resyncs ScoreDataPanel.
@@ -477,21 +471,11 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
               scoresTabBadge={spanScoresData?.pagination?.total ?? undefined}
               scoresTabSlot={({ traceId: tid, rootSpanId }) =>
                 rootSpanId ? (
-                  <TraceScoresTab
-                    traceId={tid}
-                    spanId={rootSpanId}
-                    isTopLevelSpan={!anchorSpan?.parentSpanId}
-                    entityType={anchorSpanEntityType}
-                    onScoreSelect={url.handleScoreChange}
-                  />
+                  <TraceScoresTab traceId={tid} spanId={rootSpanId} onScoreSelect={url.handleScoreChange} />
                 ) : null
               }
               spanActiveTab={url.spanTabParam ?? 'details'}
               onSpanTabChange={tab => url.handleSpanTabChange(tab as SpanTab)}
-              spanFeedbackTabBadge={<NeedsReviewDot feedback={spanFeedbackData?.feedback} />}
-              spanFeedbackTabSlot={({ traceId: tid, spanId: sid }) =>
-                tid && sid ? <SpanFeedbackTab key={`${tid}:${sid}`} traceId={tid} spanId={sid} /> : null
-              }
               spanPanelClassName="rounded-none border-0 bg-transparent"
             />
           ) : null

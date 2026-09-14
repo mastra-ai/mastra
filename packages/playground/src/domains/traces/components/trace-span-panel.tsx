@@ -5,8 +5,11 @@ import type {
 } from '@mastra/playground-ui/domains/traces/components/trace-data-panel-view';
 import { useSpanDetail } from '@mastra/playground-ui/domains/traces/hooks/use-span-detail';
 import { useTraceSpanNavigation } from '@mastra/playground-ui/domains/traces/hooks/use-trace-span-navigation';
+import { useKeydown } from '@mastra/playground-ui/keyboard/use-keydown';
 import { useState, type ComponentProps, type ReactNode } from 'react';
 
+import { useScorers } from '@/domains/scores';
+import { ScoreTraceDialog } from '@/domains/traces/components/score-trace-dialog';
 import { TraceDataPanel } from '@/domains/traces/components/trace-data-panel';
 import { TraceMessagesPanel } from '@/domains/traces/components/trace-messages-panel';
 import { getTraceThreadId } from '@/domains/traces/components/trace-thread-context';
@@ -23,6 +26,8 @@ function getEntityHref(entityType: string | null | undefined, entityId: string |
   return undefined;
 }
 type SpanDataPanelViewProps = ComponentProps<typeof SpanDataPanelView>;
+
+const SCORE_TRACE_SHORTCUT = 's';
 
 export interface TraceSpanPanelProps {
   traceId: string;
@@ -118,6 +123,12 @@ export function TraceSpanPanel({
   // where the featured spans are actually shown.
   const [traceTab, setTraceTab] = useState<TraceDataPanelTab>('details');
 
+  // "Score trace" lives in the trace header and only makes sense where a Scores tab shows the results.
+  const canScoreTrace = Boolean(scoresTabSlot);
+  const [isScoreDialogOpen, setIsScoreDialogOpen] = useState(false);
+  const { data: scorers, isLoading: isLoadingScorers } = useScorers({ enabled: canScoreTrace });
+  useKeydown({ [SCORE_TRACE_SHORTCUT]: () => setIsScoreDialogOpen(true) }, { enabled: canScoreTrace });
+
   // The trace summary links the entity to its Studio page; only Studio knows the routes.
   const rootSpan = anchorSpanId
     ? spans?.find(s => s.spanId === anchorSpanId)
@@ -143,71 +154,95 @@ export function TraceSpanPanel({
   }
 
   return (
-    <TraceDataPanel
-      className={className}
-      traceId={traceId}
-      spans={spans}
-      anchorSpanId={anchorSpanId}
-      entityHref={entityHref}
-      usage={usage}
-      isLoading={isLoadingSpans}
-      onClose={onClose}
-      onSpanSelect={onSpanSelect}
-      onSaveAsDatasetItem={onSaveAsDatasetItem}
-      onAddTraceMocksToItem={onAddTraceMocksToItem}
-      initialSpanId={initialSpanId ?? selectedSpanId}
-      onPrevious={onPrevious}
-      onNext={onNext}
-      placement="traces-list"
-      LinkComponent={Link}
-      traceHref={traceHref}
-      collapsed={collapsed}
-      onCollapsedChange={onCollapsedChange}
-      showUnavailableFeaturesMsg={showUnavailableFeaturesMsg}
-      feedbackTabBadge={feedbackTabBadge}
-      feedbackTabSlot={feedbackTabSlot}
-      featuredSpanIds={featuredSpanIds}
-      activeTab={traceTab}
-      onTabChange={setTraceTab}
-      messagesPanelSlot={
-        showPartialThread && threadId ? (
-          <TraceMessagesPanel
-            traceId={traceId}
-            threadId={threadId}
-            fullThreadHref={fullThreadHref}
-            onViewFullThread={onFullThreadOpenChange ? () => onFullThreadOpenChange(true) : undefined}
-            onHighlightSpans={
-              onHighlightSpans
-                ? spanIds => {
-                    setTraceTab('details');
-                    onHighlightSpans(spanIds);
-                  }
+    <>
+      {canScoreTrace && (
+        <ScoreTraceDialog
+          open={isScoreDialogOpen}
+          onOpenChange={setIsScoreDialogOpen}
+          traceId={traceId}
+          spanId={rootSpan?.spanId}
+          isTopLevelSpan={!rootSpan?.parentSpanId}
+          entityType={
+            rootSpan?.entityType === 'agent'
+              ? 'Agent'
+              : rootSpan?.entityType === 'workflow_run'
+                ? 'Workflow'
                 : undefined
-            }
-          />
-        ) : undefined
-      }
-      scoresTabBadge={scoresTabBadge}
-      scoresTabSlot={scoresTabSlot}
-      spanPanelSlot={
-        selectedSpanId ? (
-          <SpanDataPanelView
-            className={spanPanelClassName}
-            traceId={traceId}
-            spanId={selectedSpanId}
-            span={spanDetailData?.span}
-            isAnchor={anchorSpanId ? selectedSpanId === anchorSpanId : undefined}
-            isLoading={isLoadingSpanDetail}
-            onClose={onSpanClose ?? (() => onSpanSelect(undefined))}
-            onPrevious={handlePreviousSpan}
-            onNext={handleNextSpan}
-            activeTab={spanActiveTab}
-            onTabChange={onSpanTabChange}
-            feedbackTabBadge={spanFeedbackTabBadge}
-            feedbackTabSlot={spanFeedbackTabSlot}
-          />
-        ) : null
-      }
-    />
+          }
+          scorers={scorers}
+          isLoadingScorers={isLoadingScorers}
+          // The run's scores surface in the Scores tab, so land the reader there.
+          onTriggered={() => setTraceTab('scores')}
+        />
+      )}
+      <TraceDataPanel
+        className={className}
+        traceId={traceId}
+        spans={spans}
+        anchorSpanId={anchorSpanId}
+        onEvaluateTrace={canScoreTrace ? () => setIsScoreDialogOpen(true) : undefined}
+        evaluateTraceShortcut={SCORE_TRACE_SHORTCUT}
+        entityHref={entityHref}
+        usage={usage}
+        isLoading={isLoadingSpans}
+        onClose={onClose}
+        onSpanSelect={onSpanSelect}
+        onSaveAsDatasetItem={onSaveAsDatasetItem}
+        onAddTraceMocksToItem={onAddTraceMocksToItem}
+        initialSpanId={initialSpanId ?? selectedSpanId}
+        onPrevious={onPrevious}
+        onNext={onNext}
+        placement="traces-list"
+        LinkComponent={Link}
+        traceHref={traceHref}
+        collapsed={collapsed}
+        onCollapsedChange={onCollapsedChange}
+        showUnavailableFeaturesMsg={showUnavailableFeaturesMsg}
+        feedbackTabBadge={feedbackTabBadge}
+        feedbackTabSlot={feedbackTabSlot}
+        featuredSpanIds={featuredSpanIds}
+        activeTab={traceTab}
+        onTabChange={setTraceTab}
+        messagesPanelSlot={
+          showPartialThread && threadId ? (
+            <TraceMessagesPanel
+              traceId={traceId}
+              threadId={threadId}
+              fullThreadHref={fullThreadHref}
+              onViewFullThread={onFullThreadOpenChange ? () => onFullThreadOpenChange(true) : undefined}
+              onHighlightSpans={
+                onHighlightSpans
+                  ? spanIds => {
+                      setTraceTab('details');
+                      onHighlightSpans(spanIds);
+                    }
+                  : undefined
+              }
+            />
+          ) : undefined
+        }
+        scoresTabBadge={scoresTabBadge}
+        scoresTabSlot={scoresTabSlot}
+        spanPanelSlot={
+          selectedSpanId ? (
+            <SpanDataPanelView
+              className={spanPanelClassName}
+              traceId={traceId}
+              spanId={selectedSpanId}
+              span={spanDetailData?.span}
+              isAnchor={anchorSpanId ? selectedSpanId === anchorSpanId : undefined}
+              isLoading={isLoadingSpanDetail}
+              onClose={onSpanClose ?? (() => onSpanSelect(undefined))}
+              onPrevious={handlePreviousSpan}
+              onNext={handleNextSpan}
+              activeTab={spanActiveTab}
+              onTabChange={onSpanTabChange}
+              feedbackTabBadge={spanFeedbackTabBadge}
+              feedbackTabSlot={spanFeedbackTabSlot}
+            />
+          ) : null
+        }
+      />
+    </>
   );
 }

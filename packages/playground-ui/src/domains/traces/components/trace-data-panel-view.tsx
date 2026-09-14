@@ -1,5 +1,5 @@
 import {
-  CircleGaugeIcon,
+  GaugeIcon,
   ChevronsDownUpIcon,
   ChevronsUpDownIcon,
   DownloadIcon,
@@ -26,7 +26,9 @@ import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { DataPanel } from '@/ds/components/DataPanel';
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
 import { SearchFieldBlock } from '@/ds/components/FormFieldBlocks';
+import { Kbd } from '@/ds/components/Kbd';
 import { Notice } from '@/ds/components/Notice';
+import { PageHeader } from '@/ds/components/PageHeader';
 import { Tab, TabContent, TabList, Tabs } from '@/ds/components/Tabs';
 import type { LinkComponent } from '@/ds/types/link-component';
 import { useScrollToFirstHighlight } from '@/hooks/use-scroll-to-first-highlight';
@@ -44,7 +46,10 @@ export interface TraceDataPanelViewProps {
   isLoading?: boolean;
   onClose: () => void;
   onSpanSelect?: (spanId: string | undefined) => void;
+  /** Renders a primary "Score trace" header action. */
   onEvaluateTrace?: () => void;
+  /** Keyboard shortcut shown in the "Score trace" tooltip (the binding itself lives in the host). */
+  evaluateTraceShortcut?: string;
   /** When set, an "Add full trace to dataset" button appears; the consumer owns the dialog. */
   onSaveAsDatasetItem?: (args: { traceId: string; rootSpanId: string | undefined }) => void;
   /** When set, an "Add tool mocks to item" button appears; the consumer owns the dialog. */
@@ -118,6 +123,7 @@ export function TraceDataPanelView({
   onClose,
   onSpanSelect,
   onEvaluateTrace,
+  evaluateTraceShortcut,
   onSaveAsDatasetItem,
   onAddTraceMocksToItem,
   initialSpanId,
@@ -233,12 +239,6 @@ export function TraceDataPanelView({
             {collapsed ? 'Expand panel' : 'Collapse panel'}
           </DropdownMenu.Item>
         )}
-        {!isOnTracePage && onEvaluateTrace && (
-          <DropdownMenu.Item onSelect={onEvaluateTrace}>
-            <CircleGaugeIcon />
-            Evaluate trace
-          </DropdownMenu.Item>
-        )}
         {!isOnTracePage && onSaveAsDatasetItem && (
           <DropdownMenu.Item onSelect={() => onSaveAsDatasetItem({ traceId, rootSpanId: rootSpan?.spanId })}>
             <SaveIcon />
@@ -274,34 +274,54 @@ export function TraceDataPanelView({
             <ButtonsGroup className="ml-auto shrink-0">{traceActionsMenu}</ButtonsGroup>
           </>
         ) : (
-          <>
-            <div className="flex min-w-0 flex-1 flex-col gap-1">
-              <DataPanel.Heading className="items-center">
-                Trace
-                <TraceIdButton id={traceId} />
-              </DataPanel.Heading>
-              {!collapsed && rootSpan && (
+          <PageHeader className="min-w-0 flex-1">
+            <PageHeader.Title size="sm">
+              Trace
+              <TraceIdButton id={traceId} />
+            </PageHeader.Title>
+            {!collapsed && rootSpan && (
+              <PageHeader.Meta beside>
                 <TraceSummaryDescription
                   rootSpan={rootSpan}
                   usage={usage}
                   entityHref={entityHref}
                   LinkComponent={LinkComponent}
                 />
-              )}
-            </div>
-            <ButtonsGroup className="ml-auto shrink-0 self-start">
-              {traceActionsMenu}
-              {(onPrevious || onNext) && (
-                <DataPanel.NextPrevNav
-                  onPrevious={onPrevious}
-                  onNext={onNext}
-                  previousLabel="Previous trace"
-                  nextLabel="Next trace"
-                />
-              )}
-              <DataPanel.CloseButton onClick={onClose} />
-            </ButtonsGroup>
-          </>
+              </PageHeader.Meta>
+            )}
+            <PageHeader.Action>
+              <ButtonsGroup>
+                {onEvaluateTrace && (
+                  <Button
+                    size="md"
+                    variant="primary"
+                    icon={<GaugeIcon />}
+                    onClick={onEvaluateTrace}
+                    tooltip={
+                      evaluateTraceShortcut ? (
+                        <span className="inline-flex items-center gap-1.5">
+                          Score trace
+                          <Kbd size="xs">{evaluateTraceShortcut}</Kbd>
+                        </span>
+                      ) : undefined
+                    }
+                  >
+                    Score trace
+                  </Button>
+                )}
+                {traceActionsMenu}
+                {(onPrevious || onNext) && (
+                  <DataPanel.NextPrevNav
+                    onPrevious={onPrevious}
+                    onNext={onNext}
+                    previousLabel="Previous trace"
+                    nextLabel="Next trace"
+                  />
+                )}
+                <DataPanel.CloseButton onClick={onClose} />
+              </ButtonsGroup>
+            </PageHeader.Action>
+          </PageHeader>
         )}
       </DataPanel.Header>
 

@@ -344,12 +344,36 @@ describe('Traces side panel header actions', () => {
     const { queryClient } = renderPage('/traces?traceId=trace-a');
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
+    // "Score trace" is a primary header action, not a menu item.
+    expect(screen.getByRole('button', { name: 'Score trace' })).not.toBeNull();
+
     fireEvent.click(await screen.findByRole('button', { name: 'Trace actions' }));
 
-    expect(await screen.findByRole('menuitem', { name: 'Evaluate trace' })).not.toBeNull();
-    expect(screen.getByRole('menuitem', { name: 'Add full trace to dataset' })).not.toBeNull();
+    expect(await screen.findByRole('menuitem', { name: 'Add full trace to dataset' })).not.toBeNull();
+    expect(screen.queryByRole('menuitem', { name: 'Evaluate trace' })).toBeNull();
     // The parent trace panel is no longer collapsible.
     expect(screen.queryByRole('menuitem', { name: /collapse panel/i })).toBeNull();
+  });
+
+  it('opens the scorer dialog from the "Score trace" action and from the "s" shortcut', async () => {
+    setTracePageHandlers(metricsCapableSystemPackages);
+    server.use(
+      http.get(`${TEST_BASE_URL}/api/observability/traces/trace-a`, () => HttpResponse.json(traceSpans)),
+      http.get(`${TEST_BASE_URL}/api/observability/feedback`, () => HttpResponse.json(emptyFeedback)),
+    );
+
+    const { queryClient } = renderPage('/traces?traceId=trace-a');
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Score trace' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Score trace' });
+    expect(dialog.textContent).toContain('No eligible scorers have been defined to run.');
+
+    fireEvent.keyDown(dialog, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Score trace' })).toBeNull());
+
+    fireEvent.keyDown(window, { key: 's' });
+    expect(await screen.findByRole('dialog', { name: 'Score trace' })).not.toBeNull();
   });
 });
 
@@ -394,6 +418,8 @@ describe('Traces side panel Scores tab', () => {
 
       expect(await screen.findByText(/no scores/i)).not.toBeNull();
       expect(screen.queryByText('0.60')).toBeNull();
+      // Scorer runs are started from the header action, not from the tab.
+      expect(screen.queryByText('Select a scorer...')).toBeNull();
     });
   });
 });
