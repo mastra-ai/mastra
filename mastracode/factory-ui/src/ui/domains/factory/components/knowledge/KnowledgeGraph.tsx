@@ -114,11 +114,10 @@ function NodeNodeComponent({ data, selected }: NodeProps<NodeFlowNode>) {
           </Txt>
         ) : null}
       </div>
-      {node.isScope && node.memberCount !== undefined && node.memberCount > 0 ? (
+      {node.isScope && !focused && !selected && node.memberCount !== undefined && node.memberCount > 0 ? (
         <div className="absolute -top-1 -right-1 z-10">
           <Badge
             variant="neutral"
-            emphasis="muted"
             size="xs"
             aria-label={`${node.memberCount}${node.memberCountTruncated ? '+' : ''} direct members`}
           >
@@ -696,7 +695,7 @@ function GraphHoverCard({ hover, nodesById }: { hover: HoverCard; nodesById: Map
           {node.isScope ? (
             <>
               <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>Type</dt>
-              <dd className={textStyle({ variant: 'caption', tone: 'muted' })}>{node.kind === 'scope' ? 'Structural scope' : node.kind}</dd>
+              <dd className={textStyle({ variant: 'caption', tone: 'muted' })}>{node.kind === 'scope' ? 'scope' : node.kind}</dd>
               <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>Content nodes</dt>
               <dd className={textStyle({ variant: 'caption', tone: 'muted' })}>{node.contentNodeCount ?? '—'}</dd>
               <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>Child scopes</dt>
