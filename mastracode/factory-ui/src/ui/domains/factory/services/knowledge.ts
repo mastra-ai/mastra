@@ -187,6 +187,7 @@ export interface KnowledgeActivityEvent {
 
 export interface KnowledgeActivityPayload {
   events: KnowledgeActivityEvent[];
+  nextCursor?: string;
 }
 
 export interface KnowledgeNodePayload {
@@ -267,12 +268,14 @@ export async function fetchKnowledgeActivity(
   factoryProjectId: string,
   selection: KnowledgeSelection,
   threadId?: string,
+  cursor?: string,
   signal?: AbortSignal,
 ): Promise<KnowledgeActivityPayload> {
-  return requestJson<KnowledgeActivityPayload>(
-    `${knowledgeBase(baseUrl, factoryProjectId)}/activity${knowledgeQuery(threadId, selection)}`,
-    { signal },
-  );
+  const query = new URLSearchParams(knowledgeQuery(threadId, selection).slice(1));
+  if (cursor) query.set('cursor', cursor);
+  return requestJson<KnowledgeActivityPayload>(`${knowledgeBase(baseUrl, factoryProjectId)}/activity?${query}`, {
+    signal,
+  });
 }
 
 export async function fetchKnowledgeNode(
