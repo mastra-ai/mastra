@@ -6,6 +6,7 @@ import { useLinkComponent } from '@/lib/framework';
 
 export interface AgentMetadataSectionProps {
   title: string | React.ReactNode;
+  icon?: React.ReactNode;
   children: React.ReactNode;
   hint?: {
     link: string;
@@ -14,11 +15,12 @@ export interface AgentMetadataSectionProps {
   };
 }
 
-export const AgentMetadataSection = ({ title, children, hint }: AgentMetadataSectionProps) => {
+export const AgentMetadataSection = ({ title, icon, children, hint }: AgentMetadataSectionProps) => {
   const { Link } = useLinkComponent();
   return (
     <section className="space-y-2 pb-7 last:pb-0">
       <Txt as="h3" variant="ui-md" className="text-neutral3 flex items-center gap-1">
+        {icon && <Icon aria-hidden="true">{icon}</Icon>}
         {title}
         {hint && (
           <TooltipProvider>

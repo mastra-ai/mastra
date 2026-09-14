@@ -6,7 +6,13 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
+import { ProcessorIcon } from '@mastra/playground-ui/icons/ProcessorIcon';
+import { SkillIcon } from '@mastra/playground-ui/icons/SkillIcon';
+import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
+import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 import CodeMirror, { EditorView } from '@uiw/react-codemirror';
+import { Folder, GaugeIcon, Globe } from 'lucide-react';
 import { useAgent } from '../../hooks/use-agent';
 import { useReorderModelList, useUpdateModelInModelList } from '../../hooks/use-agents';
 import { useChannelPlatforms } from '../../hooks/use-channels';
@@ -32,10 +38,6 @@ export interface AgentOverviewPanelProps {
   agentId: string;
 }
 
-/**
- * Read-only "quick scan" of an agent (models, capabilities, prompt, memory,
- * channels) rendered in the Studio side panel next to the main frame.
- */
 export function AgentOverviewPanel({ agentId }: AgentOverviewPanelProps) {
   const { isCollapsed } = useRouteSidePanel();
 
@@ -44,7 +46,6 @@ export function AgentOverviewPanel({ agentId }: AgentOverviewPanelProps) {
       data-testid="agent-overview-panel"
       className="rounded-studio-frame grid h-full min-h-0 grid-rows-[auto_1fr] overflow-hidden"
     >
-      {/* The header route action owns the close control (see AgentDetailHeaderActions). */}
       <div className="border-border1 flex h-10 min-h-10 items-center border-b px-4">
         <Txt as="h2" variant="ui-md" className="text-neutral6 font-medium">
           Overview
@@ -52,7 +53,6 @@ export function AgentOverviewPanel({ agentId }: AgentOverviewPanelProps) {
       </div>
 
       <ScrollArea className="min-h-0" viewPortClassName="h-full" mask={{ top: false }}>
-        {/* Skip the sections (and their data fetching) while the panel is collapsed. */}
         <div className="p-4">{!isCollapsed && <AgentOverviewSections agentId={agentId} />}</div>
       </ScrollArea>
     </Card>
@@ -114,6 +114,7 @@ function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
       {networkAgents.length > 0 && (
         <AgentMetadataSection
           title={<SectionTitleWithCount title="Agents" count={networkAgents.length} />}
+          icon={<AgentIcon />}
           hint={{ link: 'https://mastra.ai/en/docs/agents/overview', title: 'Agents documentation' }}
         >
           <AgentMetadataNetworkList agents={networkAgents} />
@@ -122,6 +123,7 @@ function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
 
       <AgentMetadataSection
         title={<SectionTitleWithCount title="Tools" count={tools.length} />}
+        icon={<ToolsIcon />}
         hint={{
           link: 'https://mastra.ai/en/docs/agents/using-tools-and-mcp',
           title: 'Using Tools and MCP documentation',
@@ -132,6 +134,7 @@ function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
 
       <AgentMetadataSection
         title={<SectionTitleWithCount title="Workflows" count={workflows.length} />}
+        icon={<WorkflowIcon />}
         hint={{ link: 'https://mastra.ai/en/docs/workflows/overview', title: 'Workflows documentation' }}
       >
         <AgentMetadataWorkflowList workflows={workflows} />
@@ -140,6 +143,7 @@ function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
       {workspaceTools.length > 0 && (
         <AgentMetadataSection
           title={<SectionTitleWithCount title="Workspace Tools" count={workspaceTools.length} />}
+          icon={<Folder />}
           hint={{
             link: 'https://mastra.ai/en/reference/workspace/workspace-class#agent-tools',
             title: 'Workspace tools documentation',
@@ -152,6 +156,7 @@ function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
       {browserTools.length > 0 && (
         <AgentMetadataSection
           title={<SectionTitleWithCount title="Browser Tools" count={browserTools.length} />}
+          icon={<Globe />}
           hint={{
             link: 'https://mastra.ai/en/docs/agents/adding-browser-control',
             title: 'Browser tools documentation',
@@ -164,6 +169,7 @@ function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
       {(inputProcessors.length > 0 || outputProcessors.length > 0) && (
         <AgentMetadataSection
           title="Processors"
+          icon={<ProcessorIcon />}
           hint={{ link: 'https://mastra.ai/docs/agents/processors', title: 'Processors documentation' }}
         >
           <AgentMetadataCombinedProcessorList inputProcessors={inputProcessors} outputProcessors={outputProcessors} />
@@ -172,12 +178,13 @@ function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
 
       <AgentMetadataSection
         title={<SectionTitleWithCount title="Skills" count={skills.length} />}
+        icon={<SkillIcon />}
         hint={{ link: 'https://mastra.ai/en/docs/workspace/skills', title: 'Skills documentation' }}
       >
         <AgentMetadataSkillList skills={skills} agentId={agentId} workspaceId={agent.workspaceId} />
       </AgentMetadataSection>
 
-      <AgentMetadataSection title="Scorers">
+      <AgentMetadataSection title="Scorers" icon={<GaugeIcon />}>
         <AgentMetadataScorerList entityId={agent.name} entityType="AGENT" />
       </AgentMetadataSection>
 

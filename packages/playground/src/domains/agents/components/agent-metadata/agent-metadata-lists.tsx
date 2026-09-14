@@ -3,12 +3,6 @@ import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { LoadingBadge } from '@mastra/playground-ui/domains/chat/components/loading-badge';
 import { WORKSPACE_TOOLS_PREFIX } from '@mastra/playground-ui/domains/chat/tools/workspace-tool-constants';
-import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
-import { ProcessorIcon } from '@mastra/playground-ui/icons/ProcessorIcon';
-import { SkillIcon } from '@mastra/playground-ui/icons/SkillIcon';
-import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
-import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
-import { GaugeIcon, Folder, Globe } from 'lucide-react';
 import { useActivatedSkills } from '../../context/activated-skills-context';
 import { AgentMetadataExpandableList } from './agent-metadata-expandable-list';
 import { AgentMetadataList, AgentMetadataListEmpty, AgentMetadataListItem } from './agent-metadata-list';
@@ -32,9 +26,7 @@ export const AgentMetadataNetworkList = ({ agents }: AgentMetadataNetworkListPro
       getKey={agent => agent.id}
       renderItem={agent => (
         <Link href={paths.agentLink(agent.id)} data-testid="agent-badge">
-          <Badge variant="green" icon={<AgentIcon />}>
-            {agent.name}
-          </Badge>
+          <Badge>{agent.name}</Badge>
         </Link>
       )}
     />
@@ -59,7 +51,7 @@ export const AgentMetadataToolList = ({ tools, agentId }: AgentMetadataToolListP
       getKey={tool => tool.id}
       renderItem={tool => (
         <Link href={paths.agentToolLink(agentId, tool.id)} data-testid="tool-badge">
-          <Badge icon={<ToolsIcon className="text-accent6" />}>{tool.id}</Badge>
+          <Badge>{tool.id}</Badge>
         </Link>
       )}
     />
@@ -83,7 +75,7 @@ export const AgentMetadataWorkflowList = ({ workflows }: AgentMetadataWorkflowLi
       getKey={workflow => workflow.id}
       renderItem={workflow => (
         <Link href={paths.workflowLink(workflow.id)} data-testid="workflow-badge">
-          <Badge icon={<WorkflowIcon className="text-accent3" />}>{workflow.name}</Badge>
+          <Badge>{workflow.name}</Badge>
         </Link>
       )}
     />
@@ -124,7 +116,7 @@ export const AgentMetadataScorerList = ({ entityId, entityType }: AgentMetadataS
       getKey={scorer => scorer.id}
       renderItem={scorer => (
         <Link href={paths.scorerLink(scorer.id)} data-testid="scorer-badge">
-          <Badge icon={<GaugeIcon className="text-neutral3" />}>{scorer.scorer.config.name}</Badge>
+          <Badge>{scorer.scorer.config.name}</Badge>
         </Link>
       )}
     />
@@ -157,10 +149,7 @@ export const AgentMetadataSkillList = ({ skills, agentId, workspaceId }: AgentMe
       renderItem={skill => {
         const isActivated = isSkillActivated(skill.name);
         const badge = (
-          <Badge
-            icon={<SkillIcon className={`h-3 w-3 ${isActivated ? 'text-green-400' : 'text-accent2'}`} />}
-            variant={isActivated ? 'green' : 'neutral'}
-          >
+          <Badge variant={isActivated ? 'green' : 'neutral'}>
             {skill.name}
             {isActivated && <span className="sr-only">Active</span>}
           </Badge>
@@ -194,10 +183,6 @@ export interface AgentMetadataWorkspaceToolsListProps {
   tools: string[];
 }
 
-/**
- * Format a workspace tool name for display.
- * Converts "mastra_workspace_read_file" to "read_file"
- */
 function formatWorkspaceToolName(toolName: string): string {
   const prefix = `${WORKSPACE_TOOLS_PREFIX}_`;
   if (toolName.startsWith(prefix)) {
@@ -215,7 +200,7 @@ export const AgentMetadataWorkspaceToolsList = ({ tools }: AgentMetadataWorkspac
     <AgentMetadataExpandableList
       items={tools}
       getKey={tool => tool}
-      renderItem={tool => <Badge icon={<Folder className="text-accent1" />}>{formatWorkspaceToolName(tool)}</Badge>}
+      renderItem={tool => <Badge>{formatWorkspaceToolName(tool)}</Badge>}
     />
   );
 };
@@ -229,13 +214,7 @@ export const AgentMetadataBrowserToolsList = ({ tools }: AgentMetadataBrowserToo
     return <AgentMetadataListEmpty>No browser tools</AgentMetadataListEmpty>;
   }
 
-  return (
-    <AgentMetadataExpandableList
-      items={tools}
-      getKey={tool => tool}
-      renderItem={tool => <Badge icon={<Globe className="text-cyan-500" />}>{tool}</Badge>}
-    />
-  );
+  return <AgentMetadataExpandableList items={tools} getKey={tool => tool} renderItem={tool => <Badge>{tool}</Badge>} />;
 };
 
 export interface AgentMetadataCombinedProcessorListProps {
@@ -253,7 +232,6 @@ export const AgentMetadataCombinedProcessorList = ({
     return <AgentMetadataListEmpty>No processors</AgentMetadataListEmpty>;
   }
 
-  // Use the first processor's ID for the link (they're grouped into a single workflow per type)
   const inputProcessorId = inputProcessors[0]?.id;
   const outputProcessorId = outputProcessors[0]?.id;
 
@@ -262,14 +240,14 @@ export const AgentMetadataCombinedProcessorList = ({
       {inputProcessors.length > 0 && inputProcessorId && (
         <AgentMetadataListItem>
           <Link href={`${paths.workflowLink(inputProcessorId)}/graph`} data-testid="processor-badge">
-            <Badge icon={<ProcessorIcon className="text-accent4" />}>input</Badge>
+            <Badge>input</Badge>
           </Link>
         </AgentMetadataListItem>
       )}
       {outputProcessors.length > 0 && outputProcessorId && (
         <AgentMetadataListItem>
           <Link href={`${paths.workflowLink(outputProcessorId)}/graph`} data-testid="processor-badge">
-            <Badge icon={<ProcessorIcon className="text-accent5" />}>output</Badge>
+            <Badge>output</Badge>
           </Link>
         </AgentMetadataListItem>
       )}
