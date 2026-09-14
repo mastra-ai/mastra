@@ -1,4 +1,4 @@
-import { MCPServerBaseV2, createMCPTool } from '@mastra/core/mcp';
+import { MCPServerBaseV2 } from '@mastra/core/mcp';
 import type { MCPServerHTTPOptionsV2 } from '@mastra/core/mcp';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod/v4';
@@ -14,14 +14,25 @@ export class NativeMCPFixture extends MCPServerBaseV2 {
         ordinary: createTool({
           id: 'native-fixture-business',
           description: 'Business execution',
-          execute: async (_input, context) => ({ hasLegacyContext: 'mcp' in context }),
+          execute: async (_input, context) => ({
+            protocolVersion: context.mcpv2?.protocolVersion ?? null,
+            hasLegacyContext: 'mcp' in context,
+          }),
         }),
-        interaction: createMCPTool({
+        interaction: createTool({
           id: 'native-fixture-interaction',
-          description: 'Native interaction',
+          description: 'Asks for confirmation',
           inputSchema: z.object({}),
           outputSchema: z.number(),
-          execute: () => ({ kind: 'input_required', result: { resultType: 'input_required', requestState: 'next' } }),
+          suspendSchema: z.object({ phase: z.literal('confirm') }),
+          resumeSchema: z.object({ confirmed: z.boolean() }),
+          execute: async (_input, context) => {
+            if (!context.mcpv2?.resumeData) {
+              await context.mcpv2?.suspend({ phase: 'confirm' });
+              return;
+            }
+            return 1;
+          },
         }),
       },
     });

@@ -429,7 +429,12 @@ export class Tool<
         // validation. The original args were already validated during the initial
         // execution, and during resume the tool's execute function checks resumeData
         // and returns early without using the input args.
-        const isResuming = !!(context?.resumeData || context?.agent?.resumeData);
+        const isResuming = !!(
+          context?.resumeData ||
+          context?.agent?.resumeData ||
+          context?.workflow?.resumeData ||
+          context?.mcpv2?.resumeData
+        );
         const wasBuilderValidated = consumeBuilderValidatedInput(context);
         const skipInputValidation = isResuming || wasBuilderValidated;
 
@@ -504,6 +509,7 @@ export class Tool<
               messages,
               suspend,
               resumeData,
+              suspendPayload,
               threadId,
               resourceId,
               writableStream,
@@ -517,6 +523,7 @@ export class Tool<
                 messages,
                 suspend,
                 resumeData,
+                suspendPayload,
                 threadId,
                 resourceId,
                 writableStream,
@@ -526,7 +533,7 @@ export class Tool<
             };
           } else if (isWorkflowExecution && !baseContext.workflow) {
             // Reorganize workflow context - nest workflow-specific properties under 'workflow' key
-            const { workflowId, runId, state, setState, suspend, resumeData, ...rest } = baseContext;
+            const { workflowId, runId, state, setState, suspend, resumeData, suspendPayload, ...rest } = baseContext;
             organizedContext = {
               ...rest,
               workflow: {
@@ -536,6 +543,7 @@ export class Tool<
                 setState,
                 suspend,
                 resumeData,
+                suspendPayload,
               },
               // Ensure requestContext is always present
               requestContext: executionRequestContext ?? new RequestContext(),
@@ -563,13 +571,25 @@ export class Tool<
                     },
                   }
                 : baseContext.workflow,
+              mcpv2: baseContext.mcpv2
+                ? {
+                    ...baseContext.mcpv2,
+                    suspend: (args: any) => {
+                      suspendData = args;
+                      return baseContext.mcpv2.suspend(args);
+                    },
+                  }
+                : baseContext.mcpv2,
               requestContext: executionRequestContext ?? new RequestContext(),
             };
           }
         }
 
         const resumeData =
-          organizedContext.agent?.resumeData ?? organizedContext.workflow?.resumeData ?? organizedContext?.resumeData;
+          organizedContext.agent?.resumeData ??
+          organizedContext.workflow?.resumeData ??
+          organizedContext.mcpv2?.resumeData ??
+          organizedContext?.resumeData;
 
         if (resumeData) {
           const resumeValidation = validateToolInput(this.resumeSchema, resumeData, this.id);

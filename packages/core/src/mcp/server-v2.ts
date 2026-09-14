@@ -1,20 +1,42 @@
 import { randomUUID } from 'node:crypto';
+import type { JSONSchema7 } from 'json-schema';
 import { MastraBase } from '../base';
 import { RegisteredLogger } from '../logger';
 import type { Mastra } from '../mastra';
+import type { ObservabilityContext } from '../observability';
 import type { RequestContext } from '../request-context';
+import { standardSchemaToJSONSchema, toStandardSchema } from '../schema';
 import type { MCPToolType, Tool } from '../tools';
 import { createToolObserve } from '../tools/observe';
-import { isMCPToolV2 } from './native-tool';
-import type { MCPToolExecutionContextV2, MCPToolOutcomeV2, MCPToolV2 } from './native-tool';
+import type { MCPToolExecutionContextV2 } from './request-v2';
 import type { MCPServerConfig, MCPServerHTTPOptions, ServerDetailInfo, ServerInfo } from './types';
 import type { MCPServerBase } from './index';
 
 export type MCPServerRegistryEntry = MCPServerBase | MCPServerBaseV2;
 export type MCPServerHTTPOptionsV2 = Pick<MCPServerHTTPOptions, 'url' | 'httpPath' | 'req' | 'res'>;
-/** A catalogue entry: any ordinary business tool or a native MCP tool. */
-export type MCPServerToolV2 = Tool<any, any, any, any, any, any, any> | MCPToolV2<any, any>;
+export type MCPServerToolV2 = Tool<any, any, any, any, any, any, any>;
 export type MCPServerToolsV2 = Record<string, MCPServerToolV2>;
+
+/**
+ * Outcome of running a catalogue tool: it either produced output or suspended
+ * for input. `resumeSchema` is the tool's resume schema as JSON Schema so the
+ * caller can ask for exactly that input.
+ */
+export type MCPToolExecutionResultV2 =
+  | { status: 'completed'; output: unknown }
+  | { status: 'suspended'; suspendPayload: unknown; resumeSchema?: JSONSchema7 };
+
+export interface MCPToolExecutionOptionsV2 extends Partial<ObservabilityContext> {
+  requestContext?: RequestContext;
+  abortSignal?: AbortSignal;
+  /**
+   * Protocol request facilities plus the previous round's `resumeData` /
+   * `suspendPayload` when continuing. The base supplies `suspend` itself and
+   * reports a call to it as a `suspended` result. When omitted (for example
+   * the Studio/REST execute route) the tool runs with no-op log/progress.
+   */
+  mcpv2?: Omit<MCPToolExecutionContextV2, 'suspend'>;
+}
 
 export interface MCPServerConfigV2 extends Pick<
   MCPServerConfig,
@@ -96,7 +118,7 @@ export abstract class MCPServerBaseV2 extends MastraBase {
   __registerMastra(mastra: Mastra): void {
     this.mastra = mastra;
     for (const [key, tool] of Object.entries(this.catalogue)) {
-      if (!isMCPToolV2(tool)) mastra.addTool(tool, tool.id ?? key);
+      mastra.addTool(tool, tool.id ?? key);
     }
   }
 
@@ -107,10 +129,10 @@ export abstract class MCPServerBaseV2 extends MastraBase {
       if (previous) {
         this.logger.warn(`Tool '${key}' already exists and will be replaced.`);
         // Mastra.addTool keeps an existing registration, so drop the old business tool first.
-        if (this.mastra && !isMCPToolV2(previous)) this.mastra.removeTool(previous.id ?? key);
+        if (this.mastra) this.mastra.removeTool(previous.id ?? key);
       }
       this.catalogue[key] = tool;
-      if (this.mastra && !isMCPToolV2(tool)) this.mastra.addTool(tool, tool.id ?? key);
+      if (this.mastra) this.mastra.addTool(tool, tool.id ?? key);
     }
   }
 
@@ -124,49 +146,63 @@ export abstract class MCPServerBaseV2 extends MastraBase {
         continue;
       }
       delete this.catalogue[key];
-      if (this.mastra && !isMCPToolV2(tool)) this.mastra.removeTool(tool.id ?? key);
+      if (this.mastra) this.mastra.removeTool(tool.id ?? key);
       removed.push(key);
     }
     return removed;
   }
 
-  async invokeTool(
-    toolId: string,
-    input: unknown,
-    context: MCPToolExecutionContextV2,
-  ): Promise<MCPToolOutcomeV2<unknown>> {
-    const tool = this.catalogue[toolId];
-    if (!tool) throw new Error(`Tool ${toolId} not found`);
-    if (isMCPToolV2(tool)) return tool.invoke(input, context);
-    return {
-      kind: 'completed',
-      value: await this.executeTool(toolId, input, {
-        requestContext: context.requestContext,
-        abortSignal: context.request.signal,
-        tracingContext: context.tracingContext,
-      }),
-    };
-  }
-
+  /**
+   * Runs a catalogue tool. A tool that calls `context.mcpv2.suspend(payload)`
+   * returns `void`; that is reported as a `suspended` result carrying the
+   * payload and the tool's `resumeSchema` so the caller can ask for input.
+   */
   async executeTool(
     toolId: string,
     input: unknown,
-    context?: { requestContext?: RequestContext; abortSignal?: AbortSignal } & Pick<
-      MCPToolExecutionContextV2,
-      'tracingContext'
-    >,
-  ): Promise<unknown> {
+    options: MCPToolExecutionOptionsV2 = {},
+  ): Promise<MCPToolExecutionResultV2> {
     const tool = this.catalogue[toolId];
     if (!tool) throw new Error(`Tool ${toolId} not found`);
-    if (isMCPToolV2(tool)) throw new Error('Native MCP tools require a protocol request context; use invokeTool');
     if (!tool.execute) throw new Error(`Tool ${toolId} has no execute handler`);
-    return tool.execute(input, {
-      requestContext: context?.requestContext,
-      abortSignal: context?.abortSignal,
-      tracingContext: context?.tracingContext,
-      observe: createToolObserve(context?.tracingContext?.currentSpan),
+
+    let suspended = false;
+    let suspendPayload: unknown;
+    const abortSignal = options.abortSignal ?? options.mcpv2?.signal;
+    const mcpv2: MCPToolExecutionContextV2 = {
+      ...(options.mcpv2 ?? {
+        protocolVersion: '2026-07-28',
+        requestId: randomUUID(),
+        signal: abortSignal ?? new AbortController().signal,
+        metadata: {},
+        log: async () => {},
+        progress: async () => {},
+      }),
+      suspend: async payload => {
+        suspended = true;
+        suspendPayload = payload;
+      },
+    };
+
+    const output = await tool.execute(input, {
+      requestContext: options.requestContext,
+      abortSignal,
+      tracingContext: options.tracingContext,
+      observe: createToolObserve(options.tracingContext?.currentSpan),
       mastra: this.mastra,
+      mcpv2,
     });
+
+    if (suspended) {
+      return {
+        status: 'suspended',
+        suspendPayload,
+        resumeSchema: tool.resumeSchema
+          ? standardSchemaToJSONSchema(toStandardSchema(tool.resumeSchema), { io: 'input' })
+          : undefined,
+      };
+    }
+    return { status: 'completed', output };
   }
 
   abstract startStdio(): Promise<void>;

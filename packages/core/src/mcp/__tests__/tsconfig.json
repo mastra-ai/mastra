@@ -1,6 +1,6 @@
 {
   "extends": "../../../tsconfig.build.json",
   "compilerOptions": { "noEmit": true },
-  "include": ["native-types.ts", "../native-tool.test.ts", "../native-registry.test.ts"],
+  "include": ["v2-types.ts", "../registry-v2.test.ts"],
   "exclude": []
 }

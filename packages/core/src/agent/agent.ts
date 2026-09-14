@@ -54,7 +54,6 @@ import type { Mastra } from '../mastra';
 import { mastraCtorHolder } from '../mastra/mastra-ctor-holder';
 import type { VersionOverrides } from '../mastra/types';
 import { mergeVersionOverrides } from '../mastra/types';
-import { isMCPToolV2 } from '../mcp/native-tool';
 import type { MastraMemory } from '../memory/memory';
 import { normalizeMessageHistoryConfig } from '../memory/message-history-config';
 import { getMemoryRunState } from '../memory/run-state';
@@ -790,9 +789,6 @@ export class Agent<
     );
 
     this.#tools = config.tools || ({} as TTools);
-    if (typeof this.#tools !== 'function' && Object.values(this.#tools).some(isMCPToolV2)) {
-      throw new Error('Native MCP tools cannot be used as agent tools');
-    }
     this.#hooks = config.hooks;
     this.#pubsub = config.pubsub;
 
@@ -3044,9 +3040,6 @@ export class Agent<
         throw mastraError;
       }
 
-      if (Object.values(tools).some(isMCPToolV2)) {
-        throw new Error('Native MCP tools cannot be used as agent tools');
-      }
       const ensuredTools = ensureToolProperties(tools) as ToolsInput;
       if (!resolveWebSearch || !Object.values(ensuredTools).some(isWebSearchTool)) {
         return ensuredTools as TTools;

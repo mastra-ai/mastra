@@ -1,13 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
-import { Agent } from '../agent';
 import { Mastra } from '../mastra';
 import { RequestContext } from '../request-context';
 import { createTool } from '../tools';
-import { CoreToolBuilder } from '../tools/tool-builder/builder';
-import { createStep } from '../workflows';
-import { createStep as createEventedStep } from '../workflows/evented/workflow';
-import { MCPServerBase, MCPServerBaseV2, createMCPTool, isMCPServerV2 } from './index';
+import { MCPServerBase, MCPServerBaseV2, isMCPServerV2 } from './index';
 import type { MCPToolExecutionContextV2 } from './index';
 
 class NativeServer extends MCPServerBaseV2 {
@@ -76,37 +72,45 @@ class LegacyServer extends MCPServerBase {
   }
 }
 
-function context(): MCPToolExecutionContextV2 {
+function request(): Omit<MCPToolExecutionContextV2, 'suspend'> {
   return {
-    requestContext: new RequestContext(),
-    request: {
-      protocolVersion: '2026-07-28',
-      requestId: 'round',
-      signal: new AbortController().signal,
-      log: async () => {},
-      progress: async () => {},
-    },
+    protocolVersion: '2026-07-28',
+    requestId: 'round',
+    signal: new AbortController().signal,
+    metadata: {},
+    log: async () => {},
+    progress: async () => {},
   };
 }
 
-function nativeTool() {
-  return createMCPTool({
-    id: 'native',
-    description: 'Protocol tool',
-    inputSchema: z.object({}),
-    outputSchema: z.number(),
-    execute: () => ({ kind: 'input_required', result: { resultType: 'input_required', requestState: 'next' } }),
+function suspendingTool() {
+  return createTool({
+    id: 'confirm',
+    description: 'Asks before acting',
+    inputSchema: z.object({ amount: z.number() }),
+    outputSchema: z.object({ charged: z.number() }),
+    suspendSchema: z.object({ phase: z.literal('confirm'), amount: z.number() }),
+    resumeSchema: z.object({ confirmed: z.boolean() }),
+    execute: async ({ amount }, context) => {
+      const round = context.mcpv2;
+      if (!round?.resumeData) {
+        await round?.suspend({ phase: 'confirm', amount });
+        return;
+      }
+      if (!round.resumeData.confirmed) throw new Error('declined');
+      return { charged: round.suspendPayload?.amount ?? amount };
+    },
   });
 }
 
 describe('MCP v1/v2 registry boundaries', () => {
   it('registers both families without changing legacy instances or tool identity', () => {
-    const native = nativeTool();
+    const confirm = suspendingTool();
     const ordinary = createTool({ id: 'business', description: 'Ordinary tool', execute: async () => 1 });
     const modern = new NativeServer({
       name: 'Modern',
       version: '2.0.0',
-      tools: { native, ordinary },
+      tools: { confirm, ordinary },
       releaseDate: '2026-07-28',
     });
     const legacy = new LegacyServer({ name: 'Legacy', version: '1.0.0', tools: {} });
@@ -114,10 +118,11 @@ describe('MCP v1/v2 registry boundaries', () => {
     expect(mastra.getMCPServer('modern')).toBe(modern);
     expect(mastra.getMCPServer('legacy')).toBe(legacy);
     expect(mastra.listMCPServers()).toEqual({ modern, legacy });
-    expect(modern.tools().native).toBe(native);
+    expect(modern.tools().confirm).toBe(confirm);
     expect(modern.tools().ordinary).toBe(ordinary);
     expect(mastra.getToolById('business')).toBe(ordinary);
-    expect(mastra.listTools()).not.toHaveProperty('native');
+    // A tool that can suspend is an ordinary business tool too: agents and workflows resume it.
+    expect(mastra.getToolById('confirm')).toBe(confirm);
     expect(modern.getServerInfo().version_detail.release_date).toBe('2026-07-28');
     expect(isMCPServerV2(modern)).toBe(true);
     expect(isMCPServerV2(legacy)).toBe(false);
@@ -175,14 +180,15 @@ describe('MCP v1/v2 registry boundaries', () => {
     const server = new DynamicServer({ name: 'Dynamic', version: '2', tools: {} });
     const mastra = new Mastra({ mcpServers: { server } });
     const ordinary = createTool({ id: 'business', description: 'Ordinary', execute: async () => 1 });
-    const native = nativeTool();
-    server.add({ ordinary, native });
-    expect(server.tools()).toEqual({ ordinary, native });
+    const confirm = suspendingTool();
+    server.add({ ordinary, confirm });
+    expect(server.tools()).toEqual({ ordinary, confirm });
     expect(mastra.getToolById('business')).toBe(ordinary);
-    expect(mastra.listTools()).not.toHaveProperty('native');
-    expect(server.remove(['ordinary', 'native', 'missing'])).toEqual(['ordinary', 'native']);
+    expect(mastra.getToolById('confirm')).toBe(confirm);
+    expect(server.remove(['ordinary', 'confirm', 'missing'])).toEqual(['ordinary', 'confirm']);
     expect(server.tools()).toEqual({});
     expect(mastra.listTools()).not.toHaveProperty('business');
+    expect(mastra.listTools()).not.toHaveProperty('confirm');
   });
 
   it('replaces the business registration when a catalogue key is re-added', () => {
@@ -199,59 +205,75 @@ describe('MCP v1/v2 registry boundaries', () => {
     server.add({ ordinary: second });
     expect(server.tools().ordinary).toBe(second);
     expect(mastra.getToolById('business')).toBe(second);
-    // Replacing a business tool with a native one leaves nothing in the business registry.
-    server.add({ ordinary: nativeTool() });
-    expect(mastra.listTools()).not.toHaveProperty('business');
   });
 
-  it('passes normal auth, cancellation and observability to ordinary tools without legacy MCP context', async () => {
-    const ctx = context();
-    ctx.requestContext.set('tenant', 'north');
+  it('passes auth, cancellation, observability and the v2 request context to tools', async () => {
+    const requestContext = new RequestContext();
+    requestContext.set('tenant', 'north');
+    const round = request();
     const execute = vi.fn(async (_input, received) => {
-      expect(received).not.toHaveProperty('mcp');
-      expect(received.requestContext).toBe(ctx.requestContext);
-      expect(received.abortSignal).toBe(ctx.request.signal);
+      expect(received.requestContext).toBe(requestContext);
+      expect(received.abortSignal).toBe(round.signal);
       expect(received.observe.span).toBeTypeOf('function');
+      expect(received.mcpv2).toMatchObject({ protocolVersion: '2026-07-28', requestId: 'round' });
+      expect(received.mcpv2.suspend).toBeTypeOf('function');
+      expect(received).not.toHaveProperty('mcp');
       return 1;
     });
     const ordinary = createTool({ id: 'business', description: 'Ordinary', execute });
-    const server = new NativeServer({ name: 'Modern', version: '2', tools: { ordinary, native: nativeTool() } });
-    expect(await server.invokeTool('ordinary', {}, ctx)).toEqual({ kind: 'completed', value: 1 });
-    expect(await server.invokeTool('native', {}, ctx)).toEqual({
-      kind: 'input_required',
-      result: { resultType: 'input_required', requestState: 'next' },
+    const server = new NativeServer({ name: 'Modern', version: '2', tools: { ordinary } });
+    expect(await server.executeTool('ordinary', {}, { requestContext, mcpv2: round })).toEqual({
+      status: 'completed',
+      output: 1,
     });
-    await expect(server.executeTool('native', {})).rejects.toThrow('require a protocol request context');
     expect(execute).toHaveBeenCalledOnce();
   });
 
-  it('rejects native tools at public business-tool ingestion boundaries', async () => {
-    const native = nativeTool();
-    // @ts-expect-error deliberate invalid JavaScript caller
-    expect(() => new Mastra({ tools: { native } })).toThrow('Native MCP tools');
-    // @ts-expect-error deliberate invalid JavaScript caller
-    expect(() => new Mastra().addTool(native)).toThrow('Native MCP tools');
-    // @ts-expect-error deliberate invalid JavaScript caller
-    expect(() => new Agent({ id: 'a', name: 'A', model: 'openai/gpt-5', instructions: '', tools: { native } })).toThrow(
-      'Native MCP tools',
+  it('reports a suspension with the payload and resume schema, then resumes with both', async () => {
+    const confirm = suspendingTool();
+    const server = new NativeServer({ name: 'Modern', version: '2', tools: { confirm } });
+
+    const first = await server.executeTool('confirm', { amount: 990 }, { mcpv2: request() });
+    expect(first).toMatchObject({
+      status: 'suspended',
+      suspendPayload: { phase: 'confirm', amount: 990 },
+      resumeSchema: { type: 'object', properties: { confirmed: { type: 'boolean' } } },
+    });
+
+    const resumed = await server.executeTool(
+      'confirm',
+      { amount: 990 },
+      {
+        mcpv2: {
+          ...request(),
+          resumeData: { confirmed: true },
+          suspendPayload: { phase: 'confirm', amount: 990 },
+        },
+      },
     );
-    // @ts-expect-error deliberate invalid JavaScript caller
-    const agent = new Agent({ id: 'a', name: 'A', model: 'openai/gpt-5', instructions: '', tools: () => ({ native }) });
-    await expect(agent.listTools()).rejects.toThrow('Native MCP tools');
-    // @ts-expect-error deliberate invalid JavaScript caller
-    expect(() => createStep(native)).toThrow('Native MCP tools');
-    // @ts-expect-error deliberate invalid JavaScript caller
-    expect(() => createEventedStep(native)).toThrow('Native MCP tools');
-    // @ts-expect-error deliberate invalid JavaScript caller
-    expect(() => new LegacyServer({ name: 'Legacy', version: '1', tools: { native } })).toThrow(
-      'require an MCP v2 server',
+    expect(resumed).toEqual({ status: 'completed', output: { charged: 990 } });
+
+    await expect(
+      server.executeTool('confirm', { amount: 990 }, { mcpv2: { ...request(), resumeData: { confirmed: false } } }),
+    ).rejects.toThrow('declined');
+  });
+
+  it('runs tools without a protocol request (REST route) and still surfaces suspension', async () => {
+    const confirm = suspendingTool();
+    const server = new NativeServer({ name: 'Modern', version: '2', tools: { confirm } });
+    const result = await server.executeTool('confirm', { amount: 1 });
+    expect(result.status).toBe('suspended');
+  });
+
+  it('validates the resume data and suspend payload against the declared schemas', async () => {
+    const confirm = suspendingTool();
+    const server = new NativeServer({ name: 'Modern', version: '2', tools: { confirm } });
+    const invalidResume = await server.executeTool(
+      'confirm',
+      { amount: 1 },
+      { mcpv2: { ...request(), resumeData: { confirmed: 'yes' } } },
     );
-    expect(
-      () =>
-        new CoreToolBuilder({
-          originalTool: native,
-          options: { name: 'native', requestContext: new RequestContext() },
-        }),
-    ).toThrow('Native MCP tools');
+    expect(invalidResume.status).toBe('completed');
+    expect((invalidResume as { output: { error: boolean } }).output).toMatchObject({ error: true });
   });
 });

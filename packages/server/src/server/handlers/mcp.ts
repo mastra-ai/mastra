@@ -1,4 +1,4 @@
-import { isMCPServerV2, isMCPToolV2 } from '@mastra/core/mcp';
+import { isMCPServerV2 } from '@mastra/core/mcp';
 import type {
   MCPServerBase as MastraMCPServerImplementation,
   MCPServerRegistryEntry,
@@ -239,8 +239,18 @@ export const EXECUTE_MCP_SERVER_TOOL_ROUTE = createRoute({
       throw new HTTPException(501, { message: `Server '${serverId}' cannot execute tools in this way.` });
     }
 
-    if (isMCPServerV2(server) && isMCPToolV2(server.tools()[toolId])) {
-      throw new HTTPException(422, { message: 'Native MCP interaction requires an MCP protocol client' });
+    if (isMCPServerV2(server)) {
+      // A 2026-07-28 server runs the tool with no protocol client attached: a tool
+      // that suspends for input is reported as such instead of pretending it finished.
+      const execution = await server.executeTool(toolId, data, { requestContext });
+      if (execution.status === 'suspended') {
+        return {
+          status: 'suspended' as const,
+          suspendPayload: execution.suspendPayload,
+          resumeSchema: execution.resumeSchema,
+        };
+      }
+      return { result: execution.output };
     }
 
     const result = await server.executeTool(toolId, data, { requestContext });

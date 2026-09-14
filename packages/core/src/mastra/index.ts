@@ -39,8 +39,6 @@ import {
   createExportSuppressedLogger,
 } from '../logger';
 import type { IMastraLogger, LoggerAdapterOptions } from '../logger';
-import { isMCPToolV2 } from '../mcp/native-tool';
-import type { NonNativeMCPTool } from '../mcp/native-tool';
 import type { MCPServerRegistryEntry } from '../mcp/server-v2';
 import type { MastraMemory } from '../memory';
 import type { NotificationDispatchConfig } from '../notifications/workflow';
@@ -263,7 +261,7 @@ export interface Config<
   TLogger extends IMastraLogger = IMastraLogger,
   TMCPServers extends Record<string, MCPServerRegistryEntry> = Record<string, MCPServerRegistryEntry>,
   TScorers extends Record<string, MastraScorer<any, any, any, any>> = Record<string, MastraScorer<any, any, any, any>>,
-  TTools extends Record<string, ToolAction<any, any, any, any, any, any> & NonNativeMCPTool> = Record<
+  TTools extends Record<string, ToolAction<any, any, any, any, any, any>> = Record<
     string,
     ToolAction<any, any, any, any, any, any>
   >,
@@ -760,7 +758,7 @@ export class Mastra<
   TLogger extends IMastraLogger = IMastraLogger,
   TMCPServers extends Record<string, MCPServerRegistryEntry> = Record<string, MCPServerRegistryEntry>,
   TScorers extends Record<string, MastraScorer<any, any, any, any>> = Record<string, MastraScorer<any, any, any, any>>,
-  TTools extends Record<string, ToolAction<any, any, any, any, any, any> & NonNativeMCPTool> = Record<
+  TTools extends Record<string, ToolAction<any, any, any, any, any, any>> = Record<
     string,
     ToolAction<any, any, any, any, any, any>
   >,
@@ -4489,12 +4487,9 @@ export class Mastra<
    * mastra.addTool(newTool, 'customKey'); // Uses custom key
    * ```
    */
-  public addTool<T extends ToolAction<any, any, any, any>>(tool: T & NonNativeMCPTool, key?: string): void {
+  public addTool<T extends ToolAction<any, any, any, any>>(tool: T, key?: string): void {
     if (!tool) {
       throw createUndefinedPrimitiveError('tool', tool, key);
-    }
-    if (isMCPToolV2(tool)) {
-      throw new Error('Native MCP tools cannot be registered as business tools');
     }
     const toolKey = key || tool.id;
     const tools = this.#tools as Record<string, ToolAction<any, any, any, any>>;

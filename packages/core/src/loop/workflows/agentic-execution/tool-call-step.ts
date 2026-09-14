@@ -844,6 +844,14 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             }
           },
           resumeData: resumeDataToPassToToolOptions,
+          // The payload this tool call suspended with (see `toolCallSuspended` above), so a
+          // resumed tool can continue from its own state instead of re-deriving it.
+          ...(resumeDataToPassToToolOptions != null &&
+          suspendData &&
+          typeof suspendData === 'object' &&
+          'toolCallSuspended' in suspendData
+            ? { suspendPayload: (suspendData as { toolCallSuspended?: unknown }).toolCallSuspended }
+            : {}),
         };
 
         //if resuming a subAgent or workflow tool, we want to find the runId from when it got suspended.

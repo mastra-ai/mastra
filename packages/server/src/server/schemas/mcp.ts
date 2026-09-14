@@ -70,9 +70,16 @@ export const listMcpServerToolsResponseSchema = z.object({
   tools: z.array(mcpToolInfoSchema),
 });
 
-export const executeToolResponseSchema = z.object({
-  result: z.unknown(),
-});
+export const executeToolResponseSchema = z.union([
+  z.object({
+    result: z.unknown(),
+  }),
+  z.object({
+    status: z.literal('suspended').describe('The tool paused and asked for input; it did not complete'),
+    suspendPayload: z.unknown().describe('What the tool suspended with'),
+    resumeSchema: z.unknown().optional().describe('JSON Schema of the input the tool needs to resume'),
+  }),
+]);
 
 // Resource schemas
 export const mcpServerResourcePathParams = z.object({

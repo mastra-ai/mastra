@@ -196,7 +196,7 @@ export function createMCPTransportTestSuite(config: MCPTransportTestConfig) {
         expect(response.status).toBe(404);
       });
 
-      it('executes ordinary tools without a legacy context and reports unsupported native REST interaction', async () => {
+      it('executes ordinary tools with the v2 request context and reports a suspended tool truthfully', async () => {
         const base = `http://localhost:${port}/api/mcp/native-fixture/tools`;
         const init = {
           method: 'POST',
@@ -205,10 +205,14 @@ export function createMCPTransportTestSuite(config: MCPTransportTestConfig) {
         };
         const ordinary = await fetch(`${base}/ordinary/execute`, init);
         expect(ordinary.status).toBe(200);
-        expect(await ordinary.json()).toEqual({ result: { hasLegacyContext: false } });
-        const native = await fetch(`${base}/interaction/execute`, init);
-        expect(native.status).toBe(422);
-        expect(await native.text()).toContain('Native MCP interaction requires an MCP protocol client');
+        expect(await ordinary.json()).toEqual({ result: { protocolVersion: '2026-07-28', hasLegacyContext: false } });
+        const suspended = await fetch(`${base}/interaction/execute`, init);
+        expect(suspended.status).toBe(200);
+        expect(await suspended.json()).toEqual({
+          status: 'suspended',
+          suspendPayload: { phase: 'confirm' },
+          resumeSchema: expect.objectContaining({ type: 'object', properties: { confirmed: { type: 'boolean' } } }),
+        });
       });
     });
 

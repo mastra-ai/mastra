@@ -14,6 +14,7 @@ import type { ActorSignal } from '../auth/ee';
 import type { ToolBackgroundConfig } from '../background-tasks';
 import type { MastraBrowser } from '../browser/browser';
 import type { Mastra } from '../mastra';
+import type { MCPToolExecutionContextV2 } from '../mcp/request-v2';
 import type { ObservabilityContext } from '../observability';
 import type { RequestContext } from '../request-context';
 import type { PublicSchema } from '../schema';
@@ -217,6 +218,8 @@ export interface AgentToolExecutionContext<TSuspend, TResume> {
 
   // Optional - only present if tool was previously suspended
   resumeData?: TResume;
+  // Optional - the payload this tool suspended with, present on resume
+  suspendPayload?: TSuspend;
 
   // Optional - original WritableStream passed from AI SDK (without Mastra metadata wrapping)
   writableStream?: WritableStream<any>;
@@ -245,6 +248,8 @@ export interface WorkflowToolExecutionContext<TSuspend, TResume> {
   suspend: (suspendPayload: TSuspend, suspendOptions?: SuspendOptions) => Promise<void>;
   // Optional - only present if workflow step was previously suspended
   resumeData?: TResume;
+  // Optional - the payload this step suspended with, present on resume
+  suspendPayload?: TSuspend;
 }
 
 /** Log levels for MCP `notifications/message`, ordered per RFC 5424. */
@@ -295,12 +300,16 @@ export type MastraToolInvocationOptions = ToolInvocationOptions &
   Partial<ObservabilityContext> & {
     suspend?: (suspendPayload: any, suspendOptions?: SuspendOptions) => Promise<any>;
     resumeData?: any;
+    /** The payload the tool previously suspended with, when resuming. */
+    suspendPayload?: any;
     outputWriter?: OutputWriter;
     /**
      * Optional MCP-specific context passed when tool is executed in MCP server.
      * This is populated by the MCP server and passed through to the tool's execution context.
      */
     mcp?: MCPToolExecutionContext;
+    /** The 2026-07-28 request context when an `@mastra/mcp` 2.x server executes the tool. */
+    mcpv2?: MCPToolExecutionContextV2;
     /**
      * Workspace for tool execution. When provided at execution time, this overrides
      * any workspace configured at tool build time. Allows dynamic workspace selection
@@ -585,8 +594,12 @@ export interface ToolExecutionContext<
   // Workflow-specific properties
   workflow?: WorkflowToolExecutionContext<TSuspend, TResume>;
 
-  // MCP (Model Context Protocol) specific context
+  // MCP (Model Context Protocol) specific context provided by `@mastra/mcp` 1.x servers
   mcp?: MCPToolExecutionContext;
+
+  // The 2026-07-28 request an `@mastra/mcp` 2.x server is running this tool in:
+  // per-request log/progress/metadata plus suspend/resume for `input_required` rounds
+  mcpv2?: MCPToolExecutionContextV2<TSuspend, TResume>;
 
   /**
    * Observability helpers for recording child spans and structured logs

@@ -23,7 +23,6 @@ import {
 import { MastraBase } from '../../base';
 import { ErrorCategory, MastraError, ErrorDomain } from '../../error';
 import type { Mastra } from '../../mastra';
-import { isMCPToolV2 } from '../../mcp/native-tool';
 import { SpanType, wrapMastra, EntityType, getOrCreateSpan, createObservabilityContext } from '../../observability';
 import type { AnySpan } from '../../observability';
 import { executeWithContext } from '../../observability/utils';
@@ -271,9 +270,6 @@ export class CoreToolBuilder extends MastraBase {
     backgroundTaskEnabled?: boolean;
   }) {
     super({ name: 'CoreToolBuilder' });
-    if (isMCPToolV2(input.originalTool)) {
-      throw new Error('Native MCP tools cannot be used as business tools');
-    }
     this.originalTool = input.originalTool;
     this.options = input.options;
     this.logType = input.logType;
@@ -695,6 +691,7 @@ export class CoreToolBuilder extends MastraBase {
               return execOptions.suspend?.(args, newSuspendOptions);
             },
             resumeData: execOptions.resumeData,
+            suspendPayload: execOptions.suspendPayload,
           };
 
           // Check if this is agent execution
@@ -716,16 +713,18 @@ export class CoreToolBuilder extends MastraBase {
             // (agents use workflows internally but tools should see agent context)
             // Preserve MCP context when the agent run originated from an MCP tools/call
             // so nested tools can use elicitation/log/progress.
-            const { suspend, resumeData, threadId, resourceId, ...restBaseContext } = baseContext;
+            const { suspend, resumeData, suspendPayload, threadId, resourceId, ...restBaseContext } = baseContext;
             toolContext = {
               ...restBaseContext,
               ...(execOptions.mcp ? { mcp: execOptions.mcp } : {}),
+              ...(execOptions.mcpv2 ? { mcpv2: execOptions.mcpv2 } : {}),
               agent: {
                 agentId: options.agentId || '',
                 toolCallId: execOptions.toolCallId || '',
                 messages: execOptions.messages || [],
                 suspend,
                 resumeData,
+                suspendPayload,
                 threadId,
                 resourceId,
                 outputWriter: options.outputWriter || execOptions.outputWriter,
@@ -735,10 +734,11 @@ export class CoreToolBuilder extends MastraBase {
             };
           } else if (isWorkflowExecution) {
             // Nest workflow-specific properties under 'workflow' key
-            const { suspend, resumeData, ...restBaseContext } = baseContext;
+            const { suspend, resumeData, suspendPayload, ...restBaseContext } = baseContext;
             toolContext = {
               ...restBaseContext,
               ...(execOptions.mcp ? { mcp: execOptions.mcp } : {}),
+              ...(execOptions.mcpv2 ? { mcpv2: execOptions.mcpv2 } : {}),
               workflow: options.workflow || {
                 runId: options.runId,
                 workflowId: options.workflowId,
@@ -746,13 +746,15 @@ export class CoreToolBuilder extends MastraBase {
                 setState: options.setState,
                 suspend,
                 resumeData,
+                suspendPayload,
               },
             };
-          } else if (execOptions.mcp) {
+          } else if (execOptions.mcp || execOptions.mcpv2) {
             // MCP execution context
             toolContext = {
               ...baseContext,
-              mcp: execOptions.mcp,
+              ...(execOptions.mcp ? { mcp: execOptions.mcp } : {}),
+              ...(execOptions.mcpv2 ? { mcpv2: execOptions.mcpv2 } : {}),
             };
           } else {
             // Direct execution or unknown context
