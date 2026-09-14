@@ -12,6 +12,7 @@ import type { PublicSchema } from '../../schema';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../../schema';
 import type { ChunkType } from '../../stream';
 import type { Processor } from '../index';
+import { REPROCESS_PART_KEY } from '../stream-reprocess';
 import { selectMessagesToCheck } from './message-selection';
 import type { LastMessageOnlyOption } from './message-selection';
 
@@ -76,11 +77,13 @@ export interface ModerationOptions extends LastMessageOnlyOption {
   includeScores?: boolean;
 
   /**
-   * Number of previous chunks to include for context when moderating stream chunks.
-   * If set to 1, includes the previous part. If set to 2, includes the two previous chunks, etc.
+   * Number of previously approved text buffers to include when moderating streamed content.
    * Default: 0 (no context window)
    */
   chunkWindow?: number;
+
+  /** Character threshold for flushing buffered streamed text (default: 200). */
+  bufferSize?: number;
 
   /**
    * Structured output options used for the moderation agent
@@ -123,6 +126,7 @@ export class ModerationProcessor implements Processor<'moderation'> {
   private strategy: 'block' | 'warn' | 'filter';
   private includeScores: boolean;
   private chunkWindow: number;
+  private bufferSize: number;
   private lastMessageOnly: boolean;
   private structuredOutputOptions?: ModerationOptions['structuredOutputOptions'];
   private providerOptions?: ProviderOptions;
@@ -148,6 +152,7 @@ export class ModerationProcessor implements Processor<'moderation'> {
     this.strategy = options.strategy || 'block';
     this.includeScores = options.includeScores ?? false;
     this.chunkWindow = options.chunkWindow ?? 0;
+    this.bufferSize = options.bufferSize ?? 200;
     this.lastMessageOnly = options.lastMessageOnly ?? false;
     this.structuredOutputOptions = options.structuredOutputOptions;
     this.providerOptions = options.providerOptions;
@@ -231,51 +236,77 @@ export class ModerationProcessor implements Processor<'moderation'> {
     return this.processInput(args);
   }
 
+  private async flushStreamBuffer(
+    state: Record<string, any>,
+    abort: (reason?: string) => never,
+    observabilityContext?: ObservabilityContext,
+    requestContext?: RequestContext,
+  ): Promise<ChunkType | null> {
+    const text: string = state._moderationBuffer || '';
+    const firstPart = state._moderationFirstPart as ChunkType | undefined;
+    state._moderationBuffer = '';
+    state._moderationFirstPart = undefined;
+    if (!text || !firstPart || firstPart.type !== 'text-delta') return null;
+
+    const approved: string[] = state._moderationApprovedBuffers || [];
+    const content = [...approved.slice(-this.chunkWindow), text].join('');
+    const moderationResult = await this.moderateContent(content, true, observabilityContext, requestContext);
+    if (this.isModerationFlagged(moderationResult)) {
+      this.handleFlaggedContent(moderationResult, this.strategy, abort);
+      if (this.strategy === 'filter') return null;
+    }
+
+    approved.push(text);
+    state._moderationApprovedBuffers = approved.slice(-this.chunkWindow);
+    return { ...firstPart, payload: { ...firstPart.payload, text } };
+  }
+
   async processOutputStream(
     args: {
       part: ChunkType;
       streamParts: ChunkType[];
       state: Record<string, any>;
       abort: (reason?: string) => never;
+      writer?: { custom: (data: ChunkType) => Promise<void> };
       requestContext?: RequestContext;
     } & Partial<ObservabilityContext>,
-  ): Promise<ChunkType | null | undefined> {
+  ): Promise<ChunkType | null> {
+    const { part, state, abort, writer, requestContext, ...rest } = args;
+    const observabilityContext = resolveObservabilityContext(rest);
     try {
-      const { part, streamParts, abort, requestContext, ...rest } = args;
-      const observabilityContext = resolveObservabilityContext(rest);
-
-      // Only process text-delta chunks for moderation
       if (part.type !== 'text-delta') {
+        if (state._moderationBuffer) {
+          const flushed = await this.flushStreamBuffer(state, abort, observabilityContext, requestContext);
+          if (flushed) {
+            if (writer) state[REPROCESS_PART_KEY] = part;
+            else (state._moderationPendingNonText ||= []).push(part);
+            return flushed;
+          }
+        }
         return part;
       }
 
-      // Build context from chunks based on chunkWindow (streamParts includes the current part)
-      const contentToModerate = this.buildContextFromChunks(streamParts);
-
-      const moderationResult = await this.moderateContent(
-        contentToModerate,
-        true,
-        observabilityContext,
-        requestContext,
-      );
-
-      if (this.isModerationFlagged(moderationResult)) {
-        this.handleFlaggedContent(moderationResult, this.strategy, abort);
-
-        // If we reach here, strategy is 'warn' or 'filter'
-        if (this.strategy === 'filter') {
-          return null; // Don't emit this part
-        }
+      if (state._moderationPendingNonText?.length) {
+        const pending = state._moderationPendingNonText.shift();
+        if (!state._moderationPendingNonText.length) state._moderationPendingNonText = undefined;
+        state._moderationBuffer = (state._moderationBuffer || '') + part.payload.text;
+        state._moderationFirstPart ||= part;
+        return pending;
       }
 
-      return part;
+      if (!part.payload.text) return part;
+      state._moderationBuffer = (state._moderationBuffer || '') + part.payload.text;
+      state._moderationFirstPart ||= part;
+      if (state._moderationBuffer.length < this.bufferSize && !/[.!?]\s*$/.test(state._moderationBuffer)) return null;
+      return await this.flushStreamBuffer(state, abort, observabilityContext, requestContext);
     } catch (error) {
-      if (error instanceof TripWire) {
-        throw error; // Re-throw tripwire errors
-      }
-      // Log error but don't block the stream
+      if (error instanceof TripWire) throw error;
       console.warn('[ModerationProcessor] Stream moderation failed:', error);
-      return args.part;
+      const text = state._moderationBuffer || (part.type === 'text-delta' ? part.payload.text : '');
+      const firstPart = state._moderationFirstPart || part;
+      state._moderationBuffer = '';
+      state._moderationFirstPart = undefined;
+      return firstPart.type === 'text-delta' ? { ...firstPart, payload: { ...firstPart.payload, text } } : firstPart;
     }
   }
 
