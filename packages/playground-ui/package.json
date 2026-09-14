@@ -118,6 +118,12 @@
         "default": "./dist/new/settings.es.js"
       }
     },
+    "./new/layout/app-shell": {
+      "import": {
+        "types": "./dist/new/layout/app-shell.d.ts",
+        "default": "./dist/new/layout/app-shell.es.js"
+      }
+    },
     "./layout/tabbed-container": {
       "import": {
         "types": "./dist/layout/tabbed-container.d.ts",

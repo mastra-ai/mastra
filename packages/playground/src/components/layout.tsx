@@ -7,6 +7,7 @@ import { ThemeProvider } from '@mastra/playground-ui/components/ThemeProvider';
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
+import { AppShell } from '@mastra/playground-ui/new/layout/app-shell';
 import { CollapsiblePanel } from '@mastra/playground-ui/resize/collapsible-panel';
 import { PanelDrawer } from '@mastra/playground-ui/resize/panel-drawer';
 import { PanelGroup } from '@mastra/playground-ui/resize/panel-group';
@@ -137,29 +138,21 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
   return (
     <>
       <NavigationCommand />
-      <div className={cn('h-full', shouldShowSidebar && 'lg:grid lg:grid-cols-[auto_1fr] lg:grid-rows-[1fr]')}>
-        {shouldShowSidebar && <AppSidebar />}
-        <div className="flex h-full min-h-0 flex-col">
-          {shouldShowSidebar && <MobileNavbar />}
+      <AppShell
+        mainLabel={pageHeading ?? 'Page content'}
+        sidebar={shouldShowSidebar ? <AppSidebar /> : undefined}
+        mobileHeader={shouldShowSidebar ? <MobileNavbar /> : undefined}
+        routeHeader={shouldShowSidebar ? <RouteHeader /> : undefined}
+        renderFrame={({ children: frame, className }) => (
           <PageHeadingContext.Provider value={pageHeading}>
-            <StudioFrame className="flex min-h-0 flex-1 flex-col">
-              <div
-                className={cn(
-                  'relative ml-0 mx-1.5 my-1.5 grid flex-1 min-h-0 overflow-hidden [--studio-frame-radius:1.5rem] [--studio-frame-inset:0.5rem] rounded-studio-frame border border-border1 bg-surface2 shadow-main-frame lg:mx-2 lg:my-2 lg:ml-0',
-                  shouldShowSidebar ? 'grid-rows-[auto_1fr]' : 'grid-rows-[1fr] h-[calc(100%-1.5rem)]',
-                )}
-              >
-                {shouldShowSidebar && <RouteHeader />}
-                <div className="min-h-0 overflow-y-auto">
-                  <AuthRequired>
-                    <ErrorBoundary resetKeys={[pathname]}>{children}</ErrorBoundary>
-                  </AuthRequired>
-                </div>
-              </div>
-            </StudioFrame>
+            <StudioFrame className={className}>{frame}</StudioFrame>
           </PageHeadingContext.Provider>
-        </div>
-      </div>
+        )}
+      >
+        <AuthRequired>
+          <ErrorBoundary resetKeys={[pathname]}>{children}</ErrorBoundary>
+        </AuthRequired>
+      </AppShell>
     </>
   );
 }

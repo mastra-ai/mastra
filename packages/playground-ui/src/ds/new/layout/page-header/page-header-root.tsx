@@ -25,7 +25,7 @@ export function PageHeaderRoot({
 
   return (
     <header
-      className={cn('relative grid w-full grid-cols-[auto_minmax(0,1fr)_auto] gap-x-3 gap-y-1', className)}
+      className={cn('relative grid w-full grid-cols-[auto_auto_minmax(0,1fr)_auto] gap-x-3 gap-y-1', className)}
       {...props}
     >
       {useLegacyApi ? (
