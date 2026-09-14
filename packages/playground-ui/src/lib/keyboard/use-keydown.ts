@@ -15,15 +15,15 @@ export { parseKeyCombo, parseKeyBinding, matchesCombo } from './keyboard-dispatc
 export type { UseKeydownArgs, KeyStep, ParsedKeyBinding } from './keyboard-dispatcher';
 
 export type UseKeydownOptions = {
-  /** Attach the listener to this element instead of `window`. */
+  /** Stable ref to an element mounted with this hook; defaults to `window`. */
   target?: RefObject<HTMLElement | null>;
   /** When `false`, no listener is attached. Defaults to `true`. */
   enabled?: boolean;
   /**
    * Called before any combo is matched. Return `false` to leave the event
    * untouched (no `preventDefault`, no handler). Runs on top of the built-in
-   * rule that ignores unmodified keys coming from editable fields and keyboard
-   * widgets (see `isKeyboardConsumer`).
+   * rule that leaves unmodified keys to editable fields and keyboard widgets,
+   * unless the listener targets that field directly.
    */
   shouldHandle?: (event: KeyboardEvent) => boolean;
 };
@@ -69,7 +69,8 @@ export const useKeydown = (opts: UseKeydownArgs, options: UseKeydownOptions = {}
       unregister();
       dispatcher.reset();
     };
-  }, [enabled, target, shared]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- The target ref stays stable for this hook's lifetime.
+  }, [enabled, shared]);
 };
 
 export type UseTableKeydownArgs = {

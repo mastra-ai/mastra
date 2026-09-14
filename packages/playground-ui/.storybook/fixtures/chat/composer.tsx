@@ -1,5 +1,5 @@
 import { ArrowUp, Paperclip, Square, X } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { reviewCommands } from './commands';
 import type { ChatFile, Phase } from './data';
 import { UserFilePartRenderer } from '@/domains/chat/messages/renderers/user-file-part-renderer';
@@ -113,6 +113,16 @@ export function ConversationComposer({ phase, busy, onSend, onStop }: Conversati
     messageInput.current?.focus();
   }
 
+  function handleComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.defaultPrevented) return;
+    const composing = event.nativeEvent.isComposing || event.keyCode === 229;
+    const shouldSend = event.key === 'Enter' && !event.shiftKey && !composing;
+    if (shouldSend) {
+      event.preventDefault();
+      submitMessage();
+    }
+  }
+
   return (
     <Composer
       aria-label="Chat composer"
@@ -170,16 +180,7 @@ export function ConversationComposer({ phase, busy, onSend, onStop }: Conversati
             ref={messageInput}
             aria-label="Message"
             placeholder="Ask a follow-up, or / for commands…"
-            onKeyDown={event => {
-              commands.inputProps.onKeyDown(event);
-              if (event.defaultPrevented) return;
-              const composing = event.nativeEvent.isComposing || event.keyCode === 229;
-              const shouldSend = event.key === 'Enter' && !event.shiftKey && !composing;
-              if (shouldSend) {
-                event.preventDefault();
-                submitMessage();
-              }
-            }}
+            onKeyDown={handleComposerKeyDown}
           />
           <ComposerActions>
             <Button

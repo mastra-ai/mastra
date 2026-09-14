@@ -219,11 +219,13 @@ export const createKeyboardDispatcher = (): KeyboardDispatcher => {
   const accepts = (layer: KeyboardLayer, event: KeyboardEvent) => !layer.shouldHandle || layer.shouldHandle(event);
 
   const handleKeydown = (event: KeyboardEvent) => {
-    if (event.defaultPrevented || event.isComposing) {
+    const skipShortcut = event.defaultPrevented || event.isComposing || event.keyCode === 229;
+    if (skipShortcut) {
       reset();
       return;
     }
-    if (isTypingInConsumer(event)) return;
+    const isAncestorShortcut = event.target !== event.currentTarget;
+    if (isAncestorShortcut && isTypingInConsumer(event)) return;
 
     const bindings = resolveBindings();
     const now = Date.now();
