@@ -65,7 +65,8 @@ export const loginDialogMaskedInputScenario = {
 
     // The account name is not a secret: unlike the code prompt above, the
     // rename prompt shows the typed text, and the submitted name is a
-    // postfix on the provider base label ("Anthropic Visible Label").
+    // postfix on the provider's full display name
+    // ("Anthropic (Claude Pro/Max) Visible Label").
     terminal.write('Visible Label');
     await runtime.waitForScreenText(/Visible Label/i, terminal, 2_000);
     const renameScreen = terminal.serialize().view;
@@ -79,7 +80,7 @@ export const loginDialogMaskedInputScenario = {
       `!node -e 'const fs=require("fs"); const a=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/auth.json","utf8")); const expected=Buffer.from("${secretHex}","hex").toString("utf8"); const reg=Object.keys(a).find(k=>k.startsWith("accounts:anthropic:")); console.log("LOGIN_MASK_AUTH="+(a.anthropic?.type=== "oauth")+":"+(a.anthropic?.access === "access:"+expected)+":"+(a.anthropic?.refresh === "refresh:"+expected)); console.log("LOGIN_MASK_LABEL="+(reg?a[reg].label:"missing"));'`,
     );
     await runtime.waitForScreenText(/LOGIN_MASK_AUTH=true:true:true/i, terminal, 8_000);
-    await runtime.waitForScreenText(/LOGIN_MASK_LABEL=Anthropic Visible Label/i, terminal, 8_000);
+    await runtime.waitForScreenText(/LOGIN_MASK_LABEL=Anthropic \(Claude Pro\/Max\) Visible Label/i, terminal, 8_000);
 
     terminal.keyCtrlC();
   },
