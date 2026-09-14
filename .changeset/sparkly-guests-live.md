@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Improved the default goal judge's structured-output retry by placing JSON instructions in the latest user message. The first attempt still uses automatic capability-based routing, strict validation remains enabled, and other scorers retain their existing fallback behavior.
+Improved default goal-judge retries by adding JSON instructions to the latest user message. The first attempt still selects the supported output format automatically. Validation remains strict. Other scorers keep their existing retry behavior.
