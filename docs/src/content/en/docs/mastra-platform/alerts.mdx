@@ -12,9 +12,11 @@ Alerts notify your team when a deploy fails or a running service stops. You conf
 
 Organization admins can create and manage alerts. Other organization roles have read-only access to the alert settings.
 
-Open the [Mastra platform dashboard](https://projects.mastra.ai), go to your organization settings, then select **Alerts**.
+Open the [Mastra platform dashboard](https://projects.mastra.ai), go to your organization settings, then select **Alerts**. The page has three tabs:
 
-![Alerts overview showing an active alert and its Slack and email destinations.](/img/mastra-platform/alerts/alerts-overview.png)
+- **Alerts** lists each alert with its scope, destinations, status, and enable or pause switch.
+- **Destinations** lists the Slack channels, email groups, and webhook endpoints that can receive notifications.
+- **Activity** shows incidents and the notification attempts associated with them.
 
 ## Add a destination
 
@@ -48,7 +50,7 @@ A destination defines where Mastra sends notifications. Add at least one destina
   </StepItem>
 </Steps>
 
-![Slack destination form with workspace and channel selectors.](/img/mastra-platform/alerts/add-destination.png)
+The destination form changes based on the selected type. Slack destinations require a workspace and at least one channel. Email destinations require at least one recipient, which can be an organization role, a member, or an external address. Webhook destinations require an HTTPS endpoint. Every destination also requires a name that identifies it in alert configuration and activity history.
 
 Use the destination's actions menu to send a test notification. You can also edit, pause, or delete a destination. Pausing a destination stops notifications without removing it from existing alerts.
 
@@ -92,7 +94,7 @@ An alert combines triggers, scope, destinations, and repeat-alert pacing.
   </StepItem>
 </Steps>
 
-![Alert setup with the deploy failure trigger, all projects scope, Slack and email destinations, and five-minute repeat pacing.](/img/mastra-platform/alerts/create-alert.png)
+The alert form groups these settings into **Name**, **Trigger**, **Scope**, and **Destinations**. The selected destinations and repeat interval apply to every trigger and project included in that alert.
 
 ## Manage alerts
 
@@ -108,6 +110,4 @@ Open an alert's actions menu to:
 
 The **Activity** tab groups each incident with its delivery attempts. An incident stays **Open** while the condition is active and changes to **Resolved** after the service or deploy recovers.
 
-Expand an incident to inspect the notification sent to each destination. Delivery attempts show statuses such as **Scheduled**, **Sent**, **Suppressed**, **Retrying**, **Exhausted**, or **Config error**. Use the activity filter to show all activity, incidents only, or delivery attempts only.
-
-![Alert activity grouped by incident with child delivery attempts and their statuses.](/img/mastra-platform/alerts/alert-activity.png)
+Expand an incident to inspect the notification sent to each destination. Each incident row shows when the event occurred, the event type, its project or environment scope, and its current status. Nested delivery rows show the trigger, destination, and delivery status for each notification attempt. Delivery attempts can be **Scheduled**, **Sent**, **Suppressed**, **Retrying**, **Exhausted**, or **Config error**. Use the activity filter to show all activity, incidents only, or delivery attempts only.
