@@ -221,7 +221,7 @@ export const assistant = new Agent({
 })
 ```
 
-After messages are observed, the model receives the observation log, recent messages that haven't been observed, and a continuation reminder. Async buffered observations don't generate continuation hints (`currentTask` or `suggestedResponse`) because they may be stale by activation time. The raw messages remain stored but no longer occupy the active model context.
+After messages are observed, the model receives the observation log, recent messages that haven't been observed, and a continuation reminder. Because delayed hints may be stale by the time a buffered chunk activates, async buffered observations don't generate continuation hints (`currentTask` or `suggestedResponse`). The raw messages remain stored but no longer occupy the active model context.
 
 Observations are added in stable chunks, which helps providers reuse the existing prompt prefix. Observational Memory can also activate buffered observations after a prompt cache is likely to expire or before the agent changes providers.
 

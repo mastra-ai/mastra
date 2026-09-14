@@ -693,7 +693,7 @@ Default settings:
 - `observation.bufferActivation: 0.8`: On activation, remove enough messages to keep only 20% of the threshold remaining
 - `reflection.bufferActivation: 0.5`: start background reflection at 50% of observation threshold
 
-Async buffered Observer calls don't generate continuation hints (`suggestedResponse`, `currentTask`); activation clears any previously stored hints.
+Async buffered Observer calls don't generate continuation hints (`suggestedResponse`, `currentTask`), and activation clears any previously stored hints.
 
 To customize:
 
