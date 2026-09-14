@@ -224,15 +224,15 @@ export const AllAppUsages: Story = {
         <Crumb as="span" isCurrent isLoading />
       </Usage>
 
-      <Usage title="8. Long labels — built-in truncation (18rem nav / 28rem current), with and without action">
+      <Usage title="8. Long labels — built-in truncation (12rem nav / 20rem current), with and without action">
         <Crumb as="a" to="/agents" icon={<AgentIcon />}>
-          A very long navigation label that should truncate at eighteen rem
+          A very long navigation label that should truncate at twelve rem
         </Crumb>
         <Crumb as="a" to="/agents/x" action={<AgentSwitcher />}>
-          A very long entity name that should truncate at eighteen rem while keeping the chevron
+          A very long entity name that should truncate at twelve rem while keeping the chevron
         </Crumb>
         <Crumb as="span" isCurrent>
-          A very long current label that should truncate at twenty-eight rem and keep its ellipsis visible
+          A very long current label that should truncate at twenty rem and keep its ellipsis visible
         </Crumb>
       </Usage>
     </div>

@@ -59,8 +59,8 @@ export const Crumb = ({ className, as, isCurrent, action, icon, isLoading, child
             transitions.colors,
             // Long labels truncate: the current crumb gets more room than nav crumbs.
             isCurrent
-              ? 'max-w-md cursor-default font-medium text-neutral6'
-              : 'max-w-2xs cursor-pointer text-neutral4 hover:bg-neutral6/5 hover:text-neutral6 active:bg-neutral6/10',
+              ? 'max-w-xs cursor-default font-medium text-neutral6'
+              : 'max-w-48 cursor-pointer text-neutral4 hover:bg-neutral6/5 hover:text-neutral6 active:bg-neutral6/10',
             className,
           )}
           {...props}
