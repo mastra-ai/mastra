@@ -34,6 +34,9 @@ function main(): void {
     run('git', ['remote', 'add', 'origin', remote], cacheDir);
   }
 
+  // A deliberate repository pin change must also update an existing cache.
+  run('git', ['remote', 'set-url', 'origin', remote], cacheDir);
+
   // Detect current SHA (empty if brand-new).
   let currentSha = '';
   try {
