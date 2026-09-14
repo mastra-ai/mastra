@@ -128,6 +128,10 @@ const CODE_AGENT_ID = 'code-agent';
 // settings, so all modes/subagents benefit from a short wait before retrying a transient failure.
 // Delay uses exponential backoff: initialDelay * 2^retryCount, capped at maxDelay.
 const MASTRACODE_TRANSIENT_CONNECTION_MAX_RETRIES = 10;
+// Account pools are intentionally unbounded. Individual retry processors still
+// impose their own finite limits, and account rotation stops at its tried-set;
+// this shared core ceiling must not silently starve a larger OAuth pool.
+const MASTRACODE_MAX_PROCESSOR_RETRIES = Number.MAX_SAFE_INTEGER;
 const MASTRACODE_TRANSIENT_CONNECTION_RETRY_INITIAL_DELAY_MS = 500;
 const MASTRACODE_TRANSIENT_CONNECTION_RETRY_MAX_DELAY_MS = 30000;
 
@@ -1006,16 +1010,13 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         credentialStore: authStorage,
         // Same budget core enforces (maxProcessorRetries below): past it, core
         // discards retry:true, so the processor no-ops instead of rotating.
-        maxProcessorRetries: MASTRACODE_TRANSIENT_CONNECTION_MAX_RETRIES + 12,
+        maxProcessorRetries: MASTRACODE_MAX_PROCESSOR_RETRIES,
       }),
     ],
-    // Total budget for error-processor retries; transient retries
-    // (StreamErrorRetryProcessor, up to MASTRACODE_TRANSIENT_CONNECTION_MAX_RETRIES)
-    // and account rotations share one counter, so the budget must cover the
-    // worst case of full transient retries plus a realistic pool rotation
-    // (≤ 8 accounts) with margin. After rotations begin, later accounts see
-    // fewer transient retries — accepted per the rotation design.
-    maxProcessorRetries: MASTRACODE_TRANSIENT_CONNECTION_MAX_RETRIES + 12,
+    // Transient matchers and account rotation each have their own finite stop
+    // conditions. Keep the shared core ceiling effectively unbounded so an
+    // arbitrary-size OAuth pool is not cut off by an unrelated global cap.
+    maxProcessorRetries: MASTRACODE_MAX_PROCESSOR_RETRIES,
   });
 
   // const defaultSubAgents: Array<AgentControllerSubagent> = [];

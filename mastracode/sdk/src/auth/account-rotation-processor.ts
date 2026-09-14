@@ -60,9 +60,9 @@ const PROVIDER_HOST_PATTERNS: Array<[RegExp, string]> = [
   [/(^|\.)api\.anthropic\.com$/i, 'anthropic'],
   [/(^|\.)api\.kimi\.com$/i, 'kimi-for-coding'],
   [/(^|\.)api\.x\.ai$/i, 'xai'],
-  [/chatgpt\.com$/i, 'openai-codex'],
-  [/backend-api\.codex\.ai$/i, 'openai-codex'],
-  [/(^|\.)api\.githubcopilot\.com$/i, 'github-copilot'],
+  [/(^|\.)chatgpt\.com$/i, 'openai-codex'],
+  [/(^|\.)backend-api\.codex\.ai$/i, 'openai-codex'],
+  [/(^|\.)githubcopilot\.com$/i, 'github-copilot'],
   [/(^|\.)api\.github\.com$/i, 'github-copilot'],
 ];
 
@@ -100,11 +100,30 @@ function isErrorWithCode(error: unknown): error is { code?: unknown } {
 }
 
 function readErrorStatus(error: unknown): number | undefined {
-  if (typeof error !== 'object' || error === null) return undefined;
-  const { statusCode, status } = error as { statusCode?: unknown; status?: unknown };
-  if (typeof statusCode === 'number') return statusCode;
-  if (typeof status === 'number') return status;
+  let current: unknown = error;
+  for (let depth = 0; current && depth < MAX_CAUSE_DEPTH; depth++) {
+    if (typeof current !== 'object') break;
+    const { statusCode, status } = current as { statusCode?: unknown; status?: unknown };
+    if (typeof statusCode === 'number') return statusCode;
+    if (typeof status === 'number') return status;
+    current = (current as { cause?: unknown }).cause;
+  }
   return undefined;
+}
+
+function isProviderAuthRequiredError(error: unknown): boolean {
+  let current: unknown = error;
+  for (let depth = 0; current && depth < MAX_CAUSE_DEPTH; depth++) {
+    if (
+      current instanceof ProviderAuthRequiredError ||
+      (current instanceof Error && current.name === PROVIDER_AUTH_REQUIRED_ERROR)
+    ) {
+      return true;
+    }
+    if (typeof current !== 'object') break;
+    current = (current as { cause?: unknown }).cause;
+  }
+  return false;
 }
 
 /** Concatenate the error's message with its cause chain (bounded). */
@@ -157,10 +176,7 @@ function isNetworkErrorLike(error: unknown): boolean {
  * everything unknown never touch the registry.
  */
 export function classifyRotationError(error: unknown): RotationClassification {
-  if (
-    error instanceof ProviderAuthRequiredError ||
-    (error instanceof Error && error.name === PROVIDER_AUTH_REQUIRED_ERROR)
-  ) {
+  if (isProviderAuthRequiredError(error)) {
     return { kind: 'rotate', reason: 'auth-failed' };
   }
 
@@ -183,6 +199,7 @@ export function classifyRotationError(error: unknown): RotationClassification {
 export function providerFromModelId(modelId: string): string | undefined {
   const segments = modelId.replace(/^mastracode\//, '').split('/');
   const providerId = segments[0];
+  if (providerId === 'openai') return 'openai-codex';
   return providerId && KNOWN_PROVIDER_IDS.has(providerId) ? providerId : undefined;
 }
 
@@ -202,7 +219,10 @@ export function providerFromError(error: unknown): string | undefined {
   let current: unknown = error;
   for (let depth = 0; current && depth < MAX_CAUSE_DEPTH; depth++) {
     if (typeof current !== 'object') break;
-    const url = (current as { url?: unknown }).url ?? (current as { requestURL?: unknown }).requestURL;
+    const url =
+      (current as { url?: unknown }).url ??
+      (current as { requestURL?: unknown }).requestURL ??
+      (current as { requestUrl?: unknown }).requestUrl;
     if (typeof url === 'string') {
       try {
         const providerId = providerFromHost(new URL(url).hostname);
