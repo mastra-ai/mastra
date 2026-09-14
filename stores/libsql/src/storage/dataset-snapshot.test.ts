@@ -77,7 +77,7 @@ describe.each(['in-memory', 'libsql'] as const)('snapshot representation compati
     const created = await storage.createDataset({ name: 'empty' });
     expect(created.description).toBeUndefined();
     const reread = await storage.getDatasetById({ id: created.id });
-    expect(reread?.description).toBe(adapter === 'libsql' ? null : undefined);
+    expect(reread?.description).toBeUndefined();
     const snapshot = await capture(storage, created.id);
     expect(snapshot.configuration.description).toBe(reread?.description);
     expect(snapshot.items).toEqual([]);
@@ -149,24 +149,19 @@ describe.each(['in-memory', 'libsql'] as const)('snapshot representation compati
     const snapshot = await capture(storage, dataset.id);
     expect(snapshot.configuration).not.toHaveProperty('inputSchema');
     for (const key of ['tags', 'targetIds', 'scorerIds'] as const) {
-      expect(snapshot.configuration[key]).toBe(adapter === 'libsql' ? undefined : null);
+      expect(snapshot.configuration[key]).toBeUndefined();
     }
     const payload = snapshot.items[0]!.payload;
     for (const key of ['groundTruth', 'expectedTrajectory'] as const) {
-      expect(payload[key]).toBe(adapter === 'libsql' ? undefined : null);
+      expect(payload[key]).toBeNull();
     }
     expect(payload).not.toHaveProperty('scorerIds');
     expect(parseDatasetSnapshot(JSON.stringify(snapshot))).toEqual(snapshot);
   });
 
-  it('characterizes the current LibSQL null-input restriction', async () => {
+  it('preserves JSON null input in both adapters', async () => {
     const dataset = await storage.createDataset({ name: 'null input' });
-    const insert = storage.addItem({ datasetId: dataset.id, input: null });
-    if (adapter === 'libsql') {
-      await expect(insert).rejects.toThrow('NOT NULL constraint failed');
-    } else {
-      await insert;
-      expect((await capture(storage, dataset.id)).items[0]?.payload.input).toBeNull();
-    }
+    await storage.addItem({ datasetId: dataset.id, input: null });
+    expect((await capture(storage, dataset.id)).items[0]?.payload.input).toBeNull();
   });
 });
