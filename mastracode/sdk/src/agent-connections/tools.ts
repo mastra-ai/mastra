@@ -429,18 +429,29 @@ The target must already be saved and freshly advertise the same exact thread end
             ifIdle: priority === 'low' ? { behavior: 'persist' } : { behavior: 'wake', requireClaimedOwner: true },
           },
         )) as SendAgentNotificationSignalResult;
-        const accepted = notification.accepted ? await notification.accepted : undefined;
+        let accepted = notification.accepted ? await notification.accepted : undefined;
         if (!accepted) {
-          return {
-            content: `Failed to send agent signal: ${notification.record.lastDeliveryError ?? 'delivery was not acknowledged by the target thread owner'}`,
-            target,
-            priority: priority as AgentSignalPriority,
-            expectsReply,
-            messageId,
-            replyTo,
-            returnPeerId,
-            isError: true,
-          };
+          // Policy-only outcomes do not emit a signal, so they intentionally have no owner acknowledgment.
+          if (
+            notification.decision.action === 'persist' ||
+            notification.decision.action === 'defer' ||
+            notification.decision.action === 'summarize'
+          ) {
+            accepted = { action: 'persist' };
+          } else if (notification.decision.action === 'discard') {
+            accepted = { action: 'discard' };
+          } else {
+            return {
+              content: `Failed to send agent signal: ${notification.record.lastDeliveryError ?? 'delivery was not acknowledged by the target thread owner'}`,
+              target,
+              priority: priority as AgentSignalPriority,
+              expectsReply,
+              messageId,
+              replyTo,
+              returnPeerId,
+              isError: true,
+            };
+          }
         }
         if (accepted.action === 'blocked') {
           // The signal was not routed, so skip sent history: a retry with the

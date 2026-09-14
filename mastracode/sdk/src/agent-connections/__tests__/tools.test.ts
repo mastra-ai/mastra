@@ -389,6 +389,39 @@ describe('agent connection tools', () => {
     expect(getStored().sentSignals).toBeUndefined();
   });
 
+  it('reports low-priority notifications queued for summary as persisted', async () => {
+    const sendNotificationSignal = vi.fn(async () => ({
+      record: { id: 'notification-1', status: 'pending' as const, deliveryReason: 'idle-low-summary' },
+      decision: { action: 'summarize' as const, reason: 'idle-low-summary' },
+    }));
+    const tools = createAgentConnectionTools({
+      registry: createRegistry(),
+      getAgent: () => ({ sendNotificationSignal }),
+    });
+    const { context, getStored } = createContext([savedPeer()]);
+
+    await expect(
+      (tools.agent_signal_send as any).execute(
+        {
+          targetId: PEER_ID,
+          summary: 'Read this later',
+          priority: 'low',
+          expectsReply: false,
+          messageId: 'low-summary-message',
+        },
+        context,
+      ),
+    ).resolves.toMatchObject({
+      isError: false,
+      messageId: 'low-summary-message',
+      routingAction: 'persist',
+      content: 'Persisted low signal for "Peer One" to process later: Read this later',
+    });
+    expect(getStored().sentSignals).toEqual([
+      expect.objectContaining({ messageId: 'low-summary-message', routingAction: 'persist' }),
+    ]);
+  });
+
   it('treats blocked routing as a retryable failure and does not record sent history', async () => {
     const sendNotificationSignal = vi.fn(async () => ({
       record: { id: 'notification-1' },
