@@ -546,14 +546,15 @@ describe('PlatformLinearIntegration', () => {
 
   it('continues across routed workspaces when an earlier duplicate identifier is outside its source', async () => {
     const workspace1Source = sourceId('workspace-1', 'project-1');
+    const workspace1TeamSource = `linear-team:${Buffer.from(
+      JSON.stringify({ workspaceId: 'workspace-1', teamId: 'team-1' }),
+    ).toString('base64url')}`;
     const workspace2TeamSource = `linear-team:${Buffer.from(
       JSON.stringify({ workspaceId: 'workspace-2', teamId: 'team-2' }),
     ).toString('base64url')}`;
     const wrongIssue = {
       ...issue,
       id: 'issue-wrong',
-      project: { id: 'other-project' },
-      team: { id: 'other-team', key: 'OTHER', name: 'Other' },
     };
     const expectedIssue = {
       ...issue,
@@ -574,7 +575,12 @@ describe('PlatformLinearIntegration', () => {
     const integration = createIntegration(fetchImpl);
 
     await expect(
-      integration.fetchIssueDetail('unused-provider-token', 'ENG-42', [workspace1Source, workspace2TeamSource]),
+      integration.fetchIssueDetail(
+        'unused-provider-token',
+        'ENG-42',
+        [workspace1Source, workspace1TeamSource, workspace2TeamSource],
+        [workspace2TeamSource],
+      ),
     ).resolves.toMatchObject({ id: 'issue-correct', workspaceId: 'workspace-2', teamId: 'team-2' });
     expect(fetchImpl).toHaveBeenCalledTimes(2);
   });

@@ -493,8 +493,9 @@ export class PlatformLinearIntegration implements FactoryIntegration {
     _accessToken: string,
     idOrIdentifier: string,
     sourceIds?: string[],
+    routedSourceIds?: string[],
   ): Promise<LinearRouteIssueDetail | null> {
-    const located = await this.#findIssue(undefined, idOrIdentifier, sourceIds);
+    const located = await this.#findIssue(undefined, idOrIdentifier, sourceIds, routedSourceIds);
     if (!located) return null;
     const comments = await this.#loadComments(located.workspaceId, located.issue.id, located.issue.comments);
     const issue = located.issue;
@@ -687,14 +688,19 @@ export class PlatformLinearIntegration implements FactoryIntegration {
     sourceId: string | undefined,
     issueId: string,
     sourceIds?: string[],
+    routedSourceIds?: string[],
   ): Promise<{
     workspaceId: string;
     issue: LinearIssue & { comments?: { nodes: LinearComment[]; pageInfo: PageInfo } };
   } | null> {
     const scopedSourceIds = sourceIds ?? (sourceId ? [sourceId] : undefined);
-    const scopedSources = scopedSourceIds?.map(parseSourceId);
+    const scopedSources = scopedSourceIds?.map(sourceKey => ({
+      sourceKey,
+      source: parseSourceId(sourceKey),
+    }));
+    const routedSourceSet = routedSourceIds ? new Set(routedSourceIds) : undefined;
     const workspaceIds = scopedSources
-      ? [...new Set(scopedSources.map(source => source.workspaceId))]
+      ? [...new Set(scopedSources.map(({ source }) => source.workspaceId))]
       : await this.#candidateWorkspaceIds(undefined);
     for (const workspaceId of workspaceIds) {
       try {
@@ -704,14 +710,15 @@ export class PlatformLinearIntegration implements FactoryIntegration {
           'GET',
           `${API_PREFIX}/workspaces/${encodeURIComponent(workspaceId)}/issues/${encodeURIComponent(issueId)}?include=comments`,
         );
-        if (
-          scopedSources &&
-          !scopedSources.some(
-            source =>
+        if (scopedSources) {
+          const matching = scopedSources.filter(
+            ({ source }) =>
               source.workspaceId === workspaceId &&
               (source.kind === 'team' ? issue.team.id === source.teamId : issue.project?.id === source.projectId),
-          )
-        ) continue;
+          );
+          const winner = matching.find(({ source }) => source.kind === 'project') ?? matching[0];
+          if (!winner || (routedSourceSet && !routedSourceSet.has(winner.sourceKey))) continue;
+        }
         return { workspaceId, issue };
       } catch (error) {
         if (!isNotFound(error)) throw error;

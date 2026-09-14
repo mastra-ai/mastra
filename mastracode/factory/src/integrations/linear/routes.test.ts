@@ -686,9 +686,40 @@ describe('issue detail route', () => {
       url: 'https://linear.app/acme/issue/ENG-42',
       description: 'The sync runs the wrong way.',
     });
-    expect(fetchIssueDetail).toHaveBeenCalledWith('linear-token', 'ENG-42', ['proj-1']);
+    expect(fetchIssueDetail).toHaveBeenCalledWith('linear-token', 'ENG-42', ['proj-1'], ['proj-1']);
   });
 
+
+  it('hides a project issue from a team routed to another Factory project', async () => {
+    const teamSourceId = 'linear-team:team-1';
+    await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'project-1' } });
+    await seed.intake.saveConfig({
+      orgId: 'org1',
+      userId: 'u1',
+      config: { linear: { enabled: true, sourceIds: ['proj-1', teamSourceId] } },
+    });
+    await seed.intake.setBinding({
+      orgId: 'org1',
+      integrationId: 'linear',
+      sourceId: teamSourceId,
+      factoryProjectId: projectB,
+      board: 'work',
+    });
+    fetchIssueDetail.mockResolvedValue({ ...issueDetail, teamId: 'team-1' });
+
+    const res = await buildApp(org1()).request(
+      `/web/linear/issues/ENG-42?factoryProjectId=${projectB}`,
+    );
+
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: 'issue_not_found' });
+    expect(fetchIssueDetail).toHaveBeenCalledWith(
+      'linear-token',
+      'ENG-42',
+      ['proj-1', teamSourceId],
+      [teamSourceId],
+    );
+  });
   it("hides an issue outside the Factory project's own sources", async () => {
     await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'project-1' } });
     await seed.intake.setBinding({

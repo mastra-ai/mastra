@@ -987,7 +987,12 @@ export class LinearIntegration implements FactoryIntegration {
    * `null` when the issue doesn't exist (Linear reports it as an "Entity not
    * found" error).
    */
-  async fetchIssueDetail(accessToken: string, idOrIdentifier: string, _sourceIds?: string[]): Promise<LinearIssueDetail | null> {
+  async fetchIssueDetail(
+    accessToken: string,
+    idOrIdentifier: string,
+    _sourceIds?: string[],
+    _routedSourceIds?: string[],
+  ): Promise<LinearIssueDetail | null> {
     let data: IssueDetailQueryData;
     try {
       data = await linearGraphql<IssueDetailQueryData>(

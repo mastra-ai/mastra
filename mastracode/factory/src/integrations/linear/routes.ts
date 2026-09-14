@@ -146,6 +146,16 @@ function parseAfterCursor(raw: string | undefined): string | undefined | null {
 
 /** Human issue key as it appears on a card (`ENG-123`). */
 const ISSUE_IDENTIFIER_RE = /^[A-Za-z][A-Za-z0-9]{0,9}-\d{1,7}$/;
+/** Project sources are more specific than their team and win every routed read. */
+function winningLinearSourceId(
+  linear: LinearIntegration,
+  sourceIds: string[],
+  issue: Parameters<LinearIntegration['sourceMatchesIssue']>[1],
+): string | null {
+  const matching = sourceIds.filter(sourceId => linear.sourceMatchesIssue(sourceId, issue));
+  return matching.find(sourceId => !sourceId.startsWith('linear-team:')) ?? matching[0] ?? null;
+}
+
 
 /** Map a Linear read failure to the API response for the SPA. */
 function linearFetchError(c: RouteContext, err: unknown) {
@@ -461,20 +471,22 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions): ApiRoute[]
         if (!selection.enabled) {
           return c.json({ error: 'linear_intake_disabled', message: 'Linear intake is turned off in Settings.' }, 404);
         }
+        const selectedIds = selection.sourceIds ?? [];
         const routedSourceIds = Object.keys(
           await scopeSourceIdsToProject({
             intake,
             orgId: resolved.tenant.orgId,
             factoryProjectId,
-            selectedIds: selection.sourceIds ?? [],
+            selectedIds,
           }),
         );
         if (routedSourceIds.length === 0) return c.json({ error: 'issue_not_found' }, 404);
 
         try {
           const accessToken = await linear.getFreshAccessToken(connection);
-          const issue = await linear.fetchIssueDetail(accessToken, identifier, routedSourceIds);
-          const isRouted = issue != null && routedSourceIds.some(sourceId => linear.sourceMatchesIssue(sourceId, issue));
+          const issue = await linear.fetchIssueDetail(accessToken, identifier, selectedIds, routedSourceIds);
+          const winningSourceId = issue ? winningLinearSourceId(linear, selectedIds, issue) : null;
+          const isRouted = winningSourceId != null && routedSourceIds.includes(winningSourceId);
           // Reads exactly like an issue that doesn't exist.
           if (!issue || !isRouted) {
             return c.json({ error: 'issue_not_found' }, 404);
