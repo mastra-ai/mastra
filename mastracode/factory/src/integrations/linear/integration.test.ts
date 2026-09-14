@@ -312,6 +312,27 @@ describe('LinearIntegration capability surface', () => {
       expect.objectContaining({ sourceId: teamSourceId, source: expect.objectContaining({ externalId: 'issue-2' }) }),
     ]);
   });
+  it('forwards attribution scope through the generic listItems surface', async () => {
+    const linear = integration();
+    const teamSourceId = 'linear-team:team-1';
+    const overlapping: LinearIssue = { ...issue, projectId: 'project-1', teamId: 'team-1' };
+    vi.spyOn(linear, 'loadConnection').mockResolvedValue({} as never);
+    vi.spyOn(linear, 'getFreshAccessToken').mockResolvedValue('linear-token');
+    const listActiveIssues = vi
+      .spyOn(linear, 'listActiveIssues')
+      .mockResolvedValue({ issues: [overlapping], nextCursor: null });
+
+    const result = await linear.intake.listItems({
+      orgId: 'org-1',
+      userId: 'user-1',
+      sourceIds: [teamSourceId],
+      attributionSourceIds: ['project-1', teamSourceId],
+    });
+
+    expect(listActiveIssues).toHaveBeenCalledTimes(1);
+    expect(listActiveIssues).toHaveBeenCalledWith('linear-token', undefined, undefined, undefined, ['team-1']);
+    expect(result.items).toEqual([]);
+  });
 
   it('keeps a selected-project issue out of an earlier team page', async () => {
     const linear = integration();

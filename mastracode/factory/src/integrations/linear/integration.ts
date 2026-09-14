@@ -544,7 +544,7 @@ export class LinearIntegration implements FactoryIntegration {
         })),
       ];
     },
-    listItems: async ({ orgId, sourceIds, cursor }) => {
+    listItems: async ({ orgId, sourceIds, attributionSourceIds, cursor }) => {
       if (sourceIds.length === 0) return { items: [], nextCursor: null };
       const connection = await this.loadConnection(orgId);
       if (!connection) return { items: [], nextCursor: null };
@@ -552,6 +552,7 @@ export class LinearIntegration implements FactoryIntegration {
       const page = await this.#listIntakeIssues({
         connection: { type: 'oauth', accessToken },
         sourceIds,
+        attributionSourceIds,
         cursor,
       });
       return {
