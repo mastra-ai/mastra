@@ -7,7 +7,7 @@
  * mutating one entry.
  */
 
-import { skipToken, useMutation, useQuery } from '@tanstack/react-query';
+import { skipToken, useInfiniteQuery, useMutation, useQuery } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
@@ -98,12 +98,18 @@ export function useKnowledgeActivity(
   threadId?: string,
 ) {
   const { baseUrl } = useApiConfig();
-  return useQuery({
+  const initialPageParam: string | undefined = undefined;
+  const queryFn =
+    factoryProjectId && selection
+      ? ({ pageParam, signal }: { pageParam: string | undefined; signal: AbortSignal }) =>
+          fetchKnowledgeActivity(baseUrl, factoryProjectId, selection, threadId, pageParam, signal)
+      : skipToken;
+  return useInfiniteQuery({
     queryKey: queryKeys.knowledgeActivity(factoryProjectId, selectionKey(selection), threadId),
-    queryFn:
-      factoryProjectId && selection
-        ? ({ signal }) => fetchKnowledgeActivity(baseUrl, factoryProjectId, selection, threadId, signal)
-        : skipToken,
+    queryFn,
+    initialPageParam,
+    getNextPageParam: lastPage => lastPage.nextCursor,
+    maxPages: 5,
     refetchInterval: 5_000,
   });
 }

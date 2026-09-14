@@ -252,7 +252,7 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
           events: [
             {
               id: 'activity-1',
-              action: 'knowledge-appended',
+              action: 'record-created',
               recordType: 'record',
               recordId: 'rec-1',
               scope: ['org:proof', `resource:${projectId}`],
@@ -313,12 +313,14 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
   await expect(page.getByText(/Payments uses/)).toBeVisible();
 
   await page.getByRole('tab', { name: 'activity' }).click();
-  await expect(page.getByText('knowledge appended')).toBeVisible();
+  await expect(page.getByText('new record')).toBeVisible();
+  await expect(page.getByRole('list', { name: 'Knowledge activity' })).not.toContainText('· record ·');
 
   // The sidebar is ONE unified tree built from the scope nodes that exist:
   // identity scopes and declared structure use one name + kind-chip treatment.
   await page.getByRole('tab', { name: 'explore' }).click();
   const scopeTree = page.getByRole('complementary', { name: 'Knowledge scopes' });
+  await expect(scopeTree.getByRole('textbox', { name: 'Search knowledge' })).toBeVisible();
   await expect(scopeTree.getByText('Your access')).toBeHidden();
   await expect(scopeTree.getByText('Knowledge structure')).toBeHidden();
   await expect(scopeTree.getByRole('button', { name: /mastra org 2/ })).toBeVisible();
@@ -331,11 +333,13 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
   await expect(page).toHaveURL(/scope=22222222-2222-4222-8222-222222222222/);
   await expect(page).toHaveURL(/node=22222222-2222-4222-8222-222222222222/);
   await expect(page.getByTestId('knowledge-scope-flyout')).toContainText('features');
+  await expect(page.getByTestId('knowledge-scope-flyout')).toContainText('scope');
+  await expect(page.getByTestId('knowledge-scope-flyout')).not.toContainText('Structural scope');
   await expect(page.getByText('subconscious')).toBeVisible();
   const featureScopeNode = page.locator(
     '[data-testid="knowledge-node"][data-node-id="22222222-2222-4222-8222-222222222222"]',
   );
-  await expect(featureScopeNode.getByLabel('3 direct members')).toBeVisible();
+  await expect(featureScopeNode.getByLabel('3 direct members')).toHaveCount(0);
   await featureScopeNode.hover();
   const scopeHover = page.getByTestId('knowledge-hover-card');
   await expect(scopeHover).toContainText('Content nodes1');
