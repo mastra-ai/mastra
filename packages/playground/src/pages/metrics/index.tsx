@@ -43,6 +43,7 @@ const PERIOD_PARAM = 'period';
 const DATE_FROM_PARAM = 'dateFrom';
 const DATE_TO_PARAM = 'dateTo';
 
+/** Keeps date and filter state in the URL and gates dashboard access on storage capabilities. */
 export default function Metrics() {
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -171,6 +172,7 @@ export default function Metrics() {
   );
 }
 
+/** Fetches and renders dashboard data only after the storage gate confirms metrics support. */
 function MetricsContent() {
   const { error, isLoading: isMetricsLoading } = useAgentRunsKpiMetrics();
 

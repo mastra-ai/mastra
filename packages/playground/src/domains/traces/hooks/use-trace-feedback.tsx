@@ -7,6 +7,7 @@ type UseTraceFeedbackProps = {
   page?: number;
 };
 
+/** Loads a page of trace-level feedback and stops polling when storage cannot serve feedback. */
 export const useTraceFeedback = ({ traceId = '', page }: UseTraceFeedbackProps) => {
   const client = useMastraClient();
   const pageNumber = page ?? 0;

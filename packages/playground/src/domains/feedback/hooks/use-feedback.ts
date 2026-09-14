@@ -28,6 +28,7 @@ export function useFeedback({ reviewStatus }: { reviewStatus?: FeedbackReviewSta
   };
 }
 
+/** Polls the pending-review total while enabled, stopping on permanent storage errors. */
 export function useFeedbackInboxCount({ enabled }: { enabled: boolean }) {
   const client = useMastraClient();
 
