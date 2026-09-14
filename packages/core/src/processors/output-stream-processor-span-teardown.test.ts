@@ -60,6 +60,7 @@ describe('output stream processor span teardown', () => {
     expect(legacyEnd).toHaveBeenCalledTimes(1);
     expect(legacyEnd).toHaveBeenCalledWith({
       output: { totalChunks: 2, accumulatedText: 'hello world' },
+      attributes: { hookDurationMs: expect.any(Number) },
     });
     expect(workflowEnd).toHaveBeenCalledTimes(1);
   });
