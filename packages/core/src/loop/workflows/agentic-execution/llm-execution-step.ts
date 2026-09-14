@@ -1831,6 +1831,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           messageId: currentStep.messageId,
           options: {
             runId,
+            logger,
             toolCallStreaming,
             includeRawChunks,
             structuredOutput: currentStep.structuredOutput,
