@@ -143,7 +143,9 @@ export const useChatSendHandler = ({
 }: UseChatSendHandlerArgs) => {
   const baseClient = useMastraClient();
   const queryClient = useQueryClient();
-  const abortControllerRef = useRef<AbortController | null>(null);
+  const activeRequestRef = useRef<{ controller: AbortController; mode: 'network' | 'generate' | 'stream' } | undefined>(
+    undefined,
+  );
   const sendDepsRef = useRef<SendDeps>({
     requestContext,
     agentVersionId,
@@ -244,17 +246,18 @@ export const useChatSendHandler = ({
   );
 
   const send = useCallback(
-    async ({ message, attachments = [] }: ChatSendArgs) => {
+    async ({ message, attachments = [], delivery }: ChatSendArgs) => {
       const deps = sendDepsRef.current;
-      if (threadSignalsUnsupportedRef.current && (isRunningStream || abortControllerRef.current)) return;
+      if (threadSignalsUnsupportedRef.current && (isRunningStream || activeRequestRef.current)) return;
 
       setStreamErrors([]);
       const controller = new AbortController();
-      abortControllerRef.current = controller;
+      const mode = deps.chatWithNetwork ? 'network' : deps.chatWithGenerate ? 'generate' : 'stream';
+      activeRequestRef.current = { controller, mode };
       const requestContextInstance = buildRequestContext(deps);
 
       try {
-        if (deps.chatWithNetwork) {
+        if (mode === 'network') {
           await sendMessage({
             message,
             mode: 'network',
@@ -275,7 +278,7 @@ export const useChatSendHandler = ({
               handleHandledChunk(asHandledStreamChunk(chunk));
             },
           });
-        } else if (deps.chatWithGenerate) {
+        } else if (mode === 'generate') {
           await sendMessage({
             message,
             mode: 'generate',
@@ -294,6 +297,7 @@ export const useChatSendHandler = ({
           await sendMessage({
             message,
             mode: 'stream',
+            delivery,
             coreUserMessages: attachments,
             requestContext: requestContextInstance,
             threadId: deps.threadId,
@@ -333,7 +337,7 @@ export const useChatSendHandler = ({
         setStreamErrors(prev => [...prev, buildStreamErrorMessage({ runId: 'thrown', payload: { error } })]);
         resetObservationalMemoryStreamState();
       } finally {
-        abortControllerRef.current = null;
+        if (activeRequestRef.current?.controller === controller) activeRequestRef.current = undefined;
       }
     },
     [
@@ -351,8 +355,12 @@ export const useChatSendHandler = ({
   );
 
   const cancel = useCallback(async () => {
-    abortControllerRef.current?.abort();
-    abortControllerRef.current = null;
+    // Stream runs are stopped by the SDK; their separate send/queue acceptance must still settle.
+    const activeRequest = activeRequestRef.current;
+    if (activeRequest && activeRequest.mode !== 'stream') {
+      activeRequest.controller.abort();
+    }
+    activeRequestRef.current = undefined;
     resetObservationalMemoryStreamState();
     cancelRun?.();
     completeObservationalMemoryBuffering(sendDepsRef.current.threadId);

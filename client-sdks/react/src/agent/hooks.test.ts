@@ -911,9 +911,9 @@ describe('useChat forwards clientTools', () => {
     expect(threadSubscriptionAbortMock).not.toHaveBeenCalled();
   });
 
-  it('aborts and unsubscribes on explicit cancel', async () => {
+  it('aborts on explicit cancel and unsubscribes only when unmounted', async () => {
     keepSubscriptionOpen = true;
-    const { result } = renderHook(
+    const { result, unmount } = renderHook(
       () =>
         useChat({
           agentId: 'test-agent',
@@ -931,7 +931,30 @@ describe('useChat forwards clientTools', () => {
     });
 
     expect(threadSubscriptionAbortMock).toHaveBeenCalledTimes(1);
+    expect(threadSubscriptionUnsubscribeMock).not.toHaveBeenCalled();
+    unmount();
     expect(threadSubscriptionUnsubscribeMock).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    { error: new DOMException('Acceptance response aborted', 'AbortError'), failed: false },
+    { error: new Error('Message rejected'), failed: true },
+  ])('distinguishes an unknown aborted acceptance from a rejected send ($failed)', async ({ error, failed }) => {
+    keepSubscriptionOpen = true;
+    sendMessageMock.mockRejectedValueOnce(error);
+    const { result } = renderHook(
+      () => useChat({ agentId: 'test-agent', threadId: 'thread-1', enableThreadSignals: true }),
+      { wrapper },
+    );
+    await act(async () => {
+      await expect(
+        result.current.sendMessage({ mode: 'stream', threadId: 'thread-1', message: 'Follow up', delivery: 'steer' }),
+      ).rejects.toBe(error);
+    });
+    const metadata = result.current.messages.find(message => message.role === 'user')?.content.metadata;
+    expect(metadata?.deliveryState).toBe(failed ? 'failed' : undefined);
+    expect(metadata?.status).toBe(failed ? undefined : 'pending');
+    expect(threadSubscriptionUnsubscribeMock).not.toHaveBeenCalled();
   });
 
   // Regression test for https://github.com/mastra-ai/mastra/issues/18768:
