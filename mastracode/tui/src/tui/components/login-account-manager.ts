@@ -2,9 +2,9 @@
  * Account manager component for providers with registered accounts —
  * opened by /login on an already-connected provider.
  *
- * Lists the provider's accounts (label + active marker) and offers:
- * Add another account / Re-authenticate… / Remove… / Back. Selecting an
- * account row activates that account.
+ * Lists the provider's accounts (label + active marker) plus
+ * Add another account / Back. Selecting an account opens a submenu for
+ * it: Set as active / Re-authenticate… / Remove… / Back.
  */
 
 import { Box, Container, getKeybindings, Spacer, Text } from '@earendil-works/pi-tui';
@@ -24,7 +24,7 @@ export interface LoginAccountManagerCallbacks {
   onBack(): void;
 }
 
-type ManagerMode = 'menu' | 'pick-reauth' | 'pick-remove' | 'confirm-remove';
+type ManagerMode = 'menu' | 'account' | 'confirm-remove';
 
 export class LoginAccountManagerComponent extends Box {
   private listContainer: Container;
@@ -32,6 +32,7 @@ export class LoginAccountManagerComponent extends Box {
   private accounts: ManagedAccount[];
   private selectedIndex = 0;
   private callbacks: LoginAccountManagerCallbacks;
+  private selectedAccount?: ManagedAccount;
   private confirmTarget?: ManagedAccount;
   private readonly providerName: string;
 
@@ -57,27 +58,36 @@ export class LoginAccountManagerComponent extends Box {
   /** Accounts may have changed (e.g. after an in-place re-auth); refresh rows. */
   setAccounts(accounts: ManagedAccount[]): void {
     this.accounts = accounts;
+    if (this.selectedAccount && !accounts.some(account => account.id === this.selectedAccount?.id)) {
+      this.selectedAccount = undefined;
+      this.mode = 'menu';
+      this.selectedIndex = 0;
+    }
     this.updateList();
   }
 
   private rows(): { label: string; action: () => void }[] {
-    if (this.mode === 'pick-reauth' || this.mode === 'pick-remove') {
-      return [
-        ...this.accounts.map(account => ({
-          label: `${account.label}${account.active ? theme.fg('success', ' ✓ active') : ''}`,
-          action: () => {
-            if (this.mode === 'pick-reauth') {
-              this.callbacks.onReauthenticate(account.id);
-            } else {
-              this.confirmTarget = account;
-              this.mode = 'confirm-remove';
-              this.selectedIndex = 0;
-              this.updateList();
-            }
-          },
-        })),
-        { label: 'Back', action: () => this.backToMenu() },
-      ];
+    if (this.mode === 'account') {
+      const account = this.selectedAccount;
+      if (!account) {
+        return [{ label: 'Back', action: () => this.backToMenu() }];
+      }
+      const rows: { label: string; action: () => void }[] = [];
+      if (!account.active) {
+        rows.push({ label: 'Set as active', action: () => this.callbacks.onActivate(account.id) });
+      }
+      rows.push({ label: 'Re-authenticate…', action: () => this.callbacks.onReauthenticate(account.id) });
+      rows.push({
+        label: 'Remove…',
+        action: () => {
+          this.confirmTarget = account;
+          this.mode = 'confirm-remove';
+          this.selectedIndex = 0;
+          this.updateList();
+        },
+      });
+      rows.push({ label: 'Back', action: () => this.backToMenu() });
+      return rows;
     }
     if (this.mode === 'confirm-remove') {
       const target = this.confirmTarget;
@@ -93,23 +103,21 @@ export class LoginAccountManagerComponent extends Box {
     return [
       ...this.accounts.map(account => ({
         label: `${account.label}${account.active ? theme.fg('success', ' ✓ active') : ''}`,
-        action: () => this.callbacks.onActivate(account.id),
+        action: () => {
+          this.selectedAccount = account;
+          this.mode = 'account';
+          this.selectedIndex = 0;
+          this.updateList();
+        },
       })),
       { label: 'Add another account', action: () => this.callbacks.onAddAnother() },
-      { label: 'Re-authenticate…', action: () => this.enterPicker('pick-reauth') },
-      { label: 'Remove…', action: () => this.enterPicker('pick-remove') },
       { label: 'Back', action: () => this.callbacks.onBack() },
     ];
   }
 
-  private enterPicker(mode: 'pick-reauth' | 'pick-remove'): void {
-    this.mode = mode;
-    this.selectedIndex = 0;
-    this.updateList();
-  }
-
   private backToMenu(): void {
     this.mode = 'menu';
+    this.selectedAccount = undefined;
     this.selectedIndex = 0;
     this.updateList();
   }
@@ -117,9 +125,8 @@ export class LoginAccountManagerComponent extends Box {
   private updateList(): void {
     this.listContainer.clear();
 
-    if (this.mode === 'pick-reauth' || this.mode === 'pick-remove') {
-      const verb = this.mode === 'pick-reauth' ? 're-authenticate' : 'remove';
-      this.listContainer.addChild(new Text(theme.fg('text', `Select the account to ${verb}:`)));
+    if (this.mode === 'account' && this.selectedAccount) {
+      this.listContainer.addChild(new Text(theme.fg('text', `${this.selectedAccount.label}:`)));
       this.listContainer.addChild(new Spacer(1));
     }
 
@@ -128,7 +135,7 @@ export class LoginAccountManagerComponent extends Box {
       const row = rows[i];
       if (!row) continue;
       const isSelected = i === this.selectedIndex;
-      const isActionRow = i >= this.accounts.length && this.mode === 'menu';
+      const isActionRow = this.mode === 'account' || (this.mode === 'menu' && i >= this.accounts.length);
       const text = isSelected
         ? theme.fg('accent', `→ ${row.label}`)
         : isActionRow
@@ -155,7 +162,7 @@ export class LoginAccountManagerComponent extends Box {
     } else if (kb.matches(keyData, 'tui.select.confirm')) {
       rows[this.selectedIndex]?.action();
     } else if (kb.matches(keyData, 'tui.select.cancel')) {
-      if (this.mode === 'confirm-remove' || this.mode === 'pick-reauth' || this.mode === 'pick-remove') {
+      if (this.mode === 'account' || this.mode === 'confirm-remove') {
         this.backToMenu();
       } else {
         this.callbacks.onBack();

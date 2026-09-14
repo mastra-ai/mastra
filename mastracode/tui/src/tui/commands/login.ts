@@ -1,4 +1,3 @@
-import { PROVIDER_DISPLAY_NAMES } from '@mastra/code-sdk/auth/account-rotation-processor';
 import { getOAuthProviders, PROVIDER_DEFAULT_MODELS } from '@mastra/code-sdk/auth/storage';
 import type { OAuthAccountRecord } from '@mastra/code-sdk/auth/types';
 import { LoginAccountManagerComponent } from '../components/login-account-manager.js';
@@ -19,9 +18,9 @@ function toManagedAccounts(accounts: OAuthAccountRecord[]) {
  * label the registry resolved (re-authenticated accounts keep their previous
  * label; new accounts fall back to the provider hook or the default).
  *
- * The typed text is a postfix on the provider's short display name: typing
- * "work" for Anthropic labels the account "Anthropic work", so accounts stay
- * grouped by provider in the account manager.
+ * The typed text is a postfix on the provider's full display name: typing
+ * "work" for Anthropic labels the account "Anthropic (Claude Pro/Max) work",
+ * matching the registry's default labels (`<provider name> account N`).
  */
 async function promptForAccountName(
   ctx: SlashCommandContext,
@@ -32,7 +31,7 @@ async function promptForAccountName(
   const authStorage = ctx.authStorage;
   if (!authStorage) return;
   const provider = getOAuthProviders().find(p => p.id === providerId);
-  const baseLabel = PROVIDER_DISPLAY_NAMES[providerId] ?? provider?.name ?? providerId;
+  const baseLabel = provider?.name ?? providerId;
   const input = await dialog.promptOptional(
     `Name this account — saved as "${baseLabel} <name>" (Enter to keep "${account.label}")`,
   );
@@ -109,7 +108,7 @@ async function performLogin(
         // account was registered but not activated.
         const label = ctx.authStorage?.listAccounts(providerId).find(a => a.id === account.id)?.label ?? account.label;
         if (opts?.activate === false) {
-          ctx.showInfo(`Added ${label} to ${providerName} (not active)`);
+          ctx.showInfo(`Added ${label} (not active)`);
         } else {
           const hasSelectedModel = ctx.state.session.model.get() !== '';
           const defaultModel = PROVIDER_DEFAULT_MODELS[providerId as keyof typeof PROVIDER_DEFAULT_MODELS];
@@ -173,7 +172,7 @@ async function openAccountManager(
           ctx.authStorage?.listAccounts(providerId).find(account => account.id === accountId)?.label ?? accountId;
         ctx.authStorage?.removeAccount(providerId, accountId);
         ctx.state.controller.invalidateAvailableModelsCache();
-        ctx.showInfo(`Removed ${label} from ${providerName}`);
+        ctx.showInfo(`Removed ${label}`);
         finish();
       },
       onActivate: accountId => {
@@ -181,7 +180,7 @@ async function openAccountManager(
         ctx.state.controller.invalidateAvailableModelsCache();
         const label =
           ctx.authStorage?.listAccounts(providerId).find(account => account.id === accountId)?.label ?? accountId;
-        ctx.showInfo(`Switched ${providerName} to ${label}`);
+        ctx.showInfo(`Switched to ${label}`);
         finish();
       },
       onBack: () => finish(),
