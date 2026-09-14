@@ -10,10 +10,8 @@ import type {
 } from '@mastra/core/agent';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
 import type { BuilderModelPolicy, DefaultModelEntry, ProviderModelEntry } from '@mastra/core/agent-builder/ee';
-import type { MastraScorerEntry, ScoreRowData } from '@mastra/core/evals';
+import type { ScoreRowData } from '@mastra/core/evals';
 import type { CoreMessage, Provider as ModelProviderId } from '@mastra/core/llm';
-import type { LogLevel } from '@mastra/core/logger';
-import type { MCPToolType, ServerInfo } from '@mastra/core/mcp';
 import type {
   AiMessageType,
   MastraMessageV1,
@@ -28,7 +26,6 @@ import type {
   AgentInstructionBlock,
   PaginationInfo,
   WorkflowRuns,
-  StorageListMessagesInput,
   Rule,
   RuleGroup,
   StorageConditionalVariant,
@@ -44,7 +41,7 @@ import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema as ZodSchemaV3 } from 'zod/v3';
 import type { ZodType as ZodTypeV4 } from 'zod/v4';
 
-import type { Body, QueryParams, RouteKey, RouteResponse, Simplify } from './route-types.generated.js';
+import type { Body, PathParams, QueryParams, RouteKey, RouteResponse, Simplify } from './route-types.generated.js';
 
 export type ZodSchema = ZodSchemaV3 | ZodTypeV4;
 
@@ -481,30 +478,28 @@ export type WorkflowRunResult = WorkflowResult<any, any, any, any>;
 export type UpsertVectorParams = GeneratedRequest<Body<'POST /vector/:vectorName/upsert'>>;
 export type CreateIndexParams = GeneratedRequest<Body<'POST /vector/:vectorName/create-index'>>;
 
-export interface QueryVectorParams {
-  indexName: string;
-  queryVector: number[];
-  topK?: number;
-  filter?: Record<string, any>;
-  includeVector?: boolean;
-}
+export type QueryVectorParams = GeneratedRequest<Body<'POST /vector/:vectorName/query'>>;
 
-export type QueryVectorResponse = QueryResult[];
+/** The server schema currently represents vector-store-specific result rows as `unknown`. */
+export type QueryVectorResponse = GeneratedResponse<'POST /vector/:vectorName/query'> & QueryResult[];
 
 export type GetVectorIndexResponse = GeneratedResponse<'GET /vector/:vectorName/indexes/:indexName'>;
 
-export interface SaveMessageToMemoryParams {
-  messages: (MastraMessageV1 | MastraDBMessage)[];
-  agentId: string;
-  requestContext?: RequestContext | Record<string, any>;
-}
+export type SaveMessageToMemoryParams = GeneratedRequest<
+  Body<'POST /memory/save-messages'> & QueryParams<'POST /memory/save-messages'>
+> &
+  RequestContextOptions & {
+    messages: (MastraMessageV1 | MastraDBMessage)[];
+  };
 
-export interface SaveNetworkMessageToMemoryParams {
+export type SaveNetworkMessageToMemoryParams = GeneratedRequest<
+  Body<'POST /memory/network/save-messages'> & QueryParams<'POST /memory/network/save-messages'>
+> & {
   messages: (MastraMessageV1 | MastraDBMessage)[];
-  networkId: string;
-}
+};
 
-export type SaveMessageToMemoryResponse = {
+/** The server schema currently represents persisted message payloads as `unknown`. */
+export type SaveMessageToMemoryResponse = GeneratedResponse<'POST /memory/save-messages'> & {
   messages: (MastraMessageV1 | MastraDBMessage)[];
 };
 
@@ -515,28 +510,7 @@ export type CreateMemoryThreadParams = GeneratedRequest<
 
 export type CreateMemoryThreadResponse = GeneratedResponse<'POST /memory/threads'>;
 
-export interface ListMemoryThreadsParams {
-  /**
-   * Optional resourceId to filter threads. When not provided, returns all threads.
-   */
-  resourceId?: string;
-  /**
-   * Optional metadata filter. Threads must match all specified key-value pairs (AND logic).
-   */
-  metadata?: Record<string, unknown>;
-  /**
-   * Optional agentId. When not provided and storage is configured on the server,
-   * threads will be retrieved using storage directly.
-   */
-  agentId?: string;
-  page?: number;
-  perPage?: number;
-  orderBy?: {
-    field?: 'createdAt' | 'updatedAt';
-    direction?: 'ASC' | 'DESC';
-  };
-  requestContext?: RequestContext | Record<string, any>;
-}
+export type ListMemoryThreadsParams = GeneratedRequest<QueryParams<'GET /memory/threads'>> & RequestContextOptions;
 
 export type ListMemoryThreadsResponse = GeneratedResponse<'GET /memory/threads'>;
 
@@ -544,48 +518,33 @@ export type GetMemoryConfigParams = GeneratedRequest<QueryParams<'GET /memory/co
 
 export type GetMemoryConfigResponse = GeneratedResponse<'GET /memory/config'>;
 
-export interface UpdateMemoryThreadParams {
-  title: string;
-  metadata: Record<string, any>;
-  resourceId: string;
-  /**
-   * Agent ID. Required by the server for write operations. If omitted, the agentId provided
-   * to `getMemoryThread({ threadId, agentId })` is used.
-   */
-  agentId?: string;
-  requestContext?: RequestContext | Record<string, any>;
-}
+export type UpdateMemoryThreadParams = Omit<
+  GeneratedRequest<Body<'PATCH /memory/threads/:threadId'> & QueryParams<'PATCH /memory/threads/:threadId'>>,
+  'agentId'
+> &
+  RequestContextOptions & {
+    /** Resolved from the resource constructor when omitted. */
+    agentId?: string;
+  };
 
-export type ListMemoryThreadMessagesParams = Omit<StorageListMessagesInput, 'threadId'> & {
-  includeSystemReminders?: boolean;
-};
+export type ListMemoryThreadMessagesParams = GeneratedRequest<QueryParams<'GET /memory/threads/:threadId/messages'>>;
 
-export type ListMemoryThreadMessagesResponse = {
+/** The route schema intentionally keeps persisted message payloads opaque. */
+export type ListMemoryThreadMessagesResponse = GeneratedResponse<'GET /memory/threads/:threadId/messages'> & {
   messages: MastraDBMessage[];
 };
 
-export interface CloneMemoryThreadParams {
-  newThreadId?: string;
-  resourceId?: string;
-  title?: string;
-  metadata?: Record<string, any>;
-  options?: {
-    messageLimit?: number;
-    messageFilter?: {
-      startDate?: Date;
-      endDate?: Date;
-      messageIds?: string[];
-    };
+export type CloneMemoryThreadParams = Omit<
+  GeneratedRequest<Body<'POST /memory/threads/:threadId/clone'> & QueryParams<'POST /memory/threads/:threadId/clone'>>,
+  'agentId'
+> &
+  RequestContextOptions & {
+    /** Resolved from the resource constructor when omitted. */
+    agentId?: string;
   };
-  /**
-   * Agent ID. Required by the server for write operations. If omitted, the agentId provided
-   * to `getMemoryThread({ threadId, agentId })` is used.
-   */
-  agentId?: string;
-  requestContext?: RequestContext | Record<string, any>;
-}
 
-export type CloneMemoryThreadResponse = {
+/** The route schema intentionally keeps cloned persisted message payloads opaque. */
+export type CloneMemoryThreadResponse = GeneratedResponse<'POST /memory/threads/:threadId/clone'> & {
   thread: StorageThreadType;
   clonedMessages: MastraDBMessage[];
 };
@@ -597,16 +556,14 @@ export type TransferMemoryThreadParams = GeneratedRequest<
 
 export type GetLogsParams = GeneratedRequest<QueryParams<'GET /logs'>>;
 
-export interface GetLogParams {
-  runId: string;
-  transportId: string;
+export type GetLogParams = Omit<
+  PathParams<'GET /logs/:runId'> & GeneratedRequest<QueryParams<'GET /logs/:runId'>>,
+  'fromDate' | 'toDate'
+> & {
+  /** SDK convenience inputs serialized to the route's ISO date query values. */
   fromDate?: Date;
   toDate?: Date;
-  logLevel?: LogLevel;
-  filters?: Record<string, string>;
-  page?: number;
-  perPage?: number;
-}
+};
 
 export type GetLogsResponse = GeneratedResponse<'GET /logs'>;
 
@@ -676,24 +633,11 @@ export interface LoopVNextNetworkResponse {
   steps: WorkflowResult<any, any, any, any>['steps'];
 }
 
-export interface McpServerListResponse {
-  servers: ServerInfo[];
-  next: string | null;
-  total_count: number;
-}
+export type McpServerListResponse = GeneratedResponse<'GET /mcp/v0/servers'>;
 
-export interface McpToolInfo {
-  id: string;
-  name: string;
-  description?: string;
-  inputSchema: string;
-  toolType?: MCPToolType;
-  _meta?: Record<string, unknown>;
-}
+export type McpToolInfo = GeneratedResponse<'GET /mcp/:serverId/tools/:toolId'>;
 
-export interface McpServerToolListResponse {
-  tools: McpToolInfo[];
-}
+export type McpServerToolListResponse = GeneratedResponse<'GET /mcp/:serverId/tools'>;
 
 /**
  * `{ result }` for a completed tool, or the suspended shape a 2026-07-28 server reports
@@ -718,46 +662,31 @@ export type ListScoresResponse = {
 };
 
 // Scores-related types
-export interface ListScoresByRunIdParams {
-  runId: string;
-  page?: number;
-  perPage?: number;
-}
+export type ListScoresByRunIdParams = GeneratedRequest<
+  PathParams<'GET /scores/run/:runId'> & QueryParams<'GET /scores/run/:runId'>
+>;
 
-export interface ListScoresByScorerIdParams {
-  scorerId: string;
-  entityId?: string;
-  entityType?: string;
-  page?: number;
-  perPage?: number;
-}
+export type ListScoresByScorerIdParams = GeneratedRequest<
+  PathParams<'GET /scores/scorer/:scorerId'> & QueryParams<'GET /scores/scorer/:scorerId'>
+>;
 
-export interface ListScoresByEntityIdParams {
-  entityId: string;
-  entityType: string;
-  page?: number;
-  perPage?: number;
-}
+export type ListScoresByEntityIdParams = GeneratedRequest<
+  PathParams<'GET /scores/entity/:entityType/:entityId'> & QueryParams<'GET /scores/entity/:entityType/:entityId'>
+>;
 
-export interface SaveScoreParams {
+/** Score records remain opaque in the route schema because their shape is scorer-specific. */
+export type SaveScoreParams = GeneratedRequest<Body<'POST /scores'>> & {
   score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>;
-}
-
-export interface SaveScoreResponse {
-  score: ClientScoreRowData;
-}
-
-export type GetScorerResponse = MastraScorerEntry & {
-  agentIds: string[];
-  agentNames: string[];
-  workflowIds: string[];
-  isRegistered: boolean;
-  source: 'code' | 'stored';
 };
 
-export interface GetScorersResponse {
-  scorers: Array<GetScorerResponse>;
-}
+/** Score records remain opaque in the route schema because their shape is scorer-specific. */
+export type SaveScoreResponse = GeneratedResponse<'POST /scores'> & {
+  score: ClientScoreRowData;
+};
+
+export type GetScorerResponse = GeneratedResponse<'GET /scores/scorers/:scorerId'>;
+
+export type GetScorersResponse = GeneratedResponse<'GET /scores/scorers'>;
 
 // Template installation types
 export interface TemplateInstallationRequest {
@@ -2155,76 +2084,29 @@ export interface ListStoredWorkspacesResponse {
 // Processor Types
 // ============================================================================
 
-/**
- * Processor phase types
- */
-export type ProcessorPhase = 'input' | 'inputStep' | 'outputStream' | 'outputResult' | 'outputStep';
+/** Processor phases are defined by the processor detail route. */
+export type ProcessorPhase = GeneratedResponse<'GET /processors/:processorId'>['phases'][number];
 
-/**
- * Processor configuration showing how it's attached to an agent
- */
-export interface ProcessorConfiguration {
-  agentId: string;
-  agentName: string;
-  type: 'input' | 'output';
-}
+/** Processor attachment configuration returned by the detail route. */
+export type ProcessorConfiguration = GeneratedResponse<'GET /processors/:processorId'>['configurations'][number];
 
-/**
- * Processor in list response
- */
-export interface GetProcessorResponse {
-  id: string;
-  name?: string;
-  description?: string;
-  phases: ProcessorPhase[];
-  agentIds: string[];
-  isWorkflow: boolean;
-}
+/** Processor summary returned from the processor collection route. */
+export type GetProcessorResponse = GeneratedResponse<'GET /processors'>[string];
 
-/**
- * Detailed processor response
- */
-export interface GetProcessorDetailResponse {
-  id: string;
-  name?: string;
-  description?: string;
-  phases: ProcessorPhase[];
-  configurations: ProcessorConfiguration[];
-  isWorkflow: boolean;
-}
+/** Detailed processor response. */
+export type GetProcessorDetailResponse = GeneratedResponse<'GET /processors/:processorId'>;
 
-/**
- * Parameters for executing a processor
- */
-export interface ExecuteProcessorParams {
-  phase: ProcessorPhase;
-  messages: MastraDBMessage[];
-  agentId?: string;
-  requestContext?: RequestContext | Record<string, any>;
-}
+/** Parameters for executing a processor. */
+export type ExecuteProcessorParams = GeneratedRequest<Body<'POST /processors/:processorId/execute'>> &
+  RequestContextOptions;
 
-/**
- * Tripwire result from processor execution
- */
-export interface ProcessorTripwireResult {
-  triggered: boolean;
-  reason?: string;
-  metadata?: unknown;
-}
+/** Tripwire result returned from processor execution. */
+export type ProcessorTripwireResult = NonNullable<
+  GeneratedResponse<'POST /processors/:processorId/execute'>['tripwire']
+>;
 
-/**
- * Response from processor execution
- */
-export interface ExecuteProcessorResponse {
-  success: boolean;
-  phase: string;
-  messages?: MastraDBMessage[];
-  messageList?: {
-    messages: MastraDBMessage[];
-  };
-  tripwire?: ProcessorTripwireResult;
-  error?: string;
-}
+/** Response from processor execution. */
+export type ExecuteProcessorResponse = GeneratedResponse<'POST /processors/:processorId/execute'>;
 
 // ============================================================================
 // Observational Memory Types
@@ -2473,39 +2355,9 @@ export interface ToolMockReport {
   failure?: { code: 'TOOL_MOCK_MISMATCH' | 'TOOL_MOCK_EXHAUSTED'; toolName: string; args: unknown };
 }
 
-export interface DatasetItem {
-  id: string;
-  datasetId: string;
-  datasetVersion: number;
-  externalId?: string | null;
-  input: unknown;
-  groundTruth?: unknown;
-  expectedTrajectory?: unknown;
-  toolMocks?: DatasetItemToolMock[];
-  scorerIds?: string[];
-  requestContext?: Record<string, unknown>;
-  metadata?: unknown;
-  source?: DatasetItemSource;
-  createdAt: string | Date;
-  updatedAt: string | Date;
-}
+export type DatasetItem = GeneratedResponse<'GET /datasets/:datasetId/items/:itemId'>;
 
-export interface DatasetRecord {
-  id: string;
-  name: string;
-  description?: string | null;
-  metadata?: Record<string, unknown> | null;
-  inputSchema?: Record<string, unknown>;
-  groundTruthSchema?: Record<string, unknown>;
-  requestContextSchema?: Record<string, unknown>;
-  tags?: string[] | null;
-  targetType?: string | null;
-  targetIds?: string[] | null;
-  scorerIds?: string[] | null;
-  version: number;
-  createdAt: string | Date;
-  updatedAt: string | Date;
-}
+export type DatasetRecord = GeneratedResponse<'GET /datasets/:datasetId'>;
 
 export interface ExperimentProvenance {
   source?: string;
@@ -2527,56 +2379,11 @@ export interface ExperimentGrouping {
   trialIndex?: number;
 }
 
-export type ExperimentTargetType = 'agent' | 'workflow' | 'scorer' | 'processor';
+export type ListExperimentsParams = GeneratedRequest<QueryParams<'GET /experiments'>>;
 
-export interface ListExperimentsParams extends ExperimentGrouping {
-  page?: number;
-  perPage?: number;
-  /** Only return experiments run against targets of this type */
-  targetType?: ExperimentTargetType;
-  /** Only return experiments run against this target ID */
-  targetId?: string;
-}
+export type ListDatasetsParams = GeneratedRequest<QueryParams<'GET /datasets'>>;
 
-export interface ListDatasetsParams {
-  page?: number;
-  perPage?: number;
-  /** Only return datasets attached to targets of this type */
-  targetType?: ExperimentTargetType;
-  /** Only return datasets attached to at least one of these target IDs */
-  targetIds?: string[];
-}
-
-export interface DatasetExperiment {
-  id: string;
-  datasetId: string | null;
-  datasetVersion: number | null;
-  agentVersion: string | null;
-  /** `null` for caller-driven ingestion experiments (the caller executes items itself). */
-  targetType: 'agent' | 'workflow' | 'scorer' | 'processor' | null;
-  targetId: string | null;
-  /** Run-level scorer IDs pinned at create time for caller-driven experiments. */
-  scorerIds?: string[] | null;
-  /** Human-readable name used as the primary label wherever the experiment is displayed. */
-  name?: string;
-  /** Longer description shown as secondary detail (e.g. in a tooltip). */
-  description?: string;
-  provenance: ExperimentProvenance | null;
-  runnerAttestation: ExperimentRunnerAttestation | null;
-  experimentSetId: string | null;
-  comparisonId: string | null;
-  variantId: string | null;
-  trialIndex: number | null;
-  status: 'pending' | 'running' | 'completed' | 'failed';
-  totalItems: number;
-  succeededCount: number;
-  failedCount: number;
-  skippedCount: number;
-  startedAt: string | Date | null;
-  completedAt: string | Date | null;
-  createdAt: string | Date;
-  updatedAt: string | Date;
-}
+export type DatasetExperiment = GeneratedResponse<'GET /experiments'>['experiments'][number];
 
 export interface DatasetExperimentResult {
   id: string;
@@ -2621,157 +2428,48 @@ export interface UpdateExperimentResultParams {
   comment?: string | null;
 }
 
-export interface CreateDatasetParams {
-  name: string;
-  description?: string;
-  metadata?: Record<string, unknown>;
-  inputSchema?: Record<string, unknown> | null;
-  groundTruthSchema?: Record<string, unknown> | null;
-  requestContextSchema?: Record<string, unknown> | null;
-  targetType?: string;
-  targetIds?: string[];
-  scorerIds?: string[];
-}
+export type CreateDatasetParams = WithoutIndexSignatures<GeneratedRequest<Body<'POST /datasets'>>>;
 
-export interface UpdateDatasetParams {
-  datasetId: string;
-  name?: string;
-  description?: string;
-  metadata?: Record<string, unknown>;
-  inputSchema?: Record<string, unknown> | null;
-  groundTruthSchema?: Record<string, unknown> | null;
-  requestContextSchema?: Record<string, unknown> | null;
-  tags?: string[];
-  targetType?: string;
-  targetIds?: string[];
-  scorerIds?: string[] | null;
-  /** Restrict the lookup to a specific tenant organization. */
-  organizationId?: string;
-  /** Restrict the lookup to a specific tenant project. */
-  projectId?: string;
-}
+export type UpdateDatasetParams = PathParams<'PATCH /datasets/:datasetId'> &
+  WithoutIndexSignatures<GeneratedRequest<Body<'PATCH /datasets/:datasetId'>>> &
+  GeneratedRequest<QueryParams<'PATCH /datasets/:datasetId'>>;
 
-export interface AddDatasetItemParams {
-  datasetId: string;
-  externalId?: string;
-  input: unknown;
-  groundTruth?: unknown;
-  expectedTrajectory?: unknown;
-  toolMocks?: DatasetItemToolMock[];
-  scorerIds?: string[];
-  requestContext?: Record<string, unknown>;
-  metadata?: Record<string, unknown>;
-  source?: DatasetItemSource;
-}
+export type AddDatasetItemParams = PathParams<'POST /datasets/:datasetId/items'> &
+  WithoutIndexSignatures<GeneratedRequest<Body<'POST /datasets/:datasetId/items'>>>;
 
-export interface UpdateDatasetItemParams {
-  datasetId: string;
-  itemId: string;
-  input?: unknown;
-  groundTruth?: unknown;
-  expectedTrajectory?: unknown;
-  toolMocks?: DatasetItemToolMock[];
-  scorerIds?: string[] | null;
-  requestContext?: Record<string, unknown>;
-  metadata?: Record<string, unknown>;
-  source?: DatasetItemSource;
-}
+export type UpdateDatasetItemParams = PathParams<'PATCH /datasets/:datasetId/items/:itemId'> &
+  WithoutIndexSignatures<GeneratedRequest<Body<'PATCH /datasets/:datasetId/items/:itemId'>>>;
 
-export interface BatchInsertDatasetItemsParams {
-  datasetId: string;
-  items: Array<{
-    externalId?: string;
-    input: unknown;
-    groundTruth?: unknown;
-    expectedTrajectory?: unknown;
-    toolMocks?: DatasetItemToolMock[];
-    scorerIds?: string[];
-    requestContext?: Record<string, unknown>;
-    metadata?: Record<string, unknown>;
-    source?: DatasetItemSource;
-  }>;
-}
+export type BatchInsertDatasetItemsParams = PathParams<'POST /datasets/:datasetId/items/batch'> &
+  WithoutIndexSignatures<GeneratedRequest<Body<'POST /datasets/:datasetId/items/batch'>>>;
 
-export interface BatchDeleteDatasetItemsParams {
-  datasetId: string;
-  itemIds: string[];
-}
+export type BatchDeleteDatasetItemsParams = PathParams<'DELETE /datasets/:datasetId/items/batch'> &
+  WithoutIndexSignatures<GeneratedRequest<Body<'DELETE /datasets/:datasetId/items/batch'>>>;
 
-export interface GenerateDatasetItemsParams {
-  datasetId: string;
-  modelId: string;
-  prompt: string;
-  count?: number;
-  agentContext?: {
-    description?: string;
-    instructions?: string;
-    tools?: string[];
-  };
-}
+export type GenerateDatasetItemsParams = PathParams<'POST /datasets/:datasetId/generate-items'> &
+  WithoutIndexSignatures<GeneratedRequest<Body<'POST /datasets/:datasetId/generate-items'>>>;
 
 export interface GeneratedItem {
   input: unknown;
   groundTruth?: unknown;
 }
 
-export interface UpdateDatasetExperimentParams {
-  datasetId: string;
-  experimentId: string;
-  name?: string;
-  description?: string;
-  metadata?: Record<string, unknown>;
-}
+export type UpdateDatasetExperimentParams = PathParams<'PATCH /datasets/:datasetId/experiments/:experimentId'> &
+  WithoutIndexSignatures<GeneratedRequest<Body<'PATCH /datasets/:datasetId/experiments/:experimentId'>>>;
 
-export interface TriggerDatasetExperimentParams {
-  datasetId: string;
-  targetType: 'agent' | 'workflow' | 'scorer';
-  targetId: string;
-  name?: string;
-  description?: string;
-  metadata?: Record<string, unknown>;
-  scorerIds?: string[];
-  version?: number;
-  agentVersion?: string;
-  maxConcurrency?: number;
-  provenance?: ExperimentProvenance;
-  grouping?: ExperimentGrouping;
-  requestContext?: Record<string, unknown>;
-}
+export type TriggerDatasetExperimentParams = PathParams<'POST /datasets/:datasetId/experiments'> &
+  WithoutIndexSignatures<GeneratedRequest<Body<'POST /datasets/:datasetId/experiments'>>>;
 
-export interface CreateDatasetExperimentParams {
-  datasetId: string;
-  /** Caller-supplied experiment id (e.g. a workflow run id) for idempotent creates. */
-  id?: string;
-  /** Target executed per item via `runExperimentItem`. Both or neither of targetType/targetId. Omit for pure ingestion. */
-  targetType?: 'agent' | 'workflow' | 'scorer';
-  targetId?: string;
-  /** Run-level scorer IDs resolved server-side by `runExperimentItem`. Requires a target. */
-  scorerIds?: string[];
-  name?: string;
-  description?: string;
-  metadata?: Record<string, unknown>;
-  /** Pin to a specific dataset version. Defaults to the latest version. */
-  version?: number;
-  provenance?: ExperimentProvenance;
-  grouping?: ExperimentGrouping;
-}
+export type CreateDatasetExperimentParams = PathParams<'POST /datasets/:datasetId/experiments'> &
+  WithoutIndexSignatures<GeneratedRequest<Body<'POST /datasets/:datasetId/experiments'>>>;
 
-export interface CreateDatasetExperimentResponse {
-  experimentId: string;
-  status: 'pending' | 'running' | 'completed' | 'failed';
-  totalItems: number;
-  datasetVersion: number;
-}
+export type CreateDatasetExperimentResponse = GeneratedResponse<'POST /datasets/:datasetId/experiments'>;
 
-export interface RunExperimentItemParams {
-  datasetId: string;
-  experimentId: string;
-  itemId: string;
-  /** Zero-based repetition index. Defaults to 0. Retried calls with the same (experimentId, itemId, attempt) converge on one row. */
-  attempt?: number;
-  /** Request context merged with the item's own request context (item wins). */
-  requestContext?: Record<string, unknown>;
-}
+export type RunExperimentItemParams =
+  PathParams<'POST /datasets/:datasetId/experiments/:experimentId/items/:itemId/run'> &
+    WithoutIndexSignatures<
+      GeneratedRequest<Body<'POST /datasets/:datasetId/experiments/:experimentId/items/:itemId/run'>>
+    >;
 
 /**
  * A single experiment result row as the server returns it: structured
@@ -2780,16 +2478,8 @@ export interface RunExperimentItemParams {
  */
 export type DatasetExperimentResultRow = Omit<DatasetExperimentResult, 'scores'>;
 
-export interface RunExperimentItemResponse {
-  result: DatasetExperimentResultRow;
-  scores: Array<{
-    scorerId: string;
-    scorerName: string;
-    score: number | null;
-    reason: string | null;
-    error: string | null;
-  }>;
-}
+export type RunExperimentItemResponse =
+  GeneratedResponse<'POST /datasets/:datasetId/experiments/:experimentId/items/:itemId/run'>;
 
 export interface SubmitExperimentResultParams {
   datasetId: string;
@@ -2814,23 +2504,10 @@ export interface SubmitExperimentResultParams {
   }>;
 }
 
-export interface FinalizeExperimentParams {
-  datasetId: string;
-  experimentId: string;
-}
+export type FinalizeExperimentParams = PathParams<'POST /datasets/:datasetId/experiments/:experimentId/finalize'>;
 
-export interface CompareExperimentsParams {
-  datasetId: string;
-  experimentIdA: string;
-  experimentIdB: string;
-  thresholds?: Record<
-    string,
-    {
-      value: number;
-      direction?: 'higher-is-better' | 'lower-is-better';
-    }
-  >;
-}
+export type CompareExperimentsParams = PathParams<'POST /datasets/:datasetId/compare'> &
+  WithoutIndexSignatures<GeneratedRequest<Body<'POST /datasets/:datasetId/compare'>>>;
 
 export interface DatasetItemVersionResponse {
   id: string;
@@ -2856,21 +2533,7 @@ export interface DatasetVersionResponse {
   createdAt: string | Date;
 }
 
-export interface CompareExperimentsResponse {
-  baselineId: string;
-  items: Array<{
-    itemId: string;
-    input: unknown;
-    groundTruth: unknown;
-    results: Record<
-      string,
-      {
-        output: unknown;
-        scores: Record<string, number | null>;
-      } | null
-    >;
-  }>;
-}
+export type CompareExperimentsResponse = GeneratedResponse<'POST /datasets/:datasetId/compare'>;
 
 // ============================================================================
 // Stored Prompt Block Types
@@ -3064,57 +2727,16 @@ export interface ScheduleIfIdle {
  * Flat agent-schedule view returned by the unified `/schedules` surface.
  * Discriminate from workflow schedules by the presence of `agentId`.
  */
-export interface AgentSchedule {
-  id: string;
-  agentId: string;
-  /** Mirror of the workflow-schedule discriminator — always absent on agent schedules. */
-  workflowId?: undefined;
-  /** Workflow-run summary — never hydrated for agent schedules. */
-  lastRun?: undefined;
-  name?: string;
-  threadId?: string;
-  resourceId?: string;
-  prompt: string;
-  cron: string;
-  timezone?: string;
-  status: ScheduleStatus;
-  nextFireAt: number;
-  lastFireAt?: number;
-  lastRunId?: string;
-  signalType?: ScheduleSignalType;
-  tagName?: string;
-  attributes?: ScheduleSignalAttributes;
-  ifActive?: ScheduleIfActive;
-  ifIdle?: ScheduleIfIdle;
-  providerOptions?: Record<string, unknown>;
-  metadata?: Record<string, unknown>;
-  createdAt: number;
-  updatedAt: number;
-}
+export type AgentSchedule = Extract<GeneratedResponse<'GET /schedules'>['schedules'][number], { agentId: string }>;
 
 /**
  * Flat workflow-schedule view returned by the unified `/schedules` surface.
  * Discriminate from agent schedules by the presence of `workflowId`.
  */
-export interface WorkflowSchedule {
-  id: string;
-  workflowId: string;
-  /** Mirror of the agent-schedule discriminator — always absent on workflow schedules. */
-  agentId?: undefined;
-  cron: string;
-  timezone?: string;
-  status: ScheduleStatus;
-  nextFireAt: number;
-  lastFireAt?: number;
-  lastRunId?: string;
-  lastRun?: ScheduleRunSummary;
-  inputData?: unknown;
-  initialState?: unknown;
-  requestContext?: Record<string, unknown>;
-  metadata?: Record<string, unknown>;
-  createdAt: number;
-  updatedAt: number;
-}
+export type WorkflowSchedule = Extract<
+  GeneratedResponse<'GET /schedules'>['schedules'][number],
+  { workflowId: string }
+>;
 
 /** Union of the flat views returned by the unified `/schedules` surface. */
 export type ScheduleResponse = AgentSchedule | WorkflowSchedule;
@@ -3131,88 +2753,35 @@ export type ScheduleTriggerOutcome =
 
 export type ScheduleTriggerKind = 'schedule-fire' | 'queue-drain' | 'manual';
 
-export interface ScheduleTriggerResponse {
-  id?: string;
-  scheduleId: string;
-  runId: string | null;
-  scheduledFireAt: number;
-  actualFireAt: number;
-  outcome: ScheduleTriggerOutcome;
-  error?: string;
-  triggerKind?: ScheduleTriggerKind;
-  parentTriggerId?: string;
-  metadata?: Record<string, unknown>;
-  run?: ScheduleRunSummary;
-}
+export type ScheduleTriggerResponse = GeneratedResponse<'GET /schedules/:scheduleId/triggers'>['triggers'][number];
 
-export interface ListSchedulesParams {
-  /** Scope the list to a single agent's schedules. */
-  agentId?: string;
-  /** Scope the list to a single workflow's schedules. */
-  workflowId?: string;
-  status?: ScheduleStatus;
-  /** Agent-schedule only: match the target threadId. */
-  threadId?: string;
-  /** Agent-schedule only: match the target resourceId. */
-  resourceId?: string;
-  /** Agent-schedule only: match the free-form target name. */
-  name?: string;
-}
+export type ListSchedulesParams = GeneratedRequest<QueryParams<'GET /schedules'>>;
 
-export interface ListSchedulesResponse {
-  schedules: ScheduleResponse[];
-}
+export type ListSchedulesResponse = GeneratedResponse<'GET /schedules'>;
 
-export interface ListScheduleTriggersParams {
-  limit?: number;
-  fromActualFireAt?: number;
-  toActualFireAt?: number;
-}
+export type ListScheduleTriggersParams = GeneratedRequest<QueryParams<'GET /schedules/:scheduleId/triggers'>>;
 
-export interface ListScheduleTriggersResponse {
-  triggers: ScheduleTriggerResponse[];
-}
+export type ListScheduleTriggersResponse = GeneratedResponse<'GET /schedules/:scheduleId/triggers'>;
 
 /**
  * Agent variant of the `client.createSchedule(...)` body — targets an agent
  * by `agentId`. Mirrors `CreateAgentScheduleInput` on the core Schedules
  * service.
  */
-export interface CreateAgentScheduleInput {
-  /** Optional stable id; normalized to `agent_<slug>`. A random id is generated when omitted. */
-  id?: string;
-  agentId: string;
-  cron: string;
-  prompt: string;
-  name?: string;
-  timezone?: string;
-  threadId?: string;
-  resourceId?: string;
-  signalType?: ScheduleSignalType;
-  tagName?: string;
-  attributes?: ScheduleSignalAttributes;
-  ifActive?: ScheduleIfActive;
-  ifIdle?: ScheduleIfIdle;
-  providerOptions?: Record<string, unknown>;
-  metadata?: Record<string, unknown>;
-}
+export type CreateAgentScheduleInput = Extract<
+  WithoutIndexSignatures<GeneratedRequest<Body<'POST /schedules'>>>,
+  { agentId: string }
+>;
 
 /**
  * Workflow variant of the `client.createSchedule(...)` body — targets a
  * workflow by `workflowId`. Mirrors `CreateWorkflowScheduleInput` on the
  * core Schedules service.
  */
-export interface CreateWorkflowScheduleInput {
-  /** Optional stable id; normalized to `schedule_<slug>`. A random id is generated when omitted. */
-  id?: string;
-  workflowId: string;
-  cron: string;
-  timezone?: string;
-  inputData?: unknown;
-  initialState?: unknown;
-  requestContext?: Record<string, unknown>;
-  metadata?: Record<string, unknown>;
-}
+export type CreateWorkflowScheduleInput = Extract<
+  WithoutIndexSignatures<GeneratedRequest<Body<'POST /schedules'>>>,
+  { workflowId: string }
+>;
 
 /**
  * Body for `client.createSchedule(...)`. Discriminated by which target id is
@@ -3227,25 +2796,7 @@ export type CreateScheduleInput = CreateAgentScheduleInput | CreateWorkflowSched
  * server. `threadId` / `resourceId` are part of an agent schedule's identity
  * and cannot be changed — to retarget, delete and recreate.
  */
-export interface UpdateScheduleInput {
-  cron?: string;
-  timezone?: string;
-  status?: ScheduleStatus;
-  metadata?: Record<string, unknown>;
-  // Agent-schedule fields
-  prompt?: string;
-  name?: string;
-  signalType?: ScheduleSignalType;
-  tagName?: string;
-  attributes?: ScheduleSignalAttributes;
-  ifActive?: ScheduleIfActive;
-  ifIdle?: ScheduleIfIdle;
-  providerOptions?: Record<string, unknown>;
-  // Workflow-schedule fields
-  inputData?: unknown;
-  initialState?: unknown;
-  requestContext?: Record<string, unknown>;
-}
+export type UpdateScheduleInput = WithoutIndexSignatures<GeneratedRequest<Body<'PATCH /schedules/:scheduleId'>>>;
 
 /**
  * Response for POST /schedules/:scheduleId/run.
@@ -3254,11 +2805,7 @@ export interface UpdateScheduleInput {
  * fires. `claimId` is the trigger row's `runId` (used to look up the
  * resulting trigger row via `listScheduleTriggers`).
  */
-export interface RunScheduleResponse {
-  scheduleId: string;
-  claimId: string;
-  scheduledFireAt: number;
-}
+export type RunScheduleResponse = GeneratedResponse<'POST /schedules/:scheduleId/run'>;
 
 export interface ExperimentReviewCounts {
   experimentId: string;
