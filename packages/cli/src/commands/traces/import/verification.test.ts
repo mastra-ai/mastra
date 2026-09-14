@@ -163,7 +163,7 @@ describe('trace import verification', () => {
     expect(report.verification).toMatchObject({ status: 'verified', queryAttempts: 3 });
   });
 
-  it('bounds a server retry delay without retrying faster than local backoff', async () => {
+  it('honors a server retry delay without retrying faster than local backoff', async () => {
     const value = trace(1);
     const directory = await prepareAndUpload([value]);
     const readTrace = vi
@@ -179,7 +179,7 @@ describe('trace import verification', () => {
       dependencies: { sleep },
     });
 
-    expect(sleep).toHaveBeenNthCalledWith(1, 30_000, undefined);
+    expect(sleep).toHaveBeenNthCalledWith(1, 120_000, undefined);
     expect(sleep).toHaveBeenNthCalledWith(2, 1_000, undefined);
   });
 

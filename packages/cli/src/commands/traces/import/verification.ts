@@ -17,7 +17,6 @@ import type { TraceImportStoredSpan, TraceImportVerifier } from './verifier.js';
 
 export const DEFAULT_VERIFICATION_SAMPLE_SIZE = 10;
 export const DEFAULT_VERIFICATION_MAX_ATTEMPTS = 6;
-const MAX_VERIFICATION_RETRY_AFTER_MS = 30_000;
 
 type Sleep = (milliseconds: number, signal?: AbortSignal) => Promise<void>;
 
@@ -243,7 +242,7 @@ export async function verifyTraceImport(options: VerifyTraceImportOptions): Prom
           const backoff = backoffMilliseconds(attempt);
           const delay =
             result.kind === 'retryable' && result.retryAfterMs !== undefined
-              ? Math.max(backoff, Math.min(result.retryAfterMs, MAX_VERIFICATION_RETRY_AFTER_MS))
+              ? Math.max(backoff, result.retryAfterMs)
               : backoff;
           await wait(delay, options.signal);
         }
