@@ -47,7 +47,7 @@
 }
 
 .ds-focus-orbit::before {
-  inset: -7px;
+  inset: -7px calc(50% - 3px);
   background:
     radial-gradient(circle at 50% 3px, var(--ds-focus-color) 0 1.5px, transparent 3px),
     radial-gradient(circle at 50% calc(100% - 3px), var(--ds-focus-color) 0 1.5px, transparent 3px);
