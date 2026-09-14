@@ -70,13 +70,31 @@ describe('DatasetItems selection', () => {
     expect(screen.queryByText('Cancel')).toBeNull();
   });
 
-  it('keeps the Add Item button visible next to the selection menu', () => {
+  it('keeps the New item button visible next to the selection menu', () => {
     renderItems();
 
     fireEvent.click(screen.getByLabelText('Select item item-a'));
 
-    expect(screen.getByRole('button', { name: /Add Item/ })).toBeDefined();
+    expect(screen.getByRole('button', { name: /New item/ })).toBeDefined();
     expect(screen.getByRole('button', { name: /1 selected/ })).toBeDefined();
+  });
+
+  it('triggers the add item action once when pressing C', () => {
+    const onAddClick = vi.fn();
+    renderItems({ onAddClick });
+
+    fireEvent.keyDown(window, { key: 'c' });
+
+    expect(onAddClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not bind C when viewing an older version', () => {
+    const onAddClick = vi.fn();
+    renderItems({ onAddClick }, '/datasets/ds-1?version=1');
+
+    fireEvent.keyDown(window, { key: 'c' });
+
+    expect(onAddClick).not.toHaveBeenCalled();
   });
 
   it('invokes the Create Dataset action with the checked items', () => {

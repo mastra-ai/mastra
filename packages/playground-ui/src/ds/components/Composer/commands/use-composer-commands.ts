@@ -1,8 +1,9 @@
-import type { ChangeEvent, ComponentPropsWithoutRef, KeyboardEvent, RefObject } from 'react';
+import type { ChangeEvent, ComponentPropsWithoutRef, RefObject } from 'react';
 import { useId, useState } from 'react';
 import type { ComposerCommand, ComposerCommandOption } from './command-matches';
 import { matchCommandOptions, matchCommands } from './command-matches';
 import type { ComposerSuggestionItem, ComposerSuggestionsProps } from './composer-suggestions';
+import { useKeydown } from '@/lib/keyboard/use-keydown';
 
 function createSuggestionItems(
   listId: string,
@@ -64,31 +65,31 @@ export function useComposerCommands({
     if (command) updateValue(`/${command.name} `);
   }
 
-  function onKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
-    const isModified = event.shiftKey || event.ctrlKey || event.metaKey || event.altKey;
-    const isComposing = event.nativeEvent.isComposing || event.keyCode === 229;
-    if (isModified || isComposing || items.length === 0) return;
-
-    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-      event.preventDefault();
-      const direction = event.key === 'ArrowDown' ? 1 : -1;
-      setNavigation({ value, index: (activeIndex + direction + items.length) % items.length });
-      return;
-    }
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      returnToCommands();
-      return;
-    }
-    if (event.key === 'Tab' || event.key === 'Enter') {
-      const command = matchingCommands[activeIndex];
-      const exactCommand = matchingCommands.length === 1 && value.toLowerCase() === `/${command?.name}`;
-      const submitExactCommand = event.key === 'Enter' && exactCommand && !command?.options?.length;
-      if (submitExactCommand) return;
-      event.preventDefault();
-      selectSuggestion(activeIndex);
-    }
+  function moveSelection(direction: number) {
+    setNavigation({ value, index: (activeIndex + direction + items.length) % items.length });
   }
+
+  function shouldHandleCommandKey(event: KeyboardEvent) {
+    const command = matchingCommands[activeIndex];
+    const submitExactCommand =
+      matchingCommands.length === 1 && value.toLowerCase() === `/${command?.name}` && !command?.options?.length;
+    return event.key !== 'Enter' || !submitExactCommand;
+  }
+
+  useKeydown(
+    {
+      ArrowDown: () => moveSelection(1),
+      ArrowUp: () => moveSelection(-1),
+      Escape: returnToCommands,
+      Tab: () => selectSuggestion(activeIndex),
+      Enter: () => selectSuggestion(activeIndex),
+    },
+    {
+      target: inputRef,
+      enabled: items.length > 0,
+      shouldHandle: shouldHandleCommandKey,
+    },
+  );
 
   const inputProps = {
     value,
@@ -96,7 +97,6 @@ export function useComposerCommands({
     'aria-autocomplete': 'list',
     'aria-controls': items.length > 0 ? listId : undefined,
     'aria-activedescendant': items[activeIndex]?.id,
-    onKeyDown,
   } satisfies ComponentPropsWithoutRef<'textarea'>;
 
   const suggestionsProps: ComposerSuggestionsProps = {

@@ -230,8 +230,13 @@ describe('GeminiLiveVoice', () => {
     });
   });
 
-  describe('Audio Streaming', () => {
+  describe.each([
+    { audioConfig: undefined, inputSampleRate: 16000 },
+    { audioConfig: { inputSampleRate: undefined }, inputSampleRate: 16000 },
+    { audioConfig: { inputSampleRate: 48000 }, inputSampleRate: 48000 },
+  ])('Audio Streaming at $inputSampleRate Hz', ({ audioConfig, inputSampleRate }) => {
     beforeEach(async () => {
+      voice = new GeminiLiveVoice({ apiKey: 'test-api-key', audioConfig });
       // Setup connected state and mock WebSocket
       (voice as any).state = 'connected';
       const mockSend = vi.fn();
@@ -249,27 +254,42 @@ describe('GeminiLiveVoice', () => {
       const audioData = new Int16Array([1, 2, 3, 4, 5]);
       await voice.send(audioData);
 
-      expect(mockWs.send).toHaveBeenCalled();
+      expect(mockWs.send).toHaveBeenCalledTimes(1);
       const sentData = JSON.parse(mockWs.send.mock.calls[0][0]);
-      expect(sentData).toHaveProperty('realtime_input');
-      expect(sentData.realtime_input).toHaveProperty('audio');
+      expect(sentData).toEqual({
+        realtime_input: {
+          audio: {
+            mime_type: `audio/pcm;rate=${inputSampleRate}`,
+            data: Buffer.from(audioData.buffer).toString('base64'),
+          },
+        },
+      });
       expect(sentData.realtime_input).not.toHaveProperty('media_chunks');
     });
 
     it('should handle audio stream', async () => {
       const audioStream = new PassThrough();
-      const sendPromise = voice.send(audioStream);
+      await voice.send(audioStream);
 
-      // Write enough data to meet minimum chunk size (32 bytes = 16 samples)
-      const audioData = new Int16Array(20); // 40 bytes
-      for (let i = 0; i < 20; i++) {
-        audioData[i] = i;
+      const chunks = [new Int16Array([1, 2, 3, 4]), new Int16Array([-1, -2, -3, -4])];
+      for (const chunk of chunks) {
+        audioStream.write(Buffer.from(chunk.buffer));
       }
-      audioStream.write(Buffer.from(audioData.buffer));
       audioStream.end();
 
-      await sendPromise;
-      expect(mockWs.send).toHaveBeenCalled();
+      expect(mockWs.send).toHaveBeenCalledTimes(chunks.length);
+      for (const [index, chunk] of chunks.entries()) {
+        const sentData = JSON.parse(mockWs.send.mock.calls[index][0]);
+        expect(sentData).toEqual({
+          realtime_input: {
+            audio: {
+              mime_type: `audio/pcm;rate=${inputSampleRate}`,
+              data: Buffer.from(chunk.buffer).toString('base64'),
+            },
+          },
+        });
+        expect(sentData.realtime_input).not.toHaveProperty('media_chunks');
+      }
     });
 
     it('should throw error when not connected', async () => {
@@ -1023,6 +1043,9 @@ describe('GeminiLiveVoice', () => {
       }, 5);
 
       await expect(listenPromise).resolves.toBe('Hello world');
+      expect(mockWs.send).toHaveBeenCalledTimes(1);
+      const sentData = JSON.parse(mockWs.send.mock.calls[0][0]);
+      expect(sentData.client_content.turns[0].parts[0].inlineData.mimeType).toBe('audio/pcm');
     });
 
     it('should emit speaking and speaker stream for inbound audio and cleanup on turnComplete', async () => {
