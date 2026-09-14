@@ -30,6 +30,9 @@ export interface ExperimentsListProps {
   datasetFilter?: string;
   /** When provided, rows toggle selection (for comparison) instead of navigating. */
   selection?: ExperimentsListSelection;
+  isFetchingNextPage?: boolean;
+  hasNextPage?: boolean;
+  setEndOfListElement?: (element: HTMLDivElement | null) => void;
 }
 
 export interface ExperimentsListSelection {
@@ -115,6 +118,9 @@ export function ExperimentsList({
   statusFilter = 'all',
   datasetFilter = 'all',
   selection,
+  isFetchingNextPage,
+  hasNextPage,
+  setEndOfListElement,
 }: ExperimentsListProps) {
   const isSelectionActive = selection !== undefined;
   const datasetMap = useMemo(() => {
@@ -211,6 +217,12 @@ export function ExperimentsList({
           </EntityList.RowWrapper>
         );
       })}
+
+      <EntityList.NextPageLoading
+        isLoading={isFetchingNextPage}
+        hasMore={hasNextPage}
+        setEndOfListElement={setEndOfListElement}
+      />
 
       {experimentToDelete && (
         <DeleteExperimentDialog
