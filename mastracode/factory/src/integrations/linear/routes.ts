@@ -490,10 +490,11 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions): ApiRoute[]
         try {
           const accessToken = await linear.getFreshAccessToken(connection);
           const issue = await linear.fetchIssueDetail(accessToken, issueReference, selectedIds, routedSourceIds);
+          const matchesReference = issueId !== undefined ? issue?.id === issueId : issue?.identifier === identifier;
           const winningSourceId = issue ? winningLinearSourceId(linear, selectedIds, issue) : null;
           const isRouted = winningSourceId != null && routedSourceIds.includes(winningSourceId);
           // Reads exactly like an issue that doesn't exist.
-          if (!issue || issue.identifier !== identifier || !isRouted) {
+          if (!issue || !matchesReference || !isRouted) {
             return c.json({ error: 'issue_not_found' }, 404);
           }
           return c.json({

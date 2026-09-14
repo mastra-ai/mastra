@@ -692,6 +692,17 @@ describe('issue detail route', () => {
     });
     expect(fetchIssueDetail).toHaveBeenCalledWith('linear-token', 'issue-1', ['proj-1'], ['proj-1']);
   });
+  it('uses a stable issue UUID when the human identifier has changed', async () => {
+    fetchIssueDetail.mockResolvedValue({ ...issueDetail, identifier: 'OPS-42' });
+
+    const res = await buildApp(org1()).request(
+      `/web/linear/issues/ENG-42?factoryProjectId=${projectA}&issueId=issue-1`,
+    );
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ identifier: 'OPS-42', description: 'The sync runs the wrong way.' });
+  });
+
   it('uses the issue UUID when routed workspaces share an identifier', async () => {
     await seed.intake.saveConfig({
       orgId: 'org1',
