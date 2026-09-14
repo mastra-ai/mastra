@@ -15,6 +15,7 @@ import { isAuthenticated } from '@/domains/auth/types';
 import { ExperimentalUIProvider } from '@/domains/experimental-ui/experimental-ui-context';
 import { UI_EXPERIMENTS } from '@/domains/experimental-ui/experiments';
 import { useExperimentalUIEnabled } from '@/domains/experimental-ui/use-experimental-ui-enabled';
+import { SidebarShortcuts } from '@/domains/navigation/components/sidebar-shortcuts';
 import { NavigationCommand, useNavigationCommand } from '@/lib/command';
 import {
   RouteHeader,
@@ -107,6 +108,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
         <TooltipProvider delayDuration={0}>
           <ExperimentalUIProvider experiments={experimentalUIEnabled ? UI_EXPERIMENTS : []}>
             <MainSidebarProvider>
+              <SidebarShortcuts />
               <RouteHeaderActionsProvider>
                 <RouteHeaderCrumbsProvider>
                   <LayoutContent>{children}</LayoutContent>
