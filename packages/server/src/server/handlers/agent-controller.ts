@@ -211,6 +211,7 @@ const switchThreadBodySchema = z.object({ threadId: z.string() });
 const createThreadBodySchema = z.object({ title: z.string().optional() });
 const renameThreadBodySchema = z.object({ title: z.string() });
 const threadPathParams = z.object({ controllerId: z.string(), resourceId: z.string(), threadId: z.string() });
+const followUpPathParams = z.object({ controllerId: z.string(), resourceId: z.string(), followUpId: z.string() });
 const cloneThreadBodySchema = z.object({
   sourceThreadId: z.string().optional(),
   title: z.string().optional(),
@@ -1348,6 +1349,36 @@ export const FOLLOW_UP_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
       return { ok: true };
     } catch (error) {
       return handleError(error, 'error queuing controller follow-up');
+    }
+  },
+});
+
+export const REMOVE_FOLLOW_UP_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
+  method: 'DELETE',
+  path: '/agent-controller/:controllerId/sessions/:resourceId/follow-up/:followUpId',
+  responseType: 'json' as const,
+  pathParamSchema: followUpPathParams,
+  queryParamSchema: sessionScopeQuerySchema,
+  responseSchema: ackResponseSchema,
+  summary: 'Remove a queued follow-up message',
+  description:
+    'Removes one follow-up from the session queue by the id listed in displayState.queuedFollowUpItems. A follow-up already drained into a run is not affected.',
+  tags: ['AgentController'],
+  requiresAuth: true,
+  requiresPermission: 'agent-controller:execute',
+  handler: async ({ mastra, controllerId, resourceId, followUpId, sessionScope, sessionThreadId, requestContext }) => {
+    try {
+      const controller = getAgentControllerOrThrow(mastra, controllerId);
+      const session = await getSession(
+        controller,
+        resourceId,
+        { scope: sessionScope, sessionThreadId },
+        requestContext,
+      );
+      session.removeFollowUp({ id: followUpId });
+      return { ok: true };
+    } catch (error) {
+      return handleError(error, 'error removing controller follow-up');
     }
   },
 });

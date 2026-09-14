@@ -51,6 +51,7 @@ import type {
   PermissionRules,
   TokenUsage,
   ToolCategory,
+  QueuedFollowUpItem,
 } from './types';
 
 export const SUSPENDED_RUN_AGENT_KEY = createRunScopeKey<Agent>('agent-controller.suspendedRunAgent');
@@ -1187,6 +1188,8 @@ export class SessionSuspensions {
 
 /** A message queued to send once the active run finishes, held in {@link SessionFollowUps}. */
 export interface FollowUp {
+  /** Stable id assigned when the follow-up is queued; the handle for `removeFollowUp`. */
+  id?: string;
   /** The message text to send. */
   content: string;
   /** Optional request context to apply when the queued message is sent. */
@@ -1204,6 +1207,7 @@ export interface FollowUp {
 export class SessionFollowUps {
   /** Messages waiting to be sent after the current run, in arrival order. */
   #queue: FollowUp[] = [];
+  #nextId = 0;
 
   /** Number of messages currently queued. */
   count(): number {
@@ -1215,9 +1219,14 @@ export class SessionFollowUps {
     return this.#queue.length === 0;
   }
 
-  /** Append a follow-up to the back of the queue. */
+  /** The queued follow-ups in send order, as a UI lists them (id and text). */
+  list(): QueuedFollowUpItem[] {
+    return this.#queue.map(followUp => ({ id: followUp.id ?? '', content: followUp.content }));
+  }
+
+  /** Append a follow-up to the back of the queue, giving it an id when it has none. */
   enqueue(followUp: FollowUp): void {
-    this.#queue.push(followUp);
+    this.#queue.push(followUp.id ? followUp : { ...followUp, id: this.#allocateId() });
   }
 
   /** Remove and return the next follow-up, or undefined when empty. */
@@ -1230,9 +1239,22 @@ export class SessionFollowUps {
     this.#queue.unshift(followUp);
   }
 
+  /** Remove one queued follow-up by id. Returns whether it was queued. */
+  remove(id: string): boolean {
+    const index = this.#queue.findIndex(followUp => followUp.id === id);
+    if (index === -1) return false;
+    this.#queue.splice(index, 1);
+    return true;
+  }
+
   /** Drop all queued follow-ups (e.g. on steer or thread switch). */
   clear(): void {
     this.#queue = [];
+  }
+
+  #allocateId(): string {
+    this.#nextId += 1;
+    return `follow-up-${this.#nextId}-${Math.random().toString(36).slice(2, 8)}`;
   }
 }
 
@@ -1946,6 +1968,29 @@ class SessionPermissions {
   }
 }
 
+/**
+ * How long a message submitted right after an abort waits for the aborted run
+ * to finish tearing down before it is dispatched anyway. Real teardown includes
+ * stream cancellation and every output processor; a few seconds is normal.
+ */
+const POST_ABORT_TEARDOWN_TIMEOUT_MS = 30_000;
+
+/**
+ * How long a send may hold the follow-up queue while its run has not started.
+ * A send that never starts must not hold the queue forever.
+ */
+const RUN_START_HOLD_MS = 120_000;
+
+/** One send's hold on the follow-up queue until its run is visible. */
+type RunStartHold = {
+  /** Release the hold; returns whether it was still held. */
+  readonly release: () => boolean;
+  /** Whether the send's run was seen to start (`agent_start`). */
+  readonly started: () => boolean;
+  /** Whether the run controller was already armed when the send began. */
+  readonly armedBefore: boolean;
+};
+
 /** Stamp at submit time: a steer aborts its own run, so the route resolved downstream reads idle. */
 function asInterjection(signal: CreatedAgentSignal): CreatedAgentSignal {
   if (signal.type !== 'user' || signal.attributes?.delivery !== undefined) return signal;
@@ -2302,6 +2347,7 @@ export class SessionDisplayState {
     ds.currentMessage = null;
     this.deps.clearFollowUps();
     ds.queuedFollowUps = 0;
+    ds.queuedFollowUpItems = [];
     ds.modifiedFiles = new Map();
     ds.tasks = [];
     ds.previousTasks = [];
@@ -2649,6 +2695,7 @@ export class SessionDisplayState {
       // ── Follow-up queue ────────────────────────────────────────────────
       case 'follow_up_queued':
         ds.queuedFollowUps = event.count;
+        ds.queuedFollowUpItems = event.items ?? [];
         break;
 
       // ── Thread lifecycle ───────────────────────────────────────────────
@@ -3185,6 +3232,11 @@ export class Session<TState = unknown> {
    */
   abort(): void {
     const hadPendingSuspensions = this.displayState.get().pendingSuspensions.size > 0;
+    // Stop on a run parked on a tool suspension: no run is in progress whose
+    // end would send the next queued message. Watch the stopped run's
+    // subscription before anything is torn down.
+    const parkedStop = hadPendingSuspensions && !this.run.isRunning();
+    const teardown = parkedStop && this.stream.isOpen() ? this.#watchStreamTeardown() : undefined;
     this.displayState.clearPendingSuspensions();
     this.abortRun();
     // Clearing the suspension mirror is a direct mutation, so it doesn't flow
@@ -3192,6 +3244,22 @@ export class Session<TState = unknown> {
     // actually removed something, otherwise stale suspension UI can linger.
     if (hadPendingSuspensions) {
       this.emit({ type: 'display_state_changed', displayState: this.displayState.get() });
+    }
+    if (parkedStop) {
+      // With a live subscription, Stop's abort ends the stopped run there and
+      // the run engine sends the queue on once it has detached it. If that
+      // never happens, drop the subscription and the abort state here and move
+      // the queue on; with no subscription, move it on now.
+      if (teardown) {
+        void teardown.wait(1_000).then(() => {
+          if (!this.stream.isOpen() || !this.run.isAbortRequested()) return;
+          this.thread.cleanupSubscription();
+          this.run.reset();
+          if (!this.#hasRunInFlight()) void this.drainFollowUpQueue().catch(() => {});
+        });
+      } else if (!this.#hasRunInFlight()) {
+        void this.drainFollowUpQueue().catch(() => {});
+      }
     }
   }
 
@@ -3298,6 +3366,34 @@ export class Session<TState = unknown> {
     });
 
     return [{ type: 'text', text: content }, ...fileParts];
+  }
+
+  /**
+   * Watch for the live subscription's next teardown (detach or cleanup). The run
+   * engine detaches an aborted subscription only after that run has ended, so
+   * work that must land on a fresh subscription waits for this first. Register
+   * it before awaiting anything, while the aborted handle is still attached.
+   */
+  #watchStreamTeardown(): { wait: (timeoutMs: number) => Promise<void>; cancel: () => void } {
+    const watcher = new AbortController();
+    const teardown = this.stream.waitForTeardown(watcher.signal);
+    return {
+      wait: async timeoutMs => {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        try {
+          await Promise.race([
+            teardown,
+            new Promise<void>(resolve => {
+              timer = setTimeout(resolve, timeoutMs);
+            }),
+          ]);
+        } finally {
+          if (timer) clearTimeout(timer);
+          watcher.abort();
+        }
+      },
+      cancel: () => watcher.abort(),
+    };
   }
 
   /**
@@ -3454,6 +3550,10 @@ export class Session<TState = unknown> {
     const submittedAbortRequested = this.run.isAbortRequested();
     const submittedWhileWorking =
       submittedIsRunning || (submittedAbortRequested && Boolean(submittedRunId || submittedActiveRunId));
+    // Registered before any await: resolves when the aborted live subscription is
+    // detached, which the run engine does only after that run has ended.
+    const abortedStreamTeardown =
+      submittedAbortRequested && !submittedIsRunning && this.stream.isOpen() ? this.#watchStreamTeardown() : undefined;
     const submitted = createSignal(
       'content' in input
         ? {
@@ -3526,22 +3626,52 @@ export class Session<TState = unknown> {
       // Only do this in the post-abort window (an abort was requested but the
       // run hasn't reset yet) so normal idle signals aren't delayed.
       if (submittedAbortRequested && (submittedRunId || submittedActiveRunId)) {
-        const idle = await this.waitForStreamIdle();
-        // On the normal path the abort teardown detached the live subscription
-        // while we waited, so the handle captured by the earlier
-        // `ensureSubscription` is now dead and re-ensuring genuinely
-        // re-subscribes. But when `waitForStreamIdle` times out the old run is
-        // still finalizing with its subscription live and matching, so
-        // `ensureSubscription` would short-circuit to a no-op and dispatch onto
-        // the still-aborting run. Force teardown of the stale subscription first
-        // so the re-ensure always attaches a fresh one — otherwise the new run
-        // starts with no native subscription and its `agent_start`/`agent_end`
-        // never reach the session, leaving `run.isRunning()` stuck true.
+        // A deferred abort (parked approval gate) streams nothing and only
+        // leaves once the gated call is declined, so the short wait is enough.
+        // A normal abort tears down for real: the model stream has to cancel
+        // and the output processors (memory, billing, ...) still run on the
+        // partial result, which takes longer than a second. Dispatching before
+        // that completes hands the new message to the dying run, which drops
+        // it, so wait for the real teardown before falling back below.
+        const teardownDeadline = Date.now() + POST_ABORT_TEARDOWN_TIMEOUT_MS;
+        const idle = await this.waitForStreamIdle(submittedIsRunning ? undefined : POST_ABORT_TEARDOWN_TIMEOUT_MS);
+        // The stream can read idle before the run engine detaches the aborted
+        // subscription (it detaches, then resets the run). Ensuring the
+        // subscription in that gap reuses the handle about to be detached, and
+        // the new run's events never reach this session: wait for the detach.
+        if (abortedStreamTeardown && this.run.isAbortRequested()) {
+          await abortedStreamTeardown.wait(Math.max(0, teardownDeadline - Date.now()));
+        }
         if (!idle) {
+          // On the normal path the abort teardown detached the live subscription
+          // while we waited, so the handle captured by the earlier
+          // `ensureSubscription` is now dead and re-ensuring genuinely
+          // re-subscribes. But when `waitForStreamIdle` times out the old run is
+          // still finalizing with its subscription live and matching, so
+          // `ensureSubscription` would short-circuit to a no-op and dispatch onto
+          // the still-aborting run. Force teardown of the stale subscription first
+          // so the re-ensure always attaches a fresh one — otherwise the new run
+          // starts with no native subscription and its `agent_start`/`agent_end`
+          // never reach the session, leaving `run.isRunning()` stuck true.
           this.thread.cleanupSubscription();
         }
         await this.thread.ensureSubscription(threadId, agent);
+      } else if (abortedStreamTeardown) {
+        // Stop on a run parked on a tool suspension leaves no run id behind,
+        // but the stopped run's subscription is still attached and is about to
+        // deliver the Stop and detach. Sending on it hands the new run's first
+        // event to the stopped run, which is ended as aborted and detached, so
+        // the new run's end never reaches this session. Wait briefly for that
+        // detach; if it never comes, drop the subscription and the abort state
+        // here. Either way the new run starts on a fresh subscription.
+        await abortedStreamTeardown.wait(1_000);
+        if (this.stream.isOpen() && this.run.isAbortRequested()) {
+          this.thread.cleanupSubscription();
+          this.run.reset();
+        }
+        await this.thread.ensureSubscription(threadId, agent);
       }
+      abortedStreamTeardown?.cancel();
 
       const streamOptions = await this.machinery.buildStreamOptions({
         requestContext: requestContextInput,
@@ -3646,6 +3776,8 @@ export class Session<TState = unknown> {
     const messageInput = this.createMessageInput({ content, files });
 
     const wasActive = this.stream.isActive();
+    // An idle send starts a run: follow-ups wait until that run is visible.
+    const runStart = wasActive ? undefined : this.#holdRunStart();
     let resolveAgentEnd: (() => void) | undefined;
     const agentEnd = new Promise<void>(resolve => {
       resolveAgentEnd = resolve;
@@ -3673,34 +3805,167 @@ export class Session<TState = unknown> {
       );
       try {
         await Promise.race([agentEnd, acceptedFailure]);
+      } catch (error) {
+        this.#settleRunStart(runStart, true);
+        throw error;
       } finally {
         unsubscribeAgentEnd?.();
+        this.#settleRunStart(runStart);
       }
     }
     return;
   }
 
   /**
-   * Steer the agent mid-stream: aborts the current run and sends a new message.
+   * Steer the agent: stop whatever is in flight (the current run, or a run
+   * parked on a tool suspension) and send this message next. Queued follow-ups
+   * stay queued and run after it, one at a time. From an idle session the
+   * message is sent right away.
    */
   async steer({ content, requestContext }: { content: string; requestContext?: RequestContext }): Promise<void> {
+    if (!this.#hasRunInFlight()) {
+      await this.sendMessage({ content, requestContext });
+      return;
+    }
+    // Hold the queue until the steered run itself starts. The end of the run
+    // this stops would otherwise send a queued follow-up ahead of it.
+    const hold = this.#holdRunStart({ releaseOnEnd: false });
     this.abort();
-    this.followUps.clear();
-    this.emit({ type: 'follow_up_queued', count: 0 });
-    await this.sendMessage({ content, requestContext });
+    try {
+      await this.sendMessage({ content, requestContext });
+    } catch (error) {
+      this.#settleRunStart(hold, true);
+      throw error;
+    }
   }
+
+  /**
+   * Sends whose run this session has not seen start yet. The runtime reserves
+   * the thread as soon as such a send is dispatched, and a message sent before
+   * that run starts would be folded into its first model request, so while
+   * this is non-zero follow-ups wait in the queue and the queue does not drain.
+   */
+  #startingRuns = 0;
+
+  /**
+   * Hold the "run starting" state for one send. The hold is released when the
+   * send's run becomes visible (`agent_start` with no abort pending), when a
+   * run ends (unless `releaseOnEnd` is false), by the caller when the send
+   * fails, or after {@link RUN_START_HOLD_MS}.
+   */
+  #holdRunStart({ releaseOnEnd = true }: { releaseOnEnd?: boolean } = {}): RunStartHold {
+    const armedBefore = this.run.isRunning();
+    this.#startingRuns += 1;
+    let held = true;
+    let started = false;
+    let unsubscribe: () => void = () => {};
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const release = () => {
+      if (!held) return false;
+      held = false;
+      this.#startingRuns -= 1;
+      if (timeout) clearTimeout(timeout);
+      // Listeners are removed after the current dispatch, never mid-iteration.
+      queueMicrotask(unsubscribe);
+      return true;
+    };
+    const hold: RunStartHold = { release, started: () => started, armedBefore };
+    unsubscribe = this.subscribe(event => {
+      // A stopped run's subscription can still report a start while its abort
+      // is pending; only a run that starts after the abort has settled counts.
+      if (event.type === 'agent_start' && !this.run.isAbortRequested()) {
+        started = true;
+        release();
+      } else if (event.type === 'agent_end' && releaseOnEnd) {
+        release();
+      }
+    });
+    timeout = setTimeout(() => this.#settleRunStart(hold), RUN_START_HOLD_MS);
+    (timeout as { unref?: () => void }).unref?.();
+    return hold;
+  }
+
+  /**
+   * Release a send's hold. A send that never became a run (it failed, or its
+   * hold timed out) has no run end to send the next queued message, so the
+   * queue moves on here when nothing else is in flight.
+   */
+  #settleRunStart(hold: RunStartHold | undefined, failed = false): void {
+    if (!hold || !hold.release() || hold.started()) return;
+    // Building the send's stream options armed the run controller. A send that
+    // failed before its run started would otherwise leave the session reading
+    // as running with nothing to end it.
+    if (failed && !hold.armedBefore && this.run.isRunning() && !this.stream.isActive()) this.run.reset();
+    if (!this.#hasRunInFlight() && !this.followUps.isEmpty()) {
+      void this.drainFollowUpQueue().catch(() => {});
+    }
+  }
+
+  /** Whether a run is in flight: running, starting, or parked on a tool suspension or approval. */
+  #hasRunInFlight(): boolean {
+    return this.run.isRunning() || this.#startingRuns > 0 || this.hasParkedRun();
+  }
+
+  /**
+   * True while a follow-up sent from an idle session is on its way to becoming
+   * a run. A second follow-up arriving in that window must queue behind it
+   * instead of being folded into the run that is starting.
+   */
+  #followUpDispatchPending = false;
 
   /**
    * Queue a follow-up message to be processed after the current run completes,
    * or send it immediately when the session is idle.
+   *
+   * "Idle" means no run is in progress AND nothing is parked: a run waiting on
+   * a tool suspension (a generation, a question to the user) or a tool
+   * approval has finished streaming but is not over. A message sent to it
+   * directly would be folded into the resumed run together with every other
+   * message sent meanwhile, so those wait in the queue and run one at a time
+   * once the parked run has ended.
    */
   async followUp({ content, requestContext }: { content: string; requestContext?: RequestContext }): Promise<void> {
-    if (this.run.isRunning()) {
+    if (this.#hasRunInFlight() || this.#followUpDispatchPending) {
       this.followUps.enqueue({ content, requestContext });
-      this.emit({ type: 'follow_up_queued', count: this.followUps.count() });
-    } else {
-      await this.sendMessage({ content, requestContext });
+      this.emitFollowUpQueued();
+      return;
     }
+    this.#followUpDispatchPending = true;
+    try {
+      await this.sendMessage({ content, requestContext });
+    } finally {
+      this.#followUpDispatchPending = false;
+    }
+  }
+
+  /**
+   * Whether the current run has stopped streaming but is still waiting: a tool
+   * suspension awaiting resume data, or an armed tool approval. The queue does
+   * not drain into such a run; it drains once the run ends.
+   */
+  hasParkedRun(): boolean {
+    return this.displayState.get().pendingSuspensions.size > 0 || this.approval.isArmed();
+  }
+
+  /**
+   * Remove one queued follow-up by the id a UI read from
+   * `displayState.queuedFollowUpItems`. Returns whether it was still queued;
+   * a follow-up already drained into a run is not affected.
+   */
+  removeFollowUp({ id }: { id: string }): boolean {
+    const removed = this.followUps.remove(id);
+    if (removed) this.emitFollowUpQueued();
+    return removed;
+  }
+
+  /** Emit the queue's count and items together, so a UI never repaints one without the other. */
+  private emitFollowUpQueued(runId?: string): void {
+    this.emit({
+      type: 'follow_up_queued',
+      count: this.followUps.count(),
+      items: this.followUps.list(),
+      ...(runId ? { runId } : {}),
+    });
   }
 
   /**
@@ -3711,12 +3976,18 @@ export class Session<TState = unknown> {
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
   }): Promise<boolean> {
-    if (this.followUps.isEmpty()) return false;
+    // A parked run (tool suspension, armed approval) has ended its stream but
+    // not its turn, and a starting run's first request must not take a queued
+    // message with it: the next queued message waits for either.
+    if (this.followUps.isEmpty() || this.hasParkedRun() || this.#startingRuns > 0) return false;
 
     const next = this.followUps.dequeue()!;
     const threadId = this.thread.getId();
+    let runStart: RunStartHold | undefined;
     try {
       if (this.stream.isOpen() && threadId) {
+        // The drained message starts a run: the next one waits until it is visible.
+        runStart = this.#holdRunStart();
         const agent = this.machinery.getAgent();
         const streamOptions = await this.machinery.buildStreamOptions({
           requestContext: next.requestContext,
@@ -3740,9 +4011,9 @@ export class Session<TState = unknown> {
         // otherwise be lost).
         const accepted = await result.accepted;
         const runId = 'runId' in accepted ? accepted.runId : undefined;
-        this.emit({ type: 'follow_up_queued', count: this.followUps.count(), runId });
+        this.emitFollowUpQueued(runId);
       } else {
-        this.emit({ type: 'follow_up_queued', count: this.followUps.count() });
+        this.emitFollowUpQueued();
         await this.sendMessage({
           content: next.content,
           requestContext: next.requestContext,
@@ -3752,8 +4023,9 @@ export class Session<TState = unknown> {
       }
       return true;
     } catch (error) {
+      runStart?.release();
       this.followUps.requeue(next);
-      this.emit({ type: 'follow_up_queued', count: this.followUps.count() });
+      this.emitFollowUpQueued();
       throw error;
     }
   }
