@@ -14,8 +14,8 @@ export function PageHeaderIcon({ className, size = 'sm', ...props }: PageHeaderI
       data-slot="page-header-icon"
       data-size={size}
       className={cn(
-        'absolute right-full mr-2 flex items-center text-neutral3',
-        size === 'lg' ? 'top-1 [&>svg]:size-10' : '-top-0.5 [&>svg]:size-6',
+        'absolute top-1/2 right-full col-start-1 row-start-1 row-end-2 mr-2 flex -translate-y-1/2 items-center text-neutral3',
+        size === 'lg' ? '[&>svg]:size-10' : '[&>svg]:size-6',
         className,
       )}
       {...props}

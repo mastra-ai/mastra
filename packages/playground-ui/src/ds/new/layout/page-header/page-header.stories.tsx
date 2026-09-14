@@ -88,9 +88,9 @@ const meta = {
     metaBeside: false,
     showAction: true,
     showDescription: true,
-    showEyebrow: true,
-    showIcon: true,
-    showMeta: true,
+    showEyebrow: false,
+    showIcon: false,
+    showMeta: false,
     showTitle: true,
     title: 'Research agent',
     titleSize: 'md',
@@ -116,8 +116,16 @@ type Story = StoryObj<typeof meta>;
 
 export const Default: Story = {};
 
+export const AllSlots: Story = {
+  args: {
+    showEyebrow: true,
+    showIcon: true,
+    showMeta: true,
+  },
+};
+
 export const LargeIcon: Story = {
-  args: { iconSize: 'lg' },
+  args: { iconSize: 'lg', showIcon: true },
 };
 
 export const MetaBeside: Story = {
