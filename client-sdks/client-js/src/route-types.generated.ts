@@ -188,12 +188,12 @@ type InputShared_Auxiliary_2375 = {
   children?: InputShared_Auxiliary_2375[] | undefined;
 };
 
-type Shared_Auxiliary_4084 = {
+type Shared_Auxiliary_4086 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: Shared_Auxiliary_4084[] | undefined;
+  children?: Shared_Auxiliary_4086[] | undefined;
 };
 
 // ============================================================================
@@ -219,6 +219,7 @@ export type GetAgents_Response = {
         description?: string | undefined;
         inputSchema?: string | undefined;
         outputSchema?: string | undefined;
+        requestContextSchema?: string | undefined;
         requireApproval?: boolean | undefined;
       };
     };
@@ -241,6 +242,16 @@ export type GetAgents_Response = {
           | undefined;
       };
     };
+    skills: {
+      name: string;
+      description: string;
+      license?: string | undefined;
+      path: string;
+    }[];
+    workspaceTools: string[];
+    browserTools: string[];
+    hasBrowser: boolean;
+    workspaceId?: string | undefined;
     inputProcessors: {
       id: string;
       name?: string | undefined;
@@ -255,6 +266,9 @@ export type GetAgents_Response = {
     supportsMemory?: boolean | undefined;
     modelList?:
       | {
+          id: string;
+          enabled: boolean;
+          maxRetries: number;
           model: {
             modelId: string;
             provider: string;
@@ -332,6 +346,7 @@ export type GetAgents_Response = {
           [key: string]: unknown;
         }
       | undefined;
+    requestContextSchema?: string | undefined;
     source?: ('code' | 'stored' | 'fs') | undefined;
     status?: ('draft' | 'published' | 'archived') | undefined;
     activeVersionId?: string | undefined;
@@ -435,6 +450,7 @@ export type GetAgentsAgentId_Response = {
       description?: string | undefined;
       inputSchema?: string | undefined;
       outputSchema?: string | undefined;
+      requestContextSchema?: string | undefined;
       requireApproval?: boolean | undefined;
     };
   };
@@ -457,6 +473,16 @@ export type GetAgentsAgentId_Response = {
         | undefined;
     };
   };
+  skills: {
+    name: string;
+    description: string;
+    license?: string | undefined;
+    path: string;
+  }[];
+  workspaceTools: string[];
+  browserTools: string[];
+  hasBrowser: boolean;
+  workspaceId?: string | undefined;
   inputProcessors: {
     id: string;
     name?: string | undefined;
@@ -471,6 +497,9 @@ export type GetAgentsAgentId_Response = {
   supportsMemory?: boolean | undefined;
   modelList?:
     | {
+        id: string;
+        enabled: boolean;
+        maxRetries: number;
         model: {
           modelId: string;
           provider: string;
@@ -548,6 +577,7 @@ export type GetAgentsAgentId_Response = {
         [key: string]: unknown;
       }
     | undefined;
+  requestContextSchema?: string | undefined;
   source?: ('code' | 'stored' | 'fs') | undefined;
   status?: ('draft' | 'published' | 'archived') | undefined;
   activeVersionId?: string | undefined;
@@ -7338,6 +7368,7 @@ export type GetAgentsAgentIdToolsToolId_Response = {
   description?: string | undefined;
   inputSchema?: string | undefined;
   outputSchema?: string | undefined;
+  requestContextSchema?: string | undefined;
   requireApproval?: boolean | undefined;
 };
 
@@ -9288,6 +9319,7 @@ export type GetTools_Response = {
     description?: string | undefined;
     inputSchema?: string | undefined;
     outputSchema?: string | undefined;
+    requestContextSchema?: string | undefined;
     requireApproval?: boolean | undefined;
   };
 };
@@ -70882,7 +70914,7 @@ export type GetStoredSkills_Response = {
     /** List of asset file paths */
     assets?: string[] | undefined;
     /** Full file tree structure for the skill */
-    files?: Shared_Auxiliary_4084[] | undefined;
+    files?: Shared_Auxiliary_4086[] | undefined;
     /** Additional metadata for the skill */
     metadata?:
       | {
@@ -70969,7 +71001,7 @@ export type GetStoredSkillsStoredSkillId_Response = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_4084[] | undefined;
+  files?: Shared_Auxiliary_4086[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -71191,7 +71223,7 @@ export type PatchStoredSkillsStoredSkillId_Response =
       /** List of asset file paths */
       assets?: string[] | undefined;
       /** Full file tree structure for the skill */
-      files?: Shared_Auxiliary_4084[] | undefined;
+      files?: Shared_Auxiliary_4086[] | undefined;
       /** Additional metadata for the skill */
       metadata?:
         | {

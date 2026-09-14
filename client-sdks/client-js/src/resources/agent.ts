@@ -18,6 +18,7 @@ import type { Tool, ToolObserve } from '@mastra/core/tools';
 import { standardSchemaToJSONSchema, toStandardSchema } from '@mastra/schema-compat/schema';
 import type { JSONSchema7 } from 'json-schema';
 import { createObservabilityCollector } from '../observability/collector';
+import type { PathParams } from '../route-types.generated.js';
 import type {
   ZodSchema,
   GenerateLegacyParams,
@@ -63,6 +64,9 @@ import { processClientTools } from '../utils/process-client-tools';
 import { processMastraNetworkStream, processMastraStream } from '../utils/process-mastra-stream';
 import { zodToJsonSchema } from '../utils/zod-to-json-schema';
 import { BaseResource } from './base';
+
+type AgentId = PathParams<'GET /agents/:agentId'>['agentId'];
+type ToolId = PathParams<'GET /agents/:agentId/tools/:toolId'>['toolId'];
 
 type ResumeStreamParams<OUTPUT extends {}> = StreamParamsBaseWithoutMessages<OUTPUT> & {
   messages?: MessageListInput;
@@ -308,7 +312,7 @@ async function executeToolCallAndRespond<OUTPUT>({
 export class AgentVoice extends BaseResource {
   constructor(
     options: ClientOptions,
-    private agentId: string,
+    private agentId: AgentId,
     private version?: AgentVersionIdentifier,
   ) {
     super(options);
@@ -393,7 +397,7 @@ export class Agent extends BaseResource {
 
   constructor(
     options: ClientOptions,
-    private agentId: string,
+    private agentId: AgentId,
     private version?: AgentVersionIdentifier,
     private routeOverrides?: { stream?: string },
   ) {
@@ -3474,7 +3478,7 @@ export class Agent extends BaseResource {
    * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing tool details
    */
-  getTool(toolId: string, requestContext?: RequestContext | Record<string, any>): Promise<GetToolResponse> {
+  getTool(toolId: ToolId, requestContext?: RequestContext | Record<string, any>): Promise<GetToolResponse> {
     return this.request(`/agents/${this.agentId}/tools/${toolId}${this.getQueryString(requestContext)}`);
   }
 
@@ -3485,7 +3489,7 @@ export class Agent extends BaseResource {
    * @returns Promise containing the tool execution results
    */
   executeTool(
-    toolId: string,
+    toolId: ToolId,
     params: { data: any; requestContext?: RequestContext | Record<string, any> },
   ): Promise<any> {
     const body = {

@@ -1,4 +1,5 @@
 import type { RequestContext } from '@mastra/core/request-context';
+import type { PathParams } from '../route-types.generated.js';
 import type {
   ClientOptions,
   GetWorkflowResponse,
@@ -17,11 +18,13 @@ import { BaseResource } from './base';
 import { Run } from './run';
 
 const RECORD_SEPARATOR = '\x1E';
+type WorkflowId = PathParams<'GET /workflows/:workflowId'>['workflowId'];
+type WorkflowRunId = PathParams<'GET /workflows/:workflowId/runs/:runId'>['runId'];
 
 export class Workflow extends BaseResource {
   constructor(
     options: ClientOptions,
-    private workflowId: string,
+    private workflowId: WorkflowId,
   ) {
     super(options);
   }
@@ -98,7 +101,7 @@ export class Workflow extends BaseResource {
    * @returns Promise containing the workflow run details with metadata and processed execution state
    */
   runById(
-    runId: string,
+    runId: WorkflowRunId,
     options?: {
       requestContext?: RequestContext | Record<string, any>;
       fields?: string[];
@@ -129,7 +132,7 @@ export class Workflow extends BaseResource {
    * @param runId - The ID of the workflow run to delete
    * @returns Promise containing a success message
    */
-  deleteRunById(runId: string): Promise<{ message: string }> {
+  deleteRunById(runId: WorkflowRunId): Promise<{ message: string }> {
     return this.request(`/workflows/${this.workflowId}/runs/${runId}`, {
       method: 'DELETE',
     });

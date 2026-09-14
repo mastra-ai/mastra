@@ -1,13 +1,16 @@
 import type { RequestContext } from '@mastra/core/request-context';
+import type { PathParams } from '../route-types.generated.js';
 import type { GetToolResponse, ClientOptions } from '../types';
 
 import { parseClientRequestContext, requestContextQueryString } from '../utils';
 import { BaseResource } from './base';
 
+type ToolId = PathParams<'GET /tools/:toolId'>['toolId'];
+
 export class Tool extends BaseResource {
   constructor(
     options: ClientOptions,
-    private toolId: string,
+    private toolId: ToolId,
   ) {
     super(options);
   }

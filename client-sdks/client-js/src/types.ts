@@ -7,8 +7,6 @@ import type {
   SerializableStructuredOutputOptions,
   ToolsInput,
   UIMessageWithMetadata,
-  AgentInstructions,
-  AgentEditorConfig,
 } from '@mastra/core/agent';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
 import type { BuilderModelPolicy, DefaultModelEntry, ProviderModelEntry } from '@mastra/core/agent-builder/ee';
@@ -39,13 +37,7 @@ import type {
 } from '@mastra/core/storage';
 import type { ChunkType } from '@mastra/core/stream';
 import type { QueryResult } from '@mastra/core/vector';
-import type {
-  TimeTravelContext,
-  Workflow,
-  WorkflowResult,
-  WorkflowRunStatus,
-  WorkflowState,
-} from '@mastra/core/workflows';
+import type { TimeTravelContext, WorkflowResult, WorkflowRunStatus, WorkflowState } from '@mastra/core/workflows';
 import type { PublicSchema } from '@mastra/schema-compat/schema';
 
 import type { JSONSchema7 } from 'json-schema';
@@ -104,6 +96,9 @@ type RequestContextOptions = {
 
 type GeneratedRequest<T> = OptionalizeUndefined<T>;
 type GeneratedResponse<T extends RouteKey> = Serialized<RouteResponse<T>>;
+type WithoutIndexSignatures<T> = {
+  [K in keyof T as string extends K ? never : number extends K ? never : symbol extends K ? never : K]: T[K];
+};
 
 export type ListFeedbackResponse = GeneratedResponse<'GET /observability/feedback'>;
 export type FeedbackItem = ListFeedbackResponse['feedback'][number];
@@ -203,184 +198,35 @@ export interface RequestOptions {
   credentials?: 'omit' | 'same-origin' | 'include';
 }
 
-export type ResponseInputTextPart = {
-  type: 'input_text' | 'text' | 'output_text';
-  text: string;
-};
+type ResponseInput = Body<'POST /v1/responses'>['input'];
+type ResponseInputMessageFromRoute = Exclude<ResponseInput, string>[number];
+type ResponsePayload = GeneratedResponse<'POST /v1/responses'>;
 
-export type ResponseInputMessage = {
-  role: 'system' | 'developer' | 'user' | 'assistant';
-  content: string | ResponseInputTextPart[];
-};
+export type ResponseInputTextPart = Exclude<ResponseInputMessageFromRoute['content'], string>[number];
+export type ResponseInputMessage = ResponseInputMessageFromRoute;
+export type ResponseTextConfig = NonNullable<Body<'POST /v1/responses'>['text']>;
+export type ResponseTextFormat = ResponseTextConfig['format'];
+export type ResponseOutputItem = ResponsePayload['output'][number];
+export type ResponseOutputMessage = Extract<ResponseOutputItem, { type: 'message' }>;
+export type ResponseOutputText = ResponseOutputMessage['content'][number];
+export type ResponseOutputFunctionCall = Extract<ResponseOutputItem, { type: 'function_call' }>;
+export type ResponseOutputFunctionCallOutput = Extract<ResponseOutputItem, { type: 'function_call_output' }>;
+export type ResponseUsage = NonNullable<ResponsePayload['usage']>;
+export type ResponseTool = NonNullable<ResponsePayload['tools']>[number];
 
-export type ResponseTextFormat =
-  | {
-      type: 'json_object';
-    }
-  | {
-      type: 'json_schema';
-      name: string;
-      description?: string;
-      schema: Record<string, unknown>;
-      strict?: boolean;
-    };
+export type ConversationItem = GeneratedResponse<'GET /v1/conversations/:conversationId/items'>['data'][number];
+export type ConversationItemMessage = Extract<ConversationItem, { type: 'message' }>;
+export type ConversationItemInputText = Extract<ConversationItemMessage['content'][number], { type: 'input_text' }>;
+export type ConversationItemsPage = GeneratedResponse<'GET /v1/conversations/:conversationId/items'>;
 
-export type ResponseTextConfig = {
-  format: ResponseTextFormat;
-};
-
-export type ResponseOutputText = {
-  type: 'output_text';
-  text: string;
-  annotations?: unknown[];
-  logprobs?: unknown[];
-};
-
-export type ResponseOutputMessage = {
-  id: string;
-  type: 'message';
-  role: 'assistant';
-  status: 'in_progress' | 'completed' | 'incomplete';
-  content: ResponseOutputText[];
-};
-
-export type ResponseOutputFunctionCall = {
-  id: string;
-  type: 'function_call';
-  call_id: string;
-  name: string;
-  arguments: string;
-  status?: 'in_progress' | 'completed' | 'incomplete';
-};
-
-export type ResponseOutputFunctionCallOutput = {
-  id: string;
-  type: 'function_call_output';
-  call_id: string;
-  output: string;
-};
-
-export type ResponseUsage = {
-  input_tokens: number;
-  output_tokens: number;
-  total_tokens: number;
-  input_tokens_details?: {
-    cached_tokens: number;
-  };
-  output_tokens_details?: {
-    reasoning_tokens: number;
-  };
-};
-
-export type ResponseTool = {
-  type: 'function';
-  name: string;
-  description?: string;
-  parameters?: unknown;
-};
-
-export type ResponseOutputItem = ResponseOutputMessage | ResponseOutputFunctionCall | ResponseOutputFunctionCallOutput;
-
-export type ConversationItemInputText = {
-  type: 'input_text';
-  text: string;
-};
-
-export type ConversationItemMessage = {
-  id: string;
-  type: 'message';
-  role: 'system' | 'user' | 'assistant';
-  status: 'completed';
-  content: Array<ConversationItemInputText | ResponseOutputText>;
-};
-
-export type ConversationItem = ConversationItemMessage | ResponseOutputFunctionCall | ResponseOutputFunctionCallOutput;
-
-export type ConversationItemsPage = {
-  object: 'list';
-  data: ConversationItem[];
-  first_id: string | null;
-  last_id: string | null;
-  has_more: boolean;
-};
-
-export type ResponsesResponse = {
-  id: string;
-  object: 'response';
-  created_at: number;
-  completed_at?: number | null;
-  model: string;
-  status: 'in_progress' | 'completed' | 'incomplete';
-  output: ResponseOutputItem[];
-  usage: ResponseUsage | null;
-  error?: {
-    code?: string;
-    message?: string;
-  } | null;
-  incomplete_details?: {
-    reason?: string;
-  } | null;
-  instructions?: string | null;
-  text?: ResponseTextConfig | null;
-  previous_response_id?: string | null;
-  conversation_id?: string | null;
-  /** Provider-returned response state, such as `openai.responseId`, for provider-native continuation. */
-  providerOptions?: Record<string, Record<string, unknown> | undefined>;
-  tools?: ResponseTool[];
-  store?: boolean;
-  output_text: string;
-};
-
-export type ResponsesDeleteResponse = {
-  id: string;
-  object: 'response';
-  deleted: true;
-};
-
-export type CreateResponseParams = {
-  /** Optional model override, such as `openai/gpt-5`. When omitted, the agent default model is used. */
-  model?: string;
-  /** Mastra agent ID for the request. Required on initial requests; stored follow-ups can omit it when using `previous_response_id`. */
-  agent_id?: string;
-  /** Input text or message history for the current turn. */
-  input: string | ResponseInputMessage[];
-  /** Request-scoped instructions for the current response. */
-  instructions?: string;
-  /** Optional text output format. Supports `json_object` and `json_schema`. */
-  text?: ResponseTextConfig;
-  /** Optional conversation ID. In Mastra this is the raw threadId. */
-  conversation_id?: string;
-  /** Optional provider-specific options passed through to the underlying model call. */
-  providerOptions?: Record<string, Record<string, unknown> | undefined>;
-  /** When true, returns a streaming Responses API event stream. */
-  stream?: boolean;
-  /** Persists the response through the selected agent's memory. Requires a memory-backed agent. */
-  store?: boolean;
-  /** Continues a previously stored response chain. */
-  previous_response_id?: string;
-  requestContext?: RequestContext | Record<string, any>;
-};
-
-export type Conversation = {
-  id: string;
-  object: 'conversation';
-  thread: StorageThreadType;
-};
-
-export type ConversationDeleted = {
-  id: string;
-  object: 'conversation.deleted';
-  deleted: true;
-};
-
-export type CreateConversationParams = {
-  agent_id: string;
-  conversation_id?: string;
-  resource_id?: string;
-  title?: string;
-  metadata?: Record<string, unknown>;
-  requestContext?: RequestContext | Record<string, any>;
-};
+/** Response payload augmented by the SDK with concatenated message text. */
+export type ResponsesResponse = ResponsePayload & { output_text: string };
+export type ResponsesDeleteResponse = GeneratedResponse<'DELETE /v1/responses/:responseId'>;
+export type CreateResponseParams = GeneratedRequest<WithoutIndexSignatures<Body<'POST /v1/responses'>>> &
+  RequestContextOptions;
+export type Conversation = GeneratedResponse<'POST /v1/conversations'>;
+export type ConversationDeleted = GeneratedResponse<'DELETE /v1/conversations/:conversationId'>;
+export type CreateConversationParams = GeneratedRequest<Body<'POST /v1/conversations'>> & RequestContextOptions;
 
 export type ResponsesCreatedEvent = {
   type: 'response.created';
@@ -496,60 +342,14 @@ export type NetworkStreamParams<OUTPUT = undefined> = {
   tracingOptions?: TracingOptions;
 } & Omit<MultiPrimitiveExecutionOptions<OUTPUT>, 'model'>;
 
-export interface GetAgentResponse {
-  id: string;
-  name: string;
-  description?: string;
-  metadata?: Record<string, unknown>;
-  instructions: AgentInstructions;
-  tools: Record<string, GetToolResponse>;
-  workflows: Record<string, GetWorkflowResponse>;
-  agents: Record<string, { id: string; name: string }>;
-  skills?: SkillMetadata[];
-  workspaceTools?: string[];
-  /** Browser tool names available to this agent (if browser is configured) */
-  browserTools?: string[];
-  /**
-   * Whether the agent has any browser provider — agent-level SDK browser or
-   * workspace-level CLI browser. Gates the Studio browser viewer.
-   */
-  hasBrowser?: boolean;
-  /** ID of the agent's workspace (if configured) */
-  workspaceId?: string;
-  provider: string;
-  modelId: string;
-  modelVersion: string;
-  supportsMemory?: boolean;
-  modelList:
-    | Array<{
-        id: string;
-        enabled: boolean;
-        maxRetries: number;
-        model: {
-          modelId: string;
-          provider: string;
-          modelVersion: string;
-        };
-      }>
-    | undefined;
-  inputProcessors?: Array<{ id: string; name: string }>;
-  outputProcessors?: Array<{ id: string; name: string }>;
-  defaultOptions: WithoutMethods<AgentExecutionOptions>;
-  defaultGenerateOptionsLegacy: WithoutMethods<AgentGenerateOptions>;
-  defaultStreamOptionsLegacy: WithoutMethods<AgentStreamOptions>;
-  /** Serialized JSON schema for request context validation */
-  requestContextSchema?: string;
-  source?: 'code' | 'stored';
-  status?: 'draft' | 'published' | 'archived';
-  activeVersionId?: string;
-  hasDraft?: boolean;
-  editor?: AgentEditorConfig;
-}
+export type GetAgentResponse = GeneratedResponse<'GET /agents/:agentId'>;
 
 /**
- * Response from the browser session probe endpoint.
+ * Response from the deployer-provided browser session probe endpoint.
  *
- * Use this to decide whether to open a screencast WebSocket for an agent/thread:
+ * This route is registered dynamically by deployer adapters rather than the
+ * server route registry, so it has no generated contract. Use it to decide
+ * whether to open a screencast WebSocket for an agent/thread:
  * - `screencastAvailable`: server has the `ws` / `@hono/node-ws` packages installed.
  *   When false, opening a WS will fail and trigger a reconnect loop — skip it.
  * - `hasSession`: the agent has an active browser session for this thread. When
@@ -645,37 +445,17 @@ export type ReorderModelListParams = {
   reorderedModelIds: string[];
 };
 
-export interface GetToolResponse {
-  id: string;
-  description: string;
-  inputSchema: string;
-  outputSchema: string;
-  requestContextSchema?: string;
-}
+export type GetToolResponse = GeneratedResponse<'GET /tools/:toolId'>;
 
-export interface ListWorkflowRunsParams {
-  fromDate?: Date;
-  toDate?: Date;
-  page?: number;
-  perPage?: number;
-  resourceId?: string;
-  status?: WorkflowRunStatus;
-  /** @deprecated Use page instead */
-  offset?: number;
-  /** @deprecated Use perPage instead */
+/** Query contract with the SDK's legacy `false` sentinel for `limit`. */
+export type ListWorkflowRunsParams = Omit<GeneratedRequest<QueryParams<'GET /workflows/:workflowId/runs'>>, 'limit'> & {
   limit?: number | false;
-}
-
-export type ListWorkflowRunsResponse = WorkflowRuns;
-
-export interface WorkflowRunCounts {
-  running: number;
-  suspended: number;
-}
-
-export type ListWorkflowRunCountsResponse = Record<string, WorkflowRunCounts>;
-
-export type GetWorkflowRunByIdResponse = WorkflowState;
+};
+export type ListWorkflowRunsResponse = GeneratedResponse<'GET /workflows/:workflowId/runs'> & Serialized<WorkflowRuns>;
+export type WorkflowRunCounts = GeneratedResponse<'GET /workflows/run-counts'>[string];
+export type ListWorkflowRunCountsResponse = GeneratedResponse<'GET /workflows/run-counts'>;
+export type GetWorkflowRunByIdResponse = GeneratedResponse<'GET /workflows/:workflowId/runs/:runId'> &
+  Serialized<WorkflowState>;
 
 export type ListDynamicWorkflowsParams = GeneratedRequest<QueryParams<'GET /stored/workflows'>>;
 export type ListDynamicWorkflowsResponse = GeneratedResponse<'GET /stored/workflows'>;
@@ -695,50 +475,7 @@ export type DynamicWorkflowDefinition = Omit<
   Pick<UpsertDynamicWorkflowParams, DynamicWorkflowDefinitionField>;
 export type DeleteDynamicWorkflowResponse = GeneratedResponse<'DELETE /stored/workflows/:dynamicWorkflowId'>;
 
-export interface GetWorkflowResponse {
-  name: string;
-  description?: string;
-  metadata?: Record<string, unknown>;
-  steps: {
-    [key: string]: {
-      id: string;
-      description: string;
-      inputSchema: string;
-      outputSchema: string;
-      resumeSchema: string;
-      suspendSchema: string;
-      stateSchema: string;
-      metadata?: Record<string, unknown>;
-    };
-  };
-  allSteps: {
-    [key: string]: {
-      id: string;
-      description: string;
-      inputSchema: string;
-      outputSchema: string;
-      resumeSchema: string;
-      suspendSchema: string;
-      stateSchema: string;
-      isWorkflow: boolean;
-      metadata?: Record<string, unknown>;
-    };
-  };
-  stepGraph: Workflow['serializedStepGraph'];
-  inputSchema: string;
-  outputSchema: string;
-  stateSchema: string;
-  /** Serialized JSON schema for request context validation */
-  requestContextSchema?: string;
-  /** Whether this workflow is a processor workflow (auto-generated from agent processors) */
-  isProcessorWorkflow?: boolean;
-  /**
-   * How this workflow got into the live registry. `'code'` for statically
-   * authored or `addWorkflow()`-added workflows, `'dynamic'` for anything
-   * hydrated or added via `addDynamicWorkflow()`. Absent on older servers.
-   */
-  origin?: 'code' | 'dynamic';
-}
+export type GetWorkflowResponse = GeneratedResponse<'GET /workflows/:workflowId'>;
 
 export type WorkflowRunResult = WorkflowResult<any, any, any, any>;
 export type UpsertVectorParams = GeneratedRequest<Body<'POST /vector/:vectorName/upsert'>>;
