@@ -297,10 +297,11 @@ function groupLinearSourcesByTeam(
       // A project is redundant when its whole team is already selected.
       const knownTeam = teamById.get(team.id);
       const teamSelected = knownTeam ? selected.has(linearTeamSourceId(knownTeam)) : false;
+      const projectSelected = selected.has(project.id);
       group.items.push({
         id: project.id,
         label: project.name,
-        ...(teamSelected ? { hint: 'covered by team', disabled: true } : {}),
+        ...(teamSelected ? { hint: projectSelected ? 'project takes precedence' : 'included via team' } : {}),
       });
     }
   }

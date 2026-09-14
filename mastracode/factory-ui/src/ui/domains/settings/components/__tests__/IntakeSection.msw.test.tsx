@@ -285,25 +285,30 @@ describe('IntakeSection', () => {
       expect(saved[0]!.linear.sourceIds).toEqual(['linear-team:opaque-eng']);
     });
 
-    it('marks projects under a selected team as redundant and disables them', async () => {
-      useIntakeHandlers({
+    it('keeps explicit projects editable so the selection can switch to team-only intake', async () => {
+      const saved = useIntakeHandlers({
         config: {
           github: { enabled: true, sourceIds: null },
-          linear: { enabled: true, sourceIds: ['linear-team:opaque-eng'] },
+          linear: { enabled: true, sourceIds: ['linear-team:opaque-eng', 'lproj-1'] },
         },
       });
 
       renderIntakeSection();
 
-      // Q3 Roadmap belongs to Engineering, which is selected as a whole team.
-      // Its row gains a "covered by team" hint, so match by the leading label.
+      // The explicit project remains actionable because it wins over the team
+      // source until the user removes it.
       const project = await screen.findByRole('checkbox', { name: /Q3 Roadmap/ });
-      expect(project).toHaveAttribute('aria-disabled', 'true');
+      expect(project).toBeChecked();
+      expect(project).not.toHaveAttribute('aria-disabled');
       const linearSection = screen.getByRole('region', { name: 'Linear issues' });
-      // Q3 Roadmap and Shared initiative both sit under Engineering, so both are marked.
-      expect(within(linearSection).getAllByText('covered by team').length).toBeGreaterThanOrEqual(1);
+      expect(within(linearSection).getByText('project takes precedence')).toBeInTheDocument();
 
-      // Design refresh has no team, so it stays selectable.
+      await userEvent.click(project);
+      await waitFor(() => expect(saved).toHaveLength(1));
+      expect(saved[0]!.linear.sourceIds).toEqual(['linear-team:opaque-eng']);
+
+      // Projects that are only included through a selected team remain selectable too.
+      expect(within(linearSection).getAllByText('included via team').length).toBeGreaterThanOrEqual(1);
       expect(screen.getByRole('checkbox', { name: /Design refresh/ })).not.toHaveAttribute('aria-disabled');
     });
   });
