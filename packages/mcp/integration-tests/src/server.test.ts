@@ -9,8 +9,8 @@ vi.setConfig({ testTimeout: 20000, hookTimeout: 20000 });
 describe('MCPServer through Mastra HTTP Integration (Subprocess)', () => {
   let mastraServer: ReturnType<typeof spawn>;
   const port: number = 4114;
-  // Note: The ID gets slugified in MCPServerBase constructor, so 'myMcpServer' becomes 'my-mcp-server'
-  const mcpServerId = 'my-mcp-server';
+  // A v2 server keeps its configured id verbatim (MCP 1.x slugified it to 'my-mcp-server').
+  const mcpServerId = 'myMcpServer';
   const testToolId = 'calculator';
   let client: MCPClient;
 
@@ -133,7 +133,7 @@ describe('MCPServer through Mastra HTTP Integration (Subprocess)', () => {
 
     const tools = await client.listTools();
 
-    const tool = tools['my-mcp-server_calculator'];
+    const tool = tools[`${mcpServerId}_${testToolId}`];
 
     const result = await tool.execute!(toolCallPayload.params.args);
 
@@ -149,46 +149,32 @@ describe('MCPServer through Mastra HTTP Integration (Subprocess)', () => {
     expect(JSON.parse(toolOutput.text)).toEqual(expectedToolResult);
   }, 25000);
 
-  it('should allow a client to call a tool via Mastra MCP SSE endpoints (Subprocess)', async () => {
+  it('does not serve the removed HTTP+SSE transport for a v2 server (Subprocess)', async () => {
     const sseUrl = new URL(`http://localhost:${port}/api/mcp/${mcpServerId}/sse`);
 
-    // Configure MCPClient for SSE transport
+    // The hosted route exists only for MCP 1.x instances; a v2 server answers 404.
+    const direct = await fetch(sseUrl, { headers: { accept: 'text/event-stream' } });
+    expect(direct.status).toBe(404);
+    await direct.body?.cancel();
+
+    // The v2 client never falls back to SSE: pointing it at the old URL is an explicit discovery error.
     const sseClient = new MCPClient({
-      servers: {
-        [mcpServerId]: {
-          url: sseUrl, // URL for establishing SSE connection
-        },
-      },
+      id: 'sse-rejection',
+      servers: { [mcpServerId]: { url: sseUrl } },
     });
-
-    const toolCallPayloadParams = { num1: 10, num2: 5, operation: 'add' };
-
-    // Get tools (this will connect the client internally if not already connected)
-    const tools = await sseClient.listTools();
-
-    const toolName = `${mcpServerId}_${testToolId}`;
-    const tool = tools[toolName];
-    expect(tool, `Tool '${toolName}' should be available via SSE client`).toBeDefined();
-
-    // Execute the tool
-    const result = await tool.execute!(toolCallPayloadParams);
-
-    expect(result).toBeDefined();
-    expect(result.isError).toBe(false);
-    expect(result.content).toBeInstanceOf(Array);
-    expect(result.content.length).toBeGreaterThan(0);
-
-    const toolOutput = result.content[0];
-    expect(toolOutput.type).toBe('text');
-
-    const expectedToolResult = 15; // 10 + 5
-    expect(JSON.parse(toolOutput.text)).toEqual(expectedToolResult);
+    try {
+      const { tools, errors } = await sseClient.listToolsWithErrors();
+      expect(Object.keys(tools)).toHaveLength(0);
+      expect(Object.keys(errors)).toEqual([mcpServerId]);
+    } finally {
+      await sseClient.disconnect();
+    }
   }, 25000);
 
   // --- New tests for MCP Registry API Style Routes ---
   describe('MCP Registry API Style Endpoints', () => {
-    // Note: The ID gets slugified, so 'myMcpServer' becomes 'my-mcp-server'
-    const defaultMcpServerLogicalId = 'my-mcp-server';
+    // Same verbatim id as the client above.
+    const defaultMcpServerLogicalId = mcpServerId;
 
     it('GET /api/mcp/v0/servers - should list available MCP servers', async () => {
       const response = await fetch(`http://localhost:${port}/api/mcp/v0/servers`);
@@ -205,8 +191,10 @@ describe('MCPServer through Mastra HTTP Integration (Subprocess)', () => {
       expect(defaultServerInfo).toBeDefined();
       expect(defaultServerInfo).toHaveProperty('name');
       expect(defaultServerInfo).toHaveProperty('version_detail');
-      // The ID gets slugified in MCPServerBase constructor
+      // The id is exactly what the fixture configured
       expect(defaultServerInfo.id).toBe(defaultMcpServerLogicalId);
+      // A v2 server only offers Streamable HTTP; `sse` is reported for MCP 1.x instances only.
+      expect(defaultServerInfo.transports).toEqual(['streamable-http']);
     });
 
     it('GET /api/mcp/v0/servers/:id - should get specific server details', async () => {
@@ -301,7 +289,7 @@ describe('MCPServer through Mastra HTTP Integration (Subprocess)', () => {
       };
 
       const tools = await client.listTools();
-      const tool = tools['my-mcp-server_testMastraInstance'];
+      const tool = tools[`${mcpServerId}_testMastraInstance`];
       expect(tool).toBeDefined();
 
       const result = await tool.execute!(toolCallPayload.params.args, {});

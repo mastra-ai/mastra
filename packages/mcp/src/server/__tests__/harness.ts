@@ -48,19 +48,19 @@ export async function serveHTTP(
 }
 
 /** A client pinned to 2026-07-28: it never negotiates a legacy revision. */
-export function modernClient(options: ClientOptions = {}): Client {
+export function createClient(options: ClientOptions = {}): Client {
   return new Client(
     { name: 'test-client', version: '1.0.0' },
     { ...options, versionNegotiation: { mode: { pin: '2026-07-28' } } },
   );
 }
 
-export async function connectModern(
+export async function connectClient(
   url: URL,
   options: ClientOptions = {},
   headers?: Record<string, string>,
 ): Promise<Client> {
-  const client = modernClient(options);
+  const client = createClient(options);
   await client.connect(new StreamableHTTPClientTransport(url, headers ? { requestInit: { headers } } : undefined));
   return client;
 }
@@ -145,7 +145,7 @@ export async function rawRequest(
     headers: response.headers,
     text,
     json: () => {
-      // Modern responses may arrive as a single-event SSE stream.
+      // Responses may arrive as a single-event SSE stream.
       const data = text.startsWith('event:') || text.startsWith('data:') ? text.match(/^data: (.*)$/m)?.[1] : text;
       return JSON.parse(data ?? text);
     },

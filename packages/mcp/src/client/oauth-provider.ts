@@ -10,7 +10,14 @@
  */
 
 import { validateClientMetadataUrl } from '@modelcontextprotocol/client';
-import type { OAuthClientProvider, OAuthClientMetadata, OAuthClientInformation, OAuthTokens } from '../shared/oauth-types.js';
+import type {
+  OAuthClientProvider,
+  OAuthClientMetadata,
+  OAuthClientInformation,
+  OAuthClientInformationContext,
+  OAuthDiscoveryState,
+  StoredOAuthTokens,
+} from '../shared/oauth-types.js';
 
 /**
  * Storage interface for persisting OAuth data.
@@ -68,6 +75,15 @@ export class InMemoryOAuthStorage implements OAuthStorage {
  * client pre-registered with the authorization server, or `clientMetadataUrl`
  * for a Client ID Metadata Document the authorization server fetches.
  */
+export interface MCPClientMetadata extends OAuthClientMetadata {
+  /**
+   * The `client_id` published in a Client ID Metadata Document. When present it
+   * must equal `clientMetadataUrl`; the provider never sends it to the
+   * authorization server itself.
+   */
+  client_id?: string;
+}
+
 export interface MCPOAuthClientProviderOptions {
   /**
    * The redirect URL for the OAuth callback.
@@ -82,9 +98,10 @@ export interface MCPOAuthClientProviderOptions {
    * OAuth client metadata (name, redirect URIs, grant types, scope).
    *
    * Used for scope selection and as the description of this client; it is
-   * never posted to a registration endpoint.
+   * never posted to a registration endpoint. With `clientMetadataUrl` it must
+   * mirror the hosted document: `client_name` and at least one redirect URI.
    */
-  clientMetadata: OAuthClientMetadata;
+  clientMetadata: MCPClientMetadata;
 
   /**
    * Client information for a client pre-registered with the authorization server.
@@ -101,8 +118,12 @@ export interface MCPOAuthClientProviderOptions {
   clientMetadataUrl?: string;
 
   /**
-   * Storage for persisting OAuth data (tokens and the PKCE verifier).
-   * Defaults to InMemoryOAuthStorage if not provided.
+   * Storage for persisting OAuth data (tokens, discovery state and the PKCE
+   * verifier). Defaults to InMemoryOAuthStorage if not provided.
+   *
+   * Tokens are keyed by the authorization server's validated `issuer`, and
+   * mutation ordering is coordinated only within one provider instance, so
+   * give each provider its own storage namespace.
    */
   storage?: OAuthStorage;
 
@@ -171,6 +192,7 @@ export class MCPOAuthClientProvider implements OAuthClientProvider {
 
   private _sessionState?: string;
   private _sessionRedirectUrl?: string | URL;
+  private credentialMutation: Promise<unknown> = Promise.resolve();
 
   constructor(options: MCPOAuthClientProviderOptions) {
     if (!options.clientInformation && !options.clientMetadataUrl) {
@@ -180,9 +202,16 @@ export class MCPOAuthClientProvider implements OAuthClientProvider {
     }
     if (options.clientMetadataUrl) {
       validateClientMetadataUrl(options.clientMetadataUrl);
+      if (options.clientMetadata.client_id !== undefined && options.clientMetadata.client_id !== options.clientMetadataUrl) {
+        throw new Error('clientMetadataUrl must match clientMetadata.client_id');
+      }
+      if (!options.clientMetadata.client_name || options.clientMetadata.redirect_uris.length === 0) {
+        throw new Error('Client ID Metadata Documents require client_name and at least one redirect_uri');
+      }
     }
+    const { client_id: _clientId, ...clientMetadata } = options.clientMetadata;
     this._redirectUrl = options.redirectUrl;
-    this._clientMetadata = options.clientMetadata;
+    this._clientMetadata = clientMetadata;
     this._clientMetadataUrl = options.clientMetadataUrl;
     this._clientInfo = options.clientInformation;
     this.storage = options.storage ?? new InMemoryOAuthStorage();
@@ -274,26 +303,85 @@ export class MCPOAuthClientProvider implements OAuthClientProvider {
     return this._clientInfo ?? { client_id: this._clientMetadataUrl! };
   }
 
-  /**
-   * Loads existing OAuth tokens.
-   */
-  async tokens(): Promise<OAuthTokens | undefined> {
-    const stored = await this.storage.get('tokens');
-    if (stored) {
-      try {
-        return JSON.parse(stored) as OAuthTokens;
-      } catch {
-        // Invalid stored data, ignore
-      }
-    }
-    return undefined;
+  private tokensKey(ctx?: OAuthClientInformationContext): string {
+    return ctx ? `tokens:${encodeURIComponent(ctx.issuer)}` : 'tokens';
   }
 
   /**
-   * Stores new OAuth tokens after successful authorization.
+   * Serializes storage mutations so concurrent writes and invalidations settle
+   * in call order: a write started before `invalidateCredentials` cannot land
+   * after it completes.
    */
-  async saveTokens(tokens: OAuthTokens): Promise<void> {
-    await this.storage.set('tokens', JSON.stringify(tokens));
+  private enqueueCredentialMutation<T>(mutation: () => Promise<T>): Promise<T> {
+    const operation = this.credentialMutation.catch(() => {}).then(mutation);
+    this.credentialMutation = operation;
+    return operation;
+  }
+
+  private async readStored<T>(key: string, expectedIssuer?: string): Promise<T | undefined> {
+    const stored = await this.storage.get(key);
+    if (!stored) return undefined;
+    try {
+      const value = JSON.parse(stored) as T;
+      if (expectedIssuer && (value as { issuer?: unknown }).issuer !== expectedIssuer) return undefined;
+      return value;
+    } catch {
+      return undefined;
+    }
+  }
+
+  private async readIssuerIndex(): Promise<string[]> {
+    return (await this.readStored<string[]>('credential_issuers')) ?? [];
+  }
+
+  private async rememberIssuer(issuer: string): Promise<void> {
+    const issuers = await this.readIssuerIndex();
+    if (!issuers.includes(issuer)) {
+      issuers.push(issuer);
+      await this.storage.set('credential_issuers', JSON.stringify(issuers));
+    }
+  }
+
+  /**
+   * Loads existing OAuth tokens.
+   *
+   * With an issuer context, only tokens minted by that authorization server are
+   * returned; without one, the most recently saved token set is returned for
+   * the transport's bearer-token read.
+   */
+  async tokens(ctx?: OAuthClientInformationContext): Promise<StoredOAuthTokens | undefined> {
+    return this.readStored<StoredOAuthTokens>(this.tokensKey(ctx), ctx?.issuer);
+  }
+
+  /**
+   * Stores new OAuth tokens after successful authorization, bound to the
+   * authorization server's issuer when known.
+   */
+  async saveTokens(tokens: StoredOAuthTokens, ctx?: OAuthClientInformationContext): Promise<void> {
+    await this.enqueueCredentialMutation(async () => {
+      if (ctx) {
+        await this.rememberIssuer(ctx.issuer);
+        await this.storage.set(this.tokensKey(ctx), JSON.stringify(tokens));
+      }
+      await this.storage.set('tokens', JSON.stringify(tokens));
+    });
+  }
+
+  /**
+   * Persists authorization-server discovery state so the callback leg can
+   * verify the code is exchanged with the server that issued the redirect.
+   */
+  async saveDiscoveryState(state: OAuthDiscoveryState): Promise<void> {
+    await this.enqueueCredentialMutation(async () => {
+      await this.storage.set('discovery_state', JSON.stringify(state));
+    });
+  }
+
+  /**
+   * Loads persisted authorization-server discovery state.
+   */
+  async discoveryState(): Promise<OAuthDiscoveryState | undefined> {
+    return this.readStored<OAuthDiscoveryState>('discovery_state');
   }
 
   /**
@@ -312,7 +400,9 @@ export class MCPOAuthClientProvider implements OAuthClientProvider {
    * Saves a PKCE code verifier before redirecting to authorization.
    */
   async saveCodeVerifier(codeVerifier: string): Promise<void> {
-    await this.storage.set('code_verifier', codeVerifier);
+    await this.enqueueCredentialMutation(async () => {
+      await this.storage.set('code_verifier', codeVerifier);
+    });
   }
 
   /**
@@ -331,21 +421,33 @@ export class MCPOAuthClientProvider implements OAuthClientProvider {
    * Client identity is configuration, so the `client` scope has nothing to discard.
    */
   async invalidateCredentials(scope: 'all' | 'client' | 'tokens' | 'verifier' | 'discovery'): Promise<void> {
-    switch (scope) {
-      case 'all':
+    await this.enqueueCredentialMutation(async () => {
+      const deleteTokens = async () => {
+        const issuers = await this.readIssuerIndex();
         await this.storage.delete('tokens');
-        await this.storage.delete('code_verifier');
-        break;
-      case 'tokens':
-        await this.storage.delete('tokens');
-        break;
-      case 'verifier':
-        await this.storage.delete('code_verifier');
-        break;
-      case 'client':
-      case 'discovery':
-        break;
-    }
+        await Promise.all(issuers.map(issuer => this.storage.delete(this.tokensKey({ issuer }))));
+      };
+
+      switch (scope) {
+        case 'all':
+          await deleteTokens();
+          await this.storage.delete('code_verifier');
+          await this.storage.delete('discovery_state');
+          await this.storage.delete('credential_issuers');
+          break;
+        case 'tokens':
+          await deleteTokens();
+          break;
+        case 'verifier':
+          await this.storage.delete('code_verifier');
+          break;
+        case 'discovery':
+          await this.storage.delete('discovery_state');
+          break;
+        case 'client':
+          break;
+      }
+    });
   }
 
   /**
@@ -400,7 +502,7 @@ export function createSimpleTokenProvider(
     scope?: string;
   },
 ): OAuthClientProvider {
-  const tokens: OAuthTokens = {
+  const tokens: StoredOAuthTokens = {
     access_token: accessToken,
     token_type: options.tokenType ?? 'Bearer',
     refresh_token: options.refreshToken,

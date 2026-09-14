@@ -173,12 +173,14 @@ export class MCPServer extends MCPServerBaseV2 {
     return this.tools()[name];
   }
 
+  /**
+   * Converts a tool schema to JSON Schema 2020-12, the dialect MCP 2026-07-28
+   * assumes when none is declared. The converter's dialect declaration is kept
+   * so validators that dispatch on `$schema` pick the same draft.
+   */
   private jsonSchema(schema: StandardSchemaWithJSON | undefined): Record<string, unknown> | undefined {
     if (!schema) return undefined;
-    // The SDK default validator only supports the 2020-12 dialect; the dialect
-    // declaration is stripped before the schema is advertised.
-    const { $schema: _dialect, ...rest } = standardSchemaToJSONSchema(schema) as Record<string, unknown>;
-    return rest;
+    return standardSchemaToJSONSchema(schema, { target: 'draft-2020-12' }) as Record<string, unknown>;
   }
 
   private toolInfo(name: string, tool: CatalogueTool): MCPToolInfoV2 {

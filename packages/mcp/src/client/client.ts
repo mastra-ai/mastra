@@ -25,11 +25,13 @@ import type {
   ReadResourceResult,
   ClientCapabilities,
   SubscriptionFilter,
+  jsonSchemaValidator,
 } from '@modelcontextprotocol/client';
 import { getDefaultEnvironment, StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { asyncExitHook, gracefulExit } from 'exit-hook';
 import { getMastraToolStrictMeta } from '../shared/mastra-tool-meta';
 import { UnauthorizedError } from '../shared/oauth-types';
+import { traceContextToMeta } from '../shared/trace-context';
 import { ProgressClientActions } from './actions/progress';
 import { PromptClientActions } from './actions/prompt';
 import { ResourceClientActions } from './actions/resource';
@@ -68,6 +70,81 @@ export type {
 type MCPToolListEntry = Awaited<ReturnType<Client['listTools']>>['tools'][0];
 
 const DEFAULT_SERVER_CONNECT_TIMEOUT_MSEC = 3000;
+const JSON_SCHEMA_2020_12 = 'https://json-schema.org/draft/2020-12/schema';
+const MAX_JSON_SCHEMA_DEPTH = 128;
+const MAX_JSON_SCHEMA_NODES = 10_000;
+
+/**
+ * Bounds the work a validator can be asked to do for an untrusted tool catalogue.
+ * Only schema-bearing keywords are walked, so deeply nested annotation data such as
+ * `default` or `examples` does not count.
+ */
+function getJsonSchemaComplexityError(schema: unknown): string | undefined {
+  const seen = new Set<object>();
+  let nodes = 0;
+  const stack = [{ value: schema, depth: 0 }];
+  const schemaMapKeywords = [
+    '$defs',
+    'definitions',
+    'properties',
+    'patternProperties',
+    'dependentSchemas',
+    'dependencies',
+  ];
+  const schemaArrayKeywords = ['prefixItems', 'allOf', 'anyOf', 'oneOf', 'items'];
+  const schemaKeywords = [
+    'additionalProperties',
+    'unevaluatedProperties',
+    'additionalItems',
+    'unevaluatedItems',
+    'items',
+    'contains',
+    'propertyNames',
+    'not',
+    'if',
+    'then',
+    'else',
+    'contentSchema',
+  ];
+
+  while (stack.length > 0) {
+    const { value, depth } = stack.pop()!;
+    if (value === null || typeof value !== 'object' || Array.isArray(value) || seen.has(value)) continue;
+    seen.add(value);
+
+    nodes += 1;
+    if (depth > MAX_JSON_SCHEMA_DEPTH) {
+      return `JSON Schema exceeds the maximum depth of ${MAX_JSON_SCHEMA_DEPTH}`;
+    }
+    if (nodes > MAX_JSON_SCHEMA_NODES) {
+      return `JSON Schema exceeds the maximum node count of ${MAX_JSON_SCHEMA_NODES}`;
+    }
+
+    const record = value as Record<string, unknown>;
+    for (const keyword of schemaMapKeywords) {
+      const schemas = record[keyword];
+      if (schemas && typeof schemas === 'object' && !Array.isArray(schemas)) {
+        for (const child of Object.values(schemas)) stack.push({ value: child, depth: depth + 1 });
+      }
+    }
+    for (const keyword of schemaArrayKeywords) {
+      const schemas = record[keyword];
+      if (Array.isArray(schemas)) {
+        for (const child of schemas) stack.push({ value: child, depth: depth + 1 });
+      }
+    }
+    for (const keyword of schemaKeywords) {
+      if (record[keyword] !== undefined) stack.push({ value: record[keyword], depth: depth + 1 });
+    }
+  }
+
+  return undefined;
+}
+
+/** MCP 2026-07-28 schemas default to JSON Schema 2020-12 when they declare no dialect. */
+function withDefaultDialect(schema: JSONSchema7): JSONSchema7 {
+  return schema.$schema ? schema : { ...schema, $schema: JSON_SCHEMA_2020_12 };
+}
 const DEFAULT_INSTRUCTIONS_MAX_LENGTH = 512;
 const DEFAULT_SERVER_LOG_LEVEL: LoggingLevel = 'info';
 
@@ -96,7 +173,7 @@ type DatadogTracerLike = {
 };
 
 /**
- * Modern Streamable HTTP has no standalone GET stream; the only long-lived request is
+ * Streamable HTTP has no standalone GET stream; the only long-lived request is
  * the `subscriptions/listen` POST, whose response stays open for the life of the
  * subscription and must not hold the caller's active Datadog span open with it.
  */
@@ -325,6 +402,8 @@ export class InternalMastraMCPClient extends MastraBase {
   private serverInstructions?: string;
   private readonly requireToolApproval: RequireToolApproval | undefined;
   private readonly onToolError: 'throw' | 'return';
+  private jsonSchemaValidator?: jsonSchemaValidator;
+  private jsonSchemaValidatorPromise?: Promise<jsonSchemaValidator>;
 
   /** Provides access to resource operations (list, read, notifications) */
   public readonly resources: ResourceClientActions;
@@ -347,6 +426,7 @@ export class InternalMastraMCPClient extends MastraBase {
     this.enableProgressTracking = !!server.enableProgressTracking;
     this.requireToolApproval = server.requireToolApproval;
     this.onToolError = server.onToolError ?? 'throw';
+    this.jsonSchemaValidator = server.jsonSchemaValidator;
 
     const configured = server.capabilities ?? {};
     if (configured.elicitation !== undefined && !server.inputRequests) {
@@ -415,11 +495,14 @@ export class InternalMastraMCPClient extends MastraBase {
 
   /**
    * Request metadata every outgoing request carries: the per-request log-level
-   * opt-in (when enabled) merged under caller-supplied keys.
+   * opt-in (when enabled) and the W3C trace fields resolved for this request,
+   * merged under caller-supplied keys.
    */
   private requestMeta(meta?: Record<string, unknown>): Record<string, unknown> | undefined {
+    const traceContext = this.serverConfig.traceContext?.();
     const merged = {
       ...(this.serverLogLevel ? { [LOG_LEVEL_META_KEY]: this.serverLogLevel } : {}),
+      ...(traceContext ? traceContextToMeta(traceContext) : {}),
       ...meta,
     };
     return Object.keys(merged).length > 0 ? merged : undefined;
@@ -563,6 +646,8 @@ export class InternalMastraMCPClient extends MastraBase {
     stale.onmessage = undefined;
     if (this.client.transport === stale) {
       (this.client as unknown as { _transport?: Transport })._transport = undefined;
+      // The listen stream rode on this transport; connect() reopens it from interest.
+      this.subscriptionStream = undefined;
     }
   }
 
@@ -602,17 +687,19 @@ export class InternalMastraMCPClient extends MastraBase {
    *
    * Exchanges the authorization code captured at the redirect URI on the same
    * transport that started the flow, then leaves the client ready to connect().
+   * The RFC 9207 `iss` captured at the redirect is validated against the
+   * discovered authorization server before the code is exchanged.
    *
    * @internal
    */
-  async finishAuth(authorizationCode: string): Promise<void> {
+  async finishAuth(authorizationCode: string, issuer?: string): Promise<void> {
     const pending = this.pendingAuthTransport;
     if (!pending) {
       throw new Error('No OAuth authorization is pending for this server. Call connect() first.');
     }
     this.pendingAuthTransport = undefined;
     try {
-      await pending.finishAuth(authorizationCode);
+      await pending.finishAuth(authorizationCode, issuer);
     } finally {
       // The pending transport only ran the token exchange; the next connect() builds a fresh one.
       void pending.close().catch(() => {});
@@ -621,6 +708,20 @@ export class InternalMastraMCPClient extends MastraBase {
 
   private isConnected: Promise<boolean> | null = null;
   private reconnectPromise: Promise<void> | null = null;
+
+  /**
+   * Change notifications the caller has asked for. The client keeps exactly one
+   * `subscriptions/listen` stream open for this interest set, replaces it when the
+   * set changes and reopens it after a reconnect.
+   */
+  private subscriptionInterest = {
+    toolsListChanged: false,
+    promptsListChanged: false,
+    resourcesListChanged: false,
+    resourceSubscriptions: new Set<string>(),
+  };
+  private subscriptionStream?: McpSubscription;
+  private subscriptionUpdate: Promise<unknown> = Promise.resolve();
   private lifecycleGeneration = 0;
 
   /**
@@ -651,6 +752,17 @@ export class InternalMastraMCPClient extends MastraBase {
 
         this.serverInstructions = this.client.getInstructions();
 
+        if (this.hasSubscriptionInterest()) {
+          try {
+            await this.enqueueSubscriptionUpdate(() => this.replaceSubscriptionStream());
+          } catch (error) {
+            // The connection stays usable; the next subscribe/handler registration retries.
+            this.log('error', 'Failed to restore subscriptions/listen after connecting', {
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+        }
+
         resolve(true);
 
         // Scope the reset to this connection so an older handler retained across
@@ -669,6 +781,7 @@ export class InternalMastraMCPClient extends MastraBase {
               this.isConnected = null;
             }
             this.serverInstructions = undefined;
+            this.subscriptionStream = undefined;
             if (staleTransport) {
               this.severClientTransportLink(staleTransport);
               void staleTransport.close().catch(() => {});
@@ -750,6 +863,7 @@ export class InternalMastraMCPClient extends MastraBase {
     this.log('debug', `Disconnecting from MCP server`);
     const disconnectedTransport = this.transport;
     try {
+      await this.closeSubscriptionStream();
       await disconnectedTransport.close();
       this.log('debug', 'Successfully disconnected from MCP server');
     } catch (e) {
@@ -891,25 +1005,129 @@ export class InternalMastraMCPClient extends MastraBase {
     );
   }
 
-  /**
-   * Opens a `subscriptions/listen` stream. Change notifications delivered on the
-   * stream dispatch to the handlers registered via the `on*` methods below.
-   */
-  async listen(filter: SubscriptionFilter): Promise<McpSubscription> {
-    this.log('debug', 'Opening subscriptions/listen stream', { filter });
-    return await this.client.listen(filter, { timeout: this.timeout });
+  private hasSubscriptionInterest(): boolean {
+    const interest = this.subscriptionInterest;
+    return (
+      interest.toolsListChanged ||
+      interest.promptsListChanged ||
+      interest.resourcesListChanged ||
+      interest.resourceSubscriptions.size > 0
+    );
   }
 
-  setPromptListChangedNotificationHandler(handler: () => void): void {
+  private subscriptionFilter(): SubscriptionFilter {
+    const interest = this.subscriptionInterest;
+    return {
+      ...(interest.toolsListChanged ? { toolsListChanged: true } : {}),
+      ...(interest.promptsListChanged ? { promptsListChanged: true } : {}),
+      ...(interest.resourcesListChanged ? { resourcesListChanged: true } : {}),
+      ...(interest.resourceSubscriptions.size > 0
+        ? { resourceSubscriptions: [...interest.resourceSubscriptions].sort() }
+        : {}),
+    };
+  }
+
+  /** Serializes stream replacements so concurrent mutations apply in order. */
+  private enqueueSubscriptionUpdate<T>(update: () => Promise<T>): Promise<T> {
+    const operation = this.subscriptionUpdate.catch(() => {}).then(update);
+    this.subscriptionUpdate = operation;
+    return operation;
+  }
+
+  /**
+   * Opens a `subscriptions/listen` stream for the current interest set, then closes the
+   * previous one so no notification is lost between filters. Resource subscriptions the
+   * server declines are an error; declined list-changed bits only mean the server has
+   * nothing to announce.
+   */
+  private async replaceSubscriptionStream(): Promise<void> {
+    const previous = this.subscriptionStream;
+    const filter = this.subscriptionFilter();
+    const replacement = this.hasSubscriptionInterest()
+      ? await this.client.listen(filter, { timeout: this.timeout })
+      : undefined;
+
+    if (replacement && filter.resourceSubscriptions) {
+      const honored = new Set(replacement.honoredFilter.resourceSubscriptions ?? []);
+      const declined = filter.resourceSubscriptions.filter(uri => !honored.has(uri));
+      if (declined.length > 0) {
+        await replacement.close();
+        throw new Error(`Server declined resource subscriptions for: ${declined.join(', ')}`);
+      }
+    }
+
+    this.subscriptionStream = replacement;
+    if (replacement) {
+      void replacement.closed.then(() => {
+        if (this.subscriptionStream === replacement) this.subscriptionStream = undefined;
+      });
+    }
+    await previous?.close();
+  }
+
+  private async closeSubscriptionStream(): Promise<void> {
+    await this.subscriptionUpdate.catch(() => {});
+    const stream = this.subscriptionStream;
+    this.subscriptionStream = undefined;
+    await stream?.close();
+  }
+
+  /** Applies an interest change to the live stream when connected; otherwise connect() opens it. */
+  private async applySubscriptionInterest(): Promise<void> {
+    if (!this.transport) return;
+    await this.enqueueSubscriptionUpdate(() => this.replaceSubscriptionStream());
+  }
+
+  /**
+   * Subscribes to `notifications/resources/updated` for a resource. The subscription is
+   * carried on the client's single `subscriptions/listen` stream and survives reconnects.
+   */
+  async subscribeResource(uri: string): Promise<void> {
+    this.log('debug', `Subscribing to resource: ${uri}`);
+    await this.enqueueSubscriptionUpdate(async () => {
+      if (this.subscriptionInterest.resourceSubscriptions.has(uri) && this.subscriptionStream) return;
+      const next = new Set(this.subscriptionInterest.resourceSubscriptions);
+      next.add(uri);
+      await this.updateResourceSubscriptions(next);
+    });
+  }
+
+  async unsubscribeResource(uri: string): Promise<void> {
+    this.log('debug', `Unsubscribing from resource: ${uri}`);
+    await this.enqueueSubscriptionUpdate(async () => {
+      if (!this.subscriptionInterest.resourceSubscriptions.has(uri)) return;
+      const next = new Set(this.subscriptionInterest.resourceSubscriptions);
+      next.delete(uri);
+      await this.updateResourceSubscriptions(next);
+    });
+  }
+
+  private async updateResourceSubscriptions(next: Set<string>): Promise<void> {
+    const previous = this.subscriptionInterest.resourceSubscriptions;
+    this.subscriptionInterest.resourceSubscriptions = next;
+    if (!this.transport) return;
+    try {
+      await this.replaceSubscriptionStream();
+    } catch (error) {
+      this.subscriptionInterest.resourceSubscriptions = previous;
+      throw error;
+    }
+  }
+
+  async setPromptListChangedNotificationHandler(handler: () => void): Promise<void> {
     this.client.setNotificationHandler('notifications/prompts/list_changed', () => {
       handler();
     });
+    this.subscriptionInterest.promptsListChanged = true;
+    await this.applySubscriptionInterest();
   }
 
-  setToolListChangedNotificationHandler(handler: () => void): void {
+  async setToolListChangedNotificationHandler(handler: () => void): Promise<void> {
     this.client.setNotificationHandler('notifications/tools/list_changed', () => {
       handler();
     });
+    this.subscriptionInterest.toolsListChanged = true;
+    await this.applySubscriptionInterest();
   }
 
   setResourceUpdatedNotificationHandler(handler: (params: { uri: string }) => void): void {
@@ -918,10 +1136,12 @@ export class InternalMastraMCPClient extends MastraBase {
     });
   }
 
-  setResourceListChangedNotificationHandler(handler: () => void): void {
+  async setResourceListChangedNotificationHandler(handler: () => void): Promise<void> {
     this.client.setNotificationHandler('notifications/resources/list_changed', () => {
       handler();
     });
+    this.subscriptionInterest.resourcesListChanged = true;
+    await this.applySubscriptionInterest();
   }
 
   setProgressNotificationHandler(handler: ProgressHandler): void {
@@ -930,8 +1150,28 @@ export class InternalMastraMCPClient extends MastraBase {
     });
   }
 
-  private convertInputSchema(inputSchema: MCPToolListEntry['inputSchema']): JSONSchema7 {
-    return ('jsonSchema' in inputSchema ? inputSchema.jsonSchema : inputSchema) as JSONSchema7;
+  private async getJsonSchemaValidator(): Promise<jsonSchemaValidator> {
+    if (this.jsonSchemaValidator) return this.jsonSchemaValidator;
+
+    this.jsonSchemaValidatorPromise ??= import('@modelcontextprotocol/client/validators/ajv').then(
+      ({ AjvJsonSchemaValidator }) => new AjvJsonSchemaValidator(),
+    );
+    this.jsonSchemaValidator = await this.jsonSchemaValidatorPromise;
+    return this.jsonSchemaValidator;
+  }
+
+  private convertInputSchema(inputSchema: MCPToolListEntry['inputSchema']): StandardSchemaWithJSON {
+    const schema = withDefaultDialect(('jsonSchema' in inputSchema ? inputSchema.jsonSchema : inputSchema) as JSONSchema7);
+    const standardSchema = toStandardSchema(schema);
+    const complexityError = getJsonSchemaComplexityError(schema);
+    if (!complexityError) return standardSchema;
+
+    return {
+      '~standard': {
+        ...standardSchema['~standard'],
+        validate: () => ({ issues: [{ message: complexityError }] }),
+      },
+    };
   }
 
   /**
@@ -944,7 +1184,7 @@ export class InternalMastraMCPClient extends MastraBase {
    */
   private convertOutputSchema(outputSchema: MCPToolListEntry['outputSchema']): StandardSchemaWithJSON | undefined {
     if (!outputSchema) return outputSchema;
-    const schema = ('jsonSchema' in outputSchema ? outputSchema.jsonSchema : outputSchema) as JSONSchema7;
+    const schema = withDefaultDialect(('jsonSchema' in outputSchema ? outputSchema.jsonSchema : outputSchema) as JSONSchema7);
     const standardSchema = toStandardSchema(schema)['~standard'];
     return {
       '~standard': {
@@ -1083,11 +1323,39 @@ export class InternalMastraMCPClient extends MastraBase {
           : {};
       // Real validator for structuredContent. Kept separate from the Tool's outputSchema
       // (whose validator is a no-op — see convertOutputSchema) because only the
-      // structuredContent success path should be validated, not envelope returns.
-      const rawOutputSchema = tool.outputSchema
-        ? (('jsonSchema' in tool.outputSchema ? tool.outputSchema.jsonSchema : tool.outputSchema) as JSONSchema7)
+      // structuredContent success path should be validated, not envelope returns. It uses
+      // the SDK validator so live and cache-hydrated tools enforce the same dialect.
+      const outputSchema = tool.outputSchema
+        ? withDefaultDialect(('jsonSchema' in tool.outputSchema ? tool.outputSchema.jsonSchema : tool.outputSchema) as JSONSchema7)
         : undefined;
-      const outputValidator = rawOutputSchema ? toStandardSchema(rawOutputSchema) : undefined;
+      const outputSchemaComplexityError = outputSchema ? getJsonSchemaComplexityError(outputSchema) : undefined;
+      let outputValidationSchema: StandardSchemaWithJSON | undefined;
+      const getOutputValidationSchema = async () => {
+        if (!outputSchema) return undefined;
+        if (outputSchemaComplexityError) {
+          throw new MastraError({
+            id: 'MCP_CLIENT_OUTPUT_SCHEMA_TOO_COMPLEX',
+            domain: ErrorDomain.MCP,
+            category: ErrorCategory.THIRD_PARTY,
+            text: `MCP tool "${tool.name}" has a schema that is too complex: ${outputSchemaComplexityError}`,
+            details: { toolName: tool.name, serverName: this.name },
+          });
+        }
+        if (!outputValidationSchema) {
+          const validator = (await this.getJsonSchemaValidator()).getValidator(outputSchema);
+          const standardSchema = toStandardSchema(outputSchema)['~standard'];
+          outputValidationSchema = {
+            '~standard': {
+              ...standardSchema,
+              validate: value => {
+                const result = validator(value);
+                return result.valid ? { value: result.data } : { issues: [{ message: result.errorMessage }] };
+              },
+            },
+          };
+        }
+        return outputValidationSchema;
+      };
       const mastraTool = createTool({
         id: `${this.name}_${tool.name}`,
         description: tool.description || '',
@@ -1157,8 +1425,9 @@ export class InternalMastraMCPClient extends MastraBase {
                 // model. Covers hydrated tools too, which never populate the SDK's tools/list
                 // output-schema cache. On mismatch, return the structured ValidationError
                 // shape createTool produces so the model can self-correct.
-                if (!res.isError && outputValidator) {
-                  const validation = validateToolOutput(outputValidator, res.structuredContent, tool.name);
+                if (!res.isError && outputSchema) {
+                  const validationSchema = await getOutputValidationSchema();
+                  const validation = validateToolOutput(validationSchema, res.structuredContent, tool.name);
                   if (validation.error) {
                     this.log('debug', `Tool output failed schema validation: ${tool.name}`, {
                       message: validation.error.message,

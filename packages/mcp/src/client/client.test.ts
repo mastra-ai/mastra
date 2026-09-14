@@ -14,6 +14,7 @@ import type { CallToolResult } from '@modelcontextprotocol/server';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod';
 
+import type { MCPTraceContext } from '../shared/trace-context.js';
 import { InternalMastraMCPClient, getMcpCallToolContent, getMcpCallToolMeta } from './client.js';
 
 describe('InternalMastraMCPClient - server instructions', () => {
@@ -147,7 +148,7 @@ describe('InternalMastraMCPClient - server instructions', () => {
   });
 });
 
-type ModernTestServer = {
+type TestServer = {
   httpServer: HttpServer;
   mcpServer: McpServer;
   baseUrl: URL;
@@ -163,15 +164,15 @@ function listen(httpServer: HttpServer): Promise<URL> {
 }
 
 /**
- * Serves an SDK `McpServer` over the modern-only (2026-07-28) Streamable HTTP handler.
+ * Serves an SDK `McpServer` over the 2026-07-28 Streamable HTTP handler.
  * Legacy peers are rejected outright; every request is self-contained.
  */
-function serveModern(httpServer: HttpServer, mcpServer: McpServer): void {
+function serveMcp(httpServer: HttpServer, mcpServer: McpServer): void {
   const handler = toNodeHandler(createMcpHandler(() => mcpServer.server, { legacy: 'reject' }));
   httpServer.on('request', (req, res) => handler(req, res));
 }
 
-async function setupTestServer(): Promise<ModernTestServer> {
+async function setupTestServer(): Promise<TestServer> {
   const httpServer: HttpServer = createServer();
   const mcpServer = new McpServer(
     { name: 'test-http-server', version: '1.0.0' },
@@ -223,7 +224,7 @@ async function setupTestServer(): Promise<ModernTestServer> {
     };
   });
 
-  serveModern(httpServer, mcpServer);
+  serveMcp(httpServer, mcpServer);
   const baseUrl = await listen(httpServer);
 
   return { httpServer, mcpServer, baseUrl };
@@ -254,6 +255,78 @@ describe('InternalMastraMCPClient - jsonSchemaValidator pass-through', () => {
     expect(sdkClient._jsonSchemaValidator).toBe(customValidator);
   });
 
+  it('should use the configured validator for hydrated tool output', async () => {
+    const validate = vi.fn((input: unknown) => ({
+      valid: input === 'valid',
+      data: input === 'valid' ? input : undefined,
+      errorMessage: input === 'valid' ? undefined : 'expected valid',
+    }));
+    const customValidator = { getValidator: vi.fn(() => validate) };
+    const client = new InternalMastraMCPClient({
+      name: 'hydrated-validator-client',
+      server: {
+        url: new URL('http://127.0.0.1:0/mcp'),
+        jsonSchemaValidator: customValidator,
+      },
+    });
+    vi.spyOn(client, 'connect').mockResolvedValue();
+    // @ts-expect-error - accessing internal SDK client for isolated wrapper testing
+    const sdkClient = client.client as Client;
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValue({
+      structuredContent: 'invalid',
+      content: [{ type: 'text', text: 'invalid' }],
+      isError: false,
+    });
+    const tool = client.toolFromDefinition({
+      definition: {
+        name: 'validated',
+        inputSchema: { type: 'object' },
+        outputSchema: { type: 'string' },
+        server: { name: 'hydrated-validator-client' },
+      },
+    });
+
+    await expect(tool.execute?.({})).resolves.toMatchObject({
+      error: true,
+      message: expect.stringMatching(/tool output validation failed for validated/i),
+    });
+    expect(customValidator.getValidator).toHaveBeenCalledWith({
+      $schema: 'https://json-schema.org/draft/2020-12/schema',
+      type: 'string',
+    });
+    expect(validate).toHaveBeenCalledWith('invalid');
+  });
+
+  it('should not validate structuredContent from an error result', async () => {
+    const customValidator = { getValidator: vi.fn() };
+    const client = new InternalMastraMCPClient({
+      name: 'error-result-validator-client',
+      server: {
+        url: new URL('http://127.0.0.1:0/mcp'),
+        jsonSchemaValidator: customValidator,
+        onToolError: 'return',
+      },
+    });
+    vi.spyOn(client, 'connect').mockResolvedValue();
+    // @ts-expect-error - accessing internal SDK client for isolated wrapper testing
+    const sdkClient = client.client as Client;
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValue({
+      structuredContent: 42,
+      content: [{ type: 'text', text: 'failed' }],
+      isError: true,
+    });
+    const tool = client.toolFromDefinition({
+      definition: {
+        name: 'failed',
+        inputSchema: { type: 'object' },
+        outputSchema: { type: 'string' },
+        server: { name: 'error-result-validator-client' },
+      },
+    });
+
+    await expect(tool.execute?.({})).resolves.toBe(42);
+    expect(customValidator.getValidator).not.toHaveBeenCalled();
+  });
   it('should leave the SDK Client default validator in place when omitted', () => {
     const client = new InternalMastraMCPClient({
       name: 'default-validator-client',
@@ -468,6 +541,85 @@ describe('MastraMCPClient - outputSchema without structuredContent', () => {
     expect(storedSchema.$defs?.node?.properties?.children?.items?.$ref).toBe('#/$defs/node');
   });
 
+  it('uses JSON Schema 2020-12 by default for input validation', async () => {
+    const sdkClient = (client as any).client as Client;
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'tuple_input',
+          inputSchema: {
+            type: 'array' as const,
+            prefixItems: [{ type: 'string' as const }, { type: 'integer' as const }],
+            items: false,
+          },
+        },
+      ],
+    });
+    const callTool = vi.spyOn(sdkClient, 'callTool');
+
+    const tool = (await client.tools()).tuple_input;
+    const result = await tool.execute?.(['invalid', 1, true] as any);
+
+    expect(result).toMatchObject({ error: true, message: expect.stringMatching(/input validation failed/i) });
+    expect(callTool).not.toHaveBeenCalled();
+  });
+
+  it('bounds nested input subschemas before compiling them', async () => {
+    const sdkClient = (client as any).client as Client;
+    let nestedSchema: Record<string, unknown> = { type: 'string' };
+    for (let depth = 0; depth < 150; depth++) {
+      nestedSchema = { unevaluatedItems: nestedSchema };
+    }
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [{ name: 'deep_input', inputSchema: nestedSchema as any }],
+    });
+    const callTool = vi.spyOn(sdkClient, 'callTool');
+
+    const tool = (await client.tools()).deep_input;
+    const result = await tool.execute?.({} as any);
+
+    expect(result).toMatchObject({ error: true, message: expect.stringMatching(/maximum depth/i) });
+    expect(callTool).not.toHaveBeenCalled();
+  });
+
+  it('preserves JSON Schema 2020-12 identity, composition, and boolean subschemas', async () => {
+    const sdkClient = (client as any).client as Client;
+    const schema2020 = {
+      $schema: 'https://json-schema.org/draft/2020-12/schema',
+      $id: 'https://example.test/schemas/tree',
+      type: 'object' as const,
+      $defs: {
+        leaf: {
+          type: 'array' as const,
+          prefixItems: [{ type: 'string' as const }, { type: 'integer' as const }],
+          items: false,
+          minItems: 2,
+          maxItems: 2,
+        },
+      },
+      properties: {
+        value: {
+          anyOf: [{ $ref: '#/$defs/leaf' }, { type: 'null' as const }],
+        },
+      },
+      required: ['value'],
+      unevaluatedProperties: false,
+    };
+
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'schema_2020',
+          inputSchema: schema2020,
+          outputSchema: schema2020,
+        },
+      ],
+    });
+
+    const tool = (await client.tools()).schema_2020;
+    expect(tool.inputSchema?.['~standard'].jsonSchema.input({ target: 'draft-2020-12' })).toEqual(schema2020);
+    expect(tool.outputSchema?.['~standard'].jsonSchema.output({ target: 'draft-2020-12' })).toEqual(schema2020);
+  });
   it('exposes output JSON schema for documentation while Mastra validation always succeeds', async () => {
     const sdkClient = (client as any).client as Client;
     const outputSchema = {
@@ -1178,6 +1330,197 @@ describe('MastraMCPClient - outputSchema with structuredContent', () => {
     });
   });
 
+  it.each([
+    ['object', { value: 1 }],
+    ['array', [1, 'two', null]],
+    ['string', 'hello'],
+    ['number', 0],
+    ['boolean', false],
+    ['null', null],
+  ] as const)('preserves %s structuredContent without wrapping it', async (_kind, structuredContent) => {
+    const sdkClient = (client as any).client as Client;
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'json_value_tool',
+          inputSchema: { type: 'object' as const, properties: {} },
+          outputSchema: {},
+        },
+      ],
+    });
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValue({
+      structuredContent,
+      content: [{ type: 'text', text: 'summary' }],
+      _meta: { trace: 'value' },
+      isError: false,
+    });
+
+    const tool = (await client.tools()).json_value_tool;
+    const result = await tool.execute?.({});
+
+    expect(result).toBe(structuredContent);
+    expect(result).toEqual(structuredContent);
+    if (structuredContent === null || typeof structuredContent !== 'object') {
+      expect(getMcpCallToolContent(result)).toBeUndefined();
+      expect(getMcpCallToolMeta(result)).toBeUndefined();
+    }
+  });
+
+  it('rejects invalid structuredContent on the live discovery path', async () => {
+    const sdkClient = (client as any).client as Client;
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'validated_tool',
+          inputSchema: { type: 'object' as const, properties: {} },
+          outputSchema: { type: 'string' as const },
+        },
+      ],
+    });
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValue({
+      structuredContent: 42,
+      content: [{ type: 'text', text: '42' }],
+      isError: false,
+    });
+
+    const tool = (await client.tools()).validated_tool;
+    await expect(tool.execute?.({})).resolves.toMatchObject({
+      error: true,
+      message: expect.stringMatching(/tool output validation failed for validated_tool/i),
+    });
+  });
+
+  it('uses JSON Schema 2020-12 by default when validating structuredContent', async () => {
+    const sdkClient = (client as any).client as Client;
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'tuple_tool',
+          inputSchema: { type: 'object' as const, properties: {} },
+          outputSchema: {
+            type: 'array' as const,
+            prefixItems: [{ type: 'string' as const }, { type: 'integer' as const }],
+            items: false,
+          },
+        },
+      ],
+    });
+    vi.spyOn(sdkClient, 'callTool')
+      .mockResolvedValueOnce({
+        structuredContent: ['valid', 1],
+        content: [{ type: 'text', text: 'valid' }],
+        isError: false,
+      })
+      .mockResolvedValueOnce({
+        structuredContent: ['invalid', 1, true],
+        content: [{ type: 'text', text: 'invalid' }],
+        isError: false,
+      });
+
+    const tool = (await client.tools()).tuple_tool;
+    await expect(tool.execute?.({})).resolves.toEqual(['valid', 1]);
+    await expect(tool.execute?.({})).resolves.toMatchObject({
+      error: true,
+      message: expect.stringMatching(/tool output validation failed for tuple_tool/i),
+    });
+  });
+
+  it('enforces JSON Schema 2020-12 dependentSchemas, unevaluatedProperties, and contains bounds', async () => {
+    const sdkClient = (client as any).client as Client;
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'dependent_tool',
+          inputSchema: { type: 'object' as const, properties: {} },
+          outputSchema: {
+            $schema: 'https://json-schema.org/draft/2020-12/schema',
+            type: 'object' as const,
+            properties: {
+              amount: { type: 'number' as const },
+              currency: { enum: ['USD', 'EUR'] },
+            },
+            required: ['amount'],
+            dependentSchemas: { amount: { required: ['currency'] } },
+            unevaluatedProperties: false,
+          },
+        },
+        {
+          name: 'contains_tool',
+          inputSchema: { type: 'object' as const, properties: {} },
+          outputSchema: {
+            $schema: 'https://json-schema.org/draft/2020-12/schema',
+            type: 'array' as const,
+            contains: { type: 'integer' as const },
+            minContains: 2,
+            maxContains: 2,
+          },
+        },
+      ],
+    });
+    vi.spyOn(sdkClient, 'callTool')
+      .mockResolvedValueOnce({
+        structuredContent: { amount: 10, currency: 'USD' },
+        content: [{ type: 'text', text: 'valid' }],
+        isError: false,
+      })
+      .mockResolvedValueOnce({
+        structuredContent: { amount: 10, unexpected: true },
+        content: [{ type: 'text', text: 'invalid' }],
+        isError: false,
+      })
+      .mockResolvedValueOnce({
+        structuredContent: [1, 'middle', 2],
+        content: [{ type: 'text', text: 'valid' }],
+        isError: false,
+      })
+      .mockResolvedValueOnce({
+        structuredContent: [1, 'only one integer'],
+        content: [{ type: 'text', text: 'invalid' }],
+        isError: false,
+      });
+
+    const tools = await client.tools();
+    await expect(tools.dependent_tool.execute?.({})).resolves.toEqual({ amount: 10, currency: 'USD' });
+    await expect(tools.dependent_tool.execute?.({})).resolves.toMatchObject({ error: true });
+    await expect(tools.contains_tool.execute?.({})).resolves.toEqual([1, 'middle', 2]);
+    await expect(tools.contains_tool.execute?.({})).resolves.toMatchObject({ error: true });
+  });
+
+  it('validates output schemas that explicitly declare draft-07', async () => {
+    const sdkClient = (client as any).client as Client;
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'draft7_tuple_tool',
+          inputSchema: { type: 'object' as const, properties: {} },
+          outputSchema: {
+            $schema: 'http://json-schema.org/draft-07/schema#',
+            type: 'array' as const,
+            items: [{ type: 'string' as const }, { type: 'integer' as const }],
+            additionalItems: false,
+          },
+        },
+      ],
+    });
+    vi.spyOn(sdkClient, 'callTool')
+      .mockResolvedValueOnce({
+        structuredContent: ['valid', 1],
+        content: [{ type: 'text', text: 'valid' }],
+        isError: false,
+      })
+      .mockResolvedValueOnce({
+        structuredContent: ['invalid', 1, true],
+        content: [{ type: 'text', text: 'invalid' }],
+        isError: false,
+      });
+
+    const tool = (await client.tools()).draft7_tuple_tool;
+    await expect(tool.execute?.({})).resolves.toEqual(['valid', 1]);
+    await expect(tool.execute?.({})).resolves.toMatchObject({
+      error: true,
+      message: expect.stringMatching(/tool output validation failed for draft7_tuple_tool/i),
+    });
+  });
   it('should use scalar structuredContent as JSON model output', async () => {
     const sdkClient = (client as any).client as Client;
 
@@ -1670,6 +2013,63 @@ describe('MastraMCPClient - Custom _meta', () => {
       }),
       expect.anything(),
     );
+  });
+
+  it('resolves fresh W3C trace context per request and keeps explicit caller precedence', async () => {
+    let activeTrace: Record<string, string> = {
+      traceparent: '00-11111111111111111111111111111111-1111111111111111-01',
+      tracestate: 'vendor=first',
+      baggage: 'tenant=one',
+      'io.modelcontextprotocol/protocolVersion': 'attacker-controlled',
+    };
+    client = new InternalMastraMCPClient({
+      name: 'trace-context-client',
+      server: {
+        url: testServer.baseUrl,
+        enableServerLogs: false,
+        traceContext: () => activeTrace as unknown as MCPTraceContext,
+      },
+    });
+    await client.connect();
+
+    const sdkClient = (client as any).client as Client;
+    const tools = await client.tools();
+    const sendSpy = vi.spyOn((sdkClient as any).transport, 'send');
+
+    await tools['echo']?.execute?.({ msg: 'first' });
+    activeTrace = {
+      traceparent: '00-22222222222222222222222222222222-2222222222222222-01',
+      tracestate: 'vendor=second',
+      baggage: 'tenant=two',
+    };
+    await tools['echo']?.execute?.(
+      { msg: 'second' },
+      { _meta: { traceparent: '00-33333333333333333333333333333333-3333333333333333-01', custom: true } },
+    );
+    await client.listResources();
+
+    const sent = sendSpy.mock.calls.map(call => call[0] as { method?: string; params?: { _meta?: unknown } });
+    const callRequests = sent.filter(message => message.method === 'tools/call');
+    // Only the three W3C keys are taken from the provider; reserved SDK keys cannot be spoofed.
+    expect(callRequests[0]?.params?._meta).toMatchObject({
+      traceparent: '00-11111111111111111111111111111111-1111111111111111-01',
+      tracestate: 'vendor=first',
+      baggage: 'tenant=one',
+    });
+    expect((callRequests[0]?.params?._meta as Record<string, unknown>)['io.modelcontextprotocol/protocolVersion']).not.toBe(
+      'attacker-controlled',
+    );
+    expect(callRequests[1]?.params?._meta).toMatchObject({
+      traceparent: '00-33333333333333333333333333333333-3333333333333333-01',
+      tracestate: 'vendor=second',
+      baggage: 'tenant=two',
+      custom: true,
+    });
+    expect(sent.find(message => message.method === 'resources/list')?.params?._meta).toMatchObject({
+      traceparent: '00-22222222222222222222222222222222-2222222222222222-01',
+      tracestate: 'vendor=second',
+      baggage: 'tenant=two',
+    });
   });
 
   it('should merge custom _meta with progressToken when progress tracking is enabled', async () => {
@@ -2281,7 +2681,7 @@ describe('MastraMCPClient fetch with requestContext', () => {
     });
 
     await client.connect();
-    await client.listen({ toolsListChanged: true });
+    await client.setToolListChangedNotificationHandler(() => {});
 
     // Only the long-lived subscriptions/listen request is detached from the active span.
     const listenCalls = fetchSpy.mock.calls.filter(
@@ -2619,7 +3019,7 @@ describe('InternalMastraMCPClient - transport cleanup on close (issue #16693)', 
 });
 
 describe('InternalMastraMCPClient - stale SDK transport detach (issue #19862)', () => {
-  // Modern-only server behind a flaky front door. While `failing` is true every
+  // Server behind a flaky front door. While `failing` is true every
   // request gets a 404 — like a load balancer with no healthy backend during a
   // redeploy.
   let httpServer: HttpServer;

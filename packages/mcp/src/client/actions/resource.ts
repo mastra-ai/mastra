@@ -132,10 +132,31 @@ export class ResourceClientActions {
   }
 
   /**
+   * Subscribes to update notifications for a resource. The client carries every
+   * subscription on one `subscriptions/listen` stream and reopens it after reconnects.
+   *
+   * @param uri - URI of the resource to watch
+   * @throws {Error} If the server declines the subscription
+   *
+   * @example
+   * ```typescript
+   * await client.resources.onUpdated(({ uri }) => console.log(`updated ${uri}`));
+   * await client.resources.subscribe('file://data/config.json');
+   * ```
+   */
+  public async subscribe(uri: string): Promise<void> {
+    await this.client.subscribeResource(uri);
+  }
+
+  /** Stops update notifications for a resource previously passed to {@link subscribe}. */
+  public async unsubscribe(uri: string): Promise<void> {
+    await this.client.unsubscribeResource(uri);
+  }
+
+  /**
    * Sets a notification handler for when subscribed resources are updated.
    *
-   * Updates are delivered on a `subscriptions/listen` stream opened with
-   * `listen({ resourceSubscriptions: [uri] })`.
+   * Updates arrive for resources passed to {@link subscribe}.
    *
    * @param handler - Callback function receiving the updated resource URI
    *
@@ -170,6 +191,6 @@ export class ResourceClientActions {
    * ```
    */
   public async onListChanged(handler: () => void): Promise<void> {
-    this.client.setResourceListChangedNotificationHandler(handler);
+    await this.client.setResourceListChangedNotificationHandler(handler);
   }
 }

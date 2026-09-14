@@ -2,6 +2,7 @@ import { createServer } from 'node:http';
 import type { Server as HttpServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { createMCPTool } from '@mastra/core/mcp';
+import type { Client } from '@modelcontextprotocol/client';
 import { CLIENT_CAPABILITIES_META_KEY, createRequestStateCodec, inputRequired } from '@modelcontextprotocol/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
@@ -17,7 +18,7 @@ vi.setConfig({ testTimeout: 20_000, hookTimeout: 20_000 });
 /**
  * End-to-end coverage of the Mastra v2 client against the Mastra v2 server:
  * native input rounds answered by the keyed `inputRequests` handler, per-request
- * logging and the modern-only wire (no initialize/session/SSE fallback/legacy
+ * logging and the 2026-07-28 wire (no initialize/session/SSE fallback/legacy
  * subscriptions).
  */
 
@@ -217,7 +218,7 @@ describe('InternalMastraMCPClient - native input rounds', () => {
   });
 });
 
-describe('InternalMastraMCPClient - modern-only wire', () => {
+describe('InternalMastraMCPClient - 2026-07-28 wire', () => {
   let served: ServedHTTP | undefined;
   let client: InternalMastraMCPClient | undefined;
 
@@ -253,20 +254,133 @@ describe('InternalMastraMCPClient - modern-only wire', () => {
     expect(fetchSpy.mock.calls.every(([, init]) => !new Headers(init?.headers).has('mcp-session-id'))).toBe(true);
   });
 
-  it('opens subscriptions/listen for resource updates instead of resources/subscribe', async () => {
-    const journal = { writes: 0, rounds: [] };
-    served = await serveHTTP(makeServer(journal));
+  it('manages resource subscriptions through one replaceable listen stream that survives reconnects', async () => {
+    const server = makeServer({ writes: 0, rounds: [] });
+    served = await serveHTTP(server);
     const fetchSpy = vi.fn((url: string | URL, init?: RequestInit) => fetch(url, init));
     client = new InternalMastraMCPClient({ name: 'listen', server: { url: served.url, fetch: fetchSpy } });
+    const updated = new Promise<string>(resolve => {
+      client!.setResourceUpdatedNotificationHandler(params => resolve(params.uri));
+    });
     await client.connect();
+    const listens = () => methodsSeen(fetchSpy).filter(m => m === 'subscriptions/listen').length;
 
-    const subscription = await client.listen({ resourceSubscriptions: ['policy://public'] });
-    expect(subscription.honoredFilter.resourceSubscriptions).toEqual(['policy://public']);
-    subscription.close();
+    await client.subscribeResource('policy://public');
+    await client.subscribeResource('policy://public');
+    expect(listens()).toBe(1);
+
+    await client.subscribeResource('policy://second');
+    await client.unsubscribeResource('policy://public');
+    await client.forceReconnect();
+    await server.resources.notifyUpdated({ uri: 'policy://second' });
+    await expect(updated).resolves.toBe('policy://second');
+
+    await client.unsubscribeResource('policy://second');
+    await client.subscribeResource('policy://second');
+    await client.disconnect();
 
     const methods = methodsSeen(fetchSpy);
-    expect(methods).toContain('subscriptions/listen');
+    // subscribe, +second, -public, reconnect restore, -second (closes), +second
+    expect(listens()).toBe(5);
+    // Every replaced or closed stream is cancelled; the one severed by the reconnect is not.
+    expect(methods.filter(m => m === 'notifications/cancelled')).toHaveLength(4);
     expect(methods).not.toContain('resources/subscribe');
+    expect(methods).not.toContain('resources/unsubscribe');
+  });
+
+  it('serializes concurrent subscription mutations and replays only the final filter after reconnect', async () => {
+    const server = makeServer({ writes: 0, rounds: [] });
+    served = await serveHTTP(server);
+    const fetchSpy = vi.fn((url: string | URL, init?: RequestInit) => fetch(url, init));
+    client = new InternalMastraMCPClient({ name: 'concurrent', server: { url: served.url, fetch: fetchSpy } });
+    const uris = Array.from({ length: 12 }, (_, i) => `policy://concurrent/${i}`);
+    const retained = uris.filter((_, i) => i % 2 === 1);
+    const removed = uris.filter((_, i) => i % 2 === 0);
+    const updatedUris: string[] = [];
+    client.setResourceUpdatedNotificationHandler(params => updatedUris.push(params.uri));
+    await client.connect();
+
+    await Promise.all(uris.map(uri => client!.subscribeResource(uri)));
+    await Promise.all(removed.map(uri => client!.unsubscribeResource(uri)));
+    await client.forceReconnect();
+
+    await server.resources.notifyUpdated({ uri: removed[0]! });
+    await new Promise(resolve => setTimeout(resolve, 100));
+    expect(updatedUris).not.toContain(removed[0]);
+    await server.resources.notifyUpdated({ uri: retained[0]! });
+    await vi.waitFor(() => expect(updatedUris).toContain(retained[0]));
+    await client.disconnect();
+
+    const methods = methodsSeen(fetchSpy);
+    const listenCount = methods.filter(m => m === 'subscriptions/listen').length;
+    expect(listenCount).toBeGreaterThan(0);
+    expect(methods.filter(m => m === 'notifications/cancelled')).toHaveLength(listenCount - 1);
+    expect(methods).not.toContain('resources/subscribe');
+  });
+
+  it('keeps the connection usable when restoring subscriptions after reconnect fails', async () => {
+    const server = makeServer({ writes: 0, rounds: [] });
+    served = await serveHTTP(server);
+    client = new InternalMastraMCPClient({ name: 'restore-failure', server: { url: served.url } });
+    const updated = new Promise<string>(resolve => {
+      client!.setResourceUpdatedNotificationHandler(params => resolve(params.uri));
+    });
+    await client.connect();
+    await client.subscribeResource('policy://public');
+    const sdkClient = (client as unknown as { client: Client }).client;
+    const listenSpy = vi.spyOn(sdkClient, 'listen').mockRejectedValueOnce(new Error('listen restore failed'));
+
+    await expect(client.forceReconnect()).resolves.toBeUndefined();
+    expect(Object.keys(await client.tools())).toContain('bookDelivery');
+
+    await client.subscribeResource('policy://public');
+    expect(listenSpy).toHaveBeenCalledTimes(2);
+    await server.resources.notifyUpdated({ uri: 'policy://public' });
+    await expect(updated).resolves.toBe('policy://public');
+    listenSpy.mockRestore();
+  });
+
+  it('rejects a resource subscription the server does not honor and keeps the previous interest', async () => {
+    const server = makeServer({ writes: 0, rounds: [] });
+    served = await serveHTTP(server);
+    client = new InternalMastraMCPClient({ name: 'declined', server: { url: served.url } });
+    await client.connect();
+    const sdkClient = (client as unknown as { client: Client }).client;
+    const close = vi.fn().mockResolvedValue(undefined);
+    const listenSpy = vi
+      .spyOn(sdkClient, 'listen')
+      .mockResolvedValueOnce({ honoredFilter: {}, close, closed: new Promise(() => {}) });
+
+    await expect(client.subscribeResource('policy://declined')).rejects.toThrow(
+      'Server declined resource subscriptions for: policy://declined',
+    );
+    expect(close).toHaveBeenCalledOnce();
+
+    // Interest was rolled back, so a later valid subscription opens a stream for it alone.
+    await client.subscribeResource('policy://public');
+    expect(listenSpy).toHaveBeenLastCalledWith({ resourceSubscriptions: ['policy://public'] }, expect.anything());
+    listenSpy.mockRestore();
+  });
+
+  it('registers list-changed interest on the shared listen stream', async () => {
+    const server = makeServer({ writes: 0, rounds: [] });
+    served = await serveHTTP(server);
+    const fetchSpy = vi.fn((url: string | URL, init?: RequestInit) => fetch(url, init));
+    client = new InternalMastraMCPClient({ name: 'list-changed', server: { url: served.url, fetch: fetchSpy } });
+    const changed = new Promise<void>(resolve => {
+      void client!.setToolListChangedNotificationHandler(() => resolve());
+    });
+    await client.connect();
+    await client.subscribeResource('policy://public');
+    await server.toolActions.notifyListChanged();
+    await expect(changed).resolves.toBeUndefined();
+    const listenBodies = fetchSpy.mock.calls
+      .map(([, init]) => (typeof init?.body === 'string' ? JSON.parse(init.body) : undefined))
+      .filter(m => m?.method === 'subscriptions/listen');
+    expect(listenBodies.at(-1).params.notifications).toMatchObject({
+      toolsListChanged: true,
+      resourceSubscriptions: ['policy://public'],
+    });
   });
 
   it('fails against a legacy-only server without downgrading or falling back to SSE', async () => {
@@ -320,8 +434,9 @@ describe('InternalMastraMCPClient - modern-only wire', () => {
           expect((target as Record<string, unknown>)[member], member).toBeUndefined();
         }
       }
-      expect((client.resources as Record<string, unknown>).subscribe).toBeUndefined();
-      expect((client.resources as Record<string, unknown>).unsubscribe).toBeUndefined();
+      // Raw listen streams are not exposed; subscriptions are managed through resources.subscribe.
+      expect((client as unknown as Record<string, unknown>).listen).toBeUndefined();
+      expect((mcpClient as unknown as Record<string, unknown>).subscriptions).toBeUndefined();
     } finally {
       await mcpClient.disconnect();
     }

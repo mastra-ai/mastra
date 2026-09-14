@@ -4,7 +4,7 @@ import type { ServerNotifier } from '@modelcontextprotocol/server';
 
 interface ActionDependencies {
   getLogger: () => IMastraLogger;
-  /** Modern clients receive change events through `subscriptions/listen`; undefined until a transport is serving. */
+  /** Clients receive change events through `subscriptions/listen`; undefined until a transport is serving. */
   getNotifier: () => ServerNotifier | undefined;
 }
 

@@ -10,7 +10,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { MCPServer } from '../server';
 import type { MCPServerConfig } from '../types';
-import { connectModern, serveHTTP, textOf } from './harness';
+import { connectClient, serveHTTP, textOf } from './harness';
 
 vi.setConfig({ testTimeout: 20_000, hookTimeout: 20_000 });
 
@@ -144,7 +144,7 @@ describe('MCP Server FGA checks', () => {
     server.__registerMastra(mockMastra(fga) as any);
     const served = await serveHTTP(server, { auth: authInfo });
     try {
-      const client = await connectModern(served.url);
+      const client = await connectClient(served.url);
       try {
         expect((await client.listTools()).tools.map(tool => tool.name)).toEqual(['test-tool']);
         const result = await client.callTool({ name: 'test-tool', arguments: { input: 'hello' } });
@@ -171,7 +171,7 @@ describe('MCP Server FGA checks', () => {
     server.__registerMastra(mockMastra(fga) as any);
     const served = await serveHTTP(server);
     try {
-      const client = await connectModern(served.url);
+      const client = await connectClient(served.url);
       try {
         expect((await client.listTools()).tools).toEqual([]);
         const result = await client.callTool({ name: 'test-tool', arguments: { input: 'hello' } });

@@ -106,19 +106,15 @@ On the client, `enableServerLogs` (default `true`) now attaches the metadata key
   },
 ```
 
-### Resource updates arrive through `subscriptions.listen`
+### Resource subscriptions ride one `subscriptions/listen` stream
 
-`resources.subscribe` and `resources.unsubscribe` are replaced by a single `subscriptions/listen` stream that carries list-changed and resource-updated notifications. Register handlers first, then open the stream with the filter you need; close the returned subscription to stop.
+`resources.subscribe` and `resources.unsubscribe` keep their signatures, but the client no longer sends `resources/subscribe`. It keeps a single `subscriptions/listen` stream open for every subscribed resource and every registered list-changed handler, replaces the stream when that set changes, and reopens it after a reconnect. A subscription the server declines rejects instead of silently dropping.
 
-```diff
-  await mcp.resources.onUpdated('weather', ({ uri }) => refresh(uri));
-- await mcp.resources.subscribe('weather', 'weather://forecast');
-+ const subscription = await mcp.subscriptions.listen('weather', {
-+   resourceSubscriptions: ['weather://forecast'],
-+ });
-  // later
-- await mcp.resources.unsubscribe('weather', 'weather://forecast');
-+ await subscription.close();
+```ts
+await mcp.resources.onUpdated('weather', ({ uri }) => refresh(uri))
+await mcp.resources.subscribe('weather', 'weather://forecast')
+// later
+await mcp.resources.unsubscribe('weather', 'weather://forecast')
 ```
 
 ### Client input handlers are configured per server
@@ -149,6 +145,8 @@ The client answered server elicitation with `mcp.elicitation.onRequest(serverNam
   });
 ```
 
+Persisted credentials changed shape too: tokens are stored per authorization-server `issuer` (the SDK's `tokens(ctx)`/`saveTokens(tokens, ctx)` context) and the provider persists OAuth discovery state so the authorization code is only exchanged with the server that issued the redirect. Custom `OAuthStorage` backends keep the same key-value contract, but a storage namespace must not be shared between providers. `createOAuthCallbackServer` now also returns the RFC 9207 `iss` parameter; pass it to the code exchange so the SDK can reject an issuer mismatch.
+
 ### `startHTTP` options
 
 `startHTTP` keeps `url`, `httpPath`, `req` and `res`. The `options` object only carries request security (`enableDnsRebindingProtection`, `allowedHosts`, `allowedOrigins`); the session and serverless flags are gone because every request is stateless.
@@ -162,6 +160,16 @@ The client answered server elicitation with `mcp.elicitation.onRequest(serverNam
 -   options: { sessionIdGenerator: () => randomUUID(), serverless: false },
 +   options: { enableDnsRebindingProtection: true, allowedHosts: ['localhost:4111'] },
   });
+```
+
+### Server `id` is used verbatim
+
+MCP 1.x slugified the configured `id` (`myMcpServer` became `my-mcp-server`) and that slug appeared in hosted routes and registry listings. A v2 server keeps the `id` exactly as configured, so `/api/mcp/:serverId/mcp` and `/api/mcp/v0/servers/:id` use the value you passed. Pass a slug yourself if you need one.
+
+```diff
+  const server = new MCPServer({ id: 'myMcpServer', /* ... */ });
+- // routes: /api/mcp/my-mcp-server/mcp
++ // routes: /api/mcp/myMcpServer/mcp
 ```
 
 ### Docs server `Prompt` metadata
@@ -225,7 +233,7 @@ Servers keep the static `logging` capability required by the specification but r
 
 ### `resources/subscribe` and `resources/unsubscribe`
 
-Legacy resource subscriptions are removed from both sides; use `subscriptions.listen` as shown above.
+The legacy methods are removed from both sides; `resources.subscribe` now uses `subscriptions/listen` as shown above.
 
 ### Dynamic client registration
 
