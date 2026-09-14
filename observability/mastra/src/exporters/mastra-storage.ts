@@ -63,8 +63,6 @@ function resolveTracingStorageStrategy(
   return observabilityStrategy.preferred;
 }
 
-type Resolve = (value: void | PromiseLike<void>) => void;
-
 type FlushResult = {
   failed: boolean;
   retryAttempt?: number;
@@ -80,8 +78,8 @@ export class MastraStorageExporter extends BaseExporter {
   name = 'mastra-storage-exporter';
 
   #config: MastraStorageExporterConfig;
-  #isInitializing = false;
-  #initPromises: Set<Resolve> = new Set();
+  #initializationPromise?: Promise<void>;
+  #wasUnavailable = false;
   #eventBuffer: EventBuffer;
 
   #storage?: MastraCompositeStore;
@@ -114,56 +112,77 @@ export class MastraStorageExporter extends BaseExporter {
    * Initialize the exporter (called after all dependencies are ready)
    */
   async init(options: InitExporterOptions): Promise<void> {
-    try {
-      this.#isInitializing = true;
-      this.#emitDropEvent = options.emitDropEvent;
-
-      this.#storage = options.mastra?.getStorage();
-      if (!this.#storage) {
-        this.logger.warn('MastraStorageExporter disabled: Storage not available. Traces will not be persisted.');
-        return;
-      }
-
-      this.#observabilityStorage = await this.#storage.getStore('observability');
-      if (!this.#observabilityStorage) {
-        this.logger.warn(
-          'MastraStorageExporter disabled: Observability storage not available. Traces will not be persisted.',
-        );
-        return;
-      }
-
-      // Initialize the resolved strategy once observability store is available
-      if (!this.#resolvedStrategy) {
-        this.#resolvedStrategy = resolveTracingStorageStrategy(
-          this.#config,
-          this.#observabilityStorage,
-          this.#storage.constructor.name,
-          this.logger,
-        );
-
-        this.logger.debug('tracing storage exporter initialized', {
-          strategy: this.#resolvedStrategy,
-          source: this.#config.strategy !== 'auto' ? 'user' : 'auto',
-          storageAdapter: this.#storage.constructor.name,
-          maxBatchSize: this.#config.maxBatchSize,
-          maxBatchWaitMs: this.#config.maxBatchWaitMs,
-        });
-      }
-
-      if (this.#resolvedStrategy) {
-        this.#eventBuffer.init({ strategy: this.#resolvedStrategy });
-      }
-    } finally {
-      this.#isInitializing = false;
-      /**
-       * Assumes caller waits until export of a parent span is completed before calling
-       * export for child spans , order is not relevant for resolve
-       */
-      this.#initPromises.forEach(resolve => {
-        resolve();
-      });
-      this.#initPromises.clear();
+    this.#emitDropEvent = options.emitDropEvent;
+    this.#storage = options.mastra?.getStorage();
+    if (!this.#storage) {
+      this.logger.warn('MastraStorageExporter disabled: Storage not available. Traces will not be persisted.');
+      return;
     }
+    await this.ensureInitialized();
+  }
+
+  private warnUnavailable(message: string, error?: unknown): void {
+    if (this.#wasUnavailable) return;
+    this.#wasUnavailable = true;
+    if (error === undefined) {
+      this.logger.warn(message);
+      return;
+    }
+    this.logger.warn(message, { error: error instanceof Error ? error.message : String(error) });
+  }
+
+  private async initializeStorage(): Promise<void> {
+    const storage = this.#storage;
+    if (!storage) return;
+
+    try {
+      this.#observabilityStorage = await storage.getStore('observability');
+    } catch (error) {
+      this.warnUnavailable(
+        'MastraStorageExporter unavailable: Failed to initialize observability storage. Traces will not be persisted until storage becomes available.',
+        error,
+      );
+      return;
+    }
+
+    if (!this.#observabilityStorage) {
+      this.warnUnavailable(
+        'MastraStorageExporter unavailable: Observability storage not available. Traces will not be persisted until storage becomes available.',
+      );
+      return;
+    }
+
+    this.#resolvedStrategy = resolveTracingStorageStrategy(
+      this.#config,
+      this.#observabilityStorage,
+      storage.constructor.name,
+      this.logger,
+    );
+
+    this.#eventBuffer.init({ strategy: this.#resolvedStrategy });
+    this.logger.debug('tracing storage exporter initialized', {
+      strategy: this.#resolvedStrategy,
+      source: this.#config.strategy !== 'auto' ? 'user' : 'auto',
+      storageAdapter: storage.constructor.name,
+      maxBatchSize: this.#config.maxBatchSize,
+      maxBatchWaitMs: this.#config.maxBatchWaitMs,
+    });
+
+    if (this.#wasUnavailable) {
+      this.#wasUnavailable = false;
+      this.logger.info(
+        'MastraStorageExporter recovered: Observability storage is available. Traces will be persisted.',
+      );
+    }
+  }
+
+  private async ensureInitialized(): Promise<void> {
+    if (this.#observabilityStorage || !this.#storage) return;
+
+    this.#initializationPromise ??= this.initializeStorage().finally(() => {
+      this.#initializationPromise = undefined;
+    });
+    await this.#initializationPromise;
   }
 
   /**
@@ -532,7 +551,7 @@ export class MastraStorageExporter extends BaseExporter {
   }
 
   async _exportTracingEvent(event: TracingEvent): Promise<void> {
-    await this.waitForInit();
+    await this.ensureInitialized();
     if (!this.#observabilityStorage) {
       this.logger.debug('Cannot store traces. Observability storage is not initialized');
       return;
@@ -543,22 +562,10 @@ export class MastraStorageExporter extends BaseExporter {
   }
 
   /**
-   * Resolves when an ongoing init call is finished
-   * Doesn't wait for the caller to call init
-   * @returns
-   */
-  private async waitForInit(): Promise<void> {
-    if (!this.#isInitializing) return;
-    return new Promise(resolve => {
-      this.#initPromises.add(resolve);
-    });
-  }
-
-  /**
    * Handle metric events — buffer for batch flush.
    */
   async onMetricEvent(event: MetricEvent): Promise<void> {
-    await this.waitForInit();
+    await this.ensureInitialized();
     if (!this.#observabilityStorage) return;
 
     this.#eventBuffer.addEvent(event);
@@ -569,7 +576,7 @@ export class MastraStorageExporter extends BaseExporter {
    * Handle log events — buffer for batch flush.
    */
   async onLogEvent(event: LogEvent): Promise<void> {
-    await this.waitForInit();
+    await this.ensureInitialized();
     if (!this.#observabilityStorage) return;
 
     this.#eventBuffer.addEvent(event);
@@ -580,7 +587,7 @@ export class MastraStorageExporter extends BaseExporter {
    * Handle score events — buffer for batch flush.
    */
   async onScoreEvent(event: ScoreEvent): Promise<void> {
-    await this.waitForInit();
+    await this.ensureInitialized();
     if (!this.#observabilityStorage) return;
 
     this.#eventBuffer.addEvent(event);
@@ -591,7 +598,7 @@ export class MastraStorageExporter extends BaseExporter {
    * Handle feedback events — buffer for batch flush.
    */
   async onFeedbackEvent(event: FeedbackEvent): Promise<void> {
-    await this.waitForInit();
+    await this.ensureInitialized();
     if (!this.#observabilityStorage) return;
 
     this.#eventBuffer.addEvent(event);

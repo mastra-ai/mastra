@@ -2,7 +2,7 @@ import { existsSync, writeFileSync, symlinkSync, readdirSync, mkdtempSync, rmSyn
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { cleanupProfileLockFiles, killProcessGroup } from './browser';
+import { cleanupProfileLockFiles, killProcessGroup, resolveLaunchViewport, resolveViewportSize } from './browser';
 
 describe('cleanupProfileLockFiles', () => {
   let profileDir: string;
@@ -85,5 +85,54 @@ describe('killProcessGroup', () => {
     });
     expect(() => killProcessGroup(12345)).not.toThrow();
     killSpy.mockRestore();
+  });
+
+  // Defense in depth for issue #23588: a remote browser's PID (e.g. a
+  // container's Chromium at PID 1) must never reach process.kill, because
+  // process.kill(-pid) would signal an unrelated local group — and kill(-1)
+  // broadcasts to every process the user owns.
+  it.each([
+    ['1 (would target init / a container PID 1)', 1],
+    ['0 (would target the caller process group)', 0],
+    ['-1 (would broadcast to all owned processes)', -1],
+    ['a negative PID', -12345],
+    ['a non-integer PID', 1234.5],
+    ['NaN', Number.NaN],
+  ])('refuses to signal for unsafe PID: %s', (_label, pid) => {
+    const killSpy = vi.spyOn(process, 'kill').mockImplementation(() => true);
+    killProcessGroup(pid as number);
+    expect(killSpy).not.toHaveBeenCalled();
+    killSpy.mockRestore();
+  });
+});
+
+describe('resolveViewportSize', () => {
+  it('passes explicit dimensions through', () => {
+    expect(resolveViewportSize({ width: 800, height: 600 })).toEqual({ width: 800, height: 600 });
+  });
+
+  // Providers that emulate a fixed size treat an absent viewport as "do not
+  // emulate", which is how 'window' is expressed.
+  it('drops the viewport for window', () => {
+    expect(resolveViewportSize('window')).toBeUndefined();
+  });
+
+  it('passes undefined through', () => {
+    expect(resolveViewportSize(undefined)).toBeUndefined();
+  });
+});
+
+describe('resolveLaunchViewport', () => {
+  it('passes explicit dimensions through without launch args', () => {
+    expect(resolveLaunchViewport({ width: 800, height: 600 })).toEqual({ viewport: { width: 800, height: 600 } });
+  });
+
+  // agent-browser disables viewport emulation when it sees a window-sizing arg.
+  it('requests a maximized window for window', () => {
+    expect(resolveLaunchViewport('window')).toEqual({ args: ['--start-maximized'] });
+  });
+
+  it('leaves the viewport unset when unconfigured', () => {
+    expect(resolveLaunchViewport(undefined)).toEqual({ viewport: undefined });
   });
 });

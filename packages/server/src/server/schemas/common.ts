@@ -48,23 +48,35 @@ export const paginationInfoSchema = z.object({
 });
 
 /**
+ * Pagination values are non-negative integers. Constraining them here keeps
+ * malformed input a 400 at the request boundary: without `.int().min(0)`,
+ * `z.coerce.number()` only rejects values that coerce to `NaN`, so `page=-1`
+ * and `perPage=2.5` reach the storage layer, which rejects them with a plain
+ * `Error` that `handleError` can only report as a 500.
+ *
+ * The lower bound is 0 rather than 1 because `perPage: 0` is a supported
+ * storage contract (the include-only fast path).
+ */
+const paginationNumber = () => z.coerce.number().int().min(0);
+
+/**
  * Factory function for page/perPage pagination query params
  * @param defaultPerPage - Default value for perPage (omit for no default)
  */
 export const createPagePaginationSchema = (defaultPerPage?: number) => {
   const baseSchema = {
-    page: z.coerce.number().optional().default(0),
+    page: paginationNumber().optional().default(0),
   };
 
   if (defaultPerPage !== undefined) {
     return z.object({
       ...baseSchema,
-      perPage: z.coerce.number().optional().default(defaultPerPage),
+      perPage: paginationNumber().optional().default(defaultPerPage),
     });
   } else {
     return z.object({
       ...baseSchema,
-      perPage: z.coerce.number().optional(),
+      perPage: paginationNumber().optional(),
     });
   }
 };
@@ -75,16 +87,16 @@ export const createPagePaginationSchema = (defaultPerPage?: number) => {
  */
 export const createCombinedPaginationSchema = () => {
   return z.object({
-    page: z.coerce.number().optional(),
-    perPage: z.coerce.number().optional(),
+    page: paginationNumber().optional(),
+    perPage: paginationNumber().optional(),
     /**
      * @deprecated Use page and perPage instead
      */
-    offset: z.coerce.number().optional(),
+    offset: paginationNumber().optional(),
     /**
      * @deprecated Use page and perPage instead
      */
-    limit: z.coerce.number().optional(),
+    limit: paginationNumber().optional(),
   });
 };
 

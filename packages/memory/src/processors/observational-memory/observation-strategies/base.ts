@@ -5,10 +5,13 @@ import xxhash from 'xxhash-wasm';
 
 import type { Memory } from '../../..';
 import { omDebug, omError } from '../debug';
-import { stripThreadTags } from '../message-utils';
+import { formatOmError } from '../error';
+import { getObservableMessages, stripThreadTags } from '../message-utils';
 import { parseObservationGroups, wrapInObservationGroup } from '../observation-groups';
 import type { ObserverRunner } from '../observer-runner';
 import type { ReflectorRunner } from '../reflector-runner';
+import { withRetry } from '../retry';
+import { stripSubconsciousSignals } from '../subconscious/origin';
 import { getMaxThreshold } from '../thresholds';
 import type { TokenCounter } from '../token-counter';
 import type {
@@ -101,8 +104,9 @@ export abstract class ObservationStrategy {
       }
 
       const { messages, existingObservations } = await this.prepare();
+      const observationMessages = stripSubconsciousSignals(messages);
       await this.emitStartMarkers(cycleId);
-      const output = await this.observe(existingObservations, messages);
+      const output = await this.observe(existingObservations, observationMessages);
       const processed = await this.process(output, existingObservations);
       await this.persist(processed);
       await this.emitEndMarkers(cycleId, processed);
@@ -116,7 +120,9 @@ export abstract class ObservationStrategy {
           abortSignal,
           mainAgent: this.opts.agent,
           sendSignal: this.opts.sendSignal,
+          sendStateSignal: this.opts.sendStateSignal,
           reflectionHooks,
+          trigger: this.opts.trigger,
           requestContext,
           observabilityContext: this.opts.observabilityContext,
         });
@@ -133,7 +139,7 @@ export abstract class ObservationStrategy {
             cycleId,
             operationType: 'observation',
             startedAt: new Date().toISOString(),
-            error: error instanceof Error ? error.message : String(error),
+            error: formatOmError(error),
             recordId: record.id,
             threadId,
           },
@@ -326,14 +332,18 @@ export abstract class ObservationStrategy {
 
     await Promise.all(
       groups.map(group =>
-        this.deps.onIndexObservations!({
-          text: group.content,
-          groupId: group.id,
-          range: group.range,
-          threadId,
-          resourceId,
-          observedAt,
-        }),
+        withRetry(
+          () =>
+            this.deps.onIndexObservations!({
+              text: group.content,
+              groupId: group.id,
+              range: group.range,
+              threadId,
+              resourceId,
+              observedAt,
+            }),
+          { label: 'index-observations', abortSignal: this.opts.abortSignal },
+        ),
       ),
     );
   }
@@ -394,7 +404,7 @@ export abstract class ObservationStrategy {
     resourceId?: string,
   ): Promise<boolean> {
     if (!messageList) return false;
-    const allMsgs = messageList.get.all.db();
+    const allMsgs = getObservableMessages(messageList);
     for (let i = allMsgs.length - 1; i >= 0; i--) {
       const msg = allMsgs[i];
       if (msg?.role === 'assistant' && msg.content?.parts && Array.isArray(msg.content.parts)) {

@@ -26,10 +26,14 @@ function getActivityBindingsPath(outputDir: string): string {
 
 export class MastraPlugin implements WorkerPlugin {
   #prebuildPath: string | null = null;
+  #prebuildPromise: Promise<ReturnType<typeof this.getTemporalWorkerOptions>> | null = null;
   #compiledActivitiesModules = new Map<string, Promise<Record<string, unknown>>>();
   name = 'Mastra';
 
-  constructor() {}
+  constructor(
+    private readonly entryFile: string,
+    private readonly projectRoot: string = process.cwd(),
+  ) {}
 
   async #bundleMastra(entryFile: string, projectRoot: string, outputDirectory: string): Promise<string> {
     const { BuildBundler } = await import('./mastra-deployer');
@@ -44,6 +48,9 @@ export class MastraPlugin implements WorkerPlugin {
     return path.join(outputDirectory, 'output', 'index.mjs');
   }
 
+  /**
+   * @deprecated Please use the constructor params instead.
+   */
   async prebuild({
     entryFile,
     projectRoot = process.cwd(),
@@ -51,6 +58,10 @@ export class MastraPlugin implements WorkerPlugin {
     entryFile: string;
     projectRoot?: string;
   }): Promise<ReturnType<typeof this.getTemporalWorkerOptions>> {
+    return this.#prebuild(entryFile, projectRoot);
+  }
+
+  async #prebuild(entryFile: string, projectRoot: string): Promise<ReturnType<typeof this.getTemporalWorkerOptions>> {
     const temporalOutputDir = path.resolve(projectRoot, CACHE_PATH);
     const compiledEntryPath = await this.#bundleMastra(entryFile, projectRoot, temporalOutputDir);
 
@@ -137,15 +148,23 @@ export class MastraPlugin implements WorkerPlugin {
     };
   }
 
-  configureWorker(options: WorkerOptions): WorkerOptions {
+  async configureWorker(options: WorkerOptions): Promise<WorkerOptions> {
     const augmentedOptions = Object.assign({}, options);
-    if (this.#prebuildPath) {
-      Object.assign(augmentedOptions, this.getTemporalWorkerOptions(this.#prebuildPath));
-    } else {
-      if (!options.workflowsPath || !options.activities) {
-        throw new Error('MastraPlugin.prebuild() must be called before use');
-      }
+    if (!this.#prebuildPath) {
+      this.#prebuildPromise ??= this.#prebuild(this.entryFile, this.projectRoot).catch(error => {
+        this.#prebuildPromise = null;
+        throw error;
+      });
+      await this.#prebuildPromise;
     }
+
+    const generatedOptions = this.getTemporalWorkerOptions(this.#prebuildPath!);
+    Object.assign(augmentedOptions, generatedOptions, {
+      activities: {
+        ...options.activities,
+        ...generatedOptions.activities,
+      },
+    });
 
     return augmentedOptions;
   }

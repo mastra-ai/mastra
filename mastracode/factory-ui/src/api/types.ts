@@ -9,12 +9,21 @@
  * `import type` keeps this module type-only — no server runtime code is pulled
  * into the shared/platform-agnostic bundle.
  */
+import type { z } from 'zod';
+import type { FACTORY_ROUTE_CONTRACTS } from '@mastra/factory/routes/contracts';
+
+export type BoardCatalogResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.boardCatalog.responseSchema>;
+export type InstalledBoardInfo = BoardCatalogResponse['boards'][number];
+export type InstalledPhaseInfo = InstalledBoardInfo['phases'][number];
+
 import type {
   CustomProviderInfo,
   ModelPackInfo,
   OMConfigInfo,
   ProviderInfo,
   ProviderOMDefaultsResponse,
+  ThinkingConfigInfo,
+  UpdateThinkingConfigResponse,
 } from '@mastra/factory/routes/config';
 import type {
   ArtifactEntry,
@@ -26,11 +35,20 @@ import type {
   WorkspaceChangeStatus,
   WorkspaceDiff,
   WorkspaceFile,
+  WorkspaceFilesListing,
   WorkspaceRenderedEntry,
   WorkspaceRenderedListing,
 } from '@mastra/factory/routes/fs';
 
-export type { ProviderInfo, CustomProviderInfo, ModelPackInfo, OMConfigInfo, ProviderOMDefaultsResponse };
+export type {
+  ProviderInfo,
+  CustomProviderInfo,
+  ModelPackInfo,
+  OMConfigInfo,
+  ProviderOMDefaultsResponse,
+  ThinkingConfigInfo,
+  UpdateThinkingConfigResponse,
+};
 export type {
   ArtifactEntry,
   ArtifactListing,
@@ -41,6 +59,7 @@ export type {
   WorkspaceChangeStatus,
   WorkspaceDiff,
   WorkspaceFile,
+  WorkspaceFilesListing,
   WorkspaceRenderedEntry,
   WorkspaceRenderedListing,
 };
@@ -60,10 +79,23 @@ export interface CustomProvidersResponse {
 export interface ModelPacksResponse {
   packs: ModelPackInfo[];
   activePackId: string | null;
+  sessionPackId: string | null;
 }
 
 export interface OMResponse {
   config: OMConfigInfo;
+}
+
+/** A bundled Factory skill (`GET /web/factory/skills`). */
+export interface FactorySkillInfo {
+  name: string;
+  description: string;
+  /** SKILL.md body with the frontmatter removed. */
+  content: string;
+}
+
+export interface FactorySkillsResponse {
+  skills: FactorySkillInfo[];
 }
 
 // ── Mutation request bodies ────────────────────────────────────────────────
@@ -102,7 +134,9 @@ export interface SaveModelPackBody {
 }
 
 export interface ActivateModelPackBody {
-  resourceId: string;
+  target: 'default' | 'session';
+  resourceId?: string;
+  scope?: string;
 }
 
 export interface UpdateOMModelBody {
@@ -147,9 +181,13 @@ export type OAuthPollResponse =
   | { status: 'complete' }
   | { status: 'failed'; error: string };
 
-export interface ActivateModelPackResponse {
+export type ActivateModelPackResponse =
+  | { ok: true; target: 'default'; activePackId: string }
+  | { ok: true; target: 'session'; sessionPackId: string };
+
+export interface ClearDefaultModelPackResponse {
   ok: true;
-  activePackId: string;
+  activePackId: null;
 }
 
 export interface UpdateOMResponse {

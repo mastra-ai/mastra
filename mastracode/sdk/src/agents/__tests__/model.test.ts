@@ -29,6 +29,7 @@ vi.mock('../../providers/claude-max.js', () => ({
   claudeCodeMiddleware: { specificationVersion: 'v3', transformParams: vi.fn() },
   promptCacheMiddleware: { specificationVersion: 'v3', transformParams: vi.fn() },
   buildAnthropicOAuthFetch: vi.fn(() => mockAnthropicOAuthFetch),
+  createAnthropicThinkingMiddleware: vi.fn(() => undefined),
 }));
 
 // Mock openai-codex provider
@@ -44,6 +45,7 @@ vi.mock('../../providers/openai-codex.js', () => ({
     medium: 'medium',
     high: 'high',
     xhigh: 'xhigh',
+    max: 'max',
   },
 }));
 
@@ -194,6 +196,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { MODEL_TOKENS } from '../../../../../docs/src/plugins/remark-model-tokens/models.js';
 import { opencodeClaudeMaxProvider, buildAnthropicOAuthFetch } from '../../providers/claude-max.js';
 import { openaiCodexProvider, buildOpenAICodexOAuthFetch } from '../../providers/openai-codex.js';
+import { setCredentialStoreProvider } from '../credential-resolver.js';
 import {
   createMastraCodeGateway,
   resolveModel,
@@ -202,6 +205,7 @@ import {
   getOpenAIApiKey,
   MastraCodeGateway,
   resolveAuth,
+  resolveRequestThinkingLevel,
 } from '../model.js';
 
 function makeRequestContext({ threadId, resourceId }: { threadId?: string; resourceId?: string } = {}) {
@@ -231,11 +235,14 @@ describe('resolveModel', () => {
     delete process.env.OPENAI_BASE_URL;
     delete process.env.MOONSHOT_API_KEY;
     delete process.env.MOONSHOT_AI_API_KEY;
+    delete process.env.KIMI_API_KEY;
+    delete process.env.DEEPSEEK_API_KEY;
     delete process.env.MASTRA_GATEWAY_API_KEY;
     delete process.env.MASTRA_GATEWAY_URL;
   });
 
   afterEach(() => {
+    setCredentialStoreProvider(undefined);
     process.env = { ...originalEnv };
   });
 
@@ -470,6 +477,22 @@ describe('resolveModel', () => {
       mockAuthStorageInstance.get.mockReturnValue(undefined);
       const result = resolveModel('openai/gpt-4o') as Record<string, unknown>;
       expect(result.__provider).toBe('model-router');
+    });
+
+    it('reports a missing signed-in Factory credential instead of an environment variable', () => {
+      setCredentialStoreProvider(() => ({
+        allowEnvironmentFallback: false,
+        reload() {},
+        get: () => undefined,
+        getStoredApiKey: () => undefined,
+        getApiKey: async () => undefined,
+      }));
+      const requestContext = makeRequestContext();
+      requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+
+      expect(() => resolveModel('openai/gpt-4o', { requestContext })).toThrow(
+        'No usable openai credential is configured for this signed-in Factory account.',
+      );
     });
 
     it('passes controller headers to the OpenAI OAuth provider', () => {
@@ -734,6 +757,33 @@ describe('resolveModel', () => {
       mockAuthStorageInstance.getStoredApiKey.mockImplementation((providerId: string) =>
         providerId === 'mastra-gateway' ? 'msk_gateway_key_123' : undefined,
       );
+    });
+
+    it('does not pass the Mastra Gateway key to an unprefixed DeepSeek model', () => {
+      process.env.DEEPSEEK_API_KEY = 'sk-deepseek-env-fixture';
+      mockAuthStorageInstance.get.mockReturnValue(undefined);
+
+      const result = resolveModel('deepseek/deepseek-v4-flash') as Record<string, unknown>;
+
+      expect(result.__provider).toBe('model-router');
+      expect(result.modelId).toBe('deepseek/deepseek-v4-flash');
+      expect(result.apiKey).toBe('');
+    });
+
+    it('prefers a stored DeepSeek key over the stored Mastra Gateway key', () => {
+      process.env.DEEPSEEK_API_KEY = 'sk-deepseek-env-fixture';
+      mockAuthStorageInstance.get.mockReturnValue(undefined);
+      mockAuthStorageInstance.getStoredApiKey.mockImplementation((providerId: string) => {
+        if (providerId === 'deepseek') return 'sk-deepseek-stored-fixture';
+        if (providerId === 'mastra-gateway') return 'msk_gateway_key_123';
+        return undefined;
+      });
+
+      const result = resolveModel('deepseek/deepseek-v4-flash') as Record<string, unknown>;
+
+      expect(result.__provider).toBe('model-router');
+      expect(result.modelId).toBe('deepseek/deepseek-v4-flash');
+      expect(result.apiKey).toBe('sk-deepseek-stored-fixture');
     });
 
     it('routes explicit mastra-prefixed anthropic model through gateway', () => {
@@ -1059,5 +1109,79 @@ describe('getOpenAIApiKey', () => {
   it('ignores the env var when the credential store disables environment fallback', () => {
     process.env.OPENAI_API_KEY = 'sk-env-key';
     expect(getOpenAIApiKey(makeTenantCredentialStore())).toBeUndefined();
+  });
+});
+
+describe('resolveRequestThinkingLevel', () => {
+  const settingsWithThinking = (overrides?: {
+    modeThinkingDefaults?: Record<string, string>;
+    thinkingLevel?: string;
+  }) =>
+    ({
+      customProviders: [],
+      memoryGateway: {},
+      models: { modeThinkingDefaults: overrides?.modeThinkingDefaults ?? {} },
+      preferences: { thinkingLevel: overrides?.thinkingLevel ?? 'off' },
+    }) as any;
+
+  beforeEach(() => {
+    mockLoadSettings.mockReset();
+    mockLoadSettings.mockImplementation(() => settingsWithThinking());
+  });
+
+  it('prefers the session override over all defaults', () => {
+    mockLoadSettings.mockImplementation(() =>
+      settingsWithThinking({ modeThinkingDefaults: { build: 'high' }, thinkingLevel: 'low' }),
+    );
+
+    const level = resolveRequestThinkingLevel({
+      state: { thinkingLevel: 'xhigh' },
+      session: { modeId: 'build' },
+    } as any);
+
+    expect(level).toBe('xhigh');
+    expect(mockLoadSettings).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the mode default when no session override is set', () => {
+    mockLoadSettings.mockImplementation(() =>
+      settingsWithThinking({ modeThinkingDefaults: { build: 'high' }, thinkingLevel: 'low' }),
+    );
+
+    const level = resolveRequestThinkingLevel({ state: {}, session: { modeId: 'build' } } as any);
+
+    expect(level).toBe('high');
+  });
+
+  it('falls back to the global default when neither override nor mode default exist', () => {
+    mockLoadSettings.mockImplementation(() =>
+      settingsWithThinking({ modeThinkingDefaults: { build: 'high' }, thinkingLevel: 'medium' }),
+    );
+
+    const level = resolveRequestThinkingLevel({ state: {}, session: { modeId: 'plan' } } as any);
+
+    expect(level).toBe('medium');
+  });
+
+  it('treats a null session value as a cleared override', () => {
+    mockLoadSettings.mockImplementation(() =>
+      settingsWithThinking({ modeThinkingDefaults: { build: 'high' }, thinkingLevel: 'medium' }),
+    );
+
+    const level = resolveRequestThinkingLevel({ state: { thinkingLevel: null }, session: { modeId: 'build' } });
+
+    expect(level).toBe('high');
+  });
+
+  it('resolves defaults when no controller context exists at all', () => {
+    mockLoadSettings.mockImplementation(() => settingsWithThinking({ thinkingLevel: 'low' }));
+
+    expect(resolveRequestThinkingLevel(undefined)).toBe('low');
+  });
+
+  it('passes the settings path through to loadSettings', () => {
+    resolveRequestThinkingLevel(undefined, '/tmp/custom-settings.json');
+
+    expect(mockLoadSettings).toHaveBeenCalledWith('/tmp/custom-settings.json');
   });
 });

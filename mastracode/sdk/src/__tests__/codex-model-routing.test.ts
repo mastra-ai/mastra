@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { remapOpenAIModelForCodexOAuth } from '../agents/model.js';
-import { getEffectiveThinkingLevel } from '../providers/openai-codex.js';
+import { getEffectiveThinkingLevel, supportsMaxReasoningEffort } from '../providers/openai-codex.js';
 
 describe('remapOpenAIModelForCodexOAuth', () => {
   it('maps only explicit GPT-5 models to codex variants for OAuth', () => {
@@ -40,5 +40,29 @@ describe('getEffectiveThinkingLevel', () => {
   it('preserves requested level for non-GPT-5 models', () => {
     expect(getEffectiveThinkingLevel('gpt-4.1', 'off')).toBe('off');
     expect(getEffectiveThinkingLevel('gpt-4.1', 'high')).toBe('high');
+  });
+
+  it('preserves max for GPT-5.6+ models that support it', () => {
+    expect(getEffectiveThinkingLevel('gpt-5.6', 'max')).toBe('max');
+    expect(getEffectiveThinkingLevel('gpt-5.6-codex', 'max')).toBe('max');
+    expect(getEffectiveThinkingLevel('gpt-6', 'max')).toBe('max');
+  });
+
+  it('clamps max to xhigh for models whose effort scale tops out there', () => {
+    expect(getEffectiveThinkingLevel('gpt-5.3-codex', 'max')).toBe('xhigh');
+    expect(getEffectiveThinkingLevel('gpt-5.1-codex-mini', 'max')).toBe('xhigh');
+    expect(getEffectiveThinkingLevel('gpt-4.1', 'max')).toBe('xhigh');
+  });
+});
+
+describe('supportsMaxReasoningEffort', () => {
+  it('is true from gpt-5.6 upward and false below', () => {
+    expect(supportsMaxReasoningEffort('gpt-5.6')).toBe(true);
+    expect(supportsMaxReasoningEffort('gpt-5.6-sol')).toBe(true);
+    expect(supportsMaxReasoningEffort('gpt-6')).toBe(true);
+    expect(supportsMaxReasoningEffort('gpt-5.5')).toBe(false);
+    expect(supportsMaxReasoningEffort('gpt-5')).toBe(false);
+    expect(supportsMaxReasoningEffort('gpt-4.1')).toBe(false);
+    expect(supportsMaxReasoningEffort('o3')).toBe(false);
   });
 });

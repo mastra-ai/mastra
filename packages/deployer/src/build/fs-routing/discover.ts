@@ -19,6 +19,13 @@ export interface DiscoveredFsAgent {
   configPath?: string;
   /** Absolute path to `instructions.md`, if present. */
   instructionsPath?: string;
+  /**
+   * Absolute path to `instructions.ts`/`instructions.js`, if present. Unlike
+   * `instructions.md` (whose contents are inlined at build time), this module is
+   * imported by the generated wrapper, so it can compute its prompt or export a
+   * runtime-resolved function.
+   */
+  instructionsModulePath?: string;
   /** Absolute path to `workspace.ts`/`workspace.js`, if present. */
   workspacePath?: string;
   /** Absolute path to `memory.ts`/`memory.js`, if present. */
@@ -149,6 +156,7 @@ const CONFIG_BASENAMES = ['config.ts', 'config.js'];
 const WORKSPACE_BASENAMES = ['workspace.ts', 'workspace.js'];
 const MEMORY_BASENAMES = ['memory.ts', 'memory.js'];
 const INSTRUCTIONS_BASENAME = 'instructions.md';
+const INSTRUCTIONS_MODULE_BASENAMES = ['instructions.ts', 'instructions.js'];
 const TOOL_EXTENSIONS = ['.ts', '.js'];
 const SCHEDULE_MODULE_EXTENSIONS = ['.ts', '.js'];
 const SKILL_MODULE_EXTENSIONS = ['.ts', '.js'];
@@ -156,8 +164,9 @@ const SKILL_MD_BASENAME = 'SKILL.md';
 
 /**
  * Presence check that does NOT follow symlinks. Returns `false` for symlinks
- * (and broken links) so a symlinked `config.ts`/`instructions.md`/`workspace.ts`/
- * `memory.ts` is never inlined or imported into the generated bundle.
+ * (and broken links) so a symlinked `config.ts`/`instructions.md`/
+ * `instructions.ts`/`workspace.ts`/`memory.ts` is never inlined or imported
+ * into the generated bundle.
  */
 async function exists(path: string): Promise<boolean> {
   try {
@@ -528,8 +537,8 @@ async function discoverSchedules(schedulesDir: string, prefix = ''): Promise<Dis
 /**
  * Discover a single agent directory: its `config`/`instructions`/`workspace`
  * files plus `tools/`, `skills/`, and declared `subagents/`. Returns
- * `undefined` when `dir` is not an agent directory (no `config.(ts|js)` and no
- * `instructions.md`).
+ * `undefined` when `dir` is not an agent directory (no `config.(ts|js)`, no
+ * `instructions.md`, and no `instructions.(ts|js)`).
  *
  * `depth` is the subagent nesting level (`0` for top-level agents). Discovery
  * recurses into `subagents/` until `MAX_FS_SUBAGENT_DEPTH`; deeper directories
@@ -545,9 +554,10 @@ async function discoverAgentDir(
   const instructionsPath = (await exists(join(dir, INSTRUCTIONS_BASENAME)))
     ? slash(join(dir, INSTRUCTIONS_BASENAME))
     : undefined;
+  const instructionsModulePath = await firstExisting(dir, INSTRUCTIONS_MODULE_BASENAMES);
 
   // Not an agent directory unless it has a config or instructions file.
-  if (!configPath && !instructionsPath) {
+  if (!configPath && !instructionsPath && !instructionsModulePath) {
     return undefined;
   }
 
@@ -566,6 +576,7 @@ async function discoverAgentDir(
     dir: slash(dir),
     configPath,
     instructionsPath,
+    instructionsModulePath,
     workspacePath,
     memoryPath,
     workspaceSeedDir,
@@ -626,11 +637,11 @@ async function discoverSubagents(
 
 /**
  * Scan `<mastraDir>/agents/*` for file-system routed agents. A directory is
- * treated as an agent only when it contains a `config.(ts|js)` or an
- * `instructions.md`; other directories are ignored. Each agent may declare
- * `subagents/` up to `MAX_FS_SUBAGENT_DEPTH` levels deep. Returns descriptors
- * with absolute, slash-normalized paths ready for codegen. Performs no module
- * evaluation — only filesystem inspection.
+ * treated as an agent only when it contains a `config.(ts|js)`, an
+ * `instructions.md`, or an `instructions.(ts|js)`; other directories are
+ * ignored. Each agent may declare `subagents/` up to `MAX_FS_SUBAGENT_DEPTH`
+ * levels deep. Returns descriptors with absolute, slash-normalized paths ready
+ * for codegen. Performs no module evaluation — only filesystem inspection.
  */
 export async function discoverFsAgents(
   mastraDir: string,

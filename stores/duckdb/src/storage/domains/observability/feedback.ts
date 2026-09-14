@@ -1,6 +1,8 @@
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type {
   BatchCreateFeedbackArgs,
   CreateFeedbackArgs,
+  DeleteFeedbackArgs,
   GetFeedbackAggregateArgs,
   GetFeedbackAggregateResponse,
   GetFeedbackBreakdownArgs,
@@ -13,8 +15,10 @@ import type {
   ListFeedbackResponse,
   AggregationInterval,
   AggregationType,
+  FeedbackRecord,
+  UpdateFeedbackReviewStatusArgs,
 } from '@mastra/core/storage';
-import { listFeedbackArgsSchema } from '@mastra/core/storage';
+import { feedbackRecordSchema, listFeedbackArgsSchema } from '@mastra/core/storage';
 import { parseFieldKey } from '@mastra/core/utils';
 import type { DuckDBConnection } from '../../db/index';
 import { buildWhereClause, buildOrderByClause, buildPaginationClause } from './filters';
@@ -26,11 +30,56 @@ import {
   extendWhereClause,
   validateCursorId,
 } from './polling';
+import { coerceFeedbackReviewStatus, parseUpdateFeedbackReviewStatusArgs } from './review-status';
 
 type LegacyFeedbackRecord = CreateFeedbackArgs['feedback'] & {
   source?: string | null;
   userId?: string | null;
 };
+
+const FEEDBACK_UPSERT_COLUMNS = [
+  'timestamp',
+  'cursorId',
+  'traceId',
+  'spanId',
+  'experimentId',
+  'entityType',
+  'entityId',
+  'entityName',
+  'entityVersionId',
+  'parentEntityVersionId',
+  'parentEntityType',
+  'parentEntityId',
+  'parentEntityName',
+  'rootEntityVersionId',
+  'rootEntityType',
+  'rootEntityId',
+  'rootEntityName',
+  'userId',
+  'organizationId',
+  'resourceId',
+  'runId',
+  'sessionId',
+  'threadId',
+  'requestId',
+  'environment',
+  'executionSource',
+  'serviceName',
+  'feedbackUserId',
+  'sourceId',
+  'reviewStatus',
+  'feedbackSource',
+  'feedbackType',
+  'value',
+  'comment',
+  'tags',
+  'metadata',
+  'scope',
+] as const;
+
+const FEEDBACK_UPSERT_CLAUSE = `ON CONFLICT (feedbackId) DO UPDATE SET ${FEEDBACK_UPSERT_COLUMNS.map(
+  column => `${column} = excluded.${column}`,
+).join(', ')}`;
 
 const FEEDBACK_GROUP_BY_COLUMNS = new Set([
   'timestamp',
@@ -165,13 +214,13 @@ function toSeriesName(values: unknown[]): string {
   return values.map(value => (value === null || value === undefined ? '' : String(value))).join('|');
 }
 
-function rowToFeedbackRecord(row: Record<string, unknown>): Record<string, unknown> {
+function rowToFeedbackRecord(row: Record<string, unknown>): FeedbackRecord {
   const rawValue = row.value;
   let value: number | string = rawValue as string;
   const numValue = Number(rawValue);
   if (!isNaN(numValue)) value = numValue;
 
-  return {
+  return feedbackRecordSchema.parse({
     feedbackId: row.feedbackId as string,
     timestamp: toDate(row.timestamp),
     traceId: (row.traceId as string) ?? null,
@@ -201,6 +250,7 @@ function rowToFeedbackRecord(row: Record<string, unknown>): Record<string, unkno
     serviceName: (row.serviceName as string) ?? null,
     feedbackUserId: (row.feedbackUserId as string) ?? null,
     sourceId: (row.sourceId as string) ?? null,
+    reviewStatus: coerceFeedbackReviewStatus(row.reviewStatus),
     source: row.feedbackSource as string,
     feedbackSource: row.feedbackSource as string,
     feedbackType: row.feedbackType as string,
@@ -209,7 +259,7 @@ function rowToFeedbackRecord(row: Record<string, unknown>): Record<string, unkno
     tags: parseJsonArray(row.tags) as string[] | null,
     metadata: parseJson(row.metadata) as Record<string, unknown> | null,
     scope: parseJson(row.scope) as Record<string, unknown> | null,
-  };
+  });
 }
 
 function getComparisonDateRange(
@@ -254,7 +304,7 @@ export async function createFeedback(db: DuckDBConnection, args: CreateFeedbackA
       feedbackId, timestamp, cursorId, traceId, spanId, experimentId,
       entityType, entityId, entityName, entityVersionId, parentEntityVersionId, parentEntityType, parentEntityId, parentEntityName, rootEntityVersionId, rootEntityType, rootEntityId, rootEntityName,
       userId, organizationId, resourceId, runId, sessionId, threadId, requestId, environment, executionSource, serviceName,
-      feedbackUserId, sourceId, feedbackSource, feedbackType, value, comment, tags, metadata, scope
+      feedbackUserId, sourceId, reviewStatus, feedbackSource, feedbackType, value, comment, tags, metadata, scope
     )
      VALUES (${[
        v(f.feedbackId),
@@ -287,6 +337,7 @@ export async function createFeedback(db: DuckDBConnection, args: CreateFeedbackA
        v(f.serviceName ?? null),
        v(feedbackUserId),
        v(f.sourceId ?? null),
+       v(f.reviewStatus ?? 'needs-review'),
        v(feedbackSource),
        v(f.feedbackType),
        v(String(f.value)),
@@ -295,7 +346,7 @@ export async function createFeedback(db: DuckDBConnection, args: CreateFeedbackA
        jsonV(f.metadata),
        jsonV(f.scope ?? null),
      ].join(', ')})
-     ON CONFLICT DO NOTHING`,
+     ${FEEDBACK_UPSERT_CLAUSE}`,
   );
 }
 
@@ -303,7 +354,8 @@ export async function createFeedback(db: DuckDBConnection, args: CreateFeedbackA
 export async function batchCreateFeedback(db: DuckDBConnection, args: BatchCreateFeedbackArgs): Promise<void> {
   if (args.feedbacks.length === 0) return;
 
-  const tuples = args.feedbacks.map(f => {
+  const currentFeedback = new Map(args.feedbacks.map(feedback => [feedback.feedbackId, feedback]));
+  const tuples = [...currentFeedback.values()].map(f => {
     const legacyFeedback = f as LegacyFeedbackRecord;
     const feedbackSource = legacyFeedback.feedbackSource ?? legacyFeedback.source ?? '';
     const feedbackUserId = legacyFeedback.feedbackUserId ?? legacyFeedback.userId ?? null;
@@ -338,6 +390,7 @@ export async function batchCreateFeedback(db: DuckDBConnection, args: BatchCreat
       v(legacyFeedback.serviceName ?? null),
       v(feedbackUserId),
       v(legacyFeedback.sourceId ?? null),
+      v(legacyFeedback.reviewStatus ?? 'needs-review'),
       v(feedbackSource),
       v(legacyFeedback.feedbackType),
       v(String(legacyFeedback.value)),
@@ -353,11 +406,56 @@ export async function batchCreateFeedback(db: DuckDBConnection, args: BatchCreat
       feedbackId, timestamp, cursorId, traceId, spanId, experimentId,
       entityType, entityId, entityName, entityVersionId, parentEntityVersionId, parentEntityType, parentEntityId, parentEntityName, rootEntityVersionId, rootEntityType, rootEntityId, rootEntityName,
       userId, organizationId, resourceId, runId, sessionId, threadId, requestId, environment, executionSource, serviceName,
-      feedbackUserId, sourceId, feedbackSource, feedbackType, value, comment, tags, metadata, scope
+      feedbackUserId, sourceId, reviewStatus, feedbackSource, feedbackType, value, comment, tags, metadata, scope
     )
      VALUES ${tuples.join(',\n       ')}
-     ON CONFLICT DO NOTHING`,
+     ${FEEDBACK_UPSERT_CLAUSE}`,
   );
+}
+
+/**
+ * Delete feedback events by feedbackId. Optional `organizationId` and
+ * `resourceId` values are ANDed into the predicate to restrict deletion to
+ * records with matching scope fields.
+ */
+export async function deleteFeedback(db: DuckDBConnection, args: DeleteFeedbackArgs): Promise<void> {
+  if (args.feedbackIds.length === 0) return;
+  const placeholders = args.feedbackIds.map(() => '?').join(', ');
+  const conditions = [`feedbackId IN (${placeholders})`];
+  const params: unknown[] = [...args.feedbackIds];
+  if (args.organizationId !== undefined) {
+    conditions.push('organizationId = ?');
+    params.push(args.organizationId);
+  }
+  if (args.resourceId !== undefined) {
+    conditions.push('resourceId = ?');
+    params.push(args.resourceId);
+  }
+  await db.execute(`DELETE FROM feedback_events WHERE ${conditions.join(' AND ')}`, params);
+}
+
+/** Update the review workflow status of a single feedback event. */
+export async function updateFeedbackReviewStatus(
+  db: DuckDBConnection,
+  args: UpdateFeedbackReviewStatusArgs,
+): Promise<FeedbackRecord> {
+  const { feedbackId, reviewStatus } = parseUpdateFeedbackReviewStatusArgs(args);
+  await db.execute(`UPDATE feedback_events SET reviewStatus = ? WHERE feedbackId = ?`, [reviewStatus, feedbackId]);
+  const rows = await db.query<Record<string, unknown>>(
+    `SELECT * FROM feedback_events WHERE feedbackId = ? ORDER BY timestamp DESC LIMIT 1`,
+    [feedbackId],
+  );
+  const row = rows[0];
+  if (!row) {
+    throw new MastraError({
+      id: 'OBSERVABILITY_UPDATE_FEEDBACK_REVIEW_STATUS_NOT_FOUND',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.USER,
+      text: 'Feedback record not found',
+      details: { feedbackId },
+    });
+  }
+  return rowToFeedbackRecord(row);
 }
 
 /** Query feedback events with filtering, ordering, and pagination. */
@@ -421,7 +519,7 @@ export async function listFeedback(db: DuckDBConnection, args: ListFeedbackArgs)
 
   return {
     pagination: { total, page, perPage, hasMore: (page + 1) * perPage < total },
-    feedback: rows.map(row => rowToFeedbackRecord(row)) as ListFeedbackResponse['feedback'],
+    feedback: rows.map(row => rowToFeedbackRecord(row)),
     ...(deltaPollingFeatureEnabled() ? { deltaCursor: currentDeltaCursor } : {}),
   };
 }

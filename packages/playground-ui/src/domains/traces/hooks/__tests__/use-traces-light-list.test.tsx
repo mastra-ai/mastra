@@ -4,9 +4,9 @@ import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { setupServer } from 'msw/node';
 import type { ReactNode } from 'react';
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { server } from '../../../../test/msw-server';
 import { useTraces } from '../use-traces';
 import {
   fullDeltaBatch,
@@ -21,8 +21,6 @@ import {
 const BASE_URL = 'http://localhost:4111';
 const LIGHT_URL = `${BASE_URL}/api/observability/traces/light`;
 const FULL_URL = `${BASE_URL}/api/observability/traces`;
-
-const server = setupServer();
 
 const queryClients: QueryClient[] = [];
 
@@ -55,15 +53,12 @@ function listHandler(url: string, pageResponse: unknown, deltaResponse: unknown,
   });
 }
 
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 afterEach(() => {
   cleanup();
   // Unmounting stops the observers but leaves the cached queries armed. A leaked poller
   // lands on the next test's handlers and inflates its request counts.
   queryClients.splice(0).forEach(queryClient => queryClient.clear());
-  server.resetHandlers();
 });
-afterAll(() => server.close());
 
 describe('useTraces light-list fetching', () => {
   it('loads the traces list from the light endpoint and surfaces inputPreview rows', async () => {

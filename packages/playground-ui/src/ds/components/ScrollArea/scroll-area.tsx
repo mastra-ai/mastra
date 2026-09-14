@@ -123,7 +123,7 @@ const ScrollButton = ({ direction, label, onStartScrolling, onStopScrolling, onK
       type="button"
       aria-label={label}
       className={cn(
-        'duration-normal absolute inset-y-1 z-10 hidden w-8 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent text-neutral3 transition-colors ease-out-custom hover:bg-neutral6/5 hover:text-neutral6 active:bg-neutral6/10',
+        'absolute inset-y-1 z-10 hidden w-8 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent text-neutral3 transition-colors duration-normal ease-out-custom hover:bg-neutral6/5 hover:text-neutral6 active:bg-neutral6/10',
         'outline-hidden focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-neutral5/55 focus-visible:outline-solid',
         direction === 'left'
           ? 'left-1 group-data-[overflow-x-start]/scroll-area:flex'
@@ -289,7 +289,7 @@ const ScrollArea = React.forwardRef<HTMLDivElement, ScrollAreaProps>(
       >
         <ScrollAreaPrimitive.Viewport
           ref={setViewportRef}
-          className={cn('size-full rounded-[inherit]', maskClasses(sides), viewPortClassName)}
+          className={cn('size-full', maskClasses(sides), viewPortClassName)}
           style={viewportStyle}
         >
           <ScrollAreaPrimitive.Content style={contentStyle}>{children}</ScrollAreaPrimitive.Content>
@@ -318,7 +318,7 @@ const ScrollBar = React.forwardRef<
     ref={ref}
     orientation={orientation}
     className={cn(
-      'duration-normal flex touch-none transition-opacity ease-out-custom select-none',
+      'flex touch-none transition-opacity duration-normal ease-out-custom select-none',
       'opacity-0 data-[scrolling]:opacity-100 data-[scrolling]:duration-0',
       revealOnHover && 'data-[hovering]:opacity-100',
       orientation === 'vertical' && 'h-full w-1.5 p-px',
@@ -327,7 +327,7 @@ const ScrollBar = React.forwardRef<
     )}
     {...props}
   >
-    <ScrollAreaPrimitive.Thumb className="duration-normal bg-neutral4/30 hover:bg-neutral4/60 relative flex-1 rounded-full transition-colors" />
+    <ScrollAreaPrimitive.Thumb className="bg-neutral4/30 duration-normal hover:bg-neutral4/60 relative flex-1 rounded-full transition-colors" />
   </ScrollAreaPrimitive.Scrollbar>
 ));
 ScrollBar.displayName = 'ScrollBar';

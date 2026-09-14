@@ -10,11 +10,12 @@ import type {
   Task,
   TaskPushNotificationConfig,
 } from '@mastra/core/a2a/client';
+import { ListTasksRequest as ListTasksRequestV1 } from '@mastra/core/a2a/v1';
 import canonicalize from 'canonicalize';
 import { CompactSign, base64url, exportJWK } from 'jose';
 import { describe, it, beforeEach, afterEach, expect, expectTypeOf } from 'vitest';
 import { MastraClientError } from '../types';
-import { A2A } from './a2a';
+import { A2A, A2AV1 } from './a2a';
 import type { A2AStreamEventData } from './a2a';
 
 async function collectStream<T>(stream: AsyncIterable<T>): Promise<T[]> {
@@ -636,5 +637,56 @@ describe('A2A', () => {
         message: 'Push Notification is not supported',
       });
     });
+  });
+});
+
+describe('A2AV1', () => {
+  let server: Server;
+  let serverUrl: string;
+
+  beforeEach(async () => {
+    server = createServer();
+    await new Promise<void>(resolve => server.listen(0, resolve));
+    const address = server.address() as AddressInfo;
+    serverUrl = `http://localhost:${address.port}`;
+  });
+
+  afterEach(async () => {
+    await new Promise<void>(resolve => server.close(() => resolve()));
+  });
+
+  it('sends the v1 protocol header and serializes list tasks requests', async () => {
+    let receivedHeader: string | undefined;
+    let receivedBody: Record<string, any> | undefined;
+
+    server.on('request', (req, res) => {
+      let body = '';
+      req.on('data', chunk => {
+        body += chunk;
+      });
+      req.on('end', () => {
+        receivedHeader = req.headers['a2a-version'] as string | undefined;
+        receivedBody = JSON.parse(body);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(
+          JSON.stringify({
+            jsonrpc: '2.0',
+            id: receivedBody?.id,
+            result: { tasks: [], nextPageToken: '' },
+          }),
+        );
+      });
+    });
+
+    const a2a = new A2AV1({ baseUrl: serverUrl }, 'test-agent');
+    const result = await a2a.listTasks(ListTasksRequestV1.fromJSON({ contextId: 'context-1', pageSize: 10 }));
+
+    expect(receivedHeader).toBe('1.0');
+    expect(receivedBody).toMatchObject({
+      jsonrpc: '2.0',
+      method: 'tasks/list',
+      params: { contextId: 'context-1', pageSize: 10 },
+    });
+    expect(result.tasks).toEqual([]);
   });
 });

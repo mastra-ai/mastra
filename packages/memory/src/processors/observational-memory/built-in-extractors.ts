@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import { Extractor, validateExtractorList } from './extractor';
-import type { ObservationConfig, ReflectionConfig, ResolvedObservationConfig } from './types';
+import type { ContinuationHintsConfig, ObservationConfig, ReflectionConfig, ResolvedObservationConfig } from './types';
 
 const currentTaskInstructions = `State the current task(s) explicitly. Can be single or multiple:
 - Primary: What the agent is currently working on
@@ -56,16 +56,42 @@ export function createThreadTitleExtractor(): Extractor<string> {
   );
 }
 
+export interface ResolvedContinuationHints {
+  currentTask: boolean;
+  suggestedResponse: boolean;
+}
+
+/**
+ * Normalize the user-facing `continuationHints` config into explicit per-section flags.
+ * Both sections stay enabled unless the caller opts out, so omitting the config is a no-op.
+ */
+export function resolveContinuationHints(config: ContinuationHintsConfig | undefined): ResolvedContinuationHints {
+  if (config === undefined || config === true) {
+    return { currentTask: true, suggestedResponse: true };
+  }
+  if (config === false) {
+    return { currentTask: false, suggestedResponse: false };
+  }
+  return {
+    currentTask: config.currentTask ?? true,
+    suggestedResponse: config.suggestedResponse ?? true,
+  };
+}
+
 interface ComposeExtractorOptions {
-  includeContinuationHints?: boolean;
+  continuationHints?: ContinuationHintsConfig;
   includeThreadTitle?: boolean;
   userExtractors?: readonly Extractor<any>[];
 }
 
 export function composeExtractors(options: ComposeExtractorOptions): Extractor<any>[] {
+  const continuationHints = resolveContinuationHints(options.continuationHints);
   const extractors: Extractor<any>[] = [];
-  if (options.includeContinuationHints) {
-    extractors.push(createCurrentTaskExtractor(), createSuggestedResponseExtractor());
+  if (continuationHints.currentTask) {
+    extractors.push(createCurrentTaskExtractor());
+  }
+  if (continuationHints.suggestedResponse) {
+    extractors.push(createSuggestedResponseExtractor());
   }
   if (options.includeThreadTitle) {
     extractors.push(createThreadTitleExtractor());
@@ -75,18 +101,20 @@ export function composeExtractors(options: ComposeExtractorOptions): Extractor<a
 }
 
 export function composeObservationExtractors(
-  config: Pick<ResolvedObservationConfig, 'threadTitle'> & Pick<ObservationConfig, 'extract'>,
+  config: Pick<ResolvedObservationConfig, 'threadTitle'> & Pick<ObservationConfig, 'extract' | 'continuationHints'>,
 ): Extractor[] {
   return composeExtractors({
-    includeContinuationHints: true,
+    continuationHints: config.continuationHints,
     includeThreadTitle: config.threadTitle,
     userExtractors: config.extract,
   });
 }
 
-export function composeReflectionExtractors(config: Pick<ReflectionConfig, 'extract'>): Extractor[] {
+export function composeReflectionExtractors(
+  config: Pick<ReflectionConfig, 'extract' | 'continuationHints'>,
+): Extractor[] {
   return composeExtractors({
-    includeContinuationHints: true,
+    continuationHints: config.continuationHints,
     userExtractors: config.extract,
   });
 }

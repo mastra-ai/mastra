@@ -10,12 +10,10 @@ import {
   useWorkspaceChanges,
   useWorkspaceDiff,
   useWorkspaceFile,
+  useWorkspaceFiles,
   useWorkspaceRenderedListing,
 } from '../use-fs';
-import {
-  workspaceChangesFixture,
-  workspaceDiffFixture,
-} from '../../ui/domains/workspace-viewer/components/__tests__/fixtures/workspace-changes';
+import type { WorkspaceChanges, WorkspaceDiff } from '../../api/types';
 import { listing } from './fixtures/fs';
 
 const URL = `${TEST_BASE_URL}/web/fs/list`;
@@ -124,7 +122,9 @@ describe('useArtifactListing', () => {
 });
 
 const WORKSPACE_RENDERED_URL = `${TEST_BASE_URL}/web/workspace/rendered/list`;
+const WORKSPACE_FILES_URL = `${TEST_BASE_URL}/web/workspace/files`;
 const WORKSPACE_FILE_URL = `${TEST_BASE_URL}/web/workspace/file`;
+const THREAD = 'thread-1';
 
 describe('useWorkspaceRenderedListing', () => {
   it('does not fetch until workspace path and root are available', () => {
@@ -176,8 +176,39 @@ describe('useWorkspaceRenderedListing', () => {
   });
 });
 
+describe('useWorkspaceFiles', () => {
+  describe('when a workspace and thread are available', () => {
+    it('requests the persisted file list for that exact scope', async () => {
+      let seenWorkspacePath: string | null = null;
+      let seenThreadId: string | null = null;
+      server.use(
+        http.get(WORKSPACE_FILES_URL, ({ request }) => {
+          const url = new global.URL(request.url);
+          seenWorkspacePath = url.searchParams.get('workspacePath');
+          seenThreadId = url.searchParams.get('threadId');
+          return HttpResponse.json({
+            workspacePath: seenWorkspacePath,
+            threadId: seenThreadId,
+            files: [{ path: 'src/agent.ts' }],
+          });
+        }),
+      );
+
+      const { result } = renderHookWithProviders(() => useWorkspaceFiles('session-1', THREAD));
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(seenWorkspacePath).toBe('session-1');
+      expect(seenThreadId).toBe(THREAD);
+      expect(result.current.data?.files).toEqual([{ path: 'src/agent.ts' }]);
+    });
+  });
+});
+
 describe('useWorkspaceFile', () => {
-  it('does not fetch when disabled', () => {
+  it.each([
+    ['disabled', THREAD, { enabled: false }],
+    ['without a thread ID', undefined, undefined],
+  ])('does not fetch when %s', (_reason, threadId, options) => {
     let called = false;
     server.use(
       http.get(WORKSPACE_FILE_URL, () => {
@@ -195,7 +226,7 @@ describe('useWorkspaceFile', () => {
     );
 
     const { result } = renderHookWithProviders(() =>
-      useWorkspaceFile('/home/user/project', '.artifacts/file.md', { enabled: false }),
+      useWorkspaceFile('/home/user/project', '.artifacts/file.md', threadId, options),
     );
 
     expect(result.current.fetchStatus).toBe('idle');
@@ -223,7 +254,7 @@ describe('useWorkspaceFile', () => {
     );
 
     const { result } = renderHookWithProviders(() =>
-      useWorkspaceFile('/home/user/project', '.artifacts/understand-pr/HISTORY.md'),
+      useWorkspaceFile('/home/user/project', '.artifacts/understand-pr/HISTORY.md', THREAD),
     );
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -235,6 +266,31 @@ describe('useWorkspaceFile', () => {
 
 const WORKSPACE_CHANGES_URL = `${TEST_BASE_URL}/web/workspace/changes`;
 const WORKSPACE_DIFF_URL = `${TEST_BASE_URL}/web/workspace/changes/diff`;
+
+const workspaceChangesFixture = {
+  workspacePath: '/home/user/project',
+  available: true,
+  additions: 8,
+  deletions: 1,
+  changes: [
+    { path: 'src/edited.ts', status: 'modified', additions: 3, deletions: 1 },
+    { path: 'src/new.ts', status: 'untracked', additions: 5, deletions: 0 },
+  ],
+} satisfies WorkspaceChanges;
+
+const workspaceDiffFixture = {
+  workspacePath: '/home/user/project',
+  path: 'src/edited.ts',
+  patch: [
+    'diff --git a/src/edited.ts b/src/edited.ts',
+    '--- a/src/edited.ts',
+    '+++ b/src/edited.ts',
+    '@@ -1 +1 @@',
+    '-old value',
+    '+new value',
+  ].join('\n'),
+  truncated: false,
+} satisfies WorkspaceDiff;
 
 /**
  * `refetch()` on a `skipToken` query is a deliberate no-op, and React Query

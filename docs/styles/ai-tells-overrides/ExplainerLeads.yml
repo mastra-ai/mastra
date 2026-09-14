@@ -1,0 +1,8 @@
+extends: existence
+message: "Consider stating the point directly instead of '%s'."
+level: suggestion
+nonword: true
+scope:
+  - '~heading'
+tokens:
+  - '\b(?:What|Why|How) (?:the|this|that|these|those|a|an|each|every|your|our|its) (?:[-\w]+ ){1,3}(?:is|are|was|were)\b'

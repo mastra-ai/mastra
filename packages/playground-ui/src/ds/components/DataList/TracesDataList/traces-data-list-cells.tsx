@@ -1,9 +1,10 @@
 import { CornerDownRightIcon, ListTreeIcon } from 'lucide-react';
-import { DataListCell, DataListMonoCell } from '../data-list-cells';
+import { DataListCell, DataListTextCell } from '../data-list-cells';
+import { Badge } from '@/ds/components/Badge';
+import type { BadgeVariant } from '@/ds/components/Badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { AgentIcon } from '@/ds/icons/AgentIcon';
 import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
-import { Colors } from '@/ds/tokens/colors';
 import { cn } from '@/lib/utils';
 
 // ---------------------------------------------------------------------------
@@ -29,7 +30,7 @@ export function TracesDataListNameCell({ name, parentSpanId, showLevelTooltip }:
     </span>
   );
   return (
-    <DataListCell height="compact" className="text-ui-smd text-neutral4 flex min-w-0 items-center gap-2">
+    <DataListCell className="text-ui-smd text-neutral4 flex min-w-0 items-center gap-2">
       {showLevelTooltip ? (
         <Tooltip>
           <TooltipTrigger asChild>{icon}</TooltipTrigger>
@@ -52,7 +53,7 @@ export interface TracesDataListInputCellProps {
 }
 
 export function TracesDataListInputCell({ input }: TracesDataListInputCellProps) {
-  return <DataListMonoCell>{input || '-'}</DataListMonoCell>;
+  return <DataListTextCell font="mono">{input || '-'}</DataListTextCell>;
 }
 
 // ---------------------------------------------------------------------------
@@ -83,7 +84,7 @@ export function TracesDataListEntityCell({ entityType, entityName }: TracesDataL
   const type = entityType ?? '';
 
   return (
-    <DataListCell height="compact" className="flex min-w-0 items-center gap-2">
+    <DataListCell className="flex min-w-0 items-center gap-2">
       <EntityTypeIcon entityType={type} />
       {entityName ? <span className="text-ui-smd min-w-0 truncate">{entityName}</span> : '-'}
     </DataListCell>
@@ -94,14 +95,14 @@ export function TracesDataListEntityCell({ entityType, entityName }: TracesDataL
 // StatusCell
 // ---------------------------------------------------------------------------
 
-const UNSET_STATUS_CONFIG = { label: '-', color: Colors.neutral4 };
+const UNSET_STATUS_CONFIG: { label: string; variant: BadgeVariant } = { label: '-', variant: 'neutral' };
 
-const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
-  completed: { label: 'OK', color: Colors.accent1 },
-  ok: { label: 'OK', color: Colors.accent1 },
-  success: { label: 'OK', color: Colors.accent1 },
-  error: { label: 'ERR', color: Colors.error },
-  running: { label: 'RUN', color: Colors.neutral4 },
+const STATUS_CONFIG: Record<string, { label: string; variant: BadgeVariant }> = {
+  completed: { label: 'OK', variant: 'green' },
+  ok: { label: 'OK', variant: 'green' },
+  success: { label: 'OK', variant: 'green' },
+  error: { label: 'ERR', variant: 'red' },
+  running: { label: 'RUN', variant: 'neutral' },
   unset: UNSET_STATUS_CONFIG,
 };
 
@@ -114,10 +115,10 @@ export function TracesDataListStatusCell({ status }: TracesDataListStatusCellPro
   const config = STATUS_CONFIG[key] ?? UNSET_STATUS_CONFIG;
 
   return (
-    <DataListCell height="compact">
-      <span className="text-ui-sm font-semibold uppercase" style={{ color: config.color }}>
+    <DataListCell>
+      <Badge size="xs" variant={config.variant}>
         {config.label}
-      </span>
+      </Badge>
     </DataListCell>
   );
 }

@@ -18,6 +18,7 @@ type ToolCallOutput = {
   aborted?: boolean;
   providerMetadata?: Record<string, any>;
   providerExecuted?: boolean;
+  approval?: { id: string; approved: boolean; reason?: string };
 };
 
 describe('createLLMMappingStep HITL behavior', () => {
@@ -213,8 +214,113 @@ describe('createLLMMappingStep HITL behavior', () => {
     // Assert: Should bail (suspend execution) because updateSummary needs HITL
     expect(bail).toHaveBeenCalled();
     expect(result.stepResult.isContinued).toBe(false);
-    // Should NOT emit tool-result chunks
-    expect(controller.enqueue).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'tool-result' }));
+    // ...but the tool that DID resolve must still be streamed and persisted before bailing,
+    // otherwise its result is lost for good (issue #21637).
+    expect(controller.enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'tool-result', payload: expect.objectContaining({ toolCallId: 'call-1' }) }),
+    );
+    expect(messageList.updateToolInvocation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolInvocation: expect.objectContaining({ toolCallId: 'call-1', state: 'result' }),
+      }),
+    );
+    // The still-pending tool must not be recorded or emitted.
+    expect(controller.enqueue).not.toHaveBeenCalledWith(
+      expect.objectContaining({ payload: expect.objectContaining({ toolCallId: 'call-2' }) }),
+    );
+    expect(messageList.updateToolInvocation).not.toHaveBeenCalledWith(
+      expect.objectContaining({ toolInvocation: expect.objectContaining({ toolCallId: 'call-2' }) }),
+    );
+  });
+
+  it('should flush a completed server tool result before bailing for a pending client tool (#21637)', async () => {
+    // The reporter's scenario: the model calls a server-side tool (createTool with execute)
+    // and a client-side tool (forwarded via toolsets, no execute) in the same step. The
+    // server tool finishes before the stream closes; its result must reach the client and
+    // the message list, or the client waits forever on an `input-available` part that never
+    // resolves and history claims the tool never ran.
+    const inputData: ToolCallOutput[] = [
+      {
+        toolCallId: 'call-server',
+        toolName: 'get_record',
+        args: { id: '42' },
+        result: { record: { id: '42', name: 'Acme' } },
+      },
+      {
+        toolCallId: 'call-client',
+        toolName: 'get_record_status',
+        args: { id: '42' },
+        result: undefined, // resolved later by the browser
+      },
+    ];
+
+    const result = await llmMappingStep.execute(createExecuteParams(inputData));
+
+    // The completed server tool is streamed as a terminal result...
+    expect(controller.enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'tool-result',
+        payload: expect.objectContaining({
+          toolCallId: 'call-server',
+          toolName: 'get_record',
+          result: { record: { id: '42', name: 'Acme' } },
+        }),
+      }),
+    );
+    // ...and committed to history so a later turn knows it ran.
+    expect(messageList.updateToolInvocation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolInvocation: expect.objectContaining({
+          toolCallId: 'call-server',
+          state: 'result',
+          result: { record: { id: '42', name: 'Acme' } },
+        }),
+      }),
+    );
+    // The turn still ends so the pending client tool can be resolved by the client.
+    expect(bail).toHaveBeenCalled();
+    expect(result.stepResult.isContinued).toBe(false);
+  });
+
+  it('should enqueue tool-output-denied when a requireApproval tool is declined (#20880)', async () => {
+    const inputData: ToolCallOutput[] = [
+      {
+        toolCallId: 'call-denied',
+        toolName: 'sensitive-op',
+        args: { action: 'delete' },
+        result: undefined,
+        approval: {
+          id: 'approval-1',
+          approved: false,
+          reason: 'Tool call was not approved by the user',
+        },
+      },
+    ];
+
+    const result = await llmMappingStep.execute(createExecuteParams(inputData));
+
+    expect(messageList.updateToolInvocation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'tool-invocation',
+        toolInvocation: expect.objectContaining({
+          state: 'output-denied',
+          toolCallId: 'call-denied',
+          toolName: 'sensitive-op',
+          approval: expect.objectContaining({ approved: false }),
+        }),
+      }),
+    );
+    expect(controller.enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'tool-output-denied',
+        payload: expect.objectContaining({
+          toolCallId: 'call-denied',
+          toolName: 'sensitive-op',
+          approval: expect.objectContaining({ approved: false }),
+        }),
+      }),
+    );
+    expect(result.stepResult.isContinued).toBe(true);
   });
 
   it('should emit tool-error for tools with errors and continue the loop for self-recovery', async () => {

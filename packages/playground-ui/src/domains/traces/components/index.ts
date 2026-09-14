@@ -22,3 +22,4 @@ export { TracesListView, type TracesListViewProps, type TracesListViewTrace } fr
 export { TracesListModeToggle, type TracesListModeToggleProps } from './traces-list-mode-toggle';
 export { TracesErrorContent, type TracesErrorContentProps } from './traces-error-content';
 export { NoTracesInfo, type NoTracesInfoProps } from './no-traces-info';
+export * from './thread-trace';

@@ -9,6 +9,8 @@ import type {
   ListTracesArgs,
   ListTracesResponse,
   ListTracesLightResponse,
+  TraceQueryRequest,
+  TraceQueryResponse,
   ListBranchesArgs,
   ListBranchesResponse,
   GetBranchArgs,
@@ -21,6 +23,8 @@ import type {
   ListScoresResponse as ListScoresResponseNew,
   CreateScoreBody,
   CreateScoreResponse,
+  DeleteScoresArgs,
+  DeleteScoresResponse,
   GetScoreAggregateArgs,
   GetScoreAggregateResponse,
   GetScoreBreakdownArgs,
@@ -31,9 +35,12 @@ import type {
   GetScorePercentilesResponse,
   // Feedback
   ListFeedbackArgs,
-  ListFeedbackResponse,
   CreateFeedbackBody,
   CreateFeedbackResponse,
+  DeleteFeedbackArgs,
+  DeleteFeedbackResponse,
+  UpdateFeedbackReviewStatusArgs,
+  FeedbackRecord,
   GetFeedbackAggregateArgs,
   GetFeedbackAggregateResponse,
   GetFeedbackBreakdownArgs,
@@ -76,12 +83,13 @@ import {
   Vector,
   BaseResource,
   A2A,
+  A2AV1,
   MCPTool,
   AgentBuilder,
   Conversations,
   Observability,
   StoredAgent,
-  StoredWorkflow,
+  DynamicWorkflow,
   StoredPromptBlock,
   StoredMCPClient,
   StoredScorer,
@@ -99,6 +107,7 @@ import type {
   LegacyGetTracesResponse,
 } from './resources/observability';
 import type {
+  ListFeedbackResponse,
   ClientOptions,
   CreateMemoryThreadParams,
   CreateMemoryThreadResponse,
@@ -110,6 +119,7 @@ import type {
   GetToolResponse,
   GetProcessorResponse,
   GetWorkflowResponse,
+  ListWorkflowRunCountsResponse,
   SaveMessageToMemoryParams,
   SaveMessageToMemoryResponse,
   McpServerListResponse,
@@ -131,10 +141,11 @@ import type {
   ListStoredAgentsResponse,
   CreateStoredAgentParams,
   StoredAgentResponse,
-  ListStoredWorkflowsParams,
-  ListStoredWorkflowsResponse,
-  UpsertStoredWorkflowParams,
-  UpsertStoredWorkflowResponse,
+  ListDynamicWorkflowsParams,
+  ListDynamicWorkflowsResponse,
+  UpsertDynamicWorkflowParams,
+  UpsertDynamicWorkflowResponse,
+  WorkflowBuilderSettingsResponse,
   ListStoredPromptBlocksParams,
   ListStoredPromptBlocksResponse,
   CreateStoredPromptBlockParams,
@@ -178,6 +189,7 @@ import type {
   DatasetItem,
   DatasetExperiment,
   DatasetExperimentResult,
+  DatasetExperimentResultRow,
   ListExperimentsParams,
   ExperimentReviewCounts,
   CreateDatasetParams,
@@ -189,6 +201,13 @@ import type {
   GenerateDatasetItemsParams,
   GeneratedItem,
   TriggerDatasetExperimentParams,
+  UpdateDatasetExperimentParams,
+  CreateDatasetExperimentParams,
+  CreateDatasetExperimentResponse,
+  RunExperimentItemParams,
+  RunExperimentItemResponse,
+  SubmitExperimentResultParams,
+  FinalizeExperimentParams,
   UpdateExperimentResultParams,
   CompareExperimentsParams,
   CompareExperimentsResponse,
@@ -208,10 +227,30 @@ import type {
   CreateScheduleInput,
   UpdateScheduleInput,
   RunScheduleResponse,
+  AgentControllerInfo,
 } from './types';
 import { base64RequestContext, buildTenancyQuery, parseClientRequestContext, requestContextQueryString } from './utils';
 import { createSseJsonTransform } from './utils/stream-transforms';
 
+/**
+ * Provides typed access to agents, workflows, and other APIs on a running Mastra server.
+ * Point `baseUrl` at your server and configure authentication when required.
+ *
+ * @example
+ * ```typescript
+ * import { MastraClient } from '@mastra/client-js';
+ *
+ * const client = new MastraClient({ baseUrl: 'http://localhost:4111' });
+ * ```
+ *
+ * @see For documentation bundled with your installed package, locate
+ * `@mastra/client-js/package.json` with your project's resolver or package-manager
+ * tooling, then read `dist/docs/SKILL.md` from that package root and follow its
+ * reference links. Use package-manager tools for virtual or archived packages.
+ *
+ * @see [Client documentation](https://mastra.ai/reference/client-js/mastra-client)
+ * if packaged docs are unavailable.
+ */
 export class MastraClient extends BaseResource {
   private observability: Observability;
   public readonly conversations: Conversations;
@@ -260,16 +299,16 @@ export class MastraClient extends BaseResource {
    * @param version - Optional version selector for stored agent overrides
    * @returns Agent instance
    */
-  public getAgent(agentId: string, version?: AgentVersionIdentifier) {
-    return new Agent(this.options, agentId, version);
+  public getAgent(agentId: string, version?: AgentVersionIdentifier, routeOverrides?: { stream?: string }) {
+    return new Agent(this.options, agentId, version, routeOverrides);
   }
 
   /**
    * Lists the agent controllers hosted on the connected Mastra instance.
-   * @returns Promise containing an array of agent controller identifiers
+   * @returns Promise containing one record per agent controller, carrying its id
    */
-  public async listAgentControllers(): Promise<{ id: string }[]> {
-    const body = await this.request<{ agentControllers: { id: string }[] }>('/agent-controller');
+  public async listAgentControllers(): Promise<AgentControllerInfo[]> {
+    const body = await this.request<{ agentControllers: AgentControllerInfo[] }>('/agent-controller');
     return body.agentControllers;
   }
 
@@ -578,6 +617,26 @@ export class MastraClient extends BaseResource {
   }
 
   /**
+   * Retrieves per-workflow counts of running and suspended (awaiting resume) runs
+   * @param requestContext - Optional request context to pass as query parameter
+   * @returns Promise containing map of workflow IDs to run counts
+   */
+  public listWorkflowRunCounts(
+    requestContext?: RequestContext | Record<string, any>,
+  ): Promise<ListWorkflowRunCountsResponse> {
+    const requestContextParam = base64RequestContext(parseClientRequestContext(requestContext));
+
+    const searchParams = new URLSearchParams();
+
+    if (requestContextParam) {
+      searchParams.set('requestContext', requestContextParam);
+    }
+
+    const queryString = searchParams.toString();
+    return this.request(`/workflows/run-counts${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
    * Gets a workflow instance by ID
    * @param workflowId - ID of the workflow to retrieve
    * @returns Workflow instance
@@ -823,6 +882,14 @@ export class MastraClient extends BaseResource {
   }
 
   /**
+   * Gets an A2A Protocol v1.0 client for an agent.
+   * @param agentId - ID of the agent to interact with
+   */
+  public getA2AV1(agentId: string) {
+    return new A2AV1(this.options, agentId);
+  }
+
+  /**
    * Retrieves the working memory for a specific thread (optionally resource-scoped).
    * @param agentId - ID of the agent.
    * @param threadId - ID of the thread.
@@ -1047,6 +1114,11 @@ export class MastraClient extends BaseResource {
     return this.observability.listTraces(params);
   }
 
+  /** Queries completed logical traces using recursive trace and related-record predicates. */
+  queryTraces(params: TraceQueryRequest): Promise<TraceQueryResponse> {
+    return this.observability.queryTraces(params);
+  }
+
   /**
    * Retrieves paginated list of traces carrying only the fields a trace list renders.
    * Same contract as {@link listTraces}, but rows omit the `attributes`/`input`/`output`
@@ -1081,6 +1153,16 @@ export class MastraClient extends BaseResource {
     return this.observability.listScoresBySpan(params);
   }
 
+  /**
+   * Deletes traces by ID, cascading to all associated spans and trace-linked
+   * signal events (scores, feedback, metrics, logs). Signals without a trace ID
+   * are untouched. On ClickHouse-backed stores, reads may briefly return
+   * deleted rows until the delete is fully applied.
+   */
+  deleteTraces(params: { traceIds: string[] }): Promise<{ success: true }> {
+    return this.observability.deleteTraces(params);
+  }
+
   /** Scores one or more traces using a specified scorer (fire-and-forget). */
   score(params: {
     scorerName: string;
@@ -1110,6 +1192,11 @@ export class MastraClient extends BaseResource {
   /** Creates a single score record in the observability store. */
   createScore(params: CreateScoreBody): Promise<CreateScoreResponse> {
     return this.observability.createScore(params);
+  }
+
+  /** Deletes score records by scoreId, optionally scoped to a tenant. */
+  deleteScores(params: DeleteScoresArgs): Promise<DeleteScoresResponse> {
+    return this.observability.deleteScores(params);
   }
 
   /** Returns an aggregated score value with optional period-over-period comparison. */
@@ -1144,6 +1231,16 @@ export class MastraClient extends BaseResource {
   /** Creates a single feedback record in the observability store. */
   createFeedback(params: CreateFeedbackBody): Promise<CreateFeedbackResponse> {
     return this.observability.createFeedback(params);
+  }
+
+  /** Deletes feedback records by feedbackId, optionally scoped to a tenant. */
+  deleteFeedback(params: DeleteFeedbackArgs): Promise<DeleteFeedbackResponse> {
+    return this.observability.deleteFeedback(params);
+  }
+
+  /** Updates a feedback record's review workflow status. */
+  updateFeedbackReviewStatus(params: UpdateFeedbackReviewStatusArgs): Promise<FeedbackRecord> {
+    return this.observability.updateFeedbackReviewStatus(params);
   }
 
   /** Returns an aggregated feedback value with optional period-over-period comparison. */
@@ -1305,15 +1402,15 @@ export class MastraClient extends BaseResource {
   }
 
   // ============================================================================
-  // Stored Workflows
+  // Dynamic Workflows
   // ============================================================================
 
   /**
-   * Lists stored workflow definitions, optionally filtered by status or author
+   * Lists dynamic workflow definitions, optionally filtered by status or author
    * @param params - Optional filters: `status` ('active' | 'archived') and `authorId`
    * @returns Promise containing the matching definitions and a total count
    */
-  public listStoredWorkflows(params?: ListStoredWorkflowsParams): Promise<ListStoredWorkflowsResponse> {
+  public listDynamicWorkflows(params?: ListDynamicWorkflowsParams): Promise<ListDynamicWorkflowsResponse> {
     const searchParams = new URLSearchParams();
     if (params?.status) searchParams.set('status', params.status);
     if (params?.authorId) searchParams.set('authorId', params.authorId);
@@ -1323,13 +1420,13 @@ export class MastraClient extends BaseResource {
   }
 
   /**
-   * Creates or replaces a stored workflow definition and live-registers it on the server.
+   * Creates or replaces a dynamic workflow definition and live-registers it on the server.
    * Optional `dependencies` lets helper workflows referenced by the root definition be
    * saved in the same request; their ids are echoed back as `dependencyIds`.
    * @param params - The workflow definition (id, schemas, graph) plus optional helper dependencies
    * @returns Promise containing the persisted definition and any dependency ids
    */
-  public upsertStoredWorkflow(params: UpsertStoredWorkflowParams): Promise<UpsertStoredWorkflowResponse> {
+  public upsertDynamicWorkflow(params: UpsertDynamicWorkflowParams): Promise<UpsertDynamicWorkflowResponse> {
     return this.request('/stored/workflows', {
       method: 'POST',
       body: params,
@@ -1337,13 +1434,20 @@ export class MastraClient extends BaseResource {
   }
 
   /**
-   * Gets a stored workflow instance by ID for further operations (details, delete).
-   * To execute a stored workflow, use `getWorkflow(id).createRun()` like any other workflow.
-   * @param storedWorkflowId - ID of the stored workflow definition
-   * @returns StoredWorkflow instance
+   * Gets a dynamic workflow instance by ID for further operations (details, delete).
+   * To execute a dynamic workflow, use `getWorkflow(id).createRun()` like any other workflow.
+   * @param dynamicWorkflowId - ID of the dynamic workflow definition
+   * @returns DynamicWorkflow instance
    */
-  public getStoredWorkflow(storedWorkflowId: string): StoredWorkflow {
-    return new StoredWorkflow(this.options, storedWorkflowId);
+  public getDynamicWorkflow(dynamicWorkflowId: string): DynamicWorkflow {
+    return new DynamicWorkflow(this.options, dynamicWorkflowId);
+  }
+
+  /**
+   * Retrieves workflow builder settings for UI gating.
+   */
+  public getWorkflowBuilderSettings(): Promise<WorkflowBuilderSettingsResponse> {
+    return this.request('/editor/workflow-builder/settings');
   }
 
   // ============================================================================
@@ -1955,6 +2059,20 @@ export class MastraClient extends BaseResource {
   }
 
   /**
+   * Permanently scrubs a dataset item's data from all versions and linked experiment results
+   */
+  public purgeDatasetItem(
+    datasetId: string,
+    itemId: string,
+    tenancy?: { organizationId?: string; projectId?: string },
+  ): Promise<{ success: boolean }> {
+    const qs = buildTenancyQuery(tenancy);
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}/items/${encodeURIComponent(itemId)}/purge${qs}`, {
+      method: 'DELETE',
+    });
+  }
+
+  /**
    * Batch inserts items to a dataset
    */
   public batchInsertDatasetItems(
@@ -2112,16 +2230,71 @@ export class MastraClient extends BaseResource {
   }
 
   /**
-   * Lists results for a dataset experiment
+   * Deletes a dataset experiment and its results. Tenancy fields, when provided,
+   * scope the dataset lookup on the server side.
+   *
+   * The server also attempts to delete the experiment's observability traces,
+   * cascading to their spans and trace-linked signals. Stores without
+   * observability or trace deletion support leave the traces in place.
+   */
+  public deleteDatasetExperiment(
+    datasetId: string,
+    experimentId: string,
+    tenancy?: { organizationId?: string; projectId?: string },
+  ): Promise<{ success: boolean }> {
+    const qs = buildTenancyQuery(tenancy);
+    return this.request(
+      `/datasets/${encodeURIComponent(datasetId)}/experiments/${encodeURIComponent(experimentId)}${qs}`,
+      {
+        method: 'DELETE',
+      },
+    );
+  }
+
+  /**
+   * Deletes an experiment and its results regardless of dataset association
+   * (including experiments orphaned by dataset deletion). When tenancy fields
+   * are supplied, the server only deletes the experiment if it belongs to the
+   * given tenant (silent no-op otherwise).
+   *
+   * The server also attempts to delete the experiment's observability traces,
+   * cascading to their spans and trace-linked signals. Stores without
+   * observability or trace deletion support leave the traces in place.
+   */
+  public deleteExperiment(
+    experimentId: string,
+    options?: { organizationId?: string; projectId?: string },
+  ): Promise<{ success: boolean }> {
+    const qs = buildTenancyQuery(options);
+    return this.request(`/experiments/${encodeURIComponent(experimentId)}${qs}`, {
+      method: 'DELETE',
+    });
+  }
+
+  /**
+   * Updates a dataset experiment's name, description or metadata
+   */
+  public updateDatasetExperiment(params: UpdateDatasetExperimentParams): Promise<DatasetExperiment> {
+    const { datasetId, experimentId, ...body } = params;
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}/experiments/${encodeURIComponent(experimentId)}`, {
+      method: 'PATCH',
+      body,
+    });
+  }
+
+  /**
+   * Lists results for a dataset experiment.
+   * `tags` restricts the list to results that have all of the given tags.
    */
   public listDatasetExperimentResults(
     datasetId: string,
     experimentId: string,
-    pagination?: { page?: number; perPage?: number },
+    options?: { page?: number; perPage?: number; tags?: string[] },
   ): Promise<{ results: DatasetExperimentResult[]; pagination: PaginationInfo }> {
     const searchParams = new URLSearchParams();
-    if (pagination?.page !== undefined) searchParams.set('page', String(pagination.page));
-    if (pagination?.perPage !== undefined) searchParams.set('perPage', String(pagination.perPage));
+    if (options?.page !== undefined) searchParams.set('page', String(options.page));
+    if (options?.perPage !== undefined) searchParams.set('perPage', String(options.perPage));
+    for (const tag of options?.tags ?? []) searchParams.append('tags', tag);
     const qs = searchParams.toString();
     return this.request(
       `/datasets/${encodeURIComponent(datasetId)}/experiments/${encodeURIComponent(experimentId)}/results${qs ? `?${qs}` : ''}`,
@@ -2159,6 +2332,7 @@ export class MastraClient extends BaseResource {
       input: unknown;
       output: unknown | null;
       groundTruth: unknown | null;
+      metadata?: Record<string, unknown> | null;
       error: string | null;
       startedAt: string | Date;
       completedAt: string | Date;
@@ -2177,6 +2351,65 @@ export class MastraClient extends BaseResource {
       method: 'POST',
       body,
     });
+  }
+
+  /**
+   * Creates an experiment without starting the in-process runner, so the caller
+   * drives the loop (e.g. a Temporal workflow). With a target, execute items
+   * server-side via `runExperimentItem`; without one, ingest results via
+   * `submitExperimentResult`. Idempotent when a caller-supplied `id` is provided.
+   */
+  public createDatasetExperiment(params: CreateDatasetExperimentParams): Promise<CreateDatasetExperimentResponse> {
+    const { datasetId, ...body } = params;
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}/experiments`, {
+      method: 'POST',
+      body: { ...body, start: false },
+    });
+  }
+
+  /**
+   * Executes the experiment's target against one dataset item server-side,
+   * runs the resolved scorers, and upserts the result row keyed by
+   * (experimentId, itemId, attempt) — safe to retry.
+   */
+  public runExperimentItem(params: RunExperimentItemParams): Promise<RunExperimentItemResponse> {
+    const { datasetId, experimentId, itemId, ...body } = params;
+    return this.request(
+      `/datasets/${encodeURIComponent(datasetId)}/experiments/${encodeURIComponent(experimentId)}/items/${encodeURIComponent(itemId)}/run`,
+      {
+        method: 'POST',
+        body,
+      },
+    );
+  }
+
+  /**
+   * Submits (or re-submits) one item result for a target-less (ingestion) experiment.
+   * Upsert semantics on (experimentId, itemId, attempt) — safe to retry.
+   */
+  public submitExperimentResult(params: SubmitExperimentResultParams): Promise<DatasetExperimentResultRow> {
+    const { datasetId, experimentId, ...body } = params;
+    return this.request(
+      `/datasets/${encodeURIComponent(datasetId)}/experiments/${encodeURIComponent(experimentId)}/results`,
+      {
+        method: 'POST',
+        body,
+      },
+    );
+  }
+
+  /**
+   * Finalizes an external experiment. The server computes counts from persisted results. Idempotent.
+   */
+  public finalizeExperiment(params: FinalizeExperimentParams): Promise<DatasetExperiment> {
+    const { datasetId, experimentId } = params;
+    return this.request(
+      `/datasets/${encodeURIComponent(datasetId)}/experiments/${encodeURIComponent(experimentId)}/finalize`,
+      {
+        method: 'POST',
+        body: {},
+      },
+    );
   }
 
   /**

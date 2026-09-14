@@ -19,3 +19,8 @@ tokens:
   - Let's examine
   - Let me examine
   - Let's explore
+  # Ported from Metacommentary so the explainer-prompt family has one owner.
+  - Let me explain
+  - Let's consider
+  - Let's look at
+  - Let's break down

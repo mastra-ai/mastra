@@ -16,10 +16,12 @@ import {
 } from '@internal/server-adapter-test-utils';
 import { Mastra } from '@mastra/core';
 import { registerApiRoute } from '@mastra/core/server';
+import { createRoute } from '@mastra/server/server-adapter';
 import type { ServerRoute } from '@mastra/server/server-adapter';
 import Fastify from 'fastify';
 import type { FastifyInstance } from 'fastify';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { z } from 'zod';
 import { MastraServer } from '../index';
 
 function sleep(ms: number): Promise<void> {
@@ -934,6 +936,69 @@ describe('Fastify Server Adapter', () => {
       const data = await response.json();
       expect(data).toEqual({ message: 'Hello from custom route!' });
       await app.close();
+    });
+
+    it('registers createRoute routes from customApiRoutes with runtime validation', async () => {
+      const route = createRoute({
+        method: 'POST',
+        path: '/custom/validated',
+        responseType: 'json',
+        requiresAuth: false,
+        bodySchema: z.object({ name: z.string() }),
+        handler: async ({ name }) => ({ greeting: `Hello, ${name}` }),
+      });
+      const protectedRoute = createRoute({
+        method: 'GET',
+        path: '/custom/secure',
+        responseType: 'json',
+        requiresAuth: true,
+        handler: async () => ({ secret: true }),
+      });
+
+      const mastra = new Mastra({ server: { apiRoutes: [route, protectedRoute] } });
+      const originalGetServer = mastra.getServer.bind(mastra);
+      mastra.getServer = () =>
+        ({
+          ...originalGetServer(),
+          auth: {
+            authenticateToken: async (token: string) => (token === 'valid-token' ? { id: 'user-1' } : null),
+            authorize: async () => true,
+          },
+        }) as any;
+      const app = Fastify();
+
+      const adapter = new MastraServer({ app, mastra });
+      await adapter.init();
+      const address = await app.listen({ port: 0 });
+
+      try {
+        const invalidResponse = await fetch(`${address}/custom/validated`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: 42 }),
+        });
+        expect(invalidResponse.status).toBe(400);
+        await expect(invalidResponse.json()).resolves.toMatchObject({ error: 'Invalid request body' });
+
+        const validResponse = await fetch(`${address}/custom/validated`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: 'Ada' }),
+        });
+        expect(validResponse.status).toBe(200);
+        await expect(validResponse.json()).resolves.toEqual({ greeting: 'Hello, Ada' });
+
+        const unauthenticated = await fetch(`${address}/custom/secure`);
+        expect(unauthenticated.status).toBe(401);
+
+        const authenticated = await fetch(`${address}/custom/secure`, {
+          headers: { Authorization: 'Bearer valid-token' },
+        });
+        expect(authenticated.status).toBe(200);
+        await expect(authenticated.json()).resolves.toEqual({ secret: true });
+      } finally {
+        await app.close();
+      }
     });
   });
 

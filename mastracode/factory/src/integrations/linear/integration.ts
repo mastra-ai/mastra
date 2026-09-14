@@ -21,7 +21,7 @@
 
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
-
+import type { MastraWorker } from '@mastra/core/worker';
 import type { IntegrationConnection } from '../../capabilities/connection.js';
 import type {
   CreateIntakeCommentInput,
@@ -36,7 +36,12 @@ import type { RouteAuth } from '../../routes/route.js';
 import type { IntegrationStorageHandle } from '../../storage/domains/integrations/base.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
+import { IssueReconcileWorker } from '../issue-reconcile-worker.js';
 import { buildLinearAgentTools } from './agent-tools.js';
+import type { LinearEventRules, LinearRuleOverrides } from './default-rules.js';
+import { resolveLinearRules } from './default-rules.js';
+import { attachLinearIssueReconciler } from './issue-reconciler.js';
+import { linearIssueReconciliationEnabled, linearIssueReconciliationInterval } from './reconciliation-config.js';
 import { buildLinearRoutes } from './routes.js';
 import { attachLinearRules } from './rules.js';
 import type { LinearConnectionRow, LinearStorageHandle, UpsertLinearConnectionInput } from './storage.js';
@@ -45,8 +50,10 @@ const LINEAR_GRAPHQL_URL = 'https://api.linear.app/graphql';
 const LINEAR_TOKEN_URL = 'https://api.linear.app/oauth/token';
 const LINEAR_AUTHORIZE_URL = 'https://linear.app/oauth/authorize';
 
-/** Credentials for the Linear OAuth application. All fields are required. */
+/** Credentials and optional event rules for the Linear OAuth application. */
 export interface LinearIntegrationConfig {
+  /** Per-event replacements; omitted events retain defaults, null disables. */
+  rules?: LinearRuleOverrides;
   /** OAuth client id of the Linear application. */
   clientId: string;
   /** OAuth client secret of the Linear application. */
@@ -123,7 +130,8 @@ export interface LinearIssueComment {
 }
 
 /** Full issue payload for agent context: everything in {@link LinearIssue} plus description and discussion. */
-export interface LinearIssueDetail extends LinearIssue {
+export interface LinearIssueDetail extends Omit<LinearIssue, 'projectId'> {
+  projectId: string | null;
   /** Markdown body of the issue, or `null` when empty. */
   description: string | null;
   /** Discussion comments, oldest first. */
@@ -207,7 +215,7 @@ interface IssueDetailQueryData {
     createdAt: string;
     updatedAt: string;
     state: { name: string; type: string };
-    project: { id: string };
+    project: { id: string } | null;
     assignee: { name: string } | null;
     creator: { name: string } | null;
     team: { key: string } | null;
@@ -570,7 +578,14 @@ export class LinearIntegration implements FactoryIntegration {
   readonly #clientId: string;
   readonly #clientSecret: string;
 
+  readonly #rules: LinearEventRules;
+
+  get rules(): LinearEventRules {
+    return this.#rules;
+  }
+
   constructor(config: LinearIntegrationConfig) {
+    this.#rules = resolveLinearRules(config.rules);
     const missing = (['clientId', 'clientSecret'] as const).filter(key => !config[key]);
     if (missing.length > 0) {
       throw new Error(`LinearIntegration is missing required config: ${missing.join(', ')}.`);
@@ -908,7 +923,7 @@ export class LinearIntegration implements FactoryIntegration {
     const comments = allComments.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
     return {
       id: issue.id,
-      projectId: issue.project.id,
+      projectId: issue.project?.id ?? null,
       identifier: issue.identifier,
       title: issue.title,
       description: issue.description?.trim() ? issue.description : null,
@@ -969,6 +984,20 @@ export class LinearIntegration implements FactoryIntegration {
 
   // ── FactoryIntegration surface ───────────────────────────────────────────
 
+  workers(ctx: IntegrationContext): MastraWorker[] {
+    if (!linearIssueReconciliationEnabled()) return [];
+    const reconcile = attachLinearIssueReconciler(this, ctx);
+    if (!reconcile) return [];
+    const intervalMs = linearIssueReconciliationInterval();
+    return [
+      new IssueReconcileWorker({
+        integrationId: this.id,
+        reconcile,
+        ...(intervalMs ? { intervalMs } : {}),
+      }),
+    ];
+  }
+
   /**
    * The integration's HTTP surface: `/web/linear/*` + `/auth/linear/*` Mastra
    * `apiRoutes` (status, OAuth connect/callback, projects + issues for
@@ -981,7 +1010,8 @@ export class LinearIntegration implements FactoryIntegration {
       stateSigner: ctx.stateSigner,
       baseUrl: ctx.baseUrl,
       intake: ctx.storage.intake,
-      ingestFactoryIssues: attachLinearRules(ctx),
+      projects: ctx.storage.projects,
+      ingestFactoryIssues: attachLinearRules(this, ctx),
     });
   }
 
@@ -1008,9 +1038,10 @@ function getLinearAccessToken(connection: IntegrationConnection): string {
   return connection.accessToken;
 }
 
-function linearIssueToIntakeIssue(issue: LinearIssue): IntakeIssue {
+function linearIssueToIntakeIssue(issue: Omit<LinearIssue, 'projectId'> & { projectId?: string | null }): IntakeIssue {
   return {
     id: issue.id,
+    sourceId: issue.projectId ?? null,
     identifier: issue.identifier,
     title: issue.title,
     url: issue.url,

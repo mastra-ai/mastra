@@ -176,6 +176,25 @@ function getUnobservedPartsPreservingToolCallPairs(message: MastraDBMessage): Ma
 }
 
 /**
+ * Get the messages Observational Memory is allowed to work with.
+ *
+ * Messages supplied through the `context` option and the synthetic `om-continuation`
+ * message are prompt-only input. Core's persistence contract already treats context as
+ * never-persist, while the continuation remains memory-sourced so it can stay in the live
+ * actor prompt.
+ *
+ * OM builds its windows from `get.all.db()`, which includes both categories, and then seals
+ * and persists candidates directly. Excluding them here keeps OM's observation, buffering,
+ * persistence, and token accounting consistent with their ephemeral contract.
+ */
+export function getObservableMessages(messageList: MessageList): MastraDBMessage[] {
+  const contextMessageIds = messageList.makeMessageSourceChecker().context;
+  return messageList.get.all.db().filter(message => {
+    return message.id !== 'om-continuation' && !contextMessageIds.has(message.id);
+  });
+}
+
+/**
  * Safely extract buffered observation chunks from a record.
  * Handles both array and JSON-string formats, returning empty array if malformed.
  */
@@ -194,7 +213,7 @@ export function filterObservedMessages(opts: {
   preserveMessageIds?: Set<string>;
 }): void {
   const { messageList, record } = opts;
-  const allMessages = messageList.get.all.db();
+  const allMessages = getObservableMessages(messageList);
   const useMarkerBoundaryPruning = opts.useMarkerBoundaryPruning ?? true;
   const preserveMessageIds = opts.preserveMessageIds ?? new Set<string>();
   const observedIds = new Set<string>(Array.isArray(record?.observedMessageIds) ? record.observedMessageIds : []);

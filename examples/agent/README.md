@@ -31,6 +31,35 @@ This directory contains example agents demonstrating various Mastra features.
 - `pnpm mastra:build` - Build for production
 - `pnpm mastra:start` - Start production server
 
+## Computer-use agent
+
+The `computer-use-agent` controls a remote Linux desktop through workspace screenshot, mouse, keyboard, and shell tools. It uses Daytona by default:
+
+```bash
+DAYTONA_API_KEY=your-daytona-api-key
+```
+
+To use E2B Desktop instead, set:
+
+```bash
+COMPUTER_USE_PROVIDER=e2b-desktop
+E2B_API_KEY=your-e2b-api-key
+```
+
+Then start the linked workspace version of Mastra:
+
+```bash
+pnpm mastra dev
+```
+
+Open **Computer Use Agent** in Studio and try:
+
+> Take a screenshot and report the screen dimensions. Open a terminal through the desktop UI, create `/tmp/computer-use-demo.txt` containing a unique marker, then use the shell tool to read the file and verify that the GUI and shell are operating on the same machine.
+
+Only `COMPUTER_USE_PROVIDER=e2b-desktop` selects E2B Desktop; any other value uses Daytona. The selected provider's API key is required when the agent first uses a computer or shell tool.
+
+Computer actions can create billable cloud sandboxes. Stop or destroy test sandboxes when you're finished, and don't share authenticated desktop stream URLs.
+
 ## Request Context Presets
 
 This example includes a demonstration of Mastra's **Request Context Presets** feature, which allows you to define named configurations that can be easily switched between in the Studio UI.
@@ -165,27 +194,27 @@ Requirements:
 - **No Manual Editing**: Reduce errors from typing JSON manually
 - **Environment Parity**: Test production configurations in development
 
-## Stored Workflow Demo — `daily-standup-digest`
+## Dynamic Workflow Demo — `daily-standup-digest`
 
-This example seeds a workflow at boot from a JSON `WorkflowDefinition`, without ever calling `createWorkflow(...)`. The workflow shows up in Studio like any other workflow because `mastra.addStoredWorkflow(...)` persists it to `WorkflowDefinitionsStorage` and live-registers it in one shot.
+This example seeds a workflow at boot from a JSON `DynamicWorkflowGraph`, without ever calling `createWorkflow(...)`. The workflow shows up in Studio like any other workflow because `mastra.addDynamicWorkflow(...)` persists it to `WorkflowDefinitionsStorage` and live-registers it in one shot.
 
 ### What it demonstrates
 
 - Declarative `tool` / `agent` / `mapping` / `foreach` / `conditional` / `workflow` entry types round-tripping from JSON.
 - The three-scope template model: `${initData.teamName}` and `${stepResults.normalize-each-note}` in a `mapping` step, with the array of per-note outputs JSON-encoded automatically.
 - `foreach(agent)` with `concurrency`, rehydrated from JSON.
-- A `conditional` step with declarative predicates that picks between two nested **stored** sub-workflows (`daily-standup-plain` when there are no blockers, `daily-standup-with-escalation` when there are). The `conditional`'s output is `{ markdown: string }` regardless of branch, which becomes the parent workflow's terminal output.
-- Nested stored workflows as a first-class step type — the parent JSON references sub-workflows by id, they live in their own JSON files, and each can be inspected, run, or edited independently in Studio.
+- A `conditional` step with declarative predicates that picks between two nested **dynamic** sub-workflows (`daily-standup-plain` when there are no blockers, `daily-standup-with-escalation` when there are). The `conditional`'s output is `{ markdown: string }` regardless of branch, which becomes the parent workflow's terminal output.
+- Nested dynamic workflows as a first-class step type — the parent JSON references sub-workflows by id, they live in their own JSON files, and each can be inspected, run, or edited independently in Studio.
 - Restart survival: kill `pnpm mastra dev`, restart, and all three workflows are still there because `LibSQLStore`'s `workflowDefinitions` domain persists them.
 
 ### Files
 
-- `src/mastra/stored-workflows/daily-standup-digest.json` — the top-level `WorkflowDefinition` (normalize → detect blockers → conditional → nested sub-workflow).
-- `src/mastra/stored-workflows/daily-standup-plain.json` — sub-workflow used when there are no blockers.
-- `src/mastra/stored-workflows/daily-standup-with-escalation.json` — sub-workflow used when there are blockers; also drafts a tech-lead escalation message.
-- `src/mastra/stored-workflows/daily-standup-agents.ts` — the three agents referenced by `agentId`.
-- `src/mastra/stored-workflows/daily-standup-tools.ts` — the four tools referenced by `toolId`.
-- `src/mastra/index.ts` — imports the JSON files and seeds all three via `mastra.addStoredWorkflow(...)` after the `Mastra` instance is constructed. The two sub-workflows are seeded before the parent so `collectRefs` can resolve their ids.
+- `src/mastra/dynamic-workflows/daily-standup-digest.json` — the top-level `DynamicWorkflowGraph` (normalize → detect blockers → conditional → nested sub-workflow).
+- `src/mastra/dynamic-workflows/daily-standup-plain.json` — sub-workflow used when there are no blockers.
+- `src/mastra/dynamic-workflows/daily-standup-with-escalation.json` — sub-workflow used when there are blockers; also drafts a tech-lead escalation message.
+- `src/mastra/dynamic-workflows/daily-standup-agents.ts` — the three agents referenced by `agentId`.
+- `src/mastra/dynamic-workflows/daily-standup-tools.ts` — the four tools referenced by `toolId`.
+- `src/mastra/index.ts` — imports the JSON files and seeds all three via `mastra.addDynamicWorkflow(...)` after the `Mastra` instance is constructed. The two sub-workflows are seeded before the parent so `collectRefs` can resolve their ids.
 
 ### Try it
 
@@ -222,7 +251,7 @@ Then in Studio:
 
 1. Run `pnpm mastra dev` once so the workflow is upserted into `mastra.db`.
 2. Stop the process.
-3. Delete `src/mastra/stored-workflows/daily-standup-digest.json` (temporarily).
+3. Delete `src/mastra/dynamic-workflows/daily-standup-digest.json` (temporarily).
 4. Restart `pnpm mastra dev` — the workflow still appears in Studio because it was loaded from storage on boot, not from the JSON file.
 5. Restore the JSON file when done.
 

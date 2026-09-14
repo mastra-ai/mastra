@@ -3,6 +3,7 @@ import { useForm } from 'react-hook-form';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { AgentEditFormProvider } from '../../context/agent-edit-form-context';
+import type { AgentEditorConfig } from '../../context/agent-edit-form-context';
 import type { AgentFormValues } from '../agent-edit-page/utils/form-validation';
 import { AgentPlaygroundConfig } from '../agent-playground/agent-playground-config';
 
@@ -14,7 +15,13 @@ vi.mock('../agent-cms-pages/tools-page', () => ({
   ToolsPage: () => <div>Tools editor</div>,
 }));
 
-function AgentPlaygroundConfigHarness() {
+function AgentPlaygroundConfigHarness({
+  isCodeAgentOverride,
+  editorConfig,
+}: {
+  isCodeAgentOverride?: boolean;
+  editorConfig?: AgentEditorConfig;
+} = {}) {
   const form = useForm<AgentFormValues>({
     defaultValues: {
       name: 'Chef Agent',
@@ -36,7 +43,14 @@ function AgentPlaygroundConfigHarness() {
   });
 
   return (
-    <AgentEditFormProvider form={form} mode="edit" isSubmitting={false} handlePublish={async () => {}}>
+    <AgentEditFormProvider
+      form={form}
+      mode="edit"
+      isSubmitting={false}
+      handlePublish={async () => {}}
+      isCodeAgentOverride={isCodeAgentOverride}
+      editorConfig={editorConfig}
+    >
       <AgentPlaygroundConfig agentId="chef-agent" />
     </AgentEditFormProvider>
   );
@@ -78,6 +92,33 @@ describe('AgentPlaygroundConfig', () => {
       expect((await screen.findByRole('tooltip')).textContent).toBe(
         'Use {{variableName}} syntax to insert dynamic values into your instruction blocks.',
       );
+    });
+  });
+
+  describe('when a code-defined agent locks instructions', () => {
+    it('renders the system prompt read-only instead of the instruction blocks editor', () => {
+      render(<AgentPlaygroundConfigHarness isCodeAgentOverride editorConfig={{ instructions: false }} />);
+
+      fireEvent.click(screen.getByRole('tab', { name: 'System Prompt' }));
+
+      expect(screen.queryByText('Instruction blocks editor')).toBeNull();
+      expect(screen.getByText('Cook with care.')).not.toBeNull();
+    });
+
+    it('keeps the editor when the code agent owns instructions', () => {
+      render(<AgentPlaygroundConfigHarness isCodeAgentOverride editorConfig={{ instructions: true }} />);
+
+      fireEvent.click(screen.getByRole('tab', { name: 'System Prompt' }));
+
+      expect(screen.getByText('Instruction blocks editor')).not.toBeNull();
+    });
+
+    it('keeps the editor for a code agent with no editor config (legacy default)', () => {
+      render(<AgentPlaygroundConfigHarness isCodeAgentOverride editorConfig={undefined} />);
+
+      fireEvent.click(screen.getByRole('tab', { name: 'System Prompt' }));
+
+      expect(screen.getByText('Instruction blocks editor')).not.toBeNull();
     });
   });
 });

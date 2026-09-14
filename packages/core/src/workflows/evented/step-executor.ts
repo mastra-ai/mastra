@@ -19,6 +19,7 @@ import type { SingleStepEntry, StepFlowEntry, StepResult } from '../types';
 import {
   validateStepInput,
   createDeprecationProxy,
+  omitPriorSuspensionFields,
   runCountDeprecationMessage,
   validateStepSuspendData,
 } from '../utils';
@@ -145,6 +146,10 @@ export class StepExecutor extends MastraBase {
     // This matches the default engine's behavior where setState captures
     // the update and applies it AFTER the step completes
     let stateUpdate: Record<string, any> | undefined;
+    // Track only the keys explicitly written via setState() so parallel branch
+    // aggregation can merge sibling updates key-by-key instead of clobbering
+    // each other with full snapshots (#22319)
+    let stateDelta: Record<string, any> | undefined;
 
     // The evented engine, unlike the default engine, has no per-step span.
     // Emit the WORKFLOW_STEP span here so the step's child spans nest under it
@@ -186,6 +191,7 @@ export class StepExecutor extends MastraBase {
                 // This matches default engine behavior where state changes
                 // are applied AFTER the step completes, not during execution
                 stateUpdate = { ...(stateUpdate ?? params.state), ...newState };
+                stateDelta = { ...stateDelta, ...newState };
               },
               retryCount,
               resumeData: params.resumeData,
@@ -275,10 +281,14 @@ export class StepExecutor extends MastraBase {
       // Use stateUpdate if setState was called, otherwise use original state
       const finalState = stateUpdate ?? params.state;
 
-      let finalResult: StepResult<any, any, any, any> & { __state?: Record<string, any> };
+      const baseStepInfo = omitPriorSuspensionFields(stepInfo) as typeof stepInfo;
+      let finalResult: StepResult<any, any, any, any> & {
+        __state?: Record<string, any>;
+        __stateDelta?: Record<string, any>;
+      };
       if (suspended) {
         finalResult = {
-          ...stepInfo,
+          ...baseStepInfo,
           status: 'suspended',
           suspendedAt: endedAt,
           ...(stepOutput ? { suspendOutput: stepOutput } : {}),
@@ -290,7 +300,7 @@ export class StepExecutor extends MastraBase {
         }
       } else if (bailed) {
         finalResult = {
-          ...stepInfo,
+          ...baseStepInfo,
           // @ts-expect-error - bailed status not in type
           status: 'bailed',
           endedAt,
@@ -299,18 +309,22 @@ export class StepExecutor extends MastraBase {
         };
       } else if (nestedWflowStepPaused) {
         finalResult = {
-          ...stepInfo,
+          ...baseStepInfo,
           status: 'paused',
           __state: finalState,
         };
       } else {
         finalResult = {
-          ...stepInfo,
+          ...baseStepInfo,
           status: 'success',
           endedAt,
           output: stepOutput,
           __state: finalState,
         };
+      }
+
+      if (stateDelta) {
+        finalResult.__stateDelta = stateDelta;
       }
 
       if (finalResult.status === 'success') {
@@ -344,7 +358,7 @@ export class StepExecutor extends MastraBase {
       this.logger?.error(`Error executing step ${stepId}: ` + errorInstance?.stack);
 
       return {
-        ...stepInfo,
+        ...(omitPriorSuspensionFields(stepInfo) as typeof stepInfo),
         status: 'failed',
         endedAt,
         error: errorInstance,

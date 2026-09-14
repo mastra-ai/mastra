@@ -22,6 +22,8 @@ export async function getInputOptions(
     sourcemap = false,
     bundlerOptions = {
       enableSourcemap: false,
+      // `mastra dev` never minifies — readable output matters more than size here.
+      enableMinify: false,
       enableEsmShim: true,
       externals: true,
     },

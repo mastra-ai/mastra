@@ -112,7 +112,7 @@ export class AgentsMySQL extends AgentsStorage {
     await this.operations.alterTable({
       tableName: TABLE_AGENT_VERSIONS,
       schema: AGENT_VERSIONS_SCHEMA,
-      ifNotExists: ['mcpClients', 'requestContextSchema', 'workspace', 'skills', 'skillsFormat'],
+      ifNotExists: ['mcpClients', 'requestContextSchema', 'workspace', 'skills', 'skillsFormat', 'durable'],
     });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
@@ -511,6 +511,7 @@ export class AgentsMySQL extends AgentsStorage {
           workspace: input.workspace ?? null,
           skills: input.skills ?? null,
           skillsFormat: input.skillsFormat ?? null,
+          durable: input.durable ?? null,
           changedFields: input.changedFields ?? null,
           changeMessage: input.changeMessage ?? null,
           createdAt: now,
@@ -781,6 +782,7 @@ export class AgentsMySQL extends AgentsStorage {
       workspace: this.safeParseJSON(row.workspace) as AgentVersion['workspace'],
       skills: this.safeParseJSON(row.skills) as AgentVersion['skills'],
       skillsFormat: row.skillsFormat as 'xml' | 'json' | 'markdown' | undefined,
+      durable: this.safeParseJSON(row.durable) as AgentVersion['durable'],
       changedFields: this.safeParseJSON(row.changedFields) as AgentVersion['changedFields'],
       changeMessage: (row.changeMessage as string) ?? undefined,
       createdAt: row.createdAt instanceof Date ? row.createdAt : new Date(row.createdAt as string),

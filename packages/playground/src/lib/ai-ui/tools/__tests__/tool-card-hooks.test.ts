@@ -8,37 +8,27 @@ import { describe, it, expect } from 'vitest';
  * React error #310: "Rendered more hooks than during the previous render"
  *
  * Root cause: the tool-dispatch component (now `ToolCardInner` in tool-card.tsx,
- * previously `ToolFallbackInner`) has an early return for
- * `toolName === 'mastra-memory-om-observation'`. If that early return sits BEFORE
- * any hooks, React reuses the same fiber position during streaming (when the tool
- * call list changes) and detects a hook-count mismatch, throwing error #310.
+ * previously `ToolFallbackInner`) returns a different card per tool kind. If a
+ * hook sits after one of those returns, React reuses the same fiber position
+ * during streaming (when the tool call list changes) and detects a hook-count
+ * mismatch, throwing error #310.
  *
  * This test guards the fix: all hooks must run unconditionally at the top of
- * `ToolCardInner`, before the observation-marker early return.
+ * `ToolCardInner`, before the `switch (kind)` dispatch.
  */
 describe('ToolCardInner - Rules of Hooks (issue #12726)', () => {
   const sourceFile = resolve(__dirname, '../tool-card.tsx');
   const source = readFileSync(sourceFile, 'utf-8');
   const lines = source.split('\n');
 
-  it('should not have hook calls after the early return for observation markers', () => {
+  it('should not have hook calls after the kind dispatch', () => {
     const componentStartIdx = lines.findIndex(line => line.includes('const ToolCardInner'));
     expect(componentStartIdx, 'Could not find ToolCardInner component').toBeGreaterThan(-1);
 
-    // Find the early return for 'mastra-memory-om-observation'
-    let earlyReturnLine = -1;
-    for (let i = componentStartIdx; i < lines.length; i++) {
-      if (lines[i].includes('mastra-memory-om-observation')) {
-        for (let j = i; j < Math.min(i + 5, lines.length); j++) {
-          if (lines[j].trim().startsWith('return')) {
-            earlyReturnLine = j + 1; // 1-indexed
-            break;
-          }
-        }
-        break;
-      }
-    }
-    expect(earlyReturnLine, 'Could not find early return for observation markers').toBeGreaterThan(-1);
+    const earlyReturnLine = lines.findIndex(
+      (line, index) => index > componentStartIdx && line.includes('switch (kind)'),
+    );
+    expect(earlyReturnLine, 'Could not find the kind dispatch in ToolCardInner').toBeGreaterThan(-1);
 
     // Find the end of the ToolCardInner component (closing `};`)
     let componentEndIdx = lines.length;
@@ -64,11 +54,11 @@ describe('ToolCardInner - Rules of Hooks (issue #12726)', () => {
 
     expect(
       hooksAfterReturn,
-      `Found ${hooksAfterReturn.length} hook call(s) after early return at line ${earlyReturnLine}.\n` +
+      `Found ${hooksAfterReturn.length} hook call(s) after the kind dispatch at line ${earlyReturnLine + 1}.\n` +
         `This violates React's Rules of Hooks and causes error #310 (issue #12726).\n` +
-        `When toolName changes between 'mastra-memory-om-observation' and other values,\n` +
-        `the early return skips these hooks, causing a hook count mismatch.\n\n` +
-        `Fix: Move all hooks to the top of ToolCardInner, before the early return.\n\n` +
+        `When the tool kind changes between renders, an early return skips these hooks,\n` +
+        `causing a hook count mismatch.\n\n` +
+        `Fix: Move all hooks to the top of ToolCardInner, before the dispatch.\n\n` +
         hooksAfterReturn.map(h => `  Line ${h.line}: ${h.text}`).join('\n'),
     ).toHaveLength(0);
   });

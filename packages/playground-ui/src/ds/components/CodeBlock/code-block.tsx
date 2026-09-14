@@ -56,8 +56,10 @@ export function CodeBlock({
 
   return (
     <figure
+      // A scrolling `pre` still reports its longest line as an intrinsic width, which
+      // grows every ancestor; containment keeps the block inside the width it is given.
       className={cn(
-        'group relative flex w-full flex-col overflow-hidden rounded-2xl border border-border2/40 bg-surface2',
+        'group relative flex w-full flex-col overflow-hidden rounded-2xl border border-border2/40 bg-surface2 [contain:inline-size]',
         className,
       )}
     >

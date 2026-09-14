@@ -27,6 +27,11 @@ export interface DependencyMetadata {
 
 export interface BundlerOptions {
   enableSourcemap: boolean;
+  /**
+   * Optional so that a `Bundler` subclass outside this repo, which builds this
+   * object itself, keeps compiling. Absent means off, same as `false`.
+   */
+  enableMinify?: boolean;
   enableEsmShim: boolean;
   externals: boolean | string[];
   dynamicPackages?: string[];

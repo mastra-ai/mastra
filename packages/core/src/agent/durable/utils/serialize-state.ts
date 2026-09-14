@@ -1,5 +1,7 @@
 import type { JSONSchema7 } from 'json-schema';
+import type { ScoringFilter } from '../../../evals/predicate';
 import type { MastraLanguageModel } from '../../../llm/model/shared.types';
+import type { ToolCallConcurrency } from '../../../loop/types';
 import type { MemoryConfig } from '../../../memory/types';
 import type { CoreTool } from '../../../tools/types';
 import type { MessageList } from '../../message-list';
@@ -111,7 +113,11 @@ export function serializeModelList(models: AgentModelManagerConfig[]): Serializa
 export function serializeScorersConfig(
   scorers: Record<
     string,
-    { scorer: { name: string } | string; sampling?: { type: 'none' } | { type: 'ratio'; rate: number } }
+    {
+      scorer: { name: string } | string;
+      sampling?: { type: 'none' } | { type: 'ratio'; rate: number };
+      filter?: ScoringFilter;
+    }
   >,
 ): SerializableScorersConfig {
   const result: SerializableScorersConfig = {};
@@ -127,6 +133,12 @@ export function serializeScorersConfig(
     // Include sampling if provided
     if (entry.sampling) {
       scorerEntry.sampling = entry.sampling;
+    }
+
+    // Filters are plain JSON (declarative predicates), so they survive the
+    // snapshot round-trip by value with no name-based re-resolution.
+    if (entry.filter) {
+      scorerEntry.filter = entry.filter;
     }
 
     result[key] = scorerEntry;
@@ -170,9 +182,9 @@ export function serializeModelSettings(
   const source = settings as Record<string, unknown>;
   const out: SerializableModelSettings = {};
   const pickNumber = (key: keyof SerializableModelSettings) => {
-    const value = source[key as string];
+    const value = source[key];
     if (typeof value === 'number' && Number.isFinite(value)) {
-      (out as Record<string, unknown>)[key as string] = value;
+      (out as Record<string, unknown>)[key] = value;
     }
   };
 
@@ -186,7 +198,7 @@ export function serializeModelSettings(
   pickNumber('maxRetries');
 
   if (Array.isArray(source.stopSequences) && source.stopSequences.every(v => typeof v === 'string')) {
-    out.stopSequences = source.stopSequences as string[];
+    out.stopSequences = source.stopSequences;
   }
 
   // Headers are never serialized into the workflow input. They are stored
@@ -209,7 +221,7 @@ export function serializeDurableOptions(options: {
   activeTools?: string[];
   modelSettings?: SerializableModelSettings | Record<string, unknown>;
   requireToolApproval?: boolean;
-  toolCallConcurrency?: number;
+  toolCallConcurrency?: ToolCallConcurrency;
   autoResumeSuspendedTools?: boolean;
   maxProcessorRetries?: number;
   includeRawChunks?: boolean;
@@ -219,6 +231,7 @@ export function serializeDurableOptions(options: {
   structuredOutput?: SerializableDurableOptions['structuredOutput'];
   skipBgTaskWait?: boolean;
   disableBackgroundTasks?: boolean;
+  backgroundTaskPolicy?: SerializableDurableOptions['backgroundTaskPolicy'];
   tracingOptions?: SerializableDurableOptions['tracingOptions'];
   actor?: SerializableDurableOptions['actor'];
   instructionsOverride?: SerializableDurableOptions['instructionsOverride'];
@@ -257,6 +270,7 @@ export function serializeDurableOptions(options: {
     structuredOutput: options.structuredOutput,
     skipBgTaskWait: options.skipBgTaskWait,
     disableBackgroundTasks: options.disableBackgroundTasks,
+    backgroundTaskPolicy: options.backgroundTaskPolicy,
     tracingOptions: options.tracingOptions,
     actor: options.actor,
     instructionsOverride: options.instructionsOverride,

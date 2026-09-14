@@ -8,7 +8,7 @@
  * Use --dry-run to preview changes without making any modifications.
  *
  * The `.mdx` extension should be omitted. Sources and internal replacements support
- * the `/docs`, `/guides`, and `/reference` route families. Replacements can also be
+ * the `/docs`, `/integrations`, and `/reference` route families. Replacements can also be
  * HTTPS URLs. Run `pnpm run generate-vercel-redirects` after a successful deletion
  * and commit the generated `vercel.json` update.
  */
@@ -24,7 +24,7 @@ const VERCEL_REDIRECTS_FILE = 'vercel.redirects.json'
 
 const SIDEBAR_ROOTS = {
   docs: 'docsSidebar',
-  guides: 'guidesSidebar',
+  integrations: 'integrationsSidebar',
   reference: 'referenceSidebar',
 } as const
 
@@ -106,7 +106,7 @@ const normalizeDestination = (destination: string): NormalizedDestination => {
 
 const routeFamily = (route: string): Family => {
   const relativePath = routeToFilePath(route).split(path.sep).join('/')
-  const match = relativePath.match(/^src\/content\/en\/(docs|guides|reference)\//)
+  const match = relativePath.match(/^src\/content\/en\/(docs|integrations|reference)\//)
   if (!match) throw new Error(`Could not resolve documentation family for ${route}`)
   return match[1] as Family
 }

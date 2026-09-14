@@ -9,12 +9,27 @@
  * @see https://docs.docker.com/engine/api/
  */
 
+import { posix as posixPath } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import type { RequestContext } from '@mastra/core/di';
-import type { SandboxInfo, ProviderStatus, MastraSandboxOptions, SandboxCloneOptions } from '@mastra/core/workspace';
-import { MastraSandbox, SandboxError, SandboxNotReadyError } from '@mastra/core/workspace';
+import type {
+  SandboxInfo,
+  ProviderStatus,
+  MastraSandboxOptions,
+  SandboxCloneOptions,
+  SandboxFileInput,
+  WriteFilesOptions,
+} from '@mastra/core/workspace';
+import {
+  MastraSandbox,
+  SandboxAbortError,
+  SandboxError,
+  SandboxNotReadyError,
+  validateSandboxFileMode,
+} from '@mastra/core/workspace';
 import Docker from 'dockerode';
 import type { Container, ContainerInfo } from 'dockerode';
+import { pack as tarPack } from 'tar-stream';
 import { DockerProcessManager } from './process-manager';
 
 const LOG_PREFIX = '[DockerSandbox]';
@@ -96,6 +111,8 @@ export interface DockerSandboxOptions extends Omit<MastraSandboxOptions, 'proces
   timeout?: number;
   /** Working directory inside the container
    * @default '/workspace'
+   * @deprecated Use `workingDirectory` (the base sandbox option) instead.
+   * When both are set, `workingDirectory` wins.
    */
   workingDir?: string;
   /** Container labels for filtering and identification */
@@ -184,14 +201,21 @@ export class DockerSandbox extends MastraSandbox {
   private readonly _securityOpt?: string[];
   private readonly _ulimits?: DockerSandboxUlimit[];
   private readonly _tmpfs?: DockerSandboxTmpfs;
-  private readonly _workingDir: string;
   private readonly _labels: Record<string, string>;
   private readonly _instructionsOverride?: InstructionsOption;
   private readonly _constructorOptions: DockerSandboxOptions;
 
+  /**
+   * The effective container working directory. Narrowed to `string`: the
+   * constructor always resolves a value (option, deprecated alias, or
+   * `/workspace`), so unlike the base getter this never returns `undefined`.
+   */
+  override get workingDirectory(): string {
+    return this._workingDirectory!;
+  }
+
   constructor(options: DockerSandboxOptions = {}) {
     const processManager = new DockerProcessManager({
-      env: options.env ?? {},
       defaultTimeout: options.timeout ?? 300_000,
     });
 
@@ -222,7 +246,7 @@ export class DockerSandbox extends MastraSandbox {
     this._securityOpt = options.securityOpt;
     this._ulimits = options.ulimits;
     this._tmpfs = options.tmpfs;
-    this._workingDir = options.workingDir ?? '/workspace';
+    this.setWorkingDirectory(options.workingDirectory ?? options.workingDir ?? '/workspace');
     this._labels = {
       ...options.labels,
       'mastra.sandbox': 'true',
@@ -253,6 +277,7 @@ export class DockerSandbox extends MastraSandbox {
       ...base,
       ...(options.id !== undefined && { id: options.id }),
       ...(options.env !== undefined && { env: options.env }),
+      ...(options.workingDirectory !== undefined && { workingDirectory: options.workingDirectory }),
     });
   }
 
@@ -318,7 +343,7 @@ export class DockerSandbox extends MastraSandbox {
       Image: this._image,
       Cmd: this._command,
       Env: envArray,
-      WorkingDir: this._workingDir,
+      WorkingDir: this.workingDirectory,
       Labels: this._labels,
       HostConfig: {
         Binds: binds.length > 0 ? binds : undefined,
@@ -471,13 +496,97 @@ export class DockerSandbox extends MastraSandbox {
   }
 
   // ---------------------------------------------------------------------------
+  // File Upload
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Bulk-write files into the container's filesystem using Docker's native
+   * archive upload (`putArchive`), the same mechanism as `docker cp`.
+   *
+   * Behavior:
+   * - Requires a started sandbox. Throws {@link SandboxNotReadyError} otherwise
+   *   (Docker containers are not auto-started by this method).
+   * - Absolute paths are used as-is; relative paths resolve against
+   *   {@link workingDirectory}.
+   * - Missing parent directories are created automatically.
+   * - Existing destinations are overwritten (contents and mode).
+   * - Exact bytes are preserved for both `string` and `Buffer` content,
+   *   including empty files and binary data.
+   * - New files use the per-file `mode` when provided (validated integer
+   *   `0o001`–`0o777`), otherwise `0644`; directories created implicitly default
+   *   to Docker's `0755`. Overwriting a file replaces its mode with the
+   *   requested `mode` (or `0644` when omitted).
+   * - Not atomic across files: on failure the promise rejects and earlier or
+   *   partially written files may remain.
+   *
+   * Cancellation (`options.abortSignal`):
+   * - If the signal is already aborted, rejects with {@link SandboxAbortError}
+   *   before creating the archive or starting the upload.
+   * - If the signal aborts during transfer, the underlying `putArchive` request
+   *   is terminated by destroying the tar stream (which ends the request body),
+   *   and the promise rejects with {@link SandboxAbortError}.
+   * - Upload and cancellation race: an upload that completes before the abort is
+   *   observed resolves normally.
+   * - No rollback: files Docker already received or extracted may remain. The
+   *   daemon may continue extraction after rejection, so the caller is
+   *   responsible for any cleanup or sandbox disposal.
+   * - Behavior is unchanged when no signal is supplied.
+   *
+   * @throws {SandboxNotReadyError} If the sandbox has not been started.
+   * @throws {SandboxAbortError} If the write is cancelled via `options.abortSignal`.
+   * @throws {SandboxError} If the archive upload fails.
+   */
+  async writeFiles(files: SandboxFileInput[], options?: WriteFilesOptions): Promise<void> {
+    const container = this.container;
+
+    const signal = options?.abortSignal;
+    if (signal?.aborted) throw new SandboxAbortError('writeFiles');
+
+    if (files.length === 0) return;
+
+    const pack = tarPack();
+    for (const file of files) {
+      if (file.mode !== undefined) validateSandboxFileMode(file.mode);
+      const resolved = posixPath.isAbsolute(file.path)
+        ? posixPath.normalize(file.path)
+        : posixPath.resolve(this.workingDirectory, file.path);
+      const data = Buffer.isBuffer(file.content) ? file.content : Buffer.from(file.content);
+      const mode = file.mode ?? 0o644;
+      // tar entries are relative; strip the leading slash so extraction at `/`
+      // lands the file at its intended absolute path.
+      pack.entry({ name: resolved.replace(/^\/+/, ''), size: data.length, mode }, data);
+    }
+    pack.finalize();
+
+    // Destroying the tar stream ends the putArchive request body, which
+    // terminates the in-flight HTTP upload to the Docker daemon. The
+    // abortSignal is also forwarded to putArchive for transports that observe
+    // it; it is harmless when ignored.
+    const onAbort = () => pack.destroy();
+    if (signal) signal.addEventListener('abort', onAbort, { once: true });
+
+    try {
+      await container.putArchive(pack, { path: '/', abortSignal: signal });
+    } catch (error) {
+      if (signal?.aborted) throw new SandboxAbortError('writeFiles');
+      throw new SandboxError(
+        `Failed to write files to sandbox: ${error instanceof Error ? error.message : String(error)}`,
+        'EXECUTION_FAILED',
+        { reason: 'write_files_failed' },
+      );
+    } finally {
+      if (signal) signal.removeEventListener('abort', onAbort);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // Instructions
   // ---------------------------------------------------------------------------
 
   getInstructions(opts?: { requestContext?: RequestContext }): string {
     const defaultInstructions = [
       `You are working inside a Docker container (image: ${this._image}).`,
-      `The working directory is ${this._workingDir}.`,
+      `The working directory is ${this.workingDirectory}.`,
       'You can execute shell commands using executeCommand().',
       'You can spawn background processes using processes.spawn().',
     ].join('\n');
@@ -500,7 +609,7 @@ export class DockerSandbox extends MastraSandbox {
       createdAt: new Date(),
       metadata: {
         image: this._image,
-        workingDir: this._workingDir,
+        workingDir: this.workingDirectory,
         labels: this._labels,
       },
     };

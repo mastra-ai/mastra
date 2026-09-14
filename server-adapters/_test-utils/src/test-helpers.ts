@@ -565,6 +565,12 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
       getConfiguration: () => undefined,
       getModelPolicyWarnings: () => [],
     }),
+    hasEnabledWorkflowBuilderConfig: () => true,
+    resolveWorkflowBuilder: async () => ({
+      enabled: true,
+      getAgent: () => agent,
+      getModelPolicy: () => undefined,
+    }),
     prompt: {
       preview: vi.fn().mockResolvedValue('resolved instructions preview'),
       clearCache: vi.fn(),
@@ -622,6 +628,8 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
   if (storage) {
     const observability = await storage.getStore('observability');
     if (observability) {
+      vi.spyOn(observability, 'getFeatures').mockReturnValue([...observability.getFeatures(), 'trace-query']);
+      vi.spyOn(observability, 'queryTraces').mockResolvedValue({ traces: [], page: { next: null } });
       await observability.createSpan({
         span: {
           spanId: 'test-span',
@@ -631,6 +639,20 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
           startedAt: new Date(),
           endedAt: new Date(),
           isEvent: false,
+        },
+      });
+
+      // Add test feedback for the review-status route
+      await observability.createFeedback({
+        feedback: {
+          feedbackId: 'test-feedback',
+          timestamp: new Date(),
+          traceId: 'test-trace',
+          spanId: 'test-span',
+          feedbackSource: 'user',
+          feedbackType: 'comment',
+          value: 'test feedback',
+          reviewStatus: 'needs-review',
         },
       });
     }
@@ -762,13 +784,13 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
       });
     }
 
-    // Add test stored workflow definition so GET /stored/workflows/:storedWorkflowId
-    // finds a row matching getDefaultValidPathParams' 'test-stored-workflow'
+    // Add test dynamic workflow definition so GET /stored/workflows/:dynamicWorkflowId
+    // finds a row matching getDefaultValidPathParams' 'test-dynamic-workflow'
     const workflowDefinitions = await storage.getStore('workflowDefinitions');
     if (workflowDefinitions) {
       await workflowDefinitions.upsert({
-        id: 'test-stored-workflow',
-        description: 'Test stored workflow',
+        id: 'test-dynamic-workflow',
+        description: 'Test dynamic workflow',
         inputSchema: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] },
         outputSchema: { type: 'object', properties: { message: { type: 'string' } } },
         graph: [

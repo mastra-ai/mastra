@@ -1,4 +1,4 @@
-# @mastra/arthur - OpenTelemetry + OpenInference Tracing Exporter
+# @mastra/arthur
 
 Export Mastra traces to [Arthur AI](https://arthur.ai) using [OpenInference Semantic Conventions](https://github.com/Arize-ai/openinference/tree/main/spec).
 
@@ -8,104 +8,35 @@ Export Mastra traces to [Arthur AI](https://arthur.ai) using [OpenInference Sema
 npm install @mastra/arthur
 ```
 
-## Configuration
+## Usage
 
-Add `ArthurExporter` to your Mastra configuration to export traces to Arthur. The exporter automatically reads credentials from environment variables, enabling zero-config setup.
-
-### Zero-Config
-
-Set environment variables:
-
-```bash
-ARTHUR_API_KEY=your-api-key
-ARTHUR_BASE_URL=https://app.arthur.ai
-ARTHUR_TASK_ID=your-task-id  # optional, associates traces with a specific Arthur task
-```
+Set `ARTHUR_API_KEY` and `ARTHUR_BASE_URL` before creating the exporter.
 
 ```typescript
-import { ArthurExporter } from '@mastra/arthur';
 import { Mastra } from '@mastra/core/mastra';
+import { Observability } from '@mastra/observability';
+import { ArthurExporter } from '@mastra/arthur';
 
-const mastra = new Mastra({
-  ...,
-  observability: {
+export const mastra = new Mastra({
+  observability: new Observability({
     configs: {
       arthur: {
         serviceName: 'my-service',
         exporters: [new ArthurExporter()],
       },
     },
-  },
+  }),
 });
 ```
 
-### Explicit Configuration
+## Documentation
 
-```typescript
-import { ArthurExporter } from '@mastra/arthur';
-import { Mastra } from '@mastra/core/mastra';
+- [@mastra/arthur documentation](https://mastra.ai/integrations/observability/arthur)
 
-const mastra = new Mastra({
-  ...,
-  observability: {
-    configs: {
-      arthur: {
-        serviceName: 'my-service',
-        exporters: [
-          new ArthurExporter({
-            apiKey: 'your-api-key',
-            endpoint: 'https://app.arthur.ai',
-          }),
-        ],
-      },
-    },
-  },
-});
-```
+## Changelog
 
-## Optional Configuration
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/observability/arthur/CHANGELOG.md) for version history and release notes.
 
-```typescript
-new ArthurExporter({
-  // Required at runtime (or set ARTHUR_API_KEY env var)
-  apiKey: 'your-api-key',
-  // Required at runtime (or set ARTHUR_BASE_URL env var)
-  endpoint: 'https://app.arthur.ai',
-  // Optional headers added to each OTLP request
-  headers: {
-    'x-custom-header': 'value',
-  },
-  // Optional log level for debugging
-  logLevel: 'debug',
-  // Optional batch size for the underlying BatchSpanProcessor
-  batchSize: 512,
-  // Optional timeout for span export
-  timeout: 30000,
-  // Optional resource attributes added to each span
-  resourceAttributes: {
-    'custom.attribute': 'value',
-  },
-});
-```
+## Support
 
-### Custom metadata
-
-Custom span attributes are serialized into the OpenInference `metadata` payload. Add them through `tracingOptions.metadata`:
-
-```typescript
-await agent.generate(input, {
-  tracingOptions: {
-    metadata: {
-      companyId: 'acme-co',
-    },
-  },
-});
-```
-
-## OpenInference Semantic Conventions
-
-This exporter follows the [OpenInference Semantic Conventions](https://github.com/Arize-ai/openinference/tree/main/spec) for generative AI applications. All agent runs, tool calls, and LLM generations are automatically tagged with the correct span kinds and attributes.
-
-## License
-
-Apache 2.0
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.

@@ -5,7 +5,7 @@ import { MastraA2AError } from '@mastra/core/a2a';
 import type { AgentConfig } from '@mastra/core/agent';
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
-import { RequestContext } from '@mastra/core/request-context';
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '@mastra/core/request-context';
 import type { MastraStorage } from '@mastra/core/storage';
 import canonicalize from 'canonicalize';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -19,10 +19,12 @@ import {
   getAgentCardByIdHandler,
   getAgentExecutionHandler,
   handleTaskGet,
+  handleTaskList,
   handleMessageSend,
   handleMessageStream,
   handleTaskCancel,
   handleTaskResubscribe,
+  resolveA2AProtocolVersion,
 } from './a2a';
 
 class MockAgent extends Agent {
@@ -327,6 +329,85 @@ describe('A2A Handler', () => {
     });
   });
 
+  describe.each(['send', 'stream'] as const)('A2A %s memory identity', transport => {
+    it.each([false, true])('uses persisted v1 memory with trusted thread override=%s', async trustedThread => {
+      const taskStore = new InMemoryTaskStore();
+      const requestContext = new RequestContext();
+      requestContext.set(MASTRA_RESOURCE_ID_KEY, 'authenticated-user');
+      if (trustedThread) requestContext.set(MASTRA_THREAD_ID_KEY, 'authenticated-thread');
+      const generate = vi.fn().mockResolvedValue({ text: 'Hello' });
+      const stream = vi.fn().mockImplementation(async () => createStreamResult({ chunks: ['Hello'] }));
+      const resumeGenerate = vi.fn().mockResolvedValue({ text: 'Continued' });
+      const resumeStream = vi.fn().mockImplementation(async () => createStreamResult({ chunks: ['Continued'] }));
+      const agent = { generate, stream, resumeGenerate, resumeStream } as unknown as Agent;
+      const invoke = async (params: MessageSendParams) => {
+        const input = { requestId: 'memory', params, taskStore, agent, agentId: 'test-agent', requestContext };
+        if (transport === 'send') return (await handleMessageSend(input)).result;
+        let initial: Task | undefined;
+        for await (const event of handleMessageStream(input)) {
+          if (event.result.kind === 'task') initial ??= event.result;
+        }
+        return initial!;
+      };
+      const task = await invoke({
+        message: {
+          kind: 'message',
+          messageId: 'initial',
+          role: 'user',
+          parts: [{ kind: 'text', text: 'Hello' }],
+          metadata: { resourceId: 'untrusted-message' },
+        },
+        metadata: { resourceId: 'untrusted-params' },
+      });
+      const memory = { thread: task.contextId, resource: 'authenticated-user' };
+      if (trustedThread) expect(task.contextId).toBe('authenticated-thread');
+      expect(task.contextId).toEqual(expect.any(String));
+      const call = transport === 'send' ? generate : stream;
+      expect(call).toHaveBeenLastCalledWith(expect.any(Array), expect.objectContaining({ memory }));
+      expect(call.mock.calls[0]?.[1]).not.toHaveProperty('threadId');
+      expect(call.mock.calls[0]?.[1]).not.toHaveProperty('resourceId');
+      const stored = (await taskStore.load({ agentId: 'test-agent', taskId: task.id }))!;
+      expect(stored.metadata?.resourceId).toBe(memory.resource);
+      await taskStore.save({ agentId: 'test-agent', data: { ...stored, status: { state: 'input-required' } } });
+      await invoke({
+        message: {
+          kind: 'message',
+          messageId: 'follow-up',
+          role: 'user',
+          taskId: task.id,
+          contextId: 'changed-context',
+          parts: [{ kind: 'text', text: 'Continue' }],
+        },
+        metadata: { resourceId: 'changed-resource' },
+      });
+      const resumeCall = transport === 'send' ? resumeGenerate : resumeStream;
+      expect(resumeCall).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ runId: task.id, requestContext }),
+      );
+      expect(resumeCall.mock.calls[0]?.[1]).not.toHaveProperty('memory');
+      expect((await taskStore.load({ agentId: 'test-agent', taskId: task.id }))?.metadata?.resourceId).toBe(
+        memory.resource,
+      );
+      const before = await taskStore.load({ agentId: 'test-agent', taskId: task.id });
+      requestContext.set(MASTRA_RESOURCE_ID_KEY, 'different-user');
+      await expect(
+        invoke({
+          message: {
+            kind: 'message',
+            messageId: 'conflict',
+            role: 'user',
+            taskId: task.id,
+            parts: [{ kind: 'text', text: 'No' }],
+          },
+        }),
+      ).rejects.toThrow('Task memory identity conflicts');
+      expect(await taskStore.load({ agentId: 'test-agent', taskId: task.id })).toEqual(before);
+      expect(call).toHaveBeenCalledTimes(1);
+      expect(resumeCall).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('handleMessageSend', () => {
     let mockMastra: Mastra;
     let mockTaskStore: InMemoryTaskStore;
@@ -396,6 +477,7 @@ describe('A2A Handler', () => {
           id: expect.any(String),
           contextId: expect.any(String),
           metadata: {
+            resourceId: 'test-agent',
             execution: {
               toolCalls: undefined,
               toolResults: undefined,
@@ -527,8 +609,7 @@ describe('A2A Handler', () => {
       expect(mockAgent.generate).toHaveBeenCalledWith(expect.any(Array), {
         runId: taskId,
         requestContext,
-        threadId: contextId,
-        resourceId: 'test-agent',
+        memory: { thread: contextId, resource: 'test-agent' },
       });
       expect((await mockTaskStore.load({ agentId: 'test-agent', taskId }))?.status.state).toBe('working');
 
@@ -901,8 +982,7 @@ describe('A2A Handler', () => {
       expect(mockAgent.generate).toHaveBeenCalledWith(
         expect.any(Array),
         expect.objectContaining({
-          threadId: contextId,
-          resourceId: agentId,
+          memory: { thread: contextId, resource: agentId },
         }),
       );
     });
@@ -988,8 +1068,7 @@ describe('A2A Handler', () => {
       expect(mockAgent.generate).toHaveBeenCalledWith(
         expect.any(Array),
         expect.objectContaining({
-          threadId: contextId,
-          resourceId: customResourceId,
+          memory: { thread: contextId, resource: customResourceId },
         }),
       );
     });
@@ -1034,8 +1113,7 @@ describe('A2A Handler', () => {
       expect(mockAgent.generate).toHaveBeenCalledWith(
         expect.any(Array),
         expect.objectContaining({
-          threadId: contextId,
-          resourceId: customResourceId,
+          memory: { thread: contextId, resource: customResourceId },
         }),
       );
     });
@@ -1084,8 +1162,7 @@ describe('A2A Handler', () => {
       expect(mockAgent.generate).toHaveBeenCalledWith(
         expect.any(Array),
         expect.objectContaining({
-          threadId: contextId,
-          resourceId: paramsResourceId,
+          memory: { thread: contextId, resource: paramsResourceId },
         }),
       );
     });
@@ -1130,8 +1207,7 @@ describe('A2A Handler', () => {
       expect(mockAgent.generate).toHaveBeenCalledWith(
         expect.any(Array),
         expect.objectContaining({
-          threadId: contextId,
-          resourceId: customResourceId,
+          memory: { thread: contextId, resource: customResourceId },
         }),
       );
     });
@@ -1176,8 +1252,7 @@ describe('A2A Handler', () => {
       expect(mockAgent.generate).toHaveBeenCalledWith(
         expect.any(Array),
         expect.objectContaining({
-          threadId: contextId,
-          resourceId: customResourceId,
+          memory: { thread: contextId, resource: customResourceId },
         }),
       );
     });
@@ -1318,6 +1393,7 @@ describe('A2A Handler', () => {
             },
           ],
           metadata: {
+            resourceId: 'test-agent',
             execution: {
               toolCalls: undefined,
               toolResults: undefined,
@@ -1387,6 +1463,7 @@ describe('A2A Handler', () => {
 
       // Verify the execution metadata is stored
       expect(result.result?.metadata).toEqual({
+        resourceId: 'test-agent',
         execution: {
           toolCalls: mockExecutionData.toolCalls,
           toolResults: mockExecutionData.toolResults,
@@ -1402,6 +1479,7 @@ describe('A2A Handler', () => {
       }
       const savedTask = await mockTaskStore.load({ agentId, taskId });
       expect(savedTask?.metadata).toEqual({
+        resourceId: 'test-agent',
         execution: {
           toolCalls: mockExecutionData.toolCalls,
           toolResults: mockExecutionData.toolResults,
@@ -1458,6 +1536,7 @@ describe('A2A Handler', () => {
       // Verify both existing metadata and execution metadata are present
       expect(result.result?.metadata).toEqual({
         ...existingMetadata,
+        resourceId: 'test-agent',
         execution: {
           toolCalls: mockExecutionData.toolCalls,
           toolResults: mockExecutionData.toolResults,
@@ -1763,7 +1842,7 @@ describe('A2A Handler', () => {
           ],
           id: expect.any(String),
           kind: 'task',
-          metadata: undefined,
+          metadata: { resourceId: 'test-agent' },
           status: {
             message: {
               kind: 'message',
@@ -3777,6 +3856,29 @@ describe('A2A Handler', () => {
     });
   });
 
+  describe('A2A protocol version negotiation', () => {
+    it.each([
+      [undefined, '0.3'],
+      ['', '0.3'],
+      ['0.3', '0.3'],
+      ['1.0', '1.0'],
+    ] as const)('resolves %s to protocol version %s', (header, expected) => {
+      const request = new Request('http://localhost/api/a2a/test-agent', {
+        headers: header === undefined ? undefined : { 'A2A-Version': header },
+      });
+
+      expect(resolveA2AProtocolVersion(request)).toBe(expected);
+    });
+
+    it('rejects unsupported protocol versions', () => {
+      const request = new Request('http://localhost/api/a2a/test-agent', {
+        headers: { 'A2A-Version': '2.0' },
+      });
+
+      expect(() => resolveA2AProtocolVersion(request)).toThrow('Version not supported: 2.0');
+    });
+  });
+
   describe('AGENT_EXECUTION_ROUTE', () => {
     let mockMastra: Mastra;
     let mockTaskStore: InMemoryTaskStore;
@@ -3816,6 +3918,103 @@ describe('A2A Handler', () => {
         error: {
           code: -32001,
           message: 'Task not found: missing-task',
+        },
+      });
+    });
+
+    it('accepts and returns A2A v1 message shapes', async () => {
+      const mockAgent = mockMastra.getAgentById('test-agent');
+      // @ts-expect-error - mockResolvedValue is not available on the Agent class
+      mockAgent.generate.mockResolvedValue({ text: 'Hello from v1' });
+
+      const response = await AGENT_EXECUTION_ROUTE.handler({
+        mastra: mockMastra,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+        taskStore: mockTaskStore,
+        abortSignal: AbortSignal.abort(),
+        request: new Request('http://localhost/api/a2a/test-agent', {
+          headers: { 'A2A-Version': '1.0' },
+        }),
+        id: 2,
+        method: 'message/send',
+        params: {
+          message: {
+            messageId: 'v1-message',
+            role: 'ROLE_USER',
+            parts: [{ text: 'Hello' }],
+          },
+          configuration: { returnImmediately: false },
+        },
+      });
+
+      expect(await response.json()).toMatchObject({
+        jsonrpc: '2.0',
+        id: 2,
+        result: {
+          task: {
+            status: { state: 'TASK_STATE_COMPLETED' },
+            artifacts: [{ parts: [{ text: 'Hello from v1' }] }],
+          },
+        },
+      });
+    });
+
+    it('lists tasks using the A2A v1 pagination response', async () => {
+      const task = {
+        id: 'task-1',
+        contextId: 'context-1',
+        kind: 'task' as const,
+        status: { state: 'completed' as const, timestamp: '2026-08-06T12:00:00.000Z' },
+      };
+      await mockTaskStore.save({ agentId: 'test-agent', data: task });
+
+      expect(
+        handleTaskList({
+          requestId: 3,
+          taskStore: mockTaskStore,
+          agentId: 'test-agent',
+          params: { contextId: 'context-1', pageSize: 10 },
+        }),
+      ).toEqual({
+        jsonrpc: '2.0',
+        id: 3,
+        result: {
+          tasks: [
+            expect.objectContaining({
+              id: 'task-1',
+              status: expect.objectContaining({ state: 'TASK_STATE_COMPLETED' }),
+            }),
+          ],
+          nextPageToken: '',
+          pageSize: 10,
+          totalSize: 1,
+        },
+      });
+    });
+
+    it('returns a protocol error for unsupported A2A versions', async () => {
+      const response = await AGENT_EXECUTION_ROUTE.handler({
+        mastra: mockMastra,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+        taskStore: mockTaskStore,
+        abortSignal: AbortSignal.abort(),
+        request: new Request('http://localhost/api/a2a/test-agent', {
+          headers: { 'A2A-Version': '2.0' },
+        }),
+        id: 2,
+        method: 'tasks/get',
+        params: { id: 'missing-task' },
+      });
+
+      expect(await response.json()).toEqual({
+        jsonrpc: '2.0',
+        id: 2,
+        error: {
+          code: -32009,
+          message: 'Version not supported: 2.0',
+          data: { version: '2.0' },
         },
       });
     });

@@ -15,6 +15,8 @@ import type {
 } from './gateways/base.js';
 import { getGatewayId, shouldEnableGateway } from './gateways/index.js';
 
+const WINDOWS_RENAME_RETRY_DELAYS_MS = [25, 50, 100, 200, 400];
+
 interface GatewayWithAttachmentCapabilities {
   getAttachmentCapabilities(): AttachmentCapabilities;
 }
@@ -30,28 +32,19 @@ interface GatewayWithStructuredOutputCapabilities {
 function hasAttachmentCapabilities(
   gateway: MastraModelGatewayInterface,
 ): gateway is MastraModelGatewayInterface & GatewayWithAttachmentCapabilities {
-  return (
-    'getAttachmentCapabilities' in gateway &&
-    typeof (gateway as { getAttachmentCapabilities?: unknown }).getAttachmentCapabilities === 'function'
-  );
+  return 'getAttachmentCapabilities' in gateway && typeof gateway.getAttachmentCapabilities === 'function';
 }
 
 function hasTemperatureCapabilities(
   gateway: MastraModelGatewayInterface,
 ): gateway is MastraModelGatewayInterface & GatewayWithTemperatureCapabilities {
-  return (
-    'getTemperatureCapabilities' in gateway &&
-    typeof (gateway as { getTemperatureCapabilities?: unknown }).getTemperatureCapabilities === 'function'
-  );
+  return 'getTemperatureCapabilities' in gateway && typeof gateway.getTemperatureCapabilities === 'function';
 }
 
 function hasStructuredOutputCapabilities(
   gateway: MastraModelGatewayInterface,
 ): gateway is MastraModelGatewayInterface & GatewayWithStructuredOutputCapabilities {
-  return (
-    'getStructuredOutputCapabilities' in gateway &&
-    typeof (gateway as { getStructuredOutputCapabilities?: unknown }).getStructuredOutputCapabilities === 'function'
-  );
+  return 'getStructuredOutputCapabilities' in gateway && typeof gateway.getStructuredOutputCapabilities === 'function';
 }
 
 /**
@@ -78,9 +71,24 @@ export async function atomicWriteFile(
     // Write to temp file first
     await fs.writeFile(tempPath, content, encoding);
 
-    // Atomically rename temp file to target path
-    // This is atomic on POSIX when both paths are on the same filesystem
-    await fs.rename(tempPath, filePath);
+    // Atomically rename temp file to target path. Windows scanners can briefly
+    // lock the destination while the write is otherwise complete.
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        await fs.rename(tempPath, filePath);
+        break;
+      } catch (error) {
+        const delayMs = WINDOWS_RENAME_RETRY_DELAYS_MS[attempt];
+        const retryable =
+          process.platform === 'win32' &&
+          error instanceof Error &&
+          'code' in error &&
+          ((error as NodeJS.ErrnoException).code === 'EPERM' || (error as NodeJS.ErrnoException).code === 'EBUSY');
+
+        if (!retryable || delayMs === undefined) throw error;
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+      }
+    }
   } catch (error) {
     // Clean up temp file if it exists
     try {
@@ -223,6 +231,11 @@ export function generateTypesContent(models: Record<string, string[]>): string {
     })
     .join('\n');
 
+  // The Provider / ModelForProvider / ModelRouterModelId types emitted below cover
+  // the built-in providers only. The public, augmentable versions live in
+  // `src/llm/index.ts`, which re-derives them from the `ProviderModelsMap`
+  // interface so custom gateways can extend them. Keep the two in sync, and
+  // import from `@mastra/core/llm` rather than from the generated file.
   return `/**
  * THIS FILE IS AUTO-GENERATED - DO NOT EDIT
  * Generated from model gateway providers
@@ -305,15 +318,16 @@ export async function writeRegistryFiles(
   await atomicWriteFile(typesPath, typeContent, 'utf-8');
 
   // 3. Write per-provider capability files into a capabilities/ directory
+  const capDir = path.join(jsonDir, 'capabilities');
   const hasCapabilities =
     (attachmentCapabilities && Object.keys(attachmentCapabilities).length > 0) ||
     (temperatureCapabilities && Object.keys(temperatureCapabilities).length > 0) ||
     (structuredOutputCapabilities && Object.keys(structuredOutputCapabilities).length > 0);
-  if (hasCapabilities) {
-    const capDir = path.join(jsonDir, 'capabilities');
 
-    // Replace the directory so stale files and legacy nested gateway paths are removed.
-    await fs.rm(capDir, { recursive: true, force: true });
+  // Remove stale files even when the latest registry has no capability data.
+  await fs.rm(capDir, { recursive: true, force: true });
+
+  if (hasCapabilities) {
     await fs.mkdir(capDir, { recursive: true });
 
     // Build a merged capability object per provider

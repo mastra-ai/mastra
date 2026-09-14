@@ -963,7 +963,6 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
               endedAt: expect.any(Number),
               resumePayload: { stepId: 'promptAgent', context: { userInput: 'test input for resumption' } },
               resumedAt: expect.any(Number),
-              suspendedAt: expect.any(Number),
             },
             evaluateToneConsistency: {
               status: 'success',
@@ -972,6 +971,7 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
               endedAt: expect.any(Number),
             },
           });
+          expect(resumeResult.steps.promptAgent).not.toHaveProperty('suspendedAt');
         },
       );
 

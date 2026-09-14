@@ -28,6 +28,10 @@ export const singleDrilldownThemeSnapshotsResponse = {
   snapshots: [{ ...snapshot, ordinal: 1, total: 1 }],
 } satisfies ThemeSnapshotsResponse;
 
+export const fourSignalThemeSnapshotsResponse = {
+  snapshots: [{ ...snapshot, availableSignals: ['goal', 'outcome', 'behavior', 'sentiment'] }],
+} satisfies ThemeSnapshotsResponse;
+
 export const twoDrilldownThemeSnapshotsResponse = {
   snapshots: [
     {
@@ -186,8 +190,16 @@ export const themeDetailResponse = {
     label: 'Add transcript',
     description: 'Users want to add a transcript to their workspace.',
     state: 'continue',
-    traceCount: 2,
+    traceCount: 6,
     coverage: 2 / 3,
+  },
+} satisfies ThemeDetailResponse;
+
+export const zeroCoverageThemeDetailResponse = {
+  snapshot,
+  theme: {
+    ...themeDetailResponse.theme,
+    coverage: 0,
   },
 } satisfies ThemeDetailResponse;
 
@@ -203,8 +215,28 @@ export const firstThemeExamplesResponse = {
       signalText: 'Add this transcript to my workspace.',
       traceStartedAt: '2026-07-20T10:00:00.000Z',
     },
+    {
+      traceId: 'trace-3',
+      extractedTraceId: 'extracted-3',
+      signalText: 'Attach the standup transcript to the workspace.',
+    },
+    {
+      traceId: 'trace-4',
+      extractedTraceId: 'extracted-4',
+      signalText: 'Upload this call transcript for the team.',
+    },
+    {
+      traceId: 'trace-5',
+      extractedTraceId: 'extracted-5',
+      signalText: 'Put the interview transcript into my workspace.',
+    },
+    {
+      traceId: 'trace-6',
+      extractedTraceId: 'extracted-6',
+      signalText: 'Store the retro transcript with the workspace.',
+    },
   ],
-  nextOffset: 1,
+  nextOffset: 5,
 } satisfies ThemeExamplesResponse;
 
 export const secondThemeExamplesResponse = {
@@ -262,6 +294,19 @@ export const noiseExamplesResponse = {
   ],
 } satisfies NoiseExamplesResponse;
 
+export const sentimentNoiseResponse = {
+  ...noiseResponse,
+  noise: {
+    signalName: 'sentiment',
+    traceCount: 1,
+    coverage: 1 / 3,
+  },
+} satisfies NoiseResponse;
+
+export const emptyNoiseExamplesResponse = {
+  examples: [],
+} satisfies NoiseExamplesResponse;
+
 export const themeHistoryResponse = {
   theme: {
     themeId: '101',
@@ -269,15 +314,9 @@ export const themeHistoryResponse = {
     label: 'Add transcript',
     description: 'Users want to add a transcript to their workspace.',
   },
+  // Newest-first, matching the server's `ORDER BY frameId DESC` — the client
+  // must sort chronologically before presenting the series.
   points: [
-    {
-      snapshotId: 'older-opaque-snapshot-cursor',
-      startedAt: '2026-07-08T00:00:00.000Z',
-      endedAt: '2026-07-15T00:00:00.000Z',
-      state: 'birth',
-      traceCount: 1,
-      coverage: 0.5,
-    },
     {
       snapshotId: 'opaque-snapshot-cursor',
       startedAt: '2026-07-15T00:00:00.000Z',
@@ -286,8 +325,72 @@ export const themeHistoryResponse = {
       traceCount: 2,
       coverage: 2 / 3,
     },
+    {
+      snapshotId: 'older-opaque-snapshot-cursor',
+      startedAt: '2026-07-08T00:00:00.000Z',
+      endedAt: '2026-07-15T00:00:00.000Z',
+      state: 'birth',
+      traceCount: 1,
+      coverage: 0.5,
+    },
   ],
   relationships: [],
+} satisfies ThemeHistoryResponse;
+
+export const fadingThemeHistoryResponse = {
+  ...themeHistoryResponse,
+  points: [
+    {
+      ...themeHistoryResponse.points[0],
+      trend: { popularity: -0.4, signalScore: -0.2, strength: 'strong' },
+    },
+    themeHistoryResponse.points[1],
+  ],
+} satisfies ThemeHistoryResponse;
+
+export const singlePointThemeHistoryResponse = {
+  ...themeHistoryResponse,
+  points: [themeHistoryResponse.points[0]],
+} satisfies ThemeHistoryResponse;
+
+export const truncatedThemeHistoryResponse = {
+  ...themeHistoryResponse,
+  points: [
+    {
+      snapshotId: 'newest-opaque-snapshot-cursor',
+      startedAt: '2026-07-22T00:00:00.000Z',
+      endedAt: '2026-07-29T00:00:00.000Z',
+      state: 'continue',
+      traceCount: 3,
+      coverage: 0.75,
+    },
+    ...themeHistoryResponse.points,
+  ],
+  nextCursor: 'older-history-cursor',
+} satisfies ThemeHistoryResponse;
+
+/** Newest point's pipeline trend rises while raw trace counts fall. */
+export const risingTrendFallingCountsHistoryResponse = {
+  ...themeHistoryResponse,
+  points: [
+    {
+      snapshotId: 'opaque-snapshot-cursor',
+      startedAt: '2026-07-15T00:00:00.000Z',
+      endedAt: '2026-07-22T00:00:00.000Z',
+      state: 'continue',
+      traceCount: 1,
+      coverage: 0.25,
+      trend: { popularity: 0.6, signalScore: 0.3, strength: 'strong' },
+    },
+    {
+      snapshotId: 'older-opaque-snapshot-cursor',
+      startedAt: '2026-07-08T00:00:00.000Z',
+      endedAt: '2026-07-15T00:00:00.000Z',
+      state: 'continue',
+      traceCount: 5,
+      coverage: 0.8,
+    },
+  ],
 } satisfies ThemeHistoryResponse;
 
 export const firstThemePathsResponse = {
@@ -344,7 +447,7 @@ export const secondThemePathsResponse = {
       assignments: {
         goal: 'opaque-goal-key',
         outcome: 'opaque-outcome-key',
-        behavior: 'noise-marker-from-api',
+        behavior: 'noise',
       },
     },
     {
@@ -352,7 +455,7 @@ export const secondThemePathsResponse = {
       assignments: {
         goal: 'opaque-goal-other-key',
         outcome: 'opaque-outcome-other-key',
-        behavior: 'another-noise-marker-from-api',
+        behavior: 'noise',
       },
     },
   ],
@@ -362,6 +465,115 @@ export const allThemePathsResponse = {
   ...firstThemePathsResponse,
   paths: [...firstThemePathsResponse.paths, ...secondThemePathsResponse.paths],
   nextOffset: undefined,
+} satisfies ThemePathsResponse;
+
+export const fourSignalThemeFlowResponse = {
+  ...drilldownThemeFlowResponse,
+  snapshot: fourSignalThemeSnapshotsResponse.snapshots[0],
+  stages: [
+    ...drilldownThemeFlowResponse.stages,
+    {
+      signalName: 'sentiment',
+      traceCount: 3,
+      nodes: [
+        {
+          nodeId: 'flow-sentiment-401',
+          kind: 'theme',
+          themeId: '401',
+          label: 'Satisfied',
+          traceCount: 1,
+          stageShare: 1 / 3,
+        },
+        {
+          nodeId: 'flow-sentiment-402',
+          kind: 'theme',
+          themeId: '402',
+          label: 'Uncertain',
+          traceCount: 1,
+          stageShare: 1 / 3,
+        },
+        {
+          nodeId: 'flow-sentiment-noise',
+          kind: 'noise',
+          label: 'Noise',
+          traceCount: 1,
+          stageShare: 1 / 3,
+        },
+      ],
+    },
+  ],
+  links: [
+    ...drilldownThemeFlowResponse.links,
+    {
+      sourceNodeId: 'flow-behavior-301',
+      targetNodeId: 'flow-sentiment-401',
+      traceCount: 1,
+      sourceShare: 1,
+      targetShare: 1,
+    },
+    {
+      sourceNodeId: 'flow-behavior-noise',
+      targetNodeId: 'flow-sentiment-noise',
+      traceCount: 1,
+      sourceShare: 0.5,
+      targetShare: 1,
+    },
+    {
+      sourceNodeId: 'flow-behavior-noise',
+      targetNodeId: 'flow-sentiment-402',
+      traceCount: 1,
+      sourceShare: 0.5,
+      targetShare: 1,
+    },
+  ],
+} satisfies ThemeFlowResponse;
+
+export const fourSignalThemePathsResponse = {
+  ...allThemePathsResponse,
+  snapshot: fourSignalThemeSnapshotsResponse.snapshots[0],
+  signals: ['goal', 'outcome', 'behavior', 'sentiment'],
+  themes: {
+    ...allThemePathsResponse.themes,
+    'opaque-sentiment-401-key': {
+      signalName: 'sentiment',
+      themeId: '401',
+      label: 'Satisfied',
+    },
+    'opaque-sentiment-402-key': {
+      signalName: 'sentiment',
+      themeId: '402',
+      label: 'Uncertain',
+    },
+  },
+  paths: [
+    {
+      traceId: 'trace-1',
+      assignments: {
+        goal: 'opaque-goal-key',
+        outcome: 'opaque-outcome-key',
+        behavior: 'opaque-behavior-key',
+        sentiment: 'opaque-sentiment-401-key',
+      },
+    },
+    {
+      traceId: 'trace-2',
+      assignments: {
+        goal: 'opaque-goal-key',
+        outcome: 'opaque-outcome-key',
+        behavior: 'noise',
+        sentiment: 'noise',
+      },
+    },
+    {
+      traceId: 'trace-3',
+      assignments: {
+        goal: 'opaque-goal-other-key',
+        outcome: 'opaque-outcome-other-key',
+        behavior: 'noise',
+        sentiment: 'opaque-sentiment-402-key',
+      },
+    },
+  ],
 } satisfies ThemePathsResponse;
 
 export const pathsWithCollapsedOutcomeResponse = {

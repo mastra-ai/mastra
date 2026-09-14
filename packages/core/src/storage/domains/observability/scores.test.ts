@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   createScoreArgsSchema,
   createScoreRecordSchema,
+  deleteScoresArgsSchema,
   getScoreAggregateArgsSchema,
   getScoreAggregateResponseSchema,
   getScoreBreakdownArgsSchema,
@@ -124,6 +125,21 @@ describe('Score Schemas', () => {
     });
   });
 
+  describe('deleteScoresArgsSchema', () => {
+    it('limits the number of score IDs in a batch', () => {
+      expect(
+        deleteScoresArgsSchema.safeParse({
+          scoreIds: Array.from({ length: 1000 }, (_, index) => `score-${index}`),
+        }).success,
+      ).toBe(true);
+      expect(
+        deleteScoresArgsSchema.safeParse({
+          scoreIds: Array.from({ length: 1001 }, (_, index) => `score-${index}`),
+        }).success,
+      ).toBe(false);
+    });
+  });
+
   describe('scoresFilterSchema', () => {
     it('accepts all filter options', () => {
       const filter = scoresFilterSchema.parse({
@@ -151,6 +167,11 @@ describe('Score Schemas', () => {
     it('accepts empty filter', () => {
       const filter = scoresFilterSchema.parse({});
       expect(filter).toEqual({});
+    });
+
+    it('accepts metadata filter', () => {
+      const filter = scoresFilterSchema.parse({ metadata: { env: 'prod', attempt: 2 } });
+      expect(filter.metadata).toEqual({ env: 'prod', attempt: 2 });
     });
   });
 

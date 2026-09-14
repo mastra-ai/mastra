@@ -3,6 +3,7 @@ import {
   normalizePerPage,
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_SCHEMAS,
+  matchesExpectedWorkflowStatus,
   WorkflowsStorage,
   createStorageErrorId,
 } from '@mastra/core/storage';
@@ -237,7 +238,12 @@ export class WorkflowsDSQL extends WorkflowsStorage {
               throw new Error(`Snapshot not found for runId ${runId}`);
             }
 
-            const updatedSnapshot = { ...snapshot, ...opts };
+            const { expectedStatus, ...state } = opts;
+            if (!matchesExpectedWorkflowStatus(snapshot.status, expectedStatus)) {
+              return undefined;
+            }
+
+            const updatedSnapshot = { ...snapshot, ...state };
 
             await t.none(
               `UPDATE ${tableName} SET snapshot = $1, "updatedAt" = $2 WHERE workflow_name = $3 AND run_id = $4`,

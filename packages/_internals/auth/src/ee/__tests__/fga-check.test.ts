@@ -147,6 +147,22 @@ describe('requireFGA — actor signals', () => {
     expect(provider.require).not.toHaveBeenCalled();
   });
 
+  it('treats a propagating actor exactly like any other system actor', async () => {
+    const provider = createMockFGAProvider(true);
+
+    await requireFGA({
+      fgaProvider: provider,
+      user: undefined,
+      resource: { type: 'agent', id: 'agent-1' },
+      permission: MastraFGAPermissions.AGENTS_EXECUTE,
+      requestContext: tenantScopedRequestContext(),
+      actor: { actorKind: 'system', propagate: true },
+    });
+
+    // `propagate` is a workflow-plumbing hint; authorization must ignore it.
+    expect(provider.require).not.toHaveBeenCalled();
+  });
+
   it('still fails closed for an actor without a tenant organizationId', async () => {
     const provider = createMockFGAProvider(true);
 

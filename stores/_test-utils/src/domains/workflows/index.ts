@@ -585,6 +585,89 @@ export function createWorkflowsTests({ storage }: WorkflowsTestOptions) {
       expect(run?.runId).toBe(runId);
     });
 
+    it('should apply an update when the expectedStatus guard matches', async () => {
+      if (!supportsConcurrentUpdates) {
+        console.log('Skipping expectedStatus guard test');
+        return;
+      }
+      const workflowName = 'test-workflow';
+      const runId = `run-${randomUUID()}`;
+
+      await workflowsStorage.persistWorkflowSnapshot({
+        workflowName,
+        runId,
+        snapshot: { status: 'suspended', context: {}, suspendedPaths: { 'step-1': [0] } } as any,
+      });
+
+      const updated = await workflowsStorage.updateWorkflowState({
+        workflowName,
+        runId,
+        opts: { status: 'running', expectedStatus: 'suspended' },
+      });
+
+      expect(updated?.status).toBe('running');
+      // The guard must never leak into the persisted snapshot.
+      expect(updated).not.toHaveProperty('expectedStatus');
+
+      const persisted = await workflowsStorage.loadWorkflowSnapshot({ workflowName, runId });
+      expect(persisted?.status).toBe('running');
+      expect(persisted).not.toHaveProperty('expectedStatus');
+    });
+
+    it('should not apply an update when the expectedStatus guard does not match', async () => {
+      if (!supportsConcurrentUpdates) {
+        console.log('Skipping expectedStatus guard test');
+        return;
+      }
+      const workflowName = 'test-workflow';
+      const runId = `run-${randomUUID()}`;
+
+      await workflowsStorage.persistWorkflowSnapshot({
+        workflowName,
+        runId,
+        snapshot: { status: 'running', context: {} } as any,
+      });
+
+      const updated = await workflowsStorage.updateWorkflowState({
+        workflowName,
+        runId,
+        opts: { status: 'success', expectedStatus: 'suspended' },
+      });
+
+      expect(updated).toBeUndefined();
+
+      const persisted = await workflowsStorage.loadWorkflowSnapshot({ workflowName, runId });
+      expect(persisted?.status).toBe('running');
+    });
+
+    it('should let exactly one of many concurrent expectedStatus updates win', async () => {
+      if (!supportsConcurrentUpdates) {
+        console.log('Skipping expectedStatus guard test');
+        return;
+      }
+      const workflowName = 'test-workflow';
+      const runId = `run-${randomUUID()}`;
+
+      await workflowsStorage.persistWorkflowSnapshot({
+        workflowName,
+        runId,
+        snapshot: { status: 'suspended', context: {}, suspendedPaths: { 'step-1': [0] } } as any,
+      });
+
+      // This is the property the resume claim depends on: N racing claims, exactly one winner.
+      const results = await Promise.all(
+        Array.from({ length: 5 }, () =>
+          workflowsStorage.updateWorkflowState({
+            workflowName,
+            runId,
+            opts: { status: 'running', expectedStatus: 'suspended' },
+          }),
+        ),
+      );
+
+      expect(results.filter(result => result !== undefined)).toHaveLength(1);
+    });
+
     it('should update workflow results in snapshot', async () => {
       if (!supportsConcurrentUpdates) {
         console.log('Skipping workflow state updates sequentially test');

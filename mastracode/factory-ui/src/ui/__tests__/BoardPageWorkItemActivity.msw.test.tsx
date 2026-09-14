@@ -279,7 +279,6 @@ function stubBoardEndpoints() {
       HttpResponse.json({ pullRequests: [], nextPage: null }),
     ),
     http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () => HttpResponse.json({ sessions: [] })),
-    http.post(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/ensure`, () => HttpResponse.json({ ok: true })),
   );
 }
 
@@ -351,7 +350,7 @@ describe('Board work-item activity', () => {
     await waitForMutationsIdle(client);
 
     await screen.findByText('Authored issue');
-    await user.click(screen.getByRole('combobox'));
+    await user.click(within(screen.getByLabelText('Board filters mobile')).getByRole('combobox'));
     await user.type(await screen.findByPlaceholderText('Search teammates...'), 'octo');
     expect(screen.queryByRole('option', { name: /Grace Hopper/ })).not.toBeInTheDocument();
     await user.click(await screen.findByRole('option', { name: /octocat/ }));
@@ -363,7 +362,7 @@ describe('Board work-item activity', () => {
     expect(screen.getByText('Assigned issue')).toBeInTheDocument();
     expect(screen.queryByText('Unrelated issue')).not.toBeInTheDocument();
 
-    await user.click(screen.getByLabelText('Filter by relevance'));
+    await user.click(within(screen.getByLabelText('Board filters mobile')).getByLabelText('Filter by relevance'));
     await user.click(await screen.findByRole('menuitemcheckbox', { name: 'Authored' }));
     expect(screen.queryByRole('menuitemcheckbox', { name: 'Review requested' })).not.toBeInTheDocument();
     await waitFor(() => {
@@ -374,7 +373,9 @@ describe('Board work-item activity', () => {
     expect(screen.getByText('Assigned issue')).toBeInTheDocument();
 
     await user.keyboard('{Escape}');
-    await user.click(screen.getByRole('button', { name: 'Reset filters' }));
+    await user.click(
+      within(screen.getByLabelText('Board filters mobile')).getByRole('button', { name: 'Reset filters' }),
+    );
     await waitFor(() => {
       const params = new URLSearchParams(router.state.location.search);
       expect(params.get('teammate')).toBeNull();
@@ -414,6 +415,13 @@ describe('Board work-item activity', () => {
           },
         }),
       ),
+      http.get(`${TEST_BASE_URL}/web/intake/bindings`, () =>
+        HttpResponse.json({
+          bindings: [
+            { integrationId: 'linear', sourceId: 'linear-project', factoryProjectId: FACTORY_ID, board: 'work' },
+          ],
+        }),
+      ),
       http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
         HttpResponse.json({ enabled: true, connected: true, workspace: { name: 'Acme', urlKey: 'acme' } }),
       ),
@@ -432,6 +440,7 @@ describe('Board work-item activity', () => {
               assignee: 'Linear Grace',
               creator: 'Linear Ada',
               team: 'Engineering',
+              sourceId: 'linear-project',
               labels: [],
               createdAt: '2026-08-01T09:00:00.000Z',
               updatedAt: '2026-08-01T09:00:00.000Z',
@@ -452,7 +461,7 @@ describe('Board work-item activity', () => {
 
     await screen.findByText('Linear planning item');
     await waitFor(() => expect(linearIssuesRequested).toHaveBeenCalled());
-    await user.click(screen.getByRole('combobox'));
+    await user.click(within(screen.getByLabelText('Board filters mobile')).getByRole('combobox'));
     await user.type(await screen.findByPlaceholderText('Search teammates...'), 'Linear Ada');
     await user.click(await screen.findByRole('option', { name: /Linear Ada.*linear/i }));
 
@@ -508,7 +517,7 @@ describe('Board work-item activity', () => {
     await waitForMutationsIdle(client);
 
     await screen.findByText('Authored PR');
-    await user.click(screen.getByRole('combobox'));
+    await user.click(within(screen.getByLabelText('Board filters mobile')).getByRole('combobox'));
     await user.click(await screen.findByRole('option', { name: /octocat/ }));
 
     expect(screen.getByText('Authored PR')).toBeInTheDocument();
@@ -516,7 +525,7 @@ describe('Board work-item activity', () => {
     expect(screen.getByText('Requested PR')).toBeInTheDocument();
     expect(screen.queryByText('Worked PR')).not.toBeInTheDocument();
 
-    await user.click(screen.getByLabelText('Filter by relevance'));
+    await user.click(within(screen.getByLabelText('Board filters mobile')).getByLabelText('Filter by relevance'));
     await user.click(await screen.findByRole('menuitemcheckbox', { name: 'Authored' }));
 
     expect(screen.queryByText('Authored PR')).not.toBeInTheDocument();
@@ -524,7 +533,7 @@ describe('Board work-item activity', () => {
     expect(screen.getByText('Requested PR')).toBeInTheDocument();
 
     await user.keyboard('{Escape}');
-    await user.click(screen.getByRole('combobox'));
+    await user.click(within(screen.getByLabelText('Board filters mobile')).getByRole('combobox'));
     await user.click(await screen.findByRole('option', { name: /Ada Lovelace/ }));
 
     expect(screen.getByText('Worked PR')).toBeInTheDocument();

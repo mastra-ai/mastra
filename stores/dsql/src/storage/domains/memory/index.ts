@@ -48,7 +48,17 @@ type MessageRowFromDB = {
 function inPlaceholders(count: number, startIndex = 1): string {
   return Array.from({ length: count }, (_, i) => `$${i + startIndex}`).join(', ');
 }
+
+/**
+ * Bind dates as UTC strings because node-postgres serializes Date parameters
+ * for TIMESTAMP columns using the process's local timezone.
+ */
+function toUtcISOString(date: Date): string {
+  return date.toISOString();
+}
+
 export class MemoryDSQL extends MemoryStorage {
+  override readonly supportsPartialThreadUpdate = true;
   #db: DsqlDB;
   #schema: string;
   #skipDefaultIndexes?: boolean;
@@ -312,6 +322,8 @@ export class MemoryDSQL extends MemoryStorage {
 
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
     const tableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
+    const createdAt = toUtcISOString(thread.createdAt);
+    const updatedAt = toUtcISOString(thread.updatedAt);
 
     await withRetry(
       async () => {
@@ -339,10 +351,10 @@ export class MemoryDSQL extends MemoryStorage {
             thread.resourceId,
             thread.title,
             thread.metadata ? JSON.stringify(thread.metadata) : null,
-            thread.createdAt,
-            thread.createdAt,
-            thread.updatedAt,
-            thread.updatedAt,
+            createdAt,
+            createdAt,
+            updatedAt,
+            updatedAt,
           ],
         );
       },
@@ -374,8 +386,8 @@ export class MemoryDSQL extends MemoryStorage {
     metadata,
   }: {
     id: string;
-    title: string;
-    metadata: Record<string, unknown>;
+    title?: string;
+    metadata?: Record<string, unknown>;
   }): Promise<StorageThreadType> {
     const threadTableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
 
@@ -391,7 +403,7 @@ export class MemoryDSQL extends MemoryStorage {
             text: `Thread ${id} not found`,
             details: {
               threadId: id,
-              title,
+              title: title ?? null,
             },
           });
         }
@@ -406,14 +418,14 @@ export class MemoryDSQL extends MemoryStorage {
         const thread = await this.#db.client.one<StorageThreadType & { createdAtZ: Date; updatedAtZ: Date }>(
           `UPDATE ${threadTableName}
                       SET 
-                          title = $1,
+                          title = COALESCE($1, title),
                           metadata = $2,
                           "updatedAt" = $3::timestamp,
                           "updatedAtZ" = $4::timestamptz
                       WHERE id = $5
                       RETURNING *
                   `,
-          [title, JSON.stringify(mergedMetadata), now, now, id],
+          [title ?? null, JSON.stringify(mergedMetadata), now, now, id],
         );
 
         return {
@@ -442,7 +454,7 @@ export class MemoryDSQL extends MemoryStorage {
           category: ErrorCategory.THIRD_PARTY,
           details: {
             threadId: id,
-            title,
+            title: title ?? null,
           },
         },
         error,
@@ -486,7 +498,94 @@ export class MemoryDSQL extends MemoryStorage {
     });
   }
 
-  private async _getIncludedMessages({ include }: { include: StorageListMessagesInput['include'] }) {
+  async updateThreadResourceId({
+    threadId,
+    resourceId,
+  }: {
+    threadId: string;
+    resourceId: string;
+  }): Promise<StorageThreadType> {
+    const threadTableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
+    const messagesTableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
+
+    const { result } = await withRetry(
+      async () => {
+        // Aurora DSQL uses optimistic concurrency control: it has no SELECT ... FOR UPDATE, but
+        // wrapping the thread read plus both updates in a single transaction means two concurrent
+        // transfers of the same thread conflict at commit. The loser is aborted and retried by
+        // withRetry against fresh state, so ownership can never end up split across resources.
+        return await this.#db.client.tx(async t => {
+          const thread = await t.oneOrNone<StorageThreadType & { createdAtZ: Date; updatedAtZ: Date }>(
+            `SELECT * FROM ${threadTableName} WHERE id = $1`,
+            [threadId],
+          );
+
+          if (!thread) {
+            throw new Error(`Thread "${threadId}" not found`);
+          }
+
+          const normalized: StorageThreadType = {
+            id: thread.id,
+            resourceId: thread.resourceId,
+            title: thread.title,
+            metadata: typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata,
+            createdAt: thread.createdAtZ || thread.createdAt,
+            updatedAt: thread.updatedAtZ || thread.updatedAt,
+          };
+
+          if (thread.resourceId === resourceId) {
+            return normalized;
+          }
+
+          const now = new Date().toISOString();
+          await t.none(
+            `UPDATE ${threadTableName} SET "resourceId" = $1, "updatedAt" = $2::timestamp, "updatedAtZ" = $3::timestamptz WHERE id = $4`,
+            [resourceId, now, now, threadId],
+          );
+          await t.none(`UPDATE ${messagesTableName} SET "resourceId" = $1 WHERE thread_id = $2`, [
+            resourceId,
+            threadId,
+          ]);
+
+          return { ...normalized, resourceId, updatedAt: new Date(now) };
+        });
+      },
+      {
+        onRetry: (error, attempt, delay) => {
+          this.logger?.warn?.(
+            `updateThreadResourceId retry ${attempt} for ${threadId} after ${delay}ms: ${error.message}`,
+          );
+        },
+      },
+    ).catch(error => {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('DSQL', 'UPDATE_THREAD_RESOURCE_ID', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId, resourceId },
+        },
+        error,
+      );
+    });
+
+    return result;
+  }
+
+  /**
+   * Fetches the messages named by `include` together with their surrounding context.
+   *
+   * @param include - Message ids to pin, each with an optional before/after window.
+   * @param resourceId - When set, restricts both the pinned messages and their context
+   * to that resource so an id from another resource returns nothing.
+   */
+  private async _getIncludedMessages({
+    include,
+    resourceId,
+  }: {
+    include: StorageListMessagesInput['include'];
+    resourceId?: string;
+  }) {
     if (!include || include.length === 0) return null;
 
     const unionQueries: string[] = [];
@@ -496,18 +595,19 @@ export class MemoryDSQL extends MemoryStorage {
 
     for (const inc of include) {
       const { id, withPreviousMessages = 0, withNextMessages = 0 } = inc;
+      const resourceCondition = resourceId ? ` AND "resourceId" = $${paramIdx + 3}` : '';
       unionQueries.push(
         `
             SELECT * FROM (
               WITH target_thread AS (
-                SELECT thread_id FROM ${tableName} WHERE id = $${paramIdx}
+                SELECT thread_id FROM ${tableName} WHERE id = $${paramIdx}${resourceCondition}
               ),
               ordered_messages AS (
                 SELECT
                   *,
                   ROW_NUMBER() OVER (ORDER BY "createdAt" ASC) as row_num
                 FROM ${tableName}
-                WHERE thread_id = (SELECT thread_id FROM target_thread)
+                WHERE thread_id = (SELECT thread_id FROM target_thread)${resourceCondition}
               )
               SELECT
                 m.id,
@@ -534,6 +634,10 @@ export class MemoryDSQL extends MemoryStorage {
       );
       params.push(id, withPreviousMessages, withNextMessages);
       paramIdx += 3;
+      if (resourceId) {
+        params.push(resourceId);
+        paramIdx += 1;
+      }
     }
     const finalQuery = unionQueries.join(' UNION ALL ') + ' ORDER BY "createdAt" ASC';
     const includedRows = await this.#db.client.manyOrNone<MessageRowFromDB>(finalQuery, params);
@@ -703,7 +807,7 @@ export class MemoryDSQL extends MemoryStorage {
 
       const messageIds = new Set(messages.map(m => m.id));
       if (include && include.length > 0) {
-        const includeMessages = await this._getIncludedMessages({ include });
+        const includeMessages = await this._getIncludedMessages({ include, resourceId });
         if (includeMessages) {
           for (const includeMsg of includeMessages) {
             if (!messageIds.has(includeMsg.id)) {
@@ -1134,6 +1238,8 @@ export class MemoryDSQL extends MemoryStorage {
       record: {
         ...resource,
         metadata: JSON.stringify(resource.metadata),
+        createdAt: toUtcISOString(resource.createdAt),
+        updatedAt: toUtcISOString(resource.updatedAt),
       },
     });
 

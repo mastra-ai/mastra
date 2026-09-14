@@ -1,3 +1,4 @@
+import { RequestContext } from '../request-context';
 import type { StorageToolConfig } from '../storage/types';
 import type { ToolAction } from '../tools/types';
 import type {
@@ -9,6 +10,7 @@ import type {
   ListToolkitsResult,
   ListToolsOpts,
   ListToolsResult,
+  ResolveToolProviderToolsOptions,
   ResolveToolsOpts,
   ToolProvider,
   ToolProviderCapabilities,
@@ -129,7 +131,7 @@ export abstract class BaseToolProvider implements ToolProvider {
   async resolveTools(
     toolSlugs: string[],
     toolConfigs?: Record<string, StorageToolConfig>,
-    options?: { userId?: string; requestContext?: Record<string, unknown>; [key: string]: unknown },
+    options?: ResolveToolProviderToolsOptions,
   ): Promise<Record<string, ToolAction<any, any, any>>> {
     return this.resolveToolsVNext({
       toolSlugs,
@@ -138,7 +140,7 @@ export abstract class BaseToolProvider implements ToolProvider {
       ),
       connectionId: '',
       authorId: options?.userId,
-      requestContext: options?.requestContext,
+      requestContext: options?.requestContext ? new RequestContext(Object.entries(options.requestContext)) : undefined,
     });
   }
 

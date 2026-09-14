@@ -18,6 +18,8 @@ createObservabilityVNextTests({
   capabilities: {
     label: 'DuckDB',
     preferredStrategy: 'event-sourced',
+    traceQuery: true,
+    traceQueryStrictFeedbackValueTypes: false,
   },
   getStorage: async () => {
     sharedSuiteStore = new DuckDBStore({ path: ':memory:' });
@@ -101,16 +103,16 @@ describe('ObservabilityStorageDuckDB', () => {
     });
   });
 
-  it('gates delta list capabilities on the observability delta feature flag', async () => {
+  it('gates delta polling while always advertising metrics and logs', async () => {
     const originalFeatures = new Set(coreFeatures);
 
     try {
       coreFeatures.add('observability-delta-polling');
-      expect(storage.getFeatures()).toEqual(['delta-polling']);
+      expect(storage.getFeatures()).toEqual(['metrics', 'logs', 'delta-polling', 'trace-query']);
 
       coreFeatures.delete('observability-delta-polling');
 
-      expect(storage.getFeatures()).toBeUndefined();
+      expect(storage.getFeatures()).toEqual(['metrics', 'logs', 'trace-query']);
       await expect(storage.listLogs({ mode: 'delta' })).rejects.toThrow(
         'This storage provider does not support observability delta polling',
       );
@@ -122,14 +124,16 @@ describe('ObservabilityStorageDuckDB', () => {
     }
   });
 
-  it('reports delta list capabilities through the lazy store facade before init', async () => {
+  it('reports observability capabilities through the lazy store facade before init', async () => {
     const originalFeatures = new Set(coreFeatures);
     const lazyStore = new DuckDBStore({ path: ':memory:' });
 
     try {
       coreFeatures.add('observability-delta-polling');
+      expect(lazyStore.observability.getFeatures()).toEqual(['metrics', 'logs', 'delta-polling', 'trace-query']);
 
-      expect(lazyStore.observability.getFeatures()).toEqual(['delta-polling']);
+      coreFeatures.delete('observability-delta-polling');
+      expect(lazyStore.observability.getFeatures()).toEqual(['metrics', 'logs', 'trace-query']);
     } finally {
       coreFeatures.clear();
       for (const feature of originalFeatures) {
@@ -2164,6 +2168,82 @@ describe('ObservabilityStorageDuckDB', () => {
   // ==========================================================================
 
   describe('feedback', () => {
+    it('replaces an existing feedbackId with a backdated latest single write', async () => {
+      const original = {
+        feedbackId: 'feedback-supersession-single',
+        timestamp: new Date('2026-01-02T00:00:00Z'),
+        traceId: 'trace-feedback-supersession-single',
+        spanId: null,
+        feedbackSource: 'superseded-patient',
+        feedbackType: 'rating',
+        value: -1,
+        comment: 'old',
+        experimentId: null,
+        feedbackUserId: 'patient-1',
+        sourceId: 'survey-1',
+        metadata: null,
+      };
+      await storage.createFeedback({ feedback: original });
+      await storage.createFeedback({
+        feedback: {
+          ...original,
+          timestamp: new Date('2026-01-01T00:00:00Z'),
+          feedbackSource: 'patient',
+          value: 1,
+          comment: 'new',
+        },
+      });
+
+      const result = await storage.listFeedback({ filters: { traceId: original.traceId } });
+      expect(result.feedback).toHaveLength(1);
+      expect(result.feedback[0]).toMatchObject({
+        feedbackId: original.feedbackId,
+        timestamp: new Date('2026-01-01T00:00:00Z'),
+        feedbackSource: 'patient',
+        value: 1,
+        comment: 'new',
+      });
+    });
+
+    it('retains the last repeated feedbackId in a batch', async () => {
+      const original = {
+        feedbackId: 'feedback-supersession-batch',
+        timestamp: new Date('2026-01-01T00:00:00Z'),
+        traceId: 'trace-feedback-supersession-batch',
+        spanId: null,
+        feedbackSource: 'superseded-patient',
+        feedbackType: 'rating',
+        value: -1,
+        comment: 'old',
+        experimentId: null,
+        feedbackUserId: 'patient-1',
+        sourceId: 'survey-1',
+        metadata: null,
+      };
+      await storage.batchCreateFeedback({
+        feedbacks: [
+          original,
+          {
+            ...original,
+            timestamp: new Date('2026-01-02T00:00:00Z'),
+            feedbackSource: 'patient',
+            value: 1,
+            comment: 'new',
+          },
+        ],
+      });
+
+      const result = await storage.listFeedback({ filters: { traceId: original.traceId } });
+      expect(result.feedback).toHaveLength(1);
+      expect(result.feedback[0]).toMatchObject({
+        feedbackId: original.feedbackId,
+        timestamp: new Date('2026-01-02T00:00:00Z'),
+        feedbackSource: 'patient',
+        value: 1,
+        comment: 'new',
+      });
+    });
+
     it('accepts deprecated `source` filter for feedback (DuckDB-specific)', async () => {
       await storage.createFeedback({
         feedback: {
@@ -2381,7 +2461,7 @@ describe('ObservabilityStorageDuckDB', () => {
       expect(result.metrics[0]!.metricId).toBe('metric-retry-1');
     });
 
-    it('re-inserting the same scoreId does not throw or duplicate', async () => {
+    it('re-inserting the same scoreId replaces the current record without duplicating it', async () => {
       const score = {
         scoreId: 'score-retry-1',
         timestamp: new Date('2026-01-01T00:00:00Z'),
@@ -2394,10 +2474,52 @@ describe('ObservabilityStorageDuckDB', () => {
         metadata: null,
       };
       await storage.createScore({ score });
-      await storage.createScore({ score });
+      const bootstrap = await storage.listScores({ mode: 'delta', filters: { traceId: 'trace-retry-score' } });
+
+      await storage.createScore({ score: { ...score, score: 0.4 } });
+
       const result = await storage.listScores({ filters: { traceId: 'trace-retry-score' } });
       expect(result.scores).toHaveLength(1);
-      expect(result.scores[0]!.scoreId).toBe('score-retry-1');
+      expect(result.scores[0]).toMatchObject({ scoreId: 'score-retry-1', score: 0.4 });
+
+      const delta = await storage.listScores({
+        mode: 'delta',
+        filters: { traceId: 'trace-retry-score' },
+        after: bootstrap.deltaCursor!,
+      });
+      expect(delta.scores).toEqual([]);
+    });
+
+    it('batch re-inserts replace scores without advancing their delta cursors', async () => {
+      const score = {
+        scoreId: 'score-batch-retry-1',
+        timestamp: new Date('2026-01-01T00:00:00Z'),
+        traceId: 'trace-batch-retry-score',
+        spanId: null,
+        scorerId: 'scorer-1',
+        score: 0.9,
+        reason: null,
+        experimentId: null,
+        metadata: null,
+      };
+      await storage.batchCreateScores({ scores: [score] });
+      const bootstrap = await storage.listScores({
+        mode: 'delta',
+        filters: { traceId: 'trace-batch-retry-score' },
+      });
+
+      await storage.batchCreateScores({ scores: [{ ...score, score: 0.4 }] });
+
+      const result = await storage.listScores({ filters: { traceId: 'trace-batch-retry-score' } });
+      expect(result.scores).toHaveLength(1);
+      expect(result.scores[0]).toMatchObject({ scoreId: 'score-batch-retry-1', score: 0.4 });
+
+      const delta = await storage.listScores({
+        mode: 'delta',
+        filters: { traceId: 'trace-batch-retry-score' },
+        after: bootstrap.deltaCursor!,
+      });
+      expect(delta.scores).toEqual([]);
     });
 
     it('re-inserting the same feedbackId does not throw or duplicate', async () => {

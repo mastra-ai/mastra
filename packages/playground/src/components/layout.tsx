@@ -15,6 +15,7 @@ import { isAuthenticated } from '@/domains/auth/types';
 import { ExperimentalUIProvider } from '@/domains/experimental-ui/experimental-ui-context';
 import { UI_EXPERIMENTS } from '@/domains/experimental-ui/experiments';
 import { useExperimentalUIEnabled } from '@/domains/experimental-ui/use-experimental-ui-enabled';
+import { SidebarShortcuts } from '@/domains/navigation/components/sidebar-shortcuts';
 import { NavigationCommand, useNavigationCommand } from '@/lib/command';
 import {
   RouteHeader,
@@ -41,7 +42,7 @@ function MobileNavbar() {
         <MainSidebar.MobileTrigger />
         <span className="flex min-w-0 items-center gap-2">
           <LogoWithoutText className="size-[1.5rem] shrink-0" />
-          <span className="font-display text-sm whitespace-nowrap">Mastra Studio</span>
+          <span className="font-display text-ui-md whitespace-nowrap">Mastra Studio</span>
         </span>
       </div>
       <Button
@@ -76,21 +77,19 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
         {shouldShowSidebar && <AppSidebar />}
         <div className="flex h-full min-h-0 flex-col">
           {shouldShowSidebar && <MobileNavbar />}
-          {shouldShowSidebar && (
-            <div className="mx-1.5 mt-1 shrink-0 lg:mx-2 lg:mt-1.5">
-              <RouteHeader />
-            </div>
-          )}
           <PageHeadingContext.Provider value={pageHeading}>
             <div
               className={cn(
-                'ml-0 mx-1.5 mb-1.5 flex-1 min-h-0 overflow-y-auto [--studio-frame-radius:1.5rem] [--studio-frame-inset:0.5rem] rounded-studio-frame border border-border1 bg-surface2 shadow-main-frame lg:mx-2 lg:mb-2 lg:ml-0',
-                shouldShowSidebar ? 'mt-0' : 'mt-1.5 lg:mt-2 h-[calc(100%-1.5rem)]',
+                'relative ml-0 mx-1.5 my-1.5 grid flex-1 min-h-0 overflow-hidden [--studio-frame-radius:1.5rem] [--studio-frame-inset:0.5rem] rounded-studio-frame border border-border1 bg-surface2 shadow-main-frame lg:mx-2 lg:my-2 lg:ml-0',
+                shouldShowSidebar ? 'grid-rows-[auto_1fr]' : 'grid-rows-[1fr] h-[calc(100%-1.5rem)]',
               )}
             >
-              <AuthRequired>
-                <ErrorBoundary resetKeys={[pathname]}>{children}</ErrorBoundary>
-              </AuthRequired>
+              {shouldShowSidebar && <RouteHeader />}
+              <div className="min-h-0 overflow-y-auto">
+                <AuthRequired>
+                  <ErrorBoundary resetKeys={[pathname]}>{children}</ErrorBoundary>
+                </AuthRequired>
+              </div>
             </div>
           </PageHeadingContext.Provider>
         </div>
@@ -109,6 +108,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
         <TooltipProvider delayDuration={0}>
           <ExperimentalUIProvider experiments={experimentalUIEnabled ? UI_EXPERIMENTS : []}>
             <MainSidebarProvider>
+              <SidebarShortcuts />
               <RouteHeaderActionsProvider>
                 <RouteHeaderCrumbsProvider>
                   <LayoutContent>{children}</LayoutContent>

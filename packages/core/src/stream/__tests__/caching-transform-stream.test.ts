@@ -265,16 +265,23 @@ describe('createReplayStream', () => {
     expect(cached).toEqual([{ live: true }]);
   });
 
-  it('should support cancellation', async () => {
-    let cancelled = false;
+  it('should forward cancellation to the live reader', async () => {
+    let cancellationCount = 0;
+    let cancellationReason: unknown;
+    let resolveCancellation!: () => void;
+    const cancellation = new Promise<void>(resolve => {
+      resolveCancellation = resolve;
+    });
 
     const liveSource = new ReadableStream({
       start(controller) {
         controller.enqueue({ data: 1 });
         // Keep stream open
       },
-      cancel() {
-        cancelled = true;
+      cancel(reason) {
+        cancellationCount++;
+        cancellationReason = reason;
+        return cancellation;
       },
     });
 
@@ -284,10 +291,60 @@ describe('createReplayStream', () => {
     });
 
     const reader = stream.getReader();
-    await reader.read(); // Read one chunk
-    await reader.cancel();
+    await reader.read(); // Acquire the live reader and read one chunk
 
-    expect(cancelled).toBe(true);
+    let cancellationSettled = false;
+    const cancelPromise = reader.cancel('client disconnected').then(() => {
+      cancellationSettled = true;
+    });
+    await Promise.resolve();
+
+    expect(cancellationCount).toBe(1);
+    expect(cancellationReason).toBe('client disconnected');
+    expect(cancellationSettled).toBe(false);
+
+    resolveCancellation();
+    await cancelPromise;
+    expect(cancellationSettled).toBe(true);
+  });
+
+  it('should cancel the live source during history replay', async () => {
+    let cancellationCount = 0;
+    let cancellationReason: unknown;
+    let resolveCancellation!: () => void;
+    const cancellation = new Promise<void>(resolve => {
+      resolveCancellation = resolve;
+    });
+
+    const liveSource = new ReadableStream({
+      cancel(reason) {
+        cancellationCount++;
+        cancellationReason = reason;
+        return cancellation;
+      },
+    });
+
+    const stream = createReplayStream({
+      history: [{ seq: 1 }, { seq: 2 }],
+      liveSource,
+    });
+
+    const reader = stream.getReader();
+    await expect(reader.read()).resolves.toEqual({ value: { seq: 1 }, done: false });
+
+    let cancellationSettled = false;
+    const cancelPromise = reader.cancel('client disconnected').then(() => {
+      cancellationSettled = true;
+    });
+    await Promise.resolve();
+
+    expect(cancellationCount).toBe(1);
+    expect(cancellationReason).toBe('client disconnected');
+    expect(cancellationSettled).toBe(false);
+
+    resolveCancellation();
+    await cancelPromise;
+    expect(cancellationSettled).toBe(true);
   });
 });
 

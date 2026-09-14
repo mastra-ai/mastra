@@ -1,8 +1,10 @@
+import { isHumanActorId } from '@mastra/factory/storage/domains/audit/actors';
+
 import type { BoardCandidate } from './boardCandidates';
 import type { BoardKind } from './boardStages';
 import type { AuditActorProfile, AuditEventPage } from './services/audit';
 import type { WorkItem } from './services/workItems';
-import { isHumanActor, workItemHumanActorIds } from './workItemActivity';
+import { workItemHumanActorIds } from './workItemActivity';
 
 export const BOARD_RELEVANCE_TYPES = ['worked', 'authored', 'assigned', 'review-requested'] as const;
 export type BoardRelevanceType = (typeof BOARD_RELEVANCE_TYPES)[number];
@@ -136,12 +138,12 @@ export function workItemRelevance(
   const external = targetRelations(item);
   const worked = new Set(workItemHumanActorIds(item).map(actorId => `factory:${actorId}`));
   for (const event of activityPage?.events ?? []) {
-    if (event.actorType === 'human' && isHumanActor(event.actorId) && targetsWorkItem(event, item.id)) {
+    if (event.actorType === 'human' && isHumanActorId(event.actorId) && targetsWorkItem(event, item.id)) {
       worked.add(`factory:${event.actorId}`);
     }
   }
   const authored = new Set(external.authored);
-  if (item.source === 'manual' && isHumanActor(item.createdBy)) authored.add(`factory:${item.createdBy}`);
+  if (item.source === 'manual' && isHumanActorId(item.createdBy)) authored.add(`factory:${item.createdBy}`);
   return { worked, authored, assigned: external.assigned, 'review-requested': external['review-requested'] };
 }
 
@@ -220,7 +222,7 @@ export function boardParticipants({
   }
 
   for (const [actorId, profile] of Object.entries(activityPage?.actors ?? {})) {
-    if (!isHumanActor(actorId)) continue;
+    if (!isHumanActorId(actorId)) continue;
     add({ ...profile, id: `factory:${actorId}`, source: 'factory' });
   }
 
@@ -253,4 +255,68 @@ export function boardRelevanceOptions(kind: BoardKind): Array<{ id: BoardRelevan
   ];
   if (kind === 'review') options.push({ id: 'review-requested', label: 'Review requested' });
   return options;
+}
+
+function targetLabels(target: RelevanceTarget): string[] {
+  return metadataStrings(target.metadata, 'labels');
+}
+
+export function workItemLabels(item: WorkItem): string[] {
+  return targetLabels(item);
+}
+
+export function candidateLabels(candidate: BoardCandidate): string[] {
+  return targetLabels(candidate);
+}
+
+export function boardLabels({
+  items,
+  candidates,
+}: {
+  items: readonly WorkItem[];
+  candidates: readonly BoardCandidate[];
+}): string[] {
+  const labels = new Set<string>();
+  for (const item of items) for (const label of targetLabels(item)) labels.add(label);
+  for (const candidate of candidates) for (const label of targetLabels(candidate)) labels.add(label);
+  return [...labels].sort((left, right) => left.localeCompare(right));
+}
+
+/**
+ * Read selected labels from the `label` query parameter. Labels are stored as
+ * repeated values (`?label=a&label=b`) so that individual labels can contain
+ * commas without being split apart on reload.
+ */
+export function boardLabelsFromQuery(values: readonly string[]): ReadonlySet<string> {
+  const labels = new Set<string>();
+  for (const raw of values) {
+    const trimmed = raw.trim();
+    if (trimmed.length > 0) labels.add(trimmed);
+  }
+  return labels;
+}
+
+/**
+ * Serialize selected labels as an array of query values to be written with
+ * repeated `label` parameters via `URLSearchParams#append`.
+ */
+export function boardLabelsQueryValues(selectedLabels: ReadonlySet<string>): string[] {
+  return [...selectedLabels].sort((left, right) => left.localeCompare(right));
+}
+
+export function workItemMatchesLabels(
+  item: WorkItem,
+  selectedLabels: ReadonlySet<string>,
+  liveCandidate?: BoardCandidate,
+): boolean {
+  if (selectedLabels.size === 0) return true;
+  const itemLabels = new Set(targetLabels(item));
+  if (liveCandidate) for (const label of targetLabels(liveCandidate)) itemLabels.add(label);
+  return [...selectedLabels].every(label => itemLabels.has(label));
+}
+
+export function candidateMatchesLabels(candidate: BoardCandidate, selectedLabels: ReadonlySet<string>): boolean {
+  if (selectedLabels.size === 0) return true;
+  const labels = new Set(targetLabels(candidate));
+  return [...selectedLabels].every(label => labels.has(label));
 }

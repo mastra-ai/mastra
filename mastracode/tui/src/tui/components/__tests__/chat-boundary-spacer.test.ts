@@ -1,6 +1,6 @@
 import { Container } from '@earendil-works/pi-tui';
 import type { Component } from '@earendil-works/pi-tui';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   insertChatComponentWithBoundarySpacing,
   reconcileChatBoundarySpacers,
@@ -54,6 +54,24 @@ describe('ChatBoundarySpacer', () => {
     insertChatComponentWithBoundarySpacing(container, assistant());
 
     expect(container.render(100).filter(line => line === '')).toHaveLength(1);
+  });
+
+  it('preserves completed component caches across boundary reconciliation', () => {
+    const container = new Container();
+    const first = assistant('stable assistant text');
+    const second = quietTool('view');
+    const firstInvalidate = vi.spyOn(first, 'invalidate');
+    const secondInvalidate = vi.spyOn(second, 'invalidate');
+
+    container.addChild(first);
+    container.addChild(second);
+    reconcileChatBoundarySpacers(container);
+    const initialLines = container.render(100);
+    reconcileChatBoundarySpacers(container);
+
+    expect(container.render(100)).toEqual(initialLines);
+    expect(firstInvalidate).not.toHaveBeenCalled();
+    expect(secondInvalidate).not.toHaveBeenCalled();
   });
 
   it('spaces unrelated singleton tool changes across empty streaming message placeholders', () => {

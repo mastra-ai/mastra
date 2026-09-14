@@ -78,6 +78,32 @@ describe('extractSuspendedToolsFromMessages', () => {
     ]);
   });
 
+  it('uses the parent delegation identity for auto-resume while preserving inner approval details', () => {
+    const pending = {
+      'tc-1': {
+        toolCallId: 'tc-1',
+        toolName: 'charge-card',
+        args: { amountCents: 500 },
+        parentToolName: 'agent-billing',
+        parentArgs: { prompt: 'Charge the customer' },
+        runId: 'outer-run',
+        delegatedRunId: 'inner-run',
+      },
+    };
+    const messages = [makeAssistantMessage({ metadata: { pendingToolApprovals: pending } })];
+
+    expect(extractSuspendedToolsFromMessages(messages)).toEqual([
+      {
+        toolCallId: 'tc-1',
+        toolName: 'agent-billing',
+        args: { prompt: 'Charge the customer' },
+        approvalToolName: 'charge-card',
+        approvalArgs: { amountCents: 500 },
+        runId: 'inner-run',
+      },
+    ]);
+  });
+
   it('keeps runId untouched for non-delegated entries', () => {
     const pending = { 'tc-2': { toolCallId: 'tc-2', toolName: 'directTool', runId: 'run-1' } };
     const messages = [makeAssistantMessage({ metadata: { pendingToolApprovals: pending } })];
@@ -106,6 +132,20 @@ describe('buildAutoResumeSystemMessageSuffix', () => {
     expect(suffix).not.toBeNull();
     expect(suffix!).toContain('Analyse the suspended tools');
     expect(suffix!).toContain('fooTool');
+  });
+
+  it('returns null when only approval suspensions are present', () => {
+    expect(buildAutoResumeSystemMessageSuffix([{ toolName: 'chargeCard', type: 'approval' }])).toBeNull();
+  });
+
+  it('excludes approval suspensions when generic suspensions are also present', () => {
+    const suffix = buildAutoResumeSystemMessageSuffix([
+      { toolName: 'chargeCard', type: 'approval' },
+      { toolName: 'collectAddress', type: 'suspension' },
+    ]);
+
+    expect(suffix).toContain('collectAddress');
+    expect(suffix).not.toContain('chargeCard');
   });
 
   it('omits parentRunId from the serialized suspended tools', () => {

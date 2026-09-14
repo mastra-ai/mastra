@@ -111,7 +111,7 @@ export class FilesystemSkillsStorage extends SkillsStorage {
       ...(authorId !== undefined && { authorId }),
       ...(visibility !== undefined && { visibility }),
       ...(activeVersionId !== undefined && { activeVersionId }),
-      ...(status !== undefined && { status: status as StorageSkillType['status'] }),
+      ...(status !== undefined && { status }),
       updatedAt: new Date(),
     };
 
@@ -145,10 +145,7 @@ export class FilesystemSkillsStorage extends SkillsStorage {
       const changedFields = configFieldNames.filter(
         field =>
           field in configFields &&
-          !skillSnapshotFieldValuesEqual(
-            configFields[field as keyof typeof configFields],
-            latestConfig[field as keyof typeof latestConfig],
-          ),
+          !skillSnapshotFieldValuesEqual(configFields[field], latestConfig[field as keyof typeof latestConfig]),
       );
 
       if (changedFields.length > 0) {

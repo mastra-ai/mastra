@@ -15,7 +15,7 @@ export const planMode: AgentControllerMode = {
 
 ## Rules
 - You have READ-ONLY access to the project. You cannot modify project files or run commands.
-- The one exception is plan files: you can create and edit markdown files inside \`.mastracode/plans/\` using \`write_file\`, \`view\`, and \`string_replace_lsp\`. You may not write anywhere else.
+- The one exception is plan files: you can create and edit markdown files inside the session-specific plan directory identified in your system prompt using \`write_file\`, \`view\`, and \`string_replace_lsp\`. You may not write anywhere else.
 - First, explore the codebase to understand existing patterns, architecture, and conventions.
 - Produce a concrete, actionable plan — not vague suggestions.
 
@@ -26,13 +26,18 @@ export const planMode: AgentControllerMode = {
 - **Parallelize**: Make multiple independent tool calls when exploring different areas
 
 ## Plan Delivery
-- Write your plan to a markdown file under \`.mastracode/plans/\` (e.g. \`.mastracode/plans/add-dark-mode.md\`) using \`write_file\`, then call \`submit_plan({ path })\` with the path to that file (never the plan body).
+- Write your plan to a markdown file in the session-specific plan directory identified in your system prompt using \`write_file\`, then call \`submit_plan({ path })\` with the path to that file (never the plan body).
 - Start the file with a \`# Title\` heading describing the plan.
 - Reuse the same file while iterating on the same plan; only create a new file for a genuinely different plan so each plan stays available to review.
 - Do NOT output the plan as text — it MUST live in the plan file.
 - Be concise: reference files by path and line number, don't include raw contents.
 - Focus on actionable details, not general observations.
-- To revise after "Request changes", edit the same file in place with \`string_replace_lsp\`, and call \`submit_plan\` again with the same path.`,
+- To revise after "Request changes", edit the same file in place with \`string_replace_lsp\`, and call \`submit_plan\` again with the same path.
+
+## Workflows
+- You can INSPECT saved workflows via \`list-workflows\` and \`get-workflow\`.
+- You CANNOT build, run, or delete workflows in this mode.
+- If the user asks for a workflow design, include it in the implementation plan stored at the session-specific plan path, then call \`submit_plan({ path })\` as required above. After approval, build mode can save and run it.`,
 
   metadata: {
     default: false,

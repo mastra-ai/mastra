@@ -17,6 +17,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
   messageList,
   includeRawChunks,
   experimentalTransform,
+  hideSignals,
   modelSettings,
   tools,
   _internal,
@@ -85,9 +86,9 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
   let startTimestamp = internalToUse.now?.();
 
   let currentResponseMessageId = rest.experimental_generateMessageId?.() || internalToUse.generateId?.();
-  const rotateResponseMessageId = () => {
-    currentResponseMessageId = internalToUse.generateId?.();
-    return currentResponseMessageId!;
+  const rotateResponseMessageId = (sealMessageId?: string) => {
+    currentResponseMessageId = messageList.rotateResponseMessageId(sealMessageId ?? currentResponseMessageId);
+    return currentResponseMessageId;
   };
 
   let modelOutput: MastraModelOutput<OUTPUT> | undefined;
@@ -170,6 +171,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
       processorStates,
       transportRef: internalToUse.transportRef,
       experimentalTransform,
+      hideSignals,
     },
     initialState: initialStreamState,
   });

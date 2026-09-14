@@ -589,7 +589,8 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
     }
 
     case 'start': {
-      const messageId = typeof chunk.payload.messageId === 'string' ? chunk.payload.messageId : undefined;
+      // Retained stream history may contain `start` chunks emitted without a payload.
+      const messageId = typeof chunk.payload?.messageId === 'string' ? chunk.payload.messageId : undefined;
       if (messageId && result.some(message => message.id === messageId)) return result;
       return [...result, newAssistantMessage(messageId ?? `start-${chunk.runId + Date.now()}`, [], metadata)];
     }
@@ -1003,6 +1004,31 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
           state: 'call',
           args: parsedArgs,
         } as MastraToolInvocation,
+      } as MastraMessagePart;
+
+      return replaceAt(result, messageIndex, withParts(targetMessage, parts));
+    }
+
+    case 'tool-output-denied': {
+      const location = locateToolPart(result, chunk.payload.toolCallId, false);
+      if (!location || location.toolPartIndex < 0) return result;
+      const { messageIndex, toolPartIndex } = location;
+      const targetMessage = result[messageIndex];
+      if (!targetMessage || targetMessage.role !== 'assistant') return result;
+
+      const parts = [...targetMessage.content.parts];
+      const toolPart = parts[toolPartIndex];
+      if (!isToolPart(toolPart)) return result;
+
+      parts[toolPartIndex] = {
+        ...toolPart,
+        toolInvocation: {
+          ...toolPart.toolInvocation,
+          state: 'output-denied',
+          toolName: chunk.payload.toolName,
+          args: chunk.payload.args ?? toolPart.toolInvocation.args,
+          approval: chunk.payload.approval,
+        },
       } as MastraMessagePart;
 
       return replaceAt(result, messageIndex, withParts(targetMessage, parts));
@@ -1549,11 +1575,12 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
     case 'network-validation-end':
     case 'network-object':
     case 'network-object-result':
+    case 'tool-output-denied':
       return result;
 
     default:
       // Exhaustiveness check: any new `ChunkType` variant must be added above.
-      return assertExhaustive(chunk, result);
+      return assertExhaustive(chunk as never, result);
   }
 };
 

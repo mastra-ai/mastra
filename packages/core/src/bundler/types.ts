@@ -11,6 +11,22 @@ export type BundlerConfig = {
    */
   sourcemap?: boolean;
   /**
+   * Minifies the generated bundle, stripping whitespace, comments and shortening
+   * local identifiers. Off by default so that build output stays readable and
+   * stack traces stay meaningful.
+   *
+   * Enable it when packaging for production — a smaller bundle is cheaper to
+   * ship in a container image or to an on-prem target.
+   *
+   * @example
+   * ```typescript
+   * bundler: {
+   *   minify: true
+   * }
+   * ```
+   */
+  minify?: boolean;
+  /**
    * Packages requiring TypeScript/modern JS transpilation during bundling.
    * Automatically includes workspace packages.
    */

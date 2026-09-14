@@ -6,7 +6,7 @@ import { Label } from '@mastra/playground-ui/components/Label';
 import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { ChevronLeftIcon, ChevronRightIcon, DatabaseIcon, Loader2Icon, TrashIcon } from 'lucide-react';
+import { ChevronLeftIcon, ChevronRightIcon, DatabaseIcon, Loader2Icon, TrashIcon, X } from 'lucide-react';
 import { useState, useCallback, useEffect } from 'react';
 import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
 
@@ -195,7 +195,7 @@ export function BulkTraceReviewDialog({
           </div>
 
           <div className="flex justify-end gap-2 pt-4">
-            <Button type="button" variant="outline" onClick={onClose}>
+            <Button icon={<X />} type="button" variant="outline" onClick={onClose}>
               Cancel
             </Button>
             <Button variant="default" disabled={batchInsertItems.isPending} onClick={handleSubmit}>

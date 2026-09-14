@@ -27,8 +27,8 @@ export function WorkflowsPage() {
     if (!workflows) return [];
     return Object.entries(workflows).map(([id, workflow]) => ({
       value: id,
-      label: (workflow as { name?: string }).name || id,
-      description: (workflow as { description?: string }).description || '',
+      label: workflow.name || id,
+      description: workflow.description || '',
     }));
   }, [workflows]);
 
@@ -86,7 +86,7 @@ export function WorkflowsPage() {
 
   return (
     <ScrollArea className="h-full">
-      <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-4">
         <SectionHeader
           title="Workflows"
           subtitle={`Select workflows this agent can trigger.${count > 0 ? ` (${count} selected)` : ''}`}

@@ -1,0 +1,461 @@
+import type { ClickHouseClient } from '@clickhouse/client';
+import * as coreStorage from '@mastra/core/storage';
+import type {
+  TraceQueryCanonicalField,
+  TraceQueryFeedbackField,
+  TraceQueryField,
+  TraceQueryPredicateField,
+  TraceQueryResponse,
+  TraceQueryScoreField,
+  TraceQuerySpanField,
+  TrustedTraceQueryPlan,
+  TrustedTraceQueryPredicate,
+  TrustedTraceQueryScalarPredicate,
+} from '@mastra/core/storage';
+
+import { TABLE_FEEDBACK_EVENTS, TABLE_SCORE_EVENTS, TABLE_SPAN_EVENTS, TABLE_TRACE_ROOTS } from './ddl';
+import { CH_SETTINGS } from './helpers';
+
+type ClickHouseParameterType = 'String' | 'Float64' | 'UInt64' | "DateTime64(3, 'UTC')";
+type FieldDefinition = { sql: string; parameterType: ClickHouseParameterType };
+type FieldRegistry<TField extends string> = Record<TField, FieldDefinition>;
+type QueryParams = Record<string, string | number>;
+type SqlFragment = { sql: string; params: QueryParams };
+
+const TRACE_STATUS_SQL = `if(isNotNull(r.error), 'error', 'success')`;
+
+const TRACE_FIELDS = {
+  traceId: { sql: 'r.traceId', parameterType: 'String' },
+  threadId: { sql: 'r.threadId', parameterType: 'String' },
+  resourceId: { sql: 'r.resourceId', parameterType: 'String' },
+  startedAt: { sql: 'r.startedAt', parameterType: "DateTime64(3, 'UTC')" },
+  endedAt: { sql: 'r.endedAt', parameterType: "DateTime64(3, 'UTC')" },
+  entityName: { sql: 'r.entityName', parameterType: 'String' },
+  entityType: { sql: 'r.entityType', parameterType: 'String' },
+  environment: { sql: 'r.environment', parameterType: 'String' },
+  status: { sql: TRACE_STATUS_SQL, parameterType: 'String' },
+} satisfies FieldRegistry<TraceQueryField>;
+
+const SPAN_FIELDS = {
+  name: { sql: 's.name', parameterType: 'String' },
+  spanType: { sql: 's.spanType', parameterType: 'String' },
+  model: { sql: 's.model', parameterType: 'String' },
+  provider: { sql: 's.provider', parameterType: 'String' },
+  startedAt: { sql: 's.startedAt', parameterType: "DateTime64(3, 'UTC')" },
+  endedAt: { sql: 's.endedAt', parameterType: "DateTime64(3, 'UTC')" },
+  durationMs: { sql: 's.durationMs', parameterType: 'Float64' },
+  status: { sql: 's.status', parameterType: 'String' },
+  error: { sql: 's.error', parameterType: 'String' },
+  entityType: { sql: 's.entityType', parameterType: 'String' },
+  entityId: { sql: 's.entityId', parameterType: 'String' },
+  entityName: { sql: 's.entityName', parameterType: 'String' },
+  entityVersionId: { sql: 's.entityVersionId', parameterType: 'String' },
+  parentEntityVersionId: { sql: 's.parentEntityVersionId', parameterType: 'String' },
+  rootEntityVersionId: { sql: 's.rootEntityVersionId', parameterType: 'String' },
+} satisfies FieldRegistry<TraceQuerySpanField>;
+
+const SCORE_FIELDS = {
+  scorerId: { sql: 's.scorerId', parameterType: 'String' },
+  scorerVersion: { sql: 's.scorerVersion', parameterType: 'String' },
+  scoreSource: { sql: 's.scoreSource', parameterType: 'String' },
+  score: { sql: 's.score', parameterType: 'Float64' },
+  timestamp: { sql: 's.timestamp', parameterType: "DateTime64(3, 'UTC')" },
+  spanId: { sql: 's.spanId', parameterType: 'String' },
+  entityVersionId: { sql: 's.entityVersionId', parameterType: 'String' },
+  parentEntityVersionId: { sql: 's.parentEntityVersionId', parameterType: 'String' },
+  rootEntityVersionId: { sql: 's.rootEntityVersionId', parameterType: 'String' },
+} satisfies FieldRegistry<TraceQueryScoreField>;
+
+const FEEDBACK_FIELDS = {
+  feedbackType: { sql: 's.feedbackType', parameterType: 'String' },
+  feedbackSource: { sql: 's.feedbackSource', parameterType: 'String' },
+  feedbackUserId: { sql: 's.feedbackUserId', parameterType: 'String' },
+  sourceId: { sql: 's.sourceId', parameterType: 'String' },
+  entityVersionId: { sql: 's.entityVersionId', parameterType: 'String' },
+  parentEntityVersionId: { sql: 's.parentEntityVersionId', parameterType: 'String' },
+  rootEntityVersionId: { sql: 's.rootEntityVersionId', parameterType: 'String' },
+  timestamp: { sql: 's.timestamp', parameterType: "DateTime64(3, 'UTC')" },
+  comment: { sql: 's.comment', parameterType: 'String' },
+} satisfies FieldRegistry<Exclude<TraceQueryFeedbackField, 'value'>>;
+
+const TRACE_SELECT = `
+  r.traceId AS traceId,
+  r.spanId AS rootSpanId,
+  r.threadId AS threadId,
+  r.resourceId AS resourceId,
+  r.startedAt AS startedAt,
+  r.endedAt AS endedAt,
+  r.entityName AS entityName,
+  r.entityType AS entityType,
+  r.environment AS environment,
+  ${TRACE_STATUS_SQL} AS status`;
+
+class ParameterBuilder {
+  readonly params: QueryParams = {};
+  #next = 1;
+
+  add(value: string | number, type: ClickHouseParameterType): string {
+    const name = `trace_query_${this.#next++}`;
+    this.params[name] =
+      type === "DateTime64(3, 'UTC')" ? new Date(value).toISOString().replace('T', ' ').replace(/Z$/, '') : value;
+    return `{${name}:${type}}`;
+  }
+}
+
+function fieldDefinition<TField extends string>(
+  registry: Partial<FieldRegistry<TField>>,
+  field: TraceQueryCanonicalField,
+): FieldDefinition {
+  const definition = registry[field as TField];
+  if (definition === undefined) throw new Error(`Unsupported trusted trace-query field: ${field}`);
+  return definition;
+}
+
+function resolveOrderField(field: string): 'startedAt' | 'endedAt' {
+  if (field === 'startedAt' || field === 'endedAt') return field;
+  throw new Error(`Unsupported trusted trace-query field: ${field}`);
+}
+
+function isMetadataField(field: TraceQueryPredicateField): field is `metadata.${string}` {
+  return field.startsWith('metadata.');
+}
+
+function compileScalarPredicate<TField extends string>(
+  predicate: TrustedTraceQueryScalarPredicate,
+  registry: Partial<FieldRegistry<TField>>,
+  parameters: ParameterBuilder,
+  allowMetadata = false,
+): string {
+  if (predicate.type === 'boolean') {
+    const parts = predicate.args.map(arg => `(${compileScalarPredicate(arg, registry, parameters, allowMetadata)})`);
+    return parts.join(predicate.operator === 'and' ? ' AND ' : ' OR ');
+  }
+
+  if (predicate.type === 'not') {
+    return `NOT (${compileScalarPredicate(predicate.arg, registry, parameters, allowMetadata)})`;
+  }
+
+  const field = isMetadataField(predicate.field)
+    ? (() => {
+        if (!allowMetadata) throw new Error(`Unsupported trusted trace-query field: ${predicate.field}`);
+        const key = parameters.add(predicate.field.slice('metadata.'.length), 'String');
+        return {
+          sql: `coalesce(if(mapContains(r.metadataSearch, ${key}), r.metadataSearch[${key}], NULL), nullIf(trim(JSONExtractString(r.metadataRaw, ${key})), ''))`,
+          parameterType: 'String' as const,
+        };
+      })()
+    : fieldDefinition(registry, predicate.field);
+  if (predicate.type === 'presence') {
+    return `${predicate.operator === 'exists' ? 'isNotNull' : 'isNull'}(${field.sql})`;
+  }
+
+  if (predicate.type === 'membership') {
+    const values = predicate.values.map(value => parameters.add(value, field.parameterType)).join(', ');
+    const expression = `${field.sql} ${predicate.operator === 'in' ? 'IN' : 'NOT IN'} (${values})`;
+    return `ifNull(${expression}, ${predicate.operator === 'in' ? '0' : '1'})`;
+  }
+
+  const parameter = parameters.add(predicate.value, field.parameterType);
+  const operators = { eq: '=', ne: '!=', lt: '<', lte: '<=', gt: '>', gte: '>=' } as const;
+  const operator = operators[predicate.operator];
+  if (operator === undefined) throw new Error(`Unsupported trusted trace-query operator: ${predicate.operator}`);
+  return `ifNull(${field.sql} ${operator} ${parameter}, ${predicate.operator === 'ne' ? '1' : '0'})`;
+}
+
+function compileFeedbackScalarPredicate(
+  predicate: TrustedTraceQueryScalarPredicate,
+  parameters: ParameterBuilder,
+): string {
+  if (predicate.type === 'boolean') {
+    const parts = predicate.args.map(arg => `(${compileFeedbackScalarPredicate(arg, parameters)})`);
+    return parts.join(predicate.operator === 'and' ? ' AND ' : ' OR ');
+  }
+  if (predicate.type === 'not') return `NOT (${compileFeedbackScalarPredicate(predicate.arg, parameters)})`;
+  if (predicate.field !== 'value') return compileScalarPredicate(predicate, FEEDBACK_FIELDS, parameters);
+  if (predicate.type === 'presence') {
+    const present = `(isNotNull(s.valueString) OR isNotNull(s.valueNumber))`;
+    return predicate.operator === 'exists' ? present : `NOT ${present}`;
+  }
+  const sample = predicate.type === 'membership' ? predicate.values[0] : predicate.value;
+  const field =
+    typeof sample === 'number'
+      ? { value: { sql: 's.valueNumber', parameterType: 'Float64' as const } }
+      : { value: { sql: 's.valueString', parameterType: 'String' as const } };
+  return compileScalarPredicate(predicate, field, parameters);
+}
+
+function collectRelationCollections(
+  predicate: TrustedTraceQueryPredicate | undefined,
+  collections = new Set<'spans' | 'scores' | 'feedback'>(),
+): Set<'spans' | 'scores' | 'feedback'> {
+  if (!predicate) return collections;
+  if (predicate.type === 'relation') {
+    collections.add(predicate.collection);
+  } else if (predicate.type === 'boolean') {
+    for (const arg of predicate.args) collectRelationCollections(arg, collections);
+  } else if (predicate.type === 'not') {
+    collectRelationCollections(predicate.arg, collections);
+  }
+  return collections;
+}
+
+function compilePredicate(predicate: TrustedTraceQueryPredicate, parameters: ParameterBuilder): string {
+  if (predicate.type === 'relation') {
+    const table =
+      predicate.collection === 'spans'
+        ? 'current_spans'
+        : predicate.collection === 'scores'
+          ? 'current_scores'
+          : 'current_feedback';
+    const nested =
+      predicate.collection === 'feedback'
+        ? compileFeedbackScalarPredicate(predicate.predicate, parameters)
+        : compileScalarPredicate(
+            predicate.predicate,
+            predicate.collection === 'spans' ? SPAN_FIELDS : SCORE_FIELDS,
+            parameters,
+          );
+    const existence = `EXISTS (
+      SELECT 1 FROM ${table} s
+      WHERE isNotNull(s.traceId)
+        AND s.traceId = r.traceId
+        AND (${nested})
+    )`;
+    return predicate.quantifier === 'some' ? existence : `NOT ${existence}`;
+  }
+
+  if (predicate.type === 'boolean') {
+    const parts = predicate.args.map(arg => `(${compilePredicate(arg, parameters)})`);
+    return parts.join(predicate.operator === 'and' ? ' AND ' : ' OR ');
+  }
+
+  if (predicate.type === 'not') return `NOT (${compilePredicate(predicate.arg, parameters)})`;
+  return compileScalarPredicate(predicate, TRACE_FIELDS, parameters, true);
+}
+
+export interface CompiledClickHouseTraceQuery {
+  query: string;
+  query_params: QueryParams;
+}
+
+export function compileClickHouseTraceQuery(plan: TrustedTraceQueryPlan): CompiledClickHouseTraceQuery {
+  const parameters = new ParameterBuilder();
+  const from = parameters.add(plan.timeRange.from, "DateTime64(3, 'UTC')");
+  const to = parameters.add(plan.timeRange.to, "DateTime64(3, 'UTC')");
+  const relationCollections = collectRelationCollections(plan.where);
+  const ctes = [
+    `current_roots AS (
+    SELECT * FROM (
+      SELECT *
+      FROM ${TABLE_TRACE_ROOTS}
+      ORDER BY dedupeKey
+      LIMIT 1 BY dedupeKey
+    )
+    ORDER BY traceId, dedupeKey
+    LIMIT 1 BY traceId
+  )`,
+    `root_scope AS (
+    SELECT *
+    FROM current_roots
+    WHERE startedAt >= ${from}
+      AND startedAt < ${to}
+  )`,
+  ];
+
+  if (relationCollections.has('spans')) {
+    ctes.push(`current_spans AS (
+    SELECT
+      traceId,
+      name,
+      spanType,
+      if(JSONType(attributes, 'model') = 'String', JSONExtractString(attributes, 'model'), NULL) AS model,
+      if(JSONType(attributes, 'provider') = 'String', JSONExtractString(attributes, 'provider'), NULL) AS provider,
+      startedAt,
+      endedAt,
+      dateDiff('millisecond', startedAt, endedAt) AS durationMs,
+      if(isNotNull(error), 'error', 'success') AS status,
+      error,
+      entityType,
+      entityId,
+      entityName,
+      entityVersionId,
+      parentEntityVersionId,
+      rootEntityVersionId
+    FROM ${TABLE_SPAN_EVENTS}
+    WHERE isNotNull(traceId)
+      AND traceId IN (SELECT traceId FROM root_scope)
+    ORDER BY dedupeKey
+    LIMIT 1 BY dedupeKey
+  )`);
+  }
+  if (relationCollections.has('scores')) {
+    ctes.push(`current_scores AS (
+    SELECT
+      traceId,
+      spanId,
+      timestamp,
+      scorerId,
+      scorerVersion,
+      scoreSource,
+      score,
+      entityVersionId,
+      parentEntityVersionId,
+      rootEntityVersionId
+    FROM ${TABLE_SCORE_EVENTS}
+    WHERE isNotNull(traceId)
+      AND traceId IN (SELECT traceId FROM root_scope)
+    ORDER BY scoreId, timestamp DESC
+    LIMIT 1 BY scoreId
+  )`);
+  }
+  if (relationCollections.has('feedback')) {
+    ctes.push(`current_feedback AS (
+    SELECT
+      traceId,
+      feedbackType,
+      feedbackSource,
+      feedbackUserId,
+      sourceId,
+      valueString,
+      valueNumber,
+      comment,
+      timestamp,
+      entityVersionId,
+      parentEntityVersionId,
+      rootEntityVersionId
+    FROM (
+      SELECT *
+      FROM ${TABLE_FEEDBACK_EVENTS} FINAL
+      ORDER BY feedbackId, writeVersion DESC, timestamp DESC
+      LIMIT 1 BY feedbackId
+    ) AS current
+    WHERE isNotNull(traceId)
+      AND traceId IN (SELECT traceId FROM root_scope)
+  )`);
+  }
+
+  const predicate = plan.where ? compilePredicate(plan.where, parameters) : '1';
+  ctes.push(`candidates AS (
+    SELECT ${TRACE_SELECT}
+    FROM root_scope r
+    WHERE ${predicate}
+  )`);
+  const candidates = `WITH ${ctes.join(',\n')}`;
+
+  if (plan.result === 'groups') {
+    const pageCondition = plan.cursor ? `AND threadId > ${parameters.add(plan.cursor.threadId, 'String')}` : '';
+    const limit = parameters.add(plan.limit + 1, 'UInt64');
+    return {
+      query: `${candidates}
+SELECT threadId
+FROM candidates
+WHERE isNotNull(threadId) ${pageCondition}
+GROUP BY threadId
+ORDER BY threadId ASC
+LIMIT ${limit}`,
+      query_params: parameters.params,
+    };
+  }
+
+  const orderField = resolveOrderField(plan.orderBy.field);
+  const direction = plan.orderBy.direction === 'asc' ? 'ASC' : 'DESC';
+  let pageCondition = '';
+  if (plan.cursor) {
+    const comparison = plan.orderBy.direction === 'asc' ? '>' : '<';
+    const sortValue = parameters.add(plan.cursor.sortValue, "DateTime64(3, 'UTC')");
+    const traceId = parameters.add(plan.cursor.traceId, 'String');
+    pageCondition = `WHERE (${orderField} ${comparison} ${sortValue} OR (${orderField} = ${sortValue} AND traceId > ${traceId}))`;
+  }
+  const limit = parameters.add(plan.limit + 1, 'UInt64');
+  return {
+    query: `${candidates}
+SELECT *
+FROM candidates
+${pageCondition}
+ORDER BY ${orderField} ${direction}, traceId ASC
+LIMIT ${limit}`,
+    query_params: parameters.params,
+  };
+}
+
+function asIsoTimestamp(value: unknown): string {
+  return new Date(value as string | number | Date).toISOString();
+}
+
+function isClickHouseExecutionTimeout(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const candidate = error as { code?: unknown; type?: unknown };
+  return String(candidate.code ?? '') === '159' || candidate.type === 'TIMEOUT_EXCEEDED';
+}
+
+export async function runWithClickHouseTraceQueryTimeout(
+  client: ClickHouseClient,
+  timeoutMs: number,
+  compiled: CompiledClickHouseTraceQuery,
+  queryId?: string,
+): Promise<Record<string, unknown>[]> {
+  const resolvedTimeoutMs = coreStorage.resolveTraceQueryTimeoutMs(timeoutMs);
+  try {
+    const result = await client.query({
+      query: compiled.query,
+      query_params: compiled.query_params,
+      query_id: queryId,
+      format: 'JSONEachRow',
+      clickhouse_settings: { ...CH_SETTINGS, max_execution_time: resolvedTimeoutMs / 1000 },
+    });
+    return (await result.json()) as Record<string, unknown>[];
+  } catch (error) {
+    if (isClickHouseExecutionTimeout(error)) throw new coreStorage.TraceQueryExecutionError();
+    throw error;
+  }
+}
+
+export async function queryTraces(
+  client: ClickHouseClient,
+  plan: TrustedTraceQueryPlan,
+  timeoutMs: number,
+): Promise<TraceQueryResponse> {
+  const rows = await runWithClickHouseTraceQueryTimeout(client, timeoutMs, compileClickHouseTraceQuery(plan));
+  const visibleRows = rows.slice(0, plan.limit);
+
+  if (plan.result === 'groups') {
+    const groups = visibleRows.map(row => ({ threadId: String(row.threadId) }));
+    const last = groups.at(-1);
+    return coreStorage.traceQueryResponseSchema.parse({
+      groups,
+      page: {
+        next:
+          rows.length > plan.limit && last
+            ? coreStorage.encodeTraceQueryCursor(plan, { result: 'groups', threadId: last.threadId })
+            : null,
+      },
+    });
+  }
+
+  const traces = visibleRows.map(row => ({
+    traceId: String(row.traceId),
+    rootSpanId: String(row.rootSpanId),
+    threadId: row.threadId == null ? null : String(row.threadId),
+    resourceId: row.resourceId == null ? null : String(row.resourceId),
+    startedAt: asIsoTimestamp(row.startedAt),
+    endedAt: asIsoTimestamp(row.endedAt),
+    entityName: row.entityName == null ? null : String(row.entityName),
+    entityType: row.entityType == null ? null : String(row.entityType),
+    environment: row.environment == null ? null : String(row.environment),
+    status: row.status,
+  }));
+  const last = traces.at(-1);
+  return coreStorage.traceQueryResponseSchema.parse({
+    traces,
+    page: {
+      next:
+        rows.length > plan.limit && last
+          ? coreStorage.encodeTraceQueryCursor(plan, {
+              result: 'traces',
+              sortValue: last[plan.orderBy.field],
+              traceId: last.traceId,
+            })
+          : null,
+    },
+  });
+}

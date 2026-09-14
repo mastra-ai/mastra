@@ -419,6 +419,7 @@ describe('ExperimentsInMemory', () => {
         totalItems: 1,
       });
 
+      const metadata = { source: 'dataset-v3', nested: { value: 'original' } };
       const result = await storage.addExperimentResult({
         experimentId: experiment.id,
         itemId: 'item-1',
@@ -426,6 +427,7 @@ describe('ExperimentsInMemory', () => {
         input: { prompt: 'Hello' },
         output: { text: 'Hi there' },
         groundTruth: { text: 'Hello!' },
+        metadata,
         error: null,
         startedAt: new Date(),
         completedAt: new Date(),
@@ -437,6 +439,20 @@ describe('ExperimentsInMemory', () => {
       expect(result.itemDatasetVersion).toBe(3);
       expect(result.input).toEqual({ prompt: 'Hello' });
       expect(result.output).toEqual({ text: 'Hi there' });
+      expect(result.metadata).toEqual({ source: 'dataset-v3', nested: { value: 'original' } });
+
+      metadata.nested.value = 'mutated-input';
+      (result.metadata!.nested as { value: string }).value = 'mutated-result';
+
+      const stored = await storage.getExperimentResultById({ id: result.id });
+      expect(stored?.metadata).toEqual({ source: 'dataset-v3', nested: { value: 'original' } });
+
+      (stored!.metadata!.nested as { value: string }).value = 'mutated-read';
+      const listed = await storage.listExperimentResults({
+        experimentId: experiment.id,
+        pagination: { page: 0, perPage: 10 },
+      });
+      expect(listed.results[0]?.metadata).toEqual({ source: 'dataset-v3', nested: { value: 'original' } });
     });
 
     it('stores itemDatasetVersion as integer', async () => {
@@ -518,6 +534,53 @@ describe('ExperimentsInMemory', () => {
     });
   });
 
+  describe('upsertExperimentResult', () => {
+    it('isolates updated metadata from caller mutations', async () => {
+      const experiment = await storage.createExperiment({
+        datasetId: 'ds-1',
+        datasetVersion: 1,
+        targetType: 'agent',
+        targetId: 'a1',
+        totalItems: 1,
+      });
+
+      await storage.addExperimentResult({
+        experimentId: experiment.id,
+        itemId: 'item-1',
+        itemDatasetVersion: 1,
+        input: 'x',
+        output: 'initial',
+        groundTruth: null,
+        metadata: { nested: { value: 'initial' } },
+        error: null,
+        startedAt: new Date(),
+        completedAt: new Date(),
+        retryCount: 0,
+      });
+
+      const metadata = { nested: { value: 'updated' } };
+      const result = await storage.upsertExperimentResult({
+        experimentId: experiment.id,
+        itemId: 'item-1',
+        itemDatasetVersion: 1,
+        input: 'x',
+        output: 'updated',
+        groundTruth: null,
+        metadata,
+        error: null,
+        startedAt: new Date(),
+        completedAt: new Date(),
+        retryCount: 0,
+      });
+
+      metadata.nested.value = 'mutated-input';
+      (result.metadata!.nested as { value: string }).value = 'mutated-result';
+
+      const stored = await storage.getExperimentResultById({ id: result.id });
+      expect(stored?.metadata).toEqual({ nested: { value: 'updated' } });
+    });
+  });
+
   describe('listExperimentResults', () => {
     it('lists results for an experiment', async () => {
       const experiment = await storage.createExperiment({
@@ -570,6 +633,109 @@ describe('ExperimentsInMemory', () => {
 
       expect(result.results).toHaveLength(0);
       expect(result.pagination.total).toBe(0);
+    });
+
+    describe('tags filter', () => {
+      async function seedTaggedResults() {
+        const experiment = await storage.createExperiment({
+          datasetId: 'ds-1',
+          datasetVersion: 1,
+          targetType: 'agent',
+          targetId: 'a1',
+          totalItems: 4,
+        });
+        const base = {
+          experimentId: experiment.id,
+          itemDatasetVersion: 1,
+          input: 'x',
+          output: 'y',
+          groundTruth: null,
+          error: null,
+          completedAt: new Date(),
+          retryCount: 0,
+        };
+        const t0 = Date.now();
+        await storage.addExperimentResult({
+          ...base,
+          itemId: 'only-a',
+          tags: ['a'],
+          status: 'reviewed',
+          startedAt: new Date(t0),
+        });
+        await storage.addExperimentResult({
+          ...base,
+          itemId: 'a-and-b',
+          tags: ['a', 'b'],
+          status: 'needs-review',
+          startedAt: new Date(t0 + 1),
+        });
+        await storage.addExperimentResult({
+          ...base,
+          itemId: 'only-b',
+          tags: ['b'],
+          startedAt: new Date(t0 + 2),
+        });
+        await storage.addExperimentResult({
+          ...base,
+          itemId: 'untagged',
+          tags: null,
+          startedAt: new Date(t0 + 3),
+        });
+        return experiment;
+      }
+
+      it('returns only results containing all requested tags', async () => {
+        const experiment = await seedTaggedResults();
+
+        const result = await storage.listExperimentResults({
+          experimentId: experiment.id,
+          tags: ['a', 'b'],
+          pagination: { page: 0, perPage: 10 },
+        });
+
+        expect(result.results.map(r => r.itemId)).toEqual(['a-and-b']);
+        expect(result.pagination.total).toBe(1);
+      });
+
+      it('matches results that have extra tags beyond the requested one', async () => {
+        const experiment = await seedTaggedResults();
+
+        const result = await storage.listExperimentResults({
+          experimentId: experiment.id,
+          tags: ['a'],
+          pagination: { page: 0, perPage: 10 },
+        });
+
+        expect(result.results.map(r => r.itemId)).toEqual(['only-a', 'a-and-b']);
+        expect(result.pagination.total).toBe(2);
+      });
+
+      it('applies no tag filter for an empty array', async () => {
+        const experiment = await seedTaggedResults();
+
+        const result = await storage.listExperimentResults({
+          experimentId: experiment.id,
+          tags: [],
+          pagination: { page: 0, perPage: 10 },
+        });
+
+        expect(result.results).toHaveLength(4);
+        expect(result.pagination.total).toBe(4);
+      });
+
+      it('combines with the status filter', async () => {
+        const experiment = await seedTaggedResults();
+
+        const result = await storage.listExperimentResults({
+          experimentId: experiment.id,
+          tags: ['a'],
+          status: 'reviewed',
+          pagination: { page: 0, perPage: 10 },
+        });
+
+        expect(result.results.map(r => r.itemId)).toEqual(['only-a']);
+        expect(result.pagination.total).toBe(1);
+      });
     });
   });
 

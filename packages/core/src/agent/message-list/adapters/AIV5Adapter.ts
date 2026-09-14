@@ -22,16 +22,22 @@ import { findToolCallArgs } from '../utils/provider-compat';
 import { sanitizeToolName } from '../utils/tool-name';
 
 /**
- * Filter out empty text parts from message parts array.
+ * Compact malformed entries and filter out empty text parts from message parts arrays.
  * Empty text blocks are not allowed by Anthropic's API and cause request failures.
  * This can happen during streaming when text-start/text-end events occur without actual content.
  * However, if the only part is an empty text part, it is preserved as a legitimate placeholder
  * (e.g. empty assistant messages between tool results and user messages).
  */
-function filterEmptyTextParts(parts: MastraMessagePart[]): MastraMessagePart[] {
-  const hasNonEmptyParts = parts.some(part => !(part.type === 'text' && part.text === ''));
-  if (!hasNonEmptyParts) return parts;
-  return parts.filter(part => {
+function compactMessageParts(parts: unknown): MastraMessagePart[] {
+  if (!Array.isArray(parts)) return [];
+  return parts.filter((part): part is MastraMessagePart => part !== null && typeof part === 'object');
+}
+
+function filterEmptyTextParts(parts: unknown): MastraMessagePart[] {
+  const compactedParts = compactMessageParts(parts);
+  const hasNonEmptyParts = compactedParts.some(part => !(part.type === 'text' && part.text === ''));
+  if (!hasNonEmptyParts) return compactedParts;
+  return compactedParts.filter(part => {
     if (part.type === 'text') {
       return part.text !== '';
     }
@@ -69,7 +75,7 @@ function isUserSignalType(type: string | undefined): boolean {
 function getTextContent(message: MastraDBMessage): string {
   return typeof message.content.content === 'string'
     ? message.content.content
-    : (message.content.parts.find(part => part.type === 'text')?.text ?? '');
+    : (compactMessageParts(message.content.parts).find(part => part.type === 'text')?.text ?? '');
 }
 
 function toSignalDataPart(message: MastraDBMessage): AIV5Type.DataUIPart<AIV5.UIDataTypes> {
@@ -252,8 +258,10 @@ export class AIV5Adapter {
       };
     }
 
+    const contentParts = compactMessageParts(dbMsg.content.parts);
+
     // 1. Handle tool invocations (only if not already in parts array)
-    const hasToolInvocationParts = dbMsg.content.parts?.some(p => p.type === 'tool-invocation');
+    const hasToolInvocationParts = contentParts.some(p => p.type === 'tool-invocation');
     if (dbMsg.content.toolInvocations && !hasToolInvocationParts) {
       for (const invocation of dbMsg.content.toolInvocations) {
         if (invocation.state === 'result') {
@@ -276,8 +284,8 @@ export class AIV5Adapter {
     }
 
     // 2. Check if we have parts with providerMetadata first
-    const hasReasoningInParts = dbMsg.content.parts?.some(p => p.type === 'reasoning');
-    const hasFileInParts = dbMsg.content.parts?.some(p => p.type === 'file');
+    const hasReasoningInParts = contentParts.some(p => p.type === 'reasoning');
+    const hasFileInParts = contentParts.some(p => p.type === 'file');
 
     // 3. Handle reasoning (AIV4 reasoning is a string) - only if not in parts
     if (dbMsg.content.reasoning && !hasReasoningInParts) {
@@ -302,8 +310,8 @@ export class AIV5Adapter {
 
     // 5. Handle parts directly (if present in V2)
     let hasNonToolReasoningParts = false;
-    if (dbMsg.content.parts) {
-      for (const part of dbMsg.content.parts) {
+    if (contentParts.length > 0) {
+      for (const part of contentParts) {
         // Handle tool-invocation parts
         if (part.type === 'tool-invocation' && part.toolInvocation) {
           const inv = part.toolInvocation;
@@ -396,6 +404,7 @@ export class AIV5Adapter {
           // shapes so the media type survives (instead of the image/png default) and the
           // payload is read from `url` when v5-shaped. Mirrors #17366.
           const { mediaType: fileMimeType, data: fileData } = resolveFilePartMediaTypeAndData(part);
+          const filename = (part as { filename?: string }).filename;
 
           // Skip file parts that came from experimental_attachments to avoid duplicates
           if (typeof fileData === 'string' && attachmentUrls.has(fileData)) {
@@ -414,6 +423,7 @@ export class AIV5Adapter {
               type: 'file' as const,
               url: fileData,
               mediaType: categorized.mimeType || 'image/png',
+              ...(filename ? { filename } : {}),
             };
             v5UIPart.providerMetadata = mergeMastraCreatedAt(part.providerMetadata, part.createdAt);
             parts.push(v5UIPart);
@@ -451,6 +461,7 @@ export class AIV5Adapter {
               type: 'file' as const,
               url: dataUri,
               mediaType: finalMimeType,
+              ...(filename ? { filename } : {}),
             };
             v5UIPart.providerMetadata = mergeMastraCreatedAt(part.providerMetadata, part.createdAt);
             parts.push(v5UIPart);
@@ -836,8 +847,10 @@ export class AIV5Adapter {
     context: { dbMessages?: MastraDBMessage[] } = {},
   ): MastraDBMessage {
     const content = Array.isArray(modelMsg.content)
-      ? modelMsg.content
-      : [{ type: 'text', text: modelMsg.content } satisfies AIV5.TextPart];
+      ? modelMsg.content.filter(part => part !== null && typeof part === 'object')
+      : typeof modelMsg.content === 'string'
+        ? [{ type: 'text', text: modelMsg.content } satisfies AIV5.TextPart]
+        : [];
 
     const mastraDBParts: MastraMessageContentV2['parts'] = [];
     const toolInvocations: NonNullable<MastraDBMessage['content']['toolInvocations']> = [];

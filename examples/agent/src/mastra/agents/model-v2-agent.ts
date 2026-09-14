@@ -2,6 +2,7 @@ import { Agent } from '@mastra/core/agent';
 import { lessComplexWorkflow, myWorkflow } from '../workflows';
 import { Memory } from '@mastra/memory';
 import { ModerationProcessor } from '@mastra/core/processors';
+import { submitPlanTool } from '@mastra/core/tools';
 import { cookingTool } from '../tools';
 import { TaskSignalProvider } from '@mastra/core/signals';
 import {
@@ -12,6 +13,7 @@ import {
 import { stepLoggerProcessor, responseQualityProcessor } from '../processors';
 import { findUserWorkflow } from '../workflows/other';
 import { createScorer } from '@mastra/core/evals';
+import { alternatingScorer, alwaysPassScorer } from '../scorers/chef-model-v2-scorers';
 import { cryptoResearchTool, cryptoPriceTool } from '../tools';
 import { weatherTool as weatherInfo } from '../tools/weather-tool';
 import {
@@ -91,6 +93,7 @@ export const chefModelV2Agent = new Agent({
       ingredients they have available. Your first priority is understanding what ingredients and equipment the user has access to, then suggesting achievable recipes.
       You explain cooking steps clearly and offer substitutions when needed, maintaining a friendly and encouraging tone throughout.
       For complex multi-step requests, use the task list tools to plan and track your progress.
+      When asked to submit a plan, write its Markdown under .mastracode/plans/ in the workspace, then call submit_plan with that path.
       `,
     role: 'system',
   },
@@ -98,23 +101,17 @@ export const chefModelV2Agent = new Agent({
   tools: {
     weatherInfo,
     cookingTool,
+    submit_plan: submitPlanTool,
   },
   workflows: {
     myWorkflow,
     lessComplexWorkflow,
     findUserWorkflow,
   },
-  // scorers: ({ mastra }) => {
-  //   if (!mastra) {
-  //     throw new Error('Mastra not found');
-  //   }
-
-  //   const scorer1 = mastra.getScorerById('scorer1');
-
-  //   return {
-  //     scorer1: { scorer: scorer1, sampling: { rate: 1, type: 'ratio' } },
-  //   };
-  // },
+  scorers: {
+    alwaysPass: { scorer: alwaysPassScorer, sampling: { rate: 1, type: 'ratio' } },
+    alternating: { scorer: alternatingScorer, sampling: { rate: 1, type: 'ratio' } },
+  },
   memory,
   signals: [new TaskSignalProvider()],
   inputProcessors: [moderationProcessor],

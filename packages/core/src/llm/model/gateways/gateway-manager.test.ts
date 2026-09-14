@@ -238,6 +238,34 @@ describe('GatewayManager', () => {
       expect(auth.apiKey).toBe('env-key');
       expect(auth.source).toBe('legacy');
     });
+
+    it('falls back to getApiKey when resolveAuth returns empty headers', async () => {
+      const gateway = createFakeGateway({
+        id: 'test-gateway',
+        provider: 'acme',
+        apiKey: 'env-key',
+        resolveAuth: () => ({ headers: {} }),
+      });
+      const manager = new GatewayManager([gateway]);
+      const auth = await manager.resolveAuth('test-gateway/acme/sonic-fast');
+
+      expect(auth).toEqual({ apiKey: 'env-key', source: 'legacy' });
+      expect(gateway.getApiKey).toHaveBeenCalledWith('test-gateway/acme/sonic-fast');
+    });
+
+    it('accepts non-empty gateway headers without falling back to getApiKey', async () => {
+      const gateway = createFakeGateway({
+        id: 'test-gateway',
+        provider: 'acme',
+        apiKey: 'env-key',
+        resolveAuth: () => ({ headers: { 'x-api-key': 'gateway-key' } }),
+      });
+      const manager = new GatewayManager([gateway]);
+      const auth = await manager.resolveAuth('test-gateway/acme/sonic-fast');
+
+      expect(auth).toEqual({ headers: { 'x-api-key': 'gateway-key' }, source: 'gateway' });
+      expect(gateway.getApiKey).not.toHaveBeenCalled();
+    });
   });
 
   describe('hasAuth', () => {
@@ -258,6 +286,18 @@ describe('GatewayManager', () => {
         apiKey: '',
       });
       const manager = new GatewayManager([gateway]);
+      expect(await manager.hasAuth('test-gateway/acme/sonic-fast')).toBe(false);
+    });
+
+    it('returns false when gateway auth contains empty headers and getApiKey is empty', async () => {
+      const gateway = createFakeGateway({
+        id: 'test-gateway',
+        provider: 'acme',
+        apiKey: '',
+        resolveAuth: () => ({ headers: {} }),
+      });
+      const manager = new GatewayManager([gateway]);
+
       expect(await manager.hasAuth('test-gateway/acme/sonic-fast')).toBe(false);
     });
 

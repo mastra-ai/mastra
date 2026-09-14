@@ -1,13 +1,16 @@
+import { DEFAULT_OM_MODEL_ID } from '@mastra/code-sdk/constants';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import {
   ensureFactorySourceSession,
   hydrateFactorySession,
+  refreshFactorySessionMemorySettings,
   resolveFactoryDefaultModelId,
   resolveFactoryProjectForSession,
   resolveFactorySourceRepository,
 } from './factory-session.js';
+import { DEFAULT_OBSERVATION_THRESHOLD, DEFAULT_REFLECTION_THRESHOLD } from './memory-settings-hydration.js';
 
 type FactorySessionHandle = Parameters<typeof hydrateFactorySession>[0];
 
@@ -46,10 +49,10 @@ function createSessionDouble() {
   const calls: string[] = [];
   const session = {
     om: {
-      observer: { switchModel: vi.fn(async () => void calls.push('observer')) },
-      reflector: { switchModel: vi.fn(async () => void calls.push('reflector')) },
+      observer: { modelId: () => undefined, switchModel: vi.fn(async () => void calls.push('observer')) },
+      reflector: { modelId: () => undefined, switchModel: vi.fn(async () => void calls.push('reflector')) },
     },
-    state: { set: vi.fn(async () => void calls.push('state')) },
+    state: { get: () => ({}), set: vi.fn(async () => void calls.push('state')) },
     model: { switch: vi.fn(async () => void calls.push('model')) },
   };
   return { session: session as unknown as FactorySessionHandle, double: session, calls };
@@ -79,6 +82,8 @@ describe('ensureFactorySourceSession', () => {
         userId: 'user-1',
         branch: 'factory/issue-49',
         baseBranch: 'main',
+        // Autonomous runs are org-visible by default.
+        visibility: 'org',
       }),
     );
   });
@@ -107,6 +112,23 @@ describe('ensureFactorySourceSession', () => {
     });
 
     expect(result.baseBranch).toBe('develop');
+  });
+
+  it('attributes the session to attributeToUserId over the repo connector', async () => {
+    const { sourceControl, project } = await seedLinkedRepository();
+
+    const result = await ensureFactorySourceSession({
+      sourceControl,
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      branch: 'factory/issue-22254',
+      attributeToUserId: 'approver-1',
+    });
+
+    expect(result.userId).toBe('approver-1');
+    await expect(sourceControl.sessions.getBySessionId(result.sessionId)).resolves.toEqual(
+      expect.objectContaining({ userId: 'approver-1' }),
+    );
   });
 
   it('rejects a factory project with no connection for this integration', async () => {
@@ -139,7 +161,7 @@ describe('ensureFactorySourceSession', () => {
 });
 
 describe('hydrateFactorySession', () => {
-  it('applies stored memory settings and the factory default model', async () => {
+  it("applies the factory project's stored memory settings and the factory default model", async () => {
     const { session, double } = createSessionDouble();
     const memorySettings = {
       get: vi.fn(async () => ({
@@ -153,12 +175,12 @@ describe('hydrateFactorySession', () => {
 
     await hydrateFactorySession(session, {
       orgId: 'org-1',
-      userId: 'user-1',
+      factoryProjectId: 'proj-1',
       defaultModelId: 'anthropic/claude-opus-5',
       memorySettings: memorySettings as never,
     });
 
-    expect(memorySettings.get).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'user-1' });
+    expect(memorySettings.get).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'factory-project:proj-1' });
     expect(double.om.observer.switchModel).toHaveBeenCalledWith({ modelId: 'anthropic/claude-fable-5' });
     expect(double.om.reflector.switchModel).toHaveBeenCalledWith({ modelId: 'anthropic/claude-opus-5' });
     expect(double.state.set).toHaveBeenCalledWith({
@@ -172,10 +194,34 @@ describe('hydrateFactorySession', () => {
   it('leaves the session on its default model when the project has none', async () => {
     const { session, double } = createSessionDouble();
 
-    await hydrateFactorySession(session, { orgId: 'org-1', userId: 'user-1' });
+    await hydrateFactorySession(session, { orgId: 'org-1', factoryProjectId: 'proj-1' });
 
     expect(double.model.switch).not.toHaveBeenCalled();
-    expect(double.state.set).not.toHaveBeenCalled();
+    // The org seed is the one state write that always happens: knowledge
+    // capture scopes on it, and it must land even when nothing else does.
+    expect(double.state.set).toHaveBeenCalledWith({ factoryOrgId: 'org-1' });
+  });
+
+  it('resets to the built-in memory defaults when memory settings are omitted', async () => {
+    const { session, double } = createSessionDouble();
+
+    await hydrateFactorySession(session, { orgId: 'org-1', factoryProjectId: 'proj-1' });
+
+    expect(double.om.observer.switchModel).toHaveBeenCalledWith({ modelId: DEFAULT_OM_MODEL_ID });
+    expect(double.om.reflector.switchModel).toHaveBeenCalledWith({ modelId: DEFAULT_OM_MODEL_ID });
+    expect(double.state.set).toHaveBeenCalledWith({
+      observationThreshold: DEFAULT_OBSERVATION_THRESHOLD,
+      reflectionThreshold: DEFAULT_REFLECTION_THRESHOLD,
+    });
+  });
+
+  it('marks the session unresolved when the caller has no organization', async () => {
+    const { session, double } = createSessionDouble();
+
+    await hydrateFactorySession(session, { orgId: '  ', factoryProjectId: 'proj-1' });
+
+    expect(double.state.set).toHaveBeenCalledWith({ factoryOrgUnresolved: true });
+    expect(double.state.set).not.toHaveBeenCalledWith(expect.objectContaining({ factoryOrgId: expect.anything() }));
   });
 
   it('keeps going when the default model is unknown', async () => {
@@ -184,7 +230,7 @@ describe('hydrateFactorySession', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     await expect(
-      hydrateFactorySession(session, { orgId: 'org-1', userId: 'user-1', defaultModelId: 'openai/retired' }),
+      hydrateFactorySession(session, { orgId: 'org-1', factoryProjectId: 'proj-1', defaultModelId: 'openai/retired' }),
     ).resolves.toBeUndefined();
 
     expect(warn).toHaveBeenCalledWith('[Factory Start] Failed to apply factory default model', {
@@ -201,7 +247,7 @@ describe('hydrateFactorySession', () => {
 
     await hydrateFactorySession(session, {
       orgId: 'org-1',
-      userId: 'user-1',
+      factoryProjectId: 'proj-1',
       defaultModelId: 'anthropic/claude-opus-5',
       memorySettings: memorySettings as never,
     });
@@ -210,6 +256,57 @@ describe('hydrateFactorySession', () => {
       error: 'storage down',
     });
     expect(double.model.switch).toHaveBeenCalledWith({ modelId: 'anthropic/claude-opus-5' });
+    warn.mockRestore();
+  });
+});
+
+describe('refreshFactorySessionMemorySettings', () => {
+  it("reapplies the project's current OM models to a reused session", async () => {
+    const { session, double } = createSessionDouble();
+    const memorySettings = {
+      get: vi.fn(async () => ({
+        observerModelId: 'anthropic/claude-fable-5',
+        reflectorModelId: 'anthropic/claude-opus-5',
+        observationThreshold: 3,
+        reflectionThreshold: 7,
+        observeAttachments: true,
+      })),
+    };
+    const projects = { get: vi.fn(async () => ({ defaultModelId: 'anthropic/claude-opus-5' })) };
+
+    await refreshFactorySessionMemorySettings(session, {
+      orgId: 'org-1',
+      factoryProjectId: 'proj-1',
+      projects: projects as never,
+      memorySettings: memorySettings as never,
+    });
+
+    expect(memorySettings.get).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'factory-project:proj-1' });
+    expect(double.om.observer.switchModel).toHaveBeenCalledWith({ modelId: 'anthropic/claude-fable-5' });
+    expect(double.om.reflector.switchModel).toHaveBeenCalledWith({ modelId: 'anthropic/claude-opus-5' });
+    // Reuse only reapplies OM/memory settings — it must not touch the run model.
+    expect(double.model.switch).not.toHaveBeenCalled();
+  });
+
+  it('swallows and logs a settings lookup failure so the reused run still proceeds', async () => {
+    const { session } = createSessionDouble();
+    const memorySettings = { get: vi.fn(async () => Promise.reject(new Error('storage down'))) };
+    const projects = { get: vi.fn(async () => null) };
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    await expect(
+      refreshFactorySessionMemorySettings(session, {
+        orgId: 'org-1',
+        factoryProjectId: 'proj-1',
+        projects: projects as never,
+        memorySettings: memorySettings as never,
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(warn).toHaveBeenCalledWith(
+      '[Factory dispatch] Failed to reapply observational-memory settings on session reuse',
+      { error: 'storage down' },
+    );
     warn.mockRestore();
   });
 });
@@ -312,6 +409,106 @@ describe('resolveFactorySourceRepository', () => {
     await expect(
       resolveFactorySourceRepository({ sourceControl, orgId: 'org-1', factoryProjectId: project.id }),
     ).resolves.toMatchObject({ found: true });
+  });
+
+  // A provider-app reinstall deletes the installation but leaves the old
+  // connection row behind. That stale connection must not shadow the healthy
+  // one created for the new installation.
+  it('skips a stale connection whose installation was deleted and resolves through the healthy one', async () => {
+    const seeded = await createFactoryStorageForTests();
+    const sourceControl = seeded.sourceControl.forIntegration('github');
+    const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Mastra' } });
+
+    const staleInstallation = await sourceControl.installations.upsert({
+      orgId: 'org-1',
+      connectedByUserId: 'user-1',
+      externalId: 'old-install',
+    });
+    const staleRepository = await sourceControl.repositories.upsert({
+      orgId: 'org-1',
+      input: {
+        installationId: staleInstallation.id,
+        externalId: '456',
+        slug: 'mastra-ai/mastra',
+        defaultBranch: 'main',
+      },
+    });
+    const staleConnection = await sourceControl.connections.create({
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      installationId: staleInstallation.id,
+      createdByUserId: 'user-1',
+    });
+    await sourceControl.projectRepositories.link({
+      orgId: 'org-1',
+      connectionId: staleConnection.id,
+      repositoryId: staleRepository.id,
+      createdByUserId: 'user-1',
+      sandboxProvider: 'local',
+      sandboxWorkdir: '/sandbox/mastra',
+    });
+    // The reinstall: the installation row goes away, the connection stays.
+    await sourceControl.installations.delete({ orgId: 'org-1', id: staleInstallation.id });
+
+    const freshInstallation = await sourceControl.installations.upsert({
+      orgId: 'org-1',
+      connectedByUserId: 'user-2',
+      externalId: 'new-install',
+    });
+    const freshRepository = await sourceControl.repositories.upsert({
+      orgId: 'org-1',
+      input: {
+        installationId: freshInstallation.id,
+        externalId: '456',
+        slug: 'mastra-ai/mastra',
+        defaultBranch: 'main',
+      },
+    });
+    const freshConnection = await sourceControl.connections.create({
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      installationId: freshInstallation.id,
+      createdByUserId: 'user-2',
+    });
+    const freshProjectRepository = await sourceControl.projectRepositories.link({
+      orgId: 'org-1',
+      connectionId: freshConnection.id,
+      repositoryId: freshRepository.id,
+      createdByUserId: 'user-2',
+      sandboxProvider: 'local',
+      sandboxWorkdir: '/sandbox/mastra',
+    });
+
+    await expect(
+      resolveFactorySourceRepository({ sourceControl, orgId: 'org-1', factoryProjectId: project.id }),
+    ).resolves.toEqual({
+      found: true,
+      projectRepositoryId: freshProjectRepository.id,
+      baseBranch: 'main',
+      connectedByUserId: 'user-2',
+    });
+  });
+
+  it('reports a repository miss instead of throwing when every connection is stale', async () => {
+    const seeded = await createFactoryStorageForTests();
+    const sourceControl = seeded.sourceControl.forIntegration('github');
+    const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Mastra' } });
+    const installation = await sourceControl.installations.upsert({
+      orgId: 'org-1',
+      connectedByUserId: 'user-1',
+      externalId: 'old-install',
+    });
+    await sourceControl.connections.create({
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      installationId: installation.id,
+      createdByUserId: 'user-1',
+    });
+    await sourceControl.installations.delete({ orgId: 'org-1', id: installation.id });
+
+    await expect(
+      resolveFactorySourceRepository({ sourceControl, orgId: 'org-1', factoryProjectId: project.id }),
+    ).resolves.toEqual({ found: false, reason: 'repository' });
   });
 });
 

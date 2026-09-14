@@ -313,14 +313,15 @@ function MetricsContent() {
                 href="https://mastra.ai/docs/observability/metrics/overview"
                 target="_blank"
                 rel="noopener noreferrer"
+                icon={<ExternalLinkIcon />}
               >
-                Metrics Documentation <ExternalLinkIcon />
+                Metrics Documentation
               </Button>
             }
           />
         </div>
       ) : (
-        <div className="grid content-start gap-8 pb-10">
+        <div className="grid content-start gap-4 pb-6">
           {isInMemory && (
             <Notice variant="info" title="Metrics are not persisted">
               <Notice.Message>

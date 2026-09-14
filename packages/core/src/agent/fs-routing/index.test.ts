@@ -8,7 +8,7 @@ import type { InlineSkill } from '../../skills/types';
 import { createTool } from '../../tools';
 import { Workspace, LocalFilesystem } from '../../workspace';
 import { Agent } from '../agent';
-import { assembleAgentFromFsEntry, agentConfig, MAX_FS_SUBAGENT_DEPTH } from './index';
+import { assembleAgentFromFsEntry, agentConfig, agentInstructions, MAX_FS_SUBAGENT_DEPTH } from './index';
 import type { FsAgentToolEntry, FsAgentEntry } from './index';
 
 function makeTool(id: string): FsAgentToolEntry {
@@ -38,6 +38,17 @@ describe('agentConfig', () => {
   it('returns the config unchanged (identity)', () => {
     const config = { model: 'openai/gpt-4o' as const };
     expect(agentConfig(config)).toBe(config);
+  });
+});
+
+describe('agentInstructions', () => {
+  it('returns a static value unchanged (identity)', () => {
+    expect(agentInstructions('be helpful')).toBe('be helpful');
+  });
+
+  it('returns a dynamic value unchanged (identity)', () => {
+    const instructions = () => 'be helpful';
+    expect(agentInstructions(instructions)).toBe(instructions);
   });
 });
 
@@ -100,13 +111,216 @@ describe('assembleAgentFromFsEntry', () => {
     expect(await agent.getInstructions()).toBe('only config');
   });
 
-  it('throws when neither instructions.md nor config.instructions present', () => {
+  it('throws when neither instructions file nor config.instructions present', () => {
     expect(() =>
       assembleAgentFromFsEntry({
         name: 'broken',
         config: { model: 'openai/gpt-4o' },
       }),
     ).toThrow(/missing instructions/i);
+  });
+
+  describe('instructions.ts', () => {
+    it('uses a static instructions.ts export', async () => {
+      const agent = assembleAgentFromFsEntry({
+        name: 'a',
+        config: { model: 'openai/gpt-4o' },
+        instructions: 'from module',
+      });
+      expect(await agent.getInstructions()).toBe('from module');
+    });
+
+    it('resolves a dynamic instructions.ts export per request', async () => {
+      const agent = assembleAgentFromFsEntry({
+        name: 'a',
+        config: { model: 'openai/gpt-4o' },
+        instructions: ({ requestContext }) => `tier: ${requestContext.get('tier') ?? 'standard'}`,
+      });
+
+      const requestContext = new RequestContext();
+      requestContext.set('tier', 'premium');
+
+      expect(await agent.getInstructions({ requestContext })).toBe('tier: premium');
+      expect(await agent.getInstructions({ requestContext: new RequestContext() })).toBe('tier: standard');
+    });
+
+    it('accepts a system message object', async () => {
+      const agent = assembleAgentFromFsEntry({
+        name: 'a',
+        config: { model: 'openai/gpt-4o' },
+        instructions: { role: 'system', content: 'from message' },
+      });
+      expect(await agent.getInstructions()).toEqual({ role: 'system', content: 'from message' });
+    });
+
+    it('lets instructions.ts win over instructions.md, with a warning', async () => {
+      const onWarn = vi.fn();
+      const agent = assembleAgentFromFsEntry(
+        {
+          name: 'a',
+          config: { model: 'openai/gpt-4o' },
+          instructions: 'from module',
+          instructionsMd: 'from md',
+        },
+        { onWarn },
+      );
+
+      expect(await agent.getInstructions()).toBe('from module');
+      expect(onWarn).toHaveBeenCalledWith(expect.stringContaining('instructions.ts wins'));
+    });
+
+    it('lets instructions.ts win over a static config.instructions', async () => {
+      const agent = assembleAgentFromFsEntry({
+        name: 'a',
+        config: { model: 'openai/gpt-4o', instructions: 'from config' },
+        instructions: 'from module',
+      });
+      expect(await agent.getInstructions()).toBe('from module');
+    });
+
+    it('lets a dynamic config.instructions win over instructions.ts, with a warning', async () => {
+      const onWarn = vi.fn();
+      const agent = assembleAgentFromFsEntry(
+        {
+          name: 'a',
+          config: { model: 'openai/gpt-4o', instructions: () => 'dynamic config' },
+          instructions: 'from module',
+        },
+        { onWarn },
+      );
+
+      expect(await agent.getInstructions()).toBe('dynamic config');
+      expect(onWarn).toHaveBeenCalledWith(expect.stringContaining('defined in both config.ts and instructions.ts'));
+    });
+
+    it('satisfies the instructions requirement on its own', async () => {
+      const agent = assembleAgentFromFsEntry({
+        name: 'a',
+        config: { model: 'openai/gpt-4o' },
+        instructions: 'only module',
+      });
+      expect(await agent.getInstructions()).toBe('only module');
+    });
+
+    it('accepts an array of strings and system messages', async () => {
+      const agent = assembleAgentFromFsEntry({
+        name: 'a',
+        config: { model: 'openai/gpt-4o' },
+        instructions: ['be helpful', { role: 'system', content: 'be brief' }],
+      });
+      expect(await agent.getInstructions()).toEqual(['be helpful', { role: 'system', content: 'be brief' }]);
+    });
+
+    it('throws when the default export is not a usable instructions value', () => {
+      expect(() =>
+        assembleAgentFromFsEntry({
+          name: 'broken',
+          config: { model: 'openai/gpt-4o' },
+          instructions: { prompt: 'wrong shape' } as never,
+        }),
+      ).toThrow(/must default-export a string, a system message, an array of either, or a function/i);
+    });
+
+    // Every one of these reaches the model as an empty string, so the container
+    // being the right shape isn't enough to call the export usable.
+    it.each([
+      ['an array of non-messages', [123, 456], /array holding something other than strings or system messages/i],
+      ['an empty array', [], /an empty array/i],
+      ['a system message with non-string content', { role: 'system', content: 42 }, /but got object/i],
+      ['a message inside an array with non-string content', [{ role: 'system', content: 42 }], /array holding/i],
+    ])('throws for %s', (_label, instructions, expected) => {
+      expect(() =>
+        assembleAgentFromFsEntry({
+          name: 'broken',
+          config: { model: 'openai/gpt-4o' },
+          instructions: instructions as never,
+        }),
+      ).toThrow(expected);
+    });
+
+    // A null default export is a mistake in a file whose only job is to export
+    // instructions, so it must not read as "no instructions.ts here" and send
+    // the author chasing the missing-instructions error instead.
+    it('rejects a null default export rather than falling back', () => {
+      expect(() =>
+        assembleAgentFromFsEntry({
+          name: 'broken',
+          config: { model: 'openai/gpt-4o' },
+          instructions: null as never,
+          instructionsMd: 'from md',
+        }),
+      ).toThrow(/but got null/i);
+    });
+
+    // Same reasoning as the null case, but this one can't be caught by checking
+    // the value: codegen sets the key only when the file exists, so presence has
+    // to come from the key and an `undefined` export stays a broken file.
+    it('rejects an undefined default export rather than falling back', () => {
+      expect(() =>
+        assembleAgentFromFsEntry({
+          name: 'broken',
+          config: { model: 'openai/gpt-4o' },
+          instructions: undefined,
+          instructionsMd: 'from md',
+        }),
+      ).toThrow(/but got undefined/i);
+    });
+
+    it('still resolves instructions.md when no instructions.ts was discovered', async () => {
+      const agent = assembleAgentFromFsEntry({
+        name: 'a',
+        config: { model: 'openai/gpt-4o' },
+        instructionsMd: 'from md',
+      });
+      expect(await agent.getInstructions()).toBe('from md');
+    });
+
+    // Presence means a file was discovered for this agent, so it has to be an
+    // own key. An inherited one would let a prototype speak for the directory.
+    it('ignores an inherited instructions property', async () => {
+      const entry = Object.create({ instructions: 'from prototype' }) as FsAgentEntry;
+      Object.assign(entry, {
+        name: 'a',
+        config: { model: 'openai/gpt-4o' },
+        instructionsMd: 'from md',
+      });
+
+      expect(await assembleAgentFromFsEntry(entry).getInstructions()).toBe('from md');
+    });
+  });
+
+  // The dynamic config wins over either file, so ignoring the markdown silently
+  // would leave the same blind spot the instructions.ts collision warns about.
+  it('warns when a dynamic config.instructions overrides instructions.md', async () => {
+    const onWarn = vi.fn();
+    const agent = assembleAgentFromFsEntry(
+      {
+        name: 'a',
+        config: { model: 'openai/gpt-4o', instructions: () => 'dynamic config' },
+        instructionsMd: 'from md',
+      },
+      { onWarn },
+    );
+
+    expect(await agent.getInstructions()).toBe('dynamic config');
+    expect(onWarn).toHaveBeenCalledWith(expect.stringContaining('defined in both config.ts and instructions.md'));
+  });
+
+  it('names both files when a dynamic config.instructions overrides each of them', () => {
+    const onWarn = vi.fn();
+    assembleAgentFromFsEntry(
+      {
+        name: 'a',
+        config: { model: 'openai/gpt-4o', instructions: () => 'dynamic config' },
+        instructions: 'from module',
+        instructionsMd: 'from md',
+      },
+      { onWarn },
+    );
+
+    expect(onWarn).toHaveBeenCalledWith(
+      expect.stringContaining('defined in config.ts, instructions.ts, and instructions.md'),
+    );
   });
 
   it('throws when model is missing', () => {
@@ -203,6 +417,21 @@ describe('assembleAgentFromFsEntry', () => {
     expect(onWarn).toHaveBeenCalledWith(expect.stringContaining('tools'));
   });
 
+  it('warns that instructions.ts is ignored when config.ts exports a code-defined Agent', () => {
+    const onWarn = vi.fn();
+    const coded = new Agent({
+      id: 'weather',
+      name: 'weather',
+      instructions: 'Code-defined.',
+      model: 'openai/gpt-4o',
+    });
+
+    const result = assembleAgentFromFsEntry({ name: 'weather', config: coded, instructions: 'ignored' }, { onWarn });
+
+    expect(result).toBe(coded);
+    expect(onWarn).toHaveBeenCalledWith(expect.stringContaining('instructions.ts is ignored'));
+  });
+
   it('merges discovered skills into the agent', async () => {
     const agent = assembleAgentFromFsEntry({
       name: 'a',
@@ -290,6 +519,18 @@ describe('assembleAgentFromFsEntry', () => {
         name: 'weather',
         config: { model: 'openai/gpt-4o' },
         instructionsMd: 'hi',
+      });
+
+      const workspace = await agent.getWorkspace({ requestContext: new RequestContext() });
+      expect(workspace).toBeUndefined();
+    });
+
+    it('does not attach the default workspace when config sets workspace to undefined', async () => {
+      const agent = assembleAgentFromFsEntry({
+        name: 'weather',
+        config: { model: 'openai/gpt-4o', workspace: undefined },
+        instructionsMd: 'hi',
+        defaultWorkspaceBasePath: '/tmp/mastra-fs/weather',
       });
 
       const workspace = await agent.getWorkspace({ requestContext: new RequestContext() });

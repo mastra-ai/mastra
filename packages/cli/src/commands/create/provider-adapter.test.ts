@@ -149,6 +149,17 @@ describe('adaptDefaultTemplate', () => {
     expect(result.adaptationFailed).toBe(false);
   });
 
+  it('preserves the DuckDB native external required by experiment workers', async () => {
+    const projectPath = await createFixture();
+
+    const result = await adaptFixture({ projectPath, provider: 'openai', versionTag: 'latest' });
+
+    expect(await fs.readFile(path.join(projectPath, 'src/mastra/index.ts'), 'utf8')).toContain(
+      "externals: ['@duckdb/node-bindings']",
+    );
+    expect(result.adaptationFailed).toBe(false);
+  });
+
   it('preserves template-owned OpenAI models, built-in tools, and unrelated environment variables', async () => {
     const projectPath = await createFixture();
     const agentPath = path.join(projectPath, 'src/mastra/agents/agent.ts');

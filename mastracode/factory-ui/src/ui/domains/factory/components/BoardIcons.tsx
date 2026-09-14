@@ -6,15 +6,16 @@ import {
   CheckCircle2,
   CircleDot,
   CircleX,
-  GitMerge,
+  ClipboardCheck,
+  Eye,
   GitPullRequest,
-  GitPullRequestClosed,
-  GitPullRequestDraft,
+  Hammer,
+  Play,
+  Search,
 } from 'lucide-react';
 import type { ComponentType, SVGProps } from 'react';
 
-import type { WorkItem, WorkItemSource } from '../services/workItems';
-import type { BoardStageId } from '../stages';
+import type { WorkItemSource } from '../services/workItems';
 import { IntakeIcon } from './IntakeIcon';
 
 // GitHub keeps issue vs PR distinct — card meta shows #N for both
@@ -31,33 +32,44 @@ export function SourceIcon({ source, className }: { source: WorkItemSource; clas
   return <Icon data-source={source} className={cn('size-4 shrink-0', sourceClassName, className)} aria-hidden />;
 }
 
-type PullRequestStatus = 'draft' | 'open' | 'closed' | 'merged';
+/** Icon for each known run-action label; `Play` is the fallback for anything else. */
+const ACTION_ICONS: Record<string, ComponentType> = {
+  Investigate: Search,
+  Build: Hammer,
+  'Prepare approval': ClipboardCheck,
+  Review: Eye,
+};
 
-function pullRequestStatus(item: Pick<WorkItem, 'metadata' | 'stages'>): PullRequestStatus {
-  if (item.metadata.merged === true) return 'merged';
-  if (item.metadata.state === 'closed') return 'closed';
-  if (item.metadata.state === 'open') return item.metadata.draft === true ? 'draft' : 'open';
-  if (item.stages.includes('done')) return 'merged';
-  if (item.stages.includes('canceled')) return 'closed';
-  return item.metadata.draft === true ? 'draft' : 'open';
+export function actionIcon(label: string) {
+  const Icon = ACTION_ICONS[label] ?? Play;
+  return <Icon aria-hidden />;
 }
 
-export function PullRequestStatusIcon({ item }: { item: Pick<WorkItem, 'metadata' | 'stages'> }) {
-  const status = pullRequestStatus(item);
-  const label = `${status[0]?.toUpperCase()}${status.slice(1)} pull request`;
-  if (status === 'merged') return <GitMerge size={16} className="shrink-0 text-purple-400" aria-label={label} />;
-  if (status === 'closed') return <GitPullRequestClosed size={16} className="text-error shrink-0" aria-label={label} />;
-  if (status === 'draft') return <GitPullRequestDraft size={16} className="text-icon3 shrink-0" aria-label={label} />;
-  return <GitPullRequest size={16} className="text-accent1 shrink-0" aria-label={label} />;
-}
-
-const STAGE_ICON_SOURCES: Partial<Record<BoardStageId, string>> = {
+const STAGE_ICON_SOURCES: Partial<Record<string, string>> = {
   triage: '/factory-stage-icons/triage.svg',
   planning: '/factory-stage-icons/in-progress.svg',
   execute: '/factory-stage-icons/in-progress.svg',
 };
 
-export function BoardStageIcon({ stage }: { stage: BoardStageId }) {
+export function BoardStageIcon({
+  stage,
+  kind,
+  decorative = false,
+}: {
+  /** Built-in phases get bespoke art; any other (custom-board) id falls back to `kind`. */
+  stage: string;
+  kind?: 'resting' | 'working' | 'terminal';
+  /** Beside text that already names the phase, the icon adds nothing to the accessible name. */
+  decorative?: boolean;
+}) {
+  if (kind) {
+    const Icon = kind === 'terminal' ? CheckCircle2 : kind === 'working' ? Play : CircleDot;
+    return decorative ? (
+      <Icon size={16} className="text-icon3 shrink-0" aria-hidden />
+    ) : (
+      <Icon size={16} className="text-icon3 shrink-0" aria-label={`${kind} phase`} />
+    );
+  }
   if (stage === 'intake') return <IntakeIcon className="text-icon3 shrink-0" />;
   if (stage === 'review') return <GitPullRequest size={16} className="text-icon3 shrink-0" aria-hidden />;
   const source = STAGE_ICON_SOURCES[stage];

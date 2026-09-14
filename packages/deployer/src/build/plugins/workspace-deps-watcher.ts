@@ -5,6 +5,7 @@ import type { Plugin } from 'rollup';
 import { glob } from 'tinyglobby';
 import type { WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
 import { bundleExternals } from '../analyze/bundleExternals';
+import { normalizeExternals } from '../analyze/externals';
 import type { BundlerOptions, DependencyMetadata } from '../types';
 import type { BundlerPlatform } from '../utils';
 import { getCompiledDepCachePath, getPackageName, slash } from '../utils';
@@ -68,10 +69,12 @@ export function workspaceDepsWatcher(options: WorkspaceDepsWatcherOptions): Plug
       // bundleExternals may mutate the map when externalsPreset is true; copy first.
       const depsCopy = cloneDepsToOptimize(depsToOptimize);
 
+      const { externalsPreset, mergedExternals } = normalizeExternals(bundlerOptions?.externals ?? true);
+
       await bundleExternals(depsCopy, outputDir, {
         bundlerOptions: {
-          ...bundlerOptions,
-          externals: bundlerOptions?.externals ?? true,
+          externalsPreset,
+          mergedExternals,
           isDev: true,
         },
         projectRoot: workspaceRoot,

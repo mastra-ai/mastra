@@ -1,10 +1,16 @@
+import { randomUUID } from 'node:crypto';
+
 import type { ClickHouseClient } from '@clickhouse/client';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { listFeedbackArgsSchema } from '@mastra/core/storage';
 import type {
   AggregationInterval,
   AggregationType,
   BatchCreateFeedbackArgs,
   CreateFeedbackArgs,
+  DeleteFeedbackArgs,
+  FeedbackRecord,
+  UpdateFeedbackReviewStatusArgs,
   ListFeedbackArgs,
   ListFeedbackResponse,
   GetFeedbackAggregateArgs,
@@ -18,12 +24,16 @@ import type {
 } from '@mastra/core/storage';
 import { parseFieldKey } from '@mastra/core/utils';
 
-import { TABLE_FEEDBACK_EVENTS, TABLE_FEEDBACK_EVENTS_DELTA } from './ddl';
+import { isReplicationConfigured } from '../../../db/replication';
+import type { ClickhouseReplicationConfig } from '../../../db/replication';
+import { TABLE_DELETION_REQUESTS, TABLE_FEEDBACK_EVENTS, TABLE_FEEDBACK_EVENTS_DELTA } from './ddl';
+import { recordDeletionRequest } from './deletion-requests';
 import { buildFeedbackFilterConditions, buildPaginationClause, buildSignalOrderByClause } from './filters';
 import type { FilterResult } from './filters';
 import { CH_INSERT_SETTINGS, CH_SETTINGS, feedbackRecordToRow, rowToFeedbackRecord } from './helpers';
 import type { ClickHouseDeltaCursorStrategy } from './polling';
 import { assertDeltaPollingSupported, deltaPollingSupported, validateCursorId } from './polling';
+import { parseUpdateFeedbackReviewStatusArgs } from './review-status';
 
 // ============================================================================
 // Helpers
@@ -163,6 +173,32 @@ async function queryJson<T>(client: ClickHouseClient, query: string, params: Rec
 // Write
 // ============================================================================
 
+async function feedbackRowsWithWriteVersions(
+  client: ClickHouseClient,
+  feedbacks: BatchCreateFeedbackArgs['feedbacks'],
+) {
+  const identifiedFeedback = feedbacks.map(feedback => ({
+    ...feedback,
+    feedbackId: feedback.feedbackId ?? '',
+  }));
+  const feedbackIds = [...new Set(identifiedFeedback.map(feedback => feedback.feedbackId))];
+  const existingVersions = await queryJson<{ feedbackId: string; writeVersion: string }>(
+    client,
+    `SELECT feedbackId, toString(max(writeVersion)) AS writeVersion
+     FROM ${TABLE_FEEDBACK_EVENTS}
+     WHERE feedbackId IN ({feedbackIds:Array(String)})
+     GROUP BY feedbackId`,
+    { feedbackIds },
+  );
+  const versions = new Map(existingVersions.map(row => [row.feedbackId, BigInt(row.writeVersion)]));
+
+  return identifiedFeedback.map(feedback => {
+    const writeVersion = (versions.get(feedback.feedbackId) ?? 0n) + 1n;
+    versions.set(feedback.feedbackId, writeVersion);
+    return { ...feedbackRecordToRow(feedback), writeVersion: writeVersion.toString() };
+  });
+}
+
 export async function createFeedback(client: ClickHouseClient, args: CreateFeedbackArgs): Promise<void> {
   await batchCreateFeedback(client, { feedbacks: [args.feedback] });
 }
@@ -172,10 +208,144 @@ export async function batchCreateFeedback(client: ClickHouseClient, args: BatchC
 
   await client.insert({
     table: TABLE_FEEDBACK_EVENTS,
-    values: args.feedbacks.map(feedbackRecordToRow),
+    values: await feedbackRowsWithWriteVersions(client, args.feedbacks),
     format: 'JSONEachRow',
     clickhouse_settings: CH_INSERT_SETTINGS,
   });
+}
+
+// ============================================================================
+// Delete
+// ============================================================================
+
+/**
+ * Delete feedback events by feedbackId via lightweight DELETE. Optional
+ * `organizationId` and `resourceId` values are ANDed into the predicate to
+ * restrict deletion to records with matching scope fields.
+ *
+ * A durable deletion request is recorded before the lightweight delete. The
+ * delete is immediately visible to subsequent reads; physical purge depends on
+ * the table's configured retention TTL. The delta table is intentionally not
+ * touched and expires through its fixed two-day TTL.
+ */
+export async function deleteFeedback(
+  client: ClickHouseClient,
+  args: DeleteFeedbackArgs,
+  replication?: ClickhouseReplicationConfig,
+): Promise<void> {
+  if (args.feedbackIds.length === 0) return;
+
+  await recordDeletionRequest(client, {
+    requestId: randomUUID(),
+    organizationId: args.organizationId,
+    resourceId: args.resourceId,
+    signal: 'feedback',
+    predicateType: 'itemIds',
+    predicateValues: [...args.feedbackIds],
+    requestedAt: new Date().toISOString(),
+    replication,
+  });
+
+  const params: Record<string, string> = {};
+  const idPlaceholders: string[] = [];
+  for (let i = 0; i < args.feedbackIds.length; i++) {
+    const name = `fid_${i}`;
+    params[name] = args.feedbackIds[i]!;
+    idPlaceholders.push(`{${name}:String}`);
+  }
+
+  const conditions = [`feedbackId IN (${idPlaceholders.join(', ')})`];
+  if (args.organizationId !== undefined) {
+    conditions.push('organizationId = {delOrganizationId:String}');
+    params.delOrganizationId = args.organizationId;
+  }
+  if (args.resourceId !== undefined) {
+    conditions.push('resourceId = {delResourceId:String}');
+    params.delResourceId = args.resourceId;
+  }
+
+  await client.command({
+    query: `DELETE FROM ${TABLE_FEEDBACK_EVENTS} WHERE ${conditions.join(' AND ')}`,
+    query_params: params,
+    clickhouse_settings: { lightweight_deletes_sync: isReplicationConfigured(replication) ? '2' : '1' },
+  });
+}
+
+// ============================================================================
+// Review status
+// ============================================================================
+
+function feedbackNotFoundError(feedbackId: string): MastraError {
+  return new MastraError({
+    id: 'OBSERVABILITY_UPDATE_FEEDBACK_REVIEW_STATUS_NOT_FOUND',
+    domain: ErrorDomain.MASTRA_OBSERVABILITY,
+    category: ErrorCategory.USER,
+    text: 'Feedback record not found',
+    details: { feedbackId },
+  });
+}
+
+async function hasFeedbackDeletionRequest(
+  client: ClickHouseClient,
+  feedbackId: string,
+  organizationId: string | null,
+  resourceId: string | null,
+): Promise<boolean> {
+  const rows = await queryJson<{ found: number }>(
+    client,
+    `SELECT 1 AS found FROM ${TABLE_DELETION_REQUESTS} FINAL
+     WHERE signal = 'feedback'
+       AND predicateType = 'itemIds'
+       AND has(predicateValues, {feedbackId:String})
+       AND (organizationId = '' OR organizationId = {organizationId:String})
+       AND (resourceId = '' OR resourceId = {resourceId:String})
+     LIMIT 1`,
+    { feedbackId, organizationId: organizationId ?? '', resourceId: resourceId ?? '' },
+  );
+  return rows.length > 0;
+}
+
+export async function updateFeedbackReviewStatus(
+  client: ClickHouseClient,
+  args: UpdateFeedbackReviewStatusArgs,
+  replication?: ClickhouseReplicationConfig,
+): Promise<FeedbackRecord> {
+  const { feedbackId, reviewStatus } = parseUpdateFeedbackReviewStatusArgs(args);
+
+  const existing = await queryJson<Record<string, any>>(
+    client,
+    `SELECT * FROM ${TABLE_FEEDBACK_EVENTS} FINAL
+     WHERE feedbackId = {feedbackId:String}
+     ORDER BY writeVersion DESC, timestamp DESC
+     LIMIT 1`,
+    { feedbackId },
+  );
+  const existingRow = existing[0];
+  if (!existingRow) {
+    throw feedbackNotFoundError(feedbackId);
+  }
+
+  if (await hasFeedbackDeletionRequest(client, feedbackId, existingRow.organizationId, existingRow.resourceId)) {
+    throw feedbackNotFoundError(feedbackId);
+  }
+
+  const updated = rowToFeedbackRecord({ ...existingRow, reviewStatus });
+  await batchCreateFeedback(client, { feedbacks: [updated] });
+
+  if (await hasFeedbackDeletionRequest(client, feedbackId, existingRow.organizationId, existingRow.resourceId)) {
+    await deleteFeedback(
+      client,
+      {
+        feedbackIds: [feedbackId],
+        organizationId: existingRow.organizationId ?? undefined,
+        resourceId: existingRow.resourceId ?? undefined,
+      },
+      replication,
+    );
+    throw feedbackNotFoundError(feedbackId);
+  }
+
+  return updated;
 }
 
 // ============================================================================
@@ -222,13 +392,13 @@ export async function listFeedback(
   const currentDeltaCursor = deltaCursorEnabled ? await getDeltaCursor(client, whereClause, filter.params) : undefined;
   const countResult = await queryJson<{ total?: number }>(
     client,
-    `SELECT count() AS total FROM ${TABLE_FEEDBACK_EVENTS} AS f ${whereClause}`,
+    `SELECT count() AS total FROM ${TABLE_FEEDBACK_EVENTS} AS f FINAL ${whereClause}`,
     filter.params,
   );
 
   const rows = await queryJson<Record<string, any>>(
     client,
-    `SELECT * FROM ${TABLE_FEEDBACK_EVENTS} AS f ${whereClause} ORDER BY ${orderBy} LIMIT {limit:UInt32} OFFSET {offset:UInt32}`,
+    `SELECT * FROM ${TABLE_FEEDBACK_EVENTS} AS f FINAL ${whereClause} ORDER BY ${orderBy} LIMIT {limit:UInt32} OFFSET {offset:UInt32}`,
     { ...filter.params, limit: pagination.limit, offset: pagination.offset },
   );
 
@@ -270,7 +440,7 @@ async function queryFeedbackAfterCursor(
         f.feedbackId AS feedbackId,
         toString(d.cursorId) AS cursorId
       FROM ${TABLE_FEEDBACK_EVENTS_DELTA} d
-      INNER JOIN ${TABLE_FEEDBACK_EVENTS} f
+      INNER JOIN ${TABLE_FEEDBACK_EVENTS} f FINAL
         ON ((f.traceId = d.traceId) OR (f.traceId IS NULL AND d.traceId IS NULL))
        AND f.timestamp = d.timestamp
        AND f.feedbackId = d.feedbackId
@@ -292,7 +462,7 @@ async function getDeltaCursor(
     `
       SELECT toString(max(d.cursorId)) AS cursorId
       FROM ${TABLE_FEEDBACK_EVENTS_DELTA} d
-      INNER JOIN ${TABLE_FEEDBACK_EVENTS} f
+      INNER JOIN ${TABLE_FEEDBACK_EVENTS} f FINAL
         ON ((f.traceId = d.traceId) OR (f.traceId IS NULL AND d.traceId IS NULL))
        AND f.timestamp = d.timestamp
        AND f.feedbackId = d.feedbackId
@@ -343,7 +513,7 @@ export async function getFeedbackAggregate(
   const combined = mergeFilters(identity, signalFilter);
   const whereClause = toWhereClause(combined);
 
-  const sql = `SELECT ${aggSql} AS value FROM ${TABLE_FEEDBACK_EVENTS} ${whereClause}`;
+  const sql = `SELECT ${aggSql} AS value FROM ${TABLE_FEEDBACK_EVENTS} FINAL ${whereClause}`;
   const result = await queryJson<Record<string, unknown>>(client, sql, combined.params);
   const value = result[0]?.value == null ? null : Number(result[0]?.value);
 
@@ -382,7 +552,7 @@ export async function getFeedbackAggregate(
 
       const prevResult = await queryJson<Record<string, unknown>>(
         client,
-        `SELECT ${aggSql} AS value FROM ${TABLE_FEEDBACK_EVENTS} ${prevWhereClause}`,
+        `SELECT ${aggSql} AS value FROM ${TABLE_FEEDBACK_EVENTS} FINAL ${prevWhereClause}`,
         prevCombined.params,
       );
       const previousValue = prevResult[0]?.value == null ? null : Number(prevResult[0]?.value);
@@ -410,7 +580,7 @@ export async function getFeedbackBreakdown(
   const whereClause = toWhereClause(combined);
   const resolved = resolveFeedbackGroupBy(args.groupBy);
 
-  const sql = `SELECT ${resolved.map(e => e.selectSql).join(', ')}, ${aggSql} AS value FROM ${TABLE_FEEDBACK_EVENTS} ${whereClause} GROUP BY ${resolved.map(e => e.groupSql).join(', ')} ORDER BY value DESC`;
+  const sql = `SELECT ${resolved.map(e => e.selectSql).join(', ')}, ${aggSql} AS value FROM ${TABLE_FEEDBACK_EVENTS} FINAL ${whereClause} GROUP BY ${resolved.map(e => e.groupSql).join(', ')} ORDER BY value DESC`;
   const rows = await queryJson<Record<string, unknown>>(client, sql, combined.params);
 
   return {
@@ -443,7 +613,7 @@ export async function getFeedbackTimeSeries(
       SELECT toStartOfInterval(timestamp, ${intervalSql}) AS bucket,
              ${resolved.map(e => e.selectSql).join(', ')},
              ${aggSql} AS value
-      FROM ${TABLE_FEEDBACK_EVENTS} ${whereClause}
+      FROM ${TABLE_FEEDBACK_EVENTS} FINAL ${whereClause}
       GROUP BY bucket, ${resolved.map(e => e.groupSql).join(', ')}
       ORDER BY bucket
     `;
@@ -468,7 +638,7 @@ export async function getFeedbackTimeSeries(
   const sql = `
     SELECT toStartOfInterval(timestamp, ${intervalSql}) AS bucket,
            ${aggSql} AS value
-    FROM ${TABLE_FEEDBACK_EVENTS} ${whereClause}
+    FROM ${TABLE_FEEDBACK_EVENTS} FINAL ${whereClause}
     GROUP BY bucket
     ORDER BY bucket
   `;
@@ -509,7 +679,7 @@ export async function getFeedbackPercentiles(
     const sql = `
       SELECT toStartOfInterval(timestamp, ${intervalSql}) AS bucket,
              quantile(${p})(valueNumber) AS pvalue
-      FROM ${TABLE_FEEDBACK_EVENTS}
+      FROM ${TABLE_FEEDBACK_EVENTS} FINAL
       ${whereClause}
       GROUP BY bucket
       ORDER BY bucket

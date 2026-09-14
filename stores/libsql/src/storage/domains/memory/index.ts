@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import type { Client, InValue, Transaction } from '@libsql/client';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { MessageList } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
@@ -14,7 +13,7 @@ import type {
   StorageListThreadsInput,
   StorageListThreadsOutput,
   StorageCloneThreadInput,
-  StorageCloneThreadOutput,
+  StorageCopyThreadOutput,
   ThreadCloneMetadata,
   ObservationalMemoryRecord,
   ObservationalMemoryHistoryOptions,
@@ -55,6 +54,11 @@ const OM_TABLE = 'mastra_observational_memory' as const;
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
+import type {
+  SqliteClient as Client,
+  SqliteInValue as InValue,
+  SqliteTransaction as Transaction,
+} from '../../db/client';
 import { buildSelectColumns } from '../../db/utils';
 import { withClientWriteLock } from '../../db/write-lock';
 import { runPrune, resolveTargets } from '../../retention';
@@ -109,6 +113,7 @@ function addSqliteMetadataValuePredicate(
 }
 
 export class MemoryLibSQL extends MemoryStorage {
+  override readonly supportsPartialThreadUpdate = true;
   readonly supportsObservationalMemory = true;
 
   /**
@@ -266,7 +271,19 @@ export class MemoryLibSQL extends MemoryStorage {
     });
   }
 
-  private async _getIncludedMessages({ include }: { include: StorageListMessagesInput['include'] }) {
+  /**
+   * Fetches included messages by ID, discovering their thread automatically.
+   * This handles cross-thread includes where the include item doesn't specify a threadId.
+   * When a resourceId is given, both the target lookup and the surrounding window stay
+   * inside that resource, so an include never leaks another resource's messages.
+   */
+  private async _getIncludedMessages({
+    include,
+    resourceId,
+  }: {
+    include: StorageListMessagesInput['include'];
+    resourceId?: string;
+  }) {
     if (!include || include.length === 0) return null;
 
     // Phase 1: Batch-fetch metadata for all target messages in a single query.
@@ -274,10 +291,11 @@ export class MemoryLibSQL extends MemoryStorage {
     const targetIds = include.map(inc => inc.id).filter(Boolean);
     if (targetIds.length === 0) return null;
 
+    const resourceCondition = resourceId ? ` AND "resourceId" = ?` : '';
     const idPlaceholders = targetIds.map(() => '?').join(', ');
     const targetResult = await this.#client.execute({
-      sql: `SELECT id, thread_id, "createdAt" FROM "${TABLE_MESSAGES}" WHERE id IN (${idPlaceholders})`,
-      args: targetIds,
+      sql: `SELECT id, thread_id, "createdAt" FROM "${TABLE_MESSAGES}" WHERE id IN (${idPlaceholders})${resourceCondition}`,
+      args: resourceId ? [...targetIds, resourceId] : targetIds,
     });
 
     if (!targetResult.rows || targetResult.rows.length === 0) return null;
@@ -303,11 +321,13 @@ export class MemoryLibSQL extends MemoryStorage {
         SELECT id, content, role, type, "createdAt", thread_id, "resourceId"
         FROM "${TABLE_MESSAGES}"
         WHERE thread_id = ?
-          AND "createdAt" <= ?
+          AND "createdAt" <= ?${resourceCondition}
         ORDER BY "createdAt" DESC, id DESC
         LIMIT ?
       )`);
-      params.push(target.threadId, target.createdAt, withPreviousMessages + 1);
+      params.push(target.threadId, target.createdAt);
+      if (resourceId) params.push(resourceId);
+      params.push(withPreviousMessages + 1);
 
       // Fetch messages after the target (only if requested)
       if (withNextMessages > 0) {
@@ -315,11 +335,13 @@ export class MemoryLibSQL extends MemoryStorage {
           SELECT id, content, role, type, "createdAt", thread_id, "resourceId"
           FROM "${TABLE_MESSAGES}"
           WHERE thread_id = ?
-            AND "createdAt" > ?
+            AND "createdAt" > ?${resourceCondition}
           ORDER BY "createdAt" ASC, id ASC
           LIMIT ?
         )`);
-        params.push(target.threadId, target.createdAt, withNextMessages);
+        params.push(target.threadId, target.createdAt);
+        if (resourceId) params.push(resourceId);
+        params.push(withNextMessages);
       }
     }
 
@@ -454,7 +476,7 @@ export class MemoryLibSQL extends MemoryStorage {
       // When perPage is 0 and we have include targets, skip COUNT(*) and data queries.
       // This is the semantic recall path where we only need the included messages.
       if (perPage === 0 && include && include.length > 0) {
-        const includeMessages = await this._getIncludedMessages({ include });
+        const includeMessages = await this._getIncludedMessages({ include, resourceId });
         if (!includeMessages || includeMessages.length === 0) {
           return { messages: [], total: 0, page, perPage: perPageForResponse, hasMore: false };
         }
@@ -498,7 +520,7 @@ export class MemoryLibSQL extends MemoryStorage {
       // Step 2: Add included messages with context (if any), excluding duplicates
       const messageIds = new Set(messages.map(m => m.id));
       if (include && include.length > 0) {
-        const includeMessages = await this._getIncludedMessages({ include });
+        const includeMessages = await this._getIncludedMessages({ include, resourceId });
         if (includeMessages) {
           // Deduplicate: only add messages that aren't already in the paginated results
           for (const includeMsg of includeMessages) {
@@ -629,7 +651,7 @@ export class MemoryLibSQL extends MemoryStorage {
 
       // Fast path: when perPage is 0 and include is provided, skip COUNT and data queries.
       if (perPage === 0 && include && include.length > 0) {
-        const includeMessages = await this._getIncludedMessages({ include });
+        const includeMessages = await this._getIncludedMessages({ include, resourceId });
         if (!includeMessages || includeMessages.length === 0) {
           return { messages: [], total: 0, page, perPage: perPageForResponse, hasMore: false };
         }
@@ -672,7 +694,7 @@ export class MemoryLibSQL extends MemoryStorage {
       // Step 2: Add included messages with context (if any), excluding duplicates
       const messageIds = new Set(messages.map(m => m.id));
       if (include && include.length > 0) {
-        const includeMessages = await this._getIncludedMessages({ include });
+        const includeMessages = await this._getIncludedMessages({ include, resourceId });
         if (includeMessages) {
           // Deduplicate: only add messages that aren't already in the paginated results
           for (const includeMsg of includeMessages) {
@@ -1113,6 +1135,80 @@ export class MemoryLibSQL extends MemoryStorage {
     }
   }
 
+  /**
+   * Atomically reassign a thread and all of its messages to a different resource.
+   *
+   * Runs inside a single write transaction. SQLite serializes write transactions, so overlapping
+   * transfers of the same thread cannot interleave the thread update with the message update:
+   * either both the thread and every message move to the new resource, or neither does. The
+   * thread's `createdAt` is preserved. Callers are responsible for authorizing the reassignment.
+   */
+  async updateThreadResourceId({
+    threadId,
+    resourceId,
+  }: {
+    threadId: string;
+    resourceId: string;
+  }): Promise<StorageThreadType> {
+    try {
+      const tx = await this.#client.transaction('write');
+      try {
+        const result = await tx.execute({
+          sql: `SELECT * FROM "${TABLE_THREADS}" WHERE id = ?`,
+          args: [threadId],
+        });
+        const row = result.rows?.[0] as
+          | (Omit<StorageThreadType, 'createdAt' | 'updatedAt'> & { createdAt: string; updatedAt: string })
+          | undefined;
+
+        if (!row) {
+          throw new Error(`Thread "${threadId}" not found`);
+        }
+
+        const currentResourceId = row.resourceId as string;
+        const normalized: StorageThreadType = {
+          id: row.id as string,
+          resourceId: currentResourceId,
+          title: row.title as string,
+          metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : (row.metadata as any),
+          createdAt: new Date(row.createdAt),
+          updatedAt: new Date(row.updatedAt),
+        };
+
+        if (currentResourceId === resourceId) {
+          await tx.commit();
+          return normalized;
+        }
+
+        const now = new Date();
+        await tx.execute({
+          sql: `UPDATE "${TABLE_THREADS}" SET "resourceId" = ?, "updatedAt" = ? WHERE id = ?`,
+          args: [resourceId, now.toISOString(), threadId],
+        });
+        await tx.execute({
+          sql: `UPDATE "${TABLE_MESSAGES}" SET "resourceId" = ? WHERE thread_id = ?`,
+          args: [resourceId, threadId],
+        });
+
+        await tx.commit();
+        return { ...normalized, resourceId, updatedAt: now };
+      } catch (error) {
+        await tx.rollback();
+        throw error;
+      }
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'UPDATE_THREAD_RESOURCE_ID', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId, resourceId },
+        },
+        error,
+      );
+    }
+  }
+
   public async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
     const { page = 0, perPage: perPageInput, orderBy, filter } = args;
 
@@ -1294,8 +1390,8 @@ export class MemoryLibSQL extends MemoryStorage {
     metadata,
   }: {
     id: string;
-    title: string;
-    metadata: Record<string, unknown>;
+    title?: string;
+    metadata?: Record<string, unknown>;
   }): Promise<StorageThreadType> {
     const thread = await this.getThreadById({ threadId: id });
     if (!thread) {
@@ -1314,7 +1410,7 @@ export class MemoryLibSQL extends MemoryStorage {
     const now = new Date();
     const updatedThread = {
       ...thread,
-      title,
+      title: title ?? thread.title,
       metadata: {
         ...thread.metadata,
         ...metadata,
@@ -1324,8 +1420,9 @@ export class MemoryLibSQL extends MemoryStorage {
 
     try {
       await this.#client.execute({
-        sql: `UPDATE ${TABLE_THREADS} SET title = ?, metadata = jsonb(?), updatedAt = ? WHERE id = ?`,
-        args: [title, JSON.stringify(updatedThread.metadata), now.toISOString(), id],
+        // COALESCE so an omitted title leaves the stored one alone.
+        sql: `UPDATE ${TABLE_THREADS} SET title = COALESCE(?, title), metadata = jsonb(?), updatedAt = ? WHERE id = ?`,
+        args: [title ?? null, JSON.stringify(updatedThread.metadata), now.toISOString(), id],
       });
 
       return updatedThread;
@@ -1370,7 +1467,7 @@ export class MemoryLibSQL extends MemoryStorage {
     }
   }
 
-  async cloneThread(args: StorageCloneThreadInput): Promise<StorageCloneThreadOutput> {
+  async copyThread(args: StorageCloneThreadInput): Promise<StorageCopyThreadOutput> {
     const { sourceThreadId, newThreadId: providedThreadId, resourceId, title, metadata, options } = args;
 
     // Get the source thread
@@ -1401,8 +1498,10 @@ export class MemoryLibSQL extends MemoryStorage {
     }
 
     try {
-      // Build message query with filters
-      let messageQuery = `SELECT id, content, role, type, "createdAt", thread_id, "resourceId"
+      // Build message query with filters. Only ids (and createdAt for ordering / clone
+      // metadata) are read here — content is copied inside the database via
+      // INSERT … SELECT and never returned to the JS heap.
+      let messageQuery = `SELECT id, "createdAt"
                           FROM "${TABLE_MESSAGES}" WHERE thread_id = ?`;
       const messageParams: InValue[] = [sourceThreadId];
 
@@ -1487,55 +1586,32 @@ export class MemoryLibSQL extends MemoryStorage {
           ],
         });
 
-        // Clone messages with new IDs
-        const clonedMessages: MastraDBMessage[] = [];
+        // Copy messages under new IDs. content/role/type are read from the source row
+        // within SQL and never materialized in the JS heap.
         const messageIdMap: Record<string, string> = {};
         const targetResourceId = resourceId || sourceThread.resourceId;
 
         for (const sourceMsg of sourceMessages) {
           const newMessageId = crypto.randomUUID();
-          messageIdMap[sourceMsg.id as string] = newMessageId;
-          const contentStr = sourceMsg.content as string;
-          let parsedContent: MastraDBMessage['content'];
-          try {
-            parsedContent = JSON.parse(contentStr);
-          } catch {
-            // use content as is - wrap in format 2 structure if needed
-            parsedContent = { format: 2, parts: [{ type: 'text', text: contentStr }] };
-          }
+          const sourceMsgId = sourceMsg.id as string;
+          messageIdMap[sourceMsgId] = newMessageId;
 
-          await tx.execute({
+          const insertResult = await tx.execute({
             sql: `INSERT INTO "${TABLE_MESSAGES}" (id, thread_id, content, role, type, "createdAt", "resourceId")
-                  VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            args: [
-              newMessageId,
-              newThreadId,
-              contentStr,
-              sourceMsg.role as string,
-              (sourceMsg.type as string) || 'v2',
-              sourceMsg.createdAt as string,
-              targetResourceId,
-            ],
+                  SELECT ?, ?, content, role, type, "createdAt", ?
+                  FROM "${TABLE_MESSAGES}" WHERE id = ?`,
+            args: [newMessageId, newThreadId, targetResourceId, sourceMsgId],
           });
-
-          clonedMessages.push({
-            id: newMessageId,
-            threadId: newThreadId,
-            content: parsedContent,
-            role: sourceMsg.role as MastraDBMessage['role'],
-            type: (sourceMsg.type as string) || undefined,
-            createdAt: new Date(sourceMsg.createdAt as string),
-            resourceId: targetResourceId,
-          });
+          if (insertResult.rowsAffected !== 1) {
+            throw new Error(
+              `Failed to copy message ${sourceMsgId}: expected 1 row copied but got ${insertResult.rowsAffected}`,
+            );
+          }
         }
 
         await tx.commit();
 
-        return {
-          thread: newThread,
-          clonedMessages,
-          messageIdMap,
-        };
+        return { thread: newThread, messageIdMap };
       } catch (error) {
         await tx.rollback();
         throw error;
@@ -2289,6 +2365,11 @@ export class MemoryLibSQL extends MemoryStorage {
             } catch {
               existingChunks = [];
             }
+          }
+
+          if (existingChunks.some(existing => existing.cycleId === input.chunk.cycleId)) {
+            await tx.commit();
+            return;
           }
 
           // Create new chunk with ID and timestamp

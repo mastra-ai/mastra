@@ -18,11 +18,15 @@
  * capabilities by implementing `FactoryIntegration` from outside the package.
  */
 
+import type { TypingStatusFn } from '@mastra/core/channels';
 import type { ApiRoute } from '@mastra/core/server';
+import type { SlackAdapterChannelConfig } from '@mastra/slack';
 
+import type { WorkItemFeedPublisher } from '../../storage/domains/comments/feed-sync.js';
 import type { FactoryChannelsConfig, FactoryIntegration, IntegrationContext } from '../base.js';
 
 import { createSlackConnectRoutes } from './connect-route.js';
+import { SlackFeedPublisher } from './feed-publisher.js';
 import { createSlackChannelsConfig } from './slack.js';
 
 /**
@@ -50,6 +54,49 @@ export interface SlackIntegrationConfig {
   oidcRedirectBaseUrl?: string;
   /** SPA origin the post-connect redirect returns to. */
   uiOrigin?: string;
+  /**
+   * Overrides for the Slack channel adapter entry.
+   *
+   * @example
+   * ```ts
+   * new SlackIntegration({
+   *   signingSecret,
+   *   adapterOptions: {
+   *     streaming: true,
+   *     toolDisplay: 'grouped',
+   *   },
+   * });
+   * ```
+   */
+  adapterOptions?: SlackAdapterChannelConfig;
+}
+
+const factoryTypingStatus: TypingStatusFn = (chunk, ctx) => {
+  switch (chunk.type) {
+    case 'reasoning-delta':
+      return `is thinking${nextDots(ctx.currentStatus)}`;
+    case 'text-delta':
+      return 'is typing...';
+    case 'tool-call':
+      return `is working${nextDots(ctx.currentStatus)}`;
+    default:
+      return undefined;
+  }
+};
+
+function nextDots(currentStatus: string | undefined): string {
+  const dotCount = currentStatus?.match(/\.*$/)?.[0].length ?? 1;
+  return '.'.repeat(dotCount >= 5 ? 2 : dotCount + 1);
+}
+
+/**
+ * Drops keys the caller set to `undefined` so spreading the overrides cannot
+ * erase the Factory defaults they sit on top of.
+ */
+function adapterOverrides(options: SlackAdapterChannelConfig | undefined): SlackAdapterChannelConfig {
+  return Object.fromEntries(
+    Object.entries(options ?? {}).filter(([, value]) => value !== undefined),
+  ) as SlackAdapterChannelConfig;
 }
 
 export class SlackIntegration implements FactoryIntegration {
@@ -94,8 +141,18 @@ export class SlackIntegration implements FactoryIntegration {
       projects: ctx.storage.projects,
       sourceControl: sourceControlOwner,
       memorySettings: ctx.storage.memorySettings,
-      workItems: ctx.rules?.workItems,
+      workItems: ctx.runtime?.workItems,
+      feed: ctx.feed,
+      adapterOptions: {
+        toolDisplay: 'hidden',
+        typingStatus: factoryTypingStatus,
+        ...adapterOverrides(this.#config.adapterOptions),
+      },
     });
+  }
+
+  feedPublisher(ctx: IntegrationContext): WorkItemFeedPublisher {
+    return new SlackFeedPublisher({ controller: ctx.controller });
   }
 
   routes(ctx: IntegrationContext): ApiRoute[] {

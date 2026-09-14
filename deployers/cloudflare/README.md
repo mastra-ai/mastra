@@ -1,16 +1,11 @@
 # @mastra/deployer-cloudflare
 
-A Cloudflare Workers deployer for Mastra applications.
-
-## Features
-
-- Deploy Mastra applications to Cloudflare Workers
-- Automatic environment variable configuration
+The CloudflareDeployer bundles your Mastra server and generates a wrangler.jsonc file conforming to Cloudflare's wrangler configuration.
 
 ## Installation
 
 ```bash
-pnpm add @mastra/deployer-cloudflare
+npm install @mastra/deployer-cloudflare
 ```
 
 ## Usage
@@ -41,21 +36,15 @@ const mastra = new Mastra({
 });
 ```
 
-## Configuration
+## Documentation
 
-The `CloudflareDeployer` constructor accepts the same configuration options as `wrangler.json`. See the [Wrangler configuration documentation](https://developers.cloudflare.com/workers/wrangler/configuration/) for all available options.
+- [Deploy to Cloudflare](https://mastra.ai/integrations/deploy/cloudflare)
+- [CloudflareDeployer reference](https://mastra.ai/reference/deployer/cloudflare)
 
-**Deprecated fields:** If migrating from an earlier version, note that `projectName`, `d1Databases`, `kvNamespaces`, and `workerNamespace` are deprecated. Use the standard `wrangler.json` property names instead (`name`, `d1_databases`, `kv_namespaces`).
+## Changelog
 
-## Environment Variables
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/deployers/cloudflare/CHANGELOG.md) for version history and release notes.
 
-The deployer will automatically load environment variables from:
+## Support
 
-- `.env` files in your project
-- Environment variables passed through the Mastra configuration
-
-## Requirements
-
-- Cloudflare account with Workers enabled
-- API token with appropriate permissions
-- Domain(s) configured in Cloudflare (for custom domains)
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.

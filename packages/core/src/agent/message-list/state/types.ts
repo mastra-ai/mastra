@@ -44,6 +44,8 @@ export type MastraToolApproval = {
 export type MastraToolInvocation = Omit<LegacyToolInvocation, 'state'> & {
   state: LegacyToolInvocation['state'] | 'approval-requested' | 'approval-responded' | 'output-error' | 'output-denied';
   result?: unknown;
+  /** Set alongside `state: 'result'` when the tool executor reported a failure. */
+  isError?: boolean;
   errorText?: string;
   rawInput?: unknown;
   approval?: MastraToolApproval;

@@ -1,0 +1,23 @@
+---
+extends: existence
+message: "AI overused verb: '%s'. Say the work requires it. Disable this rule for labor or economics prose."
+level: error
+nonword: true
+ignorecase: true
+# "Demands" is an AI fingerprint for obligation issued by an abstraction: a
+# migration "demands care," an edge case "demands attention," a design
+# "demands rigor." Nothing is making a demand; the sentence means the work
+# requires something. The complement is the discriminator, so a person
+# demanding a refund and the economics noun ("supply and demand") stay
+# quiet; labor or economics writing disables the rule. Every token measured
+# at zero across the Go and Python standard libraries. The bare
+# determiner-gated construction ("the gate demands a clean run") floods general
+# prose, so it stays in the commit style's CommitFigurativeVerbs.
+tokens:
+  # --- Virtue complement: the abstraction requisitions a human quality
+  # ("demands care," "demands careful attention," "demanding precision").
+  - "\\bdemand(?:s|ed|ing)? (?:attention|care|caution|scrutiny|precision|rigou?r|respect|discipline|vigilance|patience|humility|careful)\\b"
+
+  # --- Inspection complement: the abstraction summons a reader ("demands a
+  # closer look," "demands an explanation").
+  - "\\bdemand(?:s|ed|ing)? (?:a|an) (?:closer look|second look|explanation|answer|response)\\b"

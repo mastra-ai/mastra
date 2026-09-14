@@ -1,13 +1,10 @@
 import type { MastraDBMessage } from '@mastra/core/memory';
 import type { QueryResult } from 'pg';
 import { describe, expect, it } from 'vitest';
-import type { DbClient, QueryValues, TxClient } from '../../client';
+import type { QueryValues, TxClient } from '../../client';
+import type { RecordedQuery } from './test-utils';
+import { RecordingDbClientBase } from './test-utils';
 import { MemoryPG } from './index';
-
-type RecordedQuery = {
-  query: string;
-  values?: QueryValues;
-};
 
 class RecordingTxClient implements TxClient {
   queries: RecordedQuery[] = [];
@@ -38,8 +35,9 @@ class RecordingTxClient implements TxClient {
     throw new Error('not implemented');
   }
 
-  async query(): Promise<QueryResult> {
-    throw new Error('not implemented');
+  async query(query: string, values?: QueryValues): Promise<QueryResult> {
+    this.queries.push({ query, values });
+    return { rowCount: 1, rows: [], command: 'INSERT', oid: 0, fields: [] };
   }
 
   async batch<T>(promises: Promise<T>[]): Promise<T[]> {
@@ -47,16 +45,15 @@ class RecordingTxClient implements TxClient {
   }
 }
 
-class RecordingDbClient implements DbClient {
-  readonly $pool = {} as DbClient['$pool'];
+class RecordingDbClient extends RecordingDbClientBase {
   readonly txClient = new RecordingTxClient();
   readonly threads = new Map<string, Record<string, unknown>>();
-  readonly queries: RecordedQuery[] = [];
 
   constructor({
     thread,
     threads,
   }: { thread?: Record<string, unknown> | null; threads?: Record<string, unknown>[] } = {}) {
+    super();
     const defaultThread = {
       id: 'thread-1',
       resourceId: 'resource-1',
@@ -71,42 +68,22 @@ class RecordingDbClient implements DbClient {
     }
   }
 
-  connect(): Promise<never> {
-    throw new Error('not implemented');
-  }
-
-  async none(query: string, values?: QueryValues): Promise<null> {
+  override async none(query: string, values?: QueryValues): Promise<null> {
     this.queries.push({ query, values });
     return null;
   }
 
-  async one<T = any>(): Promise<T> {
-    throw new Error('not implemented');
-  }
-
-  async oneOrNone<T = any>(_query?: string, values?: QueryValues): Promise<T | null> {
+  override async oneOrNone<T = any>(_query: string, values?: QueryValues): Promise<T | null> {
     const id = Array.isArray(values) ? values[0] : undefined;
     return id ? ((this.threads.get(String(id)) as T | undefined) ?? null) : null;
   }
 
-  async any<T = any>(): Promise<T[]> {
-    throw new Error('not implemented');
-  }
-
-  async manyOrNone<T = any>(query?: string): Promise<T[]> {
+  override async manyOrNone<T = any>(query: string): Promise<T[]> {
     if (query?.includes('information_schema.columns')) return [];
     throw new Error('not implemented');
   }
 
-  async many<T = any>(): Promise<T[]> {
-    throw new Error('not implemented');
-  }
-
-  async query(): Promise<QueryResult> {
-    throw new Error('not implemented');
-  }
-
-  async tx<T>(callback: (t: TxClient) => Promise<T>): Promise<T> {
+  override async tx<T>(callback: (t: TxClient) => Promise<T>): Promise<T> {
     return callback(this.txClient);
   }
 }
@@ -360,30 +337,25 @@ describe('MemoryPG.saveResource', () => {
   });
 });
 
-describe('MemoryPG.cloneThread', () => {
-  it('prefers createdAtZ and binds the UTC string to both timestamp columns', async () => {
+describe('MemoryPG.copyThread', () => {
+  it('copies both timestamp columns inside SQL instead of binding them from JS', async () => {
     const client = new RecordingDbClient();
     const memory = new MemoryPG({ client });
-    const legacyCreatedAt = new Date('2025-07-01T07:34:56.789Z');
-    const createdAtZ = new Date('2025-07-01T12:34:56.789Z');
     client.txClient.sourceMessages.push({
       id: 'message-1',
-      threadId: 'thread-1',
-      resourceId: 'resource-1',
-      role: 'user',
-      type: 'v2',
-      content: JSON.stringify({ format: 2, parts: [{ type: 'text', text: 'hello' }] }),
-      createdAt: legacyCreatedAt,
-      createdAtZ,
+      createdAt: new Date('2025-07-01T07:34:56.789Z'),
     });
 
-    const result = await memory.cloneThread({ sourceThreadId: 'thread-1', newThreadId: 'thread-2' });
+    const result = await memory.copyThread({ sourceThreadId: 'thread-1', newThreadId: 'thread-2' });
 
     const messageInsert = client.txClient.queries[1]!;
     expect(messageInsert.query).toContain('mastra_messages');
-    expect(messageInsert.values![3]).toBe(createdAtZ.toISOString());
-    expect(messageInsert.values![4]).toBe(createdAtZ.toISOString());
-    expect(messageInsert.values![3]).not.toBe(legacyCreatedAt.toISOString());
-    expect(result.clonedMessages[0]!.createdAt).toEqual(createdAtZ);
+    // INSERT … SELECT carries createdAt/createdAtZ (and content) verbatim from the source row.
+    expect(messageInsert.query).toMatch(/INSERT INTO [\s\S]*SELECT \$1, \$2, content, "createdAt", "createdAtZ"/);
+    // Only ids and the target resource are bound; no timestamps or content cross into JS.
+    expect(messageInsert.values).toEqual([result.messageIdMap!['message-1'], 'thread-2', 'resource-1', 'message-1']);
+    expect(messageInsert.values!.some(v => v instanceof Date || (typeof v === 'string' && v.includes('T')))).toBe(
+      false,
+    );
   });
 });

@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect } from './expect.js';
 import type { McE2eScenario } from './types.js';
@@ -10,7 +10,11 @@ export const workspaceToolOutputRenderingScenario: McE2eScenario = {
   skipReason: 'current main repeats workspace tool calls and never reaches final assistant completion text',
   useOpenAIModel: true,
   aimockFixture: 'workspace-tool-output-rendering.json',
-  prepare({ projectDir }) {
+  prepare({ appDataDir, projectDir }) {
+    const settingsPath = join(appDataDir, 'settings.json');
+    const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as Record<string, unknown>;
+    settings.lsp = true;
+    writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
     mkdirSync(join(projectDir, 'src'), { recursive: true });
     writeFileSync(join(projectDir, 'src', 'workspace-output-e2e.ts'), 'export const WORKSPACE_E2E_SYMBOL = 42;\n');
   },

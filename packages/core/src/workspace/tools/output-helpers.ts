@@ -1,5 +1,7 @@
 import { estimateTokenCount, sliceByTokens } from 'tokenx';
 
+import { isValidationError } from '../../tools/validation';
+
 /** Default number of lines to return (tail). */
 export const DEFAULT_TAIL_LINES = 200;
 
@@ -31,10 +33,17 @@ export function stripAnsi(text: string): string {
  *
  * Returns `{ type: 'text', value: '...' }` to match the AI SDK's
  * expected tool-result output format.
+ *
+ * Mastra validation-error envelopes (e.g. from output-schema validation
+ * failures) are tagged as `{ type: 'error-json', value }` so providers
+ * receive a valid tool-result output instead of an untagged object.
  */
 export function sandboxToModelOutput(output: unknown): unknown {
   if (typeof output === 'string') {
     return { type: 'text', value: stripAnsi(output) };
+  }
+  if (isValidationError(output)) {
+    return { type: 'error-json', value: output };
   }
   return output;
 }
@@ -51,8 +60,8 @@ export function sandboxToModelOutput(output: unknown): unknown {
  */
 export function applyTail(output: string, tail: number | null | undefined): string {
   if (!output) return output;
-  const n = Math.abs(tail ?? DEFAULT_TAIL_LINES);
-  if (n === 0) return output; // 0 = no limit
+  const n = Math.floor(Math.abs(tail ?? DEFAULT_TAIL_LINES));
+  if (n === 0) return output; // 0 = no limit (also covers |tail| < 1)
   // Strip trailing newline before splitting so it doesn't count as a line
   const trailingNewline = output.endsWith('\n');
   const lines = (trailingNewline ? output.slice(0, -1) : output).split('\n');
@@ -65,6 +74,9 @@ export function applyTail(output: string, tail: number | null | undefined): stri
 // ---------------------------------------------------------------------------
 // Token-based truncation (uses tokenx for fast, lightweight estimation)
 // ---------------------------------------------------------------------------
+
+// Unicode mode matches lone surrogate code points without matching complete pairs.
+const UNPAIRED_SURROGATE_RE = /[\uD800-\uDFFF]/gu;
 
 /**
  * Token-based output limit. Truncates output to fit within a token budget.
@@ -87,7 +99,10 @@ export async function applyTokenLimit(
   const totalTokens = estimateTokenCount(output);
   if (totalTokens <= limit) return output;
 
-  const kept = from === 'start' ? sliceByTokens(output, -limit) : sliceByTokens(output, 0, limit);
+  const kept = (from === 'start' ? sliceByTokens(output, -limit) : sliceByTokens(output, 0, limit)).replace(
+    UNPAIRED_SURROGATE_RE,
+    '\uFFFD',
+  );
 
   const position = from === 'start' ? 'last' : 'first';
   return from === 'start'
@@ -116,8 +131,8 @@ export async function applyTokenLimitSandwich(
   const headBudget = Math.floor(limit * headRatio);
   const tailBudget = limit - headBudget;
 
-  const head = headBudget > 0 ? sliceByTokens(output, 0, headBudget) : '';
-  const tail = tailBudget > 0 ? sliceByTokens(output, -tailBudget) : '';
+  const head = headBudget > 0 ? sliceByTokens(output, 0, headBudget).replace(UNPAIRED_SURROGATE_RE, '\uFFFD') : '';
+  const tail = tailBudget > 0 ? sliceByTokens(output, -tailBudget).replace(UNPAIRED_SURROGATE_RE, '\uFFFD') : '';
 
   const notice = `[...output truncated — showing first ~${headBudget} + last ~${tailBudget} of ~${totalTokens} tokens...]`;
   return [head, notice, tail].filter(Boolean).join('\n');

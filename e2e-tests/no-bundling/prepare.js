@@ -1,7 +1,7 @@
 import { cp, mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { execa } from 'execa';
+import { installWithRetry } from '../_local-registry-setup/install.js';
 
 /**
  *
@@ -37,9 +37,8 @@ minimumReleaseAge: 0
 
   console.log('Directory:', newPath);
   console.log('Installing dependencies...');
-  await execa(pkgManager, installArgs, {
+  installWithRetry(pkgManager, installArgs, {
     cwd: newPath,
-    stdio: 'inherit',
     env,
   });
 }

@@ -18,6 +18,7 @@ import {
   listResourcesResponseSchema,
 } from '../schemas/mcp';
 import type { ServerContext } from '../server-adapter';
+import type { SetMcpRequestAuth } from '../server-adapter/mcp-auth';
 import { createRoute } from '../server-adapter/routes/route-builder';
 
 // ============================================================================
@@ -52,7 +53,7 @@ export const LIST_MCP_SERVERS_ROUTE = createRoute({
       return { servers: [], total_count: 0, next: null };
     }
 
-    const serverList = Object.values(servers) as MastraMCPServerImplementation[];
+    const serverList = Object.values(servers);
     const totalCount = serverList.length;
 
     // Support both page/perPage and limit/offset for backwards compatibility
@@ -327,6 +328,11 @@ export interface MCPTransportOptions {
    * Custom session ID generator function.
    */
   sessionIdGenerator?: () => string;
+  /**
+   * Sets `req.auth` before the MCP transport reads it. Overrides the default
+   * bridge that forwards the principal resolved by `server.auth`.
+   */
+  setRequestAuth?: SetMcpRequestAuth;
 }
 
 /**

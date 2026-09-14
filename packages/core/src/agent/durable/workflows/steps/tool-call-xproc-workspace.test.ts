@@ -21,7 +21,10 @@ import { globalRunRegistry } from '../../run-registry';
 import * as resolveRuntime from '../../utils/resolve-runtime';
 import { createDurableToolCallStep } from './tool-call';
 
-vi.mock('../../utils/resolve-runtime', () => ({
+vi.mock('../../utils/resolve-runtime', async () => ({
+  restoreRequestContext: (
+    await vi.importActual<typeof import('../../utils/resolve-runtime')>('../../utils/resolve-runtime')
+  ).restoreRequestContext,
   resolveTool: vi.fn().mockReturnValue(undefined),
   toolRequiresApproval: vi.fn().mockResolvedValue(false),
   rebuildRunToolsFromMastra: vi.fn(),

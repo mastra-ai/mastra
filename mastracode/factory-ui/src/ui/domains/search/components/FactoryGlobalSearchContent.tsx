@@ -6,10 +6,13 @@ import {
   CommandPaletteResults,
 } from '@mastra/playground-ui/components/CommandPalette';
 import { Kbd } from '@mastra/playground-ui/components/Kbd';
+import { toast } from '@mastra/playground-ui/components/Toaster';
 import { useState } from 'react';
 
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
-import { RUN_PHASE_LABELS, itemRunSpec } from '../../factory/boardRunSpecs';
+import { candidatePayload } from '../../factory/boardDrag';
+import { cardMoves } from '../../factory/cardPrimaryAction';
+import { useBoardItems } from '../../factory/hooks/useBoardItems';
 import { useBoardRuns } from '../../factory/hooks/useBoardRuns';
 import { useGlobalSearchIntake } from '../hooks/useGlobalSearchIntake';
 import { useGlobalSearchNavigation } from '../hooks/useGlobalSearchNavigation';
@@ -36,16 +39,18 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
   const activeFactory = factories.find(factory => factory.id === factoryId);
   const repositoryIds = activeFactory?.repositories.map(repository => repository.projectRepositoryId) ?? [];
   const sessions = useGlobalSearchSessions(repositoryIds);
-  const workItems = useGlobalSearchWorkItems(repositoryIds.length > 0 ? factoryId : undefined);
+  const searchableFactoryId = repositoryIds.length > 0 ? factoryId : undefined;
+  const workItems = useGlobalSearchWorkItems(searchableFactoryId);
   // Both boards read `repositories[0]`, so that is the repository whose intake feeds are searchable.
   const projectRepositoryId = activeFactory?.repositories[0]?.projectRepositoryId;
   const intake = useGlobalSearchIntake(projectRepositoryId);
-  const runs = useBoardRuns({
-    factoryProjectId: factoryId,
-    projectRepositoryId,
-    workItems: workItems.items,
-    refetchItems: workItems.refetch,
+  // The palette closes on select, so a failed move has no card left to carry its reason.
+  const board = useBoardItems({
+    factoryProjectId: searchableFactoryId,
+    kind: 'work',
+    onFailure: message => toast.error(message),
   });
+  const runs = useBoardRuns({ factoryProjectId: factoryId, refetchItems: workItems.refetch });
   const { selectPath } = useGlobalSearchNavigation(closeSearch);
   const [activeScope, setActiveScope] = useState<GlobalSearchScope>('all');
 
@@ -94,31 +99,24 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
           {scopeIncludes(activeScope, 'items') && (
             <GlobalSearchWorkItemResults
               results={unstartedItems}
-              loadingFor={result => {
-                const target = result.target;
-                const preparing =
-                  target.kind === 'candidate'
-                    ? runs.preparingForSource(target.candidate.sourceKey)
-                    : runs.preparingFor(target.item.id);
-                if (preparing) return preparing;
-                const pendingRoles =
-                  target.kind === 'candidate'
-                    ? runs.pendingRolesForSource(target.candidate.sourceKey)
-                    : runs.pendingRolesFor(target.item.id);
-                const phase = pendingRoles.values().next().value;
-                return phase ? RUN_PHASE_LABELS[phase] : pendingRoles.size > 0 ? 'Starting run…' : undefined;
-              }}
-              onSelect={async result => {
-                if (result.target.kind === 'candidate') {
-                  const [defaultAction] = result.target.candidate.runActions;
-                  await runs.startCandidateRun(result.target.candidate, defaultAction);
-                } else {
-                  const spec = itemRunSpec(result.target.item);
-                  const defaultAction = spec?.actions[0];
-                  if (defaultAction) await runs.openOrStartRun(result.target.item, defaultAction.role);
-                  else await runs.openOrCreateSession(result.target.item, result.target.item.stages[0] ?? 'intake');
-                }
+              onSelect={result => {
                 closeSearch();
+                const target = result.target;
+                if (target.kind === 'candidate') {
+                  const [move] = cardMoves(target.candidate, target.candidate.column);
+                  if (move) board.handleDrop(candidatePayload(target.candidate), move.stage, 'card_action');
+                  return;
+                }
+                const [move] = cardMoves(target.item, 'intake');
+                if (move) {
+                  board.move(target.item.id, move.stage);
+                  return;
+                }
+                void runs
+                  .openOrCreateSession(target.item)
+                  .catch(error =>
+                    toast.error(error instanceof Error ? error.message : 'The session could not be started.'),
+                  );
               }}
             />
           )}

@@ -70,8 +70,16 @@ export const defaultOptionsSchema = z
     /** Automatically resume suspended tools */
     autoResumeSuspendedTools: z.boolean().optional(),
 
-    /** Maximum number of tool calls to execute concurrently */
-    toolCallConcurrency: z.number().optional(),
+    /** Tool-call concurrency limit and strategy */
+    toolCallConcurrency: z
+      .union([
+        z.number(),
+        z.object({
+          limit: z.number().optional(),
+          strategy: z.enum(['available', 'called']).optional(),
+        }),
+      ])
+      .optional(),
 
     /** Whether to include raw chunks in the stream output */
     includeRawChunks: z.boolean().optional(),

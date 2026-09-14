@@ -4,14 +4,14 @@
  */
 
 import { statSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { dirname, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { readJSON } from 'fs-extra/esm';
 import { getPackageInfo } from 'local-pkg';
 import { getPackageName } from './utils';
 
 /**
- * Normalize a resolution base path to a directory file URL.
+ * Normalize a resolution base path to a directory path.
  *
  * Callers often pass a module file path (e.g. a rollup module id like
  * `node_modules/@mastra/core/dist/chunk-XYZ.js`) as the parent path. mlly (used by local-pkg)
@@ -21,7 +21,7 @@ import { getPackageName } from './utils';
  * as the base avoids this while resolving identically.
  */
 function toParentDirectoryUrl(parentPath: string): string {
-  let fsPath = parentPath.startsWith('file://') ? fileURLToPath(parentPath) : parentPath;
+  let fsPath = resolve(parentPath.startsWith('file://') ? fileURLToPath(parentPath) : parentPath);
 
   try {
     if (statSync(fsPath).isFile()) {
@@ -31,7 +31,9 @@ function toParentDirectoryUrl(parentPath: string): string {
     // non-existent paths are used as-is
   }
 
-  return pathToFileURL(fsPath).href;
+  // Keep the trailing separator. Without it, URL resolution treats the directory name as a file
+  // and starts package lookup from its parent directory.
+  return pathToFileURL(`${fsPath}${sep}`).href;
 }
 
 /**

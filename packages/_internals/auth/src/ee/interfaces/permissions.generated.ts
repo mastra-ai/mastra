@@ -197,6 +197,8 @@ export const PERMISSION_PATTERNS = {
   'datasets:write': 'datasets:write',
   /** View embedders */
   'embedders:read': 'embedders:read',
+  /** Delete experiments */
+  'experiments:delete': 'experiments:delete',
   /** View experiments */
   'experiments:read': 'experiments:read',
   /** View infrastructure */
@@ -374,6 +376,7 @@ export const PERMISSIONS = [
   'datasets:read',
   'datasets:write',
   'embedders:read',
+  'experiments:delete',
   'experiments:read',
   'infrastructure:read',
   'logs:read',
@@ -494,6 +497,8 @@ export const MastraFGAPermissions = {
   DATASETS_WRITE: 'datasets:write',
   /** View embedders */
   EMBEDDERS_READ: 'embedders:read',
+  /** Delete experiments */
+  EXPERIMENTS_DELETE: 'experiments:delete',
   /** View experiments */
   EXPERIMENTS_READ: 'experiments:read',
   /** View infrastructure */

@@ -50,6 +50,8 @@ CREATE TABLE IF NOT EXISTS span_events (
   entityId VARCHAR,
   entityName VARCHAR,
   entityVersionId VARCHAR,
+  parentEntityVersionId VARCHAR,
+  rootEntityVersionId VARCHAR,
 
   -- Context
   userId VARCHAR,
@@ -282,6 +284,9 @@ CREATE TABLE IF NOT EXISTS feedback_events (
   feedbackUserId VARCHAR,
   sourceId VARCHAR,
 
+  -- Review workflow
+  reviewStatus VARCHAR NOT NULL DEFAULT 'needs-review',
+
   -- Feedback-specific scalars
   source VARCHAR,
   feedbackSource VARCHAR NOT NULL,
@@ -325,6 +330,8 @@ export const ALL_MIGRATIONS = [
   // bad default is detected in information_schema.
   `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS cursorId BIGINT`,
   `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS entityVersionId VARCHAR`,
+  `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS parentEntityVersionId VARCHAR`,
+  `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS rootEntityVersionId VARCHAR`,
 
   // Metrics. Legacy rows remain page-visible but are not part of delta polling.
   `ALTER TABLE metric_events ADD COLUMN IF NOT EXISTS cursorId BIGINT`,
@@ -437,5 +444,6 @@ export const ALL_MIGRATIONS = [
   `ALTER TABLE feedback_events ADD COLUMN IF NOT EXISTS scope JSON`,
   `ALTER TABLE feedback_events ADD COLUMN IF NOT EXISTS source VARCHAR`,
   `ALTER TABLE feedback_events ADD COLUMN IF NOT EXISTS feedbackSource VARCHAR`,
+  `ALTER TABLE feedback_events ADD COLUMN IF NOT EXISTS reviewStatus VARCHAR DEFAULT 'needs-review'`,
   `ALTER TABLE feedback_events ALTER COLUMN traceId DROP NOT NULL`,
 ];

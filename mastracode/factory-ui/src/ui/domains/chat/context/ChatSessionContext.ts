@@ -3,21 +3,40 @@ import { createContext } from 'react';
 export interface FactorySessionState {
   factoryProjectId: string;
   projectRepositoryId?: string;
-  sandboxId?: string;
-  sandboxWorkdir?: string;
 }
 
 export interface ChatSessionContextApi {
   resourceId: string;
+  /**
+   * Alias for `sandboxReady` retained for existing consumers. New code should
+   * use `sandboxReady` (mutations, runs) or `resourceReady` (reads/streaming)
+   * to make the gating intent explicit.
+   */
   sessionEnabled: boolean;
+  /**
+   * Server-side session metadata is resolved and the agent-controller
+   * resourceId is safe to address for reads/streaming. Never waits on a
+   * sandbox existing.
+   */
+  resourceReady: boolean;
+  /**
+   * Session metadata resolved and runs can be sent. The server materializes
+   * sandboxes lazily on first use, so this never waits on one.
+   * Gate any write/run consumer on this flag.
+   */
+  sandboxReady: boolean;
+  /**
+   * Session metadata is still resolving for an in-session mount. UI should
+   * show a preparing affordance while true.
+   */
+  sandboxPreparing: boolean;
   resourceEnabled: boolean;
   /**
-   * Failure while preparing the session's workspace (sandbox provision /
-   * repo materialization). While set, the session never becomes enabled, so
-   * surfaces must show this error instead of an eternal loading state.
+   * Failure resolving the session itself (denied/missing/errored session
+   * query). Fatal — the chat surface replaces its content with an error state.
    */
   sessionError?: Error;
-  /** Re-runs workspace preparation after a `sessionError`. */
+  /** Re-runs the failed session query. */
   retrySession?: () => void;
   projectPath?: string;
   /**
@@ -28,6 +47,9 @@ export interface ChatSessionContextApi {
    * of binding to a fresh random-id thread the route can never find.
    */
   sessionThreadId?: string;
+  /** The session's workspace has never been materialized, so status reads as still setting up. */
+  workspacePending?: boolean;
+  draftSessionId?: string;
   factorySessionState?: FactorySessionState;
   baseUrl: string;
   /**
