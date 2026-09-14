@@ -693,7 +693,15 @@ describe('KnowledgePage', () => {
     expect(router.state.location.search).toContain(`node=${scopeRootId}`);
     expect(router.state.location.search).toContain(`scope=${scopeRootId}`);
 
+    fireEvent.click(within(flyout).getByRole('button', { name: 'Payments Service' }));
+    await waitFor(() => expect(router.state.location.search).toContain('node=ent-a'));
+    expect(router.state.location.search).toContain('record=record-1');
+    expect(router.state.location.search).toContain('scope=resource');
+    expect(screen.queryByTestId('knowledge-scope-flyout')).not.toBeInTheDocument();
+
     // Clicking the same scope in the graph applies the identical selection.
+    fireEvent.click(within(scopes).getByRole('button', { name: /fp-1 project/ }));
+    flyout = await screen.findByTestId('knowledge-scope-flyout');
     fireEvent.click(within(flyout).getByRole('button', { name: 'Close scope details' }));
     expect(screen.queryByTestId('knowledge-scope-flyout')).not.toBeInTheDocument();
     const root = (await screen.findAllByTestId('knowledge-node')).find(node => node.textContent?.includes(FACTORY_ID));
