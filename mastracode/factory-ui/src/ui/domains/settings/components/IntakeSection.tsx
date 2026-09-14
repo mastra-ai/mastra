@@ -272,12 +272,13 @@ function groupLinearSourcesByTeam(
   const ensureGroup = (teamId: string, teamName: string): SourcePickerGroup => {
     const existing = byTeam.get(teamId);
     if (existing) return existing;
-    // The whole team is selectable as its own source, listed first in the group.
-    const teamSourceId = linearTeamSourceId(teamById.get(teamId) ?? { id: teamId });
+    // Only a returned team DTO can mint a selectable team source. Project
+    // metadata may arrive first, but it does not carry the backend's opaque id.
+    const team = teamById.get(teamId);
     const group: SourcePickerGroup = {
       id: teamId,
       label: teamName,
-      items: [{ id: teamSourceId, label: `All issues in ${teamName}` }],
+      items: team ? [{ id: linearTeamSourceId(team), label: `All issues in ${teamName}` }] : [],
     };
     byTeam.set(teamId, group);
     return group;
@@ -294,7 +295,8 @@ function groupLinearSourcesByTeam(
     for (const team of project.teams) {
       const group = ensureGroup(team.id, teamById.get(team.id)?.name ?? team.name);
       // A project is redundant when its whole team is already selected.
-      const teamSelected = selected.has(linearTeamSourceId(teamById.get(team.id) ?? { id: team.id }));
+      const knownTeam = teamById.get(team.id);
+      const teamSelected = knownTeam ? selected.has(linearTeamSourceId(knownTeam)) : false;
       group.items.push({
         id: project.id,
         label: project.name,

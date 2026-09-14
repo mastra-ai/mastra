@@ -259,6 +259,31 @@ describe('IntakeSection', () => {
       await waitFor(() => expect(saved).toHaveLength(1));
       expect(saved[0]!.linear.sourceIds).toEqual(['linear-team:opaque-eng']);
     });
+    it('waits for a returned team DTO before enabling opaque team selection', async () => {
+      const saved = useIntakeHandlers();
+      let releaseTeams!: () => void;
+      const teamsPending = new Promise<void>(resolve => {
+        releaseTeams = resolve;
+      });
+      server.use(
+        http.get(LINEAR_TEAMS_URL, async () => {
+          await teamsPending;
+          return HttpResponse.json({ teams: linearTeams });
+        }),
+      );
+
+      renderIntakeSection();
+
+      expect(await screen.findByRole('checkbox', { name: 'Q3 Roadmap' })).toBeInTheDocument();
+      expect(screen.queryByRole('checkbox', { name: 'All issues in Engineering' })).not.toBeInTheDocument();
+
+      releaseTeams();
+
+      const team = await screen.findByRole('checkbox', { name: 'All issues in Engineering' });
+      await userEvent.click(team);
+      await waitFor(() => expect(saved).toHaveLength(1));
+      expect(saved[0]!.linear.sourceIds).toEqual(['linear-team:opaque-eng']);
+    });
 
     it('marks projects under a selected team as redundant and disables them', async () => {
       useIntakeHandlers({
