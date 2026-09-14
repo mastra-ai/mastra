@@ -1,12 +1,12 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
-import { DataList } from '../data-list';
-import type { DataListSortDirection } from '../data-list';
-import { TabbedContainer } from './tabbed-container';
+import { TabbedContainer } from './index';
+import { DataList } from '@/ds/components/DataList/data-list';
+import type { DataListSortDirection } from '@/ds/components/DataList/data-list';
 import { cn } from '@/lib/utils';
 
 const meta: Meta<typeof TabbedContainer> = {
-  title: 'DataDisplay/TabbedContainer',
+  title: 'Layout/TabbedContainer',
   component: TabbedContainer,
   parameters: {
     layout: 'padded',
@@ -68,8 +68,79 @@ const STATUS_OPTIONS = [
   { value: 'failed', label: 'Failed' },
 ];
 
-export const Default: Story = {
-  render: function DefaultStory() {
+const PanelContent = ({ title, description }: { title: string; description: string }) => (
+  <div className="grid gap-1">
+    <h2 className={cn('text-ui-md', 'font-medium', 'text-neutral5')}>{title}</h2>
+    <p className="text-ui-sm text-neutral3">{description}</p>
+  </div>
+);
+
+const ScoreRows = () => (
+  <>
+    <DataList.Top>
+      <DataList.TopCell>ID</DataList.TopCell>
+      <DataList.TopCell>Scorer</DataList.TopCell>
+      <DataList.TopCell>Score</DataList.TopCell>
+      <DataList.TopCell>Date</DataList.TopCell>
+    </DataList.Top>
+    {SAMPLE_SCORES.map(score => (
+      <DataList.RowButton key={score.id} onClick={() => {}}>
+        <DataList.IdCell id={score.id} />
+        <DataList.TextCell>{score.scorer}</DataList.TextCell>
+        <DataList.NumberCell>{score.score.toFixed(2)}</DataList.NumberCell>
+        <DataList.DateCell timestamp={score.createdAt} />
+      </DataList.RowButton>
+    ))}
+  </>
+);
+
+export const PanelOnly: Story = {
+  render: () => (
+    <div className="flex h-80 w-full max-w-4xl">
+      <TabbedContainer defaultTab="overview">
+        <TabbedContainer.Panel value="overview" label="Overview">
+          <PanelContent
+            title="Evaluation overview"
+            description="Review the purpose and configuration for this evaluation."
+          />
+        </TabbedContainer.Panel>
+        <TabbedContainer.Panel value="configuration" label="Configuration">
+          <PanelContent title="Configuration" description="Panel tabs can contain any product content." />
+        </TabbedContainer.Panel>
+      </TabbedContainer>
+    </div>
+  ),
+};
+
+export const DataListOnly: Story = {
+  render: () => (
+    <div className="flex h-80 w-full max-w-4xl">
+      <TabbedContainer defaultTab="scores">
+        <TabbedContainer.DataList value="scores" label="Scores" columns="auto minmax(0,1fr) auto auto">
+          <ScoreRows />
+        </TabbedContainer.DataList>
+      </TabbedContainer>
+    </div>
+  ),
+};
+
+export const Mixed: Story = {
+  render: () => (
+    <div className="flex h-80 w-full max-w-4xl">
+      <TabbedContainer defaultTab="overview">
+        <TabbedContainer.Panel value="overview" label="Overview">
+          <PanelContent title="Evaluation overview" description="Arbitrary content and data share one frame." />
+        </TabbedContainer.Panel>
+        <TabbedContainer.DataList value="scores" label="Scores" columns="auto minmax(0,1fr) auto auto">
+          <ScoreRows />
+        </TabbedContainer.DataList>
+      </TabbedContainer>
+    </div>
+  ),
+};
+
+export const SearchAndFilter: Story = {
+  render: function SearchAndFilterStory() {
     const [runSearch, setRunSearch] = useState('');
     const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
     const [runSort, setRunSort] = useState<RunSort>({ key: 'createdAt', direction: 'descending' });
@@ -83,8 +154,8 @@ export const Default: Story = {
     );
 
     return (
-      <div className="w-full max-w-4xl" style={{ height: 400 }}>
-        <TabbedContainer defaultTab="overview" className="h-full">
+      <div className="flex w-full max-w-4xl" style={{ height: 400 }}>
+        <TabbedContainer defaultTab="overview">
           <TabbedContainer.Panel value="overview" label="Overview">
             <div className="grid gap-1">
               <h2 className={cn('text-ui-md', 'font-medium', 'text-neutral5')}>Evaluation overview</h2>
@@ -151,20 +222,7 @@ export const Default: Story = {
             {runs.length === 0 && <DataList.NoMatch message="No runs match the search" />}
           </TabbedContainer.DataList>
           <TabbedContainer.DataList value="scores" label="Scores" columns="auto minmax(0,1fr) auto auto">
-            <DataList.Top>
-              <DataList.TopCell>ID</DataList.TopCell>
-              <DataList.TopCell>Scorer</DataList.TopCell>
-              <DataList.TopCell>Score</DataList.TopCell>
-              <DataList.TopCell>Date</DataList.TopCell>
-            </DataList.Top>
-            {SAMPLE_SCORES.map(score => (
-              <DataList.RowButton key={score.id} onClick={() => {}}>
-                <DataList.IdCell id={score.id} />
-                <DataList.TextCell>{score.scorer}</DataList.TextCell>
-                <DataList.NumberCell>{score.score.toFixed(2)}</DataList.NumberCell>
-                <DataList.DateCell timestamp={score.createdAt} />
-              </DataList.RowButton>
-            ))}
+            <ScoreRows />
           </TabbedContainer.DataList>
         </TabbedContainer>
       </div>
@@ -201,8 +259,8 @@ export const OverflowAndClosable: Story = {
         : undefined;
 
     return (
-      <div className="h-80 w-full max-w-3xl">
-        <TabbedContainer defaultTab="runs" value={activeTab} onValueChange={setActiveTab} className="h-full">
+      <div className="flex h-80 w-full max-w-3xl">
+        <TabbedContainer defaultTab="runs" value={activeTab} onValueChange={setActiveTab}>
           {OVERFLOW_TABS.filter(tab => visibleTabs.includes(tab.value)).map(tab =>
             tab.value === 'overview' ? (
               <TabbedContainer.Panel key={tab.value} value={tab.value} label={tab.label} onClose={closeTab(tab.value)}>

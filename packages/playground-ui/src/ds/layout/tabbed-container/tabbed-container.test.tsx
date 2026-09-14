@@ -2,8 +2,9 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { DataList } from '../data-list';
-import { TabbedContainer } from './tabbed-container';
+import { TabbedContainer } from './index';
+import { DataList } from '@/ds/components/DataList/data-list';
+import { TabbedContainer as LegacyTabbedContainer } from '@/ds/components/DataList/TabbedContainer/tabbed-container';
 
 beforeEach(() => {
   vi.stubGlobal(
@@ -68,6 +69,12 @@ const renderTables = () =>
   );
 
 describe('TabbedContainer', () => {
+  it('keeps the legacy entrypoint compatible', () => {
+    expect(LegacyTabbedContainer).toBe(TabbedContainer);
+    expect(LegacyTabbedContainer.Panel).toBe(TabbedContainer.Panel);
+    expect(LegacyTabbedContainer.DataList).toBe(TabbedContainer.DataList);
+  });
+
   it('builds one tab per child and shows the default table', () => {
     renderTables();
     expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Runs', 'Scores']);
@@ -240,9 +247,9 @@ describe('TabbedContainer', () => {
     expect(screen.getByRole('tab', { name: 'Overview' }).getAttribute('aria-selected')).toBe('true');
   });
 
-  it('renders DataLists flush inside the frame', () => {
+  it('renders DataLists inside the regular panel body', () => {
     renderTables();
     const panel = screen.getByText('What is the weather?').closest('[data-slot="tabs-content"]');
-    expect(panel?.getAttribute('data-flush')).toBe('true');
+    expect(panel?.hasAttribute('data-flush')).toBe(false);
   });
 });
