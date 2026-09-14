@@ -106,6 +106,25 @@ describe('attachDatabase', () => {
     expect(JSON.parse(init.body)).toEqual({ kind: 'turso', name: 'my-app-db', environmentId: 'env-1' });
   });
 
+  it('posts a postgres attach with the mandatory environmentId', async () => {
+    const pgRow = {
+      ...dbRow,
+      kind: 'postgres' as const,
+      name: 'my-app-postgres',
+      environmentId: 'env-1',
+      region: null,
+    };
+    mockPlatformFetch.mockResolvedValue(jsonResponse(201, { database: pgRow }));
+
+    const { attachDatabase } = await import('./platform-api.js');
+    await expect(
+      attachDatabase('tok', 'org-1', 'proj-1', { kind: 'postgres', name: 'my-app-postgres', environmentId: 'env-1' }),
+    ).resolves.toEqual(pgRow);
+
+    const [, init] = mockPlatformFetch.mock.calls[0]!;
+    expect(JSON.parse(init.body)).toEqual({ kind: 'postgres', name: 'my-app-postgres', environmentId: 'env-1' });
+  });
+
   it('throws a clear admin-role message on 403', async () => {
     mockPlatformFetch.mockResolvedValue(jsonResponse(403, { detail: 'Forbidden' }));
 

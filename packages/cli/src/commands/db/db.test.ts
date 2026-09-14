@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as EnvPlatformApi from '../env/platform-api.js';
 import type { Environment, Project } from '../env/platform-api.js';
-import { defaultDatabaseName, formatScope, resolveDefaultEnvironment } from './db.js';
+import { defaultDatabaseName, formatScope, parseKind, resolveDefaultEnvironment, validateCreateScope } from './db.js';
 
 const selectMock = vi.fn();
 const cancelMock = vi.fn();
@@ -80,6 +80,8 @@ describe('defaultDatabaseName', () => {
     expect(defaultDatabaseName('neon', { name: 'My App', slug: 'my-app' })).toBe('my-app-pg');
     expect(defaultDatabaseName('redis', { name: 'My App', slug: 'my-app' })).toBe('my-app-redis');
     expect(defaultDatabaseName('mongodb', { name: 'My App', slug: 'my-app' })).toBe('my-app-mongo');
+    // Railway Postgres uses `-postgres`, not `-pg` — `-pg` belongs to Neon.
+    expect(defaultDatabaseName('postgres', { name: 'My App', slug: 'my-app' })).toBe('my-app-postgres');
   });
 
   it('falls back to the project name and sanitizes it for DNS-safe providers', () => {
@@ -216,6 +218,45 @@ describe('defaultDatabaseName', () => {
     const name = defaultDatabaseName('turso', { name: 'X', slug }, { name: 'eu', slug: 'eu', type: 'preview' });
     expect(name).not.toMatch(/--/);
     expect(name.length).toBeLessThanOrEqual(64);
+  });
+});
+
+describe('parseKind', () => {
+  it('accepts every creatable provider kind', () => {
+    expect(parseKind('turso')).toBe('turso');
+    expect(parseKind('neon')).toBe('neon');
+    expect(parseKind('redis')).toBe('redis');
+    expect(parseKind('postgres')).toBe('postgres');
+  });
+
+  it('rejects unknown kinds with the supported list', () => {
+    expect(() => parseKind('mysql')).toThrow(
+      'Unsupported database kind: mysql. Supported kinds: turso, neon, redis, postgres',
+    );
+  });
+});
+
+describe('validateCreateScope', () => {
+  it('rejects combining an environment argument with --shared', () => {
+    expect(() => validateCreateScope('turso', 'staging', true)).toThrow(
+      'Cannot combine an environment argument with --shared. Pick one scope.',
+    );
+  });
+
+  it('rejects --shared for postgres — managed Postgres is environment-scoped only', () => {
+    expect(() => validateCreateScope('postgres', undefined, true)).toThrow(
+      'Managed Postgres is environment-scoped and cannot be shared across environments.',
+    );
+  });
+
+  it('allows --shared for providers that support project scope', () => {
+    expect(() => validateCreateScope('turso', undefined, true)).not.toThrow();
+    expect(() => validateCreateScope('neon', undefined, true)).not.toThrow();
+  });
+
+  it('allows environment-scoped postgres', () => {
+    expect(() => validateCreateScope('postgres', 'production', undefined)).not.toThrow();
+    expect(() => validateCreateScope('postgres', undefined, undefined)).not.toThrow();
   });
 });
 
