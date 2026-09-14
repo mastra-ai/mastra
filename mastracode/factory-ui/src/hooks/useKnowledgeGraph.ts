@@ -18,6 +18,7 @@ import {
   fetchKnowledgeProposal,
   fetchKnowledgeProposals,
   fetchKnowledgeScopes,
+  fetchKnowledgeSearch,
   reviewKnowledgeProposal,
   type KnowledgeActivityFilters,
   type KnowledgeProposalStatus,
@@ -47,6 +48,18 @@ export function useKnowledgeScopes(
     queryFn: factoryProjectId
       ? ({ signal }) => fetchKnowledgeScopes(baseUrl, factoryProjectId, scopeId, threadId, signal)
       : skipToken,
+  });
+}
+
+export function useKnowledgeSearch(factoryProjectId: string | undefined, query: string, threadId?: string) {
+  const { baseUrl } = useApiConfig();
+  const normalizedQuery = query.trim();
+  return useQuery({
+    queryKey: queryKeys.knowledgeSearch(factoryProjectId, normalizedQuery, threadId),
+    queryFn:
+      factoryProjectId && normalizedQuery.length >= 2
+        ? ({ signal }) => fetchKnowledgeSearch(baseUrl, factoryProjectId, normalizedQuery, threadId, signal)
+        : skipToken,
   });
 }
 

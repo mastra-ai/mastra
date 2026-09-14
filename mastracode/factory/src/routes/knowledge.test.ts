@@ -13,6 +13,7 @@ import type {
   KnowledgeGraphPayload,
   KnowledgeRouteLimits,
   KnowledgeScopeTreePayload,
+  KnowledgeSearchPayload,
 } from './knowledge.js';
 import { KnowledgeRoutes } from './knowledge.js';
 import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
@@ -355,6 +356,48 @@ describe('KnowledgeRoutes', () => {
     expect(response.status).toBe(200);
     expect(body.children).toHaveLength(1);
     expect(body.nextCursor).toMatch(/^kh_/);
+  });
+
+  it('searches only viewer-visible nodes and scopes with opaque result handles', async () => {
+    const h = await createHarness();
+    const projectScopeId = h.projectScope.at(-1)!;
+    const scope = await h.knowledge.createNode({ name: 'Payments scope', isScope: true, scopeIds: [projectScopeId] });
+    const content = await h.knowledge.createNode({ name: 'Payments service', scopeIds: [projectScopeId] });
+
+    const response = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/search?q=payments`);
+    const body = (await response.json()) as KnowledgeSearchPayload;
+    expect(response.status).toBe(200);
+    expect(body.results.map(result => result.name)).toEqual(['Payments scope', 'Payments service']);
+    expect(body.results.map(result => result.type)).toEqual(['scope', 'node']);
+    expect(body.results.every(result => result.id.startsWith('kh_'))).toBe(true);
+    expect(JSON.stringify(body)).not.toContain(scope.id);
+    expect(JSON.stringify(body)).not.toContain(content.id);
+  });
+
+  it('renders a selected structural scope as the root of its bounded member lens', async () => {
+    const h = await createHarness();
+    const projectScopeId = h.projectScope.at(-1)!;
+    await h.knowledge.createNode({ name: 'Child scope', isScope: true, scopeIds: [projectScopeId] });
+    await h.knowledge.createNode({ name: 'Member node', scopeIds: [projectScopeId] });
+
+    const scopeResponse = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/scopes`);
+    const scopeBody = (await scopeResponse.json()) as KnowledgeScopeTreePayload;
+    expect(scopeBody.scope).toMatchObject({ memberCount: 2, contentNodeCount: 1, childScopeCount: 1 });
+
+    const response = await rawGraph(h, `?scopeId=${scopeBody.scope.id}`);
+    expect(response.status).toBe(200);
+    const root = response.body.nodes.find(item => item.name === scopeBody.scope.name);
+    const child = response.body.nodes.find(item => item.name === 'Child scope');
+    const member = response.body.nodes.find(item => item.name === 'Member node');
+    expect(root).toMatchObject({ isScope: true, rung: null, memberCount: 2 });
+    expect(child).toMatchObject({ isScope: true, rung: null });
+    expect(member).toBeDefined();
+    expect(response.body.edges).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'contains', source: root?.id, target: child?.id }),
+        expect.objectContaining({ type: 'contains', source: root?.id, target: member?.id }),
+      ]),
+    );
   });
 
   // 1

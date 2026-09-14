@@ -2,12 +2,11 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { X } from 'lucide-react';
 
 import { useKnowledgeActivity } from '../../../../../hooks/useKnowledgeGraph';
-import type { KnowledgeActivityEvent, KnowledgeScopeNode, KnowledgeSelection } from '../../services/knowledge';
+import type { KnowledgeActivityEvent, KnowledgeScopeNode } from '../../services/knowledge';
 import { knowledgeActivityLabel } from './activityLabel';
 
 interface KnowledgeScopeFlyoutProps {
   factoryProjectId: string;
-  selection: KnowledgeSelection;
   scope: KnowledgeScopeNode;
   childScopeCount: number;
   contentNodeCount: number;
@@ -19,7 +18,6 @@ interface KnowledgeScopeFlyoutProps {
 /** Detail surface for the structural scope at the root of the active lens. */
 export function KnowledgeScopeFlyout({
   factoryProjectId,
-  selection,
   scope,
   childScopeCount,
   contentNodeCount,
@@ -27,7 +25,7 @@ export function KnowledgeScopeFlyout({
   onSelectActivity,
   onClose,
 }: KnowledgeScopeFlyoutProps) {
-  const activity = useKnowledgeActivity(factoryProjectId, selection, threadId);
+  const activity = useKnowledgeActivity(factoryProjectId, scope.id, threadId, {});
   const recentActivity = activity.data?.pages[0]?.events.slice(0, 5) ?? [];
   const displayAddress =
     scope.address === `resource:${factoryProjectId}` ? `project:${factoryProjectId}` : scope.address;

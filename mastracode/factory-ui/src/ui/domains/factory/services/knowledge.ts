@@ -12,16 +12,33 @@ import { requestJson } from './request';
 /** Scope rung a node belongs to — org-wide, project (resource), or session (thread). */
 export type KnowledgeRung = 'org' | 'resource' | 'thread';
 
+export type KnowledgeSelection =
+  | { scopeLevel: KnowledgeRung; scopeNodeId?: never }
+  | { scopeNodeId: string; scopeLevel?: KnowledgeRung };
+
+export interface KnowledgeScopeNode {
+  id: string;
+  address: string;
+  name: string;
+  kind?: string;
+  description?: string;
+  parentIds: string[];
+  memberCount: number;
+  memberCountTruncated: boolean;
+  contentNodeCount: number;
+  childScopeCount: number;
+}
 
 export interface KnowledgeGraphNode {
   id: string;
-  reference: string;
+  reference?: string;
   name: string;
   kind: string;
   description?: string;
   /** Scope rung the node sits on (drives the ring color + rung filters). */
   rung: KnowledgeRung | null;
   isScope?: boolean;
+  isBoundary?: boolean;
   /** A pinned record's wikilinks reference this node (the pin accent). */
   pinned: boolean;
   /** Knowledge records owned by this node inside the snapshot window (not a total). */
@@ -31,8 +48,8 @@ export interface KnowledgeGraphNode {
   memberCountTruncated?: boolean;
   contentNodeCount?: number;
   childScopeCount?: number;
-  createdAt: string;
-  updatedAt: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface KnowledgeGraphEdge {
@@ -76,6 +93,7 @@ export interface KnowledgeSearchResult {
   type: 'scope' | 'node';
   rung: KnowledgeRung | null;
   threadId?: string;
+  address?: string;
   description?: string;
 }
 
@@ -90,6 +108,14 @@ export interface KnowledgeScopeTreePayload {
   nextCursor?: string;
 }
 
+export interface KnowledgeBoundaryNode {
+  id: string;
+  reference?: string;
+  name: string;
+  scope?: string[];
+  rung?: KnowledgeRung;
+}
+
 export interface KnowledgeGraphPayload {
   view: 'project' | 'thread';
   scopeId: string;
@@ -98,7 +124,7 @@ export interface KnowledgeGraphPayload {
   edges: KnowledgeGraphEdge[];
   records: KnowledgeGraphRecord[];
   truncated: boolean;
-  outOfWindow: Array<{ id: string; name: string }>;
+  outOfWindow: KnowledgeBoundaryNode[];
   unresolvedCapped: { count: number; names: string[] };
   pinCensus: { resource: number; thread: number | null };
   version: string | null;
@@ -214,6 +240,22 @@ export async function fetchKnowledgeScopes(
 ): Promise<KnowledgeScopeTreePayload> {
   return requestJson<KnowledgeScopeTreePayload>(
     `${knowledgeBase(baseUrl, factoryProjectId)}/scopes${knowledgeQuery({ threadId, scopeId })}`,
+    { signal },
+  );
+}
+
+export async function fetchKnowledgeSearch(
+  baseUrl: string,
+  factoryProjectId: string,
+  query: string,
+  threadId?: string,
+  signal?: AbortSignal,
+): Promise<KnowledgeSearchPayload> {
+  const params = new URLSearchParams();
+  params.set('q', query);
+  if (threadId) params.set('threadId', threadId);
+  return requestJson<KnowledgeSearchPayload>(
+    `${knowledgeBase(baseUrl, factoryProjectId)}/search?${params.toString()}`,
     { signal },
   );
 }
