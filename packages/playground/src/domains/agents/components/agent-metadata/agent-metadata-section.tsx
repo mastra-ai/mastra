@@ -18,10 +18,10 @@ export interface AgentMetadataSectionProps {
 export const AgentMetadataSection = ({ title, icon, children, hint }: AgentMetadataSectionProps) => {
   const { Link } = useLinkComponent();
   return (
-    <section className="space-y-2 pb-7 last:pb-0">
-      <Txt as="h3" variant="title" className="flex items-center gap-2">
+    <section className="space-y-2 pb-6 last:pb-0">
+      <Txt as="h3" variant="ui-smd" className="text-neutral5 flex items-center gap-2 font-medium">
         {icon && (
-          <Icon aria-hidden="true" className="shrink-0">
+          <Icon aria-hidden="true" className="text-neutral3 shrink-0">
             {icon}
           </Icon>
         )}

@@ -29,6 +29,13 @@ export const Default: Story = {
   },
 };
 
+export const EmbeddedCode: Story = {
+  args: {
+    codeBlockVariant: 'embedded',
+    children: 'Follow these instructions.\n\n    Ask for a location.\n    Keep responses concise.',
+  },
+};
+
 export const Headings: Story = {
   args: {
     children: `# Heading 1
@@ -172,7 +179,6 @@ if (!session) return redirect('/login');
 
 Moving the guard below the loader fixes it.`;
 
-/** Chunks land in clumps, the way a proxy flushes them, not one word at a time. */
 function useReplay(reply: string): string {
   const [text, setText] = useState('');
 
@@ -213,7 +219,6 @@ function StreamCadence() {
   );
 }
 
-/** The clumps the replay feeds in should not be readable in the cadence that comes out. */
 export const Streaming: Story = {
   render: () => <StreamCadence />,
 };

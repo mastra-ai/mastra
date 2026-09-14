@@ -1,17 +1,22 @@
-import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Card } from '@mastra/playground-ui/components/Card';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
-import { MemoryIcon } from '@mastra/playground-ui/icons/MemoryIcon';
-import { ProcessorIcon } from '@mastra/playground-ui/icons/ProcessorIcon';
-import { PromptIcon } from '@mastra/playground-ui/icons/PromptIcon';
-import { SkillIcon } from '@mastra/playground-ui/icons/SkillIcon';
-import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
-import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
-import { Boxes, Folder, GaugeIcon, Globe, Radio } from 'lucide-react';
+import {
+  Bot,
+  Boxes,
+  Brain,
+  Cpu,
+  FileText,
+  Folder,
+  Gauge,
+  Globe,
+  Radio,
+  Sparkles,
+  Workflow,
+  Wrench,
+} from 'lucide-react';
 import { useAgent } from '../../hooks/use-agent';
 import { useReorderModelList, useUpdateModelInModelList } from '../../hooks/use-agents';
 import { useChannelPlatforms } from '../../hooks/use-channels';
@@ -113,7 +118,7 @@ function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
       {networkAgents.length > 0 && (
         <AgentMetadataSection
           title={<SectionTitleWithCount title="Agents" count={networkAgents.length} />}
-          icon={<AgentIcon />}
+          icon={<Bot />}
           hint={{ link: 'https://mastra.ai/en/docs/agents/overview', title: 'Agents documentation' }}
         >
           <AgentMetadataNetworkList agents={networkAgents} />
@@ -121,8 +126,17 @@ function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
       )}
 
       <AgentMetadataSection
-        title={<SectionTitleWithCount title="Tools" count={tools.length} />}
-        icon={<ToolsIcon />}
+        title={
+          <SectionTitleWithCount
+            title={
+              <span className="from-accent6 to-neutral5 bg-linear-to-r bg-clip-text text-transparent forced-colors:bg-none forced-colors:text-inherit">
+                Tools
+              </span>
+            }
+            count={tools.length}
+          />
+        }
+        icon={<Wrench className="text-accent6" />}
         hint={{
           link: 'https://mastra.ai/en/docs/agents/using-tools-and-mcp',
           title: 'Using Tools and MCP documentation',
@@ -133,7 +147,7 @@ function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
 
       <AgentMetadataSection
         title={<SectionTitleWithCount title="Workflows" count={workflows.length} />}
-        icon={<WorkflowIcon />}
+        icon={<Workflow />}
         hint={{ link: 'https://mastra.ai/en/docs/workflows/overview', title: 'Workflows documentation' }}
       >
         <AgentMetadataWorkflowList workflows={workflows} />
@@ -168,7 +182,7 @@ function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
       {(inputProcessors.length > 0 || outputProcessors.length > 0) && (
         <AgentMetadataSection
           title="Processors"
-          icon={<ProcessorIcon />}
+          icon={<Cpu />}
           hint={{ link: 'https://mastra.ai/docs/agents/processors', title: 'Processors documentation' }}
         >
           <AgentMetadataCombinedProcessorList inputProcessors={inputProcessors} outputProcessors={outputProcessors} />
@@ -177,17 +191,17 @@ function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
 
       <AgentMetadataSection
         title={<SectionTitleWithCount title="Skills" count={skills.length} />}
-        icon={<SkillIcon />}
+        icon={<Sparkles />}
         hint={{ link: 'https://mastra.ai/en/docs/workspace/skills', title: 'Skills documentation' }}
       >
         <AgentMetadataSkillList skills={skills} agentId={agentId} workspaceId={agent.workspaceId} />
       </AgentMetadataSection>
 
-      <AgentMetadataSection title="Scorers" icon={<GaugeIcon />}>
+      <AgentMetadataSection title="Scorers" icon={<Gauge />}>
         <AgentMetadataScorerList entityId={agent.name} entityType="AGENT" />
       </AgentMetadataSection>
 
-      <AgentMetadataSection title="Memory" icon={<MemoryIcon />}>
+      <AgentMetadataSection title="Memory" icon={<Brain />}>
         <AgentMemoryConfig agentId={agentId} />
       </AgentMetadataSection>
 
@@ -197,7 +211,7 @@ function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
         </AgentMetadataSection>
       )}
 
-      <AgentMetadataSection title="System Prompt" icon={<PromptIcon />}>
+      <AgentMetadataSection title="System Prompt" icon={<FileText />}>
         <AgentSystemPrompt instructions={extractPrompt(agent.instructions)} />
         {!isCmsLoading && !isCmsAvailable && (
           <Notice variant="warning" title="Read-only">
@@ -221,9 +235,11 @@ function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
   );
 }
 
-const SectionTitleWithCount = ({ title, count }: { title: string; count: number }) => (
+const SectionTitleWithCount = ({ title, count }: { title: React.ReactNode; count: number }) => (
   <span className="flex items-center gap-1.5">
     {title}
-    <Badge size="xs">{count}</Badge>
+    <Txt as="span" variant="caption" className="font-normal tabular-nums">
+      {count}
+    </Txt>
   </span>
 );

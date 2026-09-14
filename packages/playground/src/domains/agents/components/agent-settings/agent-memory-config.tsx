@@ -1,7 +1,5 @@
 import type { GetMemoryConfigResponse } from '@mastra/client-js';
-import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Card, CardContent } from '@mastra/playground-ui/components/Card';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
 import { KeyValueList } from '@mastra/playground-ui/components/KeyValueList';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
@@ -34,7 +32,7 @@ function getMemorySections(config: NonNullable<GetMemoryConfigResponse['config']
     {
       title: 'General',
       items: [
-        { label: 'Memory Enabled', value: true },
+        { label: 'Status', value: true },
         { label: 'Last Messages', value: config.lastMessages ?? 'Default' },
         { label: 'Auto-generate Titles', value: 'generateTitle' in config && Boolean(config.generateTitle) },
       ],
@@ -80,19 +78,27 @@ function getMemorySections(config: NonNullable<GetMemoryConfigResponse['config']
   return sections;
 }
 
+function formatMemoryValue(value: string | number | boolean) {
+  if (typeof value === 'boolean') return value ? 'Enabled' : 'Disabled';
+  return value;
+}
+
 function MemoryConfigFields({ items }: Pick<MemoryConfigSection, 'items'>) {
   return (
     <KeyValueList
-      className="grid-cols-[minmax(0,1fr)_fit-content(50%)] [&_dd]:justify-end [&_dd]:text-right"
+      className="grid-cols-2"
       data={items.map(item => ({
         key: item.label,
-        label: item.label,
-        value:
-          typeof item.value === 'boolean' ? (
-            <Badge size="xs">{item.value ? 'Yes' : 'No'}</Badge>
-          ) : (
-            <span className="min-w-0 whitespace-normal break-words">{item.value}</span>
-          ),
+        label: (
+          <Txt as="span" variant="ui-smd">
+            {item.label}
+          </Txt>
+        ),
+        value: (
+          <Txt as="span" variant="ui-smd" className="min-w-0 whitespace-normal break-words">
+            {formatMemoryValue(item.value)}
+          </Txt>
+        ),
       }))}
     />
   );
@@ -117,28 +123,24 @@ export function AgentMemoryConfig({ agentId }: { agentId: string }) {
   if (!data?.config) return <Txt variant="caption">No memory configuration available</Txt>;
 
   return (
-    <Card appearance="surface">
-      <CardContent>
-        <div className="flex flex-col gap-3">
-          {getMemorySections(data.config).map(section =>
-            section.title === 'General' ? (
-              <MemoryConfigFields key={section.title} items={section.items} />
-            ) : (
-              <Collapsible key={section.title} defaultOpen={section.title !== 'Observational Memory'}>
-                <CollapsibleTrigger className="flex w-full items-center justify-between gap-2">
-                  <Txt as="span" variant="ui-smd">
-                    {section.title}
-                  </Txt>
-                  <ChevronRight className="size-4" />
-                </CollapsibleTrigger>
-                <CollapsibleContent className="pt-2">
-                  <MemoryConfigFields items={section.items} />
-                </CollapsibleContent>
-              </Collapsible>
-            ),
-          )}
-        </div>
-      </CardContent>
-    </Card>
+    <div className="flex flex-col gap-3">
+      {getMemorySections(data.config).map(section =>
+        section.title === 'General' ? (
+          <MemoryConfigFields key={section.title} items={section.items} />
+        ) : (
+          <Collapsible key={section.title} defaultOpen={section.title !== 'Observational Memory'}>
+            <CollapsibleTrigger className="flex w-full items-center justify-between gap-2">
+              <Txt as="span" variant="ui-smd">
+                {section.title}
+              </Txt>
+              <ChevronRight className="size-4" />
+            </CollapsibleTrigger>
+            <CollapsibleContent className="pt-2">
+              <MemoryConfigFields items={section.items} />
+            </CollapsibleContent>
+          </Collapsible>
+        ),
+      )}
+    </div>
   );
 }

@@ -10,6 +10,7 @@ import { splitBlocks } from './blocks';
 import { MarkdownTable } from './markdown-table';
 import { remarkTableMarkdown } from './table-markdown';
 import { useSettledWords } from './use-settled';
+import { Code } from '@/ds/components/Code';
 import { CodeBlock } from '@/ds/components/CodeBlock';
 import { cn } from '@/lib/utils';
 
@@ -21,48 +22,27 @@ export interface MarkdownRendererProps {
   children: string;
   className?: string;
   externalLinkTarget?: MarkdownExternalLinkTarget;
-  /** The text is a prefix of one still being written: close the markers the stream has not reached. */
   streaming?: boolean;
-  /** Opt in to table copy/download controls; disabled while this text is streaming. */
   tableActions?: boolean;
+  codeBlockVariant?: 'default' | 'embedded';
 }
 
-/**
- * Renders a markdown string. Agent output can carry attacker-influenced text
- * (file contents, tool output, web pages): react-markdown escapes raw HTML and
- * drops dangerous link schemes, so nothing here reaches the DOM as markup.
- *
- * react-markdown re-parses on every render, and a streaming reply re-renders
- * its whole transcript on every delta. Memoizing spares the settled messages;
- * rendering block by block — streaming or not — spares every block of the live
- * one but the last, and lets a reply settle without remounting what is already
- * on screen.
- *
- * The text is drawn as given: pacing a stream is `useRevealedText`, and belongs to
- * whoever owns the whole of what is being laid down — a reply is prose, tool rows
- * and cards, and they have to arrive in the order they were written. Only what
- * lands after the reader joined plays an entrance, and only while it is still new:
- * a reply opened part-written is already there, and fading in what someone is
- * halfway through reading would be both a lie and a screenful of animations at
- * once.
- */
 export const MarkdownRenderer = memo(function MarkdownRenderer({
   children,
   className,
   externalLinkTarget = 'tab',
   streaming = false,
   tableActions = false,
+  codeBlockVariant = 'default',
 }: MarkdownRendererProps) {
   const shown = decodeEscapedNewlines(children);
   const blocks = useMemo(() => splitBlocks(shown), [shown]);
   const last = blocks.length - 1;
-  const components = (tableActions ? TABLE_COMPONENTS : DEFAULT_COMPONENTS)[externalLinkTarget];
+  const components = (tableActions ? TABLE_COMPONENTS : DEFAULT_COMPONENTS)[codeBlockVariant][externalLinkTarget];
 
   const spans = wordSpans(blocks);
   const settled = useSettledWords(spans.at(-1)?.end ?? 0, streaming);
 
-  // A block whose words have all finished their entrance has nothing left to play,
-  // which is what `undefined` says: leave it as plain text, no spans at all.
   const settledWords = (span: WordSpan | undefined): number | undefined =>
     !span || settled >= span.end ? undefined : Math.max(0, settled - span.start);
 
@@ -85,7 +65,6 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
   );
 });
 
-/** Keyed by position at the call site: a content key remounts on every character. */
 const MarkdownBlock = memo(function MarkdownBlock({
   components,
   content,
@@ -122,11 +101,6 @@ interface WordSpan {
   end: number;
 }
 
-/**
- * Where each block's words fall in the reply's own count, so one settled count covers
- * them all. Counting the source counts its markers too, so the boundary only ever errs
- * towards leaving a word unanimated.
- */
 function wordSpans(blocks: string[]): WordSpan[] {
   let read = 0;
 
@@ -142,8 +116,6 @@ function countWords(text: string): number {
   return text.match(/\S+/g)?.length ?? 0;
 }
 
-// Agent networks emit their text with literal `\n`. Only unescape when the text
-// has no real newline, otherwise a `"a\nb"` inside a code fence gets shredded.
 function decodeEscapedNewlines(text: string): string {
   return text.includes('\n') ? text : text.replace(/\\n/g, '\n');
 }
@@ -166,15 +138,26 @@ function fencedCode(node: MarkdownNode | undefined): { code: string; language?: 
   return { code: code.replace(/\n$/, ''), language: languageOf(child) };
 }
 
-function MarkdownCodeBlock({
-  node,
-  children,
-  className,
-}: {
+interface MarkdownCodeBlockProps {
   node?: MarkdownNode;
   children?: ReactNode;
   className?: string;
-}) {
+}
+
+function EmbeddedMarkdownCodeBlock({ node, children, className }: MarkdownCodeBlockProps) {
+  const fenced = fencedCode(node);
+  if (!fenced) return <pre className={className}>{children}</pre>;
+
+  return (
+    <Code
+      code={fenced.code}
+      lang={fenced.language}
+      className={cn('my-3 whitespace-pre-wrap break-words font-mono text-ui-smd', className)}
+    />
+  );
+}
+
+function MarkdownCodeBlock({ node, children, className }: MarkdownCodeBlockProps) {
   const fenced = fencedCode(node);
   if (!fenced) return <pre className={className}>{children}</pre>;
 
@@ -226,14 +209,8 @@ function markdownLink(externalLinkTarget: MarkdownExternalLinkTarget): NonNullab
 const REMARK_PLUGINS = [remarkGfm];
 const COPYABLE_REMARK_PLUGINS = [remarkGfm, remarkTableMarkdown];
 
-// Links stay text until their URL lands: remend's placeholder href would render
-// a live anchor to nowhere. No math is rendered here, so pairing `$$` would only
-// turn one literal into another.
 const REMEND_OPTIONS = { katex: false, linkMode: 'text-only' } as const;
 
-// Elements are listed one by one: react-markdown also passes its `node`, which
-// React would forward to the DOM as a stray attribute. Everything else is
-// styled from markdown-renderer.css.
 const COMPONENTS: Components = {
   pre: MarkdownCodeBlock,
   a: markdownLink('tab'),
@@ -244,8 +221,20 @@ const WINDOW_COMPONENTS: Components = {
   a: markdownLink('window'),
 };
 
-const DEFAULT_COMPONENTS = { tab: COMPONENTS, window: WINDOW_COMPONENTS };
+const DEFAULT_COMPONENTS = {
+  default: { tab: COMPONENTS, window: WINDOW_COMPONENTS },
+  embedded: {
+    tab: { ...COMPONENTS, pre: EmbeddedMarkdownCodeBlock },
+    window: { ...WINDOW_COMPONENTS, pre: EmbeddedMarkdownCodeBlock },
+  },
+};
 const TABLE_COMPONENTS = {
-  tab: { ...COMPONENTS, table: MarkdownTable },
-  window: { ...WINDOW_COMPONENTS, table: MarkdownTable },
+  default: {
+    tab: { ...DEFAULT_COMPONENTS.default.tab, table: MarkdownTable },
+    window: { ...DEFAULT_COMPONENTS.default.window, table: MarkdownTable },
+  },
+  embedded: {
+    tab: { ...DEFAULT_COMPONENTS.embedded.tab, table: MarkdownTable },
+    window: { ...DEFAULT_COMPONENTS.embedded.window, table: MarkdownTable },
+  },
 };
