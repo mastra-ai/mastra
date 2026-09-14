@@ -1,0 +1,80 @@
+// AUTO-GENERATED from rhysbalevicius/integration-templates @ 3ad35d4bf046 — do not edit by hand.
+import { createTool } from '@mastra/core/tools';
+import { z } from 'zod';
+
+import type { PlatformProxy, PlatformProxyRequest } from '../../../runtime/platform-proxy.js';
+
+export const createIncidentAlertInputSchema = z
+  .object({
+    body: z.object({ alert_id: z.string(), incident_id: z.string(), re_relate: z.boolean().optional() }).passthrough(),
+  })
+  .passthrough();
+
+const ProviderResponseSchema = z
+  .object({
+    incident_alert: z
+      .object({
+        alert: z
+          .object({
+            alert_group_ids: z.array(z.string()).optional(),
+            alert_source_id: z.string(),
+            created_at: z.string(),
+            deduplication_key: z.string(),
+            description: z.string().optional(),
+            id: z.string(),
+            resolved_at: z.string().optional(),
+            source_url: z.string().optional(),
+            status: z.enum(['firing', 'resolved']),
+            title: z.string(),
+            updated_at: z.string(),
+          })
+          .passthrough(),
+        alert_route_id: z.string().optional(),
+        id: z.string(),
+        incident: z
+          .object({
+            external_id: z.number().int(),
+            id: z.string(),
+            name: z.string(),
+            reference: z.string(),
+            status_category: z.enum([
+              'triage',
+              'declined',
+              'merged',
+              'canceled',
+              'active',
+              'post-incident',
+              'closed',
+              'paused',
+            ]),
+            summary: z.string().optional(),
+            visibility: z.enum(['public', 'private']),
+          })
+          .passthrough(),
+      })
+      .passthrough(),
+  })
+  .passthrough();
+
+export const createIncidentAlertOutputSchema = ProviderResponseSchema;
+
+export function createIncidentAlertTool(proxy: PlatformProxy) {
+  return createTool({
+    id: 'incident_io_create_incident_alert',
+    description: 'Create incident alert in incident.io.',
+    inputSchema: createIncidentAlertInputSchema,
+    outputSchema: createIncidentAlertOutputSchema,
+    execute: async (input, { requestContext }): Promise<z.infer<typeof createIncidentAlertOutputSchema>> => {
+      const platformProxy = proxy.withRequestContext(requestContext);
+      const config: PlatformProxyRequest = {
+        // https://api.incident.io/v1/openapiV3.json,
+        endpoint: `/v2/incident_alerts`,
+        retries: 0,
+        data: input.body,
+      };
+      const response = await platformProxy.post(config);
+      const data = ProviderResponseSchema.parse(response.data);
+      return data;
+    },
+  });
+}
