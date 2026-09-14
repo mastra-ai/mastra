@@ -48,7 +48,7 @@ function getMemorySections(config: NonNullable<GetMemoryConfigResponse['config']
     sections.push({
       title: 'Semantic Recall',
       items: [
-        { label: 'Enabled', value: true },
+        { label: 'Status', value: true },
         { label: 'Scope', value: semanticRecall.scope ?? 'resource' },
         { label: 'Top K Results', value: semanticRecall.topK ?? 4 },
         { label: 'Message Range', value: `${before ?? 1} before, ${after ?? 1} after` },
@@ -61,7 +61,7 @@ function getMemorySections(config: NonNullable<GetMemoryConfigResponse['config']
     sections.push({
       title: 'Observational Memory',
       items: [
-        { label: 'Enabled', value: true },
+        { label: 'Status', value: true },
         { label: 'Scope', value: observationalMemory.scope ?? 'thread' },
         { label: 'Message Tokens', value: formatThreshold(observationalMemory.messageTokens) },
         { label: 'Observation Tokens', value: formatThreshold(observationalMemory.observationTokens) },
