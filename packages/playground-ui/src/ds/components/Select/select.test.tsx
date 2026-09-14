@@ -145,11 +145,11 @@ describe('Select', () => {
     }
 
     expect(renderWithVariant()).toBe(renderWithVariant('default'));
-    expect(renderWithVariant('default')).toContain('bg-surface3');
+    expect(renderWithVariant('default')).toContain('bg-button-default-bg');
     expect(renderWithVariant('default')).not.toContain('bg-transparent');
     expect(renderWithVariant('primary')).toBe(renderWithVariant('default'));
-    expect(renderWithVariant('outline')).toContain('bg-transparent');
-    expect(renderWithVariant('outline')).toContain('border-border1');
+    expect(renderWithVariant('outline')).toContain('bg-surface3');
+    expect(renderWithVariant('outline')).toContain('border-border2');
     expect(renderWithVariant('ghost')).toContain('border-transparent');
   });
 });

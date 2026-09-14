@@ -32,7 +32,7 @@ export const buttonVariants = cva(
     variants: {
       variant: {
         default:
-          'border border-border2 bg-surface3 text-neutral6 hover:bg-surface5 hover:text-neutral6 active:bg-surface6',
+          'border border-button-default-border bg-button-default-bg font-medium text-neutral6 hover:bg-button-default-bg-hover hover:text-neutral6 active:bg-button-default-bg-active',
         primary:
           'border border-transparent bg-neutral6 font-medium text-surface1 hover:bg-neutral6/90 active:bg-neutral6/80',
         destructive:
@@ -42,7 +42,7 @@ export const buttonVariants = cva(
         ghost:
           'border border-transparent bg-transparent text-neutral4 hover:bg-neutral6/5 hover:text-neutral6 active:bg-neutral6/10',
         outline:
-          'border border-border1 bg-transparent text-neutral5 hover:bg-surface3 hover:text-neutral6 active:bg-surface4',
+          'border border-border2 bg-surface3 text-neutral6 hover:bg-surface5 hover:text-neutral6 active:bg-surface6',
       },
       size: {
         xs: cn(controlSizeClasses.xs, 'px-[.8em]', TEXT_MODE_ADORNMENTS),
