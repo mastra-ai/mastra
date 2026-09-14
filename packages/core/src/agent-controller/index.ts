@@ -41,6 +41,7 @@ export type {
   AgentControllerStateSchema,
   AgentControllerSubagent,
   AgentControllerSubagentHistoryEntry,
+  AgentControllerTaskState,
   AgentControllerThread,
   IntervalHandler,
   ModelAuthStatus,

@@ -1,9 +1,5 @@
-/**
- * Event dispatcher: maps AgentControllerEvent types to extracted handler functions.
- */
 import { getCurrentGitBranchAsync } from '@mastra/code-sdk/utils/project';
 import type { AgentControllerEvent, AgentControllerThread } from '@mastra/core/agent-controller';
-import type { TaskItemSnapshot } from '@mastra/core/signals';
 import type { AskUserSelectionMode } from '@mastra/core/tools';
 
 import { getMessageText } from './db-message-parts.js';
@@ -202,15 +198,13 @@ export async function dispatchEvent(
     case 'thread_changed': {
       ectx.showInfo(`Switched to thread: ${event.threadId}`);
       state.latestRequestPromptTokens = undefined;
-      // Clear per-thread ephemeral state first so renderExistingMessages
-      // and other downstream observers see clean state.
-      await state.session.state.set({ tasks: [], activePlan: null, sandboxAllowedPaths: [] });
       state.previousPlanSnapshot = undefined;
       if (state.taskProgress) {
         state.taskProgress.updateTasks([]);
         flushRender(state);
       }
       state.taskToolInsertIndex = -1;
+      await state.session.state.set({ activePlan: null, sandboxAllowedPaths: [] });
       await ectx.renderExistingMessages();
       await state.controller.loadOMProgress(state.session);
       // Refresh git branch async so TUI status line reflects the current branch
@@ -263,13 +257,12 @@ export async function dispatchEvent(
       if (typeof tState?.escapeAsCancel === 'boolean') {
         state.editor.escapeEnabled = tState.escapeAsCancel;
       }
-      // Clear per-thread ephemeral state so new threads start clean.
-      await state.session.state.set({ tasks: [], activePlan: null, sandboxAllowedPaths: [] });
       state.previousPlanSnapshot = undefined;
       if (state.taskProgress) {
         state.taskProgress.updateTasks([]);
       }
       state.taskToolInsertIndex = -1;
+      await state.session.state.set({ activePlan: null, sandboxAllowedPaths: [] });
       break;
     }
 
@@ -427,10 +420,19 @@ export async function dispatchEvent(
       handleSubagentEnd(ectx, event.toolCallId, event.isError, event.durationMs, event.result);
       break;
 
+    case 'task_snapshot': {
+      if (event.snapshot.threadId !== state.session.thread.getId()) break;
+      if (event.snapshot.status === 'ready') {
+        state.taskProgress?.updateTasks(event.snapshot.tasks);
+      }
+      state.ui.requestRender();
+      break;
+    }
+
     case 'task_updated': {
-      const tasks = event.tasks as TaskItemSnapshot[];
+      const tasks = event.tasks;
       if (state.taskProgress) {
-        state.taskProgress.updateTasks(tasks ?? []);
+        state.taskProgress.updateTasks(tasks);
 
         // Defensive cleanup for older or non-streaming task_write components.
         // Current task tools update the pinned component directly through task_updated.
@@ -451,11 +453,11 @@ export async function dispatchEvent(
         }
 
         const previousTasks = state.session.displayState.get().previousTasks;
-        if (tasks?.length > 0 && tasks.every(task => task.status === 'completed')) {
+        if (tasks.length > 0 && tasks.every(task => task.status === 'completed')) {
           ectx.renderCompletedTasksInline(tasks, insertIndex);
-        } else if (previousTasks.length > 0 && (!tasks || tasks.length === 0)) {
+        } else if (previousTasks.length > 0 && tasks.length === 0) {
           ectx.renderClearedTasksInline(previousTasks, insertIndex);
-        } else if (tasks?.length > 0) {
+        } else if (tasks.length > 0) {
           ectx.renderTaskDeltaInline(previousTasks, tasks, insertIndex);
         }
 

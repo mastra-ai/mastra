@@ -266,7 +266,7 @@ describe('useAgentControllerConnection', () => {
     const liveTasks = [
       { id: 'verify', content: 'Verify the fix', status: 'pending' as const, activeForm: 'Verifying the fix' },
     ];
-    emit({ type: 'task_updated', tasks: liveTasks });
+    emit({ type: 'task_updated', threadId: 'state-thread', tasks: liveTasks });
 
     await waitFor(() => expect(result.current.state?.tasks).toEqual(liveTasks));
     expect(result.current.status).toBe('ready');
@@ -329,7 +329,7 @@ describe('useAgentControllerConnection', () => {
     const liveTasks = [
       { id: 'new', content: 'New task', status: 'in_progress' as const, activeForm: 'Working on new task' },
     ];
-    emit({ type: 'task_updated', tasks: liveTasks });
+    emit({ type: 'task_updated', threadId: 'thread-1', tasks: liveTasks });
     await waitFor(() => expect(result.current.state?.tasks).toEqual(liveTasks));
 
     releaseRefetch?.();

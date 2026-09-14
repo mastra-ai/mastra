@@ -35,6 +35,7 @@ import { Workspace } from '../workspace';
 
 import { readMessageAuthor, withMessageAuthor } from './message-author';
 import { SessionRunEngine } from './session-run-engine';
+import { SessionTasks } from './session-tasks';
 import type { TaskItemSnapshot } from './tools';
 import { createEmptyTokenUsage, defaultDisplayState, defaultOMProgressState } from './types';
 import type {
@@ -224,7 +225,7 @@ export interface ThreadDataStore {
   }): Promise<AgentControllerThread[]>;
   /** Fetch a single thread by id, or null when it doesn't exist. */
   getById(input: { threadId: string }): Promise<AgentControllerThread | null>;
-  getTasks?(input: { threadId: string }): Promise<TaskItemSnapshot[]>;
+  getTasks?(input: { threadId: string }): Promise<TaskItemSnapshot[] | undefined>;
   /** List messages for a thread, newest-`limit` (returned oldest-first) or all. */
   listMessages(input: { threadId: string; limit?: number }): Promise<StorageListMessagesOutput>;
   /** The first user message for each given thread id. */
@@ -350,7 +351,10 @@ export class SessionThread {
    */
   #session: Session | undefined;
 
-  constructor(getResourceId: () => string) {
+  constructor(
+    getResourceId: () => string,
+    private readonly onThreadChange: (threadId: string | null) => void,
+  ) {
     this.#getResourceId = getResourceId;
   }
 
@@ -394,17 +398,19 @@ export class SessionThread {
   /** Bind the session to a thread. */
   set({ threadId }: { threadId: string }): void {
     this.#threadId = threadId;
+    this.onThreadChange(threadId);
   }
 
   /** Clear the session's thread binding. */
   clear(): void {
     this.#threadId = null;
+    this.onThreadChange(null);
   }
 
   /** Clear the session's thread binding and release its lock when one is held. */
   async clearAndReleaseLock(): Promise<void> {
     const threadId = this.#threadId;
-    this.#threadId = null;
+    this.clear();
     if (threadId) {
       await this.#store?.releaseLock(threadId);
     }
@@ -676,6 +682,7 @@ export class SessionThread {
 
     session.resetTokenUsage();
     session.emit({ type: 'thread_created', thread });
+    await this.#loadTasks();
     await this.ensureCurrentSubscription();
 
     return thread;
@@ -974,21 +981,23 @@ export class SessionThread {
 
   async #loadTasks(): Promise<void> {
     const session = this.#owner;
-    const store = this.#store;
     const threadId = this.#threadId;
-    if (!threadId || !store?.hasStorage()) return;
-
-    const previousTasks = session.displayState.get().tasks;
+    if (threadId === null) return;
+    const previousSnapshot = session.tasks.get();
+    let tasks: TaskItemSnapshot[] | undefined;
     try {
-      const tasks = await store.getTasks?.({ threadId });
-      const snapshotIsCurrent = this.#threadId === threadId && session.displayState.get().tasks === previousTasks;
-      if (tasks && snapshotIsCurrent) {
-        session.displayState.restoreTasks(tasks);
-        session.emit({ type: 'display_state_changed', displayState: session.displayState.get() });
-      }
+      tasks = await this.#store?.getTasks?.({ threadId });
     } catch {
-      // Unavailable task storage must not prevent reopening a thread.
+      tasks = undefined;
     }
+    if (session.tasks.get() !== previousSnapshot) return;
+    if (tasks === undefined) {
+      if (previousSnapshot.status !== 'ready') {
+        session.emit({ type: 'task_snapshot', snapshot: { threadId, status: 'unavailable' } });
+      }
+      return;
+    }
+    session.emit({ type: 'task_snapshot', snapshot: { threadId, status: 'ready', tasks } });
   }
 }
 
@@ -2300,16 +2309,6 @@ export class SessionDisplayState {
   }
 
   /**
-   * Restore task display state after a UI replays persisted task-tool history.
-   * Updates the snapshot without emitting a live `task_updated` event, since no
-   * task tool just ran. The caller dispatches `display_state_changed`.
-   */
-  restoreTasks(tasks: TaskItemSnapshot[]): void {
-    this.#state.previousTasks = [...this.#state.tasks];
-    this.#state.tasks = [...tasks];
-  }
-
-  /**
    * Reset display fields scoped to a thread. Called on thread switch/creation.
    * Also clears the session's follow-up queue (mirrored by `queuedFollowUps`).
    */
@@ -2662,6 +2661,11 @@ export class SessionDisplayState {
         break;
 
       // ── Tasks ──────────────────────────────────────────────────────────
+      case 'task_snapshot':
+        ds.tasks = event.snapshot.status === 'ready' ? event.snapshot.tasks : [];
+        ds.previousTasks = [];
+        break;
+
       case 'task_updated':
         ds.previousTasks = [...ds.tasks];
         ds.tasks = event.tasks;
@@ -2733,9 +2737,20 @@ const COALESCIBLE_DISPLAY_STATE_EVENTS = new Set<AgentControllerEvent['type']>([
 /** Upper bound on coalesced display-state snapshots: one per this many ms, plus a leading one. */
 const DISPLAY_STATE_COALESCE_MS = 16;
 
+interface SessionSubscriber {
+  listener: AgentControllerEventListener;
+  events: AgentControllerEvent[];
+  replayLength: number;
+  threadGeneration: number;
+  delivering: boolean;
+  active: boolean;
+}
+
 export class SessionBus {
-  readonly #listeners: AgentControllerEventListener[] = [];
+  readonly #listeners: SessionSubscriber[] = [];
   #displayState: SessionDisplayState | undefined;
+  #tasks: SessionTasks | undefined;
+  #threadGeneration = 0;
   /** Timer for the trailing snapshot of the current coalescing window. */
   #displayStateTimer: ReturnType<typeof setTimeout> | undefined;
   /** Whether a snapshot was withheld during the current window and still owes a dispatch. */
@@ -2752,25 +2767,28 @@ export class SessionBus {
     this.#displayState = displayState;
   }
 
+  setTasks(tasks: SessionTasks): void {
+    this.#tasks = tasks;
+  }
+
   subscribe(listener: AgentControllerEventListener): () => void {
-    // Replay buffered workspace lifecycle events so late subscribers learn the
-    // current workspace status regardless of when initialization occurs.
-    for (const event of this.#lastWorkspaceEvents) {
-      try {
-        const result = listener(event);
-        if (result && typeof result === 'object' && 'catch' in result) {
-          (result as Promise<void>).catch(err => console.error('Error in session event listener:', err));
-        }
-      } catch (err) {
-        console.error('Error in session event listener:', err);
-      }
-    }
-    this.#listeners.push(listener);
+    const events = [...this.#lastWorkspaceEvents];
+    if (this.#tasks) events.push({ type: 'task_snapshot', snapshot: this.#tasks.get() });
+    const subscriber: SessionSubscriber = {
+      listener,
+      events,
+      replayLength: events.length,
+      threadGeneration: this.#threadGeneration,
+      delivering: false,
+      active: true,
+    };
+    this.#listeners.push(subscriber);
+    this.#drain(subscriber);
     return () => {
-      const index = this.#listeners.indexOf(listener);
-      if (index !== -1) {
-        this.#listeners.splice(index, 1);
-      }
+      subscriber.active = false;
+      subscriber.events.length = 0;
+      const index = this.#listeners.indexOf(subscriber);
+      if (index !== -1) this.#listeners.splice(index, 1);
     };
   }
 
@@ -2780,6 +2798,10 @@ export class SessionBus {
   }
 
   emit(event: AgentControllerEvent): void {
+    if (this.#tasks && !this.#tasks.apply(event)) return;
+    if (event.type === 'thread_changed' || event.type === 'thread_created' || event.type === 'thread_deleted') {
+      this.#threadGeneration++;
+    }
     if (
       event.type === 'workspace_status_changed' ||
       event.type === 'workspace_ready' ||
@@ -2802,7 +2824,7 @@ export class SessionBus {
 
     this.#dispatch(event);
 
-    if (event.type === 'display_state_changed' || !this.#displayState) return;
+    if (event.type === 'task_snapshot' || event.type === 'display_state_changed' || !this.#displayState) return;
 
     if (COALESCIBLE_DISPLAY_STATE_EVENTS.has(event.type)) {
       this.#scheduleDisplayState();
@@ -2850,15 +2872,35 @@ export class SessionBus {
   }
 
   #dispatch(event: AgentControllerEvent): void {
-    for (const listener of [...this.#listeners]) {
-      try {
-        const result = listener(event);
-        if (result && typeof result === 'object' && 'catch' in result) {
-          (result as Promise<void>).catch(err => console.error('Error in session event listener:', err));
-        }
-      } catch (err) {
-        console.error('Error in session event listener:', err);
+    const subscribers = [...this.#listeners];
+    for (const subscriber of subscribers) subscriber.events.push(event);
+    for (const subscriber of subscribers) this.#drain(subscriber);
+  }
+
+  #drain(subscriber: SessionSubscriber): void {
+    if (subscriber.delivering || !subscriber.active) return;
+    subscriber.delivering = true;
+    try {
+      for (let index = 0; index < subscriber.events.length && subscriber.active; index++) {
+        const event = subscriber.events[index]!;
+        const staleReplay = index < subscriber.replayLength && subscriber.threadGeneration !== this.#threadGeneration;
+        if (staleReplay && !event.type.startsWith('workspace_')) continue;
+        this.#deliver(subscriber.listener, event);
       }
+    } finally {
+      subscriber.events.length = 0;
+      subscriber.replayLength = 0;
+      subscriber.delivering = false;
+    }
+  }
+
+  #deliver(listener: AgentControllerEventListener, event: AgentControllerEvent): void {
+    try {
+      const pending = listener(event);
+      const listenerReturnedPromise = pending && typeof pending === 'object' && typeof pending.catch === 'function';
+      if (listenerReturnedPromise) pending.catch(err => console.error('Error in session event listener:', err));
+    } catch (err) {
+      console.error('Error in session event listener:', err);
     }
   }
 }
@@ -2910,6 +2952,7 @@ export class Session<TState = unknown> {
   readonly thread: SessionThread;
   /** The canonical display state a UI renders, plus the reducer that maintains it. */
   readonly displayState: SessionDisplayState;
+  readonly tasks: SessionTasks;
   /** The session-owned AgentController state domain. */
   readonly state: AgentControllerRequestState<TState>;
   /**
@@ -2940,7 +2983,12 @@ export class Session<TState = unknown> {
   }) {
     this.#tags = tags && Object.keys(tags).length > 0 ? { ...tags } : {};
     this.identity = new SessionIdentity({ resourceId, id, ownerId });
-    this.thread = new SessionThread(() => this.identity.getResourceId());
+    this.tasks = new SessionTasks();
+    this.thread = new SessionThread(
+      () => this.identity.getResourceId(),
+      threadId => this.tasks.bind(threadId),
+    );
+    this.#bus.setTasks(this.tasks);
     this.displayState = new SessionDisplayState({
       getTokenUsage: () => this.getTokenUsage(),
       getSubagentDisplayName: agentType => this.#resolveSubagentName?.(agentType),

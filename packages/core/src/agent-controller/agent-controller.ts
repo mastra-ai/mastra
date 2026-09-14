@@ -1001,7 +1001,8 @@ export class AgentController<TState = {}> {
       getById: ({ threadId }) => this.queryThreadById({ threadId }),
       getTasks: async ({ threadId }) => {
         const store = await this.#resolveStorage()?.getStore('threadState');
-        return (await store?.getState<TaskRecord[]>({ threadId, type: TASK_STATE_TYPE })) ?? [];
+        if (!store) return undefined;
+        return (await store.getState<TaskRecord[]>({ threadId, type: TASK_STATE_TYPE })) ?? [];
       },
       listMessages: async ({ threadId, limit }) => {
         if (limit !== undefined) {

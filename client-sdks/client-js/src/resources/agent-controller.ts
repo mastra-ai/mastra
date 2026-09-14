@@ -165,6 +165,7 @@ const KNOWN_AGENT_CONTROLLER_EVENT_TYPES = new Set<string>(
     subagent_end: true,
     subagent_model_changed: true,
     task_updated: true,
+    task_snapshot: true,
     notification: true,
     notification_summary: true,
     usage_update: true,

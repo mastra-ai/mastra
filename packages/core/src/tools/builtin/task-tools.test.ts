@@ -27,7 +27,10 @@ const THREAD_ID = 'thread-1';
  */
 function createToolContext(
   initialTasks: TaskInput[] = [],
-  options: { memory?: boolean; onEvent?: (event: { type: 'task_updated'; tasks: TaskItemSnapshot[] }) => void } = {},
+  options: {
+    memory?: boolean;
+    onEvent?: (event: { type: 'task_updated'; threadId: string; tasks: TaskItemSnapshot[] }) => void;
+  } = {},
 ) {
   const memory = options.memory ?? true;
   const requestContext = new RequestContext();
@@ -151,6 +154,7 @@ describe('taskWriteTool', () => {
     expect(onEvent).toHaveBeenCalledTimes(1);
     expect(onEvent.mock.calls[0]![0]).toEqual({
       type: 'task_updated',
+      threadId: THREAD_ID,
       tasks: [{ id: 'task_write_tests', content: 'Write tests', status: 'pending', activeForm: 'Writing tests' }],
     });
   });
