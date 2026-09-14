@@ -148,9 +148,7 @@ export interface MCPToolActionV2<TInputSchema extends PublicSchema<any>, TOutput
   execute(
     input: InferPublicSchema<TInputSchema>,
     context: MCPToolExecutionContextV2,
-  ):
-    | MCPToolOutcomeV2<InferPublicSchema<TOutputSchema>>
-    | Promise<MCPToolOutcomeV2<InferPublicSchema<TOutputSchema>>>;
+  ): MCPToolOutcomeV2<InferPublicSchema<TOutputSchema>> | Promise<MCPToolOutcomeV2<InferPublicSchema<TOutputSchema>>>;
 }
 
 /** Define a protocol-aware tool that cannot be executed as a business tool. */

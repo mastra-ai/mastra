@@ -62,7 +62,7 @@ const serverById = mastra.getMCPServerById('my-mcp-server')
 
 `MCPServerRegistryEntry` is the union of `MCPServerBase` and `MCPServerBaseV2`, exported from `@mastra/core/mcp`. Existing MCP 1.x servers don't need new properties or methods. Use `isMCPServerV2(server)` after checking that the lookup returned a server to narrow the union.
 
-`MCPServerBaseV2` defines the abstract core contract. Implementations provide HTTP and stdio transports, discovery metadata, resource access, and tool listings. The base provides tool registration and execution. It has no legacy SSE or session methods. Adding these core contracts doesn't change the behavior of an installed `@mastra/mcp` 1.x server.
+`MCPServerBaseV2` defines the abstract core contract. Implementations provide HTTP and stdio transports, discovery metadata, resource access, and tool listings. The base provides tool registration and execution without any legacy SSE or session methods, and adding these core contracts doesn't change the behavior of an installed `@mastra/mcp` 1.x server.
 
 ### `createMCPTool(options)`
 
