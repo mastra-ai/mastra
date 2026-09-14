@@ -77,7 +77,7 @@ function MobileHeader() {
   );
 }
 
-function RouteHeader() {
+function ExampleRouteHeader() {
   return (
     <Header className="h-10 min-h-10 gap-2 overflow-hidden px-2">
       <Breadcrumb label="Breadcrumb" className="min-w-0 flex-1 overflow-hidden" listClassName="min-w-0">
@@ -123,41 +123,6 @@ function FrameWithPanel({ children, className }: AppShellFrameProps) {
   );
 }
 
-function Shell({
-  collapsed = false,
-  routeHeader = true,
-  withFrameWrapper = false,
-}: {
-  collapsed?: boolean;
-  routeHeader?: boolean;
-  withFrameWrapper?: boolean;
-}) {
-  return (
-    <TooltipProvider>
-      <MainSidebarProvider
-        defaultState={collapsed ? 'collapsed' : 'default'}
-        defaultWidth={240}
-        minWidth={200}
-        maxWidth={360}
-        collapseBelow={160}
-        storageKey={collapsed ? 'app-shell-story-collapsed-v2' : 'app-shell-story-default-v2'}
-      >
-        <div className="bg-surface1 h-dvh w-dvw font-sans">
-          <AppShell
-            mainLabel="Research agent content"
-            sidebar={<Sidebar />}
-            mobileHeader={<MobileHeader />}
-            routeHeader={routeHeader ? <RouteHeader /> : undefined}
-            renderFrame={withFrameWrapper ? FrameWithPanel : undefined}
-          >
-            <MainContent />
-          </AppShell>
-        </div>
-      </MainSidebarProvider>
-    </TooltipProvider>
-  );
-}
-
 const meta = {
   title: 'Layout/AppShell',
   component: AppShell,
@@ -169,20 +134,83 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const StandardDesktop: Story = {
-  render: () => <Shell />,
+  render: () => (
+    <TooltipProvider>
+      <MainSidebarProvider defaultWidth={240} minWidth={200} maxWidth={360} collapseBelow={160}>
+        <div className="bg-surface1 h-dvh w-dvw font-sans lg:grid lg:grid-cols-[auto_1fr] lg:grid-rows-[1fr]">
+          <Sidebar />
+          <AppShell
+            mainLabel="Research agent content"
+            mobileHeader={<MobileHeader />}
+            routeHeader={<ExampleRouteHeader />}
+          >
+            <MainContent />
+          </AppShell>
+        </div>
+      </MainSidebarProvider>
+    </TooltipProvider>
+  ),
 };
 
 export const CollapsedSidebar: Story = {
-  render: () => <Shell collapsed />,
+  render: () => (
+    <TooltipProvider>
+      <MainSidebarProvider
+        defaultState="collapsed"
+        defaultWidth={240}
+        minWidth={200}
+        maxWidth={360}
+        collapseBelow={160}
+        storageKey="app-shell-story-collapsed"
+      >
+        <div className="bg-surface1 h-dvh w-dvw font-sans lg:grid lg:grid-cols-[auto_1fr] lg:grid-rows-[1fr]">
+          <Sidebar />
+          <AppShell
+            mainLabel="Research agent content"
+            mobileHeader={<MobileHeader />}
+            routeHeader={<ExampleRouteHeader />}
+          >
+            <MainContent />
+          </AppShell>
+        </div>
+      </MainSidebarProvider>
+    </TooltipProvider>
+  ),
 };
 
 export const Mobile: Story = {
   parameters: { viewport: { defaultViewport: 'mobile1' } },
-  render: () => <Shell />,
+  render: () => (
+    <TooltipProvider>
+      <MainSidebarProvider>
+        <div className="bg-surface1 h-dvh w-dvw font-sans lg:grid lg:grid-cols-[auto_1fr] lg:grid-rows-[1fr]">
+          <Sidebar />
+          <AppShell
+            mainLabel="Research agent content"
+            mobileHeader={<MobileHeader />}
+            routeHeader={<ExampleRouteHeader />}
+          >
+            <MainContent />
+          </AppShell>
+        </div>
+      </MainSidebarProvider>
+    </TooltipProvider>
+  ),
 };
 
 export const WithoutRouteHeader: Story = {
-  render: () => <Shell routeHeader={false} />,
+  render: () => (
+    <TooltipProvider>
+      <MainSidebarProvider>
+        <div className="bg-surface1 h-dvh w-dvw font-sans lg:grid lg:grid-cols-[auto_1fr] lg:grid-rows-[1fr]">
+          <Sidebar />
+          <AppShell mainLabel="Research agent content" mobileHeader={<MobileHeader />}>
+            <MainContent />
+          </AppShell>
+        </div>
+      </MainSidebarProvider>
+    </TooltipProvider>
+  ),
 };
 
 export const WithFrameWrapper: Story = {
@@ -194,15 +222,61 @@ export const WithFrameWrapper: Story = {
       },
     },
   },
-  render: () => <Shell withFrameWrapper />,
+  render: () => (
+    <TooltipProvider>
+      <MainSidebarProvider>
+        <div className="bg-surface1 h-dvh w-dvw font-sans lg:grid lg:grid-cols-[auto_1fr] lg:grid-rows-[1fr]">
+          <Sidebar />
+          <AppShell
+            mainLabel="Research agent content"
+            mobileHeader={<MobileHeader />}
+            routeHeader={<ExampleRouteHeader />}
+            renderFrame={FrameWithPanel}
+          >
+            <MainContent />
+          </AppShell>
+        </div>
+      </MainSidebarProvider>
+    </TooltipProvider>
+  ),
 };
 
 export const LightTheme: Story = {
   globals: { backgrounds: { value: 'light' } },
-  render: () => <Shell />,
+  render: () => (
+    <TooltipProvider>
+      <MainSidebarProvider>
+        <div className="bg-surface1 h-dvh w-dvw font-sans lg:grid lg:grid-cols-[auto_1fr] lg:grid-rows-[1fr]">
+          <Sidebar />
+          <AppShell
+            mainLabel="Research agent content"
+            mobileHeader={<MobileHeader />}
+            routeHeader={<ExampleRouteHeader />}
+          >
+            <MainContent />
+          </AppShell>
+        </div>
+      </MainSidebarProvider>
+    </TooltipProvider>
+  ),
 };
 
 export const DarkTheme: Story = {
   globals: { backgrounds: { value: 'dark' } },
-  render: () => <Shell />,
+  render: () => (
+    <TooltipProvider>
+      <MainSidebarProvider>
+        <div className="bg-surface1 h-dvh w-dvw font-sans lg:grid lg:grid-cols-[auto_1fr] lg:grid-rows-[1fr]">
+          <Sidebar />
+          <AppShell
+            mainLabel="Research agent content"
+            mobileHeader={<MobileHeader />}
+            routeHeader={<ExampleRouteHeader />}
+          >
+            <MainContent />
+          </AppShell>
+        </div>
+      </MainSidebarProvider>
+    </TooltipProvider>
+  ),
 };

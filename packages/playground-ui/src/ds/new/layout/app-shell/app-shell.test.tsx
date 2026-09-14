@@ -9,7 +9,6 @@ function renderShell({
 }: { mobileHeader?: boolean; routeHeader?: boolean } = {}) {
   return renderToStaticMarkup(
     <AppShell
-      sidebar={<aside>Sidebar</aside>}
       mainLabel="Page content"
       mobileHeader={mobileHeader ? <header>Mobile header</header> : undefined}
       routeHeader={routeHeader ? <header>Route header</header> : undefined}
@@ -21,11 +20,10 @@ function renderShell({
 
 describe('AppShell', () => {
   describe('when every slot is provided', () => {
-    it('composes the sidebar, mobile header, route header, and main content', () => {
+    it('composes the mobile header, route header, and main content', () => {
       const markup = renderShell();
 
       expect(markup).toContain('data-slot="app-shell"');
-      expect(markup).toContain('Sidebar');
       expect(markup).toContain('Mobile header');
       expect(markup).toContain('Route header');
       expect(markup).toContain('Main content');
@@ -42,6 +40,24 @@ describe('AppShell', () => {
 
       expect(markup).toContain('data-slot="app-shell-main" aria-label="Page content" role="group" tabindex="0"');
       expect(markup).toContain('class="min-h-0 overflow-y-auto"');
+    });
+
+    it('supports a consumer-owned frame wrapper', () => {
+      const markup = renderToStaticMarkup(
+        <AppShell
+          mainLabel="Page content"
+          renderFrame={({ children, className }) => (
+            <section aria-label="Frame wrapper" className={className}>
+              {children}
+            </section>
+          )}
+        >
+          Main content
+        </AppShell>,
+      );
+
+      expect(markup).toContain('<section aria-label="Frame wrapper" class="flex min-h-0 flex-1 flex-col">');
+      expect(markup).toContain('data-slot="app-shell-frame"');
     });
   });
 

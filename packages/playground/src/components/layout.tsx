@@ -138,21 +138,23 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
   return (
     <>
       <NavigationCommand />
-      <AppShell
-        mainLabel={pageHeading ?? 'Page content'}
-        sidebar={shouldShowSidebar ? <AppSidebar /> : undefined}
-        mobileHeader={shouldShowSidebar ? <MobileNavbar /> : undefined}
-        routeHeader={shouldShowSidebar ? <RouteHeader /> : undefined}
-        renderFrame={({ children: frame, className }) => (
-          <PageHeadingContext.Provider value={pageHeading}>
-            <StudioFrame className={className}>{frame}</StudioFrame>
-          </PageHeadingContext.Provider>
-        )}
-      >
-        <AuthRequired>
-          <ErrorBoundary resetKeys={[pathname]}>{children}</ErrorBoundary>
-        </AuthRequired>
-      </AppShell>
+      <div className={cn('h-full', shouldShowSidebar && 'lg:grid lg:grid-cols-[auto_1fr] lg:grid-rows-[1fr]')}>
+        {shouldShowSidebar && <AppSidebar />}
+        <AppShell
+          mainLabel={pageHeading ?? 'Page content'}
+          mobileHeader={shouldShowSidebar ? <MobileNavbar /> : undefined}
+          routeHeader={shouldShowSidebar ? <RouteHeader /> : undefined}
+          renderFrame={({ children: frame, className }) => (
+            <PageHeadingContext.Provider value={pageHeading}>
+              <StudioFrame className={className}>{frame}</StudioFrame>
+            </PageHeadingContext.Provider>
+          )}
+        >
+          <AuthRequired>
+            <ErrorBoundary resetKeys={[pathname]}>{children}</ErrorBoundary>
+          </AuthRequired>
+        </AppShell>
+      </div>
     </>
   );
 }
