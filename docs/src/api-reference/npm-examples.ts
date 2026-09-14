@@ -47,5 +47,5 @@ export async function prepareExamples(surfaces: ApiSurface[]): Promise<void> {
       await entries(item.nested ?? [])
     }
   }
-  await Promise.all(surfaces.map(surface => entries(surface.entries)))
+  await Promise.all(surfaces.map(surface => entries([...surface.entries, ...(surface.definitions ?? [])])))
 }

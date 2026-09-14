@@ -2033,6 +2033,7 @@
           }
         }
       },
+      "sourceType": "FGACheckParams",
       "children": [],
       "signatures": [],
       "parameters": [],
@@ -2065,6 +2066,7 @@
           "boundary": "type-parameter"
         }
       },
+      "sourceType": "TUser",
       "children": [],
       "signatures": [],
       "parameters": [],
@@ -2197,6 +2199,7 @@
           }
         }
       },
+      "sourceType": "MastraFGAPermissionInput",
       "children": [],
       "signatures": [],
       "parameters": [],
@@ -2239,6 +2242,7 @@
           }
         ]
       },
+      "sourceType": "T[]",
       "children": [],
       "signatures": [],
       "parameters": [],
@@ -2268,6 +2272,7 @@
         },
         "operands": []
       },
+      "sourceType": "string",
       "children": [],
       "signatures": [],
       "parameters": [],
@@ -2300,6 +2305,7 @@
           "boundary": "type-parameter"
         }
       },
+      "sourceType": "TUser",
       "children": [],
       "signatures": [],
       "parameters": [],
@@ -2470,6 +2476,7 @@
           }
         }
       },
+      "sourceType": "FGACheckParams",
       "children": [],
       "signatures": [],
       "parameters": [],
@@ -2502,6 +2509,7 @@
           "boundary": "type-parameter"
         }
       },
+      "sourceType": "TUser",
       "children": [],
       "signatures": [],
       "parameters": [],
@@ -2589,9 +2597,8 @@
             "text": ", and throw "
           },
           {
-            "kind": "inline-tag",
-            "text": "FGADeniedError",
-            "tag": "@link"
+            "kind": "code",
+            "text": "`FGADeniedError`"
           },
           {
             "kind": "text",
@@ -2706,6 +2713,7 @@
           }
         }
       },
+      "sourceType": "ActorSignal",
       "children": [],
       "signatures": [],
       "parameters": [],
@@ -2743,6 +2751,7 @@
           }
         }
       },
+      "sourceType": "FGACheckParams",
       "children": [],
       "signatures": [],
       "parameters": [],
@@ -6737,6 +6746,7 @@
           "boundary": "type-parameter"
         }
       },
+      "sourceType": "TUser",
       "children": [],
       "signatures": [],
       "parameters": [],
@@ -6855,6 +6865,7 @@
         },
         "operands": []
       },
+      "sourceType": "string",
       "children": [],
       "signatures": [],
       "parameters": [],
@@ -6972,6 +6983,7 @@
           "boundary": "type-parameter"
         }
       },
+      "sourceType": "TUser",
       "children": [],
       "signatures": [],
       "parameters": [],
@@ -7091,6 +7103,7 @@
           }
         ]
       },
+      "sourceType": "string[]",
       "children": [],
       "signatures": [],
       "parameters": [],
@@ -7123,6 +7136,7 @@
           "boundary": "type-parameter"
         }
       },
+      "sourceType": "TUser",
       "children": [],
       "signatures": [],
       "parameters": [],
@@ -7242,6 +7256,7 @@
           }
         ]
       },
+      "sourceType": "string[]",
       "children": [],
       "signatures": [],
       "parameters": [],
@@ -7274,6 +7289,7 @@
           "boundary": "type-parameter"
         }
       },
+      "sourceType": "TUser",
       "children": [],
       "signatures": [],
       "parameters": [],
@@ -7381,6 +7397,7 @@
         },
         "operands": []
       },
+      "sourceType": "string",
       "children": [],
       "signatures": [],
       "parameters": [],
@@ -7413,6 +7430,7 @@
           "boundary": "type-parameter"
         }
       },
+      "sourceType": "TUser",
       "children": [],
       "signatures": [],
       "parameters": [],
@@ -7520,6 +7538,7 @@
         },
         "operands": []
       },
+      "sourceType": "string",
       "children": [],
       "signatures": [],
       "parameters": [],
@@ -7552,6 +7571,7 @@
           "boundary": "type-parameter"
         }
       },
+      "sourceType": "TUser",
       "children": [],
       "signatures": [],
       "parameters": [],
@@ -9547,6 +9567,7 @@
           }
         }
       },
+      "sourceType": "MastraAuthRequest",
       "children": [],
       "signatures": [],
       "parameters": [],
@@ -9566,6 +9587,7 @@
         },
         "operands": []
       },
+      "sourceType": "string",
       "children": [],
       "signatures": [],
       "parameters": [],
@@ -9682,6 +9704,7 @@
           }
         }
       },
+      "sourceType": "MastraAuthRequest",
       "children": [],
       "signatures": [],
       "parameters": [],
@@ -9704,6 +9727,7 @@
           "boundary": "type-parameter"
         }
       },
+      "sourceType": "TUser",
       "children": [],
       "signatures": [],
       "parameters": [],
@@ -9813,6 +9837,7 @@
           "boundary": "type-parameter"
         }
       },
+      "sourceType": "TUser",
       "children": [],
       "signatures": [],
       "parameters": [],
@@ -10354,6 +10379,7 @@
           }
         }
       },
+      "sourceType": "MastraAuthRequest",
       "children": [],
       "signatures": [],
       "parameters": [],
@@ -10373,6 +10399,7 @@
         },
         "operands": []
       },
+      "sourceType": "string",
       "children": [],
       "signatures": [],
       "parameters": [],
@@ -10473,6 +10500,7 @@
         },
         "operands": []
       },
+      "sourceType": "string",
       "children": [],
       "signatures": [],
       "parameters": [],
@@ -11002,6 +11030,7 @@
           "boundary": "type-parameter"
         }
       },
+      "sourceType": "TUser",
       "children": [],
       "signatures": [],
       "parameters": [],
@@ -14778,7 +14807,12 @@
                 "kind": "inline-tag",
                 "text": "AgentController",
                 "tag": "@link",
-                "target": "@mastra/core:src/agent-controller/agent-controller.ts:AgentController"
+                "target": "@mastra/core:src/agent-controller/agent-controller.ts:AgentController",
+                "targetSource": {
+                  "path": "packages/core/src/agent-controller/agent-controller.ts",
+                  "line": 182,
+                  "character": 13
+                }
               },
               {
                 "kind": "text",
@@ -14884,7 +14918,12 @@
             "kind": "inline-tag",
             "text": "['recoveryConfig']",
             "tag": "@link",
-            "target": "@mastra/core:src/mastra/index.ts:Mastra"
+            "target": "@mastra/core:src/mastra/index.ts:Mastra",
+            "targetSource": {
+              "path": "packages/core/src/mastra/index.ts",
+              "line": 711,
+              "character": 13
+            }
           },
           {
             "kind": "text",
@@ -17593,7 +17632,12 @@
             "kind": "inline-tag",
             "text": "ScheduleStreamOptions",
             "tag": "@link",
-            "target": "@mastra/core:src/schedules/types.ts:ScheduleStreamOptions"
+            "target": "@mastra/core:src/schedules/types.ts:ScheduleStreamOptions",
+            "targetSource": {
+              "path": "packages/core/src/schedules/types.ts",
+              "line": 15,
+              "character": 12
+            }
           },
           {
             "kind": "text",
@@ -20968,6 +21012,7 @@
         },
         "operands": []
       },
+      "sourceType": "any",
       "children": [],
       "signatures": [],
       "parameters": [],
@@ -25767,12 +25812,11 @@
           },
           {
             "kind": "text",
-            "text": "\npubsub topic and are processed by the "
+            "text": "\npubsub topic and are processed by "
           },
           {
-            "kind": "inline-tag",
-            "text": "AgentScheduleWorker",
-            "tag": "@link"
+            "kind": "code",
+            "text": "`AgentScheduleWorker`"
           },
           {
             "kind": "text",
@@ -28765,7 +28809,12 @@
             "kind": "inline-tag",
             "text": "Mastra.getAgentController",
             "tag": "@link",
-            "target": "@mastra/core:src/mastra/index.ts:Mastra/0/getAgentController/0"
+            "target": "@mastra/core:src/mastra/index.ts:Mastra/0/getAgentController/0",
+            "targetSource": {
+              "path": "packages/core/src/mastra/index.ts",
+              "line": 2430,
+              "character": 9
+            }
           },
           {
             "kind": "text",
@@ -28775,7 +28824,12 @@
             "kind": "inline-tag",
             "text": "Mastra.listAgentControllers",
             "tag": "@link",
-            "target": "@mastra/core:src/mastra/index.ts:Mastra/0/listAgentControllers/0"
+            "target": "@mastra/core:src/mastra/index.ts:Mastra/0/listAgentControllers/0",
+            "targetSource": {
+              "path": "packages/core/src/mastra/index.ts",
+              "line": 2456,
+              "character": 9
+            }
           },
           {
             "kind": "text",
@@ -29792,7 +29846,12 @@
                 "kind": "inline-tag",
                 "text": "Config.agentControllers",
                 "tag": "@link",
-                "target": "@mastra/core!Config/0/agentControllers/0"
+                "target": "@mastra/core!Config/0/agentControllers/0",
+                "targetSource": {
+                  "path": "packages/core/src/mastra/index.ts",
+                  "line": 326,
+                  "character": 2
+                }
               },
               {
                 "kind": "text",
@@ -30477,7 +30536,12 @@
             "kind": "inline-tag",
             "text": "Mastra.recoverAllDurableAgents",
             "tag": "@link",
-            "target": "@mastra/core:src/mastra/index.ts:Mastra/0/recoverAllDurableAgents/0"
+            "target": "@mastra/core:src/mastra/index.ts:Mastra/0/recoverAllDurableAgents/0",
+            "targetSource": {
+              "path": "packages/core/src/mastra/index.ts",
+              "line": 3933,
+              "character": 15
+            }
           },
           {
             "kind": "text",
@@ -32827,11 +32891,6 @@
       "message": "typescript:Promise"
     },
     {
-      "code": "unresolved-link",
-      "owner": "@internal/auth:src/ee/interfaces/fga.ts:IFGAProvider/0/requireActor/0/5/requireActor/0",
-      "message": "FGADeniedError"
-    },
-    {
       "code": "unsupported-tag",
       "owner": "@internal/auth:src/ee/interfaces/fga.ts:IFGAProvider/0/requireActor/0/5/requireActor/0",
       "message": "@throws"
@@ -33235,11 +33294,6 @@
       "code": "unmapped-external",
       "owner": "@mastra/core:src/storage/domains/schedules/base.ts:AgentScheduleTarget/0/requestContext/0",
       "message": "typescript:Record"
-    },
-    {
-      "code": "unresolved-link",
-      "owner": "@mastra/core:src/storage/domains/schedules/base.ts:ScheduleTarget",
-      "message": "AgentScheduleWorker"
     },
     {
       "code": "unmapped-external",

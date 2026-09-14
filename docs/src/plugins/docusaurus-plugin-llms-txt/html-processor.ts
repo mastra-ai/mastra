@@ -11,7 +11,7 @@ import type { Root as HastRoot, Element, Text, Comment, ElementContent } from 'h
 import type { Root as MdastRoot } from 'mdast'
 
 import { handleCodeBlock } from './code-block-handler'
-import { handleApiReference } from './api-reference-handler'
+import { handleApiReference, handleApiTable, handleApiType, handleApiSource } from './api-reference-handler'
 import { createLinkHandler } from './link-handler'
 import { isAdmonition, handleAdmonition } from './admonition-handler'
 import {
@@ -134,6 +134,9 @@ function createProcessor(options: ResolvedOptions) {
         details: handleDetailsElement,
         article: handleApiReference,
         section: handleApiReference,
+        table: handleApiTable,
+        code: handleApiType,
+        span: handleApiSource,
       },
     })
     .use(remarkGfm)

@@ -52,6 +52,7 @@ const part = v.strictObject({
   text: v.string(),
   tag: v.optional(v.string()),
   target: v.optional(v.string()),
+  targetSource: v.optional(source),
 })
 const declaration = v.strictObject({
   id: identity,
@@ -70,6 +71,7 @@ const declaration = v.strictObject({
   defaultType: v.optional(apiTypeSchema),
   defaultValue: v.optional(v.string()),
   sourceSignature: v.optional(v.string()),
+  sourceType: v.optional(v.string()),
   children: v.array(identity),
   signatures: v.array(identity),
   parameters: v.array(identity),

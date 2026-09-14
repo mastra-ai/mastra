@@ -1,3 +1,36 @@
+.appendixMain {
+  width: 100%;
+}
+
+.appendixColumn {
+  min-width: 0;
+}
+
+.appendixRail {
+  display: none;
+}
+
+@media (min-width: 996px) {
+  .appendixRow {
+    max-width: 62.25rem;
+    margin-inline: auto;
+    gap: 2rem;
+  }
+  .appendixArticle {
+    max-width: 48rem;
+    margin-inline: auto;
+  }
+}
+
+@media (min-width: 997px) {
+  .appendixMain {
+    width: calc(100% - var(--doc-sidebar-hidden-width, 30px));
+  }
+  .appendixRail {
+    display: block;
+  }
+}
+
 .surface {
   min-width: 0;
   margin-block: 1.5rem;
@@ -13,7 +46,7 @@
 
 .entries {
   border: 1px solid var(--ifm-toc-border-color);
-  border-radius: 10px;
+  border-radius: 12px;
 }
 
 .entry {
@@ -28,10 +61,35 @@
   border-top: 1px solid var(--ifm-toc-border-color);
 }
 
+.namedType {
+  border: 1px solid var(--ifm-toc-border-color);
+  border-radius: 12px;
+  margin-block: 16px;
+}
+
+.entries:has(> .namedType) {
+  border: 0;
+}
+
+.surface[data-api-section='properties'] .nested {
+  padding-inline-start: 16px;
+}
+
+.surface [data-api-definition],
+.surface [data-api-parameter-overloads] {
+  scroll-margin-top: 6rem;
+}
+
+.method > .entry {
+  padding: 0;
+  border: 0;
+  margin-block: 0.5rem;
+}
+
 .entry p,
 .entry ul,
 .entry ol {
-  margin-block: 0.5rem;
+  margin-block: 6px;
 }
 
 .entry > :last-child {
@@ -42,8 +100,8 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.4rem;
-  margin-bottom: 0.375rem;
+  gap: 6px;
+  margin-bottom: 8px;
 }
 
 .surface .header :is(h3, h4, h5, h6) {
@@ -51,8 +109,9 @@
   padding: 0;
   margin: 0;
   min-width: 0;
-  font-size: 1rem;
-  line-height: 1.5;
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 16px;
+  line-height: 24px;
   scroll-margin-top: 6rem;
   overflow-wrap: anywhere;
 }
@@ -80,8 +139,8 @@
   padding: 0.05rem 0.3rem;
   color: var(--ifm-color-content-secondary);
   background: var(--ifm-code-background);
-  font-size: 0.7rem;
-  line-height: 1.4;
+  font-size: 12px;
+  line-height: 18px;
   font-weight: 400;
 }
 
@@ -97,15 +156,34 @@
   gap: 0.25rem 0.75rem;
   margin-bottom: 0.5rem;
   color: var(--ifm-color-content-secondary);
-  font-size: 0.8rem;
+  font-size: 12px;
+  line-height: 18px;
 }
 
-.type {
+.metadata:empty {
+  display: none;
+}
+
+.surface [data-api-generics] header,
+.surface [data-api-shared-fields] {
+  font-size: 12px;
+  line-height: 18px;
+  margin-block: 6px;
+}
+
+.surface [data-api-generics] code {
+  font-size: inherit;
+}
+
+.type,
+.path {
   min-width: 0;
   overflow-wrap: anywhere;
 }
 
-.type code {
+.type code,
+.path code {
+  display: inline;
   white-space: pre-wrap;
   font-size: 0.75rem;
 }
@@ -114,12 +192,13 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   padding: 0.75rem;
-  font-size: 0.75rem;
+  font-size: 14px;
   line-height: 1.5;
 }
 
 .entry pre code {
   white-space: pre-wrap;
+  font-size: inherit;
 }
 
 .default {
@@ -134,7 +213,7 @@
 }
 
 .default code {
-  font-size: 0.75rem;
+  font-size: inherit;
   white-space: pre-wrap;
 }
 
@@ -148,7 +227,7 @@
 
 .example summary {
   cursor: pointer;
-  font-size: 0.8125rem;
+  font-size: 14px;
   font-weight: 500;
 }
 
@@ -161,10 +240,18 @@
 }
 
 .source {
-  margin-inline-start: auto;
+  display: inline-block;
+  margin-inline-start: 0.375rem;
   min-width: 0;
+  color: var(--ifm-color-content-secondary);
   font-size: 0.75rem;
+  line-height: 1.5;
+  font-weight: 400;
   overflow-wrap: anywhere;
+}
+
+.header > .source {
+  margin-inline-start: auto;
 }
 
 .entry summary:focus-visible {
@@ -177,17 +264,97 @@
 }
 
 .nested {
-  margin-block: 0.5rem;
-}
-
-.nested > summary {
-  cursor: pointer;
-  font-weight: 500;
+  margin-block: 6px;
 }
 
 .nested > .entry {
-  padding-inline: 0.5rem;
-  border-inline-start: 1px solid var(--ifm-toc-border-color);
+  padding-inline: 0;
+}
+
+.tableContainer {
+  max-width: 100%;
+  overflow-x: auto;
+  margin-block: 8px;
+}
+
+.surface .table {
+  --api-cell-padding: 12px;
+  display: table;
+  width: 100%;
+  min-width: 0;
+  table-layout: fixed;
+  border-collapse: collapse;
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.table th,
+.table td {
+  padding: 8px var(--api-cell-padding);
+  vertical-align: top;
+  text-align: left;
+  border: 1px solid var(--ifm-toc-border-color);
+  overflow-wrap: anywhere;
+}
+
+.table th:first-child {
+  width: 23%;
+}
+.table th:nth-child(2) {
+  width: 27%;
+}
+
+@media (max-width: 575px) {
+  .table th:first-child {
+    width: 27%;
+  }
+  .table th:nth-child(2) {
+    width: 46%;
+  }
+  .surface .table {
+    --api-cell-padding: 6px;
+  }
+}
+.table th[scope='row'] {
+  font-weight: 400;
+}
+.table thead {
+  background: var(--ifm-code-background);
+}
+.table code {
+  display: inline;
+  white-space: pre-wrap;
+  font-size: 14px;
+  padding: 0;
+  border: 0;
+}
+
+.table thead th {
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.table tbody tr:nth-child(odd) {
+  background: var(--ifm-background-color);
+}
+
+.table tbody tr:nth-child(even) {
+  background: var(--ifm-code-background);
+}
+.table p {
+  margin: 0 0 0.375rem;
+}
+.table .badge {
+  display: block;
+  width: fit-content;
+  margin-top: 0.25rem;
+}
+.table :is(a[id], tr) {
+  scroll-margin-top: 6rem;
+}
+.tableContainer:focus-visible {
+  outline: 2px solid var(--ifm-color-primary);
 }
 
 .visuallyHidden {

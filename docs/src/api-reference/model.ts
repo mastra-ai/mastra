@@ -48,6 +48,7 @@ export interface ApiCommentPart {
   text: string
   tag?: string
   target?: string
+  targetSource?: ApiSource
 }
 
 export interface ApiComment {
@@ -67,6 +68,7 @@ export interface ApiDeclaration {
   defaultType?: ApiType
   defaultValue?: string
   sourceSignature?: string
+  sourceType?: string
   children: string[]
   signatures: string[]
   parameters: string[]

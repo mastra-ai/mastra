@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { compileComment, safeCommentUrl } from './comments'
 import { composeSurface } from './compose'
 import { memberAnchor } from './presentation'
+import { isObjectType } from './type-content'
 import { apiContractSchema } from './schema'
 import { MODEL_TOKENS } from '../plugins/remark-model-tokens/models'
 
@@ -39,6 +40,77 @@ describe('source-backed visual surfaces', () => {
     expect(surface.entries[3].signature).not.toContain('options')
     expect(surface.entries.every(entry => entry.description.length > 0)).toBe(true)
     expect(surface.entries.every(entry => entry.signature?.includes('Promise<FullOutput<'))).toBe(true)
+  })
+
+  it('derives compact calls from ordered normalized parameters and retains exact generic records', () => {
+    const contract = load('agent-generate')
+    const surface = composeSurface(contract, 'signatures')
+    expect(surface.entries.map(entry => entry.callSummary)).toEqual([
+      'generate(messages, options)',
+      'generate(messages, options)',
+      'generate(messages, options)',
+      'generate(messages)',
+    ])
+    for (const [index, entry] of surface.entries.entries()) {
+      const signature = contract.declarations[contract.declarations[contract.root].signatures[index]]
+      expect(entry.signature).toBe(signature.sourceSignature)
+      expect(entry.callSummary).not.toContain('<')
+      expect(entry.nested?.map(item => !('target' in item) && item.id)).toEqual(
+        signature.typeParameters.map(memberAnchor),
+      )
+    }
+    const inferred = surface.entries[0].nested?.find(item => item.name === 'T')
+    expect(inferred && !('target' in inferred) && inferred.type).toBe('InferStandardSchemaOutput<OUTPUT>')
+    expect(inferred && !('target' in inferred) && inferred.defaultType).toBe('InferStandardSchemaOutput<OUTPUT>')
+    const explicit = surface.entries[1].nested?.find(item => item.name === 'OUTPUT')
+    expect(explicit && !('target' in explicit) && explicit.type).toBe('{}')
+    expect(explicit && !('target' in explicit) && explicit.defaultType).toBeUndefined()
+
+    const signature = contract.declarations[contract.declarations[contract.root].signatures[2]]
+    signature.sourceSignature = 'generate(messages?: string, ...options: string[]): Promise<string>;'
+    contract.declarations[signature.parameters[0]].flags = ['isOptional']
+    contract.declarations[signature.parameters[1]].flags = ['isRest']
+    const optionalRest = composeSurface(contract, 'signatures').entries[2]
+    expect(optionalRest.callSummary).toBe('generate(messages?, ...options)')
+    expect(optionalRest.signature).toBe(signature.sourceSignature)
+  })
+
+  it('proves each real options intersection is an object without calling messages an object', () => {
+    const contract = load('agent-generate')
+    for (const id of contract.declarations[contract.root].signatures) {
+      const parameters = contract.declarations[id].parameters.map(parameter => contract.declarations[parameter])
+      expect(isObjectType(parameters[0].type, contract.declarations)).toBe(false)
+      if (parameters[1]) expect(isObjectType(parameters[1].type, contract.declarations)).toBe(true)
+    }
+  })
+
+  it('keeps exact option annotations and gives each object summary a distinct navigation-only definition', () => {
+    const contract = load('agent-generate')
+    const surface = composeSurface(contract, 'parameters')
+    for (const [index, group] of surface.entries.entries()) {
+      const signature = contract.declarations[contract.declarations[contract.root].signatures[index]]
+      const parameters = group.nested?.flatMap(item => ('target' in item ? [] : [item])) ?? []
+      expect(parameters).toHaveLength(signature.parameters.length)
+      expect(parameters[0].parameterDefinition).toBeUndefined()
+      if (!parameters[1]) continue
+      const parameter = parameters[1]
+      expect(parameter.type).toBe(contract.declarations[signature.parameters[1]].sourceType)
+      expect(parameter.parameterDefinition?.context).toBe(`Overload ${index + 1}`)
+      expect(parameter.parameterDefinition?.id).not.toBe(parameter.id)
+      expect(parameter.typeContent).toEqual([
+        { kind: 'link', href: `#${parameter.parameterDefinition?.id}`, children: [{ kind: 'text', value: 'object' }] },
+      ])
+      expect(
+        parameter.nested?.filter(
+          item => 'target' in item && surface.definitions?.some(definition => `#${definition.id}` === item.target),
+        ).length,
+      ).toBeGreaterThanOrEqual(3)
+    }
+    const signature = contract.declarations[contract.declarations[contract.root].signatures[0]]
+    contract.declarations[signature.parameters[1]].sourceType = 'NamedOptions<T>'
+    const named = composeSurface(contract, 'parameters').entries[0].nested?.find(item => item.name === 'options')
+    expect(named && !('target' in named) && named.parameterDefinition).toBeUndefined()
+    expect(named && !('target' in named) && named.type).toBe('NamedOptions<T>')
   })
 
   it('renders fenced default values as inline metadata without changing examples', () => {

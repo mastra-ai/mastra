@@ -94,7 +94,7 @@ export type { AttachmentCapabilities } from './model/provider-registry.js';
  *
  * Declared as an interface so it can be extended through declaration merging.
  * Custom gateways register their providers and models by augmenting this module,
- * which flows through to {@link Provider}, {@link ModelForProvider} and
+ * which flows through to {@link Provider}, `ModelForProvider` and
  * {@link ModelRouterModelId}:
  *
  * ```ts

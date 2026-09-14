@@ -14,9 +14,21 @@ export type CommentNode =
 export interface ApiEntry {
   id: string
   name: string
+  label?: string
+  path?: string
+  table?: 'Parameter' | 'Property'
+  inlineObject?: boolean
+  variantKey?: string
+  variantValue?: string
+  variantDiscriminator?: string
   signature?: string
+  callSummary?: string
+  kind?: string
+  returnValue?: boolean
+  defaultType?: string
   type?: string
   typeContent?: CommentNode[]
+  parameterDefinition?: { id: string; context: string }
   optional: boolean
   description: CommentNode[]
   deprecated: CommentNode[]
@@ -36,6 +48,8 @@ export interface ApiSurface {
   id: string
   title: string
   entries: ApiEntry[]
+  definitions?: ApiEntry[]
+  appendix?: { href: string; title: string }
 }
 
 export function memberAnchor(id: string): string {

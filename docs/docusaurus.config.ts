@@ -122,6 +122,7 @@ const config: Config = {
         remarkPlugins: [...SHARED_REMARK_PLUGINS],
       },
     ],
+    require.resolve('./src/plugins/docusaurus-plugin-api-appendix'),
     [
       require.resolve('./src/plugins/docusaurus-plugin-llms-txt'),
       {

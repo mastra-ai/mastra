@@ -50,6 +50,10 @@ export async function generateManifest(routes: RouteInfo[], siteDir: string, out
     packages: {},
   }
 
+  const registryPath = path.join(siteDir, '.docusaurus/api-reference/routes.json')
+  const registry: Record<string, string> = (await fs.pathExists(registryPath)) ? await fs.readJson(registryPath) : {}
+  const appendixSources = new Map(Object.entries(registry).map(([source, method]) => [`${method}/types`, source]))
+
   for (const { route, title } of routes) {
     // Skip root routes and non-documented routes
     if (route === '/' || !isDocumentedRoute(route)) {
@@ -57,7 +61,7 @@ export async function generateManifest(routes: RouteInfo[], siteDir: string, out
     }
 
     // Resolve source MDX file
-    const sourceFile = await resolveSourceFile(route, siteDir)
+    const sourceFile = (await resolveSourceFile(route, siteDir)) ?? appendixSources.get(route)
     if (!sourceFile) {
       continue
     }

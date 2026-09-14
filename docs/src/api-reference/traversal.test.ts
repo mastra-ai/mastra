@@ -184,7 +184,9 @@ describe('complete page-scoped traversal', () => {
       [...returns.nodes.values()].find(node => node.declaration.name === 'FullOutput')?.declaration.children,
     ).toHaveLength(26)
     const signatureGraph = traverseSurface(contract, 'signatures')
-    expect(signatureGraph.nodes.size).toBe(4)
+    expect(new Set(signatureGraph.nodes.keys())).toEqual(
+      new Set(signatures.flatMap(signature => [signature.id, ...signature.typeParameters])),
+    )
     expect(descriptionGaps(signatureGraph, '/reference/generate')).toEqual([])
   })
 })

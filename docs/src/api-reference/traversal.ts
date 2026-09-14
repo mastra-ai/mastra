@@ -1,6 +1,6 @@
 import type { ApiCommentPart, ApiContract, ApiDeclaration, ApiSource, ApiType } from './model'
 
-export type ApiSection = 'properties' | 'signatures' | 'parameters' | 'returns'
+export type ApiSection = 'properties' | 'signatures' | 'parameters' | 'returns' | 'method'
 
 export interface SurfaceEdge {
   role: string
@@ -30,6 +30,15 @@ export interface SurfaceGraph {
 }
 
 export function traverseSurface(contract: ApiContract, section: ApiSection): SurfaceGraph {
+  if (section === 'method') {
+    const graphs = (['signatures', 'parameters', 'returns'] as const).map(part => traverseSurface(contract, part))
+    return {
+      root: contract.root,
+      section,
+      groups: graphs[2].groups,
+      nodes: new Map(graphs.flatMap(graph => [...graph.nodes])),
+    }
+  }
   const root = contract.declarations[contract.root]
   if (!root) throw new Error(`Missing API root: ${contract.root}`)
   if (section === 'properties' ? root.kind !== 'Interface' : root.kind !== 'Method') {
@@ -57,7 +66,13 @@ export function traverseSurface(contract: ApiContract, section: ApiSection): Sur
     const path = [...parentPath, declaration.name]
     const node: SurfaceNode = { declaration, path, edges: [] }
     nodes.set(id, node)
-    if (section === 'signatures') return
+    if (section === 'signatures') {
+      for (const target of declaration.typeParameters) {
+        node.edges.push({ role: 'typeParameters', target })
+        visit(target, path)
+      }
+      return
+    }
     for (const role of ['children', 'signatures', 'parameters', 'typeParameters', 'indexSignatures'] as const) {
       for (const target of declaration[role]) {
         node.edges.push({ role, target })
@@ -138,7 +153,7 @@ export function descriptionGaps(graph: SurfaceGraph, page: string): DescriptionG
       return !declaration.comment?.summary.some(part => part.text.trim().length > 0)
     })
     .map(({ declaration, path }) => ({ page, owner: declaration.id, path: path.join('.'), source: declaration.source }))
-  if (graph.section === 'returns') {
+  if (graph.section === 'returns' || graph.section === 'method') {
     for (const group of graph.groups) {
       if (!group.description?.some(part => part.text.trim()))
         gaps.push({ page, owner: group.owner, path: `${graph.root}.${group.label}.returns`, source: group.source })

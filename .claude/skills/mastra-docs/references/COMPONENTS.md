@@ -7,7 +7,7 @@ Use shared components when they encode an established documentation or extractio
 Use `CardGrid` for a curated set of destinations whose labels, descriptions, and order belong to the current page.
 
 ```mdx
-import { CardGrid, CardGridItem } from '@site/src/components/cards/card-grid';
+import { CardGrid, CardGridItem } from '@site/src/components/cards/card-grid'
 
 <CardGrid columns={3}>
   <CardGridItem title="Agents" description="Create model-powered agents." href="/docs/agents/overview" />
@@ -21,7 +21,7 @@ Do not recreate card borders, links, or grid layout by hand. The shared componen
 Use `IntegrationGrid` when entries come from `docs/src/content/en/integrations/sidebars.js`.
 
 ```mdx
-import { IntegrationGrid } from '@site/src/components/integrations/grid';
+import { IntegrationGrid } from '@site/src/components/integrations/grid'
 
 <IntegrationGrid section="Frameworks" allowlist={['frameworks/next-js', 'frameworks/astro']} />
 ```
@@ -78,6 +78,24 @@ For nested parameter groups, place `parameters` inside an entry with a `type`:
   ]}
 />
 ```
+
+## `ApiReference` (source-backed pilot)
+
+Use static, complete-surface selectors for the source-backed configuration and generate pilot. Keep introductions and narrative examples in MDX; API facts come from source comments and generated data.
+
+```mdx
+<ApiReference root="Config" section="properties" />
+
+<ApiReference root="Agent.generate" section="method" />
+```
+
+The `method` selector groups each overload's parameters and return value with its declaration. The separate `signatures`, `parameters`, and `returns` selectors remain available. Don't compose overlapping surfaces or use member selectors, exclusions, expressions, or authored `data` props.
+
+The compact method heading is a call summary, not an exact TypeScript signature or a copyable usage example. The **TypeScript declaration** disclosure retains the exact declaration and canonical generic constraints/defaults in server-rendered HTML and Markdown. Generic links open the declaration for the selected overload.
+
+A linked `object` type leads to that parameter's complete definition. Overload-specific options definitions use their own tabs, and links select the matching panel. All panels remain available in server-rendered HTML and Markdown. Supporting types appear in a generated appendix linked from the method. Follow those links rather than copying type definitions, inventing aliases, or authoring appendix routes in MDX.
+
+Missing-description callouts remain visible in development and block production publication for included API data. Source controls link only to verified revisions; otherwise they show the source basename and line, with the full relative path available as accessible text and in Markdown. Don't hide diagnostics to make a preview appear publication-ready.
 
 ## `CopyPrompt`
 

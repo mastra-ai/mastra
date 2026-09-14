@@ -118,7 +118,14 @@ export function normalize(project: ProjectReflection, root: Reflection, rootId: 
       target = symbolIdentity(part.target.packageName, part.target.packagePath, part.target.qualifiedName)
     if (part.tag.startsWith('@link') && !target)
       diagnostics.push({ code: 'unresolved-link', owner, message: part.text })
-    return { kind: 'inline-tag', text: part.text, tag: part.tag, ...(target && { target }) }
+    const targetSource = part.target instanceof Reflection ? sourceOf(part.target) : undefined
+    return {
+      kind: 'inline-tag',
+      text: part.text,
+      tag: part.tag,
+      ...(target && { target }),
+      ...(targetSource && { targetSource }),
+    }
   }
 
   function referenceOf(type: ReferenceType, owner: string): ApiReference {
@@ -277,6 +284,11 @@ export function normalize(project: ProjectReflection, root: Reflection, rootId: 
     declarations[id] = node
     const source = sourceOf(reflection)
     if (source) node.source = source
+    if (reflection instanceof ParameterReflection) {
+      const annotationSource = source ?? sourceOf(reflection.parent)
+      const declaredType = annotationSource ? sourceSignature(annotationSource, node.name) : undefined
+      if (declaredType) node.sourceType = declaredType
+    }
     for (const [name, enabled] of Object.entries(reflection.flags.toObject())) if (enabled) node.flags.push(name)
     node.flags.sort()
     if (reflection.comment) {

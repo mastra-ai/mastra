@@ -8,7 +8,7 @@ import { StorageDomain } from '../base';
  * `workflow` targets publish a `workflow.start` event on the `workflows`
  * pubsub topic and are processed by the orchestration worker. `agent`
  * targets publish an `agent-schedule.fire` event on the `agent-schedules`
- * pubsub topic and are processed by the {@link AgentScheduleWorker}, which
+ * pubsub topic and are processed by `AgentScheduleWorker`, which
  * runs the referenced agent directly (no workflow indirection).
  */
 export type ScheduleTarget = WorkflowScheduleTarget | AgentScheduleTarget;

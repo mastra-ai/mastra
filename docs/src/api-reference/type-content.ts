@@ -1,9 +1,78 @@
 import { safeCommentUrl } from './comments'
-import type { ApiType } from './model'
+import type { ApiDeclaration, ApiType } from './model'
 import type { CommentNode } from './presentation'
 
-export function typeContent(type: ApiType | undefined, destinations: ReadonlyMap<string, string>): CommentNode[] {
+export function isObjectType(
+  type: ApiType | undefined,
+  declarations: Readonly<Record<string, ApiDeclaration>>,
+  seen = new Set<string>(),
+): boolean {
+  if (!type) return false
+  if (
+    type.kind === 'reference' &&
+    type.target?.boundary === 'external' &&
+    type.target.id === 'typescript:lib/lib.es5.d.ts:Partial' &&
+    type.operands.length === 1 &&
+    type.operands[0].role === 'argument:0'
+  ) {
+    return isObjectType(type.operands[0].type, declarations, seen)
+  }
+  if (type.kind === 'intersection')
+    return type.operands.length > 0 && type.operands.every(operand => isObjectType(operand.type, declarations, seen))
+  const id =
+    type.kind === 'reflection'
+      ? type.declaration
+      : type.kind === 'reference' && type.target?.boundary === 'data'
+        ? type.target.id
+        : undefined
+  if (!id || seen.has(id)) return false
+  const declaration = declarations[id]
+  if (!declaration || declaration.signatures.length || declaration.indexSignatures.length) return false
+  const visited = new Set(seen).add(id)
+  if (declaration.type) return isObjectType(declaration.type, declarations, visited)
+  return declaration.kind === 'TypeLiteral' || declaration.kind === 'Interface'
+}
+
+export function typeContent(
+  type: ApiType | undefined,
+  destinations: ReadonlyMap<string, string>,
+  compact = false,
+  structuralLabels: ReadonlyMap<string, string> = new Map(),
+  declarations: Readonly<Record<string, ApiDeclaration>> = {},
+): CommentNode[] {
   if (!type) return []
+  function render(current: ApiType, parentPrecedence = 0): CommentNode[] {
+    if (compact && current.kind === 'reflection' && current.declaration && isObjectType(current, declarations)) {
+      const href = destinations.get(current.declaration)
+      if (href)
+        return [
+          {
+            kind: 'link',
+            href: safeCommentUrl(href),
+            children: [{ kind: 'text', value: structuralLabels.get(current.declaration) ?? 'object' }],
+          },
+        ]
+    }
+    if (compact && (current.kind === 'intersection' || current.kind === 'union')) {
+      const precedence = current.kind === 'union' ? 1 : 2
+      const content = current.operands.flatMap((operand, index): CommentNode[] => {
+        const separator: CommentNode[] = index
+          ? [{ kind: 'text', value: current.kind === 'union' ? ' | ' : ' & ' }]
+          : []
+        return [...separator, ...render(operand.type, precedence)]
+      })
+      return precedence < parentPrecedence
+        ? [{ kind: 'text', value: '(' }, ...content, { kind: 'text', value: ')' }]
+        : content
+    }
+    if (compact && current.kind === 'array' && current.operands.length === 1)
+      return [...render(current.operands[0].type, 3), { kind: 'text', value: '[]' }]
+    return linkedDisplay(current, destinations)
+  }
+  return render(type)
+}
+
+function linkedDisplay(type: ApiType, destinations: ReadonlyMap<string, string>): CommentNode[] {
   const names = new Map<string, string>()
   const ambiguous = new Set<string>()
   function collect(current: ApiType) {

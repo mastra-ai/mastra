@@ -8,7 +8,13 @@ import { repositoryRoot } from './config'
 import { convertPilot, selectRoots } from './generate'
 import { normalize } from './normalize'
 
-const files = ['packages/core/src/mastra/index.ts', 'packages/core/src/agent/agent.ts']
+const files = [
+  'packages/core/src/mastra/index.ts',
+  'packages/core/src/agent/agent.ts',
+  'packages/core/src/storage/domains/schedules/base.ts',
+  'packages/core/src/llm/index.ts',
+  'packages/_internals/auth/src/ee/interfaces/fga.ts',
+]
 function withoutComments(source: string, file: string) {
   return ts
     .createPrinter({ removeComments: true })
@@ -106,6 +112,17 @@ describe('real source extraction', () => {
     const inferred = contract.declarations[signatures[0]!.typeParameters[1]!]!
     expect(inferred.defaultType?.display).toBe('InferOutput<OUTPUT>')
     expect(inferred.defaultType?.target?.id).toContain('@mastra/schema-compat')
+  })
+
+  it('preserves source provenance for comment-only links without expanding their target methods', async () => {
+    const configuration = contracts.find(contract => contract.root === '@mastra/core!Config')!
+    const node = Object.values(configuration.declarations).find(node => node.name === 'agentControllers')!
+    const link = node.comment?.summary.find(part => part.text === 'Mastra.getAgentController')
+    expect(link?.target).toBeDefined()
+    expect(link?.targetSource?.path).toBe('packages/core/src/mastra/index.ts')
+    expect(configuration.declarations[link!.target!]).toBeUndefined()
+    const source = await readFile(path.join(repositoryRoot, link!.targetSource!.path), 'utf8')
+    expect(source.split('\n')[link!.targetSource!.line - 1]).toContain('getAgentController')
   })
 
   it('resolves the corrected deprecation link and reads owned auth declarations from source', () => {

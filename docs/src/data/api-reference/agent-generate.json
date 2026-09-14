@@ -5077,7 +5077,12 @@
             "kind": "inline-tag",
             "text": "DelegationHookError",
             "tag": "@link",
-            "target": "@mastra/core:src/agent/agent.types.ts:DelegationHookError"
+            "target": "@mastra/core:src/agent/agent.types.ts:DelegationHookError",
+            "targetSource": {
+              "path": "packages/core/src/agent/agent.types.ts",
+              "line": 246,
+              "character": 17
+            }
           },
           {
             "kind": "text",
@@ -18763,17 +18768,20 @@
             "kind": "inline-tag",
             "text": "Provider",
             "tag": "@link",
-            "target": "@mastra/core:src/llm/index.ts:Provider"
+            "target": "@mastra/core:src/llm/index.ts:Provider",
+            "targetSource": {
+              "path": "packages/core/src/llm/index.ts",
+              "line": 115,
+              "character": 12
+            }
           },
           {
             "kind": "text",
             "text": ", "
           },
           {
-            "kind": "inline-tag",
-            "text": "ModelForProvider",
-            "tag": "@link",
-            "target": "@mastra/core:src/llm/index.ts:ModelForProvider"
+            "kind": "code",
+            "text": "`ModelForProvider`"
           },
           {
             "kind": "text",
@@ -18783,7 +18791,12 @@
             "kind": "inline-tag",
             "text": "ModelRouterModelId",
             "tag": "@link",
-            "target": "@mastra/core:src/llm/index.ts:ModelRouterModelId"
+            "target": "@mastra/core:src/llm/index.ts:ModelRouterModelId",
+            "targetSource": {
+              "path": "packages/core/src/llm/index.ts",
+              "line": 126,
+              "character": 12
+            }
           },
           {
             "kind": "text",
@@ -134188,7 +134201,12 @@
                 "kind": "inline-tag",
                 "text": "SkillActionAttributes",
                 "tag": "@link",
-                "target": "@mastra/core:src/observability/types/tracing.ts:SkillActionAttributes"
+                "target": "@mastra/core:src/observability/types/tracing.ts:SkillActionAttributes",
+                "targetSource": {
+                  "path": "packages/core/src/observability/types/tracing.ts",
+                  "line": 519,
+                  "character": 17
+                }
               },
               {
                 "kind": "text",
@@ -190560,6 +190578,7 @@
           }
         }
       },
+      "sourceType": "MessageListInput",
       "children": [],
       "signatures": [],
       "parameters": [],
@@ -190652,6 +190671,7 @@
           }
         ]
       },
+      "sourceType": "AgentExecutionOptionsBase<T> & {\n    structuredOutput: PublicStructuredOutputOptions<T>;\n} & {\n    model?: DynamicArgument<MastraModelConfig>;\n}",
       "children": [],
       "signatures": [],
       "parameters": [],
@@ -193781,6 +193801,7 @@
           }
         }
       },
+      "sourceType": "MessageListInput",
       "children": [],
       "signatures": [],
       "parameters": [],
@@ -193873,6 +193894,7 @@
           }
         ]
       },
+      "sourceType": "AgentExecutionOptionsBase<OUTPUT> & {\n    structuredOutput: PublicStructuredOutputOptions<OUTPUT>;\n} & {\n    model?: DynamicArgument<MastraModelConfig>;\n}",
       "children": [],
       "signatures": [],
       "parameters": [],
@@ -196931,6 +196953,7 @@
           }
         }
       },
+      "sourceType": "MessageListInput",
       "children": [],
       "signatures": [],
       "parameters": [],
@@ -197023,6 +197046,7 @@
           }
         ]
       },
+      "sourceType": "AgentExecutionOptionsBase<unknown> & {\n    structuredOutput?: never;\n} & {\n    model?: DynamicArgument<MastraModelConfig>;\n}",
       "children": [],
       "signatures": [],
       "parameters": [],
@@ -200022,6 +200046,7 @@
           }
         }
       },
+      "sourceType": "MessageListInput",
       "children": [],
       "signatures": [],
       "parameters": [],

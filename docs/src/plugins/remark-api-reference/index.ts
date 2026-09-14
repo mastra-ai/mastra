@@ -8,6 +8,7 @@ import { unified } from 'unified'
 import { visit } from 'unist-util-visit'
 import { artifactDirectory, canonicalDestinations, repositoryRoot, roots } from '../../../scripts/api-reference/config'
 import { composeSurfaces } from '../../api-reference/compose'
+import { partitionMethod } from '../../api-reference/appendix'
 import { prepareExamples } from '../../api-reference/npm-examples'
 import { verifySourceLinks } from '../../api-reference/links'
 import type { ApiSource, ApiType } from '../../api-reference/model'
@@ -21,6 +22,7 @@ interface Options {
   cwd?: string
   revision?: string
   production?: boolean
+  routeRegistry?: string
 }
 
 export function discoverSurfaces(tree: Root) {
@@ -49,93 +51,132 @@ export function discoverSurfaces(tree: Root) {
     const root = roots.find(root => (root.parent ? `${root.parent}.${root.name}` : root.name) === name)
     if (!root) throw new Error(`Unknown API root: ${name ?? '(missing)'}`)
     const section = attributes.get('section')
-    if (section !== 'properties' && section !== 'signatures' && section !== 'parameters' && section !== 'returns')
+    if (
+      section !== 'properties' &&
+      section !== 'signatures' &&
+      section !== 'parameters' &&
+      section !== 'returns' &&
+      section !== 'method'
+    )
       throw new Error(`Unknown API section: ${section ?? '(missing)'}`)
     selections.push({ node, root, section })
   })
   return selections
 }
 
+export async function prepareReference(
+  selections: ReturnType<typeof discoverSurfaces>,
+  file: { path: string; message: (message: string) => unknown },
+  options: Options = {},
+) {
+  const contracts = new Map<string, ReturnType<typeof parseContract>>()
+  const requests = selections.map(selection => {
+    let contract = contracts.get(selection.root.id)
+    if (!contract) {
+      contract = parseContract(
+        JSON.parse(readFileSync(join(options.inputDirectory ?? artifactDirectory, selection.root.file), 'utf8')),
+      )
+      if (contract.root !== selection.root.id) throw new Error(`Unexpected contract root in ${selection.root.file}`)
+      contracts.set(selection.root.id, contract)
+    }
+    return { contract, section: selection.section }
+  })
+  const graphs = requests.map(({ contract, section }) => traverseSurface(contract, section))
+  const production = options.production ?? process.env.NODE_ENV === 'production'
+  for (const graph of graphs) {
+    if (production) validateDescriptions(graph, file.path)
+    else for (const gap of descriptionGaps(graph, file.path)) file.message(`Missing API description: ${gap.path}`)
+  }
+  const sources: ApiSource[] = []
+  const types: ApiType[] = []
+  function collect(type: ApiType | undefined) {
+    if (!type) return
+    types.push(type)
+    if (type.target?.source) sources.push(type.target.source)
+    for (const operand of type.operands) collect(operand.type)
+  }
+  for (const graph of graphs)
+    for (const { declaration } of graph.nodes.values()) {
+      if (declaration.source) sources.push(declaration.source)
+      const comment = declaration.comment
+      for (const part of [...(comment?.summary ?? []), ...(comment?.tags.flatMap(tag => tag.content) ?? [])]) {
+        if (part.targetSource) sources.push(part.targetSource)
+      }
+      collect(declaration.type)
+      collect(declaration.defaultType)
+    }
+  const verified = verifySourceLinks(sources, {
+    cwd: options.cwd ?? repositoryRoot,
+    revision: options.revision ?? process.env.API_REFERENCE_SOURCE_REVISION,
+    production,
+  })
+  for (const message of verified.diagnostics) file.message(message)
+  const destinations = new Map(canonicalDestinations)
+  for (const type of types) {
+    const target = type.target
+    if (!target) continue
+    const source = target.source ? verified.links.get(`${target.source.path}:${target.source.line}`) : undefined
+    const destination = destinations.get(target.id) ?? target.canonical ?? source
+    if (destination) destinations.set(target.id, destination)
+  }
+  const included = new Set(graphs.flatMap(graph => [...graph.nodes.keys()]))
+  const warnings = new Set<string>()
+  for (const type of types) {
+    if (type.target?.boundary === 'external' && !destinations.has(type.target.id))
+      warnings.add(`Unmapped external API type: ${type.target.name}`)
+  }
+  for (const { contract } of requests) {
+    for (const diagnostic of contract.diagnostics) {
+      if (!included.has(diagnostic.owner)) continue
+      if (production && diagnostic.code === 'unresolved-link')
+        throw new Error(`${file.path}: ${diagnostic.owner}: ${diagnostic.message}`)
+      warnings.add(`${diagnostic.owner}: ${diagnostic.message}`)
+    }
+    for (const id of included) {
+      const node = contract.declarations[id]
+      if (!node?.comment) continue
+      for (const part of [...node.comment.summary, ...node.comment.tags.flatMap(tag => tag.content)]) {
+        if (part.kind !== 'inline-tag' || !part.tag?.startsWith('@link')) continue
+        if (part.target && /^https?:\/\//.test(part.target)) destinations.set(part.target, part.target)
+        if (part.target && part.targetSource && !destinations.has(part.target)) {
+          const source = verified.links.get(`${part.targetSource.path}:${part.targetSource.line}`)
+          if (source) destinations.set(part.target, source)
+        }
+        if (part.target && (included.has(part.target) || destinations.has(part.target))) continue
+        const message = `${file.path}: unresolved authored API link ${part.text} in ${id}`
+        if (production) throw new Error(message)
+        warnings.add(message)
+      }
+    }
+  }
+  for (const warning of warnings) file.message(warning)
+  const surfaces = composeSurfaces(requests, { sourceLinks: verified.links, destinations })
+  await prepareExamples(surfaces)
+  return surfaces
+}
+
 export default function remarkApiReference(options: Options = {}) {
   return async (tree: Root, file: { path: string; message: (message: string) => unknown }) => {
     const selections = discoverSurfaces(tree)
     if (!selections.length) return
-    const contracts = new Map<string, ReturnType<typeof parseContract>>()
-    const requests = selections.map(selection => {
-      let contract = contracts.get(selection.root.id)
-      if (!contract) {
-        contract = parseContract(
-          JSON.parse(readFileSync(join(options.inputDirectory ?? artifactDirectory, selection.root.file), 'utf8')),
-        )
-        if (contract.root !== selection.root.id) throw new Error(`Unexpected contract root in ${selection.root.file}`)
-        contracts.set(selection.root.id, contract)
-      }
-      return { contract, section: selection.section }
-    })
-    const graphs = requests.map(({ contract, section }) => traverseSurface(contract, section))
-    const production = options.production ?? process.env.NODE_ENV === 'production'
-    for (const graph of graphs) {
-      if (production) validateDescriptions(graph, file.path)
-      else for (const gap of descriptionGaps(graph, file.path)) file.message(`Missing API description: ${gap.path}`)
-    }
-    const sources: ApiSource[] = []
-    const types: ApiType[] = []
-    function collect(type: ApiType | undefined) {
-      if (!type) return
-      types.push(type)
-      if (type.target?.source) sources.push(type.target.source)
-      for (const operand of type.operands) collect(operand.type)
-    }
-    for (const graph of graphs)
-      for (const { declaration } of graph.nodes.values()) {
-        if (declaration.source) sources.push(declaration.source)
-        collect(declaration.type)
-        collect(declaration.defaultType)
-      }
-    const verified = verifySourceLinks(sources, {
-      cwd: options.cwd ?? repositoryRoot,
-      revision: options.revision ?? process.env.API_REFERENCE_SOURCE_REVISION,
-      production,
-    })
-    for (const message of verified.diagnostics) file.message(message)
-    const destinations = new Map(canonicalDestinations)
-    for (const type of types) {
-      const target = type.target
-      if (!target) continue
-      const source = target.source ? verified.links.get(`${target.source.path}:${target.source.line}`) : undefined
-      const destination = destinations.get(target.id) ?? target.canonical ?? source
-      if (destination) destinations.set(target.id, destination)
-    }
-    const included = new Set(graphs.flatMap(graph => [...graph.nodes.keys()]))
-    const warnings = new Set<string>()
-    for (const type of types) {
-      if (type.target?.boundary === 'external' && !destinations.has(type.target.id))
-        warnings.add(`Unmapped external API type: ${type.target.name}`)
-    }
-    for (const { contract } of requests) {
-      for (const diagnostic of contract.diagnostics) {
-        if (!included.has(diagnostic.owner)) continue
-        if (production && diagnostic.code === 'unresolved-link')
-          throw new Error(`${file.path}: ${diagnostic.owner}: ${diagnostic.message}`)
-        warnings.add(`${diagnostic.owner}: ${diagnostic.message}`)
-      }
-      for (const id of included) {
-        const node = contract.declarations[id]
-        if (!node?.comment) continue
-        for (const part of [...node.comment.summary, ...node.comment.tags.flatMap(tag => tag.content)]) {
-          if (part.kind !== 'inline-tag' || !part.tag?.startsWith('@link')) continue
-          if (part.target && /^https?:\/\//.test(part.target)) destinations.set(part.target, part.target)
-          if (part.target && (included.has(part.target) || destinations.has(part.target))) continue
-          const message = `${file.path}: unresolved authored API link ${part.text} in ${id}`
-          if (production) throw new Error(message)
-          warnings.add(message)
-        }
-      }
-    }
-    for (const warning of warnings) file.message(warning)
-    const surfaces = composeSurfaces(requests, { sourceLinks: verified.links, destinations })
-    await prepareExamples(surfaces)
+    let surfaces = await prepareReference(selections, file, options)
     const directory = options.outputDirectory ?? join(repositoryRoot, 'docs/.docusaurus/api-reference')
+    const method = surfaces.find(surface => surface.section === 'method')
+    if (method) {
+      const registryPath = options.routeRegistry ?? join(repositoryRoot, 'docs/.docusaurus/api-reference/routes.json')
+      const methodPath = existsSync(registryPath)
+        ? JSON.parse(readFileSync(registryPath, 'utf8'))[file.path]
+        : undefined
+      if (typeof methodPath !== 'string') throw new Error(`${file.path}: method appendix route was not registered`)
+      const partition = partitionMethod(
+        method,
+        methodPath,
+        surfaces.filter(surface => surface !== method),
+      )
+      partition.method.appendix = { href: partition.appendixPath, title: 'Supporting types' }
+      let companion = 0
+      surfaces = surfaces.map(surface => (surface === method ? partition.method : partition.companions[companion++]))
+    }
     mkdirSync(directory, { recursive: true })
     const imports: Root['children'] = []
     const replacements = new Map(

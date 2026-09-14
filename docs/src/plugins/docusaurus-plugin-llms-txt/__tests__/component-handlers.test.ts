@@ -29,6 +29,91 @@ function toMarkdown(nodes: ReturnType<typeof handlePropertiesTable> | ReturnType
 const mockState = {} as any
 
 describe('source-backed API markup', () => {
+  it('preserves full inline provenance once per owner through content extraction for linked and unlinked sources', async () => {
+    const html = `<html><body><nav>Not reference content</nav><article>
+      <article data-api-entry="api-linked"><header><h3>linked</h3><span data-api-source="packages/core/src/agent/agent.ts:42"><a href="https://github.com/mastra-ai/mastra/blob/88150a34f56181102c26f651aba6f055b8254c53/packages/core/src/agent/agent.ts#L42" title="packages/core/src/agent/agent.ts:42" aria-label="Source: packages/core/src/agent/agent.ts:42">Source</a></span></header><p>Linked summary.</p></article>
+      <table data-api-table><tbody><tr data-api-entry="api-local"><th>local<span data-api-source="packages/core/src/mastra/index.ts:45"><span title="packages/core/src/mastra/index.ts:45"><span aria-hidden="true">index.ts:45</span><span class="sr-only">Source: packages/core/src/mastra/index.ts:45</span></span></span></th><td>string</td><td>Local summary.</td></tr></tbody></table>
+      </article></body></html>`
+    const result = await processHtml(html, '/reference/source-test', resolveOptions({ siteUrl: 'https://mastra.ai' }))
+    expect(result.markdown.split('packages/core/src/agent/agent.ts:42')).toHaveLength(2)
+    expect(result.markdown.split('packages/core/src/mastra/index.ts:45')).toHaveLength(2)
+    expect(result.markdown).toContain('Source: [packages/core/src/agent/agent.ts:42](')
+    expect(result.markdown).toContain('Source: packages/core/src/mastra/index.ts:45')
+    expect(result.markdown).toContain('#L42')
+    expect(result.markdown).toContain('Linked summary.')
+    expect(result.markdown).toContain('Local summary.')
+    expect(result.markdown).not.toContain('Not reference content')
+  })
+
+  it('retains navigation-only option anchors and exact annotations without duplicating canonical owners', async () => {
+    const html = `<html><body><article><table data-api-table><tbody><tr data-api-entry="api-options"><th>options</th><td><code data-api-type><a href="#api-options-definition">object</a></code></td><td>Execution options.</td></tr></tbody></table>
+      <section id="api-options-definition" data-api-definition="api-options"><header><h4>options</h4><span>Overload 1</span></header><pre class="language-typescript"><code>Base&lt;T&gt; &amp; { model?: Model }</code></pre><article data-api-entry="api-model"><h5>model</h5><p>Model selection.</p></article></section>
+      </article></body></html>`
+    const result = await processHtml(html, '/reference/options-test', resolveOptions({ siteUrl: 'https://mastra.ai' }))
+    for (const id of ['api-options', 'api-options-definition', 'api-model'])
+      expect(result.markdown.split(`<a id="${id}"></a>`)).toHaveLength(2)
+    for (const text of ['#api-options-definition', 'Base<T> & { model?: Model }', 'Overload 1', 'Model selection.'])
+      expect(result.markdown).toContain(text)
+  })
+
+  it('retains semantic variant fields, anchors, examples, and cross-page links in an appendix', async () => {
+    const html = `<html><body><article><h1>Supporting types</h1><p><a href="/reference/method">Back to the method reference</a></p>
+      <article data-api-entry="api-chunk"><h2>AgentChunkType</h2>
+      <div data-api-generics><section data-api-entry="api-generic" id="api-generic"><header>Type parameters: <code>OUTPUT</code> extends <code>object</code> = <code>undefined</code></header><p>Generic documentation.</p></section></div>
+      <p>Shared fields: <a href="#api-base">BaseChunkType</a></p>
+      <table data-api-table aria-label="Union variants"><thead><tr><th>type</th><th>Variant fields</th></tr></thead><tbody>
+      <tr data-api-entry="api-variant"><th scope="row"><span id="api-variant"></span><section data-api-entry="api-discriminator" id="api-discriminator"><code data-api-type>text-delta</code><p>Discriminator documentation.</p><p>Deprecated discriminator.</p><details><summary>Example</summary><pre><code>chunk.type</code></pre></details></section><p>A text variant.</p></th>
+      <td><section data-api-entry="api-payload" id="api-payload"><code data-api-type>payload: <a href="/reference/method#api-output">Output</a></code><p>The new text.</p><p>Default: <code>undefined</code></p><details><summary>Example</summary><pre class="language-typescript"><code>chunk.payload</code></pre></details></section></td></tr>
+      </tbody></table></article></article></body></html>`
+    const result = await processHtml(html, '/reference/method/types', resolveOptions({ siteUrl: 'https://mastra.ai' }))
+    for (const text of [
+      '<a id="api-chunk"></a>',
+      '<a id="api-variant"></a>',
+      '<a id="api-payload"></a>',
+      '<a id="api-discriminator"></a>',
+      '<a id="api-generic"></a>',
+      'Discriminator documentation.',
+      'Deprecated discriminator.',
+      'chunk.type',
+      'Generic documentation.',
+      'extends',
+      'OUTPUT',
+      '#api-base',
+      'text-delta',
+      'A text variant.',
+      'The new text.',
+      'undefined',
+      'chunk.payload',
+      '/reference/method#api-output',
+      'Back to the method reference',
+    ])
+      expect(result.markdown).toContain(text)
+  })
+
+  it('retains row anchors and rich descriptions from compact SDK tables', async () => {
+    const html = `<html><body><article><table data-api-table><thead><tr><th>Property</th><th>Type</th><th>Description</th></tr></thead><tbody>
+      <tr data-api-entry="api-options"><th scope="row"><a href="#api-options"><code>options</code></a></th><td><a href="#api-object">object</a> | undefined</td><td><p>Optional configuration.</p><p>Default: <code>{}</code></p><ul><li>One item.</li><li>Another item.</li></ul><details><summary>Example</summary><pre class="language-typescript"><code>run({ enabled: true })</code></pre></details><p>Deprecated: use settings.</p></td></tr>
+      <tr data-api-entry="api-object"><th>enabled</th><td>boolean</td><td>Enable the operation.</td></tr>
+    </tbody></table><table><thead><tr><th>Ordinary</th></tr></thead><tbody><tr><td>Unaffected</td></tr></tbody></table></article></body></html>`
+    const result = await processHtml(html, '/reference/table-test', resolveOptions({ siteUrl: 'https://mastra.ai' }))
+    for (const text of [
+      '<a id="api-options"></a>',
+      '<a id="api-object"></a>',
+      '#api-object',
+      'Optional configuration.',
+      'Default:',
+      '{}',
+      'One item.',
+      'Another item.',
+      'run({ enabled: true })',
+      'Deprecated: use settings.',
+      'Enable the operation.',
+      '| Ordinary',
+      'Unaffected',
+    ])
+      expect(result.markdown).toContain(text)
+  })
+
   it('preserves stable anchors, collapsed fields, signatures, defaults, examples, and links', async () => {
     const html = `<html><head><title>API reference</title></head><body><article>
       <section data-api-reference="true" data-api-surface="api-surface"><h2>Returns</h2>

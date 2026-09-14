@@ -91,7 +91,8 @@ export function createLinkHandler(options: LinkHandlerOptions) {
     let finalHref = href || ''
     if (isInternalLink(href) && !(options.excludeRoutes && isExcludedRoute(href, options.excludeRoutes))) {
       const route = normalizeRoute(href!)
-      finalHref = `${options.siteUrl}${route}`
+      const apiAnchor = href?.match(/#api-[a-zA-Z0-9_-]+$/)?.[0] ?? ''
+      finalHref = `${options.siteUrl}${route}${apiAnchor}`
     }
 
     return {

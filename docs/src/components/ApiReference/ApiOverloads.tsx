@@ -34,7 +34,7 @@ export default function ApiOverloads({ entries }: { entries: Entry[] }) {
     )
 
   return (
-    <div className={styles.overloads}>
+    <div className={styles.overloads} role="group" aria-label="Method overloads">
       <Tabs key={selected?.id} defaultValue={selected?.id} lazy={false}>
         {entries.map(entry => (
           <TabItem key={entry.id} value={entry.id} label={entry.name}>

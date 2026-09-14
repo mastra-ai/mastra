@@ -51,6 +51,53 @@ function writeFixture() {
 }
 
 describe('static API block discovery', () => {
+  it('requires a registered appendix route before compiling a documented method in production', async () => {
+    const template = writeFixture().declarations.field
+    const root = '@mastra/core/agent!Agent.generate'
+    const contract: ApiContract = {
+      version: 1,
+      root,
+      diagnostics: [],
+      declarations: {
+        [root]: { ...template, id: root, name: 'generate', kind: 'Method', signatures: ['signature'] },
+        signature: {
+          ...template,
+          id: 'signature',
+          name: 'generate',
+          kind: 'CallSignature',
+          sourceSignature: 'generate(): void',
+          type: { kind: 'intrinsic', display: 'void', operands: [], attributes: {} },
+          comment: {
+            summary: [{ kind: 'text', text: 'Generates a response.' }],
+            modifiers: [],
+            tags: [{ name: '@returns', content: [{ kind: 'text', text: 'No result.' }] }],
+          },
+        },
+      },
+    }
+    writeFileSync(join(directory, 'agent-generate.json'), JSON.stringify(contract))
+    const routeRegistry = join(directory, 'method-routes.json')
+    const outputDirectory = join(directory, 'method-output')
+    const path = join(directory, 'method.mdx')
+    const processor = parser().use(remarkApiReference, {
+      inputDirectory: directory,
+      outputDirectory,
+      routeRegistry,
+      cwd: repositoryRoot,
+      revision,
+      production: true,
+    })
+    const source = '<ApiReference root="Agent.generate" section="method" />'
+    await expect(processor.run(processor.parse(source), { path })).rejects.toThrow(
+      'method appendix route was not registered',
+    )
+    writeFileSync(routeRegistry, JSON.stringify({ [path]: '/reference/fixture' }))
+    await processor.run(processor.parse(source), { path })
+    const payload = JSON.parse(readFileSync(join(outputDirectory, readdirSync(outputDirectory)[0]), 'utf8'))
+    expect(payload.appendix).toEqual({ href: '/reference/fixture/types', title: 'Supporting types' })
+    expect(payload.entries).toHaveLength(1)
+  })
+
   it('recognizes literal complete-surface selectors', () => {
     const tree = parser().parse('<ApiReference root="Agent.generate" section="returns" />')
     expect(discoverSurfaces(tree).map(({ root, section }) => [root.id, section])).toEqual([
@@ -71,6 +118,24 @@ describe('static API block discovery', () => {
     'Inline <ApiReference root="Config" section="properties" /> text.',
   ])('rejects invalid author syntax: %s', source => {
     expect(() => discoverSurfaces(parser().parse(source))).toThrow()
+  })
+
+  it.each([
+    ['Config', 'properties'],
+    ['Agent.generate', 'method'],
+  ])('blocks the real %s %s surface from production until descriptions are complete', async (root, section) => {
+    const outputDirectory = join(directory, `real-rejected-${section}`)
+    const processor = parser().use(remarkApiReference, {
+      inputDirectory: artifactDirectory,
+      outputDirectory,
+      cwd: repositoryRoot,
+      revision,
+      production: true,
+    })
+    await expect(
+      processor.run(processor.parse(`<ApiReference root="${root}" section="${section}" />`)),
+    ).rejects.toThrow('Missing description')
+    expect(readdirSync(directory)).not.toContain(`real-rejected-${section}`)
   })
 
   it('injects trusted imports, data expressions, and headings while preserving prose', async () => {
@@ -136,6 +201,66 @@ describe('static API block discovery', () => {
     await expect(
       processor.run(processor.parse('<ApiReference root="Config" section="properties" />')),
     ).rejects.toThrow()
+  })
+
+  it('links out-of-surface comment targets to verified source without including their declarations', async () => {
+    const contract = writeFixture()
+    contract.declarations.field.comment = {
+      summary: [
+        {
+          kind: 'inline-tag',
+          tag: '@link',
+          text: 'Mastra.getAgentController',
+          target: 'owned-method',
+          targetSource: { path: 'packages/core/src/mastra/index.ts', line: 1, character: 0 },
+        },
+      ],
+      tags: [],
+      modifiers: [],
+    }
+    writeFileSync(join(directory, 'configuration.json'), JSON.stringify(contract))
+    const outputDirectory = join(directory, 'source-comment-output')
+    const processor = parser().use(remarkApiReference, {
+      inputDirectory: directory,
+      outputDirectory,
+      cwd: repositoryRoot,
+      revision,
+      production: true,
+    })
+    await processor.run(processor.parse('<ApiReference root="Config" section="properties" />'))
+    const payload = readFileSync(join(outputDirectory, readdirSync(outputDirectory)[0]), 'utf8')
+    expect(payload).toContain(`/blob/${revision}/packages/core/src/mastra/index.ts#L1`)
+    expect(payload).not.toContain('Missing description')
+    expect(contract.declarations['owned-method']).toBeUndefined()
+  })
+
+  it('rejects unverifiable source metadata on an out-of-surface comment link', async () => {
+    const contract = writeFixture()
+    contract.declarations.field.comment = {
+      summary: [
+        {
+          kind: 'inline-tag',
+          tag: '@link',
+          text: 'Missing source',
+          target: 'owned-method',
+          targetSource: { path: 'missing-source.ts', line: 1, character: 0 },
+        },
+      ],
+      tags: [],
+      modifiers: [],
+    }
+    writeFileSync(join(directory, 'configuration.json'), JSON.stringify(contract))
+    const processor = parser().use(remarkApiReference, {
+      inputDirectory: directory,
+      outputDirectory: join(directory, 'bad-source-output'),
+      cwd: repositoryRoot,
+      revision,
+      production: true,
+    })
+    await expect(processor.run(processor.parse('<ApiReference root="Config" section="properties" />'))).rejects.toThrow(
+      'API reference source verification failed',
+    )
+    expect(readdirSync(directory)).not.toContain('bad-source-output')
   })
 
   it('fails publication on broken included comment links but exempts unused diagnostics', async () => {

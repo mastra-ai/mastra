@@ -380,7 +380,7 @@ export interface IFGAProvider<TUser = unknown> {
    * method to opt in to provider-driven least privilege for those actors:
    * decide whether the actor (identified by `actor.agentId` and constrained by
    * `actor.permissions` / `actor.scope`) may perform `permission` on
-   * `resource`, and throw {@link FGADeniedError} to deny.
+   * `resource`, and throw `FGADeniedError` to deny.
    *
    * When this method is not implemented, Mastra preserves the legacy
    * trusted-actor bypass (allow after the tenant-scope check). Adding it is
