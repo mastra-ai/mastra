@@ -2,4 +2,7 @@
 '@mastra/core': patch
 ---
 
-Fixed active controller signals building tools unnecessarily while preserving request context when delivery races with run completion.
+Fixed follow-up signals sent at run completion so they retain controller and request context when starting a new stream.
+
+**Example**
+
