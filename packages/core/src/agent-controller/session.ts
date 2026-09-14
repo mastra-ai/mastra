@@ -3024,7 +3024,7 @@ export class Session<TState = unknown> {
 
   /** Await the terminal event for a specific accepted agent run. */
   private async waitForAcceptedRunCompletion<OUTPUT>(
-    accepted: Promise<SendAgentSignalAccepted<OUTPUT>>,
+    accepted: Promise<{ action?: SendAgentSignalAccepted<OUTPUT>['action']; runId?: string }>,
     { waitForDelivery = true }: { waitForDelivery?: boolean } = {},
   ): Promise<void> {
     const completedRunIds = new Set<string>();
@@ -3719,53 +3719,22 @@ export class Session<TState = unknown> {
     requestContext?: RequestContext;
     untilIdle?: boolean | { maxIdleMs?: number };
   }): Promise<void> {
-    const messageInput = this.createMessageInput({ content, files });
-    const providerOptions = withMessageAuthor(undefined, readMessageAuthor(requestContextInput));
-    const messageWithAuthor = providerOptions ? { contents: messageInput, providerOptions } : messageInput;
     const wasActive = this.stream.isActive();
-    const submittedRunId = this.run.getRunId();
-    const submittedActiveRunId = this.stream.activeRunId();
-    const submittedIsRunning = this.run.isRunning();
-    const submittedAbortRequested = this.run.isAbortRequested();
-    const submittedWhileWorking =
-      submittedIsRunning || (submittedAbortRequested && Boolean(submittedRunId || submittedActiveRunId));
-    const routesToActiveRun = Boolean(
-      !submittedAbortRequested && submittedRunId && submittedActiveRunId && submittedIsRunning,
+    const signal = this.sendSignal(
+      {
+        content: this.createMessageInput({ content, files }),
+        tracingContext,
+        tracingOptions,
+        requestContext: requestContextInput,
+        untilIdle,
+      },
+      { requireDelivery: true },
     );
 
-    if (routesToActiveRun) {
-      this.approval.respond({
-        decision: 'decline',
-        declineContext: {
-          reason: 'interrupted_by_user_message',
-          message: 'The pending tool approval was declined because the user sent a new message.',
-        },
-      });
-    }
-    if (submittedAbortRequested && (submittedRunId || submittedActiveRunId)) {
-      await this.waitForStreamIdle();
-    }
-
-    const target = await this.prepareMessageTarget({
-      requestContext: requestContextInput,
-      tracingContext,
-      tracingOptions,
-      untilIdle,
-      includeStreamOptions: !routesToActiveRun,
-    });
-    const result = this.machinery
-      .getAgent()
-      .sendMessage(
-        submittedWhileWorking
-          ? { contents: messageInput, attributes: { delivery: 'while-active' }, providerOptions }
-          : messageWithAuthor,
-        target,
-      );
-
     if (wasActive) {
-      await result.accepted;
+      await signal.accepted;
     } else {
-      await this.waitForAcceptedRunCompletion(result.accepted);
+      await this.waitForAcceptedRunCompletion(signal.accepted);
     }
   }
 
