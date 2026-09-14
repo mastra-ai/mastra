@@ -19,14 +19,18 @@ export const AgentMetadataSection = ({ title, icon, children, hint }: AgentMetad
   const { Link } = useLinkComponent();
   return (
     <section className="space-y-2 pb-7 last:pb-0">
-      <Txt as="h3" variant="ui-md" className="text-neutral3 flex items-center gap-1">
-        {icon && <Icon aria-hidden="true">{icon}</Icon>}
+      <Txt as="h3" variant="title" className="flex items-center gap-2">
+        {icon && (
+          <Icon aria-hidden="true" className="shrink-0">
+            {icon}
+          </Icon>
+        )}
         {title}
         {hint && (
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Link href={hint.link} target="_blank" rel="noopener noreferrer">
+                <Link href={hint.link} aria-label={hint.title} target="_blank" rel="noopener noreferrer">
                   <Icon className="text-neutral3" size="sm">
                     {hint.icon || <InfoIcon />}
                   </Icon>
