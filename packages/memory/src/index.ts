@@ -2053,6 +2053,7 @@ ${workingMemory}`;
             threadTitle: omConfig.observation.threadTitle,
             observeAttachments: omConfig.observation.observeAttachments,
             continuationHints: omConfig.observation.continuationHints,
+            onFailure: omConfig.observation.onFailure,
             extract: omConfig.observation.extract,
           }
         : undefined,
