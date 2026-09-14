@@ -92,7 +92,7 @@ Mastra provides three factory functions that produce durable agents. They differ
 | `createEventedAgent()` | `@mastra/core` | Background execution. The workflow starts without blocking, and you consume chunks through PubSub. |
 | `createInngestAgent()` | `@mastra/inngest` | Production deployments. Inngest adds step memoization, retries, and a monitoring dashboard. |
 
-All three return an object you register with `Mastra` the same way as a regular agent. `createDurableAgent()` and `createEventedAgent()` return class instances that extend `Agent`. `createInngestAgent()` returns a Proxy-backed object that forwards `Agent` methods to the underlying agent. With all three, a signal that wakes an idle thread (for example from `sendSignal()` or `sendNotificationSignal()`) runs through the durable `stream()`.
+All three return an object you register with `Mastra` the same way as a regular agent. `createDurableAgent()` and `createEventedAgent()` return class instances that extend `Agent`. `createInngestAgent()` returns a Proxy-backed object that forwards `Agent` methods to the underlying agent. When a signal wakes an idle thread, all three start that run with the durable `stream()`. `sendSignal()` and `sendNotificationSignal()` both work this way.
 
 ### In-process with `createDurableAgent()`
 
