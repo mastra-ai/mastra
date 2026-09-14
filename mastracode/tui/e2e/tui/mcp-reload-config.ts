@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { z } from 'zod/v3';
+import { z } from 'zod';
 import { createGlobalPatchScope } from './global-patches.js';
 import { startMcpHttpFixtureServer } from './mcp-http-fixture.js';
 import type { McE2eInProcessApp, McE2eScenario } from './types.js';

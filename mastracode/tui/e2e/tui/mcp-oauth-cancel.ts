@@ -1,10 +1,24 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
+import { createServer } from 'node:net';
 import { join } from 'node:path';
-import { z } from 'zod/v3';
+import { getCallbackUrlCandidates } from '@mastra/mcp';
+import { z } from 'zod';
 import { createGlobalPatchScope } from './global-patches.js';
 import { startMcpOAuthFixtureServer } from './mcp-oauth-fixture.js';
 import type { McpOAuthFixture } from './mcp-oauth-fixture.js';
 import type { McE2eInProcessApp, McE2eScenario } from './types.js';
+
+/** Grab a currently-free port so the pinned `callbackPort` never collides in CI. */
+async function findFreePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const probe = createServer();
+    probe.once('error', reject);
+    probe.listen(0, '127.0.0.1', () => {
+      const { port } = probe.address() as { port: number };
+      probe.close(() => resolve(port));
+    });
+  });
+}
 
 export const mcpOauthCancelScenario = {
   name: 'mcp-oauth-cancel',
@@ -21,9 +35,11 @@ export const mcpOauthCancelScenario = {
     patches.setEnv('MASTRA_MCP_OAUTH_NO_BROWSER', '1');
     // Hold the authorize endpoint open so the client's OAuth flow stays pending,
     // giving the scenario a deterministic window to cancel before any code is issued.
+    const callbackPort = await findFreePort();
     let fixtureServer: McpOAuthFixture | undefined = await startMcpOAuthFixtureServer({
       name: 'mc-e2e-oauth-cancel-mcp',
       holdAuthorize: true,
+      redirectUris: getCallbackUrlCandidates(`http://localhost:${callbackPort}/callback`).map(String),
       registerTools: server => {
         server.tool(
           'oauth_probe',
@@ -39,7 +55,11 @@ export const mcpOauthCancelScenario = {
 
     writeFileSync(
       join(projectDir, '.mastracode', 'mcp.json'),
-      JSON.stringify({ mcpServers: { oauth_server: { url: server.url } } }, null, 2),
+      JSON.stringify(
+        { mcpServers: { oauth_server: { url: server.url, oauth: { clientId: server.clientId, callbackPort } } } },
+        null,
+        2,
+      ),
     );
 
     try {

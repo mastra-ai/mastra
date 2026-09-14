@@ -47,10 +47,20 @@ export interface McpHttpOAuthConfig {
   clientName?: string;
   /** Optional scopes requested during OAuth */
   scopes?: string[];
-  /** Optional pre-registered OAuth client ID */
+  /**
+   * OAuth client ID pre-registered with the server's authorization server.
+   * Either `clientId` or `clientMetadataUrl` is required to authenticate:
+   * `@mastra/mcp` 2.x does not register clients dynamically.
+   */
   clientId?: string;
   /** Optional pre-registered OAuth client secret */
   clientSecret?: string;
+  /**
+   * HTTPS URL of a Client ID Metadata Document that identifies this client to
+   * authorization servers that support URL-based client IDs (SEP-991). Used
+   * as the `client_id` when no `clientId` is configured.
+   */
+  clientMetadataUrl?: string;
 }
 
 /**

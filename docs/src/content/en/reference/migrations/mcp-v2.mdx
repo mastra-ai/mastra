@@ -7,17 +7,17 @@ packages:
 
 # Migrate @mastra/mcp from v1 to v2
 
-`@mastra/mcp` 2.0 implements the MCP **2026-07-28** revision only. Servers no longer negotiate older protocol revisions and clients no longer downgrade to them. Every request is self-contained: there is no `initialize` handshake, no session header, no standalone HTTP+SSE transport and no server-initiated requests. Tools, resources and prompts that need input from the caller return a native `input_required` continuation, which the client answers by repeating the call with keyed `inputResponses`.
+`@mastra/mcp` 2.0 implements the MCP **2026-07-28** revision only. Servers no longer negotiate older protocol revisions and clients no longer downgrade to them. Every request is self-contained and carries everything the server needs, so the `initialize` handshake, the session header, the standalone HTTP+SSE transport and server-initiated requests are all gone. Tools, resources and prompts that need input from the caller return a native `input_required` continuation, which the client answers by repeating the call with keyed `inputResponses`.
 
 If you need to keep serving pre-2026 clients, stay on `@mastra/mcp` 1.x. It remains supported against current `@mastra/core`, and a Mastra instance can register 1.x and 2.x servers side by side.
 
-Streamable HTTP still streams responses as Server-Sent Events. What is removed is the standalone `GET /sse` + `POST /messages` transport, not SSE framing.
+Streamable HTTP still streams responses as Server-Sent Events. What's removed is the standalone `GET /sse` + `POST /messages` transport, not SSE framing.
 
 ## Changed
 
 ### `@mastra/core` peer range
 
-`@mastra/mcp` 2.0 requires `@mastra/core` 1.67 or newer, which ships the MCP v2 contracts (`MCPServerBaseV2`, `createMCPTool`, `MCPRequestContextV2`). Update both packages together.
+`@mastra/mcp` 2.0 requires `@mastra/core` 1.67 or newer, which contains the MCP v2 contracts (`MCPServerBaseV2`, `createMCPTool`, `MCPRequestContextV2`). Update both packages together.
 
 ```diff
 - "@mastra/core": "^1.60.0",
@@ -28,9 +28,9 @@ Streamable HTTP still streams responses as Server-Sent Events. What is removed i
 
 ### Tools that ask the caller for input use `createMCPTool`
 
-In 1.x a tool asked for input through `context.mcp.elicitation.sendRequest()` inside `createTool` and awaited the answer while the request stayed open. In 2.0 the server returns `input_required` and the handler runs again with the caller's answers, so protocol-aware tools are written with `createMCPTool` from `@mastra/core/mcp` and return an explicit outcome per round. Ordinary `createTool` definitions still work unchanged on a v2 server; they receive their normal execution context without a `context.mcp` property.
+In 1.x a tool asked for input through `context.mcp.elicitation.sendRequest()` inside `createTool` and awaited the answer while the request stayed open. In 2.0 the server returns `input_required` and the handler runs again with the caller's answers, so protocol-aware tools are written with `createMCPTool` from `@mastra/core/mcp` and return an explicit outcome per round. Ordinary `createTool` definitions still work unchanged on a v2 server. They receive their normal execution context without a `context.mcp` property.
 
-To migrate, move each `sendRequest` into a named round: read the answer for that round from `request.inputResponses`, return `{ kind: 'input_required', result }` when it is missing, and return `{ kind: 'completed', value }` when the tool is done. Carry the state the next round needs in `requestState`; the client echoes it byte for byte.
+To migrate, move each `sendRequest` into a named round: read the answer for that round from `request.inputResponses`, return `{ kind: 'input_required', result }` when it's missing, and return `{ kind: 'completed', value }` when the tool is done. Carry the state the next round needs in `requestState`. The client echoes it byte for byte.
 
 ```diff
 - import { createTool } from '@mastra/core/tools';
@@ -72,7 +72,40 @@ To migrate, move each `sendRequest` into a named round: read the answer for that
 
 Carry state between rounds in `requestState`: the client echoes it byte for byte, and the server must treat it as untrusted. Pass a `createRequestStateCodec` `verify` function as `requestState: { verify }` in the `MCPServer` config so the framework rejects tampered or expired state before your handler runs and hands the decoded payload to `request.requestState`.
 
-Native tools belong to the MCP server only. Passing one to an agent, workflow or `Mastra` `tools` map throws, because a protocol continuation is not a business result.
+Native tools belong to the MCP server only. Passing one to an agent, workflow or `Mastra` `tools` map throws, because a protocol continuation isn't a business result.
+
+### `context.mcp.extra`, `context.mcp.log` and `context.mcp.progress`
+
+Ordinary tools no longer receive a `context.mcp` object. Transport authentication moved to the trusted request context, and cancellation to `context.abortSignal`. The per-request `log` and `progress` helpers, the raw `_meta` metadata and the SDK handler context are protocol facilities, so they're only available to tools created with `createMCPTool`, on `request`.
+
+| 1.x | 2.x |
+| - | - |
+| `context.mcp.extra.authInfo` | `context.requestContext.get('authInfo')` in any tool |
+| `context.mcp.extra.signal` | `context.abortSignal` in `createTool`, `request.signal` in `createMCPTool` |
+| `context.mcp.extra.sessionId` | Removed. Requests have no session |
+| `context.mcp.extra._meta` | `request.metadata` in `createMCPTool` |
+| `context.mcp.log(level, message, data?)` | `request.log(level, data, logger?)` in `createMCPTool` |
+| `context.mcp.progress({ progress, total, message })` | `request.progress(progress, total?, message?)` in `createMCPTool` |
+| `context.mcp.elicitation.sendRequest()` | `input_required` outcome in `createMCPTool` |
+
+```diff
+- execute: async ({ location }, context) => {
+-   const token = context.mcp?.extra?.authInfo?.token
+-   await context.mcp?.log('debug', 'Fetching weather', { location })
+-   const weather = await fetchWeather(location, { token, signal: context.mcp?.extra?.signal })
+-   await context.mcp?.progress({ progress: 1, total: 1 })
+-   return weather
+- }
++ execute: async ({ location }, { request, requestContext }) => {
++   const token = (requestContext.get('authInfo') as { token?: string } | undefined)?.token
++   await request.log('debug', { message: 'Fetching weather', location })
++   const weather = await fetchWeather(location, { token, signal: request.signal })
++   await request.progress(1, 1)
++   return { kind: 'completed', value: weather }
++ }
+```
+
+A tool that only read `authInfo` can stay on `createTool` and read it from `requestContext`. W3C trace headers sent by the client (`traceparent`, `tracestate`, `baggage`) are exposed to every tool under `requestContext.get('traceContext')` as opaque strings, and the client attaches them from a `traceContext` provider in the server definition.
 
 ### Resource and prompt callbacks receive `{ request, requestContext }`
 
@@ -93,7 +126,7 @@ To migrate, read authentication from `requestContext` and cancellation from `req
 
 Servers no longer accept `logging/setLevel` or keep a log level per connection. A client opts in per request by sending the `io.modelcontextprotocol/logLevel` metadata key, and the server delivers `notifications/message` for that request only, filtered to the requested severity. Tools log through `request.log(level, data)` on native tools; ordinary tools keep using the Mastra logger and observability, which are unaffected.
 
-On the client, `enableServerLogs` (default `true`) now attaches the metadata key to every request at `serverLogLevel` (default `'info'`); set `enableServerLogs: false` to receive nothing. Delivered messages still reach your `logger` handler.
+On the client, `enableServerLogs` (default `true`) now attaches the metadata key to every request at `serverLogLevel` (default `'info'`). Set `enableServerLogs: false` to receive nothing. Delivered messages still reach your `logger` handler.
 
 ```diff
   servers: {
@@ -119,7 +152,7 @@ await mcp.resources.unsubscribe('weather', 'weather://forecast')
 
 ### Client input handlers are configured per server
 
-The client answered server elicitation with `mcp.elicitation.onRequest(serverName, handler)`. Because input requests are now embedded in `input_required` results, the handler is part of the server definition and receives one keyed request at a time. Configuring it advertises the `elicitation.form` capability; servers only embed elicitation for clients that advertise it.
+The client answered server elicitation with `mcp.elicitation.onRequest(serverName, handler)`. Because input requests are now embedded in `input_required` results, the handler is part of the server definition and receives one keyed request at a time. Configuring it advertises the `elicitation.form` capability, and servers only embed elicitation for clients that advertise it.
 
 ```diff
   const mcp = new MCPClient({
@@ -145,11 +178,11 @@ The client answered server elicitation with `mcp.elicitation.onRequest(serverNam
   });
 ```
 
-Persisted credentials changed shape too: tokens are stored per authorization-server `issuer` (the SDK's `tokens(ctx)`/`saveTokens(tokens, ctx)` context) and the provider persists OAuth discovery state so the authorization code is only exchanged with the server that issued the redirect. Custom `OAuthStorage` backends keep the same key-value contract, but a storage namespace must not be shared between providers. `createOAuthCallbackServer` now also returns the RFC 9207 `iss` parameter; pass it to the code exchange so the SDK can reject an issuer mismatch.
+Persisted credentials changed shape too: tokens are stored per authorization-server `issuer` (the SDK's `tokens(ctx)`/`saveTokens(tokens, ctx)` context) and the provider persists OAuth discovery state so the authorization code is only exchanged with the server that issued the redirect. Custom `OAuthStorage` backends keep the same key-value contract, but a storage namespace must not be shared between providers. `createOAuthCallbackServer` now also returns the RFC 9207 `iss` parameter. Pass it to the code exchange so the SDK can reject an issuer mismatch.
 
 ### `startHTTP` options
 
-`startHTTP` keeps `url`, `httpPath`, `req` and `res`. The `options` object only carries request security (`enableDnsRebindingProtection`, `allowedHosts`, `allowedOrigins`); the session and serverless flags are gone because every request is stateless.
+`startHTTP` keeps `url`, `httpPath`, `req` and `res`. The `options` object only carries request security (`enableDnsRebindingProtection`, `allowedHosts`, `allowedOrigins`). The session and serverless flags are gone because every request is stateless.
 
 ```diff
   await server.startHTTP({
@@ -164,7 +197,7 @@ Persisted credentials changed shape too: tokens are stored per authorization-ser
 
 ### Server `id` is used verbatim
 
-MCP 1.x slugified the configured `id` (`myMcpServer` became `my-mcp-server`) and that slug appeared in hosted routes and registry listings. A v2 server keeps the `id` exactly as configured, so `/api/mcp/:serverId/mcp` and `/api/mcp/v0/servers/:id` use the value you passed. Pass a slug yourself if you need one.
+MCP 1.x slugified the configured `id` (`myMcpServer` became `my-mcp-server`) and used that slug in hosted routes and registry listings. A v2 server keeps the `id` exactly as configured, so `/api/mcp/:serverId/mcp` and `/api/mcp/v0/servers/:id` use the value you passed. Pass a slug yourself if you need one.
 
 ```diff
   const server = new MCPServer({ id: 'myMcpServer', /* ... */ });
@@ -185,7 +218,7 @@ MCP 1.x slugified the configured `id` (`myMcpServer` became `my-mcp-server`) and
 
 ### `protocolVersion` option
 
-Servers and clients accepted `protocolVersion` (`'2025-11-25'`, `'2026-07-28'` or `'auto'`). Only `2026-07-28` is spoken now, exposed as the `MCP_PROTOCOL_VERSION` and `MCP_CLIENT_PROTOCOL_VERSION` constants. Remove the option; a peer that does not offer `2026-07-28` fails with an explicit negotiation error instead of a downgrade.
+Servers and clients accepted `protocolVersion` (`'2025-11-25'`, `'2026-07-28'` or `'auto'`). Only `2026-07-28` is spoken now, exposed as the `MCP_PROTOCOL_VERSION` and `MCP_CLIENT_PROTOCOL_VERSION` constants. Remove the option; a peer that doesn't offer `2026-07-28` fails with an explicit negotiation error instead of a downgrade.
 
 ```diff
   const server = new MCPServer({
@@ -207,7 +240,7 @@ The standalone HTTP+SSE transport is removed from servers, and the client no lon
 
 ### `handleServerlessRequest`, `sessionId`, `sessionIds`, `reconnectionOptions`, `eventSourceInit`
 
-Requests are stateless, so there is nothing to resume or identify. `startHTTP` handles serverless and long-lived servers alike; remove the session options from server and client definitions.
+Requests are stateless, so there is nothing to resume or identify. `startHTTP` handles serverless and long-lived servers alike. Remove the session options from server and client definitions.
 
 ```diff
   servers: {
@@ -221,19 +254,19 @@ Requests are stateless, so there is nothing to resume or identify. `startHTTP` h
 
 ### `elicitation` actions on server and client
 
-`server.elicitation.sendRequest()` and `mcp.elicitation.onRequest()` are removed together with the `context.mcp` execution context. Use `createMCPTool` on the server and the `inputRequests` server option on the client, as shown above.
+`server.elicitation.sendRequest()` and `mcp.elicitation.onRequest()` are removed together with the `context.mcp` execution context. Use `createMCPTool` on the server and the `inputRequests` server option on the client.
 
 ### `roots` and `sampling`
 
-Clients no longer advertise `roots`; `setRoots()` and `sendRootsListChanged()` are gone. Servers neither request sampling nor advertise it. A server that embeds a `roots/list` or `sampling/createMessage` request in `input_required` is not answered: the client has no handler for those methods, so the call fails instead of fabricating a response.
+Clients no longer advertise `roots`, and `setRoots()` and `sendRootsListChanged()` are gone. Servers neither request sampling nor advertise it. A server that embeds a `roots/list` or `sampling/createMessage` request in `input_required` isn't answered: the client has no handler for those methods, so the call fails instead of fabricating a response.
 
 ### `logging/setLevel` and `sendLoggingMessage`
 
-Servers keep the static `logging` capability required by the specification but reject `logging/setLevel` with method-not-found; `server.sendLoggingMessage()` and `server.getServer()` are removed. Log per request through `request.log` or keep using the Mastra logger.
+Servers keep the static `logging` capability required by the specification but reject `logging/setLevel` with method-not-found. `server.sendLoggingMessage()` and `server.getServer()` are removed. Log per request through `request.log` or keep using the Mastra logger.
 
 ### `resources/subscribe` and `resources/unsubscribe`
 
-The legacy methods are removed from both sides; `resources.subscribe` now uses `subscriptions/listen` as shown above.
+The legacy methods are removed from both sides. `resources.subscribe` now rides the managed `subscriptions/listen` stream.
 
 ### Dynamic client registration
 
@@ -241,7 +274,7 @@ The legacy methods are removed from both sides; `resources.subscribe` now uses `
 
 ### `MCPServerBase` for `@mastra/mcp` servers
 
-`MCPServer` and `MCPClientServerProxy` now extend `MCPServerBaseV2`. Code that narrows registry entries should use `isMCPServerV2()` from `@mastra/core/mcp`; `mastra.getMCPServer()` returns the `MCPServerRegistryEntry` union so 1.x and 2.x servers coexist.
+`MCPServer` and `MCPClientServerProxy` now extend `MCPServerBaseV2`. Code that narrows registry entries should use `isMCPServerV2()` from `@mastra/core/mcp`. `mastra.getMCPServer()` returns the `MCPServerRegistryEntry` union so 1.x and 2.x servers coexist.
 
 ```diff
 - import { MCPServerBase } from '@mastra/core/mcp';

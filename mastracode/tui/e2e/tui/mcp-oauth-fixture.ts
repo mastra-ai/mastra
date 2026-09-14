@@ -2,13 +2,15 @@ import { createHash, randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { loadMcpSdk } from './mcp-http-fixture.js';
+import { createMcpFixtureHandler } from './mcp-http-fixture.js';
 import type { McpFixtureServer } from './mcp-http-fixture.js';
 
 export type McpOAuthFixture = {
   close: () => Promise<void>;
   /** Streamable HTTP MCP endpoint (requires a Bearer token issued by the fixture). */
   url: string;
+  /** The pre-registered OAuth client id a scenario must put in `oauth.clientId`. */
+  clientId: string;
   /**
    * Release the authorize endpoint when it is being held open (see
    * `holdAuthorize`). Resolves any in-flight authorize request so the OAuth
@@ -21,6 +23,12 @@ export type McpOAuthFixtureOptions = {
   name: string;
   registerTools: (server: McpFixtureServer) => void;
   version?: string;
+  /**
+   * Redirect URIs the pre-registered client is allowed to use. `@mastra/mcp`
+   * 2.x never registers clients dynamically, so the fixture registers the
+   * scenario's client up front like a real authorization server would.
+   */
+  redirectUris: string[];
   /**
    * When true, the authorize endpoint parks the request (holding the browser
    * "open") instead of redirecting immediately. This keeps the client's OAuth
@@ -48,17 +56,19 @@ function sendJson(res: ServerResponse, statusCode: number, payload: unknown, hea
  * OAuth-protected MCP fixture server for e2e scenarios.
  *
  * A single `node:http` server acts as both the OAuth 2.1 authorization server
- * (RFC 8414 metadata, RFC 7591 dynamic client registration, authorization code
+ * (RFC 8414 metadata, a pre-registered public client, authorization code
  * grant with PKCE S256) and the protected MCP resource (RFC 9728 metadata,
  * Bearer-gated streamable HTTP endpoint). The authorize endpoint immediately
  * redirects back with a code — no login page — so the e2e harness can act as
  * the browser with a single fetch. All tokens are fake, per-run random strings.
  */
 export async function startMcpOAuthFixtureServer(options: McpOAuthFixtureOptions): Promise<McpOAuthFixture> {
-  const { McpServer, StreamableHTTPServerTransport } = await loadMcpSdk();
-  const activeServers = new Set<McpFixtureServer>();
+  const mcp = await createMcpFixtureHandler(options);
 
-  const clientsById = new Map<string, { client_id: string; redirect_uris: string[] }>();
+  const clientId = `mc-e2e-client-${randomUUID()}`;
+  const clientsById = new Map<string, { client_id: string; redirect_uris: string[] }>([
+    [clientId, { client_id: clientId, redirect_uris: options.redirectUris }],
+  ]);
   const pendingCodes = new Map<string, { codeChallenge: string; redirectUri: string }>();
   const refreshTokens = new Set<string>();
   const validTokens = new Set<string>();
@@ -73,16 +83,6 @@ export async function startMcpOAuthFixtureServer(options: McpOAuthFixtureOptions
     : undefined;
 
   let baseUrl = '';
-
-  const createMcpServer = () => {
-    const server = new McpServer(
-      { name: options.name, version: options.version ?? '1.0.0' },
-      { capabilities: { tools: {} } },
-    );
-    options.registerTools(server);
-    activeServers.add(server);
-    return server;
-  };
 
   const httpServer = createServer((req: IncomingMessage, res: ServerResponse) => {
     void (async () => {
@@ -105,7 +105,6 @@ export async function startMcpOAuthFixtureServer(options: McpOAuthFixtureOptions
           issuer: baseUrl,
           authorization_endpoint: `${baseUrl}/authorize`,
           token_endpoint: `${baseUrl}/token`,
-          registration_endpoint: `${baseUrl}/register`,
           response_types_supported: ['code'],
           grant_types_supported: ['authorization_code', 'refresh_token'],
           code_challenge_methods_supported: ['S256'],
@@ -114,17 +113,10 @@ export async function startMcpOAuthFixtureServer(options: McpOAuthFixtureOptions
         return;
       }
 
-      // --- RFC 7591 dynamic client registration ---
-      if (requestUrl.pathname === '/register' && req.method === 'POST') {
-        const metadata = JSON.parse(await readBody(req));
-        const registration = { client_id: `client-${randomUUID()}`, redirect_uris: metadata.redirect_uris };
-        clientsById.set(registration.client_id, registration);
-        sendJson(res, 201, {
-          ...metadata,
-          client_id: registration.client_id,
-          client_id_issued_at: Math.floor(Date.now() / 1000),
-          token_endpoint_auth_method: 'none',
-        });
+      // Dynamic client registration is gone in @mastra/mcp 2.x; a client that
+      // still tried it would be a regression, so answer loudly.
+      if (requestUrl.pathname === '/register') {
+        sendJson(res, 404, { error: 'unsupported', error_description: 'dynamic client registration is not offered' });
         return;
       }
 
@@ -203,14 +195,7 @@ export async function startMcpOAuthFixtureServer(options: McpOAuthFixtureOptions
           return;
         }
 
-        const mcpServer = createMcpServer();
-        const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
-        await mcpServer.connect(transport);
-        res.on('finish', () => {
-          activeServers.delete(mcpServer);
-          void mcpServer.close().catch(() => undefined);
-        });
-        await transport.handleRequest(req, res);
+        await mcp.handle(req, res);
         return;
       }
 
@@ -237,11 +222,11 @@ export async function startMcpOAuthFixtureServer(options: McpOAuthFixtureOptions
   return {
     close: async () => {
       releaseHeldAuthorize?.();
-      await Promise.all([...activeServers].map(server => server.close().catch(() => undefined)));
-      activeServers.clear();
+      await mcp.close();
       await new Promise<void>(resolve => httpServer.close(() => resolve())).catch(() => undefined);
     },
     url: `${baseUrl}/mcp`,
+    clientId,
     releaseAuthorize: () => releaseHeldAuthorize?.(),
   };
 }

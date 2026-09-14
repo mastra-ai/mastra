@@ -55,8 +55,10 @@ constructor({
 
 Each server in the `servers` map is configured using the `MastraMCPServerDefinition` type. The transport type is detected based on the provided parameters:
 
-- If `command` is provided, it uses the Stdio transport.
-- If `url` is provided, it first attempts to use the Streamable HTTP transport and falls back to the legacy SSE transport if the initial connection fails.
+- If `command` is provided, it uses the stdio transport.
+- If `url` is provided, it uses the Streamable HTTP transport.
+
+The client speaks the MCP `2026-07-28` revision only (exported as `MCP_CLIENT_PROTOCOL_VERSION`). Every request is self-contained and carries everything the server needs. The client never opens a session, sends `initialize` or falls back to the standalone HTTP+SSE transport. A server that doesn't offer `2026-07-28` fails with an explicit negotiation error. See the [v2 migration guide](/reference/migrations/mcp-v2) for what changed from 1.x.
 
 <br />
 
@@ -92,7 +94,8 @@ Each server in the `servers` map is configured using the `MastraMCPServerDefinit
     name: 'url',
     type: 'URL',
     isOptional: true,
-    description: 'For HTTP servers (Streamable HTTP or SSE): The URL of the server.',
+    description:
+      'For HTTP servers: The URL of the Streamable HTTP endpoint (for a Mastra-hosted server, `/api/mcp/:serverId/mcp`).',
   },
   {
     name: 'requestInit',
@@ -101,18 +104,17 @@ Each server in the `servers` map is configured using the `MastraMCPServerDefinit
     description: 'For HTTP servers: Request configuration for the fetch API.',
   },
   {
-    name: 'eventSourceInit',
-    type: 'EventSourceInit',
+    name: 'connectTimeout',
+    type: 'number',
     isOptional: true,
-    description:
-      'For SSE fallback: Custom fetch configuration for SSE connections. Required when using custom headers with SSE.',
+    description: 'For HTTP servers: Timeout in milliseconds for the initial discovery request.',
   },
   {
     name: 'fetch',
     type: 'MastraFetchLike',
     isOptional: true,
     description:
-      'For HTTP servers: Custom fetch implementation used for all network requests. Receives an optional third `requestContext` parameter containing request-scoped data (e.g., authentication cookies, bearer tokens) from the incoming request. When provided, this function will be used for all HTTP requests, allowing you to add dynamic authentication headers, forward request-scoped credentials to the MCP server, customize request behavior per-request, or intercept and modify requests/responses. When `fetch` is provided, `requestInit`, `eventSourceInit`, and `authProvider` become optional, as you can handle these concerns within your custom fetch function.',
+      'For HTTP servers: Custom fetch implementation used for all network requests. Receives an optional third `requestContext` parameter containing request-scoped data (e.g., authentication cookies, bearer tokens) from the incoming request. When provided, this function will be used for all HTTP requests, allowing you to add dynamic authentication headers, forward request-scoped credentials to the MCP server, customize request behavior per-request, or intercept and modify requests/responses. When `fetch` is provided, `requestInit` and `authProvider` become optional, as you can handle these concerns within your custom fetch function.',
   },
   {
     name: 'allowedHosts',
@@ -135,9 +137,17 @@ Each server in the `servers` map is configured using the `MastraMCPServerDefinit
   },
   {
     name: 'capabilities',
-    type: 'ClientCapabilities',
+    type: 'MCPClientCapabilities',
     isOptional: true,
-    description: 'Server-specific capabilities configuration.',
+    description:
+      'Client capabilities to advertise (`elicitation` and `extensions`). `elicitation` is only accepted together with an `inputRequests` handler, and defaults to form support when a handler is configured. Roots and sampling are not supported.',
+  },
+  {
+    name: 'inputRequests',
+    type: 'MCPInputRequestHandler',
+    isOptional: true,
+    description:
+      'Answers embedded input requests (`input_required` results) from this server, one keyed request at a time. Configuring a handler advertises form elicitation support; widen it with `capabilities.elicitation` to accept url-mode requests. Without a handler an `input_required` result is surfaced as a typed error. See Input requests.',
   },
   {
     name: 'authProvider',
@@ -151,7 +161,38 @@ Each server in the `servers` map is configured using the `MastraMCPServerDefinit
     type: 'boolean',
     isOptional: true,
     defaultValue: 'true',
-    description: 'Whether to enable logging for this server.',
+    description:
+      'Whether to opt into per-request server logs. Attaches the `io.modelcontextprotocol/logLevel` metadata key to every request so the server delivers `notifications/message` for it, and forwards delivered messages to `logger`.',
+  },
+  {
+    name: 'serverLogLevel',
+    type: 'LoggingLevel',
+    isOptional: true,
+    defaultValue: "'info'",
+    description: 'Minimum severity requested from the server for per-request logs.',
+  },
+  {
+    name: 'enableProgressTracking',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'false',
+    description:
+      'Whether to attach a progress token to tool calls and forward `notifications/progress` to `progress.onUpdate` handlers.',
+  },
+  {
+    name: 'traceContext',
+    type: '() => MCPTraceContext | undefined',
+    isOptional: true,
+    description:
+      'Returns the W3C `traceparent`, `tracestate` and `baggage` values to attach to each outgoing request’s `_meta`. Called when the request is sent. Explicit `_meta` keys supplied for a tool call take precedence.',
+  },
+  {
+    name: 'onToolError',
+    type: "'throw' | 'return'",
+    isOptional: true,
+    defaultValue: "'throw'",
+    description:
+      "How to handle tool results with `isError: true`. `'throw'` surfaces the failure as a `MastraError` carrying the server's content text; `'return'` resolves with the raw result.",
   },
   {
     name: 'forwardInstructions',
@@ -230,7 +271,7 @@ The function can also be async. It receives `requestContext` from the incoming r
 
 ### Use tool annotations from a trusted server
 
-If you trust the MCP server, you can use its [tool annotations](https://modelcontextprotocol.io/specification/2025-11-25/server/tools#tool-annotations) (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`, `title`) to drive approval decisions:
+If you trust the MCP server, you can use its [tool annotations](https://modelcontextprotocol.io/specification/2026-07-28/server/tools#tool-annotations) (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`, `title`) to drive approval decisions:
 
 ```typescript
 const mcp = new MCPClient({
@@ -323,7 +364,7 @@ const mcp = new MCPClient({
 Enforcement details:
 
 - On the default fetch path, requests to disallowed hosts, including every redirect hop, are blocked **before** they're sent. Redirects are followed manually (up to 5 hops) so each hop is validated, and the `Authorization` header isn't carried across hops to a different origin (any scheme, host, or port change drops it, matching standard fetch behavior).
-- When you supply a custom `fetch` (or a custom `eventSourceInit.fetch`), the initial URL is still checked before the request, but redirect hops are validated **after the fact** using `response.url`: the outbound hop may occur, and the response is discarded when its final URL points at a disallowed host. A hand-built `Response` with an empty `response.url` skips this post-hoc check.
+- When you supply a custom `fetch`, the initial URL is still checked before the request, but redirect hops are validated **after the fact** using `response.url`: the outbound hop may occur, and the response is discarded when its final URL points at a disallowed host. A hand-built `Response` with an empty `response.url` skips this post-hoc check.
 - OAuth requests made through `authProvider` (authorization server metadata discovery, token exchange, refresh) are also validated. If your authorization server runs on a different host than the MCP server, add that host to `allowedHosts` too.
 - A blocked host fails the connection with a clear error and is never retried by the reconnect logic.
 
@@ -507,7 +548,7 @@ async disconnect(): Promise<void>
 
 ### `toMCPServerProxies()`
 
-Returns a map of `MCPClientServerProxy` instances, one per configured server. Each proxy wraps the underlying client connection as an `MCPServerBase` instance, allowing external (non-Mastra) MCP servers to be registered in `mcpServers` and appear in Studio.
+Returns a map of `MCPClientServerProxy` instances, one per configured server. Each proxy wraps the underlying client connection as an `MCPServerBaseV2` instance, allowing external (non-Mastra) MCP servers to be registered in `mcpServers` and appear in Studio.
 
 ```typescript oxfmt:false
 async toMCPServerProxies(): Promise<Record<string, MCPClientServerProxy>>
@@ -689,145 +730,6 @@ mcpClient.resources.onListChanged('myWeatherServer', () => {
 })
 ```
 
-### `elicitation` Property
-
-The `MCPClient` instance has an `elicitation` property that provides access to elicitation-related operations. Elicitation allows MCP servers to request structured information from users.
-
-```typescript
-const mcpClient = new MCPClient({/* ...servers configuration... */})
-
-// Set up elicitation handler
-mcpClient.elicitation.onRequest('serverName', async request => {
-  // Handle elicitation request from server
-  console.log('Server requests:', request.message)
-  console.log('Schema:', request.requestedSchema)
-
-  // Return user response
-  return {
-    action: 'accept',
-    content: { name: 'John Doe', email: 'john@example.com' },
-  }
-})
-```
-
-#### `elicitation.onRequest(serverName: string, handler: ElicitationHandler)`
-
-Sets up a handler function that will be called when any connected MCP server sends an elicitation request. The handler receives the request and must return a response.
-
-##### `ElicitationHandler` Function
-
-The handler function receives a request object with:
-
-- `message`: A human-readable message describing what information is needed
-- `requestedSchema`: A JSON schema defining the structure of the expected response
-
-The handler must return an `ElicitResult` with:
-
-- `action`: One of `'accept'`, `'decline'`, or `'cancel'`
-- `content`: The user's data (only when action is `'accept'`)
-
-**Example:**
-
-```typescript
-mcpClient.elicitation.onRequest('serverName', async request => {
-  console.log(`Server requests: ${request.message}`)
-
-  // Example: Simple user input collection
-  if (request.requestedSchema.properties.name) {
-    // Simulate user accepting and providing data
-    return {
-      action: 'accept',
-      content: {
-        name: 'Alice Smith',
-        email: 'alice@example.com',
-      },
-    }
-  }
-
-  // Simulate user declining the request
-  return { action: 'decline' }
-})
-```
-
-**Complete Interactive Example:**
-
-```typescript
-import { MCPClient } from '@mastra/mcp'
-import { createInterface } from 'readline'
-
-const readline = createInterface({
-  input: process.stdin,
-  output: process.stdout,
-})
-
-function askQuestion(question: string): Promise<string> {
-  return new Promise(resolve => {
-    readline.question(question, answer => resolve(answer.trim()))
-  })
-}
-
-const mcpClient = new MCPClient({
-  servers: {
-    interactiveServer: {
-      url: new URL('http://localhost:3000/mcp'),
-    },
-  },
-})
-
-// Set up interactive elicitation handler
-await mcpClient.elicitation.onRequest('interactiveServer', async request => {
-  console.log(`\n📋 Server Request: ${request.message}`)
-  console.log('Required information:')
-
-  const schema = request.requestedSchema
-  const properties = schema.properties || {}
-  const required = schema.required || []
-  const content: Record<string, any> = {}
-
-  // Collect input for each field
-  for (const [fieldName, fieldSchema] of Object.entries(properties)) {
-    const field = fieldSchema as any
-    const isRequired = required.includes(fieldName)
-
-    let prompt = `${field.title || fieldName}`
-    if (field.description) prompt += ` (${field.description})`
-    if (isRequired) prompt += ' *required*'
-    prompt += ': '
-
-    const answer = await askQuestion(prompt)
-
-    // Handle cancellation
-    if (answer.toLowerCase() === 'cancel') {
-      return { action: 'cancel' }
-    }
-
-    // Validate required fields
-    if (answer === '' && isRequired) {
-      console.log(`❌ ${fieldName} is required`)
-      return { action: 'decline' }
-    }
-
-    if (answer !== '') {
-      content[fieldName] = answer
-    }
-  }
-
-  // Confirm submission
-  console.log('\n📝 You provided:')
-  console.log(JSON.stringify(content, null, 2))
-
-  const confirm = await askQuestion('\nSubmit this information? (yes/no/cancel): ')
-
-  if (confirm.toLowerCase() === 'yes' || confirm.toLowerCase() === 'y') {
-    return { action: 'accept', content }
-  } else if (confirm.toLowerCase() === 'cancel') {
-    return { action: 'cancel' }
-  } else {
-    return { action: 'decline' }
-  }
-})
-```
-
 ### `prompts` Property
 
 The `MCPClient` instance has a `prompts` property that provides access to prompt-related operations.
@@ -869,7 +771,7 @@ const { prompts, errors, errorDetails } = await mcpClient.prompts.listWithErrors
 console.log(prompts, errors, errorDetails)
 ```
 
-#### `prompts.get({ serverName, name, args?, version? })`
+#### `prompts.get({ serverName, name, args? })`
 
 Retrieves a specific prompt and its messages from a server.
 
@@ -878,12 +780,10 @@ async get({
   serverName,
   name,
   args?,
-  version?,
 }: {
   serverName: string;
   name: string;
   args?: Record<string, any>;
-  version?: string;
 }): Promise<{ prompt: Prompt; messages: PromptMessage[] }>
 ```
 
@@ -948,7 +848,7 @@ const mcpClient = new MCPClient({
   servers: {
     myServer: {
       url: new URL('http://localhost:4111/api/mcp/myServer/mcp'),
-      // Enabled by default; set to false to disable
+      // Disabled by default; opt in per server
       enableProgressTracking: true,
     },
   },
@@ -983,34 +883,21 @@ Notes:
 - When `enableProgressTracking` is true (default), tool calls include a `progressToken` so you can correlate updates to a specific run.
 - If you pass a `runId` when executing a tool, it will be used as the `progressToken`.
 
-To disable progress tracking for a server:
+Progress notifications are delivered on the response stream of the tool call that carries the progress token, so they arrive only while that call is in flight.
 
-```typescript
-const mcpClient = new MCPClient({
-  servers: {
-    myServer: {
-      url: new URL('http://localhost:4111/api/mcp/myServer/mcp'),
-      enableProgressTracking: false,
-    },
-  },
-})
-```
+## Input requests
 
-## Elicitation
+A server tool, resource or prompt that needs information from the user answers with an `input_required` result instead of a final value. The result carries one or more keyed elicitation requests. The client collects an answer for each key and repeats the original call with the answers attached. Mastra drives that loop for you when the server definition has an `inputRequests` handler.
 
-Elicitation is a feature that allows MCP servers to request structured information from users. When a server needs additional data, it can send an elicitation request that the client handles by prompting the user. A common example is during a tool call.
+### How it works
 
-### How Elicitation Works
+1. **Server result**: `tools/call`, `resources/read` or `prompts/get` returns `input_required` with keyed `inputRequests` and opaque `requestState`
+1. **Client handler**: your `inputRequests` handler is called once per key with the request `params` and a cancellation `signal`
+1. **User interaction**: your handler collects the input (via UI, CLI, etc.) and returns accept, decline or cancel
+1. **Retry**: Mastra repeats the call with the answers for this round and the echoed `requestState`
+1. **Completion**: the server either completes or asks for another round; earlier rounds' answers are never re-sent
 
-1. **Server Request**: An MCP server tool calls `server.elicitation.sendRequest()` with a message and schema
-1. **Client Handler**: Your elicitation handler function is called with the request
-1. **User Interaction**: Your handler collects user input (via UI, CLI, etc.)
-1. **Response**: Your handler returns the user's response (accept/decline/cancel)
-1. **Tool Continuation**: The server tool receives the response and continues execution
-
-### Setting Up Elicitation
-
-You must set up an elicitation handler before tools that use elicitation are called:
+### Configuring a handler
 
 ```typescript
 import { MCPClient } from '@mastra/mcp'
@@ -1019,89 +906,83 @@ const mcpClient = new MCPClient({
   servers: {
     interactiveServer: {
       url: new URL('http://localhost:3000/mcp'),
+      inputRequests: async ({ key, params, signal }) => {
+        if (params.mode === 'url') {
+          // Open params.url for the user, or decline.
+          return { action: 'decline' }
+        }
+        console.log(`Server needs "${key}": ${params.message}`)
+        const content = await collectUserInput(params.requestedSchema, { signal })
+        return { action: 'accept', content }
+      },
     },
   },
 })
-
-// Set up elicitation handler
-mcpClient.elicitation.onRequest('interactiveServer', async request => {
-  // Handle the server's request for user input
-  console.log(`Server needs: ${request.message}`)
-
-  // Your logic to collect user input
-  const userData = await collectUserInput(request.requestedSchema)
-
-  return {
-    action: 'accept',
-    content: userData,
-  }
-})
 ```
+
+Configuring a handler advertises the `elicitation.form` capability to the server. To accept url-mode requests as well, widen `capabilities.elicitation`. A server only embeds input requests for clients that advertise support; without a handler, an `input_required` result is surfaced as a typed error rather than answered on your behalf.
 
 ### Response types
 
-Your elicitation handler must return one of three response types:
+The handler returns an `ElicitResult`:
 
-- **Accept**: User provided data and confirmed submission
+- **Accept**: the user provided data matching `params.requestedSchema`
 
   ```typescript
-  return {
-    action: 'accept',
-    content: { name: 'John Doe', email: 'john@example.com' },
-  }
+  return { action: 'accept', content: { name: 'John Doe', email: 'john@example.com' } }
   ```
 
-- **Decline**: User explicitly declined to provide the information
+- **Decline**: the user explicitly declined to provide the information
 
   ```typescript
   return { action: 'decline' }
   ```
 
-- **Cancel**: User dismissed or cancelled the request
+- **Cancel**: the user dismissed the request
+
   ```typescript
   return { action: 'cancel' }
   ```
 
-### Schema-Based Input Collection
+### Schema-based input collection
 
-The `requestedSchema` provides structure for the data the server needs:
+`params.requestedSchema` describes the data the server needs:
 
 ```typescript
-await mcpClient.elicitation.onRequest('interactiveServer', async request => {
-  const { properties, required = [] } = request.requestedSchema
-  const content: Record<string, any> = {}
+inputRequests: async ({ params }) => {
+  if (params.mode === 'url') return { action: 'decline' }
+  const { properties, required = [] } = params.requestedSchema
+  const content: Record<string, string | number | boolean | string[]> = {}
 
   for (const [fieldName, fieldSchema] of Object.entries(properties || {})) {
-    const field = fieldSchema as any
-    const isRequired = required.includes(fieldName)
-
-    // Collect input based on field type and requirements
+    const field = fieldSchema as {
+      title?: string
+      description?: string
+      type?: string
+      enum?: string[]
+    }
     const value = await promptUser({
       name: fieldName,
       title: field.title,
       description: field.description,
       type: field.type,
-      required: isRequired,
-      format: field.format,
+      required: required.includes(fieldName),
       enum: field.enum,
     })
-
-    if (value !== null) {
-      content[fieldName] = value
-    }
+    if (value !== null) content[fieldName] = value
   }
 
   return { action: 'accept', content }
-})
+}
 ```
 
 ### Best practices
 
-- **Always handle elicitation**: Set up your handler before calling tools that might use elicitation
-- **Validate input**: Check that required fields are provided
-- **Respect user choice**: Handle decline and cancel responses gracefully
-- **Clear UI**: Make it obvious what information is being requested and why
-- **Security**: Never auto-accept requests for sensitive information
+- **Configure the handler up front**: it's part of the server definition, so tools that need input work from the first call
+- **Validate input**: check that required fields are provided before accepting
+- **Respect user choice**: handle decline and cancel responses gracefully; the server decides what they mean for the operation
+- **Honor `signal`**: abort pending prompts when the originating call is cancelled or times out
+- **Security**: never auto-accept requests for sensitive information, and treat `params.message` as untrusted server content
 
 ## OAuth authentication
 
@@ -1304,12 +1185,12 @@ const mcp = new MCPClient({
       env: {
         API_KEY: 'your-api-key',
       },
-      log: logMessage => {
+      logger: logMessage => {
         console.log(`[${logMessage.level}] ${logMessage.message}`)
       },
     },
     weather: {
-      url: new URL('http://localhost:8080/sse'),
+      url: new URL('http://localhost:8080/mcp'),
     },
   },
   timeout: 30000, // Global 30s timeout
@@ -1386,7 +1267,7 @@ const mcp = new MCPClient({
       timeout: 20000, // Server-specific timeout
     },
     weather: {
-      url: new URL('http://localhost:8080/sse'),
+      url: new URL('http://localhost:8080/mcp'),
       requestInit: {
         headers: {
           Authorization: `Bearer user-123-token`,
@@ -1452,7 +1333,7 @@ For HTTP servers, you can provide a custom `fetch` function to handle runtime-de
 
 The custom `fetch` function receives an optional third `requestContext` parameter, which provides access to request-scoped data (e.g., authentication cookies, bearer tokens) set by middleware or passed during agent/tool execution. The `requestContext` is `null` during the initial connection handshake.
 
-When `fetch` is provided, `requestInit`, `eventSourceInit`, and `authProvider` become optional, as you can handle these concerns within your custom fetch function.
+When `fetch` is provided, `requestInit` and `authProvider` become optional, as you can handle these concerns within your custom fetch function. Every request the client sends, including the `subscriptions/listen` stream it opens for notifications, goes through your `fetch` as a `POST`, so there is no background `GET` listener to short-circuit. If authentication is unavailable, return the request without a token and let the server answer `401`; the error surfaces to the caller of `listTools()`, `callTool` and friends.
 
 ```typescript
 const mcpClient = new MCPClient({
@@ -1486,103 +1367,7 @@ await agent.generate('Hello!', {
 })
 ```
 
-## Handling auth failures inside custom fetch
-
-A custom `fetch` shouldn't `throw` when authentication is unavailable. The Streamable HTTP transport in the MCP SDK opens a long-lived `GET /mcp` "standalone listener" stream in the background to receive server-pushed notifications. Errors on that stream are retried with exponential backoff, and a thrown `fetch` or a cleanly-closed stream can produce an indefinite reconnect loop at roughly one attempt per second.
-
-Return a synthetic `Response` instead. The [MCP Streamable HTTP specification](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports) defines `405 Method Not Allowed` as the signal a server returns when it doesn't offer the GET SSE stream, and the SDK honors it as a terminal status that stops the listener cleanly. Use this to disable the listener when your server doesn't push notifications.
-
-The following pattern waits for an auth token on POST requests, attaches it to outgoing headers, and short-circuits the GET listener with a synthetic 405:
-
-```typescript
-async function waitForToken(timeoutMs = 5000): Promise<string | null> {
-  // Replace with your token lookup. Return null if no token is available.
-  return getAuthToken({ timeoutMs })
-}
-
-const mcpClient = new MCPClient({
-  servers: {
-    apiServer: {
-      url: new URL('https://api.example.com/mcp'),
-      fetch: async (url, init) => {
-        const method = (init?.method || 'GET').toUpperCase()
-
-        // The SDK opens a background GET stream for server-pushed notifications.
-        // If your server does not use it, short-circuit with 405 to stop reconnect attempts.
-        if (method === 'GET') {
-          return new Response(null, { status: 405, statusText: 'Method Not Allowed' })
-        }
-
-        // POST: wait for the token, then forward the request with an Authorization header.
-        const token = await waitForToken()
-        if (!token) {
-          // Forward the request without a token and let the server reject it.
-          // The SDK surfaces non-2xx POST responses as errors to the caller of
-          // tools/list, tools/call, etc., which is the desired behavior here.
-          return fetch(url, init)
-        }
-
-        const headers = new Headers(init?.headers)
-        headers.set('authorization', `Bearer ${token}`)
-        return fetch(url, { ...init, headers })
-      },
-    },
-  },
-})
-```
-
-Return `405` for the GET listener only when your server doesn't push notifications back to the client. If your server uses the standalone GET stream, attach the auth token on `GET` requests as well and let the request through.
-
-## Using SSE request headers
-
-When using the legacy SSE MCP transport, you must configure both `requestInit` and `eventSourceInit` due to a bug in the MCP SDK. Alternatively, you can use a custom `fetch` function which will be automatically used for both POST requests and SSE connections:
-
-```ts
-// Option 1: Using requestInit and eventSourceInit (required for SSE)
-const sseClient = new MCPClient({
-  servers: {
-    exampleServer: {
-      url: new URL('https://your-mcp-server.com/sse'),
-      // Note: requestInit alone isn't enough for SSE
-      requestInit: {
-        headers: {
-          Authorization: 'Bearer your-token',
-        },
-      },
-      // This is also required for SSE connections with custom headers
-      eventSourceInit: {
-        fetch(input: Request | URL | string, init?: RequestInit) {
-          const headers = new Headers(init?.headers || {})
-          headers.set('Authorization', 'Bearer your-token')
-          return fetch(input, {
-            ...init,
-            headers,
-          })
-        },
-      },
-    },
-  },
-})
-
-// Option 2: Using custom fetch (simpler, works for both Streamable HTTP and SSE)
-const sseClientWithFetch = new MCPClient({
-  servers: {
-    exampleServer: {
-      url: new URL('https://your-mcp-server.com/sse'),
-      fetch: async (url, init) => {
-        const headers = new Headers(init?.headers || {})
-        headers.set('Authorization', 'Bearer your-token')
-        return fetch(url, {
-          ...init,
-          headers,
-        })
-      },
-    },
-  },
-})
-```
-
 ## Related information
 
 - For creating MCP servers, see the [MCPServer documentation](./mcp-server).
-- For more about the Model Context Protocol, see the [@modelcontextprotocol/sdk documentation](https://github.com/modelcontextprotocol/typescript-sdk).
+- For more about the Model Context Protocol, see the [MCP 2026-07-28 specification](https://modelcontextprotocol.io/specification/2026-07-28).

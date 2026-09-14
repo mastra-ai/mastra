@@ -11,21 +11,10 @@ export type McpFixtureToolHandler = (
 ) => Promise<{ content: McpFixtureContent }> | { content: McpFixtureContent };
 
 export type McpFixtureServer = {
-  close: () => Promise<void>;
-  connect: (transport: McpFixtureTransport) => Promise<void>;
   tool: (name: string, description: string, schema: Record<string, unknown>, handler: McpFixtureToolHandler) => void;
 };
 
-export type McpFixtureTransport = {
-  handleRequest: (req: IncomingMessage, res: ServerResponse) => Promise<void>;
-};
-
-type McpServerConstructor = new (
-  info: { name: string; version: string },
-  options: { capabilities: { tools: Record<string, unknown> } },
-) => McpFixtureServer;
-
-type StreamableHttpTransportConstructor = new (options: { sessionIdGenerator: undefined }) => McpFixtureTransport;
+export type McpFixtureRequestHandler = (req: IncomingMessage, res: ServerResponse) => void | Promise<void>;
 
 export type McpHttpFixture = {
   close: () => Promise<void>;
@@ -45,40 +34,86 @@ export type McpHttpFixtureOptions = {
   version?: string;
 };
 
+type SdkMcpServer = {
+  server: unknown;
+  registerTool: (
+    name: string,
+    config: { description: string; inputSchema: Record<string, unknown> },
+    handler: McpFixtureToolHandler,
+  ) => unknown;
+  close: () => Promise<void>;
+};
+
+type SdkServerModule = {
+  McpServer: new (
+    info: { name: string; version: string },
+    options: { capabilities: { tools: Record<string, unknown> } },
+  ) => SdkMcpServer;
+  createMcpHandler: (
+    getServer: () => unknown,
+    options: { legacy: 'reject' },
+  ) => { close: () => Promise<void>; (request: Request): Promise<Response> };
+};
+
+type SdkNodeModule = {
+  toNodeHandler: (handler: (request: Request) => Promise<Response>) => McpFixtureRequestHandler;
+};
+
 const requireFromMcpPackage = createRequire(new URL('../../../packages/mcp/package.json', import.meta.url));
 
-export async function loadMcpSdk(): Promise<{
-  McpServer: McpServerConstructor;
-  StreamableHTTPServerTransport: StreamableHttpTransportConstructor;
-}> {
-  const mcpServerModule = (await import(
-    pathToFileURL(requireFromMcpPackage.resolve('@modelcontextprotocol/sdk/server/mcp.js')).href
-  )) as unknown as { McpServer: McpServerConstructor };
+/**
+ * Resolves the MCP SDK through `@mastra/mcp` so the fixture speaks exactly the
+ * protocol revision the client under test does (2026-07-28 only).
+ */
+export async function loadMcpSdk(): Promise<{ server: SdkServerModule; node: SdkNodeModule }> {
+  const server = (await import(
+    pathToFileURL(requireFromMcpPackage.resolve('@modelcontextprotocol/server')).href
+  )) as unknown as SdkServerModule;
+  const node = (await import(
+    pathToFileURL(requireFromMcpPackage.resolve('@modelcontextprotocol/node')).href
+  )) as unknown as SdkNodeModule;
+  return { server, node };
+}
 
-  const streamableHttpModule = (await import(
-    pathToFileURL(requireFromMcpPackage.resolve('@modelcontextprotocol/sdk/server/streamableHttp.js')).href
-  )) as unknown as { StreamableHTTPServerTransport: StreamableHttpTransportConstructor };
+export type McpFixtureHandler = {
+  /** Serves one HTTP request against the fixture's MCP server. */
+  handle: McpFixtureRequestHandler;
+  close: () => Promise<void>;
+};
 
+/**
+ * Builds a single MCP server with the scenario's tools and a request handler
+ * that serves it over Streamable HTTP. Every request is self-contained, so one
+ * server instance serves the whole fixture lifetime.
+ */
+export async function createMcpFixtureHandler(options: {
+  name: string;
+  version?: string;
+  registerTools: (server: McpFixtureServer) => void;
+}): Promise<McpFixtureHandler> {
+  const { server: sdk, node } = await loadMcpSdk();
+  const mcpServer = new sdk.McpServer(
+    { name: options.name, version: options.version ?? '1.0.0' },
+    { capabilities: { tools: {} } },
+  );
+  options.registerTools({
+    tool: (name, description, schema, handler) => {
+      mcpServer.registerTool(name, { description, inputSchema: schema }, handler);
+    },
+  });
+  const mcpHandler = sdk.createMcpHandler(() => mcpServer.server, { legacy: 'reject' });
   return {
-    McpServer: mcpServerModule.McpServer,
-    StreamableHTTPServerTransport: streamableHttpModule.StreamableHTTPServerTransport,
+    handle: node.toNodeHandler(mcpHandler),
+    close: async () => {
+      await mcpHandler.close().catch(() => undefined);
+      await mcpServer.close().catch(() => undefined);
+    },
   };
 }
 
 export async function startMcpHttpFixtureServer(options: McpHttpFixtureOptions): Promise<McpHttpFixture> {
-  const { McpServer, StreamableHTTPServerTransport } = await loadMcpSdk();
+  const mcp = await createMcpFixtureHandler(options);
   const httpServer = createServer();
-  const activeServers = new Set<McpFixtureServer>();
-
-  const createMcpServer = () => {
-    const server = new McpServer(
-      { name: options.name, version: options.version ?? '1.0.0' },
-      { capabilities: { tools: {} } },
-    );
-    options.registerTools(server);
-    activeServers.add(server);
-    return server;
-  };
 
   httpServer.on('request', (req: IncomingMessage, res: ServerResponse) => {
     void (async () => {
@@ -95,14 +130,7 @@ export async function startMcpHttpFixtureServer(options: McpHttpFixtureOptions):
         return;
       }
 
-      const mcpServer = createMcpServer();
-      const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
-      await mcpServer.connect(transport);
-      res.on('finish', () => {
-        activeServers.delete(mcpServer);
-        void mcpServer.close().catch(() => undefined);
-      });
-      await transport.handleRequest(req, res);
+      await mcp.handle(req, res);
     })().catch(error => {
       res.writeHead(500, { 'content-type': 'text/plain' });
       res.end(String(error instanceof Error ? (error.stack ?? error.message) : error));
@@ -124,8 +152,7 @@ export async function startMcpHttpFixtureServer(options: McpHttpFixtureOptions):
 
   return {
     close: async () => {
-      await Promise.all([...activeServers].map(server => server.close().catch(() => undefined)));
-      activeServers.clear();
+      await mcp.close();
       await new Promise<void>(resolve => httpServer.close(() => resolve())).catch(() => undefined);
     },
     url,

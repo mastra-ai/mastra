@@ -25,8 +25,8 @@ import type { McpConfig, McpHttpOAuthConfig, McpServerConfig, McpSkippedServer }
  * Port 1458 is stable across sessions so persisted tokens keep the same
  * storage fingerprint; it sits clear of the ports the Codex login flow
  * reserves (1455/1457). When 1458 is busy the callback server falls back
- * to the next sequential port, which stays covered by the client
- * registration (see `@mastra/mcp`'s `getCallbackUrlCandidates`).
+ * to the next sequential port; register every candidate from `@mastra/mcp`'s
+ * `getCallbackUrlCandidates` as a redirect URI with the authorization server.
  */
 export const DEFAULT_OAUTH_REDIRECT_URL = 'http://127.0.0.1:1458/oauth/callback';
 
@@ -374,6 +374,18 @@ function parseOAuthConfig(raw: unknown): { config?: McpHttpOAuthConfig; reason?:
   if (obj.scopes !== undefined && (!Array.isArray(obj.scopes) || obj.scopes.some(scope => typeof scope !== 'string'))) {
     return { reason: 'Invalid OAuth config: "scopes" must be an array of strings' };
   }
+  if (obj.clientMetadataUrl !== undefined) {
+    if (typeof obj.clientMetadataUrl !== 'string') {
+      return { reason: 'Invalid OAuth config: "clientMetadataUrl" must be a string' };
+    }
+    try {
+      if (new URL(obj.clientMetadataUrl).protocol !== 'https:') {
+        return { reason: 'Invalid OAuth config: "clientMetadataUrl" must be an HTTPS URL' };
+      }
+    } catch {
+      return { reason: `Invalid OAuth clientMetadataUrl: "${obj.clientMetadataUrl}"` };
+    }
+  }
 
   return {
     config: {
@@ -382,6 +394,7 @@ function parseOAuthConfig(raw: unknown): { config?: McpHttpOAuthConfig; reason?:
       scopes: obj.scopes as string[] | undefined,
       clientId: typeof obj.clientId === 'string' ? obj.clientId : undefined,
       clientSecret: typeof obj.clientSecret === 'string' ? obj.clientSecret : undefined,
+      clientMetadataUrl: obj.clientMetadataUrl as string | undefined,
     },
   };
 }

@@ -152,10 +152,10 @@ Visit the [Configuration reference](/reference/configuration) for detailed docum
   },
   {
     name: 'mcpServers',
-    type: 'Record<string, MCPServerBase>',
+    type: 'Record<string, MCPServerRegistryEntry>',
     isOptional: true,
     description:
-      'An object where keys are registry keys (used for getMCPServer()) and values are instances of MCPServer or classes extending MCPServerBase. Each MCPServer must have an id property. Servers can be retrieved by registry key using getMCPServer() or by their intrinsic id using getMCPServerById().',
+      'An object where keys are registry keys (used for getMCPServer()) and values are instances of MCPServer or classes extending MCPServerBase (`@mastra/mcp` 1.x) or MCPServerBaseV2 (`@mastra/mcp` 2.x). Each MCPServer must have an id property. Servers can be retrieved by registry key using getMCPServer() or by their intrinsic id using getMCPServerById().',
   },
   {
     name: 'bundler',

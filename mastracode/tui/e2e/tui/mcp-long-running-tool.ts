@@ -1,5 +1,5 @@
 import { mkdirSync } from 'node:fs';
-import { z } from 'zod/v3';
+import { z } from 'zod';
 import { expect } from './expect.js';
 import { createGlobalPatchScope } from './global-patches.js';
 import { startMcpHttpFixtureServer } from './mcp-http-fixture.js';
