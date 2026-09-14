@@ -1043,6 +1043,9 @@ describe('GeminiLiveVoice', () => {
       }, 5);
 
       await expect(listenPromise).resolves.toBe('Hello world');
+      expect(mockWs.send).toHaveBeenCalledTimes(1);
+      const sentData = JSON.parse(mockWs.send.mock.calls[0][0]);
+      expect(sentData.client_content.turns[0].parts[0].inlineData.mimeType).toBe('audio/pcm');
     });
 
     it('should emit speaking and speaker stream for inbound audio and cleanup on turnComplete', async () => {
