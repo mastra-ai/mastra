@@ -16,6 +16,7 @@ import { SkeletonRows } from '../ui/SkeletonRows';
 import { FactoryPageShell } from '../domains/factory/components/FactoryPageShell';
 import { KnowledgeGraph } from '../domains/factory/components/knowledge/KnowledgeGraph';
 import { KnowledgeFlyout } from '../domains/factory/components/knowledge/KnowledgeFlyout';
+import { knowledgeActivityLabel } from '../domains/factory/components/knowledge/activityLabel';
 import { KnowledgeSearch } from '../domains/factory/components/knowledge/KnowledgeSearch';
 import type { Arrivals, DiffBaseline } from '../domains/factory/components/knowledge/graphDiff';
 import { computeArrivals } from '../domains/factory/components/knowledge/graphDiff';
@@ -157,6 +158,7 @@ function ScopeTree({
   scopes,
   selection,
   onSelect,
+  onSearchSelect,
   onNodesLoaded,
 }: {
   factoryProjectId: string | undefined;
@@ -164,6 +166,7 @@ function ScopeTree({
   scopes: KnowledgeScopeTreePayload | undefined;
   selection: KnowledgeSelection | undefined;
   onSelect: (selection: KnowledgeSelection) => void;
+  onSearchSelect: (result: KnowledgeSearchResult) => void;
   onNodesLoaded: (nodes: KnowledgeScopeNode[]) => void;
 }) {
   const scopePage = useKnowledgeScopePage(factoryProjectId, threadId);
@@ -303,12 +306,13 @@ function ScopeTree({
   return (
     <aside
       aria-label="Knowledge scopes"
-      className="border-surface5 bg-surface2 w-56 shrink-0 overflow-y-auto rounded-lg border p-3"
+      className="border-surface5 bg-surface2 relative z-30 flex w-56 shrink-0 flex-col overflow-visible rounded-lg border p-3"
     >
       <Txt as="h2" variant="ui-sm" className="text-icon5 mb-2 font-semibold">
         Scopes
       </Txt>
-      <div className="text-icon4 flex flex-col gap-1 text-xs">
+      <KnowledgeSearch factoryProjectId={factoryProjectId} threadId={threadId} onSelect={onSearchSelect} />
+      <div className="text-icon4 mt-2 flex min-h-0 flex-col gap-1 overflow-y-auto text-xs">
         {treeRoots.map(node => renderScopeNode(node, 0, new Set()))}
         {rootCursor ? (
           <button
@@ -364,7 +368,10 @@ function ActivityPanel({
     const message = activity.error instanceof Error ? activity.error.message : 'Unable to load knowledge activity.';
     return <Notice variant="destructive">{message}</Notice>;
   }
-  if (activity.data.events.length === 0) {
+  const events = activity.data.pages
+    .flatMap(page => page.events)
+    .filter((event, index, all) => all.findIndex(candidate => candidate.id === event.id) === index);
+  if (events.length === 0) {
     return (
       <Txt as="p" variant="ui-md" className="text-icon3">
         No knowledge activity yet.
@@ -372,27 +379,39 @@ function ActivityPanel({
     );
   }
   return (
-    <ol aria-label="Knowledge activity" className="divide-surface5 divide-y">
-      {activity.data.events.map(event => (
-        <li key={event.id} className="flex items-start justify-between gap-4 py-3 text-sm">
-          <div>
-            <span className="text-icon5">{event.action.replaceAll('-', ' ')}</span>
-            <span className="text-icon3"> · {event.recordType} · </span>
-            <button
-              type="button"
-              className="text-icon6 font-medium hover:text-purple-300 hover:underline"
-              onClick={() => onSelect(event)}
-            >
-              {event.node.name}
-            </button>
-            <div className="text-icon3 mt-1 text-xs">{event.scope.join(' → ')}</div>
-          </div>
-          <time className="text-icon3 shrink-0 text-xs" dateTime={event.createdAt}>
-            {new Date(event.createdAt).toLocaleString()}
-          </time>
-        </li>
-      ))}
-    </ol>
+    <div className="min-h-0 flex-1 overflow-y-auto pr-2">
+      <ol aria-label="Knowledge activity" className="divide-surface5 divide-y">
+        {events.map(event => (
+          <li key={event.id} className="flex items-start justify-between gap-4 py-3 text-sm">
+            <div>
+              <span className="text-icon5">{knowledgeActivityLabel(event)}</span>
+              <span className="text-icon3"> · </span>
+              <button
+                type="button"
+                className="text-icon6 font-medium hover:text-purple-300 hover:underline"
+                onClick={() => onSelect(event)}
+              >
+                {event.node.name}
+              </button>
+              <div className="text-icon3 mt-1 text-xs">{event.scope.join(' → ')}</div>
+            </div>
+            <time className="text-icon3 shrink-0 text-xs" dateTime={event.createdAt}>
+              {new Date(event.createdAt).toLocaleString()}
+            </time>
+          </li>
+        ))}
+      </ol>
+      {activity.hasNextPage ? (
+        <button
+          type="button"
+          className="text-icon3 hover:text-icon5 mt-2 px-2 py-1 text-sm"
+          disabled={activity.isFetchingNextPage}
+          onClick={() => void activity.fetchNextPage()}
+        >
+          {activity.isFetchingNextPage ? 'Loading older activity…' : 'Load older activity'}
+        </button>
+      ) : null}
+    </div>
   );
 }
 
@@ -769,24 +788,21 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
         <Txt as="p" variant="ui-md" className="text-icon3 mt-1">
           Explore captured knowledge and review how it changes over time.
         </Txt>
-        <div className="mt-3 flex items-start justify-between gap-3">
-          <div className="flex gap-1" role="tablist" aria-label="Knowledge views">
-            {(['explore', 'activity'] as const).map(view => (
-              <button
-                key={view}
-                type="button"
-                role="tab"
-                aria-selected={activeView === view}
-                className={`rounded-md px-3 py-1.5 text-sm capitalize ${
-                  activeView === view ? 'bg-surface4 text-icon6' : 'text-icon3 hover:text-icon5'
-                }`}
-                onClick={() => setView(view)}
-              >
-                {view}
-              </button>
-            ))}
-          </div>
-          <KnowledgeSearch factoryProjectId={factoryProjectId} threadId={threadId} onSelect={selectSearchResult} />
+        <div className="mt-3 flex gap-1" role="tablist" aria-label="Knowledge views">
+          {(['explore', 'activity'] as const).map(view => (
+            <button
+              key={view}
+              type="button"
+              role="tab"
+              aria-selected={activeView === view}
+              className={`rounded-md px-3 py-1.5 text-sm capitalize ${
+                activeView === view ? 'bg-surface4 text-icon6' : 'text-icon3 hover:text-icon5'
+              }`}
+              onClick={() => setView(view)}
+            >
+              {view}
+            </button>
+          ))}
         </div>
         <Breadcrumb
           threadId={threadId}
@@ -811,6 +827,7 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
           scopes={scopesQuery.data}
           selection={selection}
           onSelect={selectScope}
+          onSearchSelect={selectSearchResult}
           onNodesLoaded={nodes =>
             setLoadedScopeNodesByView(current => ({
               ...current,
@@ -820,7 +837,7 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
         />
         {/* Flex column so the graph container's `min-h-0 flex-1` chain connects
             to a sized parent; as a block wrapper it collapses to zero height. */}
-        <div className="flex min-w-0 flex-1 flex-col">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           {activeView === 'activity' ? (
             <ActivityPanel
               factoryProjectId={factoryProjectId}

@@ -19,7 +19,7 @@ export function KnowledgeSearch({ factoryProjectId, threadId, onSelect }: Knowle
   const open = focused && query.trim().length >= 2;
 
   return (
-    <div className="relative w-full max-w-sm">
+    <div className="relative w-full">
       <div className="border-surface5 bg-surface2 flex items-center gap-2 rounded-md border px-2">
         <Search className="text-icon3 size-4 shrink-0" />
         <Input
@@ -43,7 +43,7 @@ export function KnowledgeSearch({ factoryProjectId, threadId, onSelect }: Knowle
         <div
           role="listbox"
           aria-label="Knowledge search results"
-          className="border-surface5 bg-surface2 absolute z-20 mt-1 max-h-72 w-full overflow-y-auto rounded-md border p-1 shadow-lg"
+          className="border-surface5 bg-surface2 absolute z-50 mt-1 max-h-72 w-full overflow-y-auto rounded-md border p-1 shadow-lg"
           onMouseDown={event => event.preventDefault()}
         >
           {search.isPending || deferredQuery !== query ? (
