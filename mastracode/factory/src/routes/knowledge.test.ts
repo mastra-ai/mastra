@@ -11,6 +11,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import type {
+  KnowledgeActivityPayload,
   KnowledgeNodePayload,
   KnowledgeGraphPayload,
   KnowledgeRouteLimits,
@@ -134,11 +135,11 @@ async function graph(h: Harness, query = ''): Promise<{ status: number; body: Kn
   return { status: response.status, body: (await response.json().catch(() => ({}))) as KnowledgeGraphPayload };
 }
 
-async function activity(h: Harness, query = ''): Promise<{ status: number; body: { events: unknown[] } }> {
+async function activity(h: Harness, query = ''): Promise<{ status: number; body: KnowledgeActivityPayload }> {
   const response = await h.app.request(
     `/web/factory/projects/${h.projectId}/knowledge/activity${selectedQuery(query)}`,
   );
-  return { status: response.status, body: (await response.json().catch(() => ({}))) as { events: unknown[] } };
+  return { status: response.status, body: (await response.json().catch(() => ({}))) as KnowledgeActivityPayload };
 }
 
 async function nodeDetail(
@@ -1043,6 +1044,26 @@ describe('KnowledgeRoutes', () => {
         node: { id: entity.id, name: 'Activity Entity', rung: 'resource' },
       }),
     );
+  });
+
+  it('paginates the authorized activity stream newest-first without replaying rows', async () => {
+    const h = await createHarness();
+    const entity = await node(h.knowledge, 'Busy Entity', h.projectScope);
+    for (let index = 0; index < 30; index++) {
+      await record(h.knowledge, entity, `Activity ${index}`, h.projectScope);
+    }
+
+    const first = await activity(h);
+    expect(first.body.events).toHaveLength(25);
+    const cursor = first.body.nextCursor;
+    expect(cursor).toBe(first.body.events.at(-1)?.id);
+    if (!cursor) throw new Error('Expected an activity cursor');
+
+    const second = await activity(h, `?cursor=${cursor}`);
+    expect(second.body.events).toHaveLength(6);
+    expect(second.body.nextCursor).toBeUndefined();
+    expect(new Set([...first.body.events, ...second.body.events].map(event => event.id)).size).toBe(31);
+    expect(second.body.events[0]?.id < cursor).toBe(true);
   });
 
   it('does not expose deleted activity targets or their source-thread identifiers', async () => {
