@@ -1,9 +1,95 @@
+import type { LanguageModelV4, LanguageModelV4Usage, LanguageModelV4StreamPart } from '@ai-sdk/provider-v7';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+import { z } from 'zod';
 import { createMockModel } from '../../test-utils/llm-mock';
+import { createTool } from '../../tools';
 import { Agent } from '../agent';
 
 describe('Agent usage tracking', () => {
+  it.each(['generate', 'stream'] as const)('accumulates nested V4 usage across tool steps with %s', async mode => {
+    let calls = 0;
+    const nextResult = () => {
+      const first = calls++ === 0;
+      // The extra total wrapper is malformed provider data, not the V4 contract.
+      const usage = {
+        inputTokens: { total: { total: first ? 100 : 200, noCache: first ? 60 : 160, cacheRead: 30, cacheWrite: 10 } },
+        outputTokens: { total: { total: first ? 20 : 30, text: first ? 15 : 25, reasoning: 5 } },
+      } as unknown as LanguageModelV4Usage;
+      return {
+        first,
+        usage,
+        finishReason: { unified: first ? ('tool-calls' as const) : ('stop' as const), raw: undefined },
+      };
+    };
+    const model: LanguageModelV4 = {
+      specificationVersion: 'v4',
+      provider: 'test',
+      modelId: 'nested-usage',
+      supportedUrls: {},
+      doGenerate: async () => {
+        const { first, usage, finishReason } = nextResult();
+        return {
+          content: first
+            ? [{ type: 'tool-call', toolCallId: 'call-1', toolName: 'lookup', input: '{}' }]
+            : [{ type: 'text', text: 'Done' }],
+          usage,
+          finishReason,
+          warnings: [],
+        };
+      },
+      doStream: async () => {
+        const { first, usage, finishReason } = nextResult();
+        const parts: LanguageModelV4StreamPart[] = first
+          ? [{ type: 'tool-call', toolCallId: 'call-1', toolName: 'lookup', input: '{}' }]
+          : [
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'Done' },
+              { type: 'text-end', id: 'text-1' },
+            ];
+        parts.push({ type: 'finish', usage, finishReason });
+        return { stream: convertArrayToReadableStream(parts) };
+      },
+    };
+    const execute = vi.fn(async () => ({ value: 'ok' }));
+    const agent = new Agent({
+      id: 'nested-usage',
+      name: 'Nested usage',
+      instructions: 'Use lookup then respond.',
+      model,
+      tools: {
+        lookup: createTool({
+          id: 'lookup',
+          description: 'Look up a value',
+          inputSchema: z.object({}),
+          outputSchema: z.object({ value: z.string() }),
+          execute,
+        }),
+      },
+    });
+    const result = await agent[mode]('Look up a value', { maxSteps: 2 });
+    if (mode === 'stream' && 'fullStream' in result) {
+      for await (const _chunk of result.fullStream) {
+        // Drain the stream so both steps finish.
+      }
+    }
+    expect(calls).toBe(2);
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(await result.usage).toMatchObject({
+      inputTokens: 300,
+      outputTokens: 50,
+      totalTokens: 350,
+      cachedInputTokens: 60,
+      cacheCreationInputTokens: 20,
+      reasoningTokens: 10,
+    });
+    expect(await result.totalUsage).toEqual(await result.usage);
+    expect((await result.steps).map(step => step.usage)).toMatchObject([
+      { inputTokens: 100, outputTokens: 20, totalTokens: 120 },
+      { inputTokens: 200, outputTokens: 30, totalTokens: 230 },
+    ]);
+  });
+
   describe('Agent usage tracking (VNext paths)', () => {
     describe('generate', () => {
       it('should expose usage with inputTokens and outputTokens (AI SDK v5 format)', async () => {

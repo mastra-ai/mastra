@@ -705,6 +705,70 @@ describe('convertFullStreamChunkToMastra', () => {
       }
     });
 
+    it.each([
+      [false, false],
+      [true, false],
+      [false, true],
+      [true, true],
+    ])('normalizes extra usage wrappers (input=%s, output=%s)', (wrapInput, wrapOutput) => {
+      const input = { total: 100, noCache: 60, cacheRead: 30, cacheWrite: 10 };
+      const output = { total: 20, text: 15, reasoning: 5 };
+      const usage = {
+        inputTokens: wrapInput ? { total: input } : input,
+        outputTokens: wrapOutput ? { total: output } : output,
+      };
+      // Exercise malformed provider data with one extra total wrapper.
+      const chunk = {
+        type: 'finish',
+        finishReason: { unified: 'stop', raw: 'stop' },
+        usage,
+        providerMetadata: {
+          anthropic: { cacheCreation: { ephemeral_5m_input_tokens: 6, ephemeral_1h_input_tokens: 4 } },
+        },
+      } as unknown as StreamPart;
+      const result = convertFullStreamChunkToMastra(chunk, { runId: 'nested-usage' });
+      expect(result?.type).toBe('finish');
+      if (result?.type !== 'finish') throw new Error('Expected finish');
+      expect(result.payload.output.usage).toMatchObject({
+        inputTokens: 100,
+        outputTokens: 20,
+        totalTokens: 120,
+        cachedInputTokens: 30,
+        cacheCreationInputTokens: 10,
+        reasoningTokens: 5,
+        cacheCreationInputTokens5m: 6,
+        cacheCreationInputTokens1h: 4,
+      });
+      expect(result.payload.output.usage.raw).toBe(usage);
+    });
+
+    it.each([
+      { total: 0, expected: 0 },
+      { total: undefined, expected: undefined },
+      { total: 'invalid', expected: undefined },
+      { total: { total: 100 }, expected: undefined },
+    ])('keeps nested token leaves numeric or undefined: $total', ({ total, expected }) => {
+      const result = convertFullStreamChunkToMastra(
+        {
+          type: 'finish',
+          finishReason: 'stop',
+          usage: {
+            inputTokens: { total: { total, cacheRead: 30 }, cacheRead: 0 },
+            outputTokens: { total: { total, reasoning: 5 }, reasoning: 0 },
+          },
+        } as unknown as StreamPart,
+        { runId: 'nested-usage' },
+      );
+      if (result?.type !== 'finish') throw new Error('Expected finish');
+      expect(result.payload.output.usage).toMatchObject({
+        inputTokens: expected,
+        outputTokens: expected,
+        totalTokens: 0,
+        cachedInputTokens: 0,
+        reasoningTokens: 0,
+      });
+    });
+
     it('should preserve providerMetadata for AI SDK v6 finish chunks', () => {
       const providerMetadata = {
         anthropic: {

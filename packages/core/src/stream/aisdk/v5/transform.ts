@@ -652,7 +652,10 @@ export function convertMastraChunkToAISDKv5<OUTPUT = undefined>({
 /**
  * Type guard to check if usage is in V3 format (nested objects)
  */
-function isV3Usage(usage: unknown): usage is LanguageModelV3Usage {
+function isV3Usage(usage: unknown): usage is {
+  inputTokens: Record<string, unknown>;
+  outputTokens: Record<string, unknown>;
+} {
   if (!usage || typeof usage !== 'object') return false;
   const u = usage as Record<string, unknown>;
   return (
@@ -688,6 +691,22 @@ function getAnthropicCacheCreationUsage(providerMetadata?: SharedV2ProviderMetad
   };
 }
 
+function numericTokenCount(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function normalizeTokenDetails(tokens: Record<string, unknown>) {
+  // Some provider wrappers put the entire token breakdown inside `total`.
+  const inner = tokens.total;
+  const details = typeof inner === 'object' && inner !== null ? inner : tokens;
+  return {
+    total: numericTokenCount('total' in details ? details.total : undefined),
+    cacheRead: numericTokenCount(tokens.cacheRead ?? ('cacheRead' in details ? details.cacheRead : undefined)),
+    cacheWrite: numericTokenCount(tokens.cacheWrite ?? ('cacheWrite' in details ? details.cacheWrite : undefined)),
+    reasoning: numericTokenCount(tokens.reasoning ?? ('reasoning' in details ? details.reasoning : undefined)),
+  };
+}
+
 function normalizeUsage(
   usage: LanguageModelV2Usage | LanguageModelV3Usage | undefined,
   providerMetadata?: SharedV2ProviderMetadata,
@@ -707,16 +726,17 @@ function normalizeUsage(
   }
 
   if (isV3Usage(usage)) {
-    // V3 format - extract from nested structure
-    const inputTokens = usage.inputTokens.total;
-    const outputTokens = usage.outputTokens.total;
+    const input = normalizeTokenDetails(usage.inputTokens);
+    const output = normalizeTokenDetails(usage.outputTokens);
+    const inputTokens = input.total;
+    const outputTokens = output.total;
     return {
       inputTokens,
       outputTokens,
       totalTokens: (inputTokens ?? 0) + (outputTokens ?? 0),
-      reasoningTokens: usage.outputTokens.reasoning,
-      cachedInputTokens: usage.inputTokens.cacheRead,
-      cacheCreationInputTokens: usage.inputTokens.cacheWrite,
+      reasoningTokens: output.reasoning,
+      cachedInputTokens: input.cacheRead,
+      cacheCreationInputTokens: input.cacheWrite,
       ...cacheCreationUsage,
       raw: usage,
     };
