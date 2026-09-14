@@ -1,9 +1,22 @@
+import type { MastraErrorPart } from '@mastra/core/agent/message-list';
 import type { ToolInvocationPart } from '@mastra/react/ui';
 import { describe, expect, it } from 'vitest';
 
-import type { ToolCall } from '../services/transcript';
-import { messageText, toolFromInvocationPart } from './transcript-parts';
+import type { MessageEntry, ToolCall } from '../services/transcript';
+import { draws, messageText, renderableParts, toolFromInvocationPart } from './transcript-parts';
 import type { MessagePart } from './transcript-parts';
+
+const errorPart = (message = 'The model request failed.'): MastraErrorPart => ({
+  type: 'error',
+  error: { name: 'Error', message },
+});
+
+const entry = (parts: MessagePart[]): MessageEntry =>
+  ({
+    kind: 'message',
+    id: 'msg-1',
+    message: { id: 'msg-1', role: 'assistant', createdAt: new Date(), content: { format: 2, parts } },
+  }) as MessageEntry;
 
 describe('messageText', () => {
   it('keeps the copyable prose free of thinking and tool rows', () => {
@@ -59,5 +72,21 @@ describe('toolFromInvocationPart', () => {
 
   it('leaves the row unstamped rather than carrying NaN from an unparseable message date', () => {
     expect(toolFromInvocationPart(part(), runtime(), 'not a date').createdAt).toBeUndefined();
+  });
+});
+
+describe('persisted terminal error parts', () => {
+  it('keeps its slot among the other parts of the reply', () => {
+    const parts = renderableParts(entry([{ type: 'text', text: 'partial answer' }, errorPart()]));
+    expect(parts.map(p => p.type)).toEqual(['text', 'error']);
+  });
+
+  it('keeps the slot of an error-only reply', () => {
+    const parts = renderableParts(entry([errorPart()]));
+    expect(parts.map(p => p.type)).toEqual(['error']);
+  });
+
+  it('draws immediately, with nothing to wait for', () => {
+    expect(draws(errorPart(), new Map(), undefined)).toBe(true);
   });
 });
