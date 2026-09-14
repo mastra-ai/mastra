@@ -1,10 +1,12 @@
-import { DurableAgentDefaults } from '@mastra/core/agent/durable';
+import { MessageList } from '@mastra/core/agent';
+import { DurableAgentDefaults, globalRunRegistry } from '@mastra/core/agent/durable';
+import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 
 import type { AnyExportedSpan, ObservabilityExporter, TracingEvent } from '@mastra/core/observability';
 import { SpanType, TracingEventType } from '@mastra/core/observability';
 import { Observability } from '@mastra/observability';
 import { Inngest } from 'inngest';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createInngestDurableAgenticWorkflow } from './create-inngest-agentic-workflow';
 
@@ -205,12 +207,25 @@ describe('createInngestDurableAgenticWorkflow tool-call tracing (#19842)', () =>
 });
 
 /**
- * `map-final-output` runs the finish side effects through `engine.step.run`. These tests
- * only care about how the spans are ended, so the fake engine returns the step's result
- * without invoking the callback. Mocking the module instead would leak across files,
- * because this package runs vitest with `--no-isolate`.
+ * Empty serialized MessageList. `map-final-output` now calls
+ * `runDurableFinishSideEffects` directly, which deserializes this state.
+ * These tests only care about span ends, not processors.
  */
-const skipFinishSideEffects = async () => ({ messageListState: undefined, outputText: undefined });
+const emptyMessageListState = {
+  messages: [],
+  systemMessages: [],
+  taggedSystemMessages: {},
+  memoryInfo: null,
+  _agentNetworkAppend: false,
+  memoryMessages: [],
+  newUserMessages: [],
+  newResponseMessages: [],
+  userContextMessages: [],
+  memoryMessagesPersisted: [],
+  newUserMessagesPersisted: [],
+  newResponseMessagesPersisted: [],
+  userContextMessagesPersisted: [],
+};
 
 describe('createInngestDurableAgenticWorkflow final span ends', () => {
   it('ends the model span with usage on attributes and the agent span with text only', async () => {
@@ -256,10 +271,10 @@ describe('createInngestDurableAgenticWorkflow final span ends', () => {
         lastStepResult: { reason: 'stop', isContinued: false, warnings: [] },
         modelSpanData: modelSpan.exportSpan(),
         agentSpanData: agentSpan.exportSpan(),
+        messageListState: emptyMessageListState,
         state: {},
       },
       getInitData: () => ({ runId: 'run-1', agentId: 'agent-1' }),
-      engine: { step: { run: skipFinishSideEffects } },
       mastra: { observability, getLogger: () => undefined },
     });
 
@@ -300,13 +315,81 @@ describe('createInngestDurableAgenticWorkflow final span ends', () => {
         accumulatedSteps,
         accumulatedUsage: usage,
         lastStepResult: { reason: 'stop', isContinued: false, warnings: [] },
+        messageListState: emptyMessageListState,
         state: {},
       },
       getInitData: () => ({ runId: 'run-1', agentId: 'agent-1' }),
-      engine: { step: { run: skipFinishSideEffects } },
       mastra: { getLogger: () => undefined },
     });
 
     expect(result.output).toEqual({ text: 'final answer', usage, steps: accumulatedSteps });
+  });
+});
+
+/**
+ * #23815 / #22450: map-final-output already runs inside wrapDurableOperation, so
+ * wrapping runDurableFinishSideEffects in engine.step.run is a nested Inngest
+ * step. Invoke the helper directly. These tests call the mapping with a live
+ * processor in the run registry; a source-string grep is not enough.
+ */
+describe('createInngestDurableAgenticWorkflow finish side effects (#23815)', () => {
+  const runId = 'run-finish-direct';
+
+  afterEach(() => {
+    globalRunRegistry.delete(runId);
+  });
+
+  it('runs output processors without wrapping finish in engine.step.run', async () => {
+    const inngest = new Inngest({ id: 'inngest-agentic-workflow-finish-direct-tests' });
+    const workflow = createInngestDurableAgenticWorkflow({ inngest });
+    const entry = findEntry(
+      (workflow as any).executionGraph.steps,
+      item => item.type === 'mapping' && item.id === 'map-final-output',
+    );
+    expect(entry).toBeDefined();
+
+    const messageList = new MessageList();
+    messageList.add({ role: 'user', content: 'hi' }, 'user');
+    messageList.add({ role: 'assistant', content: 'hello' }, 'response');
+
+    globalRunRegistry.set(runId, {
+      isPlaceholder: false,
+      outputProcessors: [
+        {
+          id: 'uppercase-finish-output',
+          processOutputResult: async ({ messages }: { messages: MastraDBMessage[] }) =>
+            messages.map(message => ({
+              ...message,
+              content: {
+                ...message.content,
+                parts: message.content.parts.map(part =>
+                  part.type === 'text' ? { ...part, text: part.text.toUpperCase() } : part,
+                ),
+              },
+            })),
+        },
+      ],
+    } as any);
+
+    const stepRun = vi.fn(async (_id: string, fn: () => Promise<unknown>) => fn());
+    const accumulatedSteps = [{ text: 'hello' }];
+
+    const result = await entry.mapConfig({
+      inputData: {
+        runId,
+        accumulatedSteps,
+        accumulatedUsage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+        lastStepResult: { reason: 'stop', isContinued: false, warnings: [] },
+        messageListState: messageList.serialize(),
+        state: {},
+      },
+      getInitData: () => ({ runId, agentId: 'agent-1' }),
+      engine: { step: { run: stepRun } },
+      mastra: { getLogger: () => undefined },
+    });
+
+    expect(stepRun).not.toHaveBeenCalled();
+    expect(result.output.text).toBe('HELLO');
+    expect(accumulatedSteps[0].text).toBe('HELLO');
   });
 });
