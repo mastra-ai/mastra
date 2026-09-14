@@ -623,9 +623,10 @@ export class AgentThreadStreamRuntime {
     key: string,
     runId: string,
     scope: 'pending' | 'pre-run',
-  ): Promise<boolean> {
+  ): Promise<{ complete: boolean; publishedCount: number }> {
     const signalsByThread = scope === 'pre-run' ? state.preRunSignalsByThread : state.pendingSignalsByThread;
     const queue = signalsByThread.get(key);
+    let publishedCount = 0;
     while (queue?.length) {
       const signal = queue[0]!;
       try {
@@ -636,12 +637,13 @@ export class AgentThreadStreamRuntime {
           sourceId: this.#getSourceId(),
         });
       } catch {
-        return false;
+        return { complete: false, publishedCount };
       }
       queue.shift();
+      publishedCount += 1;
     }
     if (queue?.length === 0) signalsByThread.delete(key);
-    return true;
+    return { complete: true, publishedCount };
   }
 
   #queuedMessageCount(
@@ -2276,7 +2278,7 @@ export class AgentThreadStreamRuntime {
           const restored = state.pendingSignalsByThread.get(key) ?? [];
           state.pendingSignalsByThread.set(key, [signal, ...restored]);
           if (owns.owner) {
-            if (await this.#forwardQueuedSignals(state, pubsub, key, owns.owner, 'pending')) {
+            if ((await this.#forwardQueuedSignals(state, pubsub, key, owns.owner, 'pending')).complete) {
               await this.#forwardQueuedSignals(state, pubsub, key, owns.owner, 'pre-run');
             }
           }
@@ -3892,8 +3894,15 @@ export class AgentThreadStreamRuntime {
         // "safe to exit" boundary (e.g. a serverless Lambda holding the request open
         // via waitUntil) don't tear down before the enqueue lands on the broker.
         const winnerRunId = lease.owner;
-        if (winnerRunId) {
-          await this.#forwardQueuedSignals(state, pubsub, reservedKey, winnerRunId, 'pre-run');
+        const handoff = winnerRunId
+          ? await this.#forwardQueuedSignals(state, pubsub, reservedKey, winnerRunId, 'pre-run')
+          : { complete: false, publishedCount: 0 };
+        if (handoff.publishedCount === 0) {
+          const queuedSignals = state.preRunSignalsByThread.get(reservedKey);
+          const signalIndex = queuedSignals?.findIndex(queued => queued.id === signal.id) ?? -1;
+          if (queuedSignals && signalIndex >= 0) queuedSignals.splice(signalIndex, 1);
+          if (queuedSignals?.length === 0) state.preRunSignalsByThread.delete(reservedKey);
+          throw new Error(`Failed to hand off signal ${signal.id} to the active thread run`);
         }
         return { action: 'deliver' as const, runId: winnerRunId ?? reservedRunId };
       }

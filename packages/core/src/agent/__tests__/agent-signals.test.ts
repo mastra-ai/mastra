@@ -6752,7 +6752,7 @@ describe('Agent signals', () => {
     );
     await early.accepted;
     releaseAcquire.resolve();
-    await expect(initial.accepted).resolves.toMatchObject({ action: 'deliver', runId: winnerRunId });
+    await expect(initial.accepted).rejects.toThrow('Failed to hand off signal failed-forward-initial');
 
     pubsub.rejectPublishedTypesBeforeDelivery.delete('signal-enqueued');
     await pubsub.releaseLease(key, winnerRunId);
@@ -6762,7 +6762,6 @@ describe('Agent signals', () => {
       pubsub,
     );
     expect(runtime.drainPendingSignals(recoveryRunId, pubsub, 'pre-run').map(signal => signal.id)).toEqual([
-      'failed-forward-initial',
       'failed-forward-early',
     ]);
     expect(agent.stream).not.toHaveBeenCalled();
