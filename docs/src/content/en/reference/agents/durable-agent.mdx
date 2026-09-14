@@ -132,7 +132,7 @@ Returns: `DurableAgent`
 
 ## `createEventedAgent(options)`
 
-Wraps an `Agent` with fire-and-forget durable execution on the built-in workflow engine. Like `createDurableAgent`, it returns a result you stream from, but the underlying workflow runs non-blocking (via `startAsync`) instead of running to completion before the stream is wired up. Use it when you want the run to progress independently of the caller. It doesn't accept `id` or `name` overrides.
+Wraps an `Agent` with fire-and-forget durable execution on the built-in evented workflow engine. Like `createDurableAgent`, it returns a result you stream from, but the run is started without being awaited: execution is driven by events on the Mastra instance's PubSub, so the run progresses independently of the caller. The agent must be registered on a `Mastra` instance with storage before use. It doesn't accept `id` or `name` overrides.
 
 ```typescript
 import { createEventedAgent } from '@mastra/core/agent/durable'
