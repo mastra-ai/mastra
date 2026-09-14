@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createObservabilityCollector, getCurrentObservabilityCollector } from './collector';
 
@@ -41,6 +41,10 @@ function flushLogs(payload: ReturnType<ReturnType<typeof createObservabilityColl
 }
 
 describe('ObservabilityCollector', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it('exposes the original parentContext on the collector', () => {
     const carrier = makeCarrier();
     const collector = createObservabilityCollector(carrier);
@@ -58,6 +62,31 @@ describe('ObservabilityCollector', () => {
     expect(spans[0]!.parentSpanId).toBe(PARENT_SPAN_ID);
     expect(spans[0]!.name).toBe('inner work');
     expect(spans[0]!.status.code).toBe(1);
+  });
+
+  it('creates span IDs from Web Crypto bytes', async () => {
+    const getRandomValues = vi.fn((bytes: Uint8Array) => {
+      bytes.set([0, 1, 2, 3, 4, 5, 6, 7]);
+      return bytes;
+    });
+    vi.stubGlobal('crypto', { getRandomValues });
+    const collector = createObservabilityCollector(makeCarrier());
+
+    await collector.span('secure span', async () => null);
+
+    expect(getRandomValues).toHaveBeenCalledOnce();
+    expect(flushSpans(collector.flush())[0]!.spanId).toBe('0001020304050607');
+  });
+
+  it('rejects span creation when Web Crypto is unavailable', async () => {
+    vi.stubGlobal('crypto', undefined);
+    const callback = vi.fn();
+    const collector = createObservabilityCollector(makeCarrier());
+
+    await expect(collector.span('insecure span', callback)).rejects.toThrow(
+      '`crypto.getRandomValues` is required to create client observability spans',
+    );
+    expect(callback).not.toHaveBeenCalled();
   });
 
   it('nests spans correctly when called recursively', async () => {

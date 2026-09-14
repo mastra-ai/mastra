@@ -85,6 +85,9 @@ jobs:
       - name: Test changeset package validator
         run: node --test .github/scripts/check-changeset-packages.test.mjs
 
+      - name: Test repository security scripts
+        run: node --test .github/scripts/check-deleted-pages.test.mjs .github/scripts/check-pinned-actions.test.mjs
+
       # Check all pending changesets, including on changeset-only PRs.
       - name: Reject unknown or ignored changeset packages
         run: node .github/scripts/check-changeset-packages.mjs

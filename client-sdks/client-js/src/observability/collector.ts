@@ -78,17 +78,16 @@ function isValidTraceparentMatch(parsed: RegExpExecArray): boolean {
 }
 
 function randomSpanIdHex(): string {
-  // 16 hex chars = 8 bytes. Use crypto when available; fall back to
-  // Math.random for environments without (older RN, some sandboxes).
-  if (typeof globalThis.crypto !== 'undefined' && globalThis.crypto.getRandomValues) {
-    const bytes = new Uint8Array(8);
-    globalThis.crypto.getRandomValues(bytes);
-    let out = '';
-    for (const b of bytes) out += b.toString(16).padStart(2, '0');
-    return out;
+  if (typeof globalThis.crypto === 'undefined' || !globalThis.crypto.getRandomValues) {
+    throw new Error(
+      '`crypto.getRandomValues` is required to create client observability spans. Provide a Web Crypto polyfill or configure a custom observability collector.',
+    );
   }
+
+  const bytes = new Uint8Array(8);
+  globalThis.crypto.getRandomValues(bytes);
   let out = '';
-  for (let i = 0; i < 16; i++) out += Math.floor(Math.random() * 16).toString(16);
+  for (const b of bytes) out += b.toString(16).padStart(2, '0');
   return out;
 }
 
