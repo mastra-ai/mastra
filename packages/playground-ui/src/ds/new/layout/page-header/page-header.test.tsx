@@ -42,7 +42,7 @@ describe('PageHeader', () => {
   });
 
   it('supports beside metadata', () => {
-    const markup = renderToStaticMarkup(<PageHeader.Meta placement="beside">Live</PageHeader.Meta>);
+    const markup = renderToStaticMarkup(<PageHeader.Meta beside>Live</PageHeader.Meta>);
 
     expect(markup).toContain('data-placement="beside"');
   });

@@ -14,7 +14,7 @@ type PageHeaderStoryProps = {
   description: string;
   iconSize: PageHeaderIconSize;
   isLoading: boolean;
-  metaPlacement: 'below' | 'beside';
+  metaBeside: boolean;
   showAction: boolean;
   showDescription: boolean;
   showEyebrow: boolean;
@@ -29,7 +29,7 @@ function PageHeaderStory({
   description,
   iconSize,
   isLoading,
-  metaPlacement,
+  metaBeside,
   showAction,
   showDescription,
   showEyebrow,
@@ -61,7 +61,7 @@ function PageHeaderStory({
           </PageHeader.Title>
         )}
         {showMeta && (
-          <PageHeader.Meta placement={metaPlacement}>
+          <PageHeader.Meta beside={metaBeside}>
             <Badge variant="green">Active</Badge>
             <span className="text-ui-xs text-neutral2 font-mono">agent_8f3a91b2</span>
           </PageHeader.Meta>
@@ -85,7 +85,7 @@ const meta = {
     description: 'Searches trusted sources and writes cited summaries.',
     iconSize: 'sm',
     isLoading: false,
-    metaPlacement: 'below',
+    metaBeside: false,
     showAction: true,
     showDescription: true,
     showEyebrow: true,
@@ -100,7 +100,7 @@ const meta = {
     titleSize: { control: 'inline-radio', options: ['sm', 'md', 'lg', 'xl'] },
     description: { control: 'text' },
     iconSize: { control: 'inline-radio', options: ['sm', 'lg'] },
-    metaPlacement: { control: 'inline-radio', options: ['below', 'beside'] },
+    metaBeside: { control: 'boolean' },
     isLoading: { control: 'boolean' },
     showEyebrow: { control: 'boolean' },
     showIcon: { control: 'boolean' },
@@ -125,7 +125,7 @@ export const MetaBeside: Story = {
     <StoryFrame>
       <PageHeader>
         <PageHeader.Title>production</PageHeader.Title>
-        <PageHeader.Meta placement="beside">
+        <PageHeader.Meta beside>
           <Badge variant="green">Live</Badge>
           <span className="text-ui-xs text-neutral2 font-mono">env_01j9</span>
         </PageHeader.Meta>
@@ -133,6 +133,25 @@ export const MetaBeside: Story = {
           <Button size="sm">Settings</Button>
         </PageHeader.Action>
         <PageHeader.Description>Runtime configuration for the production environment.</PageHeader.Description>
+      </PageHeader>
+    </StoryFrame>
+  ),
+};
+
+export const MetaBoth: Story = {
+  render: () => (
+    <StoryFrame>
+      <PageHeader>
+        <PageHeader.Title>production</PageHeader.Title>
+        <PageHeader.Meta beside>
+          <Badge variant="green">Live</Badge>
+        </PageHeader.Meta>
+        <PageHeader.Meta>
+          <span className="text-ui-xs text-neutral2 font-mono">env_01j9</span>
+        </PageHeader.Meta>
+        <PageHeader.Action>
+          <Button size="sm">Settings</Button>
+        </PageHeader.Action>
       </PageHeader>
     </StoryFrame>
   ),
