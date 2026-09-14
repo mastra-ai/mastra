@@ -9,8 +9,9 @@ import type {
   ListTracesArgs,
   ListTracesResponse,
   ListTracesLightResponse,
-  TraceQueryRequest,
+  TraceQueryGroupResponse,
   TraceQueryResponse,
+  TraceQueryTraceResponse,
   ListBranchesArgs,
   ListBranchesResponse,
   GetBranchArgs,
@@ -102,9 +103,13 @@ import {
   AgentController,
 } from './resources';
 import type {
-  ListScoresBySpanParams,
-  LegacyTracesPaginatedArg,
   LegacyGetTracesResponse,
+  LegacyGroupedTraceQueryInput,
+  LegacyTracesPaginatedArg,
+  ListScoresBySpanParams,
+  QueryTraceThreadsInput,
+  QueryTraceThreadsResult,
+  QueryTracesInput,
 } from './resources/observability';
 import type {
   ListFeedbackResponse,
@@ -1116,8 +1121,17 @@ export class MastraClient extends BaseResource {
   }
 
   /** Queries completed logical traces using recursive trace and related-record predicates. */
-  queryTraces(params: TraceQueryRequest): Promise<TraceQueryResponse> {
+  queryTraces(params: QueryTracesInput): Promise<TraceQueryTraceResponse>;
+  /** @deprecated Use {@link queryTraceThreads} for querying thread identities. */
+  queryTraces(params: LegacyGroupedTraceQueryInput): Promise<TraceQueryGroupResponse>;
+  queryTraces(params: QueryTracesInput | LegacyGroupedTraceQueryInput): Promise<TraceQueryResponse> {
+    if (params.group) return this.observability.queryTraces(params);
     return this.observability.queryTraces(params);
+  }
+
+  /** Queries thread identities using eligible-trace and cross-trace predicates. */
+  queryTraceThreads(params: QueryTraceThreadsInput): Promise<QueryTraceThreadsResult> {
+    return this.observability.queryTraceThreads(params);
   }
 
   /**
