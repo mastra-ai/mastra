@@ -23,6 +23,7 @@ import {
 import { findProviderToolByName } from '../../../tools/provider-tool-utils';
 import { createToolInputState, persistedToolInput, TOOL_INPUT_STATE } from '../../../tools/resumable-input';
 import { getNeedsApprovalFn } from '../../../tools/toolchecks';
+import { executeToolWithPolicy } from '../../../tools/tool-policy-execution';
 import type { MastraToolInvocationOptions, ToolApprovalContext } from '../../../tools/types';
 import { ensureSerializable } from '../../../utils';
 import type { SuspendOptions } from '../../../workflows/step';
@@ -87,6 +88,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
   agentVersionId,
   mastra,
   requireToolApproval: requireToolApprovalFromFactory,
+  toolPolicy,
+  requestContext: policyRequestContext,
   actor,
   mcp,
 }: OuterLLMRun<Tools, OUTPUT>) {
@@ -1051,29 +1054,36 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                     // would suspend the AGENT run via tool-call-approval) with
                     // the bg-task workflow's, so calling `suspend()` from the
                     // tool pauses the bg-task run instead.
-                    const rawResult = await resolvedTool.execute!(bgArgs, {
-                      ...toolOptions,
-                      isBackgroundTask: true,
-                      [BACKGROUND_WORK_CONTEXT]: {
-                        originRunId: runId,
-                        originToolCallId: inputData.toolCallId,
-                        taskId: bgTask.task.id,
-                        invocationKind: isAgentTool ? 'agent' : 'tool',
-                        disposition: bgResolved.disposition === 'awaited' ? 'awaited' : 'deferred',
-                      },
-                      [TOOL_INPUT_STATE]: backgroundInputState,
-                      ...(opts?.resumeData !== undefined ? { resumeData: opts.resumeData } : {}),
-                      suspend: async (data?: unknown, options?: SuspendOptions) => {
-                        Object.assign(toolInputState, backgroundInputState);
-                        await toolOptions.suspend?.(data, options);
-                        return opts?.suspend?.(data, options);
-                      },
-                      outputWriter: async (chunk: any) => {
-                        await opts?.onProgress?.(chunk);
-                        return toolOptions.outputWriter?.(chunk);
-                      },
-                      abortSignal: opts?.abortSignal,
-                    } as any);
+                    const rawResult = await executeToolWithPolicy(
+                      resolvedTool,
+                      toolKey ?? inputData.toolName,
+                      bgArgs,
+                      {
+                        ...toolOptions,
+                        isBackgroundTask: true,
+                        [BACKGROUND_WORK_CONTEXT]: {
+                          originRunId: runId,
+                          originToolCallId: inputData.toolCallId,
+                          taskId: bgTask.task.id,
+                          invocationKind: isAgentTool ? 'agent' : 'tool',
+                          disposition: bgResolved.disposition === 'awaited' ? 'awaited' : 'deferred',
+                        },
+                        [TOOL_INPUT_STATE]: backgroundInputState,
+                        ...(opts?.resumeData !== undefined ? { resumeData: opts.resumeData } : {}),
+                        suspend: async (data?: unknown, options?: SuspendOptions) => {
+                          Object.assign(toolInputState, backgroundInputState);
+                          await toolOptions.suspend?.(data, options);
+                          return opts?.suspend?.(data, options);
+                        },
+                        outputWriter: async (chunk: any) => {
+                          await opts?.onProgress?.(chunk);
+                          return toolOptions.outputWriter?.(chunk);
+                        },
+                        abortSignal: opts?.abortSignal,
+                      } as any,
+                      toolPolicy,
+                      policyRequestContext ?? requestContext,
+                    );
                     const result = ensureSerializable(rawResult);
 
                     if ('onOutput' in resolvedTool && typeof (resolvedTool as any).onOutput === 'function') {
@@ -1514,7 +1524,14 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           }
         }
 
-        const rawResult = await tool.execute(args, toolOptions);
+        const rawResult = await executeToolWithPolicy(
+          tool,
+          toolKey ?? inputData.toolName,
+          args,
+          toolOptions,
+          toolPolicy,
+          policyRequestContext ?? requestContext,
+        );
         const result = ensureSerializable(rawResult);
 
         // Call onOutput hook after successful execution

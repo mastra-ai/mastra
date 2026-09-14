@@ -339,6 +339,31 @@ describe('AgentController Resource', () => {
     );
   });
 
+  it('preserves typed dependency recovery fields from native error SSE', async () => {
+    const error = {
+      name: 'ToolDependencyError',
+      message: 'Load the skill',
+      code: 'MISSING_REQUIRED_SKILL',
+      tool: 'protected_tool',
+      missingSkills: ['required'],
+      retryable: true,
+    };
+    mockSse([`data: ${JSON.stringify({ type: 'error', error })}\n\n`]);
+    const received: KnownAgentControllerEvent[] = [];
+    const sub = await client
+      .getAgentController('code')
+      .session('user-1')
+      .subscribe({
+        onEvent: event => {
+          if (isKnownAgentControllerEvent(event)) received.push(event);
+        },
+      });
+    await new Promise(resolve => setTimeout(resolve, 10));
+    sub.unsubscribe();
+    const event = received.find(event => event.type === 'error');
+    expect(event?.error).toEqual(error);
+  });
+
   it('hydrates thread timestamps from SSE events', async () => {
     const createdAt = '2026-01-01T00:00:00.000Z';
     const updatedAt = '2026-01-02T03:04:05.000Z';

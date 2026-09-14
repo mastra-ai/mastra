@@ -53,7 +53,7 @@ function extractActivatedNames(result: unknown): string[] {
   if (Array.isArray(maybeResults)) {
     for (const entry of maybeResults) {
       const name = (entry as { name?: unknown })?.name;
-      if (typeof name === 'string') names.push(name);
+      if (typeof name === 'string' && (entry as { loaded?: unknown }).loaded !== false) names.push(name);
     }
   }
 

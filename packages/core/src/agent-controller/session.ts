@@ -1,3 +1,4 @@
+import { MastraError } from '../error';
 import type { Agent } from '../agent';
 import type { MastraDBMessage, MastraProviderMetadata } from '../agent/message-list/state/types';
 import { createSignal, resolveDeliveryAttributes } from '../agent/signals';
@@ -1069,6 +1070,10 @@ export class SessionStream {
   }
 
   /** Whether the live subscription currently has a run in flight. */
+  getCurrentAgent(): Agent | null {
+    return this.#agent;
+  }
+
   isActive(): boolean {
     return this.activeRunId() !== null;
   }
@@ -1498,6 +1503,10 @@ export class SessionRun {
   }
 
   /** Bump and return the operation counter at the start of a new operation. */
+  getOperationId(): number {
+    return this.#operationId;
+  }
+
   nextOperation(): number {
     this.#operationId += 1;
     return this.#operationId;
@@ -2298,6 +2307,10 @@ export class SessionDisplayState {
    * which abandons the run's parked suspensions; the caller dispatches
    * `display_state_changed`.
    */
+  clearPendingApproval(): void {
+    this.#state.pendingApproval = null;
+  }
+
   clearPendingSuspensions(): void {
     this.#state.pendingSuspensions.clear();
   }
@@ -3176,9 +3189,7 @@ export class Session<TState = unknown> {
     const discover = async () => {
       try {
         const result = await agent.listSuspendedRuns({ threadId, resourceId });
-        return result.runs.flatMap(run =>
-          run.toolCalls.filter(call => call.requiresApproval).map(call => ({ agent, runId: run.runId, call })),
-        );
+        return result.runs.flatMap(run => run.toolCalls.map(call => ({ agent, runId: run.runId, call })));
       } catch (error) {
         if (error instanceof MastraError && error.id === 'AGENT_LIST_SUSPENDED_RUNS_NO_STORAGE') return [];
         throw error;
@@ -3195,8 +3206,27 @@ export class Session<TState = unknown> {
       this.approval.isArmed()
     )
       return;
-    if (pending.length > 1) throw new Error('Multiple saved approvals match this Session thread');
-    const approval = pending[0];
+    for (const { runId, call } of pending) {
+      if (
+        call.requiresApproval ||
+        !call.toolCallId ||
+        !call.toolName ||
+        this.suspensions.has({ toolCallId: call.toolCallId })
+      )
+        continue;
+      this.machinery.getRunScope?.(runId)?.set(SUSPENDED_RUN_AGENT_KEY, agent);
+      this.suspensions.register({ runId, toolCallId: call.toolCallId, toolName: call.toolName });
+      this.emit({
+        type: 'tool_suspended',
+        toolCallId: call.toolCallId,
+        toolName: call.toolName,
+        args: call.args,
+        suspendPayload: call.suspendPayload,
+      });
+    }
+    const approvals = pending.filter(({ call }) => call.requiresApproval);
+    if (approvals.length > 1) throw new Error('Multiple saved approvals match this Session thread');
+    const approval = approvals[0];
     if (!approval) return;
     const { runId, call } = approval;
     const { toolName, toolCallId } = call;
@@ -3378,6 +3408,7 @@ export class Session<TState = unknown> {
     requestContext?: RequestContext;
     declineContext?: { reason?: string; message?: string };
   }): void {
+    const wasArmed = this.approval.isArmed();
     this.approval.respond({
       decision,
       toolCallId,
@@ -3388,6 +3419,10 @@ export class Session<TState = unknown> {
         if (category) this.grantCategory(category);
       },
     });
+    if (wasArmed && !this.approval.isArmed()) {
+      this.displayState.clearPendingApproval();
+      this.emit({ type: 'display_state_changed', displayState: this.displayState.get() });
+    }
   }
 
   // ===========================================================================
@@ -3964,7 +3999,7 @@ export class Session<TState = unknown> {
     } catch (error) {
       const err = getErrorFromUnknown(error);
       this.emit({ type: 'error', error: err });
-      await this.finishAgentRun('error');
+      if (err.name !== 'ToolDependencyError') await this.finishAgentRun('error');
     }
   }
 
@@ -4138,12 +4173,15 @@ export class Session<TState = unknown> {
     // originating agent so another mode's agent cannot reclaim one by run id.
     // An explicit, authorized run-handoff would be required to transfer ownership.
     const agent =
-      this.machinery.getRunScope(suspension.runId)?.get(SUSPENDED_RUN_AGENT_KEY) ?? this.machinery.getAgent();
+      this.machinery.getRunScope(suspension.runId)?.get(SUSPENDED_RUN_AGENT_KEY) ??
+      this.stream.getCurrentAgent() ??
+      this.machinery.getAgent();
 
     // Remove before resuming so a re-suspend during the resumed run can
     // re-register the same toolCallId without being clobbered by this cleanup.
     // Drop the matching display-state entry too so the UI stops rendering the
     // resolved prompt while any other parked suspensions stay visible.
+    const pendingDisplay = this.displayState.get().pendingSuspensions.get(toolCallId);
     this.suspensions.delete({ toolCallId });
     this.displayState.deletePendingSuspension(toolCallId);
 
@@ -4182,6 +4220,12 @@ export class Session<TState = unknown> {
         },
       });
       await resumedSubscriptionBoundary.promise;
+    } catch (error) {
+      if (getErrorFromUnknown(error).name === 'ToolDependencyError') {
+        this.suspensions.register({ toolCallId, ...suspension });
+        if (pendingDisplay) this.emit({ type: 'tool_suspended', ...pendingDisplay });
+      }
+      throw error;
     } finally {
       resumedSubscriptionBoundary.cancel();
       await this.thread.ensureSubscription(threadId);

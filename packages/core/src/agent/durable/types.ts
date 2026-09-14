@@ -558,6 +558,8 @@ export interface RegistryModelListEntry {
  * Registry entry for a single run's non-serializable state
  */
 export interface RunRegistryEntry {
+  /** Configured Agent policy; reconstructed from the registered Agent after restart. */
+  toolPolicy?: import('../../tools/tool-policy').ToolPolicy;
   /**
    * Marks a minimal cross-process placeholder entry (e.g. seeded by
    * @mastra/inngest resume() to carry an abort controller). Placeholder

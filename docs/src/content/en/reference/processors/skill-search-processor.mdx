@@ -87,12 +87,25 @@ const skillSearch = new SkillSearchProcessor({
             isOptional: true,
             default: 'false',
           },
+          {
+            name: 'trackReadiness',
+            type: 'boolean',
+            description: 'Publish a read-only request snapshot after injecting loaded instructions. Enables mandatory tool dependencies and isolates loaded state per request. Checks the authorized catalog names once per model step.',
+            isOptional: true,
+            default: 'false',
+          },
         ],
       },
     ],
   },
 ]}
 />
+
+## Skill readiness
+
+With `trackReadiness: true`, `getSkillReadiness(requestContext)` from `@mastra/core/processors` returns an immutable snapshot containing `readySkills` and `availableSkills`. Before the first processor step, after state expiry, or after state clearing, it returns `undefined`. A successful `load_skill` call changes readiness only after the next input step injects its instructions.
+
+Readiness checks perform no catalog or storage reads. Native Workspace skills expose `listNames()` to read the current catalog names without checking every filesystem path. Custom skill implementations without this optional method use `list()` instead. The processor checks catalog visibility once per model step; this uses the Workspace's existing refresh behavior. Set `blockingRefresh: true` if same-turn source freshness is required. Keep one readiness-enabled skill processor per request and place it before tool search. See [required skills](/reference/processors/tool-search-processor#required-skills) for activation and execution enforcement.
 
 ## Returns
 

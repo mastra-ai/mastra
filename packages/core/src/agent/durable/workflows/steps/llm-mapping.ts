@@ -17,6 +17,17 @@ import type {
 } from '../../types';
 import { normalizeModelOutput } from './normalize-model-output';
 
+/** Keep the dependency recovery contract in both model and stored tool output. */
+function toolErrorOutput(error: NonNullable<DurableToolCallOutput['error']>): string | Record<string, unknown> {
+  if (error.name !== 'ToolDependencyError') return error.message;
+  return { ...error };
+}
+
+function toolErrorText(error: NonNullable<DurableToolCallOutput['error']>): string {
+  const output = toolErrorOutput(error);
+  return typeof output === 'string' ? output : JSON.stringify(output);
+}
+
 /**
  * Input schema for the durable LLM mapping step.
  * This combines the LLM execution output with tool call results.
@@ -163,7 +174,7 @@ export function createDurableLLMMappingStep() {
             continue;
           }
 
-          const result = toolResult.error ? toolResult.error.message : toolResult.result;
+          const result = toolResult.error ? toolErrorOutput(toolResult.error) : toolResult.result;
 
           // Compute toModelOutput for successful tool results (Bug 9 parity).
           // Start from the existing providerMetadata so it's preserved even when
@@ -227,7 +238,7 @@ export function createDurableLLMMappingStep() {
               // `errorText` so the transcript/adapters read it as a failure rather than
               // a normal result. Successful results keep `state: 'result'` + `result`.
               ...(toolResult.error
-                ? { state: 'output-error' as const, errorText: toolResult.error.message }
+                ? { state: 'output-error' as const, errorText: toolErrorText(toolResult.error) }
                 : { state: 'result' as const, result }),
               toolCallId: toolResult.toolCallId,
               toolName: toolResult.toolName,
@@ -379,7 +390,7 @@ export function createDurableLLMMappingStep() {
               type: 'tool-result',
               toolCallId: tr.toolCallId,
               toolName: tr.toolName,
-              result: tr.error ? tr.error.message : tr.result,
+              result: tr.error ? toolErrorOutput(tr.error) : tr.result,
               ...(tr.error ? { isError: true } : {}),
             });
           }

@@ -1,5 +1,12 @@
 export * from './tool';
 export * from './types';
+export type {
+  ToolPolicy,
+  ToolPolicyArgs,
+  ToolPolicyDecision,
+  ToolPolicyConfig,
+  ToolPolicyResolverArgs,
+} from './tool-policy';
 export * from './ui-types';
 export { getTransformedToolPayload, hasTransformedToolPayload } from './payload-transform';
 export { isProviderDefinedTool, isProviderTool, isVercelTool } from './toolchecks';
@@ -53,3 +60,5 @@ export {
   type EffectiveGoalSettings,
   type AgentGoalConfigDefaults,
 } from '../agent/goal';
+
+export { ToolPolicyError } from './tool-policy';

@@ -1,3 +1,4 @@
+import type { ToolPolicy } from '../tools/tool-policy';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import type { StepResult, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
 import { z } from 'zod/v4';
@@ -120,6 +121,7 @@ export type ProcessorInputStepPhaseType = {
   retryCount?: number;
   model?: ProcessorStepModelConfig;
   tools?: ProcessorStepToolsConfig;
+  toolPolicy?: ToolPolicy;
   toolChoice?: ToolChoice<ToolSet>;
   activeTools?: string[];
   providerOptions?: SharedProviderOptions;
@@ -223,6 +225,7 @@ export type ProcessorStepOutputType = {
   providerExecuted?: boolean;
   model?: MastraLanguageModel;
   tools?: ProcessorStepToolsConfig;
+  toolPolicy?: ToolPolicy;
   toolChoice?: ToolChoice<ToolSet>;
   activeTools?: string[];
   providerOptions?: SharedProviderOptions;
@@ -569,6 +572,7 @@ export const ProcessorInputStepPhaseSchema = z.object({
   // Model and tools configuration (can be modified by processors)
   model: z.custom<ProcessorStepModelConfig>().optional().describe('Current model for this step'),
   tools: z.custom<ProcessorStepToolsConfig>().optional().describe('Current tools available for this step'),
+  toolPolicy: z.custom<ToolPolicy>().optional(),
   toolChoice: z.custom<ToolChoice<ToolSet>>().optional().describe('Current tool choice setting'),
   activeTools: z.array(z.string()).optional().describe('Currently active tools'),
   providerOptions: z.custom<SharedProviderOptions>().optional().describe('Provider-specific options'),
@@ -731,6 +735,7 @@ export const ProcessorStepOutputSchema: z.ZodType<ProcessorStepOutputType> = z.o
   // Model and tools configuration (for inputStep phase)
   model: z.custom<MastraLanguageModel>().optional(),
   tools: z.custom<ProcessorStepToolsConfig>().optional(),
+  toolPolicy: z.custom<ToolPolicy>().optional(),
   toolChoice: z.custom<ToolChoice<ToolSet>>().optional(),
   activeTools: z.array(z.string()).optional(),
   providerOptions: z.custom<SharedProviderOptions>().optional(),

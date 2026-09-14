@@ -664,8 +664,13 @@ export class SessionRunEngine {
         const policy = this.#session.resolveToolApproval(toolName);
 
         if (policy === 'allow') {
-          await this.#session.approveToolCall({ toolCallId, requestContext });
-          break;
+          try {
+            await this.#session.approveToolCall({ toolCallId, requestContext });
+            break;
+          } catch (error) {
+            if (getErrorFromUnknown(error).name !== 'ToolDependencyError') throw error;
+            this.#session.emit({ type: 'error', error: getErrorFromUnknown(error) });
+          }
         }
 
         if (policy === 'deny') {
@@ -673,42 +678,51 @@ export class SessionRunEngine {
           break;
         }
 
-        const approvalPromise = this.#session.approval.arm({ toolName, toolCallId });
-        this.#session.emit({ type: 'tool_approval_required', toolCallId, toolName, args: toolArgs });
+        while (true) {
+          const approvalPromise = this.#session.approval.arm({ toolName, toolCallId });
+          this.#session.emit({ type: 'tool_approval_required', toolCallId, toolName, args: toolArgs });
 
-        const approval = await approvalPromise;
-        this.#session.approval.clearToolName();
+          const approval = await approvalPromise;
+          this.#session.approval.clearToolName();
 
-        // `session.abort()` releases a parked gate as a decline and defers the
-        // stream/signal teardown to us, so the decline can still be driven
-        // through the (live) agent run and persist an `output-denied` result.
-        // Once it lands we finish the teardown, which stops the run rather than
-        // letting the model continue past the denied call.
-        const deferredAbort = this.#session.run.isAbortRequested();
+          // `session.abort()` releases a parked gate as a decline and defers the
+          // stream/signal teardown to us, so the decline can still be driven
+          // through the (live) agent run and persist an `output-denied` result.
+          // Once it lands we finish the teardown, which stops the run rather than
+          // letting the model continue past the denied call.
+          const deferredAbort = this.#session.run.isAbortRequested();
 
-        if (!deferredAbort && approval.decision === 'approve') {
-          await this.#session.approveToolCall({
-            toolCallId,
-            requestContext: approval.requestContext ?? requestContext,
-          });
-        } else {
-          await this.#session.declineToolCall({
-            toolCallId,
-            requestContext: approval.requestContext ?? requestContext,
-            declineContext: deferredAbort
-              ? { reason: ABORTED_BY_USER_REASON, message: ABORTED_BY_USER_REASON }
-              : approval.declineContext,
-          });
-        }
+          try {
+            if (!deferredAbort && approval.decision === 'approve') {
+              await this.#session.approveToolCall({
+                toolCallId,
+                requestContext: approval.requestContext ?? requestContext,
+              });
+            } else {
+              await this.#session.declineToolCall({
+                toolCallId,
+                requestContext: approval.requestContext ?? requestContext,
+                declineContext: deferredAbort
+                  ? { reason: ABORTED_BY_USER_REASON, message: ABORTED_BY_USER_REASON }
+                  : approval.declineContext,
+              });
+            }
+          } catch (error) {
+            if (getErrorFromUnknown(error).name !== 'ToolDependencyError' || deferredAbort) throw error;
+            this.#session.emit({ type: 'error', error: getErrorFromUnknown(error) });
+            continue;
+          }
 
-        if (deferredAbort) {
-          // The denial chunk the agent emits for this decline can never reach
-          // us: we are blocking the consumer loop that would read it, and the
-          // teardown below ends the loop. Settle the call locally so the
-          // display state shows the denied result instead of a call stuck
-          // mid-flight.
-          this.settleToolCallAsDenied(state, { toolCallId, toolName, args: toolArgs });
-          this.#session.completeDeferredAbort();
+          if (deferredAbort) {
+            // The denial chunk the agent emits for this decline can never reach
+            // us: we are blocking the consumer loop that would read it, and the
+            // teardown below ends the loop. Settle the call locally so the
+            // display state shows the denied result instead of a call stuck
+            // mid-flight.
+            this.settleToolCallAsDenied(state, { toolCallId, toolName, args: toolArgs });
+            this.#session.completeDeferredAbort();
+          }
+          break;
         }
         break;
       }
