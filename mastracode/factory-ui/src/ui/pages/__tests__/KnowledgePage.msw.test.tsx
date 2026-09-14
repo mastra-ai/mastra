@@ -499,7 +499,7 @@ describe('KnowledgePage', () => {
     );
     if (!rootNode) throw new Error('Expected the selected scope root node');
     expect(within(rootNode).getByText('features')).toBeVisible();
-    expect(within(rootNode).getByLabelText('2 direct members')).toHaveTextContent('2');
+    expect(within(rootNode).queryByLabelText('2 direct members')).not.toBeInTheDocument();
     fireEvent.mouseEnter(rootNode, { clientX: 120, clientY: 80 });
     const scopeHover = await screen.findByTestId('knowledge-hover-card');
     expect(scopeHover).toHaveTextContent('Content nodes1');
@@ -538,7 +538,8 @@ describe('KnowledgePage', () => {
     stubKnowledgeRoute();
     const user = userEvent.setup();
     const { router } = renderRoute(`/factories/${FACTORY_ID}/knowledge`);
-    const search = await screen.findByRole('textbox', { name: 'Search knowledge' });
+    const scopes = await screen.findByRole('complementary', { name: 'Knowledge scopes' });
+    const search = within(scopes).getByRole('textbox', { name: 'Search knowledge' });
 
     await user.type(search, 'payments');
     const payments = await screen.findByRole('option', { name: /Payments Service/ });
@@ -669,7 +670,7 @@ describe('KnowledgePage', () => {
     expect(flyout).not.toHaveTextContent(`resource:${FACTORY_ID}`);
     expect(flyout).toHaveTextContent('Content nodes1');
     expect(flyout).toHaveTextContent('Child scopes1');
-    expect(await within(flyout).findByText('knowledge-appended')).toBeInTheDocument();
+    expect(await within(flyout).findByText('new record')).toBeInTheDocument();
     expect(activityScopeIds).toContain(scopeRootId);
     expect(router.state.location.search).toContain(`node=${scopeRootId}`);
     expect(router.state.location.search).toContain(`scope=${scopeRootId}`);
@@ -780,13 +781,63 @@ describe('KnowledgePage', () => {
     expect(within(scopes).getByRole('button', { name: /mastra org/ })).not.toHaveClass('bg-surface4');
 
     await user.click(screen.getByRole('tab', { name: 'activity' }));
-    expect(await screen.findByText('knowledge appended')).toBeInTheDocument();
+    expect(await screen.findByText('new record')).toBeInTheDocument();
+    expect(screen.queryByText('knowledge appended')).not.toBeInTheDocument();
     expect(screen.getByText(`org:org-1 → resource:${FACTORY_ID}`)).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Payments Service' }));
     expect(router.state.location.search).not.toContain('view=activity');
     expect(router.state.location.search).toContain('node=ent-a');
     expect(router.state.location.search).toContain('record=record-1');
     expect(await screen.findByText(/Handles charging flows/)).toBeInTheDocument();
+  });
+
+  it('loads older activity pages without replacing newer rows', async () => {
+    stubKnowledgeRoute();
+    const requestedCursors: Array<string | null> = [];
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/activity`, ({ request }) => {
+        const cursor = new URL(request.url).searchParams.get('cursor');
+        requestedCursors.push(cursor);
+        const shared = {
+          action: 'record-created',
+          recordType: 'record',
+          scope: ['org:org-1', `resource:${FACTORY_ID}`],
+          createdAt: '2026-08-13T03:00:00.000Z',
+        };
+        return cursor
+          ? HttpResponse.json({
+              events: [
+                {
+                  ...shared,
+                  id: 'activity-older',
+                  recordId: 'record-older',
+                  node: { id: 'ent-older', name: 'Older Service', rung: 'resource' },
+                },
+              ],
+            })
+          : HttpResponse.json({
+              events: [
+                {
+                  ...shared,
+                  id: 'activity-newer',
+                  recordId: 'record-newer',
+                  node: { id: 'ent-newer', name: 'Newer Service', rung: 'resource' },
+                },
+              ],
+              nextCursor: 'cursor-older',
+            });
+      }),
+    );
+    const user = userEvent.setup();
+    renderRoute(`/factories/${FACTORY_ID}/knowledge?scope=resource&view=activity`);
+
+    expect(await screen.findByRole('button', { name: 'Newer Service' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Load older activity' }));
+
+    expect(await screen.findByRole('button', { name: 'Older Service' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Newer Service' })).toBeInTheDocument();
+    expect(requestedCursors).toContain('cursor-older');
+    expect(screen.queryByRole('button', { name: 'Load older activity' })).not.toBeInTheDocument();
   });
 
   it('shows bounded-window status and deep-links rendered out-of-window wikilinks', async () => {
