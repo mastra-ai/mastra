@@ -544,7 +544,7 @@ describe('PlatformLinearIntegration', () => {
     expect(fetchImpl).toHaveBeenCalledTimes(3);
   });
 
-  it('continues across routed workspaces when an earlier duplicate identifier is outside its source', async () => {
+  it('probes only routed workspaces while retaining complete source precedence', async () => {
     const workspace1Source = sourceId('workspace-1', 'project-1');
     const workspace1TeamSource = `linear-team:${Buffer.from(
       JSON.stringify({ workspaceId: 'workspace-1', teamId: 'team-1' }),
@@ -552,10 +552,6 @@ describe('PlatformLinearIntegration', () => {
     const workspace2TeamSource = `linear-team:${Buffer.from(
       JSON.stringify({ workspaceId: 'workspace-2', teamId: 'team-2' }),
     ).toString('base64url')}`;
-    const wrongIssue = {
-      ...issue,
-      id: 'issue-wrong',
-    };
     const expectedIssue = {
       ...issue,
       id: 'issue-correct',
@@ -565,7 +561,7 @@ describe('PlatformLinearIntegration', () => {
     const fetchImpl = vi.fn<typeof fetch>(async input => {
       const url = String(input);
       if (url.includes('/workspace-1/issues/ENG-42')) {
-        return json({ ...wrongIssue, comments: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } } });
+        return json({ detail: 'Unrelated workspace unavailable' }, 503);
       }
       if (url.includes('/workspace-2/issues/ENG-42')) {
         return json({ ...expectedIssue, comments: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } } });
@@ -582,7 +578,7 @@ describe('PlatformLinearIntegration', () => {
         [workspace2TeamSource],
       ),
     ).resolves.toMatchObject({ id: 'issue-correct', workspaceId: 'workspace-2', teamId: 'team-2' });
-    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
   it('tracks independent cursors when selected projects span workspaces', async () => {

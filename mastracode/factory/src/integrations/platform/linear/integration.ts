@@ -699,9 +699,11 @@ export class PlatformLinearIntegration implements FactoryIntegration {
       source: parseSourceId(sourceKey),
     }));
     const routedSourceSet = routedSourceIds ? new Set(routedSourceIds) : undefined;
-    const workspaceIds = scopedSources
-      ? [...new Set(scopedSources.map(({ source }) => source.workspaceId))]
-      : await this.#candidateWorkspaceIds(undefined);
+    const workspaceIds = routedSourceIds
+      ? [...new Set(routedSourceIds.map(sourceKey => parseSourceId(sourceKey).workspaceId))]
+      : scopedSources
+        ? [...new Set(scopedSources.map(({ source }) => source.workspaceId))]
+        : await this.#candidateWorkspaceIds(undefined);
     for (const workspaceId of workspaceIds) {
       try {
         const issue = await this.#client.request<
