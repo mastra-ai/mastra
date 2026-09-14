@@ -1394,6 +1394,7 @@ export interface CompareScorerVersionsResponse {
 }
 
 export type ListAgentsModelProvidersResponse = GeneratedResponse<'GET /agents/providers'>;
+export type GetAgentBuilderActionsResponse = GeneratedResponse<'GET /agent-builder'>;
 
 export type Provider = ListAgentsModelProvidersResponse['providers'][number];
 

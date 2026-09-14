@@ -1,6 +1,5 @@
 import type { ServerDetailInfo } from '@mastra/core/mcp';
 import type { RequestContext } from '@mastra/core/request-context';
-import type { WorkflowInfo } from '@mastra/core/workflows';
 import {
   Agent,
   MemoryThread,
@@ -139,6 +138,7 @@ import type {
   ListMemoryThreadMessagesResponse,
   MemorySearchResponse,
   ListAgentsModelProvidersResponse,
+  GetAgentBuilderActionsResponse,
   ListMemoryThreadsParams,
   ListMemoryThreadsResponse,
   ListStoredAgentsParams,
@@ -654,7 +654,7 @@ export class MastraClient extends BaseResource {
    * Gets all available agent builder actions
    * @returns Promise containing map of action IDs to action details
    */
-  public getAgentBuilderActions(): Promise<Record<string, WorkflowInfo>> {
+  public getAgentBuilderActions(): Promise<GetAgentBuilderActionsResponse> {
     return this.request('/agent-builder');
   }
 
