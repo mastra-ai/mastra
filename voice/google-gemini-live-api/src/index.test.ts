@@ -232,6 +232,7 @@ describe('GeminiLiveVoice', () => {
 
   describe.each([
     { audioConfig: undefined, inputSampleRate: 16000 },
+    { audioConfig: { inputSampleRate: undefined }, inputSampleRate: 16000 },
     { audioConfig: { inputSampleRate: 48000 }, inputSampleRate: 48000 },
   ])('Audio Streaming at $inputSampleRate Hz', ({ audioConfig, inputSampleRate }) => {
     beforeEach(async () => {
