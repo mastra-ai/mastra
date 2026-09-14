@@ -5,7 +5,7 @@ import { z } from 'zod/v4';
 import { StructuredOutputProcessor } from '../../processors/processors/structured-output';
 import { Agent } from '../agent';
 
-function createModel(version: 'v2' | 'v3', respond: (prompt: unknown) => string) {
+function createModel(version: 'v2' | 'v3', respond: (prompt: unknown) => string | Promise<string>) {
   const chunks = (text: string) => [
     { type: 'stream-start' as const, warnings: [] },
     { type: 'response-metadata' as const, id: 'response', modelId: 'mock-model', timestamp: new Date(0) },
@@ -16,14 +16,14 @@ function createModel(version: 'v2' | 'v3', respond: (prompt: unknown) => string)
   if (version === 'v2') {
     return new MockLanguageModelV2({
       doGenerate: async ({ prompt }) => ({
-        content: [{ type: 'text', text: respond(prompt) }],
+        content: [{ type: 'text', text: await respond(prompt) }],
         finishReason: 'stop',
         usage: { inputTokens: 10, outputTokens: 20 },
         warnings: [],
       }),
       doStream: async ({ prompt }) => ({
         stream: convertArrayToReadableStream([
-          ...chunks(respond(prompt)),
+          ...chunks(await respond(prompt)),
           { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20 } },
         ]),
       }),
@@ -31,7 +31,7 @@ function createModel(version: 'v2' | 'v3', respond: (prompt: unknown) => string)
   }
   return new MockLanguageModelV3({
     doGenerate: async ({ prompt }) => ({
-      content: [{ type: 'text', text: respond(prompt) }],
+      content: [{ type: 'text', text: await respond(prompt) }],
       finishReason: { unified: 'stop', raw: 'stop' },
       usage: {
         inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
@@ -41,7 +41,7 @@ function createModel(version: 'v2' | 'v3', respond: (prompt: unknown) => string)
     }),
     doStream: async ({ prompt }) => ({
       stream: convertArrayToReadableStream([
-        ...chunks(respond(prompt)),
+        ...chunks(await respond(prompt)),
         {
           type: 'finish',
           finishReason: { unified: 'stop', raw: 'stop' },
@@ -153,6 +153,61 @@ describe.each(['v2', 'v3'] as const)('separate structuring model retries (%s)', 
         if (request === 1) expect(await result.tripwire).toBeUndefined();
       }
       expect(structuringCalls).toBe(2);
+    });
+
+    it('isolates a retrying request from a concurrent successful request', async () => {
+      let primaryCalls = 0;
+      let structuringCalls = 0;
+      let initialStructuringCalls = 0;
+      let releaseInitialStructuringCalls!: () => void;
+      const initialStructuringCallsStarted = new Promise<void>(resolve => {
+        releaseInitialStructuringCalls = resolve;
+      });
+      const processor = new StructuredOutputProcessor({
+        schema: z.object({ count: z.number() }),
+        model: createModel(version, async prompt => {
+          structuringCalls++;
+          const serializedPrompt = JSON.stringify(prompt);
+          const shouldRetry = serializedPrompt.includes('needs retry');
+          if (structuringCalls <= 2) {
+            initialStructuringCalls++;
+            if (initialStructuringCalls === 2) releaseInitialStructuringCalls();
+            await initialStructuringCallsStarted;
+          }
+          if (shouldRetry && structuringCalls <= 2) return '{"count":"invalid"}';
+          return JSON.stringify({ count: shouldRetry ? 1 : 2 });
+        }),
+      });
+      const agent = new Agent({
+        id: 'structured-output-concurrent-retry',
+        name: 'Structured output concurrent retry',
+        model: createModel(version, prompt => {
+          primaryCalls++;
+          return JSON.stringify(prompt).includes('Retry request') ? 'needs retry' : 'succeeds immediately';
+        }),
+        outputProcessors: [processor],
+      });
+      const request = async (input: string) => {
+        const result = await agent[method](input, { maxProcessorRetries: 1 });
+        if (method === 'stream' && 'fullStream' in result) {
+          for await (const chunk of result.fullStream) {
+            expect(chunk.type).not.toBe('error');
+          }
+        }
+        expect(await result.tripwire).toBeUndefined();
+        expect(await result.finishReason).toBe('stop');
+        return result.object;
+      };
+
+      const [retriedObject, successfulObject] = await Promise.all([
+        request('Retry request'),
+        request('Successful request'),
+      ]);
+
+      expect(await retriedObject).toEqual({ count: 1 });
+      expect(await successfulObject).toEqual({ count: 2 });
+      expect(primaryCalls).toBe(3);
+      expect(structuringCalls).toBe(3);
     });
 
     it.each([

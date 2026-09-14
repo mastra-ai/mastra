@@ -964,7 +964,9 @@ describe('separate-model structured output logging', () => {
           expect(result.tripwire).toBeDefined();
           expect(object).toBeUndefined();
           expect(logger.error).toHaveBeenCalled();
-          expect(logger.warn).not.toHaveBeenCalled();
+          expect(logger.warn).toHaveBeenCalledWith(
+            'Processor requested retry but maxProcessorRetries is not set. Treating as abort.',
+          );
         } else {
           expect(result.tripwire).toBeUndefined();
           expect(object).toEqual(errorStrategy === 'fallback' ? fallbackValue : undefined);

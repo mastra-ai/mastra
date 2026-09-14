@@ -976,8 +976,98 @@ describe('StructuredOutputProcessor', () => {
         retryCount: 0,
       });
 
-      // Should only call stream once (guarded by isStructuringAgentStreamStarted)
+      // Should only call stream once (guarded by request-local state)
       expect(streamSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('isolates structuring guards and failures between processor instances sharing one state', async () => {
+      const firstProcessor = new StructuredOutputProcessor({
+        schema: testSchema,
+        model: mockModel,
+        errorStrategy: 'strict',
+      });
+      const secondProcessor = new StructuredOutputProcessor({
+        schema: testSchema,
+        model: mockModel,
+        errorStrategy: 'strict',
+      });
+      const { controller } = createMockController();
+      const firstAbort = createMockAbort();
+      const secondAbort = createMockAbort();
+      const state = { controller };
+      const finishChunk: ChunkType = {
+        runId: 'test-run',
+        from: ChunkFrom.AGENT,
+        type: 'finish',
+        payload: {
+          stepResult: { reason: 'stop' },
+          output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+          metadata: {},
+          messages: { all: [], user: [], nonUser: [] },
+        },
+      };
+      const errorChunk = {
+        runId: 'test-run',
+        from: ChunkFrom.AGENT,
+        type: 'error',
+        payload: { error: new Error('first processor failed') },
+      };
+      const objectChunk = {
+        runId: 'test-run',
+        from: ChunkFrom.AGENT,
+        type: 'object-result',
+        object: { color: 'blue', intensity: 'bright' },
+      };
+      const firstStreamSpy = vi
+        .spyOn(firstProcessor['structuringAgent'], 'stream')
+        .mockResolvedValueOnce({ fullStream: convertArrayToReadableStream([errorChunk]) } as any)
+        .mockResolvedValueOnce({ fullStream: convertArrayToReadableStream([objectChunk]) } as any);
+      const secondStreamSpy = vi
+        .spyOn(secondProcessor['structuringAgent'], 'stream')
+        .mockResolvedValue({ fullStream: convertArrayToReadableStream([objectChunk]) } as any);
+
+      await firstProcessor.processOutputStream({
+        part: finishChunk,
+        streamParts: [],
+        state,
+        abort: firstAbort,
+        retryCount: 0,
+      });
+      await secondProcessor.processOutputStream({
+        part: finishChunk,
+        streamParts: [],
+        state,
+        abort: secondAbort,
+        retryCount: 0,
+      });
+
+      expect(firstStreamSpy).toHaveBeenCalledTimes(1);
+      expect(secondStreamSpy).toHaveBeenCalledTimes(1);
+      const secondStepArgs = outputStepArgs(state, secondAbort);
+      expect(secondProcessor.processOutputStep(secondStepArgs)).toBe(secondStepArgs.messages);
+      expect(secondAbort).not.toHaveBeenCalled();
+
+      const firstReason = '[StructuredOutputProcessor] Structuring failed: first processor failed';
+      expect(() => firstProcessor.processOutputStep(outputStepArgs(state, firstAbort))).toThrow(firstReason);
+      expect(firstAbort).toHaveBeenCalledWith(firstReason, { retry: true });
+
+      await firstProcessor.processOutputStream({
+        part: finishChunk,
+        streamParts: [],
+        state,
+        abort: firstAbort,
+        retryCount: 1,
+      });
+      await secondProcessor.processOutputStream({
+        part: finishChunk,
+        streamParts: [],
+        state,
+        abort: secondAbort,
+        retryCount: 1,
+      });
+
+      expect(firstStreamSpy).toHaveBeenCalledTimes(2);
+      expect(secondStreamSpy).toHaveBeenCalledTimes(1);
     });
   });
 
