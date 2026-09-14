@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Button } from '@/ds/components/Button';
-import type { TxtProps } from '@/ds/components/Txt';
+import type { TxtElement, TxtProps } from '@/ds/components/Txt';
 import { Txt } from '@/ds/components/Txt';
 import { ChevronIcon } from '@/ds/icons/ChevronIcon';
 import { useIsClamped } from '@/hooks/use-is-clamped';
@@ -18,23 +18,21 @@ const clampClasses = {
 
 export type ClampedTextLines = keyof typeof clampClasses;
 
-export interface ClampedTextProps extends Omit<TxtProps, 'children' | 'ref'> {
+export type ClampedTextProps<TElement extends TxtElement = 'p'> = Omit<TxtProps<TElement>, 'children' | 'ref'> & {
   children: string;
-  /** Number of lines to clamp to (default: 2) */
   lines?: ClampedTextLines;
   readMoreLabel?: string;
   showLessLabel?: string;
-}
+};
 
-/** Text clamped to a number of lines, with a "read more" toggle shown only when the clamp actually cuts content. */
-export function ClampedText({
+export function ClampedText<TElement extends TxtElement = 'p'>({
   children,
   lines = 2,
   readMoreLabel = 'Read more',
   showLessLabel = 'Show less',
   className,
   ...txtProps
-}: ClampedTextProps) {
+}: ClampedTextProps<TElement>) {
   const [isExpanded, setIsExpanded] = useState(false);
   const { ref, isClamped } = useIsClamped({ enabled: !isExpanded });
 

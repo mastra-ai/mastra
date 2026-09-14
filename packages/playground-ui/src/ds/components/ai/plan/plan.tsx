@@ -6,6 +6,7 @@ import { Badge } from '@/ds/components/Badge';
 import { Button } from '@/ds/components/Button';
 import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
 import { Txt } from '@/ds/components/Txt';
+import type { TxtProps } from '@/ds/components/Txt';
 import { Icon } from '@/ds/icons/Icon';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { cn } from '@/lib/utils';
@@ -15,7 +16,6 @@ const DEFAULT_COLLAPSED_HEIGHT = 220;
 interface PlanContextValue {
   collapsedHeight: number;
   isExpanded: boolean;
-  /** Whether the rendered content overflows the collapsed height (measured, not estimated). */
   isClipped: boolean;
   setClipped: (clipped: boolean) => void;
   toggleExpanded: () => void;
@@ -160,7 +160,7 @@ export function PlanIntro({ children, className, ...props }: PlanIntroProps) {
   );
 }
 
-export interface PlanTitleProps extends Omit<ComponentProps<typeof Txt>, 'as' | 'children' | 'variant'> {
+export interface PlanTitleProps extends Omit<TxtProps<'h3'>, 'as' | 'children' | 'variant'> {
   children: ReactNode;
 }
 
@@ -172,10 +172,7 @@ export function PlanTitle({ children, className, ...props }: PlanTitleProps) {
   );
 }
 
-export interface PlanPathProps extends Omit<
-  ComponentProps<typeof Txt>,
-  'as' | 'children' | 'font' | 'title' | 'variant'
-> {
+export interface PlanPathProps extends Omit<TxtProps<'p'>, 'as' | 'children' | 'font' | 'title' | 'variant'> {
   children: string;
 }
 
@@ -217,8 +214,6 @@ export function PlanContent({ children, className, style, ...props }: PlanConten
   const { collapsedHeight, isExpanded, isClipped, setClipped } = usePlanContext();
   const contentRef = useRef<HTMLDivElement>(null);
 
-  // Measure the rendered content against the collapsed height so the clip hint
-  // and expand control track actual overflow — not an estimate of it.
   useLayoutEffect(() => {
     const element = contentRef.current;
     if (!element) return;
@@ -237,7 +232,6 @@ export function PlanContent({ children, className, style, ...props }: PlanConten
   return (
     <div
       data-slot="plan-content"
-      // The clip hint masks the content itself, so it reads correctly on any card background.
       {...(showClipHint ? { 'data-clipped': '' } : {})}
       className={cn(
         'relative',
@@ -313,7 +307,6 @@ export type PlanExpandButtonProps = Omit<
 export function PlanExpandButton({ className, ...props }: PlanExpandButtonProps) {
   const { isExpanded, isClipped, toggleExpanded } = usePlanContext();
 
-  // Nothing to expand: the collapsed card already shows the whole plan.
   if (!isClipped && !isExpanded) return null;
 
   return (

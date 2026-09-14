@@ -67,9 +67,7 @@ const commentItemLayout: Record<CommentVariant, string> = {
 };
 
 export interface CommentItemProps extends HTMLAttributes<HTMLElement> {
-  /** Same author moments after the row above: the header is dropped and the row tightens. */
   continued?: boolean;
-  /** The comment a link pointed at. */
   highlighted?: boolean;
 }
 
@@ -100,7 +98,6 @@ CommentItem.displayName = 'CommentItem';
 
 export type CommentItemAvatarProps = ComponentPropsWithoutRef<'div'>;
 
-/** Fixed gutter: left empty on a continuation row, it keeps the body aligned under the avatar above. */
 export const CommentItemAvatar = forwardRef<HTMLDivElement, CommentItemAvatarProps>(({ className, ...props }, ref) => (
   <div ref={ref} data-slot="comment-item-avatar" className={cn('w-6 shrink-0 pt-0.5', className)} {...props} />
 ));
@@ -108,7 +105,6 @@ CommentItemAvatar.displayName = 'CommentItemAvatar';
 
 export type CommentItemContentProps = ComponentPropsWithoutRef<'div'>;
 
-/** Everything beside the gutter, stacked and free to shrink so long words wrap instead of widening the row. */
 export const CommentItemContent = forwardRef<HTMLDivElement, CommentItemContentProps>(
   ({ className, ...props }, ref) => (
     <div ref={ref} data-slot="comment-item-content" className={cn('min-w-0 flex-1', className)} {...props} />
@@ -152,7 +148,7 @@ const commentItemAuthorTone: Record<CommentVariant, string> = {
 
 export type CommentItemAuthorProps = ComponentPropsWithoutRef<'span'>;
 
-export const CommentItemAuthor = forwardRef<HTMLElement, CommentItemAuthorProps>(({ className, ...props }, ref) => {
+export const CommentItemAuthor = forwardRef<HTMLSpanElement, CommentItemAuthorProps>(({ className, ...props }, ref) => {
   const variant = useCommentVariant();
 
   return (
@@ -206,21 +202,23 @@ const commentItemBodyTone: Record<CommentVariant, string> = {
 
 export type CommentItemBodyProps = ComponentPropsWithoutRef<'p'>;
 
-export const CommentItemBody = forwardRef<HTMLElement, CommentItemBodyProps>(({ className, ...props }, ref) => {
-  const variant = useCommentVariant();
+export const CommentItemBody = forwardRef<HTMLParagraphElement | HTMLDivElement, CommentItemBodyProps>(
+  ({ className, ...props }, ref) => {
+    const variant = useCommentVariant();
 
-  return (
-    <Txt
-      ref={ref}
-      // Rendered markdown brings its own blocks, which a paragraph cannot hold.
-      as={variant === 'thread' ? 'div' : 'p'}
-      variant={commentItemBodySize[variant]}
-      data-slot="comment-item-body"
-      className={cn(commentItemBodyTone[variant], className)}
-      {...props}
-    />
-  );
-});
+    return (
+      <Txt
+        ref={ref}
+        // Rendered markdown brings its own blocks, which a paragraph cannot hold.
+        as={variant === 'thread' ? 'div' : 'p'}
+        variant={commentItemBodySize[variant]}
+        data-slot="comment-item-body"
+        className={cn(commentItemBodyTone[variant], className)}
+        {...props}
+      />
+    );
+  },
+);
 CommentItemBody.displayName = 'CommentItemBody';
 
 const commentItemActionsLayout: Record<CommentVariant, string> = {
@@ -235,7 +233,6 @@ const commentItemActionsLayout: Record<CommentVariant, string> = {
 
 export type CommentItemActionsProps = ComponentPropsWithoutRef<'div'>;
 
-/** Hidden in the `embed` variant, which drops per-item actions. */
 export const CommentItemActions = forwardRef<HTMLDivElement, CommentItemActionsProps>(
   ({ className, ...props }, ref) => {
     const variant = useCommentVariant();

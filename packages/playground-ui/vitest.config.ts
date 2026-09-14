@@ -16,5 +16,9 @@ export default defineConfig({
     env: { TZ: 'UTC' },
     include: ['src/**/*.{test,spec}.{ts,tsx}'],
     exclude: ['**/node_modules/**'],
+    typecheck: {
+      enabled: true,
+      tsconfig: './tsconfig.type-tests.json',
+    },
   },
 });

@@ -16,7 +16,7 @@ import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRende
 import { useMutation } from '@tanstack/react-query';
 import { Link2, Pencil, Quote, Trash2 } from 'lucide-react';
 import { useRef, useState } from 'react';
-import type { Ref } from 'react';
+import type { ComponentRef, Ref } from 'react';
 
 import { useEditWorkItemCommentMutation } from '../../../../../hooks/useWorkItemComments';
 import { relativeTime } from '../../../../../lib/date/relativeTime';
@@ -24,8 +24,6 @@ import type { WorkItemComment } from '../../services/commentsWire';
 import type { CommentQuoteDraft } from './quoteDraft';
 import { useMentionResolver } from './useMentionResolver';
 
-// A hand-picked passage is quoted as picked; quoting a whole comment gets more
-// room, since the reader has no highlight to tell them what mattered.
 const MAX_SELECTION_QUOTE_CHARS = 280;
 const MAX_BODY_QUOTE_CHARS = 500;
 
@@ -33,7 +31,6 @@ function commentAuthorName(comment: Pick<WorkItemComment, 'author'>): string {
   return comment.author.displayName ?? comment.author.id;
 }
 
-/** The highlighted text, only when both ends of the highlight sit in `container`. */
 function selectionWithin(container: HTMLElement | null): string | undefined {
   const selection = window.getSelection();
   if (!selection || !container) return undefined;
@@ -110,7 +107,13 @@ function CommentRowEditor({
   );
 }
 
-function CommentRowBody({ comment, ref }: { comment: WorkItemComment; ref: Ref<HTMLElement> }) {
+function CommentRowBody({
+  comment,
+  ref,
+}: {
+  comment: WorkItemComment;
+  ref: Ref<ComponentRef<typeof CommentItemBody>>;
+}) {
   if (comment.deletedAt !== undefined) return <p className="text-ui-sm text-icon2 m-0 italic">Comment deleted</p>;
 
   return (
@@ -144,7 +147,7 @@ export function CommentRow({
   onQuote?: (draft: CommentQuoteDraft) => void;
   onDelete?: () => void;
 }) {
-  const bodyRef = useRef<HTMLElement | null>(null);
+  const bodyRef = useRef<ComponentRef<typeof CommentItemBody>>(null);
   const [editing, setEditing] = useState(false);
   const deleted = comment.deletedAt !== undefined;
   const own = comment.author.kind === 'user' && comment.author.id === currentUserId;

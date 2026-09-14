@@ -1,27 +1,27 @@
 import { CopyButton } from '@/ds/components/CopyButton';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
-import type { TxtProps } from '@/ds/components/Txt';
+import type { TxtElement, TxtProps } from '@/ds/components/Txt';
 import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
 
-export interface TruncateProps extends Omit<TxtProps, 'children'> {
+export type TruncateProps<TElement extends TxtElement = 'span'> = Omit<TxtProps<TElement>, 'children'> & {
   children: string;
   untilChar?: string;
   charCount?: number;
   copy?: boolean;
   withTooltip?: boolean;
-}
+};
 
-export function Truncate({
+export function Truncate<TElement extends TxtElement = 'span'>({
   children,
   untilChar,
   charCount,
   copy,
   withTooltip = true,
   className,
-  as = 'span',
+  as,
   ...txtProps
-}: TruncateProps) {
+}: TruncateProps<TElement>) {
   const fullText = children;
 
   let truncatedText = fullText;
@@ -40,7 +40,7 @@ export function Truncate({
 
   if (!isTruncated) {
     return (
-      <Txt as={as} className={className} {...txtProps}>
+      <Txt as={as ?? 'span'} className={className} {...txtProps}>
         {fullText}
       </Txt>
     );
@@ -53,7 +53,7 @@ export function Truncate({
   );
 
   return (
-    <Txt as={as} className={cn('group inline-flex items-center gap-1', className)} {...txtProps}>
+    <Txt as={as ?? 'span'} className={cn('group inline-flex items-center gap-1', className)} {...txtProps}>
       {withTooltip ? (
         <Tooltip>
           <TooltipTrigger asChild>{truncatedContent}</TooltipTrigger>

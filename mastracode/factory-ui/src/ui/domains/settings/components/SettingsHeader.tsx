@@ -12,7 +12,7 @@ type SettingsHeaderProps = {
 
 export function SettingsHeader({ autoFocus = false, placement }: SettingsHeaderProps) {
   const section = useSettingsSection();
-  const titleRef = useRef<HTMLElement>(null);
+  const titleRef = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
     if (autoFocus) titleRef.current?.focus();
   }, [autoFocus]);

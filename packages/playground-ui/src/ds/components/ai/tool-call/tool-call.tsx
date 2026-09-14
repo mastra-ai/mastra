@@ -7,6 +7,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/compon
 import { CopyButton } from '@/ds/components/CopyButton';
 import { Shimmer } from '@/ds/components/Shimmer';
 import { Txt } from '@/ds/components/Txt';
+import type { TxtElement, TxtProps } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
 
 type ToolCallStatus = 'idle' | 'running' | 'error';
@@ -107,15 +108,20 @@ export const ToolCallIcon = ({ className, ...props }: ComponentProps<'span'>) =>
   <span className={cn('flex size-4 shrink-0 items-center justify-center', className)} {...props} />
 );
 
-export const ToolCallLabel = ({ className, ...props }: ComponentProps<typeof Txt>) => (
-  <Txt as="span" variant="ui-sm" className={cn('text-icon3 max-w-[55%] shrink-0 truncate', className)} {...props} />
+export const ToolCallLabel = <TElement extends TxtElement = 'span'>({ className, ...props }: TxtProps<TElement>) => (
+  <Txt<TElement | 'span'>
+    as="span"
+    variant="ui-sm"
+    className={cn('text-icon3 max-w-[55%] shrink-0 truncate', className)}
+    {...props}
+  />
 );
 
-export const ToolCallDetail = ({ className, ...props }: ComponentProps<typeof Txt>) => {
+export const ToolCallDetail = <TElement extends TxtElement = 'span'>({ className, ...props }: TxtProps<TElement>) => {
   const arriving = useArriving();
 
   return (
-    <Txt
+    <Txt<TElement | 'span'>
       as="span"
       variant="ui-xs"
       font="mono"
@@ -165,7 +171,6 @@ export const ToolCallDisclosure = ({ className, children, ...props }: ComponentP
 };
 
 export interface ToolCallPresentedHeaderProps extends Omit<ComponentProps<typeof ToolCallHeader>, 'children'> {
-  /** Rendered ahead of the icon, e.g. a timestamp. */
   leading?: ReactNode;
   icon: LucideIcon;
   label: string;
@@ -173,7 +178,6 @@ export interface ToolCallPresentedHeaderProps extends Omit<ComponentProps<typeof
   disclosure?: boolean;
 }
 
-/** The canonical header of a presented tool call: icon, label, detail, failure mark, chevron. */
 export const ToolCallPresentedHeader = ({
   leading,
   icon: Icon,
@@ -225,7 +229,6 @@ export interface ToolCallMonoProps extends ComponentProps<'pre'> {
   copyText: string;
 }
 
-/** Monospace body block of an expanded call — arguments, command, output — with a hover copy. */
 export const ToolCallMono = ({ copyText, className, children, ...props }: ToolCallMonoProps) => (
   <div className="group/block relative max-w-full min-w-0">
     <pre
@@ -246,7 +249,6 @@ export const ToolCallMono = ({ copyText, className, children, ...props }: ToolCa
   </div>
 );
 
-/** A shell command as the body shows it: `$` in the margin, the copy takes the command alone. */
 export const ToolCallCommand = ({ command }: { command: string }) => (
   <ToolCallMono copyText={command} className="text-icon5">
     <span className="text-icon3 select-none">$ </span>

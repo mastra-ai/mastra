@@ -30,7 +30,7 @@ export function MobilePageTitle({
   tabIndex,
 }: {
   children?: ReactNode;
-  ref?: Ref<HTMLElement>;
+  ref?: Ref<HTMLHeadingElement>;
   tabIndex?: number;
 }) {
   const { pathname } = useLocation();
