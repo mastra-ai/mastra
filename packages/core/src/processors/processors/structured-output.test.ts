@@ -3,10 +3,12 @@ import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { z } from 'zod/v4';
 import type { Agent } from '../../agent';
+import { MessageList } from '../../agent/message-list';
 import { Mastra } from '../../mastra';
 import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../../request-context';
 import type { ChunkType } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
+import type { ProcessOutputStepArgs } from '../index';
 import { StructuredOutputProcessor } from './structured-output';
 
 describe('StructuredOutputProcessor', () => {
@@ -39,6 +41,23 @@ describe('StructuredOutputProcessor', () => {
     return vi.fn((reason?: string) => {
       throw new Error(reason || 'Aborted');
     }) as any;
+  }
+
+  function outputStepArgs(
+    state: Record<string, unknown>,
+    abort: ProcessOutputStepArgs['abort'],
+  ): ProcessOutputStepArgs {
+    return {
+      state,
+      abort,
+      messages: [],
+      messageList: new MessageList(),
+      systemMessages: [],
+      steps: [],
+      stepNumber: 0,
+      retryCount: 0,
+      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+    };
   }
 
   beforeEach(() => {
@@ -97,7 +116,7 @@ describe('StructuredOutputProcessor', () => {
       expect(controller.enqueue).not.toHaveBeenCalled();
     });
 
-    it('should call abort with strict error strategy', async () => {
+    it.each(['error-chunk', 'thrown'] as const)('should defer strict %s failures to the output step', async failure => {
       const { controller } = createMockController();
       const abort = createMockAbort();
 
@@ -125,17 +144,32 @@ describe('StructuredOutputProcessor', () => {
         ]),
       };
 
-      vi.spyOn(processor['structuringAgent'], 'stream').mockResolvedValue(mockStream as any);
+      const streamSpy = vi.spyOn(processor['structuringAgent'], 'stream');
+      if (failure === 'thrown') streamSpy.mockRejectedValueOnce(upstreamError);
+      else streamSpy.mockResolvedValueOnce(mockStream as any);
+      const reason = `[StructuredOutputProcessor] ${failure === 'thrown' ? 'Structured output processing failed' : 'Structuring failed'}: Structuring failed`;
 
+      const state = { controller };
       await expect(
-        processor.processOutputStream({
-          part: finishChunk,
-          streamParts: [],
-          state: { controller },
-          abort,
-          retryCount: 0,
-        }),
-      ).rejects.toThrow('[StructuredOutputProcessor] Structuring failed: Structuring failed');
+        processor.processOutputStream({ part: finishChunk, streamParts: [], state, abort, retryCount: 0 }),
+      ).resolves.toBe(finishChunk);
+      expect(abort).not.toHaveBeenCalled();
+      expect(controller.enqueue).not.toHaveBeenCalled();
+      expect(() => processor.processOutputStep(outputStepArgs(state, abort))).toThrow(reason);
+      expect(abort).toHaveBeenCalledWith(reason, { retry: true });
+      const stepArgs = outputStepArgs(state, abort);
+      expect(processor.processOutputStep(stepArgs)).toBe(stepArgs.messages);
+
+      const objectChunk = {
+        type: 'object-result',
+        object: { color: 'blue', intensity: 'bright' },
+      };
+      streamSpy.mockResolvedValueOnce({ fullStream: convertArrayToReadableStream([objectChunk]) } as any);
+      await processor.processOutputStream({ part: finishChunk, streamParts: [], state, abort, retryCount: 1 });
+      expect(streamSpy).toHaveBeenCalledTimes(2);
+      expect(controller.enqueue).toHaveBeenCalledWith({ ...objectChunk, metadata: { from: 'structured-output' } });
+      expect(processor.processOutputStep(stepArgs)).toBe(stepArgs.messages);
+      expect(abort).toHaveBeenCalledTimes(1);
     });
 
     it('should preserve upstream error details in strict logs', async () => {
@@ -183,15 +217,12 @@ describe('StructuredOutputProcessor', () => {
 
       vi.spyOn(loggingProcessor['structuringAgent'], 'stream').mockResolvedValue(mockStream as any);
 
-      await expect(
-        loggingProcessor.processOutputStream({
-          part: finishChunk,
-          streamParts: [],
-          state: { controller },
-          abort,
-          retryCount: 0,
-        }),
-      ).rejects.toThrow('[StructuredOutputProcessor] Structuring failed: No recording found for gpt-5.4');
+      const state = { controller };
+      await loggingProcessor.processOutputStream({ part: finishChunk, streamParts: [], state, abort, retryCount: 0 });
+      expect(abort).not.toHaveBeenCalled();
+      expect(() => loggingProcessor.processOutputStep(outputStepArgs(state, abort))).toThrow(
+        '[StructuredOutputProcessor] Structuring failed: No recording found for gpt-5.4',
+      );
 
       expect(mockLogger.error).toHaveBeenCalledWith(
         '[StructuredOutputProcessor] Structuring failed: No recording found for gpt-5.4',
@@ -635,15 +666,12 @@ describe('StructuredOutputProcessor', () => {
 
       vi.spyOn(loggingProcessor['structuringAgent'], 'stream').mockResolvedValue(mockStream as any);
 
-      await expect(
-        loggingProcessor.processOutputStream({
-          part: finishChunk,
-          streamParts: [],
-          state: { controller },
-          abort,
-          retryCount: 0,
-        }),
-      ).rejects.toThrow('[StructuredOutputProcessor] Structuring failed: Schema failed');
+      const state = { controller };
+      await loggingProcessor.processOutputStream({ part: finishChunk, streamParts: [], state, abort, retryCount: 0 });
+      expect(abort).not.toHaveBeenCalled();
+      expect(() => loggingProcessor.processOutputStep(outputStepArgs(state, abort))).toThrow(
+        '[StructuredOutputProcessor] Structuring failed: Schema failed',
+      );
 
       expect(mockLogger.error).toHaveBeenCalledWith(
         '[StructuredOutputProcessor] Structuring failed: Schema failed',

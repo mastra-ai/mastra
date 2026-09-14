@@ -649,8 +649,9 @@ function structuredOutputTests({ version }: { version: 'v1' | 'v2' | 'v3' }) {
 
         expect(result.object).toBeUndefined();
         expect(result.tripwire?.reason).toBe(
-          '[StructuredOutputProcessor] Structured output processing failed: [StructuredOutputProcessor] Structuring failed: No recording found for gpt-5.4',
+          '[StructuredOutputProcessor] Structuring failed: No recording found for gpt-5.4',
         );
+        expect(result.tripwire?.retry).toBe(true);
       });
 
       it('should parse JSON from text field when object is undefined and finishReason is tool-calls (generate)', async () => {
