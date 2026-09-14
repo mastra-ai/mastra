@@ -4,13 +4,16 @@ import type { VariantProps } from 'class-variance-authority';
 import { XIcon } from 'lucide-react';
 import * as React from 'react';
 
+import { DrawerContext, useDrawerContext } from './drawer-context';
+import type { DrawerContextValue } from './drawer-context';
+import type { DrawerOverlay, DrawerSide, DrawerVariant } from './drawer-types';
 import { Button } from '@/ds/components/Button';
 import { cn } from '@/lib/utils';
 
 // Swipe/stack transforms live in drawer.css — unreadable as Tailwind arbitrary values.
 import './drawer.css';
 
-export type DrawerSide = 'top' | 'right' | 'bottom' | 'left';
+export type { DrawerSide } from './drawer-types';
 
 const drawerBackdropVariants = cva('drawer-backdrop fixed inset-0 z-50', {
   variants: {
@@ -135,12 +138,11 @@ const drawerPopupVariants = cva(
 type DrawerBackdropVariantsProps = VariantProps<typeof drawerBackdropVariants>;
 type DrawerViewportClassVariantsProps = VariantProps<typeof drawerViewportVariants>;
 type DrawerPopupVariantsProps = VariantProps<typeof drawerPopupVariants>;
-export type DrawerVariant = NonNullable<DrawerPopupVariantsProps['variant']>;
 type DrawerViewportLayout = NonNullable<DrawerViewportClassVariantsProps['layout']>;
 type DrawerViewportVariantsProps = Pick<DrawerViewportClassVariantsProps, 'side'> & {
   variant?: DrawerVariant;
 };
-export type DrawerOverlay = 'auto' | NonNullable<DrawerBackdropVariantsProps['overlay']>;
+export type { DrawerVariant, DrawerOverlay } from './drawer-types';
 
 // `side` = anchor edge; Base UI's `swipeDirection` = dismissal gesture (bottom sheet swipes `down`).
 const sideToSwipeDirection: Record<DrawerSide, 'up' | 'down' | 'left' | 'right'> = {
@@ -148,12 +150,6 @@ const sideToSwipeDirection: Record<DrawerSide, 'up' | 'down' | 'left' | 'right'>
   bottom: 'down',
   left: 'left',
   right: 'right',
-};
-
-type DrawerContextValue = {
-  side: DrawerSide;
-  variant: DrawerVariant;
-  resolvedOverlay: NonNullable<DrawerBackdropVariantsProps['overlay']>;
 };
 
 const resolveDrawerOverlay = (
@@ -166,16 +162,6 @@ const resolveDrawerOverlay = (
 
   return variant === 'floating' ? 'none' : 'visible';
 };
-
-const DrawerContext = React.createContext<DrawerContextValue>({
-  side: 'bottom',
-  variant: 'default',
-  resolvedOverlay: 'visible',
-});
-
-const useDrawerContext = () => React.useContext(DrawerContext);
-
-export const useDrawerSide = () => useDrawerContext().side;
 
 const resolveDrawerViewportLayout = (
   variant: DrawerVariant,
@@ -267,7 +253,6 @@ const DrawerProvider = DrawerPrimitive.Provider;
 const DrawerIndent = DrawerPrimitive.Indent;
 const DrawerIndentBackground = DrawerPrimitive.IndentBackground;
 const DrawerSwipeArea = DrawerPrimitive.SwipeArea;
-const createDrawerHandle = DrawerPrimitive.createHandle;
 // Inner region where pointer drags select text / scroll instead of swiping the drawer closed.
 const DrawerInteractive = DrawerPrimitive.Content;
 
@@ -490,7 +475,6 @@ export {
   DrawerIndentBackground,
   DrawerSwipeArea,
   DrawerInteractive,
-  createDrawerHandle,
 };
 
 export type {

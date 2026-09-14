@@ -250,6 +250,9 @@ export default [
     files: [
       'e2e/{tests,studio-base-tests}/**/*.spec.{js,jsx,ts,tsx}',
       'e2e/{tests,studio-base-tests}/**/__tests__/fixtures/**/*.{js,jsx,ts,tsx}',
+      // Workflow-builder suite helpers live next to their specs and are also
+      // outside the type-aware tsconfig program.
+      'e2e/tests/workflow-builder/*.ts',
     ],
     languageOptions: {
       parserOptions: {
