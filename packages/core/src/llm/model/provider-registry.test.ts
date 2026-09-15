@@ -42,6 +42,45 @@ describe('modelSupportsAttachments', () => {
     expect(modelSupportsAttachments('openrouter/openai/gpt-4o')).toBe(true);
     expect(modelSupportsAttachments('mastra/openrouter/openai/gpt-4o')).toBe(true);
   });
+
+  it('does not fall back to the nested provider when the gateway lists the model without support', () => {
+    const originalReadFileSync = fs.readFileSync;
+    vi.spyOn(fs, 'readFileSync').mockImplementation((filePath, ...rest) => {
+      const content = originalReadFileSync(filePath as any, ...(rest as [any]));
+      if (typeof filePath === 'string' && path.basename(filePath) === 'deepseek.json' && typeof content === 'string') {
+        // Simulate a gateway-synced DeepSeek file where the direct API gained vision.
+        const data = JSON.parse(content);
+        data.attachment = [...(data.attachment ?? []), 'deepseek-v4-flash'];
+        return JSON.stringify(data);
+      }
+      return content;
+    });
+
+    // DeepSeek direct supports it, but OpenRouter lists the model without attachment support.
+    expect(modelSupportsAttachments('deepseek/deepseek-v4-flash')).toBe(true);
+    expect(modelSupportsAttachments('openrouter/deepseek/deepseek-v4-flash')).toBe(false);
+  });
+
+  it('falls back to the nested provider only when the gateway does not list the model at all', () => {
+    const originalReadFileSync = fs.readFileSync;
+    vi.spyOn(fs, 'readFileSync').mockImplementation((filePath, ...rest) => {
+      const content = originalReadFileSync(filePath as any, ...(rest as [any]));
+      if (
+        typeof filePath === 'string' &&
+        path.basename(filePath) === 'openrouter.json' &&
+        typeof content === 'string'
+      ) {
+        const data = JSON.parse(content);
+        for (const key of Object.keys(data)) {
+          if (Array.isArray(data[key])) data[key] = data[key].filter((id: string) => id !== 'openai/gpt-4o');
+        }
+        return JSON.stringify(data);
+      }
+      return content;
+    });
+
+    expect(modelSupportsAttachments('openrouter/openai/gpt-4o')).toBe(true);
+  });
 });
 
 describe('modelSupportsTemperature', () => {

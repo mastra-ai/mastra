@@ -609,6 +609,15 @@ function getProviderCapabilitySupport(
   return models.includes(modelId);
 }
 
+/** Whether the provider's capability file enumerates this model under any dimension. */
+function providerListsModel(provider: string, modelId: string, useDynamicLoading: boolean): boolean {
+  const file = loadProviderCapabilityFile(provider, useDynamicLoading);
+  if (!file) return false;
+  return (Object.keys(providerCapCaches) as CapabilityDimension[]).some(dimension =>
+    file[dimension]?.includes(modelId),
+  );
+}
+
 function modelSupportsCapability(modelRouterId: string, dimension: CapabilityDimension): boolean | undefined {
   const parsed = parseModelString(modelRouterId);
   const provider = parsed.provider ? (PROVIDER_ALIASES[parsed.provider] ?? parsed.provider) : parsed.provider;
@@ -638,12 +647,16 @@ function modelSupportsCapability(modelRouterId: string, dimension: CapabilityDim
   // Positive direct match wins immediately.
   if (directSupport === true) return true;
 
-  // For nested model IDs (e.g. `openrouter/anthropic/claude-sonnet-4-6`), the
-  // outer gateway's capability list may not enumerate every nested model. Fall
-  // back to the underlying provider's authoritative capability file before
-  // trusting a `false` from the gateway.
+  // The provider actually serving the request is authoritative. If it lists the
+  // model at all, its `false` stands — a gateway can lack capabilities the
+  // upstream provider offers directly (OpenRouter has no image-capable endpoint
+  // for `deepseek/deepseek-v4-flash` even though DeepSeek's own API does).
+  //
+  // Only when the gateway doesn't enumerate the nested model anywhere (e.g.
+  // `openrouter/anthropic/claude-sonnet-4-6` missing from OpenRouter's data) do
+  // we fall back to the underlying provider's capability file.
   const nestedProviderDelimiter = modelId.indexOf('/');
-  if (nestedProviderDelimiter !== -1) {
+  if (nestedProviderDelimiter !== -1 && !providerListsModel(provider, modelId, useDynamicLoading)) {
     const nestedProvider = modelId.substring(0, nestedProviderDelimiter);
     const nestedModelId = modelId.substring(nestedProviderDelimiter + 1);
     if (nestedProvider && nestedModelId) {
