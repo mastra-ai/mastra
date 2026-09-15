@@ -3,9 +3,10 @@ import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import { APICallError } from '@internal/ai-sdk-v5';
 import type { IdGenerator, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
 import { prepareJsonSchemaForOpenAIStrictMode } from '@mastra/schema-compat';
+import { resolveJsonPromptInjectionForModel } from '../../../agent/structured-output';
 import type { StructuredOutputOptions } from '../../../agent/types';
 import type { ModelMethodType } from '../../../llm/model/model.loop.types';
-import { modelSupportsStructuredOutput, modelSupportsTemperature } from '../../../llm/model/provider-registry';
+import { modelSupportsTemperature } from '../../../llm/model/provider-registry';
 import type { MastraLanguageModel, SharedProviderOptions } from '../../../llm/model/shared.types';
 import {
   createTimeoutAbortSignal,
@@ -22,9 +23,6 @@ import { attachModelStreamTransport, readModelStreamTransport } from '../../type
 import { prepareToolsAndToolChoice } from './compat';
 import type { ModelSpecVersion } from './compat';
 import { AISDKV5InputStream } from './input';
-
-type JsonPromptInjection = StructuredOutputOptions<unknown>['jsonPromptInjection'];
-type ResolvedJsonPromptInjection = Exclude<JsonPromptInjection, 'auto'>;
 
 /**
  * p-retry's own defaults, pinned explicitly so the delay it schedules between
@@ -66,14 +64,6 @@ function isRetryableModelError(error: unknown): boolean {
     return error.isRetryable;
   }
   return true;
-}
-
-export function resolveJsonPromptInjection(
-  value: JsonPromptInjection,
-  capability: boolean | undefined,
-): ResolvedJsonPromptInjection {
-  if (value !== 'auto') return value;
-  return capability === true ? undefined : 'inline';
 }
 
 type InjectJsonInstructionArgs = Parameters<typeof injectJsonInstructionIntoMessagesV3>[0];
@@ -214,10 +204,7 @@ export function execute<OUTPUT = undefined>({
   let prompt = inputMessages;
   const jsonPromptInjection = structuredOutput?.jsonPromptInjection;
   const modelRoute = `${model.provider.split('.')[0]}/${model.modelId}`;
-  const resolvedJsonPromptInjection = resolveJsonPromptInjection(
-    jsonPromptInjection,
-    jsonPromptInjection === 'auto' ? modelSupportsStructuredOutput(modelRoute) : undefined,
-  );
+  const resolvedJsonPromptInjection = resolveJsonPromptInjectionForModel(jsonPromptInjection, model);
   const injectionMode = resolvedJsonPromptInjection === true ? 'system' : resolvedJsonPromptInjection;
 
   // For direct mode (no model provided for structuring agent), inject JSON schema instruction if opting out of native response format with jsonPromptInjection
