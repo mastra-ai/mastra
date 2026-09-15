@@ -950,10 +950,11 @@ export class GeminiLiveVoice extends MastraVoice<
 
       // Update thinking configuration if provided. Mirrors `sendInitialConfig`: public config is
       // camelCase, the wire format is snake_case. Merge into any existing generation_config so a
-      // speaker + thinkingConfig update in the same call don't clobber each other.
-      if (config.thinkingConfig) {
+      // speaker + thinkingConfig update in the same call don't clobber each other. Only emit when a
+      // sub-field is set, so an empty `thinkingConfig: {}` is a no-op rather than a bare object.
+      const tc = config.thinkingConfig;
+      if (tc && (tc.includeThoughts !== undefined || tc.thinkingBudget !== undefined)) {
         hasUpdates = true;
-        const tc = config.thinkingConfig;
         updateMessage.session.generation_config = {
           ...updateMessage.session.generation_config,
           thinking_config: {
@@ -1992,13 +1993,14 @@ export class GeminiLiveVoice extends MastraVoice<
 
     // Forward caller-supplied thinking configuration. Public config is camelCase; the wire
     // format is snake_case (`thinking_config.include_thoughts` / `thinking_budget`), matching
-    // the translation done for `speech_config` above. Each sub-field is guarded so an empty
-    // `thinkingConfig: {}` doesn't emit a bare `thinking_config` object.
-    if (this.options.thinkingConfig) {
-      const tc = this.options.thinkingConfig;
+    // the translation done for `speech_config` above. Only emit `thinking_config` when at least
+    // one sub-field is set, so an empty `thinkingConfig: {}` is a no-op and the setup frame stays
+    // byte-for-byte unchanged — a bare `thinking_config: {}` may be rejected by non-thinking models.
+    const setupThinking = this.options.thinkingConfig;
+    if (setupThinking && (setupThinking.includeThoughts !== undefined || setupThinking.thinkingBudget !== undefined)) {
       generationConfig.thinking_config = {
-        ...(tc.includeThoughts !== undefined && { include_thoughts: tc.includeThoughts }),
-        ...(tc.thinkingBudget !== undefined && { thinking_budget: tc.thinkingBudget }),
+        ...(setupThinking.includeThoughts !== undefined && { include_thoughts: setupThinking.includeThoughts }),
+        ...(setupThinking.thinkingBudget !== undefined && { thinking_budget: setupThinking.thinkingBudget }),
       };
     }
 

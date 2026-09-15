@@ -1187,6 +1187,20 @@ describe('GeminiLiveVoice', () => {
       expect(setupMsg.setup.generation_config.thinking_config).toBeUndefined();
     });
 
+    it('connect() should omit generation_config.thinking_config when thinkingConfig is an empty object', async () => {
+      const v = new GeminiLiveVoice({ apiKey: 'k', thinkingConfig: {} });
+
+      vi.spyOn((v as any).connectionManager, 'waitForOpen').mockResolvedValue(undefined as any);
+      (v as any).waitForSessionCreated = vi.fn().mockResolvedValue(undefined);
+
+      await v.connect();
+
+      const wsSent = ((v as any).connectionManager.getWebSocket() as any).send as any;
+      const payloads = wsSent.mock.calls.map((c: any[]) => JSON.parse(c[0]));
+      const setupMsg = payloads.find((p: any) => p.setup);
+      expect(setupMsg.setup.generation_config.thinking_config).toBeUndefined();
+    });
+
     it('connect() should pick up apiKey and model placed on realtimeConfig root (not inside options)', async () => {
       const v = new GeminiLiveVoice({
         realtimeConfig: {
@@ -1293,6 +1307,18 @@ describe('GeminiLiveVoice', () => {
       expect(updateMsg).toBeDefined();
       expect(updateMsg.session.generation_config.thinking_config).toEqual({ include_thoughts: false });
       expect((voice as any).options.thinkingConfig).toEqual({ includeThoughts: false });
+    });
+
+    it('updateSessionConfig({ thinkingConfig: {} }) should not emit session.generation_config.thinking_config', async () => {
+      setTimeout(() => {
+        (voice as any).eventManager.getEventEmitter().emit('session.updated', { ok: true } as any);
+      }, 10);
+
+      await voice.updateSessionConfig({ thinkingConfig: {}, instructions: 'hi' });
+
+      const calls = mockWs.send.mock.calls.map((c: any[]) => JSON.parse(c[0]));
+      const withThinking = calls.find((p: any) => p.session?.generation_config?.thinking_config !== undefined);
+      expect(withThinking).toBeUndefined();
     });
 
     it('updateSessionConfig({ tools }) should emit the same single-container function_declarations shape as setup', async () => {
