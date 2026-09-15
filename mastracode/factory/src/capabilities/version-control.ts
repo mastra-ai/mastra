@@ -65,6 +65,8 @@ export interface ListPullRequestsInput {
   state?: PullRequestState | 'all';
   includeDrafts?: boolean;
   cursor?: string;
+  /** Number or words to match; a provider with no server-side search returns the page unfiltered. */
+  query?: string;
 }
 
 export interface CreatePullRequestInput {

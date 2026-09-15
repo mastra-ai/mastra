@@ -88,8 +88,13 @@ export async function listRepositoryIssues(
   githubProjectId: string,
   page: number,
   label?: string,
+  query?: string,
 ): Promise<GithubIssuePage> {
-  return getRepositoryResource<GithubIssuePage>(baseUrl, githubProjectId, 'issues', { page: String(page), label });
+  return getRepositoryResource<GithubIssuePage>(baseUrl, githubProjectId, 'issues', {
+    page: String(page),
+    label,
+    q: query,
+  });
 }
 
 /** List one page of a connected repository's open pull requests (drafts excluded server-side). */
@@ -97,8 +102,12 @@ export async function listRepositoryPullRequests(
   baseUrl: string,
   githubProjectId: string,
   page: number,
+  query?: string,
 ): Promise<GithubPullRequestPage> {
-  return getRepositoryResource<GithubPullRequestPage>(baseUrl, githubProjectId, 'prs', { page: String(page) });
+  return getRepositoryResource<GithubPullRequestPage>(baseUrl, githubProjectId, 'prs', {
+    page: String(page),
+    q: query,
+  });
 }
 
 export async function getRepositoryIssue(

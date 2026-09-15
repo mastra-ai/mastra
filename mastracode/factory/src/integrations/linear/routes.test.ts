@@ -31,7 +31,7 @@ const fetchLinearWorkspace = vi.fn(async () => ({ name: 'Acme', urlKey: 'acme' }
 const listLinearProjects = vi.fn(async () => [
   { id: 'proj-1', name: 'Q3 Roadmap', state: 'started', teams: [{ id: 'team-1', key: 'ENG', name: 'Engineering' }] },
 ]);
-const listActiveLinearIssues = vi.fn(async (_token: string, _after?: string, _sourceIds?: string[]) => ({
+const listActiveLinearIssues = vi.fn(async (_token: string, _after?: string, _sourceIds?: string[], _query?: string) => ({
   issues: [
     {
       id: 'issue-1',
@@ -124,7 +124,10 @@ beforeEach(async () => {
   vi.spyOn(linear, 'listProjects').mockImplementation(listLinearProjects);
   // The intake path passes a 4th `labels` arg; forward only what the tests assert on.
   vi.spyOn(linear, 'listActiveIssues').mockImplementation(
-    (token, after, sourceIds) => listActiveLinearIssues(token, after, sourceIds) as never,
+    (token, after, sourceIds, _labels, query) =>
+      (query === undefined
+        ? listActiveLinearIssues(token, after, sourceIds)
+        : listActiveLinearIssues(token, after, sourceIds, query)) as never,
   );
   await seed.intake.saveConfig({
     orgId: 'org1',
@@ -401,6 +404,19 @@ describe('issues route', () => {
     await connect();
     await buildApp(org1()).request('/web/linear/issues?after=cursor-2');
     expect(listActiveLinearIssues).toHaveBeenCalledWith('linear-token', 'cursor-2', ['proj-1']);
+  });
+
+  it('forwards the search query', async () => {
+    await connect();
+    await buildApp(org1()).request('/web/linear/issues?q=ENG-123');
+    expect(listActiveLinearIssues).toHaveBeenCalledWith('linear-token', undefined, ['proj-1'], 'ENG-123');
+  });
+
+  it('rejects an oversized search query', async () => {
+    await connect();
+    const res = await buildApp(org1()).request(`/web/linear/issues?q=${'a'.repeat(201)}`);
+    expect(res.status).toBe(400);
+    expect(listActiveLinearIssues).not.toHaveBeenCalled();
   });
 
   it('rejects malformed cursors', async () => {

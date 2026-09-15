@@ -29,20 +29,21 @@ export function useLinearStatusQuery(enabled: boolean = true) {
  * the list is scrolled. The server applies the caller's intake config (project
  * selection); disabled until Linear is connected.
  */
-export function useLinearIssuesQuery(githubProjectId: string | undefined) {
+export function useLinearIssuesQuery(githubProjectId: string | undefined, query?: string) {
   const { baseUrl } = useApiConfig();
   return useInfiniteQuery({
-    queryKey: queryKeys.linearIssues(githubProjectId),
+    queryKey: queryKeys.linearIssues(githubProjectId, query),
     queryFn: githubProjectId
-      ? ({ pageParam }) => listLinearIssues(baseUrl, githubProjectId, pageParam || undefined)
+      ? ({ pageParam }) => listLinearIssues(baseUrl, githubProjectId, pageParam || undefined, query)
       : skipToken,
     initialPageParam: '',
     getNextPageParam: lastPage => lastPage.nextCursor,
     enabled: githubProjectId !== undefined,
     select: data => data.pages.flatMap(page => page.issues),
     // New intake must show up on the board without a reload; the endpoint
-    // proxies the Linear API, so poll on the gentle intake cadence.
-    refetchInterval: INTAKE_POLL_MS,
+    // proxies the Linear API, so poll on the gentle intake cadence. A search
+    // is a one-off question, not a feed: it never polls.
+    refetchInterval: query ? false : INTAKE_POLL_MS,
     refetchOnWindowFocus: true,
   });
 }

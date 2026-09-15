@@ -89,7 +89,7 @@ describe('LinearIntegration capability surface', () => {
       ],
       nextCursor: 'cursor-2',
     });
-    expect(listActiveIssues).toHaveBeenCalledWith('linear-token', 'cursor-1', ['project-1'], ['bug', 'urgent']);
+    expect(listActiveIssues).toHaveBeenCalledWith('linear-token', 'cursor-1', ['project-1'], ['bug', 'urgent'], undefined);
   });
 
   it('passes label filters to Linear GraphQL', async () => {
@@ -111,6 +111,28 @@ describe('LinearIntegration capability surface', () => {
     };
     expect(request.query).toContain('labels: { name: { in: $labels } }');
     expect(request.variables).toMatchObject({ labels: ['bug', 'urgent'] });
+  });
+
+  it('searches by issue key or by title words', async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({ data: { issues: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } } } }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const linear = integration();
+    const sentRequest = (call: number) =>
+      JSON.parse(String(fetchMock.mock.calls[call]?.[1]?.body)) as { query: string; variables: Record<string, unknown> };
+
+    await linear.listActiveIssues('linear-token', undefined, ['project-1'], undefined, 'eng-123');
+    expect(sentRequest(0).query).toContain('team: { key: { eqIgnoreCase: $teamKey } }, number: { eq: $issueNumber }');
+    expect(sentRequest(0).variables).toMatchObject({ projectIds: ['project-1'], teamKey: 'eng', issueNumber: 123 });
+
+    await linear.listActiveIssues('linear-token', undefined, ['project-1'], undefined, 'failed uploads');
+    expect(sentRequest(1).query).toContain('title: { containsIgnoreCase: $query }');
+    expect(sentRequest(1).variables).toMatchObject({ query: 'failed uploads' });
   });
 
   it('fetches issue details without a project', async () => {

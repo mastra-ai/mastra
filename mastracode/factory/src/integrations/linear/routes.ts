@@ -18,6 +18,7 @@ import type { Context } from 'hono';
 import type { RouteAuth } from '../../routes/route.js';
 import type { StateSigner } from '../../state-signing.js';
 import type { IntakeStorage } from '../../storage/domains/intake/base.js';
+import { parseSearchQuery } from '../search-query.js';
 import type { LinearIntegration } from './integration.js';
 import { LinearReauthRequiredError } from './integration.js';
 import type { LinearRulesIngress } from './rules.js';
@@ -319,6 +320,8 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions): ApiRoute[]
 
         const after = parseAfterCursor(c.req.query('after'));
         if (after === null) return c.json({ error: 'invalid_cursor' }, 400);
+        const query = parseSearchQuery(c.req.query('q'));
+        if (query === null) return c.json({ error: 'invalid_query' }, 400);
         const factoryProjectId = c.req.query('factoryProjectId');
         if (factoryProjectId && !UUID_RE.test(factoryProjectId)) {
           return c.json({ error: 'invalid_factory_project_id' }, 400);
@@ -359,6 +362,7 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions): ApiRoute[]
             connection: { type: 'oauth', accessToken },
             sourceIds: projectIds,
             cursor: after,
+            query,
           });
           const issuePayload = issues.map(issue => ({
             id: issue.id,

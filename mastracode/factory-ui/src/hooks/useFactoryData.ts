@@ -25,37 +25,38 @@ function intakePollInterval(query: { state: { status: string } }): number {
  * Open issues for a GitHub project, loaded one page at a time as the list is
  * scrolled; disabled until a github project is active.
  */
-export function useProjectIssuesQuery(projectRepositoryId: string | undefined, label?: string) {
+export function useProjectIssuesQuery(projectRepositoryId: string | undefined, label?: string, query?: string) {
   const { baseUrl } = useApiConfig();
   return useInfiniteQuery({
-    queryKey: queryKeys.githubIssues(projectRepositoryId, label),
+    queryKey: queryKeys.githubIssues(projectRepositoryId, label, query),
     queryFn: projectRepositoryId
-      ? ({ pageParam }) => listRepositoryIssues(baseUrl, projectRepositoryId, pageParam, label)
+      ? ({ pageParam }) => listRepositoryIssues(baseUrl, projectRepositoryId, pageParam, label, query)
       : skipToken,
     initialPageParam: 1,
     getNextPageParam: lastPage => lastPage.nextPage,
     select: data => data.pages.flatMap(page => page.issues),
     // New intake must show up on the board without a reload. The endpoint
     // proxies the live GitHub API (and a refetch replays every loaded page),
-    // so poll gently and refresh when the user returns to the tab.
-    refetchInterval: intakePollInterval,
+    // so poll gently and refresh when the user returns to the tab. A search
+    // is a one-off question, not a feed: it never polls.
+    refetchInterval: query ? false : intakePollInterval,
     refetchOnWindowFocus: true,
   });
 }
 
 /** Open (non-draft) pull requests for a GitHub project, one page at a time. */
-export function useProjectPullRequestsQuery(projectRepositoryId: string | undefined) {
+export function useProjectPullRequestsQuery(projectRepositoryId: string | undefined, query?: string) {
   const { baseUrl } = useApiConfig();
   return useInfiniteQuery({
-    queryKey: queryKeys.githubPulls(projectRepositoryId),
+    queryKey: queryKeys.githubPulls(projectRepositoryId, query),
     queryFn: projectRepositoryId
-      ? ({ pageParam }) => listRepositoryPullRequests(baseUrl, projectRepositoryId, pageParam)
+      ? ({ pageParam }) => listRepositoryPullRequests(baseUrl, projectRepositoryId, pageParam, query)
       : skipToken,
     initialPageParam: 1,
     getNextPageParam: lastPage => lastPage.nextPage,
     select: data => data.pages.flatMap(page => page.pullRequests),
     // Same intake-freshness contract as the issues feed above.
-    refetchInterval: intakePollInterval,
+    refetchInterval: query ? false : intakePollInterval,
     refetchOnWindowFocus: true,
   });
 }
