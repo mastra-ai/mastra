@@ -271,6 +271,7 @@ const DATABASE_PRESENTATION: Record<ProjectDatabase['kind'], { label: string; to
   neon: { label: 'Neon', tone: 'green' },
   mongodb: { label: 'MongoDB', tone: 'green' },
   redis: { label: 'Redis', tone: 'red' },
+  postgres: { label: 'Postgres', tone: 'blue' },
 };
 
 function architectureTextWidth(value: string): number {

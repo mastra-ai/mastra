@@ -36,7 +36,7 @@ export function registerEnvDbCommands(envCommand: Command) {
       '[environment]',
       "Environment name, slug, or ID (default: the project's only environment, or prompt if there are several)",
     )
-    .requiredOption('--kind <kind>', 'Database provider (turso, neon, redis)')
+    .requiredOption('--kind <kind>', 'Database provider (turso, neon, redis, postgres)')
     .option(...PROJECT_OPTION)
     .option('--name <name>', 'Database name (default: derived from the project slug)')
     .option('--region <region>', 'Provider region ID (shared databases only; environment region wins otherwise)')
@@ -87,8 +87,8 @@ export function formatScope(db: Pick<ProjectDatabase, 'environmentId'>, environm
  *
  * The tail is a per-provider suffix matching the dashboard's suggested
  * names (`suggestDatabaseName` in the platform frontend): `-turso`, `-pg`
- * for Neon, `-redis`, `-mongo` — so a CLI-provisioned database looks the
- * same as one created via the UI.
+ * for Neon, `-redis`, `-mongo`, `-postgres` for Railway Postgres — so a
+ * CLI-provisioned database looks the same as one created via the UI.
  *
  * When `environment` is provided and its type is not `production`, the name
  * includes an env-derived discriminator (e.g. `my-app-eu-redis`). Two
@@ -119,6 +119,7 @@ const KIND_NAME_SUFFIX: Record<DatabaseKind, string> = {
   neon: 'pg',
   redis: 'redis',
   mongodb: 'mongo',
+  postgres: 'postgres',
 };
 
 export function defaultDatabaseName(
@@ -279,11 +280,30 @@ async function listDatabasesAction(envArg: string | undefined, options: { projec
 /*  mastra env db create                                               */
 /* ------------------------------------------------------------------ */
 
-function parseKind(kind: string): DatabaseKind {
-  if (kind !== 'turso' && kind !== 'neon' && kind !== 'redis') {
-    throw new Error(`Unsupported database kind: ${kind}. Supported kinds: turso, neon, redis`);
+export function parseKind(kind: string): DatabaseKind {
+  if (kind !== 'turso' && kind !== 'neon' && kind !== 'redis' && kind !== 'postgres') {
+    throw new Error(`Unsupported database kind: ${kind}. Supported kinds: turso, neon, redis, postgres`);
   }
   return kind;
+}
+
+/**
+ * Validate the environment/--shared scope combination for `db create`.
+ * Managed Postgres is environment-scoped only (the platform rejects
+ * project-scoped attaches), so we fail fast client-side with an
+ * actionable message instead of a server error.
+ */
+export function validateCreateScope(kind: DatabaseKind, envArg: string | undefined, shared: boolean | undefined) {
+  if (envArg && shared) {
+    throw new Error('Cannot combine an environment argument with --shared. Pick one scope.');
+  }
+
+  if (kind === 'postgres' && shared) {
+    throw new Error(
+      'Managed Postgres is environment-scoped and cannot be shared across environments. ' +
+        'Drop --shared and pass an environment instead: mastra env db create <environment> --kind postgres',
+    );
+  }
 }
 
 async function createDatabaseAction(
@@ -299,10 +319,7 @@ async function createDatabaseAction(
   },
 ) {
   const kind = parseKind(options.kind);
-
-  if (envArg && options.shared) {
-    throw new Error('Cannot combine an environment argument with --shared. Pick one scope.');
-  }
+  validateCreateScope(kind, envArg, options.shared);
 
   const token = await getToken();
   const { orgId } = await resolveCurrentOrg(token);

@@ -79,6 +79,42 @@ describe('preflightBuildOutput', () => {
       });
     });
 
+    it('attaches a managed-Postgres autofix for a missing POSTGRES_URL', async () => {
+      writeBundle(`const url = process.env.POSTGRES_URL;`);
+      const issues = await preflightBuildOutput(tmpDir, {});
+      const issue = issues.find(i => i.code === 'MISSING_ENV_VAR' && i.message.includes('POSTGRES_URL'));
+      expect(issue?.autofix).toEqual({
+        kind: 'create-managed-database',
+        provider: 'postgres',
+        envVarName: 'POSTGRES_URL',
+      });
+    });
+
+    it('keeps DATABASE_URL mapped to neon — POSTGRES_URL is the Railway Postgres var', async () => {
+      writeBundle(`const neon = process.env.DATABASE_URL; const pg = process.env.POSTGRES_URL;`);
+      const issues = await preflightBuildOutput(tmpDir, {});
+      const byVar = (name: string) =>
+        issues.find(i => i.code === 'MISSING_ENV_VAR' && i.message.includes(name))?.autofix;
+      expect(byVar('DATABASE_URL')).toMatchObject({ provider: 'neon', envVarName: 'DATABASE_URL' });
+      expect(byVar('POSTGRES_URL')).toMatchObject({ provider: 'postgres', envVarName: 'POSTGRES_URL' });
+    });
+
+    it('does not flag POSTGRES_URL when a usable value is supplied (no autofix, no API involvement)', async () => {
+      writeBundle(`const url = process.env.POSTGRES_URL;`);
+      const issues = await preflightBuildOutput(tmpDir, {
+        POSTGRES_URL: 'postgresql://mastra:pw@svc.railway.internal:5432/mastra?sslmode=disable',
+      });
+      expect(issues.find(i => i.message.includes('POSTGRES_URL'))).toBeUndefined();
+    });
+
+    it('treats an empty POSTGRES_URL as missing so deploy can offer a managed Postgres', async () => {
+      writeBundle(`const url = process.env.POSTGRES_URL;`);
+      const issues = await preflightBuildOutput(tmpDir, { POSTGRES_URL: '   ' });
+      expect(
+        issues.find(i => i.code === 'MISSING_ENV_VAR' && i.message.includes('POSTGRES_URL'))?.autofix,
+      ).toMatchObject({ provider: 'postgres' });
+    });
+
     it('does not attach an autofix to non-provider missing env vars', async () => {
       writeBundle(`const k = process.env.SOME_CUSTOM_KEY;`);
       const issues = await preflightBuildOutput(tmpDir, {});
@@ -136,6 +172,31 @@ describe('preflightBuildOutput', () => {
         writeBundle(`const url = process.env.REDIS_URL;`);
         const issues = await preflightBuildOutput(tmpDir, {
           REDIS_URL: 'redis://default:secret@fly-my-redis.upstash.io:6379',
+        });
+        expect(issues.find(i => i.code === 'LOCALHOST_ENV_VAR')).toBeUndefined();
+      });
+
+      it('flags a localhost POSTGRES_URL with a managed-Postgres autofix, without echoing credentials', async () => {
+        writeBundle(`const url = process.env.POSTGRES_URL;`);
+        const issues = await preflightBuildOutput(tmpDir, {
+          POSTGRES_URL: 'postgresql://mastra:secret@localhost:5432/mastra',
+        });
+        const issue = issues.find(i => i.code === 'LOCALHOST_ENV_VAR');
+        expect(issue?.severity).toBe('warning');
+        expect(issue?.message).toContain('POSTGRES_URL');
+        expect(issue?.message).toContain('localhost:5432');
+        expect(issue?.message).not.toContain('secret');
+        expect(issue?.autofix).toEqual({
+          kind: 'create-managed-database',
+          provider: 'postgres',
+          envVarName: 'POSTGRES_URL',
+        });
+      });
+
+      it('does not flag the private Railway Postgres URL shape as localhost', async () => {
+        writeBundle(`const url = process.env.POSTGRES_URL;`);
+        const issues = await preflightBuildOutput(tmpDir, {
+          POSTGRES_URL: 'postgresql://mastra:pw@svc.railway.internal:5432/mastra?sslmode=disable',
         });
         expect(issues.find(i => i.code === 'LOCALHOST_ENV_VAR')).toBeUndefined();
       });
@@ -445,6 +506,20 @@ describe('preflightBuildOutput', () => {
         provider: 'redis',
         envVarName: 'REDIS_URL',
       });
+    });
+
+    it('attaches a create-managed-database autofix hint for POSTGRES_URL and names the postgres command', async () => {
+      writeBundle(`export {};`);
+      writeMetadata({ localPaths: [{ ...guardedDetection, guardedBy: 'POSTGRES_URL' }] });
+
+      const issues = await preflightBuildOutput(tmpDir, {}, { hasEnvFile: true, environmentName: 'production' });
+      const issue = issues.find(i => i.code === 'LOCAL_STORAGE_PATH');
+      expect(issue?.autofix).toEqual({
+        kind: 'create-managed-database',
+        provider: 'postgres',
+        envVarName: 'POSTGRES_URL',
+      });
+      expect(fixText(issue?.fix)).toContain('mastra env db create production --kind postgres');
     });
 
     it('omits the autofix hint when the guard var does not map to a known provider', async () => {
