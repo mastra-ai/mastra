@@ -427,7 +427,7 @@ export type AdminProviderId = ModelProviderId | (string & {});
 
 export type UpdateModelParams = GeneratedRequest<Body<'POST /agents/:agentId/model'>>;
 
-export type UpdateModelInModelListParams = PathParams<'POST /agents/:agentId/models/:modelConfigId'> &
+export type UpdateModelInModelListParams = Omit<PathParams<'POST /agents/:agentId/models/:modelConfigId'>, 'agentId'> &
   GeneratedRequest<Body<'POST /agents/:agentId/models/:modelConfigId'>>;
 
 export type ReorderModelListParams = GeneratedRequest<Body<'POST /agents/:agentId/models/reorder'>>;
@@ -1946,6 +1946,8 @@ export interface ToolMockReport {
 export type DatasetItem = GeneratedResponse<'GET /datasets/:datasetId/items/:itemId'>;
 
 export type DatasetRecord = GeneratedResponse<'GET /datasets/:datasetId'>;
+
+export type ExperimentTargetType = NonNullable<QueryParams<'GET /experiments'>['targetType']>;
 
 export interface ExperimentProvenance {
   source?: string;
