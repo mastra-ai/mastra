@@ -1,11 +1,11 @@
 ---
-title: "Reference: Memory class | Memory"
-description: "The Memory class provides a reliable system for managing conversation history and thread-based message storage in Mastra."
+title: 'Reference: Memory class | Memory'
+description: 'The Memory class provides a reliable system for managing conversation history and thread-based message storage in Mastra.'
 packages:
-  - "@mastra/core"
-  - "@mastra/libsql"
-  - "@mastra/memory"
-  - "@mastra/pg"
+  - '@mastra/core'
+  - '@mastra/libsql'
+  - '@mastra/memory'
+  - '@mastra/pg'
 ---
 
 # Memory class
@@ -74,9 +74,16 @@ To enable `workingMemory` on an agent, you’ll need a storage provider configur
             name: 'lastMessages',
             type: 'number | false',
             description:
-              'Number of most recent messages to include in context. Set to `false` to disable the message history feature entirely (messages are not loaded into context or saved). Use `Number.MAX_SAFE_INTEGER` to retrieve all messages with no limit. To load messages without saving new ones, use the `readOnly` option.',
+              'Number of most recent messages to include in context. Set to `false` to disable the message history feature entirely (messages are not loaded into context or saved). Use `Number.MAX_SAFE_INTEGER` to retrieve all messages with no limit. To load messages without saving new ones, use the `readOnly` option. The window slides forward on every request, so once a thread exceeds the limit, each turn invalidates the provider prompt cache. For long-running conversations, use [Observational Memory](/docs/memory/observational-memory) instead.',
             isOptional: true,
             defaultValue: '10',
+          },
+          {
+            name: 'messageHistory',
+            type: '{ maxTokens: number; atMaxRemoveTokens?: number }',
+            description:
+              'Token budget for the complete prompt, including remembered history, system instructions, context, and the current turn. When the prompt exceeds `maxTokens`, the oldest remembered messages are dropped until the prompt is at most `maxTokens - atMaxRemoveTokens` (defaults to 25% of `maxTokens`). Protected content is never removed. Linked tool calls and results are removed together. During agent runs, trimmed history is excluded from later turns via a persisted per-thread boundary, but the messages themselves stay in storage. When set without an explicit `lastMessages`, the default 10-message cap is not applied. Set `maxTokens` to `0` to disable message history. Prefer this over `lastMessages`, since message count is a poor proxy for context size.',
+            isOptional: true,
           },
           {
             name: 'readOnly',
@@ -230,5 +237,6 @@ export const agent = new Agent({
 - [listThreads](/reference/memory/listThreads)
 - [deleteMessages](/reference/memory/deleteMessages)
 - [cloneThread](/reference/memory/cloneThread)
+- [copyThread](/reference/memory/copyThread)
 - [settled](/reference/memory/settled)
 - [Clone Utility Methods](/reference/memory/clone-utilities)

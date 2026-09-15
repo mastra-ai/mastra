@@ -106,7 +106,7 @@ type NotificationEvent =
 /** The timestamps the SDK gives back as `Date`s. {@link hydrateKnownEvent} is typed against this, so the two cannot drift. */
 type Hydrated<T> = T extends { type: 'thread_created' }
   ? Omit<T, 'thread'> & { thread: AgentControllerThread }
-  : T extends { type: 'message_start' | 'message_update' | 'message_end' }
+  : T extends { type: 'message_start' }
     ? Omit<T, 'message'> & { message: MastraDBMessage }
     : T;
 
@@ -218,8 +218,6 @@ function isKnownParsedEvent(event: ParsedEvent): event is AgentControllerWireEve
 function hydrateKnownEvent(event: AgentControllerWireEvent | NotificationEvent): KnownAgentControllerEvent {
   switch (event.type) {
     case 'message_start':
-    case 'message_update':
-    case 'message_end':
       return { ...event, message: hydrateMessage(event.message) };
     case 'thread_created':
       return { ...event, thread: hydrateThread(event.thread) };

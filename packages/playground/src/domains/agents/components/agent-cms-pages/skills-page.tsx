@@ -62,7 +62,7 @@ export function SkillsPage() {
 
   return (
     <ScrollArea className="h-full">
-      <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between">
           <SectionHeader
             title="Skills"
@@ -70,8 +70,7 @@ export function SkillsPage() {
           />
 
           {!readOnly && (
-            <Button variant="outline" size="sm" onClick={() => setDialogOpen(true)}>
-              <Plus className="size-3" />
+            <Button variant="outline" size="sm" onClick={() => setDialogOpen(true)} icon={<Plus />}>
               Add a skill
             </Button>
           )}
@@ -110,15 +109,14 @@ export function SkillsPage() {
         )}
 
         {!isLoading && storedSkills.length === 0 && (
-          <div className="py-12">
+          <div className="py-8">
             <EmptyState
               iconSlot={<CircleSlashIcon height={40} width={40} />}
               titleSlot="No skills available"
               descriptionSlot="Create a skill to give your agent specialized knowledge."
               actionSlot={
                 !readOnly ? (
-                  <Button onClick={() => setDialogOpen(true)}>
-                    <Plus />
+                  <Button onClick={() => setDialogOpen(true)} icon={<Plus />}>
                     Add a skill
                   </Button>
                 ) : undefined

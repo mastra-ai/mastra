@@ -548,6 +548,13 @@ export interface ProcessorPipelineAttributes {
   processorExecutor?: 'workflow' | 'legacy';
   /** Processor index in the agent */
   processorIndex?: number;
+  /**
+   * Milliseconds spent inside `processOutputStream`, summed across every
+   * chunk of the stream. Only set on output stream processor spans. The
+   * span's own duration covers the whole stream, model latency included, so
+   * this is what separates a slow processor from a slow model.
+   */
+  hookDurationMs?: number;
   /** MessageList mutations performed by this processor */
   messageListMutations?: Array<{
     type: 'add' | 'addSystem' | 'removeByIds' | 'clear';

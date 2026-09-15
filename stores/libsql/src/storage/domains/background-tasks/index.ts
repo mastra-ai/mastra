@@ -13,9 +13,19 @@ import type { SqliteClient as Client, SqliteInValue as InValue } from '../../db/
 import { buildSelectColumns } from '../../db/utils';
 import { runPrune, resolveTargets } from '../../retention';
 
-function serializeJson(v: unknown): any {
-  if (typeof v === 'object' && v != null) return JSON.stringify(v);
-  return v ?? null;
+function serializeJson(v: unknown): InValue {
+  if (v === undefined) return null;
+
+  let serialized: string | undefined;
+  try {
+    serialized = JSON.stringify(v);
+  } catch (error) {
+    throw new Error('Failed to serialize background task value as JSON', { cause: error });
+  }
+  if (serialized === undefined) {
+    throw new Error('Failed to serialize background task value as JSON');
+  }
+  return serialized;
 }
 
 function parseJson(val: unknown): any {

@@ -2,23 +2,26 @@ import { useParams } from 'react-router';
 import { useExperiments } from '@/domains/datasets/hooks/use-experiments';
 import { ExperimentStatusIcon } from '@/domains/experiments/components/experiment-stats';
 
-/**
- * Experiment breadcrumb: run status icon followed by the experiment name, falling
- * back to the truncated id while loading or when the experiment was created without one.
- */
-export function ExperimentCrumb() {
+const useCurrentExperiment = () => {
   const { experimentId } = useParams<{ experimentId: string }>();
   const { data } = useExperiments();
+  return { experimentId, experiment: data?.experiments?.find(e => e.id === experimentId) };
+};
 
+/**
+ * Experiment breadcrumb label: the experiment name, falling back to the
+ * truncated id while loading or when the experiment was created without one.
+ */
+export function ExperimentCrumb() {
+  const { experimentId, experiment } = useCurrentExperiment();
   if (!experimentId) return null;
 
-  const experiment = data?.experiments?.find(e => e.id === experimentId);
   const shortId = experimentId.length > 8 ? `${experimentId.slice(0, 8)}...` : experimentId;
+  return experiment?.name || shortId;
+}
 
-  return (
-    <span className="flex min-w-0 items-center gap-1.5">
-      {experiment && <ExperimentStatusIcon status={experiment.status} />}
-      <span className="truncate">{experiment?.name || shortId}</span>
-    </span>
-  );
+/** Run status icon rendered through the crumb `icon` slot. */
+export function ExperimentCrumbStatusIcon() {
+  const { experiment } = useCurrentExperiment();
+  return experiment ? <ExperimentStatusIcon status={experiment.status} /> : null;
 }

@@ -12,7 +12,7 @@ import type {
   StorageListThreadsInput,
   StorageListThreadsOutput,
   StorageCloneThreadInput,
-  StorageCloneThreadOutput,
+  StorageCopyThreadOutput,
   ThreadCloneMetadata,
   ObservationalMemoryRecord,
   ObservationalMemoryHistoryOptions,
@@ -649,7 +649,7 @@ export class InMemoryMemory extends MemoryStorage {
     return resource;
   }
 
-  async cloneThread(args: StorageCloneThreadInput): Promise<StorageCloneThreadOutput> {
+  async copyThread(args: StorageCloneThreadInput): Promise<StorageCopyThreadOutput> {
     const { sourceThreadId, newThreadId: providedThreadId, resourceId, title, metadata, options } = args;
 
     // Get the source thread
@@ -722,19 +722,13 @@ export class InMemoryMemory extends MemoryStorage {
     // Save the new thread
     this.db.threads.set(newThreadId, newThread);
 
-    // When not hydrating, skip building the parsed clonedMessages array so message
-    // payloads never accumulate on the heap; the copied storage rows keep the raw content.
-    const hydrateMessages = options?.hydrateMessages ?? true;
-
-    // Clone messages with new IDs
-    const clonedMessages: MastraDBMessage[] = [];
+    // Copy the raw storage rows under new IDs; payloads are never parsed here.
     const messageIdMap: Record<string, string> = {};
     for (const sourceMsg of sourceMessages) {
       const newMessageId = crypto.randomUUID();
       messageIdMap[sourceMsg.id] = newMessageId;
 
-      // Create storage message
-      const newStorageMessage: StorageMessageType = {
+      this.db.messages.set(newMessageId, {
         id: newMessageId,
         thread_id: newThreadId,
         content: sourceMsg.content,
@@ -742,31 +736,10 @@ export class InMemoryMemory extends MemoryStorage {
         type: sourceMsg.type,
         createdAt: sourceMsg.createdAt,
         resourceId: resourceId || sourceMsg.resourceId,
-      };
-
-      this.db.messages.set(newMessageId, newStorageMessage);
-
-      if (!hydrateMessages) {
-        continue;
-      }
-
-      // Create MastraDBMessage for return
-      clonedMessages.push({
-        id: newMessageId,
-        threadId: newThreadId,
-        content: safelyParseJSON(sourceMsg.content),
-        role: sourceMsg.role as MastraDBMessage['role'],
-        type: sourceMsg.type,
-        createdAt: sourceMsg.createdAt,
-        resourceId: resourceId || sourceMsg.resourceId || undefined,
       });
     }
 
-    return {
-      thread: newThread,
-      clonedMessages,
-      messageIdMap,
-    };
+    return { thread: newThread, messageIdMap };
   }
 
   private sortThreads(threads: any[], field: ThreadOrderBy, direction: ThreadSortDirection): any[] {

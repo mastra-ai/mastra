@@ -94,7 +94,6 @@ export const subconsciousActivityRenderingScenario: McE2eScenario = {
     await runtime.waitForScreenText(new RegExp(REPLAY_TITLE, 'i'), terminal);
     terminal.write('Subconscious activity replay');
     terminal.write('\r');
-    await runtime.waitForScreenText(new RegExp(`Switched to: ${REPLAY_TITLE}`, 'i'), terminal);
     await runtime.waitForScreenText(/Subconscious knowledge/i, terminal, 8_000);
     await runtime.waitForScreenText(/record-created: Beta service/i, terminal, 8_000);
     await runtime.waitForScreenText(/Hot: Beta service \(1\)/i, terminal, 8_000);

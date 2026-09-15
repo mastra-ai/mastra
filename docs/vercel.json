@@ -2221,6 +2221,11 @@
       "permanent": true
     },
     {
+      "source": "/docs/connections/connect-mcp-client",
+      "destination": "/docs/connections/mcp",
+      "permanent": true
+    },
+    {
       "source": "/docs/workspace/overview/llms.txt",
       "destination": "/docs/sandbox/overview/llms.txt",
       "permanent": true
@@ -4033,6 +4038,11 @@
     {
       "source": "/docs/evals/datasets/running-experiments/llms.txt",
       "destination": "/docs/evals/experiments/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/connections/connect-mcp-client/llms.txt",
+      "destination": "/docs/connections/mcp/llms.txt",
       "permanent": true
     }
   ]

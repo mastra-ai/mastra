@@ -1,9 +1,10 @@
 import { Combobox as BaseCombobox } from '@base-ui/react/combobox';
-import { Check, ChevronsUpDown, Search } from 'lucide-react';
+import { Check, ChevronsUpDown, Search, X } from 'lucide-react';
 import * as React from 'react';
 import { comboboxItemClass, comboboxStyles, comboboxTriggerClass } from './combobox-styles';
 import type { ComboboxVariant } from './combobox-styles';
-import type { TextButtonSize } from '@/ds/components/Button/Button';
+import { Button, isIconButtonSize } from '@/ds/components/Button/Button';
+import type { ButtonSize } from '@/ds/components/Button/Button';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
 import { cn } from '@/lib/utils';
@@ -26,11 +27,15 @@ type ComboboxSharedProps = {
   className?: string;
   disabled?: boolean;
   variant?: ComboboxVariant;
-  size?: TextButtonSize;
+  /** Icon sizes (`icon-*`) render a chevron-only trigger; pass `aria-label` to name it. */
+  size?: ButtonSize;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   container?: HTMLElement | ShadowRoot | null | React.RefObject<HTMLElement | ShadowRoot | null>;
   error?: string;
+  'aria-label'?: string;
+  /** Which edge of the trigger the popup lines up with. `end` opens it leftwards (e.g. an icon trigger at the end of a row). */
+  align?: 'start' | 'center' | 'end';
   allowCustomValue?: boolean;
   /** Called with the search input text as it changes (and with `''` after a single-mode selection resets it). */
   onInputValueChange?: (value: string) => void;
@@ -46,6 +51,7 @@ export type ComboboxMultipleProps = ComboboxSharedProps & {
   multiple: true;
   value?: readonly string[];
   onValueChange?: (value: string[]) => void;
+  clearLabel?: string;
 };
 
 export type ComboboxProps = ComboboxSingleProps | ComboboxMultipleProps;
@@ -80,10 +86,13 @@ export function Combobox(props: ComboboxProps) {
     onOpenChange,
     container,
     error,
+    'aria-label': ariaLabel,
+    align = 'start',
     allowCustomValue = false,
     onInputValueChange,
   } = props;
   const multiple = isMultipleCombobox(props);
+  const clearLabel = multiple ? props.clearLabel : undefined;
   const [inputValue, setInputValue] = React.useState('');
   const customValue = inputValue.trim();
   const customOption =
@@ -96,14 +105,23 @@ export function Combobox(props: ComboboxProps) {
   const selectedOption = multiple ? null : (options.find(option => option.value === props.value) ?? null);
   const selectedOptions = multiple ? options.filter(option => selectedValueSet.has(option.value)) : EMPTY_OPTIONS;
   const triggerText = selectedOptions.length === 0 ? placeholder : `${selectedOptions.length} selected`;
+  const clearSelection = () => {
+    if (isMultipleCombobox(props)) props.onValueChange?.([]);
+  };
   // Default to the nearest SideDialog/Drawer popup so the list stays
   // interactive inside a modal drawer; an explicit `container` still wins.
   const resolvedContainer = usePortalContainer(container);
+  const iconOnly = isIconButtonSize(size);
 
   const comboboxContent = (
     <>
-      <BaseCombobox.Trigger className={comboboxTriggerClass({ variant, size, error: Boolean(error), className })}>
-        {multiple ? (
+      <BaseCombobox.Trigger
+        aria-label={ariaLabel}
+        className={comboboxTriggerClass({ variant, size, error: Boolean(error), className })}
+      >
+        {iconOnly ? (
+          <span className="sr-only">{multiple ? triggerText : <BaseCombobox.Value placeholder={placeholder} />}</span>
+        ) : multiple ? (
           <span className={cn('truncate', selectedOptions.length === 0 && comboboxStyles.placeholder)}>
             {triggerText}
           </span>
@@ -119,13 +137,13 @@ export function Combobox(props: ComboboxProps) {
         {/* Wrap the chevron in a `<span>` so the svg is one level deep and
             escapes Button's `[&>svg]` adornments — mirrors Select's chevron wrap. */}
         <span className="flex shrink-0 items-center">
-          <ChevronsUpDown className={comboboxStyles.chevron} />
+          <ChevronsUpDown className={cn(comboboxStyles.chevron, iconOnly && 'ml-0')} />
         </span>
       </BaseCombobox.Trigger>
 
       <BaseCombobox.Portal container={resolvedContainer}>
         <BaseCombobox.Positioner
-          align="start"
+          align={align}
           sideOffset={4}
           positionMethod={FLOATING_POSITION_METHOD}
           className={comboboxStyles.positioner}
@@ -171,6 +189,20 @@ export function Combobox(props: ComboboxProps) {
                 );
               }}
             </BaseCombobox.List>
+            {selectedValues.length > 0 && clearLabel ? (
+              <div className={cn('border-t', 'border-border1', 'p-1')}>
+                <Button
+                  type="button"
+                  variant="destructive-ghost"
+                  size="sm"
+                  className="w-full justify-start"
+                  onClick={clearSelection}
+                  icon={<X />}
+                >
+                  {clearLabel}
+                </Button>
+              </div>
+            ) : null}
           </BaseCombobox.Popup>
         </BaseCombobox.Positioner>
       </BaseCombobox.Portal>

@@ -43,7 +43,7 @@ async function validateWithStandardSchema<T>(
     };
   }
 
-  return { success: true, data: resolvedResult.value as T };
+  return { success: true, data: resolvedResult.value };
 }
 
 export async function validateStepInput({

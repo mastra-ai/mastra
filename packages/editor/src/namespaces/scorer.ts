@@ -21,7 +21,10 @@ export class EditorScorerNamespace extends CrudEditorNamespace<
   StorageResolvedScorerDefinitionType
 > {
   protected override onCacheEvict(id: string): void {
-    this.mastra?.removeScorer(id);
+    // Only remove stored-owned registrations at this exact key, never ID/name matches.
+    if (this.mastra?.listScorers()?.[id]?.source === 'stored') {
+      this.mastra.removeScorer(id);
+    }
   }
 
   /**

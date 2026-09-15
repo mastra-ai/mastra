@@ -207,6 +207,40 @@ describe('Review Queue page', () => {
     });
   });
 
+  describe('when ?targetType and ?targetId are set', () => {
+    it('forwards them to the experiments request', async () => {
+      const experimentQueries: URLSearchParams[] = [];
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/experiments`, ({ request }) => {
+          experimentQueries.push(new URL(request.url).searchParams);
+          return HttpResponse.json(experimentsResponse);
+        }),
+      );
+
+      renderPage('?targetType=agent&targetId=agent-1');
+
+      await screen.findByText(/third question/);
+      const lastQuery = experimentQueries.at(-1)!;
+      expect(lastQuery.get('targetType')).toBe('agent');
+      expect(lastQuery.get('targetId')).toBe('agent-1');
+    });
+
+    it('keeps the target params when picking an experiment', async () => {
+      const { router } = renderPage('?targetType=agent&targetId=agent-1');
+
+      const select = await screen.findByRole('combobox', { name: 'Select experiment' });
+      await screen.findByRole('option', { name: 'entity-extraction / model-b' });
+      fireEvent.change(select, { target: { value: OTHER_EXPERIMENT_ID } });
+
+      await waitFor(() => {
+        const params = new URLSearchParams(router.state.location.search);
+        expect(params.get('experiment')).toBe(OTHER_EXPERIMENT_ID);
+        expect(params.get('targetType')).toBe('agent');
+        expect(params.get('targetId')).toBe('agent-1');
+      });
+    });
+  });
+
   describe('when ?review names a result of the selected experiment', () => {
     it('opens that result in the review dialog', async () => {
       renderPage(`?experiment=${EXPERIMENT_ID}&review=res-3`);

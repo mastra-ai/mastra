@@ -384,7 +384,7 @@ describe('TelegramProvider webhook route — happy path (update → agent → re
     const provider = new TelegramProvider({
       storage,
       baseUrl: BASE_URL,
-      // Buffer instead of stream so the reply lands in a single deterministic sendMessage.
+      // Buffer instead of stream so the reply lands in a single deterministic sendRichMessage.
       streaming: false,
       waitUntil: (p: Promise<unknown>) => {
         pending.push(Promise.resolve(p));
@@ -395,7 +395,7 @@ describe('TelegramProvider webhook route — happy path (update → agent → re
     // Control-plane (connect) + reply-path (typing + send) Bot API stubs.
     stubActiveConnect(BOT_TOKEN);
     stubSend(BOT_TOKEN, 'sendChatAction');
-    const sends = stubSend(BOT_TOKEN, 'sendMessage');
+    const sends = stubSend(BOT_TOKEN, 'sendRichMessage');
 
     await provider.connect('agent-1', { botToken: BOT_TOKEN });
     const record = await storage.getInstallationByAgent('telegram', 'agent-1');
@@ -426,9 +426,9 @@ describe('TelegramProvider webhook route — happy path (update → agent → re
     // The agent's model was actually invoked…
     expect(modelCalls.length).toBeGreaterThan(0);
     // …and a reply was posted back to the sender's chat with the agent's text.
-    expect(sends.length).toBeGreaterThan(0);
-    const replied = sends.some(b => String(b.chat_id) === '4242' && String(b.text).includes('from the mock agent'));
-    expect(replied).toBe(true);
+    expect(sends).toHaveLength(1);
+    expect(String(sends[0].chat_id)).toBe('4242');
+    expect(sends[0].rich_message).toEqual({ markdown: 'Hello from the mock agent' });
   });
 });
 

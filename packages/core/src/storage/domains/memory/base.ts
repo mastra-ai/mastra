@@ -12,6 +12,7 @@ import type {
   StorageOrderBy,
   StorageCloneThreadInput,
   StorageCloneThreadOutput,
+  StorageCopyThreadOutput,
   ObservationalMemoryRecord,
   ObservationalMemoryHistoryOptions,
   CreateObservationalMemoryInput,
@@ -53,6 +54,8 @@ export abstract class MemoryStorage extends StorageDomain {
    * Adapters that implement partial updates must set this to true.
    */
   readonly supportsPartialThreadUpdate?: boolean = false;
+
+  private threadMetadataUpdateQueues = new Map<string, Promise<void>>();
 
   constructor() {
     super({
@@ -127,6 +130,38 @@ export abstract class MemoryStorage extends StorageDomain {
     });
   }
 
+  /**
+   * Serializes a metadata read-modify-write for one thread within this storage instance.
+   * Transaction-capable adapters may override this to provide cross-process atomicity.
+   */
+  async updateThreadMetadata({
+    id,
+    resourceId,
+    update,
+  }: {
+    id: string;
+    resourceId?: string;
+    update: (thread: StorageThreadType) => Record<string, unknown> | undefined;
+  }): Promise<StorageThreadType | null> {
+    const previous = this.threadMetadataUpdateQueues.get(id) ?? Promise.resolve();
+    let release!: () => void;
+    const current = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    this.threadMetadataUpdateQueues.set(id, current);
+
+    await previous.catch(() => {});
+    try {
+      const thread = await this.getThreadById({ threadId: id, resourceId });
+      if (!thread) return null;
+      const metadata = update(thread);
+      return metadata ? await this.patchThread({ id, metadata }) : thread;
+    } finally {
+      release();
+      if (this.threadMetadataUpdateQueues.get(id) === current) this.threadMetadataUpdateQueues.delete(id);
+    }
+  }
+
   abstract deleteThread({ threadId }: { threadId: string }): Promise<void>;
 
   abstract listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput>;
@@ -175,17 +210,51 @@ export abstract class MemoryStorage extends StorageDomain {
   abstract listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput>;
 
   /**
-   * Clone a thread and its messages to create a new independent thread.
-   * The cloned thread will have clone metadata stored in its metadata field.
+   * Copy a thread and its messages to a new independent thread without returning
+   * the message payloads. Adapters should copy rows inside the store (e.g.
+   * `INSERT … SELECT`) or stream them in pages so the whole thread never sits on
+   * the Node heap. The new thread carries clone metadata in its metadata field.
+   *
+   * Adapters that only override `cloneThread` get this for free; the payloads it
+   * returns are discarded.
+   *
+   * @param args - Clone configuration options
+   * @returns The newly created thread and the source→new message id map
+   */
+  async copyThread(args: StorageCloneThreadInput): Promise<StorageCopyThreadOutput> {
+    if (this.cloneThread !== MemoryStorage.prototype.cloneThread) {
+      const { thread, messageIdMap } = await this.cloneThread(args);
+      return { thread, messageIdMap };
+    }
+    throw new Error(
+      `Thread cloning is not implemented by this storage adapter (${this.constructor.name}). ` +
+        `The copyThread method needs to be implemented in the storage adapter.`,
+    );
+  }
+
+  /**
+   * Clone a thread and its messages to create a new independent thread and return
+   * the cloned messages. Defaults to `copyThread` followed by reading the new
+   * thread's messages back, so adapters only need to implement `copyThread`.
    *
    * @param args - Clone configuration options
    * @returns The newly created thread and the cloned messages
    */
-  async cloneThread(_args: StorageCloneThreadInput): Promise<StorageCloneThreadOutput> {
-    throw new Error(
-      `Thread cloning is not implemented by this storage adapter (${this.constructor.name}). ` +
-        `The cloneThread method needs to be implemented in the storage adapter.`,
-    );
+  async cloneThread(args: StorageCloneThreadInput): Promise<StorageCloneThreadOutput> {
+    if (this.copyThread === MemoryStorage.prototype.copyThread) {
+      throw new Error(
+        `Thread cloning is not implemented by this storage adapter (${this.constructor.name}). ` +
+          `The copyThread method needs to be implemented in the storage adapter.`,
+      );
+    }
+    const { thread, messageIdMap } = await this.copyThread(args);
+    const { messages } = await this.listMessages({
+      threadId: thread.id,
+      resourceId: thread.resourceId,
+      perPage: false,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+    });
+    return { thread, clonedMessages: messages, messageIdMap };
   }
 
   /**
