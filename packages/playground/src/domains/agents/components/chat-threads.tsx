@@ -26,6 +26,7 @@ export interface ChatThreadsProps {
   resourceId: string;
   resourceType: 'agent' | 'network';
   embedded?: boolean;
+  /** When provided, renders a "Hide threads panel" control next to "New Chat". */
   onHidePanel?: () => void;
 }
 
@@ -49,6 +50,7 @@ export const ChatThreads = ({
   return (
     <>
       <ThreadList embedded={embedded}>
+        {/* pt-[3px] lines the hide button up with the collapsed panel's expand button (top-2 vs border+p-1) */}
         <div className="flex items-center gap-1 pt-[3px]">
           <ThreadListNewItem as={Link} to={newThreadLink}>
             <Icon>

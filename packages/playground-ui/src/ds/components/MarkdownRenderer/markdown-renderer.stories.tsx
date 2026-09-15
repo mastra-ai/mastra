@@ -179,6 +179,7 @@ if (!session) return redirect('/login');
 
 Moving the guard below the loader fixes it.`;
 
+/** Chunks land in clumps, the way a proxy flushes them, not one word at a time. */
 function useReplay(reply: string): string {
   const [text, setText] = useState('');
 
@@ -219,6 +220,7 @@ function StreamCadence() {
   );
 }
 
+/** The clumps the replay feeds in should not be readable in the cadence that comes out. */
 export const Streaming: Story = {
   render: () => <StreamCadence />,
 };

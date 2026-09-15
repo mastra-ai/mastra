@@ -38,6 +38,7 @@ export function AgentOverviewPanel({ agentId }: AgentOverviewPanelProps) {
       data-testid="agent-overview-panel"
       className="rounded-studio-frame grid h-full min-h-0 grid-rows-[auto_1fr] overflow-hidden"
     >
+      {/* The header route action owns the close control (see AgentDetailHeaderActions). */}
       <div className="border-border1 flex h-10 min-h-10 items-center border-b px-4">
         <Txt as="h2" variant="header-md" className="text-neutral6 font-semibold">
           Config
@@ -45,6 +46,7 @@ export function AgentOverviewPanel({ agentId }: AgentOverviewPanelProps) {
       </div>
 
       <ScrollArea className="min-h-0" viewPortClassName="h-full" mask={{ top: false }}>
+        {/* Skip the sections (and their data fetching) while the panel is collapsed. */}
         {!isCollapsed && <AgentOverviewSections agentId={agentId} />}
       </ScrollArea>
     </Card>

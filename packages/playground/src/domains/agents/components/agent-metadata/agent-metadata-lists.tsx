@@ -183,6 +183,10 @@ export interface AgentMetadataWorkspaceToolsListProps {
   tools: string[];
 }
 
+/**
+ * Format a workspace tool name for display.
+ * Converts "mastra_workspace_read_file" to "read_file"
+ */
 function formatWorkspaceToolName(toolName: string): string {
   const prefix = `${WORKSPACE_TOOLS_PREFIX}_`;
   if (toolName.startsWith(prefix)) {
@@ -232,6 +236,7 @@ export const AgentMetadataCombinedProcessorList = ({
     return <AgentMetadataListEmpty>No processors</AgentMetadataListEmpty>;
   }
 
+  // Use the first processor's ID for the link (they're grouped into a single workflow per type)
   const inputProcessorId = inputProcessors[0]?.id;
   const outputProcessorId = outputProcessors[0]?.id;
 
