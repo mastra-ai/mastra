@@ -1,61 +1,35 @@
-# Playground UI guidance
+# Playground UI
 
 <commands>
 
-- Build from root: `pnpm build:playground-ui`
-- Test from root: `pnpm --filter ./packages/playground-ui test`
+- Build: `pnpm build:playground-ui`
+- Test: `pnpm --filter ./packages/playground-ui test`
 - Typecheck: `pnpm --filter ./packages/playground-ui typecheck`
-
-`build` runs `vite build`; `vite-plugin-dts` emits declarations and gates type errors through `afterDiagnostic`. Use `typecheck` for an explicit `tsc` gate. The package build takes about eight seconds. A slow root build usually means Turbo is rebuilding upstream dependencies through `^build`.
 
 </commands>
 
 <rules>
 
-## Testing
-
-- Vitest, MSW, and typed `@mastra/client-js` fixtures are the primary testing strategy.
-- Tests MUST drive the real `@mastra/client-js` and React Query stack and mock only the network.
-- Tests MUST NOT mock package data hooks, services, or auth gating.
-- Fixtures MUST live in a nearby `__tests__/fixtures/` directory and use response types re-exported from `@mastra/client-js`.
-- Use the `playground-msw-tests` skill for business hooks, data components, gating, and React Query flows.
-- Use Playwright E2E through `e2e-tests-studio` only when MSW cannot model the journey.
+- Test data flows with Vitest, MSW, typed `@mastra/client-js` fixtures, and the real React Query stack. Mock only the network. Use Playwright only when MSW cannot model the journey.
+- Consumer `className` MUST NOT override a DS component's look. Do not add `asChild`; use Base UI's `render` prop.
 
 ## Typography
 
-- Product copy SHOULD use `Txt` variants. Low-level primitives MAY use `text-ui-*` or `text-header-*` utilities.
-- Code MUST NOT use `text-xs`, `text-sm`, `text-base`, `text-lg`, larger Tailwind text sizes, or arbitrary pixel sizes. Lint enforces this.
-- Typography tokens include their paired line-height. Code MUST NOT add a separate `leading-*` unless an existing design-system exception requires it.
-- Headings MUST use the established hierarchy:
-  - Page heading: `header-md`.
-  - Hero heading: `header-xl`.
-  - Section heading: `header-sm`.
-  - Panel heading: `ui-md`.
-- Review `Foundations/Tokens / Typography` in Storybook before changing typography tokens or heading conventions.
+- `text-ui-*` and `text-header-*` are the foundation. `Txt` is a convenience component that consumes them, not another scale. Prefer an existing `Txt` variant for product copy; primitives MAY use the utilities directly.
+- Do not use Tailwind's default text sizes or arbitrary pixel sizes. Lint enforces this. A text token already supplies its paired line-height, so consumer code MUST NOT add `leading-*`.
+- Heading roles: hero `header-xl`, page `header-md`, section `header-sm`, panel `ui-md`.
 
 ## Color
 
-- Plain `:root` color variables in `theme.css` are raw foundations and do not generate Tailwind utilities. Only `@theme` variables generate utilities.
-- Background foundations describe nesting: `background-1` is sidebar or outer chrome, `background-2` is the main canvas, and `background-3` is cards and panels.
-- Gray foundations describe contrast strength, not lightness. `gray-1` is subtle and `gray-10` is strong. The tonal direction reverses between dark and light themes so the same step preserves its role.
-- Gray alpha uses white overlays in dark mode and black overlays in light mode. Higher steps increase opacity and contrast.
-- Components MUST use semantic color utilities when they exist. Raw foundations MUST NOT replace existing tokens outside an explicitly approved migration.
-- Review `Foundations/Color foundations` in Storybook before changing foundations, aliases, or theme mappings.
-
-## Components
-
-- Preserve design-system consistency and existing component APIs.
-- Consumer code MUST NOT override a DS component's colors, typography, borders, radius, shadow, or internal padding through `className`.
-- Do not add `asChild`; use Base UI's native `render` prop.
+- Plain `:root` variables are raw foundations; only `@theme` variables generate utilities.
+- Background numbers encode nesting: sidebar `background-1`, canvas `background-2`, panel `background-3`.
+- Gray numbers encode contrast from subtle `1` to strong `10`; tonal direction reverses by theme. Alpha grays use white in dark mode and black in light mode.
+- Components MUST use semantic colors when available. Raw foundations MUST NOT replace existing tokens outside an approved migration.
 
 </rules>
 
 <verification>
 
-- Run the narrow unit or integration tests before E2E.
-- Run typecheck for every TypeScript change.
-- UI handoff MUST include mobile, tablet, and desktop screenshots.
-- Color and typography changes MUST be checked in dark and light themes through their Storybook foundation stories.
-- Run `e2e-frontend-validation` before merging when it applies.
+Review the matching `Tiger Team/Foundations` story before changing either system. Verify light and dark themes at mobile, tablet, and desktop widths. Run narrow tests before E2E and include handoff screenshots.
 
 </verification>

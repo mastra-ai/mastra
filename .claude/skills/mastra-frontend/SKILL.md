@@ -44,9 +44,10 @@ Class strings MUST remain complete and statically detectable. Use `cn()` for con
 
 ## Typography
 
-- Product copy SHOULD use `Txt` variants. Low-level primitives MAY use `text-ui-*` or `text-header-*` utilities directly.
+- `text-ui-*` and `text-header-*` are the typography foundation. `Txt` is a convenience component that consumes those tokens; it is not a separate scale.
+- Product copy SHOULD use an existing `Txt` variant. Low-level primitives MAY use the foundation utilities directly. Do not add a `Txt` variant for a one-off role.
 - UI code MUST NOT use Tailwind size utilities from `text-xs` through `text-4xl` or arbitrary pixel sizes such as `text-[11px]`.
-- Each typography token includes its paired line-height. Code MUST NOT add a separate `leading-*` unless the design system explicitly defines an exception.
+- Each typography token includes its paired line-height. Consumer code MUST NOT add a separate `leading-*` unless the design system explicitly defines an exception.
 - Headings MUST follow this hierarchy:
 
 | Role            | Token       |
@@ -56,7 +57,7 @@ Class strings MUST remain complete and statically detectable. Use `cn()` for con
 | Section heading | `header-sm` |
 | Panel heading   | `ui-md`     |
 
-Review `Foundations/Tokens / Typography` in Storybook before changing typography tokens or heading conventions. The paired size and line-height are one contract.
+Review `Tiger Team/Foundations/Typography` in Storybook before changing typography tokens, `Txt`, or heading conventions. The paired size and line-height are one contract.
 
 ## Color foundations and semantics
 
@@ -72,7 +73,7 @@ Review `Foundations/Tokens / Typography` in Storybook before changing typography
 - A new semantic alias MUST name a role, not a visual value. Prefer `sidebar-background` over `dark-gray`.
 - Theme-aware tokens MUST switch through `:root` and `html.light`. Components MUST NOT add `dark:` color overrides for behavior already represented by a token.
 
-Review `Foundations/Color foundations` in Storybook before changing color foundations, semantic aliases, or theme mappings.
+Review `Tiger Team/Foundations/Color` in Storybook before changing color foundations, semantic aliases, or theme mappings.
 
 ## Theme and token wiring
 
@@ -86,7 +87,7 @@ Review `Foundations/Color foundations` in Storybook before changing color founda
 <quality-checklist>
 
 - Existing DS components and variants were checked before new UI was built.
-- Typography uses `Txt`, `text-ui-*`, or `text-header-*` with the paired leading intact.
+- Typography uses the foundation scale directly or through an existing `Txt` variant, with paired leading intact.
 - Raw color foundations, generated utilities, and semantic aliases are not confused.
 - The same semantic or gray token is used in both themes without component-level theme overrides.
 - No guessed token names, raw colors, arbitrary font sizes, or look overrides appear in consumer code.
