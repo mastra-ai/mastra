@@ -75,6 +75,38 @@ describe('preview workflow history', () => {
       expect(fetchSpy).not.toHaveBeenCalled();
     });
 
+    it('provides completed, suspended, and failed approval runs with step data', async () => {
+      const workflow = previewWorkflows.requestReview;
+      const { runs } = await workflow.listWorkflowRuns();
+      const seededRuns = await Promise.all(
+        runs.filter(run => run.runId.startsWith('preview-')).map(run => workflow.getWorkflowRunById(run.runId)),
+      );
+
+      expect(seededRuns.map(run => run?.status).sort()).toEqual(['failed', 'success', 'success', 'suspended']);
+      const suspended = await workflow.getWorkflowRunById('preview-request-awaiting-review');
+      expect(suspended?.steps?.['review-request']).toMatchObject({
+        status: 'suspended',
+        suspendPayload: { title: 'Team workshop', amount: 2400 },
+      });
+    });
+
+    it('keeps nested batch results available to the run inspector', async () => {
+      const run = await previewWorkflows.documentBatch.getWorkflowRunById('preview-document-batch', {
+        withNestedWorkflows: true,
+      });
+
+      expect(run?.status).toBe('success');
+      expect(run?.result).toMatchObject({ processed: 3 });
+      expect(run?.steps?.['analyze-document[0].count-words']).toMatchObject({ status: 'success' });
+    });
+
+    it('finishes the loop at zero', async () => {
+      const run = await previewWorkflows.countdown.getWorkflowRunById('preview-countdown');
+
+      expect(run?.status).toBe('success');
+      expect(run?.result).toEqual({ remaining: 0 });
+    });
+
     it.each(Object.entries(workflowNodeCoverage))('exposes %s in %s', (kind, workflowName) => {
       const entries = collectGraphEntries(previewWorkflows[workflowName].serializedStepGraph);
       expect(entries.map(entry => entry.type)).toContain(kind);
@@ -186,6 +218,28 @@ describe('preview workflow history', () => {
         runId: run.runId,
       });
       expect(snapshot?.context['pack-order']).toBeUndefined();
+    });
+  });
+
+  describe('when a reviewer resumes a new request', () => {
+    it('completes the request with the review decision', async () => {
+      const workflow = previewWorkflows.requestReview;
+      const run = await workflow.createRun();
+      await run.start({ inputData: { title: 'Team workshop', amount: 2400 } });
+      const result = await run.resume({ step: 'review-request', resumeData: { approved: true } });
+
+      expect(result).toMatchObject({ status: 'success', result: { title: 'Team workshop', approvedBy: 'Reviewer' } });
+    });
+  });
+
+  describe('when startup seeding is requested again', () => {
+    it('preserves existing runs and review decisions', async () => {
+      const workflow = previewWorkflows.requestReview;
+      const beforeSeeding = await workflow.listWorkflowRuns();
+
+      await Promise.all([seedPreviewWorkflowRuns(), seedPreviewWorkflowRuns()]);
+
+      expect(await workflow.listWorkflowRuns()).toEqual(beforeSeeding);
     });
   });
 
