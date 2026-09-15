@@ -88,7 +88,7 @@ vi.mock('./rules/terminal-cleanup', async importOriginal => {
   return {
     ...actual,
     createTerminalStageCleanup: (options: Parameters<typeof actual.createTerminalStageCleanup>[0]) => {
-      const cleanup = actual.createTerminalStageCleanup(options);
+      const cleanup = vi.fn(actual.createTerminalStageCleanup(options));
       terminalCleanups.push(cleanup);
       return cleanup;
     },
@@ -362,7 +362,26 @@ describe('MastraFactory.prepare', () => {
     // not enough (bindings would stay active until the 24h sweep).
     expect(terminalCleanups).toHaveLength(1);
     expect(transitionServiceOptions).toHaveLength(1);
-    expect(transitionServiceOptions[0]!.onTerminalStage).toBe(terminalCleanups[0]);
+    // The hook maps the transition's actor onto the cleanup: an agent seat that
+    // drove its own terminal transition is passed as `initiatingBindingId` so
+    // cleanup leaves that live run alone while aborting the others.
+    const onTerminalStage = transitionServiceOptions[0]!.onTerminalStage!;
+    expect(onTerminalStage).toBeTypeOf('function');
+    await onTerminalStage({
+      orgId: 'org-1',
+      factoryProjectId: '11111111-2222-4333-8444-555555555555',
+      workItemId: 'item-1',
+      stage: 'done',
+      revision: 3,
+      actor: { type: 'agent', bindingId: 'binding-1', role: 'work' },
+    });
+    expect(terminalCleanups[0]).toHaveBeenCalledWith({
+      orgId: 'org-1',
+      factoryProjectId: '11111111-2222-4333-8444-555555555555',
+      workItemId: 'item-1',
+      revision: 3,
+      initiatingBindingId: 'binding-1',
+    });
   });
 
   it('threads the default config version when the slot is omitted', async () => {

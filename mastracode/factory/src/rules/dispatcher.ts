@@ -1227,7 +1227,15 @@ export class FactoryDecisionDispatcher {
     if (!record.workItemId) return false;
     const bindings = await this.#storage.listRunBindings(record.orgId, record.factoryProjectId, record.workItemId);
     const own = bindings.filter(candidate => candidate.role === role);
+    // An active seat for this role still runs — a terminal card can legitimately
+    // hold one (e.g. a close-out skill dispatched on `done`).
     if (own.some(candidate => candidate.status === 'active')) return false;
+    // With no active seat left, a card that has already reached a terminal stage
+    // can never mint one for this role again, and its bindings are being revoked
+    // out from under the run by terminal-stage cleanup. Treat the decision as
+    // superseded so it stops retrying to MAX_ATTEMPTS as `session_unavailable`.
+    const item = await this.#storage.get({ orgId: record.orgId, id: record.workItemId }).catch(() => null);
+    if (item && workItemPhaseSemantics(this.#boards, item)?.kind === 'terminal') return true;
     return own.some(
       revoked =>
         revoked.revokedAt !== null &&

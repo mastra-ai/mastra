@@ -1519,6 +1519,50 @@ describe('FactoryDecisionDispatcher', () => {
       });
     });
 
+    it('supersedes a plan decision on a card that has reached a terminal stage instead of retrying it', async () => {
+      // An external terminal transition revoked the seat out from under a queued
+      // plan decision. The card can never mint a plan seat again, so the decision
+      // must settle as superseded rather than flap through session_unavailable
+      // retries and page a person on a finished card.
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const { item, transitionService } = await queueDecision(storage, planSkill('plan-terminal'));
+      const { controller } = createSession();
+      const binding = await bindRole(storage, item.id, 'plan');
+      await storage.revokeRunBinding({
+        orgId: 'org-1',
+        factoryProjectId: PROJECT_ID,
+        bindingId: binding.id,
+        revokedAt: new Date('2030-01-01T00:00:00Z'),
+      });
+      const current = await storage.get({ orgId: 'org-1', id: item.id });
+      await storage.commitTransition({
+        orgId: 'org-1',
+        factoryProjectId: PROJECT_ID,
+        workItemId: item.id,
+        expectedRevision: current!.revision,
+        destinationStage: 'done',
+        actorId: 'user-1',
+        ingress: { identity: 'external-close', triggerType: 'github', transitionId: 'external-close' },
+        configVersion: 'rules-v1',
+        causalChain: [],
+        evaluation: { outcome: 'accepted', decisions: [] },
+      });
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: controller as never,
+        isAutoRunEnabled: async () => true,
+        transitionService,
+        storage,
+        ownerId: 'worker-1',
+      });
+
+      await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+      expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+        status: 'succeeded',
+        attempts: 1,
+      });
+    });
+
     it('still fails when the run ends in error with the plan seat intact', async () => {
       const storage = (await createFactoryStorageForTests()).workItems;
       const { item, transitionService } = await queueDecision(storage, planSkill('plan-real-error'));
