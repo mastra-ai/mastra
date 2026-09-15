@@ -13,4 +13,4 @@
 '@mastra/tanstack-start': patch
 ---
 
-Fixed query-parser, static-site generation, and parseBody security issues by updating hono to 4.13.5.
+Fixed query-parser, static-site generation, parseBody, and XSS security issues by updating hono to 4.13.7.

@@ -29,7 +29,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@chat-adapter/telegram": "^4.34.0"
+    "@chat-adapter/telegram": "^4.37.0"
   },
   "devDependencies": {
     "@mastra/core": "workspace:*",

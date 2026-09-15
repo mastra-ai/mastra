@@ -183,8 +183,9 @@ minimumReleaseAgeExclude:
   - shell-quote@1.10.0
   # Renovate security update: tmp@0.2.7
   - tmp@0.2.7
-  # Renovate security update: axios@1.18.0
+  # Renovate security update: axios@1.20.0
   - axios@1.18.0
+  - axios@1.20.0
   # Renovate security update: body-parser@2.3.0
   - body-parser@2.3.0
   # Renovate security update: protobufjs@8.6.6 || 7.6.5
@@ -198,13 +199,15 @@ minimumReleaseAgeExclude:
   - dompurify@3.4.15
   # Renovate security update: fast-xml-parser@5.10.1
   - fast-xml-parser@5.10.1
-  # Renovate security update: svgo@3.3.4
+  # Renovate security update: svgo@3.3.5
   - svgo@3.3.4
+  - svgo@3.3.5
   # Renovate security update: @hono/node-server@2.0.10 || 2.0.5
   - "@hono/node-server@2.0.10 || 2.0.5"
   - "@hono/node-server@1.19.17"
-  # Security bump: hono 4.13.5 (query-parser / toSSG / parseBody advisories)
+  # Security bump: hono 4.13.7 (query-parser / toSSG / parseBody / XSS advisories)
   - hono@4.13.5
+  - hono@4.13.7
   # Security bump: tinypool 2.2.0, image-size 2.0.4, mysql2 3.24.4
   - tinypool@2.2.0
   - image-size@2.0.4
@@ -222,6 +225,7 @@ minimumReleaseAgeExclude:
   - '@clerk/backend@3.17.2'
   - better-auth@1.7.4
   - js-yaml@5.4.1
+  - js-yaml@5.4.2
   - vitest@4.1.11
   - '@vitest/coverage-v8@4.1.11'
   - '@vitest/ui@4.1.11'
@@ -234,6 +238,7 @@ minimumReleaseAgeExclude:
   # Renovate security update: js-yaml@5.2.2
   - js-yaml@5.2.2
   - js-yaml@5.4.1
+  - js-yaml@5.4.2
   # Renovate security update: better-auth@1.6.23
   - better-auth@1.6.23
   # Renovate security update: valibot@1.4.2
@@ -272,7 +277,7 @@ overrides:
   # >=1.6.26 fixes user-enumeration (AIKIDO-2026-906996). Stay on 1.7.4
   # rather than 1.6.33 because 1.6.33 is inside the 1-day minimumReleaseAge window.
   better-auth: ^1.7.4
-  js-yaml: ^5.4.1
+  js-yaml: ^5.4.2
   glob@<=10.5.0: 10.5.0
   body-parser@<=2.2.1: 2.3.0
   inngest: ^4.2.2
@@ -284,9 +289,9 @@ overrides:
   # Security floors for Dependabot alerts (transitive deps; patched versions
   # are within the parents' declared ranges).
   simple-git@<3.36.0: 3.36.0
-  axios@>=1.0.0 <1.16.0: 1.18.0
-  protobufjs@>=7.0.0 <7.6.5: 7.6.6
-  protobufjs@>=8.0.0 <8.6.6: 8.8.0
+  axios@>=1.0.0 <1.20.0: 1.20.0
+  protobufjs@>=7.0.0 <7.6.6: 7.6.6
+  protobufjs@>=8.0.0 <8.8.0: 8.8.0
   minimatch@>=5.0.0 <5.1.8: 5.1.8
   minimatch@>=9.0.0 <9.0.7: 9.0.7
   ws@>=7.0.0 <7.5.12: 7.5.13
@@ -300,12 +305,12 @@ overrides:
   brace-expansion@>=2.0.0 <2.1.4: 2.1.4
   brace-expansion@>=4.0.0 <5.0.9: 5.0.9
   immer@>=11.0.0 <11.1.9: 11.1.9
-  '@clerk/shared@>=3.0.0 <3.47.5': 3.47.8
-  '@clerk/shared@>=4.0.0 <4.25.5': 4.31.1
+  # 3.x has no XSS patch (AIKIDO-2026-420462 is fixed in 4.25.5+).
+  '@clerk/shared@>=3.0.0 <4.25.5': 4.31.1
   js-cookie@>=3.0.0 <3.0.7: 3.0.7
   path-to-regexp@<0.1.13: 0.1.13
   joi@>=17.0.0 <17.13.7: 17.13.8
-  svgo@>=3.0.0 <3.3.3: 3.3.4
+  svgo@>=3.0.0 <3.3.5: 3.3.5
   # undici 5.x has no patched release; the only 5.x consumer is
   # @connectrpc/connect-node@1.7.0 (via @cursor/sdk), which is compatible with
   # the undici 6 Client/Pool APIs.
@@ -333,7 +338,7 @@ overrides:
   '@babel/core@>=7.0.0 <7.29.6': 8.0.1
   '@babel/plugin-transform-modules-systemjs@>=7.12.0 <7.29.4': 8.0.1
   dompurify@>=3.0.0 <3.4.15: 3.4.15
-  hono@<4.13.5: 4.13.5
+  hono@<4.13.8: 4.13.7
   '@hono/node-server@<1.19.15': 1.19.17
   nanoid@>=3.0.0 <3.3.19: 3.3.19
   nanoid@>=5.0.0 <5.1.16: 5.1.16
@@ -351,7 +356,35 @@ overrides:
   deepmerge-ts@<8.0.0: 8.0.2
   valibot@<1.4.2: 1.4.2
   find-my-way@<9.7.0: 9.9.0
-  adm-zip@<0.6.0: 0.6.0
+  adm-zip@<=0.6.0: 0.6.1
+  toml@<4.2.0: 4.2.0
+  fflate@>=0.4.5 <0.4.9: 0.4.9
+  colord@<2.9.4: 2.10.0
+  postcss-selector-parser@>=6.1.0 <6.1.3: 6.1.4
+  postcss-selector-parser@>=7.1.0 <7.1.3: 7.1.6
+  '@vitest/mocker@>=4.1.0 <4.1.11': 4.1.11
+  '@fastify/forwarded@<3.0.2': 3.0.2
+  ajv@>=8.0.0 <8.20.0: 8.20.0
+  '@noble/hashes@>=2.0.0 <2.4.0': 2.4.0
+  '@docsearch/react@>=4.0.0 <4.7.0': 4.7.0
+  es-toolkit@>=1.11.0 <1.51.0: 1.52.0
+  fast-copy@>=4.0.0 <4.1.0: 4.1.1
+  onnxruntime-node@<1.24.2: 1.26.0
+  '@opentelemetry/auto-instrumentations-node@<0.80.0': 0.80.0
+  '@opentelemetry/instrumentation-pg@<0.73.0': 0.74.0
+  '@opentelemetry/instrumentation-tedious@<0.40.0': 0.41.0
+  '@opentelemetry/instrumentation-oracledb@<0.47.0': 0.47.0
+  '@opentelemetry/instrumentation-mysql@<0.68.0': 0.68.0
+  '@opentelemetry/instrumentation-mysql2@<0.68.0': 0.68.0
+  '@opentelemetry/instrumentation-mongoose@<0.68.0': 0.68.0
+  '@opentelemetry/instrumentation-knex@<0.66.0': 0.66.0
+  '@opentelemetry/instrumentation-cassandra-driver@<0.67.0': 0.67.0
+  cjs-module-lexer@<2.2.0: 2.2.1
+  es-module-lexer@<3.0.0: 3.0.2
+  '@ai-sdk/provider-utils@>=3.0.0 <3.0.28': 3.0.31
+  yargs@>=17.0.0 <18.1.0: 18.1.0
+  jose@>=6.0.0 <6.2.5: 6.2.12
+  fast-copy@>=3.0.0 <3.1.0: 3.1.0
   '@tootallnate/once@<3.0.1': ^3.0.1
   '@codemirror/lang-jinja': ^6.0.1
   'aggregate-error': 'npm:@socketregistry/aggregate-error@^1'

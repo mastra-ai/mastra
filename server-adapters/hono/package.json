@@ -47,7 +47,7 @@
     "@types/node": "22.20.1",
     "@types/ws": "^8.18.1",
     "eslint": "^10.7.0",
-    "hono": "^4.13.5",
+    "hono": "^4.13.7",
     "tsdown": "0.22.9",
     "typescript": "catalog:",
     "vitest": "catalog:",
@@ -55,7 +55,7 @@
   },
   "peerDependencies": {
     "@mastra/core": ">=1.50.0-0 <2.0.0-0",
-    "hono": "^4.13.5"
+    "hono": "^4.13.7"
   },
   "engines": {
     "node": ">=22.13.0"

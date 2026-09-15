@@ -5,7 +5,7 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  hono@<4.13.5: 4.13.5
+  hono: 4.13.7
   nanoid@>=3.0.0 <3.3.19: 3.3.19
   postcss@<8.5.23: 8.5.23
   undici@<6.28.1: 6.28.1
@@ -60,8 +60,8 @@ importers:
         specifier: 22.20.1
         version: 22.20.1
       hono:
-        specifier: ^4.13.5
-        version: 4.13.5
+        specifier: 4.13.7
+        version: 4.13.7
       mastra:
         specifier: link:../../packages/cli
         version: link:../../packages/cli
@@ -949,8 +949,8 @@ packages:
   headers-polyfill@5.0.1:
     resolution: {integrity: sha512-1TJ6Fih/b8h5TIcv+1+Hw0PDQWJTKDKzFZzcKOiW1wJza3XoAQlkCuXLbymPYB8+ZQyw8mHvdw560e8zVFIWyA==}
 
-  hono@4.13.5:
-    resolution: {integrity: sha512-O6+/eCYRkzzzy0rPWwKLiGBR1nFuUPZynnwjxN1MBA62NNqbT0wQEzQyK2gSO5yDIDB336sXQleAhOHrzlYyKw==}
+  hono@4.13.7:
+    resolution: {integrity: sha512-c8/gF9ac8Y78/agExVocyLevgR+JlpNB444Py0FSX8pJoPdYUfUzRcXtYEYGwt6l19qIlVZPN5Mfsw9jFShmQQ==}
     engines: {node: '>=16.9.0'}
 
   html-encoding-sniffer@4.0.0:
@@ -2059,7 +2059,7 @@ snapshots:
       set-cookie-parser: 3.1.2
     optional: true
 
-  hono@4.13.5: {}
+  hono@4.13.7: {}
 
   html-encoding-sniffer@4.0.0:
     dependencies:

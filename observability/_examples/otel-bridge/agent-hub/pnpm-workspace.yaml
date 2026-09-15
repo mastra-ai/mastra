@@ -8,6 +8,7 @@ minimumReleaseAgeExclude:
   - '@opentelemetry/propagator-jaeger@2.11.0'
   - systeminformation@5.33.10
   - nanoid@3.3.19
+  - '@opentelemetry/auto-instrumentations-node@0.80.0'
 
 overrides:
   '@mastra/core': link:../../../../packages/core
@@ -16,10 +17,11 @@ overrides:
   '@mastra/otel-bridge': link:../../../otel-bridge
   '@mastra/server': link:../../../../packages/server
   systeminformation: 5.33.10
-  protobufjs@>=7.0.0 <7.6.5: 7.6.6
+  protobufjs@>=7.0.0 <7.6.6: 7.6.6
   '@opentelemetry/propagator-jaeger@<2.9.0': 2.11.0
   nanoid@>=3.0.0 <3.3.19: 3.3.19
-  ajv@<=8.18.0: 8.18.0
+  ajv@<=8.18.0: 8.20.0
+  '@opentelemetry/auto-instrumentations-node': 0.80.0
   fast-uri@<3.1.7: 3.1.7
   minimatch@<=10.2.1: 10.2.1
   '@isaacs/brace-expansion@<=5.0.1': 5.0.1

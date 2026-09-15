@@ -2,7 +2,7 @@ packages:
   - '.'
 
 overrides:
-  nanoid@>=3.0.0 <3.3.18: 3.3.18
+  nanoid@>=3.0.0 <3.3.19: 3.3.19
 
 allowBuilds:
   esbuild: true

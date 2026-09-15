@@ -18,7 +18,7 @@
     "@mastra/memory": "workspace:*",
     "@mastra/observability": "workspace:*",
     "get-port": "^7.2.0",
-    "hono": "^4.13.5",
+    "hono": "^4.13.7",
     "vitest": "catalog:"
   },
   "peerDependencies": {

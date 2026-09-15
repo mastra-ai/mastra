@@ -6,7 +6,7 @@
 packages:
   - '.'
 overrides:
-  hono@<4.13.5: 4.13.5
+  hono: 4.13.7
   nanoid@>=3.0.0 <3.3.19: 3.3.19
   postcss@<8.5.23: 8.5.23
   undici@<6.28.1: 6.28.1

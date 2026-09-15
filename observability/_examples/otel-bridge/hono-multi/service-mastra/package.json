@@ -11,7 +11,7 @@
     "lint:fix": "prettier --write '**/*.{js,ts}'"
   },
   "dependencies": {
-    "@hono/node-server": "^1.19.9",
+    "@hono/node-server": "^1.19.17",
     "@hono/otel": "^1.1.0",
     "@hono/swagger-ui": "^0.5.2",
     "@mastra/core": "latest",
@@ -23,7 +23,7 @@
     "@opentelemetry/instrumentation": "^0.208.0",
     "@opentelemetry/semantic-conventions": "^1.40.0",
     "dotenv": "^17.2.3",
-    "hono": "^4.13.5",
+    "hono": "^4.13.7",
     "zod": "^4.1.13"
   },
   "devDependencies": {

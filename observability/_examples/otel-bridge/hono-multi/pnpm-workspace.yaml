@@ -9,9 +9,9 @@ catalog:
   typescript: ^5.9.3
 
 overrides:
-  protobufjs@>=7.0.0 <7.6.5: 7.6.6
+  protobufjs@>=7.0.0 <7.6.6: 7.6.6
   '@opentelemetry/propagator-jaeger@<2.9.0': 2.11.0
-  hono: 4.13.5
+  hono: 4.13.7
   nanoid@>=3.0.0 <3.3.19: 3.3.19
   zod@>=4.0.0 <4.5.5: 4.6.5
   '@mastra/core': link:../../../../packages/core
