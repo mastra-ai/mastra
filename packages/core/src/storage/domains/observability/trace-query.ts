@@ -205,13 +205,15 @@ export const traceQueryObservedFieldDescriptorSchema = z
 export const getTraceQueryFieldsResponseSchema = z
   .object({
     canonicalFields: z.array(traceQueryCanonicalFieldDescriptorSchema),
-    observedFields: z.array(traceQueryObservedFieldDescriptorSchema),
+    observedFields: z.array(traceQueryObservedFieldDescriptorSchema).max(TRACE_QUERY_DISCOVERY_MAX_LIMIT),
     observedFieldsTruncated: z.boolean(),
   })
   .strict();
 export const getTraceQueryValuesResponseSchema = z
   .object({
-    values: z.array(z.object({ value: z.string(), count: z.number().int().nonnegative() }).strict()),
+    values: z
+      .array(z.object({ value: z.string(), count: z.number().int().nonnegative() }).strict())
+      .max(TRACE_QUERY_DISCOVERY_MAX_LIMIT),
     valuesTruncated: z.boolean(),
   })
   .strict();

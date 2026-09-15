@@ -6,7 +6,9 @@ import {
   encodeTraceQueryCursor,
   getTraceQueryCanonicalFieldDescriptors,
   getTraceQueryFieldsArgsSchema,
+  getTraceQueryFieldsResponseSchema,
   getTraceQueryValuesArgsSchema,
+  getTraceQueryValuesResponseSchema,
   isTraceQueryValueSuggestionsPath,
   parseGetTraceQueryFieldsArgs,
   parseGetTraceQueryValuesArgs,
@@ -1318,6 +1320,38 @@ describe('trace-query discovery contract', () => {
     ).toBe(false);
   });
 
+  it('bounds observed fields and values in public responses', () => {
+    const observedFields = Array.from({ length: TRACE_QUERY_DISCOVERY_MAX_LIMIT + 1 }, () =>
+      createTraceQueryObservedFieldDescriptor('metadata.region', 1),
+    );
+    const values = Array.from({ length: TRACE_QUERY_DISCOVERY_MAX_LIMIT + 1 }, (_, index) => ({
+      value: `value-${index}`,
+      count: 1,
+    }));
+
+    expect(
+      getTraceQueryFieldsResponseSchema.safeParse({
+        canonicalFields: [],
+        observedFields: observedFields.slice(0, TRACE_QUERY_DISCOVERY_MAX_LIMIT),
+        observedFieldsTruncated: true,
+      }).success,
+    ).toBe(true);
+    expect(
+      getTraceQueryFieldsResponseSchema.safeParse({
+        canonicalFields: [],
+        observedFields,
+        observedFieldsTruncated: true,
+      }).success,
+    ).toBe(false);
+    expect(
+      getTraceQueryValuesResponseSchema.safeParse({
+        values: values.slice(0, TRACE_QUERY_DISCOVERY_MAX_LIMIT),
+        valuesTruncated: true,
+      }).success,
+    ).toBe(true);
+    expect(getTraceQueryValuesResponseSchema.safeParse({ values, valuesTruncated: true }).success).toBe(false);
+  });
+
   it('derives ordered canonical descriptors and value eligibility from one registry', () => {
     for (const scope of ['trace', 'spans', 'scores', 'feedback'] as const) {
       const descriptors = getTraceQueryCanonicalFieldDescriptors(scope);
@@ -1340,6 +1374,9 @@ describe('trace-query discovery contract', () => {
     });
     expect(parseGetTraceQueryValuesArgs({ ...discoveryArgs, path: ' ${metadata.region} ' })).toMatchObject({
       path: 'metadata.region',
+    });
+    expect(parseGetTraceQueryValuesArgs({ ...discoveryArgs, path: '${metadata.region }' })).toMatchObject({
+      path: 'metadata.region ',
     });
     for (const path of ['traceId', 'startedAt', 'metadata', 'metadata.customer.plan']) {
       expect(getTraceQueryValuesArgsSchema.safeParse({ ...discoveryArgs, path }).success, path).toBe(false);
