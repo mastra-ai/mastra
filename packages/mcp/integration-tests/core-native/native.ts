@@ -4,7 +4,7 @@ import type { MCPServerHTTPOptions, MCPToolExecutionResultV2 } from '@mastra/cor
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { standardSchemaToJSONSchema } from '@mastra/core/schema';
-import { createTool } from '@mastra/core/tools';
+import { createTool, isValidationError } from '@mastra/core/tools';
 import type { ToolsInput } from '@mastra/core/agent';
 import type { InternalCoreTool, MCPToolExecutionContext } from '@mastra/core/tools';
 import { makeCoreTool } from '@mastra/core/utils';
@@ -116,6 +116,9 @@ class Fixture extends MCPServerBase {
         resumeSchema: resumeSchema ? standardSchemaToJSONSchema(resumeSchema, { io: 'input' }) : undefined,
       };
     }
+    // Core reports invalid input/resume data as a validation-error output (the same
+    // object agents see); a 2.x server rejects it like any other failed call.
+    if (isValidationError(output)) throw new Error(output.message);
     return { status: 'completed', output };
   }
   async startHTTP(_options: MCPServerHTTPOptions) {}

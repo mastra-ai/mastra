@@ -2,7 +2,7 @@
 
 This consumer installs published `@mastra/mcp@1.17.3` with a packed core build. It does not import workspace source or the workspace MCP package.
 
-From the repository root, build and pack core, then pass its tarball and a new consumer directory:
+From the repository root, `pnpm build:core` and then `pnpm --filter @mastra/mcp test:compat` packs core and runs this consumer plus the `core-native` fixture (CI runs the same script in the `E2E MCP compatibility` job). To run it by hand, pack core and pass its tarball and a new consumer directory:
 
 ```sh
 pnpm build:core
