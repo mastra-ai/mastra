@@ -1,5 +1,3 @@
-import { createHash } from 'node:crypto';
-
 import { describe, expect, it, vi } from 'vitest';
 import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
@@ -7,6 +5,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 
 import { MastraEditor } from '../index';
+import { computeInlineWorkspaceIdentity } from './workspace-identity';
 
 async function createEditorWithStore(agents?: Record<string, Agent>) {
   const storage = new InMemoryStore();
@@ -278,10 +277,7 @@ describe('EditorAgentNamespace.update', () => {
       workspace,
     });
 
-    const workspaceId = `inline-${createHash('sha256')
-      .update(JSON.stringify(workspace.config))
-      .digest('hex')
-      .slice(0, 12)}`;
+    const { workspaceId } = computeInlineWorkspaceIdentity(workspace.config);
     const storedWorkspace = await workspaceStore.getByIdResolved(workspaceId);
     expect(storedWorkspace?.name).toBe('Updated Workspace');
   });
