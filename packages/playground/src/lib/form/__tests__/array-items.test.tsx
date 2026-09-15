@@ -82,6 +82,28 @@ describe('Array item editing', () => {
     });
   });
 
+  describe('when an item carries an identifier before its title', () => {
+    it('names the row by its title and announces the missing field', async () => {
+      const identified = z.object({
+        documents: z.array(z.object({ id: z.string(), title: z.string().min(1), text: z.string().min(1) })),
+      });
+      render(
+        <DynamicForm
+          schema={identified}
+          defaultValues={{ documents: [{ id: '0f8c2b64-2f1a-4d3e-9a77-12f4b0c9e5a1', title: 'Quarterly report' }] }}
+          onSubmit={vi.fn()}
+          submitButtonLabel="Run"
+        />,
+      );
+
+      expect(screen.getByRole('button', { name: 'Item 1: Quarterly report' })).not.toBeNull();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Run' }));
+
+      expect(await screen.findByRole('button', { name: 'Item 1: Quarterly report, Needs input' })).not.toBeNull();
+    });
+  });
+
   describe('when a collapsed item has a missing required field', () => {
     it('reveals the fields after validation fails', async () => {
       const onSubmit = vi.fn();

@@ -1,4 +1,5 @@
 import { expect, Page } from '@playwright/test';
+import { OUTSIDE_NESTED_GRAPHS } from './workflow-nodes';
 
 /**
  * Edge-activation assertions for the workflow graph.
@@ -14,7 +15,7 @@ import { expect, Page } from '@playwright/test';
  */
 
 function edgesFrom(page: Page, fromStepId: string) {
-  return page.locator(`[data-edge-from="${fromStepId}"]`);
+  return page.locator(`[data-edge-from="${fromStepId}"]${OUTSIDE_NESTED_GRAPHS}`);
 }
 
 /** Assert every edge leaving `fromStepId` is active (data flowed through). */
@@ -62,7 +63,7 @@ export type EdgeExpectation = {
 type RenderedEdge = { from: string | null; to: string | null; status: string | null };
 
 async function readAllEdges(page: Page): Promise<RenderedEdge[]> {
-  const edges = page.locator('[data-edge-from]');
+  const edges = page.locator(`[data-edge-from]${OUTSIDE_NESTED_GRAPHS}`);
   const count = await edges.count();
   const result: RenderedEdge[] = [];
   for (let i = 0; i < count; i++) {
@@ -89,7 +90,7 @@ async function readAllEdges(page: Page): Promise<RenderedEdge[]> {
 export async function expectExactEdgeStatuses(page: Page, expectations: EdgeExpectation[]) {
   // Wait until the graph settles on the expected status for each pair before snapshotting.
   for (const { from, to, status } of expectations) {
-    const pairEdges = page.locator(`[data-edge-from="${from}"][data-edge-to="${to}"]`);
+    const pairEdges = page.locator(`[data-edge-from="${from}"][data-edge-to="${to}"]${OUTSIDE_NESTED_GRAPHS}`);
     const count = await pairEdges.count();
     expect(count, `expected at least one edge "${from}" -> "${to}"`).toBeGreaterThan(0);
     for (let i = 0; i < count; i++) {

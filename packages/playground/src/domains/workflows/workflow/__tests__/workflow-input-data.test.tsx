@@ -80,7 +80,7 @@ describe('WorkflowInputData', () => {
     });
   });
 
-  it('renders processor default values in the simple read-only input', async () => {
+  it('renders stored processor default values in the simple input', async () => {
     render(
       <WorkflowInputData
         schema={processorSchema}
@@ -101,14 +101,11 @@ describe('WorkflowInputData', () => {
         isSubmitLoading={false}
         submitButtonLabel="Run"
         onSubmit={() => {}}
-        withoutSubmit
-        isReadOnly
         isProcessorWorkflow
       />,
     );
 
-    const messageInput = await screen.findByDisplayValue('Stored processor run input');
-    expect(messageInput).toHaveProperty('disabled', true);
+    await screen.findByDisplayValue('Stored processor run input');
     await waitFor(() => expect(screen.getByText('outputResult')).not.toBeNull());
   });
 

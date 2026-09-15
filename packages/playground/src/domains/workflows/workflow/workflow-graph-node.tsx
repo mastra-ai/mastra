@@ -64,7 +64,6 @@ const WorkflowStepCard = ({
       label={data.mapContext?.label ?? label}
       nodeKind={getWorkflowCardKind(data.workflowStep)}
       onSelect={() => setSelectedStepId(stepKey)}
-      bodyLayout="graph"
       initiallyOpen={!parentWorkflowName}
       body={
         stepGraph?.length ? (

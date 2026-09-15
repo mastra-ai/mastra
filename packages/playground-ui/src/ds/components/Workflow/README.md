@@ -12,10 +12,10 @@ for application actions.
 
 Cards combine a running title shimmer with the shared `ActivityWick` animated edge.
 Use `nodeKind` to identify agent, tool, map, delay, or scheduled-wait entries.
-Pass `onSelect` for card selection, `body` for a collapsible structure summary,
-and `onOpenBody` to open the application's full nested graph. These callbacks
-do not execute workflow steps. Foreach progress and all execution states come
-from the caller's run data.
+Pass `onSelect` for card selection and `body` for the nested graph, which the
+card reveals from its own disclosure. These callbacks do not execute workflow
+steps. Foreach progress and all execution states come from the caller's run
+data.
 
 `WorkflowConditionCard` derives its badge from the first supplied condition and
 shows expressions inline. `WorkflowConditionCardView` accepts an explicit type
@@ -93,10 +93,10 @@ renderers and viewport independently of Studio's parser and live execution.
 Use the existing Studio tests for those integrations.
 
 Step cards use a tinted outer shell and a two-pixel inset surface for the
-description, execution time, status, and controls. Set `bodyLayout="graph"`
-when supplying a connected graph: the body expands inside a dashed group.
-Use `initiallyOpen` for the first level; leave deeper workflows collapsed to
-limit the initial amount of detail. Graph disclosures do not select the parent.
+description, execution time, status, and controls. A supplied `body` expands
+inside a dashed group. Use `initiallyOpen` for the first level; leave deeper
+workflows collapsed to limit the initial amount of detail. Graph disclosures do
+not select the parent.
 
 Condition cards show the supplied expression with syntax highlighting and
 formatting. Unparsable source remains unchanged, and Copy expression copies the

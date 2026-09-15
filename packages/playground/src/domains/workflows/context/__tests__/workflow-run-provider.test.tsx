@@ -66,6 +66,7 @@ function CompletedRunProbe() {
       >
         Stream run
       </button>
+      <button onClick={() => setResult(null)}>Clear result</button>
       <output aria-label="Stream completion">{streamFinished ? 'Finished' : 'Pending'}</output>
       <output aria-label="Streaming state">{String(isStreamingWorkflow)}</output>
       <output aria-label="Run state">{result?.status}</output>
@@ -116,6 +117,24 @@ describe('WorkflowRunProvider', () => {
         ),
       );
       renderProvider();
+      fireEvent.click(screen.getByRole('button', { name: 'Stream run' }));
+      await waitFor(() => expect(screen.getByLabelText('Run state').textContent).toBe('running'));
+    });
+  });
+
+  describe('when the previous result is cleared before the next run starts', () => {
+    it('shows the next run as it streams', async () => {
+      server.use(
+        http.post(`${BASE_URL}/api/workflows/two-step-workflow/create-run`, () =>
+          HttpResponse.json({ runId: 'live-run' }),
+        ),
+        http.post(
+          `${BASE_URL}/api/workflows/two-step-workflow/stream`,
+          () => new HttpResponse(JSON.stringify(runningChunk) + '\x1e'),
+        ),
+      );
+      renderProvider();
+      fireEvent.click(screen.getByRole('button', { name: 'Clear result' }));
       fireEvent.click(screen.getByRole('button', { name: 'Stream run' }));
       await waitFor(() => expect(screen.getByLabelText('Run state').textContent).toBe('running'));
     });
@@ -243,7 +262,7 @@ describe('WorkflowRunProvider', () => {
       expect(await screen.findByText('extract-excerpt')).not.toBeNull();
       expect(screen.getByTestId('workflow-timeline')).toBe(timeline);
       expect(screen.getAllByTestId('workflow-timeline-bar')).toHaveLength(2);
-      fireEvent.click(screen.getByRole('button', { name: 'New run', exact: true }));
+      fireEvent.click(screen.getByRole('button', { name: 'New run' }));
       expect(screen.queryByTestId('workflow-timeline')).toBeNull();
     });
 

@@ -14,7 +14,7 @@ export function WorkflowDebugModeSwitch() {
         aria-label="Step by step"
         aria-describedby={descriptionId}
       />
-      <span className="flex min-w-0 flex-col gap-0.5 text-ui-xs">
+      <span className="text-ui-xs flex min-w-0 flex-col gap-0.5">
         <span className="text-neutral5">Step by step</span>
         <span id={descriptionId} className="text-neutral3">
           Pause to inspect outputs

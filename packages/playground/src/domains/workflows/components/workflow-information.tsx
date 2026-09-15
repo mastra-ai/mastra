@@ -8,7 +8,6 @@ import type { ContextType, ReactNode } from 'react';
 import { useEffect, useContext, useState } from 'react';
 
 import { useWorkflowSelectedStep } from '../context/use-workflow-selected-step';
-import { WorkflowPanelEdgesContext } from '../context/workflow-panel-edges-context';
 import type { WorkflowRunStreamResult } from '../context/workflow-run-context';
 import { WorkflowRunContext } from '../context/workflow-run-context';
 import { WorkflowRunDetail } from '../runs/workflow-run-details';
@@ -82,23 +81,19 @@ function WorkflowInformationTopSection({
   showNewRunButton: boolean;
   onNewRun: () => void;
 }) {
-  const panelEdges = useContext(WorkflowPanelEdgesContext);
   const { result } = useContext(WorkflowRunContext);
   const [isOpen, setIsOpen] = useState(true);
   return (
     <Collapsible
-      render={<section ref={panelEdges?.information} />}
+      render={<section />}
       open={isOpen}
       onOpenChange={setIsOpen}
       data-testid="workflow-information-top-section"
-      className="rounded-studio-panel border-border1/50 bg-surface3 flex max-h-[75%] min-h-0 min-w-0 flex-initial flex-col overflow-hidden border"
+      className="rounded-studio-panel border-border1/50 bg-surface3 shadow-panel pointer-events-auto flex max-h-[75%] min-h-0 min-w-0 flex-initial flex-col overflow-hidden border"
     >
       <div className="flex shrink-0 items-center gap-1 pr-2">
-        <CollapsibleTrigger
-          className="flex min-w-0 flex-1 items-center gap-2 px-4 py-3 text-ui-sm font-medium text-neutral4"
-          aria-label={isOpen ? 'Collapse workflow run' : 'Expand workflow run'}
-        >
-          <ChevronRight aria-hidden className="size-4 shrink-0 text-neutral3 motion-reduce:transition-none" />
+        <CollapsibleTrigger className="text-ui-sm text-neutral4 flex min-w-0 flex-1 items-center gap-2 px-4 py-3 font-medium">
+          <ChevronRight aria-hidden className="text-neutral3 size-4 shrink-0 motion-reduce:transition-none" />
           <span>Workflow run</span>
           {!isOpen && result?.status && <WorkflowRunStatusBadge status={result.status} />}
         </CollapsibleTrigger>
@@ -112,7 +107,7 @@ function WorkflowInformationTopSection({
           />
         )}
       </div>
-      <CollapsibleContent keepMounted className="flex h-full min-h-0 flex-col" style={{ minHeight: 0 }}>
+      <CollapsibleContent keepMounted className="flex h-full min-h-0 flex-col">
         <ScrollArea
           data-testid="workflow-information-top-scroll-area"
           className="border-border1/50 min-h-0 flex-1 border-t"
@@ -135,12 +130,8 @@ function RunWorkflowSidebar({ runId, observeWorkflowStream, ...props }: RunWorkf
 }
 
 function RecentWorkflowRunsSection({ workflowId, activeRunId }: { workflowId: string; activeRunId?: string }) {
-  const panelEdges = useContext(WorkflowPanelEdgesContext);
   return (
-    <section
-      ref={panelEdges?.recentRuns}
-      className="workflow-recent-runs rounded-studio-panel border-border1/50 bg-surface3 mt-auto flex max-h-[min(35%,280px)] min-h-0 min-w-0 shrink-0 flex-col overflow-hidden border"
-    >
+    <section className="rounded-studio-panel border-border1/50 bg-surface3 shadow-panel pointer-events-auto mt-auto flex max-h-[min(35%,280px)] min-h-0 min-w-0 shrink-0 flex-col overflow-hidden border">
       <WorkflowRecentRuns workflowId={workflowId} runId={activeRunId} />
     </section>
   );

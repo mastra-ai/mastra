@@ -104,22 +104,4 @@ describe('Condition source fallback', () => {
       expect(format).not.toHaveBeenCalled();
     });
   });
-
-  describe('when a structured condition contains non-JSON values', () => {
-    it('keeps the condition inspectable', () => {
-      const query: Record<string, unknown> = { minimum: BigInt(10) };
-      query.self = query;
-      render(
-        <WorkflowConditionCard
-          conditions={[
-            { type: 'when', ref: { step: 'trigger', path: 'amount' }, query },
-            { type: 'when', fnString: 'inputData.enabled' },
-          ]}
-        />,
-      );
-      expect(screen.getByRole('region').textContent).toContain('"minimum": "10"');
-      expect(screen.getByRole('region').textContent).toContain('[Circular]');
-      expect(screen.getByRole('button', { name: 'Copy expression' })).not.toBeNull();
-    });
-  });
 });

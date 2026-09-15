@@ -2,7 +2,7 @@ import type { GetWorkflowResponse } from '@mastra/client-js';
 import { WorkflowGraphPlaceholder } from '@mastra/playground-ui/components/Workflow';
 import { lodashTitleCase } from '@mastra/playground-ui/utils/string';
 import { ReactFlowProvider } from '@xyflow/react';
-import { useContext } from 'react';
+import { useContext, useMemo } from 'react';
 import { WorkflowRunContext } from '../context/workflow-run-context';
 import { WorkflowGraphBoundary } from './workflow-graph-boundary';
 import { WorkflowGraphInner } from './workflow-graph-inner';
@@ -16,16 +16,16 @@ export interface WorkflowGraphProps {
 
 export function WorkflowGraph({ workflowId, workflow, isLoading }: WorkflowGraphProps) {
   const { runSnapshot, snapshot } = useContext(WorkflowRunContext);
+  const stepGraph = runSnapshot?.serializedStepGraph ?? snapshot?.serializedStepGraph ?? workflow?.stepGraph;
+  const layoutKey = useMemo(() => `${workflowId}:${JSON.stringify(stepGraph)}`, [workflowId, stepGraph]);
 
   if (isLoading) return <WorkflowGraphPlaceholder isLoading />;
-  if (!workflow) return <WorkflowGraphPlaceholder workflowName={lodashTitleCase(workflowId)} />;
-
-  const graph = { stepGraph: runSnapshot?.serializedStepGraph ?? snapshot?.serializedStepGraph ?? workflow.stepGraph };
+  if (!workflow || !stepGraph) return <WorkflowGraphPlaceholder workflowName={lodashTitleCase(workflowId)} />;
 
   return (
-    <ReactFlowProvider key={`${workflowId}:${JSON.stringify(graph.stepGraph)}`}>
-      <WorkflowGraphBoundary stepGraph={graph.stepGraph}>
-        <WorkflowGraphInner workflow={graph} />
+    <ReactFlowProvider key={layoutKey}>
+      <WorkflowGraphBoundary stepGraph={stepGraph}>
+        <WorkflowGraphInner stepGraph={stepGraph} />
       </WorkflowGraphBoundary>
     </ReactFlowProvider>
   );

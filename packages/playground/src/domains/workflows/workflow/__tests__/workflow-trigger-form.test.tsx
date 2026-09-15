@@ -19,7 +19,6 @@ describe('WorkflowTriggerForm', () => {
           onExecute={vi.fn()}
           defaultValues={{ request: true }}
           isViewingRun
-          isReadOnly
           collapsible={false}
           headingSlot={<div data-testid="heading-slot">heading</div>}
           leftActions={<div data-testid="left-actions">debug</div>}

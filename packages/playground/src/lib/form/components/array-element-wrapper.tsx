@@ -5,12 +5,19 @@ import { Check, ChevronRight, Trash2 } from 'lucide-react';
 import { useContext, useRef, useState } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
 import { ArrayAddButtonContext, ArrayItemPathContext, FormReadOnlyContext } from '../field-context';
+import { isPlainObject } from '../utils';
+
+const HUMAN_SUMMARY_KEYS = ['title', 'name', 'label'];
+
+function firstFilledText(values: unknown[]) {
+  return values.find((value): value is string => typeof value === 'string' && value.trim().length > 0);
+}
 
 function itemSummary(value: unknown) {
   if (typeof value === 'string') return value.trim();
   if (typeof value === 'number' || typeof value === 'boolean') return String(value);
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
-  return Object.values(value).find((field): field is string => typeof field === 'string' && field.trim().length > 0);
+  if (!isPlainObject(value)) return undefined;
+  return firstFilledText(HUMAN_SUMMARY_KEYS.map(key => value[key])) ?? firstFilledText(Object.values(value));
 }
 
 export function ArrayElementWrapper({ children, onRemove, index }: ArrayElementWrapperProps) {
@@ -25,6 +32,7 @@ export function ArrayElementWrapper({ children, onRemove, index }: ArrayElementW
   const invalid = getFieldState(path, formState).invalid;
   const hasNewErrors = invalid && formState.submitCount > disclosure.dismissedSubmission;
   const expanded = disclosure.expanded || hasNewErrors;
+  const itemLabel = `Item ${index + 1}${summary ? `: ${summary}` : ''}`;
 
   function changeExpanded(expanded: boolean) {
     setDisclosure({ expanded, dismissedSubmission: formState.submitCount });
@@ -34,22 +42,22 @@ export function ArrayElementWrapper({ children, onRemove, index }: ArrayElementW
     <Collapsible
       open={expanded}
       onOpenChange={changeExpanded}
-      className="overflow-hidden rounded-lg border border-border1 bg-surface2 motion-reduce:[&_[data-slot=collapsible-content]]:transition-none motion-reduce:[&_svg]:transition-none"
+      className="border-border1 bg-surface2 overflow-hidden rounded-lg border motion-reduce:[&_[data-slot=collapsible-content]]:transition-none motion-reduce:[&_svg]:transition-none"
     >
       <div className="flex min-w-0 items-center gap-1 pr-1">
         <CollapsibleTrigger
           ref={triggerRef}
-          aria-label={`Item ${index + 1}${summary ? `: ${summary}` : ''}`}
-          className="flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-lg px-3 text-left text-ui-sm focus-visible:ring-inset focus-visible:shadow-none"
+          aria-label={invalid ? `${itemLabel}, Needs input` : itemLabel}
+          className="text-ui-sm flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-lg px-3 text-left focus-visible:shadow-none focus-visible:ring-inset"
         >
-          <ChevronRight aria-hidden className="size-3.5 shrink-0 text-neutral3" />
-          <span className="shrink-0 text-neutral3">Item {index + 1}</span>
+          <ChevronRight aria-hidden className="text-neutral3 size-3.5 shrink-0" />
+          <span className="text-neutral3 shrink-0">Item {index + 1}</span>
           {summary && (
-            <span className="truncate text-neutral5" title={summary}>
+            <span className="text-neutral5 truncate" title={summary}>
               {summary}
             </span>
           )}
-          {invalid && <span className="ml-auto shrink-0 text-ui-xs text-accent2">Needs input</span>}
+          {invalid && <span className="text-ui-xs text-accent2 ml-auto shrink-0">Needs input</span>}
         </CollapsibleTrigger>
         {!readOnly && (
           <Button
@@ -67,7 +75,7 @@ export function ArrayElementWrapper({ children, onRemove, index }: ArrayElementW
           </Button>
         )}
       </div>
-      <CollapsibleContent keepMounted className="border-t border-border1 px-3 py-3">
+      <CollapsibleContent keepMounted className="border-border1 border-t px-3 py-3">
         {children}
         {!readOnly && (
           <div className="flex justify-end pt-2">

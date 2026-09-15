@@ -5,7 +5,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 
-import { convertWorkflowRunStateToStreamResult } from '../utils';
+import { convertWorkflowRunStateToStreamResult, isWorkflowRunFinished } from '../utils';
 import { WorkflowRunContext } from './workflow-run-context';
 import type { WorkflowRunContextType, WorkflowRunStreamResult } from './workflow-run-context';
 import { WorkflowStepDetailContext } from './workflow-step-detail-context';
@@ -16,10 +16,6 @@ function getRunTimestamp(value: Date | string | number | undefined): number | un
   if (!value) return undefined;
   const timestamp = value instanceof Date ? value.getTime() : new Date(value).getTime();
   return Number.isFinite(timestamp) ? timestamp : undefined;
-}
-
-function isWorkflowRunFinished(status?: string) {
-  return ['success', 'failed', 'canceled', 'bailed', 'tripwire'].includes(status ?? '');
 }
 
 function resolveWorkflowRunResult(
@@ -125,7 +121,10 @@ export function WorkflowRunProvider({
   const setRunId: WorkflowRunContextType['setRunId'] = useCallback(
     update => {
       resetStepDetail?.();
-      setLocalRun(current => ({ ...current, runId: typeof update === 'function' ? update(current.runId) : update }));
+      setLocalRun(current => {
+        const runId = typeof update === 'function' ? update(current.runId) : update;
+        return runId === current.runId ? current : { ...current, runId, result: null };
+      });
     },
     [resetStepDetail],
   );

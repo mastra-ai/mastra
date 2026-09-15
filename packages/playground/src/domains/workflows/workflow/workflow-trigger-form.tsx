@@ -12,12 +12,9 @@ export interface WorkflowTriggerFormProps {
   onExecute: (data: any) => void;
   defaultValues?: any;
   isViewingRun?: boolean;
-  isReadOnly?: boolean;
-  disableSubmit?: boolean;
   isProcessorWorkflow?: boolean;
   submitActions?: ReactNode;
   leftActions?: ReactNode;
-  heading?: string;
   headingSlot?: ReactNode;
   collapsible?: boolean;
   submitButtonLabel?: string;
@@ -29,12 +26,9 @@ export function WorkflowTriggerForm({
   onExecute,
   defaultValues,
   isViewingRun,
-  isReadOnly,
-  disableSubmit,
   isProcessorWorkflow,
   submitActions,
   leftActions,
-  heading,
   headingSlot,
   collapsible,
   submitButtonLabel = 'Run',
@@ -58,13 +52,9 @@ export function WorkflowTriggerForm({
           </Icon>
         }
         onSubmit={onExecute}
-        withoutSubmit={isViewingRun}
-        isReadOnly={isReadOnly}
-        disableSubmit={disableSubmit}
         isProcessorWorkflow={isProcessorWorkflow}
         submitActions={submitActions}
         leftActions={leftActions}
-        heading={heading}
         headingSlot={headingSlot}
         collapsible={collapsible}
       />
@@ -76,7 +66,7 @@ export function WorkflowTriggerForm({
       {leftActions ?? <div />}
       <div className="flex items-center gap-1">
         {submitActions}
-        <Button variant="primary" disabled={isStreaming || disableSubmit} onClick={() => onExecute(null)}>
+        <Button variant="primary" disabled={isStreaming} onClick={() => onExecute(null)}>
           {isStreaming ? (
             <Icon>
               <Loader2 className="animate-spin" />

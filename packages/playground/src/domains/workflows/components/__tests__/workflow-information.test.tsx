@@ -132,10 +132,12 @@ describe('WorkflowInformation', () => {
       renderInformation();
       const input = await screen.findByRole('textbox', { name: /Title/ });
       fireEvent.change(input, { target: { value: 'My draft' } });
-      fireEvent.click(screen.getByRole('button', { name: 'Collapse workflow run' }));
+      const trigger = screen.getByRole('button', { name: /Workflow run/ });
+      fireEvent.click(trigger);
       await waitFor(() => expect(screen.queryByRole('textbox', { name: /Title/ })).toBeNull());
+      expect(trigger.getAttribute('aria-expanded')).toBe('false');
       expect(input.isConnected).toBe(true);
-      fireEvent.click(screen.getByRole('button', { name: 'Expand workflow run' }));
+      fireEvent.click(trigger);
       expect(await screen.findByRole('textbox', { name: /Title/ })).toBe(input);
       expect(screen.getByDisplayValue('My draft')).toBe(input);
     });
@@ -143,9 +145,9 @@ describe('WorkflowInformation', () => {
     it('opens the panel when creating a new run', async () => {
       renderInformation();
       const newRunButton = await screen.findByRole('link', { name: 'New workflow run' });
-      fireEvent.click(screen.getByRole('button', { name: 'Collapse workflow run' }));
+      fireEvent.click(screen.getByRole('button', { name: /Workflow run/ }));
       fireEvent.click(newRunButton);
-      expect(screen.getByRole('button', { name: 'Collapse workflow run' }).getAttribute('aria-expanded')).toBe('true');
+      expect(screen.getByRole('button', { name: /Workflow run/ }).getAttribute('aria-expanded')).toBe('true');
     });
   });
 });

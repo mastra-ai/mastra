@@ -14,8 +14,6 @@ export interface WorkflowEdgeDataButtonProps {
   onInspect?: MouseEventHandler<HTMLButtonElement>;
 }
 
-const hasPayload = (value: unknown) => value !== undefined;
-
 export const WorkflowEdgeDataButton = ({
   previousStepId,
   output,
@@ -24,10 +22,9 @@ export const WorkflowEdgeDataButton = ({
   onInspect,
 }: WorkflowEdgeDataButtonProps) => {
   const [isOpen, setIsOpen] = useState(false);
-  const hasOutput = hasPayload(output);
   const dataLabel = label ?? (previousStepId ? `${previousStepId} output` : 'Previous output');
 
-  if (!hasOutput) {
+  if (output === undefined) {
     return null;
   }
 
@@ -38,7 +35,7 @@ export const WorkflowEdgeDataButton = ({
         onClick={onInspect ?? (() => setIsOpen(true))}
         aria-label={onInspect ? `View ${dataLabel}` : undefined}
         aria-pressed={selected}
-        className="h-7 rounded-lg border border-border1 bg-surface3 px-2 text-neutral5 shadow-panel hover:bg-surface4 aria-pressed:border-neutral3 aria-pressed:bg-surface4"
+        className="border-border1 bg-surface3 text-neutral5 shadow-panel hover:bg-surface4 aria-pressed:border-neutral3 aria-pressed:bg-surface4 h-7 rounded-lg border px-2"
         icon={<Database className="text-accent1" />}
       >
         Data
@@ -50,8 +47,8 @@ export const WorkflowEdgeDataButton = ({
             <DialogTitle>Step output</DialogTitle>
           </DialogHeader>
           <DialogBody className="overflow-auto" style={{ maxHeight: 700 }}>
-            <div className="min-w-0 rounded-lg border border-border1 bg-surface2 p-3">
-              <Txt variant="ui-sm" className="mb-2 block text-neutral5">
+            <div className="border-border1 bg-surface2 min-w-0 rounded-lg border p-3">
+              <Txt variant="ui-sm" className="text-neutral5 mb-2 block">
                 {dataLabel}
               </Txt>
               <WorkflowCodeContent data={output} />

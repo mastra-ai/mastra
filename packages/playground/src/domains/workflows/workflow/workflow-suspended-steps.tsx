@@ -8,12 +8,12 @@ import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { ChevronRight, CirclePause, MoveDownLeft, MoveUpRight, Play } from 'lucide-react';
 import { useState } from 'react';
+import type { CSSProperties } from 'react';
 import { parse } from 'superjson';
 import { z } from 'zod';
 
 import type { SuspendedStep } from './use-workflow-trigger';
 import { WorkflowInputData } from './workflow-input-data';
-import './workflow-suspended-steps.css';
 
 import { jsonSchemaToZodRuntime } from '@/lib/form/json-schema-to-zod-runtime';
 
@@ -62,11 +62,11 @@ export function WorkflowSuspendedSteps({
 
   return (
     <section
-      className="workflow-suspended-panel rounded-studio-panel border-border1/50 bg-surface3 shadow-panel relative isolate border"
+      className="rounded-studio-panel border-border1/50 bg-surface3 shadow-panel pointer-events-auto relative isolate border"
       data-testid="workflow-suspended-steps"
       aria-label="Step suspended"
     >
-      <div className="workflow-suspended-content">
+      <div className="max-h-[calc(100cqh-64px)] overflow-y-auto overscroll-contain rounded-[inherit]">
         <div className="border-border1/50 bg-surface2 flex items-center justify-between gap-3 border-b px-5 py-4">
           <Txt as="h2" variant="ui-sm" className="text-neutral6 flex items-center gap-2 font-medium">
             <Icon>
@@ -99,7 +99,12 @@ export function WorkflowSuspendedSteps({
           );
         })}
       </div>
-      <ActivityWick status="ready" label="Needs input" className="workflow-suspended-wick" />
+      <ActivityWick
+        status="ready"
+        label="Needs input"
+        className="before:hidden"
+        style={{ '--belt-hue': 'var(--warning1)' } as CSSProperties}
+      />
     </section>
   );
 }
@@ -116,9 +121,9 @@ function SuspendedStepCard({ step, stepSchema, description, isStreaming, onResum
   const [isPayloadOpen, setIsPayloadOpen] = useState(false);
 
   return (
-    <div className="space-y-5 p-5 [&+&]:border-t [&+&]:border-border1/50">
+    <div className="[&+&]:border-border1/50 space-y-5 p-5 [&+&]:border-t">
       <div className="space-y-2">
-        <Txt as="p" variant="ui-md" className="text-neutral6 break-words font-medium">
+        <Txt as="p" variant="ui-md" className="text-neutral6 font-medium break-words">
           {step.stepId}
         </Txt>
         {description && (

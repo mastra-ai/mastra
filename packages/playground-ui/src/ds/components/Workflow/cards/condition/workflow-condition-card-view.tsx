@@ -1,4 +1,3 @@
-import { safeStringify } from '@mastra/core/utils/safe-stringify';
 import { Braces } from 'lucide-react';
 import type { WorkflowConditionCardViewProps } from '../../types';
 import { getConditionIndicator } from '../workflow-card-badge-utils';
@@ -7,7 +6,8 @@ import { WorkflowConditionSource } from './workflow-condition-source';
 import { Badge } from '@/ds/components/Badge';
 import { Code } from '@/ds/components/Code';
 import { CopyButton } from '@/ds/components/CopyButton';
-import './workflow-condition.css';
+
+const surfaceClasses = 'rounded-[calc(var(--radius-xl)-2px)] bg-surface3 text-ui-xs';
 
 export function WorkflowConditionCardView({
   type,
@@ -27,17 +27,17 @@ export function WorkflowConditionCardView({
     return { condition, expression, key: `${identity}:${occurrence}` };
   });
   const copyContent =
-    conditions.length > 1 ? safeStringify(conditions, 2) : sources.map(source => source.expression).join('\n');
+    conditions.length > 1 ? JSON.stringify(conditions, null, 2) : sources.map(source => source.expression).join('\n');
   const hasExpression = type !== 'else' && sources.some(({ expression }) => expression.trim().length > 0);
 
   return (
     <div
-      className="workflow-condition-gate"
+      className="border-border1 bg-surface2 shadow-panel has-focus-visible:outline-accent3 w-[274px] overflow-hidden rounded-xl border p-0.5 has-focus-visible:outline-2 has-focus-visible:outline-offset-4"
       data-workflow-node
       data-testid="workflow-condition-node"
       data-workflow-step-status={previousDisplayStatus ?? 'idle'}
     >
-      <div className="workflow-condition-heading">
+      <div className="text-ui-xs text-neutral3 flex h-[46px] items-center gap-2 px-2.5">
         <Badge size="xs" variant={type === 'else' ? 'neutral' : 'yellow'} emphasis="muted" icon={<Icon aria-hidden />}>
           {label}
         </Badge>
@@ -53,7 +53,7 @@ export function WorkflowConditionCardView({
           role="region"
           aria-label="Condition details"
           tabIndex={0}
-          className="workflow-condition-details nodrag nopan nowheel"
+          className={`${surfaceClasses} text-neutral5 nodrag nopan nowheel max-h-[220px] overflow-auto p-3.5 [&_pre]:leading-relaxed [&_pre]:whitespace-pre-wrap`}
         >
           {sources.map(({ condition, expression, key }) => (
             <div key={key}>
@@ -71,11 +71,11 @@ export function WorkflowConditionCardView({
           ))}
         </div>
       ) : (
-        <p className="workflow-condition-empty">
+        <p className={`${surfaceClasses} text-neutral3 p-3`}>
           {type === 'else' ? 'When no other branch matches' : 'Condition expression unavailable'}
         </p>
       )}
-      {actionBar && <div className="workflow-condition-actions nodrag nopan">{actionBar}</div>}
+      {actionBar && <div className="nodrag nopan flex justify-end px-2.5 py-1.5">{actionBar}</div>}
     </div>
   );
 }

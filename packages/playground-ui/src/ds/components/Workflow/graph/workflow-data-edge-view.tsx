@@ -56,7 +56,6 @@ export function WorkflowDataEdgeView({ output, label, dataControl, ...props }: W
           strokeWidth: isExecuted ? 2 : 1,
           strokeLinecap: 'round',
           strokeDasharray: isExecuted ? 'none' : '5 6',
-          animation: 'none',
         }}
         vectorEffect="non-scaling-stroke"
         data-edge-status={props.data?.edgeStatus ?? 'idle'}

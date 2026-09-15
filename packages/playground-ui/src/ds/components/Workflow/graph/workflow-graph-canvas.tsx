@@ -5,8 +5,8 @@ import { WorkflowCanvasInsetContext, workflowFitOptions } from '../workflow-canv
 import { WorkflowGraphGroups } from './workflow-graph-groups';
 import type { WorkflowGraphGroup } from './workflow-graph-groups';
 import { ZoomSlider } from './zoom-slider';
+import { cn } from '@/utils/cn';
 import '@xyflow/react/dist/style.css';
-import './workflow-graph-canvas.css';
 
 export type { WorkflowGraphGroup } from './workflow-graph-groups';
 
@@ -85,11 +85,7 @@ export function WorkflowGraphCanvas<NodeType extends Node, EdgeType extends Edge
       ref={graphRef}
       tabIndex={-1}
       data-testid="workflow-graph-viewport"
-      className={
-        variant === 'nested'
-          ? 'workflow-graph-viewport size-full bg-surface1 outline-none'
-          : 'workflow-graph-viewport size-full bg-surface2 outline-none'
-      }
+      className={cn('size-full outline-none', variant === 'nested' ? 'bg-surface1' : 'bg-surface2')}
     >
       <ReactFlow
         fitView={variant === 'default'}
@@ -117,8 +113,8 @@ export function WorkflowGraphCanvas<NodeType extends Node, EdgeType extends Edge
         {!isInline && (
           <ZoomSlider
             position="top-right"
-            className={hasCompactZoom ? 'workflow-zoom-compact' : undefined}
-            style={{ margin: 8 }}
+            className="m-2!"
+            compact={hasCompactZoom}
             onFitView={() => fitView({ ...workflowFitOptions(leftInset), duration: 300 })}
           />
         )}

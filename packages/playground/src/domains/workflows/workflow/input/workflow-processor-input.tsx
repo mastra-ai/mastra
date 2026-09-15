@@ -2,7 +2,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useId, useState } from 'react';
 import type { WorkflowInputDataProps } from '../workflow-input-data';
-import { getProcessorMessage, updateProcessorMessage } from './processor-input';
+import { getProcessorMessage, updateProcessorMessage, withPhaseRole } from './processor-input';
 import { WorkflowSubmitRow } from './workflow-input-submit-row';
 
 const PROCESSOR_PHASES = [
@@ -19,13 +19,9 @@ export const WorkflowProcessorInput = ({
   isSubmitLoading,
   submitButtonLabel,
   onSubmit,
-  withoutSubmit,
-  isReadOnly,
-  disableSubmit,
   children,
   submitActions,
   leftActions,
-  submitButtonClassName,
   submitButtonIcon,
   submitButtonVariant,
   submitButtonFullWidth,
@@ -40,7 +36,7 @@ export const WorkflowProcessorInput = ({
   const handleSubmit = () => {
     setErrors([]);
 
-    const result = schema.safeParse(defaultValues);
+    const result = schema.safeParse(withPhaseRole(defaultValues));
     if (!result.success) {
       setErrors(result.error.issues.map(issue => `${issue.path.join('.')}: ${issue.message}`));
       return;
@@ -56,8 +52,8 @@ export const WorkflowProcessorInput = ({
             {errors.length} errors found
           </Txt>
           <ul className="list-inside list-disc">
-            {errors.map(error => (
-              <li key={error} className="text-ui-sm text-accent2">
+            {errors.map((error, index) => (
+              <li key={index} className="text-ui-sm text-accent2">
                 {error}
               </li>
             ))}
@@ -71,17 +67,8 @@ export const WorkflowProcessorInput = ({
         </Txt>
         <Select
           value={phase}
-          onValueChange={phase => {
-            const role = phase === 'outputStep' || phase === 'outputResult' ? 'assistant' : 'user';
-            onValuesChange({
-              ...defaultValues,
-              phase,
-              messages: defaultValues.messages.map((message: { role: string }, index: number) =>
-                index === 0 ? { ...message, role } : message,
-              ),
-            });
-          }}
-          disabled={isReadOnly}
+          onValueChange={phase => onValuesChange({ ...defaultValues, phase })}
+          disabled={isSubmitLoading}
         >
           <SelectTrigger id={phaseId} className="w-full">
             <SelectValue placeholder="Select phase" />
@@ -109,27 +96,23 @@ export const WorkflowProcessorInput = ({
           onChange={event => onValuesChange(updateProcessorMessage(defaultValues, event.target.value))}
           placeholder="Enter a test message..."
           rows={4}
-          disabled={isReadOnly}
+          disabled={isSubmitLoading}
           className="border-border1 text-ui-sm text-neutral6 placeholder:text-neutral3 focus:ring-accent1 w-full rounded-md border bg-transparent p-3 focus:ring-2 focus:outline-hidden disabled:opacity-50"
         />
       </div>
 
       {children}
 
-      {withoutSubmit ? null : (
-        <WorkflowSubmitRow
-          isSubmitLoading={isSubmitLoading}
-          submitButtonLabel={submitButtonLabel}
-          disableSubmit={disableSubmit}
-          submitActions={submitActions}
-          leftActions={leftActions}
-          submitButtonClassName={submitButtonClassName}
-          submitButtonIcon={submitButtonIcon}
-          submitButtonVariant={submitButtonVariant}
-          submitButtonFullWidth={submitButtonFullWidth}
-          onSubmit={handleSubmit}
-        />
-      )}
+      <WorkflowSubmitRow
+        isSubmitLoading={isSubmitLoading}
+        submitButtonLabel={submitButtonLabel}
+        submitActions={submitActions}
+        leftActions={leftActions}
+        submitButtonIcon={submitButtonIcon}
+        submitButtonVariant={submitButtonVariant}
+        submitButtonFullWidth={submitButtonFullWidth}
+        onSubmit={handleSubmit}
+      />
     </div>
   );
 };

@@ -33,9 +33,7 @@ export interface WorkflowStepCardViewProps {
   nodeKind?: 'step' | 'agent' | 'tool' | 'map' | 'delay' | 'wait-until';
   onSelect?: () => void;
   body?: ReactNode;
-  bodyLayout?: 'content' | 'graph';
   initiallyOpen?: boolean;
-  onOpenBody?: () => void;
   description?: string;
   displayStatus?: WorkflowCardDisplayStatus;
   isNestedWorkflowStep?: boolean;

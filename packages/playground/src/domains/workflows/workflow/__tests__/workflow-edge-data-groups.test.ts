@@ -40,12 +40,26 @@ describe('Workflow edge data groups', () => {
     });
   });
 
-  describe('when one node exposes different data or source handles', () => {
-    it('keeps each distinct connection inspectable', () => {
+  describe('when a mapped output flows into both arms of a branch', () => {
+    it('offers that output once instead of repeating it per arm', () => {
+      const edges: WorkflowDataEdgeModel[] = [
+        { id: 'map-short', source: 'node-map', target: 'condition-short', data: { previousStepId: 'mapping_join' } },
+        { id: 'map-long', source: 'node-map', target: 'condition-long', data: { previousStepId: 'mapping_join' } },
+        { id: 'short-arm', source: 'condition-short', target: 'node-short', data: { previousStepId: 'mapping_join' } },
+        { id: 'long-arm', source: 'condition-long', target: 'node-long', data: { previousStepId: 'mapping_join' } },
+      ];
+
+      expect(groupWorkflowEdgeData(edges).filter(edge => edge.data?.dataLabelPlacement !== 'hidden')).toEqual([
+        expect.objectContaining({ id: 'map-short' }),
+      ]);
+    });
+  });
+
+  describe('when two steps expose different outputs', () => {
+    it('keeps each distinct output inspectable', () => {
       const edges: WorkflowDataEdgeModel[] = [
         parallelEdges[0],
         { ...parallelEdges[1], data: { previousStepId: 'another-output' } },
-        { ...parallelEdges[1], id: 'alternate-handle', sourceHandle: 'alternate' },
       ];
 
       expect(groupWorkflowEdgeData(edges).every(edge => edge.data?.dataLabelPlacement === undefined)).toBe(true);

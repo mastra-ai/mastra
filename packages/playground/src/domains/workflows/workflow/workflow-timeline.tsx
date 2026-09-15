@@ -9,7 +9,6 @@ import { useWorkflowSelectedStep } from '../context/use-workflow-selected-step';
 import { useWorkflowStepDetail } from '../context/workflow-step-detail-context';
 import { WorkflowTimelineRow } from './workflow-timeline-row';
 import { buildTimeline } from './workflow-timeline-utils';
-import './workflow-timeline.css';
 
 export function WorkflowTimeline() {
   const { steps } = useCurrentRun();
@@ -25,13 +24,13 @@ export function WorkflowTimeline() {
   useAutoscroll(scrollRef, { enabled: hasRunning && !isCollapsed });
 
   useEffect(() => {
-    if (!hasRunning) {
+    if (!hasRunning || isCollapsed) {
       return;
     }
 
     const interval = setInterval(() => setNow(Date.now()), 100);
     return () => clearInterval(interval);
-  }, [hasRunning]);
+  }, [hasRunning, isCollapsed]);
 
   if (rows.length === 0) {
     return null;
@@ -42,16 +41,15 @@ export function WorkflowTimeline() {
       <Collapsible
         open={!isCollapsed}
         onOpenChange={open => setIsCollapsed(!open)}
-        className="workflow-timeline pointer-events-auto"
-        data-enlarged={isEnlarged || undefined}
+        className="border-border1 bg-surface3 @container/workflow-timeline pointer-events-auto overflow-hidden rounded-xl border"
       >
-        <div className="workflow-timeline-heading">
+        <div className="flex items-center">
           <CollapsibleTrigger
-            className="workflow-timeline-header"
+            className="hover:bg-surface4 text-ui-sm text-neutral5 flex min-h-11 min-w-0 flex-1 items-center gap-2 px-3.5 py-2.5"
             aria-label={isCollapsed ? 'Expand timeline' : 'Collapse timeline'}
           >
             <span>
-              <ChartNoAxesGantt aria-hidden className="size-4 text-neutral3" />
+              <ChartNoAxesGantt aria-hidden className="text-neutral3 size-4" />
             </span>
             <span>Timeline</span>
             <span className="text-neutral3 text-ui-xs">{rows.length} events</span>
@@ -76,7 +74,14 @@ export function WorkflowTimeline() {
           )}
         </div>
         <CollapsibleContent>
-          <div ref={scrollRef} data-testid="workflow-timeline-list" className="workflow-timeline-list">
+          <div
+            ref={scrollRef}
+            data-testid="workflow-timeline-list"
+            className={cn(
+              'overflow-auto overscroll-contain px-1.5 pb-1.5',
+              isEnlarged ? 'max-h-[min(720px,calc(100dvh-112px))]' : 'max-h-[min(320px,40dvh)]',
+            )}
+          >
             {rows.map(row => (
               <WorkflowTimelineRow
                 key={row.stepId}

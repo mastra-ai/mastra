@@ -92,6 +92,17 @@ describe('Workflow input views', () => {
     });
   });
 
+  describe('when JSON leaves a required field empty', () => {
+    it('returns to Form with that draft so the field can be filled there', async () => {
+      renderInput();
+      fireEvent.click(screen.getByRole('radio', { name: 'JSON' }));
+      editJson('{"documents": [{"title": "Draft", "text": ""}]}');
+      fireEvent.click(screen.getByRole('radio', { name: 'Form' }));
+      expect(await screen.findByDisplayValue('Draft')).not.toBeNull();
+      expect(screen.queryByRole('alert')).toBeNull();
+    });
+  });
+
   describe('when the schema supplies default input', () => {
     it('shows the actual form defaults in JSON before any field is edited', async () => {
       render(
@@ -160,24 +171,25 @@ describe('Workflow input views', () => {
     });
   });
 
-  describe('when a submitted run is read-only', () => {
-    it('allows switching views while keeping its JSON immutable', () => {
+  describe('when optional fields are left untouched', () => {
+    it('submits without the keys the user never filled in', async () => {
+      const onSubmit = vi.fn();
       render(
         <WorkflowInputData
-          schema={schema}
-          defaultValues={original}
+          schema={z.object({
+            prompt: z.string().min(1),
+            retries: z.number().optional(),
+            note: z.string().min(1).optional(),
+            scheduledFor: z.date().optional(),
+          })}
           isSubmitLoading={false}
           submitButtonLabel="Run"
-          onSubmit={vi.fn()}
-          isReadOnly
-          withoutSubmit
+          onSubmit={onSubmit}
         />,
       );
-      fireEvent.click(screen.getByRole('radio', { name: 'JSON' }));
-      expect(screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Code editor' }).readOnly).toBe(true);
-      expect(screen.queryByRole('button', { name: 'Run' })).toBeNull();
-      fireEvent.click(screen.getByRole('radio', { name: 'Form' }));
-      expect(screen.queryByRole('button', { name: 'Add Documents item' })).toBeNull();
+      fireEvent.change(await screen.findByRole('textbox', { name: /^Prompt/ }), { target: { value: 'Ship it' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Run' }));
+      await waitFor(() => expect(onSubmit).toHaveBeenCalledWith({ prompt: 'Ship it' }));
     });
   });
 

@@ -2,7 +2,7 @@ import type { SerializedStepFlowEntry } from '@mastra/core/workflows';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { WorkflowGraphCanvas, WORKFLOW_BOUNDARY_NODE_TYPE } from '@mastra/playground-ui/components/Workflow';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useCurrentRun } from '../context/use-current-run';
 import { useWorkflowGraphNodes } from './use-workflow-graph-nodes';
 import { useWorkflowGraphRuntime } from './use-workflow-graph-runtime';
@@ -12,7 +12,6 @@ import { getWorkflowIterationScopes } from './workflow-iteration-scopes';
 
 export interface WorkflowNestedGraphProps {
   stepGraph: SerializedStepFlowEntry[];
-  open: boolean;
   workflowName: string;
   isForEach?: boolean;
   embedded?: boolean;
@@ -26,7 +25,7 @@ export function WorkflowNestedGraph(props: WorkflowNestedGraphProps) {
   );
 }
 
-function WorkflowNestedGraphContent({ stepGraph, open, workflowName, isForEach, embedded }: WorkflowNestedGraphProps) {
+function WorkflowNestedGraphContent({ stepGraph, workflowName, isForEach, embedded }: WorkflowNestedGraphProps) {
   const { nodes, edges, onNodesChange } = useWorkflowGraphNodes(stepGraph);
   const { steps } = useCurrentRun();
   const iterations = getWorkflowIterationScopes(Object.keys(steps), workflowName);
@@ -38,11 +37,16 @@ function WorkflowNestedGraphContent({ stepGraph, open, workflowName, isForEach, 
     workflowName: activeIteration?.value ?? workflowName,
   });
 
-  const labeledNodes = nodes.map(node => {
-    if (!isForEach || node.type !== WORKFLOW_BOUNDARY_NODE_TYPE) return node;
-    const label = node.data.boundaryRole === 'start' ? 'Each item' : 'Item result';
-    return { ...node, data: { ...node.data, label } };
-  });
+  const labeledNodes = useMemo(
+    () =>
+      nodes.map(node => {
+        if (!isForEach || node.type !== WORKFLOW_BOUNDARY_NODE_TYPE) return node;
+        const label = node.data.boundaryRole === 'start' ? 'Each item' : 'Item result';
+        return { ...node, data: { ...node.data, label } };
+      }),
+    [nodes, isForEach],
+  );
+  const groups = useMemo(() => getWorkflowGraphGroups(nodes), [nodes]);
 
   return (
     <div className="relative flex h-full w-full flex-col">
@@ -64,17 +68,15 @@ function WorkflowNestedGraphContent({ stepGraph, open, workflowName, isForEach, 
         </div>
       )}
       <div className="min-h-0 flex-1">
-        {open && (
-          <WorkflowGraphCanvas
-            variant={embedded ? 'inline' : 'nested'}
-            groups={getWorkflowGraphGroups(nodes)}
-            nodes={labeledNodes}
-            edges={styledEdges}
-            edgeTypes={edgeTypes}
-            nodeTypes={nodeTypes}
-            onNodesChange={onNodesChange}
-          />
-        )}
+        <WorkflowGraphCanvas
+          variant={embedded ? 'inline' : 'nested'}
+          groups={groups}
+          nodes={labeledNodes}
+          edges={styledEdges}
+          edgeTypes={edgeTypes}
+          nodeTypes={nodeTypes}
+          onNodesChange={onNodesChange}
+        />
       </div>
     </div>
   );

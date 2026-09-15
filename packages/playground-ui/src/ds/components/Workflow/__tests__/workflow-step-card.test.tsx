@@ -6,9 +6,8 @@ import { WorkflowStepCardView, WorkflowConditionCard } from '../index';
 afterEach(cleanup);
 
 describe('Workflow cards', () => {
-  describe('when a workflow has an inspectable body', () => {
-    it('reveals its body without opening another graph until requested', async () => {
-      const onOpenBody = vi.fn();
+  describe('when a collapsed loop is selected', () => {
+    it('selects the step without revealing its body until the disclosure is used', async () => {
       const onSelect = vi.fn();
       render(
         <WorkflowStepCardView
@@ -16,16 +15,14 @@ describe('Workflow cards', () => {
           isForEach
           onSelect={onSelect}
           body={<span>Count words and extract an excerpt</span>}
-          onOpenBody={onOpenBody}
         />,
       );
-      expect(screen.queryByText('Count words and extract an excerpt')).toBeNull();
       fireEvent.click(screen.getByRole('button', { name: 'Inspect analyze-document' }));
+      expect(onSelect).toHaveBeenCalledOnce();
+      expect(screen.queryByText('Count words and extract an excerpt')).toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: 'Expand loop' }));
       expect(await screen.findByText('Count words and extract an excerpt')).not.toBeNull();
       expect(onSelect).toHaveBeenCalledOnce();
-      expect(onOpenBody).not.toHaveBeenCalled();
-      fireEvent.click(screen.getByRole('button', { name: 'Open full workflow' }));
-      expect(onOpenBody).toHaveBeenCalledOnce();
     });
   });
 
@@ -51,7 +48,6 @@ describe('Workflow cards', () => {
         <WorkflowStepCardView
           label="Analyze documents"
           isForEach
-          bodyLayout="graph"
           initiallyOpen
           onSelect={onSelect}
           body={<span>Count words</span>}
@@ -75,7 +71,6 @@ describe('Workflow cards', () => {
         <WorkflowStepCardView
           label="Nested approval"
           isNestedWorkflowStep
-          bodyLayout="graph"
           initiallyOpen={false}
           body={<button onClick={inspectChild}>Inspect approval</button>}
         />,

@@ -25,15 +25,15 @@ const WorkflowContent = ({ workflowId, workflow, isLoading }: WorkflowContentPro
   const isMobile = useIsMobile();
   const isInspectingData = stepDetail?.type === 'data';
   const graph = (
-    <div className="workflow-canvas-container relative h-full min-h-0">
+    <div className="[container-type:size] relative h-full min-h-0">
       <WorkflowGraph workflowId={workflowId} workflow={workflow} isLoading={isLoading} />
-      <WorkflowSuspendedOverlay hidden={Boolean(stepDetail)} />
+      <WorkflowSuspendedOverlay hidden={isInspectingData} />
       {isInspectingData && (
-        <div className="workflow-inspection-overlay workflow-data-overlay">
+        <div className="pointer-events-auto absolute top-12 right-2 z-30 flex max-h-[calc(100cqh-64px)] w-[440px] max-w-[calc(100%-16px)] flex-col">
           <WorkflowStepDetailContent />
         </div>
       )}
-      <div className="workflow-timeline-overlay">
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 left-[var(--workflow-left-panel-width,0px)] z-20">
         <WorkflowTimeline />
       </div>
     </div>
@@ -50,17 +50,19 @@ const WorkflowContent = ({ workflowId, workflow, isLoading }: WorkflowContentPro
   return (
     <div className="relative h-full min-h-0">
       {graph}
-      {stepDetail && !isInspectingData && (
-        <PanelGroup className="workflow-graph-detail-layout pointer-events-none absolute inset-0 z-30 min-h-0 w-full min-w-0 p-2">
-          <Panel className="pointer-events-none min-w-0" />
-          <PanelSeparator className="pointer-events-auto" />
-          <Panel id="workflow-step-detail" minSize={300} maxSize="60%" defaultSize={420} className="min-w-0">
-            <div className="rounded-studio-panel border-border1 bg-surface2 pointer-events-auto h-full min-h-0 overflow-hidden border">
-              <WorkflowStepDetailContent />
-            </div>
-          </Panel>
-        </PanelGroup>
-      )}
+      <PanelGroup className="pointer-events-none absolute inset-0 z-30 min-h-0 w-full min-w-0 p-2">
+        <Panel id="workflow-graph" className="pointer-events-none min-w-0" />
+        {stepDetail && !isInspectingData && (
+          <>
+            <PanelSeparator className="pointer-events-auto" />
+            <Panel id="workflow-step-detail" minSize={300} maxSize="60%" defaultSize={420} className="min-w-0">
+              <div className="rounded-studio-panel border-border1 bg-surface2 pointer-events-auto h-full min-h-0 overflow-hidden border">
+                <WorkflowStepDetailContent />
+              </div>
+            </Panel>
+          </>
+        )}
+      </PanelGroup>
     </div>
   );
 };

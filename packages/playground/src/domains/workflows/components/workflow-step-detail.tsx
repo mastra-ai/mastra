@@ -20,7 +20,7 @@ export function WorkflowStepDetailContent() {
 
   return (
     <div className="flex h-full flex-col" data-testid="workflow-step-detail-panel">
-      <div className="border-border1 bg-surface1 flex items-center justify-between border-b px-4 py-3 pl-12 lg:pl-4">
+      <div className="border-border1 bg-surface1 flex items-center justify-between border-b px-4 py-3">
         <div className="flex items-center gap-2">
           {stepDetail.type === 'map-config' && <List className="h-4 w-4" style={{ color: BADGE_COLORS.map }} />}
           {stepDetail.type === 'nested-graph' && (
@@ -55,27 +55,12 @@ export function WorkflowStepDetailContent() {
             <ReactFlowProvider key={`nested-graph-${stepDetail.nestedGraph.fullStep}`}>
               <WorkflowNestedGraph
                 stepGraph={stepDetail.nestedGraph.stepGraph}
-                open={true}
                 workflowName={stepDetail.nestedGraph.fullStep}
               />
             </ReactFlowProvider>
           </div>
         )}
       </div>
-    </div>
-  );
-}
-
-export function WorkflowStepDetailPanel() {
-  const { stepDetail } = useWorkflowStepDetail();
-
-  if (!stepDetail) {
-    return null;
-  }
-
-  return (
-    <div className="border-border1 bg-surface2 h-full w-[400px] max-w-[45%] shrink-0 border-l">
-      <WorkflowStepDetailContent />
     </div>
   );
 }

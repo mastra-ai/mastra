@@ -82,7 +82,9 @@ function useWorkflowStepGraphInfo(stepGraph: GetWorkflowResponse['stepGraph'] | 
 export function useWaitingStepKey(): string | undefined {
   const { result, workflow } = useContext(WorkflowRunContext);
 
-  const { stepNodesInOrder, stepSuccessors, conditionalStepIds } = useWorkflowStepGraphInfo(workflow?.stepGraph);
+  const { stepNodesInOrder, stepsFlow, stepSuccessors, conditionalStepIds } = useWorkflowStepGraphInfo(
+    workflow?.stepGraph,
+  );
 
   const steps = result?.steps;
   const isPaused = result?.status === 'paused';
@@ -92,8 +94,8 @@ export function useWaitingStepKey(): string | undefined {
     [steps],
   );
   const isStepBypassed = useCallback(
-    (stepId: string) => isBranchArmBypassed({ stepId, conditionalStepIds, stepSuccessors, steps }),
-    [conditionalStepIds, stepSuccessors, steps],
+    (stepId: string) => isBranchArmBypassed({ stepId, conditionalStepIds, stepSuccessors, stepsFlow, steps }),
+    [conditionalStepIds, stepSuccessors, stepsFlow, steps],
   );
 
   return useMemo(
@@ -127,8 +129,8 @@ export function useNextPerStep() {
     [steps],
   );
   const isStepBypassed = useCallback(
-    (stepId: string) => isBranchArmBypassed({ stepId, conditionalStepIds, stepSuccessors, steps }),
-    [conditionalStepIds, stepSuccessors, steps],
+    (stepId: string) => isBranchArmBypassed({ stepId, conditionalStepIds, stepSuccessors, stepsFlow, steps }),
+    [conditionalStepIds, stepSuccessors, stepsFlow, steps],
   );
 
   const nextStepKey = useWaitingStepKey();

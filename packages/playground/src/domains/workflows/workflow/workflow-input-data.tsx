@@ -4,7 +4,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { ChevronRight } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { ZodSchema } from 'zod';
 
 import { createProcessorInput } from './input/processor-input';
@@ -22,18 +22,12 @@ export interface WorkflowInputDataProps {
   isSubmitLoading: boolean;
   submitButtonLabel: string;
   onSubmit: (data: any) => void;
-  withoutSubmit?: boolean;
-  isReadOnly?: boolean;
-  disableSubmit?: boolean;
   children?: React.ReactNode;
   isProcessorWorkflow?: boolean;
   submitActions?: React.ReactNode;
   leftActions?: React.ReactNode;
-  heading?: string;
   headingSlot?: ReactNode;
   collapsible?: boolean;
-  headingClassName?: string;
-  submitButtonClassName?: string;
   submitButtonIcon?: ReactNode;
   submitButtonVariant?: React.ComponentProps<typeof Button>['variant'];
   submitButtonFullWidth?: boolean;
@@ -45,9 +39,6 @@ export interface WorkflowInputDataProps {
 export const WorkflowInputData = ({
   schema,
   defaultValues,
-  withoutSubmit,
-  isReadOnly,
-  disableSubmit,
   isSubmitLoading,
   submitButtonLabel,
   onSubmit,
@@ -55,11 +46,8 @@ export const WorkflowInputData = ({
   isProcessorWorkflow,
   submitActions,
   leftActions,
-  heading,
   headingSlot,
   collapsible = true,
-  headingClassName,
-  submitButtonClassName,
   submitButtonIcon,
   submitButtonVariant,
   submitButtonFullWidth,
@@ -69,46 +57,51 @@ export const WorkflowInputData = ({
 }: WorkflowInputDataProps) => {
   const [draft, setDraft] = useState<
     { type: 'json'; value: string } | { type: 'form'; value: unknown } | { type: 'simple'; value: unknown }
-  >(() => ({
-    type: isProcessorWorkflow ? 'simple' : 'form',
-    value: isProcessorWorkflow ? createProcessorInput(defaultValues) : defaultValues,
-  }));
+  >(() =>
+    isProcessorWorkflow
+      ? { type: 'simple', value: defaultValues ?? createProcessorInput() }
+      : { type: 'form', value: defaultValues },
+  );
+  // The Form view is uncontrolled: state here would only re-render this tree on every keystroke.
+  const formValues = useRef<unknown>(defaultValues);
   const [errors, setErrors] = useState<string[]>([]);
 
-  function parseJsonInput(text: string) {
-    let value: unknown;
+  function parseJsonDraft(text: string) {
     try {
-      value = JSON.parse(text);
+      return { success: true, value: JSON.parse(text) as unknown } as const;
     } catch (error) {
       setErrors([error instanceof Error ? `Invalid JSON: ${error.message}` : 'Invalid JSON']);
       return { success: false } as const;
     }
-    const result = schema.safeParse(value);
-    if (!result.success) {
-      setErrors(result.error.issues.map(issue => `${issue.path.join('.') || 'Input'}: ${issue.message}`));
-      return { success: false } as const;
-    }
-    return { success: true, value, parsed: result.data } as const;
+  }
+
+  function submitJsonDraft(text: string) {
+    const json = parseJsonDraft(text);
+    if (!json.success) return;
+    const result = schema.safeParse(json.value);
+    if (result.success) onSubmit(result.data);
+    else setErrors(result.error.issues.map(issue => `${issue.path.join('.') || 'Input'}: ${issue.message}`));
   }
 
   function changeInputType(type: InputType) {
     if (type === draft.type) return;
     setErrors([]);
+    const value = draft.type === 'form' ? formValues.current : draft.value;
     if (type === 'json') {
-      setDraft({ type, value: JSON.stringify(draft.value === undefined ? {} : draft.value, null, 2) });
+      setDraft({ type, value: JSON.stringify(value === undefined ? {} : value, null, 2) });
       return;
     }
     if (draft.type === 'json') {
-      const result = parseJsonInput(draft.value);
-      if (result.success) setDraft({ type, value: result.value });
+      const json = parseJsonDraft(draft.value);
+      if (json.success) setDraft({ type, value: json.value });
       return;
     }
-    setDraft({ type, value: draft.value });
+    setDraft({ type, value });
   }
 
   const defaultHeading = (
-    <Txt as="span" variant="ui-md" className={cn('text-neutral5 font-semibold', headingClassName)}>
-      {heading ?? (withoutSubmit ? 'Run input' : 'Trigger a run')}
+    <Txt as="span" variant="ui-md" className="text-neutral5 font-semibold">
+      Trigger a run
     </Txt>
   );
   const inputTypeToggle = (
@@ -140,47 +133,7 @@ export const WorkflowInputData = ({
             'opacity-50 pointer-events-none': isSubmitLoading,
           })}
         >
-          {draft.type === 'simple' ? (
-            <WorkflowProcessorInput
-              schema={schema}
-              onValuesChange={value => setDraft({ type: 'simple', value })}
-              defaultValues={draft.value}
-              isSubmitLoading={isSubmitLoading}
-              submitButtonLabel={submitButtonLabel}
-              submitButtonClassName={submitButtonClassName}
-              submitButtonIcon={submitButtonIcon}
-              submitButtonVariant={submitButtonVariant}
-              submitButtonFullWidth={submitButtonFullWidth}
-              onSubmit={onSubmit}
-              withoutSubmit={withoutSubmit}
-              isReadOnly={isReadOnly || isSubmitLoading}
-              disableSubmit={disableSubmit}
-              submitActions={submitActions}
-              leftActions={leftActions}
-            >
-              {children}
-            </WorkflowProcessorInput>
-          ) : draft.type === 'form' ? (
-            <WorkflowFormInput
-              schema={schema}
-              onValuesChange={value => setDraft({ type: 'form', value })}
-              defaultValues={draft.value}
-              isSubmitLoading={isSubmitLoading}
-              submitButtonLabel={submitButtonLabel}
-              submitButtonClassName={submitButtonClassName}
-              submitButtonIcon={submitButtonIcon}
-              submitButtonVariant={submitButtonVariant}
-              submitButtonFullWidth={submitButtonFullWidth}
-              onSubmit={onSubmit}
-              withoutSubmit={withoutSubmit}
-              isReadOnly={isReadOnly || isSubmitLoading}
-              disableSubmit={disableSubmit}
-              submitActions={submitActions}
-              leftActions={leftActions}
-            >
-              {children}
-            </WorkflowFormInput>
-          ) : (
+          {draft.type === 'json' ? (
             <WorkflowJsonInput
               value={draft.value}
               onChange={value => {
@@ -190,22 +143,49 @@ export const WorkflowInputData = ({
               errors={errors}
               isSubmitLoading={isSubmitLoading}
               submitButtonLabel={submitButtonLabel}
-              submitButtonClassName={submitButtonClassName}
               submitButtonIcon={submitButtonIcon}
               submitButtonVariant={submitButtonVariant}
               submitButtonFullWidth={submitButtonFullWidth}
-              onSubmit={() => {
-                const result = parseJsonInput(draft.value);
-                if (result.success) onSubmit(result.parsed);
-              }}
-              withoutSubmit={withoutSubmit}
-              isReadOnly={isReadOnly || isSubmitLoading}
-              disableSubmit={disableSubmit}
+              onSubmit={() => submitJsonDraft(draft.value)}
               submitActions={submitActions}
               leftActions={leftActions}
             >
               {children}
             </WorkflowJsonInput>
+          ) : draft.type === 'simple' && isProcessorWorkflow ? (
+            <WorkflowProcessorInput
+              schema={schema}
+              onValuesChange={value => setDraft({ type: 'simple', value })}
+              defaultValues={draft.value}
+              isSubmitLoading={isSubmitLoading}
+              submitButtonLabel={submitButtonLabel}
+              submitButtonIcon={submitButtonIcon}
+              submitButtonVariant={submitButtonVariant}
+              submitButtonFullWidth={submitButtonFullWidth}
+              onSubmit={onSubmit}
+              submitActions={submitActions}
+              leftActions={leftActions}
+            >
+              {children}
+            </WorkflowProcessorInput>
+          ) : (
+            <WorkflowFormInput
+              schema={schema}
+              onValuesChange={value => {
+                formValues.current = value;
+              }}
+              defaultValues={draft.value}
+              isSubmitLoading={isSubmitLoading}
+              submitButtonLabel={submitButtonLabel}
+              submitButtonIcon={submitButtonIcon}
+              submitButtonVariant={submitButtonVariant}
+              submitButtonFullWidth={submitButtonFullWidth}
+              onSubmit={onSubmit}
+              submitActions={submitActions}
+              leftActions={leftActions}
+            >
+              {children}
+            </WorkflowFormInput>
           )}
         </div>
       </div>
@@ -239,13 +219,9 @@ const WorkflowFormInput = ({
   isSubmitLoading,
   submitButtonLabel,
   onSubmit,
-  withoutSubmit,
-  isReadOnly,
-  disableSubmit,
   children,
   submitActions,
   leftActions,
-  submitButtonClassName,
   submitButtonIcon,
   submitButtonVariant,
   submitButtonFullWidth,
@@ -253,18 +229,15 @@ const WorkflowFormInput = ({
 }: WorkflowInputDataProps & { onValuesChange: (value: unknown) => void }) => (
   <DynamicForm
     schema={schema}
-    preserveEmptyValues
     defaultValues={defaultValues}
     onValuesChange={onValuesChange}
     isSubmitLoading={isSubmitLoading}
     submitButtonLabel={submitButtonLabel}
-    submitButtonClassName={submitButtonClassName}
     submitButtonIcon={submitButtonIcon}
     submitButtonVariant={submitButtonVariant}
     submitButtonFullWidth={submitButtonFullWidth}
-    onSubmit={withoutSubmit ? undefined : onSubmit}
-    readOnly={isReadOnly}
-    disableSubmit={disableSubmit}
+    onSubmit={onSubmit}
+    readOnly={isSubmitLoading}
     submitActions={submitActions}
     leftActions={leftActions}
   >

@@ -95,10 +95,12 @@ describe('WorkflowRecentRuns', () => {
       stubRuns(oneSuccessfulRun);
       renderRunList('run-success-1');
       const link = await screen.findByRole('link', { name: /run-success-1/ });
-      fireEvent.click(screen.getByRole('button', { name: 'Collapse recent runs' }));
+      const trigger = screen.getByRole('button', { name: /Recent runs/ });
+      fireEvent.click(trigger);
       await waitFor(() => expect(screen.queryByRole('link', { name: /run-success-1/ })).toBeNull());
-      expect(within(screen.getByRole('button', { name: 'Expand recent runs' })).getByText('1')).not.toBeNull();
-      fireEvent.click(screen.getByRole('button', { name: 'Expand recent runs' }));
+      expect(trigger.getAttribute('aria-expanded')).toBe('false');
+      expect(within(trigger).getByText('1')).not.toBeNull();
+      fireEvent.click(trigger);
       expect(await screen.findByRole('link', { name: /run-success-1/ })).toBe(link);
     });
   });

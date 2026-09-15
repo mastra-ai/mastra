@@ -66,3 +66,7 @@ export function convertWorkflowRunStateToStreamResult(runState: WorkflowRunState
       : {}),
   } as WorkflowRunStreamResult;
 }
+
+export function isWorkflowRunFinished(status?: string) {
+  return ['success', 'failed', 'canceled', 'bailed', 'tripwire'].includes(status ?? '');
+}

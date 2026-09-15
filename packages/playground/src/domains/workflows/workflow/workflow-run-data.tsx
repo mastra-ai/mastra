@@ -9,7 +9,7 @@ import type { WorkflowRunStreamResult } from '../context/workflow-run-context';
 function RunDataValue({ value }: { value: unknown }) {
   if (value === undefined) {
     return (
-      <Txt className="block p-4 text-neutral3" variant="ui-sm">
+      <Txt className="text-neutral3 block p-4" variant="ui-sm">
         No input recorded
       </Txt>
     );
@@ -19,7 +19,7 @@ function RunDataValue({ value }: { value: unknown }) {
       value={safeStringify(value, 2)}
       editable={false}
       lineNumbers={false}
-      className="max-h-72 overflow-auto rounded-lg border border-border1 bg-surface2 p-3"
+      className="border-border1 bg-surface2 max-h-72 overflow-auto rounded-lg border p-3"
     />
   );
 }
@@ -29,11 +29,11 @@ export function WorkflowRunData({ input, result }: { input: unknown; result: Wor
   const hasOutput = output !== undefined;
 
   return (
-    <Collapsible className="border-t border-border1/50" data-testid="workflow-run-data">
-      <CollapsibleTrigger className="flex min-h-11 w-full items-center gap-2 px-5 py-3 text-ui-sm text-neutral4">
-        <Database aria-hidden className="size-3.5 text-neutral3" />
+    <Collapsible className="border-border1/50 border-t" data-testid="workflow-run-data">
+      <CollapsibleTrigger className="text-ui-sm text-neutral4 flex min-h-11 w-full items-center gap-2 px-5 py-3">
+        <Database aria-hidden className="text-neutral3 size-3.5" />
         <span>Run data</span>
-        <ChevronRight aria-hidden className="ml-auto size-4 text-neutral3" />
+        <ChevronRight aria-hidden className="text-neutral3 ml-auto size-4" />
       </CollapsibleTrigger>
       <CollapsibleContent>
         <Tabs defaultTab={hasOutput ? 'output' : 'input'} className="min-w-0 px-5 pb-4">

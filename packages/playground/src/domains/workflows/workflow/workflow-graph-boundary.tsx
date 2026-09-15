@@ -34,7 +34,7 @@ export function WorkflowGraphBoundary({
               <details>
                 <summary className="text-ui-sm cursor-pointer">View workflow definition</summary>
                 <CopyButton content={definition} tooltip="Copy workflow definition" />
-                <pre className="text-ui-xs mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words">
+                <pre className="text-ui-xs mt-2 max-h-64 overflow-auto break-words whitespace-pre-wrap">
                   {definition}
                 </pre>
               </details>

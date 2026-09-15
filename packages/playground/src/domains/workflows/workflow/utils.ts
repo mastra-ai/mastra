@@ -510,7 +510,7 @@ const getStepNodeAndEdge = ({
     const parallelGroup = { id: `parallel:${nodes.map(node => node.id).join(':')}`, pathCount: stepFlow.steps.length };
     nodes = nodes.map(node => ({
       ...node,
-      data: { ...node.data, isParallel: true, parallelGroup: node.data.parallelGroup ?? parallelGroup },
+      data: { ...node.data, isParallel: true, parallelGroup },
     }));
 
     return { nodes, edges, nextPrevNodeIds: nodes.map(node => node.id), nextPrevStepIds };
@@ -744,17 +744,23 @@ export const isBranchArmBypassed = ({
   stepId,
   conditionalStepIds,
   stepSuccessors,
+  stepsFlow,
   steps,
 }: {
   stepId: string;
   conditionalStepIds: Set<string>;
   stepSuccessors: Record<string, string[]>;
+  stepsFlow: Record<string, string[]>;
   steps: Record<string, { status?: string }> | undefined;
 }): boolean => {
   if (!conditionalStepIds.has(stepId)) return false;
-  return (
-    steps?.[stepId]?.status === 'skipped' ||
-    (stepSuccessors[stepId] ?? []).some(successorId => steps?.[successorId]?.status === 'success')
+  if (steps?.[stepId]?.status === 'skipped') return true;
+
+  const hasSucceeded = (candidateId: string) => steps?.[candidateId]?.status === 'success';
+  const siblingArmsOn = (successorId: string) => (stepsFlow[successorId] ?? []).filter(armId => armId !== stepId);
+
+  return (stepSuccessors[stepId] ?? []).some(
+    successorId => hasSucceeded(successorId) || siblingArmsOn(successorId).some(hasSucceeded),
   );
 };
 

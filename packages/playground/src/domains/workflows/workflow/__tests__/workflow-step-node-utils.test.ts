@@ -231,13 +231,13 @@ describe('resolveWorkflowGraphStep', () => {
     expect(stepNodes.map(node => node.data.workflowStep.kind)).toEqual(['step', 'map-step', 'sleep-step']);
     expect(stepNodes[0].data.withoutTopHandle).toBe(false);
     expect(stepNodes.at(-1)?.data.withoutBottomHandle).toBe(false);
-    expect(
-      edges.some(
-        edge =>
-          edge.source === 'boundary-start' && edge.target === 'node-regular' && edge.data?.nextStepId === 'regular',
-      ),
-    ).toBe(true);
-    expect(edges.some(edge => edge.source === 'node-sleep' && edge.target === 'boundary-end')).toBe(true);
+    expect(edges.map(edge => edge.id)).toEqual([
+      'edge-boundary-start-node-regular',
+      'edge-node-regular-node-map',
+      'edge-node-map-node-sleep',
+      'edge-node-sleep-boundary-end',
+    ]);
+    expect(edges[0].data?.nextStepId).toBe('regular');
   });
 
   it('namespaces graph IDs by domain while preserving raw workflow metadata', () => {

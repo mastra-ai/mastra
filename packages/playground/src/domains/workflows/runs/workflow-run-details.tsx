@@ -3,7 +3,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useCallback, useContext } from 'react';
 import type { WorkflowRunStreamResult } from '../context/workflow-run-context';
 import { WorkflowRunContext } from '../context/workflow-run-context';
-import { convertWorkflowRunStateToStreamResult } from '../utils';
+import { convertWorkflowRunStateToStreamResult, isWorkflowRunFinished } from '../utils';
 import type { WorkflowTriggerProps } from '../workflow/workflow-trigger';
 import { WorkflowTrigger } from '../workflow/workflow-trigger';
 
@@ -33,15 +33,12 @@ export const WorkflowRunDetail = ({
   const { runSnapshot, isLoadingRunExecutionResult } = useContext(WorkflowRunContext);
 
   const observeSelectedRun = useCallback(() => {
-    if (!runId || !runSnapshot) return;
-    const isActive = ['running', 'waiting', 'pending'].includes(runSnapshot.status);
-    if (isActive) {
-      observeWorkflowStream?.({
-        workflowId,
-        runId,
-        storeRunResult: convertWorkflowRunStateToStreamResult(runSnapshot),
-      });
-    }
+    if (!runId || !runSnapshot || isWorkflowRunFinished(runSnapshot.status)) return;
+    observeWorkflowStream?.({
+      workflowId,
+      runId,
+      storeRunResult: convertWorkflowRunStateToStreamResult(runSnapshot),
+    });
   }, [workflowId, runId, runSnapshot, observeWorkflowStream]);
 
   if (isLoadingRunExecutionResult) {

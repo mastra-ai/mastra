@@ -56,22 +56,32 @@ export function WorkflowTimelineRow({
     <div
       data-testid="workflow-timeline-row"
       data-workflow-step-key={row.stepId}
-      data-workflow-step-active={isSelected || undefined}
-      data-workflow-step-hovered={isHovered || undefined}
-      data-workflow-step-nested={row.isNestedEntry || undefined}
       onMouseEnter={() => !row.isNestedEntry && onHoverStep(row.stepId)}
       onMouseLeave={() => !row.isNestedEntry && onHoverStep(null)}
-      className={cn('workflow-timeline-row', (isSelected || isHovered) && 'bg-surface4')}
+      className={cn(
+        'grid grid-cols-[minmax(130px,1fr)_minmax(64px,1fr)_56px_64px] items-center gap-3 rounded-md px-2 py-1',
+        '@max-[540px]/workflow-timeline:grid-cols-[minmax(0,1fr)_48px_64px] @max-[540px]/workflow-timeline:gap-x-1.5 @max-[540px]/workflow-timeline:gap-y-1 @max-[540px]/workflow-timeline:py-2',
+        (isSelected || isHovered) && 'bg-surface4',
+      )}
     >
       <button
         type="button"
-        className="workflow-timeline-step"
-        disabled={row.isNestedEntry}
+        className="text-ui-xs text-neutral5 focus-visible:outline-neutral3 flex min-h-9 min-w-0 cursor-pointer items-center gap-2.5 text-left focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 aria-disabled:cursor-default"
+        aria-disabled={row.isNestedEntry}
         aria-pressed={isSelected}
-        onClick={() => onSelectStep(row.stepId)}
+        onClick={() => {
+          if (row.isNestedEntry) return;
+          onSelectStep(row.stepId);
+        }}
         title={row.stepId}
       >
-        <span aria-label={status.label} className={cn('workflow-timeline-status', status.color)}>
+        <span
+          aria-label={status.label}
+          className={cn(
+            'border-border1 bg-surface2 grid size-6 flex-none place-items-center rounded-md border',
+            status.color,
+          )}
+        >
           <StatusIcon aria-hidden className={cn('size-3.5', row.status === 'running' && 'motion-safe:animate-spin')} />
         </span>
         <span className="min-w-0">
@@ -84,7 +94,10 @@ export function WorkflowTimelineRow({
           )}
         </span>
       </button>
-      <div className="workflow-timeline-track" aria-hidden>
+      <div
+        className="bg-surface4 relative h-5 min-w-0 overflow-hidden rounded-sm @max-[540px]/workflow-timeline:col-span-full @max-[540px]/workflow-timeline:row-start-2 @max-[540px]/workflow-timeline:ml-[34px]"
+        aria-hidden
+      >
         {row.timing && (
           <div
             data-testid="workflow-timeline-bar"
@@ -95,10 +108,10 @@ export function WorkflowTimelineRow({
           />
         )}
       </div>
-      <span className="text-neutral3 text-ui-xs whitespace-nowrap text-right tabular-nums">
+      <span className="text-neutral3 text-ui-xs text-right whitespace-nowrap tabular-nums">
         {row.timing ? formatTimelineDuration(row.timing.durationMs) : <span aria-label="Timing unavailable">—</span>}
       </span>
-      <div className="workflow-timeline-data flex items-center">
+      <div className="flex items-center">
         <Button
           type="button"
           variant="ghost"

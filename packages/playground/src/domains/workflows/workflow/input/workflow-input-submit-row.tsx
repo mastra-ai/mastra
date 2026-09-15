@@ -8,10 +8,8 @@ type WorkflowSubmitRowProps = Pick<
   WorkflowInputDataProps,
   | 'isSubmitLoading'
   | 'submitButtonLabel'
-  | 'disableSubmit'
   | 'submitActions'
   | 'leftActions'
-  | 'submitButtonClassName'
   | 'submitButtonIcon'
   | 'submitButtonVariant'
   | 'submitButtonFullWidth'
@@ -22,10 +20,8 @@ type WorkflowSubmitRowProps = Pick<
 export const WorkflowSubmitRow = ({
   isSubmitLoading,
   submitButtonLabel,
-  disableSubmit,
   submitActions,
   leftActions,
-  submitButtonClassName,
   submitButtonIcon,
   submitButtonVariant,
   submitButtonFullWidth,
@@ -41,8 +37,8 @@ export const WorkflowSubmitRow = ({
       <Button
         variant={submitButtonVariant ?? 'primary'}
         onClick={onSubmit}
-        disabled={isSubmitLoading || disableSubmit}
-        className={cn(submitButtonFullWidth && 'w-full justify-center', submitButtonClassName)}
+        disabled={isSubmitLoading}
+        className={cn(submitButtonFullWidth && 'w-full justify-center')}
       >
         {isSubmitLoading ? (
           <Icon>

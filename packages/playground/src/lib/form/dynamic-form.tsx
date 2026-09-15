@@ -17,14 +17,11 @@ interface DynamicFormProps {
   onSubmit?: (values: any) => void | Promise<void>;
   onValuesChange?: (values: any) => void;
   defaultValues?: any;
-  preserveEmptyValues?: boolean;
   isSubmitLoading?: boolean;
   submitButtonLabel?: string;
-  submitButtonClassName?: string;
   submitButtonIcon?: ReactNode;
   submitButtonVariant?: ButtonProps['variant'];
   submitButtonFullWidth?: boolean;
-  disableSubmit?: boolean;
   className?: string;
   readOnly?: boolean;
   children?: React.ReactNode;
@@ -47,14 +44,11 @@ export function DynamicForm({
   onSubmit,
   onValuesChange,
   defaultValues,
-  preserveEmptyValues,
   isSubmitLoading,
   submitButtonLabel,
-  submitButtonClassName,
   submitButtonIcon,
   submitButtonVariant,
   submitButtonFullWidth,
-  disableSubmit,
   className,
   readOnly,
   children,
@@ -125,8 +119,8 @@ export function DynamicForm({
       return s;
     };
 
-    return new CustomZodProvider(normalizeSchema(schema), { preserveEmptyValues });
-  }, [schema, isNotZodObject, preserveEmptyValues]);
+    return new CustomZodProvider(normalizeSchema(schema));
+  }, [schema, isNotZodObject]);
 
   const uiComponents = useMemo(
     () => ({
@@ -141,8 +135,8 @@ export function DynamicForm({
               {submitActions}
               <Button
                 variant={submitButtonVariant}
-                disabled={isSubmitLoading || disableSubmit}
-                className={cn(submitButtonFullWidth && 'w-full justify-center', submitButtonClassName)}
+                disabled={isSubmitLoading}
+                className={cn(submitButtonFullWidth && 'w-full justify-center')}
               >
                 {isSubmitLoading ? (
                   <Loader2 className="animate-spin" />
@@ -161,13 +155,11 @@ export function DynamicForm({
       onSubmit,
       isSubmitLoading,
       submitButtonLabel,
-      submitButtonClassName,
       submitButtonIcon,
       submitButtonVariant,
       submitButtonFullWidth,
       submitActions,
       leftActions,
-      disableSubmit,
     ],
   );
 

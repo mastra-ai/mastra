@@ -82,10 +82,18 @@ describe('collectGraphStepFlags', () => {
 });
 
 describe('isBranchArmBypassed', () => {
-  const graph = { conditionalStepIds: new Set(['short', 'long']), stepSuccessors: { short: ['join'], long: ['join'] } };
+  const graph = {
+    conditionalStepIds: new Set(['short', 'long']),
+    stepSuccessors: { short: ['join'], long: ['join'] },
+    stepsFlow: { join: ['short', 'long'] },
+  };
 
-  it('does not bypass an unknown branch merely because its sibling succeeded', () => {
-    expect(isBranchArmBypassed({ ...graph, stepId: 'long', steps: { short: { status: 'success' } } })).toBe(false);
+  it('bypasses an un-taken conditional arm once its sibling on the join has succeeded', () => {
+    expect(isBranchArmBypassed({ ...graph, stepId: 'long', steps: { short: { status: 'success' } } })).toBe(true);
+  });
+
+  it('keeps a conditional arm runnable while no sibling has succeeded', () => {
+    expect(isBranchArmBypassed({ ...graph, stepId: 'long', steps: { short: { status: 'running' } } })).toBe(false);
   });
 
   it('bypasses an explicitly skipped conditional arm', () => {

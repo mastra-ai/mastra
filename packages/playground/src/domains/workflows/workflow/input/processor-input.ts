@@ -1,36 +1,58 @@
-import type { WorkflowInputDataProps } from '../workflow-input-data';
+type ProcessorMessagePart = { type: string; text?: string };
 
-export function createProcessorInput(value: WorkflowInputDataProps['defaultValues']) {
-  if (value !== undefined && value !== null) return value;
+type ProcessorMessage = {
+  id: string;
+  role: string;
+  createdAt: string;
+  content: { format: number; parts: ProcessorMessagePart[] };
+};
+
+type ProcessorInput = { phase?: string; messages?: ProcessorMessage[] } & Record<string, unknown>;
+
+const FALLBACK_MESSAGE_TEXT = 'Hello, this is a test message.';
+
+function createProcessorMessage(text: string): ProcessorMessage {
   return {
-    messages: [
-      {
-        id: crypto.randomUUID(),
-        role: 'user',
-        createdAt: new Date().toISOString(),
-        content: { format: 2, parts: [{ type: 'text', text: 'Hello, this is a test message.' }] },
-      },
-    ],
-    phase: 'input',
+    id: crypto.randomUUID(),
+    role: 'user',
+    createdAt: new Date().toISOString(),
+    content: { format: 2, parts: [{ type: 'text', text }] },
   };
 }
 
-export function getProcessorMessage(value: WorkflowInputDataProps['defaultValues']) {
-  const part = value.messages[0]?.content.parts.find((part: { type: string; text?: string }) => part.type === 'text');
-  return part?.text ?? '';
+export function createProcessorInput() {
+  return { messages: [createProcessorMessage(FALLBACK_MESSAGE_TEXT)], phase: 'input' };
 }
 
-export function updateProcessorMessage(value: WorkflowInputDataProps['defaultValues'], message: string) {
-  const firstMessage = value.messages[0] ?? createProcessorInput(undefined).messages[0];
-  const otherMessages = value.messages.slice(1);
-  const parts = firstMessage.content.parts;
-  const textIndex = parts.findIndex((part: { type: string }) => part.type === 'text');
-  const nextParts = parts.map((part: { type: string }, index: number) =>
-    index === textIndex ? { ...part, text: message } : part,
-  );
-  if (textIndex === -1) nextParts.push({ type: 'text', text: message });
+export function getProcessorMessage(input: ProcessorInput) {
+  if (!Array.isArray(input?.messages)) return '';
+  const textPart = input.messages[0]?.content?.parts?.find(part => part.type === 'text');
+  return textPart?.text ?? '';
+}
+
+export function updateProcessorMessage(input: ProcessorInput, text: string): ProcessorInput {
+  const messages = Array.isArray(input?.messages) ? input.messages : [];
+  const [firstMessage = createProcessorMessage(text), ...otherMessages] = messages;
+  const parts = firstMessage.content?.parts ?? [];
+  const textIndex = parts.findIndex(part => part.type === 'text');
+  const nextParts =
+    textIndex === -1
+      ? [...parts, { type: 'text', text }]
+      : parts.map((part, index) => (index === textIndex ? { ...part, text } : part));
+
   return {
-    ...value,
+    ...input,
     messages: [{ ...firstMessage, content: { ...firstMessage.content, parts: nextParts } }, ...otherMessages],
+  };
+}
+
+// The processor contract ties the author of the first message to the phase being exercised.
+export function withPhaseRole(input: ProcessorInput): ProcessorInput {
+  if (!Array.isArray(input?.messages)) return input;
+  const role = input.phase === 'outputStep' || input.phase === 'outputResult' ? 'assistant' : 'user';
+
+  return {
+    ...input,
+    messages: input.messages.map((message, index) => (index === 0 ? { ...message, role } : message)),
   };
 }

@@ -30,7 +30,6 @@ export interface WorkflowTriggerProps {
   workflowId: string;
   paramsRunId?: string;
   paramsRunStatus?: WorkflowRunStatus;
-  setRunId?: (runId: string) => void;
   workflow?: GetWorkflowResponse;
   isLoading?: boolean;
   createWorkflowRun: ({ workflowId, prevRunId }: { workflowId: string; prevRunId?: string }) => Promise<{
@@ -98,7 +97,6 @@ export function WorkflowTrigger({
   workflowId,
   paramsRunId,
   paramsRunStatus,
-  setRunId,
   workflow,
   isLoading,
   createWorkflowRun,
@@ -119,13 +117,13 @@ export function WorkflowTrigger({
     runId: contextRunId,
     runSnapshot,
     workflowError,
-    debugMode,
   } = useContext(WorkflowRunContext);
   const { canExecute } = usePermissions();
   const canExecuteWorkflow = canExecute('workflows');
 
   const [isStarting, setIsStarting] = useState(false);
   const pendingStart = useRef<AbortController | null>(null);
+  const observedParamRun = useRef<string | null>(null);
   const [cancelResponse, setCancelResponse] = useState<{ runId: string; message: string }>();
 
   const activeRunId = paramsRunId || contextRunId;
@@ -152,7 +150,6 @@ export function WorkflowTrigger({
       const run = await createWorkflowRun({ workflowId });
       if (request.signal.aborted) return;
 
-      setRunId?.(run.runId);
       setContextRunId(run.runId);
       setIsStarting(false);
 
@@ -181,7 +178,12 @@ export function WorkflowTrigger({
   };
 
   useEffect(() => {
-    if (paramsRunId) observeWorkflowStream?.({ workflowId, runId: paramsRunId });
+    if (!paramsRunId || !observeWorkflowStream) return;
+    // Observing twice releases the stream reader and resets the run back to its snapshot.
+    const paramRun = `${workflowId}:${paramsRunId}`;
+    if (observedParamRun.current === paramRun) return;
+    observedParamRun.current = paramRun;
+    observeWorkflowStream({ workflowId, runId: paramsRunId });
   }, [paramsRunId, observeWorkflowStream, workflowId]);
 
   if (isLoading) {
@@ -200,7 +202,6 @@ export function WorkflowTrigger({
   const isSuspendedSteps = suspendedSteps.length > 0;
 
   const isViewingRun = !!activeRunId;
-  const runButtonLabel = debugMode ? 'Start debug' : 'Run';
   const runStatus = streamResultToUse?.status ?? paramsRunStatus ?? (isStreamingWorkflow ? 'running' : 'pending');
   const cancelAction = (
     <WorkflowCancelButton
@@ -235,33 +236,29 @@ export function WorkflowTrigger({
         )}
 
         {canExecuteWorkflow && (
-          <>
-            <WorkflowTriggerForm
-              zodSchema={zodSchemaToUse}
-              defaultValues={payload}
-              isStreaming={isStarting || isStreamingWorkflow || isSuspendedSteps}
-              onExecute={data => {
-                setPayload(data);
-                void handleExecuteWorkflow(data);
-              }}
-              isViewingRun={isViewingRun}
-              isReadOnly={isViewingRun}
-              disableSubmit={isSuspendedSteps}
-              isProcessorWorkflow={workflow?.isProcessorWorkflow}
-              collapsible={false}
-              headingSlot={headingSlot}
-              leftActions={!paramsRunId ? <WorkflowDebugModeSwitch /> : undefined}
-              submitButtonLabel={isStarting ? 'Starting…' : runButtonLabel}
-              submitActions={
-                <>
-                  {workflow?.requestContextSchema && (
-                    <WorkflowRequestContextDialog requestContextSchema={workflow.requestContextSchema} />
-                  )}
-                  <WorkflowRunOptionsDialog />
-                </>
-              }
-            />
-          </>
+          <WorkflowTriggerForm
+            zodSchema={zodSchemaToUse}
+            defaultValues={payload}
+            isStreaming={isStarting || isStreamingWorkflow}
+            onExecute={data => {
+              setPayload(data);
+              void handleExecuteWorkflow(data);
+            }}
+            isViewingRun={isViewingRun}
+            isProcessorWorkflow={workflow?.isProcessorWorkflow}
+            collapsible={false}
+            headingSlot={headingSlot}
+            leftActions={!paramsRunId ? <WorkflowDebugModeSwitch /> : undefined}
+            submitButtonLabel={isStarting ? 'Starting…' : 'Run'}
+            submitActions={
+              <>
+                {workflow?.requestContextSchema && (
+                  <WorkflowRequestContextDialog requestContextSchema={workflow.requestContextSchema} />
+                )}
+                <WorkflowRunOptionsDialog />
+              </>
+            }
+          />
         )}
 
         {!canExecuteWorkflow && (

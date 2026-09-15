@@ -19,7 +19,7 @@ export function WorkflowSuspendedOverlay({ hidden }: { hidden?: boolean }) {
       key={runId}
       hidden={hidden}
       data-testid="workflow-suspended-overlay"
-      className="workflow-inspection-overlay animate-in fade-in-0 slide-in-from-top-2 w-[380px] duration-300 motion-reduce:animate-none"
+      className="animate-in fade-in-0 slide-in-from-top-2 pointer-events-none absolute top-12 right-2 z-30 w-[380px] max-w-[calc(100%-16px)] duration-300 motion-reduce:animate-none"
     >
       <WorkflowSuspendedSteps
         suspendedSteps={suspendedSteps}

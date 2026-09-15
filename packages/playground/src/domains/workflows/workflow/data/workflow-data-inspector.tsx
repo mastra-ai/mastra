@@ -37,7 +37,7 @@ export function WorkflowDataInspector({ selection }: { selection: WorkflowDataSe
             {direction === 'input' ? <ArrowDownToLine /> : <ArrowUpFromLine />}
             {direction === 'input' ? 'Input' : 'Output'}
           </Badge>
-          <Txt as="h2" variant="ui-sm" className="break-words text-neutral6 font-medium">
+          <Txt as="h2" variant="ui-sm" className="text-neutral6 font-medium break-words">
             {name}
           </Txt>
         </div>
@@ -47,7 +47,7 @@ export function WorkflowDataInspector({ selection }: { selection: WorkflowDataSe
       </header>
       <div className="min-h-0 overflow-auto overscroll-contain p-3">
         {value === undefined ? (
-          <Txt as="p" variant="ui-sm" className="p-2 text-neutral3">
+          <Txt as="p" variant="ui-sm" className="text-neutral3 p-2">
             No {direction} recorded for this selection.
           </Txt>
         ) : (
@@ -56,13 +56,13 @@ export function WorkflowDataInspector({ selection }: { selection: WorkflowDataSe
             value={safeStringify(value, 2)}
             editable={false}
             lineNumbers={false}
-            className="min-w-0 rounded-lg bg-surface2 p-3"
+            className="bg-surface2 min-w-0 rounded-lg p-3"
           />
         )}
       </div>
       {result?.status === 'suspended' && (
-        <div className="shrink-0 border-t border-border1/50 p-2">
-          <Button variant="ghost" className="w-full justify-start text-warning1" onClick={closeStepDetail}>
+        <div className="border-border1/50 shrink-0 border-t p-2">
+          <Button variant="ghost" className="text-warning1 w-full justify-start" onClick={closeStepDetail}>
             <CirclePause />
             Return to suspended step
             <ChevronRight className="ml-auto" />

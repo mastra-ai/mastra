@@ -75,11 +75,8 @@ export const WorkflowRecentRuns = ({ workflowId, runId }: WorkflowRecentRunsProp
   return (
     <>
       <Collapsible open={isOpen} onOpenChange={setIsOpen} className="flex min-h-0 flex-col">
-        <CollapsibleTrigger
-          className="flex shrink-0 items-center gap-2 px-4 py-3 text-left text-ui-sm text-neutral4"
-          aria-label={isOpen ? 'Collapse recent runs' : 'Expand recent runs'}
-        >
-          <ChevronRight aria-hidden className="size-4 shrink-0 text-neutral3 motion-reduce:transition-none" />
+        <CollapsibleTrigger className="text-ui-sm text-neutral4 flex shrink-0 items-center gap-2 px-4 py-3 text-left">
+          <ChevronRight aria-hidden className="text-neutral3 size-4 shrink-0 motion-reduce:transition-none" />
           <span>Recent runs</span>
           {!isLoading && (
             <span className="text-ui-xs text-neutral3">
@@ -88,8 +85,8 @@ export const WorkflowRecentRuns = ({ workflowId, runId }: WorkflowRecentRunsProp
             </span>
           )}
         </CollapsibleTrigger>
-        <CollapsibleContent keepMounted className="flex h-full min-h-0 flex-col" style={{ minHeight: 0 }}>
-          <ScrollArea className="min-h-0 w-full" mask={{ top: false }}>
+        <CollapsibleContent keepMounted className="flex h-full min-h-0 flex-col">
+          <ScrollArea className="min-h-0 w-full flex-1" mask={{ top: false }}>
             {isLoading ? (
               <div className="p-4">
                 <Skeleton className="h-32" />

@@ -23,7 +23,7 @@ export const WorkflowClock = ({ startedAt, endedAt, isRunning = false }: Workflo
   const timeDiff = Number.isFinite(duration) && duration >= 0 ? duration : undefined;
 
   return (
-    <Txt variant="ui-xs" className="font-mono whitespace-nowrap text-neutral3">
+    <Txt variant="ui-xs" className="text-neutral3 font-mono whitespace-nowrap">
       {timeDiff === undefined ? <span aria-label="Timing unavailable">—</span> : `${toSigFigs(timeDiff, 3)}ms`}
     </Txt>
   );

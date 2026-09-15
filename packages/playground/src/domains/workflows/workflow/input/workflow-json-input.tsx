@@ -14,25 +14,24 @@ export function WorkflowJsonInput({
   onChange,
   errors,
   children,
-  withoutSubmit,
-  isReadOnly,
+  isSubmitLoading,
   onSubmit,
   ...submitProps
 }: WorkflowJsonInputProps) {
   return (
     <div className="flex flex-col gap-4">
       {errors.length > 0 && (
-        <div role="alert" className="rounded-lg border border-accent2/30 bg-accent2/5 p-3 text-ui-sm text-accent2">
+        <div role="alert" className="border-accent2/30 bg-accent2/5 text-ui-sm text-accent2 rounded-lg border p-3">
           <ul className="list-inside list-disc">
-            {errors.map(error => (
-              <li key={error}>{error}</li>
+            {errors.map((error, index) => (
+              <li key={index}>{error}</li>
             ))}
           </ul>
         </div>
       )}
-      <CodeEditor value={value} onChange={onChange} editable={!isReadOnly} />
+      <CodeEditor value={value} onChange={onChange} editable={!isSubmitLoading} />
       {children}
-      {!withoutSubmit && <WorkflowSubmitRow {...submitProps} onSubmit={onSubmit} />}
+      <WorkflowSubmitRow {...submitProps} isSubmitLoading={isSubmitLoading} onSubmit={onSubmit} />
     </div>
   );
 }

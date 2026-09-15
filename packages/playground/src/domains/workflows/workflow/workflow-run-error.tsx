@@ -14,7 +14,7 @@ export function WorkflowRunError({
   if (errors.length === 0) return null;
 
   return (
-    <Notice variant="destructive" className={className}>
+    <Notice variant="destructive" title="Workflow failed" className={className}>
       <div className="flex flex-col gap-1">
         {errors.map(error => (
           <Notice.Message key={error}>{error}</Notice.Message>

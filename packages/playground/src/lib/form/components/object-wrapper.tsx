@@ -7,14 +7,14 @@ export function ObjectWrapper({ label, children }: ObjectWrapperProps) {
 
   return (
     <Collapsible className="motion-reduce:[&_[data-slot=collapsible-content]]:transition-none motion-reduce:[&_svg]:transition-none">
-      <CollapsibleTrigger className="flex min-h-11 w-full items-center gap-2 text-left text-ui-sm text-neutral3">
+      <CollapsibleTrigger className="text-ui-sm text-neutral3 flex min-h-11 w-full items-center gap-2 text-left">
         <ChevronRight aria-hidden className="size-3.5 shrink-0" />
         <span className="flex min-w-0 items-center gap-1.5">
           <Braces aria-hidden className="size-3.5" />
           {label}
         </span>
       </CollapsibleTrigger>
-      <CollapsibleContent keepMounted className="border-l border-border1 pl-4 pt-2">
+      <CollapsibleContent keepMounted className="border-border1 border-l pt-2 pl-4">
         {children}
       </CollapsibleContent>
     </Collapsible>

@@ -24,6 +24,31 @@ describe('Workflow graph groups', () => {
       });
     });
   });
+  describe('when a parallel path is itself parallel', () => {
+    it('brackets every concurrent step of the outer path', () => {
+      const { nodes } = constructNodesAndEdges({
+        stepGraph: [
+          {
+            type: 'parallel',
+            steps: [
+              {
+                type: 'parallel',
+                steps: [
+                  { type: 'step', step: { id: 'fetch' } },
+                  { type: 'step', step: { id: 'scan' } },
+                ],
+              },
+              { type: 'step', step: { id: 'notify' } },
+            ],
+          },
+        ],
+      });
+
+      expect(getWorkflowGraphGroups(nodes)).toEqual([
+        expect.objectContaining({ nodeIds: ['node-fetch', 'node-scan', 'node-notify'] }),
+      ]);
+    });
+  });
   describe('when conditional branches feed a map', () => {
     it('does not describe conditional paths as parallel execution', () => {
       const { nodes, edges } = constructNodesAndEdges(branchWorkflow);

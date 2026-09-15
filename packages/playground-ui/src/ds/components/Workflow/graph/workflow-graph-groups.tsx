@@ -13,7 +13,10 @@ export interface WorkflowGraphGroup {
 export function WorkflowGraphGroups({ nodes, groups }: { nodes: Node[]; groups: WorkflowGraphGroup[] }) {
   const { x, y, zoom } = useViewport();
   return (
-    <div className="workflow-group-viewport" style={{ transform: `translate(${x}px, ${y}px) scale(${zoom})` }}>
+    <div
+      className="pointer-events-none absolute inset-0 z-0 origin-top-left"
+      style={{ transform: `translate(${x}px, ${y}px) scale(${zoom})` }}
+    >
       {groups.map(group => {
         const members = nodes.flatMap(node => {
           if (!group.nodeIds.includes(node.id) || !node.measured?.width || !node.measured.height) return [];
@@ -27,10 +30,10 @@ export function WorkflowGraphGroups({ nodes, groups }: { nodes: Node[]; groups: 
         return (
           <div
             key={group.id}
-            className="workflow-parallel-group"
+            className="border-neutral3/25 bg-neutral3/3 absolute rounded-xl border border-dashed"
             style={{ transform: `translate(${left}px, ${top}px)`, width: right - left, height: bottom - top }}
           >
-            <div className="workflow-parallel-heading">
+            <div className="text-ui-xs text-neutral3 flex items-center gap-2 px-5 py-4">
               <Badge size="xs" variant="blue" emphasis="muted" icon={<GitFork aria-hidden />}>
                 {group.label}
               </Badge>

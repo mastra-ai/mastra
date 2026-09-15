@@ -27,14 +27,14 @@ export function WorkflowDebugControls({
 
   return (
     <div className="flex min-w-0 flex-col gap-3" data-testid="workflow-debug-step-controls">
-      <div className="rounded-xl border border-border1/50 bg-surface2 p-3">
+      <div className="border-border1/50 bg-surface2 rounded-xl border p-3">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <span className="text-ui-xs text-neutral3">Next step</span>
           <Badge size="sm" icon={<Pause />} emphasis="muted">
             Step by step
           </Badge>
         </div>
-        <div className="text-ui-md font-medium break-words text-neutral5" aria-live="polite">
+        <div className="text-ui-md text-neutral5 font-medium break-words" aria-live="polite">
           {nextStepLabel || nextStepFallback}
         </div>
       </div>

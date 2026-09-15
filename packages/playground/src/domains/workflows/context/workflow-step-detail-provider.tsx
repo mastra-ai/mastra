@@ -1,5 +1,5 @@
 import type { SerializedStepFlowEntry } from '@mastra/core/workflows';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { WorkflowStepDetailContext } from './workflow-step-detail-context';
 import type { StepDetailData, WorkflowDataSelection } from './workflow-step-detail-context';
@@ -42,29 +42,21 @@ export function WorkflowStepDetailProvider({ children }: { children: ReactNode }
     setStepDetail(null);
   }, []);
 
-  const closeStepDetail = () => {
+  const closeStepDetail = useCallback(() => {
     const trigger = dataTriggerRef.current;
     resetStepDetail();
     if (trigger?.isConnected) trigger.focus({ preventScroll: true });
-  };
+  }, [resetStepDetail]);
 
-  const showData = (selection: WorkflowDataSelection, trigger: HTMLButtonElement) => {
+  const showData = useCallback((selection: WorkflowDataSelection, trigger: HTMLButtonElement) => {
     dataTriggerRef.current = trigger;
     setStepDetail({ type: 'data', selection });
-  };
+  }, []);
 
-  return (
-    <WorkflowStepDetailContext.Provider
-      value={{
-        stepDetail,
-        showMapConfig,
-        showNestedGraph,
-        showData,
-        closeStepDetail,
-        resetStepDetail,
-      }}
-    >
-      {children}
-    </WorkflowStepDetailContext.Provider>
+  const value = useMemo(
+    () => ({ stepDetail, showMapConfig, showNestedGraph, showData, closeStepDetail, resetStepDetail }),
+    [stepDetail, showMapConfig, showNestedGraph, showData, closeStepDetail, resetStepDetail],
   );
+
+  return <WorkflowStepDetailContext.Provider value={value}>{children}</WorkflowStepDetailContext.Provider>;
 }
