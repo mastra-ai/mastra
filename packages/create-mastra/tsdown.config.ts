@@ -13,6 +13,6 @@ export default defineConfig({
   fixedExtension: false,
   deps: {
     onlyBundle: false,
-    alwaysBundle: ['mastra'],
+    alwaysBundle: ['mastra', 'commander', 'posthog-node', 'tinyexec'],
   },
 });
