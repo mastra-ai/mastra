@@ -377,7 +377,7 @@ export class AgentVoice extends BaseResource {
    */
   getSpeakers(
     requestContext?: RequestContext | Record<string, any>,
-  ): Promise<Array<{ voiceId: string; [key: string]: any }>> {
+  ): Promise<RouteResponse<'GET /agents/:agentId/voice/speakers'>> {
     return this.request(`/agents/${this.agentId}/voice/speakers${this.getQueryString(requestContext)}`);
   }
 
