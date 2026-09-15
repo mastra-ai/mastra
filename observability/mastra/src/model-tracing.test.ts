@@ -127,6 +127,31 @@ describe('ModelSpanTracker', () => {
       });
     });
 
+    it('uses the exact cost from the shape published provider versions emit, without isByok', () => {
+      // Matches the recorded OpenRouter response for a non-BYOK request: cost and
+      // upstreamInferenceCost are equal and the provider drops usage.is_byok.
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+        attributes: { model: 'openai/gpt-4o-mini', provider: 'openrouter' },
+      });
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      tracker.endGeneration({
+        attributes: {},
+        providerMetadata: {
+          openrouter: { usage: { cost: 0.0000084, costDetails: { upstreamInferenceCost: 0.0000084 } } },
+        },
+      });
+
+      const [span] = testExporter.getSpansByType(SpanType.MODEL_GENERATION);
+      expect(span?.attributes?.costContext?.estimatedCost).toBe(0.0000084);
+      expect(span?.attributes?.costContext?.costMetadata).toMatchObject({
+        source: 'provider_reported',
+        sdkCostField: 'openrouter.usage.cost',
+      });
+    });
+
     it('does not double-count the non-BYOK upstream cost breakdown', () => {
       const modelSpan = tracing.startSpan({
         type: SpanType.MODEL_GENERATION,
