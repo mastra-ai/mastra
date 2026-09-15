@@ -289,7 +289,7 @@
                 }
               },
               "hookDurationMs": {
-                "__any__": true
+                "__any__": "number"
               }
             },
             "metadata": {

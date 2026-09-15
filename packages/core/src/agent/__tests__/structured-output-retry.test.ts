@@ -160,8 +160,15 @@ describe.each(['v2', 'v3'] as const)('separate structuring model retries (%s)', 
       let structuringCalls = 0;
       let initialStructuringCalls = 0;
       let releaseInitialStructuringCalls!: () => void;
-      const initialStructuringCallsStarted = new Promise<void>(resolve => {
-        releaseInitialStructuringCalls = resolve;
+      const initialStructuringCallsStarted = new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(
+          () => reject(new Error('Both requests did not reach the structuring model')),
+          10_000,
+        );
+        releaseInitialStructuringCalls = () => {
+          clearTimeout(timeout);
+          resolve();
+        };
       });
       const processor = new StructuredOutputProcessor({
         schema: z.object({ count: z.number() }),
