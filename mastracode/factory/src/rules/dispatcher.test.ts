@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createBoardRegistry, defineBoard } from '../boards/index.js';
 import { createLifecycleTestRegistry, createTestBoard } from '../boards/test-utils.js';
 import { DecisionAttentionProvider, failedDecisionAttentionSpec } from '../routes/attention-providers.js';
-import { observeSessionRunEnd } from '../session/run-audit.js';
+import { FACTORY_OPEN_RUNS_SETTING, observeSessionRunEnd } from '../session/run-audit.js';
 import { FactoryFeedReader } from '../storage/domains/comments/feed-context.js';
 import { FACTORY_RULE_MATERIALIZATION_KEY, type WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
@@ -299,6 +299,7 @@ async function bindWorkRun(storage: WorkItemsStorage, workItemId: string, option
     kickoffMessage: null,
   });
   await storage.markPendingStart(prepared.binding.id, 'sent');
+  return prepared.binding;
 }
 
 /** A card whose run someone asked for: a pending start still waiting to be sent. */
@@ -426,7 +427,10 @@ describe('FactoryDecisionDispatcher', () => {
       isAutoRunEnabled: async () => true,
     });
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
-    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe('retry');
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+      status: 'retry',
+      failureCode: 'notification_delivery_failed',
+    });
     expect((await seed.audit.list({ orgId: 'org-1' })).events).toEqual([]);
   });
 
@@ -1261,7 +1265,7 @@ describe('FactoryDecisionDispatcher', () => {
       threadId: 'thread-1',
       session: { modeId: 'build', modelId: 'openai/gpt-5.6-sol' },
     });
-    expect(session.subscribe).toHaveBeenCalledTimes(1);
+    expect(session.subscribe).toHaveBeenCalledTimes(2);
     expect(getAgentEndListenerCount()).toBe(0);
   });
 
@@ -1976,7 +1980,127 @@ describe('FactoryDecisionDispatcher', () => {
     ).toMatchObject({ status: 'succeeded' });
   });
 
-  it('fails a wake dispatch for retry when the terminal event is not observed before the deadline', async () => {
+  it('waits for an open run on the same binding before sending another kickoff', async () => {
+    const seed = await createFactoryStorageForTests();
+    const storage = seed.workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'invokeSkill',
+      role: 'work',
+      skillName: 'understand-issue',
+      cancelInFlight: true,
+      idempotencyKey: 'wait-for-open-binding-run',
+    });
+    const binding = await bindWorkRun(storage, item.id);
+    const { controller, session, emitAgentEnd, getAgentEndListenerCount, abort } = createSession(undefined, {
+      signalAccepted: Promise.resolve({ accepted: true, action: 'wake' }),
+      emitAgentEndDuringSignal: true,
+      agentEndReason: 'complete',
+      streamActive: true,
+    });
+    await session.thread.setSetting({
+      key: FACTORY_OPEN_RUNS_SETTING,
+      value: [
+        {
+          kickoffId: 'earlier-kickoff',
+          bindingId: binding.id,
+          role: binding.role,
+          startedBy: 'factory-rule-dispatcher',
+          orgId: binding.orgId,
+          factoryProjectId: binding.factoryProjectId,
+          workItemId: binding.workItemId,
+          sessionId: binding.sessionId,
+          threadId: binding.threadId,
+          branch: binding.branch,
+          agentName: 'build',
+        },
+      ],
+    });
+    controller.listActiveThreadRuns.mockReturnValue([{ runId: 'run-1', threadId: binding.threadId }]);
+    observeSessionRunEnd(session, { audit: seed.audit });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      isAutoRunEnabled: async () => true,
+      transitionService,
+      storage,
+      audit: seed.audit,
+      ownerId: 'worker-1',
+    });
+
+    const dispatch = dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+    await vi.waitFor(() => expect(getAgentEndListenerCount()).toBe(2));
+    expect(session.sendSignal).not.toHaveBeenCalled();
+    expect(abort).not.toHaveBeenCalled();
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+      status: 'leased',
+      attempts: 1,
+      deliveryGeneration: 0,
+    });
+
+    controller.listActiveThreadRuns.mockReturnValue([]);
+    emitAgentEnd('complete');
+    await dispatch;
+
+    expect(session.sendSignal).toHaveBeenCalledTimes(1);
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'succeeded' });
+  });
+
+  it('serializes concurrently claimed skill decisions for the same binding', async () => {
+    const seed = await createFactoryStorageForTests();
+    const storage = seed.workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'invokeSkill',
+      role: 'work',
+      skillName: 'understand-issue',
+      idempotencyKey: 'same-binding-first',
+    });
+    await bindWorkRun(storage, item.id);
+    const current = await storage.get({ orgId: 'org-1', id: item.id });
+    if (!current) throw new Error('Expected work item');
+    await storage.commitRuleEvaluation({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: item.id,
+      ingress: { identity: 'same-binding-second', triggerType: 'rule' },
+      configVersion: 'rules-v1',
+      expectedRevision: current.revision,
+      actor: { type: 'system', id: 'factory-rule-dispatcher' },
+      outcome: { status: 'accepted' },
+      decisions: [
+        {
+          type: 'invokeSkill',
+          role: 'work',
+          skillName: 'understand-issue',
+          idempotencyKey: 'same-binding-second',
+        },
+      ],
+      causalChain: [],
+      now: new Date('2030-01-01T00:00:00Z'),
+    });
+    const { controller, session, emitAgentEnd } = createSession(undefined, {
+      signalAccepted: Promise.resolve({ accepted: true, action: 'wake' }),
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      isAutoRunEnabled: async () => true,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+    });
+
+    const dispatch = dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+    await vi.waitFor(() => expect(session.sendSignal).toHaveBeenCalledTimes(1));
+    emitAgentEnd('complete');
+    await vi.waitFor(() => expect(session.sendSignal).toHaveBeenCalledTimes(2));
+    emitAgentEnd('complete');
+    await dispatch;
+
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID)).map(row => row.status)).toEqual([
+      'succeeded',
+      'succeeded',
+    ]);
+  });
+
+  it('fails a wake dispatch terminally when the terminal event is not observed', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2030-01-01T00:00:00Z'));
     try {
@@ -2025,11 +2149,13 @@ describe('FactoryDecisionDispatcher', () => {
       await vi.advanceTimersByTimeAsync(FACTORY_DISPATCH_CONSTANTS.runRegistryHeartbeatMs);
       await dispatch;
 
-      // An unobserved run end is the silent-stall failure mode: the decision
-      // must fail for redelivery instead of completing on nothing.
+      // Once delivery was admitted, a missing terminal event cannot be retried
+      // safely: another generation could duplicate work that actually started.
       expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
-        status: 'retry',
+        status: 'failed',
         attempts: 1,
+        deliveryGeneration: 0,
+        failureCode: 'run_terminal_event_missing',
         lastError: expect.stringContaining('terminal event was not observed'),
       });
       expect(getAgentEndListenerCount()).toBe(0);
@@ -2286,7 +2412,7 @@ describe('FactoryDecisionDispatcher', () => {
     expect(getAgentEndListenerCount()).toBe(0);
   });
 
-  it('retries a kickoff that was queued onto an ending run instead of reporting success', async () => {
+  it('fails terminally when a kickoff remains queued after an ending run', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { item, transitionService } = await queueDecision(storage, {
       type: 'invokeSkill',
@@ -2335,8 +2461,12 @@ describe('FactoryDecisionDispatcher', () => {
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
 
     const [decision] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
-    expect(decision?.status).toBe('retry');
-    expect(decision?.lastError).toContain('never reached the agent');
+    expect(decision).toMatchObject({
+      status: 'failed',
+      deliveryGeneration: 0,
+      failureCode: 'skill_delivery_ambiguous',
+      lastError: expect.stringContaining('never reached the agent'),
+    });
     expect(getAgentEndListenerCount()).toBe(0);
   });
 
@@ -3710,7 +3840,7 @@ describe('FactoryDecisionDispatcher', () => {
     expect(record?.lastError).toContain('did not reach the agent');
   });
 
-  it('retries the skill kickoff when acceptance carries no delivery action', async () => {
+  it('fails terminally when acceptance carries no delivery action', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { item, transitionService } = await queueDecision(storage, {
       type: 'invokeSkill',
@@ -3755,8 +3885,12 @@ describe('FactoryDecisionDispatcher', () => {
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
 
     const [record] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
-    expect(record?.status).toBe('retry');
-    expect(record?.lastError).toContain('did not reach the agent');
+    expect(record).toMatchObject({
+      status: 'failed',
+      deliveryGeneration: 0,
+      failureCode: 'skill_delivery_ambiguous',
+      lastError: expect.stringContaining('did not reach the agent'),
+    });
   });
 
   it('prepares a missing binding before dispatching a rule-driven skill', async () => {
