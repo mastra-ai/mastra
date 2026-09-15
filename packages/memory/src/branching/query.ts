@@ -47,7 +47,7 @@ export function buildThreadBranchSegments(entries: ResolvedThreadLineageEntry[])
   return reversed.reverse();
 }
 
-function tupleInSegment(message: MastraDBMessage, segment: ThreadBranchSegment): boolean {
+export function messageIsReachableInSegment(message: MastraDBMessage, segment: ThreadBranchSegment): boolean {
   if (message.threadId !== segment.thread.id || message.resourceId !== segment.thread.resourceId) return false;
   if (segment.lower && compareMessageTuples(message, segment.lower) <= 0) return false;
   if (segment.upper && compareMessageTuples(message, segment.upper) > 0) return false;
@@ -129,7 +129,7 @@ async function validateBranchPoints(
       ownerIndex < 0 ||
       branchPoint.resourceId !== entries[index]!.thread.resourceId ||
       branchPoint.createdAt.getTime() !== branch.branchPointCreatedAt.getTime() ||
-      !tupleInSegment(branchPoint, parentPathSegments[ownerIndex]!)
+      !messageIsReachableInSegment(branchPoint, parentPathSegments[ownerIndex]!)
     ) {
       throw createThreadBranchError('BRANCH_LINEAGE_CORRUPT', 'Stored thread branch point is not reachable.');
     }
@@ -179,6 +179,24 @@ export async function getThreadBranchParticipation(
     return candidateBranch?.state === 'ready' && candidateBranch.parentThreadId === threadId;
   });
   return { participant: branch?.state === 'ready' || hasReadyChild, thread };
+}
+
+export async function resolveThreadBranchSegments(
+  memoryStore: MemoryStorage,
+  threadId: string,
+  allThreads?: StorageThreadType[],
+): Promise<{ thread: StorageThreadType; segments: ThreadBranchSegment[] } | null> {
+  const participation = await getThreadBranchParticipation(memoryStore, threadId, allThreads);
+  if (!participation.thread) return null;
+  if (!participation.participant) {
+    return { thread: participation.thread, segments: [{ thread: participation.thread }] };
+  }
+
+  const entries = await resolveThreadLineageEntries(memoryStore, threadId);
+  const segments = (await validateBranchPoints(memoryStore, entries)).filter(
+    segment => !segment.lower || !segment.upper || compareMessageTuples(segment.upper, segment.lower) > 0,
+  );
+  return { thread: participation.thread, segments };
 }
 
 async function fetchTimestampCohort(
@@ -243,7 +261,9 @@ async function fetchSegmentMessages(
     const boundary = page.messages.at(-1)!.createdAt;
     const cohort = await fetchTimestampCohort(memoryStore, segment, boundary, args.filter?.metadata);
     const batch = dedupeMessages([...page.messages, ...cohort]).filter(
-      message => tupleInSegment(message, segment) && messageMatchesRequestedDateRange(message, args.filter?.dateRange),
+      message =>
+        messageIsReachableInSegment(message, segment) &&
+        messageMatchesRequestedDateRange(message, args.filter?.dateRange),
     );
     for (const message of sortMessages(batch, direction)) {
       if (seen.has(message.id)) continue;
@@ -282,7 +302,10 @@ async function countSegmentMessages(
   for (const boundaryTime of boundaryTimes) {
     const cohort = await fetchTimestampCohort(memoryStore, segment, new Date(boundaryTime), filter?.metadata);
     for (const message of cohort) {
-      if (messageMatchesRequestedDateRange(message, filter?.dateRange) && !tupleInSegment(message, segment)) {
+      if (
+        messageMatchesRequestedDateRange(message, filter?.dateRange) &&
+        !messageIsReachableInSegment(message, segment)
+      ) {
         excludedIds.add(message.id);
       }
     }
@@ -306,7 +329,7 @@ async function resolveIncludedMessages(
 
   for (const item of include) {
     const target = targetsById.get(item.id);
-    if (!target || !segments.some(segment => tupleInSegment(target, segment))) continue;
+    if (!target || !segments.some(segment => messageIsReachableInSegment(target, segment))) continue;
 
     const previousCount = item.withPreviousMessages ?? 0;
     const nextCount = item.withNextMessages ?? 0;
