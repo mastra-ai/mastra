@@ -13,7 +13,8 @@
     "vitest": "^4.1.10"
   },
   "scripts": {
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:cloudflare:deployed": "MASTRA_CLOUDFLARE_DEPLOY_SMOKE=1 vitest run cloudflare.test.ts"
   },
   "dependencies": {
     "form-data": "^4.0.6"

@@ -11,7 +11,17 @@ const storage = new PostgresStore({
   connectionString: 'test-connection-string',
 });
 
+const workerState = globalThis as typeof globalThis & {
+  __mastraInitializationCount?: number;
+  __mastraInstanceId?: string;
+};
+
 export const mastra = new Mastra({
+  id: (() => {
+    workerState.__mastraInitializationCount = (workerState.__mastraInitializationCount ?? 0) + 1;
+    workerState.__mastraInstanceId = crypto.randomUUID();
+    return 'cloudflare-e2e';
+  })(),
   workflows: { weatherWorkflow },
   agents: { weatherAgent },
   bundler: {
