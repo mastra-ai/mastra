@@ -5,8 +5,7 @@ vi.stubGlobal('fetch', fetchMock);
 
 const githubCopilotStorage = {
   reload: vi.fn(),
-  get: vi.fn(),
-  getApiKey: vi.fn(),
+  getOAuthCredential: vi.fn(),
 };
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -20,8 +19,7 @@ describe('getCopilotModelCatalog', () => {
   beforeEach(() => {
     fetchMock.mockReset();
     githubCopilotStorage.reload.mockReset();
-    githubCopilotStorage.get.mockReset();
-    githubCopilotStorage.getApiKey.mockReset();
+    githubCopilotStorage.getOAuthCredential.mockReset();
   });
 
   afterEach(async () => {
@@ -31,7 +29,7 @@ describe('getCopilotModelCatalog', () => {
   });
 
   it('returns an empty list when there is no Copilot OAuth credential', async () => {
-    githubCopilotStorage.get.mockReturnValue(undefined);
+    githubCopilotStorage.getOAuthCredential.mockResolvedValue(undefined);
 
     const { getCopilotModelCatalog } = await import('../github-copilot.js');
     const models = await getCopilotModelCatalog({ authStorage: githubCopilotStorage as any });
@@ -41,7 +39,7 @@ describe('getCopilotModelCatalog', () => {
   });
 
   it('returns an empty list when the credential is not OAuth', async () => {
-    githubCopilotStorage.get.mockReturnValue({ type: 'api_key', key: 'sk-x' });
+    githubCopilotStorage.getOAuthCredential.mockResolvedValue({ type: 'api_key', key: 'sk-x' });
 
     const { getCopilotModelCatalog } = await import('../github-copilot.js');
     const models = await getCopilotModelCatalog({ authStorage: githubCopilotStorage as any });
@@ -51,13 +49,12 @@ describe('getCopilotModelCatalog', () => {
   });
 
   it('fetches /models against the proxy-ep base URL with the bearer token', async () => {
-    githubCopilotStorage.get.mockReturnValue({
+    githubCopilotStorage.getOAuthCredential.mockResolvedValue({
       type: 'oauth',
       access: 'tid=test;proxy-ep=proxy.individual.githubcopilot.com;',
       refresh: 'ghu_x',
       expires: Date.now() + 60_000,
     });
-    githubCopilotStorage.getApiKey.mockResolvedValue('tid=test;proxy-ep=proxy.individual.githubcopilot.com;');
     fetchMock.mockResolvedValueOnce(
       jsonResponse({
         data: [
@@ -92,13 +89,12 @@ describe('getCopilotModelCatalog', () => {
   });
 
   it('caches the model list across calls (single fetch within TTL)', async () => {
-    githubCopilotStorage.get.mockReturnValue({
+    githubCopilotStorage.getOAuthCredential.mockResolvedValue({
       type: 'oauth',
       access: 'tid=test;proxy-ep=proxy.individual.githubcopilot.com;',
       refresh: 'ghu_x',
       expires: Date.now() + 60_000,
     });
-    githubCopilotStorage.getApiKey.mockResolvedValue('tid=test;proxy-ep=proxy.individual.githubcopilot.com;');
     fetchMock.mockResolvedValue(
       jsonResponse({
         data: [
@@ -121,13 +117,12 @@ describe('getCopilotModelCatalog', () => {
   });
 
   it('shares the inflight fetch across concurrent callers', async () => {
-    githubCopilotStorage.get.mockReturnValue({
+    githubCopilotStorage.getOAuthCredential.mockResolvedValue({
       type: 'oauth',
       access: 'tid=test;proxy-ep=proxy.individual.githubcopilot.com;',
       refresh: 'ghu_x',
       expires: Date.now() + 60_000,
     });
-    githubCopilotStorage.getApiKey.mockResolvedValue('tid=test;proxy-ep=proxy.individual.githubcopilot.com;');
 
     let resolveFetch: (r: Response) => void;
     const fetchDeferred = new Promise<Response>(resolve => {
@@ -158,13 +153,12 @@ describe('getCopilotModelCatalog', () => {
   });
 
   it('falls back to the hard-coded model list when the fetch fails', async () => {
-    githubCopilotStorage.get.mockReturnValue({
+    githubCopilotStorage.getOAuthCredential.mockResolvedValue({
       type: 'oauth',
       access: 'tid=test;proxy-ep=proxy.individual.githubcopilot.com;',
       refresh: 'ghu_x',
       expires: Date.now() + 60_000,
     });
-    githubCopilotStorage.getApiKey.mockResolvedValue('tid=test;proxy-ep=proxy.individual.githubcopilot.com;');
     fetchMock.mockResolvedValueOnce(new Response('forbidden', { status: 403, statusText: 'Forbidden' }));
 
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -183,14 +177,13 @@ describe('getCopilotModelCatalog', () => {
   });
 
   it('honors the enterprise base URL when proxy-ep is absent', async () => {
-    githubCopilotStorage.get.mockReturnValue({
+    githubCopilotStorage.getOAuthCredential.mockResolvedValue({
       type: 'oauth',
       access: 'tid=test;exp=9999999999;', // no proxy-ep
       refresh: 'ghu_x',
       expires: Date.now() + 60_000,
       enterpriseUrl: 'company.ghe.com',
     });
-    githubCopilotStorage.getApiKey.mockResolvedValue('tid=test;exp=9999999999;');
     fetchMock.mockResolvedValueOnce(jsonResponse({ data: [] }));
 
     const { getCopilotModelCatalog } = await import('../github-copilot.js');
@@ -198,5 +191,39 @@ describe('getCopilotModelCatalog', () => {
 
     const [url] = fetchMock.mock.calls[0]!;
     expect(url).toBe('https://copilot-api.company.ghe.com/models');
+  });
+
+  it('does not reuse credentials or cached models after an account switch', async () => {
+    githubCopilotStorage.getOAuthCredential
+      .mockResolvedValueOnce({
+        type: 'oauth',
+        access: 'tid=account-a;exp=9999999999;',
+        refresh: 'ghu_a',
+        expires: Date.now() + 60_000,
+        accountInstanceId: 'github-copilot:account-a',
+      })
+      .mockResolvedValueOnce({
+        type: 'oauth',
+        access: 'tid=account-b;exp=9999999999;',
+        refresh: 'ghu_b',
+        expires: Date.now() + 60_000,
+        accountInstanceId: 'github-copilot:account-b',
+      });
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ data: [{ id: 'model-a', model_picker_enabled: true }] }))
+      .mockResolvedValueOnce(jsonResponse({ data: [{ id: 'model-b', model_picker_enabled: true }] }));
+
+    const { getCopilotModelCatalog } = await import('../github-copilot.js');
+    const first = await getCopilotModelCatalog({ authStorage: githubCopilotStorage as any });
+    const second = await getCopilotModelCatalog({ authStorage: githubCopilotStorage as any });
+
+    expect(first.map(model => model.id)).toEqual(['model-a']);
+    expect(second.map(model => model.id)).toEqual(['model-b']);
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      'https://api.individual.githubcopilot.com/models',
+      'https://api.individual.githubcopilot.com/models',
+    ]);
+    expect((fetchMock.mock.calls[0]![1].headers as Record<string, string>).Authorization).toContain('account-a');
+    expect((fetchMock.mock.calls[1]![1].headers as Record<string, string>).Authorization).toContain('account-b');
   });
 });

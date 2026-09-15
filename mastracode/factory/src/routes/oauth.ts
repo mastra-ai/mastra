@@ -234,7 +234,7 @@ async function persistOAuthCredential({
     return;
   }
   if (!authStorage) throw new Error('Credential storage is not available');
-  authStorage.set(authProviderId, { type: 'oauth', ...credentials });
+  await authStorage.addAccount(authProviderId, credentials);
 }
 
 async function readJsonBody(c: Context): Promise<Record<string, unknown>> {
@@ -513,7 +513,7 @@ export class OAuthRoutes extends Route<OAuthRoutesDeps> {
               onCredentialsChanged(tenant);
             } else {
               if (!authStorage) return c.json({ error: 'Credential storage is not available' }, 503);
-              authStorage.remove(authProviderId);
+              authStorage.logout(authProviderId);
             }
             return c.json({ ok: true });
           } catch (error) {

@@ -21,15 +21,17 @@ const TOKEN_URL = 'https://auth.x.ai/oauth2/token';
 const SCOPE = 'openid profile email offline_access grok-cli:access api:access';
 const DEVICE_CODE_GRANT_TYPE = 'urn:ietf:params:oauth:grant-type:device_code';
 const DEFAULT_TOKEN_EXPIRES_IN_SECONDS = 3600;
+const REQUEST_TIMEOUT_MS = 30_000;
 // Refresh 5 minutes before actual expiry (same skew as Anthropic).
 const REFRESH_SKEW_MS = 5 * 60 * 1000;
 
 async function postForm(url: string, params: Record<string, string>, signal?: AbortSignal): Promise<Response> {
+  const timeoutSignal = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
   return fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams(params).toString(),
-    signal,
+    signal: signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal,
   });
 }
 
@@ -39,15 +41,19 @@ function validateVerificationUri(raw: string): string {
   try {
     parsed = new URL(raw);
   } catch {
-    throw new Error(`xAI device authorization returned an invalid verification_uri: ${raw}`);
+    throw new Error('xAI device authorization returned an invalid verification_uri');
   }
   if (parsed.protocol !== 'https:') {
-    throw new Error(`xAI device authorization returned a non-https verification_uri: ${raw}`);
+    throw new Error('xAI device authorization returned a non-https verification_uri');
   }
   return parsed.toString();
 }
 
-function credentialsFromTokenResponse(data: unknown, previousRefreshToken?: string): OAuthCredentials {
+function credentialsFromTokenResponse(
+  data: unknown,
+  previousRefreshToken?: string,
+  previousIdToken?: string,
+): OAuthCredentials {
   const record = (data ?? {}) as Record<string, unknown>;
   const access = record.access_token;
   if (typeof access !== 'string' || access.length === 0) {
@@ -72,6 +78,10 @@ function credentialsFromTokenResponse(data: unknown, previousRefreshToken?: stri
     access,
     refresh,
     expires: Date.now() + expiresIn * 1000 - REFRESH_SKEW_MS,
+    // Kept so the account label can resolve the email claim later; xAI's
+    // refresh responses re-issue it, and the previous one is carried forward
+    // when they don't.
+    idToken: typeof record.id_token === 'string' && record.id_token.length > 0 ? record.id_token : previousIdToken,
   };
 }
 
@@ -102,8 +112,7 @@ export async function startXAIDeviceLogin(options?: { signal?: AbortSignal }): P
   const response = await postForm(DEVICE_CODE_URL, { client_id: CLIENT_ID, scope: SCOPE }, options?.signal);
 
   if (!response.ok) {
-    const text = await response.text().catch(() => '');
-    throw new Error(`Failed to initiate xAI device authorization: ${response.status}${text ? ` ${text}` : ''}`);
+    throw new Error(`Failed to initiate xAI device authorization: ${response.status}`);
   }
 
   const data = (await response.json()) as {
@@ -161,7 +170,7 @@ async function pollXAITokenOnce(
   try {
     body = JSON.parse(text) as { error?: string; interval?: number };
   } catch {
-    // Non-JSON error body — fail loudly below with the raw text.
+    // Non-JSON upstream bodies are intentionally omitted from user-visible errors.
   }
 
   switch (body.error) {
@@ -177,7 +186,7 @@ async function pollXAITokenOnce(
     default:
       return {
         status: 'failed',
-        error: `xAI device authorization failed: ${response.status}${text ? ` ${text}` : ''}`,
+        error: `xAI device authorization failed: ${response.status}${body.error ? ` ${body.error}` : ''}`,
       };
   }
 }
@@ -228,7 +237,11 @@ export async function loginXAI(callbacks: OAuthLoginCallbacks): Promise<OAuthCre
 /**
  * Refresh xAI OAuth token
  */
-export async function refreshXAIToken(refreshToken: string, signal?: AbortSignal): Promise<OAuthCredentials> {
+export async function refreshXAIToken(
+  refreshToken: string,
+  signal?: AbortSignal,
+  previousIdToken?: string,
+): Promise<OAuthCredentials> {
   const response = await postForm(
     TOKEN_URL,
     {
@@ -240,11 +253,24 @@ export async function refreshXAIToken(refreshToken: string, signal?: AbortSignal
   );
 
   if (!response.ok) {
-    const text = await response.text().catch(() => '');
-    throw new Error(`xAI token refresh failed: ${response.status}${text ? ` ${text}` : ''}`);
+    throw new Error(`xAI token refresh failed: ${response.status}`);
   }
 
-  return credentialsFromTokenResponse((await response.json()) as unknown, refreshToken);
+  return credentialsFromTokenResponse((await response.json()) as unknown, refreshToken, previousIdToken);
+}
+
+/** Decode the email claim out of an id_token JWT payload (no verification). */
+function emailFromIdToken(idToken: string | undefined): string | undefined {
+  if (typeof idToken !== 'string') return undefined;
+  const parts = idToken.split('.');
+  if (parts.length !== 3) return undefined;
+  try {
+    const padded = (parts[1] ?? '').replace(/-/g, '+').replace(/_/g, '/');
+    const json = JSON.parse(Buffer.from(padded, 'base64').toString('utf8')) as { email?: unknown };
+    return typeof json.email === 'string' && json.email.length > 0 ? json.email : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 export const xaiOAuthProvider: OAuthProviderInterface = {
@@ -256,10 +282,14 @@ export const xaiOAuthProvider: OAuthProviderInterface = {
   },
 
   async refreshToken(credentials: OAuthCredentials): Promise<OAuthCredentials> {
-    return refreshXAIToken(credentials.refresh);
+    return refreshXAIToken(credentials.refresh, undefined, credentials.idToken as string | undefined);
   },
 
   getApiKey(credentials: OAuthCredentials): string {
     return credentials.access;
+  },
+
+  getAccountLabel(credentials: OAuthCredentials): Promise<string | undefined> {
+    return Promise.resolve(emailFromIdToken(credentials.idToken as string | undefined));
   },
 };
