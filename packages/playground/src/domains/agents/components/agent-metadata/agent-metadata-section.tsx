@@ -6,13 +6,13 @@ import { InfoIcon } from 'lucide-react';
 import { useLinkComponent } from '@/lib/framework';
 
 const sectionAccentClasses = {
-  amber: '[--section-accent:var(--badge-yellow-fg)] dark:[--section-accent:var(--accent6)]',
-  blue: '[--section-accent:var(--badge-blue-fg)] dark:[--section-accent:var(--badge-blue)]',
-  cyan: '[--section-accent:var(--badge-cyan-fg)] dark:[--section-accent:var(--badge-cyan)]',
-  green: '[--section-accent:var(--badge-green-fg)] dark:[--section-accent:var(--badge-green)]',
-  orange: '[--section-accent:var(--badge-orange-fg)] dark:[--section-accent:var(--badge-orange)]',
-  pink: '[--section-accent:var(--badge-pink-fg)] dark:[--section-accent:var(--badge-pink)]',
-  purple: '[--section-accent:var(--badge-purple-fg)] dark:[--section-accent:var(--badge-purple)]',
+  amber: '[--section-accent:var(--badge-yellow-fg)]',
+  blue: '[--section-accent:var(--badge-blue-fg)]',
+  cyan: '[--section-accent:var(--badge-cyan-fg)]',
+  green: '[--section-accent:var(--badge-green-fg)]',
+  orange: '[--section-accent:var(--badge-orange-fg)]',
+  pink: '[--section-accent:var(--badge-pink-fg)]',
+  purple: '[--section-accent:var(--badge-purple-fg)]',
 };
 
 export interface AgentMetadataSectionProps {
