@@ -23,6 +23,7 @@ const semanticTokens = [
   'border',
   'ring',
   'sidebar-accent',
+  'selected',
 ] as const;
 
 const deferredSemanticTokens = [
@@ -35,7 +36,6 @@ const deferredSemanticTokens = [
   'secondary-foreground',
   'accent',
   'accent-foreground',
-  'selected',
   'input',
   'sidebar-foreground',
   'sidebar-accent-foreground',
@@ -54,6 +54,7 @@ const darkAliases = {
   border: 'gray-alpha-2',
   ring: 'gray-8',
   'sidebar-accent': 'gray-alpha-1',
+  selected: 'gray-alpha-2',
 } as const;
 
 const lightAliases = {

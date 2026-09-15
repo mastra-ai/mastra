@@ -15207,6 +15207,20 @@
       },
       {
         "file": "packages/playground-ui/src/ds/tokens/tokens.stories.tsx",
+        "token": "selected",
+        "form": "css-variable",
+        "kind": "semantic",
+        "count": 1
+      },
+      {
+        "file": "packages/playground-ui/src/ds/tokens/tokens.stories.tsx",
+        "token": "selected",
+        "form": "typescript",
+        "kind": "semantic",
+        "count": 1
+      },
+      {
+        "file": "packages/playground-ui/src/ds/tokens/tokens.stories.tsx",
         "token": "sidebar",
         "form": "typescript",
         "kind": "semantic",
@@ -15217,7 +15231,7 @@
         "token": "sidebar-accent",
         "form": "css-variable",
         "kind": "semantic",
-        "count": 2
+        "count": 1
       },
       {
         "file": "packages/playground-ui/src/ds/tokens/tokens.stories.tsx",
@@ -15482,6 +15496,13 @@
       },
       {
         "file": "packages/playground-ui/src/ds/tokens/colors.ts",
+        "token": "selected",
+        "form": "css-variable",
+        "kind": "semantic",
+        "count": 1
+      },
+      {
+        "file": "packages/playground-ui/src/ds/tokens/colors.ts",
         "token": "sidebar",
         "form": "css-variable",
         "kind": "semantic",
@@ -15650,6 +15671,13 @@
       },
       {
         "file": "packages/playground-ui/theme.css",
+        "token": "selected",
+        "form": "css-variable",
+        "kind": "semantic",
+        "count": 1
+      },
+      {
+        "file": "packages/playground-ui/theme.css",
         "token": "sidebar",
         "form": "css-variable",
         "kind": "semantic",
@@ -15716,7 +15744,7 @@
   "summary": {
     "production": 3609,
     "tests": 141,
-    "stories": 835,
-    "tokens": 61
+    "stories": 836,
+    "tokens": 63
   }
 }
