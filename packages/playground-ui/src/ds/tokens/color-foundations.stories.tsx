@@ -32,7 +32,7 @@ const BackgroundSwatch = ({ token, role }: { token: string; role: string }) => (
       aria-label={`${token} color swatch`}
       role="img"
       className="h-24 border border-border1"
-      style={{ borderRadius: 'var(--radius-md)', background: `var(--${token})` }}
+      style={{ background: `var(--${token})` }}
     />
     <div className="flex min-w-0 items-start justify-between gap-2">
       <Txt variant="ui-sm" font="mono" className="truncate">
@@ -51,7 +51,7 @@ const ScaleSwatch = ({ token, step }: { token: string; step: number }) => (
       aria-label={`${token} color swatch`}
       role="img"
       className="h-16 border border-border1"
-      style={{ borderRadius: 'var(--radius-md)', background: `var(--${token})` }}
+      style={{ background: `var(--${token})` }}
     />
     <Txt variant="ui-xs" font="mono" className="text-neutral3">
       {step}
@@ -94,27 +94,25 @@ export const ColorFoundations: Story = {
     const activeTheme = context.globals.backgrounds?.value === 'light' ? 'Light' : 'Dark';
 
     return (
-      <div
-        className="max-w-320 flex flex-col gap-8 border border-border1 p-5 sm:p-8"
-        style={{ borderRadius: 'var(--radius-xl)', background: 'var(--background-2)' }}
-      >
-        <header className="flex flex-col items-start justify-between gap-4 sm:flex-row">
+      <div className="max-w-320 px-5 sm:px-8" style={{ background: 'var(--background-2)' }}>
+        <header className="grid gap-5 border-y border-border1 py-6 sm:grid-cols-[10rem_minmax(0,1fr)_auto] sm:py-8">
+          <Txt variant="ui-xs" font="mono" className="text-neutral3 uppercase">
+            Neutrals / 23 tokens
+          </Txt>
           <div className="max-w-180 flex flex-col gap-2">
             <Txt as="h1" variant="header-lg" className="font-semibold">
               Color foundations
             </Txt>
             <Txt variant="ui-md" className="text-neutral4">
-              Backgrounds encode nesting. Gray encodes contrast. The same gray step works across themes.
+              Backgrounds encode nesting. Gray encodes contrast. The same step keeps its role across themes.
             </Txt>
           </div>
-          <div className="rounded-full border border-border1 px-3 py-1.5" style={{ background: 'var(--background-3)' }}>
-            <Txt variant="ui-xs" font="mono" className="text-neutral4 uppercase">
-              {activeTheme}
-            </Txt>
-          </div>
+          <Txt variant="ui-xs" font="mono" className="text-neutral3 uppercase">
+            Mode / {activeTheme}
+          </Txt>
         </header>
 
-        <section className="flex flex-col gap-4 lg:grid lg:grid-cols-[8rem_minmax(0,1fr)] lg:gap-6">
+        <section className="flex flex-col gap-5 py-8 lg:grid lg:grid-cols-[8rem_minmax(0,1fr)] lg:gap-6">
           <div className="flex flex-col gap-1">
             <Txt as="h2" variant="header-xs" className="font-medium">
               Backgrounds
@@ -130,22 +128,21 @@ export const ColorFoundations: Story = {
           </div>
         </section>
 
-        <div className="h-px bg-border1" />
+        <section className="border-t border-border1 py-8">
+          <ScaleRow label="Gray" description="Contrast, not lightness" tokens={grayTokens} />
+        </section>
 
-        <ScaleRow label="Gray" description="Contrast, not lightness" tokens={grayTokens} />
-
-        <div className="h-px bg-border1" />
-
-        <div className="rounded-lg p-4 sm:p-5" style={{ background: 'var(--background-1)' }}>
+        <section
+          className="-mx-5 border-y border-border1 px-5 py-8 sm:-mx-8 sm:px-8"
+          style={{ background: 'var(--background-1)' }}
+        >
           <ScaleRow label="Gray alpha" description="Opacity and contrast" tokens={grayAlphaTokens} />
-        </div>
+        </section>
 
-        <footer className="flex flex-col gap-2 border-t border-border1 pt-4 sm:flex-row sm:items-center sm:justify-between">
+        <footer className="flex flex-col gap-1 py-5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-8">
+          <Txt variant="ui-sm">Foundation CSS properties. No generated utilities.</Txt>
           <Txt variant="ui-sm" className="text-neutral3">
-            Background numbers follow product layers. Gray numbers increase contrast from 1 to 10.
-          </Txt>
-          <Txt variant="ui-sm" font="mono" className="shrink-0 text-neutral3">
-            Raw CSS properties
+            Gray runs from subtle 1 to strong 10.
           </Txt>
         </footer>
       </div>
