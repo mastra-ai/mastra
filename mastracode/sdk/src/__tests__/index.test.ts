@@ -1359,7 +1359,7 @@ describe('createMastraCode', () => {
     expect(startNotice!.processAPIError).toBeUndefined();
   });
 
-  it('sets a shared error-processor retry budget that cannot starve an arbitrary account pool', async () => {
+  it('sets a finite shared retry ceiling with headroom for large account pools', async () => {
     const { createMastraCode } = await import('../index.js');
 
     await createMastraCode();
@@ -1368,14 +1368,12 @@ describe('createMastraCode', () => {
       .map(call => call[0] as { maxProcessorRetries?: number } | undefined)
       .find(config => typeof config?.maxProcessorRetries === 'number');
     const budget = agentConfig?.maxProcessorRetries;
-    expect(budget).toBe(Number.MAX_SAFE_INTEGER);
+    expect(budget).toBe(1024);
+    expect(Number.isSafeInteger(budget)).toBe(true);
 
-    // Core shares this ceiling across transient and account-rotation retries.
-    // The individual processors retain their finite limits, while the shared
-    // cap leaves even a very large account pool reachable.
-    const transientRetries = 10;
-    const largePool = 10_000;
-    expect(transientRetries + largePool).toBeLessThan(budget!);
+    // Ten transient attempts per account still leave room for far more local
+    // subscriptions than a person can realistically configure.
+    expect(10 * 64).toBeLessThan(budget!);
   });
 
   it('prepends embedding input processors without replacing mandatory built-ins', async () => {
