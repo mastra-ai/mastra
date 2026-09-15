@@ -30,7 +30,7 @@ export const WorkflowLayout = ({ workflowId, children, leftSlot, rightSlot }: Wo
   const [informationSurface, setInformationSurface] = useState<HTMLElement | null>(null);
   const [recentRunsSurface, setRecentRunsSurface] = useState<HTMLElement | null>(null);
   const { defaultLayout, onLayoutChange } = useDefaultLayout({
-    id: `workflow-layout-v6-${workflowId}`,
+    id: `workflow-canvas-panels-${workflowId}`,
     storage: localStorage,
   });
 

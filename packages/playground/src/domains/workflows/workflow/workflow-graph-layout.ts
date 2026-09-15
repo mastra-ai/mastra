@@ -30,9 +30,6 @@ export const getLayoutedElements = (nodes: WorkflowGraphNode[], edges: WorkflowG
 
   Dagre.layout(g);
 
-  const fullWidth = g.graph()?.width ? g.graph().width! / 2 : 0;
-  const fullHeight = g.graph()?.height ? g.graph().height! / 2 : 0;
-
   return {
     nodes: nodes.map(node => {
       const position = g.node(node.id);
@@ -42,7 +39,5 @@ export const getLayoutedElements = (nodes: WorkflowGraphNode[], edges: WorkflowG
       return { ...node, position: { x: positionX, y: positionY } };
     }),
     edges,
-    fullWidth,
-    fullHeight,
   };
 };

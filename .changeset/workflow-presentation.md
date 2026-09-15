@@ -1,5 +1,5 @@
 ---
-'@mastra/playground-ui': major
+'@mastra/playground-ui': minor
 ---
 
 Redesign workflow cards with colored type badges, inset content surfaces, execution timing, and a shared activity edge. Conditions display their supplied expressions inline with copy support and unformatted-source fallbacks. Nested graphs expand inside dashed groups, while parallel paths retain a shared input-data control and distinct branch outputs.

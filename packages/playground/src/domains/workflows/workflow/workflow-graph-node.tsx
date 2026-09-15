@@ -71,7 +71,6 @@ const WorkflowStepCard = ({
           <WorkflowBodyGraph stepGraph={stepGraph} workflowName={fullLabel} isForEach={data.isForEach} />
         ) : undefined
       }
-      onOpenBody={stepGraph?.length ? () => showNestedGraph({ label, fullStep: fullLabel, stepGraph }) : undefined}
       description={description ?? data.mapContext?.description}
       displayStatus={displayStatus}
       isNestedWorkflowStep={data.workflowStep.kind === 'nested-workflow-step'}
