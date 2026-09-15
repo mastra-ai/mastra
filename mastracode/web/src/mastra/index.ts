@@ -193,6 +193,14 @@ const jiraApiToken = process.env.JIRA_API_TOKEN?.trim();
 const platformJiraConfigured = Boolean(
   process.env.MASTRA_PLATFORM_ACCESS_TOKEN?.trim() || process.env.MASTRA_PLATFORM_SECRET_KEY?.trim(),
 );
+const jiraDirectVars = [jiraBaseUrl, jiraEmail, jiraApiToken];
+if (jiraDirectVars.some(Boolean) && !jiraDirectVars.every(Boolean)) {
+  // A partial group silently disables direct Jira (no /web/jira routes mount),
+  // so tell the operator which knob is missing instead of showing nothing.
+  console.warn(
+    'Direct Jira intake is disabled: JIRA_BASE_URL, JIRA_EMAIL, and JIRA_API_TOKEN must all be set together.',
+  );
+}
 const jira =
   jiraBaseUrl && jiraEmail && jiraApiToken
     ? new JiraIntegration({

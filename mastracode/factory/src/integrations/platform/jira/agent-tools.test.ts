@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeRouteAuth } from '../../../routes/test-utils.js';
 import { createFactoryStorageForTests } from '../../../storage/test-utils.js';
 import type { FactoryStorageTestSeed } from '../../../storage/test-utils.js';
+import { JIRA_UNTRUSTED_CONTENT_NOTICE } from '../../jira/agent-tools.js';
 import { JiraApiError } from '../../jira/api.js';
 import { buildPlatformJiraAgentTools } from './agent-tools.js';
 import { PlatformJiraIntegration } from './integration.js';
@@ -104,7 +105,7 @@ describe('jira_get_issue', () => {
     const tools = await buildPlatformJiraAgentTools({ jira, requestContext: requestContextFor(PROJECT_ID) });
     const input = (tools.jira_get_issue!.inputSchema as any).parse({ issue: ' ENG-42 ' });
     const result = await (tools.jira_get_issue!.execute as any)(input);
-    expect(result).toEqual(issueDetail);
+    expect(result).toEqual({ notice: JIRA_UNTRUSTED_CONTENT_NOTICE, ...issueDetail });
     expect(fetchJiraIssueDetail).toHaveBeenCalledWith('ENG-42');
   });
 

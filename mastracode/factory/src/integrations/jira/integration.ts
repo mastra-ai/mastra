@@ -18,6 +18,7 @@
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 
+import type { IntegrationConnection } from '../../capabilities/connection.js';
 import type {
   CreateIntakeCommentInput,
   CreatedIntakeComment,
@@ -54,6 +55,17 @@ export interface JiraIntegrationConfig {
 
 /** Hard stop for comment pagination so a misbehaving `total` can't loop forever. */
 const ISSUE_COMMENTS_MAX_PAGES = 20;
+
+/** Hard stop for project pagination so a misbehaving `isLast` can't loop forever. */
+const PROJECT_SEARCH_MAX_PAGES = 50;
+
+/**
+ * The `Intake` contract requires a connection argument, but Jira credentials
+ * live on the integration instance — this inert placeholder is accepted and
+ * ignored everywhere, and keeps the real API token out of resolved dispatches
+ * and agent-tool calls.
+ */
+export const DEPLOYMENT_CONNECTION: IntegrationConnection = { type: 'oauth', accessToken: 'deployment-global' };
 
 /** Jira issue keys look like `ENG-42`. */
 const ISSUE_KEY_PATTERN = /^[A-Za-z][A-Za-z0-9_]*-\d+$/;
@@ -187,7 +199,10 @@ export class JiraIntegration implements FactoryIntegration {
   async #resolveIntakeDispatch({ externalSource }: ResolveIntakeDispatchInput): Promise<ResolvedIntakeDispatch | null> {
     if (externalSource.type !== 'issue') return null;
     return {
-      connection: { type: 'oauth', accessToken: this.#config.apiToken },
+      // Inert placeholder, never the real token: the Jira intake methods read
+      // credentials from the client, and the resolved dispatch travels through
+      // generic reconciler/dispatcher code that must stay secret-free.
+      connection: DEPLOYMENT_CONNECTION,
       issueId: externalSource.externalId,
     };
   }
@@ -196,7 +211,7 @@ export class JiraIntegration implements FactoryIntegration {
   async #listSources(): Promise<IntakeSource[]> {
     const sources: IntakeSource[] = [];
     let startAt = 0;
-    for (;;) {
+    for (let pageCount = 0; pageCount < PROJECT_SEARCH_MAX_PAGES; pageCount++) {
       const page = await this.api.listProjects({ startAt });
       for (const project of page.values) {
         sources.push({

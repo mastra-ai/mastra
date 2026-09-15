@@ -62,6 +62,9 @@ interface JiraPageCursor {
 }
 
 const ISSUE_COMMENTS_MAX_PAGES = 20;
+
+/** Hard stop for project pagination so a misbehaving `isLast` can't loop forever. */
+const PROJECT_SEARCH_MAX_PAGES = 50;
 const ISSUE_KEY_PATTERN = /^[A-Za-z][A-Za-z0-9_]*-\d+$/;
 const PLATFORM_JIRA_PROVIDER_CONFIG_KEY = 'factory-jira';
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -188,7 +191,7 @@ export class PlatformJiraIntegration implements FactoryIntegration {
     for (const connection of await this.#activeConnections()) {
       const context = await this.#connectionContext(connection);
       let startAt = 0;
-      for (;;) {
+      for (let pageCount = 0; pageCount < PROJECT_SEARCH_MAX_PAGES; pageCount++) {
         const page = await context.api.listProjects({ startAt });
         for (const project of page.values) {
           sources.push({
@@ -284,17 +287,11 @@ export class PlatformJiraIntegration implements FactoryIntegration {
   }
 
   async #getIssue(input: GetIntakeIssueInput): Promise<IntakeIssueDetail | null> {
-    const resolved = await this.#resolveRequest(input);
-    let issue: JiraIssue;
-    try {
-      issue = await resolved.context.api.getIssue(resolved.issueId);
-    } catch (error) {
-      if (error instanceof JiraApiError && error.status === 404) return null;
-      throw error;
-    }
-    const { comments, total } = await this.#listAllComments(resolved.context.api, issue.key);
+    const { context, issue } = (await this.#findIssue(input)) ?? {};
+    if (!context || !issue) return null;
+    const { comments, total } = await this.#listAllComments(context.api, issue.key);
     return {
-      ...this.#toIntakeIssue(issue, resolved.context.siteUrl),
+      ...this.#toIntakeIssue(issue, context.siteUrl),
       commentCount: total,
       description: issue.fields.description ? adfToText(issue.fields.description) || null : null,
       comments: comments.map(comment => ({
@@ -364,6 +361,47 @@ export class PlatformJiraIntegration implements FactoryIntegration {
       throw new JiraApiError('Jira issue reference must identify a connection when multiple sites are connected.', 400);
     }
     return { context: await this.#connectionContext(active[0]!), issueId };
+  }
+
+  /**
+   * Locate an issue for a read. A connection-scoped reference resolves
+   * directly; a plain issue key (the agent tool's normal input) is looked up
+   * across every active connection so multi-site organizations can still
+   * fetch by key — the first site that knows the key wins, which is safe
+   * because Jira project-key prefixes make cross-site collisions unlikely and
+   * the tool is read-only.
+   */
+  async #findIssue(input: GetIntakeIssueInput): Promise<{ context: JiraConnectionContext; issue: JiraIssue } | null> {
+    const issueReference = decodeIssueReference(input.issueId);
+    const source = input.sourceId ? decodeSourceId(input.sourceId) : null;
+    const connectionId =
+      issueReference?.connectionId ?? source?.connectionId ?? connectionIdFromConnection(input.connection);
+    const issueId = issueReference?.issueId ?? input.issueId;
+
+    const candidates: JiraConnectionContext[] = [];
+    if (connectionId) {
+      candidates.push(await this.#connectionContextById(connectionId));
+    } else {
+      const active = await this.#activeConnections();
+      if (active.length === 0) {
+        throw new JiraApiError('Jira connection is unavailable or requires reauthentication.', 401);
+      }
+      for (const connection of active) candidates.push(await this.#connectionContext(connection));
+    }
+
+    let firstError: unknown;
+    for (const context of candidates) {
+      try {
+        return { context, issue: await context.api.getIssue(issueId) };
+      } catch (error) {
+        if (error instanceof JiraApiError && error.status === 404) continue;
+        firstError ??= error;
+      }
+    }
+    // Not found anywhere. If a site failed for a non-404 reason, surface that
+    // failure instead of a silent "not found".
+    if (firstError !== undefined) throw firstError;
+    return null;
   }
 
   #toIntakeIssue(issue: JiraIssue, siteUrl: string): IntakeIssue {
@@ -534,7 +572,15 @@ function decodePageCursor(cursor: string | undefined): JiraPageCursor {
 
 function normalizeSiteUrl(value: string): string {
   const candidate = /^https?:\/\//i.test(value) ? value : `https://${value}`;
-  const url = new URL(candidate);
+  // `accountLabel` is free-form Platform data — an unparsable value must
+  // surface as the classified 502 the routes already handle, not a raw
+  // TypeError escaping the connection context.
+  let url: URL;
+  try {
+    url = new URL(candidate);
+  } catch {
+    throw new JiraApiError('Jira site URL is invalid.', 502);
+  }
   if (url.protocol !== 'http:' && url.protocol !== 'https:') throw new JiraApiError('Jira site URL is invalid.', 502);
   return url.origin;
 }

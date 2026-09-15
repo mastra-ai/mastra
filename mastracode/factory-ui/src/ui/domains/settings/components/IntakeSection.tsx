@@ -374,16 +374,35 @@ export function IntakeSection() {
   );
 }
 
-/** Group Jira projects by connected site so duplicate project keys stay distinguishable. */
+/**
+ * Group Jira projects by connection (labelled with the site host) so duplicate
+ * project keys stay distinguishable — including two connections to the same
+ * site, which get numbered labels instead of being merged.
+ */
 function groupJiraProjectsBySite(projects: JiraProject[]): SourcePickerGroup[] {
-  const bySite = new Map<string, SourcePickerGroup>();
+  const byConnection = new Map<string, SourcePickerGroup>();
   for (const project of projects) {
     const site = project.site ?? 'Jira';
-    const group = bySite.get(site) ?? { id: project.connectionId ?? site, label: site, items: [] };
+    const key = project.connectionId ?? site;
+    const group = byConnection.get(key) ?? { id: key, label: site, items: [] };
     group.items.push({ id: project.id, label: `${project.key} · ${project.name}` });
-    bySite.set(site, group);
+    byConnection.set(key, group);
   }
-  return [...bySite.values()].toSorted((left, right) => (left.label ?? '').localeCompare(right.label ?? ''));
+  const groups = [...byConnection.values()].toSorted((left, right) =>
+    (left.label ?? '').localeCompare(right.label ?? ''),
+  );
+  const labelCounts = new Map<string, number>();
+  for (const group of groups) labelCounts.set(group.label ?? '', (labelCounts.get(group.label ?? '') ?? 0) + 1);
+  const seen = new Map<string, number>();
+  for (const group of groups) {
+    const label = group.label ?? '';
+    if ((labelCounts.get(label) ?? 0) > 1) {
+      const ordinal = (seen.get(label) ?? 0) + 1;
+      seen.set(label, ordinal);
+      group.label = `${label} · connection ${ordinal}`;
+    }
+  }
+  return groups;
 }
 
 function groupLinearSourcesByTeam(

@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeRouteAuth } from '../../routes/test-utils.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
 import type { FactoryStorageTestSeed } from '../../storage/test-utils.js';
-import { buildJiraAgentTools } from './agent-tools.js';
+import { buildJiraAgentTools, JIRA_UNTRUSTED_CONTENT_NOTICE } from './agent-tools.js';
 import { JiraApiError } from './api.js';
 import { JiraIntegration } from './integration.js';
 
@@ -100,7 +100,7 @@ describe('jira_get_issue', () => {
     fetchJiraIssueDetail.mockResolvedValueOnce(issueDetail);
     const tools = await buildJiraAgentTools({ jira, requestContext: requestContextFor(PROJECT_ID) });
     const result = await (tools.jira_get_issue!.execute as any)({ issue: ' ENG-42 ' });
-    expect(result).toEqual(issueDetail);
+    expect(result).toEqual({ notice: JIRA_UNTRUSTED_CONTENT_NOTICE, ...issueDetail });
     expect(fetchJiraIssueDetail).toHaveBeenCalledWith('ENG-42');
   });
 

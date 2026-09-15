@@ -20,6 +20,8 @@ import type { AdfNode } from './adf.js';
 import { textToAdf } from './adf.js';
 
 const JIRA_TIMEOUT_MS = 15_000;
+/** Hosts allowed to receive Basic credentials over plain http (local development mocks). */
+const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]', '::1']);
 /** Issue page size — Linear parity (`LINEAR_ISSUES_PAGE_SIZE`). */
 export const JIRA_ISSUES_PAGE_SIZE = 30;
 /** Comment page size — Linear parity (`LINEAR_COMMENTS_PAGE_SIZE`). */
@@ -168,6 +170,17 @@ export class JiraApiClient {
     if (!config.baseUrl) {
       throw new Error('JiraApiClient is missing required config: baseUrl.');
     }
+    // Fail fast on a malformed base URL: a bare host like `acme.atlassian.net`
+    // would otherwise surface later as an opaque `TypeError: Invalid URL`.
+    let parsed: URL;
+    try {
+      parsed = new URL(config.baseUrl);
+    } catch {
+      throw new Error(`JiraApiClient baseUrl is not an absolute URL: "${config.baseUrl}".`);
+    }
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+      throw new Error(`JiraApiClient baseUrl must be an http(s) URL: "${config.baseUrl}".`);
+    }
     if (config.accessToken !== undefined) {
       if (!config.accessToken) {
         throw new Error('JiraApiClient is missing required config: accessToken.');
@@ -177,6 +190,11 @@ export class JiraApiClient {
       const missing = (['email', 'apiToken'] as const).filter(key => !config[key]);
       if (missing.length > 0) {
         throw new Error(`JiraApiClient is missing required config: ${missing.join(', ')}.`);
+      }
+      // Basic credentials ride on every request, so never send them over
+      // plaintext to a remote host. Loopback stays allowed for local mocks.
+      if (parsed.protocol === 'http:' && !LOOPBACK_HOSTS.has(parsed.hostname)) {
+        throw new Error('JiraApiClient baseUrl must use https when Basic credentials are configured.');
       }
       this.#authHeader = `Basic ${Buffer.from(`${config.email}:${config.apiToken}`).toString('base64')}`;
     }

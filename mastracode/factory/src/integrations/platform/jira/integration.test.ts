@@ -276,11 +276,61 @@ describe('PlatformJiraIntegration over integrations v2', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it('rejects an unqualified issue key when multiple Jira sites are connected', async () => {
-    stubRoutes([]);
+  it('finds an unqualified issue key by scanning the connected sites in order', async () => {
+    // The acme site does not know the key; the beta site does.
+    stubRoutes([
+      [
+        'GET',
+        `a1b_acme/proxy/ex/jira/${ACME_CLOUD_ID}/rest/api/3/issue/OPS-7?`,
+        () => json({ errorMessages: ['Issue does not exist'] }, 404),
+      ],
+      ['GET', `a1b_beta/proxy/ex/jira/${BETA_CLOUD_ID}/rest/api/3/issue/OPS-7?`, () => json(issue('OPS-7', '2'))],
+      [
+        'GET',
+        `a1b_beta/proxy/ex/jira/${BETA_CLOUD_ID}/rest/api/3/issue/OPS-7/comment`,
+        () => json({ comments: [], startAt: 0, maxResults: 50, total: 0 }),
+      ],
+    ]);
+
+    const detail = await integration().intake.getIssue({ connection, issueId: 'OPS-7' });
+
+    expect(detail).toMatchObject({ identifier: 'OPS-7', url: 'https://beta.atlassian.net/browse/OPS-7' });
+  });
+
+  it('returns null for an unqualified issue key no connected site knows', async () => {
+    stubRoutes([
+      [
+        'GET',
+        `a1b_acme/proxy/ex/jira/${ACME_CLOUD_ID}/rest/api/3/issue/ENG-404?`,
+        () => json({ errorMessages: ['Issue does not exist'] }, 404),
+      ],
+      [
+        'GET',
+        `a1b_beta/proxy/ex/jira/${BETA_CLOUD_ID}/rest/api/3/issue/ENG-404?`,
+        () => json({ errorMessages: ['Issue does not exist'] }, 404),
+      ],
+    ]);
+
+    await expect(integration().intake.getIssue({ connection, issueId: 'ENG-404' })).resolves.toBeNull();
+  });
+
+  it('surfaces a site failure instead of "not found" when the key resolves nowhere else', async () => {
+    stubRoutes([
+      [
+        'GET',
+        `a1b_acme/proxy/ex/jira/${ACME_CLOUD_ID}/rest/api/3/issue/ENG-42?`,
+        () => json({ errorMessages: ['boom'] }, 500),
+      ],
+      [
+        'GET',
+        `a1b_beta/proxy/ex/jira/${BETA_CLOUD_ID}/rest/api/3/issue/ENG-42?`,
+        () => json({ errorMessages: ['Issue does not exist'] }, 404),
+      ],
+    ]);
+
     await expect(integration().intake.getIssue({ connection, issueId: 'ENG-42' })).rejects.toMatchObject({
       code: 'jira_request_failed',
-      status: 400,
+      status: 500,
     } satisfies Partial<JiraApiError>);
   });
 

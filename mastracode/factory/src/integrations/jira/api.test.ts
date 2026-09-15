@@ -39,6 +39,30 @@ describe('JiraApiClient construction', () => {
   it('normalizes the base URL by stripping trailing slashes', () => {
     expect(client().baseUrl).toBe(BASE);
   });
+
+  it('rejects a base URL that is not an absolute URL', () => {
+    expect(() => new JiraApiClient({ baseUrl: 'acme.atlassian.net', email: 'ops@acme.test', apiToken: 'tok' })).toThrow(
+      /not an absolute URL/,
+    );
+  });
+
+  it('rejects a non-http(s) base URL', () => {
+    expect(
+      () => new JiraApiClient({ baseUrl: 'ftp://acme.atlassian.net', email: 'ops@acme.test', apiToken: 'tok' }),
+    ).toThrow(/http\(s\)/);
+  });
+
+  it('refuses to send Basic credentials over plaintext http to a remote host', () => {
+    expect(
+      () => new JiraApiClient({ baseUrl: 'http://acme.atlassian.net', email: 'ops@acme.test', apiToken: 'tok' }),
+    ).toThrow(/https/);
+  });
+
+  it('allows plain http for loopback hosts (local mocks)', () => {
+    expect(new JiraApiClient({ baseUrl: 'http://localhost:8080', email: 'ops@acme.test', apiToken: 'tok' }).baseUrl).toBe(
+      'http://localhost:8080',
+    );
+  });
 });
 
 describe('JiraApiClient requests', () => {
