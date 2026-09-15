@@ -503,7 +503,7 @@ export abstract class Bundler extends MastraBundler {
     mastraEntryFile: string,
     analyzedBundleInfo: Awaited<ReturnType<typeof analyzeBundle>>,
     toolsPaths: (string | string[])[],
-    { enableSourcemap, enableMinify, enableEsmShim, externals }: BundlerOptions,
+    { enableSourcemap, enableMinify, enableEsmShim, externals, dynamicPackages }: BundlerOptions,
     additionalEntries: Record<string, string>,
     toolProjectRoot: string,
   ) {
@@ -525,6 +525,7 @@ export abstract class Bundler extends MastraBundler {
         projectRoot,
         enableEsmShim,
         externalsPreset: externals === true,
+        externalPackages: dynamicPackages,
       },
     );
     const toolsInputOptions = await this.listToolsInputOptions(toolsPaths, toolProjectRoot);

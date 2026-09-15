@@ -642,6 +642,23 @@ export const mastra = new Mastra({
     }, timeout);
 
     runApiTests(port);
+
+    it('should preserve configured external package subpaths', async () => {
+      const res = await fetch(`http://localhost:${port}/protobuf-wkt`);
+      const body = await res.json();
+      expect(res.status).toBe(200);
+      expect(body).toEqual({ typeName: 'google.protobuf.Timestamp' });
+
+      const outputDir = join(fixturePath, 'apps', 'custom', '.mastra', 'output');
+      const outputFiles = await readdir(outputDir);
+      const output = (
+        await Promise.all(
+          outputFiles.filter(file => file.endsWith('.mjs')).map(file => readFile(join(outputDir, file), 'utf-8')),
+        )
+      ).join('\n');
+      expect(output).toContain(`import('@bufbuild/protobuf/wkt')`);
+      expect(output).not.toContain('@bufbuild/protobuf/wkt/index.js');
+    });
   });
 
   describe.sequential('start', async () => {
