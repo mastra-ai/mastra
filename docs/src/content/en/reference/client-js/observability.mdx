@@ -132,7 +132,7 @@ const values = await mastraClient.getTraceQueryValues(
 controller.abort()
 ```
 
-Both methods use case-insensitive literal substring search and accept an empty search. Limits default to 25 and can't exceed 100. Results are ordered by occurrence count, then deterministically by path or value. `observedFieldsTruncated` and `valuesTruncated` indicate that the caller should refine `search`; discovery has no cursor.
+Both methods use case-insensitive literal substring search and accept an empty search. Limits default to 25 and can't exceed 100. Results are ordered by occurrence count, then deterministically by path or value. `observedFieldsTruncated` and `valuesTruncated` indicate that the caller should refine `search`. Discovery has no cursor.
 
 Suggestions are bounded and advisory. Manual values remain valid when suggestions are unavailable, empty, or truncated. Discovery doesn't accept a draft query predicate. The client doesn't retry either request, and a per-call `AbortSignal` takes precedence over the signal configured on `MastraClient`.
 

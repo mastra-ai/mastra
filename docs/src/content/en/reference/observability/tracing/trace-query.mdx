@@ -224,11 +224,11 @@ Value suggestions are available for these canonical fields:
 | Scores | `scorerId`, `scorerVersion`, `scoreSource` |
 | Feedback | `feedbackType`, `feedbackSource` |
 
-Each executable top-level string `metadata.<key>` field also supports value suggestions in the `trace` scope. Identifiers, timestamps, durations, numeric score or feedback values, comments, errors, and version IDs don't. The fields response still includes canonical fields with `valueSuggestions: false`; the values endpoint rejects those paths with `422 TRACE_QUERY_INVALID`.
+Each executable top-level string `metadata.<key>` field also supports value suggestions in the `trace` scope. Identifiers, timestamps, durations, numeric score or feedback values, comments, errors, and version IDs don't. The fields response still includes canonical fields with `valueSuggestions: false`. The values endpoint rejects those paths with `422 TRACE_QUERY_INVALID`.
 
 Both discovery requests require a half-open time range of at most 31 days. They use the same current-record semantics as `queryTraces()`: qualifying completed roots satisfy `from <= startedAt < to`, and related values come only from current records joined to those roots by `traceId`. Discovery doesn't accept or apply a draft `where` predicate.
 
-`search` defaults to the empty string, is trimmed, and matches case-insensitive literal substrings. Characters such as `%` and `_` have no wildcard meaning. An empty search returns the most frequent results. `limit` defaults to 25 and has a maximum of 100. Both endpoints fetch one extra result to set their truncation flag, but don't provide a cursor. When a flag is `true`, refine `search`; it doesn't imply that a next page is available. No matches return an empty array and `false` truncation.
+`search` defaults to the empty string, is trimmed, and matches case-insensitive literal substrings. Characters such as `%` and `_` have no wildcard meaning. An empty search returns the most frequent results. `limit` defaults to 25 and has a maximum of 100. Both endpoints fetch one extra result to set their truncation flag, but don't provide a cursor. When a flag is `true`, refine `search`. It doesn't imply that a next page is available. No matches return an empty array and `false` truncation.
 
 Both routes require `observability:read` and use the configured observability storage boundary. Don't send organization or project authorization fields in the request. Treat discovered paths, values, and counts as observability data.
 
