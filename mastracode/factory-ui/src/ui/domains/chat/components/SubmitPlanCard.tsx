@@ -70,7 +70,7 @@ export function SubmitPlanCard({ toolCallId, input, output, isSubmitting = false
   const respondDisabled = isSubmitting || loading;
   // Never approve a plan with no visible body (missing, blank, loading, or
   // submitting). Reject stays available after a load failure.
-  const approveDisabled = respondDisabled || plan.length === 0;
+  const approveDisabled = respondDisabled || plan.trim().length === 0;
 
   const respond = (response: PlanResume) =>
     onRespond?.({

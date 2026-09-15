@@ -218,6 +218,20 @@ describe('SubmitPlanCard', () => {
       expect(screen.getByRole('button', { name: 'Reject the plan' })).toBeEnabled();
     });
 
+    it('disables Approve for a whitespace-only inline plan', async () => {
+      stubUserSession();
+      stubPlanFile();
+      renderCard({
+        input: { toolId: 'submit_plan', path: PLAN_PATH, title: 'Blank plan', plan: '   \n\t  ' },
+        onRespond: () => {},
+      });
+
+      await screen.findByText('Blank plan');
+      // A plan with no visible body must not be approvable.
+      expect(screen.getByRole('button', { name: 'Approve the plan and switch to build' })).toBeDisabled();
+      expect(screen.getByRole('button', { name: 'Reject the plan' })).toBeEnabled();
+    });
+
     it('does not fetch paths outside the workspace artifacts root', async () => {
       stubUserSession();
       const requests = stubPlanFile();
