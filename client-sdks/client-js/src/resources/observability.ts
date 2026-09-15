@@ -10,7 +10,7 @@ import type {
   ListTracesResponse,
   ListTracesLightResponse,
   TraceQueryRequest,
-  TraceQueryTraceResponse,
+  TraceQueryResponse,
   ListBranchesArgs,
   ListBranchesResponse,
   GetBranchArgs,
@@ -238,7 +238,7 @@ export class Observability extends BaseResource {
    * @param params - Advanced trace query, including its required time range
    * @returns Matching lightweight traces
    */
-  queryTraces(params: Omit<TraceQueryRequest, 'group'>): Promise<TraceQueryTraceResponse> {
+  queryTraces(params: Omit<TraceQueryRequest, 'group'>): Promise<TraceQueryResponse> {
     return this.request('/observability/traces/query', { method: 'POST', body: params });
   }
 

@@ -1117,7 +1117,7 @@ export class MastraClient extends BaseResource {
   }
 
   /** Queries completed logical traces using recursive trace and related-record predicates. */
-  queryTraces(params: Omit<TraceQueryRequest, 'group'>): Promise<TraceQueryTraceResponse> {
+  queryTraces(params: Omit<TraceQueryRequest, 'group'>): Promise<TraceQueryResponse> {
     return this.observability.queryTraces(params);
   }
 
