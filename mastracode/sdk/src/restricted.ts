@@ -47,7 +47,7 @@ const restrictedStateSchema = z.looseObject({
   observeAttachments: z.union([z.literal('auto'), z.boolean()]).default('auto'),
   omScope: z.enum(['thread', 'resource']).optional(),
   thinkingLevel: z.enum(['off', 'low', 'medium', 'high', 'xhigh', 'max']).optional(),
-  yolo: z.boolean().default(false),
+  yolo: z.literal(false).default(false),
   permissionRules: z
     .object({
       categories: z.record(z.string(), z.enum(['allow', 'ask', 'deny'])).default({}),

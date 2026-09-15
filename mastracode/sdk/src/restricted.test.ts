@@ -32,6 +32,7 @@ vi.mock('@mastra/core/mastra', () => ({
   },
 }));
 
+/** Builds a complete restricted configuration for unit-level wiring tests. */
 function createConfig(overrides: Record<string, unknown> = {}) {
   return {
     project: {

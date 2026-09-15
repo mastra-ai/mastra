@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { mountRestrictedAgentControllerOnMastra } from './restricted.js';
 
+/** Creates a model stream that requests one workspace tool. */
 function toolCallStream(toolName: string) {
   return new ReadableStream({
     start(controller) {
@@ -35,6 +36,7 @@ function toolCallStream(toolName: string) {
   });
 }
 
+/** Creates the final text response after a tool-call turn. */
 function textStream() {
   return new ReadableStream({
     start(controller) {
@@ -105,6 +107,10 @@ describe('restricted workspace tool enforcement', () => {
     const stream = vi.spyOn(codeAgent, 'stream');
     const session = await controller.createSession({ id: 'session-1', ownerId: 'owner-1' });
     await session.thread.create();
+
+    expect(session.state.get().yolo).toBe(false);
+    await expect(session.state.set({ yolo: true } as never)).rejects.toThrow('Invalid state update');
+    expect(session.state.get().yolo).toBe(false);
 
     await session.sendMessage({ content: 'Delete protected.txt' });
 
