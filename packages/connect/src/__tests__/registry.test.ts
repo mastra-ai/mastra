@@ -13,6 +13,7 @@ describe('shipped provider registry', () => {
       'anthropic',
       'clerk',
       'incident-io',
+      'jira',
       'linear',
       'notion',
       'openai',
