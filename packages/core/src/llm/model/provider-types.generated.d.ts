@@ -362,7 +362,6 @@ export type ProviderModelsMap = {
     'claw-medium',
     'cohere/command-r-plus-08-2024',
     'command-a-reasoning-08-2025',
-    'deepclaude',
     'deepcogito/cogito-v1-preview-qwen-32B',
     'deepseek-ai/DeepSeek-R1-0528',
     'deepseek-ai/DeepSeek-V3.1',
@@ -1504,10 +1503,8 @@ export type ProviderModelsMap = {
     'together-ai/deepseek-v4-flash',
     'together-ai/deepseek-v4-pro',
     'together-ai/deepseek-v4.1-flash',
-    'together-ai/gemma-4-31b-it',
     'together-ai/glm-4.7',
     'together-ai/gpt-oss-120b',
-    'together-ai/gpt-oss-20b',
     'together-ai/kimi-k3',
     'together-ai/minimax-m3',
     'vertex-anthropic/claude-haiku-4-5',
@@ -6979,6 +6976,7 @@ export type ProviderModelsMap = {
     'qwen3.8-max',
   ];
   readonly 'tencent-token-plan': readonly ['hy3', 'hy4-preview'];
+  readonly vispark: readonly ['vispark/vision-large', 'vispark/vision-medium', 'vispark/vision-small'];
   readonly neosmith: readonly [
     'neosmith.intelligent-basic',
     'neosmith.intelligent-maestro',

@@ -205,7 +205,7 @@ describe('DuckDB advanced trace query', () => {
     expect(repeatedSpans.sql.match(/current_spans AS/g)).toHaveLength(1);
   });
 
-  it('compiles feedback relations against the existing string value representation', () => {
+  it('compiles feedback value predicates against typed columns while retaining legacy presence semantics', () => {
     const compiled = compileDuckDBTraceQuery(
       plan({
         where: {
@@ -218,6 +218,9 @@ describe('DuckDB advanced trace query', () => {
                   args: [
                     { op: 'eq', left: { path: 'feedbackType' }, right: { literal: "rating' OR TRUE --" } },
                     { op: 'lt', left: { path: 'value' }, right: { literal: 0 } },
+                    { op: 'eq', left: { path: 'value' }, right: { literal: 3 } },
+                    { op: 'eq', left: { path: 'value' }, right: { literal: '3' } },
+                    { op: 'in', value: { path: 'value' }, set: [1, 2] },
                     { op: 'gte', left: { path: 'timestamp' }, right: { literal: '2026-01-01T14:00:00+02:00' } },
                     { op: 'exists', path: 'value' },
                   ],
@@ -234,9 +237,13 @@ describe('DuckDB advanced trace query', () => {
     expect(compiled.sql.match(/FROM current_feedback s/g)).toHaveLength(2);
     expect(compiled.sql).toContain('s.traceId IS NOT NULL');
     expect(compiled.sql).toContain('s.traceId = r.traceId');
-    expect(compiled.sql).toContain('TRY_CAST(s.value AS DOUBLE) IS NOT NULL AND TRY_CAST(s.value AS DOUBLE) < ?');
-    expect(compiled.sql).toContain('s.value IS NOT NULL AND s.value IN (?, ?)');
+    expect(compiled.sql).toContain('s.valueNumber IS NOT NULL AND s.valueNumber < ?');
+    expect(compiled.sql).toContain('s.valueNumber IS NOT DISTINCT FROM ?');
+    expect(compiled.sql).toContain('s.valueString IS NOT DISTINCT FROM ?');
+    expect(compiled.sql).toContain('s.valueNumber IS NOT NULL AND s.valueNumber IN (?, ?)');
+    expect(compiled.sql).toContain('s.valueString IS NOT NULL AND s.valueString IN (?, ?)');
     expect(compiled.sql).toContain('s.value IS NOT NULL');
+    expect(compiled.sql).not.toContain('TRY_CAST(s.value');
     expect(compiled.sql).not.toContain("rating' OR TRUE --");
     expect(compiled.values).toContain("rating' OR TRUE --");
     expect(compiled.values).toContain('2026-01-01T12:00:00.000Z');
