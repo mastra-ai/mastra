@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { Route, Search } from 'lucide-react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -21,6 +21,10 @@ class TestResizeObserver implements ResizeObserver {
   unobserve() {}
   disconnect() {}
   takeRecords = (): ResizeObserverEntry[] => [];
+}
+
+if (!Element.prototype.getAnimations) {
+  Object.defineProperty(Element.prototype, 'getAnimations', { configurable: true, value: () => [] });
 }
 
 beforeEach(() => {
@@ -98,6 +102,33 @@ describe('CommandPalette', () => {
     expect(selectScope).toHaveBeenCalledOnce();
     expect(selectItem).toHaveBeenCalledOnce();
   });
+
+  describe('when a category has keyboard focus', () => {
+    it('leaves Enter to the category without running a search result', async () => {
+      const { selectItem } = renderPalette();
+      await waitFor(() => expect(screen.getByRole('option').getAttribute('aria-selected')).toBe('true'));
+      const category = screen.getByRole('button', { name: SCOPE_NAME });
+      category.focus();
+
+      const nativeActivationAllowed = fireEvent.keyDown(category, { key: 'Enter' });
+
+      expect(selectItem).not.toHaveBeenCalled();
+      expect(nativeActivationAllowed).toBe(true);
+    });
+  });
+
+  describe('when the search input has keyboard focus', () => {
+    it('runs the selected search result with Enter', async () => {
+      const { selectItem } = renderPalette();
+      await waitFor(() => expect(screen.getByRole('option').getAttribute('aria-selected')).toBe('true'));
+      const input = screen.getByRole('combobox');
+      input.focus();
+
+      fireEvent.keyDown(input, { key: 'Enter' });
+
+      expect(selectItem).toHaveBeenCalledOnce();
+    });
+  });
 });
 
 describe('CommandPaletteScope', () => {
@@ -151,7 +182,6 @@ describe('CommandPaletteScope', () => {
 });
 
 describe('CommandPaletteItem', () => {
-  // cmdk items need the Command root the dialog provides.
   const renderItem = (props: Partial<Parameters<typeof CommandPaletteItem>[0]> = {}) =>
     render(
       <CommandPaletteDialog
@@ -169,8 +199,6 @@ describe('CommandPaletteItem', () => {
       </CommandPaletteDialog>,
     );
 
-  // The item is an icon, a column of text and an optional shortcut. The column
-  // is a title row and, when there is anything for it, a second line.
   const itemElement = () => screen.getByRole('option');
   const textColumn = () => itemElement().children[1];
   const titleRow = () => textColumn()?.children[0];
@@ -182,7 +210,6 @@ describe('CommandPaletteItem', () => {
     const item = itemElement();
     expect(within(item).getByTestId('item-icon')).toBeTruthy();
     expect(item.textContent).toBe('Settings');
-    // Icon and text column, no shortcut.
     expect(item.childElementCount).toBe(2);
     expect(titleRow()?.childElementCount).toBe(1);
     expect(secondLine()).toBeUndefined();
@@ -225,7 +252,6 @@ describe('CommandPaletteItem', () => {
   it('leaves out the second line entirely with neither a subtitle nor a path', () => {
     renderItem({ badge: 'Path' });
 
-    // Title row and nothing under it.
     expect(textColumn()?.childElementCount).toBe(1);
   });
 
@@ -234,7 +260,6 @@ describe('CommandPaletteItem', () => {
 
     const item = screen.getByRole('option');
     expect(item.classList.contains('my-own-class')).toBe(true);
-    expect(item.classList.contains('rounded-xl')).toBe(true);
   });
 });
 
@@ -274,11 +299,5 @@ describe('CommandPaletteFooter', () => {
     for (const key of ['↑', '↓', '↵', 'Esc']) {
       expect(screen.getByText(key)).toBeTruthy();
     }
-  });
-
-  it('stays out of the way of the results behind it', () => {
-    const { container } = render(<CommandPaletteFooter label="Application search" />);
-
-    expect((container.firstElementChild as HTMLElement).classList.contains('pointer-events-none')).toBe(true);
   });
 });

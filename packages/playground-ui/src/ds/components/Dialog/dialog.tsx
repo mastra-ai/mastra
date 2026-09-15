@@ -157,7 +157,7 @@ const DialogContent = React.forwardRef<HTMLDivElement, DialogContentProps>(
           {children}
           <DialogPrimitive.Close
             render={
-              <Button variant="ghost" size="sm" className="absolute top-3 right-3" aria-label="Close">
+              <Button variant="ghost" size="icon-sm" className="absolute top-3 right-3" aria-label="Close">
                 <X />
               </Button>
             }
