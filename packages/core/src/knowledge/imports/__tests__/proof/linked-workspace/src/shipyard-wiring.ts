@@ -62,7 +62,7 @@ try {
     scopeIds: authority,
     limit: 10,
   });
-  await knowledge.createRecord({
+  const externallyAdded = await knowledge.createRecord({
     node: records.records[0]!.nodeId,
     text: 'Extra stale record',
     source: shipyardImportBinding.source,
@@ -74,6 +74,14 @@ try {
     false,
     'A matching record plus stale evidence must fail completion',
   );
+  assert.equal((await runtime.repair()).status, 'failed', 'Importer must not claim externally added evidence');
+  assert(await knowledge.getRecord({ id: externallyAdded.id, scopeIds: authority }));
+  await knowledge.deleteRecord({
+    id: externallyAdded.id,
+    version: externallyAdded.version,
+    deletedBy: 'shipyard-maintainer',
+    vouchedScopeIds: authority,
+  });
   assert.equal((await runtime.repair()).status, 'succeeded');
   empty = true;
   assert.deepEqual(await runtime.inspect(), { integrated: true, internalRecordCount: 0, publicRecordCount: 0 });
