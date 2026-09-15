@@ -46,15 +46,15 @@ export const AgentMetadataSection = ({
         sectionAccentClasses[accent],
       )}
     >
-      <header className="col-span-2 group-has-[[data-slot=metadata-empty]]/metadata:col-span-1 flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-1">
+      <header className="col-span-2 flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 group-has-[[data-slot=metadata-empty]]/metadata:col-span-1">
         <Txt as="h3" variant="ui-smd" className="text-neutral5 flex min-w-0 items-center gap-2 font-medium">
           {icon && (
-            <Icon aria-hidden="true" className="text-(--section-accent) shrink-0">
+            <Icon aria-hidden="true" className="shrink-0 text-(--section-accent)">
               {icon}
             </Icon>
           )}
           <span className="flex min-w-0 items-center gap-1.5">
-            <span className="from-(--section-accent) to-neutral5 bg-linear-to-r bg-clip-text text-transparent forced-colors:bg-none forced-colors:text-inherit">
+            <span className="to-neutral5 bg-linear-to-r from-(--section-accent) bg-clip-text text-transparent forced-colors:bg-none forced-colors:text-inherit">
               {title}
             </span>
             {count !== undefined && count > 0 && (
@@ -72,7 +72,7 @@ export const AgentMetadataSection = ({
                     aria-label={hint.title}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="opacity-0 group-hover/metadata:opacity-100 group-focus-within/metadata:opacity-100 pointer-coarse:opacity-100"
+                    className="opacity-0 group-focus-within/metadata:opacity-100 group-hover/metadata:opacity-100 pointer-coarse:opacity-100"
                   >
                     <Icon className="text-neutral3" size="sm">
                       {hint.icon || <InfoIcon />}

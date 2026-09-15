@@ -96,7 +96,7 @@ function MemoryConfigFields({ items }: Pick<MemoryConfigSection, 'items'>) {
           </Txt>
         ),
         value: (
-          <Badge className="h-auto min-h-5 min-w-0 whitespace-normal break-words">
+          <Badge className="h-auto min-h-5 min-w-0 break-words whitespace-normal">
             {formatMemoryValue(item.value)}
           </Badge>
         ),
