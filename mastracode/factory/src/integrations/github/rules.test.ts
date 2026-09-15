@@ -2617,6 +2617,88 @@ describe('createGithubPullRequestReconciler', () => {
     };
   }
 
+  it('carries native stack membership into newly materialized Review cards', async () => {
+    const context = await setup('read');
+    const service = new GithubRules({
+      github: context.github,
+      sourceControl: context.sourceControl,
+      integrationStorage: context.integrationStorage,
+      projects: context.projects,
+      storage: context.workItems,
+      configVersion: 'factory-config-v1',
+      boards: createBoardRegistry(),
+    });
+    const event = pullRequest('opened', 'native-stack-opened');
+    const stack = { id: 100, number: 7, position: 2, base: { ref: 'main' } };
+    await service.ingest({
+      ...event,
+      payload: {
+        ...event.payload,
+        pull_request: { ...event.payload.pull_request, stack },
+      },
+    });
+    const [decision] = await context.workItems.listDeferredDecisions('org-1', context.project.id);
+    expect(decision?.decision).toMatchObject({ type: 'upsertLinkedWorkItem', board: 'review', metadata: { stack } });
+  });
+
+  it('updates and clears stack membership from webhooks without moving cards or starting reviews', async () => {
+    const context = await setup('read');
+    const card = await createCard(context, { number: 17, metadata: { labels: ['keep'] } });
+    const service = new GithubRules({
+      github: context.github,
+      sourceControl: context.sourceControl,
+      integrationStorage: context.integrationStorage,
+      projects: context.projects,
+      storage: context.workItems,
+      configVersion: 'factory-config-v1',
+      boards: createBoardRegistry(),
+    });
+    const event = pullRequest('opened', 'native-stack-change');
+    const stack = { id: 100, number: 7, position: 2, base: { ref: 'main' } };
+    const stackedEvent = {
+      ...event,
+      payload: {
+        ...event.payload,
+        action: 'stacked',
+        pull_request: { ...event.payload.pull_request, stack },
+      },
+    };
+    await service.ingest(stackedEvent);
+    const grouped = await context.workItems.get({ orgId: 'org-1', id: card.item.id });
+    expect(grouped).toMatchObject({ stages: ['review'], metadata: { stack, labels: ['keep'] } });
+    await service.ingest(stackedEvent);
+    expect((await context.workItems.get({ orgId: 'org-1', id: card.item.id }))?.revision).toBe(grouped?.revision);
+    await service.ingest({ ...event, payload: { ...event.payload, action: 'edited' } });
+    expect(await context.workItems.get({ orgId: 'org-1', id: card.item.id })).toMatchObject({
+      stages: ['review'],
+      metadata: { stack: null, labels: ['keep'] },
+    });
+    expect(await context.workItems.listDeferredDecisions('org-1', context.project.id)).toHaveLength(0);
+  });
+
+  it('reconciles changed positions and removed membership when no webhook arrives', async () => {
+    const context = await setup('read');
+    const card = await createCard(context, { number: 17 });
+    const stack = { id: 100, number: 7, position: 2, base: { ref: 'main' } };
+    const state: ReconcilePullRequestState = { ...mergedState(17), state: 'open', merged: false, stack };
+    const fetchPullRequest = vi.fn(async () => state);
+    const reconcile = createReconciler(context, fetchPullRequest);
+    await reconcile([repositoryTarget]);
+    expect(await context.workItems.get({ orgId: 'org-1', id: card.item.id })).toMatchObject({ metadata: { stack } });
+    state.stack = { ...stack, position: 1 };
+    await reconcile([repositoryTarget]);
+    const reordered = await context.workItems.get({ orgId: 'org-1', id: card.item.id });
+    expect(reordered).toMatchObject({ stages: ['review'], metadata: { stack: { ...stack, position: 1 } } });
+    await reconcile([repositoryTarget]);
+    expect((await context.workItems.get({ orgId: 'org-1', id: card.item.id }))?.revision).toBe(reordered?.revision);
+    state.stack = undefined;
+    await reconcile([repositoryTarget]);
+    expect(await context.workItems.get({ orgId: 'org-1', id: card.item.id })).toMatchObject({
+      metadata: { stack: null },
+    });
+    expect(await context.workItems.listDeferredDecisions('org-1', context.project.id)).toHaveLength(0);
+  });
+
   it('replays a missed merge through the ingress exactly once', async () => {
     const context = await setup('read');
     const card = await createCard(context, { number: 17 });

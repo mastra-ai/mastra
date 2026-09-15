@@ -38,6 +38,7 @@ const issue = {
   updatedAt: '2026-07-02T00:00:00Z',
 };
 const pullRequest = {
+  stack: { id: 100, number: 7, position: 2, base: { ref: 'main' } },
   number: 34,
   title: 'Ship intake',
   body: 'Ready to ship',
@@ -264,7 +265,14 @@ describe('PlatformGithubIntegration', () => {
     await expect(
       integration.versionControl.listPullRequests({ connection: installationConnection, sourceId: 'acme/app' }),
     ).resolves.toEqual({
-      pullRequests: [expect.objectContaining({ id: '34', baseBranch: 'main', headBranch: 'feat/intake' })],
+      pullRequests: [
+        expect.objectContaining({
+          id: '34',
+          baseBranch: 'main',
+          headBranch: 'feat/intake',
+          stack: { id: 100, number: 7, position: 2, base: { ref: 'main' } },
+        }),
+      ],
       nextCursor: null,
     });
     expect(String(fetchImpl.mock.calls[0]?.[0])).toContain('label=bug%2Curgent');

@@ -39,6 +39,7 @@ import type {
   ListIntakeIssuesInput,
   UpdateIntakeIssueInput,
 } from '../../capabilities/intake.js';
+import { readPullRequestStack } from '../../capabilities/pull-request-stack.js';
 import type {
   PullRequest,
   PullRequestComment,
@@ -265,6 +266,7 @@ export class GithubIntegration implements FactoryIntegration {
                   author: pullRequest.author,
                   baseBranch: pullRequest.baseBranch,
                   headBranch: pullRequest.headBranch,
+                  stack: pullRequest.stack,
                 },
               })),
             ],
@@ -1276,6 +1278,7 @@ export class GithubIntegration implements FactoryIntegration {
         labels: pullRequest.labels ?? [],
         headBranch: pullRequest.headBranch,
         baseBranch: pullRequest.baseBranch,
+        stack: pullRequest.stack,
         ...(pullRequest.author ? { author: pullRequest.author } : {}),
         ...(pullRequest.createdAt ? { createdAt: pullRequest.createdAt } : {}),
       };
@@ -1387,6 +1390,7 @@ export class GithubIntegration implements FactoryIntegration {
 }
 
 interface GithubPullRequestData {
+  stack?: unknown;
   number: number;
   title: string;
   html_url: string;
@@ -1450,6 +1454,7 @@ function parsePullRequest(pr: GithubPullRequestData): PullRequest {
     baseBranch: pr.base.ref,
     headBranch: pr.head.ref,
     headSha: pr.head.sha,
+    stack: readPullRequestStack(pr.stack),
     createdAt: pr.created_at,
     updatedAt: pr.updated_at,
   };

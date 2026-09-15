@@ -1,3 +1,4 @@
+import type { PullRequestStack } from '@mastra/factory/capabilities/pull-request-stack';
 /**
  * Browser-side helpers for the Factory pages (Intake / Review).
  *
@@ -20,6 +21,7 @@ export interface GithubIssue {
 }
 
 export interface GithubPullRequest {
+  stack?: PullRequestStack;
   number: number;
   title: string;
   url: string;

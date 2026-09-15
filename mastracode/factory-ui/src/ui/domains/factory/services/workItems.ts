@@ -1,3 +1,5 @@
+import { readPullRequestStack } from '@mastra/factory/capabilities/pull-request-stack';
+import type { PullRequestStack } from '@mastra/factory/capabilities/pull-request-stack';
 /**
  * Browser-side helpers for Factory work items (the kanban board records).
  *
@@ -28,6 +30,8 @@ export interface WorkItemStageEntry {
   exitedBy?: string;
 }
 
+export type WorkItemMetadata = Record<string, unknown> & { stack?: PullRequestStack };
+
 export interface WorkItem {
   id: string;
   orgId: string;
@@ -42,7 +46,7 @@ export interface WorkItem {
   stages: string[];
   stageHistory: WorkItemStageEntry[];
   sessions: Record<string, WorkItemSessionRef>;
-  metadata: Record<string, unknown>;
+  metadata: WorkItemMetadata;
   /** Classification the triage run recorded; non-bug kinds wait for a person before agents advance them. */
   triageType: FactoryTriageType | null;
   /** When a person first moved the card into Planning/Build, which is the approval agents then honor. */
@@ -155,7 +159,7 @@ function fromWireWorkItem(item: WireWorkItem): WorkItem {
     source: sourceFromExternalSource(externalSource),
     sourceKey: externalSource?.externalId ?? null,
     url: externalSource?.url ?? null,
-    metadata: metadata ?? {},
+    metadata: { ...metadata, stack: readPullRequestStack(metadata?.stack) },
     commentCount: commentCount ?? 0,
     feedActivityAt: feedActivityAt ?? null,
     triageType: triageType ?? null,

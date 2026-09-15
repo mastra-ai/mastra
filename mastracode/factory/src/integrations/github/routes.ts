@@ -20,6 +20,7 @@ import { registerApiRoute } from '@mastra/core/server';
 import { UniqueViolationError } from '@mastra/core/storage';
 import type { FactoryStorage } from '@mastra/core/storage';
 import type { Context } from 'hono';
+import type { PullRequestStack } from '../../capabilities/pull-request-stack.js';
 import type { RouteAuth } from '../../routes/route.js';
 import { AUTO_TRIAGED_LABEL, NEEDS_APPROVAL_LABEL } from '../../rules/types.js';
 import { requireExec } from '../../sandbox/materialization.js';
@@ -323,6 +324,7 @@ function polledPullRequestEvent(
     requestedReviewers: string[];
     headBranch: string;
     baseBranch: string;
+    stack?: PullRequestStack;
     createdAt: string;
   },
 ): ParsedGithubWebhook {
@@ -346,6 +348,7 @@ function polledPullRequestEvent(
         requested_reviewers: pullRequest.requestedReviewers.map(login => ({ login })),
         head: { ref: pullRequest.headBranch },
         base: { ref: pullRequest.baseBranch },
+        stack: pullRequest.stack,
       },
     },
   };
@@ -796,6 +799,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
             requestedReviewers: pr.requestedReviewers ?? [],
             baseBranch: pr.baseBranch,
             headBranch: pr.headBranch,
+            stack: pr.stack,
             createdAt: pr.createdAt,
             updatedAt: pr.updatedAt,
           }));
@@ -845,6 +849,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
             requestedReviewers: pr.requestedReviewers ?? [],
             baseBranch: pr.baseBranch,
             headBranch: pr.headBranch,
+            stack: pr.stack,
             createdAt: pr.createdAt,
             updatedAt: pr.updatedAt,
             description: pr.body,

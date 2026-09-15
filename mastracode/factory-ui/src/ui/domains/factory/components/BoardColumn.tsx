@@ -8,7 +8,6 @@ import type { DragPayload } from '../boardDrag';
 import type { BoardStageId } from '../stages';
 import { BoardStageIcon } from './BoardIcons';
 
-/** Header cells and card lanes share this so the two rows stay column-aligned. */
 function columnWidthClass(collapsed: boolean): string {
   return cn('w-80 min-w-0 shrink-0 transition-[width] motion-reduce:transition-none', collapsed && 'lg:w-14');
 }
@@ -49,18 +48,19 @@ const BOARD_CARD_GAP_PX = 10;
 function dropLinePosition(cardList: HTMLDivElement, pointerY: number): number {
   const cards = cardList.querySelectorAll<HTMLElement>(BOARD_CARD_SELECTOR);
   if (cards.length === 0) return 0;
+  const listTop = cardList.getBoundingClientRect().top;
 
   for (let index = 0; index < cards.length; index += 1) {
     const card = cards.item(index);
     if (!card) continue;
     const bounds = card.getBoundingClientRect();
     if (pointerY < bounds.top + bounds.height / 2) {
-      return Math.max(0, card.offsetTop - (index === 0 ? 0 : BOARD_CARD_GAP_PX / 2));
+      return Math.max(0, bounds.top - listTop - BOARD_CARD_GAP_PX / 2);
     }
   }
 
   const lastCard = cards.item(cards.length - 1);
-  return lastCard ? lastCard.offsetTop + lastCard.offsetHeight + BOARD_CARD_GAP_PX / 2 : 0;
+  return lastCard ? lastCard.getBoundingClientRect().bottom - listTop + BOARD_CARD_GAP_PX / 2 : 0;
 }
 
 const COLUMN_ACTION_REVEAL_CLASS =
@@ -82,7 +82,6 @@ export function BoardColumnHeader({
   taskCount: number;
   totalTaskCount: number;
   phaseKind?: 'resting' | 'working' | 'terminal';
-  /** While loading, the task badge is hidden so a false "0/0" never flashes. */
   loading: boolean;
   collapsed: boolean;
   headerAction?: React.ReactNode;
