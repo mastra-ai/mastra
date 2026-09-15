@@ -908,8 +908,9 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
         onValueChange={handleTabChange}
         className="flex h-full flex-col overflow-hidden"
       >
-        <div className="border-border1 flex flex-wrap items-center justify-between gap-x-2 border-b">
-          <TabList className="shrink-0 border-b-0">
+        {/* -mx-2.5 offsets the root p-4 so the pills line up with the parent tab bar (p-1.5). */}
+        <div className="border-border1 -mx-2.5 flex flex-wrap items-center justify-between gap-x-2 border-b pb-1.5">
+          <TabList variant="pill-ghost" className="shrink-0">
             <Tab value="experiments">Experiments</Tab>
             <Tab value="datasets">Datasets</Tab>
             <Tab value="scorers">Scorers</Tab>
