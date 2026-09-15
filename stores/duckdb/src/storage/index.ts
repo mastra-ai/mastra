@@ -1,6 +1,6 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { coreFeatures } from '@mastra/core/features';
-import type { StorageDomains } from '@mastra/core/storage';
+import type { RetentionConfig, StorageDomains } from '@mastra/core/storage';
 import { MastraCompositeStore, ObservabilityStorage as CoreObservabilityStorage } from '@mastra/core/storage';
 
 import { DuckDBConnection } from './db/index';
@@ -146,6 +146,11 @@ export class ObservabilityStorageDuckDB extends CoreObservabilityStorage {
   ): ReturnType<ObservabilityStoreImpl['migrateSpans']> {
     const delegate = await this.requireDelegate();
     return delegate.migrateSpans(...args);
+  }
+
+  async prune(...args: Parameters<ObservabilityStoreImpl['prune']>): ReturnType<ObservabilityStoreImpl['prune']> {
+    const delegate = await this.requireDelegate();
+    return delegate.prune(...args);
   }
 
   async dangerouslyClearAll(
@@ -518,6 +523,11 @@ export interface DuckDBStoreConfig {
    * shared application server.
    */
   threads?: number;
+  /**
+   * Opt-in age-based retention policies. Only configured tables are pruned.
+   * Call `store.prune()` from your scheduler to apply them.
+   */
+  retention?: RetentionConfig;
 }
 
 /**
@@ -550,7 +560,7 @@ export class DuckDBStore extends MastraCompositeStore {
 
   constructor(config: DuckDBStoreConfig = {}) {
     const id = config.id ?? 'duckdb';
-    super({ id, name: 'DuckDBStore' });
+    super({ id, name: 'DuckDBStore', retention: config.retention });
 
     this.db = new DuckDBConnection({ path: config.path, memoryLimit: config.memoryLimit, threads: config.threads });
     this.observabilityStore = new ObservabilityStorageDuckDB({ db: this.db });

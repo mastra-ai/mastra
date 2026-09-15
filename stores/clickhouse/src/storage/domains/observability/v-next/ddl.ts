@@ -1267,32 +1267,60 @@ const SIGNAL_TO_TABLES: Record<keyof RetentionConfig, string[]> = {
  * Replicated/Shared MergeTree tables).
  */
 export interface RetentionEntry {
+  operation: 'modify' | 'remove';
   table: string;
   column: string;
   days: number;
   sql: string;
 }
 
+export const RETENTION_MANAGED_TABLES = [...Object.keys(SIGNAL_TTL_COLUMNS), TABLE_DELETION_REQUESTS];
+
+const DELETION_REQUEST_RETENTION_MARGIN_DAYS = 30;
+
 export function buildRetentionEntries(retention: RetentionConfig): RetentionEntry[] {
   const entries: RetentionEntry[] = [];
+  const signalRetentionDays = new Map<keyof RetentionConfig, number>();
 
   for (const [signal, days] of Object.entries(retention)) {
     const safeDays = Math.floor(Number(days));
     if (!Number.isFinite(safeDays) || safeDays <= 0) continue;
 
-    const tables = SIGNAL_TO_TABLES[signal as keyof RetentionConfig];
+    const retentionSignal = signal as keyof RetentionConfig;
+    const tables = SIGNAL_TO_TABLES[retentionSignal];
     if (!tables) continue;
+    signalRetentionDays.set(retentionSignal, safeDays);
 
     for (const table of tables) {
       const col = SIGNAL_TTL_COLUMNS[table];
       if (!col) continue;
       entries.push({
+        operation: 'modify',
         table,
         column: col,
         days: safeDays,
         sql: `ALTER TABLE ${table} MODIFY TTL ${col} + INTERVAL ${safeDays} DAY`,
       });
     }
+  }
+
+  // A trace deletion request covers every signal row linked to the trace, so it
+  // must outlive the longest configured signal retention period.
+  const deletionSignalRetentionDays = signalRetentionDays.has('tracing')
+    ? [...signalRetentionDays.values()]
+    : [signalRetentionDays.get('scores'), signalRetentionDays.get('feedback')].filter(
+        (days): days is number => days !== undefined,
+      );
+
+  if (deletionSignalRetentionDays.length > 0) {
+    const days = Math.max(...deletionSignalRetentionDays) + DELETION_REQUEST_RETENTION_MARGIN_DAYS;
+    entries.push({
+      operation: 'modify',
+      table: TABLE_DELETION_REQUESTS,
+      column: 'requestedAt',
+      days,
+      sql: `ALTER TABLE ${TABLE_DELETION_REQUESTS} MODIFY TTL requestedAt + INTERVAL ${days} DAY`,
+    });
   }
 
   return entries;
