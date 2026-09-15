@@ -1,5 +1,5 @@
 import { createReadStream } from 'node:fs';
-import { open, rename, rm } from 'node:fs/promises';
+import { open, rename, rm, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { MAX_RECORDED_SOURCE_SPAN_IDS, readTraceImportManifest, writeTraceImportManifest } from './manifest.js';
@@ -219,6 +219,12 @@ export async function* readPendingTraceBatches(
   const manifest = await readTraceImportManifest(directory);
   if (manifest.phase === 'preparing') throw new Error('Trace preparation has not finished.');
   if (manifest.phase === 'complete') return;
+
+  const preparedFile = join(directory, PREPARED_TRACES_FILE);
+  const preparedFileSize = (await stat(preparedFile)).size;
+  if (preparedFileSize !== manifest.preparedBytes) {
+    throw new Error('Prepared trace file size does not match the manifest. Start a new import.');
+  }
 
   let traceIndex = 0;
   let totalSpans = 0;

@@ -45,7 +45,13 @@ describe('LangfuseObservationsReader', () => {
           meta: { cursor: 'next-page' },
         });
       }
-      return Response.json({ data: [child, { ...root, id: 'other', traceId: 'trace-2' }], meta: { cursor: null } });
+      return Response.json({
+        data: [
+          { ...root, id: 'duplicate-root' },
+          { ...root, id: 'other', traceId: 'trace-2' },
+        ],
+        meta: { cursor: null },
+      });
     });
     const reader = new LangfuseObservationsReader(clientOptions, { fetch });
 
@@ -65,10 +71,13 @@ describe('LangfuseObservationsReader', () => {
 
     const urls = fetch.mock.calls.map(([input]) => new URL(String(input)));
     expect(urls).toHaveLength(2);
-    expect(urls[0]!.searchParams.get('fields')).toBe('core');
-    expect(urls[0]!.searchParams.get('limit')).toBe('1000');
-    expect(urls[0]!.searchParams.get('fromStartTime')).toBe('2026-08-02T00:00:00.000Z');
-    expect(urls[0]!.searchParams.get('toStartTime')).toBe('2026-09-01T12:00:00.000Z');
+    for (const url of urls) {
+      expect(url.searchParams.get('fields')).toBe('core');
+      expect(url.searchParams.get('limit')).toBe('1000');
+      expect(url.searchParams.get('isRootObservation')).toBe('true');
+      expect(url.searchParams.get('fromStartTime')).toBe('2026-08-02T00:00:00.000Z');
+      expect(url.searchParams.get('toStartTime')).toBe('2026-09-01T12:00:00.000Z');
+    }
     expect(urls[1]!.searchParams.get('cursor')).toBe('next-page');
   });
 

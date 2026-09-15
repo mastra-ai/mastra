@@ -105,7 +105,12 @@ export function resolveTraceImportDirectory(options: {
 }): string {
   assertSafePathSegment(options.targetProjectId, 'Target project ID');
   assertSafePathSegment(options.importId, 'Import ID');
-  return join(options.stateRoot ?? join(homedir(), '.mastra', 'imports'), options.targetProjectId, options.importId);
+  return join(
+    options.stateRoot ?? join(homedir(), '.mastra', 'imports'),
+    'traces',
+    options.targetProjectId,
+    options.importId,
+  );
 }
 
 export async function initializeTraceImport(options: {

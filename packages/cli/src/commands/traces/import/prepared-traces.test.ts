@@ -1,4 +1,4 @@
-import { access, mkdtemp, readFile, rm, stat } from 'node:fs/promises';
+import { access, appendFile, mkdtemp, readFile, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -134,6 +134,16 @@ describe('prepared traces', () => {
     );
 
     expect(batches.map(batch => batch.traces.map(item => item.sourceTraceId))).toEqual([['source-1'], ['source-2']]);
+  });
+
+  it('rejects a changed prepared file before yielding the first batch', async () => {
+    const state = await initialize();
+    await prepareTraceImport({ directory: state.directory, provider: provider([trace(1), trace(2)]) });
+    await appendFile(join(state.directory, 'traces.jsonl'), '{}\n');
+
+    const batches = readPendingTraceBatches(state.directory, { preferredSpansPerBatch: 2 });
+
+    await expect(batches.next()).rejects.toThrow('file size does not match the manifest');
   });
 
   it('resumes from the first unacknowledged trace and permits a new batch preference', async () => {

@@ -29,7 +29,7 @@ provider should require a new adapter, not another upload pipeline.
 ## Local preparation and resume
 
 Preparation is an upload-free pass over the provider output. It writes two
-private files under `~/.mastra/imports/<target-project>/<import-id>/`:
+private files under `~/.mastra/imports/traces/<target-project>/<import-id>/`:
 
 - `manifest.json` stores source identity, the fixed import window, counts, and
   acknowledged progress.

@@ -50,6 +50,9 @@ describe('trace import manifest', () => {
   });
 
   it('allows only safe project and import IDs in state paths', () => {
+    expect(
+      resolveTraceImportDirectory({ stateRoot: '/tmp/imports', targetProjectId: 'project', importId: 'import' }),
+    ).toBe(join('/tmp/imports', 'traces', 'project', 'import'));
     expect(() =>
       resolveTraceImportDirectory({ stateRoot: '/tmp/imports', targetProjectId: '../escape', importId: 'safe' }),
     ).toThrow('Target project ID');
