@@ -15,6 +15,8 @@ Breaking changes may occur without a major version bump until the API is stable.
 
 The `mountAgentControllerOnMastra()` function builds the Mastra Code agent controller (the coding agent behind [Mastra Code](https://code.mastra.ai), with its modes, tools, memory, and thread management) and registers it on a server-owned [Mastra](/reference/core/mastra-class) instance. Use it to serve the Mastra Code agent to your own UI (web app, editor, bot): each client creates or resumes its own isolated session through the returned [`AgentController`](/reference/agent-controller/agent-controller-class).
 
+This function keeps Mastra Code's local and terminal defaults, including host configuration discovery. Use [`mountRestrictedAgentControllerOnMastra()`](/reference/code-sdk/mount-restricted-agent-controller) when a credentialed server needs an explicit, fail-closed capability boundary. Injecting a remote workspace into this function doesn't disable its other local discovery paths.
+
 To construct the `Mastra` instance yourself (for example in a deployable entry file), use `prepareAgentControllerMount()` from the same package, which returns the constructor args plus a `finalize()` callback.
 
 ## Usage example
@@ -197,5 +199,6 @@ const { controller } = await mountAgentControllerOnMastra({ mastra })
 
 ## Related
 
+- [`mountRestrictedAgentControllerOnMastra()`](/reference/code-sdk/mount-restricted-agent-controller)
 - [AgentController class](/reference/agent-controller/agent-controller-class)
 - [Session class](/reference/agent-controller/session)

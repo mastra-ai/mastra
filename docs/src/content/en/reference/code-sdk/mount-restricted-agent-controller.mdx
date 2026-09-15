@@ -1,0 +1,155 @@
+---
+title: 'Reference: mountRestrictedAgentControllerOnMastra() | Code SDK'
+description: 'Mount Mastra Code in a server with explicit models, instructions, storage, workspace access, and tool permissions.'
+packages:
+  - '@mastra/code-sdk'
+---
+
+# mountRestrictedAgentControllerOnMastra()
+
+:::beta
+
+Breaking changes may occur without a major version bump until the API is stable.
+
+:::
+
+The `mountRestrictedAgentControllerOnMastra()` function creates a Mastra Code controller without reading local environment files, settings, authentication caches, repository instructions, Git metadata, or installed binaries. Use it when a credentialed server must define the complete authority available to the controller.
+
+Import this function from the dedicated `@mastra/code-sdk/restricted` entry point. The main package entry point loads the local Mastra Code factory and its discovery features.
+
+## Usage example
+
+Create the model, workspace, and storage with credentials and providers owned by the embedding server:
+
+```typescript title="src/mastra/index.ts"
+import { createOpenAI } from '@ai-sdk/openai'
+import { mountRestrictedAgentControllerOnMastra } from '@mastra/code-sdk/restricted'
+
+const openai = createOpenAI({ apiKey: tenantCredentials.openaiApiKey })
+
+const { mastra, controller } = await mountRestrictedAgentControllerOnMastra({
+  project: {
+    resourceId: project.id,
+    name: project.name,
+    rootPath: project.workspacePath,
+    gitBranch: project.branch,
+  },
+  model: openai('__AI_SDK_OPENAI_MODEL_BASE__'),
+  instructions: 'Work only through the tools and workspace provided by this server.',
+  modes: [
+    {
+      id: 'build',
+      name: 'Build',
+      metadata: { default: true },
+    },
+  ],
+  allowedTools: ['view', 'write_file', 'execute_command', 'lookup_ticket'],
+  tools: {
+    lookup_ticket: ticketTools.lookup,
+  },
+  workspace: remoteWorkspace,
+  storage: tenantStorage,
+  memory: tenantMemory,
+})
+
+const session = await controller.createSession({ resourceId: tenant.id })
+```
+
+The allowlist applies to every mode. A mode can narrow its own access with `availableTools`, but it can't add a tool that isn't in `allowedTools`. Tools omitted from the allowlist remain hidden even if session state changes later.
+
+## Security boundary
+
+The factory prevents Mastra Code itself from discovering ambient host capabilities. The model, workspace, storage, memory, tools, processors, routes, and callbacks you inject are trusted host code and remain responsible for their own filesystem, process, credential, and network access. In particular, `allowedTools` controls which tools the model can see and call; it doesn't sandbox the implementation of an allowed tool.
+
+## Disabled capabilities
+
+The restricted factory doesn't register these capabilities:
+
+- Authentication storage or provider login
+- Browser automation
+- GitHub polling or cross-agent signals
+- Goal judging
+- Project or global hook, plugin, and Model Context Protocol (MCP) discovery
+- Local or global instruction files
+- Subagents
+- Workflow creation, loading, or execution
+
+The factory also skips gateway synchronization, local thread locks, model usage persistence, built-in web tools, and default workspace tools outside the injected workspace. Add a capability only through a future restricted configuration field that documents its authority boundary. A remote workspace alone isn't an isolation boundary for the standard factory.
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'project',
+    type: 'RestrictedProjectMetadata',
+    description:
+      'Explicit resource id, display name, workspace path, and optional branch. The factory does not verify these values against the host.',
+  },
+  {
+    name: 'model',
+    type: 'RestrictedModel',
+    description: 'Pre-resolved model instance or resolver. Construct the model with host-owned credentials.',
+  },
+  {
+    name: 'instructions',
+    type: 'AgentConfig["instructions"]',
+    description: 'Complete system instructions. Repository and global instruction files are not appended.',
+  },
+  {
+    name: 'modes',
+    type: 'AgentControllerMode[]',
+    description: 'Explicit controller modes. At least one mode is required.',
+  },
+  {
+    name: 'allowedTools',
+    type: 'string[]',
+    description: 'Global allowlist for host and workspace tools. An empty array creates a tool-free agent.',
+  },
+  {
+    name: 'tools',
+    type: 'Record<string, ToolAction> | RestrictedToolProvider',
+    description: 'Host-supplied non-workspace tools. Entries outside allowedTools are removed.',
+    isOptional: true,
+  },
+  {
+    name: 'workspace',
+    type: 'Workspace',
+    description: 'Host-supplied workspace. The factory has no local workspace fallback.',
+  },
+  {
+    name: 'storage',
+    type: 'MastraCompositeStore',
+    description: 'Host-supplied storage. The factory has no settings-based storage fallback.',
+  },
+  {
+    name: 'memory',
+    type: 'AgentControllerConfig["memory"] | false',
+    description: 'Host-supplied memory, or false to disable memory.',
+  },
+  {
+    name: 'initialState',
+    type: 'Partial<MastraCodeState>',
+    description: 'Host-supplied initial state. Values in project take precedence over matching state fields.',
+    isOptional: true,
+  },
+  {
+    name: 'mastra',
+    type: 'Mastra',
+    description: 'Existing Mastra instance to mount onto. When omitted, the function creates one.',
+    isOptional: true,
+  },
+]}
+/>
+
+## Returns
+
+The function returns the initialized `controller`, its `mastra` instance, and the exact injected `storage`, `memory`, and `workspace`. It also returns `allowedTools`, `projectPath`, and the backing `codeAgent`.
+
+Use `createRestrictedMastraCodeAgentController()` from the same entry point when the host owns controller registration and initialization.
+
+## Related
+
+- [`mountAgentControllerOnMastra()`](/reference/code-sdk/mount-agent-controller)
+- [AgentController class](/reference/agent-controller/agent-controller-class)
+- [Workspace class](/reference/workspace/workspace-class)

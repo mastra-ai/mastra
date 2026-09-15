@@ -24,9 +24,16 @@ const { mastra, controller } = await mountAgentControllerOnMastra({
 });
 ```
 
+For credentialed servers that must not discover configuration or capabilities
+from the host machine, import `mountRestrictedAgentControllerOnMastra` from
+`@mastra/code-sdk/restricted`. The restricted factory requires an explicit
+model, workspace, storage, project identity, modes, instructions, and tool
+allowlist.
+
 ## Documentation
 
 - [@mastra/code-sdk documentation](https://mastra.ai/reference/code-sdk/mount-agent-controller)
+- [Restricted server embedding](https://mastra.ai/reference/code-sdk/mount-restricted-agent-controller)
 
 ## Changelog
 
