@@ -290,6 +290,7 @@ export interface StudioInjectionConfig {
   platformProjectId: string;
   platformObservabilityEndpoint: string;
   autoDetectUrl?: string;
+  devServerInstanceId?: string;
 }
 
 /**
@@ -310,6 +311,7 @@ export function injectStudioHtmlConfig(html: string, config: StudioInjectionConf
     html = html.replace(token, () => value);
   };
 
+  replace(`'%%MASTRA_DEV_SERVER_INSTANCE_ID%%'`, config.devServerInstanceId ?? "''");
   replace(`'%%MASTRA_SERVER_HOST%%'`, config.host);
   replace(`'%%MASTRA_SERVER_PORT%%'`, config.port);
   replace(`'%%MASTRA_SERVER_PROTOCOL%%'`, config.protocol);

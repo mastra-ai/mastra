@@ -132,7 +132,7 @@ Returns: [`InngestAgent`](#inngestagent-interface)
 
 ## `InngestAgent` interface
 
-The object returned by `createInngestAgent()`. It provides the durable execution methods below. Any property or method not explicitly defined (e.g., `listTools()` and `getMemory()`) is forwarded to the underlying agent via a Proxy.
+The object returned by `createInngestAgent()`. It provides the durable execution methods below. Any property or method not explicitly defined (e.g., `listTools()` and `getMemory()`) is forwarded to the underlying agent via a Proxy. Thread APIs such as `sendSignal()`, `sendStateSignal()`, `sendNotificationSignal()`, and `subscribeToThread()` are forwarded too, but a signal that wakes an idle thread starts the run through the durable `stream()`.
 
 ### Properties
 

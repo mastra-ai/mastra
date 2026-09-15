@@ -1,5 +1,4 @@
 import { Slider as SliderPrimitive } from '@base-ui/react/slider';
-import '@/ds/primitives/focus.css';
 
 import { cn } from '@/lib/utils';
 
@@ -23,8 +22,6 @@ const Slider = ({
   max = 100,
   onValueChange,
   onValueCommitted,
-  'aria-label': ariaLabel,
-  'aria-labelledby': ariaLabelledBy,
   ...props
 }: SliderProps) => {
   const values = Array.isArray(value) ? value : Array.isArray(defaultValue) ? defaultValue : [min];
@@ -68,14 +65,12 @@ const Slider = ({
           <SliderPrimitive.Thumb
             key={index}
             index={index}
-            aria-label={ariaLabel}
-            aria-labelledby={ariaLabelledBy}
             className={cn(
               'relative block h-5 w-2.5 shrink-0 rounded-full border-2 border-neutral6 bg-neutral2 outline-hidden select-none',
               'after:absolute after:-inset-2 after:content-[""]',
               'transition-shadow duration-normal',
               'hover:ring-2 hover:ring-neutral6/30',
-              'ds-focus ds-focus-notch ds-focus-within',
+              'has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-neutral6/60',
               'data-[orientation=vertical]:h-2.5 data-[orientation=vertical]:w-5',
               'data-[disabled]:pointer-events-none',
             )}

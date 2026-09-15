@@ -46,6 +46,10 @@
   --border2: oklch(100% 0 0deg / 11%);
   --surface-overlay-soft: oklch(100% 0 0deg / 4%);
   --surface-overlay-strong: oklch(100% 0 0deg / 7%);
+  --button-default-bg: var(--surface5);
+  --button-default-bg-hover: var(--surface6);
+  --button-default-bg-active: var(--surface4);
+  --button-default-border: var(--border1);
   --surface-header: oklch(15% 0 0deg);
   --surface-header-hover: oklch(19% 0 0deg);
   --surface-row-featured: oklch(100% 0 0deg / 12%);
@@ -159,6 +163,10 @@ html.light {
   --border2: oklch(20.8% 0 0deg / 16%);
   --surface-overlay-soft: oklch(20.8% 0 0deg / 4%);
   --surface-overlay-strong: oklch(20.8% 0 0deg / 7%);
+  --button-default-bg: var(--surface2);
+  --button-default-bg-hover: var(--surface5);
+  --button-default-bg-active: var(--surface5);
+  --button-default-border: var(--border2);
   --surface-header: oklch(92.6% 0 0deg);
   --surface-header-hover: oklch(90% 0 0deg);
   --surface-row-featured: oklch(20.8% 0 0deg / 11%);
@@ -414,6 +422,10 @@ html.light {
   --color-border2: var(--border2);
   --color-surface-overlay-soft: var(--surface-overlay-soft);
   --color-surface-overlay-strong: var(--surface-overlay-strong);
+  --color-button-default-bg: var(--button-default-bg);
+  --color-button-default-bg-hover: var(--button-default-bg-hover);
+  --color-button-default-bg-active: var(--button-default-bg-active);
+  --color-button-default-border: var(--button-default-border);
   --color-surface-row-featured: var(--surface-row-featured);
 
   /* Semantic color aliases */

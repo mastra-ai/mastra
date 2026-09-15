@@ -279,6 +279,7 @@
             "attributes": {
               "processorExecutor": "legacy",
               "processorIndex": 0,
+              "hookDurationMs": { "__any__": "number" },
               "internalUsage": {
                 "inputTokens": 15,
                 "outputTokens": 25,

@@ -12,6 +12,7 @@ import { InMemoryServerCache } from '@mastra/core/cache';
 import { CachingPubSub, EventEmitterPubSub } from '@mastra/core/events';
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
+import { InMemoryStore } from '@mastra/core/storage';
 import { DefaultStorage } from '@mastra/libsql';
 import { Inngest } from 'inngest';
 import { describe, it, expect, vi } from 'vitest';
@@ -908,6 +909,79 @@ describe('InngestAgent parity surface', () => {
 
       sendSpy.mockRestore();
     });
+  });
+
+  it('wakes an idle thread from sendSignal() through the durable stream, not the wrapped agent', async () => {
+    // sendSignal() is forwarded to the wrapped Agent by the Proxy. The thread
+    // runtime starts idle threads with `agent.stream()`, so without the
+    // runtime-agent hook the woken turn would bypass Inngest entirely.
+    const durableAgent = makeIsolatedAgent('signal-wake-durable');
+    const wrappedStream = vi.spyOn(durableAgent.agent, 'stream');
+    const durableStream = vi.fn(async () => {
+      throw new Error('STOP_AT_DURABLE_STREAM');
+    });
+    durableAgent.stream = durableStream as any;
+
+    const result = durableAgent.sendSignal(
+      { type: 'user-message', contents: 'wake up' },
+      { resourceId: 'signal-wake-resource', threadId: 'signal-wake-thread' },
+    );
+
+    await expect(result.accepted).rejects.toThrow('STOP_AT_DURABLE_STREAM');
+    expect(durableStream).toHaveBeenCalledTimes(1);
+    expect(durableStream.mock.calls[0]?.[0]).toBe(result.signal);
+    expect(durableStream.mock.calls[0]?.[1]).toMatchObject({
+      untilIdle: true,
+      memory: { resource: 'signal-wake-resource', thread: 'signal-wake-thread' },
+    });
+    expect(wrappedStream).not.toHaveBeenCalled();
+  });
+
+  it('wakes an idle thread from sendNotificationSignal() through the durable stream', async () => {
+    // The notification inbox is the documented ingress for external events.
+    // An urgent notification on an idle thread must start the durable run.
+    const durableAgent = makeIsolatedAgent('notification-wake-durable');
+    const wrappedStream = vi.spyOn(durableAgent.agent, 'stream');
+    const durableStream = vi.fn(async () => {
+      throw new Error('STOP_AT_DURABLE_STREAM');
+    });
+    durableAgent.stream = durableStream as any;
+    // Registering with Mastra gives the wrapped agent the notifications storage domain.
+    new Mastra({
+      agents: { notificationWake: durableAgent as any },
+      storage: new InMemoryStore(),
+      logger: false,
+    });
+
+    const result = await durableAgent.sendNotificationSignal(
+      { source: 'test', kind: 'event', priority: 'urgent', summary: 'Start an idle turn' },
+      { resourceId: 'notification-wake-resource', threadId: 'notification-wake-thread' },
+    );
+
+    expect(result.decision.action).toBe('deliver');
+    expect(result.record.lastDeliveryError).toBe('STOP_AT_DURABLE_STREAM');
+    expect(durableStream).toHaveBeenCalledTimes(1);
+    expect(durableStream.mock.calls[0]?.[1]).toMatchObject({ untilIdle: true });
+    expect(wrappedStream).not.toHaveBeenCalled();
+  });
+
+  it('registers durable runs with the thread-stream runtime so thread APIs can find them', async () => {
+    // Mirrors DurableAgent: a thread-bound durable run is visible to
+    // getActiveThreadRunId()/sendSignal() while it runs, under the wrapper's
+    // identity, and clears the thread once the stream finishes.
+    const durableAgent = makeIsolatedAgent('thread-runtime-registration');
+    const sendSpy = stubInngestSend();
+    const target = { resourceId: 'registration-resource', threadId: 'registration-thread' };
+
+    const result = await durableAgent.stream([{ role: 'user', content: 'hi' }], {
+      memory: { resource: target.resourceId, thread: target.threadId },
+    });
+    try {
+      expect(durableAgent.getActiveThreadRunId(target)).toBe(result.runId);
+    } finally {
+      result.cleanup();
+      sendSpy.mockRestore();
+    }
   });
 
   it('exposes generate() and resumeGenerate() with durable signatures', () => {
