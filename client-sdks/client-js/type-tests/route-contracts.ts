@@ -1,3 +1,4 @@
+import type { FullOutput } from '@mastra/core/stream';
 import type { MastraClient } from '../src/client.js';
 import type {
   Body,
@@ -217,17 +218,14 @@ type _AgentBuilderStart = Expect<
 type _AgentBuilderResume = Expect<
   Equal<ReturnType<AgentBuilder['resume']>, Promise<RouteResponse<'POST /agent-builder/:actionId/resume'>>>
 >;
+type _AgentToolCallGenerateRouteResponseIsOpaque = Expect<
+  Equal<RouteResponse<'POST /agents/:agentId/approve-tool-call-generate'>, unknown>
+>;
 type _AgentApproveToolCall = Expect<
-  Equal<
-    ReturnType<Agent['approveToolCallGenerate']>,
-    Promise<RouteResponse<'POST /agents/:agentId/approve-tool-call-generate'>>
-  >
+  Equal<ReturnType<Agent['approveToolCallGenerate']>, Promise<FullOutput<undefined>>>
 >;
 type _AgentDeclineToolCall = Expect<
-  Equal<
-    ReturnType<Agent['declineToolCallGenerate']>,
-    Promise<RouteResponse<'POST /agents/:agentId/decline-tool-call-generate'>>
-  >
+  Equal<ReturnType<Agent['declineToolCallGenerate']>, Promise<FullOutput<undefined>>>
 >;
 type _StartAsyncBody = Expect<
   Omit<Parameters<Run['startAsync']>[0], 'requestContext'> extends Omit<

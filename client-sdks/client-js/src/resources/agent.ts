@@ -67,6 +67,8 @@ import { BaseResource } from './base';
 
 type AgentId = PathParams<'GET /agents/:agentId'>['agentId'];
 type ToolId = PathParams<'GET /agents/:agentId/tools/:toolId'>['toolId'];
+type ToolCallGenerateResponse = RouteResponse<'POST /agents/:agentId/approve-tool-call-generate'> &
+  FullOutput<undefined>;
 
 type ResumeStreamParams<OUTPUT extends {}> = StreamParamsBaseWithoutMessages<OUTPUT> & {
   messages?: MessageListInput;
@@ -3286,7 +3288,7 @@ export class Agent extends BaseResource {
     params: Omit<Body<'POST /agents/:agentId/approve-tool-call-generate'>, 'requestContext'> & {
       requestContext?: RequestContext | Record<string, any>;
     },
-  ): Promise<RouteResponse<'POST /agents/:agentId/approve-tool-call-generate'>> {
+  ): Promise<ToolCallGenerateResponse> {
     const { requestContext, ...rest } = params;
     return this.request(`/agents/${this.agentId}/approve-tool-call-generate`, {
       method: 'POST',
@@ -3302,7 +3304,7 @@ export class Agent extends BaseResource {
     params: Omit<Body<'POST /agents/:agentId/decline-tool-call-generate'>, 'requestContext'> & {
       requestContext?: RequestContext | Record<string, any>;
     },
-  ): Promise<RouteResponse<'POST /agents/:agentId/decline-tool-call-generate'>> {
+  ): Promise<ToolCallGenerateResponse> {
     const { requestContext, ...rest } = params;
     return this.request(`/agents/${this.agentId}/decline-tool-call-generate`, {
       method: 'POST',
