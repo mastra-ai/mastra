@@ -46,12 +46,14 @@ import type {
   ReviewComment,
   VersionControl,
 } from '../../capabilities/version-control.js';
-import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
+import type { FactoryIntegration, FactoryReferenceResolver, IntegrationContext, IntegrationTools } from '../base.js';
 import type { GithubEventRules, GithubRuleOverrides } from './default-rules.js';
 import { resolveGithubRules } from './default-rules.js';
 import { attachGithubIssueReconciler } from './issue-reconciler.js';
+import { createFactoryLocateTool } from './locate-tool.js';
 import { GithubReconcileWorker } from './reconcile-worker.js';
 import { reconcileInterval, reconciliationEnabled } from './reconciliation-config.js';
+import { createGithubReferenceResolver } from './reference-resolver.js';
 import { buildGithubRoutes } from './routes.js';
 import { attachGithubReconciler, attachGithubRules } from './rules.js';
 import type { ReconcileIssueState, ReconcilePullRequestState } from './rules.js';
@@ -416,6 +418,11 @@ export class GithubIntegration implements FactoryIntegration {
     const storage = this.#sourceControlStorage ?? this.#storage?.sourceControl;
     if (!storage) throw new Error('GithubIntegration source-control storage has not been initialized.');
     return storage;
+  }
+
+  get projectsStorage(): IntegrationContext['storage']['projects'] {
+    if (!this.#storage) throw new Error('GithubIntegration storage has not been initialized.');
+    return this.#storage.projects;
   }
 
   get integrationStorage(): GithubSubscriptionStorage {
@@ -1211,6 +1218,12 @@ export class GithubIntegration implements FactoryIntegration {
     });
   }
 
+  readonly referenceResolverDomains = ['source-control'] as const;
+
+  referenceResolver(ctx: IntegrationContext): FactoryReferenceResolver {
+    return createGithubReferenceResolver({ sourceControl: ctx.storage.sourceControl });
+  }
+
   /**
    * Pull-request and issue sweeps share a worker and lease, but can be enabled
    * and paced independently. The legacy combined controls remain the fallback.
@@ -1365,7 +1378,7 @@ export class GithubIntegration implements FactoryIntegration {
   }
 
   sessionTools({ requestContext }: { requestContext: RequestContext }): IntegrationTools {
-    return createGithubSubscriptionTools(requestContext, this);
+    return { ...createGithubSubscriptionTools(requestContext, this), ...createFactoryLocateTool(requestContext, this) };
   }
 
   async postToolObserver({

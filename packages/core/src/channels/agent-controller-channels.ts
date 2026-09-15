@@ -398,7 +398,7 @@ export class AgentControllerChannels extends AgentChannels {
    * pre-existing threads (custom resolveResourceId, or created before this
    * feature) always pass the session's thread-ownership check.
    */
-  protected async getSessionForThread(
+  async getSessionForThread(
     thread: Pick<StorageThreadType, 'id' | 'resourceId'>,
     requestContext?: RequestContext,
   ): Promise<Session<any>> {

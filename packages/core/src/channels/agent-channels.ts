@@ -63,6 +63,8 @@ import { resolveWaitUntil } from './wait-until';
  *
  * @internal Created automatically by the Agent when `channels` config is provided.
  */
+const HANDED_OFF_PLATFORM = 'handed-off';
+
 export class AgentChannels {
   readonly adapters: Record<string, Adapter>;
   private chat: Chat | null = null;
@@ -1681,6 +1683,87 @@ export class AgentChannels {
     }
 
     return { thread: undefined, memoryStore, metadata };
+  }
+
+  async rebindThread({
+    externalThreadId,
+    channelId,
+    platform,
+    resourceId,
+    threadId,
+    mastra,
+  }: {
+    externalThreadId: string;
+    channelId: string;
+    platform: string;
+    resourceId: string;
+    threadId: string;
+    mastra?: Mastra;
+  }): Promise<{ previous: StorageThreadType | undefined; thread: StorageThreadType }> {
+    const resolvedMastra = mastra ?? this.getMastra();
+    if (!resolvedMastra) {
+      throw new Error(
+        'AgentChannels.rebindThread requires a Mastra instance: pass `mastra` or bind the channels to an agent.',
+      );
+    }
+    const {
+      thread: previous,
+      memoryStore,
+      metadata,
+    } = await this.findThreadMapping({ externalThreadId, channelId, platform, mastra: resolvedMastra });
+
+    if (await memoryStore.getThreadById({ threadId })) {
+      throw new Error(`Cannot rebind ${platform} thread ${externalThreadId}: thread ${threadId} already exists`);
+    }
+
+    const previousMetadata = { ...previous?.metadata };
+    if (previous) {
+      await memoryStore.patchThread({
+        id: previous.id,
+        metadata: {
+          ...previousMetadata,
+          channel_platform: HANDED_OFF_PLATFORM,
+          channel_handedOffPlatform: platform,
+          channel_handedOffTo: threadId,
+        },
+      });
+    }
+
+    const boundMetadata: Record<string, unknown> = { ...metadata };
+    if (previous) boundMetadata.channel_handedOffFrom = previous.id;
+    let thread: StorageThreadType;
+    try {
+      thread = await memoryStore.saveThread({
+        thread: {
+          id: threadId,
+          title: `${platform} conversation`,
+          resourceId,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          metadata: boundMetadata,
+        },
+      });
+    } catch (error) {
+      // The previous thread is already marked handed-off. Without restoring it
+      // the conversation has no active mapping at all and every later message
+      // mints a fresh thread, losing the history. `updateThread` merges
+      // metadata, so the handoff markers are cleared explicitly.
+      if (previous) {
+        await memoryStore
+          .patchThread({
+            id: previous.id,
+            metadata: { ...previousMetadata, channel_handedOffPlatform: undefined, channel_handedOffTo: undefined },
+          })
+          .catch(restoreError =>
+            this.log(
+              'error',
+              `Failed to restore ${platform} thread ${externalThreadId} after a failed rebind: ${restoreError}`,
+            ),
+          );
+      }
+      throw error;
+    }
+    return { previous, thread };
   }
 
   /**
