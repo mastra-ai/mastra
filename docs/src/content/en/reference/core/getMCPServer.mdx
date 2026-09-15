@@ -66,7 +66,7 @@ The 1.x-only surfaces are marked `@deprecated` and are removed in the next major
 
 ### Tools that ask for input
 
-A 2026-07-28 server runs ordinary `createTool` definitions. A tool that needs something from the user before it can finish declares `suspendSchema` and `resumeSchema` and calls `suspend()`, exactly as it would for an agent or a workflow. The server turns that suspension into an `input_required` round, and resumes the tool with the answer in `resumeData`.
+A 2026-07-28 server runs ordinary `createTool` definitions. A tool that needs something from the user before it can finish declares `suspendSchema` and `resumeSchema` and calls `suspend()`, exactly as it would for an agent or a workflow. Core reports the suspension as `{ status: 'suspended', suspendPayload, resumeSchema }` from `executeTool`. An `@mastra/mcp` 2.x server turns that into an `input_required` round on the wire, and resumes the tool with the answer in `resumeData`.
 
 ```typescript
 import { createTool } from '@mastra/core/tools'

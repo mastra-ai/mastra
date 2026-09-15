@@ -760,7 +760,7 @@ export class CoreToolBuilder extends MastraBase {
 
           const resumeData = execOptions.resumeData;
 
-          if (resumeData) {
+          if (resumeData != null) {
             const resumeValidation = validateToolInput(resumeSchema, resumeData, options.name);
             if (resumeValidation.error) {
               logger?.warn(resumeValidation.error.message);
@@ -900,7 +900,7 @@ export class CoreToolBuilder extends MastraBase {
         // validation unless the builder injected additional fields. The original args
         // were already validated during the initial execution, but builder-local fields
         // still need validation before Tool.execute skips its own validation.
-        const isResuming = !!execOptions?.resumeData;
+        const isResuming = execOptions?.resumeData != null;
 
         const parameters = inputValidationSchema ?? this.getParameters();
         if (!isResuming || this.injectedInputSchema) {
