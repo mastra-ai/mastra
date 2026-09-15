@@ -15,8 +15,12 @@ export interface SandboxCommandResult {
  * so this type promotes it to required. `id` is taken from core; the command
  * signature is spelled out because core's `CommandResult` is wider than what
  * these helpers read (see below).
+ *
+ * `sandboxId` is the provider's physical, reattachable VM id (undefined until
+ * started, or for providers with no separate physical id); it is carried here
+ * so callers can persist it for deterministic reattach on resume.
  */
-export type ExecutableSandbox = Pick<WorkspaceSandbox, 'id'> & {
+export type ExecutableSandbox = Pick<WorkspaceSandbox, 'id' | 'sandboxId'> & {
   /**
    * Runs a command. The options are core's, but the result is only the part
    * these helpers read: core's `CommandResult` also carries `success` and
