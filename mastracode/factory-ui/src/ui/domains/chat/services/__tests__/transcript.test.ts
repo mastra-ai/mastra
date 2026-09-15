@@ -275,6 +275,19 @@ describe('transcript reducer message entries', () => {
     ]);
   });
 
+  it('keeps accumulated text when a message_start is re-delivered', () => {
+    const message = dbMessage('assistant-1', 'assistant', [{ type: 'text', text: '' }]);
+    const started = transcriptReducer(initialTranscript, { type: 'event', event: { type: 'message_start', message } });
+    const streamed = transcriptReducer(started, {
+      type: 'event',
+      event: { type: 'message_update', id: message.id, event: { type: 'text-delta', delta: 'Streaming text' } },
+    });
+    const replayed = transcriptReducer(streamed, { type: 'event', event: { type: 'message_start', message } });
+
+    expect(replayed.entries).toHaveLength(1);
+    expect(messageParts(replayed.entries[0])).toEqual([{ type: 'text', text: 'Streaming text' }]);
+  });
+
   it('deduplicates starts and finalizes only the matching assistant message', () => {
     const message = dbMessage('assistant-1', 'assistant', [{ type: 'text', text: '' }]);
     const started = transcriptReducer(

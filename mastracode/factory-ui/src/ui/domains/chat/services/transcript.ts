@@ -823,7 +823,13 @@ function preserveRuntimeToolParts(message: MastraDBMessage, previous?: MastraDBM
   const parts = [...message.content.parts];
   const existingToolIds = new Set(parts.map(toolCallIdForPart).filter((id): id is string => Boolean(id)));
 
-  for (const part of previous.content.parts) {
+  for (const [index, part] of previous.content.parts.entries()) {
+    const currentPart = parts[index];
+    if (part.type === 'text' && currentPart?.type === 'text' && currentPart.text === '' && part.text) {
+      parts[index] = part;
+      continue;
+    }
+
     const toolCallId = toolCallIdForPart(part);
     if (toolCallId && !existingToolIds.has(toolCallId)) {
       parts.push(part);
