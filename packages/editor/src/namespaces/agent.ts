@@ -186,6 +186,8 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
   StorageResolvedAgentType,
   Agent
 > {
+  private readonly registeredStoredAgentIds = new Set<string>();
+
   protected async getStorageAdapter(): Promise<
     StorageAdapter<
       StorageCreateAgentInput,
@@ -432,6 +434,26 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       }
     } catch {
       // Agent not found in registry — nothing to remove
+    } finally {
+      this.registeredStoredAgentIds.delete(id);
+    }
+  }
+
+  override clearCache(id?: string): void {
+    if (id) {
+      super.clearCache(id);
+      return;
+    }
+
+    const registeredIds = Array.from(this.registeredStoredAgentIds);
+    super.clearCache();
+
+    // Version-specific lookups bypass the value cache but still register their
+    // hydrated agents with Mastra, so clear any registrations not visited above.
+    for (const registeredId of registeredIds) {
+      if (this.registeredStoredAgentIds.has(registeredId)) {
+        this.onCacheEvict(registeredId);
+      }
     }
   }
 
@@ -1131,8 +1153,9 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     // When a stored config is an override for a code agent, adding it would create a
     // duplicate entry under a different key (agent.id vs config key), causing the list
     // endpoint to show the agent as "stored" instead of "code".
-    if (!this.getCodeDefinedAgent(storedAgent.id)) {
-      this.mastra?.addAgent(agent, storedAgent.id, { source: 'stored' });
+    if (!this.getCodeDefinedAgent(storedAgent.id) && this.mastra) {
+      this.mastra.addAgent(agent, storedAgent.id, { source: 'stored' });
+      this.registeredStoredAgentIds.add(storedAgent.id);
     }
     this.logger?.debug(`[createAgentFromStoredConfig] Successfully created agent "${storedAgent.id}"`);
 

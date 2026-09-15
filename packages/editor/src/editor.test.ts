@@ -236,6 +236,29 @@ describe('agent.clearCache', () => {
     expect(debugSpy).toHaveBeenCalledWith('[clearCache] Cleared all cached entities');
   });
 
+  it('should remove version-specific stored agents from the Mastra registry when clearing all', async () => {
+    const storage = new InMemoryStore();
+    const agentsStore = await storage.getStore('agents');
+    await agentsStore?.create({
+      agent: {
+        id: 'versioned-cache-test-agent',
+        name: 'Versioned Cache Test Agent',
+        instructions: 'Test',
+        model: { provider: 'openai', name: 'gpt-4' },
+      },
+    });
+
+    const editor = new MastraEditor();
+    const mastra = new Mastra({ storage, editor });
+
+    await editor.agent.getById('versioned-cache-test-agent', { versionNumber: 1 });
+    expect(mastra.getAgentById('versioned-cache-test-agent')).toBeDefined();
+
+    editor.agent.clearCache();
+
+    expect(() => mastra.getAgentById('versioned-cache-test-agent')).toThrow();
+  });
+
   it('should do nothing if editor is not registered with Mastra', () => {
     const editor = new MastraEditor();
 
