@@ -197,7 +197,9 @@ export class ToolCallFilter implements Processor {
         if (part.type !== 'tool-result') continue;
         if (!excludedToolCallIds.has(part.toolCallId)) continue;
         const mastraMetadata = part.providerOptions?.mastra;
-        if (!mastraMetadata || !Object.hasOwn(mastraMetadata, 'modelOutput')) continue;
+        if (!mastraMetadata || !Object.hasOwn(mastraMetadata, 'modelOutput') || mastraMetadata.modelOutput == null) {
+          continue;
+        }
 
         const text = this.modelOutputToText((part as ToolResultPart).output);
         if (text) {

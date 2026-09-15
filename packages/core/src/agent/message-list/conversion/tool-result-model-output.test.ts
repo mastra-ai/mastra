@@ -39,7 +39,7 @@ function toolResultPart(prompt: Awaited<ReturnType<MessageList['get']['all']['ai
 
 function hasExplicitModelOutput(part: ReturnType<typeof toolResultPart>): boolean {
   const mastraMetadata = part?.providerOptions?.mastra;
-  return Boolean(mastraMetadata && Object.hasOwn(mastraMetadata, 'modelOutput'));
+  return Boolean(mastraMetadata && Object.hasOwn(mastraMetadata, 'modelOutput') && mastraMetadata.modelOutput != null);
 }
 
 describe('explicit tool model output provenance', () => {

@@ -228,6 +228,29 @@ describe('ToolCallFilter', () => {
       expect(result).toEqual([]);
     });
 
+    it('does not preserve a raw result when explicit model output is nullish', async () => {
+      const prompt: LanguageModelV2Prompt = [
+        { role: 'assistant', content: [toolCallPart('call-nullish', 'nullishTool')] },
+        {
+          role: 'tool',
+          content: [
+            {
+              ...toolResultPart('call-nullish', 'nullishTool', {
+                type: 'json',
+                value: { secret: 'NULLISH_RAW_RESULT' },
+              }),
+              providerOptions: { mastra: { modelOutput: null } },
+            },
+          ],
+        },
+      ];
+
+      const result = await runFilter(new ToolCallFilter({ preserveModelOutput: true }), prompt);
+
+      expect(JSON.stringify(result)).not.toContain('NULLISH_RAW_RESULT');
+      expect(result).toEqual([]);
+    });
+
     it('distinguishes equal outputs by explicit model output provenance', async () => {
       const output = { type: 'text' as const, value: 'SAME_OUTPUT' };
       const prompt: LanguageModelV2Prompt = [
