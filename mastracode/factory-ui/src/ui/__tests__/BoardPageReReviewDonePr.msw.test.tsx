@@ -1,10 +1,9 @@
 /**
  * A PR that reached Done but is still open on GitHub may have picked up new
  * commits after its review — nothing re-queues it automatically. The Done-lane
- * card offers a manual "Re-review" action that starts a fresh review run even
- * though the review session slot is already used, instead of just reopening
- * the old thread. Merged PRs don't get the action: there's nothing left to
- * review.
+ * card offers a manual "Re-review" that moves the card back into Review, where
+ * the lane's rule queues a fresh review run. Merged PRs don't get the action:
+ * there's nothing left to review.
  */
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -63,11 +62,10 @@ const donePrWorkItem = {
   updatedAt: '2026-07-18T00:00:00.000Z',
 };
 
-const NEW_THREAD_ID = 'thread-rereview-1';
-
-/** Stubs the review board's data endpoints and captures run-start requests. */
+/** Stubs the review board's data endpoints and captures what a Re-review writes. */
 function stubReviewBoard({ workItems = [donePrWorkItem] as object[] } = {}) {
-  const startRequests: Array<Record<string, unknown>> = [];
+  const transitions: Array<Record<string, unknown>> = [];
+  const patches: Array<Record<string, unknown>> = [];
 
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () =>
@@ -115,53 +113,30 @@ function stubReviewBoard({ workItems = [donePrWorkItem] as object[] } = {}) {
     http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () =>
       HttpResponse.json({ sessions: [reviewSession] }),
     ),
-    // Re-review mints a fresh workspace session before kicking off the run.
-    http.post(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, async ({ request }) => {
-      const body = (await request.json()) as { branch?: string };
-      return HttpResponse.json({ session: { ...reviewSession, branch: body.branch ?? reviewSession.branch } });
+    http.patch(`${TEST_BASE_URL}/web/factory/work-items/:itemId`, async ({ params, request }) => {
+      patches.push((await request.json()) as Record<string, unknown>);
+      return HttpResponse.json({ workItem: { ...donePrWorkItem, id: String(params.itemId), revision: 4 } });
     }),
-    http.post(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/ensure`, () => HttpResponse.json({ ok: true })),
-    http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/:sessionId/permissions`, () =>
-      HttpResponse.json({ permissions: [] }),
+    http.post(
+      `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items/:itemId/transition`,
+      async ({ params, request }) => {
+        const body = (await request.json()) as Record<string, unknown>;
+        transitions.push(body);
+        return HttpResponse.json({
+          result: {
+            status: 'accepted',
+            transitionId: 'transition-1',
+            itemId: String(params.itemId),
+            revision: 9,
+            stage: body.stage,
+            decisions: [],
+          },
+        });
+      },
     ),
-    // The thread page the successful kickoff navigates to.
-    http.get(`${TEST_BASE_URL}/web/user-sessions/${SESSION_ID}`, () => HttpResponse.json({ session: reviewSession })),
-    http.get(`${TEST_BASE_URL}/web/github/subscriptions`, () => HttpResponse.json({ subscriptions: [] })),
-    http.get(`${TEST_BASE_URL}/api/agent-controller/code/modes`, () => HttpResponse.json({ modes: [] })),
-    http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/:sessionId`, () =>
-      HttpResponse.json({ id: SESSION_ID, resourceId: SESSION_ID, state: {} }),
-    ),
-    http.put(`${TEST_BASE_URL}/api/agent-controller/code/sessions/:sessionId/state`, () =>
-      HttpResponse.json({ ok: true }),
-    ),
-    http.get(
-      `${TEST_BASE_URL}/api/agent-controller/code/sessions/:sessionId/stream`,
-      () =>
-        new Response(new ReadableStream<Uint8Array>({ start() {}, cancel() {} }), {
-          headers: { 'content-type': 'text/event-stream' },
-        }),
-    ),
-    http.post(`${TEST_BASE_URL}/api/agent-controller/code/sessions`, () =>
-      HttpResponse.json({ id: SESSION_ID, resourceId: SESSION_ID }),
-    ),
-    http.post(`${TEST_BASE_URL}/api/agent-controller/code/sessions/:sessionId/thread`, () =>
-      HttpResponse.json({ ok: true }),
-    ),
-    http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/:sessionId/threads`, () =>
-      HttpResponse.json({ threads: [{ id: NEW_THREAD_ID, resourceId: SESSION_ID, title: 'Re-review PR #42' }] }),
-    ),
-    http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/:sessionId/threads/:threadId/messages`, () =>
-      HttpResponse.json({ messages: [] }),
-    ),
-    http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/runs/start`, async ({ request }) => {
-      startRequests.push((await request.json()) as Record<string, unknown>);
-      return HttpResponse.json({
-        prepared: { workItemId: 'item-pr-42', threadId: NEW_THREAD_ID, sessionId: SESSION_ID, kickoffStatus: 'sent' },
-      });
-    }),
   );
 
-  return { startRequests };
+  return { transitions, patches };
 }
 
 function renderReviewBoard() {
@@ -170,8 +145,8 @@ function renderReviewBoard() {
 }
 
 describe('Re-review action for open PRs in Done', () => {
-  it('starts a fresh review run for a Done-lane open PR whose review slot is already used', async () => {
-    const { startRequests } = stubReviewBoard();
+  it('moves a Done-lane open PR back into Review, where its rule queues the run', async () => {
+    const { transitions } = stubReviewBoard();
     const user = userEvent.setup();
     const { router, client } = renderReviewBoard();
 
@@ -179,17 +154,28 @@ describe('Re-review action for open PRs in Done', () => {
     await user.click(await screen.findByRole('menuitem', { name: 'Re-review' }));
 
     await waitForMutationsIdle(client);
-    expect(startRequests).toHaveLength(1);
     expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/review`);
-    expect(startRequests[0]).toMatchObject({
-      sessionId: SESSION_ID,
-      destinationStage: 'review',
-      invocation: { type: 'skill', skillName: 'factory-review' },
-      workItem: { id: 'item-pr-42', role: 'review' },
-    });
+    expect(transitions).toEqual([
+      expect.objectContaining({ board: 'review', stage: 'review', cause: 'card_action', expectedRevision: 1 }),
+    ]);
   });
 
-  it('does not offer Re-review for a merged PR in Done', async () => {
+  it('re-reviews hands-off, stamping the card before the move that queues the run', async () => {
+    const { transitions, patches } = stubReviewBoard();
+    const user = userEvent.setup();
+    const { client } = renderReviewBoard();
+
+    await user.click(await screen.findByRole('button', { name: 'Actions for Add rate limiting' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Re-review hands-off' }));
+
+    await waitForMutationsIdle(client);
+    expect(patches).toEqual([{ plansPreapproved: true }]);
+    expect(transitions).toEqual([
+      expect.objectContaining({ board: 'review', stage: 'review', cause: 'card_action', expectedRevision: 4 }),
+    ]);
+  });
+
+  it('offers a merged PR in Done no lane at all', async () => {
     stubReviewBoard({
       workItems: [{ ...donePrWorkItem, metadata: { number: 42, state: 'closed', merged: true } }],
     });
@@ -198,6 +184,6 @@ describe('Re-review action for open PRs in Done', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Actions for Add rate limiting' }));
     await screen.findByRole('menuitem', { name: 'Remove' });
-    expect(screen.queryByRole('menuitem', { name: 'Re-review' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: /^(Re-)?review$/ })).not.toBeInTheDocument();
   });
 });

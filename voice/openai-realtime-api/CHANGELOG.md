@@ -1,5 +1,181 @@
 # @mastra/voice-openai-realtime
 
+## 0.14.0
+
+### Minor Changes
+
+- Added session hooks to `OpenAIRealtimeVoice` for applications that manage parts of the OpenAI Realtime session themselves. Every server event is now re-emitted as `openAIRealtime:<event.type>`, the socket emits `open` and `close`, and `sendEvent()` is public so you can send any client event, such as adding conversation items. ([#23916](https://github.com/mastra-ai/mastra/pull/23916))
+
+  ```typescript
+  voice.on('openAIRealtime:rate_limits.updated', event => console.log(event.rate_limits));
+  voice.on('close', ({ code, reason }) => console.log('socket closed', code, reason));
+
+  voice.sendEvent('conversation.item.create', {
+    item: { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'Hello' }] },
+  });
+  ```
+
+  Fixed the provider sending an extra `response.create` for function calls whose tools were not registered with `addTools()`. Tools declared directly through `session.update` are now left to the application, so OpenAI no longer rejects the application's own `response.create` with `conversation_already_has_active_response`. Fixes [#20219](https://github.com/mastra-ai/mastra/issues/20219).
+
+### Patch Changes
+
+- Fixed public realtime speech boundary events and complete input transcription payload delivery. Subscribe to the native event names to receive speech timestamps and transcription usage when provided, without changing existing `writing` events. ([#23432](https://github.com/mastra-ai/mastra/pull/23432))
+
+  ```typescript
+  voice.on('input_audio_buffer.speech_started', event => {
+    console.log(event.item_id, event.audio_start_ms);
+  });
+  voice.on('input_audio_buffer.speech_stopped', event => {
+    console.log(event.item_id, event.audio_end_ms);
+  });
+  voice.on('conversation.item.input_audio_transcription.completed', event => {
+    console.log(event.transcript, event.usage);
+  });
+  ```
+
+- Updated dependencies [[`ffe16f1`](https://github.com/mastra-ai/mastra/commit/ffe16f17447449b7155f1f15992e3c9e5f6511ac), [`80608ed`](https://github.com/mastra-ai/mastra/commit/80608ede1a9e5d7d8488ac511245bf327e8987e3)]:
+  - @mastra/schema-compat@1.3.10
+
+## 0.14.0-alpha.3
+
+### Minor Changes
+
+- Added session hooks to `OpenAIRealtimeVoice` for applications that manage parts of the OpenAI Realtime session themselves. Every server event is now re-emitted as `openAIRealtime:<event.type>`, the socket emits `open` and `close`, and `sendEvent()` is public so you can send any client event, such as adding conversation items. ([#23916](https://github.com/mastra-ai/mastra/pull/23916))
+
+  ```typescript
+  voice.on('openAIRealtime:rate_limits.updated', event => console.log(event.rate_limits));
+  voice.on('close', ({ code, reason }) => console.log('socket closed', code, reason));
+
+  voice.sendEvent('conversation.item.create', {
+    item: { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'Hello' }] },
+  });
+  ```
+
+  Fixed the provider sending an extra `response.create` for function calls whose tools were not registered with `addTools()`. Tools declared directly through `session.update` are now left to the application, so OpenAI no longer rejects the application's own `response.create` with `conversation_already_has_active_response`. Fixes [#20219](https://github.com/mastra-ai/mastra/issues/20219).
+
+## 0.13.11-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`ffe16f1`](https://github.com/mastra-ai/mastra/commit/ffe16f17447449b7155f1f15992e3c9e5f6511ac)]:
+  - @mastra/schema-compat@1.3.10-alpha.1
+
+## 0.13.11-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`80608ed`](https://github.com/mastra-ai/mastra/commit/80608ede1a9e5d7d8488ac511245bf327e8987e3)]:
+  - @mastra/schema-compat@1.3.10-alpha.0
+
+## 0.13.11-alpha.0
+
+### Patch Changes
+
+- Fixed public realtime speech boundary events and complete input transcription payload delivery. Subscribe to the native event names to receive speech timestamps and transcription usage when provided, without changing existing `writing` events. ([#23432](https://github.com/mastra-ai/mastra/pull/23432))
+
+  ```typescript
+  voice.on('input_audio_buffer.speech_started', event => {
+    console.log(event.item_id, event.audio_start_ms);
+  });
+  voice.on('input_audio_buffer.speech_stopped', event => {
+    console.log(event.item_id, event.audio_end_ms);
+  });
+  voice.on('conversation.item.input_audio_transcription.completed', event => {
+    console.log(event.transcript, event.usage);
+  });
+  ```
+
+## 0.13.10
+
+### Patch Changes
+
+- Moved connection-failure and handshake-timeout guidance into the voice connection reference and linked it from the README. ([#23488](https://github.com/mastra-ai/mastra/pull/23488))
+
+## 0.13.10-alpha.0
+
+### Patch Changes
+
+- Moved connection-failure and handshake-timeout guidance into the voice connection reference and linked it from the README. ([#23488](https://github.com/mastra-ai/mastra/pull/23488))
+
+## 0.13.9
+
+### Patch Changes
+
+- Fixed realtime connections hanging when session creation fails. Connections now reject on handshake errors, early socket closure, or a 15-second timeout configurable with connectTimeoutMs. ([#23143](https://github.com/mastra-ai/mastra/pull/23143))
+
+- Updated dependencies [[`40f3647`](https://github.com/mastra-ai/mastra/commit/40f36478291d6098f762fc639d545357732b77b4)]:
+  - @mastra/schema-compat@1.3.9
+
+## 0.13.9-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`40f3647`](https://github.com/mastra-ai/mastra/commit/40f36478291d6098f762fc639d545357732b77b4)]:
+  - @mastra/schema-compat@1.3.9-alpha.0
+
+## 0.13.9-alpha.0
+
+### Patch Changes
+
+- Fixed realtime connections hanging when session creation fails. Connections now reject on handshake errors, early socket closure, or a 15-second timeout configurable with connectTimeoutMs. ([#23143](https://github.com/mastra-ai/mastra/pull/23143))
+
+## 0.13.8
+
+### Patch Changes
+
+- Update README to include accurate, up-to-date information ([#22858](https://github.com/mastra-ai/mastra/pull/22858))
+
+- Remove `CHANGELOG.md` from distributed npm files resulting in reduced package size ([#22737](https://github.com/mastra-ai/mastra/pull/22737))
+
+- Updated dependencies [[`e983f74`](https://github.com/mastra-ai/mastra/commit/e983f749873189f767f509eb33d1a3596c0f1c74), [`28ce924`](https://github.com/mastra-ai/mastra/commit/28ce924276eeca492e6a360e5482ed20c2785ef6)]:
+  - @mastra/schema-compat@1.3.8
+
+## 0.13.8-alpha.1
+
+### Patch Changes
+
+- Update README to include accurate, up-to-date information ([#22858](https://github.com/mastra-ai/mastra/pull/22858))
+
+- Updated dependencies [[`e983f74`](https://github.com/mastra-ai/mastra/commit/e983f749873189f767f509eb33d1a3596c0f1c74)]:
+  - @mastra/schema-compat@1.3.8-alpha.1
+
+## 0.13.8-alpha.0
+
+### Patch Changes
+
+- Remove `CHANGELOG.md` from distributed npm files resulting in reduced package size ([#22737](https://github.com/mastra-ai/mastra/pull/22737))
+
+- Updated dependencies [[`28ce924`](https://github.com/mastra-ai/mastra/commit/28ce924276eeca492e6a360e5482ed20c2785ef6)]:
+  - @mastra/schema-compat@1.3.8-alpha.0
+
+## 0.13.7
+
+### Patch Changes
+
+- Updated dependencies [[`cf418b6`](https://github.com/mastra-ai/mastra/commit/cf418b65efb81997e9b8dc7638eee363c5d96c96)]:
+  - @mastra/schema-compat@1.3.7
+
+## 0.13.7-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`cf418b6`](https://github.com/mastra-ai/mastra/commit/cf418b65efb81997e9b8dc7638eee363c5d96c96)]:
+  - @mastra/schema-compat@1.3.7-alpha.0
+
+## 0.13.6
+
+### Patch Changes
+
+- Updated dependencies [[`6bff877`](https://github.com/mastra-ai/mastra/commit/6bff877e214695ff8d9c84b06c13a6e6bcf9f1ed), [`f5a17d9`](https://github.com/mastra-ai/mastra/commit/f5a17d95c19e7d4149996932bd8d1905089f031d), [`5dba2a4`](https://github.com/mastra-ai/mastra/commit/5dba2a41600385751f5aace79878904e1972609d), [`9be8878`](https://github.com/mastra-ai/mastra/commit/9be8878dcf0388e84fc4873e0eec27bd49b881a4)]:
+  - @mastra/schema-compat@1.3.6
+
+## 0.13.6-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`5dba2a4`](https://github.com/mastra-ai/mastra/commit/5dba2a41600385751f5aace79878904e1972609d)]:
+  - @mastra/schema-compat@1.3.6-alpha.3
+
 ## 0.13.6-alpha.2
 
 ### Patch Changes

@@ -14,7 +14,7 @@ export interface SkillInvocationInput {
 
 export interface SkillSession {
   getWorkspace(): Workspace;
-  sendMessage(input: { content: string }): Promise<unknown>;
+  sendMessage(input: { content: string; requestContext?: RequestContext }): Promise<unknown>;
   sendNotificationSignal(
     input: {
       source: string;
@@ -47,6 +47,16 @@ function escapeSkillBoundary(value: string): string {
   return value.replaceAll('</skill>', '&lt;/skill&gt;');
 }
 
+/** Kicks a run off from a plain prompt, for runs that activate no skill. */
+export async function resolvePromptInvocation(
+  controller: Pick<AgentController<MastraCodeState>, 'getSessionByResource'>,
+  input: { resourceId: string; scope?: SkillInvocationInput['scope']; prompt: string },
+): Promise<{ session: SkillSession; message: string }> {
+  const session = (await controller.getSessionByResource(input.resourceId, input.scope)) as SkillSession | undefined;
+  if (!session) throw new SkillInvocationError('session_not_found', 'Agent controller session not found.');
+  return { session, message: input.prompt };
+}
+
 export async function resolveSkillInvocation(
   controller: Pick<AgentController<MastraCodeState>, 'getSessionByResource'>,
   input: SkillInvocationInput,
@@ -73,8 +83,9 @@ export async function resolveSkillInvocation(
 export async function dispatchSkillInvocation(
   controller: Pick<AgentController<MastraCodeState>, 'getSessionByResource'>,
   input: SkillInvocationInput,
+  requestContext?: RequestContext,
 ): Promise<{ skillName: string; message: string }> {
   const resolved = await resolveSkillInvocation(controller, input);
-  await resolved.session.sendMessage({ content: resolved.message });
+  await resolved.session.sendMessage({ content: resolved.message, ...(requestContext ? { requestContext } : {}) });
   return { skillName: resolved.skillName, message: resolved.message };
 }

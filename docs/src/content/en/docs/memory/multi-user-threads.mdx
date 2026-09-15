@@ -1,6 +1,6 @@
 ---
 title: "Multi-user threads | Memory"
-description: "Share one Mastra thread between multiple users by carrying speaker identity in the message body."
+description: "Share one Mastra memory thread across multiple users by preserving speaker identity in messages and combining history with observational or working memory."
 packages:
   - "@mastra/core"
   - "@mastra/libsql"
@@ -167,7 +167,7 @@ OM requires a storage adapter that supports it: `@mastra/libsql`, `@mastra/pg`, 
 
 :::note
 
-If you switch the Observer to a weaker model and see facts collapse to a generic `User`, use [`observation.instruction`](/reference/memory/observational-memory) to teach the Observer how to read the `<turn>` tag.
+If you switch the Observer to a less capable model and see facts attributed to a generic `User` instead of individual participants, use [`observation.instruction`](/reference/memory/observational-memory) to explain how to interpret the `<turn>` tag.
 
 :::
 

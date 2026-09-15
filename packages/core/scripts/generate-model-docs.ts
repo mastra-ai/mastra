@@ -5,6 +5,8 @@ import { z } from 'zod/v4';
 import type { ProviderConfig } from '../src/llm';
 import { EXCLUDED_PROVIDERS, PROVIDERS_WITH_INSTALLED_PACKAGES } from '../src/llm/model/gateways/constants';
 import { generateProviderOptionsSection } from './generate-provider-options-docs';
+import { getGatewayPageMetadata, getModelsDevAttribution, getProviderPageMetadata } from './model-doc-metadata';
+import type { ModelPageData } from './model-doc-metadata';
 
 /**
  * Generate a comment indicating the file was auto-generated
@@ -30,6 +32,7 @@ function formatProviderName(name: string): string {
     'github-models': 'GitHub Models',
     deepinfra: 'Deep Infra',
     fastrouter: 'FastRouter',
+    'merge-gateway': 'Merge Gateway',
     baseten: 'Baseten',
     lmstudio: 'LMStudio',
     modelscope: 'ModelScope',
@@ -114,7 +117,7 @@ const __dirname = path.dirname(__filename);
 const POPULAR_PROVIDERS = ['openai', 'anthropic', 'google', 'deepseek', 'groq', 'mistral', 'xai'];
 
 // Providers that are actually gateways (aggregate multiple model providers)
-const GATEWAY_PROVIDERS = ['netlify', 'neon', 'openrouter', 'vercel', 'azure-openai'];
+const GATEWAY_PROVIDERS = ['netlify', 'neon', 'openrouter', 'vercel', 'azure-openai', 'merge-gateway'];
 
 const MANUALLY_DOCUMENTED_PROVIDERS = ['azure-openai'];
 const MANUALLY_DOCUMENTED_GATEWAYS = ['azure-openai', 'mastra'];
@@ -242,7 +245,7 @@ async function parseProviders(): Promise<GroupedProviders> {
   return { gateways, popular, other };
 }
 
-async function fetchProviderInfo(providerId: string): Promise<{ models: any[]; packageName?: string }> {
+async function fetchProviderInfo(providerId: string): Promise<{ models: ModelPageData[]; packageName?: string }> {
   try {
     const response = await fetch('https://models.dev/api.json');
     const data = await response.json();
@@ -310,16 +313,15 @@ Learn more in the [${provider.name} documentation](${docUrl}).`
   // Fetch model capabilities from models.dev
   const { models: modelsWithCapabilities, packageName } = await fetchProviderInfo(provider.id);
   provider.packageName = packageName;
-
-  // Check for AI SDK docs link if package is available
-  const aiSdkDocsLink = packageName ? await checkAiSdkDocsLink(provider.id) : null;
+  const metadata = getProviderPageMetadata(provider.name, modelsWithCapabilities);
 
   // Generate static model data as JSON for the component (show all models)
   const modelDataJson = JSON.stringify(modelsWithCapabilities, null, 2);
+  const modelsDevAttribution = getModelsDevAttribution(modelsWithCapabilities);
 
   return `---
-title: "${provider.name} | Models"
-description: "Use ${provider.name} models with Mastra. ${modelCount} model${modelCount !== 1 ? 's' : ''} available."
+title: "${metadata.title}"
+description: "${metadata.description}"
 ---
 
 ${getGeneratedComment()}
@@ -355,7 +357,7 @@ ${
   !PROVIDERS_WITH_INSTALLED_PACKAGES.includes(provider.id)
     ? // if it's not a directly supported provider then it's openai compatible, so warn about it
       `
-:::info
+:::note
 
 Mastra uses the OpenAI-compatible \`/chat/completions\` endpoint. Some provider-specific features may not be available. Check the [${provider.name} documentation](${docUrl || '#'}) for details.
 
@@ -368,7 +370,7 @@ Mastra uses the OpenAI-compatible \`/chat/completions\` endpoint. Some provider-
 <ProviderModelsTable
   models={${modelDataJson}}
 />
-
+${modelsDevAttribution}
 ## Advanced configuration
 
 ### Custom headers
@@ -407,26 +409,7 @@ const agent = new Agent({
 });
 \`\`\`
 
-${generateProviderOptionsSection(provider.id)}
-${
-  provider.packageName && provider.packageName !== '@ai-sdk/openai-compatible'
-    ? `
-## Direct provider installation
-
-This provider can also be installed directly as a standalone package, which can be used instead of the Mastra model router string. View the [package documentation](https://www.npmjs.com/package/${provider.packageName}) for more details.
-
-\`\`\`bash npm2yarn
-npm install ${provider.packageName}
-\`\`\`
-${
-  aiSdkDocsLink
-    ? `
-For detailed provider-specific documentation, see the [AI SDK ${provider.name} provider docs](${aiSdkDocsLink}).`
-    : ''
-}
-`
-    : ''
-}`;
+${generateProviderOptionsSection(provider.id)}`;
 }
 
 async function checkAiSdkDocsLink(providerId: string): Promise<string | null> {
@@ -497,6 +480,7 @@ function generateGatewayPage(
 ): string {
   const displayName = formatProviderName(gatewayName);
   const totalModels = providers.reduce((sum, p) => sum + p.models.length, 0);
+  const metadata = getGatewayPageMetadata(displayName, totalModels);
   // Get documentation URL if available
   // Special override for Vercel to use the AI SDK documentation
   let rawDocUrl: string | undefined;
@@ -548,8 +532,8 @@ ${allModels.map(m => `| \`${m}\` |`).join('\n')}
     : `<img src="${getLogoUrl(gatewayName)}" alt="${displayName} logo" className="${getLogoClass(gatewayName)}" />`;
 
   return `---
-title: "${displayName} | Models"
-description: "Use AI models through ${displayName}."
+title: "${metadata.title}"
+description: "${metadata.description}"
 ---
 
 ${getGeneratedComment()}
@@ -573,7 +557,7 @@ const agent = new Agent({
 });
 \`\`\`
 
-:::info
+:::note
 
 Mastra uses the OpenAI-compatible \`/chat/completions\` endpoint. Some provider-specific features may not be available. ${docUrl ? `Check the [${displayName} documentation](${docUrl}) for details.` : `Check the ${displayName} documentation for details.`}
 
@@ -856,7 +840,7 @@ You can also discover models directly in your editor. Mastra provides full autoc
 
 Alternatively, browse and test models in [Studio](/docs/studio/overview) UI.
 
-:::info
+:::note
 
 In development, we auto-refresh your local model list every hour, ensuring your TypeScript autocomplete and Studio stay up-to-date with the latest models. To disable, set \`MASTRA_AUTO_REFRESH_PROVIDERS=false\`. Auto-refresh is disabled by default in production.
 
@@ -960,7 +944,7 @@ const agent = new Agent({
 });
 \`\`\`
 
-:::info
+:::note
 
 Configuration differs by provider. See the provider pages in the left navigation for details on custom headers.
 
@@ -1155,7 +1139,7 @@ ${gatewaysList
       title="Mastra"
       description="Built-in Observational Memory"
       href="/models/gateways/${g}"
-      logo="https://mastra.ai/brand/logo.svg"
+      logo="/img/integrations/mastra.svg"
     />`;
       }
     }
@@ -1486,6 +1470,9 @@ export {
   parseProviders,
   generateProviderPage,
   generateGatewayPage,
+  getProviderPageMetadata,
+  getGatewayPageMetadata,
+  getModelsDevAttribution,
   generateEnvListPage,
   generateIndexPage,
   generateSidebarsFile,

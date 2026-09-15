@@ -1,11 +1,9 @@
-import type { DatasetExperiment, GetAgentResponse, GetScorerResponse, GetWorkflowResponse } from '@mastra/client-js';
+import type { DatasetExperiment, MastraClient } from '@mastra/client-js';
 
 // Empty registries for the target-resolution queries the experiment top area
 // fires (agents / workflows / scorers). The name/description under test come
 // from the experiment itself, so these can be empty.
-export const noAgents: Record<string, GetAgentResponse> = {};
-export const noWorkflows: Record<string, GetWorkflowResponse> = {};
-export const noScorers: Record<string, GetScorerResponse> = {};
+export { noAgents, noProcessors, noScorers, noWorkflows } from './target-registries';
 
 const base: DatasetExperiment = {
   id: 'a1b2c3d4-0000-0000-0000-000000000001',
@@ -52,3 +50,13 @@ export const experiments: DatasetExperiment[] = [
     createdAt: '2026-07-01T13:00:00.000Z',
   },
 ];
+
+type ListExperimentsResponse = Awaited<ReturnType<MastraClient['listExperiments']>>;
+type ReviewSummaryResponse = Awaited<ReturnType<MastraClient['getExperimentReviewSummary']>>;
+
+export const buildListExperimentsResponse = (list: DatasetExperiment[]): ListExperimentsResponse => ({
+  experiments: list,
+  pagination: { total: list.length, page: 0, perPage: 50, hasMore: false },
+});
+
+export const emptyReviewSummary: ReviewSummaryResponse = { counts: [] };

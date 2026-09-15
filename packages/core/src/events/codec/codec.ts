@@ -174,7 +174,7 @@ export function decode(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(decode);
 
   if (CODEC_TAG in value && isEnvelope(value)) {
-    const env = value as Envelope;
+    const env = value;
     switch (env[CODEC_TAG]) {
       case 'Undefined':
         return undefined;

@@ -5,7 +5,7 @@ Vector store implementation for Turbopuffer, using the official @turbopuffer/tur
 ## Installation
 
 ```bash
-pnpm add @mastra/turbopuffer
+npm install @mastra/turbopuffer
 ```
 
 ## Usage
@@ -20,51 +20,34 @@ const vectorStore = new TurbopufferVector({
 });
 
 // Create a new index
-await vectorStore.createIndex({ indexName: 'my-index', dimension: 1536, metric: 'cosine' });
+await vectorStore.createIndex({ indexName: 'my-index', dimension: 3, metric: 'cosine' });
 
 // Add vectors
-const vectors = [[0.1, 0.2, ...], [0.3, 0.4, ...]];
+const vectors = [
+  [0.1, 0.2, 0.3],
+  [0.3, 0.4, 0.5],
+];
 const metadata = [{ text: 'doc1' }, { text: 'doc2' }];
 const ids = await vectorStore.upsert({ indexName: 'my-index', vectors, metadata });
 
 // Query vectors
 const results = await vectorStore.query({
   indexName: 'my-index',
-  queryVector: [0.1, 0.2, ...],
+  queryVector: [0.1, 0.2, 0.3],
   topK: 10,
   filter: { text: { $eq: 'doc1' } },
   includeVector: false,
-);
+});
 ```
 
-## Configuration
+## Documentation
 
-Required:
+- [@mastra/turbopuffer documentation](https://mastra.ai/reference/vectors/turbopuffer)
 
-- `apiKey`: Your Turbopuffer API key
+## Changelog
 
-Optional:
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/stores/turbopuffer/CHANGELOG.md) for version history and release notes.
 
-- `baseUrl`: Your Turbopuffer base URL (default: https://api.turbopuffer.com)
-- `connectTimeout`: Timeout to establish a connection, in ms (default: 10_000)
-- `connectionIdleTimeout`: Socket idle timeout, in ms (default: 60_000)
-- `warmConnections`: Number of connections to open initially (default: 0)
-- `compression`: Whether to compress requests and accept compressed responses (default: true)
-- `schemaConfigForIndex`: A function that returns a Turbopuffer schema config for an index (default: undefined).
+## Support
 
-## Methods
-
-- `createIndex({ indexName, dimension, metric? })`: Create a new namespace
-- `upsert({ indexName, vectors, metadata?, ids? })`: Add or update vectors
-- `query({ indexName, queryVector, topK?, filter?, includeVector? })`: Search for similar vectors
-- `updateVector({ indexName, id?, filter?, update })`: Update a single vector by ID or metadata filter
-- `deleteVector({ indexName, id })`: Delete a single vector by ID
-- `deleteVectors({ indexName, ids?, filter? })`: Delete multiple vectors by IDs or metadata filter
-- `listIndexes()`: List all namespaces
-- `describeIndex({ indexName })`: Get namespace statistics
-- `deleteIndex({ indexName })`: Delete a namespace
-
-## Related Links
-
-- [Turbopuffer Documentation](https://turbopuffer.com/docs)
-- [Turbopuffer TypeScript Client Library](https://github.com/turbopuffer/turbopuffer-typescript)
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.

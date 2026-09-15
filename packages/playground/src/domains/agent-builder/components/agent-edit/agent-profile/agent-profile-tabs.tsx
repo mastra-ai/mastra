@@ -51,7 +51,7 @@ export const AgentProfileTabs = ({
   const browserTabEnabled = gates.browser;
   const integrationsTabEnabled = gates.integrations;
 
-  const tabContentClassName = 'h-full min-h-0 pb-6 pt-6';
+  const tabContentClassName = 'h-full min-h-0 pb-4 pt-4';
   // The Model/Tools tabs use a two-pane layout whose left filter pane must run
   // the full height of the panel, so they manage their own vertical spacing
   // instead of inheriting the shared vertical padding.
@@ -63,7 +63,7 @@ export const AgentProfileTabs = ({
   return (
     <div className="h-full min-h-0 overflow-hidden" data-testid="agent-profile-tabs">
       <Tabs defaultTab={defaultTab} className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden">
-        <TabList variant="line" sticky className="!bg-surface3 px-6" style={tabListStyle}>
+        <TabList variant="line" sticky className="!bg-surface3 px-4" style={tabListStyle}>
           {modelTabEnabled && <Tab value="model">Model</Tab>}
           {toolsTabEnabled && <Tab value="tools">Tools</Tab>}
           <Tab value="instructions">Instructions</Tab>

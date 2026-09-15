@@ -8,6 +8,7 @@ type TimelineSpan = {
   startedAt: Date | string;
   endedAt?: Date | string | null;
   parentSpanId?: string | null;
+  matchedInPayloadOnly?: boolean;
 };
 
 /**
@@ -45,6 +46,7 @@ export const formatHierarchicalSpans = (spans: TimelineSpan[], anchorSpanId?: st
       endTime: endDate ? endDate.toISOString() : undefined,
       spans: [],
       parentSpanId: spanRecord.parentSpanId,
+      matchedInPayloadOnly: spanRecord.matchedInPayloadOnly,
     };
 
     spanMap.set(spanRecord.spanId, uiSpan);

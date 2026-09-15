@@ -289,6 +289,35 @@ export type BaseServerOptions = {
    * ```
    */
   roots?: Root[];
+  /**
+   * Opt-in MCP protocol version negotiation.
+   *
+   * - Omitted (default): the plain legacy (2025-era) connect sequence,
+   *   byte-identical to a client without this option.
+   * - `'auto'`: probe the server with `server/discover` at connect time and use
+   *   the stateless `2026-07-28` revision when the server supports it, with a
+   *   conservative fallback to the legacy `initialize` handshake.
+   * - `'2026-07-28'`: pin to that revision exactly. Connecting to a server that
+   *   does not offer it fails loudly with a typed error — no fallback.
+   *
+   * Elicitation handlers work on both eras: on a negotiated `2026-07-28`
+   * connection, embedded elicitation requests from `input_required` results are
+   * dispatched through the same registered handler and the originating call is
+   * retried automatically.
+   *
+   * @example
+   * ```typescript
+   * const mcp = new MCPClient({
+   *   servers: {
+   *     weather: {
+   *       url: new URL('https://example/mcp'),
+   *       protocolVersion: 'auto',
+   *     },
+   *   },
+   * });
+   * ```
+   */
+  protocolVersion?: 'auto' | '2026-07-28';
 };
 
 /**
@@ -513,3 +542,51 @@ export type InternalMastraMCPClientOptions = {
   /** Optional timeout in milliseconds */
   timeout?: number;
 };
+
+/**
+ * A fully serializable description of a single tool advertised by an MCP server.
+ *
+ * This is the data returned by the MCP `tools/list` response, plus the server metadata needed
+ * to reconstruct the tool faithfully. It contains no functions, class instances or references
+ * to a live client, so it survives `JSON.stringify` and can be cached in Redis, a database, or
+ * a build artifact and reused by other processes.
+ *
+ * Obtain these via {@link MCPClient.listToolDefinitions} and turn them back into executable
+ * tools with {@link MCPClient.toolFromDefinition}.
+ */
+export type SerializableMCPToolDefinition = {
+  /** Tool name as advertised by the server, without any server namespace prefix. */
+  name: string;
+  /** Human readable description from the server, if it supplied one. */
+  description?: string;
+  /** Raw JSON Schema for the tool's arguments, exactly as sent by the server. */
+  inputSchema: unknown;
+  /** Raw JSON Schema for the tool's structured output, if the server declared one. */
+  outputSchema?: unknown;
+  /** Server-advertised annotations (title, readOnlyHint, destructiveHint, ...). */
+  annotations?: ToolAnnotations;
+  /** Server-supplied `_meta`, including `ui.resourceUri` for MCP Apps. */
+  _meta?: Record<string, unknown>;
+  /**
+   * Metadata about the server that advertised this tool.
+   *
+   * Captured at discovery time because it is otherwise only available from a live connection.
+   * Without it, hydrating a tool would silently drop the server version and instructions that
+   * a normally discovered tool carries.
+   */
+  server: {
+    /** The name this server is configured under. */
+    name: string;
+    /** Server version reported during the MCP handshake, if any. */
+    version?: string;
+    /** Instructions the server returned during initialization, if any. */
+    instructions?: string;
+  };
+};
+
+/**
+ * A serializable catalog of MCP tool definitions, keyed by server name and then tool name.
+ *
+ * This is the shape returned by {@link MCPClient.listToolDefinitions}.
+ */
+export type SerializableMCPToolCatalog = Record<string, Record<string, SerializableMCPToolDefinition>>;

@@ -1,11 +1,17 @@
 ---
 title: "Reference: TaskSignalProvider | Signals"
-description: "API reference for TaskSignalProvider, a signal provider that bundles the built-in task tools and the task state-signal processor behind a single agent registration."
+description: "Register TaskSignalProvider to add task_write, task_update, task_complete, and task_check tools with TaskStateProcessor-backed durable task state."
 packages:
   - "@mastra/core"
 ---
 
 # TaskSignalProvider
+
+:::beta
+
+Breaking changes may occur without a major version bump until the API is stable.
+
+:::
 
 Bundles the built-in task tools (`task_write`, `task_update`, `task_complete`, `task_check`) and the `TaskStateProcessor` behind a single agent registration. Use it to add a structured, durable task list to an agent without wiring the tools and processor separately.
 
@@ -53,7 +59,7 @@ Task tracking requires a memory-backed thread (`threadId` + `resourceId`). Witho
 
 ### Agent integration
 
-These methods are called automatically by the Agent when the provider is passed to `signals`. You normally don't call them directly.
+The Agent calls these methods automatically when the provider is passed to `signals`, so you normally don't call them directly.
 
 #### `getTools()`
 

@@ -762,6 +762,172 @@ describe('Agent Routes Authorization', () => {
     });
   });
 
+  describe('hasBrowser capability', () => {
+    const stubAgentInternals = (agent: Agent) => {
+      vi.spyOn(agent, 'listTools').mockResolvedValue({});
+      vi.spyOn(agent, 'getLLM').mockResolvedValue({
+        getModel: () => undefined,
+        getProvider: () => 'test-provider',
+        getModelId: () => 'test-model',
+      } as any);
+      vi.spyOn(agent, 'getDefaultGenerateOptionsLegacy').mockResolvedValue({});
+      vi.spyOn(agent, 'getDefaultStreamOptionsLegacy').mockResolvedValue({});
+      vi.spyOn(agent, 'getDefaultOptions').mockResolvedValue({});
+      vi.spyOn(agent, 'getModelList').mockResolvedValue(null);
+    };
+
+    it('reports hasBrowser: true for an agent with a workspace-level CLI browser and no SDK browser tools', async () => {
+      mockAgent = new Agent({
+        id: 'cli-browser-agent',
+        name: 'cli-browser-agent',
+        instructions: 'test-instructions',
+        model: {} as any,
+      });
+      stubAgentInternals(mockAgent);
+      vi.spyOn(mockAgent, 'getWorkspace').mockResolvedValue({
+        id: 'test-workspace',
+        browser: { providerType: 'cli', getTools: () => ({}) },
+      } as any);
+
+      mastra = new Mastra({
+        agents: { 'cli-browser-agent': mockAgent },
+        logger: false,
+      });
+
+      const result = await GET_AGENT_BY_ID_ROUTE.handler({
+        mastra,
+        agentId: 'cli-browser-agent',
+        requestContext: new RequestContext(),
+      } as any);
+
+      expect(result.browserTools).toEqual([]);
+      expect(result.hasBrowser).toBe(true);
+    });
+
+    it('reports hasBrowser: false for an agent with no browser configured', async () => {
+      mockAgent = new Agent({
+        id: 'no-browser-agent',
+        name: 'no-browser-agent',
+        instructions: 'test-instructions',
+        model: {} as any,
+      });
+      stubAgentInternals(mockAgent);
+
+      mastra = new Mastra({
+        agents: { 'no-browser-agent': mockAgent },
+        logger: false,
+      });
+
+      const result = await GET_AGENT_BY_ID_ROUTE.handler({
+        mastra,
+        agentId: 'no-browser-agent',
+        requestContext: new RequestContext(),
+      } as any);
+
+      expect(result.browserTools).toEqual([]);
+      expect(result.hasBrowser).toBe(false);
+    });
+  });
+
+  describe('dynamic getters without execution context', () => {
+    const createDynamicModelAgent = () =>
+      new Agent({
+        id: 'dynamic-model-agent',
+        name: 'dynamic-model-agent',
+        instructions: 'dynamic-instructions',
+        model: ({ requestContext }) => {
+          if (!requestContext.get('controller')) {
+            throw new Error('No model available: this run started without a controller session context');
+          }
+          return {} as any;
+        },
+      });
+
+    it('lists and serializes an agent whose dynamic model resolver throws', async () => {
+      const agent = createDynamicModelAgent();
+      mastra = new Mastra({ agents: { 'dynamic-model-agent': agent }, logger: false });
+
+      const list = await LIST_AGENTS_ROUTE.handler({ mastra, requestContext: new RequestContext() } as any);
+      expect(Object.keys(list)).toContain('dynamic-model-agent');
+
+      const result = await GET_AGENT_BY_ID_ROUTE.handler({
+        mastra,
+        agentId: 'dynamic-model-agent',
+        requestContext: new RequestContext(),
+      } as any);
+
+      expect(result.name).toBe('dynamic-model-agent');
+      expect(result.instructions).toBe('dynamic-instructions');
+      expect(result.tools).toEqual({});
+      expect(result.modelId).toBeUndefined();
+      expect(result.provider).toBeUndefined();
+      expect(result.modelVersion).toBeUndefined();
+    });
+
+    it('logs a warning when getLLM rejects instead of failing the request', async () => {
+      const agent = createDynamicModelAgent();
+      const warn = vi.fn();
+      mastra = new Mastra({ agents: { 'dynamic-model-agent': agent }, logger: false });
+      vi.spyOn(mastra, 'getLogger').mockReturnValue({
+        warn,
+        error: vi.fn(),
+        info: vi.fn(),
+        debug: vi.fn(),
+      } as any);
+      vi.spyOn(agent, 'getLLM').mockRejectedValue(new Error('boom'));
+
+      const result = await GET_AGENT_BY_ID_ROUTE.handler({
+        mastra,
+        agentId: 'dynamic-model-agent',
+        requestContext: new RequestContext(),
+      } as any);
+
+      expect(result.name).toBe('dynamic-model-agent');
+      expect(warn).toHaveBeenCalledWith(
+        'Error getting LLM for agent',
+        expect.objectContaining({ agentName: 'dynamic-model-agent' }),
+      );
+    });
+
+    it('logs a warning when listAgents rejects instead of silently dropping sub-agents', async () => {
+      const agent = createDynamicModelAgent();
+      const warn = vi.fn();
+      mastra = new Mastra({ agents: { 'dynamic-model-agent': agent }, logger: false });
+      vi.spyOn(mastra, 'getLogger').mockReturnValue({
+        warn,
+        error: vi.fn(),
+        info: vi.fn(),
+        debug: vi.fn(),
+      } as any);
+      vi.spyOn(agent, 'listAgents').mockRejectedValue(new Error('boom'));
+
+      const result = await GET_AGENT_BY_ID_ROUTE.handler({
+        mastra,
+        agentId: 'dynamic-model-agent',
+        requestContext: new RequestContext(),
+      } as any);
+
+      expect(result.name).toBe('dynamic-model-agent');
+      expect(result.agents).toEqual({});
+      expect(warn).toHaveBeenCalledWith(
+        'Error getting sub-agents for agent',
+        expect.objectContaining({ agentName: 'dynamic-model-agent' }),
+      );
+    });
+
+    it('still returns 404 for an unknown agent', async () => {
+      mastra = new Mastra({ agents: { 'dynamic-model-agent': createDynamicModelAgent() }, logger: false });
+
+      await expect(
+        GET_AGENT_BY_ID_ROUTE.handler({
+          mastra,
+          agentId: 'missing-agent',
+          requestContext: new RequestContext(),
+        } as any),
+      ).rejects.toMatchObject({ status: 404 });
+    });
+  });
+
   describe('GENERATE_AGENT_ROUTE', () => {
     it('should return 403 when memory option specifies thread owned by different resource', async () => {
       // Create a thread owned by user-b

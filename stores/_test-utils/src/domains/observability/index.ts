@@ -3,16 +3,22 @@ import type { ObservabilityStorage, SpanRecord, TraceSpan } from '@mastra/core/s
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createSpan, createChildSpan, createFeedbackRecord, SpanType, EntityType, DEFAULT_BASE_DATE } from './data';
 
-export function createObservabilityTests({ storage }: { storage: MastraStorage }) {
+export function createObservabilityTests({
+  storage,
+  capabilities = {},
+}: {
+  storage: MastraStorage;
+  capabilities?: { scopedTraceDeletion?: boolean };
+}) {
   // Skip tests if storage doesn't have observability domain
   const describeObservability = storage.stores?.observability ? describe : describe.skip;
 
-  // Adapters that only support the `insert-only` tracing strategy cannot
-  // satisfy updateSpan / batchUpdateSpans by contract — every span is
-  // persisted as a single immutable row. Skip those describe blocks so the
-  // rest of the suite still runs.
-  const isInsertOnly = storage.stores?.observability?.runtimeTracingStrategy === 'insert-only';
-  const describeUpdate = isInsertOnly ? describe.skip : describe;
+  // Adapters on the `insert-only` or `event-sourced` tracing strategies cannot
+  // satisfy updateSpan / batchUpdateSpans by contract — spans are persisted as
+  // immutable rows and a change is a new row, not an edit. Skip those describe
+  // blocks so the rest of the suite still runs.
+  const strategy = storage.stores?.observability?.runtimeTracingStrategy;
+  const describeUpdate = strategy === 'insert-only' || strategy === 'event-sourced' ? describe.skip : describe;
 
   let observabilityStorage: ObservabilityStorage;
 
@@ -547,6 +553,19 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
 
       it('should handle deleting non-existent traces gracefully', async () => {
         await expect(observabilityStorage.batchDeleteTraces({ traceIds: ['non-existent'] })).resolves.not.toThrow();
+      });
+
+      // Adapters without tenant columns must reject scoped deletes instead of
+      // silently performing an unscoped (cross-tenant-hazard) delete.
+      const itScoped = capabilities.scopedTraceDeletion ? it.skip : it;
+      itScoped('should reject tenant-scoped deletion when scope is not supported', async () => {
+        await expect(
+          observabilityStorage.batchDeleteTraces({ traceIds: ['trace-1'], organizationId: 'org-1' }),
+        ).rejects.toThrow(/tenant-scoped trace deletion/);
+
+        await expect(
+          observabilityStorage.batchDeleteTraces({ traceIds: ['trace-1'], resourceId: 'res-1' }),
+        ).rejects.toThrow(/tenant-scoped trace deletion/);
       });
     });
 

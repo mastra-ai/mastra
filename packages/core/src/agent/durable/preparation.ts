@@ -7,7 +7,13 @@ import type { MemoryConfig, MemoryConfig as _MemoryConfig, StorageThreadType } f
 import { EntityType, SpanType, createObservabilityContext, getOrCreateSpan } from '../../observability';
 import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow, ErrorProcessorOrWorkflow } from '../../processors';
 import type { ProcessorState } from '../../processors/runner';
-import { RequestContext, MASTRA_VERSIONS_KEY, mergeVersionOverrides } from '../../request-context';
+import {
+  RequestContext,
+  MASTRA_AUTH_TOKEN_KEY,
+  MASTRA_INHERITED_MEMORY_KEY,
+  MASTRA_VERSIONS_KEY,
+  mergeVersionOverrides,
+} from '../../request-context';
 import type { VersionOverrides } from '../../request-context';
 import { toStandardSchema } from '../../schema';
 import { normalizeToolPayloadTransformPolicy } from '../../tools/payload-transform';
@@ -16,6 +22,7 @@ import { boundedStringify, deepMerge } from '../../utils';
 import type { Workspace } from '../../workspace';
 import type { Agent } from '../agent';
 import type { AgentExecutionOptions, DelegationConfig } from '../agent.types';
+import { assertThreadOwnedByResource } from '../memory-thread-ownership';
 import { MessageList } from '../message-list';
 import type { MessageListInput } from '../message-list';
 import { SaveQueueManager } from '../save-queue';
@@ -30,8 +37,13 @@ import type {
   ToolsetsInput,
   ToolsInput,
 } from '../types';
+import {
+  applyClientToolModelOutput,
+  fireClientToolOutputHooks,
+} from '../workflows/prepare-stream/client-tool-output-hooks';
 import type { DurableAgenticWorkflowInput, RunRegistryEntry, SerializableStructuredOutput } from './types';
 import { createWorkflowInput } from './utils/serialize-state';
+import { generateDurableThreadTitle } from './workflows/finalize-run';
 
 /**
  * JSON-safe snapshot of `requestContext.entries()` so durable steps (e.g.
@@ -46,6 +58,17 @@ function snapshotRequestContextEntries(
   const out: Record<string, unknown> = {};
   let any = false;
   for (const [key, value] of requestContext.entries()) {
+    // Holds a live MastraMemory instance, which stringifies into a large, method-less
+    // husk of the memory and its storage adapter. Persisting that would bloat the
+    // workflow input and hand the resumed run an object whose methods are gone; the
+    // resumed agent resolves memory from its own config instead.
+    if (key === MASTRA_INHERITED_MEMORY_KEY) continue;
+    // Framework-managed per-run memory context is rebuilt from persisted run
+    // state. A caller may carry a parent run's serializable value here.
+    if (key === 'MastraMemory') continue;
+    // Never persist the framework-managed bearer token in durable workflow
+    // input; a resumed authenticated request supplies its own fresh token.
+    if (key === MASTRA_AUTH_TOKEN_KEY) continue;
     // Serialize each entry exactly once with a bounded pass: a shared-reference
     // graph would otherwise make JSON.stringify expand exponentially and wedge
     // the event loop on every durable step, and reading the value twice (probe
@@ -119,6 +142,8 @@ interface DurablePreparationAgent {
     hooks?: ToolHooks;
     delegation?: DelegationConfig;
     methodType?: AgentMethodType;
+    backgroundTaskEnabled?: boolean;
+    backgroundTaskPolicy?: AgentExecutionOptions<any>['backgroundTaskPolicy'];
   }): Promise<Record<string, CoreTool>>;
   listInputProcessors(requestContext?: RequestContext): Promise<InputProcessorOrWorkflow[]>;
   listOutputProcessors(requestContext?: RequestContext): Promise<OutputProcessorOrWorkflow[]>;
@@ -346,6 +371,9 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   const memoryConfig = execOptions?.memory?.options;
   if (memory && threadId && resourceId) {
     const existingThread = await memory.getThreadById({ threadId });
+    if (existingThread) {
+      assertThreadOwnedByResource({ thread: existingThread, resourceId, agentName: publicAgentName });
+    }
     threadObject =
       existingThread ??
       (await memory.createThread({
@@ -441,6 +469,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
         errorProcessors,
         logger: logger as any,
         agentName: publicAgentName,
+        agent: agent as unknown as Agent<any, any, any, any>,
         processorStates,
       });
       await runner.runInputProcessors(
@@ -469,6 +498,14 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     }
   }
 
+  // Resolve background task configuration before converting tools so eligible
+  // tools expose the per-call `_background` override in their input schemas.
+  const backgroundTasksConfig = typedAgent.getBackgroundTasksConfig?.();
+  const backgroundTaskManager =
+    execOptions?.disableBackgroundTasks || execOptions?.backgroundTaskPolicy?.allowToolDispatch === false
+      ? undefined
+      : mastra?.backgroundTaskManager;
+
   // 7. Convert tools to CoreTool format for execution
   let tools: Record<string, CoreTool> = {};
   try {
@@ -484,6 +521,8 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       hooks: execOptions?.hooks,
       delegation: execOptions?.delegation,
       methodType,
+      backgroundTaskEnabled: Boolean(backgroundTaskManager),
+      backgroundTaskPolicy: execOptions?.backgroundTaskPolicy,
     });
   } catch (error) {
     logger?.warn?.(`[DurableAgent] Error converting tools: ${error}`);
@@ -493,6 +532,24 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   const model = await typedAgent.getModel({ requestContext });
   if (!model) {
     throw new Error('Agent model not available');
+  }
+
+  // Client-executed results fire only after processors accept the request and
+  // the required runtime model has resolved.
+  if (!tripwireData) {
+    await fireClientToolOutputHooks({
+      messages,
+      tools,
+      abortSignal: execOptions?.abortSignal,
+      logger,
+    });
+    // Apply server-defined toModelOutput to client-executed results by
+    // enriching the ingested MessageList parts.
+    await applyClientToolModelOutput({
+      messageList,
+      tools,
+      logger,
+    });
   }
 
   const modelList = await typedAgent.getModelList(requestContext);
@@ -539,12 +596,6 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       }
     }
   }
-
-  // 11. Get background task config. When the caller opts out with
-  // `disableBackgroundTasks: true`, drop the manager so the registry entry
-  // signals "no background tasks for this run" to the check step.
-  const backgroundTasksConfig = typedAgent.getBackgroundTasksConfig?.();
-  const backgroundTaskManager = execOptions?.disableBackgroundTasks ? undefined : mastra?.backgroundTaskManager;
 
   // Resolve tool payload transform policy with the same precedence the
   // non-durable Agent uses: per-call > agent-level > mastra-level. The
@@ -607,12 +658,13 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       autoResumeSuspendedTools: execOptions?.autoResumeSuspendedTools,
       maxProcessorRetries: execOptions?.maxProcessorRetries,
       includeRawChunks: execOptions?.includeRawChunks,
-      returnScorerData: (execOptions as any)?.returnScorerData,
+      returnScorerData: execOptions?.returnScorerData,
       hasErrorProcessors: errorProcessors.length > 0,
       providerOptions: execOptions?.providerOptions,
       structuredOutput: serializedStructuredOutput,
       skipBgTaskWait: (execOptions as any)?._skipBgTaskWait,
       disableBackgroundTasks: execOptions?.disableBackgroundTasks,
+      backgroundTaskPolicy: execOptions?.backgroundTaskPolicy,
       tracingOptions: execOptions?.tracingOptions,
       actor: execOptions?.actor,
       instructionsOverride: execOptions?.instructions,
@@ -644,6 +696,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
 
   // 14. Create registry entry for non-serializable state
   const registryEntry: RunRegistryEntry = {
+    mastra,
     tools,
     saveQueueManager,
     memory,
@@ -659,6 +712,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       : undefined,
     workspace,
     requestContext,
+    mcp: execOptions?.mcp,
     inputProcessors,
     llmRequestInputProcessors,
     outputProcessors,
@@ -691,57 +745,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     // in scope; the durable finish step invokes it after the run completes. No-op
     // when the merged config has no `generateTitle` or the thread already has a
     // title. Non-serializable — cross-process engines skip title generation.
-    generateThreadTitle: memory
-      ? async ({ threadId, resourceId, memoryConfig, messageListState, requestContext: rc, tracingContext }) => {
-          // Re-read the thread so a title written mid-run isn't regenerated, and so we only
-          // generate on the first turn (mirrors the non-durable `!thread.title` guard).
-          const thread = await memory.getThreadById?.({ threadId });
-          const mergedConfig = memory.getMergedThreadConfig?.(memoryConfig);
-          const { shouldGenerate, model, instructions, minMessages } = agent.resolveTitleGenerationConfig(
-            mergedConfig?.generateTitle as Parameters<typeof agent.resolveTitleGenerationConfig>[0],
-          );
-          if (!shouldGenerate || thread?.title) return;
-
-          const titleMessageList = new MessageList().deserialize(messageListState);
-          // Only messages of the thread being titled — resource-scoped memory can
-          // load messages from other threads into the deserialized list.
-          const uiMessages = agent.filterUiMessagesByThread(titleMessageList, threadId, titleMessageList.get.all.ui());
-          if (uiMessages.length < (minMessages ?? 1)) return;
-
-          const userMessage = agent.getMostRecentUserMessage(uiMessages);
-          if (!userMessage) return;
-
-          const title = await agent.genTitle(
-            userMessage,
-            rc ?? new RequestContext(),
-            createObservabilityContext(tracingContext),
-            model,
-            instructions,
-            uiMessages,
-          );
-          if (!title) return;
-
-          // Title-only late write. Prefer updateThread when the thread record
-          // already exists so its original createdAt is preserved (createThread
-          // rebuilds the record with a fresh createdAt). Fall back to createThread
-          // for the first-turn case where the record may not be persisted yet.
-          if (thread) {
-            await memory.updateThread({
-              id: threadId,
-              title,
-              metadata: thread.metadata ?? {},
-              memoryConfig,
-            });
-          } else {
-            await memory.createThread({
-              threadId,
-              resourceId,
-              memoryConfig,
-              title,
-            });
-          }
-        }
-      : undefined,
+    generateThreadTitle: memory ? async args => generateDurableThreadTitle({ agent, memory, ...args }) : undefined,
     // Signal messages already in the messageList at run start (from persisted
     // history). Echoed as data-signal parts on the first LLM step so the client
     // sees them without refetching. Spliced once, never re-emitted.
@@ -770,6 +774,10 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
           schema: toStandardSchema(execOptions.structuredOutput.schema),
         }
       : undefined,
+    // Call-time returnScorerData flag. Also serialized into the workflow
+    // input; parked here too so warm resume()/observe() can rebuild
+    // scoringData without re-reading the snapshot.
+    returnScorerData: execOptions?.returnScorerData,
     cleanup: () => {},
   };
 

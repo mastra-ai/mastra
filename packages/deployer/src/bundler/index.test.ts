@@ -2,7 +2,6 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import type { BundlerOptions } from '../build/types';
 import type { SourceDependencyConstraints } from './index';
 import { Bundler, applySourceDependencyRange, getSourceDependencyConstraints, isRegistryVersionSpec } from './index';
 
@@ -13,17 +12,6 @@ class TestBundler extends Bundler {
 
   getEnvFiles(): Promise<string[]> {
     return Promise.resolve([]);
-  }
-
-  // Surfaces the protected input-map builder for assertions.
-  publicGetBundlerOptions(serverFile: string, mastraEntryFile: string, options: BundlerOptions) {
-    return this.getBundlerOptions(
-      serverFile,
-      mastraEntryFile,
-      { dependencies: new Map(), externalDependencies: new Map(), workspaceMap: new Map() },
-      [],
-      options,
-    );
   }
 }
 
@@ -80,6 +68,36 @@ const createSourceApp = async ({
 
 afterEach(async () => {
   await Promise.all(tempDirs.splice(0).map(dir => rm(dir, { recursive: true, force: true })));
+});
+
+describe('Bundler.listToolsInputOptions', () => {
+  it('returns stable, sorted inputs relative to the project root', async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), 'mastra-bundler-tools-'));
+    tempDirs.push(tempDir);
+    const projectRoot = join(tempDir, 'apps', 'api');
+    const toolsDir = join(projectRoot, 'src', 'mastra', 'tools');
+    await mkdir(join(toolsDir, 'nested'), { recursive: true });
+    for (const file of ['b.ts', 'a.ts', join('nested', 'c.ts')]) {
+      await writeFile(join(toolsDir, file), 'export {}', 'utf-8');
+    }
+
+    const bundler = new TestBundler('Test');
+    const toolsGlob = join(toolsDir, '**/*.ts');
+    const first = await bundler.listToolsInputOptions([toolsGlob], projectRoot);
+    const second = await bundler.listToolsInputOptions([join(toolsDir, 'b.ts'), toolsGlob], projectRoot);
+
+    expect(second).toEqual(first);
+    expect(Object.values(first)).toEqual([
+      join(toolsDir, 'a.ts').replaceAll('\\', '/'),
+      join(toolsDir, 'b.ts').replaceAll('\\', '/'),
+      join(toolsDir, 'nested', 'c.ts').replaceAll('\\', '/'),
+    ]);
+    expect(Object.keys(first)).toEqual([
+      'tools/a3576fdd-4db8-3860-0363-043d8e044095',
+      'tools/c8a75e35-2420-ce8d-d5d1-d6a12388c682',
+      'tools/a34d68f6-b252-bc06-1de9-238ce99e3110',
+    ]);
+  });
 });
 
 describe('Bundler.writePackageJson', () => {
@@ -452,60 +470,5 @@ describe('getSourceDependencyConstraints', () => {
       dependencies: {},
       pinnedByResolutionField: new Set(),
     });
-  });
-});
-
-describe('Bundler.getBundlerOptions extra entries', () => {
-  const baseOptions: BundlerOptions = {
-    enableSourcemap: false,
-    enableEsmShim: true,
-    externals: [],
-  };
-
-  async function setupProject() {
-    const tempDir = await mkdtemp(join(tmpdir(), 'mastra-bundler-entries-'));
-    tempDirs.push(tempDir);
-    const mastraEntryFile = join(tempDir, 'index.ts');
-    await writeFile(mastraEntryFile, 'export const mastra = {}');
-    await writeFile(join(tempDir, 'package.json'), JSON.stringify({ name: 'fixture', version: '1.0.0' }));
-    return { tempDir, mastraEntryFile };
-  }
-
-  it('keeps only index when no extra entries are configured', async () => {
-    const { mastraEntryFile } = await setupProject();
-    const bundler = new TestBundler('Test');
-
-    const inputOptions = await bundler.publicGetBundlerOptions('const virtual = 1\n', mastraEntryFile, baseOptions);
-
-    expect(inputOptions.input).toEqual({ index: '#entry' });
-  });
-
-  it('emits extra entries alongside the virtual server entry', async () => {
-    const { tempDir, mastraEntryFile } = await setupProject();
-    const workerPath = join(tempDir, 'voice-worker.ts').replaceAll('\\', '/');
-    const bundler = new TestBundler('Test');
-
-    const inputOptions = await bundler.publicGetBundlerOptions('const virtual = 1\n', mastraEntryFile, {
-      ...baseOptions,
-      entries: { 'voice-worker': workerPath },
-    });
-
-    // `index` must survive — an extra entry adds an output, it never replaces the server.
-    expect(inputOptions.input).toEqual({ index: '#entry', 'voice-worker': workerPath });
-  });
-
-  it('emits extra entries alongside a file-based server entry', async () => {
-    const { tempDir, mastraEntryFile } = await setupProject();
-    const serverFile = join(tempDir, 'server.ts');
-    await writeFile(serverFile, 'export const server = 1');
-    const workerPath = join(tempDir, 'voice-worker.ts').replaceAll('\\', '/');
-    const bundler = new TestBundler('Test');
-
-    const inputOptions = await bundler.publicGetBundlerOptions(serverFile, mastraEntryFile, {
-      ...baseOptions,
-      entries: { 'voice-worker': workerPath },
-    });
-
-    expect(inputOptions.input).toEqual({ index: serverFile, 'voice-worker': workerPath });
   });
 });

@@ -1,4 +1,4 @@
-import React, { createContext, type ReactNode, useContext, useEffect, useState } from 'react'
+import React, { createContext, type ReactNode, useContext, useEffect, useRef, useState } from 'react'
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext'
 import { useLocation } from '@docusaurus/router'
 import type { PropSidebarItem, PropSidebarItemCategory } from '@docusaurus/plugin-content-docs'
@@ -21,6 +21,7 @@ type ContextualSidebarContextValue = Readonly<{
   clearSidebar: () => void
   enterSidebar: (category: PropSidebarItemCategory) => void
   resolveSidebar: (sidebar: readonly PropSidebarItem[]) => ResolvedContextualSidebar | undefined
+  rootScrollState: React.RefObject<{ restorePending: boolean; scrollTop: number }>
 }>
 
 const ContextualSidebarContext = createContext<ContextualSidebarContextValue | undefined>(undefined)
@@ -56,6 +57,7 @@ export function ContextualSidebarProvider({ children }: { children: ReactNode })
   } = useDocusaurusContext()
   const [suppressedPathnames, setSuppressedPathnames] = useState(() => new Set<string>())
   const [sidebarState, setSidebarState] = useState<ContextualSidebarState>()
+  const rootScrollState = useRef({ restorePending: false, scrollTop: 0 })
   const observedState = observeContextualSidebarPathname(sidebarState, pathname)
 
   useEffect(() => {
@@ -113,6 +115,7 @@ export function ContextualSidebarProvider({ children }: { children: ReactNode })
       const items = getContextualSidebarItems(sidebar, state)
       return state && items ? { state, items } : undefined
     },
+    rootScrollState,
   }
 
   return <ContextualSidebarContext.Provider value={value}>{children}</ContextualSidebarContext.Provider>

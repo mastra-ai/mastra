@@ -1,4 +1,4 @@
-import type { JSONSchema7 } from 'json-schema';
+import type { JSONSchema7, JSONSchema7Type } from 'json-schema';
 import { z } from 'zod';
 import type { ZodType as ZodTypeV3, ZodObject as ZodObjectV3 } from 'zod/v3';
 import type { ZodType as ZodTypeV4, ZodObject as ZodObjectV4 } from 'zod/v4';
@@ -31,6 +31,76 @@ const allowedStringFormats = [
   'ipv6',
   'uuid',
 ] as const;
+
+function unorderedArraysEqual(
+  left: unknown[],
+  right: unknown[],
+  itemEquals: (leftItem: unknown, rightItem: unknown) => boolean,
+): boolean {
+  if (left.length !== right.length) return false;
+
+  const matched = new Set<number>();
+  return left.every(leftItem => {
+    const matchIndex = right.findIndex((rightItem, index) => !matched.has(index) && itemEquals(leftItem, rightItem));
+    if (matchIndex === -1) return false;
+    matched.add(matchIndex);
+    return true;
+  });
+}
+
+function jsonValuesEqual(left: unknown, right: unknown): boolean {
+  if (Object.is(left, right)) return true;
+  if (Array.isArray(left) || Array.isArray(right)) {
+    return (
+      Array.isArray(left) &&
+      Array.isArray(right) &&
+      left.length === right.length &&
+      left.every((value, index) => jsonValuesEqual(value, right[index]))
+    );
+  }
+  if (!left || !right || typeof left !== 'object' || typeof right !== 'object') return false;
+
+  const leftEntries = Object.entries(left);
+  const rightRecord = right as Record<string, unknown>;
+  return (
+    leftEntries.length === Object.keys(rightRecord).length &&
+    leftEntries.every(
+      ([key, value]) =>
+        Object.prototype.hasOwnProperty.call(rightRecord, key) && jsonValuesEqual(value, rightRecord[key]),
+    )
+  );
+}
+
+function schemaValuesEqual(left: unknown, right: unknown, keyword?: string): boolean {
+  if (keyword === 'const' || keyword === 'default' || keyword === 'example' || keyword === 'examples') {
+    return jsonValuesEqual(left, right);
+  }
+  if (Object.is(left, right)) return true;
+  if (Array.isArray(left) || Array.isArray(right)) {
+    if (!Array.isArray(left) || !Array.isArray(right)) return false;
+    if (keyword === 'required' || keyword === 'type') {
+      return unorderedArraysEqual(left, right, Object.is);
+    }
+    if (keyword === 'enum') {
+      return unorderedArraysEqual(left, right, jsonValuesEqual);
+    }
+    if (keyword === 'allOf' || keyword === 'anyOf' || keyword === 'oneOf') {
+      return unorderedArraysEqual(left, right, (leftItem, rightItem) => schemaValuesEqual(leftItem, rightItem));
+    }
+    return left.length === right.length && left.every((value, index) => schemaValuesEqual(value, right[index]));
+  }
+  if (!left || !right || typeof left !== 'object' || typeof right !== 'object') return false;
+
+  const leftEntries = Object.entries(left);
+  const rightRecord = right as Record<string, unknown>;
+  return (
+    leftEntries.length === Object.keys(rightRecord).length &&
+    leftEntries.every(
+      ([key, value]) =>
+        Object.prototype.hasOwnProperty.call(rightRecord, key) && schemaValuesEqual(value, rightRecord[key], key),
+    )
+  );
+}
 
 export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
   getSchemaTarget(): Targets | undefined {
@@ -260,39 +330,104 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
             // @ts-expect-error - x-optional is a custom property
             schema['x-optional'] = [...(schema['x-optional'] || []), key];
             schema.required?.push(key);
-            if (prop.type) {
-              if (Array.isArray(prop.type)) {
-                const types = [...prop.type];
-                if (!types.includes('null')) {
-                  types.push('null');
+            const objectKeywords = ['properties', 'required', 'additionalProperties', 'x-optional'] as const;
+            const arrayKeywords = ['items'] as const;
+            const genericConstraintKeywords = ['const', 'enum', 'oneOf', 'not', 'if', 'then', 'else'] as const;
+            const branchConstraintKeywords = ['anyOf', 'oneOf', 'not', 'if', 'then', 'else'] as const;
+            const typeSpecificKeywords = (type: JSONSchema7['type']) =>
+              type === 'object' ? objectKeywords : type === 'array' ? arrayKeywords : [];
+            const isRedundantNullableUnion = (type: JSONSchema7['type']) => {
+              if (!prop.anyOf || prop.anyOf.length !== 2) return false;
+
+              const nullBranches = prop.anyOf.filter(branch => typeof branch !== 'boolean' && branch.type === 'null');
+              const valueBranches = prop.anyOf.filter(branch => typeof branch !== 'boolean' && branch.type !== 'null');
+              if (nullBranches.length !== 1 || valueBranches.length !== 1) return false;
+
+              const valueBranch = valueBranches[0] as JSONSchema7;
+              if (valueBranch.type !== type) return false;
+
+              return Object.entries(valueBranch).every(([keyword, value]) => {
+                if (keyword === 'type') return true;
+                return keyword in prop && schemaValuesEqual((prop as Record<string, unknown>)[keyword], value, keyword);
+              });
+            };
+
+            if (Array.isArray(prop.type)) {
+              const types = [...prop.type];
+              if (!types.includes('null')) {
+                types.push('null');
+              }
+
+              const branchConstraints = {} as JSONSchema7;
+              const propRecord = prop as Record<string, unknown>;
+              const branchConstraintRecord = branchConstraints as Record<string, unknown>;
+              for (const keyword of branchConstraintKeywords) {
+                if (keyword in prop) {
+                  branchConstraintRecord[keyword] = propRecord[keyword];
+                  delete propRecord[keyword];
+                }
+              }
+              delete prop.type;
+
+              if ('const' in prop) {
+                const constValue = prop.const as JSONSchema7Type;
+                const enumAllowsConst = !prop.enum || prop.enum.some(value => jsonValuesEqual(value, constValue));
+                prop.enum = enumAllowsConst ? [constValue, null] : [null];
+                delete prop.const;
+              } else if (prop.enum && !prop.enum.includes(null)) {
+                prop.enum = [...prop.enum, null];
+              }
+
+              prop.anyOf = types.map(type => {
+                if (type === 'null') {
+                  return { type: 'null' } as JSONSchema7;
                 }
 
-                const propSchema = { ...prop } as JSONSchema7;
-                delete propSchema.anyOf;
-                delete propSchema.type;
-                delete prop.type;
+                const branch = { type } as JSONSchema7;
+                for (const keyword of typeSpecificKeywords(type)) {
+                  if (keyword in prop) {
+                    // @ts-expect-error - keyword is a valid property for JSON Schema
+                    branch[keyword] = prop[keyword];
+                  }
+                }
 
-                prop.anyOf = types.map(type =>
-                  type === 'null'
-                    ? { type: 'null' }
-                    : {
-                        ...propSchema,
-                        type,
-                      },
-                );
-              } else if (prop.type !== 'null') {
-                const originalType = prop.type;
-                const propSchema = { ...prop } as JSONSchema7;
-                delete propSchema.anyOf;
-                delete propSchema.type;
+                return Object.assign(branch, branchConstraints);
+              });
+
+              for (const keyword of [...objectKeywords, ...arrayKeywords]) {
+                // @ts-expect-error - keyword is a valid property for JSON Schema
+                delete prop[keyword];
+              }
+            } else if (prop.type && prop.type !== 'null') {
+              const originalType = prop.type;
+              const keywords = typeSpecificKeywords(originalType);
+              if (keywords.length > 0) {
+                const branch = { type: originalType } as JSONSchema7;
+                const preserveAnyOf = prop.anyOf && !isRedundantNullableUnion(originalType) ? prop.anyOf : undefined;
+                for (const keyword of [...keywords, ...genericConstraintKeywords]) {
+                  if (keyword in prop) {
+                    // @ts-expect-error - keyword is a valid property for JSON Schema
+                    branch[keyword] = prop[keyword];
+                    // @ts-expect-error - keyword is a valid property for JSON Schema
+                    delete prop[keyword];
+                  }
+                }
+                if (preserveAnyOf) {
+                  branch.anyOf = preserveAnyOf;
+                }
+
                 delete prop.type;
-                prop.anyOf = [
-                  {
-                    ...propSchema,
-                    type: originalType,
-                  },
-                  { type: 'null' },
-                ];
+                prop.anyOf = [branch, { type: 'null' }];
+              } else {
+                const propSchema = { ...prop, type: originalType } as JSONSchema7;
+                if (isRedundantNullableUnion(originalType)) {
+                  delete propSchema.anyOf;
+                }
+                for (const keyword of [...genericConstraintKeywords, 'anyOf'] as const) {
+                  delete prop[keyword];
+                }
+                delete prop.type;
+                prop.anyOf = [propSchema, { type: 'null' }];
               }
             }
           }
@@ -302,8 +437,8 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
   }
 
   #traverse(value: unknown, schema: Record<string, unknown>): unknown {
-    // If schema uses anyOf, find the non-null variant for traversal
-    const resolved = this.#resolveAnyOf(schema);
+    // If schema uses anyOf, find the variant matching the value for traversal
+    const resolved = this.#resolveAnyOf(schema, value);
 
     if ((isDateFormat(resolved) || resolved['x-date'] === true) && typeof value === 'string') {
       return new Date(value);
@@ -343,14 +478,42 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
   }
 
   /**
-   * If schema has anyOf, return the first non-null variant for traversal.
+   * If schema has anyOf, return the variant whose type matches the value's shape
+   * (branches are type-specific), falling back to the first non-null variant.
    * Otherwise return the schema itself.
    */
-  #resolveAnyOf(schema: Record<string, unknown>): Record<string, unknown> {
+  #resolveAnyOf(schema: Record<string, unknown>, value?: unknown): Record<string, unknown> {
     if (Array.isArray(schema.anyOf)) {
-      const nonNull = (schema.anyOf as Record<string, unknown>[]).find(s => s.type !== 'null');
-      if (nonNull) {
-        return nonNull;
+      const nonNullVariants = (schema.anyOf as Record<string, unknown>[]).filter(s => s && s.type !== 'null');
+
+      const valueType = Array.isArray(value)
+        ? 'array'
+        : value !== null && typeof value === 'object'
+          ? 'object'
+          : typeof value === 'number'
+            ? Number.isInteger(value)
+              ? 'integer'
+              : 'number'
+            : typeof value === 'string' || typeof value === 'boolean'
+              ? typeof value
+              : undefined;
+      if (valueType) {
+        const hasType = (variant: Record<string, unknown>, type: string) =>
+          (Array.isArray(variant.type) ? (variant.type as string[]) : [variant.type]).includes(type);
+        const exactMatch = nonNullVariants.find(variant => hasType(variant, valueType));
+        if (exactMatch) {
+          return { ...schema, ...exactMatch };
+        }
+        if (valueType === 'integer') {
+          const numberMatch = nonNullVariants.find(variant => hasType(variant, 'number'));
+          if (numberMatch) {
+            return { ...schema, ...numberMatch };
+          }
+        }
+      }
+
+      if (nonNullVariants[0]) {
+        return { ...schema, ...nonNullVariants[0] };
       }
     }
 

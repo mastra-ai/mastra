@@ -35,6 +35,7 @@ import type { RedisClient } from '../../types';
 import { getKey, processRecord } from '../utils';
 
 export class StoreMemoryRedis extends MemoryStorage {
+  override readonly supportsPartialThreadUpdate = true;
   private client: RedisClient;
   private db: RedisDB;
 
@@ -245,8 +246,8 @@ export class StoreMemoryRedis extends MemoryStorage {
     metadata,
   }: {
     id: string;
-    title: string;
-    metadata: Record<string, unknown>;
+    title?: string;
+    metadata?: Record<string, unknown>;
   }): Promise<StorageThreadType> {
     const thread = await this.getThreadById({ threadId: id });
     if (!thread) {
@@ -263,7 +264,7 @@ export class StoreMemoryRedis extends MemoryStorage {
 
     const updatedThread = {
       ...thread,
-      title,
+      title: title ?? thread.title,
       metadata: {
         ...thread.metadata,
         ...metadata,
@@ -1263,6 +1264,7 @@ export class StoreMemoryRedis extends MemoryStorage {
       multi.set(threadKey, JSON.stringify(processRecord(TABLE_THREADS, newThread).processedRecord));
 
       const clonedMessages: MastraDBMessage[] = [];
+      const messageIdMap: Record<string, string> = Object.create(null);
       const targetResourceId = resourceId || sourceThread.resourceId;
       const newThreadMessagesKey = getThreadMessagesKey(newThreadId);
 
@@ -1285,6 +1287,7 @@ export class StoreMemoryRedis extends MemoryStorage {
         multi.zAdd(newThreadMessagesKey, { score, value: newMessageId });
 
         clonedMessages.push(newMessage);
+        messageIdMap[sourceMsg.id] = newMessageId;
       }
 
       await multi.exec();
@@ -1292,6 +1295,7 @@ export class StoreMemoryRedis extends MemoryStorage {
       return {
         thread: newThread,
         clonedMessages,
+        messageIdMap,
       };
     } catch (error) {
       if (error instanceof MastraError) {

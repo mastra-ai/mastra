@@ -91,6 +91,18 @@ export interface MastraAuthOktaOptions {
    */
   redirectUri?: string;
   /**
+   * Expected `aud` claim when verifying bearer tokens.
+   * Defaults to OKTA_AUDIENCE env var, then to the client ID (the ID-token audience).
+   *
+   * Set this to accept Okta access tokens:
+   * - org authorization server: `https://{domain}`
+   * - custom authorization server: the configured audience, e.g. `api://default`
+   *
+   * Pass an array to accept more than one, e.g. ID tokens from the browser and
+   * access tokens from service callers against the same provider.
+   */
+  audience?: string | string[];
+  /**
    * OAuth scopes to request.
    * Default: ['openid', 'profile', 'email', 'groups']
    */

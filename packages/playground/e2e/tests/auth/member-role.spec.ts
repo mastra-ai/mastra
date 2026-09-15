@@ -89,12 +89,12 @@ test.describe('Member Role', () => {
 
     test('member can view agent tools', async ({ page }) => {
       await setupMemberAuth(page);
-      await page.goto('/agents/weather-agent/settings');
+      await page.goto('/agents/weather-agent/chat/new');
 
-      // Member should be able to see agent tools (they have agents:read and tools:read).
-      await expect(page.getByTestId('agent-settings-view')).toBeVisible({ timeout: 10000 });
-      await expect(page.getByRole('tab', { name: 'General' })).toHaveAttribute('aria-selected', 'true');
-      await expect(page.getByRole('heading', { name: 'Tools' })).toBeVisible({ timeout: 10000 });
+      // The overview side panel starts collapsed; the member can open it and see the agent tools.
+      await page.getByTestId('agent-overview-panel-toggle').click();
+      await expect(page.getByTestId('agent-overview-panel')).toBeVisible({ timeout: 10000 });
+      await expect(page.getByRole('heading', { name: /^Tools/ })).toBeVisible({ timeout: 10000 });
       await expect(page.getByRole('link', { name: 'weatherInfo' })).toHaveAttribute(
         'href',
         /\/agents\/weather-agent\/tools\/weatherInfo$/,

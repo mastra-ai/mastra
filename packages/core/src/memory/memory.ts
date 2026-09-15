@@ -1,5 +1,6 @@
 import type { AssistantContent, UserContent, CoreMessage } from '@internal/ai-sdk-v4';
 import type { MastraDBMessage } from '../agent/message-list';
+import type { AgentSignalType } from '../agent/signals';
 import { MastraFGAPermissions } from '../auth/ee';
 import type { MastraFGAPermissionInput, ActorSignal } from '../auth/ee';
 import { MastraBase } from '../base';
@@ -24,6 +25,7 @@ import type {
   StorageListThreadsOutput,
   StorageCloneThreadInput,
   StorageCloneThreadOutput,
+  StorageCopyThreadOutput,
 } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
 import type { ToolAction } from '../tools';
@@ -303,13 +305,24 @@ https://mastra.ai/en/docs/memory/overview`,
             values: ['a'],
             ...(this.embedderOptions || {}),
           } as any);
-          return result.embeddings[0]?.length;
+          const dimension = result.embeddings[0]?.length;
+          if (!dimension) {
+            throw new Error('Embedder returned no usable embedding for the dimension probe.');
+          }
+          return dimension;
         } catch (e) {
-          console.warn(
-            `[Mastra Memory] Failed to probe embedder for dimension, falling back to default. ` +
-              `This may cause index name mismatches if the embedder uses non-default dimensions. Error: ${e}`,
+          throw new MastraError(
+            {
+              id: 'MASTRA_MEMORY_GET_EMBEDDING_DIMENSION_FAILED',
+              domain: ErrorDomain.MASTRA_VECTOR,
+              category: 'THIRD_PARTY',
+              text:
+                `Failed to determine the embedder's output dimension. Semantic recall cannot safely select a ` +
+                `vector index until the embedder returns a usable embedding. Check that the embedder is reachable ` +
+                `and correctly configured.`,
+            },
+            e,
           );
-          return undefined;
         }
       })();
     }
@@ -473,7 +486,10 @@ https://mastra.ai/en/docs/memory/overview`,
     args: StorageListMessagesInput & {
       threadConfig?: MemoryConfigInternal;
       vectorSearchString?: string;
+      /** @deprecated Use hideSignals: [] to include all, or ['reactive', 'system-reminder'] to hide reminders. */
       includeSystemReminders?: boolean;
+      /** true hides all recognized signals, false includes all, or select exact stored types with an array. Overrides includeSystemReminders. */
+      hideSignals?: boolean | AgentSignalType[];
       observabilityContext?: Partial<ObservabilityContext>;
     },
   ): Promise<{
@@ -539,8 +555,8 @@ https://mastra.ai/en/docs/memory/overview`,
     memoryConfig,
   }: {
     id: string;
-    title: string;
-    metadata: Record<string, unknown>;
+    title?: string;
+    metadata?: Record<string, unknown>;
     memoryConfig?: MemoryConfigInternal;
   }): Promise<StorageThreadType>;
 
@@ -549,6 +565,23 @@ https://mastra.ai/en/docs/memory/overview`,
    * @param threadId - the id of the thread to delete
    */
   abstract deleteThread(threadId: string): Promise<void>;
+
+  /**
+   * Resolve once all background work this memory started has finished.
+   *
+   * Some memory work continues after an agent run returns, and it writes to storage.
+   * Callers that own the storage connection should await this before closing it,
+   * otherwise background statements can race the close.
+   *
+   * ```ts
+   * await agent.generate('hello', { memory: { thread, resource } });
+   * await memory.settled();
+   * await store.close();
+   * ```
+   *
+   * Implementations that do no background work can leave this as a no-op.
+   */
+  async settled(): Promise<void> {}
 
   /**
    * Helper method to add a single message to a thread
@@ -961,6 +994,32 @@ https://mastra.ai/en/docs/memory/overview`,
    * @returns Promise resolving to the cloned thread and copied messages
    */
   abstract cloneThread(args: StorageCloneThreadInput): Promise<StorageCloneThreadOutput>;
+
+  /**
+   * Copies a thread and its messages to a new thread without returning the message
+   * payloads. Prefer this over `cloneThread` when only the new thread id is needed
+   * (e.g. forking), so large threads never have to be loaded into memory.
+   * @param args - Clone parameters including source thread ID and optional filtering options
+   * @returns Promise resolving to the new thread and the source→new message id map
+   */
+  async copyThread(args: StorageCloneThreadInput): Promise<StorageCopyThreadOutput> {
+    const { thread, messageIdMap } = await this.cloneThread(args);
+    return { thread, messageIdMap };
+  }
+
+  /**
+   * Reassign a thread and all of its messages to a different resource.
+   * Preserves the thread's `createdAt`. Performs no ownership authorization.
+   * @param args - The thread to reassign and the resource that should own it.
+   * @returns Promise resolving to the updated thread
+   */
+  updateThreadResourceId(_args: {
+    threadId: string;
+    resourceId: string;
+    memoryConfig?: MemoryConfigInternal;
+  }): Promise<StorageThreadType> {
+    throw new Error('Thread resource transfer is not supported by this memory implementation.');
+  }
 
   /**
    * Get serializable configuration for this memory instance

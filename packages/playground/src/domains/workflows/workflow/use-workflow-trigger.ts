@@ -1,5 +1,4 @@
 import type { GetWorkflowResponse, TimeTravelParams } from '@mastra/client-js';
-import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
 import { useCallback, useContext, useMemo } from 'react';
 import { parse } from 'superjson';
 import { z } from 'zod';
@@ -19,7 +18,7 @@ import {
 import { WORKFLOW_STEP_NODE_TYPE } from './workflow-step-node-utils';
 import type { ResumeStepParams } from './workflow-suspended-steps';
 import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
-import { resolveSerializedZodOutput } from '@/lib/form/utils';
+import { jsonSchemaToZodRuntime } from '@/lib/form/json-schema-to-zod-runtime';
 
 export interface SuspendedStep {
   stepId: string;
@@ -47,13 +46,13 @@ export function useWorkflowSchemas(workflow?: GetWorkflowResponse) {
     const triggerSchema = workflow?.inputSchema;
     const stateSchema = workflow?.stateSchema;
 
-    const zodInputSchema = triggerSchema ? resolveSerializedZodOutput(jsonSchemaToZod(parse(triggerSchema))) : null;
-    const zodStateSchema = stateSchema ? resolveSerializedZodOutput(jsonSchemaToZod(parse(stateSchema))) : null;
+    const zodInputSchema = triggerSchema ? jsonSchemaToZodRuntime(parse(triggerSchema)) : null;
+    const zodStateSchema = stateSchema ? jsonSchemaToZodRuntime(parse(stateSchema)) : null;
 
     return {
       zodSchemaToUse: zodStateSchema
         ? z.object({
-            inputData: zodInputSchema,
+            inputData: zodInputSchema ?? z.any(),
             initialState: zodStateSchema.optional(),
           })
         : zodInputSchema,

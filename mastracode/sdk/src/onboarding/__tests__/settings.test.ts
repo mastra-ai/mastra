@@ -11,7 +11,10 @@ import {
   migrateLegacyVariedPack,
   parseCustomProviders,
   parseThreadSettings,
+  parseViewportInput,
   resolveDefaultThinkingLevel,
+  resolveLspSetting,
+  resolveModelDefaults,
   resolveOmRoleModel,
   resolveThreadActiveModelPackId,
   saveSettings,
@@ -32,6 +35,7 @@ function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
     },
     models: {
       activeModelPackId: 'anthropic',
+      modePackOverrides: {},
       modeDefaults: {},
       modeThinkingDefaults: {},
       activeOmPackId: null,
@@ -46,7 +50,14 @@ function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
       goalJudgeModel: null,
       goalMaxTurns: null,
     },
-    preferences: { yolo: null, theme: 'auto', thinkingLevel: 'off', quietMode: false, quietModeMaxToolPreviewLines: 2 },
+    preferences: {
+      yolo: null,
+      theme: 'auto',
+      thinkingLevel: 'off',
+      subagentsEnabled: false,
+      quietMode: false,
+      quietModeMaxToolPreviewLines: 2,
+    },
     storage,
     customProviders: [],
     customModelPacks: [
@@ -72,7 +83,13 @@ function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
     },
     shellPassthrough: { mode: 'default' },
     voice: { enabled: false, engine: 'cloud', provider: 'openai', model: 'whisper-1' },
-    signals: { unixSocketPubSub: false, experimentalGithubSignals: false },
+    signals: {
+      unixSocketPubSub: false,
+      experimentalGithubSignals: false,
+      experimentalCrossAgentSignals: false,
+      githubPollIntervalMs: 300_000,
+    },
+    mcp: { claudeCodeGlobal: false, codexGlobal: false },
     observability: { resources: {}, localTracing: false },
     ...overrides,
   };
@@ -199,6 +216,24 @@ function withTempSettingsFile(run: (filePath: string) => void): void {
   }
 }
 
+describe('MCP discovery settings parsing', () => {
+  it('defaults external MCP discovery to disabled', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(filePath, '{}', 'utf-8');
+
+      expect(loadSettings(filePath).mcp).toEqual({ claudeCodeGlobal: false, codexGlobal: false });
+    });
+  });
+
+  it('loads valid opt-ins and defaults malformed values', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(filePath, JSON.stringify({ mcp: { claudeCodeGlobal: true, codexGlobal: 'yes' } }), 'utf-8');
+
+      expect(loadSettings(filePath).mcp).toEqual({ claudeCodeGlobal: true, codexGlobal: false });
+    });
+  });
+});
+
 describe('voice settings parsing', () => {
   it('back-compat: old { enabled }-only file gets engine + provider defaults', () => {
     withTempSettingsFile(filePath => {
@@ -271,8 +306,27 @@ describe('customProviders parsing/persistence', () => {
 
       expect(settings.customProviders).toEqual([]);
       expect(settings.preferences.thinkingLevel).toBe('off');
+      expect(settings.preferences.subagentsEnabled).toBe(false);
       expect(settings.preferences.quietModeMaxToolPreviewLines).toBe(2);
       expect(settings.shellPassthrough).toEqual({ mode: 'default' });
+    });
+  });
+
+  it('parses subagent enablement as an explicit boolean preference', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(
+        filePath,
+        JSON.stringify({ onboarding: {}, models: {}, preferences: { subagentsEnabled: true }, storage: {} }),
+        'utf-8',
+      );
+      expect(loadSettings(filePath).preferences.subagentsEnabled).toBe(true);
+
+      writeFileSync(
+        filePath,
+        JSON.stringify({ onboarding: {}, models: {}, preferences: { subagentsEnabled: 'true' }, storage: {} }),
+        'utf-8',
+      );
+      expect(loadSettings(filePath).preferences.subagentsEnabled).toBe(false);
     });
   });
 
@@ -400,6 +454,111 @@ describe('customProviders parsing/persistence', () => {
 
       expect(loadSettings(filePath).signals.experimentalGithubSignals).toBe(true);
       expect(JSON.parse(readFileSync(filePath, 'utf-8')).signals.experimentalGithubSignals).toBe(true);
+    });
+  });
+
+  it('persists experimental cross-agent signals and defaults them off for old settings files', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(
+        filePath,
+        JSON.stringify({
+          onboarding: {},
+          models: {},
+          preferences: {},
+          storage: {},
+          signals: { unixSocketPubSub: true },
+        }),
+        'utf-8',
+      );
+      expect(loadSettings(filePath).signals.experimentalCrossAgentSignals).toBe(false);
+
+      const settings = loadSettings(filePath);
+      settings.signals.experimentalCrossAgentSignals = true;
+      saveSettings(settings, filePath);
+
+      expect(loadSettings(filePath).signals.experimentalCrossAgentSignals).toBe(true);
+      expect(JSON.parse(readFileSync(filePath, 'utf-8')).signals.experimentalCrossAgentSignals).toBe(true);
+    });
+  });
+
+  it('defaults missing GitHub poll interval for old settings files', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(
+        filePath,
+        JSON.stringify({
+          onboarding: {},
+          models: {},
+          preferences: {},
+          storage: {},
+          signals: { experimentalGithubSignals: true },
+        }),
+        'utf-8',
+      );
+
+      const settings = loadSettings(filePath);
+
+      expect(settings.signals.experimentalGithubSignals).toBe(true);
+      expect(settings.signals.githubPollIntervalMs).toBe(300_000);
+    });
+  });
+
+  it('falls back for malformed GitHub poll interval values', () => {
+    withTempSettingsFile(filePath => {
+      for (const value of [null, '300000', -1, 9999]) {
+        writeFileSync(
+          filePath,
+          JSON.stringify({
+            onboarding: {},
+            models: {},
+            preferences: {},
+            storage: {},
+            signals: { githubPollIntervalMs: value },
+          }),
+          'utf-8',
+        );
+        expect(loadSettings(filePath).signals.githubPollIntervalMs).toBe(300_000);
+      }
+
+      writeFileSync(
+        filePath,
+        JSON.stringify({
+          onboarding: {},
+          models: {},
+          preferences: {},
+          storage: {},
+          signals: { githubPollIntervalMs: 99_999_999_999 },
+        }),
+        'utf-8',
+      );
+      expect(loadSettings(filePath).signals.githubPollIntervalMs).toBe(2_147_483_647);
+    });
+  });
+
+  it('persists GitHub poll interval across reloads', () => {
+    withTempSettingsFile(filePath => {
+      const settings = createSettings();
+      settings.signals.githubPollIntervalMs = 60_000;
+      saveSettings(settings, filePath);
+
+      expect(loadSettings(filePath).signals.githubPollIntervalMs).toBe(60_000);
+      expect(JSON.parse(readFileSync(filePath, 'utf-8')).signals.githubPollIntervalMs).toBe(60_000);
+    });
+  });
+
+  it('does not clobber GitHub poll interval from a stale settings object', () => {
+    withTempSettingsFile(filePath => {
+      saveSettings(createSettings(), filePath);
+      const staleSettings = loadSettings(filePath);
+
+      const currentSettings = loadSettings(filePath);
+      currentSettings.signals.githubPollIntervalMs = 60_000;
+      saveSettings(currentSettings, filePath);
+
+      staleSettings.modelUseCounts['openai/gpt-5.5'] = 1;
+      saveSettings(staleSettings, filePath);
+
+      expect(loadSettings(filePath).signals.githubPollIntervalMs).toBe(60_000);
+      expect(JSON.parse(readFileSync(filePath, 'utf-8')).signals.githubPollIntervalMs).toBe(60_000);
     });
   });
 
@@ -698,6 +857,60 @@ describe('resolveThreadActiveModelPackId', () => {
   });
 });
 
+describe('resolveModelDefaults', () => {
+  it('layers stored mode overrides over the active built-in pack', () => {
+    const settings = createSettings({
+      models: {
+        ...createSettings().models,
+        activeModelPackId: 'openai',
+        modePackOverrides: { openai: { build: 'openai/gpt-5.4' } },
+      },
+    });
+
+    expect(resolveModelDefaults(settings, builtinPacks)).toEqual({
+      plan: 'openai/gpt-5.5',
+      build: 'openai/gpt-5.4',
+      fast: 'openai/gpt-5.4-mini',
+    });
+  });
+
+  it('does not apply built-in overrides to custom packs', () => {
+    const settings = createSettings({
+      models: {
+        ...createSettings().models,
+        activeModelPackId: 'custom:My Pack',
+        modePackOverrides: { 'custom:My Pack': { build: 'openai/gpt-5.4' } },
+      },
+    });
+
+    expect(resolveModelDefaults(settings, builtinPacks)).toEqual(settings.customModelPacks[0]!.models);
+  });
+
+  it('loads valid pack overrides and drops malformed entries', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mc-settings-'));
+    const path = join(dir, 'settings.json');
+    try {
+      writeFileSync(
+        path,
+        JSON.stringify({
+          models: {
+            modePackOverrides: {
+              openai: { build: 'openai/gpt-5.4', plan: 42 },
+              anthropic: null,
+            },
+          },
+        }),
+      );
+
+      expect(loadSettings(path).models.modePackOverrides).toEqual({
+        openai: { build: 'openai/gpt-5.4' },
+      });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
 describe('resolveDefaultThinkingLevel', () => {
   it('returns the mode default when set for the mode', () => {
     const settings = createSettings({
@@ -911,6 +1124,60 @@ describe('parseBrowserSettings — stagehand model', () => {
   });
 });
 
+describe('parseViewportInput', () => {
+  it.each([
+    ['desktop', { width: 1280, height: 720 }],
+    ['desktop-hd', { width: 1920, height: 1080 }],
+    ['MOBILE', { width: 390, height: 844 }],
+    ['1600x1000', { width: 1600, height: 1000 }],
+    ['1600 x 1000', { width: 1600, height: 1000 }],
+    ['  1600X1000  ', { width: 1600, height: 1000 }],
+  ])('parses %p', (input, expected) => {
+    expect(parseViewportInput(input)).toEqual(expected);
+  });
+
+  it('parses window', () => {
+    expect(parseViewportInput('window')).toBe('window');
+  });
+
+  it.each([[''], ['   '], ['1280'], ['1280x'], ['0x720'], ['-10x720'], ['1280.5x720'], ['99999x720'], ['huge']])(
+    'rejects %p',
+    input => {
+      expect(parseViewportInput(input)).toBeUndefined();
+    },
+  );
+});
+
+describe('parseBrowserSettings — viewport', () => {
+  function parseBrowser(browser: unknown): BrowserSettings {
+    const dir = mkdtempSync(join(tmpdir(), 'mc-browser-viewport-'));
+    const file = join(dir, 'settings.json');
+    writeFileSync(file, JSON.stringify({ browser }));
+    try {
+      return loadSettings(file).browser;
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+
+  it('round-trips explicit dimensions', () => {
+    expect(parseBrowser({ viewport: { width: 1600, height: 1000 } }).viewport).toEqual({ width: 1600, height: 1000 });
+  });
+
+  it('round-trips window', () => {
+    expect(parseBrowser({ viewport: 'window' }).viewport).toBe('window');
+  });
+
+  // A hand-edited settings.json bypasses /browser set viewport validation, so
+  // unusable shapes fall back to the default rather than reaching the provider.
+  it.each([[undefined], ['maximized'], [{ width: 0, height: 720 }], [{ width: '1280', height: 720 }], [{}], [42]])(
+    'falls back to the default for %p',
+    value => {
+      expect(parseBrowser({ viewport: value }).viewport).toEqual({ width: 1280, height: 720 });
+    },
+  );
+});
+
 describe('createBrowserFromSettings — recording tools gating', () => {
   const RECORDING_TOOL_NAMES = ['browser_record', 'browser_record_caption'] as const;
 
@@ -960,5 +1227,63 @@ describe('createBrowserFromSettings — recording tools gating', () => {
     for (const name of RECORDING_TOOL_NAMES) {
       expect(tools[name], `expected tool ${name} to be absent on direct AgentBrowser`).toBeUndefined();
     }
+  });
+});
+
+describe('LSP settings parsing', () => {
+  it('leaves LSP unset when the file has no lsp key', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(filePath, '{}', 'utf-8');
+
+      expect(loadSettings(filePath).lsp).toBeUndefined();
+    });
+  });
+
+  it('preserves an explicit opt-out', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(filePath, JSON.stringify({ lsp: false }), 'utf-8');
+
+      expect(loadSettings(filePath).lsp).toBe(false);
+    });
+  });
+
+  it('preserves an explicit opt-in', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(filePath, JSON.stringify({ lsp: true }), 'utf-8');
+
+      expect(loadSettings(filePath).lsp).toBe(true);
+    });
+  });
+
+  it('preserves a full config object', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(filePath, JSON.stringify({ lsp: { maxOpenClients: 2 } }), 'utf-8');
+
+      expect(loadSettings(filePath).lsp).toEqual({ maxOpenClients: 2 });
+    });
+  });
+
+  it('ignores malformed values', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(filePath, JSON.stringify({ lsp: 'yes' }), 'utf-8');
+      expect(loadSettings(filePath).lsp).toBeUndefined();
+
+      writeFileSync(filePath, JSON.stringify({ lsp: null }), 'utf-8');
+      expect(loadSettings(filePath).lsp).toBeUndefined();
+    });
+  });
+
+  it('defaults new installs to disabled', () => {
+    withTempSettingsFile(filePath => {
+      expect(loadSettings(filePath).lsp).toBe(false);
+    });
+  });
+
+  it('resolveLspSetting treats absent and false as disabled, true as defaults', () => {
+    expect(resolveLspSetting(undefined)).toBe(false);
+    expect(resolveLspSetting(false)).toBe(false);
+    expect(resolveLspSetting(true)).toEqual({});
+    const config = { maxOpenClients: 3 };
+    expect(resolveLspSetting(config)).toBe(config);
   });
 });

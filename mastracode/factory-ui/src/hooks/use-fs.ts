@@ -33,6 +33,17 @@ function workspaceFileUrl(workspacePath: string | undefined, path: string | unde
   return `/web/workspace/file?${new URLSearchParams({ workspacePath, path, threadId })}`;
 }
 
+export function isPlanReadablePath(path: string | undefined): path is string {
+  return Boolean(path?.startsWith('.artifacts/'));
+}
+
+function planFileUrl(workspacePath: string | undefined, path: string | undefined) {
+  if (!workspacePath || !isPlanReadablePath(path)) return undefined;
+  // The session file route only approves `.artifacts/*` reads without a thread
+  // file listing; Factory plans always live under `.artifacts/plans/`.
+  return `/web/workspace/file?${new URLSearchParams({ workspacePath, path })}`;
+}
+
 function workspaceChangesUrl(workspacePath: string | undefined) {
   if (!workspacePath) return undefined;
   return `/web/workspace/changes?${new URLSearchParams({ workspacePath })}`;
@@ -104,16 +115,37 @@ export function useWorkspaceFiles(
   });
 }
 
-export function useWorkspaceFile(
+export function useWorkspaceFile<TData = WorkspaceFile>(
   workspacePath: string | undefined,
   filePath: string | undefined,
   threadId: string | undefined,
-  { enabled = true }: { enabled?: boolean } = {},
+  { enabled = true, select }: { enabled?: boolean; select?: (file: WorkspaceFile) => TData } = {},
 ) {
   const { client } = useApiConfig();
   const url = workspaceFileUrl(workspacePath, filePath, threadId);
-  return useQuery<WorkspaceFile>({
+  return useQuery<WorkspaceFile, Error, TData>({
     queryKey: queryKeys.workspaceFile(workspacePath, filePath, threadId),
+    enabled,
+    queryFn: url ? () => client.get<WorkspaceFile>(url) : skipToken,
+    select,
+  });
+}
+
+/**
+ * Read a submitted plan's markdown from the session workspace. Keyed by
+ * `toolCallId` so a plan resubmission (same path, new tool call) fetches the
+ * revised file instead of replaying the previous submission from cache.
+ */
+export function usePlanFile(
+  workspacePath: string | undefined,
+  path: string | undefined,
+  toolCallId: string | undefined,
+  { enabled = true }: { enabled?: boolean } = {},
+) {
+  const { client } = useApiConfig();
+  const url = planFileUrl(workspacePath, path);
+  return useQuery<WorkspaceFile>({
+    queryKey: queryKeys.planFile(workspacePath, path, toolCallId),
     enabled,
     queryFn: url ? () => client.get<WorkspaceFile>(url) : skipToken,
   });

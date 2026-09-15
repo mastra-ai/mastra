@@ -202,7 +202,6 @@ export const languageDetectorProvider: ProcessorProvider = {
     instructions: z.string().optional(),
     minTextLength: z.number().optional(),
     includeDetectionDetails: z.boolean().optional(),
-    translationQuality: z.enum(['speed', 'quality', 'balanced']).optional(),
     providerOptions: providerOptionsSchema,
   }),
   availablePhases: ['processInput'] as ProcessorPhase[],

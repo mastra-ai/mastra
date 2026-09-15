@@ -1,5 +1,5 @@
 {
-  "attachment": ["moonshotai/Kimi-K3", "thinkingmachines/Inkling-NVFP4"],
-  "temperature": ["thinkingmachines/Inkling-NVFP4"],
-  "structuredOutput": ["moonshotai/Kimi-K3"]
+  "attachment": ["moonshotai/Kimi-K3", "thinkingmachines/Inkling-NVFP4", "zai-org/GLM-5.3-Flash"],
+  "temperature": ["Qwen/Qwen3.8-2.4T-A95B", "thinkingmachines/Inkling-NVFP4", "zai-org/GLM-5.3-Flash"],
+  "structuredOutput": ["Qwen/Qwen3.8-2.4T-A95B", "moonshotai/Kimi-K3", "zai-org/GLM-5.3-Flash"]
 }

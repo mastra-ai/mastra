@@ -143,6 +143,37 @@ describe('RedisServerCache Integration', () => {
       const after = await shortTtlCache.get('expiring-key');
       expect(after).toBeNull();
     });
+
+    it('listPushIndexed assigns indices atomically and stamps TTL on both keys', async () => {
+      expect(await cache.listPushIndexed('events', 'events:counter', {})).toBe(0);
+      expect(await cache.listPushIndexed('events', 'events:counter', { type: 'a', data: { n: 1 } })).toBe(1);
+      expect(
+        await cache.listPushIndexed('events', 'events:counter', { type: 'b', big: 9007199254740991, arr: [1, null] }),
+      ).toBe(2);
+
+      expect(await cache.listFromTo('events', 0)).toEqual([
+        { index: 0 },
+        { index: 1, type: 'a', data: { n: 1 } },
+        { index: 2, type: 'b', big: 9007199254740991, arr: [1, null] },
+      ]);
+      expect(await cache.increment('events:counter')).toBe(4);
+
+      for (const key of ['test:events', 'test:events:counter']) {
+        const ttl = await redis.ttl(key);
+        expect(ttl).toBeGreaterThan(0);
+        expect(ttl).toBeLessThanOrEqual(60);
+      }
+    });
+
+    it('should apply TTL to keys written via increment', async () => {
+      await cache.increment('counter');
+
+      // Bare INCR would leave the key with no expiry (-1); increment must
+      // stamp the configured TTL like every other write in this class.
+      const ttl = await redis.ttl('test:counter');
+      expect(ttl).toBeGreaterThan(0);
+      expect(ttl).toBeLessThanOrEqual(60);
+    });
   });
 });
 

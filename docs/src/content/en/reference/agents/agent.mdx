@@ -1,6 +1,6 @@
 ---
 title: "Reference: Agent class | Agents"
-description: "Documentation for the `Agent` class in Mastra, which provides the foundation for creating AI agents with various capabilities."
+description: "The Agent class is the foundation for creating AI agents in Mastra. It provides methods for generating responses and streaming interactions."
 packages:
   - "@mastra/core"
 ---
@@ -331,7 +331,37 @@ agent.queueMessage('Also check whether the tests need updates.', {
 })
 ```
 
-`queueMessage()` accepts the same `message` and `options` shape as `sendMessage()` and returns `{ accepted: Promise<SendAgentSignalAccepted>, signal: CreatedAgentSignal, persisted?: Promise<void> }`, with the same `accepted` semantics as `sendMessage()`.
+`queueMessage()` accepts the same `message` and `options` shape as `sendMessage()` and returns `{ accepted: Promise<SendAgentSignalAccepted>, signal: CreatedAgentSignal, persisted?: Promise<void> }`, with the same `accepted` semantics as `sendMessage()`. Pass an optional `queueOwnerId` to group local queued messages for observation and cancellation. The owner ID is local metadata: it's neither serialized with the message nor an authorization mechanism.
+
+Use `subscribeThreadEvents({ resourceId, threadId }, listener)` to observe local thread events. Currently, Mastra emits only `queue-count-changed`, which reports all locally pending messages on the shared thread, including messages submitted by other Sessions or Agents using the same runtime and PubSub instance. The listener receives a synchronous baseline with the current local count, then updates only when its count changes. Its unsubscribe function is idempotent and doesn't cancel queued messages. Pass an optional `queueOwnerId` to restrict queue-count notifications to that owner's messages submitted by the calling Agent.
+
+```typescript
+const scope = {
+  resourceId: 'user-123',
+  threadId: 'thread-abc',
+}
+
+const unsubscribe = agent.subscribeThreadEvents(scope, event => {
+  if (event.type === 'queue-count-changed') {
+    console.log(`${event.count} messages are pending`)
+  }
+})
+
+agent.queueMessage('Review the failing test.', {
+  ...scope,
+  ifIdle: { streamOptions: { maxSteps: 3 } },
+})
+
+unsubscribe()
+```
+
+`subscribeThreadEvents()` is distinct from `subscribeToThread()`, which streams agent output. It doesn't currently emit composite thread state, individual message lifecycle events, run events, or approval events. Mastra may add those as separate event types in the future.
+
+AgentController Sessions observe the shared thread count when they subscribe, even before submitting a follow-up. `session.steer()` aborts the current run before sending the new input, without clearing queued follow-ups. Session cleanup stops observation and cancels unfinished local preparation, but leaves submitted messages in the Agent queue.
+
+The count includes messages waiting in the local FIFO and a non-cancelled message while it acquires or transfers its lease. It drops at cancellation, execution handoff, forwarding to another owner, or failure, not when model generation completes. An idle `queueMessage()` handoff is immediate and isn't represented as a cancellable pending slot.
+
+Use `cancelQueuedMessages({ resourceId, threadId, signalIds })` to remove specific queued messages, or pass `{ resourceId, threadId, queueOwnerId }` to remove an owner group. Supply exactly one selector. Owner-scoped observation and cancellation match the calling Agent, its local runtime, resource, thread, and owner ID. They don't cancel already-running, remote-owner, or crash-persisted work, and don't provide durable queue delivery.
 
 ### `sendSignal(signal, options)`
 
@@ -680,7 +710,7 @@ const result = await agent.sendNotificationSignal(
 
 Returns `{ record: NotificationRecord, decision: NotificationDeliveryDecision, runId?: string, signal?: CreatedAgentSignal, persisted?: Promise<void>, accepted?: Promise<SendAgentSignalAccepted> }`. `record` is the stored inbox record. `decision` is the delivery-policy result. `signal` and `runId` are present when ingress emits a signal immediately, including the immediate summary emitted for active high-priority notifications. `persisted` is present when the emitted signal is persisted without waking an idle thread. `accepted` is present when a signal is emitted and resolves at decision-time, once Mastra decides what to do with it: `{ action: 'wake', runId, output }` when this process runs the agent (it started or won the lease to start the run), `{ action: 'deliver', runId }` when the signal is forwarded onto an existing run, or `{ action: 'persist' }` / `{ action: 'discard' }` when nothing ran. `runId` on the accepted result is present only on `wake` and `deliver`. On the `wake` action, `output` is the agent stream for in-process consumption.
 
-Default delivery is priority-aware. `urgent` notifications deliver immediately. `high` notifications deliver immediately when the thread is idle. When the thread is active, Mastra emits a summary immediately and keeps `deliverAt` for later full delivery when the thread is idle. `medium` notifications deliver immediately when idle and batch into summaries when active. `low` notifications batch into summaries in both active and idle threads. Idle low-priority summaries reach subscribers without waking the model loop. For the full flow, visit [Signals](/docs/long-running-agents/signals#notification-signals).
+Default delivery is priority-aware. `urgent` notifications deliver immediately. `high` notifications deliver immediately when the thread is idle. When the thread is active, Mastra emits a summary immediately and keeps `deliverAt` for later full delivery when the thread is idle. `medium` notifications deliver immediately when idle and batch into summaries when active. `low` notifications batch into summaries in both active and idle threads. Idle low-priority summaries reach subscribers without waking the model loop. For the full flow, visit [Signals](/docs/harness/signals#notification-signals).
 
 Configure `notifications.deliveryPolicy` on the agent when some notifications should wait for a different dispatch window or summary rollup:
 
@@ -733,12 +763,34 @@ Subscribes to raw stream chunks for a memory thread. Use this before calling `se
             type: 'string',
             description: 'Thread ID to subscribe to.',
           },
+          {
+            name: 'hideSignals',
+            type: 'boolean | AgentSignalType[]',
+            isOptional: true,
+            defaultValue: '[]',
+            description:
+              'Use true to hide all recognized signals, false to show all, or an array to hide selected types from this subscription, including live, idle-persisted, and replayed signals. Other subscribers and the initiating stream keep their own policies.',
+          },
         ],
       },
     ],
   },
 ]}
 />
+
+By default, subscriptions include every signal type, including reactive reminders. To hide reminders for one subscriber without affecting another:
+
+```ts
+const visible = await agent.subscribeToThread({ threadId: 'thread-abc' })
+const filtered = await agent.subscribeToThread({
+  threadId: 'thread-abc',
+  hideSignals: ['reactive', 'system-reminder'],
+})
+```
+
+`hideSignals: true` hides all recognized signal types. Set it to `false` to show all signals. An array accepts `user`, `state`, `reactive`, `notification`, `user-message`, and `system-reminder`. Matching normalizes `system-reminder` to `reactive` and `user-message` to `user`. An omitted option, `false`, or `[]` excludes nothing. Each subscriber filters its own live and replayed chunks, including remote pubsub events and idle-persisted signals. Filtering preserves non-signal chunks, unknown or malformed signal chunks, ordering, and completion/error events, even when every signal type is excluded.
+
+Exclusions don't change model context, storage, shared broadcasts, or another caller's output. They aren't a security boundary and don't replace `ifActive`/`ifIdle` delivery policies or `transient` persistence behavior. This option is supported by the in-process core API, not HTTP or client-js subscription requests. See [stream signal visibility](/reference/streaming/agents/stream#signal-visibility) for transform ordering and the distinction from recall's exact stored-type matching and reminder-hidden history default.
 
 Returns an `AgentThreadSubscription` object with these members:
 
@@ -1049,7 +1101,7 @@ When you register the [`MastraEditor`](/reference/editor/mastra-editor), the `ed
 ]}
 />
 
-The agent's `id`, `name`, and `model` always come from code and can't be overridden through Editor. See [Editor](/docs/editor/overview) for usage.
+The agent's `id`, `name`, and `model` always come from code and can't be overridden through Editor. See [Editor](/docs/studio/editor) for usage.
 
 ## Returns
 

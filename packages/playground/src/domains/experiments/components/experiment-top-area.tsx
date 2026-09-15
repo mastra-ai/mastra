@@ -1,112 +1,71 @@
 import type { DatasetExperiment } from '@mastra/client-js';
-import { DataKeysAndValues } from '@mastra/playground-ui/components/DataKeysAndValues';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
+import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { format } from 'date-fns';
-import { useAgents } from '@/domains/agents/hooks/use-agents';
-import { ExperimentStats } from '@/domains/experiments/components/experiment-stats';
-import { useScorers } from '@/domains/scores/hooks/use-scorers';
-import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
+import { ClipboardCheck, MoreVertical, Pencil, Trash2 } from 'lucide-react';
+import { useState } from 'react';
+import { RenameExperimentDialog } from '@/domains/experiments/components/rename-experiment-dialog';
+import { RerunExperimentButton } from '@/domains/experiments/components/rerun-experiment-button';
+import { experimentReviewQueueLink } from '@/lib/app-routing';
 import { useLinkComponent } from '@/lib/framework';
 
 export interface ExperimentTopAreaProps {
   experiment: DatasetExperiment;
+  /** When provided, renders a delete action in the actions menu. */
+  onDeleteClick?: () => void;
+  /** Contextual actions (e.g. bulk actions for selected results), rendered on the left. */
+  children?: React.ReactNode;
 }
 
 /**
- * Top area for any Experiment page — keys-and-values (Created/Completed/Target/Version)
- * on the left, stats on the right. Wrapped in PageLayout primitives so it slots into
- * any consumer's PageLayout shell.
+ * Top area for any Experiment page — page actions first (Rerun leads), then
+ * contextual actions (e.g. bulk actions) trailing on the same row. The name lives in the breadcrumbs and the
+ * pipeline/metadata in the side rail.
  */
-export function ExperimentTopArea({ experiment }: ExperimentTopAreaProps) {
-  const { Link: LinkComponent, paths } = useLinkComponent();
-  const { data: agents } = useAgents();
-  const { data: workflows } = useWorkflows();
-  const { data: scorers } = useScorers();
+export function ExperimentTopArea({ experiment, onDeleteClick, children }: ExperimentTopAreaProps) {
+  const { Link: LinkComponent } = useLinkComponent();
+  const [renameOpen, setRenameOpen] = useState(false);
 
-  const targetPath = () => {
-    switch (experiment.targetType) {
-      case 'agent':
-        return paths.agentLink(experiment.targetId);
-      case 'workflow':
-        return paths.workflowLink(experiment.targetId);
-      case 'scorer':
-        return paths.scorerLink(experiment.targetId);
-      default:
-        return '#';
-    }
-  };
-
-  const targetName = () => {
-    const targetId = experiment.targetId;
-    if (!targetId) return targetId;
-    switch (experiment.targetType) {
-      case 'agent':
-        return agents?.[targetId]?.name ?? targetId;
-      case 'workflow':
-        return workflows?.[targetId]?.name ?? targetId;
-      case 'scorer':
-        return scorers?.[targetId]?.scorer?.config?.name ?? targetId;
-      default:
-        return targetId;
-    }
-  };
-
-  const versionLinkHref =
-    experiment.agentVersion && experiment.targetType === 'agent' && experiment.targetId
-      ? `${paths.agentLink(experiment.targetId)}/editor?version=${encodeURIComponent(experiment.agentVersion)}`
-      : null;
+  // The rename route is dataset-scoped, so caller-run experiments without a dataset can't be renamed.
+  const canRename = Boolean(experiment.datasetId);
+  const hasMenu = canRename || Boolean(onDeleteClick);
 
   return (
     <PageLayout.TopArea>
-      <PageLayout.Row>
-        <PageLayout.Column>
-          <DataKeysAndValues numOfCol={2}>
-            {experiment.name && (
-              <>
-                <DataKeysAndValues.Key>Name</DataKeysAndValues.Key>
-                <DataKeysAndValues.Value>{experiment.name}</DataKeysAndValues.Value>
-              </>
-            )}
-            {experiment.description && (
-              <>
-                <DataKeysAndValues.Key>Description</DataKeysAndValues.Key>
-                <DataKeysAndValues.Value>{experiment.description}</DataKeysAndValues.Value>
-              </>
-            )}
-            <DataKeysAndValues.Key>Created at</DataKeysAndValues.Key>
-            <DataKeysAndValues.Value>
-              {format(new Date(experiment.createdAt), "MMM d, yyyy 'at' h:mm a")}
-            </DataKeysAndValues.Value>
-            {experiment.completedAt && (
-              <>
-                <DataKeysAndValues.Key>Completed at</DataKeysAndValues.Key>
-                <DataKeysAndValues.Value>
-                  {format(new Date(experiment.completedAt), "MMM d, yyyy 'at' h:mm a")}
-                </DataKeysAndValues.Value>
-              </>
-            )}
-            <DataKeysAndValues.Key>Target</DataKeysAndValues.Key>
-            <DataKeysAndValues.ValueLink href={targetPath()} as={LinkComponent}>
-              {targetName()}
-            </DataKeysAndValues.ValueLink>
-            {experiment.agentVersion && (
-              <>
-                <DataKeysAndValues.Key>Version</DataKeysAndValues.Key>
-                {versionLinkHref ? (
-                  <DataKeysAndValues.ValueLink href={versionLinkHref} as={LinkComponent}>
-                    {experiment.agentVersion}
-                  </DataKeysAndValues.ValueLink>
-                ) : (
-                  <DataKeysAndValues.Value>{experiment.agentVersion}</DataKeysAndValues.Value>
+      <PageLayout.Row className="items-center justify-start gap-2">
+        <ButtonsGroup className="whitespace-nowrap">
+          <RerunExperimentButton experiment={experiment} />
+          <Button as={LinkComponent} to={experimentReviewQueueLink(experiment.id)} icon={<ClipboardCheck />}>
+            Review queue
+          </Button>
+          {hasMenu && (
+            <DropdownMenu>
+              <DropdownMenu.Trigger asChild>
+                <Button size="lg" aria-label="Experiment actions menu">
+                  <MoreVertical />
+                </Button>
+              </DropdownMenu.Trigger>
+              <DropdownMenu.Content align="start" className="w-48">
+                {canRename && (
+                  <DropdownMenu.Item onSelect={() => setRenameOpen(true)}>
+                    <Pencil /> Rename Experiment
+                  </DropdownMenu.Item>
                 )}
-              </>
-            )}
-          </DataKeysAndValues>
-        </PageLayout.Column>
-        <PageLayout.Column>
-          <ExperimentStats experiment={experiment} />
-        </PageLayout.Column>
+                {onDeleteClick && (
+                  <DropdownMenu.Item onSelect={onDeleteClick} className="text-red-500 focus:text-red-400">
+                    <Trash2 /> Delete Experiment
+                  </DropdownMenu.Item>
+                )}
+              </DropdownMenu.Content>
+            </DropdownMenu>
+          )}
+        </ButtonsGroup>
+        {children}
       </PageLayout.Row>
+
+      {/* Mounted on demand so the form state is seeded from the experiment each time it opens. */}
+      {renameOpen && <RenameExperimentDialog experiment={experiment} open onOpenChange={setRenameOpen} />}
     </PageLayout.TopArea>
   );
 }

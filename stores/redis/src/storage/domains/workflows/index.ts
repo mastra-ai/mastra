@@ -3,6 +3,7 @@ import {
   createStorageErrorId,
   normalizePerPage,
   TABLE_WORKFLOW_SNAPSHOT,
+  matchesExpectedWorkflowStatus,
   WorkflowsStorage,
   ensureDate,
 } from '@mastra/core/storage';
@@ -167,7 +168,14 @@ export class WorkflowsRedis extends WorkflowsStorage {
         return undefined;
       }
 
-      const updatedSnapshot = { ...existingSnapshot, ...opts };
+      // Best-effort only: this store reports `supportsConcurrentUpdates() === false`, so the
+      // read and the write are not a single critical section.
+      const { expectedStatus, ...state } = opts;
+      if (!matchesExpectedWorkflowStatus(existingSnapshot.status, expectedStatus)) {
+        return undefined;
+      }
+
+      const updatedSnapshot = { ...existingSnapshot, ...state };
 
       await this.persistWorkflowSnapshot({
         namespace: 'workflows',

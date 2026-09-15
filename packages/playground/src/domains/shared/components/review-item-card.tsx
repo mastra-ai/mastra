@@ -61,9 +61,7 @@ export function ReviewItemCard({
     }
   })();
 
-  const scoresEntries: Array<[string, number]> = item.scores
-    ? (Object.entries(item.scores) as Array<[string, number]>)
-    : [];
+  const scoresEntries: Array<[string, number]> = item.scores ? Object.entries(item.scores) : [];
 
   return (
     <div
@@ -137,9 +135,7 @@ export function ReviewItemCard({
               item.tags.length > 0 ? (
                 <div className="flex flex-wrap items-center gap-1">
                   {item.tags.map(t => (
-                    <Badge key={t} variant="default">
-                      {t}
-                    </Badge>
+                    <Badge key={t}>{t}</Badge>
                   ))}
                 </div>
               ) : null
@@ -181,7 +177,7 @@ export function ReviewItemCard({
           {scoresEntries.length > 0 && (
             <div className="flex flex-wrap items-center gap-2">
               {scoresEntries.map(([scorerId, score]) => (
-                <Badge key={scorerId} variant={score >= 0.5 ? 'success' : 'error'}>
+                <Badge key={scorerId} variant={score >= 0.5 ? 'green' : 'red'}>
                   {scorerId.slice(0, 12)}: {score.toFixed(3)}
                 </Badge>
               ))}
@@ -193,7 +189,7 @@ export function ReviewItemCard({
             <Txt variant="ui-xs" className="text-neutral3 mb-1 block font-medium">
               Input
             </Txt>
-            <pre className="text-neutral4 bg-surface3 max-h-24 overflow-x-auto overflow-y-auto rounded px-3 py-2 text-xs wrap-break-word whitespace-pre-wrap">
+            <pre className="text-neutral4 bg-surface3 text-ui-sm max-h-24 overflow-x-auto overflow-y-auto rounded px-3 py-2 wrap-break-word whitespace-pre-wrap">
               {formatUnknown(item.input)}
             </pre>
           </div>
@@ -205,7 +201,7 @@ export function ReviewItemCard({
             </Txt>
             <pre
               className={cn(
-                'text-xs rounded px-3 py-2 overflow-x-auto whitespace-pre-wrap wrap-break-word max-h-24 overflow-y-auto',
+                'text-ui-sm rounded px-3 py-2 overflow-x-auto whitespace-pre-wrap wrap-break-word max-h-24 overflow-y-auto',
                 item.error ? 'text-negative1 bg-negative1/10' : 'text-neutral4 bg-surface3',
               )}
             >

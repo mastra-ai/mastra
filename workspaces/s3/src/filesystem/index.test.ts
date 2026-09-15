@@ -31,6 +31,38 @@ vi.mock('@aws-sdk/client-s3', () => ({
 }));
 
 describe('S3Filesystem', () => {
+  describe('initialization access checks', () => {
+    beforeEach(() => vi.clearAllMocks());
+
+    it('checks only the configured prefix, including its directory boundary', async () => {
+      const { ListObjectsV2Command, HeadBucketCommand } = await import('@aws-sdk/client-s3');
+      const fs = new S3Filesystem({ bucket: 'test', region: 'auto', prefix: '/resource/thread/' });
+      await fs.init();
+      expect(ListObjectsV2Command).toHaveBeenCalledWith({
+        Bucket: 'test',
+        Prefix: 'resource/thread/',
+        MaxKeys: 1,
+      });
+      expect(HeadBucketCommand).not.toHaveBeenCalled();
+    });
+
+    it('retains the bucket check when no prefix is configured', async () => {
+      const { HeadBucketCommand, ListObjectsV2Command } = await import('@aws-sdk/client-s3');
+      const fs = new S3Filesystem({ bucket: 'test', region: 'auto' });
+      await fs.init();
+      expect(HeadBucketCommand).toHaveBeenCalledWith({ Bucket: 'test' });
+      expect(ListObjectsV2Command).not.toHaveBeenCalled();
+    });
+
+    it('does not fall back to broader access when the prefix is denied', async () => {
+      const { HeadBucketCommand } = await import('@aws-sdk/client-s3');
+      const fs = new S3Filesystem({ bucket: 'test', region: 'auto', prefix: 'resource/thread' });
+      vi.mocked(fs.client.send).mockRejectedValueOnce({ name: 'AccessDenied', $metadata: { httpStatusCode: 403 } });
+      await expect(fs.init()).rejects.toMatchObject({ status: 403 });
+      expect(HeadBucketCommand).not.toHaveBeenCalled();
+    });
+  });
+
   describe('Constructor & Options', () => {
     it('generates unique id if not provided', () => {
       const fs1 = new S3Filesystem({ bucket: 'test', region: 'us-east-1' });
@@ -847,6 +879,16 @@ describe('S3Filesystem SDK Operations', () => {
       await expect(fs.readFile('/empty.txt')).rejects.toThrow(/empty\.txt/);
     });
 
+    it('throws FileNotFoundError for a trailing-slash directory path', async () => {
+      // The directory marker is a real zero-byte object
+      mockSend.mockResolvedValueOnce({
+        Body: { transformToByteArray: () => Promise.resolve(new Uint8Array(0)) },
+      });
+
+      await expect(fs.readFile('/logs/', { encoding: 'utf-8' })).rejects.toThrow(/logs/);
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
     it('applies prefix to key', async () => {
       const { GetObjectCommand } = await import('@aws-sdk/client-s3');
       const prefixFs = new S3Filesystem({
@@ -1066,15 +1108,124 @@ describe('S3Filesystem SDK Operations', () => {
   });
 
   describe('mkdir()', () => {
-    it('is a no-op (S3 has no real directories)', async () => {
+    it('writes a zero-byte directory marker so empty directories are visible', async () => {
+      const { PutObjectCommand } = await import('@aws-sdk/client-s3');
+      vi.mocked(PutObjectCommand).mockClear();
+
+      mockSend.mockRejectedValueOnce({ name: 'NotFound' }); // HeadObject: no file at this path
+      mockSend.mockResolvedValueOnce({}); // PutObject: marker
+
       await fs.mkdir('/new-dir');
 
-      // No SDK calls should be made
+      const args = vi.mocked(PutObjectCommand).mock.calls[0]![0]!;
+      expect(args.Bucket).toBe('test-bucket');
+      expect(args.Key).toBe('new-dir/');
+      expect((args.Body as Uint8Array).length).toBe(0);
+    });
+
+    it('normalizes trailing slashes in the marker key', async () => {
+      const { PutObjectCommand } = await import('@aws-sdk/client-s3');
+      vi.mocked(PutObjectCommand).mockClear();
+
+      mockSend.mockRejectedValueOnce({ name: 'NotFound' });
+      mockSend.mockResolvedValueOnce({});
+
+      await fs.mkdir('/nested/dir//');
+
+      expect(vi.mocked(PutObjectCommand).mock.calls[0]![0]!.Key).toBe('nested/dir/');
+    });
+
+    it('does nothing for the root path', async () => {
+      await fs.mkdir('/');
+
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
+    it('throws FileExistsError when a file occupies the path', async () => {
+      mockSend.mockResolvedValueOnce({ ContentLength: 5 }); // HeadObject: a file is there
+
+      await expect(fs.mkdir('/thing')).rejects.toThrow(/thing/);
+      expect(mockSend).toHaveBeenCalledTimes(1);
+    });
+
+    it('writes one marker for a nested path', async () => {
+      const { PutObjectCommand } = await import('@aws-sdk/client-s3');
+      vi.mocked(PutObjectCommand).mockClear();
+
+      mockSend.mockRejectedValueOnce({ name: 'NotFound' });
+      mockSend.mockResolvedValueOnce({});
+
+      await fs.mkdir('/a/b');
+
+      expect(vi.mocked(PutObjectCommand).mock.calls).toHaveLength(1);
+      expect(vi.mocked(PutObjectCommand).mock.calls[0]![0]!.Key).toBe('a/b/');
+    });
+
+    it('still writes the marker when the existence probe is denied', async () => {
+      const { PutObjectCommand } = await import('@aws-sdk/client-s3');
+      vi.mocked(PutObjectCommand).mockClear();
+
+      // HeadObject: write-only credentials answer 403 instead of 404
+      mockSend.mockRejectedValueOnce({ name: 'AccessDenied', $metadata: { httpStatusCode: 403 } });
+      mockSend.mockResolvedValueOnce({}); // PutObject: marker
+
+      await fs.mkdir('/write-only');
+
+      expect(vi.mocked(PutObjectCommand).mock.calls[0]![0]!.Key).toBe('write-only/');
+      expect(fs.status).toBe('ready');
+    });
+
+    it('does nothing for the root path of a configured prefix', async () => {
+      const prefixFs = new S3Filesystem({
+        bucket: 'test-bucket',
+        region: 'us-east-1',
+        accessKeyId: 'k',
+        secretAccessKey: 's',
+        prefix: 'base',
+      });
+      (prefixFs as any)._client = { send: mockSend };
+      (prefixFs as any).status = 'ready';
+
+      await prefixFs.mkdir('/');
+
       expect(mockSend).not.toHaveBeenCalled();
     });
   });
 
   describe('rmdir()', () => {
+    it('deletes the directory marker of an empty directory', async () => {
+      const { DeleteObjectCommand } = await import('@aws-sdk/client-s3');
+      vi.mocked(DeleteObjectCommand).mockClear();
+
+      // readdir: only the directory marker itself
+      mockSend.mockResolvedValueOnce({ Contents: [{ Key: 'dir/', Size: 0 }], CommonPrefixes: [] });
+      mockSend.mockResolvedValueOnce({}); // DeleteObject: marker
+
+      await fs.rmdir('/dir');
+
+      expect(DeleteObjectCommand).toHaveBeenCalledWith({ Bucket: 'test-bucket', Key: 'dir/' });
+    });
+
+    it('does nothing for the root path of a configured prefix', async () => {
+      const { DeleteObjectCommand } = await import('@aws-sdk/client-s3');
+      vi.mocked(DeleteObjectCommand).mockClear();
+      const prefixFs = new S3Filesystem({
+        bucket: 'test-bucket',
+        region: 'us-east-1',
+        accessKeyId: 'k',
+        secretAccessKey: 's',
+        prefix: 'base',
+      });
+      (prefixFs as any)._client = { send: mockSend };
+      (prefixFs as any).status = 'ready';
+      // readdir: empty mount root
+      mockSend.mockResolvedValueOnce({ Contents: [], CommonPrefixes: [] });
+
+      await prefixFs.rmdir('/');
+
+      expect(DeleteObjectCommand).not.toHaveBeenCalled();
+    });
+
     it('throws if non-recursive and directory is not empty', async () => {
       // readdir: ListObjectsV2 returns files
       mockSend.mockResolvedValueOnce({
@@ -1201,6 +1352,28 @@ describe('S3Filesystem SDK Operations', () => {
       expect(entries).toContainEqual({ name: 'file.txt', type: 'file', size: 100 });
     });
 
+    it('rolls a nested directory marker up to its first segment', async () => {
+      // A recursive listing has no delimiter, so a nested marker reaches Contents
+      mockSend.mockResolvedValueOnce({ Contents: [{ Key: 'a/b/', Size: 0 }], CommonPrefixes: [] });
+
+      const entries = await fs.readdir('/');
+
+      expect(entries).toEqual([{ name: 'a', type: 'directory' }]);
+    });
+
+    it('excludes directory markers from a recursive listing filtered by extension', async () => {
+      mockSend.mockResolvedValueOnce({
+        Contents: [
+          { Key: 'notes/', Size: 0 },
+          { Key: 'notes/a.md', Size: 1 },
+        ],
+      });
+
+      const entries = await fs.readdir('/', { recursive: true, extension: '.md' });
+
+      expect(entries).toEqual([{ name: 'notes/a.md', type: 'file', size: 1 }]);
+    });
+
     it('skips empty relative paths and searchPrefix itself', async () => {
       mockSend.mockResolvedValueOnce({
         Contents: [
@@ -1311,6 +1484,7 @@ describe('S3Filesystem SDK Operations', () => {
       const lastMod = new Date('2024-01-15T10:30:00Z');
       mockSend.mockResolvedValueOnce({
         ContentLength: 1024,
+        ContentType: 'text/plain',
         LastModified: lastMod,
       });
 
@@ -1321,9 +1495,20 @@ describe('S3Filesystem SDK Operations', () => {
         path: '/docs/readme.txt',
         type: 'file',
         size: 1024,
+        mimeType: 'text/plain',
         createdAt: lastMod,
         modifiedAt: lastMod,
       });
+    });
+
+    it('falls back to an extension-based MIME type when HeadObject has no ContentType', async () => {
+      mockSend.mockResolvedValueOnce({
+        ContentLength: 2048,
+      });
+
+      const stat = await fs.stat('/images/no-content-type.png');
+
+      expect(stat.mimeType).toBe('image/png');
     });
 
     it('returns directory stat when file not found but prefix exists', async () => {
@@ -1350,6 +1535,18 @@ describe('S3Filesystem SDK Operations', () => {
       mockSend.mockResolvedValueOnce({ Contents: [] });
 
       await expect(fs.stat('/missing')).rejects.toThrow(/missing/);
+    });
+
+    it('treats a trailing slash as a directory even when a file has the same name', async () => {
+      // isDirectory: ListObjectsV2 finds contents. No HeadObject is sent
+      mockSend.mockResolvedValueOnce({ Contents: [{ Key: 'report/file.txt' }] });
+
+      const stat = await fs.stat('/report/');
+
+      expect(stat.type).toBe('directory');
+      expect(stat.name).toBe('report');
+      expect(mockSend).toHaveBeenCalledTimes(1);
+      expect(await fs.isFile('/report/')).toBe(false);
     });
   });
 });

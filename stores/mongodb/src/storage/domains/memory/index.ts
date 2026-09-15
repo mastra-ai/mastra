@@ -57,6 +57,7 @@ import type { MongoDBDomainConfig, MongoDBIndexConfig } from '../../types';
 import { formatDateForMongoDB } from '../utils';
 
 export class MemoryStorageMongoDB extends MemoryStorage {
+  override readonly supportsPartialThreadUpdate = true;
   readonly supportsObservationalMemory = true;
 
   #connector: MongoDBConnector;
@@ -1174,8 +1175,8 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     metadata,
   }: {
     id: string;
-    title: string;
-    metadata: Record<string, unknown>;
+    title?: string;
+    metadata?: Record<string, unknown>;
   }): Promise<StorageThreadType> {
     const thread = await this.getThreadById({ threadId: id });
     if (!thread) {
@@ -1191,7 +1192,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     const now = new Date();
     const updatedThread = {
       ...thread,
-      title,
+      title: title ?? thread.title,
       metadata: {
         ...thread.metadata,
         ...metadata,
@@ -1205,7 +1206,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         { id },
         {
           $set: {
-            title,
+            title: updatedThread.title,
             metadata: updatedThread.metadata,
             updatedAt: now,
           },

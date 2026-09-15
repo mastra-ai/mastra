@@ -188,11 +188,13 @@ describe('Dataset', () => {
   });
 
   // 12. getItem — with version
-  it('getItem with version returns DatasetItem at that version', async () => {
-    const added = await ds.addItem({ input: { x: 1 } });
-    const fetched = await ds.getItem({ itemId: added.id, version: added.datasetVersion });
+  it('getItem with version returns the item visible in that dataset snapshot', async () => {
+    const itemA = await ds.addItem({ input: { x: 1 } });
+    const itemB = await ds.addItem({ input: { x: 2 } });
+
+    const fetched = await ds.getItem({ itemId: itemA.id, version: itemB.datasetVersion });
     expect(fetched).not.toBeNull();
-    expect(fetched!.datasetVersion).toBe(added.datasetVersion);
+    expect(fetched!.datasetVersion).toBe(itemA.datasetVersion);
   });
 
   // 13. getItem — nonexistent returns null
@@ -832,6 +834,7 @@ describe('Dataset', () => {
         retryCount: 0,
         traceId: 'trace-a',
         status: 'reviewed',
+        tags: ['a'],
         organizationId: 'org-1',
         projectId: 'proj-1',
       });
@@ -848,6 +851,7 @@ describe('Dataset', () => {
         retryCount: 0,
         traceId: 'trace-b',
         status: 'needs-review',
+        tags: ['a', 'b'],
         organizationId: 'org-2',
         projectId: 'proj-2',
       });
@@ -885,6 +889,15 @@ describe('Dataset', () => {
       const { results } = await ds.listExperimentResults({ experimentId, status: 'reviewed' });
       expect(results).toHaveLength(1);
       expect(results[0]!.status).toBe('reviewed');
+    });
+
+    it('filters by tags (all must match)', async () => {
+      const both = await ds.listExperimentResults({ experimentId, tags: ['a', 'b'] });
+      expect(both.results.map(r => r.itemId)).toEqual(['item-2']);
+      expect(both.pagination.total).toBe(1);
+
+      const onlyA = await ds.listExperimentResults({ experimentId, tags: ['a'] });
+      expect(onlyA.results.map(r => r.itemId)).toEqual(['item-1', 'item-2']);
     });
 
     it('forwards tenancy filters', async () => {

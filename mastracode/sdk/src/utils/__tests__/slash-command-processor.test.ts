@@ -1,8 +1,9 @@
+import { promises as fs } from 'node:fs';
 import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { SlashCommandMetadata } from '../slash-command-loader.js';
 import { processSlashCommand } from '../slash-command-processor.js';
@@ -14,6 +15,10 @@ const createCommand = (template: string): SlashCommandMetadata => ({
   sourcePath: '/tmp/test.md',
 });
 
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
 describe('slash command processor', () => {
   it('replaces file references that resolve on disk', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'mastracode-command-processor-'));
@@ -22,6 +27,32 @@ describe('slash command processor', () => {
     const result = await processSlashCommand(createCommand('Read @context.md'), [], dir);
 
     expect(result).toBe('Read File context');
+  });
+
+  it('resolves relative Windows file references with win32 path semantics', async () => {
+    const readFile = vi.spyOn(fs, 'readFile').mockResolvedValue('Windows context');
+
+    const result = await processSlashCommand(
+      createCommand(String.raw`Read @src\context.md`),
+      [],
+      String.raw`C:\workspace\project`,
+    );
+
+    expect(readFile).toHaveBeenCalledWith(String.raw`C:\workspace\project\src\context.md`, 'utf-8');
+    expect(result).toBe('Read Windows context');
+  });
+
+  it('resolves absolute Windows file references without joining the working directory', async () => {
+    const readFile = vi.spyOn(fs, 'readFile').mockResolvedValue('Shared context');
+
+    const result = await processSlashCommand(
+      createCommand(String.raw`Read @D:\shared\context.md`),
+      [],
+      String.raw`C:\workspace\project`,
+    );
+
+    expect(readFile).toHaveBeenCalledWith(String.raw`D:\shared\context.md`, 'utf-8');
+    expect(result).toBe('Read Shared context');
   });
 
   it('leaves @ references intact when they do not resolve to files', async () => {

@@ -144,11 +144,7 @@ curl http://localhost:4111/hello
 
 When testing browser agents locally, you'll experience "browserception" — your MastraCode browser watching the project's agent browser.
 
-Ensure Playwright browsers are installed:
-
-```bash
-<pm> exec playwright install chromium
-```
+Stagehand launches an installed local Chromium browser, such as Google Chrome. Verify one is available on the machine; no separate Playwright browser install is required.
 
 ## Notes
 

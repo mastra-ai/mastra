@@ -50,9 +50,11 @@ function createMockEntrypoint() {
 
 describe('Mastra `environment` config', () => {
   const originalNodeEnv = process.env.NODE_ENV;
+  const originalMastraDev = process.env.MASTRA_DEV;
 
   beforeEach(() => {
     delete process.env.NODE_ENV;
+    delete process.env.MASTRA_DEV;
   });
 
   afterEach(() => {
@@ -60,6 +62,11 @@ describe('Mastra `environment` config', () => {
       delete process.env.NODE_ENV;
     } else {
       process.env.NODE_ENV = originalNodeEnv;
+    }
+    if (originalMastraDev === undefined) {
+      delete process.env.MASTRA_DEV;
+    } else {
+      process.env.MASTRA_DEV = originalMastraDev;
     }
   });
 
@@ -83,6 +90,26 @@ describe('Mastra `environment` config', () => {
     process.env.NODE_ENV = 'production';
     const mastra = new Mastra({ logger: false, environment: 'staging' });
     expect(mastra.getEnvironment()).toBe('staging');
+  });
+
+  it('resolves to development for `mastra dev` runs even though the dev server sets NODE_ENV=production', () => {
+    process.env.MASTRA_DEV = 'true';
+    process.env.NODE_ENV = 'production';
+    const mastra = new Mastra({ logger: false });
+    expect(mastra.getEnvironment()).toBe('development');
+  });
+
+  it('prefers explicit environment over the MASTRA_DEV signal', () => {
+    process.env.MASTRA_DEV = 'true';
+    const mastra = new Mastra({ logger: false, environment: 'staging' });
+    expect(mastra.getEnvironment()).toBe('staging');
+  });
+
+  it('ignores MASTRA_DEV values other than "true"', () => {
+    process.env.MASTRA_DEV = 'false';
+    process.env.NODE_ENV = 'production';
+    const mastra = new Mastra({ logger: false });
+    expect(mastra.getEnvironment()).toBe('production');
   });
 
   it('propagates the resolved environment to observability via setMastraContext', () => {

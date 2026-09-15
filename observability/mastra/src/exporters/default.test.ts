@@ -267,6 +267,32 @@ describe('DefaultExporter', () => {
           ]),
         });
       });
+
+      it('should only remove parent IDs that refer to spans outside the stored trace', async () => {
+        mockObservabilityStore.observabilityStrategy = {
+          preferred: 'realtime',
+          supported: ['realtime', 'batch-with-updates', 'insert-only'],
+        };
+        const exporter = new DefaultExporter({ strategy: 'realtime', logger: mockLogger });
+        await exporter.init({ mastra: mockMastra });
+
+        const externalRootEvent = createMockEvent(TracingEventType.SPAN_STARTED, 'trace-1', 'external-root');
+        externalRootEvent.exportedSpan.externalParentSpanId = 'external-parent';
+
+        const resumedRootEvent = createMockEvent(TracingEventType.SPAN_STARTED, 'trace-1', 'resumed-root');
+        resumedRootEvent.exportedSpan.parentSpanId = 'suspended-span';
+
+        await exporter.exportTracingEvent(externalRootEvent);
+        await exporter.exportTracingEvent(resumedRootEvent);
+
+        const records = mockObservabilityStore.batchCreateSpans.mock.calls.flatMap((call: any) => call[0].records);
+        expect(records).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ spanId: 'external-root', parentSpanId: null }),
+            expect.objectContaining({ spanId: 'resumed-root', parentSpanId: 'suspended-span' }),
+          ]),
+        );
+      });
     });
 
     describe('Batch-with-updates strategy', () => {

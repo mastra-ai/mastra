@@ -29,6 +29,7 @@ import { getTtlProps } from '../../ttl';
 import { deleteTableData } from '../utils';
 
 export class MemoryStorageDynamoDB extends MemoryStorage {
+  override readonly supportsPartialThreadUpdate = true;
   private service: Service<Record<string, any>>;
   private ttlConfig?: DynamoDBTtlConfig;
 
@@ -214,8 +215,8 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     metadata,
   }: {
     id: string;
-    title: string;
-    metadata: Record<string, unknown>;
+    title?: string;
+    metadata?: Record<string, unknown>;
   }): Promise<StorageThreadType> {
     this.logger.debug('Updating thread', { threadId: id });
 

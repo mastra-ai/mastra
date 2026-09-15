@@ -37,7 +37,6 @@ const noopPaths = {
   workflowRunLink: () => '',
   datasetLink: () => '',
   datasetItemLink: () => '',
-  datasetExperimentLink: () => '',
   experimentLink: () => '',
 } as never;
 

@@ -87,6 +87,42 @@ export async function createServerProject({
   return body.project;
 }
 
+export async function ensureProductionEnvironment({
+  token,
+  orgId,
+  projectId,
+  region,
+}: {
+  token: string;
+  orgId: string;
+  projectId: string;
+  region: ProjectRegion;
+}): Promise<string> {
+  const url = `${MASTRA_PLATFORM_API_URL}/v1/projects/${encodeURIComponent(projectId)}/environments`;
+  const headers = authHeaders(token, orgId);
+  const res = await platformFetch(url, { headers });
+  if (!res.ok) {
+    throw new PlatformApiError(res.status, `Failed to list environments — ${await extractError(res)}`);
+  }
+  const body = (await res.json()) as { environments: { id: string; type: string }[] };
+  const production = body.environments.find(environment => environment.type === 'production');
+  if (production) return production.id;
+
+  const created = await platformFetch(url, {
+    method: 'POST',
+    headers: { ...headers, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: 'production', type: 'production', region }),
+  });
+  if (!created.ok) {
+    throw new PlatformApiError(
+      created.status,
+      `Failed to create production environment — ${await extractError(created)}`,
+    );
+  }
+  const result = (await created.json()) as { environment: { id: string } };
+  return result.environment.id;
+}
+
 /**
  * POST /v1/auth/tokens — mint an `sk_` WorkOS org API key.
  * Returns the plaintext secret; the platform never returns it again.

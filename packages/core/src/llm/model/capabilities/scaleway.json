@@ -9,6 +9,7 @@
     "qwen3.6-35b-a3b"
   ],
   "temperature": [
+    "deepseek-v4-flash-0731",
     "gemma-4-26b-a4b-it",
     "glm-5.2",
     "gpt-oss-120b",
@@ -22,6 +23,7 @@
     "qwen3.6-35b-a3b"
   ],
   "structuredOutput": [
+    "deepseek-v4-flash-0731",
     "gemma-4-26b-a4b-it",
     "glm-5.2",
     "mistral-medium-3.5-128b",

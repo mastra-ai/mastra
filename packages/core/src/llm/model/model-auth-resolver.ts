@@ -1,4 +1,5 @@
 import type { GatewayAuthRequest, GatewayAuthResult, MastraModelGatewayInterface } from './gateways/base.js';
+import { hasAuthCredentials } from './gateways/gateway-helpers.js';
 
 export type ResolveModelAuthArgs = {
   gateway: MastraModelGatewayInterface;
@@ -17,12 +18,6 @@ function mergeAuthHeaders(auth: GatewayAuthResult | undefined): GatewayAuthResul
   };
 }
 
-function hasExplicitAuth(explicit?: Pick<GatewayAuthResult, 'apiKey' | 'headers' | 'bearerToken'>): boolean {
-  return Boolean(
-    explicit?.apiKey || explicit?.bearerToken || (explicit?.headers && Object.keys(explicit.headers).length > 0),
-  );
-}
-
 /**
  * @deprecated This function is deprecated and will be removed in a future release.
  * Auth resolution is now handled internally by {@link ModelRouterLanguageModel}.
@@ -33,12 +28,12 @@ export async function resolveModelAuth({
   request,
   explicit,
 }: ResolveModelAuthArgs): Promise<GatewayAuthResult> {
-  if (hasExplicitAuth(explicit)) {
+  if (hasAuthCredentials(explicit)) {
     return mergeAuthHeaders({ ...explicit, source: 'explicit' }) ?? { source: 'explicit' };
   }
 
   const gatewayAuth = mergeAuthHeaders(await gateway.resolveAuth?.(request));
-  if (gatewayAuth?.apiKey || gatewayAuth?.headers || gatewayAuth?.bearerToken) {
+  if (hasAuthCredentials(gatewayAuth)) {
     return { ...gatewayAuth, source: gatewayAuth.source ?? 'gateway' };
   }
 

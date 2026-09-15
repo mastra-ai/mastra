@@ -2,7 +2,7 @@ import { globSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { loadConfigFromFile } from 'vite';
 import type { TestProjectConfiguration, UserWorkspaceConfig } from 'vitest/config';
-import { defineConfig } from 'vitest/config';
+import { configDefaults, defineConfig } from 'vitest/config';
 
 // Directories to exclude from project discovery
 const EXCLUDED_DIRS = new Set([
@@ -10,6 +10,8 @@ const EXCLUDED_DIRS = new Set([
   'packages/_types-builder',
   'packages/_vendored',
   'server-adapters/_test-utils',
+  'browser/_test-utils',
+  'workspaces/_test-utils',
   'observability/_examples',
 ]);
 
@@ -26,6 +28,12 @@ const PROJECT_GLOBS = [
   'pubsub/*/vitest.config.ts',
   'signals/*/vitest.config.ts',
   'workflows/*/vitest.config.ts',
+  'code-mode/*/vitest.config.ts',
+  'integrations/*/vitest.config.ts',
+  'channels/*/vitest.config.ts',
+  'browser/*/vitest.config.ts',
+  'workspaces/*/vitest.config.ts',
+  'agent-sdks/*/vitest.config.ts',
   'mastracode/vitest.config.ts',
 ];
 
@@ -45,6 +53,19 @@ async function discoverProjects(): Promise<TestProjectConfiguration[]> {
 
     // Skip excluded directories
     if (EXCLUDED_DIRS.has(projectDir)) {
+      continue;
+    }
+
+    // Match workspace test:unit scripts; integration suites keep their package-local CI jobs.
+    if (projectDir.startsWith('workspaces/')) {
+      projects.push({
+        extends: resolve(configPath),
+        test: {
+          name: `unit:${projectDir}`,
+          root: resolve(projectDir),
+          exclude: [...configDefaults.exclude, '**/*.integration.test.ts'],
+        },
+      });
       continue;
     }
 

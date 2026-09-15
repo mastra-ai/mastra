@@ -1,4 +1,5 @@
 import type { MessageList } from '@mastra/core/agent';
+import type { MemoryRunState } from '@mastra/core/memory';
 
 import type { MemoryContextProvider } from '../processor';
 
@@ -7,16 +8,20 @@ export async function loadMemoryContextMessages({
   messageList,
   threadId,
   resourceId,
+  runState,
 }: {
   memory: MemoryContextProvider;
   messageList: MessageList;
   threadId: string;
   resourceId?: string;
+  runState?: MemoryRunState;
 }): Promise<Awaited<ReturnType<MemoryContextProvider['getContext']>>> {
-  const ctx = await memory.getContext({ threadId, resourceId });
+  const ctx = await memory.getContext({ threadId, resourceId, runState });
 
+  // Historical context must not overwrite newer messages already supplied to this run.
+  const existingIds = new Set(messageList.get.all.db().map(message => message.id));
   for (const msg of ctx.messages) {
-    if (msg.role !== 'system') {
+    if (msg.role !== 'system' && !existingIds.has(msg.id)) {
       messageList.add(msg, 'memory');
     }
   }

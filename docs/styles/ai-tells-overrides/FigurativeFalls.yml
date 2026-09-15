@@ -1,0 +1,16 @@
+extends: existence
+message: "Replace '%s' with the specific failure, limitation, or outcome."
+level: error
+nonword: true
+ignorecase: true
+tokens:
+  - '\bf(?:all(?:s|ing)?|ell|allen) (?:short|flat|apart|to pieces)\b'
+  - '\bfall(?:s|ing)? into place\b'
+  - '\bf(?:all(?:s|ing)?|ell|allen) into line\b'
+  - '\bf(?:all(?:s|ing)?|ell|allen) into the (?:trap|habit|pattern) of\b'
+  - '\b(?:responsibility|responsibilities|the task|the job|the duty|the burden|the onus|the decision|the choice|the call|the blame|the work|it all) f(?:alls?|ell) (?:to|on|upon)\b'
+  - '\bf(?:all(?:s|ing)?|ell|allen) (?:by the wayside|through the cracks|on deaf ears)\b'
+  - '\bf(?:all(?:s|ing)?|ell|allen) out of (?:favor|favour|use|fashion|style)\b'
+  - '\bf(?:all(?:s|ing)?|ell|allen) off (?:the|a) (?:radar|cliff|map|table|rails)\b'
+  - '\bf(?:all(?:s|ing)?|ell|allen) into (?:disrepair|disuse|obscurity|oblivion|neglect)\b'
+  - '\bf(?:all(?:s|ing)?|ell|allen) (?:victim|prey) to\b'

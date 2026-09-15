@@ -1,5 +1,7 @@
 import { z } from 'zod';
 import { DEFAULT_CONFIG_DIR, DEFAULT_OM_MODEL_ID } from './constants.js';
+import { THINKING_LEVEL_VALUES } from './thinking.js';
+import type { ThinkingLevelSetting } from './thinking.js';
 
 export type PermissionPolicy = 'allow' | 'ask' | 'deny';
 
@@ -18,15 +20,17 @@ export interface MastraCodeState {
   projectName?: string;
   /** Factory project that owns this session. */
   factoryProjectId?: string;
+  /** Authoritative organization id seeded by factory at session construction. */
+  factoryOrgId?: string;
+  /**
+   * Factory owns this session but could not resolve its organization. Knowledge
+   * capture refuses rather than filing under a substituted identity; without the
+   * marker a projectless factory session is indistinguishable from a local one.
+   */
+  factoryOrgUnresolved?: boolean;
   /** Linked repository used by this session when source-control execution is required. */
   projectRepositoryId?: string;
-  /** Persisted sandbox id for reattaching the project's cloud workspace. */
-  sandboxId?: string;
-  /** Path inside the sandbox the repo is cloned into. */
-  sandboxWorkdir?: string;
-  /** Active git worktree path inside the sandbox for the current unit of work. */
-  worktreePath?: string;
-  /** Active feature branch checked out in the worktree. */
+  /** Active feature branch checked out in the session workdir. */
   branch?: string;
   /**
    * The session's checkout contains third-party content (e.g. a PR branch
@@ -63,7 +67,7 @@ export interface MastraCodeState {
    * resolved at request time from settings (`models.modeThinkingDefaults[mode]`
    * falling back to `preferences.thinkingLevel`).
    */
-  thinkingLevel?: 'off' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+  thinkingLevel?: ThinkingLevelSetting;
   yolo: boolean;
   permissionRules: {
     categories: Record<string, PermissionPolicy>;
@@ -90,10 +94,7 @@ export interface MastraCodeState {
     enabled: boolean;
     provider: 'stagehand' | 'agent-browser';
     headless?: boolean;
-    viewport?: {
-      width: number;
-      height: number;
-    };
+    viewport?: { width: number; height: number } | 'window';
     cdpUrl?: string;
     stagehand?: {
       env: 'LOCAL' | 'BROWSERBASE';
@@ -114,10 +115,9 @@ export const stateSchema = z.object({
   projectPath: z.string().optional(),
   projectName: z.string().optional(),
   factoryProjectId: z.string().optional(),
+  factoryOrgId: z.string().optional(),
+  factoryOrgUnresolved: z.boolean().optional(),
   projectRepositoryId: z.string().optional(),
-  sandboxId: z.string().optional(),
-  sandboxWorkdir: z.string().optional(),
-  worktreePath: z.string().optional(),
   branch: z.string().optional(),
   // Session operates on an untrusted checkout — suppress AGENTS.md ingestion.
   untrustedCheckout: z.boolean().optional(),
@@ -148,7 +148,7 @@ export const stateSchema = z.object({
   // Thinking level for model reasoning effort. Optional: absent means "no
   // session override" — the effective level is resolved from settings
   // (per-mode defaults, then the global preference) at request time.
-  thinkingLevel: z.enum(['off', 'low', 'medium', 'high', 'xhigh', 'max']).optional(),
+  thinkingLevel: z.preprocess(value => (value === null ? undefined : value), z.enum(THINKING_LEVEL_VALUES).optional()),
   // YOLO mode — auto-approve all tool calls
   yolo: z.boolean().default(false),
   // Permission rules — per-category and per-tool approval policies
@@ -195,10 +195,13 @@ export const stateSchema = z.object({
       provider: z.enum(['stagehand', 'agent-browser']),
       headless: z.boolean().optional(),
       viewport: z
-        .object({
-          width: z.number(),
-          height: z.number(),
-        })
+        .union([
+          z.object({
+            width: z.number(),
+            height: z.number(),
+          }),
+          z.literal('window'),
+        ])
         .optional(),
       cdpUrl: z.string().optional(),
       stagehand: z

@@ -101,6 +101,9 @@ export class EventedExecutionEngine extends ExecutionEngine {
       resolveResult = resolve;
       rejectResult = reject;
     });
+    // Let Mastra.shutdown() drain this run before it tears down the pubsub
+    // subscriptions the run needs to make progress.
+    const releaseTracking = this.mastra?.__trackEventedRun(resultPromise) ?? (() => {});
 
     const finishCb = async (event: Event, ack?: () => Promise<void>) => {
       if (event.runId !== params.runId) {
@@ -126,6 +129,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
     try {
       await pubsub.subscribe('workflows-finish', finishCb);
     } catch (err) {
+      releaseTracking();
       this.mastra?.getLogger()?.error('Failed to subscribe to workflows-finish:', err);
       throw err;
     }
@@ -220,11 +224,17 @@ export class EventedExecutionEngine extends ExecutionEngine {
       // Clean up subscription and reject the promise on error
       await pubsub.unsubscribe('workflows-finish', finishCb);
       rejectResult(err);
+      releaseTracking();
       throw err;
     }
 
     // Wait for workflow to complete
-    const resultData: any = await resultPromise;
+    let resultData: any;
+    try {
+      resultData = await resultPromise;
+    } finally {
+      releaseTracking();
+    }
 
     // Extract state from resultData (stored in stepResults.__state)
     const finalState = resultData.state ?? resultData.stepResults?.__state ?? params.initialState ?? {};

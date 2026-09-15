@@ -12,6 +12,9 @@ import { agent } from './agents/agent';
 import { startScheduleTool, stopScheduleTool } from './tools/schedule-tools';
 
 export const mastra = new Mastra({
+  bundler: {
+    externals: ['@duckdb/node-bindings'],
+  },
   agents: { agent },
   tools: { startScheduleTool, stopScheduleTool },
   storage: new MastraCompositeStore({

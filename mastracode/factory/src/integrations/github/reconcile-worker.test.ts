@@ -1,16 +1,16 @@
 import type { WorkerDeps } from '@mastra/core/worker';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { IssueReconcileSummary } from '../issue-reconciler.js';
+import type { GithubIssueReconcileSummary } from './issue-reconciler.js';
 import { GithubReconcileWorker } from './reconcile-worker.js';
 import type { GithubReconcileRepositorySource } from './reconcile-worker.js';
 import type { ReconcileRepository, ReconcileSweepSummary } from './rules.js';
 
-const EMPTY_ISSUE_SUMMARY: IssueReconcileSummary = {
-  projects: 0,
+const EMPTY_ISSUE_SUMMARY: GithubIssueReconcileSummary = {
+  repositories: 0,
   checked: 0,
   updated: 0,
-  missing: 0,
+  closed: 0,
   failed: 0,
   errors: [],
 };
@@ -20,8 +20,6 @@ const EMPTY_SUMMARY: ReconcileSweepSummary = {
   checked: 1,
   merged: 0,
   closed: 0,
-  issuesChecked: 0,
-  issuesClosed: 0,
   failed: 0,
   errors: [],
 };
@@ -153,6 +151,46 @@ describe('GithubReconcileWorker', () => {
     expect(worker.isRunning).toBe(false);
   });
 
+  it('runs issue reconciliation without a pull-request reconciler', async () => {
+    const reconcileIssues = vi.fn(async () => EMPTY_ISSUE_SUMMARY);
+    const worker = new GithubReconcileWorker({
+      reconcileIssues,
+      sourceControl: repositorySource(),
+      issueIntervalMs: 60_000,
+    });
+    await worker.init(workerDeps());
+
+    await worker.start();
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(60_000);
+    await worker.stop();
+
+    expect(reconcileIssues).toHaveBeenCalledTimes(2);
+  });
+
+  it('runs pull-request and issue reconciliation on independent cadences', async () => {
+    const reconcile = vi.fn(async () => EMPTY_SUMMARY);
+    const reconcileIssues = vi.fn(async () => EMPTY_ISSUE_SUMMARY);
+    const worker = new GithubReconcileWorker({
+      reconcile,
+      reconcileIssues,
+      sourceControl: repositorySource(),
+      intervalMs: 60_000,
+      issueIntervalMs: 20_000,
+    });
+    await worker.init(workerDeps());
+
+    await worker.start();
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(20_000);
+    await vi.advanceTimersByTimeAsync(20_000);
+    await vi.advanceTimersByTimeAsync(20_000);
+    await worker.stop();
+
+    expect(reconcile).toHaveBeenCalledTimes(2);
+    expect(reconcileIssues).toHaveBeenCalledTimes(4);
+  });
+
   it('folds the issue reconcile into the same tick and passes the same targets', async () => {
     const reconcile = vi.fn(async () => EMPTY_SUMMARY);
     const reconcileIssues = vi.fn(async () => EMPTY_ISSUE_SUMMARY);
@@ -172,8 +210,7 @@ describe('GithubReconcileWorker', () => {
     expect(reconcile).toHaveBeenCalledTimes(1);
     expect(reconcileIssues).toHaveBeenCalledTimes(1);
     const targets = reconcile.mock.calls[0]![0];
-    const scope = reconcileIssues.mock.calls[0]![0];
-    expect(scope.scopes).toBe(targets);
+    expect(reconcileIssues.mock.calls[0]![0]).toBe(targets);
     // Same lease covers both writers of card state.
     expect(releaseLease).toHaveBeenCalledTimes(1);
   });

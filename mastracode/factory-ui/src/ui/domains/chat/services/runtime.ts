@@ -1,30 +1,23 @@
-import type { AgentControllerEvent, AgentControllerOMProgress } from '@mastra/client-js';
+import type { AgentControllerEvent, AgentControllerSessionState } from '@mastra/client-js';
 import { isKnownAgentControllerEvent } from '@mastra/client-js';
+import type { MastraDBMessage, TokenUsage } from '@mastra/core/agent-controller';
 
-export interface UsageSnapshot {
-  promptTokens?: number;
-  completionTokens?: number;
-  totalTokens?: number;
-  reasoningTokens?: number;
-  [key: string]: unknown;
-}
+import type { OMBudgets } from './om';
 
+export type SessionStateSnapshot = Pick<AgentControllerSessionState, 'threadId' | 'omProgress' | 'tokenUsage'>;
 export type OMPhase = 'idle' | 'observing' | 'reflecting' | 'buffering';
-
-export interface GoalSnapshot {
-  objective: string;
-  status: 'active' | 'paused' | 'done';
-  iteration: number;
-  maxRuns: number;
-  passed: boolean;
-  reason?: string;
-}
+export type GoalSnapshot = Pick<
+  Extract<AgentControllerEvent, { type: 'goal_evaluation' }>['payload'],
+  'objective' | 'status' | 'iteration' | 'maxRuns' | 'passed' | 'reason'
+>;
 
 export interface ChatRuntimeState {
-  usage?: UsageSnapshot;
+  usage?: TokenUsage;
   followUpCount: number;
-  omProgress?: AgentControllerOMProgress;
+  omProgress?: OMBudgets;
   omPhase: OMPhase;
+  bufferingMessages: boolean;
+  bufferingObservations: boolean;
   goal?: GoalSnapshot;
   tokensPerSec: number;
   _decodeStartedAt: number;
@@ -33,11 +26,24 @@ export interface ChatRuntimeState {
 export const initialChatRuntime: ChatRuntimeState = {
   followUpCount: 0,
   omPhase: 'idle',
+  bufferingMessages: false,
+  bufferingObservations: false,
   tokensPerSec: 0,
   _decodeStartedAt: 0,
 };
 
-export function runtimeReducer(state: ChatRuntimeState, event: AgentControllerEvent): ChatRuntimeState {
+type RuntimeAction =
+  | { type: 'event'; event: AgentControllerEvent }
+  | { type: 'reset'; threadId?: string; state?: SessionStateSnapshot };
+
+export function runtimeReducer(state: ChatRuntimeState, action: RuntimeAction): ChatRuntimeState {
+  if (action.type === 'reset') {
+    const matchingSnapshot =
+      action.threadId !== undefined && action.state?.threadId === action.threadId ? action.state : undefined;
+    return { ...initialChatRuntime, usage: matchingSnapshot?.tokenUsage, omProgress: matchingSnapshot?.omProgress };
+  }
+
+  const event = action.event;
   if (!isKnownAgentControllerEvent(event)) return state;
 
   switch (event.type) {
@@ -50,8 +56,8 @@ export function runtimeReducer(state: ChatRuntimeState, event: AgentControllerEv
       if (!hasAssistantText(event.message) || state._decodeStartedAt > 0) return state;
       return { ...state, _decodeStartedAt: Date.now() };
     case 'usage_update': {
-      const usage = event.usage as UsageSnapshot;
-      const stepTokens = (usage.completionTokens ?? 0) + (usage.reasoningTokens ?? 0);
+      const usage = event.usage;
+      const stepTokens = usage.completionTokens + (usage.reasoningTokens ?? 0);
       let tokensPerSec = state.tokensPerSec;
       if (state._decodeStartedAt > 0 && stepTokens > 0) {
         const decodeSeconds = Math.max((Date.now() - state._decodeStartedAt) / 1000, 0.001);
@@ -67,53 +73,33 @@ export function runtimeReducer(state: ChatRuntimeState, event: AgentControllerEv
       return {
         ...state,
         omProgress: event.displayState.omProgress ?? state.omProgress,
-        usage: (event.displayState.tokenUsage as UsageSnapshot | undefined) ?? state.usage,
+        usage: event.displayState.tokenUsage ?? state.usage,
+        bufferingMessages: event.displayState.bufferingMessages ?? false,
+        bufferingObservations: event.displayState.bufferingObservations ?? false,
       };
     case 'goal_evaluation':
-      return {
-        ...state,
-        goal: {
-          objective: event.payload.objective,
-          status: event.payload.status,
-          iteration: event.payload.iteration,
-          maxRuns: event.payload.maxRuns,
-          passed: event.payload.passed,
-          reason: event.payload.reason,
-        },
-      };
+      return { ...state, goal: event.payload };
     case 'follow_up_queued':
       return { ...state, followUpCount: event.count };
     case 'om_observation_start':
       return { ...state, omPhase: 'observing' };
+    case 'om_reflection_start':
+      return { ...state, omPhase: 'reflecting' };
+    case 'om_buffering_start':
+      return { ...state, omPhase: 'buffering' };
     case 'om_observation_end':
     case 'om_observation_failed':
     case 'om_reflection_end':
     case 'om_reflection_failed':
     case 'om_buffering_end':
     case 'om_buffering_failed':
-      return { ...state, omPhase: 'idle' };
-    case 'om_reflection_start':
-      return { ...state, omPhase: 'reflecting' };
-    case 'om_buffering_start':
-      return { ...state, omPhase: 'buffering' };
     case 'om_activation':
-      return event.enabled ? state : { ...state, omPhase: 'idle' };
+      return { ...state, omPhase: 'idle' };
     default:
       return state;
   }
 }
 
-interface RuntimeMessagePart {
-  type: string;
-  text?: string;
-}
-
-interface RuntimeMessage {
-  role: string;
-  content: RuntimeMessagePart[] | { parts: RuntimeMessagePart[] };
-}
-
-function hasAssistantText(message: RuntimeMessage) {
-  const parts = Array.isArray(message.content) ? message.content : message.content.parts;
-  return message.role === 'assistant' && parts.some(part => part.type === 'text' && part.text?.trim());
+function hasAssistantText(message: MastraDBMessage) {
+  return message.role === 'assistant' && message.content.parts.some(part => part.type === 'text' && part.text.trim());
 }

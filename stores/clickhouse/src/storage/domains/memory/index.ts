@@ -83,6 +83,7 @@ function appendClickhouseMessageMetadataFilter(
 }
 
 export class MemoryStorageClickhouse extends MemoryStorage {
+  override readonly supportsPartialThreadUpdate = true;
   protected client: ClickHouseClient;
   #db: ClickhouseDB;
   constructor(config: ClickhouseDomainConfig) {
@@ -880,8 +881,8 @@ export class MemoryStorageClickhouse extends MemoryStorage {
     metadata,
   }: {
     id: string;
-    title: string;
-    metadata: Record<string, unknown>;
+    title?: string;
+    metadata?: Record<string, unknown>;
   }): Promise<StorageThreadType> {
     try {
       // First get the existing thread to merge metadata
@@ -898,7 +899,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
 
       const updatedThread = {
         ...existingThread,
-        title,
+        title: title ?? existingThread.title,
         metadata: mergedMetadata,
         updatedAt: new Date(),
       };
@@ -930,7 +931,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
           id: createStorageErrorId('CLICKHOUSE', 'UPDATE_THREAD', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { threadId: id, title },
+          details: { threadId: id, title: title ?? null },
         },
         error,
       );

@@ -1,31 +1,36 @@
-import { Txt } from '@mastra/playground-ui/components/Txt';
+import { SettingsDescription, SettingsGroup, SettingsHeader, SettingsTitle } from '@mastra/playground-ui/new/settings';
 import type { ReactNode } from 'react';
+import { ScopeBadge, ScopeSwitch } from './SettingsScope';
+import type { ScopeControl, SettingsScope } from './SettingsScope';
 
 export function SettingsSubsection({
+  id,
   title,
   description,
+  scope,
   action,
   children,
 }: {
+  id?: string;
   title: string;
   description?: string;
+  scope: SettingsScope | ScopeControl;
   action?: ReactNode;
   children?: ReactNode;
 }) {
   return (
-    <section className="flex flex-col gap-2">
-      <div className="flex flex-col gap-1">
-        <Txt as="h2" variant="ui-sm" className="text-icon6 leading-ui-md font-semibold">
-          {title}
-        </Txt>
-        {description && (
-          <Txt as="p" variant="ui-sm" className="text-icon3">
-            {description}
-          </Txt>
-        )}
-        {action && <div className="mt-1 flex">{action}</div>}
-      </div>
+    <SettingsGroup id={id}>
+      <SettingsHeader action={action}>
+        <SettingsTitle accessory={<ScopeIndicator scope={scope} />}>{title}</SettingsTitle>
+        {description && <SettingsDescription>{description}</SettingsDescription>}
+      </SettingsHeader>
       {children}
-    </section>
+    </SettingsGroup>
   );
+}
+
+function ScopeIndicator({ scope }: { scope: SettingsScope | ScopeControl }) {
+  if (typeof scope === 'string') return <ScopeBadge scope={scope} />;
+  if (scope.options.length > 1) return <ScopeSwitch {...scope} />;
+  return <ScopeBadge scope={scope.value} />;
 }

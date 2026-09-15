@@ -379,8 +379,23 @@ describe('Mock OM Agent Integration', () => {
     // OM processor MUST emit progress, start, and end markers
     expect(omParts.length).toBeGreaterThan(0);
 
-    const hasProgress = omParts.some(p => p.type === 'data-om-status');
-    expect(hasProgress).toBe(true);
+    const statusParts = omParts.filter(p => p.type === 'data-om-status');
+    expect(statusParts.length).toBeGreaterThan(0);
+    expect(statusParts.every(p => p.transient === true)).toBe(true);
+
+    const statusMemoryStore = await store.getStore('memory');
+    const { messages } = await statusMemoryStore!.listMessages({
+      threadId: 'test-thread-parts',
+      perPage: false,
+    });
+    const persistedStatusOnlyMessages = messages.filter(message => {
+      if (message.role !== 'assistant' || typeof message.content !== 'object' || !('parts' in message.content)) {
+        return false;
+      }
+      const parts = message.content.parts ?? [];
+      return parts.length > 0 && parts.every((part: any) => part.type === 'data-om-status');
+    });
+    expect(persistedStatusOnlyMessages).toHaveLength(0);
 
     // Observation MUST be triggered (threshold is 50 tokens, response is ~100 tokens)
     const hasStart = omParts.some(p => p.type === 'data-om-observation-start');
@@ -524,7 +539,6 @@ describe('Mock OM Agent Integration', () => {
     const memoryOpts = { thread: threadId, resource: resourceId };
 
     // First generate — creates initial observations (no boundary yet)
-    const beforeFirstCall = new Date();
     await boundaryAgent.generate('Hello, I need help with something important.', { memory: memoryOpts });
 
     const memoryStore = await store.getStore('memory');
@@ -539,7 +553,6 @@ describe('Mock OM Agent Integration', () => {
 
     // Second generate — appends observations with a boundary
     await boundaryAgent.generate('Can you also help me with another task?', { memory: memoryOpts });
-    const afterSecondCall = new Date();
 
     const secondRecord = await memoryStore!.getObservationalMemory(threadId, resourceId);
     expect(secondRecord).toBeTruthy();
@@ -553,13 +566,16 @@ describe('Mock OM Agent Integration', () => {
     const boundaryDate = new Date(boundaryMatch![1]!);
     expect(boundaryDate.getTime()).not.toBeNaN();
 
-    // The boundary date should be the max createdAt of the messages observed in the second cycle.
-    // Those messages were created between beforeFirstCall and afterSecondCall (wall-clock).
-    // Since getMaxMessageTimestamp picks the latest createdAt from the observed messages,
-    // and messages are saved at approximately wall-clock time, the boundary date should
-    // fall within this window.
-    expect(boundaryDate.getTime()).toBeGreaterThanOrEqual(beforeFirstCall.getTime());
-    expect(boundaryDate.getTime()).toBeLessThanOrEqual(afterSecondCall.getTime());
+    // The boundary timestamp comes from observed messages, whose persisted timestamps may be
+    // slightly ahead of wall-clock time when monotonic ordering adds an offset.
+    const persistedMessages = await memoryStore!.listMessages({
+      threadId,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+      perPage: false,
+    });
+    const persistedTimestamps = persistedMessages.messages.map(message => message.createdAt.getTime());
+    expect(boundaryDate.getTime()).toBeGreaterThanOrEqual(Math.min(...persistedTimestamps));
+    expect(boundaryDate.getTime()).toBeLessThanOrEqual(Math.max(...persistedTimestamps));
 
     // The boundary date should also match the record's lastObservedAt
     // (which is set from getMaxMessageTimestamp + a small offset in some paths)

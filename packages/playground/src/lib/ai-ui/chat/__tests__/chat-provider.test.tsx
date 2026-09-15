@@ -1,22 +1,40 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
+import { useChatMessages, useChatRunning, useChatSend } from '@mastra/playground-ui/domains/chat/context/chat-context';
 import { useMemoryThreadMessages } from '@mastra/playground-ui/domains/memory/hooks/use-memory-thread-messages';
 import { useObservationalMemory } from '@mastra/playground-ui/domains/memory/hooks/use-observational-memory';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { useChatMessages, useChatRunning, useChatSend } from '../chat-context';
+import { MessageRow } from '../../messages/message-row';
 import { ChatProvider } from '../chat-provider';
-import { WorkingMemoryProvider } from '@/domains/agents/context/agent-working-memory-context';
+import {
+  acceptedToolRun,
+  emptyMcpServers,
+  toolRunChunks,
+  toolRunFinish,
+  unfinishedToolHistory,
+} from './fixtures/tool-run';
+import { workingMemoryFixture } from './fixtures/working-memory';
+import { WorkingMemoryProvider, useWorkingMemory } from '@/domains/agents/context/agent-working-memory-context';
 import { PlaygroundModelProvider, usePlaygroundModel } from '@/domains/agents/context/playground-model-context';
+import { useMemoryConfig } from '@/domains/memory/hooks';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
+
+const createDeferred = () => {
+  let resolve = () => {};
+  const promise = new Promise<void>(done => {
+    resolve = done;
+  });
+  return { promise, resolve };
+};
 
 type CapturedBody = Record<string, unknown>;
 
@@ -193,6 +211,102 @@ describe('ChatProvider', () => {
     // Default tests target the legacy stream-until-idle route, not signals.
     (window as Window & { MASTRA_AGENT_SIGNALS?: string }).MASTRA_AGENT_SIGNALS = 'false';
     server.resetHandlers();
+  });
+
+  describe('when a later run starts after an interrupted run', () => {
+    it.each(['legacy', 'signals'])(
+      'keeps historical calls incomplete while the new %s run progresses',
+      async transport => {
+        Object.assign(window, { MASTRA_AGENT_SIGNALS: transport === 'signals' ? 'true' : 'false' });
+        const streams: ReadableStreamDefaultController<Uint8Array>[] = [];
+        let requests = 0;
+        const streamResponse = () =>
+          new HttpResponse(
+            new ReadableStream<Uint8Array>({
+              start(controller) {
+                streams.push(controller);
+              },
+            }),
+            { headers: { 'content-type': 'text/event-stream' } },
+          );
+        server.use(
+          http.get(`${BASE_URL}/api/mcp/v0/servers`, () => HttpResponse.json(emptyMcpServers)),
+          http.post(`${BASE_URL}/api/agents/agent-1/stream`, () => {
+            requests++;
+            return streamResponse();
+          }),
+          http.post(`${BASE_URL}/api/agents/agent-1/threads/subscribe`, streamResponse),
+          http.post(`${BASE_URL}/api/agents/agent-1/send-message`, () => {
+            requests++;
+            return HttpResponse.json(acceptedToolRun(requests === 1 ? 'first-run' : 'second-run'));
+          }),
+          ...baseHandlers([]),
+        );
+        const Transcript = () => {
+          const messages = useChatMessages();
+          const send = useChatSend();
+          const { isRunning } = useChatRunning();
+          return (
+            <>
+              <button onClick={() => send({ message: 'Run tools' })}>Run tools</button>
+              <output>{isRunning ? 'Running' : 'Stopped'}</output>
+              {messages.map(message => (
+                <section key={message.id} aria-label={message.id}>
+                  <MessageRow message={message} />
+                </section>
+              ))}
+            </>
+          );
+        };
+        render(
+          <Wrapper>
+            <ChatProvider agentId="agent-1" threadId="thread-1" initialMessages={unfinishedToolHistory}>
+              <Transcript />
+            </ChatProvider>
+          </Wrapper>,
+        );
+        const emit = (index: number, chunks: ReturnType<typeof toolRunChunks>) =>
+          act(() => {
+            for (const chunk of chunks)
+              streams[index].enqueue(new TextEncoder().encode(`data: ${JSON.stringify(chunk)}\n\n`));
+          });
+        fireEvent.click(screen.getByRole('button', { name: 'Run tools' }));
+        await waitFor(() => expect(requests).toBe(1));
+        expect(within(screen.getByRole('region', { name: 'first-response' })).getByText('3 incomplete')).toBeTruthy();
+        await emit(0, toolRunChunks('first-run', 'first-response').slice(0, 1));
+        await screen.findByText('0/3');
+        await emit(0, toolRunChunks('first-run', 'first-response').slice(1));
+        await emit(0, [toolRunFinish('first-run')]);
+        if (transport === 'legacy') await act(() => streams[0].close());
+        await screen.findByText('Stopped');
+        const history = screen.getByRole('region', { name: 'first-response' });
+        fireEvent.click(within(history).getByRole('button', { name: /3 steps/ }));
+        expect(within(history).getAllByText('Incomplete')).toHaveLength(3);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Run tools' }));
+        await waitFor(() => expect(requests).toBe(2));
+        expect(within(history).getByText('3 incomplete')).toBeTruthy();
+        expect(within(history).getAllByText('Incomplete')).toHaveLength(3);
+        const currentStream = transport === 'legacy' ? 1 : 0;
+        await emit(currentStream, toolRunChunks('second-run', 'second-response'));
+        await waitFor(() =>
+          expect(within(screen.getByRole('region', { name: 'second-response' })).getByText('0/3')).toBeTruthy(),
+        );
+        await emit(currentStream, [
+          { type: 'step-start', runId: 'second-run', from: 'AGENT', payload: { messageId: 'rotated-response' } },
+          ...toolRunChunks('second-run', 'rotated-response').slice(1),
+        ]);
+        await waitFor(() =>
+          expect(within(screen.getByRole('region', { name: 'rotated-response' })).getByText('0/3')).toBeTruthy(),
+        );
+        expect(within(screen.getByRole('region', { name: 'second-response' })).getByText('0/3')).toBeTruthy();
+        expect(within(history).getByText('3 incomplete')).toBeTruthy();
+        expect(within(history).getAllByText('Incomplete')).toHaveLength(3);
+        expect(within(history).queryAllByRole('group', { busy: true })).toHaveLength(0);
+        await emit(currentStream, [toolRunFinish('second-run')]);
+        await act(() => streams[currentStream].close());
+      },
+    );
   });
 
   describe('when Studio selects a request-scoped model', () => {
@@ -726,25 +840,277 @@ describe('ChatProvider', () => {
       http.post(`${BASE_URL}/api/agents/agent-1/stream`, () => sseResponse()),
     );
 
-    await act(async () => {
+    const SendAfterPanelLoads = () => {
+      const om = useObservationalMemory('agent-1', 'thread-1');
+      const messages = useMemoryThreadMessages('thread-1');
+      const send = useChatSend();
+      return (
+        <button disabled={!om.isSuccess || !messages.isSuccess} onClick={() => send({ message: 'just finish' })}>
+          Finish after panel loads
+        </button>
+      );
+    };
+    render(
+      <Wrapper>
+        <ChatProvider agentId="agent-1" threadId="thread-1" initialMessages={[]}>
+          <SendAfterPanelLoads />
+        </ChatProvider>
+      </Wrapper>,
+    );
+
+    // A synchronous finish during mount can share the still-pending initial query.
+    // Settle those reads before testing that completion starts a new fetch.
+    const sendButton = screen.getByRole<HTMLButtonElement>('button', { name: 'Finish after panel loads' });
+    await waitFor(() => expect(sendButton.disabled).toBe(false));
+    fireEvent.click(sendButton);
+    await waitFor(() => {
+      expect(omRequests.length).toBeGreaterThan(1);
+      expect(messageRequests.length).toBeGreaterThan(1);
+    });
+    expect(messageRequests.every(url => url.includes('/threads/thread-1/messages'))).toBe(true);
+  });
+
+  // Adapted from Jaya Krishna's regression cases in #22270, with independent completion gates.
+  it.each(['observation-end', 'buffer-status'])(
+    'refreshes working memory after %s without the other completion path',
+    async boundary => {
+      const emitBoundary = createDeferred();
+      const finish = createDeferred();
+      let persisted = false;
+      let initialWorkingMemoryReads = 0;
+      const workingMemoryRequest = vi.fn(() =>
+        HttpResponse.json(workingMemoryFixture(persisted ? 'fresh working memory' : 'stale working memory')),
+      );
+      const bufferRequest = vi.fn(() => {
+        persisted = true;
+        return HttpResponse.json({ record: null });
+      });
+      const Probe = () => {
+        const { workingMemoryData } = useWorkingMemory();
+        const { data } = useMemoryConfig('agent-1');
+        return (
+          <>
+            <div data-testid="wm-value">{workingMemoryData}</div>
+            <div data-testid="wm-config">{String(data?.config?.observationalMemory)}</div>
+          </>
+        );
+      };
+      server.use(...baseHandlers([]));
+      server.use(
+        http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json({ config: { observationalMemory: true } })),
+        http.get(`${BASE_URL}/api/memory/threads/thread-1/working-memory`, workingMemoryRequest),
+        http.post(`${BASE_URL}/api/memory/observational-memory/buffer-status`, bufferRequest),
+        http.post(
+          `${BASE_URL}/api/agents/agent-1/stream`,
+          () =>
+            new HttpResponse(
+              new ReadableStream<Uint8Array>({
+                async start(controller) {
+                  const encoder = new TextEncoder();
+                  await emitBoundary.promise;
+                  if (boundary === 'observation-end') {
+                    controller.enqueue(
+                      encoder.encode(
+                        `data: ${JSON.stringify({ type: 'data-om-observation-start', data: { operationType: 'observation' } })}\n\n`,
+                      ),
+                    );
+                    persisted = true;
+                    controller.enqueue(
+                      encoder.encode(
+                        `data: ${JSON.stringify({ type: 'data-om-observation-end', data: { operationType: 'observation' } })}\n\n`,
+                      ),
+                    );
+                    await finish.promise;
+                  }
+                  controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'finish', payload: {} })}\n\n`));
+                  controller.close();
+                },
+              }),
+              { headers: { 'content-type': 'text/event-stream' } },
+            ),
+        ),
+      );
       render(
         <Wrapper>
           <ChatProvider agentId="agent-1" threadId="thread-1" initialMessages={[]}>
-            <PanelQueriesConsumer agentId="agent-1" threadId="thread-1" />
-            <SendOnMount text="just finish" />
+            <Probe />
+            <SendOnMount text="update working memory" />
           </ChatProvider>
         </Wrapper>,
       );
-    });
+      try {
+        await screen.findByText('stale working memory');
+        await waitFor(() => expect(screen.getByTestId('wm-config').textContent).toBe('true'));
+        initialWorkingMemoryReads = workingMemoryRequest.mock.calls.length;
+        emitBoundary.resolve();
+        await screen.findByText('fresh working memory');
+        expect(workingMemoryRequest).toHaveBeenCalledTimes(initialWorkingMemoryReads + 1);
+        expect(bufferRequest).toHaveBeenCalledTimes(boundary === 'buffer-status' ? 1 : 0);
+      } finally {
+        emitBoundary.resolve();
+        finish.resolve();
+        await waitFor(() => expect(bufferRequest).toHaveBeenCalledTimes(1));
+      }
+    },
+  );
 
-    // Wait for mount fetches and the stream to finish + the finish-path refetch.
-    await act(async () => {
-      await new Promise(resolve => setTimeout(resolve, 250));
+  it('waits for the signals run to finish before refreshing buffered working memory', async () => {
+    delete window.MASTRA_AGENT_SIGNALS;
+    const accepted = createDeferred();
+    const finish = createDeferred();
+    const persisted = createDeferred();
+    const close = createDeferred();
+    let runFinished = false;
+    let workingMemory = 'stale working memory';
+    const bufferRequest = vi.fn(async () => {
+      if (runFinished) await persisted.promise;
+      return HttpResponse.json({ record: null });
     });
-
-    // The finish-path refresh must have refetched the panel queries more than once.
-    expect(omRequests.length).toBeGreaterThan(1);
-    expect(messageRequests.length).toBeGreaterThan(1);
-    expect(messageRequests.every(url => url.includes('/threads/thread-1/messages'))).toBe(true);
+    const Probe = () => {
+      const send = useChatSend();
+      const { workingMemoryData } = useWorkingMemory();
+      const { data } = useMemoryConfig('agent-1');
+      return (
+        <>
+          <div>{workingMemoryData}</div>
+          <button
+            disabled={!data?.config?.observationalMemory}
+            onClick={async () => {
+              await send({ message: 'update working memory' });
+              accepted.resolve();
+            }}
+          >
+            Send signals message
+          </button>
+        </>
+      );
+    };
+    server.use(...baseHandlers([]));
+    server.use(
+      http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json({ config: { observationalMemory: true } })),
+      http.get(`${BASE_URL}/api/memory/threads/thread-1/working-memory`, () =>
+        HttpResponse.json(workingMemoryFixture(workingMemory)),
+      ),
+      http.post(`${BASE_URL}/api/memory/observational-memory/buffer-status`, bufferRequest),
+      http.post(`${BASE_URL}/api/agents/agent-1/send-message`, () => HttpResponse.json({ accepted: true })),
+      http.post(
+        `${BASE_URL}/api/agents/agent-1/threads/subscribe`,
+        () =>
+          new HttpResponse(
+            new ReadableStream<Uint8Array>({
+              async start(controller) {
+                await finish.promise;
+                runFinished = true;
+                controller.enqueue(
+                  new TextEncoder().encode(`data: ${JSON.stringify({ type: 'finish', payload: {} })}\n\n`),
+                );
+                await close.promise;
+                controller.close();
+              },
+            }),
+            { headers: { 'content-type': 'text/event-stream' } },
+          ),
+      ),
+    );
+    render(
+      <Wrapper>
+        <ChatProvider agentId="agent-1" threadId="thread-1" initialMessages={[]}>
+          <Probe />
+        </ChatProvider>
+      </Wrapper>,
+    );
+    try {
+      await screen.findByText('stale working memory');
+      const send = screen.getByRole('button', { name: 'Send signals message' });
+      await waitFor(() => expect(send.hasAttribute('disabled')).toBe(false));
+      fireEvent.click(send);
+      await act(async () => {
+        await accepted.promise;
+      });
+      expect(bufferRequest).not.toHaveBeenCalled();
+      finish.resolve();
+      await waitFor(() => expect(bufferRequest).toHaveBeenCalledTimes(1));
+      expect(screen.queryByText('fresh working memory')).toBeNull();
+      workingMemory = 'fresh working memory';
+      persisted.resolve();
+      await screen.findByText('fresh working memory');
+      expect(bufferRequest).toHaveBeenCalledTimes(1);
+    } finally {
+      finish.resolve();
+      persisted.resolve();
+      close.resolve();
+    }
   });
+
+  it.each(['success', 'error', 'before-newer', 'newer-error'])(
+    'keeps ownership with the newest working-memory refresh: %s',
+    async outcome => {
+      const releaseOlder = createDeferred();
+      const releaseNewer = createDeferred();
+      const newerStarted = createDeferred();
+      const olderStarted = createDeferred();
+      const olderCompleted = createDeferred();
+      const newerCompleted = createDeferred();
+      let requests = 0;
+      const Probe = () => {
+        const { workingMemoryData, isLoading, refetch: refreshWorkingMemory } = useWorkingMemory();
+        return (
+          <>
+            <div data-testid="wm-current">{workingMemoryData}</div>
+            <div data-testid="wm-loading">{String(isLoading)}</div>
+            <button onClick={() => void refreshWorkingMemory().then(olderCompleted.resolve)}>older refresh</button>
+            <button onClick={() => void refreshWorkingMemory().then(newerCompleted.resolve)}>newer refresh</button>
+          </>
+        );
+      };
+      server.use(...baseHandlers([]));
+      server.use(
+        http.get(`${BASE_URL}/api/memory/threads/thread-1/working-memory`, async () => {
+          requests++;
+          if (requests === 1) return HttpResponse.json(workingMemoryFixture('initial working memory'));
+          if (requests === 2) {
+            olderStarted.resolve();
+            await releaseOlder.promise;
+            if (outcome === 'error') return new HttpResponse(undefined, { status: 400 });
+            return HttpResponse.json(workingMemoryFixture('older working memory'));
+          }
+          newerStarted.resolve();
+          if (outcome === 'before-newer') await releaseNewer.promise;
+          if (outcome === 'newer-error') return new HttpResponse(undefined, { status: 400 });
+          return HttpResponse.json(workingMemoryFixture('newer working memory'));
+        }),
+      );
+      render(
+        <Wrapper>
+          <Probe />
+        </Wrapper>,
+      );
+      await screen.findByText('initial working memory');
+      fireEvent.click(screen.getByText('older refresh'));
+      await olderStarted.promise;
+      fireEvent.click(screen.getByText('newer refresh'));
+      await newerStarted.promise;
+      if (outcome === 'before-newer') {
+        await act(async () => {
+          releaseOlder.resolve();
+          await olderCompleted.promise;
+        });
+        expect(screen.getByTestId('wm-loading').textContent).toBe('true');
+        expect(screen.queryByText('older working memory')).toBeNull();
+        releaseNewer.resolve();
+      }
+      await act(async () => {
+        await newerCompleted.promise;
+      });
+      const expectedValue = outcome === 'newer-error' ? '' : 'newer working memory';
+      expect(screen.getByTestId('wm-current').textContent).toBe(expectedValue);
+      await waitFor(() => expect(screen.getByTestId('wm-loading').textContent).toBe('false'));
+      await act(async () => {
+        releaseOlder.resolve();
+        await olderCompleted.promise;
+      });
+      expect(screen.getByTestId('wm-current').textContent).toBe(expectedValue);
+      expect(screen.queryByText('older working memory')).toBeNull();
+    },
+  );
 });

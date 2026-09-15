@@ -279,7 +279,8 @@
                         }
                       },
                       "finishReason": "tool-calls",
-                      "completionStartTime": "<date>"
+                      "completionStartTime": "<date>",
+                      "responseModel": "mock-model-id"
                     },
                     "metadata": {
                       "runId": "<runId-1>",
@@ -494,7 +495,8 @@
                         }
                       },
                       "finishReason": "stop",
-                      "completionStartTime": "<date>"
+                      "completionStartTime": "<date>",
+                      "responseModel": "mock-model-id"
                     },
                     "metadata": {
                       "runId": "<runId-1>",

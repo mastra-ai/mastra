@@ -13,17 +13,18 @@ export const taskInlineTransitionsScenario: McE2eScenario = {
     await (expect(terminal.getByText(/Project:|Resource ID:|>/gi, { full: true, strict: false })) as any).toBeVisible();
     terminal.submit('Exercise task inline transitions through real task tools.');
 
-    await runtime.waitForScreenText(/✓\s+Plan task inline e2e/i, terminal, 8_000);
-    await runtime.waitForScreenText(/✓\s+Finish task inline e2e/i, terminal, 8_000);
-    await runtime.waitForOutputText(/Tasks/i, terminal, 8_000);
-    await runtime.waitForOutputText(/✓ Plan task inline e2e/i, terminal, 8_000);
-    await runtime.waitForOutputText(/▶ Finishing task inline e2e/i, terminal, 8_000);
-    await runtime.waitForOutputText(/Tasks\s+\[2\/2 completed\]/i, terminal, 8_000);
-    await runtime.waitForOutputText(/Plan task inline e2e/i, terminal, 8_000);
-    await runtime.waitForOutputText(/Finish task inline e2e/i, terminal, 8_000);
+    const timeout = 15_000;
+    await runtime.waitForScreenText(/✓\s+Plan task inline e2e/i, terminal, timeout);
+    await runtime.waitForScreenText(/✓\s+Finish task inline e2e/i, terminal, timeout);
+    await runtime.waitForOutputText(/Tasks/i, terminal, timeout);
+    await runtime.waitForOutputText(/✓ Plan task inline e2e/i, terminal, timeout);
+    await runtime.waitForOutputText(/▶ Finishing task inline e2e/i, terminal, timeout);
+    await runtime.waitForOutputText(/Tasks\s+\[2\/2 completed\]/i, terminal, timeout);
+    await runtime.waitForOutputText(/Plan task inline e2e/i, terminal, timeout);
+    await runtime.waitForOutputText(/Finish task inline e2e/i, terminal, timeout);
 
-    await runtime.waitForScreenText(/Tasks cleared/i, terminal, 8_000);
-    await runtime.waitForScreenText(/Task inline transition e2e complete\./i, terminal, 8_000);
+    await runtime.waitForScreenText(/Tasks cleared/i, terminal, timeout);
+    await runtime.waitForScreenText(/Task inline transition e2e complete\./i, terminal, timeout);
 
     terminal.keyCtrlC();
   },

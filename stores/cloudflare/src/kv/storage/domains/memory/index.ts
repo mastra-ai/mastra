@@ -27,6 +27,7 @@ import { CloudflareKVDB, resolveCloudflareConfig } from '../../db';
 import type { CloudflareDomainConfig } from '../../types';
 
 export class MemoryStorageCloudflare extends MemoryStorage {
+  override readonly supportsPartialThreadUpdate = true;
   #db: CloudflareKVDB;
 
   constructor(config: CloudflareDomainConfig) {
@@ -202,8 +203,8 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     metadata,
   }: {
     id: string;
-    title: string;
-    metadata: Record<string, unknown>;
+    title?: string;
+    metadata?: Record<string, unknown>;
   }): Promise<StorageThreadType> {
     try {
       const thread = await this.getThreadById({ threadId: id });
@@ -213,7 +214,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
 
       const updatedThread = {
         ...thread,
-        title,
+        title: title ?? thread.title,
         metadata: this.ensureMetadata({
           ...(thread.metadata ?? {}),
           ...metadata,
@@ -232,7 +233,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
           category: ErrorCategory.THIRD_PARTY,
           details: {
             threadId: id,
-            title,
+            title: title ?? null,
           },
         },
         error,
@@ -269,7 +270,8 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       }
 
       // Get all message keys for this thread first
-      const messageKeys = await this.#db.listKV(TABLE_MESSAGES);
+      const prefix = this.#db.namespacePrefix ? `${this.#db.namespacePrefix}:` : '';
+      const messageKeys = await this.#db.listKV(TABLE_MESSAGES, { prefix: `${prefix}${TABLE_MESSAGES}:${threadId}:` });
       const threadMessageKeys = messageKeys.filter(key => key.name.includes(`${TABLE_MESSAGES}:${threadId}:`));
 
       // Delete all messages and their order atomically

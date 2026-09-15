@@ -70,19 +70,13 @@ function DatasetCompareVersionsPage() {
     return (
       <MainContentLayout>
         <MainContentContent>
-          <div className="text-neutral4 py-8 text-center">
+          <div className="text-neutral4 py-5 text-center">
             <p>Select at least two versions to compare.</p>
           </div>
         </MainContentContent>
       </MainContentLayout>
     );
   }
-
-  const handleItemClick = (itemId: string, itemA?: { datasetVersion: number }, itemB?: { datasetVersion: number }) => {
-    void navigate(
-      `/datasets/${datasetId}/items/${itemId}/versions?ids=${itemA?.datasetVersion ?? ''},${itemB?.datasetVersion ?? ''}`,
-    );
-  };
 
   const handleVersionChange = (newA: string, newB: string) => {
     void navigate(`/datasets/${datasetId}/versions?ids=${newA},${newB}`, {
@@ -93,7 +87,7 @@ function DatasetCompareVersionsPage() {
   return (
     <MainContentLayout>
       <div className="h-full overflow-hidden px-[3vw] pb-4">
-        <div className="mx-auto grid h-full max-w-[140rem] grid-rows-[auto_1fr] gap-6">
+        <div className="mx-auto grid h-full max-w-[140rem] grid-rows-[auto_1fr] gap-4">
           <MainHeader>
             <MainHeader.Column>
               <MainHeader.Title>
@@ -107,8 +101,7 @@ function DatasetCompareVersionsPage() {
               </MainHeader.Description>
             </MainHeader.Column>
             <MainHeader.Column>
-              <Button as={Link} to={`/datasets/${datasetId}`}>
-                <ArrowLeft />
+              <Button as={Link} to={`/datasets/${datasetId}`} icon={<ArrowLeft />}>
                 Back to Dataset
               </Button>
             </MainHeader.Column>
@@ -129,7 +122,6 @@ function DatasetCompareVersionsPage() {
                 allItems={allItems}
                 itemsAMap={itemsAMap}
                 itemsBMap={itemsBMap}
-                onItemClick={handleItemClick}
               />
             </Column>
           </Columns>

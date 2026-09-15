@@ -41,6 +41,27 @@ function getTopLevelYamlKey(line: string) {
   return match?.[1];
 }
 
+const PNPM_IGNORED_BUILDS_ERROR = 'ERR_PNPM_IGNORED_BUILDS';
+
+export function getPnpmIgnoredBuildPackages(output: string): string[] {
+  const match = new RegExp(`\\[?${PNPM_IGNORED_BUILDS_ERROR}\\]?[^\\n]*Ignored build scripts:\\s*([^\\n]+)`).exec(
+    output,
+  );
+  if (!match?.[1]) return [];
+
+  return match[1]
+    .split(',')
+    .map(specifier => specifier.trim())
+    .filter(Boolean)
+    .map(specifier => {
+      if (specifier.startsWith('@')) {
+        const versionSeparator = specifier.indexOf('@', 1);
+        return versionSeparator === -1 ? specifier : specifier.slice(0, versionSeparator);
+      }
+      return specifier.split('@', 1)[0]!;
+    });
+}
+
 function validatePnpmBuildApprovals(key: string, block: string): void {
   if (key !== 'allowBuilds' && key !== 'onlyBuiltDependencies') return;
 
@@ -333,11 +354,33 @@ export class Deps extends MastraBase {
       root: dir,
     });
 
-    return cpLogger({
-      cmd: `${pm} ${installCommand}`,
-      args,
-      env: process.env as Record<string, string>,
-    });
+    try {
+      return await cpLogger({
+        cmd: `${pm} ${installCommand}`,
+        args,
+        env: process.env as Record<string, string>,
+      });
+    } catch (error) {
+      if (pm !== 'pnpm') throw error;
+
+      const processOutput =
+        error && typeof error === 'object'
+          ? `${'stdout' in error ? String(error.stdout) : ''}\n${'stderr' in error ? String(error.stderr) : ''}`
+          : '';
+      const ignoredPackages = getPnpmIgnoredBuildPackages(processOutput);
+      if (ignoredPackages.length === 0) throw error;
+
+      throw new MastraError(
+        {
+          id: 'DEPLOYER_PNPM_IGNORED_BUILDS',
+          domain: ErrorDomain.DEPLOYER,
+          category: ErrorCategory.USER,
+          details: { packageNames: ignoredPackages.join(', ') },
+          text: `pnpm blocked build scripts for: ${ignoredPackages.join(', ')}. Add these packages to allowBuilds in pnpm-workspace.yaml and retry the build.`,
+        },
+        error,
+      );
+    }
   }
 
   public async installPackages(packages: string[]) {

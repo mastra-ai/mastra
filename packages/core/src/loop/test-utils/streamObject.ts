@@ -1084,6 +1084,8 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               "toolResults": [],
               "totalUsage": {
                 "cacheCreationInputTokens": undefined,
+                "cacheCreationInputTokens1h": undefined,
+                "cacheCreationInputTokens5m": undefined,
                 "cachedInputTokens": undefined,
                 "inputTokens": 3,
                 "outputTokens": 10,
@@ -1214,6 +1216,14 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                           "text": "{ "invalid": "Hello, world!" }",
                           "type": "text",
                         },
+                        {
+                          "createdAt": 1704067200000,
+                          "error": {
+                            "message": "Structured output validation failed: - content: Invalid input: expected string, received undefined",
+                            "name": "Error",
+                          },
+                          "type": "error",
+                        },
                       ],
                     },
                     "createdAt": 2024-01-01T00:00:00.001Z,
@@ -1264,6 +1274,14 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                         "text": "{ "invalid": "Hello, world!" }",
                         "type": "text",
                       },
+                      {
+                        "createdAt": 1704067200000,
+                        "error": {
+                          "message": "Structured output validation failed: - content: Invalid input: expected string, received undefined",
+                          "name": "Error",
+                        },
+                        "type": "error",
+                      },
                     ],
                     "role": "assistant",
                   },
@@ -1308,6 +1326,14 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                               "createdAt": 1704067200000,
                               "text": "{ "invalid": "Hello, world!" }",
                               "type": "text",
+                            },
+                            {
+                              "createdAt": 1704067200000,
+                              "error": {
+                                "message": "Structured output validation failed: - content: Invalid input: expected string, received undefined",
+                                "name": "Error",
+                              },
+                              "type": "error",
                             },
                           ],
                         },
@@ -1359,6 +1385,14 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                             "text": "{ "invalid": "Hello, world!" }",
                             "type": "text",
                           },
+                          {
+                            "createdAt": 1704067200000,
+                            "error": {
+                              "message": "Structured output validation failed: - content: Invalid input: expected string, received undefined",
+                              "name": "Error",
+                            },
+                            "type": "error",
+                          },
                         ],
                         "role": "assistant",
                       },
@@ -1392,6 +1426,8 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               "toolResults": [],
               "totalUsage": {
                 "cacheCreationInputTokens": undefined,
+                "cacheCreationInputTokens1h": undefined,
+                "cacheCreationInputTokens5m": undefined,
                 "cachedInputTokens": undefined,
                 "inputTokens": 3,
                 "outputTokens": 10,
@@ -1522,6 +1558,14 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                           "text": "{ "invalid": "Hello, world!" }",
                           "type": "text",
                         },
+                        {
+                          "createdAt": 1704067200000,
+                          "error": {
+                            "message": "Structured output validation failed: - content: Invalid input: expected string, received undefined",
+                            "name": "Error",
+                          },
+                          "type": "error",
+                        },
                       ],
                     },
                     "createdAt": 2024-01-01T00:00:00.001Z,
@@ -1572,6 +1616,14 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                         "text": "{ "invalid": "Hello, world!" }",
                         "type": "text",
                       },
+                      {
+                        "createdAt": 1704067200000,
+                        "error": {
+                          "message": "Structured output validation failed: - content: Invalid input: expected string, received undefined",
+                          "name": "Error",
+                        },
+                        "type": "error",
+                      },
                     ],
                     "role": "assistant",
                   },
@@ -1616,6 +1668,14 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                               "createdAt": 1704067200000,
                               "text": "{ "invalid": "Hello, world!" }",
                               "type": "text",
+                            },
+                            {
+                              "createdAt": 1704067200000,
+                              "error": {
+                                "message": "Structured output validation failed: - content: Invalid input: expected string, received undefined",
+                                "name": "Error",
+                              },
+                              "type": "error",
                             },
                           ],
                         },
@@ -1667,6 +1727,14 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                             "text": "{ "invalid": "Hello, world!" }",
                             "type": "text",
                           },
+                          {
+                            "createdAt": 1704067200000,
+                            "error": {
+                              "message": "Structured output validation failed: - content: Invalid input: expected string, received undefined",
+                              "name": "Error",
+                            },
+                            "type": "error",
+                          },
                         ],
                         "role": "assistant",
                       },
@@ -1700,6 +1768,8 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               "toolResults": [],
               "totalUsage": {
                 "cacheCreationInputTokens": undefined,
+                "cacheCreationInputTokens1h": undefined,
+                "cacheCreationInputTokens5m": undefined,
                 "cachedInputTokens": undefined,
                 "inputTokens": 3,
                 "outputTokens": 10,

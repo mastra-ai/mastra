@@ -231,9 +231,26 @@ describe('Mastra runScope lifecycle', () => {
         expect.objectContaining({
           runId: 'abandoned-run',
           ttlMs: Mastra.INTERNAL_WORKFLOW_TTL_MS,
-          ageMs: expect.any(Number),
+          idleMs: expect.any(Number),
         }),
       );
+    });
+
+    it('keeps the runScope of a run that is still active past the TTL', () => {
+      const m = makeMastra();
+      m.__registerInternalWorkflow(makeWorkflow('agentic-loop'), 'long-run');
+
+      // A long-running run resolves its own workflow on every step event; the
+      // TTL measures idleness, so it must survive well past the bound.
+      for (let i = 0; i < 6; i++) {
+        vi.setSystemTime(Date.now() + Mastra.INTERNAL_WORKFLOW_TTL_MS / 2);
+        expect(m.__hasInternalWorkflow('agentic-loop', 'long-run')).toBe(true);
+      }
+
+      m.__registerInternalWorkflow(makeWorkflow('agentic-loop'), 'fresh-run');
+
+      expect(m.__hasInternalWorkflow('agentic-loop', 'long-run')).toBe(true);
+      expect(m.__getRunScope('long-run')).toBeDefined();
     });
 
     it('releases the correct scope when the runId contains a colon', () => {

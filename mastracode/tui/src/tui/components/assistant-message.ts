@@ -2,10 +2,8 @@
  * Component that renders an assistant message with streaming support.
  */
 
-import fs from 'node:fs';
-import path from 'node:path';
 import { Container, Markdown, Spacer, Text } from '@earendil-works/pi-tui';
-import type { MarkdownTheme } from '@earendil-works/pi-tui';
+import type { Component, MarkdownTheme } from '@earendil-works/pi-tui';
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import { getAssistantRenderParts } from '../db-message-parts.js';
 import type { AssistantRenderPart } from '../db-message-parts.js';
@@ -13,15 +11,26 @@ import { sanitizeAnsiForRendering } from '../sanitize-ansi.js';
 import { CHAT_INDENT, getMarkdownTheme, theme } from '../theme.js';
 import type { ChatSpacingKind } from './chat-spacing.js';
 
-let _compId = 0;
-function asmDebugLog(...args: unknown[]) {
-  if (!['true', '1'].includes(process.env.MASTRA_TUI_DEBUG!)) {
-    return;
-  }
-  const line = `[ASM ${new Date().toISOString()}] ${args.map(a => (typeof a === 'string' ? a : JSON.stringify(a))).join(' ')}\n`;
-  try {
-    fs.appendFileSync(path.join(process.cwd(), 'tui-debug.log'), line);
-  } catch {}
+export interface AssistantSourcePart {
+  kind: 'text' | 'thinking';
+  text: string;
+}
+
+export interface AssistantTerminalStatus {
+  stopReason?: string;
+  errorMessage?: string;
+}
+
+interface RenderNode {
+  key: string;
+  kind: 'markdown' | 'thinking-markdown' | 'text' | 'spacer';
+  text?: string;
+}
+
+interface OwnedRenderNode {
+  kind: RenderNode['kind'];
+  component: Component;
+  text?: string;
 }
 
 function getStopReason(message: MastraDBMessage): { stopReason?: string; errorMessage?: string } {
@@ -35,21 +44,17 @@ export class AssistantMessageComponent extends Container {
   private contentContainer: Container;
   private hideThinkingBlock: boolean;
   private markdownTheme: MarkdownTheme;
-  private lastMessage?: MastraDBMessage;
-  private _id: number;
+  private sourceParts: AssistantSourcePart[] = [];
+  private terminalStatus?: AssistantTerminalStatus;
+  private renderNodes = new Map<string, OwnedRenderNode>();
+  private renderOrder: string[] = [];
 
   constructor(message?: MastraDBMessage, hideThinkingBlock = false, markdownTheme: MarkdownTheme = getMarkdownTheme()) {
     super();
-    this._id = ++_compId;
-
     this.hideThinkingBlock = hideThinkingBlock;
     this.markdownTheme = markdownTheme;
-
-    // Container for text/thinking content
     this.contentContainer = new Container();
     this.addChild(this.contentContainer);
-
-    asmDebugLog(`COMP#${this._id} CREATED`);
 
     if (message) {
       this.updateContent(message);
@@ -58,17 +63,12 @@ export class AssistantMessageComponent extends Container {
 
   override invalidate(): void {
     super.invalidate();
-    if (this.lastMessage) {
-      const summary = getAssistantRenderParts(this.lastMessage)
-        .map(part => (part.kind === 'text' ? `text(${part.text.length}ch)` : part.kind))
-        .join(', ');
-      asmDebugLog(`COMP#${this._id} INVALIDATE lastMessage=[${summary}]`);
-      this.updateContent(this.lastMessage);
-    }
   }
 
   setHideThinkingBlock(hide: boolean): void {
+    if (this.hideThinkingBlock === hide) return;
     this.hideThinkingBlock = hide;
+    this.reconcileChildren();
   }
 
   getChatSpacingKind(): ChatSpacingKind | undefined {
@@ -76,62 +76,153 @@ export class AssistantMessageComponent extends Container {
   }
 
   updateContent(message: MastraDBMessage): void {
-    this.lastMessage = message;
+    const sourceParts = getAssistantRenderParts(message)
+      .filter(
+        (part): part is Extract<AssistantRenderPart, { kind: 'text' | 'thinking' }> =>
+          part.kind === 'text' || part.kind === 'thinking',
+      )
+      .map(part => ({ kind: part.kind, text: part.text }));
+    this.updateRenderParts(sourceParts, getStopReason(message));
+  }
 
-    // Clear content container
+  updateRenderParts(sourceParts: AssistantSourcePart[], terminalStatus: AssistantTerminalStatus = {}): void {
+    this.sourceParts = sourceParts;
+    this.terminalStatus = terminalStatus;
+    this.reconcileChildren();
+  }
+
+  /** Release source-only reconciliation data once this segment becomes immutable. */
+  finalizeRenderState(): void {
+    this.sourceParts = [];
+    this.terminalStatus = undefined;
+  }
+
+  /** Release every child and source reference when registry ownership is removed. */
+  disposeRenderState(): void {
+    this.sourceParts = [];
+    this.terminalStatus = undefined;
+    this.renderNodes.clear();
+    this.renderOrder = [];
     this.contentContainer.clear();
+  }
 
-    // Project the nested DB message parts into ordered render items, then render
-    // text and thinking traces in document order (tool parts are rendered by the
-    // dedicated ToolExecutionComponent, so they are ignored here).
-    const renderParts = getAssistantRenderParts(message).filter(
-      (part): part is Extract<AssistantRenderPart, { kind: 'text' | 'thinking' }> =>
-        part.kind === 'text' || part.kind === 'thinking',
-    );
+  private reconcileChildren(): void {
+    const desired = this.buildRenderNodes();
+    const nextNodes = new Map<string, OwnedRenderNode>();
+    const nextOrder: string[] = [];
 
-    for (let i = 0; i < renderParts.length; i++) {
-      const part = renderParts[i]!;
+    for (const node of desired) {
+      const existing = this.renderNodes.get(node.key);
+      const owned = existing?.kind === node.kind ? existing : this.createRenderNode(node);
+      if (node.text !== undefined && owned.text !== node.text) {
+        (owned.component as Markdown | Text).setText(node.text);
+        owned.text = node.text;
+      }
+      nextNodes.set(node.key, owned);
+      nextOrder.push(node.key);
+    }
 
-      if (part.kind === 'text' && part.text.trim()) {
-        // Assistant text messages - trim and sanitize escape codes
-        this.contentContainer.addChild(
-          new Markdown(sanitizeAnsiForRendering(part.text.trim()), CHAT_INDENT, 0, this.markdownTheme, {
-            color: (text: string) => theme.fg('text', text),
-          }),
-        );
-      } else if (part.kind === 'thinking' && part.text.trim()) {
-        // Check if there's text content after this thinking block
-        const hasTextAfter = renderParts.slice(i + 1).some(p => p.kind === 'text' && p.text.trim());
-
-        if (this.hideThinkingBlock) {
-          // Show static "Thinking..." label when hidden
-          this.contentContainer.addChild(
-            new Text(theme.italic(theme.fg('thinkingText', 'Thinking...')), CHAT_INDENT, 0),
-          );
-          if (hasTextAfter) {
-            this.contentContainer.addChild(new Spacer(1));
-          }
-        } else {
-          // Thinking traces in thinkingText color, italic
-          this.contentContainer.addChild(
-            new Markdown(sanitizeAnsiForRendering(part.text.trim()), CHAT_INDENT, 0, this.markdownTheme, {
-              color: (text: string) => theme.fg('thinkingText', text),
-              italic: true,
-            }),
-          );
-          this.contentContainer.addChild(new Spacer(1));
-        }
+    const structureChanged =
+      nextOrder.length !== this.renderOrder.length || nextOrder.some((key, index) => key !== this.renderOrder[index]);
+    if (structureChanged) {
+      this.contentContainer.clear();
+      for (const key of nextOrder) {
+        this.contentContainer.addChild(nextNodes.get(key)!.component);
       }
     }
 
-    // Check if aborted or error - show after partial content
-    const { stopReason, errorMessage } = getStopReason(message);
-    if (stopReason === 'aborted') {
-      const abortMessage = errorMessage || 'Interrupted';
-      this.contentContainer.addChild(new Text(theme.fg('error', abortMessage), CHAT_INDENT, 0));
-    } else if (stopReason === 'error') {
-      const errorMsg = errorMessage || 'Unknown error';
-      this.contentContainer.addChild(new Text(theme.fg('error', `Error: ${errorMsg}`), CHAT_INDENT, 0));
+    this.renderNodes = nextNodes;
+    this.renderOrder = nextOrder;
+  }
+
+  private createRenderNode(node: RenderNode): OwnedRenderNode {
+    switch (node.kind) {
+      case 'markdown':
+        return {
+          kind: node.kind,
+          component: new Markdown(node.text ?? '', CHAT_INDENT, 0, this.markdownTheme, {
+            color: (text: string) => theme.fg('text', text),
+          }),
+          text: node.text,
+        };
+      case 'thinking-markdown':
+        return {
+          kind: node.kind,
+          component: new Markdown(node.text ?? '', CHAT_INDENT, 0, this.markdownTheme, {
+            color: (text: string) => theme.fg('thinkingText', text),
+            italic: true,
+          }),
+          text: node.text,
+        };
+      case 'text':
+        return {
+          kind: node.kind,
+          component: new Text(node.text ?? '', CHAT_INDENT, 0),
+          text: node.text,
+        };
+      case 'spacer':
+        return { kind: node.kind, component: new Spacer(1) };
     }
+  }
+
+  private buildRenderNodes(): RenderNode[] {
+    const nodes: RenderNode[] = [];
+    let hiddenThinkingRunStart: number | undefined;
+
+    for (let index = 0; index < this.sourceParts.length; index++) {
+      const part = this.sourceParts[index]!;
+      const text = part.text.trim();
+      if (!text) continue;
+
+      if (part.kind === 'text') {
+        hiddenThinkingRunStart = undefined;
+        nodes.push({
+          key: `part:${index}:text`,
+          kind: 'markdown',
+          text: sanitizeAnsiForRendering(text),
+        });
+        continue;
+      }
+
+      if (!this.hideThinkingBlock) {
+        hiddenThinkingRunStart = undefined;
+        nodes.push({
+          key: `part:${index}:thinking`,
+          kind: 'thinking-markdown',
+          text: sanitizeAnsiForRendering(text),
+        });
+        nodes.push({ key: `part:${index}:thinking-spacer`, kind: 'spacer' });
+        continue;
+      }
+
+      if (hiddenThinkingRunStart === undefined) {
+        hiddenThinkingRunStart = index;
+        nodes.push({
+          key: `part:${index}:hidden-thinking`,
+          kind: 'text',
+          text: theme.italic(theme.fg('thinkingText', 'Thinking...')),
+        });
+      }
+
+      const nextRenderedIndex = this.sourceParts.findIndex((candidate, candidateIndex) => {
+        return candidateIndex > index && candidate.text.trim().length > 0;
+      });
+      if (nextRenderedIndex !== -1 && this.sourceParts[nextRenderedIndex]?.kind === 'text') {
+        nodes.push({ key: `part:${hiddenThinkingRunStart}:hidden-thinking-spacer`, kind: 'spacer' });
+      }
+    }
+
+    const { stopReason, errorMessage } = this.terminalStatus ?? {};
+    if (stopReason === 'aborted') {
+      nodes.push({ key: 'terminal:aborted', kind: 'text', text: theme.fg('error', errorMessage || 'Interrupted') });
+    } else if (stopReason === 'error') {
+      nodes.push({
+        key: 'terminal:error',
+        kind: 'text',
+        text: theme.fg('error', `Error: ${errorMessage || 'Unknown error'}`),
+      });
+    }
+
+    return nodes;
   }
 }

@@ -9,6 +9,7 @@ import { ExperimentsInMemory } from './domains/experiments/inmemory';
 import { InMemoryFavoritesStorage } from './domains/favorites/inmemory';
 import { InMemoryHarness } from './domains/harness/inmemory';
 import { InMemoryDB } from './domains/inmemory-db';
+import { InMemoryKnowledgeStorage } from './domains/knowledge/inmemory';
 import { InMemoryMCPClientsStorage } from './domains/mcp-clients/inmemory';
 import { InMemoryMCPServersStorage } from './domains/mcp-servers/inmemory';
 import { InMemoryMemory } from './domains/memory/inmemory';
@@ -25,23 +26,26 @@ import { InMemoryWorkflowDefinitionsStorage } from './domains/workflow-definitio
 import { WorkflowsInMemory } from './domains/workflows/inmemory';
 import { InMemoryWorkspacesStorage } from './domains/workspaces/inmemory';
 /**
- * In-memory storage implementation for testing and development.
- *
- * All data is stored in memory and will be lost when the process ends.
- * Access domain-specific storage via `getStore()`:
+ * Provides in-memory storage for testing and development.
+ * Data is lost when the process ends. Access individual storage domains with `getStore()`.
  *
  * @example
  * ```typescript
- * const storage = new InMemoryStore();
+ * import { Mastra } from '@mastra/core/mastra';
+ * import { InMemoryStore } from '@mastra/core/storage';
  *
- * // Access memory domain
- * const memory = await storage.getStore('memory');
- * await memory?.saveThread({ thread });
- *
- * // Access workflows domain
- * const workflows = await storage.getStore('workflows');
- * await workflows?.persistWorkflowSnapshot({ workflowName, runId, snapshot });
+ * const mastra = new Mastra({
+ *   storage: new InMemoryStore(),
+ * });
  * ```
+ *
+ * @see For documentation bundled with your installed package, locate
+ * `@mastra/core/package.json` with your project's resolver or package-manager
+ * tooling, then read `dist/docs/SKILL.md` from that package root and follow its
+ * reference links. Use package-manager tools for virtual or archived packages.
+ *
+ * @see [Storage documentation](https://mastra.ai/docs/storage)
+ * if packaged docs are unavailable.
  */
 export class InMemoryStore extends MastraCompositeStore {
   stores: StorageDomains;
@@ -64,6 +68,7 @@ export class InMemoryStore extends MastraCompositeStore {
     // Create all domain instances with the shared db
     this.stores = {
       memory: new InMemoryMemory({ db: this.#db }),
+      knowledge: new InMemoryKnowledgeStorage({ db: this.#db }),
       workflows: new WorkflowsInMemory({ db: this.#db }),
       workflowDefinitions: new InMemoryWorkflowDefinitionsStorage({ db: this.#db }),
       scores: new ScoresInMemory({ db: this.#db }),

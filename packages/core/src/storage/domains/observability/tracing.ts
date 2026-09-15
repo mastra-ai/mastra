@@ -1,6 +1,7 @@
 import { z } from 'zod/v4';
 import { scoreRowDataSchema } from '../../../evals/types';
 import { SpanType } from '../../../observability/types';
+import type { SpanInput, SpanOutput, SpanTypeMap } from '../../../observability/types';
 import {
   deltaLimitSchema,
   deltaInfoSchema,
@@ -15,6 +16,8 @@ import {
   paginationInfoSchema,
   refineObservabilityListMode,
   sortDirectionSchema,
+  organizationIdField,
+  resourceIdField,
   tagsField,
   traceIdField,
   spanIdField,
@@ -138,8 +141,35 @@ export const spanRecordSchema = z
   })
   .describe('Span record data');
 
-/** Complete span record as stored in the database */
-export type SpanRecord = z.infer<typeof spanRecordSchema>;
+/** Span record exactly as the schema stores it: payload fields are untyped. */
+type StoredSpanRecord = z.infer<typeof spanRecordSchema>;
+
+/**
+ * Stored span record narrowed to one span type: `attributes`, `input` and
+ * `output` carry the shapes core records for that type. A union of span types
+ * gives a union of records, so `spanType` keeps discriminating after the
+ * guard.
+ */
+export type TypedSpanRecord<TType extends SpanType> = TType extends SpanType
+  ? Omit<StoredSpanRecord, 'spanType' | 'attributes' | 'input' | 'output'> & {
+      spanType: TType;
+      attributes?: (SpanTypeMap[TType] & Record<string, unknown>) | null;
+      input?: SpanInput<TType> | null;
+      output?: SpanOutput<TType> | null;
+    }
+  : never;
+
+/**
+ * Complete span record as stored in the database.
+ *
+ * Without a type argument this is the stored record as-is. Narrow `TType` to
+ * get a `TypedSpanRecord`. The schema itself stays permissive, so this is a
+ * read-side view only; narrow with `isSpanRecordOfType` from
+ * `@mastra/core/observability`.
+ */
+export type SpanRecord<TType extends SpanType = SpanType> = SpanType extends TType
+  ? StoredSpanRecord
+  : TypedSpanRecord<TType>;
 
 // ============================================================================
 // Trace Span Schema (SpanRecord + computed status for list responses)
@@ -842,17 +872,39 @@ export const batchUpdateSpansArgsSchema = z
 /** Arguments for batch updating multiple spans */
 export type BatchUpdateSpansArgs = z.infer<typeof batchUpdateSpansArgsSchema>;
 
+/** Maximum number of trace IDs accepted by a single batch delete request. */
+export const BATCH_DELETE_TRACES_MAX_IDS = 1000;
+
 /**
  * Schema for batchDeleteTraces operation arguments
  */
 export const batchDeleteTracesArgsSchema = z
   .object({
-    traceIds: z.array(traceIdField),
+    traceIds: z
+      .array(traceIdField)
+      .max(BATCH_DELETE_TRACES_MAX_IDS)
+      .describe(`Trace IDs to delete (maximum ${BATCH_DELETE_TRACES_MAX_IDS})`),
+    organizationId: organizationIdField
+      .optional()
+      .describe('Optional tenant scope: only delete rows belonging to this organization'),
+    resourceId: resourceIdField
+      .optional()
+      .describe('Optional tenant scope: only delete rows belonging to this resource'),
   })
   .describe('Arguments for batch deleting traces');
 
 /** Arguments for batch deleting multiple traces */
 export type BatchDeleteTracesArgs = z.infer<typeof batchDeleteTracesArgsSchema>;
+
+/** Schema for batchDeleteTraces route response */
+export const batchDeleteTracesResponseSchema = z
+  .object({
+    success: z.literal(true),
+  })
+  .describe('Response for batch deleting traces');
+
+/** Response for batch deleting traces */
+export type BatchDeleteTracesResponse = z.infer<typeof batchDeleteTracesResponseSchema>;
 
 // ============================================================================
 // Scoring related schemas

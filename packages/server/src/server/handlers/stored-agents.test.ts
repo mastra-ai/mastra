@@ -2421,6 +2421,36 @@ describe('createStoredAgentBodySchema', () => {
 
     expect(result.success).toBe(false);
   });
+
+  it('should accept durable as a boolean', () => {
+    const result = createStoredAgentBodySchema.safeParse({ ...baseAgent, durable: true });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.durable).toBe(true);
+    }
+  });
+
+  it('should accept durable as a serializable config object', () => {
+    const result = createStoredAgentBodySchema.safeParse({
+      ...baseAgent,
+      durable: { maxSteps: 25, cleanupTimeoutMs: 0 },
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.durable).toEqual({ maxSteps: 25, cleanupTimeoutMs: 0 });
+    }
+  });
+
+  it('should reject durable options that are not serializable config', () => {
+    const result = createStoredAgentBodySchema.safeParse({
+      ...baseAgent,
+      durable: { maxSteps: -1 },
+    });
+
+    expect(result.success).toBe(false);
+  });
 });
 
 describe('UPDATE_STORED_AGENT_ROUTE — model policy is surface-scoped, not enforced on save', () => {

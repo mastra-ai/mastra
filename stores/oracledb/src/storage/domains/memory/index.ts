@@ -70,7 +70,15 @@ import {
 } from './observational-buffering';
 import { getResourceById, saveResource, updateResource } from './resources';
 import { clearAllMemoryTables, initMemorySchema } from './schema';
-import { deleteThread, getThreadById, insertThreadRow, listThreads, saveThread, updateThread } from './threads';
+import {
+  deleteThread,
+  getThreadById,
+  insertThreadRow,
+  listThreads,
+  saveThread,
+  updateThread,
+  updateThreadResourceId,
+} from './threads';
 import { storageError } from './utils';
 import type { MemoryContext } from './utils';
 
@@ -83,6 +91,7 @@ const DEFAULT_MESSAGE_SAVE_BATCH_SIZE = 200;
 const DEFAULT_VECTOR_REGISTRY_TABLE = 'MASTRA_VECTOR_INDEXES';
 
 export class MemoryOracle extends MemoryStorage {
+  override readonly supportsPartialThreadUpdate = true;
   readonly supportsObservationalMemory = true;
   // Memory owns all tables needed for normal message history plus observational memory state.
   static readonly MANAGED_TABLES = [
@@ -155,14 +164,18 @@ export class MemoryOracle extends MemoryStorage {
 
   async updateThread(args: {
     id: string;
-    title: string;
-    metadata: Record<string, unknown>;
+    title?: string;
+    metadata?: Record<string, unknown>;
   }): Promise<StorageThreadType> {
     return updateThread(this.ctx, args);
   }
 
   async deleteThread(args: { threadId: string }): Promise<void> {
     return deleteThread(this.ctx, args);
+  }
+
+  async updateThreadResourceId(args: { threadId: string; resourceId: string }): Promise<StorageThreadType> {
+    return updateThreadResourceId(this.ctx, args);
   }
 
   async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {

@@ -1,6 +1,6 @@
 ---
-title: "Workflows overview"
-description: "Workflows in Mastra help you orchestrate complex sequences of tasks with features like branching, parallel execution, resource suspension, and more."
+title: "Workflows"
+description: "Build deterministic Mastra workflows with typed steps, agents, tools, branching, parallel execution, loops, suspension, state, and Studio visualization."
 packages:
   - "@mastra/core"
 ---
@@ -8,9 +8,9 @@ packages:
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
 
-# Workflows overview
+# Workflows
 
-Workflows let you define complex sequences of tasks using clear, structured steps rather than relying on the reasoning of a single agent. They give you full control over how tasks are broken down and how data moves between them, plus what gets executed when. Workflows run using the built-in execution engine by default, or can be deployed to [workflow runners](/docs/deployment/workflow-runners) like Inngest for managed infrastructure.
+Workflows let you define complex task sequences with clear, structured steps instead of relying on one agent to reason through the entire process. You control the task breakdown along with the flow and timing of data. Workflows use the built-in execution engine by default, while managed infrastructure is available through [workflow runners](/docs/deployment/workflow-runners) such as Inngest.
 
 <Inject>
   **For AI agents:** Run `npx mastra api workflow run start test-workflow '{"inputData":{"message":"Hello, world!"}}'` to start this workflow directly instead of writing a temporary script. The command requires a running Mastra server; start the local server with `npx mastra dev`, or pass the reachable server's base URL with `--url`. Run `npx mastra api workflow run start --schema` before constructing different input. Install Mastra's skill with `npx skills add mastra-ai/skills --skill mastra` for complete API CLI discovery, targeting, schema, authentication, and error-handling guidance.
@@ -117,7 +117,7 @@ Visit [`Step`](/reference/workflows/step) for a full list of configuration optio
 
 ### Using agents and tools
 
-Workflow steps can also call registered agents or import and execute tools directly, visit the [Using Tools](/docs/agents/using-tools) page for more information.
+Workflow steps can also call registered agents or import and execute tools directly, visit the [Using Tools](/docs/agents/tools) page for more information.
 
 ## Creating a workflow
 
@@ -125,7 +125,7 @@ Create a workflow using `createWorkflow()` with `inputSchema` and `outputSchema`
 
 <Tabs>
   <TabItem value="zod" label="Zod">
-    ```typescript {9,12,15,16} title="src/mastra/workflows/test-workflow.ts" prettier:false
+    ```typescript {9,12,15,16} title="src/mastra/workflows/test-workflow.ts" oxfmt:false
     import { createWorkflow, createStep } from "@mastra/core/workflows";
     import { z } from "zod";
 
@@ -146,7 +146,7 @@ Create a workflow using `createWorkflow()` with `inputSchema` and `outputSchema`
   </TabItem>
 
   <TabItem value="valibot" label="Valibot">
-    ```typescript {10,13,16,17} title="src/mastra/workflows/test-workflow.ts" prettier:false
+    ```typescript {10,13,16,17} title="src/mastra/workflows/test-workflow.ts" oxfmt:false
     import { createWorkflow, createStep } from "@mastra/core/workflows";
     import * as v from "valibot";
     import { toStandardJsonSchema } from "@valibot/to-json-schema";
@@ -168,7 +168,7 @@ Create a workflow using `createWorkflow()` with `inputSchema` and `outputSchema`
   </TabItem>
 
   <TabItem value="arktype" label="ArkType">
-    ```typescript {9,12,15,16} title="src/mastra/workflows/test-workflow.ts" prettier:false
+    ```typescript {9,12,15,16} title="src/mastra/workflows/test-workflow.ts" oxfmt:false
     import { createWorkflow, createStep } from "@mastra/core/workflows";
     import { type } from "arktype";
 
@@ -232,7 +232,7 @@ Visit [Workflow State](/docs/workflows/workflow-state) for complete documentatio
 
 Use a workflow as a step to reuse its logic within a larger composition. Input and output follow the same schema rules described in [Core principles](/docs/workflows/control-flow).
 
-```typescript {26} title="src/mastra/workflows/test-workflow.ts" prettier:false
+```typescript {26} title="src/mastra/workflows/test-workflow.ts" oxfmt:false
 const step1 = createStep({...});
 const step2 = createStep({...});
 
@@ -266,7 +266,7 @@ export const testWorkflow = createWorkflow({
 
 Clone a workflow using `cloneWorkflow()` when you want to reuse its logic but track it separately under a new ID. Each clone runs independently and shows up as a distinct workflow in logs and observability tools.
 
-```typescript prettier:false {6} title="src/mastra/workflows/test-workflow.ts"
+```typescript oxfmt:false {6} title="src/mastra/workflows/test-workflow.ts"
 import { cloneWorkflow } from "@mastra/core/workflows";
 
 const step1 = createStep({...});
@@ -301,7 +301,7 @@ You can run workflows from agents, tools, the Mastra Client, or the command line
 const testWorkflow = mastra.getWorkflow('testWorkflow')
 ```
 
-:::info
+:::note
 `mastra.getWorkflow()` is preferred over a direct import for two reasons:
 
 1. It provides access to the Mastra instance configuration (logger, telemetry, storage, registered agents, and vector stores)
@@ -425,7 +425,7 @@ Here's an example of a successful workflow result, showing the `input`, `steps`,
 
 ## Streaming
 
-For generic `writer` API usage, see [Streaming](/guides/concepts/streaming#writer-api).
+For generic `writer` API usage, see [Streaming](/docs/guides/streaming#writer-api).
 
 ### Inspecting workflow stream payloads
 
@@ -506,6 +506,8 @@ Use `restartAllActiveWorkflowRuns()` to restart all active workflow runs of a wo
 workflow.restartAllActiveWorkflowRuns()
 ```
 
+To exclude a workflow from automatic boot-time restarts triggered by `Mastra.restartAllActiveWorkflowRuns()`, set `autoRestartActiveRuns: false` in the workflow's `options`. This is useful for workflows with side effects that must not be re-driven by a blanket restart. Durable agent workflows set this automatically because their recovery is owned by the opt-in `recovery.durableAgents: 'auto'` path.
+
 ### Restarting an active workflow run with `restart()`
 
 Use `restart()` to restart an active workflow run from the last active step. This will resume execution from the last active step, and the workflow will continue from there.
@@ -565,7 +567,7 @@ For type-safe request context schema validation, see [Schema Validation](/docs/s
 
 ## Related
 
-For a closer look at workflows, see our [Workflow Guide](/guides/guide/ai-recruiter), which walks through the core concepts with a practical example.
+For a closer look at workflows, see our [Workflow Guide](https://mastra.ai/blog/building-an-ai-recruiter), which walks through the core concepts with a practical example.
 
 - [Workflow State](/docs/workflows/workflow-state)
 - [Control Flow](/docs/workflows/control-flow)

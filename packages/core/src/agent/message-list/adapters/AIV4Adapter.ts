@@ -222,12 +222,16 @@ export class AIV4Adapter {
         } else if (part.type === 'tool-invocation') {
           // Handle tool invocations with step number logic
           const isDeniedApproval = part.toolInvocation.state === 'output-denied';
+          const isOutputError = part.toolInvocation.state === 'output-error';
           const toolInvocation = {
             ...part.toolInvocation,
-            // v4 has no denied state and AI SDK v4's convertToCoreMessages requires every
-            // tool invocation to carry a result. Downgrade a declined approval to a normal
-            // result whose value is the decline reason so the conversion accepts it.
-            ...(isDeniedApproval ? { state: 'result' as const } : {}),
+            // v4 has no denied or output-error state and AI SDK v4's convertToCoreMessages
+            // requires every completed tool invocation to carry a result. Downgrade both to
+            // normal results so the error or denial is sent back to the model.
+            // A downgraded output-error still has to read as a failure, so keep the isError
+            // marker on it — otherwise a failed terminal tool looks like it succeeded.
+            ...(isDeniedApproval || isOutputError ? { state: 'result' as const } : {}),
+            ...(isOutputError ? { isError: true } : {}),
             args: getDisplayTransform(
               part.providerMetadata,
               'input-available',
@@ -250,7 +254,9 @@ export class AIV4Adapter {
                 }
               : isDeniedApproval
                 ? { result: part.toolInvocation.approval?.reason ?? 'Tool call was not approved by the user' }
-                : {}),
+                : isOutputError
+                  ? { result: part.toolInvocation.errorText }
+                  : {}),
           };
 
           // Find the step number for this tool invocation

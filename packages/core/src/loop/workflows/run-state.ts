@@ -13,6 +13,8 @@ type State = {
   apiError: unknown | undefined;
   deferredErrorChunk: any | undefined;
   providerOptions: Record<string, any> | undefined;
+  /** Assistant text emitted so far for the in-flight step. Surfaced to `onAbort` when a run is cancelled mid-stream. */
+  partialText: string;
 };
 
 export class AgenticRunState {
@@ -37,6 +39,7 @@ export class AgenticRunState {
       apiError: undefined,
       deferredErrorChunk: undefined,
       stepResult: undefined,
+      partialText: '',
     };
   }
 

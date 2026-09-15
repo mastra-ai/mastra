@@ -37,6 +37,8 @@ export interface SchemaSnapshot {
   tables: Set<string>;
   /** table name -> column names present on that table. */
   columns: Map<string, Set<string>>;
+  /** table name -> column name -> Postgres type name (`jsonb`, `text`, ...). */
+  columnTypes: Map<string, Map<string, string>>;
   /** Index names present in the schema, exactly as the catalog stores them. */
   indexes: Set<string>;
   /** Names of indexes that are the replica identity of their table. */
@@ -82,8 +84,8 @@ export async function loadSchemaSnapshot(client: DbClient, schemaName: string | 
     client.manyOrNone<{ tablename: string }>(`SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname = $1`, [
       schema,
     ]),
-    client.manyOrNone<{ table_name: string; column_name: string }>(
-      `SELECT c.relname AS table_name, a.attname AS column_name
+    client.manyOrNone<{ table_name: string; column_name: string; data_type: string }>(
+      `SELECT c.relname AS table_name, a.attname AS column_name, format_type(a.atttypid, a.atttypmod) AS data_type
          FROM pg_catalog.pg_class c
          JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
          JOIN pg_catalog.pg_attribute a ON a.attrelid = c.oid
@@ -108,6 +110,7 @@ export async function loadSchemaSnapshot(client: DbClient, schemaName: string | 
   ]);
 
   const columns = new Map<string, Set<string>>();
+  const columnTypes = new Map<string, Map<string, string>>();
   for (const row of columnRows) {
     let set = columns.get(row.table_name);
     if (!set) {
@@ -115,6 +118,13 @@ export async function loadSchemaSnapshot(client: DbClient, schemaName: string | 
       columns.set(row.table_name, set);
     }
     set.add(row.column_name);
+
+    let types = columnTypes.get(row.table_name);
+    if (!types) {
+      types = new Map<string, string>();
+      columnTypes.set(row.table_name, types);
+    }
+    types.set(row.column_name, row.data_type);
   }
 
   const indexes = new Set<string>();
@@ -134,6 +144,7 @@ export async function loadSchemaSnapshot(client: DbClient, schemaName: string | 
     schemaName: schema,
     tables: new Set(tableRows.map(r => r.tablename)),
     columns,
+    columnTypes,
     indexes,
     replicaIdentityIndexes,
     primaryKeyIndexes,

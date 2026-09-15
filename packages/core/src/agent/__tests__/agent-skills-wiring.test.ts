@@ -375,7 +375,7 @@ describe('Agent-level skills wiring', () => {
       return { parent, children };
     }
 
-    it('opens one resolve-skills span per request and hands it to the resolver', async () => {
+    it('opens one skill resolve span per request and hands it to the resolver', async () => {
       initContextStorage();
       const { parent, children } = createRecordingSpan();
       const seenSpans: unknown[] = [];
@@ -400,10 +400,14 @@ describe('Agent-level skills wiring', () => {
       });
 
       expect(parent.createChildSpan).toHaveBeenCalledTimes(1);
-      expect(children[0]!.options).toMatchObject({ name: 'resolve-skills', metadata: { agentId: 'skills-span' } });
+      expect(children[0]!.options).toMatchObject({
+        type: 'skill_action',
+        name: 'skill:resolve',
+        attributes: { operation: 'resolve', agentId: 'skills-span' },
+      });
       expect(seenSpans).toEqual([children[0]!.span]);
       expect(children[0]!.ended).toBe(true);
-      expect(children[0]!.endOptions).toMatchObject({ metadata: { skillCount: 1 } });
+      expect(children[0]!.endOptions).toMatchObject({ attributes: { skillCount: 1 } });
     });
 
     it('records a resolver failure on the span and opens a fresh one on retry', async () => {
@@ -431,7 +435,7 @@ describe('Agent-level skills wiring', () => {
       expect(children[0]!.errored).toBe(true);
       expect(children[0]!.errorOptions).toMatchObject({ endSpan: true });
       expect(children[1]!.ended).toBe(true);
-      expect(children[1]!.endOptions).toMatchObject({ metadata: { skillCount: 0 } });
+      expect(children[1]!.endOptions).toMatchObject({ attributes: { skillCount: 0 } });
     });
 
     it('passes an empty tracingContext on metadata reads like listSkills', async () => {

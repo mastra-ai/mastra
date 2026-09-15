@@ -61,6 +61,18 @@ export interface CreateEventedAgentOptions<
 
   /** Maximum steps for agentic loop */
   maxSteps?: number;
+
+  /**
+   * Per-topic opt-out of the replay cache.
+   *
+   * Return `false` to publish a topic straight through to the underlying
+   * PubSub without recording it in the cache. Subscribers of that topic then
+   * receive live events only and cannot resume from an offset. Use this to
+   * trade replay for minimum publish latency on hot topics when the cache is
+   * remote (e.g. cross-region Redis). Run-local topics are always excluded,
+   * regardless of this option.
+   */
+  shouldCache?: (topic: string) => boolean;
 }
 
 /**
@@ -92,13 +104,14 @@ export function createEventedAgent<
   TTools extends Record<string, any> = Record<string, any>,
   TOutput = undefined,
 >(options: CreateEventedAgentOptions<TAgentId, TTools, TOutput>): EventedAgent<TAgentId, TTools, TOutput> {
-  const { agent, pubsub, cache, maxSteps } = options;
+  const { agent, pubsub, cache, maxSteps, shouldCache } = options;
 
   return new EventedAgent({
     agent,
     pubsub,
     cache,
     maxSteps,
+    shouldCache,
   } as EventedAgentConfig<TAgentId, TTools, TOutput>);
 }
 

@@ -247,6 +247,103 @@ describe('CachingPubSub', () => {
         expect(await cachingPubsub.getHistory(topic)).toHaveLength(2);
       });
     });
+
+    describe('shouldCache', () => {
+      // `localOnly` is not always visible to this layer: when the inner PubSub
+      // is what decides `localOnly` (e.g. the `mastra.pubsub` proxy), the cache
+      // runs above that decision and never sees the flag. `shouldCache` lets the
+      // policy be declared at construction time instead.
+      const uncachedTopic = 'workflow.events.v2.run-1';
+      const cachedTopic = 'agent.stream.run-1';
+      let policyPubsub: CachingPubSub;
+
+      beforeEach(() => {
+        policyPubsub = new CachingPubSub(innerPubsub, cache, {
+          shouldCache: topic => !topic.startsWith('workflow.events.v2.'),
+        });
+      });
+
+      it('should not cache topics rejected by shouldCache', async () => {
+        await policyPubsub.publish(uncachedTopic, { type: 'watch', runId: 'run-1', data: { big: 'payload' } });
+        await new Promise(resolve => setTimeout(resolve, 10));
+
+        expect(await policyPubsub.getHistory(uncachedTopic)).toHaveLength(0);
+      });
+
+      it('should not allocate an index counter for topics rejected by shouldCache', async () => {
+        await policyPubsub.publish(uncachedTopic, { type: 'watch', runId: 'run-1', data: {} });
+        await new Promise(resolve => setTimeout(resolve, 10));
+
+        expect(await cache.get(`pubsub:${uncachedTopic}:counter`)).toBeUndefined();
+      });
+
+      it('should still deliver rejected topics live to subscribers', async () => {
+        const receivedEvents: Event[] = [];
+        await policyPubsub.subscribe(uncachedTopic, event => {
+          receivedEvents.push(event);
+        });
+
+        await policyPubsub.publish(uncachedTopic, { type: 'watch', runId: 'run-1', data: { foo: 'bar' } });
+
+        expect(receivedEvents).toHaveLength(1);
+        expect(receivedEvents[0]).toMatchObject({ type: 'watch', runId: 'run-1', data: { foo: 'bar' } });
+        expect(receivedEvents[0].index).toBeUndefined();
+      });
+
+      it('should still cache topics accepted by shouldCache', async () => {
+        await policyPubsub.publish(cachedTopic, { type: 'text-delta', runId: 'run-1', data: {} });
+        await new Promise(resolve => setTimeout(resolve, 10));
+
+        const history = await policyPubsub.getHistory(cachedTopic);
+        expect(history).toHaveLength(1);
+        expect(history[0].index).toBe(0);
+      });
+
+      it('should cache everything when shouldCache is not provided', async () => {
+        await cachingPubsub.publish(uncachedTopic, { type: 'watch', runId: 'run-1', data: {} });
+        await new Promise(resolve => setTimeout(resolve, 10));
+
+        expect(await cachingPubsub.getHistory(uncachedTopic)).toHaveLength(1);
+      });
+
+      it('should keep cached indices gap-free across interleaved rejected publishes', async () => {
+        await policyPubsub.publish(cachedTopic, { type: 'cached-first', runId: 'run-1', data: {} });
+        await policyPubsub.publish(uncachedTopic, { type: 'watch', runId: 'run-1', data: {} });
+        await policyPubsub.publish(cachedTopic, { type: 'cached-second', runId: 'run-1', data: {} });
+        await new Promise(resolve => setTimeout(resolve, 10));
+
+        const history = await policyPubsub.getHistory(cachedTopic);
+        expect(history.map(event => [event.type, event.index])).toEqual([
+          ['cached-first', 0],
+          ['cached-second', 1],
+        ]);
+      });
+
+      it('should deliver live events on a rejected topic to a replay subscriber with nothing to replay', async () => {
+        const receivedEvents: Event[] = [];
+
+        await policyPubsub.publish(uncachedTopic, { type: 'before-subscribe', runId: 'run-1', data: {} });
+        await new Promise(resolve => setTimeout(resolve, 10));
+
+        await policyPubsub.subscribeWithReplay(uncachedTopic, event => {
+          receivedEvents.push(event);
+        });
+
+        await policyPubsub.publish(uncachedTopic, { type: 'after-subscribe', runId: 'run-1', data: {} });
+        await new Promise(resolve => setTimeout(resolve, 10));
+
+        // Nothing replayed — the pre-subscribe event was never cached.
+        expect(receivedEvents.map(event => event.type)).toEqual(['after-subscribe']);
+        expect(await policyPubsub.getHistory(uncachedTopic)).toHaveLength(0);
+      });
+
+      it('should still bypass the cache for localOnly publishes on accepted topics', async () => {
+        await policyPubsub.publish(cachedTopic, { type: 'watch', runId: 'run-1', data: {} }, { localOnly: true });
+        await new Promise(resolve => setTimeout(resolve, 10));
+
+        expect(await policyPubsub.getHistory(cachedTopic)).toHaveLength(0);
+      });
+    });
   });
 
   describe('subscribe', () => {
@@ -273,7 +370,7 @@ describe('CachingPubSub', () => {
       );
     });
 
-    it('forwards options (including batch) verbatim to the inner PubSub', async () => {
+    it('forwards options (including startFrom and batch) verbatim to the inner PubSub', async () => {
       const subscribeSpy = vi.fn(async () => {});
       class StubInner extends PubSub {
         get supportsNativeBatching() {
@@ -286,7 +383,7 @@ describe('CachingPubSub', () => {
       }
       const wrapped = new CachingPubSub(new StubInner(), cache);
       const cb = () => {};
-      const options = { batch: { maxSize: 2, maxWaitMs: 50 } };
+      const options = { startFrom: 'latest' as const, batch: { maxSize: 2, maxWaitMs: 50 } };
       await wrapped.subscribe('t', cb, options);
       expect(subscribeSpy).toHaveBeenCalledWith('t', cb, options);
     });
@@ -309,6 +406,10 @@ describe('CachingPubSub', () => {
       }
       expect(new CachingPubSub(new NativeInner(), cache).supportsNativeBatching).toBe(true);
       expect(new CachingPubSub(new NonNativeInner(), cache).supportsNativeBatching).toBe(false);
+    });
+
+    it('reports support for numeric offsets', () => {
+      expect(cachingPubsub.supportsOffsets).toBe(true);
     });
   });
 
@@ -755,6 +856,52 @@ describe('CachingPubSub', () => {
 
       // listPush should NOT be called when increment failed (avoids duplicate index-0 entries)
       expect(listPushSpy).not.toHaveBeenCalled();
+    });
+
+    it('publishes through a single listPushIndexed cache call (no separate increment/listPush)', async () => {
+      const topic = 'single-roundtrip-topic';
+      const cache = new InMemoryServerCache();
+      const indexedSpy = vi.spyOn(cache, 'listPushIndexed');
+
+      const pubsub = new CachingPubSub(innerPubsub, cache);
+      const callback = vi.fn();
+      await pubsub.subscribe(topic, callback);
+      await pubsub.publish(topic, { type: 'test', runId: 'run-1', data: { a: 1 } });
+
+      expect(indexedSpy).toHaveBeenCalledTimes(1);
+      expect(indexedSpy).toHaveBeenCalledWith(
+        `pubsub:${topic}`,
+        `pubsub:${topic}:counter`,
+        expect.objectContaining({ type: 'test', runId: 'run-1', data: { a: 1 }, id: expect.any(String) }),
+      );
+      // The value handed to the cache must not carry a pre-assigned index
+      expect(indexedSpy.mock.calls[0]![2]).not.toHaveProperty('index');
+
+      // Live event carries the index the cache assigned
+      expect(callback).toHaveBeenCalledWith(
+        expect.objectContaining({ index: 0 }),
+        expect.any(Function),
+        expect.any(Function),
+      );
+      const cached = await cache.listFromTo(`pubsub:${topic}`, 0);
+      expect(cached).toHaveLength(1);
+      expect((cached[0] as any).index).toBe(0);
+    });
+
+    it('delivers live without an index when listPushIndexed fails', async () => {
+      const topic = 'indexed-fail-topic';
+      const cache = new InMemoryServerCache();
+      cache.listPushIndexed = async () => {
+        throw new Error('atomic write failed');
+      };
+      const pubsub = new CachingPubSub(innerPubsub, cache);
+      const callback = vi.fn();
+      await pubsub.subscribe(topic, callback);
+      await pubsub.publish(topic, { type: 'test', runId: 'run-1', data: {} });
+
+      expect(callback).toHaveBeenCalledTimes(1);
+      expect(callback.mock.calls[0]![0]).not.toHaveProperty('index');
+      expect(await cache.listLength(`pubsub:${topic}`)).toBe(0);
     });
   });
 

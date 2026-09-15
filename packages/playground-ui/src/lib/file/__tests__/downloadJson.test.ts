@@ -42,14 +42,19 @@ describe('downloadJson', () => {
     vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:mock-url');
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
     let downloadAttr: string | undefined;
+    let connectedAtClick: boolean | undefined;
     vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
       downloadAttr = this.download;
+      connectedAtClick = this.isConnected;
     });
 
     downloadJson('trace-xyz.json', {});
 
     expect(downloadAttr).toBe('trace-xyz.json');
-    // Anchor is appended only for the click, then removed — none should linger in the DOM.
+    // Firefox only honours a programmatic download when the anchor is in the
+    // document at click time, so it must be attached before the click...
+    expect(connectedAtClick).toBe(true);
+    // ...and removed right after — none should linger in the DOM.
     expect(document.querySelector('a')).toBeNull();
   });
 });

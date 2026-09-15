@@ -47,6 +47,7 @@ function getMessageIndexKey(messageId: string): string {
 }
 
 export class StoreMemoryUpstash extends MemoryStorage {
+  override readonly supportsPartialThreadUpdate = true;
   private client: Redis;
   #db: UpstashDB;
   constructor(config: UpstashDomainConfig) {
@@ -253,8 +254,8 @@ export class StoreMemoryUpstash extends MemoryStorage {
     metadata,
   }: {
     id: string;
-    title: string;
-    metadata: Record<string, unknown>;
+    title?: string;
+    metadata?: Record<string, unknown>;
   }): Promise<StorageThreadType> {
     const thread = await this.getThreadById({ threadId: id });
     if (!thread) {
@@ -272,7 +273,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
     const now = new Date();
     const updatedThread = {
       ...thread,
-      title,
+      title: title ?? thread.title,
       metadata: {
         ...thread.metadata,
         ...metadata,

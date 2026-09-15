@@ -1,5 +1,8 @@
 import { it, expect, vi, describe } from 'vitest';
+import { MastraCompositeStore } from './base';
 import type { MastraStorage } from './base';
+import { InMemoryDB } from './domains/inmemory-db';
+import { InMemoryKnowledgeStorage } from './domains/knowledge';
 import { augmentWithInit } from './storageWithInit';
 
 describe('augmentWithInit', () => {
@@ -14,6 +17,17 @@ describe('augmentWithInit', () => {
     await augmentedStorage.listMessages({ threadId: '1' });
 
     expect(mockStorage.init).toHaveBeenCalled();
+  });
+
+  it('initializes a knowledge domain before returning it on first use', async () => {
+    const knowledge = new InMemoryKnowledgeStorage({ db: new InMemoryDB() });
+    const knowledgeInitSpy = vi.spyOn(knowledge, 'init');
+    const composite = augmentWithInit(new MastraCompositeStore({ id: 'knowledge-composite', domains: { knowledge } }));
+
+    const initializedKnowledge = await composite.getStore('knowledge');
+
+    expect(initializedKnowledge).toBe(knowledge);
+    expect(knowledgeInitSpy).toHaveBeenCalledOnce();
   });
 
   it("shouln't double augment the storage", async () => {

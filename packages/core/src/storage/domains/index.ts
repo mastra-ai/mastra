@@ -17,6 +17,7 @@ export * from './operations';
 export * from './workflows';
 export * from './workflow-definitions';
 export * from './memory';
+export * from './knowledge';
 export * from './inmemory-db';
 export * from './shared';
 export * from './datasets';

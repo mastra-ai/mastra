@@ -1,6 +1,10 @@
-import type { AgentConfig } from '@mastra/core/agent';
+import type { AgentConfig, MastraDBMessage } from '@mastra/core/agent';
+import type { WidenModelId } from '@mastra/core/llm';
 import type { Mastra } from '@mastra/core/mastra';
 import type { ObservationalMemoryModelSettings } from '@mastra/core/memory';
+import type { ObservabilityContext } from '@mastra/core/observability';
+import type { ProcessorContext, ProcessorStreamWriter } from '@mastra/core/processors';
+import type { RequestContext } from '@mastra/core/request-context';
 import type { MemoryStorage } from '@mastra/core/storage';
 import type { ProviderMetadata } from '@mastra/core/stream';
 import type { Memory } from '../..';
@@ -60,6 +64,30 @@ export type ResolvedActivationTTL = number | 'auto';
  * Configuration for the observation step (Observer agent).
  */
 export type ObservationalMemoryModel = Exclude<AgentConfig['model'], undefined> | ModelByInputTokens;
+
+/**
+ * `ObservationalMemoryModel` with model-id literals widened to `string`. Read config model
+ * fields into this before combining them (`??`, ternaries) — see `WidenModelId` in core.
+ */
+export type WidenedObservationalMemoryModel = WidenModelId<ObservationalMemoryModel>;
+
+/**
+ * Controls which continuation-hint sections OM asks the Observer and Reflector to emit.
+ *
+ * Pass `false` to disable both, or an object to disable them individually. Agents that
+ * drive their own control flow generally want `suggestedResponse: false` so memory does
+ * not compete with the agent for what to say next.
+ *
+ * @default true
+ */
+export type ContinuationHintsConfig =
+  | boolean
+  | {
+      /** Emit the `<current-task>` section. @default true */
+      currentTask?: boolean;
+      /** Emit the `<suggested-response>` section. @default true */
+      suggestedResponse?: boolean;
+    };
 
 export interface ObservationConfig {
   /**
@@ -169,14 +197,15 @@ export interface ObservationConfig {
   activateOnProviderChange?: boolean;
 
   /**
-   * Token threshold above which synchronous (blocking) observation is forced.
-   * Between `messageTokens` and `blockAfter`, only async buffering/activation is used.
-   * Above `blockAfter`, a synchronous observation runs as a last resort.
+   * Token threshold above which buffered activation is allowed to overshoot the
+   * retention target. Crossing `blockAfter` does not trigger a blocking observation;
+   * a synchronous observation runs when `messageTokens` is reached and buffered
+   * activation did not happen.
    *
    * Accepts either:
-   * - A multiplier (1 < value < 2): multiplied by `messageTokens`.
+   * - A multiplier (1 ≤ value < 100): multiplied by `messageTokens`.
    *   e.g. `blockAfter: 1.5` with `messageTokens: 20_000` → blocks at 30,000.
-   * - An absolute token count (≥ 2): must be greater than `messageTokens`.
+   * - An absolute token count (≥ 100): must be greater than `messageTokens`.
    *
    * Only relevant when `bufferTokens` is set.
    * If not set, synchronous observation is never used when async buffering is enabled.
@@ -196,6 +225,14 @@ export interface ObservationConfig {
    * Use this to customize observation behavior for specific use cases.
    */
   instruction?: string;
+
+  /**
+   * Which continuation-hint sections the Observer should emit.
+   * Set `{ suggestedResponse: false }` when the agent owns its own control flow.
+   *
+   * @default true
+   */
+  continuationHints?: ContinuationHintsConfig;
 
   /**
    * Manage working memory through Observational Memory extraction.
@@ -243,7 +280,10 @@ export interface ObservationConfig {
    * endpoints) while the main agent uses a multimodal model. The same
    * filter applies to tool results that contain image or file parts.
    *
-   * @default true
+   * When omitted, images and PDFs are forwarded. Use `true` to explicitly
+   * forward every attachment type.
+   *
+   * @default ['image/*', 'application/pdf']
    */
   observeAttachments?: 'auto' | boolean | string[];
 }
@@ -289,14 +329,15 @@ export interface ReflectionConfig {
   providerOptions?: ProviderOptions;
 
   /**
-   * Token threshold above which synchronous (blocking) reflection is forced.
-   * Between `observationTokens` and `blockAfter`, only async buffering/activation is used.
-   * Above `blockAfter`, a synchronous reflection runs as a last resort.
+   * Token threshold above which synchronous reflection is used as a last resort.
+   * Between `observationTokens` and `blockAfter`, only async buffering/activation
+   * is used. Above `blockAfter`, a synchronous reflection runs when no buffered
+   * reflection is ready to activate.
    *
    * Accepts either:
-   * - A multiplier (1 < value < 2): multiplied by `observationTokens`.
+   * - A multiplier (1 ≤ value < 100): multiplied by `observationTokens`.
    *   e.g. `blockAfter: 1.5` with `observationTokens: 30_000` → blocks at 45,000.
-   * - An absolute token count (≥ 2): must be greater than `observationTokens`.
+   * - An absolute token count (≥ 100): must be greater than `observationTokens`.
    *
    * Only relevant when `bufferActivation` is set.
    * If not set, synchronous reflection is never used when async reflection is enabled.
@@ -333,6 +374,14 @@ export interface ReflectionConfig {
    * Use this to customize reflection behavior for specific use cases.
    */
   instruction?: string;
+
+  /**
+   * Which continuation-hint sections the Reflector should emit.
+   * Set `{ suggestedResponse: false }` when the agent owns its own control flow.
+   *
+   * @default true
+   */
+  continuationHints?: ContinuationHintsConfig;
 
   /**
    * Additional values to extract from reflector output. Built-in OM fields are registered automatically.
@@ -534,6 +583,8 @@ export interface DataOmObservationFailedPart {
  */
 export interface DataOmStatusPart {
   type: 'data-om-status';
+  /** Stream to clients without persisting as a standalone data-only message. */
+  transient?: boolean;
   data: {
     windows: {
       /** Active context windows — current token usage and thresholds */
@@ -883,6 +934,18 @@ export interface ObservationDebugEvent {
 /**
  * Configuration for ObservationalMemory
  */
+export interface ReflectionCommittedContext {
+  parentThreadId: string;
+  resourceId: string;
+  observations: string;
+  requestContext?: RequestContext;
+  mainAgent?: ProcessorContext['agent'];
+  sendStateSignal?: ProcessorContext['sendStateSignal'];
+  writer?: ProcessorStreamWriter;
+  abortSignal?: AbortSignal;
+  observabilityContext?: ObservabilityContext;
+}
+
 export interface ObservationalMemoryConfig {
   /**
    * Storage adapter for persisting observations.
@@ -965,17 +1028,33 @@ export interface ObservationalMemoryConfig {
    * so consumers can account for OM model economics without wrapping the
    * observer/reflector models in middleware.
    *
-   * Semantics worth knowing:
-   * - Failed async-buffer cycles never throw (fire-and-forget), so the
-   *   failure is reported via the end hook's `error` field instead.
-   * - An end hook may fire with neither `usage` nor `error` when a cycle
-   *   concludes without a model call (e.g. a concurrent-observation
-   *   stale-record check skips the work).
-   * - Errors thrown (or promise rejections returned) by these hooks are
-   *   caught and logged at OM debug level (`OM_DEBUG`); they never fail the
-   *   cycle.
+   * Failed async-buffer cycles never throw (fire-and-forget), so failures are
+   * reported through the end hook's `error` field. An end hook may fire with
+   * neither `usage` nor `error` when a cycle concludes without a model call.
+   *
+   * Also accepts transform hooks (`beforeObservation`, `afterObservation`,
+   * `beforeReflection`, `afterReflection`) that can filter the messages sent
+   * to the observer or rewrite observation/reflection text before it is
+   * persisted. See {@link ObserveTransformHooks}.
    */
   hooks?: ObserveHooks;
+
+  /**
+   * Controls config-level hook execution for manual and turn-synchronous cycles.
+   *
+   * - `non-blocking` (default): hook promises are not awaited and failures are
+   *   logged without failing the cycle.
+   * - `await`: hooks are awaited in lifecycle order. A start-hook failure gates
+   *   the model call, every started cycle receives exactly one paired end hook,
+   *   and hook failures reject the synchronous/manual cycle after cleanup.
+   *
+   * Async-buffer cycles remain fire-and-forget under both modes. Their hooks
+   * settle inside the tracked background operation, but failures are consumed
+   * and logged rather than surfacing to the initiating caller.
+   *
+   * @default 'non-blocking'
+   */
+  hookExecution?: 'non-blocking' | 'await';
 
   obscureThreadIds?: boolean;
 
@@ -1019,6 +1098,9 @@ export interface ObservationalMemoryConfig {
    * to opt reflections into provider-change activation.
    */
   activateOnProviderChange?: boolean;
+
+  /** @internal Runs Subconscious reflection work only after a reflection is durably committed. */
+  onReflectionCommitted?: (context: ReflectionCommittedContext) => Promise<void>;
 
   /** @internal Parent Mastra instance for custom gateway model resolution. */
   mastra?: Mastra;
@@ -1116,8 +1198,57 @@ export interface ObserveHookContext {
   trigger?: ObserveTrigger;
 }
 
-export interface ObserveHooks {
-  onObservationStart?: (info?: ObserveHookContext) => void;
+/**
+ * Transform hooks that intercept the data flowing through an observation or
+ * reflection cycle. Unlike lifecycle hooks they are always awaited (regardless
+ * of `hookExecution`) because the pipeline cannot continue until the transform
+ * settles. Returning `undefined` passes the payload through unchanged (useful
+ * for logging or syncing to external systems); returning an object replaces
+ * it. A thrown error fails the cycle so untransformed data is never persisted;
+ * on async-buffer paths the failure surfaces via the matching end hook's
+ * `error` field. Config-level only.
+ */
+export interface ObserveTransformHooks {
+  /**
+   * Runs before the observer model sees the unobserved messages. Return
+   * `{ messages }` to filter or redact them. Returning an empty array skips
+   * the observer model call for this cycle; the original messages are still
+   * marked as observed.
+   */
+  beforeObservation?: (
+    input: { messages: MastraDBMessage[] } & ObserveHookContext,
+  ) => void | { messages: MastraDBMessage[] } | Promise<void | { messages: MastraDBMessage[] }>;
+  /**
+   * Runs on the observer's parsed observation text before it is merged into
+   * the record. Return `{ observations }` to replace it.
+   */
+  afterObservation?: (
+    input: { observations: string } & ObserveHookContext,
+  ) => void | { observations: string } | Promise<void | { observations: string }>;
+  /**
+   * Runs on the observation text about to be compressed by the reflector.
+   * Return `{ observations }` to replace what the reflector sees.
+   */
+  beforeReflection?: (
+    input: { observations: string } & ObserveHookContext,
+  ) => void | { observations: string } | Promise<void | { observations: string }>;
+  /**
+   * Runs on the reflector's parsed output before it is persisted as the new
+   * generation (or buffered reflection). Return `{ observations }` to replace it.
+   */
+  afterReflection?: (
+    input: { observations: string } & ObserveHookContext,
+  ) => void | { observations: string } | Promise<void | { observations: string }>;
+}
+
+export interface ObserveHooks extends ObserveLifecycleHooks, ObserveTransformHooks {}
+
+/**
+ * Telemetry-style hooks fired around observation/reflection cycles. These are
+ * the hooks accepted per call by `observe({ hooks })`.
+ */
+export interface ObserveLifecycleHooks {
+  onObservationStart?: (info?: ObserveHookContext) => void | Promise<void>;
   /**
    * Fires when an observation cycle ends. `providerMetadata` carries the OM
    * observer model call's full provider metadata (e.g. AI Gateway cost and
@@ -1129,8 +1260,8 @@ export interface ObserveHooks {
    */
   onObservationEnd?: (
     result: { usage?: ObserveHookUsage; error?: Error; providerMetadata?: ProviderMetadata } & ObserveHookContext,
-  ) => void;
-  onReflectionStart?: (info?: ObserveHookContext) => void;
+  ) => void | Promise<void>;
+  onReflectionStart?: (info?: ObserveHookContext) => void | Promise<void>;
   /**
    * Fires when a reflection cycle ends. `providerMetadata` carries the OM
    * reflector model call's full provider metadata; it is undefined when the
@@ -1141,5 +1272,5 @@ export interface ObserveHooks {
    */
   onReflectionEnd?: (
     result: { usage?: ObserveHookUsage; error?: Error; providerMetadata?: ProviderMetadata } & ObserveHookContext,
-  ) => void;
+  ) => void | Promise<void>;
 }

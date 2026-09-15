@@ -27,6 +27,9 @@ import type { LanceDomainConfig } from '../../db';
 import { getTableSchema, processResultWithTypeConversion } from '../../db/utils';
 
 export class StoreMemoryLance extends MemoryStorage {
+  // Note: not declaring supportsPartialThreadUpdate — Lance's updateThread uses a
+  // read-modify-write mergeInsert that rewrites the full row, so an omitted title
+  // is not atomically preserved. patchThread's legacy backfill path matches that.
   private client: Connection;
   #db: LanceDB;
 
@@ -175,8 +178,8 @@ export class StoreMemoryLance extends MemoryStorage {
     metadata,
   }: {
     id: string;
-    title: string;
-    metadata: Record<string, unknown>;
+    title?: string;
+    metadata?: Record<string, unknown>;
   }): Promise<StorageThreadType> {
     const maxRetries = 5;
 
@@ -194,7 +197,7 @@ export class StoreMemoryLance extends MemoryStorage {
         // Update atomically
         const record = {
           id,
-          title,
+          title: title ?? current.title,
           metadata: JSON.stringify(mergedMetadata),
           updatedAt: new Date().getTime(),
         };

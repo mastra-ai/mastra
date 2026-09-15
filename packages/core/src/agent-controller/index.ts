@@ -7,7 +7,8 @@
  */
 export { AgentController } from './agent-controller';
 export { Session } from './session';
-export type { SessionBeforeAgentEndListener } from './session';
+export type { ReservedThreadMetadataKey, SessionBeforeAgentEndListener } from './session';
+export type { MessageAuthor } from './message-author';
 export {
   askUserTool,
   assignTaskIds,
@@ -36,6 +37,7 @@ export type {
   AgentControllerRequestState,
   AgentControllerRequestStateUpdater,
   AgentControllerRequestStateUpdateResult,
+  AgentControllerSessionDeletedListener,
   AgentControllerStateSchema,
   AgentControllerSubagent,
   AgentControllerSubagentHistoryEntry,
@@ -53,4 +55,10 @@ export type {
   BuiltinToolId,
   TokenUsage,
 } from './types';
+export type {
+  AgentControllerWireEvent,
+  ErrorCarryingAgentControllerEvent,
+  JsonReadyAgentControllerEvent,
+  WireDisplayState,
+} from './wire';
 export type { MastraDBMessage, MastraMessageContentV2, MastraMessagePart } from '../agent/message-list/state/types';

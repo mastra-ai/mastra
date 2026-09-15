@@ -552,10 +552,27 @@ function parseBM25Config(
 // =============================================================================
 
 /**
- * Workspace provides agents with filesystem and execution capabilities.
+ * Provides agents with filesystem and execution capabilities through configured providers.
  *
- * At minimum, a workspace has either a filesystem or a sandbox (or both).
- * Users pass instantiated provider objects to the constructor.
+ * Supply a filesystem, a sandbox, or both. File operations require a filesystem;
+ * command execution requires a sandbox.
+ *
+ * @example
+ * ```typescript
+ * import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
+ *
+ * const workspace = new Workspace({
+ *   filesystem: new LocalFilesystem({ basePath: './my-workspace' }),
+ * });
+ * ```
+ *
+ * @see For documentation bundled with your installed package, locate
+ * `@mastra/core/package.json` with your project's resolver or package-manager
+ * tooling, then read `dist/docs/SKILL.md` from that package root and follow its
+ * reference links. Use package-manager tools for virtual or archived packages.
+ *
+ * @see [Workspace documentation](https://mastra.ai/docs/workspace/overview)
+ * if packaged docs are unavailable.
  */
 export class Workspace<
   TFilesystem extends WorkspaceFilesystem | undefined = WorkspaceFilesystem | undefined,
@@ -569,6 +586,7 @@ export class Workspace<
 
   private _status: WorkspaceStatus = 'pending';
   private _destroyPromise?: Promise<void>;
+  private _stopPromise?: Promise<void>;
   private readonly _fs?: WorkspaceFilesystem;
   private readonly _filesystemResolver?: WorkspaceFilesystemResolver;
   private readonly _sandbox?: WorkspaceSandbox;
@@ -1052,14 +1070,15 @@ export class Workspace<
   }
 
   /**
-   * Rebuild the search index from filesystem paths.
-   * Used internally for auto-indexing on init.
+   * Rebuild the search index from filesystem paths without starting the sandbox.
    *
-   * Paths can be plain directories, single files, or glob patterns.
-   * Uses resolvePathPattern for unified resolution: file matches are
-   * indexed directly, directory matches are recursed.
+   * Defaults to the configured `autoIndexPaths`, or accepts explicit paths for a
+   * one-off rebuild. Paths can be plain directories, single files, or glob patterns.
+   * Uses resolvePathPattern for unified resolution: file matches are indexed directly,
+   * and directory matches are recursed. Does nothing when search is not configured,
+   * the workspace has no static filesystem, or no paths are provided.
    */
-  private async rebuildSearchIndex(paths: string[]): Promise<void> {
+  async rebuildSearchIndex(paths: string[] = this._config.autoIndexPaths ?? []): Promise<void> {
     this.assertSearchWritable();
     if (!this._searchEngine || !this._fs || paths.length === 0) {
       return;
@@ -1302,6 +1321,64 @@ export class Workspace<
   }
 
   /**
+   * Stop the workspace's live resources without destroying them.
+   *
+   * Shuts down LSP clients, closes the browser, and stops the sandbox
+   * (`stop`, not `destroy` — remote providers pause/suspend so the sandbox
+   * can be resumed later; {@link LocalSandbox} kills its background
+   * processes). The workspace itself stays usable: filesystem, search index,
+   * and skills are untouched, and a later sandbox operation may start the
+   * sandbox again.
+   *
+   * This is what `Mastra.shutdown()` calls for registered workspaces, so a
+   * process restart suspends remote sandboxes instead of deleting them.
+   */
+  async stop(): Promise<void> {
+    if (this._teardownStarted || this._status === 'destroyed') {
+      return;
+    }
+    // Coalesce concurrent stop() calls onto one in-flight teardown, same as
+    // destroy() does with _destroyPromise.
+    if (this._stopPromise) {
+      return await this._stopPromise;
+    }
+
+    this._stopPromise = this._performStop();
+    try {
+      await this._stopPromise;
+    } finally {
+      this._stopPromise = undefined;
+    }
+  }
+
+  private async _performStop(): Promise<void> {
+    // Shutdown LSP before the sandbox — LSP clients need running processes
+    // to send shutdown/exit. The manager is kept: shutdownAll() drains its
+    // clients and resets it, so it spawns clients again on the next
+    // diagnostics request.
+    if (this._lsp) {
+      try {
+        await this._lsp.shutdownAll();
+      } catch {
+        // LSP shutdown errors are non-blocking
+      }
+    }
+
+    // Close browser before the sandbox
+    if (this._browser) {
+      try {
+        await this._browser.close();
+      } catch {
+        // Browser close errors are non-blocking
+      }
+    }
+
+    if (this._sandbox) {
+      await callLifecycle(this._sandbox, 'stop');
+    }
+  }
+
+  /**
    * Destroy the workspace and clean up all resources.
    */
   async destroy(): Promise<void> {
@@ -1314,7 +1391,18 @@ export class Workspace<
 
     this._teardownStarted = true;
     this._status = 'destroying';
-    this._destroyPromise = this._performDestroy();
+    // Assigned before any await so a concurrent destroy() during the
+    // stop-drain below joins this promise instead of starting a second
+    // destroy path.
+    this._destroyPromise = (async () => {
+      // Let an in-flight stop() settle before destructive cleanup so the two
+      // teardowns never interleave on the same LSP manager, browser, and
+      // sandbox.
+      if (this._stopPromise) {
+        await this._stopPromise.catch(() => {});
+      }
+      await this._performDestroy();
+    })();
 
     try {
       await this._destroyPromise;
@@ -1585,6 +1673,11 @@ export class Workspace<
    * Called by Mastra when the logger is set.
    * @internal
    */
+  /** Logger set by Mastra, if any. */
+  get logger(): IMastraLogger | undefined {
+    return this._logger;
+  }
+
   __setLogger(logger: IMastraLogger): void {
     this._logger = logger;
 

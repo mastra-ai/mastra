@@ -7,11 +7,12 @@ import type { GithubIssue, GithubPullRequest } from '../../factory/services/fact
 import { relationshipLabel, relationshipPath, workItemIdentifier } from '../../factory/services/relationships';
 import type { WorkItem, WorkItemSessionRef } from '../../factory/services/workItems';
 import { stageLabel } from '../../factory/stages';
-import type { FactoryUserSession } from '../../workspaces/services/github';
+import type { FactoryUserSession } from '../../workspaces/services/user-sessions';
 import {
   getFactorySessionKind,
   getReviewBranchIdentifier,
   getUserSessionLabel,
+  isAutomaticUserSessionBranch,
 } from '../../workspaces/services/sessionPresentation';
 
 export interface SessionSearchResult {
@@ -101,7 +102,7 @@ function createUserSessionResult(factoryId: string, session: FactoryUserSession)
     id: session.sessionId,
     kind,
     title,
-    context: `User session · ${session.branch}`,
+    context: isAutomaticUserSessionBranch(session) ? 'User session' : `User session · ${session.branch}`,
     value: buildValue(session, kind, title, undefined, undefined),
     path: `/factories/${factoryId}/user/threads/${session.sessionId}`,
     preserveOrigin: false,

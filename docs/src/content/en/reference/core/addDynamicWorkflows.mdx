@@ -1,15 +1,15 @@
 ---
 title: "Reference: Mastra.addDynamicWorkflows() | Core"
-description: "Documentation for the `Mastra.addDynamicWorkflows()` method, which validates, persists, and live-registers a bundle of dynamic workflow definitions."
+description: "The .addDynamicWorkflows() method adds a bundle of dynamic workflow definitions that may reference each other."
 packages:
   - "@mastra/core"
 ---
 
 # Mastra.addDynamicWorkflows()
 
-:::experimental
+:::beta
 
-Dynamic workflows are in beta. Breaking changes may occur without a major version bump until the API is stable.
+Breaking changes may occur without a major version bump until the API is stable.
 
 :::
 
@@ -34,7 +34,7 @@ await mastra.addDynamicWorkflows([
   content={[
   {
     name: 'defs',
-    type: 'readonly DynamicWorkflowGraph[]',
+    type: 'readonly (DynamicWorkflowGraph | WorkflowBuilderDefinitionInput)[]',
     description:
       'The workflow definitions to add. Nested-workflow references may resolve against the live registries or against other members of the same bundle.',
   },

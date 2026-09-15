@@ -16,10 +16,10 @@ const docsTabs = [
     basePath: '/models',
   },
   {
-    id: 'Guides',
-    label: 'Guides',
-    href: '/guides',
-    basePath: '/guides',
+    id: 'Integrations',
+    label: 'Integrations',
+    href: '/integrations',
+    basePath: '/integrations',
   },
   {
     id: 'Reference',

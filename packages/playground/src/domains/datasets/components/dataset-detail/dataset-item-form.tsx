@@ -3,7 +3,8 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { Label } from '@mastra/playground-ui/components/Label';
-import { Pencil } from 'lucide-react';
+import { Pencil, X, Check } from 'lucide-react';
+import { DatasetItemScorerSelector } from './dataset-item-scorer-selector';
 
 /** Schema validation error from API */
 export interface SchemaValidationError {
@@ -18,7 +19,7 @@ function ValidationErrors({ field, errors }: { field: string; errors: Array<{ pa
   return (
     <div className="mt-2 space-y-1">
       {errors.map((err, idx) => (
-        <p key={idx} className="text-destructive text-xs">
+        <p key={idx} className="text-destructive text-ui-sm">
           <code className="bg-destructive/10 rounded px-1">
             {field}
             {err.path !== '/' ? err.path : ''}
@@ -44,6 +45,10 @@ export interface EditModeContentProps {
   setTrajectoryValue: (value: string) => void;
   toolMocksValue: string;
   setToolMocksValue: (value: string) => void;
+  scorerOverrideEnabled: boolean;
+  setScorerOverrideEnabled: (enabled: boolean) => void;
+  selectedScorerIds: string[];
+  setSelectedScorerIds: (scorerIds: string[]) => void;
   requestContextValue: string;
   setRequestContextValue: (value: string) => void;
   validationErrors: SchemaValidationError | null;
@@ -63,6 +68,10 @@ export function EditModeContent({
   setTrajectoryValue,
   toolMocksValue,
   setToolMocksValue,
+  scorerOverrideEnabled,
+  setScorerOverrideEnabled,
+  selectedScorerIds,
+  setSelectedScorerIds,
   requestContextValue,
   setRequestContextValue,
   validationErrors,
@@ -73,7 +82,7 @@ export function EditModeContent({
   return (
     <>
       <div className="mb-4">
-        <h3 className="flex items-center gap-2 text-lg font-medium">
+        <h3 className="text-header-sm flex items-center gap-2 font-medium">
           <Pencil className="h-5 w-5" /> Edit Item
         </h3>
       </div>
@@ -110,7 +119,7 @@ export function EditModeContent({
 
         <div className="space-y-2">
           <Label>Tool Mocks (JSON array, optional)</Label>
-          <p className="text-muted-foreground text-xs">
+          <p className="text-muted-foreground text-ui-sm">
             Ordered static mocks served in place of executing the tool. Each entry is{' '}
             <code>{`{ "toolName", "args", "output" }`}</code>. Calling a mocked tool with non-matching args fails the
             item; unmocked tools run live.
@@ -125,6 +134,14 @@ export function EditModeContent({
             <ValidationErrors field="toolMocks" errors={validationErrors.errors} />
           )}
         </div>
+
+        <DatasetItemScorerSelector
+          overrideEnabled={scorerOverrideEnabled}
+          onOverrideEnabledChange={setScorerOverrideEnabled}
+          selectedScorerIds={selectedScorerIds}
+          onSelectedScorerIdsChange={setSelectedScorerIds}
+          disabled={isSaving}
+        />
 
         <div className="space-y-2">
           <Label>Request Context (JSON, optional)</Label>
@@ -147,10 +164,10 @@ export function EditModeContent({
         </div>
 
         <div className="flex gap-2 pt-4">
-          <Button variant="primary" onClick={onSave} disabled={isSaving}>
+          <Button icon={<Check />} variant="primary" onClick={onSave} disabled={isSaving}>
             {isSaving ? 'Saving...' : 'Save Changes'}
           </Button>
-          <Button onClick={onCancel} disabled={isSaving}>
+          <Button icon={<X />} onClick={onCancel} disabled={isSaving}>
             Cancel
           </Button>
         </div>

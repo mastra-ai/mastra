@@ -1,5 +1,5 @@
 {
-  "attachment": ["qwen/qwen3.6-27b"],
+  "attachment": ["qwen/qwen3.6-27b", "qwen/qwen3.8-27b"],
   "temperature": [
     "allam-2-7b",
     "groq/compound",
@@ -10,8 +10,15 @@
     "openai/gpt-oss-20b",
     "openai/gpt-oss-safeguard-20b",
     "qwen/qwen3.6-27b",
+    "qwen/qwen3.8-27b",
     "whisper-large-v3",
     "whisper-large-v3-turbo"
   ],
-  "structuredOutput": ["openai/gpt-oss-120b", "openai/gpt-oss-20b", "openai/gpt-oss-safeguard-20b", "qwen/qwen3.6-27b"]
+  "structuredOutput": [
+    "openai/gpt-oss-120b",
+    "openai/gpt-oss-20b",
+    "openai/gpt-oss-safeguard-20b",
+    "qwen/qwen3.6-27b",
+    "qwen/qwen3.8-27b"
+  ]
 }

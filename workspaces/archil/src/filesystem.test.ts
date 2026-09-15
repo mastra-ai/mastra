@@ -482,7 +482,7 @@ describe('ArchilFilesystem', () => {
     });
   });
 
-  describe('grep', () => {
+  describe('diskGrep', () => {
     it('passes through to disk.grep', async () => {
       const result = {
         matches: [{ file: 'log.txt', line: 1, text: 'ERROR: something' }],
@@ -495,7 +495,7 @@ describe('ArchilFilesystem', () => {
         grepMs: 800,
       };
       mockDisk.grep.mockResolvedValue(result);
-      const res = await fs.grep({ directory: '/', pattern: 'ERROR', recursive: true });
+      const res = await fs.diskGrep({ directory: '/', pattern: 'ERROR', recursive: true });
       expect(res).toEqual(result);
     });
   });

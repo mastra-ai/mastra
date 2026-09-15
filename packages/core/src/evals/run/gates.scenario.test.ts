@@ -437,6 +437,95 @@ describe('Gates & Verdict — scenario tests via runEvals + AIMock', () => {
     });
   });
 
+  describe('trajectory-typed scorers used as gates (#22632)', () => {
+    it('hands a trajectory-typed gate a Trajectory, not the raw output messages', async () => {
+      const agent = toolCallingAgent(
+        { get_weather: weatherTool },
+        [{ name: 'get_weather', id: 'call_1', input: { city: 'Brooklyn' } }],
+        'Sunny and 72°F in Brooklyn.',
+      );
+
+      let seenOutput: unknown;
+      const trajectoryGate = createScorer({
+        id: 'trajectory-shape-gate',
+        description: 'Records the output shape it was handed',
+        name: 'Trajectory Shape Gate',
+        type: 'trajectory',
+      }).generateScore(({ run }) => {
+        seenOutput = run.output;
+        return 1;
+      });
+
+      const result = await runEvals({
+        data: [{ input: 'What is the weather?' }],
+        gates: [trajectoryGate],
+        target: agent,
+      });
+
+      // `ScorerTypeShortcuts['trajectory']` declares `output: Trajectory`, and the
+      // `scorers.trajectory` path honours it. The gate path must too.
+      expect(Array.isArray(seenOutput)).toBe(false);
+      expect((seenOutput as { steps?: unknown } | undefined)?.steps).toBeInstanceOf(Array);
+      // The gate could actually run, so it scores 1 instead of failing closed.
+      expect(result.gateResults![0]!.score).toBe(1);
+    });
+
+    it('threads expectedTrajectory through to a trajectory-typed gate', async () => {
+      const agent = toolCallingAgent(
+        { get_weather: weatherTool },
+        [{ name: 'get_weather', id: 'call_2', input: { city: 'Brooklyn' } }],
+        'Sunny.',
+      );
+
+      let seenExpected: unknown = 'UNSET';
+      const expectationGate = createScorer({
+        id: 'expected-trajectory-gate',
+        description: 'Records expectedTrajectory',
+        name: 'Expected Trajectory Gate',
+        type: 'trajectory',
+      }).generateScore(({ run }) => {
+        seenExpected = (run as { expectedTrajectory?: unknown }).expectedTrajectory;
+        return 1;
+      });
+
+      const expectedTrajectory = { steps: [{ type: 'tool_call', toolName: 'get_weather' }] };
+
+      await runEvals({
+        data: [{ input: 'What is the weather?', expectedTrajectory }],
+        gates: [expectationGate],
+        target: agent,
+      });
+
+      expect(seenExpected).toEqual(expectedTrajectory);
+    });
+
+    it('leaves a non-trajectory gate on the agent-shaped payload', async () => {
+      const agent = textAgent('Plain response.');
+
+      let seenOutput: unknown;
+      let seenExpected: unknown = 'UNSET';
+      const plainGate = createScorer({
+        id: 'plain-shape-gate',
+        description: 'Records what a plain gate is handed',
+        name: 'Plain Shape Gate',
+      }).generateScore(({ run }: any) => {
+        seenOutput = run.output;
+        seenExpected = run.expectedTrajectory;
+        return 1;
+      });
+
+      await runEvals({
+        data: [{ input: 'Test', expectedTrajectory: { steps: [] } }],
+        gates: [plainGate],
+        target: agent,
+      });
+
+      // Unchanged behaviour for every gate that did not ask for a trajectory.
+      expect(Array.isArray(seenOutput)).toBe(true);
+      expect(seenExpected).toBeUndefined();
+    });
+  });
+
   describe('multi-item dataset verdict', () => {
     it('averages gate scores across items for verdict', async () => {
       const agent = textAgent('Consistent response.');

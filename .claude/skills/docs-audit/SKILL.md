@@ -1,177 +1,159 @@
 ---
 name: docs-audit
-description: Interactive documentation quality review for Mastra docs. Use when auditing, reviewing, or critiquing Mastra documentation; checking docs against source code; validating code examples, API accuracy, or property completeness; checking whether docs follow the styleguide and deterministic linters; or evaluating whether a beginner or agent can follow a doc to complete a job. This skill keeps humans in the loop with ask_user and submit_plan, then always runs an agent-build eval after approved fixes.
+description: Autonomous, report-only documentation review for Mastra docs. Use when auditing changed docs against source, validating contextual code examples or API coverage, checking canonical mastra-docs guidance, or running narrow deterministic checks.
 ---
 
-# Documentation Audit
+# Documentation audit
 
-Audit Mastra docs against source, deterministic checks, styleguides, and followability. Produce an evidence-based report first, then an approved fix plan, then mandatory eval after fixes.
+Audit Mastra documentation autonomously against source, the canonical `mastra-docs` guidance, and narrow deterministic checks. This skill is for report-only reviews. Do not edit documentation, ask the user to select jobs, or submit a fix plan unless the user separately requests implementation after the audit.
 
-Use this for audits/reviews/critiques/accuracy checks/completeness checks/followability checks, not ordinary docs authoring.
+## Load first
+
+1. Activate the `mastra-docs` skill. Its references are the canonical authoring policy; do not restate their rules.
+2. Read:
+   - `references/RUBRIC.md`
+   - `references/AUDIT-REPORT.md`
+   - `.claude/skills/mastra-docs/references/STYLEGUIDE.md`
+   - `.claude/skills/mastra-docs/references/INFORMATION_ARCHITECTURE.md`
+   - `.claude/skills/mastra-docs/references/AUTHORING_WORKFLOW.md`
+3. Add the applicable canonical references:
+   - `/docs` pages: `DOC.md`
+   - `/integrations` pages: `GUIDE_INTEGRATION.md`
+   - `/reference` pages: `REFERENCE.md`
+   - pages using shared MDX or llms-txt-aware components: `COMPONENTS.md`
+   - pages containing Mermaid or diagram assets: `DIAGRAM.md`
+
+Apply the verification rules in `AUTHORING_WORKFLOW.md` to every audit. Apply its move, delete, and redirect sections only when those operations are part of the reviewed diff.
+
+## Autonomous workflow
+
+### 1. Determine the complete audit scope
+
+Use the explicit files, URL, topic, or PR named by the user. Otherwise inspect the current PR/diff and include every changed authored page under:
+
+- `docs/src/content/en/docs`
+- `docs/src/content/en/integrations`
+- `docs/src/content/en/reference`
+
+Do not ask the user to choose pages or jobs. Do not silently sample or cap a large changed-page set. Exclude generated pages unless the diff changes their generator or generated contract. Record any unavailable or ambiguous scope as a report limitation instead of starting a question loop.
+
+### 2. Classify every page and map canonical guidance
+
+Use these classifications:
+
+- `docs overview`: `/docs/**/overview.mdx` and overview-shaped `/docs/index.mdx`
+- `docs page`: other authored `/docs/**` pages
+- `deployment integration`: `/integrations/deploy/**`
+- `integration`: other authored `/integrations/**`
+- `reference`: authored `/reference/**`
+
+Prefer content and canonical ownership when a filename is misleading. For each page, record a compliance map with its classification and every canonical reference applied. Always include `STYLEGUIDE.md`, `INFORMATION_ARCHITECTURE.md`, and the verification guidance in `AUTHORING_WORKFLOW.md`, then add the page-type, component, and diagram references that apply.
+
+### 3. Plan a bounded evidence pass
+
+Keep the audit complete without repeating work:
+
+- Use one command over the three authored content directories to collect both the changed-file list and a focused diff. Treat changed hunks and their page-level consequences as the primary risk map; do not retry with glob variants or rerun equivalent diff commands per file.
+- Read each page once in the largest practical contiguous chunks and retain its line numbers for citations. Do not separately search for code fences or reread ranges for citations; reread only when tool truncation hid required evidence.
+- Do not inspect sidebars unless a sidebar changed or route ownership is genuinely ambiguous from the page path and content.
+- Load each canonical reference once. Batch independent canonical-reference and page reads with `multi_tool_use.parallel`, but keep each parallel batch to at most two files and 500 requested lines so results remain directly usable. Never batch all references or all pages into one response, issue every read serially, or reread a `docs/styleguides` symlink or another alias.
+- Do not create a task list for an audit-only review.
+- Build one batched alternation from exact imported/exported identifiers and disputed literals across all changed pages, then search the full repository once with no context and a small per-file match cap. Omit generic words, broad option names, and already-proven prose terms so the result identifies source paths without flooding the audit. Do not guess package subtrees, begin with one search per page or symbol, or use file discovery unless that full-repository search returns no usable path.
+- Group related pages, blocks, imports, and symbols into shared source reads. Once the batched search identifies source paths and line evidence, open independent implementation ranges together with `multi_tool_use.parallel`, keeping each range under 150 lines and each batch under 500 requested lines. Do not open full implementation files, issue serial source reads, or run discovery commands between the search and those reads.
+- After scope, guidance, and page reads, default to no more than two focused source lookup operations per changed page. Exceed that only to resolve a material ambiguity or complete a reference surface, and batch the additional evidence.
+- For guides and overviews, source-check changed claims and the code or behavior the page teaches; do not re-verify unrelated unchanged vendor behavior.
+- For references, still perform the complete declared-surface comparison required below.
+- Use current source and exports before history. Do not search tests or history after the exported implementation already proves the claim. Do not call an architecture expert during a docs audit: the report requires current `file:line` source evidence, and an expert response cannot replace it.
+- Never call conversation recall, web search, browser tools, or external search during a repository audit. If a tool result is truncated, rerun the same repository read with narrower line ranges instead of recalling prior tool output. Repository source is authoritative for Mastra APIs and components; record any genuinely unverifiable external claim as a limitation instead of browsing.
+
+Complete source and guidance research before deterministic checks. After the checker finishes, synthesize the report immediately; do not start new research unless the checker exposes a new audited-target failure.
+
+### 4. Establish source truth narrowly
+
+For guides and overviews, collect the changed claims plus the minimum page-level context needed to judge their imports, commands, APIs, options, components, diagrams, and prerequisites. Do not inventory every unchanged API or vendor operation on the page. For references, collect the complete declared public surface, including parameters, defaults, optionality, errors, and returns.
+
+Resolve packages through workspace `package.json` exports when package ownership is unclear. Inspect the narrow exported implementation or public type needed to verify each finding candidate, and stop once the claim is proven. Do not inspect tests, package manifests, or adjacent implementations unless the public implementation leaves a material gap. Use history only when current ownership or intended behavior cannot be established from current source. Existing docs are context, not proof.
+
+Cite changed-doc `file:line` evidence for every finding. Accuracy findings also cite source `file:line`; guidance findings cite the canonical guide `file:line` that establishes the rule.
+
+### 5. Verify every code block contextually
+
+Classify each block as one of:
+
+- standalone
+- incremental
+- illustrative
+- configuration-only
+- shell
+- output
+
+Judge completeness for that role and the surrounding page. Adjacent prose, imports, setup sections, or prior blocks may intentionally provide omitted context. Do not require every block to compile independently and do not flag a fragment merely because it is partial. Group unchanged blocks that share setup and API surfaces into one contextual outcome. Source-check changed blocks and unchanged blocks whose correctness is necessary to judge a changed claim; for other unchanged blocks, use the package/source evidence already established for the page instead of opening new source solely to re-audit unchanged code.
+
+Verify what the relevant block set teaches against source:
+
+- package and relative imports
+- exported symbols and method names
+- options, required fields, defaults, and constraints
+- async/await and return behavior
+- prerequisites, credentials, services, and environment setup
+- consistency with adjacent blocks and stated expected results
+
+Report a contextual block outcome for every changed page, including valid intentional omissions and why the surrounding context makes them sufficient.
+
+### 6. Check page-specific completeness
+
+Apply `references/RUBRIC.md` and the canonical page guide:
+
+- Docs overviews: verify broad orientation, canonical ownership, component-driven navigation, and next-step coverage without demanding an API catalog.
+- Docs pages: verify the concept or task taught, its prerequisites, sequence, expected results, and related navigation.
+- Integrations: verify installation/setup, imported package and provider behavior, recipes or task flow, and integration-specific prerequisites.
+- Deployment integrations: additionally verify authentication and exposure ordering, production prerequisites, commands, environment values, and operational verification.
+- References: compare the declared public surface with exported APIs. Check every claimed parameter, property, overload, default, optional field, constraint, error, return value, and example. Flag missing public surface within the page's declared scope, but not internal implementation details.
+
+Guides and overviews still require source verification for APIs and behavior they teach; they are not forced into reference-page completeness.
+
+### 7. Run narrow deterministic checks
+
+Run the read-only docs-audit checker once for all changed pages:
+
+```sh
+bash .claude/skills/docs-audit/scripts/run-checks.sh \
+  --docs <all-audited-files>
+```
+
+Invoke the documented command directly; do not inspect the checker source before or after running it. Use the diagnostics and five summary lines printed to stdout. Treat `*-target` entries as audited-page results. Report proven unrelated repository-wide failures separately and never count them against an audited page. Treat `validate-target=warn` as ambiguous attribution that needs report context, not as a target failure or a clean pass. Do not run write-formatting, package installation, temporary project setup, code-example eval projects, or ad hoc compiler/parser probes.
+
+### 8. Report and stop
+
+Produce one compact final report using `references/AUDIT-REPORT.md`. Use one row per page where possible, group code blocks that share a role and evidence, and keep each finding to the evidence, contradiction, impact, and bounded direction needed to act. Include:
+
+- complete scope and limitations
+- per-page classification and canonical-guidance compliance map
+- source paths inspected
+- contextual outcome for every code block or page-level code set
+- strict reference completeness outcomes where applicable
+- deterministic target results and separate repo-wide noise
+- uniquely identified, source-backed findings ordered by severity
+- an overall verdict
+
+Do not ask follow-up questions, edit files, submit a plan, or run post-fix checks. Stop after the report. If the user later requests fixes, treat that as a separate implementation task under `mastra-docs`.
+
+## Rules
+
+- Audit every changed authored page in scope
+- Keep `mastra-docs` as the sole owner of authoring rules
+- Treat source and exported types as truth
+- Use narrow evidence-driven reads rather than broad source archaeology
+- Verify code in page context, not through blanket independent compilation
+- Keep reference completeness bounded by the page's declared public surface
+- Separate deterministic target failures from unrelated repository noise
+- Never modify the repository during an audit-only request
 
 ## References
 
-Load during the audit:
-
-- `references/RUBRIC.md`: audit dimensions and severity rules
-- `references/AUDIT-REPORT.md`: required report format
-- `.claude/skills/mastra-docs/references/STYLEGUIDE.md`: base docs styleguide
-- One matching page-type guide from `.claude/skills/mastra-docs/references/`: `DOC.md`, `GUIDE_QUICKSTART.md`, `GUIDE_TUTORIAL.md`, `GUIDE_INTEGRATION.md`, `GUIDE_DEPLOYMENT.md`, or `REFERENCE.md`
+- references/AUDIT-REPORT.md
+- references/RUBRIC.md
 
 ## Scripts
 
-Use scripts for deterministic mechanics; do not hand-roll run dirs, snapshots, lint capture, eval scaffolds, typecheck logging, or local package linking. Invoke from anywhere as `bash .claude/skills/docs-audit/scripts/<name>.sh ...`.
-
-- `init-run.sh --docs <files>`: create the temp run directory and print `RUN_DIR=...`.
-- `snapshot.sh --run-dir "$RUN_DIR" --stage original|improved --docs <files>`: copy audited docs into the run dir.
-- `run-checks.sh --run-dir "$RUN_DIR" --docs <files>`: run validation, repo-wide and target-scoped remark/Vale, file-scoped Prettier, and write raw output plus `$RUN_DIR/commands/summary.txt`.
-- `format-doc.sh --docs <files>`: format changed docs from the docs package cwd so `docs/.prettierrc` and `docs/.prettierignore` apply.
-- `eval-setup.sh --run-dir "$RUN_DIR" --job "..." --doc <file> --pkg @mastra/...`: create an eval job/project, copy `doc-under-test.mdx`, resolve local packages, and print `JOB_DIR=...`.
-- `eval-typecheck.sh --job-dir "$JOB_DIR"`: run TypeScript verification and append output to `commands.log`.
-
-## Artifact policy
-
-- Keep intermediate artifacts outside the repo in the script-created `$RUN_DIR`.
-- Run `init-run.sh` before deterministic checks and report the exact printed path, including `$TMPDIR` fallbacks.
-- Snapshot original docs immediately after scope confirmation; snapshot improved docs after approved fixes and before eval.
-- Save `audit-report.md`, `fix-plan.md`, eval `instructions.md`, `commands.log`, and `result.md` under `$RUN_DIR`.
-- Do not commit or stage temp artifacts. Keep the directory until the final response and include its path.
-
-## Required workflow
-
-### 1. Scope interactively
-
-Use `ask_user` to ask which doc page, URL/path, topic, category, or multi-page scope to audit.
-
-DO free-text scope prompt with only `question`:
-
-```ts
-ask_user({ question: 'Which doc page should I audit? Paste a path, URL, or topic.' });
-```
-
-DON'T pass `options` or `selectionMode` for free text. If a free-text prompt errors with `selectionMode requires options`, you passed `selectionMode` without `options` — drop both keys and retry; do not fall back to plain chat.
-
-Resolve to docs files under `docs/src/content/en/docs/`, `docs/src/content/en/guides/`, or `docs/src/content/en/reference/`. If ambiguous, present plausible matches. Prefer one page unless the user asks for a category. Treat more than five pages as too broad unless the user approves a narrowed scope or representative sample.
-
-After reading scoped pages, derive 2–4 concrete jobs-to-be-done from each doc's title, intro, headings, examples, page type, and promise. Do not ask the user to invent jobs. Ask the user to select jobs with multi-select and explicit options:
-
-```ts
-ask_user({ question, options: [...], selectionMode: "multi_select" })
-```
-
-Only use `selectionMode` with `options`. Selected jobs seed practicability checks and mandatory eval. Confirm multi-page scope before auditing.
-
-### 2. Classify page type and styleguide
-
-Classify each scoped file before style checks:
-
-- `docs/src/content/en/docs/**/overview.mdx`: docs overview
-- `docs/src/content/en/docs/**`: docs standard
-- `docs/src/content/en/guides/getting-started/**`: guide quickstart
-- deployment paths or titles like `Deploy Mastra to ...`: guide deployment
-- tutorial paths or titles like `Guide: Building ...`: guide tutorial
-- integration paths or titles like `Using ...`: guide integration
-- `docs/src/content/en/reference/**`: reference
-- otherwise: other
-
-If classification overlaps, prefer the matching frontmatter title pattern; otherwise choose by structure. Apply `STYLEGUIDE.md` plus the matching page-type guide and state the classification in the report.
-
-### 3. Map docs to source
-
-Read docs and collect frontmatter `packages:`, `@mastra/<name>` imports, mentioned APIs, `<PropertiesTable>` entries, and code-block file paths.
-
-Resolve each `@mastra/<pkg>` import to the matching workspace `package.json`, then inspect its `exports` and `src/index.ts` before any repo-wide search. For the exact exported symbol/type, use `lsp_inspect` or `view` on the narrow export/type file first. Only broaden to `search_content` if the narrow export/type read is ambiguous.
-
-Do not guess paths. `@mastra/core` usually maps to `packages/core/src`; `@mastra/<name>` often maps to `packages/<name>/src`, but the package `name` field is authoritative. For symbols like `cloneThread` that are noisy across tests, controllers, and docs, start from the package export surface such as `packages/memory/src/index.ts`.
-
-Source is the source of truth for code accuracy and API completeness; never trust doc snippets at face value. If activated skill text conflicts with the on-disk skill files, trust the on-disk files.
-
-### 4. Run deterministic checks
-
-Run:
-
-```sh
-bash .claude/skills/docs-audit/scripts/run-checks.sh --run-dir "$RUN_DIR" --docs <audited-files>
-```
-
-The script handles cwd, capture, target-scoped lint summaries, file-scoped Prettier, and missing local Vale as a warning. Read `$RUN_DIR/commands/summary.txt` first: `*-target` lines are the audit signal, and `repo-wide-failures` is unrelated noise to list separately. Do not run formatting commands that write files during the audit phase.
-
-### 5. Apply the rubric
-
-Load `references/RUBRIC.md` and score all dimensions:
-
-1. Styleguide adherence
-2. Deterministic linting
-3. Code example accuracy
-4. API/property completeness
-5. Practicability
-
-For code accuracy, verify imports, exports, constructors, methods, properties, options, required fields, model-token usage, and `new Agent()` fields. For generic/overload-heavy APIs, check TypeScript inference closely, including literal IDs, registry keys, version selectors, and overload parameters.
-
-For completeness, compare documented APIs to exported source APIs for the page scope; on reference pages, verify methods have real examples and `<PropertiesTable>` entries include `name`, `type`, and `description`.
-
-For practicability, use the selected jobs. Check whether a beginner or agent can complete the job from the doc alone, including prerequisites, jargon, expected output, verification, and TypeScript-copyability for inference-sensitive examples.
-
-Every finding needs `file:line` evidence; source-backed findings also need source `file:line` evidence.
-
-### 6. Report before editing
-
-Write `$RUN_DIR/audit-report.md` using `references/AUDIT-REPORT.md`, then present it before proposing edits. Include score table, findings, deterministic output summary, selected jobs, source paths inspected, styleguides applied, and `$RUN_DIR`. If the full report is too long for chat, summarize and provide the full path. Do not edit files yet.
-
-### 7. Submit a fix plan
-
-After the user has seen the report, write `$RUN_DIR/fix-plan.md` and submit it with `submit_plan`. The plan must list files, findings addressed, change types, rationale, verification commands, and mandatory eval per selected job.
-
-Before submitting, inspect nearby table rows, nested properties, headings, and examples around findings; include adjacent stale details that belong to the same API surface. Order fixes by blocker/major accuracy, completeness, practicability, style, then deterministic lint/formatting. Wait for approval before editing.
-
-### 8. Implement approved fixes
-
-Implement only approved fixes. Keep changes focused, follow docs styleguides and `docs/AGENTS.md`, and do not modify examples or unrelated files unless approved. If renaming/deleting docs, update `docs/vercel.redirects.json` and run `pnpm run generate-vercel-redirects` from `docs/`.
-
-### 9. Re-run checks and snapshot improved docs
-
-After fixes, format changed docs with the docs package config:
-
-```sh
-bash .claude/skills/docs-audit/scripts/format-doc.sh --docs <changed-audited-files>
-```
-
-Then run:
-
-```sh
-bash .claude/skills/docs-audit/scripts/run-checks.sh --run-dir "$RUN_DIR" --docs <changed-audited-files>
-```
-
-Fix failures caused by approved changes; use `commands/summary.txt` to separate target-page failures from repo-wide noise. Then snapshot improved docs with `snapshot.sh --stage improved`.
-
-### 10. Run mandatory eval
-
-Always run eval after approved fixes and re-linting. For each selected job:
-
-1. Run `eval-setup.sh`, passing every local package the doc imports with repeatable `--pkg` flags. Use the printed `JOB_DIR=...`.
-2. Write `$JOB_DIR/instructions.md` with only the selected job, eval rules, and `doc-under-test.mdx` path.
-3. Write minimal files under `$JOB_DIR/project/src/` to complete the job, starting from the documented snippet and adding only necessary setup. Do not simplify away registry keys, literal IDs, overload args, or version selectors the doc teaches.
-4. Respect credential boundaries: do not use paid/external/prod services unless required and the user provides safe test credentials. If missing, continue to the first credential boundary and report whether the docs got there cleanly.
-5. Run `eval-typecheck.sh --job-dir "$JOB_DIR"`; a failing typecheck is an eval result, not a script error.
-6. Write `$JOB_DIR/result.md`, separating `Doc friction` from `Harness/environment friction`. Only doc-caused friction becomes follow-up findings.
-
-If using a subagent/fresh isolated turn for the eval, give it only the selected job, `doc-under-test.mdx`, `project/`, `commands.log`, and `result.md` paths. Verify the output before trusting it.
-
-If eval reveals doc-caused friction, add findings, produce a follow-up report section, submit a follow-up plan, re-run checks/eval after approved fixes, preserve original failures in `commands.log`, and replace `result.md` with the latest outcome.
-
-### 11. Finish with proof
-
-Final response must include audited pages, selected jobs, `$RUN_DIR`, eval project paths, changed files, verification commands/outcomes, eval outcomes, and unrelated failures or skipped checks.
-
-## Important rules
-
-- Derive jobs from the doc and let the user choose; the user should not have to invent them.
-- Eval after fixes is mandatory.
-- Keep artifacts and eval projects outside the repo.
-- Separate deterministic lint results from judgment findings.
-- Cite evidence with `file:line`.
-- Never edit before the audit report and approved plan.
-- Reference/apply styleguides; do not duplicate them.
-- Treat source as truth for accuracy and completeness.
-- Prefer narrow docs checks over repo-wide commands when possible.
-- Separate doc friction from harness/environment friction.
+- scripts/run-checks.sh

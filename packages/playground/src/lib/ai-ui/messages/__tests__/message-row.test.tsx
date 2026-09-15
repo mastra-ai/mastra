@@ -1,15 +1,20 @@
+import { MessageList } from '@mastra/core/agent/message-list';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
+import { ArrivalScope } from '@mastra/playground-ui/components/Arrival';
+import { ChatRunningContext } from '@mastra/playground-ui/domains/chat/context/chat-context';
+import { ToolCallProvider } from '@mastra/playground-ui/domains/chat/context/tool-call-context';
+import { ARRIVING_CLASS } from '@mastra/playground-ui/tokens';
+import type { MastraTextPart, ToolInvocationPart } from '@mastra/react';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MessageRow } from '../message-row';
 import { buildGlobalOmPartsByCycleId, convertOmPartsInMastraMessage } from '@/services/om-parts-converter';
-import { ToolCallProvider } from '@/services/tool-call-provider';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -22,7 +27,10 @@ beforeEach(() => {
   server.use(...mcpEmptyHandlers);
 });
 
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
 
 const Providers = ({ children }: { children: ReactNode }) => {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -51,6 +59,8 @@ const Providers = ({ children }: { children: ReactNode }) => {
 
 const renderRow = (message: MastraDBMessage) => render(<MessageRow message={message} />, { wrapper: Providers });
 
+const streamingText = (text: string): MastraTextPart => ({ type: 'text', text, state: 'streaming' });
+
 const omPart = (name: string, data: Record<string, unknown>) => ({
   type: `data-${name}`,
   data,
@@ -74,6 +84,138 @@ describe('MessageRow', () => {
       }),
     );
     expect(screen.getByText('world')).toBeTruthy();
+  });
+
+  // The reveal only paces if the factory keeps the text part mounted as the
+  // reply grows; a remount would show every chunk whole again.
+  describe('when a streaming reply grows', () => {
+    it('reveals it gradually', () => {
+      vi.useFakeTimers();
+      const reply = `Ready. ${Array.from({ length: 40 }, (_, index) => `word${index}`).join(' ')}`;
+      const growing = (text: string) => baseMessage({ content: { format: 2, parts: [streamingText(text)] } });
+
+      const { container, rerender } = render(<MessageRow message={growing('Ready.')} />, { wrapper: Providers });
+      rerender(<MessageRow message={growing(reply)} />);
+
+      expect(container.textContent).not.toContain('word39');
+
+      for (let frames = 0; frames < 300 && !container.textContent?.includes('word39'); frames++) {
+        act(() => void vi.advanceTimersByTime(16));
+      }
+
+      expect(container.textContent).toContain('word39');
+    });
+
+    it('holds a tool row behind the prose written before it', () => {
+      vi.useFakeTimers();
+      const reply = `Ready. ${Array.from({ length: 40 }, (_, index) => `word${index}`).join(' ')}`;
+      const withTool = (text: string) =>
+        baseMessage({
+          content: {
+            format: 2,
+            parts: [
+              streamingText(text),
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  toolName: 'genericTool',
+                  toolCallId: 'call-1',
+                  state: 'result',
+                  args: {},
+                  result: { ok: true },
+                },
+              } as never,
+            ],
+          },
+        });
+      const badge = () => container.querySelector('[data-testid="tool-badge"]');
+
+      const { container, rerender } = render(<MessageRow message={withTool('Ready.')} />, { wrapper: Providers });
+      rerender(<MessageRow message={withTool(reply)} />);
+
+      expect(badge()).toBeNull();
+
+      for (let frames = 0; frames < 600 && !badge(); frames++) {
+        act(() => void vi.advanceTimersByTime(16));
+      }
+
+      expect(badge()).toBeTruthy();
+    });
+
+    it('finishes one text block before starting the next', () => {
+      vi.useFakeTimers();
+      const first = `First. ${Array.from({ length: 30 }, (_, index) => `alpha${index}`).join(' ')}`;
+      const second = `Second. ${Array.from({ length: 30 }, (_, index) => `beta${index}`).join(' ')}`;
+      const twoBlocks = (a: string, b: string) =>
+        baseMessage({ content: { format: 2, parts: [streamingText(a), streamingText(b)] } });
+
+      const { container, rerender } = render(<MessageRow message={twoBlocks('First.', '')} />, { wrapper: Providers });
+      rerender(<MessageRow message={twoBlocks(first, second)} />);
+
+      for (let frames = 0; frames < 900 && !container.textContent?.includes('beta29'); frames++) {
+        if (container.textContent?.includes('beta0')) expect(container.textContent).toContain('alpha29');
+        act(() => void vi.advanceTimersByTime(16));
+      }
+
+      expect(container.textContent).toContain('beta29');
+    });
+
+    it('fades in a tool row that lands while the reader is watching', () => {
+      vi.useFakeTimers();
+      const reply = `Ready. ${Array.from({ length: 40 }, (_, index) => `word${index}`).join(' ')}`;
+      const withTool = (text: string) =>
+        baseMessage({
+          content: {
+            format: 2,
+            parts: [
+              streamingText(text),
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  toolName: 'genericTool',
+                  toolCallId: 'call-1',
+                  state: 'result',
+                  args: {},
+                  result: { ok: true },
+                },
+              } as never,
+            ],
+          },
+        });
+      const badge = () => container.querySelector('[data-testid="tool-badge"]');
+
+      const { container, rerender } = render(
+        <ArrivalScope>
+          <MessageRow message={withTool('Ready.')} />
+        </ArrivalScope>,
+        { wrapper: Providers },
+      );
+      rerender(
+        <ArrivalScope>
+          <MessageRow message={withTool(reply)} />
+        </ArrivalScope>,
+      );
+
+      for (let frames = 0; frames < 600 && !badge(); frames++) {
+        act(() => void vi.advanceTimersByTime(16));
+      }
+
+      expect(badge()?.closest(`.${ARRIVING_CLASS}`)).not.toBeNull();
+    });
+
+    it('hands over a notice whole instead of pacing it', () => {
+      vi.useFakeTimers();
+      const reason = `Blocked. ${Array.from({ length: 40 }, (_, index) => `word${index}`).join(' ')}`;
+      const failing = (text: string) =>
+        baseMessage({
+          content: { format: 2, metadata: { status: 'error' }, parts: [streamingText(text)] },
+        });
+
+      const { container, rerender } = render(<MessageRow message={failing('Blocked.')} />, { wrapper: Providers });
+      rerender(<MessageRow message={failing(reason)} />);
+
+      expect(container.textContent).toContain('word39');
+    });
   });
 
   it('renders user text', () => {
@@ -186,6 +328,210 @@ describe('MessageRow', () => {
       }),
     );
     expect(document.querySelector('[data-testid="tool-badge"]')).toBeTruthy();
+  });
+
+  describe('when plain tool calls run back to back', () => {
+    const toolCall = (
+      toolCallId: string,
+      toolName = 'genericTool',
+      state: 'result' | 'call' = 'result',
+    ): ToolInvocationPart =>
+      state === 'result'
+        ? {
+            type: 'tool-invocation',
+            toolInvocation: { state, toolName, toolCallId, args: { q: toolCallId }, result: { ok: true } },
+          }
+        : { type: 'tool-invocation', toolInvocation: { state, toolName, toolCallId, args: { q: toolCallId } } };
+    const withCalls = (parts: MastraDBMessage['content']['parts'], metadata: Record<string, unknown> = {}) =>
+      baseMessage({ role: 'assistant', content: { format: 2, metadata: { mode: 'stream', ...metadata }, parts } });
+
+    it('folds three of them into one group row that opens onto the cards', () => {
+      const { container } = renderRow(withCalls([toolCall('call-1'), toolCall('call-2'), toolCall('call-3')]));
+
+      const group = screen.getByRole('group', { name: 'Tool group: 3 steps' });
+      expect(container.querySelectorAll('[data-testid="tool-badge"]')).toHaveLength(0);
+
+      fireEvent.click(within(group).getByRole('button'));
+      expect(container.querySelectorAll('[data-testid="tool-badge"]')).toHaveLength(3);
+    });
+
+    it('summarizes successful results without expanding the group', () => {
+      renderRow(withCalls([toolCall('call-1'), toolCall('call-2'), toolCall('call-3')]));
+      expect(screen.getByText('3 OK')).toBeTruthy();
+    });
+
+    it('includes recorded failures in the collapsed summary', () => {
+      renderRow(
+        withCalls([
+          toolCall('call-1'),
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'output-error',
+              toolName: 'genericTool',
+              toolCallId: 'call-2',
+              args: {},
+              errorText: 'Failed',
+            },
+          },
+          toolCall('call-3'),
+        ]),
+      );
+      expect(screen.getByText('2 OK · 1 failed')).toBeTruthy();
+    });
+
+    it('does not count recorded legacy tool errors as successful results', () => {
+      renderRow(
+        withCalls([
+          toolCall('one'),
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolName: 'genericTool',
+              toolCallId: 'two',
+              args: {},
+              result: 'Failed',
+              isError: true,
+            },
+          },
+          toolCall('three'),
+        ]),
+      );
+      expect(screen.getByText('2 OK · 1 failed')).toBeTruthy();
+    });
+
+    it('does not count unfinished calls in stopped history as successful', () => {
+      renderRow(
+        withCalls([
+          toolCall('call-1'),
+          toolCall('call-2', 'genericTool', 'call'),
+          toolCall('call-3', 'genericTool', 'call'),
+        ]),
+      );
+      expect(screen.getByText('1 OK · 2 incomplete')).toBeTruthy();
+    });
+
+    it('identifies only unfinished calls inside the expanded group', () => {
+      renderRow(
+        withCalls([
+          toolCall('done', 'finishedTool'),
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'output-error',
+              toolName: 'failedTool',
+              toolCallId: 'failed',
+              args: {},
+              errorText: 'Failed',
+            },
+          },
+          toolCall('pending', 'unfinishedTool', 'call'),
+        ]),
+      );
+      const group = screen.getByRole('group', { name: 'Tool group: 3 steps' });
+      fireEvent.click(within(group).getByRole('button'));
+      expect(within(screen.getByRole('group', { name: 'unfinishedTool' })).getByText('Incomplete')).toBeTruthy();
+      expect(within(screen.getByRole('group', { name: 'finishedTool' })).queryByText('Incomplete')).toBeNull();
+      expect(within(screen.getByRole('group', { name: 'failedTool' })).queryByText('Incomplete')).toBeNull();
+    });
+
+    it('restores modern successful results from stored history', () => {
+      const messages = new MessageList();
+      messages.add(
+        {
+          id: 'modern-results',
+          role: 'assistant',
+          parts: [
+            { type: 'tool-genericTool', toolCallId: 'one', state: 'output-available', input: {}, output: { ok: true } },
+            { type: 'tool-genericTool', toolCallId: 'two', state: 'output-available', input: {}, output: { ok: true } },
+            { type: 'tool-genericTool', toolCallId: 'three', state: 'input-available', input: {} },
+          ],
+        },
+        'response',
+      );
+      const stored = messages.get.all.db();
+      renderRow(stored[0]);
+      expect(screen.getByText('2 OK · 1 incomplete')).toBeTruthy();
+    });
+
+    it('preserves incomplete counts when a live row stops and is remounted as history', () => {
+      const message = withCalls([
+        toolCall('one'),
+        toolCall('two', 'genericTool', 'call'),
+        toolCall('three', 'genericTool', 'call'),
+      ]);
+      message.content.metadata = { runId: 'live-run' };
+      const row = (isRunning: boolean) => (
+        <ChatRunningContext.Provider
+          value={{ isRunning, activeRunId: 'live-run', cancelRun: () => {}, canSendWhileStreaming: false }}
+        >
+          <MessageRow message={message} />
+        </ChatRunningContext.Provider>
+      );
+      const { rerender, unmount } = render(row(true), { wrapper: Providers });
+      expect(screen.getByText('1/3')).toBeTruthy();
+      fireEvent.click(within(screen.getByRole('group', { name: 'Tool group: 3 steps' })).getByRole('button'));
+      expect(screen.queryByText('Incomplete')).toBeNull();
+      const pendingCall = within(screen.getAllByRole('group', { name: 'genericTool' })[1]).getByRole('button');
+      fireEvent.click(pendingCall);
+      rerender(row(false));
+      expect(screen.getByText('1 OK · 2 incomplete')).toBeTruthy();
+      expect(screen.getAllByText('Incomplete')).toHaveLength(2);
+      expect(pendingCall.getAttribute('aria-expanded')).toBe('true');
+      expect(pendingCall.isConnected).toBe(true);
+      unmount();
+      renderRow(structuredClone(message));
+      expect(screen.getByText('1 OK · 2 incomplete')).toBeTruthy();
+      fireEvent.click(within(screen.getByRole('group', { name: 'Tool group: 3 steps' })).getByRole('button'));
+      expect(screen.getAllByText('Incomplete')).toHaveLength(2);
+    });
+
+    it('leaves two of them as their own rows', () => {
+      const { container } = renderRow(withCalls([toolCall('call-1'), toolCall('call-2')]));
+
+      expect(screen.queryByRole('group', { name: /Tool group/ })).toBeNull();
+      expect(container.querySelectorAll('[data-testid="tool-badge"]')).toHaveLength(2);
+    });
+
+    it('keeps a call waiting on approval out of the fold', () => {
+      renderRow(
+        withCalls([toolCall('call-1'), toolCall('call-2'), toolCall('call-3', 'dangerousTool', 'call')], {
+          requireApprovalMetadata: { 'call-3': { toolCallId: 'call-3', toolName: 'dangerousTool', args: {} } },
+        }),
+      );
+
+      expect(screen.queryByRole('group', { name: /Tool group/ })).toBeNull();
+      expect(screen.getByText('Approve')).toBeTruthy();
+    });
+
+    it('lets a docked task update sit inside the run without breaking it', () => {
+      renderRow(
+        withCalls([toolCall('call-1'), toolCall('task-1', 'task_update'), toolCall('call-2'), toolCall('call-3')]),
+      );
+
+      expect(screen.getByRole('group', { name: 'Tool group: 3 steps' })).toBeTruthy();
+    });
+
+    // A thread read back without its suspend payload draws the question as a plain badge. It is still
+    // a question, so it breaks the run rather than folding away with the calls around it.
+    it('keeps a question out of the fold even where nothing is left to answer', () => {
+      const { container } = render(
+        <MessageRow
+          readOnly
+          message={withCalls([
+            toolCall('call-1'),
+            toolCall('ask-1', 'ask_user'),
+            toolCall('call-2'),
+            toolCall('call-3'),
+          ])}
+        />,
+        { wrapper: Providers },
+      );
+
+      expect(screen.queryByRole('group', { name: /Tool group/ })).toBeNull();
+      expect(container.querySelectorAll('[data-testid="tool-badge"]')).toHaveLength(4);
+    });
   });
 
   it('routes an OM observation tool into the observation marker badge', () => {

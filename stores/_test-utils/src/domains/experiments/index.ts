@@ -71,6 +71,41 @@ export function createExperimentsTests({
         expect(exp.id).toBe(customId);
       });
 
+      it('createExperiment round-trips a null target and scorerIds', async () => {
+        const exp = await experimentsStorage.createExperiment({
+          name: 'caller-driven-exp',
+          datasetId: null,
+          datasetVersion: null,
+          targetType: null,
+          targetId: null,
+          scorerIds: null,
+          totalItems: 3,
+        });
+
+        expect(exp.targetType).toBeNull();
+        expect(exp.targetId).toBeNull();
+
+        const fetched = await experimentsStorage.getExperimentById({ id: exp.id });
+        expect(fetched?.targetType).toBeNull();
+        expect(fetched?.targetId).toBeNull();
+        expect(fetched?.scorerIds ?? null).toBeNull();
+      });
+
+      it('createExperiment round-trips scorerIds', async () => {
+        const exp = await experimentsStorage.createExperiment({
+          name: 'scorer-ids-exp',
+          datasetId: null,
+          datasetVersion: null,
+          targetType: 'agent',
+          targetId: 'agent-1',
+          scorerIds: ['accuracy', 'fluency'],
+          totalItems: 3,
+        });
+
+        const fetched = await experimentsStorage.getExperimentById({ id: exp.id });
+        expect(fetched?.scorerIds).toEqual(['accuracy', 'fluency']);
+      });
+
       it('persists provenance, runner attestation, and grouping identity', async () => {
         const exp = await experimentsStorage.createExperiment({
           name: 'provenance-exp',
@@ -450,6 +485,175 @@ export function createExperimentsTests({
         expect(result.retryCount).toBe(1);
       });
 
+      it('upsertExperimentResult creates a row when none exists for the natural key', async () => {
+        const result = await experimentsStorage.upsertExperimentResult({
+          experimentId: exp.id,
+          itemId: 'item-up-1',
+          itemDatasetVersion: null,
+          input: { q: 'hello' },
+          output: { a: 'v1' },
+          groundTruth: null,
+          error: null,
+          startedAt: new Date(),
+          completedAt: new Date(),
+          retryCount: 0,
+          attempt: 0,
+        });
+
+        expect(result.id).toBeDefined();
+        expect(result.attempt).toBe(0);
+        expect(result.output).toEqual({ a: 'v1' });
+      });
+
+      it('upsertExperimentResult converges retried submissions onto a single row', async () => {
+        const first = await experimentsStorage.upsertExperimentResult({
+          experimentId: exp.id,
+          itemId: 'item-up-2',
+          itemDatasetVersion: null,
+          input: { q: 'hello' },
+          output: { a: 'v1' },
+          groundTruth: null,
+          error: null,
+          startedAt: new Date(),
+          completedAt: new Date(),
+          retryCount: 0,
+          attempt: 0,
+        });
+
+        const second = await experimentsStorage.upsertExperimentResult({
+          experimentId: exp.id,
+          itemId: 'item-up-2',
+          itemDatasetVersion: null,
+          input: { q: 'hello' },
+          output: { a: 'v2' },
+          groundTruth: null,
+          error: null,
+          startedAt: new Date(),
+          completedAt: new Date(),
+          retryCount: 1,
+          attempt: 0,
+        });
+
+        expect(second.id).toBe(first.id);
+        expect(second.output).toEqual({ a: 'v2' });
+
+        const listed = await experimentsStorage.listExperimentResults({
+          experimentId: exp.id,
+          pagination: { page: 0, perPage: 10 },
+        });
+        const matching = listed.results.filter(r => r.itemId === 'item-up-2');
+        expect(matching).toHaveLength(1);
+        expect(matching[0]!.output).toEqual({ a: 'v2' });
+      });
+
+      it('upsertExperimentResult defaults attempt to 0 when omitted and converges with explicit attempt 0', async () => {
+        const first = await experimentsStorage.upsertExperimentResult({
+          experimentId: exp.id,
+          itemId: 'item-up-default',
+          itemDatasetVersion: null,
+          input: { q: 'hello' },
+          output: { a: 'v1' },
+          groundTruth: null,
+          error: null,
+          startedAt: new Date(),
+          completedAt: new Date(),
+          retryCount: 0,
+        });
+
+        expect(first.attempt).toBe(0);
+
+        const second = await experimentsStorage.upsertExperimentResult({
+          experimentId: exp.id,
+          itemId: 'item-up-default',
+          itemDatasetVersion: null,
+          input: { q: 'hello' },
+          output: { a: 'v2' },
+          groundTruth: null,
+          error: null,
+          startedAt: new Date(),
+          completedAt: new Date(),
+          retryCount: 1,
+          attempt: 0,
+        });
+
+        expect(second.id).toBe(first.id);
+        expect(second.attempt).toBe(0);
+      });
+
+      it('upsertExperimentResult preserves createdAt across retries', async () => {
+        const first = await experimentsStorage.upsertExperimentResult({
+          experimentId: exp.id,
+          itemId: 'item-up-created-at',
+          itemDatasetVersion: null,
+          input: { q: 'hello' },
+          output: { a: 'v1' },
+          groundTruth: null,
+          error: null,
+          startedAt: new Date(),
+          completedAt: new Date(),
+          retryCount: 0,
+          attempt: 0,
+        });
+
+        await new Promise(resolve => setTimeout(resolve, 25));
+
+        const second = await experimentsStorage.upsertExperimentResult({
+          experimentId: exp.id,
+          itemId: 'item-up-created-at',
+          itemDatasetVersion: null,
+          input: { q: 'hello' },
+          output: { a: 'v2' },
+          groundTruth: null,
+          error: null,
+          startedAt: new Date(),
+          completedAt: new Date(),
+          retryCount: 1,
+          attempt: 0,
+        });
+
+        expect(second.id).toBe(first.id);
+        expect(new Date(second.createdAt).getTime()).toBe(new Date(first.createdAt).getTime());
+      });
+
+      it('upsertExperimentResult keeps separate rows per attempt', async () => {
+        const a0 = await experimentsStorage.upsertExperimentResult({
+          experimentId: exp.id,
+          itemId: 'item-up-3',
+          itemDatasetVersion: null,
+          input: { q: 'hello' },
+          output: { a: 'trial-0' },
+          groundTruth: null,
+          error: null,
+          startedAt: new Date(),
+          completedAt: new Date(),
+          retryCount: 0,
+          attempt: 0,
+        });
+        const a1 = await experimentsStorage.upsertExperimentResult({
+          experimentId: exp.id,
+          itemId: 'item-up-3',
+          itemDatasetVersion: null,
+          input: { q: 'hello' },
+          output: { a: 'trial-1' },
+          groundTruth: null,
+          error: null,
+          startedAt: new Date(),
+          completedAt: new Date(),
+          retryCount: 0,
+          attempt: 1,
+        });
+
+        expect(a1.id).not.toBe(a0.id);
+        expect(a0.attempt).toBe(0);
+        expect(a1.attempt).toBe(1);
+
+        const listed = await experimentsStorage.listExperimentResults({
+          experimentId: exp.id,
+          pagination: { page: 0, perPage: 10 },
+        });
+        expect(listed.results.filter(r => r.itemId === 'item-up-3')).toHaveLength(2);
+      });
+
       const toolMockReportFixture = {
         served: [{ mockIndex: 0, toolName: 'getWeather', args: { city: 'Seattle' } }],
         unconsumed: [{ mockIndex: 1, toolName: 'getWeather', args: { city: 'Paris' } }],
@@ -596,6 +800,72 @@ export function createExperimentsTests({
         expect(new Date(results.results[0]!.startedAt).getTime()).toBeLessThanOrEqual(
           new Date(results.results[1]!.startedAt).getTime(),
         );
+      });
+
+      it('listExperimentResults filters by tags (all must match)', async () => {
+        const now = Date.now();
+        const seeds: Array<{ itemId: string; tags: string[] | null; status?: 'reviewed' }> = [
+          { itemId: 'only-a', tags: ['a'], status: 'reviewed' },
+          { itemId: 'a-and-b', tags: ['a', 'b'] },
+          { itemId: 'only-b', tags: ['b'] },
+          { itemId: 'untagged', tags: null },
+        ];
+        for (const [i, seed] of seeds.entries()) {
+          await experimentsStorage.addExperimentResult({
+            experimentId: exp.id,
+            itemId: seed.itemId,
+            itemDatasetVersion: null,
+            input: { q: seed.itemId },
+            output: null,
+            groundTruth: null,
+            error: null,
+            startedAt: new Date(now + i * 1000),
+            completedAt: new Date(now + i * 1000 + 500),
+            retryCount: 0,
+            tags: seed.tags,
+            status: seed.status ?? null,
+          });
+        }
+
+        const both = await experimentsStorage.listExperimentResults({
+          experimentId: exp.id,
+          tags: ['a', 'b'],
+          pagination: { page: 0, perPage: 10 },
+        });
+        expect(both.results.map(r => r.itemId)).toEqual(['a-and-b']);
+        expect(both.pagination.total).toBe(1);
+
+        const onlyA = await experimentsStorage.listExperimentResults({
+          experimentId: exp.id,
+          tags: ['a'],
+          pagination: { page: 0, perPage: 10 },
+        });
+        expect(onlyA.results.map(r => r.itemId)).toEqual(['only-a', 'a-and-b']);
+        expect(onlyA.pagination.total).toBe(2);
+
+        const withStatus = await experimentsStorage.listExperimentResults({
+          experimentId: exp.id,
+          tags: ['a'],
+          status: 'reviewed',
+          pagination: { page: 0, perPage: 10 },
+        });
+        expect(withStatus.results.map(r => r.itemId)).toEqual(['only-a']);
+        expect(withStatus.pagination.total).toBe(1);
+
+        const empty = await experimentsStorage.listExperimentResults({
+          experimentId: exp.id,
+          tags: [],
+          pagination: { page: 0, perPage: 10 },
+        });
+        expect(empty.pagination.total).toBe(4);
+
+        const missing = await experimentsStorage.listExperimentResults({
+          experimentId: exp.id,
+          tags: ['nope'],
+          pagination: { page: 0, perPage: 10 },
+        });
+        expect(missing.results).toHaveLength(0);
+        expect(missing.pagination.total).toBe(0);
       });
 
       it('deleteExperimentResults removes all results for experimentId', async () => {

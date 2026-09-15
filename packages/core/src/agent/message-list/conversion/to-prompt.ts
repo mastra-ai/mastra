@@ -207,7 +207,12 @@ export function aiV5ModelMessageToV2PromptMessage(modelMessage: AIV5Type.ModelMe
 
   const role = modelMessage.role;
 
-  for (const part of modelMessage.content) {
+  for (const part of modelMessage.content ?? []) {
+    // Defensive: upstream rewrites (e.g. observational memory) have produced sparse
+    // content arrays in production. A hole here would crash the provider converter
+    // with an unattributable "Cannot read properties of undefined (reading 'type')".
+    if (!part || typeof part !== 'object') continue;
+
     const incompatibleMessage = `Saw incompatible message content part type ${part.type} for message role ${role}`;
 
     switch (part.type) {
@@ -245,6 +250,10 @@ export function aiV5ModelMessageToV2PromptMessage(modelMessage: AIV5Type.ModelMe
         roleContent[role].push({
           ...part,
           toolName: sanitizeToolName(part.toolName),
+          // Providers read `output.type` unguarded (e.g. @ai-sdk/openai-compatible).
+          // An output-less tool result (lost result chunk, OM rewrite) must still
+          // present a valid LanguageModelV2ToolResultOutput shape.
+          output: part.output ?? { type: 'json', value: null },
         });
         break;
       }
