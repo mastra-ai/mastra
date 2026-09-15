@@ -955,11 +955,6 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
           <div className="ml-auto flex shrink-0 items-center gap-2 whitespace-nowrap">
             {activeTab === 'datasets' && (
               <>
-                {unattachedDatasets.length > 0 && (
-                  <Button variant="ghost" size="sm" onClick={() => setShowAttachDialog(true)} icon={<Paperclip />}>
-                    Attach
-                  </Button>
-                )}
                 <CreateButton
                   variant="ghost"
                   size="sm"
@@ -970,10 +965,23 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
                 >
                   New dataset
                 </CreateButton>
+                {unattachedDatasets.length > 0 && (
+                  <Button variant="ghost" size="sm" onClick={() => setShowAttachDialog(true)} icon={<Paperclip />}>
+                    Attach
+                  </Button>
+                )}
               </>
             )}
             {activeTab === 'scorers' && (
               <>
+                <CreateButton
+                  variant="ghost"
+                  size="sm"
+                  tooltip="Create a scorer"
+                  onClick={() => setDetailView({ type: 'new-scorer' })}
+                >
+                  New scorer
+                </CreateButton>
                 {unattachedScorers.length > 0 && (
                   <Button
                     variant="ghost"
@@ -984,14 +992,6 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
                     Attach
                   </Button>
                 )}
-                <CreateButton
-                  variant="ghost"
-                  size="sm"
-                  tooltip="Create a scorer"
-                  onClick={() => setDetailView({ type: 'new-scorer' })}
-                >
-                  New scorer
-                </CreateButton>
               </>
             )}
             <AgentTopBarRunOptions requestContextSchema={requestContextSchema} />
