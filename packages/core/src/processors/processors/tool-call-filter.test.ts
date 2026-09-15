@@ -6,7 +6,6 @@ import { z } from 'zod/v4';
 
 import { Mastra } from '../..';
 import { MessageList } from '../../agent/message-list';
-import { markExplicitModelOutput } from '../../agent/message-list/conversion/tool-result-model-output';
 import { EventEmitterPubSub } from '../../events';
 import { loop } from '../../loop/loop';
 import { MastraLanguageModelV2Mock } from '../../loop/test-utils/MastraLanguageModelV2Mock';
@@ -40,9 +39,10 @@ function toolResultPart(toolCallId: string, toolName: string, output: any = { ty
 }
 
 function explicitModelOutputPart(toolCallId: string, toolName: string, output: any) {
-  const part = toolResultPart(toolCallId, toolName, output);
-  markExplicitModelOutput(part);
-  return part;
+  return {
+    ...toolResultPart(toolCallId, toolName, output),
+    providerOptions: { mastra: { modelOutput: output } },
+  };
 }
 
 function toolCallIdsIn(prompt: LanguageModelV2Prompt): string[] {
@@ -225,6 +225,61 @@ describe('ToolCallFilter', () => {
       const result = await runFilter(new ToolCallFilter({ preserveModelOutput: true }), prompt);
 
       expect(JSON.stringify(result)).not.toContain('RAW_RESULT');
+      expect(result).toEqual([]);
+    });
+
+    it('distinguishes equal outputs by explicit model output provenance', async () => {
+      const output = { type: 'text' as const, value: 'SAME_OUTPUT' };
+      const prompt: LanguageModelV2Prompt = [
+        {
+          role: 'assistant',
+          content: [toolCallPart('call-explicit', 'explicitTool'), toolCallPart('call-raw', 'rawTool')],
+        },
+        {
+          role: 'tool',
+          content: [
+            explicitModelOutputPart('call-explicit', 'explicitTool', output),
+            toolResultPart('call-raw', 'rawTool', output),
+          ],
+        },
+      ];
+
+      const result = await runFilter(new ToolCallFilter({ preserveModelOutput: true }), prompt);
+
+      expect(textsIn(result)).toEqual(['explicitTool result:\nSAME_OUTPUT']);
+      expect(JSON.stringify(result)).not.toContain('rawTool result');
+    });
+
+    it('preserves explicit model output after an earlier processor clones the prompt', async () => {
+      const cloneProcessor: Processor = {
+        id: 'clone-prompt',
+        name: 'ClonePrompt',
+        processLLMRequest: async ({ prompt }) => ({ prompt: structuredClone(prompt) }),
+      };
+      const clonedPrompt = await runFilter(cloneProcessor, searchPrompt());
+      const result = await runFilter(new ToolCallFilter({ preserveModelOutput: true }), clonedPrompt);
+
+      expect(textsIn(result)).toContain('search result:\nCompact search summary');
+      expect(toolCallIdsIn(result)).toEqual([]);
+    });
+
+    it('requires modelOutput to be an own property', async () => {
+      const inheritedMetadata = Object.create({ modelOutput: { type: 'text', value: 'INHERITED_OUTPUT' } });
+      const prompt: LanguageModelV2Prompt = [
+        { role: 'assistant', content: [toolCallPart('call-inherited', 'inheritedTool')] },
+        {
+          role: 'tool',
+          content: [
+            {
+              ...toolResultPart('call-inherited', 'inheritedTool', { type: 'text', value: 'INHERITED_OUTPUT' }),
+              providerOptions: { mastra: inheritedMetadata },
+            },
+          ],
+        },
+      ];
+
+      const result = await runFilter(new ToolCallFilter({ preserveModelOutput: true }), prompt);
+
       expect(result).toEqual([]);
     });
 

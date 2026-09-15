@@ -26,7 +26,6 @@ import {
   StepContentExtractor,
 } from './conversion';
 import type { ToolCallConversionMode } from './conversion';
-import { markExplicitModelOutput } from './conversion/tool-result-model-output';
 import { TypeDetector } from './detection/TypeDetector';
 import { MessageMerger } from './merge';
 import { convertImageFilePart } from './prompt/convert-file';
@@ -661,12 +660,10 @@ export class MessageList {
             for (let i = 0; i < modelMsg.content.length; i++) {
               const part = modelMsg.content[i]!;
               if (part.type === 'tool-result' && storedModelOutputs.has(part.toolCallId)) {
-                const modelOutputPart = {
+                modelMsg.content[i] = {
                   ...part,
                   output: storedModelOutputs.get(part.toolCallId) as any,
                 };
-                markExplicitModelOutput(modelOutputPart);
-                modelMsg.content[i] = modelOutputPart;
               }
             }
           }

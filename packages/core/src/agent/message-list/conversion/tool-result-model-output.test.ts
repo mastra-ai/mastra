@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 
 import { MessageList } from '../message-list';
 import type { MastraDBMessage } from '../state/types';
-import { hasExplicitModelOutput } from './tool-result-model-output';
 
 const compactOutput = {
   type: 'content',
@@ -38,12 +37,17 @@ function toolResultPart(prompt: Awaited<ReturnType<MessageList['get']['all']['ai
   return toolMessage?.content.find(part => part.type === 'tool-result');
 }
 
+function hasExplicitModelOutput(part: ReturnType<typeof toolResultPart>): boolean {
+  const mastraMetadata = part?.providerOptions?.mastra;
+  return Boolean(mastraMetadata && Object.hasOwn(mastraMetadata, 'modelOutput'));
+}
+
 describe('explicit tool model output provenance', () => {
   it.each([
     ['aiV5', (list: MessageList) => list.get.all.aiV5.llmPrompt({})],
     ['aiV6', (list: MessageList) => list.get.all.aiV6.llmPrompt({})],
     ['aiV7', (list: MessageList) => list.get.all.aiV7.llmPrompt({})],
-  ] as const)('survives the %s prompt path without provider-visible metadata', async (_, getPrompt) => {
+  ] as const)('survives the %s prompt path as own Mastra metadata', async (_, getPrompt) => {
     const list = new MessageList();
     list.add(makeToolResultMessage({ modelOutput: compactOutput }), 'memory');
 
@@ -52,15 +56,15 @@ describe('explicit tool model output provenance', () => {
 
     expect(part).toBeDefined();
     expect(hasExplicitModelOutput(part)).toBe(true);
-    expect(JSON.stringify(prompt)).not.toContain('explicitModelOutput');
     expect(part).not.toHaveProperty('providerMetadata.mastra');
     expect(part).toHaveProperty('providerOptions.mastra.modelOutput', compactOutput);
+    expect(hasExplicitModelOutput(structuredClone(part))).toBe(true);
   });
 
   it.each([
     ['absent', undefined],
     ['inherited', Object.create({ modelOutput: compactOutput })],
-  ])('does not mark %s model output provenance', async (_, metadata) => {
+  ])('does not create provenance for %s model output metadata', async (_, metadata) => {
     const list = new MessageList();
     list.add(makeToolResultMessage(metadata), 'memory');
 
