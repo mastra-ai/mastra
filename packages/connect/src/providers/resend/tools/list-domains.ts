@@ -1,4 +1,4 @@
-// AUTO-GENERATED from rhysbalevicius/integration-templates @ 2faa11af97d8 — do not edit by hand.
+// AUTO-GENERATED from rhysbalevicius/integration-templates @ b9fc364318f7 — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -50,7 +50,8 @@ export const listDomainsOutputSchema = ProviderResponseSchema.extend({ next_curs
 export function listDomainsTool(proxy: PlatformProxy) {
   return createTool({
     id: 'resend_list_domains',
-    description: 'List domains in Resend. Returns one page; pass next_cursor as after to continue.',
+    description:
+      'List domains in Resend. Returns one page; pass next_cursor back as after, or as before when paginating backwards, to continue.',
     inputSchema: listDomainsInputSchema,
     outputSchema: listDomainsOutputSchema,
     execute: async (input, { requestContext }): Promise<z.infer<typeof listDomainsOutputSchema>> => {
@@ -67,7 +68,8 @@ export function listDomainsTool(proxy: PlatformProxy) {
       };
       const response = await platformProxy.get(config);
       const data = ProviderResponseSchema.parse(response.data);
-      return { ...data, next_cursor: data.has_more ? data.data?.at(-1)?.id : undefined };
+      const nextCursor = input['before'] !== undefined ? data.data?.[0]?.id : data.data?.at(-1)?.id;
+      return { ...data, next_cursor: data.has_more ? nextCursor : undefined };
     },
   });
 }

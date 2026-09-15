@@ -1,4 +1,4 @@
-// AUTO-GENERATED from rhysbalevicius/integration-templates @ 2faa11af97d8 — do not edit by hand.
+// AUTO-GENERATED from rhysbalevicius/integration-templates @ b9fc364318f7 — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -11,7 +11,7 @@ export const updateDomainInputSchema = z
       .object({
         open_tracking: z.boolean().optional(),
         click_tracking: z.boolean().optional(),
-        tls: z.string().optional(),
+        tls: z.enum(['opportunistic', 'enforced']).optional(),
         capabilities: z
           .object({
             sending: z.enum(['enabled', 'disabled']).optional(),

@@ -1,10 +1,12 @@
-// AUTO-GENERATED from rhysbalevicius/integration-templates @ 2faa11af97d8 — do not edit by hand.
+// AUTO-GENERATED from rhysbalevicius/integration-templates @ b9fc364318f7 — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import type { PlatformProxy, PlatformProxyRequest } from '../../../runtime/platform-proxy.js';
 
-export const getTopicInputSchema = z.object({ id: z.string() }).passthrough();
+export const getTopicInputSchema = z
+  .object({ id: z.string().describe('The topic ID. Example: "b6d24b8e-af0b-4c3c-be0c-359bbd97381e"') })
+  .passthrough();
 
 const ProviderResponseSchema = z
   .object({

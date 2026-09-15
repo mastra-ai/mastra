@@ -1,4 +1,4 @@
-// AUTO-GENERATED from rhysbalevicius/integration-templates @ 2faa11af97d8 — do not edit by hand.
+// AUTO-GENERATED from rhysbalevicius/integration-templates @ b9fc364318f7 — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -29,11 +29,11 @@ const ProviderResponseSchema = z
             from: z.string().optional(),
             created_at: z.string().optional(),
             subject: z.string().optional(),
-            html: z.string().optional(),
-            text: z.string().optional(),
-            bcc: z.array(z.string()).optional(),
-            cc: z.array(z.string()).optional(),
-            reply_to: z.array(z.string()).optional(),
+            html: z.string().nullable().optional(),
+            text: z.string().nullable().optional(),
+            bcc: z.array(z.string()).nullable().optional(),
+            cc: z.array(z.string()).nullable().optional(),
+            reply_to: z.array(z.string()).nullable().optional(),
             last_event: z
               .enum([
                 'bounced',
@@ -62,7 +62,8 @@ export const listEmailsOutputSchema = ProviderResponseSchema.extend({ next_curso
 export function listEmailsTool(proxy: PlatformProxy) {
   return createTool({
     id: 'resend_list_emails',
-    description: 'List emails in Resend. Returns one page; pass next_cursor as after to continue.',
+    description:
+      'List emails in Resend. Returns one page; pass next_cursor back as after, or as before when paginating backwards, to continue.',
     inputSchema: listEmailsInputSchema,
     outputSchema: listEmailsOutputSchema,
     execute: async (input, { requestContext }): Promise<z.infer<typeof listEmailsOutputSchema>> => {
@@ -79,7 +80,8 @@ export function listEmailsTool(proxy: PlatformProxy) {
       };
       const response = await platformProxy.get(config);
       const data = ProviderResponseSchema.parse(response.data);
-      return { ...data, next_cursor: data.has_more ? data.data?.at(-1)?.id : undefined };
+      const nextCursor = input['before'] !== undefined ? data.data?.[0]?.id : data.data?.at(-1)?.id;
+      return { ...data, next_cursor: data.has_more ? nextCursor : undefined };
     },
   });
 }

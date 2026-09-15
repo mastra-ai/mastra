@@ -1,4 +1,4 @@
-// AUTO-GENERATED from rhysbalevicius/integration-templates @ 2faa11af97d8 — do not edit by hand.
+// AUTO-GENERATED from rhysbalevicius/integration-templates @ b9fc364318f7 — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -9,9 +9,9 @@ export const getContactPropertyInputSchema = z.object({ id: z.string() }).passth
 const ProviderResponseSchema = z
   .object({
     object: z.string().optional(),
-    id: z.string().optional(),
-    key: z.string().optional(),
-    type: z.string().optional(),
+    id: z.string(),
+    key: z.string(),
+    type: z.enum(['string', 'number']),
     fallback_value: z.union([z.string(), z.number()]).optional(),
     created_at: z.string().optional(),
   })

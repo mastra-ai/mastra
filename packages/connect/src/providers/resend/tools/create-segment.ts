@@ -1,4 +1,4 @@
-// AUTO-GENERATED from rhysbalevicius/integration-templates @ 2faa11af97d8 — do not edit by hand.
+// AUTO-GENERATED from rhysbalevicius/integration-templates @ b9fc364318f7 — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -7,7 +7,14 @@ import type { PlatformProxy, PlatformProxyRequest } from '../../../runtime/platf
 export const createSegmentInputSchema = z
   .object({
     body: z
-      .object({ name: z.string(), audience_id: z.string().optional(), filter: z.object({}).passthrough().optional() })
+      .object({
+        name: z.string(),
+        audience_id: z
+          .string()
+          .optional()
+          .describe('Deprecated audience to attach the segment to. Example: "78261eea-8f8b-4381-83c6-79fa7120f1cf"'),
+        filter: z.object({}).passthrough().optional(),
+      })
       .passthrough(),
   })
   .passthrough();

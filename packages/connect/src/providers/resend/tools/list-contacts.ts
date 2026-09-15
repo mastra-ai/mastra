@@ -1,4 +1,4 @@
-// AUTO-GENERATED from rhysbalevicius/integration-templates @ 2faa11af97d8 — do not edit by hand.
+// AUTO-GENERATED from rhysbalevicius/integration-templates @ b9fc364318f7 — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -11,11 +11,15 @@ export const listContactsInputSchema = z
     after: z.string().optional(),
     before: z.string().optional(),
   })
-  .passthrough();
+  .passthrough()
+  .refine(input => input.after === undefined || input.before === undefined, {
+    message: 'Use either after or before, not both',
+  });
 
 const ProviderResponseSchema = z
   .object({
     object: z.string().optional(),
+    has_more: z.boolean().optional(),
     data: z
       .array(
         z
@@ -33,12 +37,13 @@ const ProviderResponseSchema = z
   })
   .passthrough();
 
-export const listContactsOutputSchema = ProviderResponseSchema;
+export const listContactsOutputSchema = ProviderResponseSchema.extend({ next_cursor: z.string().optional() });
 
 export function listContactsTool(proxy: PlatformProxy) {
   return createTool({
     id: 'resend_list_contacts',
-    description: 'Retrieve a list of contacts in Resend.',
+    description:
+      'Retrieve a list of contacts in Resend. Returns one page; pass next_cursor back as after, or as before when paginating backwards, to continue.',
     inputSchema: listContactsInputSchema,
     outputSchema: listContactsOutputSchema,
     execute: async (input, { requestContext }): Promise<z.infer<typeof listContactsOutputSchema>> => {
@@ -62,7 +67,8 @@ export function listContactsTool(proxy: PlatformProxy) {
       };
       const response = await platformProxy.get(config);
       const data = ProviderResponseSchema.parse(response.data);
-      return data;
+      const nextCursor = input['before'] !== undefined ? data.data?.[0]?.id : data.data?.at(-1)?.id;
+      return { ...data, next_cursor: data.has_more ? nextCursor : undefined };
     },
   });
 }

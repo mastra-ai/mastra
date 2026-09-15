@@ -1,4 +1,4 @@
-// AUTO-GENERATED from rhysbalevicius/integration-templates @ 2faa11af97d8 — do not edit by hand.
+// AUTO-GENERATED from rhysbalevicius/integration-templates @ b9fc364318f7 — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -15,7 +15,7 @@ export const createAudienceOutputSchema = ProviderResponseSchema;
 export function createAudienceTool(proxy: PlatformProxy) {
   return createTool({
     id: 'resend_create_audience',
-    description: 'Create a list of contacts in Resend.',
+    description: 'Create an audience in Resend.',
     inputSchema: createAudienceInputSchema,
     outputSchema: createAudienceOutputSchema,
     execute: async (input, { requestContext }): Promise<z.infer<typeof createAudienceOutputSchema>> => {

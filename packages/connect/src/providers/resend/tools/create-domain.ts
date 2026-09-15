@@ -1,29 +1,33 @@
-// AUTO-GENERATED from rhysbalevicius/integration-templates @ 2faa11af97d8 — do not edit by hand.
+// AUTO-GENERATED from rhysbalevicius/integration-templates @ b9fc364318f7 — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import type { PlatformProxy, PlatformProxyRequest } from '../../../runtime/platform-proxy.js';
 
 export const createDomainInputSchema = z.object({
-  body: z.object({
-    name: z.string(),
-    region: z.enum(['us-east-1', 'eu-west-1', 'sa-east-1', 'ap-northeast-1']).optional(),
-    custom_return_path: z.string().optional(),
-    open_tracking: z.boolean().optional(),
-    click_tracking: z.boolean().optional(),
-    tls: z.enum(['opportunistic', 'enforced']).optional(),
-    capabilities: z
-      .object({
-        sending: z.enum(['enabled', 'disabled']).optional(),
-        receiving: z.enum(['enabled', 'disabled']).optional(),
-      })
-      .optional(),
-    tracking_subdomain: z.string().optional(),
-  }),
+  body: z
+    .object({
+      name: z.string(),
+      region: z.enum(['us-east-1', 'eu-west-1', 'sa-east-1', 'ap-northeast-1']).optional(),
+      custom_return_path: z.string().optional(),
+      open_tracking: z.boolean().optional(),
+      click_tracking: z.boolean().optional(),
+      tls: z.enum(['opportunistic', 'enforced']).optional(),
+      capabilities: z
+        .object({
+          sending: z.enum(['enabled', 'disabled']).optional(),
+          receiving: z.enum(['enabled', 'disabled']).optional(),
+        })
+        .passthrough()
+        .optional(),
+      tracking_subdomain: z.string().optional(),
+    })
+    .passthrough(),
 });
 
 const ProviderResponseSchema = z
   .object({
+    object: z.string().optional(),
     id: z.string().optional(),
     name: z.string().optional(),
     created_at: z.string().optional(),

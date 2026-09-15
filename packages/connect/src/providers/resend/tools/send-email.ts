@@ -1,4 +1,4 @@
-// AUTO-GENERATED from rhysbalevicius/integration-templates @ 2faa11af97d8 — do not edit by hand.
+// AUTO-GENERATED from rhysbalevicius/integration-templates @ b9fc364318f7 — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -38,7 +38,7 @@ export const sendEmailInputSchema = z
           }),
         )
         .optional(),
-      tags: z.array(z.object({ name: z.string().optional(), value: z.string().optional() })).optional(),
+      tags: z.array(z.object({ name: z.string(), value: z.string() })).optional(),
       topic_id: z.string().optional(),
     }),
   })
@@ -65,16 +65,25 @@ export function sendEmailTool(proxy: PlatformProxy) {
     outputSchema: sendEmailOutputSchema,
     execute: async (input, { requestContext }): Promise<z.infer<typeof sendEmailOutputSchema>> => {
       const platformProxy = proxy.withRequestContext(requestContext);
-      const config: PlatformProxyRequest = {
+      if (input.idempotency_key !== undefined) {
+        const keyedConfig: PlatformProxyRequest = {
+          // https://raw.githubusercontent.com/resend/resend-openapi/68c1b66c20ad62020962838832e53af10558c2f5/resend.yaml,
+          endpoint: `/emails`,
+          retries: 3,
+          data: input.body,
+          headers: { 'Idempotency-Key': input.idempotency_key },
+        };
+        const response = await platformProxy.post(keyedConfig);
+        return ProviderResponseSchema.parse(response.data);
+      }
+      const unkeyedConfig: PlatformProxyRequest = {
         // https://raw.githubusercontent.com/resend/resend-openapi/68c1b66c20ad62020962838832e53af10558c2f5/resend.yaml,
         endpoint: `/emails`,
-        retries: input.idempotency_key ? 3 : 0,
+        retries: 0,
         data: input.body,
-        headers: input.idempotency_key ? { 'Idempotency-Key': input.idempotency_key } : {},
       };
-      const response = await platformProxy.post(config);
-      const data = ProviderResponseSchema.parse(response.data);
-      return data;
+      const response = await platformProxy.post(unkeyedConfig);
+      return ProviderResponseSchema.parse(response.data);
     },
   });
 }

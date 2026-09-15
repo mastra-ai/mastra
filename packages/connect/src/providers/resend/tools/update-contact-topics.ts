@@ -1,4 +1,4 @@
-// AUTO-GENERATED from rhysbalevicius/integration-templates @ 2faa11af97d8 — do not edit by hand.
+// AUTO-GENERATED from rhysbalevicius/integration-templates @ b9fc364318f7 — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -9,9 +9,7 @@ export const updateContactTopicsInputSchema = z
     contact_id: z.string(),
     body: z
       .object({
-        topics: z.array(
-          z.object({ id: z.string().optional(), subscription: z.enum(['opt_in', 'opt_out']).optional() }).passthrough(),
-        ),
+        topics: z.array(z.object({ id: z.string(), subscription: z.enum(['opt_in', 'opt_out']) }).passthrough()),
       })
       .passthrough(),
   })

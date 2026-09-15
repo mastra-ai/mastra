@@ -12,4 +12,4 @@
 // Temporary contribution fork while the Resend and incident.io templates are reviewed upstream.
 // Return this pin to NangoHQ after both contributions land.
 export const TEMPLATE_REPO = 'rhysbalevicius/integration-templates';
-export const TEMPLATE_SHA = '3ad35d4bf046919578759e5e239ce57ab165aa69';
+export const TEMPLATE_SHA = 'b9fc364318f7797f2e9efe5bbd3133331ea8e08d';

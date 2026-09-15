@@ -1,4 +1,4 @@
-// AUTO-GENERATED from rhysbalevicius/integration-templates @ 2faa11af97d8 — do not edit by hand.
+// AUTO-GENERATED from rhysbalevicius/integration-templates @ b9fc364318f7 — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -15,11 +15,11 @@ const ProviderResponseSchema = z
     from: z.string().optional(),
     created_at: z.string().optional(),
     subject: z.string().optional(),
-    html: z.string().optional(),
-    text: z.string().optional(),
-    bcc: z.array(z.string()).optional(),
-    cc: z.array(z.string()).optional(),
-    reply_to: z.array(z.string()).optional(),
+    html: z.string().nullable().optional(),
+    text: z.string().nullable().optional(),
+    bcc: z.array(z.string()).nullable().optional(),
+    cc: z.array(z.string()).nullable().optional(),
+    reply_to: z.array(z.string()).nullable().optional(),
     last_event: z
       .enum([
         'bounced',
