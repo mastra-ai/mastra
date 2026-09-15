@@ -901,15 +901,15 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
   const hasDetailPanel = !!detailView;
 
   return (
-    <div className="flex h-full flex-col overflow-hidden p-4">
+    <div className="flex h-full flex-col overflow-hidden">
       <Tabs<AgentEvalTab>
         defaultTab="experiments"
         value={activeTab}
         onValueChange={handleTabChange}
         className="flex h-full flex-col overflow-hidden"
       >
-        {/* -mx-2.5 offsets the root p-4 so the pills line up with the parent tab bar (p-1.5). */}
-        <div className="border-border1 -mx-2.5 flex flex-wrap items-center justify-between gap-x-2 border-b pb-1.5">
+        {/* Same p-1.5 as the parent agent tab bar so the pills line up. */}
+        <div className="border-border1 flex flex-wrap items-center justify-between gap-x-2 border-b p-1.5">
           <TabList variant="pill-ghost" className="shrink-0">
             <Tab value="experiments">Experiments</Tab>
             <Tab value="datasets">Datasets</Tab>
@@ -966,7 +966,7 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
 
         {/* Search bar below tabs */}
         {activeTab !== 'review' && (
-          <div className="border-border1 border-b py-2">
+          <div className="border-border1 border-b px-4 py-2">
             {activeTab === 'experiments' && (
               <InputGroup variant="outline">
                 <InputGroupAddon align="inline-start">
@@ -1009,7 +1009,7 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
           </div>
         )}
 
-        <div className="flex-1 overflow-hidden">
+        <div className="flex-1 overflow-hidden px-4 pb-4">
           <TabContent value="review" className="h-full overflow-hidden">
             <AgentPlaygroundReview agentId={agentId} onCreateScorer={handleCreateScorerFromFailures} />
           </TabContent>
