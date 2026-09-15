@@ -4,6 +4,8 @@ import type { KnowledgeConcreteRole, KnowledgeImportRun, KnowledgeScopeIds } fro
 import type { Knowledge } from '../index';
 import type { StaticKnowledgeImporterOperations } from './static-importer';
 
+export const KNOWLEDGE_IMPORT_INTERNAL_STATE_PREFIX = '__mastra_internal/';
+
 export interface KnowledgeImporterBindingInput {
   readonly source: string;
   readonly scope: string;

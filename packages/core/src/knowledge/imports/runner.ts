@@ -9,11 +9,14 @@ import {
 import type { Knowledge } from '../index';
 import { runAgenticKnowledgeImport } from './agent-importer';
 import { createStaticKnowledgeImporterOperations } from './static-importer';
-import type { KnowledgeImporterBindingInput, KnowledgeImporterHandle } from './types';
+import {
+  KNOWLEDGE_IMPORT_INTERNAL_STATE_PREFIX,
+  type KnowledgeImporterBindingInput,
+  type KnowledgeImporterHandle,
+} from './types';
 
-const INTERNAL_STATE_PREFIX = '__mastra_internal/';
-const PAYLOAD_KEY_PREFIX = `${INTERNAL_STATE_PREFIX}import-payload/`;
-const LEASE_KEY_PREFIX = `${INTERNAL_STATE_PREFIX}import-lease/`;
+const PAYLOAD_KEY_PREFIX = `${KNOWLEDGE_IMPORT_INTERNAL_STATE_PREFIX}import-payload/`;
+const LEASE_KEY_PREFIX = `${KNOWLEDGE_IMPORT_INTERNAL_STATE_PREFIX}import-lease/`;
 const HEARTBEAT_MS = 10_000;
 const LEASE_TIMEOUT_MS = 30_000;
 const RECOVERY_SCAN_MS = 10_000;
@@ -300,7 +303,9 @@ export class KnowledgeImporterRunner {
 
   #assertStateKey(key: string): void {
     if (typeof key !== 'string' || !key.trim()) throw new Error('Knowledge importer state key is required');
-    if (key.startsWith(INTERNAL_STATE_PREFIX)) throw new Error('Knowledge importer state key is reserved');
+    if (key.startsWith(KNOWLEDGE_IMPORT_INTERNAL_STATE_PREFIX)) {
+      throw new Error('Knowledge importer state key is reserved');
+    }
   }
 
   #queueRecovery(): Promise<void> {

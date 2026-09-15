@@ -7,9 +7,12 @@ const source = 'google-calendar:primary';
 const scopeAddress = 'project:mastra';
 const binding = knowledgeImporterBindingKey({ source, scope: scopeAddress });
 
-async function createFixture(role: 'append' | 'edit' | 'owner' = 'edit') {
+async function createFixture(
+  role: 'append' | 'edit' | 'owner' = 'edit',
+  store = new InMemoryStore({ id: `static-import-${role}` }),
+) {
   const knowledge = new Knowledge({
-    storage: new InMemoryStore({ id: `static-import-${role}` }),
+    storage: store,
     structure: {
       scopes: [
         { address: 'org:acme', name: 'Acme' },
@@ -148,6 +151,61 @@ describe('static Knowledge importer operations', () => {
     const updatedAgain = await operations.upsertNode('event:42', { name: 'Planning updated again' });
 
     await expect(updatedAgain.removeRecord(externallyChanged.id)).resolves.toBeNull();
+    await expect(knowledge.getRecordInternal({ id: externallyChanged.id })).resolves.toMatchObject({
+      id: externallyChanged.id,
+    });
+  });
+
+  it('recovers record ownership after interruption following a committed node update', async () => {
+    const { knowledge, operations, projectScopeId, run } = await createFixture('owner');
+    const storage = await knowledge.getStorageInternal();
+    const committedUpdateNode = storage.updateNode.bind(storage);
+    let interruptAfterNodeUpdate = false;
+    storage.updateNode = async input => {
+      const updated = await committedUpdateNode(input);
+      if (interruptAfterNodeUpdate) {
+        interruptAfterNodeUpdate = false;
+        throw new Error('interrupted after committed node update');
+      }
+      return updated;
+    };
+    const initial = await operations.upsertNode('event:42', { name: 'Planning' });
+    const recoverable = await initial.appendRecord({ id: 'record-recoverable', text: 'Recoverable details' });
+    const externallyChanged = await initial.appendRecord({ id: 'record-external', text: 'External details' });
+
+    interruptAfterNodeUpdate = true;
+    await expect(operations.upsertNode('event:42', { name: 'Planning updated' })).rejects.toThrow(
+      'interrupted after committed node update',
+    );
+    for (let index = 0; index < 101; index += 1) {
+      await operations.upsertNode(`later:${index}`, { name: `Later ${index}` });
+      await operations.upsertNode(`later:${index}`, { name: `Later ${index} updated` });
+    }
+    await knowledge.updateImportRunInternal({ id: run.id, status: 'failed', error: 'interrupted' });
+    const externallyChangedAfterUpdate = await storage.getRecord({ id: externallyChanged.id });
+    await storage.setRecordScopes({
+      id: externallyChanged.id,
+      version: externallyChangedAfterUpdate!.version,
+      scopeIds: [projectScopeId],
+    });
+
+    const queuedReplay = await knowledge.createImportRunInternal({
+      importerId: 'calendar',
+      binding,
+      importKind: 'static',
+      triggerKind: 'replay',
+    });
+    const replayRun = await knowledge.updateImportRunInternal({ id: queuedReplay.id, status: 'running' });
+    const replayOperations = await createStaticKnowledgeImporterOperations({
+      knowledge,
+      importerId: 'calendar',
+      source,
+      scopeAddress,
+      importRunId: replayRun.id,
+    });
+    const replayed = await replayOperations.upsertNode('event:42', { name: 'Planning updated' });
+    await expect(replayed.removeRecord(recoverable.id)).resolves.toMatchObject({ id: recoverable.id });
+    await expect(replayed.removeRecord(externallyChanged.id)).resolves.toBeNull();
     await expect(knowledge.getRecordInternal({ id: externallyChanged.id })).resolves.toMatchObject({
       id: externallyChanged.id,
     });
