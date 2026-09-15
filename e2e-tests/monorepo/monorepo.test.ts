@@ -368,6 +368,49 @@ export const environmentRoute = registerApiRoute('/environment', {
         const originalPackageSource = await readFile(packageSource, 'utf-8');
         const originalAppRoute = await readFile(appRoute, 'utf-8');
 
+        const readServerInstance = async () => {
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 10_000);
+          try {
+            const instanceIdPattern = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
+            while (!controller.signal.aborted) {
+              const page = await fetch(`http://localhost:${port}/`, { signal: controller.signal });
+              expect(page.status).toBe(200);
+              const html = await page.text();
+              const htmlId = html.match(/window\.MASTRA_DEV_SERVER_INSTANCE_ID = "([^"]+)";/)?.[1];
+              expect(htmlId).toMatch(instanceIdPattern);
+              const response = await fetch(`http://localhost:${port}/refresh-events`, { signal: controller.signal });
+              expect(response.status).toBe(200);
+              if (!response.body) throw new Error('Missing refresh stream');
+              const reader = response.body.getReader();
+              const decoder = new TextDecoder();
+              let event = '';
+              try {
+                while (!event.includes('\n\n')) {
+                  const chunk = await reader.read();
+                  if (chunk.done) throw new Error('Refresh stream ended before the handshake');
+                  event += decoder.decode(chunk.value, { stream: true });
+                }
+              } finally {
+                await reader.cancel();
+              }
+              expect(event).toContain('data: connected');
+              const id = event.match(/^id: (.+)$/m)?.[1];
+              expect(id).toMatch(instanceIdPattern);
+              if (htmlId === id) {
+                expect(html).toContain(`window.MASTRA_DEV_SERVER_INSTANCE_ID = "${id}";`);
+                return id;
+              }
+              // A restart between requests is valid; retry both snapshots, not just the stream.
+              await new Promise(resolve => setTimeout(resolve, 100));
+            }
+            throw new Error('Timed out waiting for matching Studio HTML and refresh-stream generations');
+          } finally {
+            clearTimeout(timeout);
+            controller.abort();
+          }
+        };
+
         const waitForReload = async (predicate: (body: { value: string; app: string }) => boolean) => {
           const started = Date.now();
           let lastBody: { value: string; app: string } | undefined;
@@ -394,6 +437,8 @@ export const environmentRoute = registerApiRoute('/environment', {
             body => body.value === 'a -> b -> c' && body.app === 'App value is BEFORE.',
           );
           expect(baseline).toEqual({ value: 'a -> b -> c', app: 'App value is BEFORE.' });
+          const initialInstance = await readServerInstance();
+          expect(await readServerInstance()).toBe(initialInstance);
 
           // 2. Edit workspace package only
           await writeFile(packageSource, `export const valueC = 'c-AFTER';\n`);
@@ -401,6 +446,11 @@ export const environmentRoute = registerApiRoute('/environment', {
             body => body.value === 'a -> b -> c-AFTER' && body.app === 'App value is BEFORE.',
           );
           expect(afterPackage).toEqual({ value: 'a -> b -> c-AFTER', app: 'App value is BEFORE.' });
+          // A browser reconnecting after this broadcast must still detect the restart.
+          await fetch(`http://localhost:${port}/__refresh`, { method: 'POST' });
+          const packageInstance = await readServerInstance();
+          expect(packageInstance).not.toBe(initialInstance);
+          expect(await readServerInstance()).toBe(packageInstance);
 
           // 3. Edit app only — package AFTER must still be present (no stale optimizer cache)
           await writeFile(appRoute, originalAppRoute.replace('App value is BEFORE.', 'App value is AFTER.'));

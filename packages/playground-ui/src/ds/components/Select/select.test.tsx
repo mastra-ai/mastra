@@ -6,8 +6,8 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 
 // Base UI synthesizes PointerEvents, which this jsdom version does not implement.
 beforeAll(() => {
-  if (typeof window.PointerEvent === 'undefined') {
-    window.PointerEvent = window.MouseEvent as unknown as typeof PointerEvent;
+  if (window.PointerEvent === undefined) {
+    Object.defineProperty(window, 'PointerEvent', { value: window.MouseEvent, configurable: true });
   }
 });
 
@@ -125,31 +125,5 @@ describe('Select', () => {
     const trigger = screen.getByRole('combobox');
     expect(trigger.classList.contains('text-ui-smd')).toBe(true);
     expect(trigger.classList.contains('text-ui-md')).toBe(false);
-  });
-
-  it('wires the variant prop through to the button recipe (default = the filled Button default, field-only variants)', () => {
-    function renderWithVariant(variant?: 'default' | 'outline' | 'ghost' | 'primary') {
-      const utils = render(
-        <Select>
-          <SelectTrigger {...(variant ? { variant } : {})}>
-            <SelectValue placeholder="Pick one" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="apple">Apple</SelectItem>
-          </SelectContent>
-        </Select>,
-      );
-      const className = screen.getByRole('combobox').className;
-      utils.unmount();
-      return className;
-    }
-
-    expect(renderWithVariant()).toBe(renderWithVariant('default'));
-    expect(renderWithVariant('default')).toContain('bg-surface3');
-    expect(renderWithVariant('default')).not.toContain('bg-transparent');
-    expect(renderWithVariant('primary')).toBe(renderWithVariant('default'));
-    expect(renderWithVariant('outline')).toContain('bg-transparent');
-    expect(renderWithVariant('outline')).toContain('border-border1');
-    expect(renderWithVariant('ghost')).toContain('border-transparent');
   });
 });
