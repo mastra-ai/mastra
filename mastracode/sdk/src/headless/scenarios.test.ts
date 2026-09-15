@@ -6,9 +6,15 @@
  * pipeline — `runMC` + a {@link ResolutionPolicy} + the pure formatters — the
  * way a CLI session or a CI consumer actually would.
  */
+import { spawn } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
+import { rmSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
 import { Agent } from '@mastra/core/agent';
 import { AgentController } from '@mastra/core/agent-controller';
 import type { AgentControllerEvent } from '@mastra/core/agent-controller';
+import type { PubSub } from '@mastra/core/events';
 import { Mastra } from '@mastra/core/mastra';
 import { MastraLanguageModelV2Mock } from '@mastra/core/test-utils/llm-mock';
 import { createTool } from '@mastra/core/tools';
@@ -17,6 +23,7 @@ import { LibSQLStore } from '@mastra/libsql';
 import { describe, it, expect, vi } from 'vitest';
 import z from 'zod';
 
+import { createSignalsPubSub } from '../utils/signals-pubsub.js';
 import { createHumanFormatState, formatHuman, formatJsonl, renderJsonResult, renderTextResult } from './format.js';
 import { runMC } from './run-mc.js';
 import type { ResolutionPolicy } from './types.js';
@@ -61,6 +68,8 @@ interface HarnessOptions {
   doStream: () => Promise<{ stream: ReadableStream }>;
   withReadFileTool?: boolean;
   readFileNeedsApproval?: boolean;
+  pubsub?: PubSub;
+  resourceId?: string;
 }
 
 async function makeHarness(opts: HarnessOptions) {
@@ -85,7 +94,7 @@ async function makeHarness(opts: HarnessOptions) {
     tools,
   });
 
-  const mastra = new Mastra({ agents: { 'test-agent': agent }, logger: false, storage });
+  const mastra = new Mastra({ agents: { 'test-agent': agent }, logger: false, storage, pubsub: opts.pubsub });
   const registeredAgent = mastra.getAgent('test-agent');
 
   const controller = new AgentController({
@@ -103,11 +112,16 @@ async function makeHarness(opts: HarnessOptions) {
       },
     ],
     initialState: { yolo: false },
+    pubsub: opts.pubsub,
   });
   (controller as any).getAgentForMode = () => registeredAgent;
 
   await controller.init();
-  const session = await controller.createSession({ id: `s-${Math.random()}`, ownerId: 'test-owner' });
+  const session = await controller.createSession({
+    id: `s-${Math.random()}`,
+    ownerId: 'test-owner',
+    resourceId: opts.resourceId,
+  });
   await session.thread.create();
 
   return { controller, session };
@@ -268,6 +282,56 @@ describe('headless scenarios', () => {
       expect(exitSpy).not.toHaveBeenCalled();
     } finally {
       exitSpy.mockRestore();
+    }
+  });
+
+  it('publishes session lifecycle events to a separate Unix-socket subscriber process', async () => {
+    const resourceId = `headless-lifecycle-${randomUUID()}`;
+    const publisher = createSignalsPubSub(resourceId);
+    let child: ReturnType<typeof spawn> | undefined;
+
+    try {
+      const { controller, session } = await makeHarness({
+        doStream: async () => ({ stream: textStream('Observed.') }),
+        pubsub: publisher,
+        resourceId,
+      });
+      const threadId = session.thread.requireId();
+      const tsxBin = fileURLToPath(new URL('../../node_modules/.bin/tsx', import.meta.url));
+      const childScript = fileURLToPath(new URL('./fixtures/lifecycle-subscriber.mts', import.meta.url));
+      child = spawn(tsxBin, [childScript, resourceId, threadId], { stdio: ['pipe', 'pipe', 'pipe'] });
+      const events: string[] = [];
+      let stdout = '';
+      let stderr = '';
+      child.stdout.setEncoding('utf8');
+      child.stderr.setEncoding('utf8');
+      child.stderr.on('data', chunk => (stderr += chunk));
+      child.stdout.on('data', chunk => {
+        stdout += chunk;
+        const lines = stdout.split('\n');
+        stdout = lines.pop() ?? '';
+        for (const line of lines) if (line) events.push((JSON.parse(line) as { event: string }).event);
+      });
+      await vi.waitFor(() => expect(events).toContain('ready'));
+
+      const result = await runMC({ controller, session, prompt: 'Observe this run' }).result;
+
+      expect(result.status).toBe('completed');
+      await vi.waitFor(() => {
+        expect(events).toEqual(expect.arrayContaining(['run-registered', 'run-completed']));
+      });
+      expect(stderr).toBe('');
+      const exited = new Promise<void>((resolve, reject) => {
+        child!.once('close', code =>
+          code === 0 ? resolve() : reject(new Error(`Subscriber exited ${code}: ${stderr}`)),
+        );
+      });
+      child.stdin.end('close\n');
+      await exited;
+    } finally {
+      if (child && child.exitCode === null) child.kill('SIGKILL');
+      await publisher.close();
+      rmSync(`/tmp/mc/${resourceId}`, { recursive: true, force: true });
     }
   });
 
