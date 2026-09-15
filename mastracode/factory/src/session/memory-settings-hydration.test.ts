@@ -12,9 +12,14 @@ import {
   type MemorySettingsHydrationSession,
 } from './memory-settings-hydration.js';
 
-function createSession(state: Record<string, unknown> = {}, modelIds: { observer?: string; reflector?: string } = {}) {
+function createSession(
+  state: Record<string, unknown> = {},
+  modelIds: { observer?: string; reflector?: string } = {},
+  threadSettings?: Record<string, unknown>,
+) {
   const session: MemorySettingsHydrationSession = {
     identity: { getResourceId: () => 'session-1' },
+    ...(threadSettings ? { thread: { getSetting: async ({ key }: { key: string }) => threadSettings[key] } } : {}),
     om: {
       observer: { modelId: () => modelIds.observer, switchModel: vi.fn().mockResolvedValue(undefined) },
       reflector: { modelId: () => modelIds.reflector, switchModel: vi.fn().mockResolvedValue(undefined) },
@@ -289,6 +294,26 @@ describe('hydrateSessionMemorySettings', () => {
     });
     expect(session.om.observer.switchModel).toHaveBeenCalledExactlyOnceWith({ modelId: 'openai/gpt-5.6-sol' });
     expect(session.om.reflector.switchModel).toHaveBeenCalledExactlyOnceWith({ modelId: 'openai/gpt-5.6-sol' });
+  });
+
+  it('restores the project of a run session re-created from its thread, then follows the project row', async () => {
+    const session = createSession({}, {}, { factoryProjectId: 'project-1' });
+    const dependencies = createDependencies({
+      settings: memorySettingsRow({
+        userId: 'factory-project:project-1',
+        observerModelId: 'openai/gpt-5.6-sol',
+        reflectorModelId: 'openai/gpt-5.6-sol',
+      }),
+    });
+
+    await hydrateSessionMemorySettings(session, dependencies);
+
+    expect(session.state.set).toHaveBeenCalledWith({ factoryProjectId: 'project-1', projectRepositoryId: 'repo-1' });
+    expect(dependencies.memorySettings.get).toHaveBeenCalledExactlyOnceWith({
+      orgId: 'org-1',
+      userId: 'factory-project:project-1',
+    });
+    expect(session.om.observer.switchModel).toHaveBeenCalledExactlyOnceWith({ modelId: 'openai/gpt-5.6-sol' });
   });
 
   it('uses the project provider fallback when a project settings row only configures thresholds', async () => {

@@ -7,7 +7,7 @@ import {
   type MemorySettingsStorage,
 } from '../storage/domains/memory-settings/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
-import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
+import type { SourceControlSession, SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import { seedSessionOrg } from './org-seed.js';
 
 /** Default thresholds mirror the TUI `/om` fallbacks. */
@@ -32,6 +32,8 @@ interface OMStateWrites {
   reflectionThreshold?: number;
   observeAttachments?: 'auto' | boolean;
   factoryOrgId?: string;
+  factoryProjectId?: string;
+  projectRepositoryId?: string;
 }
 
 /** The slice of a session needed to apply stored observational-memory settings. */
@@ -83,6 +85,8 @@ export async function applyStoredMemorySettings(
 
 export interface MemorySettingsHydrationSession extends OMConfigurableSession {
   readonly identity: { getResourceId(): string };
+  /** Absent on channel sessions, which never sit on a run's thread. */
+  thread?: { getSetting(args: { key: string }): Promise<unknown> };
 }
 
 export interface MemorySettingsHydrationDependencies {
@@ -92,6 +96,18 @@ export interface MemorySettingsHydrationDependencies {
   };
   projects: Pick<FactoryProjectsStorage, 'get'>;
   memorySettings: Pick<MemorySettingsStorage, 'get'>;
+}
+
+// The coordinator tags a run's project onto its thread; core seeds tags into state at
+// creation but never reads them back when a person reopens the thread after a restart.
+async function restoreRunProject(
+  session: MemorySettingsHydrationSession,
+  record: SourceControlSession,
+): Promise<string | undefined> {
+  const factoryProjectId = await session.thread?.getSetting({ key: 'factoryProjectId' });
+  if (typeof factoryProjectId !== 'string') return undefined;
+  await session.state.set({ factoryProjectId, projectRepositoryId: record.projectRepositoryId });
+  return factoryProjectId;
 }
 
 /**
@@ -122,7 +138,6 @@ export async function hydrateSessionMemorySettings(
   { sourceControl, projects, memorySettings }: MemorySettingsHydrationDependencies,
 ): Promise<void> {
   const state = session.state.get() ?? {};
-  const isFactoryRun = Boolean(state.factoryProjectId);
   try {
     const record = await sourceControl.sessions.getBySessionId(session.identity.getResourceId());
     // No row, or a row whose org is blank, leaves the session with no tenant.
@@ -131,7 +146,9 @@ export async function hydrateSessionMemorySettings(
     // under the local scope — the same bug wearing a different rung.
     await seedSessionOrg(session, record?.orgId);
     if (!record) return;
-    const factoryProjectId = isFactoryRun ? String(state.factoryProjectId) : undefined;
+    const factoryProjectId = state.factoryProjectId
+      ? String(state.factoryProjectId)
+      : await restoreRunProject(session, record);
     const settings = await memorySettings.get({
       orgId: record.orgId,
       userId: factoryProjectId ? factoryMemorySettingsUserId(factoryProjectId) : record.userId,
