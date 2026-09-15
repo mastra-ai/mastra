@@ -727,7 +727,17 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       }
 
       try {
-        span = processor.process(span);
+        const processed = processor.process(span);
+        // exportSpan/isValid are instance members of the live span, so a plain
+        // copy can't be exported (it throws for started/updated spans and is
+        // silently dropped for ended spans). Drop it here with a clear error.
+        if (processed !== undefined && typeof processed.exportSpan !== 'function') {
+          this.logger.error(
+            `[Observability] Processor error [name=${processor.name}]: process() must return the span it received (or undefined to drop it), not a copy. Span dropped.`,
+          );
+          return undefined;
+        }
+        span = processed;
       } catch (error) {
         this.logger.error(`[Observability] Processor error [name=${processor.name}]`, error);
         // Continue with other processors
