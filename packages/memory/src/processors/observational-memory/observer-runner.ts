@@ -639,13 +639,6 @@ export class ObserverRunner {
       }),
     ];
 
-    // Mark all messages as observed
-    for (const msgs of messagesByThread.values()) {
-      for (const msg of msgs) {
-        this.observedMessageIds.add(msg.id);
-      }
-    }
-
     const doGenerate = async () => {
       return withRetry(
         () =>
@@ -796,6 +789,12 @@ export class ObserverRunner {
     for (const threadId of threadOrder) {
       if (!results.has(threadId)) {
         results.set(threadId, { observations: '' });
+      }
+    }
+
+    for (const msgs of messagesByThread.values()) {
+      for (const msg of msgs) {
+        this.observedMessageIds.add(msg.id);
       }
     }
 

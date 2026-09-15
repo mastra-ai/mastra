@@ -429,6 +429,20 @@ describe('OM Error State', { timeout: 30_000 }, () => {
     expect(attempts).toBe(2);
     expect(result.tripwire).toBeUndefined();
     expect(result.text).toBe(longResponseText);
+
+    const memoryStore = await store.getStore('memory');
+    const record = await memoryStore!.getObservationalMemory('test-continue-thread', 'test-resource');
+    const messages = await memoryStore!.listMessages({ threadId: 'test-continue-thread' });
+    const pendingUserMessage = messages.messages.find(
+      message =>
+        message.role === 'user' &&
+        message.content.parts.some(part => part.type === 'text' && part.text.includes('Hello')),
+    );
+
+    expect(record?.lastObservedAt).toBeUndefined();
+    expect(record?.observedMessageIds ?? []).not.toContain(pendingUserMessage?.id);
+    expect(record?.pendingMessageTokens).toBeGreaterThan(0);
+    expect(pendingUserMessage).toBeDefined();
   });
 
   it('should emit tripwire in response when observer fails during streaming', async () => {
