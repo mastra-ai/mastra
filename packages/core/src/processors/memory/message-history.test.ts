@@ -712,6 +712,7 @@ describe('MessageHistory', () => {
           metadata: {},
         }),
         listMessages: vi.fn().mockResolvedValue({ messages: [], total: 0 }),
+        listMessagesById: vi.fn().mockResolvedValue({ messages: [] }),
         updateThread: vi.fn().mockResolvedValue(undefined),
       } as unknown as MemoryStorage;
 
@@ -774,6 +775,7 @@ describe('MessageHistory', () => {
           metadata: {},
         }),
         listMessages: vi.fn().mockResolvedValue({ messages: [], total: 0 }),
+        listMessagesById: vi.fn().mockResolvedValue({ messages: [] }),
         updateThread: vi.fn().mockResolvedValue(undefined),
       } as unknown as MemoryStorage;
 
@@ -1503,10 +1505,8 @@ describe('MessageHistory', () => {
       const lookupError = new Error('lookup unavailable');
       vi.spyOn(mockStorage, 'listMessagesById').mockRejectedValueOnce(lookupError);
       const saveSpy = vi.spyOn(mockStorage, 'saveMessages');
-      const lookupSpan = { end: vi.fn(), error: vi.fn() };
-      const saveSpan = { end: vi.fn(), error: vi.fn() };
       const currentSpan = {
-        createChildSpan: vi.fn().mockReturnValueOnce(lookupSpan).mockReturnValueOnce(saveSpan),
+        update: vi.fn(),
       };
 
       const input = assistantMessage({
@@ -1532,18 +1532,9 @@ describe('MessageHistory', () => {
         }),
       ).rejects.toThrow('lookup unavailable');
 
-      expect(currentSpan.createChildSpan).toHaveBeenNthCalledWith(
-        1,
-        expect.objectContaining({
-          name: 'memory: recall',
-          input: { messageIds: ['msg-input'] },
-          attributes: { operationType: 'recall', messageCount: 1 },
-        }),
-      );
-      expect(lookupSpan.error).toHaveBeenCalledWith({ error: lookupError, endSpan: true });
-      // No unreconciled write happened, and the save span was never opened.
+      expect(currentSpan.update).toHaveBeenCalledWith({ attributes: { reconciliationMessageCount: 1 } });
+      // No unreconciled write happened.
       expect(saveSpy).not.toHaveBeenCalled();
-      expect(saveSpan.end).not.toHaveBeenCalled();
 
       saveSpy.mockRestore();
     });
@@ -2032,7 +2023,7 @@ describe('MessageHistory', () => {
       saveSpy.mockRestore();
     });
 
-    it('should keep a user text edit while retaining server observation markers and sealed metadata', async () => {
+    it('should reject an edited echo of a sealed user message', async () => {
       // Observational memory appends a `data-om-*` marker part and stamps
       // `content.metadata.mastra.sealed` onto the user message.
       const observationMarker = {
@@ -2076,17 +2067,10 @@ describe('MessageHistory', () => {
         requestContext: createRuntimeContextWithMemory('thread-1'),
       });
 
-      const savedMessages = (saveSpy.mock.calls[0]![0] as any).messages as MastraDBMessage[];
-      const savedMsg1 = savedMessages.find(m => m.id === 'msg-1')!;
-
-      // The client edit survives...
-      const textParts = savedMsg1.content.parts.filter((p: any) => p.type === 'text').map((p: any) => p.text);
-      expect(textParts).toEqual(['Edited question']);
-      // ...but the server-authored observation marker is retained despite the echo
-      // dropping it...
-      expect(savedMsg1.content.parts.some((p: any) => p.type === 'data-om-observation-end')).toBe(true);
-      // ...and the sealed metadata cannot be erased by the lossy echo.
-      expect((savedMsg1.content.metadata as any)?.mastra?.sealed).toBe(true);
+      // Sealed content has already crossed an observational-memory boundary.
+      // Rewriting it while preserving the marker would diverge storage from the
+      // observation record, so the edited echo is dropped entirely.
+      expect(saveSpy).not.toHaveBeenCalled();
 
       saveSpy.mockRestore();
     });
