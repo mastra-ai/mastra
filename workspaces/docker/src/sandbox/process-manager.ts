@@ -27,20 +27,19 @@ const PROC_DIR = '/tmp/.mastra-proc';
  * group later.
  *
  * Docker's exec-inspect `Pid` is a host/daemon-namespace PID and cannot be used
- * with an in-container `kill`, so we need a container-namespace identity. Rather
- * than tag processes with a (spoofable, losable) environment marker and scan
- * `/proc`, we use a *kernel-enforced* process group:
+ * with an in-container `kill`, so we need a container-namespace identity. We use
+ * a *kernel-enforced* process group as that identity:
  *
  *   1. `setsid -w` re-execs the command as a new session/process-group leader,
  *      so its PID == PGID. Every descendant inherits that PGID (unless it calls
- *      `setsid` itself), regardless of whether it drops env vars or re-parents
- *      to PID 1. `-w` keeps the wrapper (and thus the exec) alive for the whole
- *      lifetime and propagates the child's exit status — without it `setsid`
- *      forks and returns immediately, so the exec would appear to finish while
- *      the real work keeps running.
+ *      `setsid` itself) and stays reachable even if it re-parents to PID 1.
+ *      `-w` keeps the wrapper (and thus the exec) alive for the whole lifetime
+ *      and propagates the child's exit status — without it `setsid` forks and
+ *      returns immediately, so the exec would appear to finish while the real
+ *      work keeps running.
  *   2. The leader writes its own PID (`$$`) — the PGID — to a private file that
- *      only this process wrote, so the identity cannot be forged by another
- *      container process copying an environment value.
+ *      only this process wrote, so the identity is kernel-owned and cannot be
+ *      forged by another container process.
  *
  * If `setsid -w` is unavailable in the image (e.g. BusyBox), we degrade
  * gracefully: the command runs directly and we record its PID so kill() can
@@ -67,7 +66,7 @@ exit $ret
 /**
  * Kill script: read the recorded PGID and SIGKILL the whole process group.
  * A negative PID targets the kernel-owned process group, so descendants that
- * dropped env markers or re-parented to PID 1 are still caught. We SIGSTOP the
+ * re-parented to PID 1 are still caught. We SIGSTOP the
  * group first to freeze fork races, then SIGKILL. The file may not exist yet if
  * kill races the leader's first write, so we briefly wait for it.
  *
@@ -192,8 +191,8 @@ class DockerProcessHandle extends ProcessHandle {
       // Kill the process group inside the *container's* PID namespace. We must
       // not use exec.inspect().Pid here: that is the host/daemon-namespace PID
       // and does not correspond to PIDs an in-container `kill` can address. The
-      // recorded PGID targets a kernel-owned group, so descendants that dropped
-      // env vars or were re-parented to PID 1 are still caught.
+      // recorded PGID targets a kernel-owned group, so descendants that were
+      // re-parented to PID 1 are still caught.
       const killExec = await this._container.exec({
         // Static script; the pgid file path is passed as $1 (sh sets $0='sh',
         // $1=path) so no runtime value is ever interpolated into the command.
