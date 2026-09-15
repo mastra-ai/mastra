@@ -5,53 +5,91 @@ description: How to build Mastra frontend interfaces with the @mastra/playground
 
 # Building Frontend Interfaces
 
-Every Mastra application UI is assembled from the `@mastra/playground-ui` design system. Building a screen is composition work: pick existing components, arrange them with layout utilities, and let the design system provide the look. Writing colors, font sizes, shadows, or radii by hand means you have left the happy path. Changing the design system itself (tokens, `ds/` components, variants) is a separate, explicitly-approved task. For Tailwind v4 mechanics (renames, dynamic utilities, CSS-first APIs), read the `tailwind-v4` skill.
+<context>
+Every Mastra application UI is assembled from the `@mastra/playground-ui` design system. Building a screen is composition work: pick existing components, arrange them with layout utilities, and let the design system provide the look. Writing colors, font sizes, shadows, or radii by hand leaves the supported path. Changing the design system itself is a separate, explicitly approved task.
+</context>
 
-## The boundary: look vs layout
+<workflow>
 
-- **Look** — colors, typography, radius, shadows, borders, internal padding — belongs to the design system. Consumers never restyle it.
-- **Layout** — positioning, flex/grid placement, `gap-*`, margins, size constraints (`w-*`, `max-w-*`, `min-h-*`, `shrink-0`) — belongs to the consumer, through Tailwind utilities on your own wrappers and, when needed, directly on DS components.
+## Before writing UI
 
-`className` on a DS component is fine for layout (`<DialogContent className="max-w-100">`) and forbidden for look (`<Button className="bg-red-500 text-xs">`). If a component's look doesn't fit, use its variants and props; if none fit, escalate for a new variant instead of overriding.
+1. Inspect `packages/playground-ui/src/ds/components/` and `src/domains/` for an existing component and usage pattern.
+2. Inspect `packages/playground-ui/theme.css` for the exact token and whether it is a raw CSS property or an `@theme` utility.
+3. Review the relevant Storybook foundation before changing typography, color, spacing, radius, or shadow.
+4. Choose the highest applicable rung from the class-value hierarchy below.
+5. Verify the result in every affected theme and viewport.
 
-## Find what exists — never guess, never rebuild
+</workflow>
 
-- **Components**: browse `packages/playground-ui/src/ds/components/` (primitives) and `src/domains/` (feature components). Check the exports and existing usage before building anything new.
-- **Tokens**: read the `@theme` block in `packages/playground-ui/theme.css`. The namespace tells you the generated utility: `--color-x` → `bg-x`/`text-x`/`border-x`, `--spacing-x` → `p-x`/`gap-x`/`h-x`, `--text-x` → `text-x`, `--shadow-x` → `shadow-x`, `--radius-x` → `rounded-x`. Token names drift — confirm them in the file, never use them from memory.
+<rules>
+
+## The boundary between look and layout
+
+- **Look** includes colors, typography, radius, shadows, borders, and internal padding. It MUST come from the design system.
+- **Layout** includes positioning, flex/grid placement, gaps, margins, and size constraints. Consumers MAY set layout through Tailwind utilities on wrappers and DS components.
+- `className` on a DS component MAY control layout, such as `<DialogContent className="max-w-100">`. It MUST NOT override look, such as `<Button className="bg-red-500 text-xs">`.
+- If an existing variant does not fit, the agent MUST escalate for a shared variant instead of locally restyling the component.
 
 ## Choosing a class value
 
-Pick the highest rung that fits; each step down needs a reason:
+Use the first rung that fits:
 
-1. **DS component or variant** — the look you need probably already exists.
-2. **Generated theme utility** from `theme.css`.
-3. **Dynamic v4 utility** when the value maps to the spacing scale (`min-w-100`, `size-6`, `grid-cols-15`).
-4. **Local CSS custom property** consumed via shorthand, for runtime values scoped to one component (`bg-(--row-bg)`, `text-(color:--agent-color-fg)`).
-5. **Square-bracket arbitrary value** only for a justified one-off (`max-h-[calc(100dvh-3rem)]`).
+1. DS component or variant.
+2. Generated utility from the `@theme` block in `theme.css`.
+3. Dynamic Tailwind v4 utility when the value belongs to the spacing or sizing scale.
+4. Local CSS custom property for a runtime value scoped to one component, consumed with syntax such as `bg-(--row-bg)`.
+5. Square-bracket arbitrary value only for a justified one-off that has no token or scale value.
 
-## Theme contract
+Class strings MUST remain complete and statically detectable. Use `cn()` for conditional or merged classes. Do not import `twMerge` directly from `tailwind-merge`.
 
-- `theme.css` variables are API: adding one generates utilities for every consumer. Never modify `theme.css` or `packages/playground-ui/src/ds/tokens/*.ts` without explicit approval. To request a token: document the use case, explain why a local CSS custom property is not enough, and wait for the design team.
-- Runtime-only or single-component values get a plain CSS custom property (which generates no utility) consumed via `bg-(--var)` — not a new `@theme` token.
-- When JavaScript needs a theme value, read the CSS variable (`var(--color-surface4)`, `getComputedStyle`) — never `resolveConfig` or JS token imports for styling.
+## Typography
 
-## Wiring
+- Product copy SHOULD use `Txt` variants. Low-level primitives MAY use `text-ui-*` or `text-header-*` utilities directly.
+- UI code MUST NOT use Tailwind size utilities from `text-xs` through `text-4xl` or arbitrary pixel sizes such as `text-[11px]`.
+- Each typography token includes its paired line-height. Code MUST NOT add a separate `leading-*` unless the design system explicitly defines an exception.
+- Headings MUST follow this hierarchy:
 
-- `packages/playground-ui/src/index.css` imports Tailwind and `theme.css`, and declares the dark variant: `@custom-variant dark (&:is(.dark *))`.
-- The palette defaults to dark in `:root`; `html.light` flips the semantic variables. Theming is automatic through semantic tokens — never write `dark:` color overrides on semantic tokens; reserve `dark:` for rare structural differences.
-- Build conditional or merged class strings with `cn()` — exported from `@mastra/playground-ui` for consumers, `src/lib/utils.ts` inside the package. Its `twMerge` is extended with the DS scales (`src/lib/tw-merge-config.ts`), so DS utilities like `text-ui-md` merge correctly; importing `twMerge` from `tailwind-merge` directly mis-merges them.
-- Code inside `packages/playground-ui` outside `ds/` (for example `src/domains/`) is itself a consumer of the `ds/` primitives — all of these rules apply there too.
+| Role            | Token       |
+| --------------- | ----------- |
+| Page heading    | `header-md` |
+| Hero heading    | `header-xl` |
+| Section heading | `header-sm` |
+| Panel heading   | `ui-md`     |
 
-## Review smells
+Review `Foundations/Tokens / Typography` in Storybook before changing typography tokens or heading conventions. The paired size and line-height are one contract.
 
-- Look overrides on DS components: `bg-*`, text color or size, border color, `rounded-*`, `shadow-*`, or padding via `className`
-- A new component that duplicates an existing `ds/` or `domains/` component
-- `bg-[#hex]`, `text-[15px]`, `p-[13px]` — a token or scale value exists
-- Token names that don't exist in `theme.css` (guessed from memory)
-- `bg-[var(--x)]` — use `bg-(--x)`
-- `min-w-[400px]` and friends that divide cleanly by 4px — use the scale (`min-w-100`)
-- Template-literal class fragments (`` `bg-${tone}-500` ``) — map props to complete strings
-- A new `--color-*` or `--animate-*` token added for one component's local state
-- `dark:` color overrides on semantic tokens — the palette already flips via `html.light`
-- `twMerge` imported from `tailwind-merge` or manual string concatenation instead of `cn()`
-- Decorative animation without `motion-safe:`/`motion-reduce:`
+## Color foundations and semantics
+
+- Every variable shipped in `theme.css` is part of the CSS contract. Only variables declared in `@theme` generate Tailwind utilities.
+- Plain `:root` variables are raw foundations. Adding `--gray-1` does not create `bg-gray-1`.
+- Background foundations describe structural nesting:
+  - `background-1`: sidebar or outer chrome.
+  - `background-2`: main canvas.
+  - `background-3`: cards and panels.
+- Gray foundations describe contrast strength, not lightness. `gray-1` is subtle and `gray-10` is strong. The tonal direction reverses between themes so the same gray step preserves its role.
+- Gray alpha follows the same strength rule. Dark mode uses white overlays and light mode uses black overlays.
+- Consumer components MUST use semantic color utilities when they exist. Raw foundations MUST NOT replace existing semantic or legacy tokens outside an explicitly approved migration.
+- A new semantic alias MUST name a role, not a visual value. Prefer `sidebar-background` over `dark-gray`.
+- Theme-aware tokens MUST switch through `:root` and `html.light`. Components MUST NOT add `dark:` color overrides for behavior already represented by a token.
+
+Review `Foundations/Color foundations` in Storybook before changing color foundations, semantic aliases, or theme mappings.
+
+## Theme and token wiring
+
+- `packages/playground-ui/src/index.css` imports Tailwind and `theme.css` and declares the dark variant.
+- When JavaScript needs a theme value, read the CSS variable. Do not use `resolveConfig` or JavaScript token imports for styling.
+- Code inside `packages/playground-ui` but outside `ds/` is a consumer of the design system and MUST follow the same rules.
+- For Tailwind v4 mechanics, load the `tailwind-v4` skill.
+
+</rules>
+
+<quality-checklist>
+
+- Existing DS components and variants were checked before new UI was built.
+- Typography uses `Txt`, `text-ui-*`, or `text-header-*` with the paired leading intact.
+- Raw color foundations, generated utilities, and semantic aliases are not confused.
+- The same semantic or gray token is used in both themes without component-level theme overrides.
+- No guessed token names, raw colors, arbitrary font sizes, or look overrides appear in consumer code.
+- Light and dark themes and relevant viewport widths were verified.
+
+</quality-checklist>
