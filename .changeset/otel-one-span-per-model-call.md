@@ -6,4 +6,28 @@ Export token usage on the model call span only, so Langfuse, Phoenix and other O
 
 Previously the generation span (the whole agent loop) was exported as the `chat` call with the loop's total usage, and the model step and inference spans exported nothing. Backends could not show which call consumed the tokens, where output hit the length limit, or how the cache hit ratio changed between calls.
 
-Now `model_inference` is exported as `chat {model}` with `gen_ai.request.model`, the messages, `gen_ai.usage.*` and `gen_ai.response.*`. `model_generation` becomes a parent span named `model_generation {model}` without model or usage attributes, and `model_step` becomes `agent_step` with `mastra.model_step.step_index` and `is_continued`. When paired with an older `@mastra/observability` that does not emit inference spans, the generation span keeps the `chat` role as before. Fixes #23872.
+**Before**, a two-step tool-calling agent arrived at the backend as:
+
+```
+invoke_agent weather-agent
+└── chat gpt-5                gen_ai.usage.input_tokens=146   ← loop total
+    ├── model_step            (no attributes)
+    │   └── model_inference   (no attributes)
+    ├── execute_tool weather
+    └── model_step            (no attributes)
+        └── model_inference   (no attributes)
+```
+
+**After**, only the span that made the call carries `gen_ai.request.model`, the messages and `gen_ai.usage.*`:
+
+```
+invoke_agent weather-agent
+└── model_generation gpt-5    (no usage)
+    ├── agent_step weather-agent
+    │   └── chat gpt-5        gen_ai.usage.input_tokens=61
+    ├── execute_tool weather
+    └── agent_step weather-agent
+        └── chat gpt-5        gen_ai.usage.input_tokens=85
+```
+
+Backends sum the `chat` spans to the same total as before and can now show each call. When paired with an older `@mastra/observability` that does not emit inference spans, the generation span keeps the `chat` role as before. Dashboards that read usage from the old generation span should read the `chat` spans instead. Fixes #23872.
