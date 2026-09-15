@@ -3,20 +3,7 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import {
-  Bot,
-  Boxes,
-  Brain,
-  Cpu,
-  FileText,
-  Folder,
-  Gauge,
-  Globe,
-  Radio,
-  Sparkles,
-  Workflow,
-  Wrench,
-} from 'lucide-react';
+import { Bot, Boxes, Brain, Cpu, Folder, Gauge, Globe, Radio, Sparkles, Workflow, Wrench } from 'lucide-react';
 import { useAgent } from '../../hooks/use-agent';
 import { useReorderModelList, useUpdateModelInModelList } from '../../hooks/use-agents';
 import { useChannelPlatforms } from '../../hooks/use-channels';
@@ -215,8 +202,7 @@ function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
         </AgentMetadataSection>
       )}
 
-      <AgentMetadataSection title="System Prompt" accent="pink" icon={<FileText />}>
-        <AgentSystemPrompt instructions={extractPrompt(agent.instructions)} />
+      <AgentSystemPrompt instructions={extractPrompt(agent.instructions)}>
         {!isCmsLoading && !isCmsAvailable && (
           <Notice variant="warning" title="Read-only">
             <Notice.Message>
@@ -234,7 +220,7 @@ function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
             </Notice.Message>
           </Notice>
         )}
-      </AgentMetadataSection>
+      </AgentSystemPrompt>
     </>
   );
 }
