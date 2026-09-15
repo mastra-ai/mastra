@@ -75,14 +75,20 @@ export function createTerminalStageCleanup(options: TerminalStageCleanupOptions)
           if (binding.id === args.initiatingBindingId) continue;
           // A role handoff or reopen may have rebound this session to a newer
           // active run for another item; aborting would kill that successor.
-          const current = await options.workItems
-            .findRunBindingBySession({
+          // If the lookup fails we cannot rule out a successor, so skip the
+          // abort — revocation below still severs this seat's authority, and a
+          // false abort would kill a live run for a different work item.
+          let current: FactoryRunBindingRecord | null;
+          try {
+            current = await options.workItems.findRunBindingBySession({
               factoryProjectId: binding.factoryProjectId,
               threadId: binding.threadId,
               resourceId: binding.resourceId,
               sessionId: binding.sessionId,
-            })
-            .catch(() => null);
+            });
+          } catch {
+            continue;
+          }
           if (current && current.status === 'active' && current.workItemId !== args.workItemId) continue;
           await options.abortSession(binding).catch(() => {});
         }

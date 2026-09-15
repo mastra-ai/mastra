@@ -129,6 +129,25 @@ describe('createTerminalStageCleanup', () => {
     expect(abortSession).not.toHaveBeenCalled();
   });
 
+  it('skips the abort when the successor lookup fails rather than risk killing another item', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const stale = await prepareBinding(storage, { issue: 1, role: 'work', session: 'session-1' });
+
+    // A transient storage failure must not be read as "no successor" — a false
+    // abort would kill a live run that may belong to a different work item.
+    vi.spyOn(storage, 'findRunBindingBySession').mockRejectedValue(new Error('transient'));
+
+    const abortSession = vi.fn(async () => {});
+    const cleanup = createTerminalStageCleanup({ workItems: storage, abortSession });
+
+    await cleanup({ orgId: 'org-1', factoryProjectId: PROJECT_ID, workItemId: stale.item.id });
+
+    expect(abortSession).not.toHaveBeenCalled();
+    // Revocation still severs the seat's authority even though the abort was skipped.
+    const bindings = await storage.listRunBindings('org-1', PROJECT_ID, stale.item.id);
+    expect(bindings.every(b => b.status === 'revoked')).toBe(true);
+  });
+
   it('does not revoke a re-entered card after terminal cleanup becomes stale', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const prepared = await prepareBinding(storage);
