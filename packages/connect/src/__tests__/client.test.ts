@@ -298,6 +298,22 @@ describe('proxyRequest', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it('sends a pre-encoded string body unchanged with the caller content type', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ ok: true }));
+    const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
+    const multipart = '--b\r\nContent-Disposition: form-data; name="file"\r\n\r\nemail\r\n--b--\r\n';
+    await proxyRequest(client, 'c_1', {
+      method: 'POST',
+      path: 'contacts/imports',
+      headers: { 'Content-Type': 'multipart/form-data; boundary=b' },
+      body: multipart,
+    });
+    const [, init] = fetchMock.mock.calls[0]!;
+    expect(init.body).toBe(multipart);
+    expect(init.headers['Content-Type']).toBe('multipart/form-data; boundary=b');
+    expect(init.headers['content-type']).toBeUndefined();
+  });
+
   it('keeps a provider 404 as proxy_error (never connection_not_found)', async () => {
     const fetchMock = vi.fn().mockResolvedValue(Response.json({ message: 'page not found' }, { status: 404 }));
     const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
