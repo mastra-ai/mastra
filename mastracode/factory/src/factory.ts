@@ -624,6 +624,11 @@ export class MastraFactory {
           boards: this.#boards,
           storage: workItemsStorage,
           audit: auditDomain,
+          autoApprovePlans: async ({ orgId, factoryProjectId }) => {
+            await factoryProjectsStorage.ensureReady();
+            const project = await factoryProjectsStorage.get({ orgId, id: factoryProjectId });
+            return project?.autoApprovePlans ?? false;
+          },
           ...(onTerminalStage ? { onTerminalStage } : {}),
           ...(githubIntegration
             ? {
