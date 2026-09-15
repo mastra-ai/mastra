@@ -59,7 +59,7 @@ The allowlist applies to every mode. A mode can narrow its own access with `avai
 
 ## Security boundary
 
-The factory prevents Mastra Code itself from discovering ambient host capabilities. The model, workspace, storage, memory, tools, processors, routes, and callbacks you inject are trusted host code and remain responsible for their own filesystem, process, credential, and network access. In particular, `allowedTools` controls which tools the model can see and call; it doesn't sandbox the implementation of an allowed tool.
+The factory prevents Mastra Code itself from discovering ambient host capabilities. The model, workspace, storage, memory, tools, processors, routes, and callbacks you inject are trusted host code and remain responsible for their own filesystem, process, credential, and network access. In particular, `allowedTools` controls which tools the model can see and call. It doesn't sandbox the implementation of an allowed tool.
 
 ## Disabled capabilities
 
