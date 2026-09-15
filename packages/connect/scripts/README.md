@@ -20,6 +20,12 @@ The template source is pinned in `templates-config.ts` and cloned into the gitig
 pnpm --filter @mastra/connect sync-templates
 ```
 
+A provider listed in `TEMPLATE_PIN_OVERRIDES` is generated from its own repository and commit instead of the shared pin. Pass the provider id to move the checkout to that pin first; `add-provider` refuses to generate from a checkout at any other commit.
+
+```bash
+pnpm --filter @mastra/connect sync-templates resend
+```
+
 ## Find a provider
 
 ```bash
@@ -75,17 +81,13 @@ Generated action implementations are adapted from `NangoHQ/integration-templates
 
 ## Pending provider contributions
 
-Resend and incident.io are generated from the contribution branches under review in NangoHQ/integration-templates PRs [#667](https://github.com/NangoHQ/integration-templates/pull/667) and [#668](https://github.com/NangoHQ/integration-templates/pull/668):
-
-The two contributions live on separate branches of the fork, so each provider is regenerated with its own branch head pinned in `templates-config.ts`. Each provider's manifest records the SHA it was generated from.
+Resend and incident.io are generated from the contribution branches under review in NangoHQ/integration-templates PRs [#667](https://github.com/NangoHQ/integration-templates/pull/667) and [#668](https://github.com/NangoHQ/integration-templates/pull/668). Each has its own entry in `TEMPLATE_PIN_OVERRIDES`, so the shared pin stays on the upstream repository and every other provider is generated from it.
 
 ```sh
-# templateSha = head of feat/resend-actions
-pnpm --filter @mastra/connect sync-templates
+pnpm --filter @mastra/connect sync-templates resend
 pnpm --filter @mastra/connect add-provider resend --yes
-# templateSha = head of feat/incident-io-actions
-pnpm --filter @mastra/connect sync-templates
+pnpm --filter @mastra/connect sync-templates incident-io
 pnpm --filter @mastra/connect add-provider incident-io --yes
 ```
 
-After both PRs merge, update the relevant template pins to upstream revisions containing them, sync, regenerate the providers, and review manifest/checksum changes. Sync updates an existing cache's remote when the repository pin changes. Older manifests without `templateRepo` refer to NangoHQ/integration-templates.
+After both PRs merge, delete the overrides, move the shared pin to an upstream revision that contains them, sync, regenerate the providers, and review manifest/checksum changes. Sync updates an existing cache's remote when the repository pin changes. Older manifests without `templateRepo` refer to NangoHQ/integration-templates.

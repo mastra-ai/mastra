@@ -44,7 +44,7 @@ import {
   validateProviderId,
   type ProviderManifest,
 } from './provider-utils.js';
-import { TEMPLATE_REPO, TEMPLATE_SHA } from './templates-config.js';
+import { templatePinFor, type TemplatePin } from './templates-config.js';
 
 /** Module specifier the upstream templates import their SDK from. */
 const TEMPLATE_SDK_MODULE = 'nango';
@@ -52,6 +52,9 @@ const PROXY_REQUEST_METHODS = new Set(['get', 'post', 'put', 'patch', 'delete'])
 const PROXY_CONTEXT_METHODS = new Set([...PROXY_REQUEST_METHODS, 'getConnection', 'getMetadata', 'ActionError', 'log']);
 const UNSUPPORTED_PROXY_OPTIONS = ['responseType'] as const;
 const ALLOWED_TEMPLATE_SDK_IMPORTS = new Set(['createAction', 'ProxyConfiguration']);
+
+/** Pin of the provider currently being generated; stamped into headers and the manifest. */
+let activePin: TemplatePin = templatePinFor();
 
 interface ActionCandidate {
   providerId: string;
@@ -347,7 +350,7 @@ function emitActionFile(action: ExtractedAction): string {
   const proxyImport = `import type { PlatformProxy${proxyTypeImports.length > 0 ? `, ${proxyTypeImports.join(', ')}` : ''} } from '../../../runtime/platform-proxy.js';\n`;
   const modelOutput = modelOutputOverride(action);
 
-  return `// AUTO-GENERATED from ${TEMPLATE_REPO} @ ${TEMPLATE_SHA.slice(0, 12)} — do not edit by hand.
+  return `// AUTO-GENERATED from ${activePin.repo} @ ${activePin.sha.slice(0, 12)} — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -380,7 +383,7 @@ function emitToolsFile(integrationId: string, actions: ExtractedAction[]): strin
     .map(action => `    '${action.candidate.toolKey}': ${action.toolFactoryName}(platformProxy),`)
     .join('\n');
 
-  return `// AUTO-GENERATED from ${TEMPLATE_REPO} @ ${TEMPLATE_SHA.slice(0, 12)} — do not edit by hand.
+  return `// AUTO-GENERATED from ${activePin.repo} @ ${activePin.sha.slice(0, 12)} — do not edit by hand.
 import { createPlatformProxy } from '../../runtime/platform-proxy.js';
 import type { ProviderToolsOptions } from '../../toolset.js';
 import { applyAllowTools } from '../../toolset.js';
@@ -402,7 +405,7 @@ function emitIndexFile(integrationId: string): string {
   // Shared with updateProviderIndex so the emitted export always matches the
   // import the provider index writes (including leading-digit normalization).
   const registrationName = providerRegistrationName(integrationId);
-  return `// AUTO-GENERATED from ${TEMPLATE_REPO} @ ${TEMPLATE_SHA.slice(0, 12)} — do not edit by hand.
+  return `// AUTO-GENERATED from ${activePin.repo} @ ${activePin.sha.slice(0, 12)} — do not edit by hand.
 import type { ProviderRegistration } from '../../registry.js';
 import { ${factoryName} } from './tools.js';
 
@@ -432,11 +435,13 @@ export interface GenerateProviderResult {
 export async function generateProvider({
   providerId,
   localId = providerId,
-  expectedTemplateSha = TEMPLATE_SHA,
+  expectedTemplateSha,
 }: GenerateProviderOptions): Promise<GenerateProviderResult> {
   validateProviderId(providerId, 'Provider ID');
   validateProviderId(localId, 'Local ID');
   assertProviderEnvVarAvailable(localId);
+  activePin = templatePinFor(providerId);
+  const expectedSha = expectedTemplateSha ?? activePin.sha;
 
   const actionDir = resolve(templatesDir, providerId, 'actions');
   if (!existsSync(actionDir)) {
@@ -444,9 +449,9 @@ export async function generateProvider({
   }
 
   const templateSha = currentTemplateSha();
-  if (templateSha !== expectedTemplateSha) {
+  if (templateSha !== expectedSha) {
     throw new Error(
-      `Template checkout is at ${templateSha}, but the generator expects ${expectedTemplateSha}. Run \`pnpm sync-templates\`.`,
+      `Template checkout is at ${templateSha}, but the generator expects ${expectedSha}. Run \`pnpm sync-templates ${providerId}\`.`,
     );
   }
 
@@ -491,7 +496,7 @@ export async function generateProvider({
       providerId,
       localId,
       templateSha,
-      templateRepo: TEMPLATE_REPO,
+      templateRepo: activePin.repo,
       generatedAt: new Date().toISOString(),
       toolCount: extracted.length,
       skippedActions: skipped.map(action => ({ action: action.candidate.actionSlug, reason: action.reason })),
