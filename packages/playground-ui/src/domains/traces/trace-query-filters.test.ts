@@ -41,6 +41,24 @@ describe('buildTraceQueryRequest', () => {
     expect(buildTraceQueryRequest({ tokens: [{ fieldId: 'status', value: ['running'] }], now }).where).toBeUndefined();
   });
 
+  it('retains error when mixed with running', () => {
+    expect(buildTraceQueryRequest({ tokens: [{ fieldId: 'status', value: ['running', 'error'] }], now }).where).toEqual(
+      {
+        op: 'and',
+        args: [{ op: 'eq', left: { path: 'status' }, right: { literal: 'error' } }],
+      },
+    );
+  });
+
+  it('retains all supported statuses when mixed with running', () => {
+    expect(
+      buildTraceQueryRequest({ tokens: [{ fieldId: 'status', value: ['running', 'success', 'error'] }], now }).where,
+    ).toEqual({
+      op: 'and',
+      args: [{ op: 'in', value: { path: 'status' }, set: ['success', 'error'] }],
+    });
+  });
+
   it('preserves explicit dates and root filters', () => {
     const dateFrom = new Date('2026-09-01T00:00:00Z');
     expect(

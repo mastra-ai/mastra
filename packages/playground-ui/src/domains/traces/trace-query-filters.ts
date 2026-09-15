@@ -44,10 +44,11 @@ export function buildTraceQueryRequest({
       case 'entityType':
         args.push(predicate('entityType', values));
         break;
-      case 'status':
-        if (values.includes('running')) break;
-        args.push(predicate('status', values));
+      case 'status': {
+        const supportedStatuses = values.filter(value => value !== 'running');
+        if (supportedStatuses.length) args.push(predicate('status', supportedStatuses));
         break;
+      }
       case 'entityName':
       case 'environment':
       case 'traceId':
