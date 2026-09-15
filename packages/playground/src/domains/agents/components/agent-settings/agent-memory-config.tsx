@@ -1,4 +1,5 @@
 import type { GetMemoryConfigResponse } from '@mastra/client-js';
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
 import { KeyValueList } from '@mastra/playground-ui/components/KeyValueList';
@@ -95,9 +96,9 @@ function MemoryConfigFields({ items }: Pick<MemoryConfigSection, 'items'>) {
           </Txt>
         ),
         value: (
-          <Txt as="span" variant="ui-smd" className="min-w-0 whitespace-normal break-words">
+          <Badge className="h-auto min-h-5 min-w-0 whitespace-normal break-words">
             {formatMemoryValue(item.value)}
-          </Txt>
+          </Badge>
         ),
       }))}
     />

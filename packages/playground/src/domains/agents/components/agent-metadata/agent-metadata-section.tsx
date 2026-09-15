@@ -42,7 +42,7 @@ export const AgentMetadataSection = ({
   return (
     <section
       className={cn(
-        'group/metadata grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-3',
+        'group/metadata grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-3 p-4',
         sectionAccentClasses[accent],
       )}
     >

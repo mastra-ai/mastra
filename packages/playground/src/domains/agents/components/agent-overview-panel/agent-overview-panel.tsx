@@ -45,7 +45,7 @@ export function AgentOverviewPanel({ agentId }: AgentOverviewPanelProps) {
       </div>
 
       <ScrollArea className="min-h-0" viewPortClassName="h-full" mask={{ top: false }}>
-        <div className="p-6">{!isCollapsed && <AgentOverviewSections agentId={agentId} />}</div>
+        {!isCollapsed && <AgentOverviewSections agentId={agentId} />}
       </ScrollArea>
     </Card>
   );
@@ -60,7 +60,7 @@ function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
 
   if (isLoading) {
     return (
-      <div className="flex flex-col gap-3" data-testid="agent-overview-panel-skeleton">
+      <div className="flex flex-col gap-3 p-4" data-testid="agent-overview-panel-skeleton">
         <Skeleton className="h-6 w-1/2" />
         <Skeleton className="h-16" />
         <Skeleton className="h-6 w-1/3" />
@@ -71,7 +71,7 @@ function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
 
   if (!agent) {
     return (
-      <Txt variant="ui-md" className="text-neutral3">
+      <Txt variant="ui-md" className="text-neutral3 p-4">
         Agent not found
       </Txt>
     );
@@ -91,109 +91,107 @@ function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
   const hasChannels = Boolean(channelPlatforms?.length);
 
   return (
-    <div className="space-y-8">
-      <div className="space-y-8">
-        {agent.modelList && (
-          <AgentMetadataSection title="Models" accent="blue" icon={<Boxes />}>
-            <AgentMetadataModelList
-              modelList={agent.modelList}
-              updateModelInModelList={updateModelInModelList}
-              reorderModelList={reorderModelList}
-            />
-          </AgentMetadataSection>
-        )}
+    <>
+      {agent.modelList && (
+        <AgentMetadataSection title="Models" accent="blue" icon={<Boxes />}>
+          <AgentMetadataModelList
+            modelList={agent.modelList}
+            updateModelInModelList={updateModelInModelList}
+            reorderModelList={reorderModelList}
+          />
+        </AgentMetadataSection>
+      )}
 
-        {networkAgents.length > 0 && (
-          <AgentMetadataSection
-            title="Agents"
-            count={networkAgents.length}
-            accent="green"
-            icon={<Bot />}
-            hint={{ link: 'https://mastra.ai/en/docs/agents/overview', title: 'Agents documentation' }}
-          >
-            <AgentMetadataNetworkList agents={networkAgents} />
-          </AgentMetadataSection>
-        )}
-
+      {networkAgents.length > 0 && (
         <AgentMetadataSection
-          title="Tools"
-          count={tools.length}
-          accent="amber"
-          icon={<Wrench />}
+          title="Agents"
+          count={networkAgents.length}
+          accent="green"
+          icon={<Bot />}
+          hint={{ link: 'https://mastra.ai/en/docs/agents/overview', title: 'Agents documentation' }}
+        >
+          <AgentMetadataNetworkList agents={networkAgents} />
+        </AgentMetadataSection>
+      )}
+
+      <AgentMetadataSection
+        title="Tools"
+        count={tools.length}
+        accent="amber"
+        icon={<Wrench />}
+        hint={{
+          link: 'https://mastra.ai/en/docs/agents/using-tools-and-mcp',
+          title: 'Using Tools and MCP documentation',
+        }}
+      >
+        <AgentMetadataToolList tools={tools} agentId={agentId} />
+      </AgentMetadataSection>
+
+      <AgentMetadataSection
+        title="Workflows"
+        count={workflows.length}
+        accent="blue"
+        icon={<Workflow />}
+        hint={{ link: 'https://mastra.ai/en/docs/workflows/overview', title: 'Workflows documentation' }}
+      >
+        <AgentMetadataWorkflowList workflows={workflows} />
+      </AgentMetadataSection>
+
+      {workspaceTools.length > 0 && (
+        <AgentMetadataSection
+          title="Workspace Tools"
+          count={workspaceTools.length}
+          accent="green"
+          icon={<Folder />}
           hint={{
-            link: 'https://mastra.ai/en/docs/agents/using-tools-and-mcp',
-            title: 'Using Tools and MCP documentation',
+            link: 'https://mastra.ai/en/reference/workspace/workspace-class#agent-tools',
+            title: 'Workspace tools documentation',
           }}
         >
-          <AgentMetadataToolList tools={tools} agentId={agentId} />
+          <AgentMetadataWorkspaceToolsList tools={workspaceTools} />
         </AgentMetadataSection>
+      )}
 
+      {browserTools.length > 0 && (
         <AgentMetadataSection
-          title="Workflows"
-          count={workflows.length}
-          accent="blue"
-          icon={<Workflow />}
-          hint={{ link: 'https://mastra.ai/en/docs/workflows/overview', title: 'Workflows documentation' }}
+          title="Browser Tools"
+          count={browserTools.length}
+          accent="cyan"
+          icon={<Globe />}
+          hint={{
+            link: 'https://mastra.ai/en/docs/agents/adding-browser-control',
+            title: 'Browser tools documentation',
+          }}
         >
-          <AgentMetadataWorkflowList workflows={workflows} />
+          <AgentMetadataBrowserToolsList tools={browserTools} />
         </AgentMetadataSection>
+      )}
 
-        {workspaceTools.length > 0 && (
-          <AgentMetadataSection
-            title="Workspace Tools"
-            count={workspaceTools.length}
-            accent="green"
-            icon={<Folder />}
-            hint={{
-              link: 'https://mastra.ai/en/reference/workspace/workspace-class#agent-tools',
-              title: 'Workspace tools documentation',
-            }}
-          >
-            <AgentMetadataWorkspaceToolsList tools={workspaceTools} />
-          </AgentMetadataSection>
-        )}
-
-        {browserTools.length > 0 && (
-          <AgentMetadataSection
-            title="Browser Tools"
-            count={browserTools.length}
-            accent="cyan"
-            icon={<Globe />}
-            hint={{
-              link: 'https://mastra.ai/en/docs/agents/adding-browser-control',
-              title: 'Browser tools documentation',
-            }}
-          >
-            <AgentMetadataBrowserToolsList tools={browserTools} />
-          </AgentMetadataSection>
-        )}
-
-        {(inputProcessors.length > 0 || outputProcessors.length > 0) && (
-          <AgentMetadataSection
-            title="Processors"
-            accent="orange"
-            icon={<Cpu />}
-            hint={{ link: 'https://mastra.ai/docs/agents/processors', title: 'Processors documentation' }}
-          >
-            <AgentMetadataCombinedProcessorList inputProcessors={inputProcessors} outputProcessors={outputProcessors} />
-          </AgentMetadataSection>
-        )}
-
+      {(inputProcessors.length > 0 || outputProcessors.length > 0) && (
         <AgentMetadataSection
-          title="Skills"
-          count={skills.length}
-          accent="purple"
-          icon={<Sparkles />}
-          hint={{ link: 'https://mastra.ai/en/docs/workspace/skills', title: 'Skills documentation' }}
+          title="Processors"
+          accent="orange"
+          icon={<Cpu />}
+          hint={{ link: 'https://mastra.ai/docs/agents/processors', title: 'Processors documentation' }}
         >
-          <AgentMetadataSkillList skills={skills} agentId={agentId} workspaceId={agent.workspaceId} />
+          <AgentMetadataCombinedProcessorList inputProcessors={inputProcessors} outputProcessors={outputProcessors} />
         </AgentMetadataSection>
+      )}
 
-        <AgentMetadataSection title="Scorers" accent="pink" icon={<Gauge />}>
-          <AgentMetadataScorerList entityId={agent.name} entityType="AGENT" />
-        </AgentMetadataSection>
-      </div>
-      <div className="border-border1 space-y-8 border-t pt-6">
+      <AgentMetadataSection
+        title="Skills"
+        count={skills.length}
+        accent="purple"
+        icon={<Sparkles />}
+        hint={{ link: 'https://mastra.ai/en/docs/workspace/skills', title: 'Skills documentation' }}
+      >
+        <AgentMetadataSkillList skills={skills} agentId={agentId} workspaceId={agent.workspaceId} />
+      </AgentMetadataSection>
+
+      <AgentMetadataSection title="Scorers" accent="pink" icon={<Gauge />}>
+        <AgentMetadataScorerList entityId={agent.name} entityType="AGENT" />
+      </AgentMetadataSection>
+      <div className="border-border1 border-t">
         <AgentMetadataSection title="Memory" accent="purple" icon={<Brain />}>
           <AgentMemoryConfig agentId={agentId} />
         </AgentMetadataSection>
@@ -224,6 +222,6 @@ function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
           )}
         </AgentSystemPrompt>
       </div>
-    </div>
+    </>
   );
 }
