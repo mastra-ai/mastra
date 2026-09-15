@@ -210,6 +210,44 @@ describe.each(['v2', 'v3'] as const)('separate structuring model retries (%s)', 
       expect(structuringCalls).toBe(3);
     });
 
+    it('structures only the regenerated output after a retry', async () => {
+      let primaryCalls = 0;
+      let structuringCalls = 0;
+      const structuringPrompts: string[] = [];
+      const agent = new Agent({
+        id: 'structured-output-attempt-boundary',
+        name: 'Structured output attempt boundary',
+        instructions: 'Count the files.',
+        model: createModel(version, () => {
+          primaryCalls++;
+          return primaryCalls === 1 ? 'There are three files.' : 'There are four files.';
+        }),
+      });
+
+      const result = await agent[method]('Count the files.', {
+        maxProcessorRetries: 1,
+        structuredOutput: {
+          schema: z.object({ count: z.number() }),
+          model: createModel(version, prompt => {
+            structuringCalls++;
+            structuringPrompts.push(JSON.stringify(prompt));
+            return JSON.stringify(structuringCalls === 1 ? { count: 'invalid' } : { count: 4 });
+          }),
+        },
+      });
+      if (method === 'stream' && 'fullStream' in result) {
+        for await (const chunk of result.fullStream) {
+          expect(chunk.type).not.toBe('error');
+        }
+      }
+
+      expect(await result.object).toEqual({ count: 4 });
+      expect(primaryCalls).toBe(2);
+      expect(structuringCalls).toBe(2);
+      expect(structuringPrompts[1]).toContain('There are four files.');
+      expect(structuringPrompts[1]).not.toContain('There are three files.');
+    });
+
     it.each([
       { budget: 2, failures: 0, attempts: 1, succeeds: true },
       { budget: 2, failures: 1, attempts: 2, succeeds: true },

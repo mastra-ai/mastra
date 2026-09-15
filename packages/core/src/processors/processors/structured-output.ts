@@ -23,6 +23,7 @@ export const STRUCTURED_OUTPUT_PROCESSOR_NAME = 'structured-output';
 type StructuredOutputRequestState = {
   isStructuringAgentStreamStarted: boolean;
   structuredOutputError?: string;
+  streamPartsStartIndex: number;
 };
 
 /**
@@ -108,7 +109,7 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
   private getRequestState(state: object): StructuredOutputRequestState {
     let requestState = this.requestStates.get(state);
     if (!requestState) {
-      requestState = { isStructuringAgentStreamStarted: false };
+      requestState = { isStructuringAgentStreamStarted: false, streamPartsStartIndex: 0 };
       this.requestStates.set(state, requestState);
     }
     return requestState;
@@ -164,7 +165,7 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
     requestState.isStructuringAgentStreamStarted = true;
     try {
       const structuringAgentStream = await this.getStructuringStream(
-        streamParts,
+        streamParts.slice(requestState.streamPartsStartIndex),
         requestContext,
         messageList,
         observabilityContext,
@@ -219,6 +220,9 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
       }
     } catch (error) {
       this.handleError('Structured output processing failed', error, requestState);
+    }
+    if (requestState.structuredOutputError) {
+      requestState.streamPartsStartIndex = streamParts.length;
     }
   }
 
