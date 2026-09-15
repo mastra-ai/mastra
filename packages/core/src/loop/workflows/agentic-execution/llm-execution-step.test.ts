@@ -1823,6 +1823,131 @@ describe('createLLMExecutionStep gateway provider tools', () => {
     expect(firstModelStream).toHaveBeenCalledTimes(1);
   });
 
+  it('preserves fallback model index when a successful fallback continues after a tool call', async () => {
+    const tools = {
+      echo: createTool({
+        id: 'echo',
+        description: 'Echo input text',
+        inputSchema: z.object({ text: z.string() }),
+        execute: vi.fn(async ({ text }) => ({ text })),
+      }),
+    };
+    const firstModelStream = vi.fn(async () => {
+      throw new APICallError({
+        message: 'primary failed',
+        url: 'https://primary.example.com/v1/messages',
+        requestBodyValues: {},
+        statusCode: 503,
+        isRetryable: true,
+      });
+    });
+    const secondModelStream = vi
+      .fn()
+      .mockResolvedValueOnce({
+        stream: convertArrayToReadableStream([
+          {
+            type: 'tool-call',
+            toolCallId: 'call-1',
+            toolName: 'echo',
+            input: '{"text":"continue on fallback"}',
+          },
+          {
+            type: 'finish',
+            finishReason: 'tool-calls',
+            usage: testUsage,
+          },
+        ]),
+        request: {},
+        response: { headers: undefined },
+        warnings: [],
+      })
+      .mockResolvedValueOnce({
+        stream: convertArrayToReadableStream([
+          {
+            type: 'text-delta',
+            textDelta: 'Completed on fallback',
+          },
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: testUsage,
+          },
+        ]),
+        request: {},
+        response: { headers: undefined },
+        warnings: [],
+      });
+
+    const llmExecutionStep = createLLMExecutionStep({
+      agentId: 'test-agent',
+      messageId: 'msg-0',
+      runId: 'test-run',
+      startTimestamp: Date.now(),
+      methodType: 'stream',
+      controller,
+      outputWriter: vi.fn(),
+      messageList,
+      models: [
+        {
+          id: 'primary-model',
+          maxRetries: 0,
+          model: {
+            specificationVersion: 'v2' as const,
+            provider: 'mock-provider',
+            modelId: 'primary-model',
+            supportedUrls: {},
+            doGenerate: vi.fn(),
+            doStream: firstModelStream,
+          } as any,
+        },
+        {
+          id: 'secondary-model',
+          maxRetries: 0,
+          model: {
+            specificationVersion: 'v2' as const,
+            provider: 'mock-provider',
+            modelId: 'secondary-model',
+            supportedUrls: {},
+            doGenerate: vi.fn(),
+            doStream: secondModelStream,
+          } as any,
+        },
+      ],
+      tools,
+      streamState: {
+        serialize: vi.fn(),
+        deserialize: vi.fn(),
+      },
+      _internal: {
+        generateId: () => 'generated-id',
+        threadId: 'thread-123',
+        resourceId: 'resource-456',
+      },
+      logger: {
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+      } as any,
+    } as unknown as OuterLLMRun<typeof tools>);
+
+    const toolCallResult = await llmExecutionStep.execute(createExecuteParams(createIterationInput()));
+
+    expect(toolCallResult.stepResult.reason).toBe('tool-calls');
+    expect(toolCallResult.stepResult.isContinued).toBe(true);
+    expect(toolCallResult.fallbackModelIndex).toBe(1);
+    expect(firstModelStream).toHaveBeenCalledTimes(1);
+    expect(secondModelStream).toHaveBeenCalledTimes(1);
+
+    const continuationInput = createIterationInput();
+    continuationInput.fallbackModelIndex = toolCallResult.fallbackModelIndex;
+    const completionResult = await llmExecutionStep.execute(createExecuteParams(continuationInput));
+
+    expect(completionResult.stepResult.reason).toBe('stop');
+    expect(completionResult.fallbackModelIndex).toBeUndefined();
+    expect(firstModelStream).toHaveBeenCalledTimes(1);
+    expect(secondModelStream).toHaveBeenCalledTimes(2);
+  });
+
   it('does not signal a processor retry when aborted during the retry delay', async () => {
     const abortController = new AbortController();
     const onAbort = vi.fn();
