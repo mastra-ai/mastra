@@ -1309,6 +1309,20 @@ describe('GeminiLiveVoice', () => {
       expect((voice as any).options.thinkingConfig).toEqual({ includeThoughts: false });
     });
 
+    it('updateSessionConfig({ thinkingConfig: { thinkingBudget: 0 } }) should emit thinking_budget: 0 and update internal options', async () => {
+      setTimeout(() => {
+        (voice as any).eventManager.getEventEmitter().emit('session.updated', { ok: true } as any);
+      }, 10);
+
+      await voice.updateSessionConfig({ thinkingConfig: { thinkingBudget: 0 } });
+
+      const calls = mockWs.send.mock.calls.map((c: any[]) => JSON.parse(c[0]));
+      const updateMsg = calls.find((p: any) => p.session?.generation_config?.thinking_config !== undefined);
+      expect(updateMsg).toBeDefined();
+      expect(updateMsg.session.generation_config.thinking_config).toEqual({ thinking_budget: 0 });
+      expect((voice as any).options.thinkingConfig).toEqual({ thinkingBudget: 0 });
+    });
+
     it('updateSessionConfig({ thinkingConfig: {} }) should not emit session.generation_config.thinking_config', async () => {
       setTimeout(() => {
         (voice as any).eventManager.getEventEmitter().emit('session.updated', { ok: true } as any);
