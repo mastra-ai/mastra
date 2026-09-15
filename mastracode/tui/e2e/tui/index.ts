@@ -84,6 +84,7 @@ import { modelSearchScenario } from './model-search.js';
 import { modelSelectionApiKeyPromptScenario } from './model-selection-api-key-prompt.js';
 import { modelSelectionCancelEnvScenario } from './model-selection-cancel-env.js';
 import { modelsPackActivationPersistenceScenario } from './models-pack-activation-persistence.js';
+import { newThreadRestartScenario } from './new-thread-restart.js';
 import { notificationInboxCrudFlowScenario } from './notification-inbox-crud-flow.js';
 import { notificationInboxReloadScenario } from './notification-inbox-reload.js';
 import { notificationInboxToolFlowScenario } from './notification-inbox-tool-flow.js';
@@ -365,6 +366,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'task-prompt-context-next-turn': taskPromptContextNextTurnScenario,
   'terminal-resize-reflow': terminalResizeReflowScenario,
   'thread-history': threadHistoryScenario,
+  'new-thread-restart': newThreadRestartScenario,
   'tool-history-reload': toolHistoryReloadScenario,
   'tool-schema-compat': toolSchemaCompatScenario,
   'tool-suspension-same-run-resume': toolSuspensionSameRunResumeScenario,
