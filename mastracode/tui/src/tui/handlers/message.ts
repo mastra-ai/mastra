@@ -18,6 +18,7 @@ import {
   resolveModePackModels,
   saveSettings,
   THREAD_ACTIVE_MODEL_PACK_ID_KEY,
+  THREAD_FALLBACK_STATUS_KEY,
 } from '@mastra/code-sdk/onboarding/settings';
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
 
@@ -310,8 +311,14 @@ export async function handlePackFallbackState(
   if (pending.toModelId.length === 0 || pending.toPackId.length === 0) return;
 
   const settings = loadSettings();
-  const pack = listResolvableModePacks(settings).find(candidate => candidate.id === pending.toPackId);
+  const packs = listResolvableModePacks(settings);
+  const pack = packs.find(candidate => candidate.id === pending.toPackId);
   if (!pack) return; // Pack deleted since the hop — state is consumed, bail.
+  const failedPack = packs.find(candidate => candidate.id === pending.fromPackId);
+  const fallbackStatus = {
+    usingPack: pack.name,
+    failedPack: failedPack?.name ?? pending.fromPackId,
+  };
   const packModels = resolveModePackModels(settings, pack) as Record<string, string>;
 
   // Per-mode models — mirrors applyPack so switching modes after the hop
@@ -341,7 +348,9 @@ export async function handlePackFallbackState(
 
   if (ectx.state.session.thread.getId()) {
     await ectx.state.session.thread.setSetting({ key: THREAD_ACTIVE_MODEL_PACK_ID_KEY, value: pending.toPackId });
+    await ectx.state.session.thread.setSetting({ key: THREAD_FALLBACK_STATUS_KEY, value: fallbackStatus });
   }
+  ectx.state.fallbackStatus = fallbackStatus;
   await ectx.state.session.state.set({ activeModelPackId: pending.toPackId });
 
   if (pending.toPackId.startsWith('custom:')) {

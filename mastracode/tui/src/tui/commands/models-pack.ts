@@ -17,6 +17,7 @@ import {
   saveSettings,
   stripMastraCodeCustomProviderPrefix,
   THREAD_ACTIVE_MODEL_PACK_ID_KEY,
+  THREAD_FALLBACK_STATUS_KEY,
 } from '@mastra/code-sdk/onboarding/settings';
 import type { GlobalSettings } from '@mastra/code-sdk/onboarding/settings';
 import chalk from 'chalk';
@@ -585,6 +586,8 @@ async function applyPack(ctx: SlashCommandContext, pack: ModePack, previousPackI
   }
 
   await ctx.state.session.thread.setSetting({ key: THREAD_ACTIVE_MODEL_PACK_ID_KEY, value: pack.id });
+  await ctx.state.session.thread.setSetting({ key: THREAD_FALLBACK_STATUS_KEY, value: undefined });
+  ctx.state.fallbackStatus = undefined;
   await ctx.state.session.state.set({ activeModelPackId: pack.id });
 
   const s = loadSettings();

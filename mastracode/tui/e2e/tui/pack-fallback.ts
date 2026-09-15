@@ -265,8 +265,10 @@ export const packFallbackScenario: McE2eScenario = {
     }
     runtime.printScreen('after hop', terminal);
 
-    // Stickiness: the live session now shows the landed pack's model.
-    await runtime.waitForScreenText(/claude-fable-5/i, terminal, 10_000);
+    // Stickiness: the live session now shows the landed pack's model and
+    // identifies both sides of the fallback in the status line.
+    await runtime.waitForScreenText(/fable-5/i, terminal, 10_000);
+    await runtime.waitForScreenText(/Using fallback Anthropic \(hop-kimi failed\)/i, terminal, 10_000);
 
     // Raw outbound order: Kimi was tried first, Anthropic served the
     // completion, and no Kimi request follows the first Anthropic one.
@@ -291,7 +293,8 @@ export const packFallbackScenario: McE2eScenario = {
     await runtime.waitForScreenText(/Switched to:/i, terminal, 10_000);
     await runtime.waitForScreenText(/All Kimi accounts unavailable \(pool exhausted\)/i, terminal, 30_000);
     await runtime.waitForScreenText(/Switched model pack: hop-kimi → Anthropic \(pool exhausted\)/i, terminal, 30_000);
-    await runtime.waitForScreenText(/claude-fable-5/i, terminal, 10_000);
+    await runtime.waitForScreenText(/fable-5/i, terminal, 10_000);
+    await runtime.waitForScreenText(/Using fallback Anthropic \(hop-kimi failed\)/i, terminal, 10_000);
     runtime.printScreen('after restart history reload', terminal);
   },
 };
