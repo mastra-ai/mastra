@@ -26,39 +26,37 @@ export function AgentSystemPrompt({ instructions, children }: { instructions: st
         icon={<FileText />}
         actions={
           hasInstructions && (
-            <>
-              <div className="shrink-0">
-                <TabList variant="pill-ghost" className="[--tab-indicator-color:transparent]">
-                  <Tab value="read" className={promptTabClassName}>
-                    Read
-                  </Tab>
-                  <Tab value="source" className={promptTabClassName}>
-                    Source
-                  </Tab>
-                </TabList>
-              </div>
-              <div className="size-form-sm shrink-0">
-                {activeTab === 'source' && (
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label="Wrap lines"
-                    aria-pressed={wrapSource}
-                    tooltip="Wrap lines"
-                    className="aria-pressed:bg-surface3 aria-pressed:text-neutral5"
-                    onClick={() => setWrapSource(wrapped => !wrapped)}
-                  >
-                    <WrapText />
-                  </Button>
-                )}
-              </div>
-              <CopyButton content={instructions} tooltip="Copy system prompt" variant="ghost" size="icon-sm" />
-            </>
+            <div className="shrink-0">
+              <TabList variant="pill-ghost" className="[--tab-indicator-color:transparent]">
+                <Tab value="read" className={promptTabClassName}>
+                  Read
+                </Tab>
+                <Tab value="source" className={promptTabClassName}>
+                  Source
+                </Tab>
+              </TabList>
+            </div>
           )
         }
       >
         {hasInstructions ? (
           <>
+            <div className="h-form-sm mb-2 flex items-center justify-end gap-1">
+              {activeTab === 'source' && (
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="Wrap lines"
+                  aria-pressed={wrapSource}
+                  tooltip="Wrap lines"
+                  className="aria-pressed:bg-surface3 aria-pressed:text-neutral5"
+                  onClick={() => setWrapSource(wrapped => !wrapped)}
+                >
+                  <WrapText />
+                </Button>
+              )}
+              <CopyButton content={instructions} tooltip="Copy system prompt" variant="ghost" size="icon-sm" />
+            </div>
             <TabContent value="read" className="overflow-visible py-0">
               <MarkdownRenderer codeBlockVariant="embedded">{instructions}</MarkdownRenderer>
             </TabContent>
