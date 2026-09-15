@@ -196,7 +196,7 @@ export function FeedbackThread({
 
   return (
     // Same offsets as the span search field so the input doesn't jump when switching tabs.
-    <Comment variant={variant} className="h-full min-h-0 gap-4 px-2 pt-1.5">
+    <Comment variant={variant} className="h-full min-h-0 gap-4 pt-1.5">
       <CommentComposer
         aria-label="Leave feedback"
         onSubmit={async event => {

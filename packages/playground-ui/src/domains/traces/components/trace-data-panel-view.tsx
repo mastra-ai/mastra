@@ -365,7 +365,7 @@ export function TraceDataPanelView({
                   onValueChange={handleTabChange}
                   className="grid h-full min-h-0 grid-rows-[auto_1fr]"
                 >
-                  <DataPanel.Header className="min-h-0 p-1">
+                  <DataPanel.Header className="min-h-0 px-2 py-1">
                     <TabList variant="pill-ghost">
                       <Tab value="details">Spans</Tab>
                       <Tab value="timeline">Timeline</Tab>
@@ -377,7 +377,7 @@ export function TraceDataPanelView({
                   </DataPanel.Header>
 
                   <TabContent value="details" className="min-h-0 py-0">
-                    <DataPanel.Content>
+                    <DataPanel.Content className="px-2">
                       {!isOnTracePage &&
                         !onEvaluateTrace &&
                         !onSaveAsDatasetItem &&
@@ -407,7 +407,7 @@ export function TraceDataPanelView({
                     </DataPanel.Content>
                   </TabContent>
                   <TabContent value="timeline" className="min-h-0 py-0">
-                    <DataPanel.Content>
+                    <DataPanel.Content className="px-2">
                       {/* Same selection + expansion state as the Spans tab, so switching views keeps context. */}
                       <TraceSpanTimeline
                         hierarchicalSpans={hierarchicalSpans}
@@ -423,12 +423,14 @@ export function TraceDataPanelView({
                   </TabContent>
                   {feedbackTabSlot && (
                     <TabContent value="feedback" className="h-full min-h-0 py-0">
-                      <DataPanel.Content>{feedbackTabSlot({ traceId })}</DataPanel.Content>
+                      <DataPanel.Content className="px-2">{feedbackTabSlot({ traceId })}</DataPanel.Content>
                     </TabContent>
                   )}
                   {scoresTabSlot && (
                     <TabContent value="scores" className="h-full min-h-0 py-0">
-                      <DataPanel.Content>{scoresTabSlot({ traceId, rootSpanId: rootSpan?.spanId })}</DataPanel.Content>
+                      <DataPanel.Content className="px-2">
+                        {scoresTabSlot({ traceId, rootSpanId: rootSpan?.spanId })}
+                      </DataPanel.Content>
                     </TabContent>
                   )}
                 </Tabs>

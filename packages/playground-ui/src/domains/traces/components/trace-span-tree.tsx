@@ -60,7 +60,7 @@ export function TraceSpanTree({
 
   return (
     <>
-      {leadingSlot && <div className="px-2 pt-1.5">{leadingSlot}</div>}
+      {leadingSlot && <div className="pt-1.5">{leadingSlot}</div>}
       <SpanTypeLegend spans={hierarchicalSpans} />
       <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] content-start items-start gap-y-px overflow-hidden py-1">
         <SpanRows

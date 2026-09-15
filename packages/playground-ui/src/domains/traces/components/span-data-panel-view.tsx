@@ -80,7 +80,7 @@ export function SpanDataPanelView({
 }: SpanDataPanelViewProps) {
   return (
     <DataPanel className={className}>
-      <DataPanel.Header>
+      <DataPanel.Header className="not-last:border-b-0">
         <PageHeader className="min-w-0 flex-1">
           <PageHeader.Title size="sm" className="whitespace-nowrap">
             Span

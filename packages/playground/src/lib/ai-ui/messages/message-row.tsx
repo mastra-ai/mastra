@@ -348,7 +348,10 @@ export const MessageRow = memo(function MessageRow({
   if (dbMessage === null) return null;
 
   // Same inset as a tool badge's trailing slot, so a user message's action lines up with the tool below it.
-  const footerSlot = footer ? <div className="pr-1">{footer}</div> : null;
+  // Hover-revealed like the copy button, so secondary actions stay quiet until the row is hovered.
+  const footerSlot = footer ? (
+    <div className="pr-1 group-focus-within:opacity-100 group-hover:opacity-100 pointer-fine:opacity-0">{footer}</div>
+  ) : null;
 
   // Same object once caught up, so the factory keeps the part it is filling in mounted.
   const shownMessage = revealing ? { ...dbMessage, content: { ...dbMessage.content, parts: shownParts } } : dbMessage;
@@ -401,13 +404,19 @@ export const MessageRow = memo(function MessageRow({
       {(showActionBar || footerSlot) && (
         <div className="mt-4 flex min-h-6 items-center gap-2">
           {showActionBar && (
-            <AssistantActionBar
-              text={getTextFromParts(message)}
-              modelMetadata={modelMetadata}
-              isSpeaking={isSpeaking}
-              onReadAloud={onReadAloud}
-              onStopSpeaking={onStopSpeaking}
-            />
+            <div
+              className={cn(
+                readOnly && 'group-focus-within:opacity-100 group-hover:opacity-100 pointer-fine:opacity-0',
+              )}
+            >
+              <AssistantActionBar
+                text={getTextFromParts(message)}
+                modelMetadata={modelMetadata}
+                isSpeaking={isSpeaking}
+                onReadAloud={onReadAloud}
+                onStopSpeaking={onStopSpeaking}
+              />
+            </div>
           )}
           {footerSlot}
         </div>

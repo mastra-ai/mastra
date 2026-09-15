@@ -29,7 +29,7 @@ export function SpanTypeLegend({ spans }: { spans: UISpan[] }) {
   if (usedSpanTypes.length === 0) return null;
 
   return (
-    <div className="flex flex-wrap items-center justify-end gap-3 px-2 py-1.5">
+    <div className="flex flex-wrap items-center justify-end gap-3 py-1.5">
       {usedSpanTypes.map(type => {
         const spanUI = getSpanTypeUi(type);
         return (
