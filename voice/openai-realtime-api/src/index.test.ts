@@ -118,6 +118,7 @@ describe('OpenAIRealtimeVoice', () => {
   describe('function call dispatch', () => {
     it('should send exactly one response.create after multiple function_calls', async () => {
       (voice as any).ws = { on: vi.fn(), send: vi.fn(), close: vi.fn() };
+      (voice as any).sessionReady = true;
       voice.addTools({
         tool_a: {
           description: 'A',
@@ -192,6 +193,7 @@ describe('OpenAIRealtimeVoice', () => {
   describe('sendEvent', () => {
     it('should keep the type argument when data also carries a type field', () => {
       (voice as any).ws = { on: vi.fn(), send: vi.fn(), close: vi.fn(), readyState: 1, OPEN: 1 };
+      (voice as any).sessionReady = true;
 
       voice.sendEvent('response.create', { type: 'session.update', response: {} });
 

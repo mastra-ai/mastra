@@ -229,4 +229,29 @@ describe('session hooks', () => {
     await connect(voice, server);
     await expect(received).resolves.toEqual({ type: 'conversation.item.create', item });
   });
+
+  it('queues sendEvent payloads sent after the socket opens but before session.created', async () => {
+    const server = new WebSocketServer({ host: '127.0.0.1', port: 0 });
+    servers.push(server);
+    await once(server, 'listening');
+    const received: string[] = [];
+    server.on('connection', socket => {
+      socket.on('message', raw => {
+        const event = JSON.parse(raw.toString());
+        if (event.type === 'conversation.item.create') received.push(event.item.content[0].text);
+      });
+      setTimeout(() => socket.send(JSON.stringify({ type: 'session.created', session: {} })), 50);
+    });
+    const voice = new OpenAIRealtimeVoice({
+      apiKey: 'local-test-only',
+      url: `ws://127.0.0.1:${(server.address() as AddressInfo).port}`,
+      connectTimeoutMs: 2000,
+    });
+    voices.push(voice);
+    const item = (text: string) => ({ type: 'message', role: 'user', content: [{ type: 'input_text', text }] });
+    voice.sendEvent('conversation.item.create', { item: item('first') });
+    voice.on('open', () => voice.sendEvent('conversation.item.create', { item: item('second') }));
+    await voice.connect();
+    await vi.waitFor(() => expect(received).toEqual(['first', 'second']));
+  });
 });

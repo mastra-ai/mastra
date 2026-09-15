@@ -120,6 +120,7 @@ export class OpenAIRealtimeVoice extends MastraVoice {
   private tools?: TTools;
   private debug: boolean;
   private queue: unknown[] = [];
+  private sessionReady = false;
   private transcriber: Realtime.AudioTranscriptionModel;
   private requestContext?: RequestContext;
   private connectionAbort?: AbortController;
@@ -459,6 +460,7 @@ export class OpenAIRealtimeVoice extends MastraVoice {
 
     const ws = this.ws;
     this.state = 'close';
+    this.sessionReady = false;
     this.client.removeAllListeners();
     const controller = new AbortController();
     this.connectionAbort = controller;
@@ -475,6 +477,7 @@ export class OpenAIRealtimeVoice extends MastraVoice {
       this.connectionAbort = undefined;
     }
 
+    this.sessionReady = true;
     const openaiTools = transformTools(this.tools);
     this.updateConfig({
       type: 'realtime',
@@ -660,6 +663,7 @@ export class OpenAIRealtimeVoice extends MastraVoice {
     ws.on('close', (code, reason) => {
       if (this.ws !== ws) return;
       this.state = 'close';
+      this.sessionReady = false;
       this.emit('close', { code, reason: reason.toString() });
     });
     ws.on('message', message => {
@@ -677,6 +681,7 @@ export class OpenAIRealtimeVoice extends MastraVoice {
     this.client.on('session.created', ev => {
       this.emit('session.created', ev);
 
+      this.sessionReady = true;
       const queue = this.queue.splice(0, this.queue.length);
       for (const ev of queue) {
         this.ws?.send(JSON.stringify(ev));
@@ -854,7 +859,7 @@ export class OpenAIRealtimeVoice extends MastraVoice {
    * ```
    */
   sendEvent(type: string, data: Record<string, unknown> = {}) {
-    if (!this.ws || this.ws.readyState !== this.ws.OPEN) {
+    if (!this.sessionReady || !this.ws || this.ws.readyState !== this.ws.OPEN) {
       this.queue.push({ ...data, type });
     } else {
       this.ws?.send(
