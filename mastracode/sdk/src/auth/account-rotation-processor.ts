@@ -445,7 +445,13 @@ export class AccountRotationProcessor implements Processor {
       return { retry: false };
     }
 
-    const providerId = providerFromError(error) ?? providerFromSession(args);
+    const cascade = await this.getPackCascade(args);
+    const currentPack = cascade?.packs[cascade.position];
+    const cascadeModelId = currentPack ? cascade.models[currentPack.packId]?.[cascade.modeId] : undefined;
+    const providerId =
+      providerFromError(error) ??
+      (typeof cascadeModelId === 'string' ? providerFromModelId(cascadeModelId) : undefined) ??
+      (cascade ? undefined : providerFromSession(args));
     if (!providerId) {
       await this.emitPackFallbackPart(args, classification.kind === 'hop' ? 'persistent-outage' : 'pool-exhausted');
       return { retry: false };
@@ -567,7 +573,7 @@ export class AccountRotationProcessor implements Processor {
         : 'build';
     const settings = loadSettings(this.options.settingsPath);
     const packs = listResolvableModePacks(settings);
-    const statePackId = controller?.getState?.()?.activeModelPackId;
+    const statePackId = controller?.getState?.()?.activeModelPackId ?? settings.models.activeModelPackId;
     const activePack = findModePackForModel(
       settings,
       packs,
@@ -655,21 +661,28 @@ export class AccountRotationProcessor implements Processor {
       | {
           session?: { modeId?: unknown };
           setState?: (updates: Record<string, unknown>) => Promise<void>;
+          setThreadSetting?: (setting: { key: string; value: unknown }) => Promise<void>;
           emitEvent?: (event: { type: 'info'; message: string }) => void;
         }
       | undefined;
     const at = new Date().toISOString();
-    // Thread stickiness trigger — must land before the info event so the
-    // TUI never renders a hop it cannot stick. Cleared by the TUI handler.
-    await controller?.setState?.({
-      [PACK_FALLBACK_STATE_KEY]: {
-        fromPackId: from.packId,
-        toPackId: to.packId,
-        toModelId,
-        reason,
-        at,
-      } satisfies PendingPackFallback,
-    });
+    const pending = {
+      fromPackId: from.packId,
+      toPackId: to.packId,
+      toModelId,
+      reason,
+      at,
+    } satisfies PendingPackFallback;
+    // Persist the pending hop before announcing it. The TUI clears this marker
+    // only after applying every model/pack write, so a crash or immediate
+    // retrigger resumes on the landed fallback instead of the failed pack.
+    await controller?.setThreadSetting?.({ key: PACK_FALLBACK_STATE_KEY, value: pending });
+    try {
+      await controller?.setState?.({ [PACK_FALLBACK_STATE_KEY]: pending });
+    } catch (error) {
+      await controller?.setThreadSetting?.({ key: PACK_FALLBACK_STATE_KEY, value: undefined });
+      throw error;
+    }
 
     const data: PackFallbackPartData = { from, to, reason, at };
     await args.writer?.custom({ type: PACK_FALLBACK_PART_TYPE, data });

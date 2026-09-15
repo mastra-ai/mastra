@@ -642,17 +642,19 @@ describe('pack-fallback parts', () => {
     );
   }
 
-  function makeControllerArgs(modelId: string, modeId = 'build', activeModelPackId?: string) {
+  function makeControllerArgs(modelId: string, modeId = 'build', activeModelPackId = modelId.split('/')[0]) {
     const emitEvent = vi.fn();
     const setState = vi.fn(async () => {});
+    const setThreadSetting = vi.fn(async () => {});
     const requestContext = new RequestContext();
     requestContext.set('controller', {
       session: { modelId, modeId },
       getState: () => ({ activeModelPackId }),
       emitEvent,
       setState,
+      setThreadSetting,
     });
-    return makeArgs({ requestContext, emitEvent, setState });
+    return makeArgs({ requestContext, emitEvent, setState, setThreadSetting });
   }
 
   it('emits a pack-fallback part (and live info event) when the exhausted pool has a fallback pack', async () => {
@@ -679,14 +681,17 @@ describe('pack-fallback parts', () => {
     });
     // Stickiness trigger: session state carries the landed pack + its model
     // for the current mode, written before the info event.
-    expect(args.setState).toHaveBeenCalledWith({
-      [PACK_FALLBACK_STATE_KEY]: expect.objectContaining({
-        fromPackId: 'anthropic',
-        toPackId: 'openai',
-        toModelId: 'openai/gpt-5.6-sol',
-        reason: 'pool-exhausted',
-      }),
+    const pendingHop = expect.objectContaining({
+      fromPackId: 'anthropic',
+      toPackId: 'openai',
+      toModelId: 'openai/gpt-5.6-sol',
+      reason: 'pool-exhausted',
     });
+    expect(args.setThreadSetting).toHaveBeenCalledWith({ key: PACK_FALLBACK_STATE_KEY, value: pendingHop });
+    expect(args.setState).toHaveBeenCalledWith({ [PACK_FALLBACK_STATE_KEY]: pendingHop });
+    expect(args.setThreadSetting.mock.invocationCallOrder[0]).toBeLessThan(
+      args.writer.custom.mock.invocationCallOrder.at(-1)!,
+    );
   });
 
   it('attributes the hop to the explicit active pack when packs share a model', async () => {
@@ -744,6 +749,68 @@ describe('pack-fallback parts', () => {
     ]);
   });
 
+  it('attributes an error without request metadata to the cascade model after a hop', async () => {
+    const seeded = makeTwoAccountStorage();
+    seedSettingsWithFallbacks({ anthropic: 'openai', openai: 'github-copilot' });
+    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
+    const args = makeControllerArgs('anthropic/claude-fable-5');
+
+    for (let attempt = 0; attempt < 2; attempt++) {
+      await processor.processAPIError({ ...args, error: apiError(429) } as never);
+    }
+    const result = await processor.processAPIError({
+      ...args,
+      retryCount: 2,
+      error: new ProviderAuthRequiredError('Fallback provider login expired'),
+    } as never);
+
+    expect(result).toEqual({ retry: false });
+    const parts = args.writer.custom.mock.calls.map(call => call[0]);
+    expect(parts.filter(part => part.type === ACCOUNT_SWITCH_PART_TYPE)).toHaveLength(2);
+    expect(
+      parts
+        .filter(part => part.type === PACK_FALLBACK_PART_TYPE)
+        .map(part => [part.data.from.packId, part.data.to.packId]),
+    ).toEqual([
+      ['anthropic', 'openai'],
+      ['openai', 'github-copilot'],
+    ]);
+  });
+
+  it('does not fall back to the original session provider on an unattributable custom-pack error', async () => {
+    const seeded = makeTwoAccountStorage();
+    seeded.storage.addAccount('github-copilot', {
+      access: 'copilot-token',
+      refresh: 'copilot-refresh',
+      expires: FUTURE,
+    });
+    seedSettingsWithFallbacks({ anthropic: 'custom:cere', 'custom:cere': 'github-copilot' });
+    const raw = JSON.parse(readFileSync(join(process.env.MASTRA_APP_DATA_DIR!, 'settings.json'), 'utf-8'));
+    raw.customModelPacks = [{ name: 'cere', models: { build: 'cerebras/llama-3.3-70b' } }];
+    writeFileSync(join(process.env.MASTRA_APP_DATA_DIR!, 'settings.json'), JSON.stringify(raw), 'utf-8');
+    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
+    const args = makeControllerArgs('anthropic/claude-fable-5', 'build', 'anthropic');
+
+    for (let attempt = 0; attempt < 2; attempt++) {
+      await processor.processAPIError({ ...args, error: apiError(429) } as never);
+    }
+    args.writer.custom.mockClear();
+
+    const result = await processor.processAPIError({
+      ...args,
+      retryCount: 2,
+      error: new ProviderAuthRequiredError('Custom provider login expired'),
+    } as never);
+
+    expect(result).toEqual({ retry: false });
+    const parts = args.writer.custom.mock.calls.map(call => call[0]);
+    expect(parts.some(part => part.type === ACCOUNT_SWITCH_PART_TYPE)).toBe(false);
+    expect(parts.find(part => part.type === PACK_FALLBACK_PART_TYPE)?.data).toMatchObject({
+      from: { packId: 'custom:cere' },
+      to: { packId: 'github-copilot' },
+    });
+  });
+
   it('emits no pack part when the active pack has no fallback configured', async () => {
     const seeded = makeTwoAccountStorage();
     seedSettingsWithFallbacks({});
@@ -792,17 +859,19 @@ describe('Q14 chain gate (400/unknown never hop packs)', () => {
     );
   }
 
-  function makeControllerArgs(modelId: string, modeId = 'build', activeModelPackId?: string) {
+  function makeControllerArgs(modelId: string, modeId = 'build', activeModelPackId = modelId.split('/')[0]) {
     const emitEvent = vi.fn();
     const setState = vi.fn(async () => {});
+    const setThreadSetting = vi.fn(async () => {});
     const requestContext = new RequestContext();
     requestContext.set('controller', {
       session: { modelId, modeId },
       getState: () => ({ activeModelPackId }),
       emitEvent,
       setState,
+      setThreadSetting,
     });
-    return makeArgs({ requestContext, emitEvent, setState });
+    return makeArgs({ requestContext, emitEvent, setState, setThreadSetting });
   }
 
   it('throws TripWire on a 400 when the session pack has an active fallback chain', async () => {
@@ -913,17 +982,19 @@ describe('cross-provider cascades', () => {
     );
   }
 
-  function makeControllerArgs(modelId: string, modeId = 'build', activeModelPackId?: string) {
+  function makeControllerArgs(modelId: string, modeId = 'build', activeModelPackId = modelId.split('/')[0]) {
     const emitEvent = vi.fn();
     const setState = vi.fn(async () => {});
+    const setThreadSetting = vi.fn(async () => {});
     const requestContext = new RequestContext();
     requestContext.set('controller', {
       session: { modelId, modeId },
       getState: () => ({ activeModelPackId }),
       emitEvent,
       setState,
+      setThreadSetting,
     });
-    return makeArgs({ requestContext, emitEvent, setState });
+    return makeArgs({ requestContext, emitEvent, setState, setThreadSetting });
   }
 
   it('scopes the tried-set per provider: the landed pack pool still rotates after a hop', async () => {
@@ -970,7 +1041,7 @@ describe('cross-provider cascades', () => {
     raw.customModelPacks = [{ name: 'cere', models: { build: 'cerebras/llama-3.3-70b' } }];
     writeFileSync(join(process.env.MASTRA_APP_DATA_DIR!, 'settings.json'), JSON.stringify(raw), 'utf-8');
     const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
-    const args = makeControllerArgs('cerebras/llama-3.3-70b');
+    const args = makeControllerArgs('cerebras/llama-3.3-70b', 'build', 'custom:cere');
     const error = apiError(500, { url: 'https://api.cerebras.ai/v1/chat/completions' });
 
     const result = await processor.processAPIError({ ...args, error } as never);
@@ -993,7 +1064,7 @@ describe('cross-provider cascades', () => {
     raw.customModelPacks = [{ name: 'cere', models: { build: 'cerebras/llama-3.3-70b' } }];
     writeFileSync(join(process.env.MASTRA_APP_DATA_DIR!, 'settings.json'), JSON.stringify(raw), 'utf-8');
     const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
-    const args = makeControllerArgs('cerebras/llama-3.3-70b');
+    const args = makeControllerArgs('cerebras/llama-3.3-70b', 'build', 'custom:cere');
     const error = apiError(400, { url: 'https://api.cerebras.ai/v1/chat/completions' });
 
     const thrown = await processor.processAPIError({ ...args, error } as never).catch(e => e);
