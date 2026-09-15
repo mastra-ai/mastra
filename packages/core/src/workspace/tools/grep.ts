@@ -70,6 +70,13 @@ Usage:
     const { workspace, filesystem } = requireFilesystem(context);
     await emitWorkspaceMetadata(context, WORKSPACE_TOOLS.FILESYSTEM.GREP);
 
+    // Honor provider-configured text extensions when available; otherwise use
+    // the built-in set. Track files skipped solely for an unsupported extension
+    // so the summary can distinguish "no matches" from "nothing searched".
+    const isText = (filename: string): boolean =>
+      filesystem.isTextFile ? filesystem.isTextFile(filename) : isTextFile(filename);
+    let skippedExtensionCount = 0;
+
     const span = startWorkspaceSpan(context, workspace, {
       category: 'filesystem',
       operation: 'grep',
@@ -132,7 +139,12 @@ Usage:
           const stat = await filesystem.stat(searchPath);
           if (stat.type === 'file') {
             // Single file — search it directly
-            filePaths = isTextFile(searchPath) ? [searchPath] : [];
+            if (isText(searchPath)) {
+              filePaths = [searchPath];
+            } else {
+              filePaths = [];
+              skippedExtensionCount++;
+            }
           } else if (typeof filesystem.grep === 'function') {
             // Directory + native grep capability — one provider call instead of
             // walking the tree and reading every file host-side. Host-side
@@ -227,7 +239,10 @@ Usage:
 
                 if (entry.type === 'file') {
                   // Skip non-text files
-                  if (!isTextFile(entry.name)) continue;
+                  if (!isText(entry.name)) {
+                    skippedExtensionCount++;
+                    continue;
+                  }
                   // Apply glob filter (createGlobMatcher normalizes leading slashes)
                   if (globMatcher && !globMatcher(fullPath)) continue;
                   files.push(fullPath);
@@ -329,7 +344,10 @@ Usage:
           const segments = rel.split('/');
           if (segments.includes('.git')) continue;
           if (!includeHidden && segments.some(segment => segment.startsWith('.'))) continue;
-          if (!isTextFile(segments[segments.length - 1]!)) continue;
+          if (!isText(segments[segments.length - 1]!)) {
+            skippedExtensionCount++;
+            continue;
+          }
 
           const fullPath = searchPath.endsWith('/') ? `${searchPath}${rel}` : `${searchPath}/${rel}`;
           if (ignoreFilter) {
@@ -421,6 +439,11 @@ Usage:
       summaryParts.push(`across ${filesWithMatches.size} file${filesWithMatches.size !== 1 ? 's' : ''}`);
       if (truncated) {
         summaryParts.push(`(truncated at ${GLOBAL_CAP})`);
+      }
+      if (skippedExtensionCount > 0) {
+        summaryParts.push(
+          `(${skippedExtensionCount} file${skippedExtensionCount !== 1 ? 's' : ''} skipped: unsupported extension)`,
+        );
       }
       const summary = summaryParts.join(' ');
       outputLines.unshift(summary, '---');
