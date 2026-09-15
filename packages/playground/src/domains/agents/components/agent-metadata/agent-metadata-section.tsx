@@ -6,13 +6,13 @@ import { InfoIcon } from 'lucide-react';
 import { useLinkComponent } from '@/lib/framework';
 
 const sectionAccentClasses = {
-  amber: '[--section-accent:var(--accent6)]',
-  blue: '[--section-accent:var(--badge-blue)]',
-  cyan: '[--section-accent:var(--badge-cyan)]',
-  green: '[--section-accent:var(--badge-green)]',
-  orange: '[--section-accent:var(--badge-orange)]',
-  pink: '[--section-accent:var(--badge-pink)]',
-  purple: '[--section-accent:var(--badge-purple)]',
+  amber: '[--section-accent:var(--badge-yellow-fg)] dark:[--section-accent:var(--accent6)]',
+  blue: '[--section-accent:var(--badge-blue-fg)] dark:[--section-accent:var(--badge-blue)]',
+  cyan: '[--section-accent:var(--badge-cyan-fg)] dark:[--section-accent:var(--badge-cyan)]',
+  green: '[--section-accent:var(--badge-green-fg)] dark:[--section-accent:var(--badge-green)]',
+  orange: '[--section-accent:var(--badge-orange-fg)] dark:[--section-accent:var(--badge-orange)]',
+  pink: '[--section-accent:var(--badge-pink-fg)] dark:[--section-accent:var(--badge-pink)]',
+  purple: '[--section-accent:var(--badge-purple-fg)] dark:[--section-accent:var(--badge-purple)]',
 };
 
 export interface AgentMetadataSectionProps {
@@ -49,15 +49,12 @@ export const AgentMetadataSection = ({
       <header className="col-span-2 group-has-[[data-slot=metadata-empty]]/metadata:col-span-1 flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-1">
         <Txt as="h3" variant="ui-smd" className="text-neutral5 flex min-w-0 items-center gap-2 font-medium">
           {icon && (
-            <Icon
-              aria-hidden="true"
-              className="text-(--section-accent) group-has-[[data-slot=metadata-empty]]/metadata:text-neutral3 shrink-0"
-            >
+            <Icon aria-hidden="true" className="text-(--section-accent) shrink-0">
               {icon}
             </Icon>
           )}
           <span className="flex min-w-0 items-center gap-1.5">
-            <span className="from-(--section-accent) to-neutral5 bg-linear-to-r bg-clip-text text-transparent group-has-[[data-slot=metadata-empty]]/metadata:bg-none group-has-[[data-slot=metadata-empty]]/metadata:text-neutral3 forced-colors:bg-none forced-colors:text-inherit">
+            <span className="from-(--section-accent) to-neutral5 bg-linear-to-r bg-clip-text text-transparent forced-colors:bg-none forced-colors:text-inherit">
               {title}
             </span>
             {count !== undefined && count > 0 && (

@@ -10,8 +10,7 @@ import type { ReactNode } from 'react';
 import { AgentMetadataSection } from '../agent-metadata/agent-metadata-section';
 import { cn } from '@/lib/utils';
 
-const promptTabClassName =
-  'h-form-sm px-1 text-ui-sm underline-offset-4 data-[active]:font-medium data-[active]:underline';
+const promptTabClassName = 'h-form-sm px-1 text-ui-sm font-medium underline-offset-4 data-[active]:underline';
 
 export function AgentSystemPrompt({ instructions, children }: { instructions: string; children?: ReactNode }) {
   const [activeTab, setActiveTab] = useState('read');
@@ -38,19 +37,21 @@ export function AgentSystemPrompt({ instructions, children }: { instructions: st
                   </Tab>
                 </TabList>
               </div>
-              {activeTab === 'source' && (
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label="Wrap lines"
-                  aria-pressed={wrapSource}
-                  tooltip="Wrap lines"
-                  className="aria-pressed:bg-surface3 aria-pressed:text-neutral5"
-                  onClick={() => setWrapSource(wrapped => !wrapped)}
-                >
-                  <WrapText />
-                </Button>
-              )}
+              <div className="size-form-sm shrink-0">
+                {activeTab === 'source' && (
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label="Wrap lines"
+                    aria-pressed={wrapSource}
+                    tooltip="Wrap lines"
+                    className="aria-pressed:bg-surface3 aria-pressed:text-neutral5"
+                    onClick={() => setWrapSource(wrapped => !wrapped)}
+                  >
+                    <WrapText />
+                  </Button>
+                )}
+              </div>
               <CopyButton content={instructions} tooltip="Copy system prompt" variant="ghost" size="icon-sm" />
             </>
           )

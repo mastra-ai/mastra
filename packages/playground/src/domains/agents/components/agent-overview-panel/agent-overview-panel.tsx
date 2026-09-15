@@ -191,37 +191,35 @@ function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
       <AgentMetadataSection title="Scorers" accent="pink" icon={<Gauge />}>
         <AgentMetadataScorerList entityId={agent.name} entityType="AGENT" />
       </AgentMetadataSection>
-      <div className="border-border1 border-t">
-        <AgentMetadataSection title="Memory" accent="purple" icon={<Brain />}>
-          <AgentMemoryConfig agentId={agentId} />
+      <AgentMetadataSection title="Memory" accent="purple" icon={<Brain />}>
+        <AgentMemoryConfig agentId={agentId} />
+      </AgentMetadataSection>
+
+      {hasChannels && (
+        <AgentMetadataSection title="Channels" accent="cyan" icon={<Radio />}>
+          <AgentChannels agentId={agentId} />
         </AgentMetadataSection>
+      )}
 
-        {hasChannels && (
-          <AgentMetadataSection title="Channels" accent="cyan" icon={<Radio />}>
-            <AgentChannels agentId={agentId} />
-          </AgentMetadataSection>
+      <AgentSystemPrompt instructions={extractPrompt(agent.instructions)}>
+        {!isCmsLoading && !isCmsAvailable && (
+          <Notice variant="warning" title="Read-only">
+            <Notice.Message>
+              To edit the system prompt in Studio, add <code className="font-medium">@mastra/editor</code> to your
+              project. See the{' '}
+              <a
+                href="https://mastra.ai/docs/editor/overview"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline"
+              >
+                documentation
+              </a>
+              .
+            </Notice.Message>
+          </Notice>
         )}
-
-        <AgentSystemPrompt instructions={extractPrompt(agent.instructions)}>
-          {!isCmsLoading && !isCmsAvailable && (
-            <Notice variant="warning" title="Read-only">
-              <Notice.Message>
-                To edit the system prompt in Studio, add <code className="font-medium">@mastra/editor</code> to your
-                project. See the{' '}
-                <a
-                  href="https://mastra.ai/docs/editor/overview"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="underline"
-                >
-                  documentation
-                </a>
-                .
-              </Notice.Message>
-            </Notice>
-          )}
-        </AgentSystemPrompt>
-      </div>
+      </AgentSystemPrompt>
     </>
   );
 }
