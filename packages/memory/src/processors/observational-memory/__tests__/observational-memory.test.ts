@@ -7,6 +7,7 @@ import { coreFeatures } from '@mastra/core/features';
 import { MASTRA_THREAD_ID_KEY, RequestContext } from '@mastra/core/request-context';
 import { createSkill } from '@mastra/core/skills';
 import { InMemoryMemory, InMemoryDB, InMemoryStore } from '@mastra/core/storage';
+import { estimateTokenCount } from 'tokenx';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod';
 
@@ -129,7 +130,7 @@ import {
 } from '../reflector-agent';
 import { resolveRetentionFloor } from '../thresholds';
 import { TokenCounter } from '../token-counter';
-import { formatToolResultForObserver } from '../tool-result-helpers';
+import { DEFAULT_OBSERVER_TOOL_RESULT_MAX_TOKENS, formatToolResultForObserver } from '../tool-result-helpers';
 
 // =============================================================================
 // Test Helpers
@@ -1655,6 +1656,32 @@ describe('Observer Agent Helpers', () => {
       expect(formatted).toContain('[stripped encryptedContent: 6000 characters]');
       expect(formatted).toContain('[truncated ~');
       expect(formatted).not.toContain('x'.repeat(200));
+    });
+
+    it('caps oversized tool results at the 5,000-token default', () => {
+      const toolResult = 'result line\n'.repeat(3_000);
+      const msg = createToolInvocationMessage([
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'default-result-limit',
+            toolName: 'large_result',
+            args: {},
+            result: toolResult,
+          },
+        },
+      ]);
+      const formatted = formatMessagesForObserver([msg]);
+      const resultHeader = formatted.match(/^Tool Result large_result(?: \([^)]*\))?: /m)?.[0];
+      expect(resultHeader).toBeDefined();
+      const resultBody = formatted.slice(formatted.indexOf(resultHeader!) + resultHeader!.length);
+
+      expect(estimateTokenCount(toolResult)).toBeGreaterThan(5_000);
+      expect(estimateTokenCount(toolResult)).toBeLessThan(10_000);
+      expect(DEFAULT_OBSERVER_TOOL_RESULT_MAX_TOKENS).toBe(5_000);
+      expect(resultBody).toContain('[truncated ~');
+      expect(estimateTokenCount(resultBody!)).toBeLessThanOrEqual(5_000);
     });
 
     it('should replace image-data tool-result blocks with attachment placeholders', () => {
