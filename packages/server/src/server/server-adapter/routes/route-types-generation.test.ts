@@ -67,6 +67,33 @@ describe('renderRouteTypesFileContent', () => {
     expect(rendered).not.toContain('preprocessed?: unknown');
   });
 
+  it('promotes repeated nested schemas during the rendering pass', () => {
+    const nestedSchema = z.object({
+      first: z.string(),
+      second: z.string(),
+      third: z.string(),
+      fourth: z.string(),
+      fifth: z.string(),
+      sixth: z.string(),
+      seventh: z.string(),
+      eighth: z.string(),
+    });
+
+    const rendered = renderFixtureRoutes([
+      {
+        method: 'POST',
+        path: '/nested',
+        responseType: 'json',
+        responseSchema: z.object({ first: nestedSchema, second: nestedSchema }),
+        handler: async () => ({}),
+      },
+    ]);
+
+    expect(rendered).toContain('type Shared_Type_0 = {');
+    expect(rendered).toContain('first: Shared_Type_0;');
+    expect(rendered).toContain('second: Shared_Type_0;');
+  });
+
   it('does not cross-deduplicate shared schemas between input and output aliases', () => {
     const sharedSchema = z.object({ value: z.string().default('default') });
 

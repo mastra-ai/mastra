@@ -434,7 +434,11 @@ export function renderRouteTypesFileContent(routes: readonly RouteDefinition[] =
   generateRouteTypesFileContent(routes);
 
   // Pass 2: real generation, extracting schemas seen more than once into shared types.
+  const inputOccurrenceCounts = renderStates.input.nestedOccurrenceCounts;
+  const outputOccurrenceCounts = renderStates.output.nestedOccurrenceCounts;
   renderStates = createRenderStates();
+  renderStates.input.nestedOccurrenceCounts = inputOccurrenceCounts;
+  renderStates.output.nestedOccurrenceCounts = outputOccurrenceCounts;
   countingPass = false;
   const rawFileContent = generateRouteTypesFileContent(routes);
 
