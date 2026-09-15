@@ -149,6 +149,7 @@ describe('AgentController: non-success finish reasons', () => {
     await session.sendMessage({ content: 'do something blocked' });
 
     expect(events.find(e => e.type === 'agent_end')?.reason).toBe('error');
+    expect(events.find(e => e.type === 'error')?.error.message).toBe('The model stopped on a content filter.');
     const messageStart = events.find(e => e.type === 'message_start' && e.message.role === 'assistant');
     const messageEnd = [...events].reverse().find(e => e.type === 'message_end');
     expect(messageEnd?.id).toBe(messageStart?.message.id);
@@ -166,6 +167,9 @@ describe('AgentController: non-success finish reasons', () => {
     await session.sendMessage({ content: 'write a very long answer' });
 
     expect(events.find(e => e.type === 'agent_end')?.reason).toBe('error');
+    expect(events.find(e => e.type === 'error')?.error.message).toBe(
+      'The model stopped because it reached its maximum output length before finishing.',
+    );
     const messageStart = events.find(e => e.type === 'message_start' && e.message.role === 'assistant');
     const messageEnd = [...events].reverse().find(e => e.type === 'message_end');
     expect(messageEnd?.id).toBe(messageStart?.message.id);
