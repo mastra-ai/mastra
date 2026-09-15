@@ -378,7 +378,10 @@ function compileClickHouseTraceScope(
   return ctes;
 }
 
-export function compileClickHouseTraceQuery(plan: TrustedTraceQueryPlan): CompiledClickHouseTraceQuery {
+export function compileClickHouseTraceQuery(
+  plan: TrustedTraceQueryPlan,
+  mode: 'data' | 'count' = 'data',
+): CompiledClickHouseTraceQuery {
   const parameters = new ParameterBuilder();
   const relationCollections = collectRelationCollections(plan.where);
   const ctes = compileClickHouseTraceScope(plan, relationCollections, parameters);
@@ -390,6 +393,15 @@ export function compileClickHouseTraceQuery(plan: TrustedTraceQueryPlan): Compil
     WHERE ${predicate}
   )`);
   const candidates = `WITH ${ctes.join(',\n')}`;
+
+  if (plan.paginationMode === 'page' && mode === 'count') {
+    return {
+      query: `${candidates}
+SELECT count() AS total
+FROM candidates`,
+      query_params: parameters.params,
+    };
+  }
 
   if (plan.result === 'groups') {
     const pageCondition = plan.cursor ? `AND threadId > ${parameters.add(plan.cursor.threadId, 'String')}` : '';
@@ -408,6 +420,19 @@ LIMIT ${limit}`,
 
   const orderField = resolveOrderField(plan.orderBy.field);
   const direction = plan.orderBy.direction === 'asc' ? 'ASC' : 'DESC';
+  if (plan.paginationMode === 'page') {
+    const limit = parameters.add(plan.perPage, 'UInt64');
+    const offset = parameters.add(plan.page * plan.perPage, 'UInt64');
+    return {
+      query: `${candidates}
+SELECT *
+FROM candidates
+ORDER BY ${orderField} ${direction}, traceId ASC
+LIMIT ${limit} OFFSET ${offset}`,
+      query_params: parameters.params,
+    };
+  }
+
   let pageCondition = '';
   if (plan.cursor) {
     const comparison = plan.orderBy.direction === 'asc' ? '>' : '<';
@@ -503,6 +528,37 @@ export async function queryTraces(
   plan: TrustedTraceQueryPlan,
   timeoutMs: number,
 ): Promise<TraceQueryResponse> {
+  if (plan.paginationMode === 'page') {
+    const countRows = await runWithClickHouseTraceQueryTimeout(
+      client,
+      timeoutMs,
+      compileClickHouseTraceQuery(plan, 'count'),
+    );
+    const rows = await runWithClickHouseTraceQueryTimeout(client, timeoutMs, compileClickHouseTraceQuery(plan));
+    const total = Number(countRows[0]?.total ?? 0);
+    const traces = rows.map(row => ({
+      traceId: String(row.traceId),
+      rootSpanId: String(row.rootSpanId),
+      threadId: row.threadId == null ? null : String(row.threadId),
+      resourceId: row.resourceId == null ? null : String(row.resourceId),
+      startedAt: asIsoTimestamp(row.startedAt),
+      endedAt: asIsoTimestamp(row.endedAt),
+      entityName: row.entityName == null ? null : String(row.entityName),
+      entityType: row.entityType == null ? null : String(row.entityType),
+      environment: row.environment == null ? null : String(row.environment),
+      status: row.status,
+    }));
+    return coreStorage.traceQueryResponseSchema.parse({
+      traces,
+      pagination: {
+        total,
+        page: plan.page,
+        perPage: plan.perPage,
+        hasMore: (plan.page + 1) * plan.perPage < total,
+      },
+    });
+  }
+
   const rows = await runWithClickHouseTraceQueryTimeout(client, timeoutMs, compileClickHouseTraceQuery(plan));
   const visibleRows = rows.slice(0, plan.limit);
 

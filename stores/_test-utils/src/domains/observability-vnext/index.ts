@@ -260,12 +260,70 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
             }),
           );
           const response = await storage.queryTraces(pagePlan);
-          if (!('traces' in response)) throw new Error('Expected trace results');
+          if (!('traces' in response) || !('page' in response)) throw new Error('Expected keyset trace results');
           pagedTraceIds.push(...response.traces.map(trace => trace.traceId));
           after = response.page.next ?? undefined;
         } while (after);
         expect(pagedTraceIds).toEqual(['trace-d', 'trace-c', 'trace-a', 'trace-b']);
         expect(new Set(pagedTraceIds).size).toBe(pagedTraceIds.length);
+      });
+
+      it('matches list-compatible trace-query page boundaries and metadata', async () => {
+        await writeTraceQueryFixture(storage, TRACE_QUERY_FIXTURE_DATA, capabilities.traceQuerySpanWriteModel);
+        const pages = [
+          { page: 0, ids: ['trace-d', 'trace-c'], hasMore: true },
+          { page: 1, ids: ['trace-a', 'trace-b'], hasMore: false },
+          { page: 2, ids: [], hasMore: false },
+        ];
+
+        const consecutiveIds: string[] = [];
+        for (const expected of pages) {
+          const plan = planTraceQuery(
+            parseTraceQueryRequest({
+              timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
+              pagination: { page: expected.page, perPage: 2 },
+            }),
+          );
+          const response = await storage.queryTraces(plan);
+          if (!('traces' in response) || !('pagination' in response)) throw new Error('Expected paginated traces');
+          expect(response.traces.map(trace => trace.traceId)).toEqual(expected.ids);
+          expect(response.pagination).toEqual({
+            total: 4,
+            page: expected.page,
+            perPage: 2,
+            hasMore: expected.hasMore,
+          });
+          if (expected.page < 2) consecutiveIds.push(...response.traces.map(trace => trace.traceId));
+        }
+        expect(consecutiveIds).toEqual(['trace-d', 'trace-c', 'trace-a', 'trace-b']);
+        expect(new Set(consecutiveIds).size).toBe(consecutiveIds.length);
+
+        const filteredPlan = planTraceQuery(
+          parseTraceQueryRequest({
+            timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
+            where: { op: 'exists', path: 'threadId' },
+            orderBy: [{ field: 'startedAt', direction: 'asc' }],
+            pagination: { page: 0, perPage: 3 },
+          }),
+        );
+        const filtered = await storage.queryTraces(filteredPlan);
+        if (!('traces' in filtered) || !('pagination' in filtered)) throw new Error('Expected paginated traces');
+        expect(filtered.traces.map(trace => trace.traceId)).toEqual(['trace-a', 'trace-b', 'trace-c']);
+        expect(filtered.pagination).toEqual({ total: 3, page: 0, perPage: 3, hasMore: false });
+
+        const emptyPlan = planTraceQuery(
+          parseTraceQueryRequest({
+            timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
+            where: { op: 'eq', left: { path: 'traceId' }, right: { literal: 'missing' } },
+            pagination: { page: 0, perPage: 10 },
+          }),
+        );
+        const empty = await storage.queryTraces(emptyPlan);
+        if (!('traces' in empty) || !('pagination' in empty)) throw new Error('Expected paginated traces');
+        expect(empty).toEqual({
+          traces: [],
+          pagination: { total: 0, page: 0, perPage: 10, hasMore: false },
+        });
       });
 
       describe('feedback replacement conformance', () => {
@@ -368,6 +426,7 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
             } else {
               values.push(...response.groups.map(group => group.threadId));
             }
+            if (!('page' in response)) throw new Error('Expected keyset results');
             after = response.page.next ?? undefined;
           } while (after);
           return values;

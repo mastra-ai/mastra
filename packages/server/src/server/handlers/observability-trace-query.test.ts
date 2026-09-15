@@ -97,6 +97,39 @@ describe('QUERY_TRACES', () => {
     );
   });
 
+  it('passes list-compatible pagination plans and responses through unchanged', async () => {
+    const { mastra, observabilityStore } = createHarness();
+    observabilityStore.queryTraces.mockResolvedValue({
+      traces: [],
+      pagination: { total: 21, page: 1, perPage: 10, hasMore: true },
+    });
+
+    const response = await QUERY_TRACES.handler(
+      params(mastra, { timeRange: TIME_RANGE, pagination: { page: 1, perPage: 10 } }),
+    );
+
+    expect(observabilityStore.queryTraces).toHaveBeenCalledWith(
+      expect.objectContaining({ result: 'traces', paginationMode: 'page', page: 1, perPage: 10 }),
+    );
+    expect(response).toEqual({ traces: [], pagination: { total: 21, page: 1, perPage: 10, hasMore: true } });
+    expect(response).not.toHaveProperty('page');
+  });
+
+  it('rejects mixed and grouped compatibility pagination before storage execution', async () => {
+    const { mastra, observabilityStore, getStore } = createHarness();
+    const requests = [
+      { timeRange: TIME_RANGE, page: { limit: 10 }, pagination: { page: 0, perPage: 10 } },
+      { timeRange: TIME_RANGE, group: { by: ['threadId'] }, pagination: { page: 0, perPage: 10 } },
+    ];
+
+    for (const request of requests) {
+      const error = await captureHttpException(QUERY_TRACES.handler(params(mastra, request)));
+      expect(error.status).toBe(422);
+    }
+    expect(getStore).not.toHaveBeenCalled();
+    expect(observabilityStore.queryTraces).not.toHaveBeenCalled();
+  });
+
   it('passes richer span predicates through without adding matching evidence', async () => {
     const { mastra, observabilityStore } = createHarness();
     const response = await QUERY_TRACES.handler(
@@ -436,7 +469,12 @@ describe('QUERY_TRACES', () => {
     });
 
     const document = generateOpenAPIDocument([QUERY_TRACES], { title: 'Test', version: '1.0.0' });
-    const responses = document.paths['/observability/traces/query'].post.responses;
+    const operation = document.paths['/observability/traces/query'].post;
+    const responses = operation.responses;
+    const operationSchema = JSON.stringify(operation);
+    expect(operationSchema).toContain('pagination');
+    expect(operationSchema).toContain('perPage');
+    expect(operationSchema).toContain('hasMore');
     for (const status of ['400', '409', '413', '422', '501', '504']) {
       expect(responses[status].content['application/json'].schema).toBeDefined();
     }
