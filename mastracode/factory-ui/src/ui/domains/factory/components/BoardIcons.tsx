@@ -17,6 +17,7 @@ import type { ComponentType, SVGProps } from 'react';
 
 import type { WorkItemSource } from '../services/workItems';
 import type { BoardStageId } from '../stages';
+import { JiraIcon } from '../../../ui/icons';
 import { IntakeIcon } from './IntakeIcon';
 
 // GitHub keeps issue vs PR distinct — card meta shows #N for both
@@ -24,6 +25,7 @@ const SOURCE_ICONS: Record<WorkItemSource, { icon: ComponentType<SVGProps<SVGSVG
   'github-issue': { icon: GithubIcon, className: 'text-icon5' },
   'github-pr': { icon: GitPullRequest, className: 'text-accent1' },
   'linear-issue': { icon: LinearIcon, className: 'text-accent3' },
+  'jira-issue': { icon: JiraIcon, className: 'text-accent2' },
   'slack-thread': { icon: SlackIcon, className: '' },
   manual: { icon: CircleDot, className: 'text-icon3' },
 };

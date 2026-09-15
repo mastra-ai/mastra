@@ -7,14 +7,17 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useApiConfig } from '../../../../api/config';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { useIntakeConfigQuery, useSaveIntakeConfigMutation } from '../../../../hooks/useIntakeConfig';
+import { useJiraProjectsQuery, useJiraStatusQuery } from '../../../../hooks/useJiraData';
 import { useLinearProjectsQuery, useLinearStatusQuery } from '../../../../hooks/useLinearData';
+import { isJiraAuthError } from '../../factory/services/jira';
+import type { JiraProject, JiraStatus } from '../../factory/services/jira';
 import { connectLinear, isLinearReauthError } from '../../factory/services/linear';
 import type { LinearProject, LinearStatus } from '../../factory/services/linear';
 import type { IntakeConfig } from '../../factory/services/intake';
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import { SourcePicker } from './IntakeSourcePicker';
 import type { SourcePickerGroup } from './IntakeSourcePicker';
-import { LinearRouting } from './LinearRouting';
+import { IntakeSourceRouting } from './LinearRouting';
 import { SettingsCard } from './SettingsCard';
 import { SettingsSubsection } from './SettingsSubsection';
 
@@ -165,6 +168,82 @@ function LinearIntakeSection({
   );
 }
 
+function JiraIntakeSection({
+  config,
+  busy,
+  update,
+  status,
+  projects,
+  authError,
+  reauthRequired,
+  showPickers,
+}: SourceSectionProps & {
+  status: JiraStatus | undefined;
+  projects: JiraProject[];
+  authError: boolean;
+  reauthRequired: boolean;
+  showPickers: boolean;
+}) {
+  const configured = Boolean(status?.enabled && status.configured);
+  const platformManaged = status?.mode === 'platform' || status?.connections !== undefined;
+  const description = reauthRequired
+    ? 'A Jira account needs to be reconnected in Mastra Platform.'
+    : !configured
+      ? platformManaged
+        ? 'Connect Jira in Mastra Platform to sync issues from this organization.'
+        : 'Jira is not configured on this server. Set JIRA_BASE_URL, JIRA_EMAIL, and JIRA_API_TOKEN to enable it.'
+      : authError
+        ? platformManaged
+          ? 'Jira rejected a connected account. Reconnect it in Mastra Platform.'
+          : 'Jira rejected the configured credentials. Ask the operator to check the Jira API token.'
+        : 'Active issues from the selected projects.';
+  const sites = status?.sites ?? (status?.site ? [status.site] : []);
+  let connectionLabel = 'Jira connected';
+  if (sites.length === 1) {
+    connectionLabel = `Connected to ${sites[0]}`;
+  } else if (sites.length > 1) {
+    connectionLabel = `${sites.length} Jira sites connected`;
+  } else if (platformManaged) {
+    connectionLabel = 'Connected through Mastra Platform';
+  }
+  const action = configured ? (
+    <Txt as="span" variant="ui-sm" className="text-icon3">
+      {connectionLabel}
+    </Txt>
+  ) : undefined;
+
+  return (
+    <SettingsSubsection title="Jira issues" description={description} action={action}>
+      <SettingsCard>
+        <SettingsRow variant="factory" label="Sync Jira issues">
+          <Switch
+            aria-label="Sync Jira issues"
+            checked={config.jira.enabled}
+            disabled={busy || !configured}
+            onCheckedChange={enabled => update({ ...config, jira: { ...config.jira, enabled } })}
+          />
+        </SettingsRow>
+
+        {showPickers && (
+          <SourcePicker
+            label="Jira projects"
+            groups={groupJiraProjectsBySite(projects)}
+            selectedIds={config.jira.sourceIds}
+            disabled={busy}
+            pending={busy}
+            onToggleItem={projectId =>
+              update({
+                ...config,
+                jira: { ...config.jira, sourceIds: toggleId(config.jira.sourceIds, projectId) },
+              })
+            }
+          />
+        )}
+      </SettingsCard>
+    </SettingsSubsection>
+  );
+}
+
 export function IntakeSection() {
   const { baseUrl } = useApiConfig();
   const configQuery = useIntakeConfigQuery();
@@ -175,6 +254,11 @@ export function IntakeSection() {
   const linearStatus = linearStatusQuery.data;
   const linearConnected = Boolean(linearStatus?.enabled && linearStatus.connected);
   const linearProjectsQuery = useLinearProjectsQuery(linearConnected);
+  const jiraStatusQuery = useJiraStatusQuery();
+  const jiraStatus = jiraStatusQuery.data;
+  const jiraConfigured = Boolean(jiraStatus?.enabled && jiraStatus.configured);
+  const jiraReauthRequired = Boolean(jiraStatus?.connections?.some(connection => connection.status === 'needs_reauth'));
+  const jiraProjectsQuery = useJiraProjectsQuery(jiraConfigured);
 
   const config = configQuery.data;
   // The same repository can be linked to several factories; Intake picks it once.
@@ -188,7 +272,7 @@ export function IntakeSection() {
   if (configQuery.isError || !config) {
     return (
       <Txt as="p" variant="ui-sm" className="text-icon3">
-        Intake configuration is unavailable. Connect GitHub or Linear first.
+        Intake configuration is unavailable. Connect GitHub, Linear, or Jira first.
       </Txt>
     );
   }
@@ -204,6 +288,10 @@ export function IntakeSection() {
   const reauthRequired = isLinearReauthError(linearProjectsQuery.error);
   const routedProjectIds = config.linear.sourceIds ?? [];
   const linearReady = linearConnected && config.linear.enabled && !reauthRequired && linearProjects.length > 0;
+  const jiraProjects = jiraProjectsQuery.data ?? [];
+  const jiraAuthError = isJiraAuthError(jiraProjectsQuery.error);
+  const jiraSourceIds = config.jira.sourceIds ?? [];
+  const jiraReady = jiraConfigured && config.jira.enabled && !jiraAuthError && jiraProjects.length > 0;
 
   return (
     <div className="flex flex-col gap-8">
@@ -225,9 +313,37 @@ export function IntakeSection() {
           description="Each selected project feeds one factory. Until a project is routed, its issues are not picked up."
         >
           <SettingsCard>
-            <LinearRouting
+            <IntakeSourceRouting
+              integrationId="linear"
+              label="Linear"
               sourceIds={routedProjectIds}
-              projects={linearProjects}
+              sources={linearProjects}
+              factories={factoriesQuery.data ?? []}
+            />
+          </SettingsCard>
+        </SettingsSubsection>
+      )}
+      <JiraIntakeSection
+        config={config}
+        busy={busy}
+        update={update}
+        status={jiraStatus}
+        projects={jiraProjects}
+        authError={jiraAuthError}
+        reauthRequired={jiraReauthRequired}
+        showPickers={jiraReady}
+      />
+      {jiraReady && jiraSourceIds.length > 0 && (
+        <SettingsSubsection
+          title="Jira routing"
+          description="Each selected project feeds one factory. Until a project is routed, its issues are not picked up."
+        >
+          <SettingsCard>
+            <IntakeSourceRouting
+              integrationId="jira"
+              label="Jira"
+              sourceIds={jiraSourceIds}
+              sources={jiraProjects.map(project => ({ id: project.id, name: `${project.key} · ${project.name}` }))}
               factories={factoriesQuery.data ?? []}
             />
           </SettingsCard>
@@ -236,6 +352,19 @@ export function IntakeSection() {
     </div>
   );
 }
+
+/** Group Jira projects by connected site so duplicate project keys stay distinguishable. */
+function groupJiraProjectsBySite(projects: JiraProject[]): SourcePickerGroup[] {
+  const bySite = new Map<string, SourcePickerGroup>();
+  for (const project of projects) {
+    const site = project.site ?? 'Jira';
+    const group = bySite.get(site) ?? { id: project.connectionId ?? site, label: site, items: [] };
+    group.items.push({ id: project.id, label: `${project.key} · ${project.name}` });
+    bySite.set(site, group);
+  }
+  return [...bySite.values()].toSorted((left, right) => (left.label ?? '').localeCompare(right.label ?? ''));
+}
+
 /**
  * Group Linear projects under each team they belong to (shared projects appear
  * in every team), sorted by team name. Team-less projects land in a trailing

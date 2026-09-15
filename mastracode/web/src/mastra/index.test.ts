@@ -245,20 +245,22 @@ describe('platform entry (src/mastra/index.ts)', () => {
       expect(paths).toContain('/auth/linear/connect');
     });
 
-    it('boots without Jira routes when the Jira group is partially configured', { timeout: 60_000 }, async () => {
-      vi.resetModules();
-      vi.stubEnv('JIRA_BASE_URL', 'https://acme.atlassian.net');
-      vi.stubEnv('JIRA_EMAIL', 'ops@acme.test');
-      vi.stubEnv('JIRA_API_TOKEN', '');
-      const mod = await import('./index.js');
-      expect(mod.mastra).toBeDefined();
-      // No integration instance means no /web/jira/* routes mount at all;
-      // the SPA degrades the status 404 to "disabled" (Linear parity).
-      const paths = mod.mastra.getServer()?.apiRoutes?.map(route => route.path) ?? [];
-      expect(paths).not.toContain('/web/jira/status');
-    });
+    it(
+      'mounts the disabled Jira status route when the Jira group is partially configured',
+      { timeout: 60_000 },
+      async () => {
+        vi.resetModules();
+        vi.stubEnv('JIRA_BASE_URL', 'https://acme.atlassian.net');
+        vi.stubEnv('JIRA_EMAIL', 'ops@acme.test');
+        vi.stubEnv('JIRA_API_TOKEN', '');
+        const mod = await import('./index.js');
+        expect(mod.mastra).toBeDefined();
+        const paths = mod.mastra.getServer()?.apiRoutes?.map(route => route.path) ?? [];
+        expect(paths).toContain('/web/jira/status');
+      },
+    );
 
-    it('registers the Jira integration when the full group is configured', { timeout: 60_000 }, async () => {
+    it('registers the direct Jira integration when the full group is configured', { timeout: 60_000 }, async () => {
       vi.resetModules();
       vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', '');
       vi.stubEnv('JIRA_BASE_URL', 'https://acme.atlassian.net');
@@ -266,9 +268,45 @@ describe('platform entry (src/mastra/index.ts)', () => {
       vi.stubEnv('JIRA_API_TOKEN', 'jira-token');
       const mod = await import('./index.js');
       const paths = mod.mastra.getServer()?.apiRoutes?.map(route => route.path) ?? [];
-      // The status route is registered only by the JiraIntegration, so its
-      // presence proves the env group wired the integration onto the factory.
       expect(paths).toContain('/web/jira/status');
+      expect(factoryConfigs[0]?.integrations?.find(integration => integration.id === 'jira')?.constructor.name).toBe(
+        'JiraIntegration',
+      );
+    });
+
+    it('does not register Platform Jira without Platform credentials', { timeout: 60_000 }, async () => {
+      vi.resetModules();
+      const mod = await import('./index.js');
+      const paths = mod.mastra.getServer()?.apiRoutes?.map(route => route.path) ?? [];
+      expect(paths).toContain('/web/jira/status');
+      expect(factoryConfigs[0]?.integrations?.find(integration => integration.id === 'jira')).toBeUndefined();
+    });
+
+    it(
+      'registers Platform Jira for automatic discovery when Platform credentials are configured',
+      { timeout: 60_000 },
+      async () => {
+        vi.resetModules();
+        vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'platform-token');
+        const mod = await import('./index.js');
+        const paths = mod.mastra.getServer()?.apiRoutes?.map(route => route.path) ?? [];
+        expect(paths).toContain('/web/jira/status');
+        expect(factoryConfigs[0]?.integrations?.find(integration => integration.id === 'jira')?.constructor.name).toBe(
+          'PlatformJiraIntegration',
+        );
+      },
+    );
+
+    it('prefers direct Jira credentials when both Jira configurations are complete', { timeout: 60_000 }, async () => {
+      vi.resetModules();
+      vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'platform-token');
+      vi.stubEnv('JIRA_BASE_URL', 'https://acme.atlassian.net');
+      vi.stubEnv('JIRA_EMAIL', 'ops@acme.test');
+      vi.stubEnv('JIRA_API_TOKEN', 'jira-token');
+      await import('./index.js');
+      expect(factoryConfigs[0]?.integrations?.find(integration => integration.id === 'jira')?.constructor.name).toBe(
+        'JiraIntegration',
+      );
     });
 
     it('skips Slack channel wiring when the Slack app env is unset', { timeout: 60_000 }, async () => {

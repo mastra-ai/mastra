@@ -35,6 +35,7 @@ import type { FactoryStageRuleContext } from '@mastra/factory/rules/types';
 import { GithubIntegration } from '@mastra/factory/integrations/github/integration';
 import { parseAuthorizedBotsEnv } from '@mastra/factory/integrations/github/webhook';
 import { JiraIntegration } from '@mastra/factory/integrations/jira/integration';
+import { PlatformJiraIntegration } from '@mastra/factory/integrations/platform/jira/integration';
 import { LinearIntegration } from '@mastra/factory/integrations/linear/integration';
 import { SlackIntegration } from '@mastra/factory/integrations/slack/integration';
 import type { IMastraAuthProvider } from '@mastra/core/server';
@@ -194,13 +195,16 @@ const linear =
       })
     : undefined;
 
-// Jira Cloud intake. Deployment-global credentials (Basic auth with an API
-// token) — no OAuth flow. Only a complete credential group enables the
-// integration; with a partial group no `/web/jira/*` routes mount and the SPA
-// treats the missing status route as "disabled".
+// Jira Cloud intake. A complete direct Basic-auth credential group takes
+// precedence. Otherwise Platform credentials enable automatic discovery of
+// visible `factory-jira` connections. Partial direct configuration falls back
+// to Platform Jira when Platform credentials are available.
 const jiraBaseUrl = process.env.JIRA_BASE_URL?.trim();
 const jiraEmail = process.env.JIRA_EMAIL?.trim();
 const jiraApiToken = process.env.JIRA_API_TOKEN?.trim();
+const platformJiraConfigured = Boolean(
+  process.env.MASTRA_PLATFORM_ACCESS_TOKEN?.trim() || process.env.MASTRA_PLATFORM_SECRET_KEY?.trim(),
+);
 const jira =
   jiraBaseUrl && jiraEmail && jiraApiToken
     ? new JiraIntegration({
@@ -208,7 +212,9 @@ const jira =
         email: jiraEmail,
         apiToken: jiraApiToken,
       })
-    : undefined;
+    : platformJiraConfigured
+      ? new PlatformJiraIntegration()
+      : undefined;
 
 // Host env exposed to local sandboxes: an allow-list only, so app secrets
 // (GITHUB_APP_PRIVATE_KEY, WORKOS_API_KEY, DATABASE_URL, …) never leak into
