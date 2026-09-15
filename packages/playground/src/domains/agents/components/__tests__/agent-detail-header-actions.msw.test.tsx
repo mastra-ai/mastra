@@ -6,7 +6,6 @@ import { http, HttpResponse } from 'msw';
 import { useImperativeHandle } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { AgentConfigToggle } from '../agent-config-toggle';
 import { AgentDetailHeaderActions } from '../agent-detail-header-actions';
 import { v2Agent } from './fixtures/composer-model-settings';
 import { RouteHeaderActionsProvider, RouteHeaderActionsSlot } from '@/lib/route-header/route-header-actions';
@@ -50,9 +49,6 @@ function renderActions() {
               <RouteHeaderActionsSlot />
             </div>
             <FakeLayoutPanel />
-            <div data-testid="tab-actions">
-              <AgentConfigToggle />
-            </div>
             <AgentDetailHeaderActions agentId={AGENT_ID} />
           </RouteSidePanelProvider>
         </RouteHeaderActionsProvider>
@@ -69,15 +65,14 @@ afterEach(() => {
 });
 
 describe('AgentDetailHeaderActions', () => {
-  it('keeps Share in the header and Config beside the tabs', async () => {
+  it('renders Share and the Config toggle inside the route header slot', async () => {
     installHandlers();
     renderActions();
 
     const slot = screen.getByTestId('header-actions');
     await waitFor(() => expect(slot.querySelector('[data-testid="agent-entity-header-share"]')).not.toBeNull());
     const toggle = screen.getByTestId('agent-overview-panel-toggle');
-    expect(slot.contains(toggle)).toBe(false);
-    expect(screen.getByTestId('tab-actions').contains(toggle)).toBe(true);
+    expect(slot.contains(toggle)).toBe(true);
     expect(toggle.getAttribute('aria-pressed')).toBe('false');
   });
 

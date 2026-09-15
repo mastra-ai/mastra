@@ -3,6 +3,7 @@ import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clip
 import { Check, Link as LinkIcon, Pencil } from 'lucide-react';
 
 import { useAgent } from '../hooks/use-agent';
+import { AgentConfigToggle } from './agent-config-toggle';
 import { useCanCreateAgent } from '@/domains/agent-builder/hooks/use-can-create-agent';
 import { useLinkComponent } from '@/lib/framework';
 import { RouteHeaderActions } from '@/lib/route-header';
@@ -12,7 +13,7 @@ export interface AgentDetailHeaderActionsProps {
   agentId: string;
 }
 
-/** Edit / Share actions shown in the route header on every agent sub-page. */
+/** Edit / Share / Config actions shown in the route header on every agent sub-page. */
 export function AgentDetailHeaderActions({ agentId }: AgentDetailHeaderActionsProps) {
   const { data: agent } = useAgent(agentId);
   const { canCreateAgent } = useCanCreateAgent();
@@ -46,6 +47,7 @@ export function AgentDetailHeaderActions({ agentId }: AgentDetailHeaderActionsPr
         >
           {isShareCopied ? <Check /> : <LinkIcon />}
         </Button>
+        <AgentConfigToggle />
       </div>
     </RouteHeaderActions>
   );

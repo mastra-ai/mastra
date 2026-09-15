@@ -6,7 +6,6 @@ import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
 import { ExternalLink, FlaskConical, GitBranch, MessageSquare } from 'lucide-react';
 
-import { AgentConfigToggle } from './agent-config-toggle';
 import { useLinkComponent } from '@/lib/framework';
 
 /** Tabs that render a pill in the bar. Routes without a pill pass `'none'`. */
@@ -150,7 +149,6 @@ export function AgentPageTabs({
             <GitBranch />
           </Button>
         )}
-        <AgentConfigToggle />
       </div>
     </div>
   );

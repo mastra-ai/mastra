@@ -15,6 +15,7 @@ export function AgentConfigToggle() {
       type="button"
       aria-label="Config"
       aria-pressed={!isCollapsed}
+      className="max-lg:hidden"
       tooltip={
         <span className="inline-flex items-center gap-1.5">
           {isCollapsed ? 'Show Config panel' : 'Hide Config panel'}
