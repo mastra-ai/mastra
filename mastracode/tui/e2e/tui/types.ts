@@ -8,6 +8,10 @@ export type ScenarioName =
   | 'abort-followup'
   | 'branch-context-long-name'
   | 'active-signal-followup'
+  | 'agent-connections-expected-reply-watchdog'
+  | 'agent-connections-tool-flow'
+  | 'agent-connections-notification-signal'
+  | 'agents-md-autoload'
   | 'autocomplete-wrapping-navigation'
   | 'api-key-delete-env'
   | 'api-key-multi-provider-delete'
@@ -16,6 +20,7 @@ export type ScenarioName =
   | 'approval-overlay-focus'
   | 'ask-user-advanced-prompts'
   | 'automated-chat'
+  | 'automated-chat-unix-pubsub'
   | 'browser-active-pending-status'
   | 'browser-model-picker'
   | 'browser-viewport'
@@ -28,6 +33,7 @@ export type ScenarioName =
   | 'browser-wizard-browserbase'
   | 'browser-wizard-export'
   | 'clipboard-image-paste'
+  | 'connect-command'
   | 'commit-attribution-prompt'
   | 'custom-config-dir'
   | 'custom-pack-import-overwrite'
@@ -38,6 +44,7 @@ export type ScenarioName =
   | 'custom-provider-management'
   | 'custom-provider-modal-validation'
   | 'custom-provider-model-selector'
+  | 'cross-agent-settings'
   | 'custom-slash-command'
   | 'ctrlf-queued-custom-slash'
   | 'ctrlf-queued-image-followup'
@@ -155,6 +162,7 @@ export type ScenarioName =
   | 'stream-error-retry'
   | 'streaming-render-stability'
   | 'streaming-tool-args'
+  | 'subagents-command'
   | 'subagent-delegation'
   | 'subagent-plan-execute-tools'
   | 'subagent-model-startup-restore'
@@ -188,6 +196,7 @@ export type McE2eTerminal = {
   keyCtrlC: () => void;
   resize: (columns: number, rows: number) => void;
   serialize: () => { view: string };
+  serializeHistory?: () => { output: string };
   submit: (text: string) => void;
   write: (text: string) => void;
 };

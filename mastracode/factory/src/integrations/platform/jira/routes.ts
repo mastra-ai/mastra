@@ -53,12 +53,6 @@ export interface MountJiraRoutesOptions {
    * project filter; when absent, only the disabled `status` route is served.
    */
   intake?: IntakeStorage;
-  /**
-   * Factory project domain, used to keep single-project installs working
-   * without any source binding. When absent, unbound sources are treated as
-   * belonging to no project.
-   */
-  projects?: { list(input: { orgId: string }): Promise<unknown[]> };
   /** Whether the host configured the application database backing intake state. */
   appDbConfigured: boolean;
 }
@@ -69,34 +63,30 @@ export interface MountJiraRoutesOptions {
  *
  * A Jira issue carries no Factory project of its own, so without a binding
  * every board view would show every selected project's issues on whichever
- * Factory happened to be on screen. Bound sources win; when the org has no
- * bindings at all we fall back to the full selection for single-project
- * installs, where "which project" is unambiguous. Mirrors the Linear routes'
- * scoping semantics locally — the generic binding storage is provider-neutral.
+ * Factory happened to be on screen. Only sources explicitly bound to a board
+ * of this Factory pass — nothing is routed implicitly. Mirrors the Linear
+ * routes' scoping semantics locally — the generic binding storage is
+ * provider-neutral.
  */
 async function scopeSourceIdsToProject({
   intake,
-  projects,
   orgId,
   factoryProjectId,
   selectedIds,
 }: {
   intake: IntakeStorage;
-  projects: MountJiraRoutesOptions['projects'];
   orgId: string;
   factoryProjectId: string;
   selectedIds: string[];
-}): Promise<string[]> {
-  const bound = await intake.listBoundSourceIds({ orgId, integrationId: 'jira', factoryProjectId });
-  if (bound.length > 0) {
-    const boundSet = new Set(bound);
-    return selectedIds.filter(id => boundSet.has(id));
+}): Promise<Record<string, string>> {
+  const selected = new Set(selectedIds);
+  const intakeBoards: Record<string, string> = {};
+  for (const binding of await intake.listBindings({ orgId, integrationId: 'jira' })) {
+    if (binding.factoryProjectId === factoryProjectId && binding.board && selected.has(binding.sourceId)) {
+      intakeBoards[binding.sourceId] = binding.board;
+    }
   }
-  const orgBindings = await intake.listBindings({ orgId, integrationId: 'jira' });
-  if (orgBindings.length > 0) return [];
-  if (!projects) return [];
-  const all = await projects.list({ orgId });
-  return all.length <= 1 ? selectedIds : [];
+  return intakeBoards;
 }
 
 /**
@@ -271,11 +261,7 @@ export function buildPlatformJiraRoutes(options: MountJiraRoutesOptions): ApiRou
         }
 
         await intake.ensureReady();
-        const config = await intake.getConfig({
-          orgId: resolved.tenant.orgId,
-          userId: resolved.tenant.userId,
-          integrationIds: ['jira'],
-        });
+        const config = await intake.getConfig({ orgId: resolved.tenant.orgId, integrationIds: ['jira'] });
         const selection = config.jira!;
         if (!selection.enabled) {
           return c.json({ error: 'jira_intake_disabled', message: 'Jira intake is turned off in Settings.' }, 404);
@@ -283,18 +269,18 @@ export function buildPlatformJiraRoutes(options: MountJiraRoutesOptions): ApiRou
 
         // No projects selected means nothing is synced — don't fan out to Jira.
         const selectedIds = selection.sourceIds ?? [];
-        // A board request only ever sees the sources bound (routed) to that
-        // Factory project; unscoped listing stays available to callers that
-        // don't view a specific board.
-        const projectIds = factoryProjectId
+        // A board request only ever sees the projects routed to a board of
+        // that Factory project; unscoped listing stays available to callers
+        // that don't view a specific board.
+        const intakeBoards = factoryProjectId
           ? await scopeSourceIdsToProject({
               intake,
-              projects: options.projects,
               orgId: resolved.tenant.orgId,
               factoryProjectId,
               selectedIds,
             })
-          : selectedIds;
+          : null;
+        const projectIds = intakeBoards ? Object.keys(intakeBoards) : selectedIds;
         if (projectIds.length === 0) {
           return c.json({ issues: [], nextCursor: null });
         }
@@ -315,6 +301,7 @@ export function buildPlatformJiraRoutes(options: MountJiraRoutesOptions): ApiRou
               labels: issue.labels,
               createdAt: issue.createdAt,
               updatedAt: issue.updatedAt,
+              sourceId: issue.sourceId || null,
             })),
             nextCursor,
           });

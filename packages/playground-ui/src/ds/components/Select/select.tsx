@@ -7,6 +7,7 @@ import { buttonVariants } from '../Button/Button';
 import type { TextButtonSize } from '../Button/Button';
 import { controlTriggerOpenState } from '@/ds/primitives/control-size';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
+import { menuItemCheckClass, menuItemClass, menuPopupClass, menuPositionerClass } from '@/ds/primitives/menu-item';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
@@ -227,17 +228,8 @@ const SelectContent = React.forwardRef<HTMLDivElement, SelectContentProps>(
 
     return (
       <SelectPrimitive.Portal container={resolvedContainer}>
-        <SelectPrimitive.Positioner className="z-50 outline-none" {...positionerProps}>
-          <SelectPrimitive.Popup
-            ref={ref}
-            className={cn(
-              'relative z-50 max-h-[min(var(--max-height-dropdown-max-height),var(--available-height))] min-w-[max(8rem,var(--anchor-width))] origin-[var(--transform-origin)] overflow-x-hidden overflow-y-auto rounded-xl border border-border1 bg-surface3 p-1 text-neutral4 shadow-dialog',
-              'data-[closed]:animate-out data-[closed]:fade-out-0 data-[closed]:zoom-out-95 data-[open]:animate-in data-[open]:fade-in-0 data-[open]:zoom-in-95',
-              'data-[side=bottom]:slide-in-from-top-1 data-[side=left]:slide-in-from-right-1 data-[side=right]:slide-in-from-left-1 data-[side=top]:slide-in-from-bottom-1',
-              className,
-            )}
-            {...props}
-          >
+        <SelectPrimitive.Positioner className={menuPositionerClass} {...positionerProps}>
+          <SelectPrimitive.Popup ref={ref} className={cn(menuPopupClass, className)} {...props}>
             <SelectPrimitive.List>{children}</SelectPrimitive.List>
           </SelectPrimitive.Popup>
         </SelectPrimitive.Positioner>
@@ -252,27 +244,11 @@ export type SelectItemProps = Omit<SelectPrimitive.Item.Props, 'className'> & {
 };
 
 const SelectItem = React.forwardRef<HTMLDivElement, SelectItemProps>(({ className, children, ...props }, ref) => (
-  <SelectPrimitive.Item
-    ref={ref}
-    className={cn(
-      'relative flex w-full cursor-pointer items-center gap-2.5 rounded-lg py-1.5 pr-8 pl-2 text-ui-smd leading-ui-sm text-neutral4 select-none',
-      'outline-none focus:outline-none focus-visible:outline-none',
-      transitions.colors,
-      'hover:bg-surface4 hover:text-neutral6',
-      'focus:bg-surface4 focus:text-neutral6',
-      'data-[highlighted]:bg-surface4 data-[highlighted]:text-neutral6',
-      'data-[selected]:text-neutral6',
-      'data-disabled:pointer-events-none data-disabled:opacity-50',
-      className,
-    )}
-    {...props}
-  >
-    <span className="absolute right-2 flex size-3.5 items-center justify-center">
-      <SelectPrimitive.ItemIndicator>
-        <Check className="text-neutral6 size-4" />
-      </SelectPrimitive.ItemIndicator>
-    </span>
+  <SelectPrimitive.Item ref={ref} className={cn(menuItemClass, className)} {...props}>
     <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
+    <SelectPrimitive.ItemIndicator className={menuItemCheckClass}>
+      <Check />
+    </SelectPrimitive.ItemIndicator>
   </SelectPrimitive.Item>
 ));
 SelectItem.displayName = 'SelectItem';

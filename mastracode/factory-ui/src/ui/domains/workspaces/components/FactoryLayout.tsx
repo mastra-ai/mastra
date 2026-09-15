@@ -5,7 +5,7 @@ import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import { AuthPendingSkeleton } from '../../auth/components/RootGuards';
 import { FeedEventsProvider } from '../../factory/context/FeedEventsProvider';
 import { GitHubAppCallbackHandler } from './GitHubAppCallbackHandler';
-import { RunEndObserver } from './RunEndObserver';
+import { SessionRunObserver } from './SessionRunObserver';
 
 /**
  * Route element for `factories/:factoryId`. Validates the route param against
@@ -39,7 +39,10 @@ export function FactoryLayout() {
       <GitHubAppCallbackHandler />
       <FeedEventsProvider factoryProjectId={factory.id}>
         {factory.repositories.map(repository => (
-          <RunEndObserver key={repository.projectRepositoryId} projectRepositoryId={repository.projectRepositoryId} />
+          <SessionRunObserver
+            key={repository.projectRepositoryId}
+            projectRepositoryId={repository.projectRepositoryId}
+          />
         ))}
         <Outlet />
       </FeedEventsProvider>

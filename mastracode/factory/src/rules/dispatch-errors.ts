@@ -1,4 +1,7 @@
-import type { FactoryDispatchFailureCode } from '../storage/domains/work-items/base.js';
+import type {
+  FactoryDispatchFailureCode,
+  StoredFactoryDispatchFailureCode,
+} from '../storage/domains/work-items/base.js';
 
 interface FactoryDispatchFailureMetadata {
   canRetry: boolean;
@@ -11,8 +14,7 @@ const FAILURE_METADATA = {
   source_repository_missing: { canRetry: true, label: 'Source repository unavailable' },
   unsupported_provider_item: { canRetry: false, label: 'Unsupported provider work item' },
   notification_delivery_failed: { canRetry: true, label: 'Factory message delivery failed' },
-  plan_awaiting_approval: { canRetry: false, label: 'Plan waiting for review' },
-  run_awaiting_input: { canRetry: false, label: 'Agent is waiting for an answer' },
+  run_overdue: { canRetry: false, label: 'Agent run is overdue' },
   repository_git_missing: { canRetry: false, label: 'Git is unavailable in the workspace' },
   repository_egress_blocked: { canRetry: false, label: 'Repository network access is blocked' },
   repository_clone_failed: { canRetry: true, label: 'Repository clone failed' },
@@ -21,8 +23,12 @@ const FAILURE_METADATA = {
   repository_commit_failed: { canRetry: true, label: 'Repository commit failed' },
   repository_cli_missing: { canRetry: false, label: 'GitHub CLI is unavailable in the workspace' },
   repository_pr_failed: { canRetry: true, label: 'Pull request creation failed' },
+  run_configuration_invalid: { canRetry: false, label: 'Run configuration rejected by provider' },
   unknown: { canRetry: true, label: 'Factory automation failed' },
-} satisfies Record<FactoryDispatchFailureCode, FactoryDispatchFailureMetadata>;
+  // Retired: no path writes these any more, stored rows still read through here.
+  plan_awaiting_approval: { canRetry: false, label: 'Plan waiting for review' },
+  run_awaiting_input: { canRetry: false, label: 'Agent is waiting for an answer' },
+} satisfies Record<StoredFactoryDispatchFailureCode, FactoryDispatchFailureMetadata>;
 
 export class FactoryDispatchError extends Error {
   constructor(
@@ -40,7 +46,7 @@ export function factoryDispatchFailureCode(error: unknown): FactoryDispatchFailu
 }
 
 export function factoryDispatchFailureMetadata(
-  code: FactoryDispatchFailureCode | null,
+  code: StoredFactoryDispatchFailureCode | null,
 ): FactoryDispatchFailureMetadata {
   return code === null ? FAILURE_METADATA.unknown : FAILURE_METADATA[code];
 }

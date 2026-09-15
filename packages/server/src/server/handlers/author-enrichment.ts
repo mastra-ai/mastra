@@ -1,7 +1,6 @@
 import type { Mastra } from '@mastra/core';
 import type { IUserProvider, User } from '@mastra/core/auth';
 import type { RequestContext } from '@mastra/core/di';
-import type { IMastraAuthProvider } from '@mastra/core/server';
 
 /**
  * Public-safe resolved author shape — same fields exposed by `/auth/me`.
@@ -21,11 +20,13 @@ export type ResolvedAuthor = {
  * - no server config is registered;
  * - `server.auth` is a `MastraAuthConfig`, not a `MastraAuthProvider`.
  */
-function getAuthProvider(mastra: Mastra): IMastraAuthProvider | null {
+function getAuthProvider(mastra: Mastra, isStudio: boolean): unknown {
+  const studioAuth = isStudio ? mastra.getStudio?.()?.auth : undefined;
+  if (studioAuth && typeof studioAuth.authenticateToken === 'function') return studioAuth;
   const serverConfig = (mastra as { getServer?: () => { auth?: unknown } }).getServer?.();
   if (!serverConfig?.auth) return null;
   if (typeof (serverConfig.auth as { authenticateToken?: unknown }).authenticateToken === 'function') {
-    return serverConfig.auth as IMastraAuthProvider;
+    return serverConfig.auth;
   }
   return null;
 }
@@ -76,8 +77,9 @@ export async function prepareAuthorEnrichment(
   mastra: Mastra,
   _requestContext: RequestContext,
   authorIds: ReadonlyArray<string | null | undefined>,
+  isStudio = false,
 ): Promise<Map<string, ResolvedAuthor> | null> {
-  const provider = getAuthProvider(mastra);
+  const provider = getAuthProvider(mastra, isStudio);
   if (!provider || !isUserProvider(provider)) return null;
 
   const uniqueIds = dedupeIds(authorIds);

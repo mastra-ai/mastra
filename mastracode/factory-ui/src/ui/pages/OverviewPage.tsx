@@ -7,6 +7,7 @@ import { Check, ChevronDown } from 'lucide-react';
 import { useMemo, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 
+import { useSupervisorHealth } from '../../hooks/useSupervisorHealth';
 import { useRunningSessions, useWorkItemsQuery } from '../../hooks/useWorkItems';
 import { CommitRail } from '../domains/factory/components/CommitRail';
 import { DocumentFactoryPageShell } from '../domains/factory/components/FactoryPageShell';
@@ -51,6 +52,7 @@ export function OverviewContent({
   const [rangeDays, setRangeDays] = useState(DEFAULT_RANGE_DAYS);
   const itemsQuery = useWorkItemsQuery(factoryProjectId);
   const activeSessions = useRunningSessions(factoryProjectId);
+  const supervisorHealth = useSupervisorHealth(factoryProjectId);
   const items = itemsQuery.data;
 
   // The board refetches on a timer; recomputing off its identity re-ages every
@@ -103,7 +105,23 @@ export function OverviewContent({
         <ActivityFeed moved={current.moved} factoryProjectId={factoryProjectId} />
       </Block>
 
-      <Block title="Needs you" action={<ViewAll to={`/factories/${factoryProjectId ?? ''}/attention`} />}>
+      <Block
+        title="Needs you"
+        action={
+          <div className="flex items-center gap-3">
+            {supervisorHealth.data?.findings.length ? (
+              <Link
+                className="text-accent1 hover:text-accent2 text-ui-xs"
+                to={`/factories/${factoryProjectId ?? ''}/supervisor`}
+              >
+                {supervisorHealth.data.findings.length} supervisor{' '}
+                {supervisorHealth.data.findings.length === 1 ? 'finding' : 'findings'}
+              </Link>
+            ) : null}
+            <ViewAll to={`/factories/${factoryProjectId ?? ''}/attention`} />
+          </div>
+        }
+      >
         <AttentionPreview factoryProjectId={factoryProjectId} />
       </Block>
     </div>

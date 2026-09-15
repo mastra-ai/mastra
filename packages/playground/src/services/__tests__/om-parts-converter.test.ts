@@ -37,6 +37,12 @@ const convertedOmData = (message: MastraDBMessage) => {
 };
 
 describe('OM part conversion', () => {
+  it('hands a message without OM parts back as the same object', () => {
+    const message = assistantMessage([{ type: 'text', text: 'settled reply' }]);
+
+    expect(convertOmPartsInMastraMessage(message, new Map())).toBe(message);
+  });
+
   it('retains terminal extraction fields across a post-stream reset with a poorer snapshot', () => {
     const cache = new Map();
     const streamedMessages = [

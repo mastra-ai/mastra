@@ -1,8 +1,9 @@
+import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
-import { useMemo, useState } from 'react';
+import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
+import { useMemo } from 'react';
 import { useParams } from 'react-router';
 import { AgentPlaygroundEvaluate } from '@/domains/agents/components/agent-playground/agent-playground-evaluate';
 import { AgentEditFormProvider } from '@/domains/agents/context/agent-edit-form-context';
@@ -13,11 +14,9 @@ import { useStoredAgent } from '@/domains/agents/hooks/use-stored-agents';
 import { mapAgentResponseToDataSource } from '@/domains/agents/utils/compute-agent-initial-values';
 import type { AgentDataSource } from '@/domains/agents/utils/compute-agent-initial-values';
 import { useEditorSource } from '@/domains/configuration/hooks/use-editor-source';
-import { useLinkComponent } from '@/lib/framework';
 
 function AgentEvaluate() {
   const { agentId } = useParams();
-  const { navigate } = useLinkComponent();
 
   const { data: codeAgent, isLoading: isLoadingCodeAgent, error } = useAgent(agentId!);
 
@@ -55,22 +54,6 @@ function AgentEvaluate() {
     onSuccess: () => {},
   });
 
-  // Check for pending scorer items from Review tab (via sessionStorage)
-  const [pendingScorerItems, setPendingScorerItems] = useState<Array<{ input: unknown; output: unknown }> | null>(
-    () => {
-      const stored = sessionStorage.getItem(`pending-scorer-items-${agentId}`);
-      if (stored) {
-        sessionStorage.removeItem(`pending-scorer-items-${agentId}`);
-        try {
-          return JSON.parse(stored);
-        } catch {
-          return null;
-        }
-      }
-      return null;
-    },
-  );
-
   if (error && is401UnauthorizedError(error)) {
     return (
       <div className="flex h-full items-center justify-center">
@@ -95,6 +78,15 @@ function AgentEvaluate() {
     );
   }
 
+  // A 404 is authoritative even if a previous fetch left stale data in the cache.
+  if (error && is404NotFoundError(error)) {
+    return <div className="py-4 text-center">Agent not found</div>;
+  }
+
+  if (error) {
+    return <ErrorState title="Failed to load agent" message={error.message} />;
+  }
+
   if (!codeAgent) {
     return <div className="py-4 text-center">Agent not found</div>;
   }
@@ -112,12 +104,7 @@ function AgentEvaluate() {
       isCodeSourceAgent={isCodeSourceAgent}
       readOnly={false}
     >
-      <AgentPlaygroundEvaluate
-        agentId={agentId!}
-        onSwitchToReview={() => navigate(`/agents/${agentId}/review`)}
-        pendingScorerItems={pendingScorerItems}
-        onPendingScorerItemsConsumed={() => setPendingScorerItems(null)}
-      />
+      <AgentPlaygroundEvaluate agentId={agentId!} requestContextSchema={codeAgent.requestContextSchema} />
     </AgentEditFormProvider>
   );
 }

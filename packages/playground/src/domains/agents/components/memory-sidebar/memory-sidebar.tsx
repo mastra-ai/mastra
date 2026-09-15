@@ -7,7 +7,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useObservationalMemory } from '@mastra/playground-ui/domains/memory/hooks/use-observational-memory';
 import { MemoryIcon } from '@mastra/playground-ui/icons/MemoryIcon';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ChevronDown, ChevronUp, Eye, MessageSquare, NotebookPen, Search } from 'lucide-react';
+import { ChevronDown, ChevronUp, Eye, MessageSquare, NotebookPen, Search, ExternalLink } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useLayoutEffect, useRef, useState } from 'react';
 import { AgentCapabilitiesFooter } from './agent-capabilities-footer';
@@ -32,6 +32,8 @@ export interface MemorySidebarProps {
   onDelete?: (threadId: string) => void;
   /** When provided, rendered as the thread layer instead of the built-in ChatThreads list. */
   threadsSlot?: React.ReactNode;
+  /** Forwarded to ChatThreads; renders the "Hide threads panel" control when set. */
+  onHidePanel?: () => void;
 }
 
 const barColor = (percent: number): string => {
@@ -83,15 +85,28 @@ function MemorySidebarSkeleton() {
 
 // SidebarPanel is the single layout shell; the body picks the view with guard
 // clauses and returns bare content — see structure-early-return-render-branches.
-export function MemorySidebar({ agentId, threadId, threads, onDelete }: MemorySidebarProps) {
+export function MemorySidebar({ agentId, threadId, threads, onDelete, onHidePanel }: MemorySidebarProps) {
   return (
     <SidebarPanel>
-      <MemorySidebarBody agentId={agentId} threadId={threadId} threads={threads} onDelete={onDelete} />
+      <MemorySidebarBody
+        agentId={agentId}
+        threadId={threadId}
+        threads={threads}
+        onDelete={onDelete}
+        onHidePanel={onHidePanel}
+      />
     </SidebarPanel>
   );
 }
 
-export function MemorySidebarBody({ agentId, threadId, threads, onDelete, threadsSlot }: MemorySidebarProps) {
+export function MemorySidebarBody({
+  agentId,
+  threadId,
+  threads,
+  onDelete,
+  threadsSlot,
+  onHidePanel,
+}: MemorySidebarProps) {
   // Derive memory state from the shared (React Query deduped) hook instead of
   // accepting it as props — see structure-derive-dont-duplicate.
   const { data: memory, isLoading: isMemoryLoading } = useMemory(agentId);
@@ -101,7 +116,7 @@ export function MemorySidebarBody({ agentId, threadId, threads, onDelete, thread
   const { selectedTab, handleTabChange } = useMemorySidebarTab();
   const { isPanelOpen } = useMemoryTimeline();
   const { streamProgress } = useObservationalMemoryContext();
-  const { lastMessages, semanticRecallOn, workingMemoryOn, observationalOn } = useMemoryFeatureFlags(agentId);
+  const { recentMessages, semanticRecallOn, workingMemoryOn, observationalOn } = useMemoryFeatureFlags(agentId);
 
   const showMemory = selectedTab === 'memory';
   const memoryCardShellRef = useRef<HTMLDivElement>(null);
@@ -167,7 +182,7 @@ export function MemorySidebarBody({ agentId, threadId, threads, onDelete, thread
     return () => observer.disconnect();
   }, [
     hasMemory,
-    lastMessages,
+    recentMessages.description,
     observationPercent,
     observationalOn,
     semanticRecallOn,
@@ -215,6 +230,7 @@ export function MemorySidebarBody({ agentId, threadId, threads, onDelete, thread
                 threadId={threadId}
                 onDelete={onDelete ?? (() => {})}
                 embedded
+                onHidePanel={onHidePanel}
               />
             ) : (
               <EmptyState
@@ -223,6 +239,7 @@ export function MemorySidebarBody({ agentId, threadId, threads, onDelete, thread
                 descriptionSlot="Conversations are only saved as threads when the agent has memory configured."
                 actionSlot={
                   <Button
+                    icon={<ExternalLink />}
                     as="a"
                     href="https://mastra.ai/docs/memory/overview"
                     target="_blank"
@@ -277,13 +294,9 @@ export function MemorySidebarBody({ agentId, threadId, threads, onDelete, thread
                   <span data-testid="memory-config-badges" className="mt-1.5 flex flex-wrap items-center gap-1.5">
                     <ConfigBadge
                       icon={MessageSquare}
-                      tooltip={
-                        lastMessages !== undefined
-                          ? `Keeps the last ${lastMessages} messages in context`
-                          : 'Recent message history is off'
-                      }
-                      enabled={lastMessages !== undefined}
-                      value={lastMessages}
+                      tooltip={recentMessages.description}
+                      enabled={recentMessages.enabled}
+                      value={recentMessages.maxMessages}
                     />
                     <ConfigBadge
                       icon={Search}

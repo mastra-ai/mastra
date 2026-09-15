@@ -103,7 +103,7 @@ The `sampling` option allows you to control which traces are collected, helping 
 
 ## Adding custom metadata
 
-Custom metadata allows you to attach additional context to your traces, making it easier to debug issues and understand system behavior in production.
+Add custom metadata to record application-specific context in your traces for debugging production issues.
 
 Metadata can include business logic and performance metrics. It can also carry user context or any other information that explains what happened during execution.
 
@@ -768,7 +768,7 @@ The trace ID is only available when tracing is enabled. If tracing is disabled o
 
 ## Integrating with external tracing systems
 
-When running Mastra agents or workflows within applications that have existing distributed tracing (OpenTelemetry, Datadog, etc.), you can connect Mastra traces to your parent trace context. This creates a unified view of your entire request flow, making it easier to understand how Mastra operations fit into the broader system.
+If your application already uses distributed tracing, such as OpenTelemetry or Datadog, you can connect Mastra traces to the parent trace context. This lets you follow a request through your application and its Mastra agent or workflow calls.
 
 ### Passing external trace IDs
 

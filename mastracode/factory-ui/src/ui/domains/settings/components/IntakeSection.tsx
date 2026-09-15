@@ -1,5 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { SettingsRow } from '@mastra/playground-ui/components/SettingsRow';
+import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -8,24 +8,20 @@ import { useApiConfig } from '../../../../api/config';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { useIntakeConfigQuery, useSaveIntakeConfigMutation } from '../../../../hooks/useIntakeConfig';
 import { useJiraProjectsQuery, useJiraStatusQuery } from '../../../../hooks/useJiraData';
-import { useLinearProjectsQuery, useLinearStatusQuery } from '../../../../hooks/useLinearData';
+import { useLinearProjectsQuery, useLinearStatusQuery, useLinearTeamsQuery } from '../../../../hooks/useLinearData';
 import { isJiraAuthError } from '../../factory/services/jira';
 import type { JiraProject, JiraStatus } from '../../factory/services/jira';
-import { connectLinear, isLinearReauthError } from '../../factory/services/linear';
-import type { LinearProject, LinearStatus } from '../../factory/services/linear';
+import { connectLinear, isLinearReauthError, linearTeamSourceId } from '../../factory/services/linear';
+import type { LinearProject, LinearStatus, LinearTeam } from '../../factory/services/linear';
 import type { IntakeConfig } from '../../factory/services/intake';
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import { SourcePicker } from './IntakeSourcePicker';
 import type { SourcePickerGroup } from './IntakeSourcePicker';
-import { IntakeSourceRouting } from './LinearRouting';
-import { SettingsCard } from './SettingsCard';
+import { GithubLabelRouting } from './GithubLabelRouting';
+import { IntakeSourceRouting, LinearRouting } from './LinearRouting';
+
 import { SettingsSubsection } from './SettingsSubsection';
 
-/**
- * Toggle `id` in the selection list. `null` means "nothing selected" (nothing
- * syncs) — the first pick starts from an empty list, and clearing the last
- * pick returns to `null`.
- */
 function toggleId(ids: string[] | null, id: string): string[] | null {
   const current = ids ?? [];
   const next = current.includes(id) ? current.filter(v => v !== id) : [...current, id];
@@ -41,11 +37,12 @@ interface SourceSectionProps {
 function GithubIntakeSection({ config, busy, update, slugs }: SourceSectionProps & { slugs: string[] }) {
   return (
     <SettingsSubsection
+      scope="org"
       title="GitHub issues"
-      description="Open issues from the selected repositories. Pull requests always appear in Review."
+      description="Open issues from the selected repositories feed every member's board. Pull requests always appear in Review."
     >
-      <SettingsCard>
-        <SettingsRow variant="factory" label="Sync GitHub issues">
+      <SettingsContainer>
+        <SettingsRow label="Sync GitHub issues">
           <Switch
             aria-label="Sync GitHub issues"
             checked={config.github.enabled}
@@ -79,16 +76,11 @@ function GithubIntakeSection({ config, busy, update, slugs }: SourceSectionProps
               }
             />
           ))}
-      </SettingsCard>
+      </SettingsContainer>
     </SettingsSubsection>
   );
 }
 
-/**
- * Linear needs an OAuth workspace before anything can sync, so the connection
- * state is the section header: the description says what is missing and the
- * action connects or reconnects.
- */
 function LinearIntakeSection({
   config,
   busy,
@@ -96,6 +88,7 @@ function LinearIntakeSection({
   status,
   connected,
   projects,
+  teams,
   reauthRequired,
   showPickers,
   baseUrl,
@@ -103,8 +96,9 @@ function LinearIntakeSection({
   status: LinearStatus | undefined;
   connected: boolean;
   projects: LinearProject[];
+  teams: LinearTeam[];
   reauthRequired: boolean;
-  /** Projects can only be picked — and routed — once Linear answers with them. */
+
   showPickers: boolean;
   baseUrl: string;
 }) {
@@ -115,7 +109,7 @@ function LinearIntakeSection({
       ? 'Connect a Linear workspace to sync its issues.'
       : reauthRequired
         ? 'Linear authorization expired. Reconnect to keep syncing issues.'
-        : 'Active issues from the selected projects.';
+        : "Active issues from the selected projects and teams feed every member's board. Selecting a whole team also covers its projectless issues.";
 
   const action = !serverConfigured ? undefined : !connected ? (
     <Button size="sm" onClick={() => connectLinear(baseUrl)}>
@@ -137,9 +131,9 @@ function LinearIntakeSection({
   );
 
   return (
-    <SettingsSubsection title="Linear issues" description={description} action={action}>
-      <SettingsCard>
-        <SettingsRow variant="factory" label="Sync Linear issues">
+    <SettingsSubsection scope="org" title="Linear issues" description={description} action={action}>
+      <SettingsContainer>
+        <SettingsRow label="Sync Linear issues">
           <Switch
             aria-label="Sync Linear issues"
             checked={config.linear.enabled}
@@ -150,20 +144,20 @@ function LinearIntakeSection({
 
         {showPickers && (
           <SourcePicker
-            label="Linear projects"
-            groups={groupLinearProjectsByTeam(projects)}
+            label="Linear projects and teams"
+            groups={groupLinearSourcesByTeam(projects, teams, config.linear.sourceIds)}
             selectedIds={config.linear.sourceIds}
             disabled={busy}
             pending={busy}
-            onToggleItem={projectId =>
+            onToggleItem={sourceId =>
               update({
                 ...config,
-                linear: { ...config.linear, sourceIds: toggleId(config.linear.sourceIds, projectId) },
+                linear: { ...config.linear, sourceIds: toggleId(config.linear.sourceIds, sourceId) },
               })
             }
           />
         )}
-      </SettingsCard>
+      </SettingsContainer>
     </SettingsSubsection>
   );
 }
@@ -213,9 +207,9 @@ function JiraIntakeSection({
   ) : undefined;
 
   return (
-    <SettingsSubsection title="Jira issues" description={description} action={action}>
-      <SettingsCard>
-        <SettingsRow variant="factory" label="Sync Jira issues">
+    <SettingsSubsection scope="org" title="Jira issues" description={description} action={action}>
+      <SettingsContainer>
+        <SettingsRow label="Sync Jira issues">
           <Switch
             aria-label="Sync Jira issues"
             checked={config.jira.enabled}
@@ -239,7 +233,7 @@ function JiraIntakeSection({
             }
           />
         )}
-      </SettingsCard>
+      </SettingsContainer>
     </SettingsSubsection>
   );
 }
@@ -254,6 +248,7 @@ export function IntakeSection() {
   const linearStatus = linearStatusQuery.data;
   const linearConnected = Boolean(linearStatus?.enabled && linearStatus.connected);
   const linearProjectsQuery = useLinearProjectsQuery(linearConnected);
+  const linearTeamsQuery = useLinearTeamsQuery(linearConnected);
   const jiraStatusQuery = useJiraStatusQuery();
   const jiraStatus = jiraStatusQuery.data;
   const jiraConfigured = Boolean(jiraStatus?.enabled && jiraStatus.configured);
@@ -261,7 +256,7 @@ export function IntakeSection() {
   const jiraProjectsQuery = useJiraProjectsQuery(jiraConfigured);
 
   const config = configQuery.data;
-  // The same repository can be linked to several factories; Intake picks it once.
+
   const linkedSlugs = [
     ...new Set((factoriesQuery.data ?? []).flatMap(factory => factory.repositories.map(r => r.slug))),
   ];
@@ -285,9 +280,14 @@ export function IntakeSection() {
   };
   const busy = saveMutation.isPending;
   const linearProjects = linearProjectsQuery.data ?? [];
+  const linearTeams = linearTeamsQuery.data ?? [];
   const reauthRequired = isLinearReauthError(linearProjectsQuery.error);
   const routedProjectIds = config.linear.sourceIds ?? [];
-  const linearReady = linearConnected && config.linear.enabled && !reauthRequired && linearProjects.length > 0;
+  const linearReady =
+    linearConnected &&
+    config.linear.enabled &&
+    !reauthRequired &&
+    (linearProjects.length > 0 || linearTeams.length > 0);
   const jiraProjects = jiraProjectsQuery.data ?? [];
   const jiraAuthError = isJiraAuthError(jiraProjectsQuery.error);
   const jiraSourceIds = config.jira.sourceIds ?? [];
@@ -296,6 +296,25 @@ export function IntakeSection() {
   return (
     <div className="flex flex-col gap-8">
       <GithubIntakeSection config={config} busy={busy} update={update} slugs={linkedSlugs} />
+      {config.github.enabled && linkedSlugs.length > 0 && (factoriesQuery.data?.length ?? 0) > 0 && (
+        <SettingsSubsection
+          scope="org"
+          title="GitHub routing"
+          description="Issues carrying a routed label file onto that board in the Factory; everything else stays on Work."
+        >
+          {(factoriesQuery.data ?? [])
+            .filter(factory => factory.repositories.length > 0)
+            .map(factory => (
+              <SettingsContainer key={factory.id}>
+                <GithubLabelRouting
+                  factoryProjectId={factory.id}
+                  name={factory.name}
+                  repositories={factory.repositories.map(r => r.slug)}
+                />
+              </SettingsContainer>
+            ))}
+        </SettingsSubsection>
+      )}
       <LinearIntakeSection
         config={config}
         busy={busy}
@@ -303,24 +322,25 @@ export function IntakeSection() {
         status={linearStatus}
         connected={linearConnected}
         projects={linearProjects}
+        teams={linearTeams}
         reauthRequired={reauthRequired}
         showPickers={linearReady}
         baseUrl={baseUrl}
       />
       {linearReady && routedProjectIds.length > 0 && (
         <SettingsSubsection
+          scope="org"
           title="Linear routing"
-          description="Each selected project feeds one factory. Until a project is routed, its issues are not picked up."
+          description="Each selected source feeds one factory. Until a source is routed, its issues are not picked up."
         >
-          <SettingsCard>
-            <IntakeSourceRouting
-              integrationId="linear"
-              label="Linear"
+          <SettingsContainer>
+            <LinearRouting
               sourceIds={routedProjectIds}
-              sources={linearProjects}
+              projects={linearProjects}
+              teams={linearTeams}
               factories={factoriesQuery.data ?? []}
             />
-          </SettingsCard>
+          </SettingsContainer>
         </SettingsSubsection>
       )}
       <JiraIntakeSection
@@ -335,10 +355,11 @@ export function IntakeSection() {
       />
       {jiraReady && jiraSourceIds.length > 0 && (
         <SettingsSubsection
+          scope="org"
           title="Jira routing"
           description="Each selected project feeds one factory. Until a project is routed, its issues are not picked up."
         >
-          <SettingsCard>
+          <SettingsContainer>
             <IntakeSourceRouting
               integrationId="jira"
               label="Jira"
@@ -346,7 +367,7 @@ export function IntakeSection() {
               sources={jiraProjects.map(project => ({ id: project.id, name: `${project.key} · ${project.name}` }))}
               factories={factoriesQuery.data ?? []}
             />
-          </SettingsCard>
+          </SettingsContainer>
         </SettingsSubsection>
       )}
     </div>
@@ -365,25 +386,53 @@ function groupJiraProjectsBySite(projects: JiraProject[]): SourcePickerGroup[] {
   return [...bySite.values()].toSorted((left, right) => (left.label ?? '').localeCompare(right.label ?? ''));
 }
 
-/**
- * Group Linear projects under each team they belong to (shared projects appear
- * in every team), sorted by team name. Team-less projects land in a trailing
- * "No team" group.
- */
-function groupLinearProjectsByTeam(projects: LinearProject[]): SourcePickerGroup[] {
+function groupLinearSourcesByTeam(
+  projects: LinearProject[],
+  teams: LinearTeam[],
+  selectedIds: string[] | null,
+): SourcePickerGroup[] {
+  const selected = new Set(selectedIds ?? []);
+  const teamById = new Map(teams.map(team => [team.id, team]));
   const byTeam = new Map<string, SourcePickerGroup>();
   const orphans: LinearProject[] = [];
+
+  const ensureGroup = (teamId: string, teamName: string): SourcePickerGroup => {
+    const existing = byTeam.get(teamId);
+    if (existing) return existing;
+    // Only a returned team DTO can mint a selectable team source. Project
+    // metadata may arrive first, but it does not carry the backend's opaque id.
+    const team = teamById.get(teamId);
+    const group: SourcePickerGroup = {
+      id: teamId,
+      label: teamName,
+      items: team ? [{ id: linearTeamSourceId(team), label: `All issues in ${teamName}` }] : [],
+    };
+    byTeam.set(teamId, group);
+    return group;
+  };
+
+  // Seed a group per known team so a team with no projects is still selectable.
+  for (const team of teams) ensureGroup(team.id, team.name);
+
   for (const project of projects) {
     if (project.teams.length === 0) {
       orphans.push(project);
       continue;
     }
     for (const team of project.teams) {
-      const group = byTeam.get(team.id) ?? { id: team.id, label: team.name, items: [] };
-      group.items.push({ id: project.id, label: project.name });
-      byTeam.set(team.id, group);
+      const group = ensureGroup(team.id, teamById.get(team.id)?.name ?? team.name);
+      // A project is redundant when its whole team is already selected.
+      const knownTeam = teamById.get(team.id);
+      const teamSelected = knownTeam ? selected.has(linearTeamSourceId(knownTeam)) : false;
+      const projectSelected = selected.has(project.id);
+      group.items.push({
+        id: project.id,
+        label: project.name,
+        ...(teamSelected ? { hint: projectSelected ? 'project takes precedence' : 'included via team' } : {}),
+      });
     }
   }
+
   const groups = [...byTeam.values()].sort((a, b) => (a.label ?? '').localeCompare(b.label ?? ''));
   if (orphans.length) {
     groups.push({

@@ -360,6 +360,7 @@ async function startMastraCodeApp(
     unixSocketPubSub: !isTruthyEnv('MASTRACODE_DISABLE_UNIX_SOCKET_PUBSUB'),
     disableMcp: isTruthyEnv('MASTRACODE_DISABLE_MCP'),
     disableHooks: isTruthyEnv('MASTRACODE_DISABLE_HOOKS'),
+    ...(isTruthyEnv('MASTRACODE_ENABLE_CROSS_AGENT_SIGNALS') ? { crossAgentSignals: true } : {}),
     ...(isTruthyEnv('MASTRACODE_DISABLE_MEMORY') ? { memory: false } : {}),
     cwd: runConfig.cwd,
     ...(process.env.HOME ? { homeDir: process.env.HOME } : {}),

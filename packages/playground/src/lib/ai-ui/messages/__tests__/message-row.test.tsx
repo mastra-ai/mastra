@@ -1,10 +1,13 @@
+import { MessageList } from '@mastra/core/agent/message-list';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { ArrivalScope } from '@mastra/playground-ui/components/Arrival';
+import { ChatRunningContext } from '@mastra/playground-ui/domains/chat/context/chat-context';
+import { ToolCallProvider } from '@mastra/playground-ui/domains/chat/context/tool-call-context';
 import { ARRIVING_CLASS } from '@mastra/playground-ui/tokens';
-import type { MastraTextPart } from '@mastra/react';
+import type { MastraTextPart, ToolInvocationPart } from '@mastra/react';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
@@ -12,7 +15,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MessageRow } from '../message-row';
 import { buildGlobalOmPartsByCycleId, convertOmPartsInMastraMessage } from '@/services/om-parts-converter';
-import { ToolCallProvider } from '@/services/tool-call-provider';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -326,6 +328,243 @@ describe('MessageRow', () => {
       }),
     );
     expect(document.querySelector('[data-testid="tool-badge"]')).toBeTruthy();
+  });
+
+  describe('when a completed tool result has image model output', () => {
+    it('renders the generated image in the assistant message', () => {
+      const toolPart: ToolInvocationPart = {
+        type: 'tool-invocation',
+        toolInvocation: {
+          toolName: 'openai_create_image',
+          toolCallId: 'call-image',
+          state: 'result',
+          args: { prompt: 'A pineapple' },
+          result: { data: [{ b64_json: 'iVBORw0KGgo=' }] },
+        },
+        providerMetadata: {
+          mastra: {
+            modelOutput: {
+              type: 'content',
+              value: [{ type: 'media', data: 'iVBORw0KGgo=', mediaType: 'image/png' }],
+            },
+          },
+        },
+      };
+
+      renderRow(
+        baseMessage({
+          role: 'assistant',
+          content: { format: 2, metadata: { mode: 'stream' }, parts: [toolPart] },
+        }),
+      );
+
+      const image = screen.getByRole<HTMLImageElement>('img', { name: 'Preview' });
+      expect(image.src).toBe('data:image/png;base64,iVBORw0KGgo=');
+    });
+  });
+
+  describe('when plain tool calls run back to back', () => {
+    const toolCall = (
+      toolCallId: string,
+      toolName = 'genericTool',
+      state: 'result' | 'call' = 'result',
+    ): ToolInvocationPart =>
+      state === 'result'
+        ? {
+            type: 'tool-invocation',
+            toolInvocation: { state, toolName, toolCallId, args: { q: toolCallId }, result: { ok: true } },
+          }
+        : { type: 'tool-invocation', toolInvocation: { state, toolName, toolCallId, args: { q: toolCallId } } };
+    const withCalls = (parts: MastraDBMessage['content']['parts'], metadata: Record<string, unknown> = {}) =>
+      baseMessage({ role: 'assistant', content: { format: 2, metadata: { mode: 'stream', ...metadata }, parts } });
+
+    it('folds three of them into one group row that opens onto the cards', () => {
+      const { container } = renderRow(withCalls([toolCall('call-1'), toolCall('call-2'), toolCall('call-3')]));
+
+      const group = screen.getByRole('group', { name: 'Tool group: 3 steps' });
+      expect(container.querySelectorAll('[data-testid="tool-badge"]')).toHaveLength(0);
+
+      fireEvent.click(within(group).getByRole('button'));
+      expect(container.querySelectorAll('[data-testid="tool-badge"]')).toHaveLength(3);
+    });
+
+    it('summarizes successful results without expanding the group', () => {
+      renderRow(withCalls([toolCall('call-1'), toolCall('call-2'), toolCall('call-3')]));
+      expect(screen.getByText('3 OK')).toBeTruthy();
+    });
+
+    it('includes recorded failures in the collapsed summary', () => {
+      renderRow(
+        withCalls([
+          toolCall('call-1'),
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'output-error',
+              toolName: 'genericTool',
+              toolCallId: 'call-2',
+              args: {},
+              errorText: 'Failed',
+            },
+          },
+          toolCall('call-3'),
+        ]),
+      );
+      expect(screen.getByText('2 OK · 1 failed')).toBeTruthy();
+    });
+
+    it('does not count recorded legacy tool errors as successful results', () => {
+      renderRow(
+        withCalls([
+          toolCall('one'),
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolName: 'genericTool',
+              toolCallId: 'two',
+              args: {},
+              result: 'Failed',
+              isError: true,
+            },
+          },
+          toolCall('three'),
+        ]),
+      );
+      expect(screen.getByText('2 OK · 1 failed')).toBeTruthy();
+    });
+
+    it('does not count unfinished calls in stopped history as successful', () => {
+      renderRow(
+        withCalls([
+          toolCall('call-1'),
+          toolCall('call-2', 'genericTool', 'call'),
+          toolCall('call-3', 'genericTool', 'call'),
+        ]),
+      );
+      expect(screen.getByText('1 OK · 2 incomplete')).toBeTruthy();
+    });
+
+    it('identifies only unfinished calls inside the expanded group', () => {
+      renderRow(
+        withCalls([
+          toolCall('done', 'finishedTool'),
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'output-error',
+              toolName: 'failedTool',
+              toolCallId: 'failed',
+              args: {},
+              errorText: 'Failed',
+            },
+          },
+          toolCall('pending', 'unfinishedTool', 'call'),
+        ]),
+      );
+      const group = screen.getByRole('group', { name: 'Tool group: 3 steps' });
+      fireEvent.click(within(group).getByRole('button'));
+      expect(within(screen.getByRole('group', { name: 'unfinishedTool' })).getByText('Incomplete')).toBeTruthy();
+      expect(within(screen.getByRole('group', { name: 'finishedTool' })).queryByText('Incomplete')).toBeNull();
+      expect(within(screen.getByRole('group', { name: 'failedTool' })).queryByText('Incomplete')).toBeNull();
+    });
+
+    it('restores modern successful results from stored history', () => {
+      const messages = new MessageList();
+      messages.add(
+        {
+          id: 'modern-results',
+          role: 'assistant',
+          parts: [
+            { type: 'tool-genericTool', toolCallId: 'one', state: 'output-available', input: {}, output: { ok: true } },
+            { type: 'tool-genericTool', toolCallId: 'two', state: 'output-available', input: {}, output: { ok: true } },
+            { type: 'tool-genericTool', toolCallId: 'three', state: 'input-available', input: {} },
+          ],
+        },
+        'response',
+      );
+      const stored = messages.get.all.db();
+      renderRow(stored[0]);
+      expect(screen.getByText('2 OK · 1 incomplete')).toBeTruthy();
+    });
+
+    it('preserves incomplete counts when a live row stops and is remounted as history', () => {
+      const message = withCalls([
+        toolCall('one'),
+        toolCall('two', 'genericTool', 'call'),
+        toolCall('three', 'genericTool', 'call'),
+      ]);
+      message.content.metadata = { runId: 'live-run' };
+      const row = (isRunning: boolean) => (
+        <ChatRunningContext.Provider
+          value={{ isRunning, activeRunId: 'live-run', cancelRun: () => {}, canSendWhileStreaming: false }}
+        >
+          <MessageRow message={message} />
+        </ChatRunningContext.Provider>
+      );
+      const { rerender, unmount } = render(row(true), { wrapper: Providers });
+      expect(screen.getByText('1/3')).toBeTruthy();
+      fireEvent.click(within(screen.getByRole('group', { name: 'Tool group: 3 steps' })).getByRole('button'));
+      expect(screen.queryByText('Incomplete')).toBeNull();
+      const pendingCall = within(screen.getAllByRole('group', { name: 'genericTool' })[1]).getByRole('button');
+      fireEvent.click(pendingCall);
+      rerender(row(false));
+      expect(screen.getByText('1 OK · 2 incomplete')).toBeTruthy();
+      expect(screen.getAllByText('Incomplete')).toHaveLength(2);
+      expect(pendingCall.getAttribute('aria-expanded')).toBe('true');
+      expect(pendingCall.isConnected).toBe(true);
+      unmount();
+      renderRow(structuredClone(message));
+      expect(screen.getByText('1 OK · 2 incomplete')).toBeTruthy();
+      fireEvent.click(within(screen.getByRole('group', { name: 'Tool group: 3 steps' })).getByRole('button'));
+      expect(screen.getAllByText('Incomplete')).toHaveLength(2);
+    });
+
+    it('leaves two of them as their own rows', () => {
+      const { container } = renderRow(withCalls([toolCall('call-1'), toolCall('call-2')]));
+
+      expect(screen.queryByRole('group', { name: /Tool group/ })).toBeNull();
+      expect(container.querySelectorAll('[data-testid="tool-badge"]')).toHaveLength(2);
+    });
+
+    it('keeps a call waiting on approval out of the fold', () => {
+      renderRow(
+        withCalls([toolCall('call-1'), toolCall('call-2'), toolCall('call-3', 'dangerousTool', 'call')], {
+          requireApprovalMetadata: { 'call-3': { toolCallId: 'call-3', toolName: 'dangerousTool', args: {} } },
+        }),
+      );
+
+      expect(screen.queryByRole('group', { name: /Tool group/ })).toBeNull();
+      expect(screen.getByText('Approve')).toBeTruthy();
+    });
+
+    it('lets a docked task update sit inside the run without breaking it', () => {
+      renderRow(
+        withCalls([toolCall('call-1'), toolCall('task-1', 'task_update'), toolCall('call-2'), toolCall('call-3')]),
+      );
+
+      expect(screen.getByRole('group', { name: 'Tool group: 3 steps' })).toBeTruthy();
+    });
+
+    // A thread read back without its suspend payload draws the question as a plain badge. It is still
+    // a question, so it breaks the run rather than folding away with the calls around it.
+    it('keeps a question out of the fold even where nothing is left to answer', () => {
+      const { container } = render(
+        <MessageRow
+          readOnly
+          message={withCalls([
+            toolCall('call-1'),
+            toolCall('ask-1', 'ask_user'),
+            toolCall('call-2'),
+            toolCall('call-3'),
+          ])}
+        />,
+        { wrapper: Providers },
+      );
+
+      expect(screen.queryByRole('group', { name: /Tool group/ })).toBeNull();
+      expect(container.querySelectorAll('[data-testid="tool-badge"]')).toHaveLength(4);
+    });
   });
 
   it('routes an OM observation tool into the observation marker badge', () => {

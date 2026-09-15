@@ -130,7 +130,11 @@ jobs:
         env:
           TURBO_CACHE: local:rw
           NODE_OPTIONS: --max-old-space-size=8192
-        run: pnpm turbo --filter "!./examples/**/*" --filter "!./docs/" --filter "!./explorations/**/*" build
+        # @mastra/mcp-docs-server#build depends on mastra-docs#build, which
+        # runs `git log --name-status` across the repo. In this blobless,
+        # credential-less checkout that lazy-fetches blobs and fails. Nothing
+        # else depends on it, so leave it out of the gate build.
+        run: pnpm turbo --filter "!./examples/**/*" --filter "!./docs/" --filter "!./explorations/**/*" --filter "!@mastra/mcp-docs-server" build
 
       - name: Run changed tests against base
         if: ${{ steps.changed_tests.outputs.has_tests == 'true' }}

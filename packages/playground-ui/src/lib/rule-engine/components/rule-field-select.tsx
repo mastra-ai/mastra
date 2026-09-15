@@ -48,7 +48,7 @@ const FieldLevelSelect: React.FC<FieldLevelSelectProps> = ({
   return (
     <div className={cn('relative', className)}>
       <Select value={value} onValueChange={onChange}>
-        <SelectTrigger className="bg-surface4 text-neutral6 min-w-35" size="sm">
+        <SelectTrigger className="bg-surface4 text-neutral6" size="sm">
           <SelectValue placeholder={placeholder} />
         </SelectTrigger>
         <SelectContent>
@@ -132,7 +132,7 @@ export const RuleFieldSelect: React.FC<RuleFieldSelectProps> = ({ schema, value,
   );
 
   if (selectors.length === 0) {
-    return <div className={cn('text-sm text-neutral3', className)}>No fields available</div>;
+    return <div className={cn('text-ui-md text-neutral3', className)}>No fields available</div>;
   }
 
   return (

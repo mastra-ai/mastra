@@ -67,6 +67,7 @@ describe('WorkerBundler', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+    vi.unstubAllEnvs();
   });
 
   describe('getEntry', () => {
@@ -99,15 +100,38 @@ describe('WorkerBundler', () => {
     });
   });
 
-  it('reports starting until workers are ready, then reports healthy', async () => {
+  it('serves live worker topology from /config', async () => {
+    const { getWorkerEntry } = await import('./WorkerBundler');
+    const workerEntry = getWorkerEntry();
+
+    expect(workerEntry).toContain("request.url === '/config'");
+    expect(workerEntry).toContain('mastra.getWorkerConfig()');
+    expect(workerEntry).not.toContain("new URL('./workers.json', import.meta.url)");
+    expect(workerEntry).not.toContain('buildTime');
+  });
+
+  it('reports health and serves live worker config', async () => {
     const { getWorkerEntry } = await import('./WorkerBundler');
     const tempDir = await mkdtemp(join(tmpdir(), 'mastra-worker-health-'));
     const port = await getAvailablePort();
     const workerEntry = getWorkerEntry().replace("from '#mastra'", "from './mastra.mjs'");
     await writeFile(
       join(tempDir, 'mastra.mjs'),
-      `export const mastra = {
-        async startWorkers() { await new Promise(resolve => process.stdin.once('data', resolve)); },
+      `let workersReady = false;
+      export const mastra = {
+        getWorkerConfig() {
+          return {
+            version: 1,
+            orchestration: workersReady ? { group: 'runtime-group', enabled: true } : { enabled: false },
+            scheduler: { enabled: false },
+            backgroundTasks: { enabled: false },
+            custom: workersReady ? ['cleanup-jobs'] : [],
+          };
+        },
+        async startWorkers() {
+          await new Promise(resolve => process.stdin.once('data', resolve));
+          workersReady = true;
+        },
         async stopWorkers() {},
       };`,
     );
@@ -115,7 +139,11 @@ describe('WorkerBundler', () => {
 
     const child = spawn(process.execPath, ['worker.mjs'], {
       cwd: tempDir,
-      env: { ...process.env, PORT: String(port) },
+      env: {
+        ...process.env,
+        PORT: String(port),
+        MASTRA_WORKER_CONFIG_TOKEN: 'managed-config-token',
+      },
       stdio: ['pipe', 'ignore', 'pipe'],
     });
     const childExit = once(child, 'exit');
@@ -127,8 +155,30 @@ describe('WorkerBundler', () => {
 
     try {
       await waitForHealthStatus(port, 503);
+      await expect(fetch(`http://127.0.0.1:${port}/config`)).resolves.toMatchObject({ status: 401 });
+      const startingConfig = await fetch(`http://127.0.0.1:${port}/config`, {
+        headers: { authorization: 'Bearer managed-config-token' },
+      }).then(response => response.json());
+      expect(startingConfig).toEqual({
+        version: 1,
+        orchestration: { enabled: false },
+        scheduler: { enabled: false },
+        backgroundTasks: { enabled: false },
+        custom: [],
+      });
+
       child.stdin.write('ready');
       await waitForHealthStatus(port, 200);
+      const readyConfig = await fetch(`http://127.0.0.1:${port}/config`, {
+        headers: { authorization: 'Bearer managed-config-token' },
+      }).then(response => response.json());
+      expect(readyConfig).toEqual({
+        version: 1,
+        orchestration: { group: 'runtime-group', enabled: true },
+        scheduler: { enabled: false },
+        backgroundTasks: { enabled: false },
+        custom: ['cleanup-jobs'],
+      });
     } finally {
       child.kill('SIGTERM');
       await childExit;

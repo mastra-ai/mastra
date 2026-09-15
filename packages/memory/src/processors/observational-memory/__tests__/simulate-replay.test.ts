@@ -50,13 +50,38 @@ describe('direct Subconscious replay', () => {
     const generatedPrompts: string[] = [];
     let firstRecordId = '';
     let nodeId = '';
+    const getActiveReminderRecord = async () =>
+      (
+        await store.listKnowledgeAbout({
+          node: nodeId,
+          scope: ['org:acme', 'resource:atlas'],
+          limit: 10,
+        })
+      ).records.find(record => !record.deletedAt)!;
 
     vi.spyOn(Agent.prototype, 'sendMessage').mockImplementation(function (this: Agent, message: any, options: any) {
       const text = String(message.contents);
       generatedPrompts.push(text);
       const consumeStream = async () => {
         const tools = (await this.listTools({ requestContext: options?.ifIdle?.streamOptions?.requestContext })) as any;
-        if (!nodeId) {
+        if (this.id.startsWith('subconscious-remind-')) {
+          const reminderRecord = await getActiveReminderRecord();
+          const eventId = message.metadata.subconsciousRemind.eventId;
+          await tools.send_reminder!.execute?.(
+            {
+              eventId,
+              reminder: `Project Atlas now launches on October 1. Source: ${reminderRecord.id}`,
+              sourceIds: [reminderRecord.id],
+            },
+            {
+              agent: {
+                threadId: options.threadId,
+                resourceId: options.resourceId,
+                messages: [{ role: 'user', content: text, metadata: message.metadata }],
+              },
+            } as any,
+          );
+        } else if (!nodeId) {
           const created = (await tools.knowledge_create!.execute?.(
             {
               name: 'Project Atlas',
@@ -91,13 +116,7 @@ describe('direct Subconscious replay', () => {
       return { accepted: Promise.resolve({ action: 'wake', output: { consumeStream } }), signal: {} } as any;
     });
     (vi.spyOn(Agent.prototype, 'generate') as any).mockImplementation(async () => {
-      const reminderRecord = (
-        await store.listKnowledgeAbout({
-          node: nodeId,
-          scope: ['org:acme', 'resource:atlas'],
-          limit: 10,
-        })
-      ).records.find(record => !record.deletedAt)!;
+      const reminderRecord = await getActiveReminderRecord();
       return { text: `Project Atlas now launches on October 1. Source: ${reminderRecord.id}` } as any;
     });
 

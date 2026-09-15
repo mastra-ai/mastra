@@ -29,8 +29,9 @@ describe('AgentController fork clone metadata wiring', () => {
     capturedOpts.length = 0;
   });
 
-  it('passes forkedSubagent + parentThreadId metadata through to memory.cloneThread', async () => {
-    const cloneThread = vi.fn().mockResolvedValue({
+  it('passes forkedSubagent + parentThreadId metadata through to memory.copyThread', async () => {
+    const cloneThread = vi.fn();
+    const copyThread = vi.fn().mockResolvedValue({
       thread: {
         id: 'forked-thread-id',
         resourceId: 'parent-resource',
@@ -39,11 +40,10 @@ describe('AgentController fork clone metadata wiring', () => {
         updatedAt: new Date(),
         metadata: {},
       },
-      clonedMessages: [],
       messageIdMap: {},
     });
 
-    const memoryFactory = vi.fn().mockResolvedValue({ cloneThread });
+    const memoryFactory = vi.fn().mockResolvedValue({ cloneThread, copyThread });
 
     const subagents: AgentControllerSubagent[] = [
       {
@@ -90,8 +90,10 @@ describe('AgentController fork clone metadata wiring', () => {
 
     await cloneCb({ sourceThreadId: 'parent-thread-xyz', title: 'Fork: Explore subagent' });
 
-    expect(cloneThread).toHaveBeenCalledTimes(1);
-    expect(cloneThread).toHaveBeenCalledWith({
+    // The fork path must never hydrate message payloads.
+    expect(cloneThread).not.toHaveBeenCalled();
+    expect(copyThread).toHaveBeenCalledTimes(1);
+    expect(copyThread).toHaveBeenCalledWith({
       sourceThreadId: 'parent-thread-xyz',
       resourceId: 'parent-resource',
       title: 'Fork: Explore subagent',

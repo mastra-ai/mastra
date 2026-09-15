@@ -374,7 +374,9 @@ export function convertMastraChunkToAISDKBase<OUTPUT = undefined>({
         output: hasTransformedToolPayload(displayOutputTransform)
           ? displayOutputTransform.transformed
           : chunk.payload.result,
-        // providerMetadata: chunk.payload.providerMetadata, // AI v5 types don't show this?
+        // Carries the `toModelOutput` projection as `mastra.modelOutput`; dropping it sent
+        // the raw tool output back into the prompt on a `useChat` round trip (issue #22012).
+        ...(chunk.payload.providerMetadata != null ? { providerMetadata: chunk.payload.providerMetadata } : {}),
       };
     case 'tool-error':
       return {
@@ -595,6 +597,16 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
   | undefined {
   const partType = part?.type;
 
+  if (
+    !sendReasoning &&
+    (partType === 'text-start' || partType === 'text-delta' || partType === 'text-end') &&
+    part.providerMetadata?.openai?.itemId != null
+  ) {
+    // Replaying a stored OpenAI text item requires its reasoning item, which is hidden here.
+    const { itemId, ...openai } = { ...part.providerMetadata.openai };
+    part = { ...part, providerMetadata: { ...part.providerMetadata, openai } };
+  }
+
   switch (partType) {
     case 'text-start': {
       return {
@@ -739,6 +751,9 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
         toolCallId: part.toolCallId,
         output: part.output,
         ...(part.providerExecuted != null ? { providerExecuted: part.providerExecuted } : {}),
+        // Mirrors `tool-call` above. The AI SDK stores this as the UI part's
+        // `resultProviderMetadata`, so `mastra.modelOutput` survives the trip (issue #22012).
+        ...(part.providerMetadata != null ? { providerMetadata: part.providerMetadata } : {}),
         ...(part.dynamic != null ? { dynamic: part.dynamic } : {}),
       };
     }

@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import type { UISpan, UISpanStyle } from '../types';
 import { TimelineStructureSign } from './timeline-structure-sign';
 import { cn } from '@/lib/utils';
@@ -9,15 +10,11 @@ type TimelineNameColProps = {
   depth?: number;
   onSpanClick?: (id: string) => void;
   selectedSpanId?: string;
+  revealSpanId?: string;
   isLastChild?: boolean;
   hasChildren?: boolean;
   isRootSpan?: boolean;
   isExpanded?: boolean;
-};
-
-// Nested rows mount late, once expansion opens their ancestors.
-const revealRow = (node: HTMLDivElement | null) => {
-  node?.scrollIntoView({ block: 'nearest' });
 };
 
 export function TimelineNameCol({
@@ -27,19 +24,29 @@ export function TimelineNameCol({
   depth = 0,
   onSpanClick,
   selectedSpanId,
+  revealSpanId,
   isLastChild,
   hasChildren: _hasChildren,
   isRootSpan,
   isExpanded: _isExpanded,
 }: TimelineNameColProps) {
+  const rowRef = useRef<HTMLDivElement>(null);
   const isSelected = selectedSpanId === span.id;
+  const isRevealed = revealSpanId === span.id;
+  const shouldScrollIntoView = isSelected || isRevealed;
+
+  // Nested rows mount late, once expansion opens their ancestors; the effect runs on that
+  // mount as well as when the row becomes the selected / revealed one.
+  useEffect(() => {
+    if (shouldScrollIntoView) rowRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }, [shouldScrollIntoView]);
 
   return (
     <div
-      ref={isSelected ? revealRow : undefined}
+      ref={rowRef}
       aria-label={`View details for span ${span.name}`}
       className={cn('flex min-h-8 items-center rounded-md rounded-l-lg opacity-80', {
-        'opacity-30 [&:hover]:opacity-60': isFaded,
+        'opacity-40 [&:hover]:opacity-70 dark:opacity-30 dark:[&:hover]:opacity-60': isFaded,
         'bg-surface4': isSelected,
       })}
       style={{ paddingLeft: `${depth * 1}rem` }}

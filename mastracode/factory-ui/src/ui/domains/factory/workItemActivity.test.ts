@@ -18,6 +18,8 @@ const item: WorkItem = {
   stageHistory: [],
   sessions: {},
   metadata: {},
+  triageType: null,
+  acceptedAt: null,
   commentCount: 0,
   feedActivityAt: null,
   revision: 1,

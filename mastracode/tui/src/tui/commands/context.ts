@@ -2,6 +2,7 @@ import { buildContextAudit } from '@mastra/code-sdk/agents/context-audit';
 import type { ContextAudit, ContextAuditGroup, ContextAuditTool } from '@mastra/code-sdk/agents/context-audit';
 import { getDynamicInstructionSections } from '@mastra/code-sdk/agents/instructions';
 import { formatSkillsCatalog } from '@mastra/core/processors';
+import { TUI_CO_AUTHOR } from '../../commit-attribution.js';
 import type { SlashCommandContext } from './types.js';
 
 /**
@@ -138,6 +139,7 @@ export async function handleContextCommand(ctx: SlashCommandContext): Promise<vo
   try {
     const instructionSections = await getDynamicInstructionSections({
       requestContext: requestContextForSession(ctx),
+      coAuthor: TUI_CO_AUTHOR,
     });
 
     let skillsCatalog: string | undefined;

@@ -36,13 +36,8 @@ createStartRouteHandler({
 
 ## Documentation
 
-`createStartRouteHandler()` returns GET, POST, PUT, DELETE, PATCH, OPTIONS, and HEAD handlers compatible with TanStack Start's server route API. It lazily initializes the underlying Hono adapter on the first request and forwards the standard Web `Request` to the Mastra server.
-
-The adapter reads custom API routes, per-route authentication, MCP settings, and `bodySizeLimit` from the Mastra server configuration. Request bodies default to a 4.5 MB limit when no application-specific value is configured.
-
-Use `tools` to register additional server tools. The `prefix` defaults to `/api` and must match the path before the `$` splat route. Authentication and each custom route's `requiresAuth` value are passed to the common Mastra server adapter.
-
-A2A operations use an in-memory task store. Keep the target TanStack Start deployment's process lifecycle in mind when relying on task state across separate requests or replicas.
+- [TanStack Start reference](https://mastra.ai/reference/server/tanstack-start-adapter)
+- [Guide](https://mastra.ai/integrations/frameworks/tanstack-start)
 
 ## Changelog
 

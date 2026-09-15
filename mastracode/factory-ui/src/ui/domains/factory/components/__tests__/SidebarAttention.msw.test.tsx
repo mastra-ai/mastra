@@ -6,6 +6,7 @@ import { MemoryRouter, Route, Routes } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { queryKeys } from '../../../../../api/keys';
+import { attentionKindSummaries } from '../../../../../../e2e/ui/attention';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import {
@@ -14,10 +15,14 @@ import {
   type FactoryAttentionView,
   type FactoryActivityAttentionItem,
   type FactoryAutomationFailedAttentionItem,
+  type FactoryAutomationProposedAttentionItem,
   type FactoryMentionAttentionItem,
+  type FactorySupervisorFindingAttentionItem,
 } from '../../services/attention';
 import { playAttentionSoundOnce } from '../../services/attentionSound';
-import { ATTENTION_PREVIEW_LIMIT, SidebarAttention } from '../SidebarAttention';
+import { ATTENTION_PREVIEW_LIMIT } from '../../../../../hooks/useFactoryAttention';
+import { AttentionPreview } from '../OverviewLists';
+import { SidebarAttention } from '../SidebarAttention';
 
 const FACTORY_ID = 'factory-1';
 const DECISION_ID = 'decision-1';
@@ -93,6 +98,43 @@ function attentionItem(occurrence = 1): FactoryAutomationFailedAttentionItem {
   };
 }
 
+function proposedItem(): FactoryAutomationProposedAttentionItem {
+  return {
+    key: `factory:${FACTORY_ID}:attention:automation-proposed:${DECISION_ID}:0`,
+    kind: 'automation-proposed',
+    decisionId: DECISION_ID,
+    occurrence: 0,
+    workItemId: 'item-1',
+    title: 'Fix the loader',
+    detail: 'Waiting for approval to run review',
+    decisionType: 'invokeSkill',
+    occurredAt: '2026-08-20T10:00:00.000Z',
+    read: false,
+    archived: false,
+    target: { kind: 'work-item', workItemId: 'item-1', board: 'work' },
+  };
+}
+
+function supervisorFindingItem(): FactorySupervisorFindingAttentionItem {
+  return {
+    key: `factory:${FACTORY_ID}:attention:supervisor-finding:decision-stuck:${DECISION_ID}:0`,
+    kind: 'supervisor-finding',
+    findingKey: `decision-stuck:${DECISION_ID}`,
+    findingTitle: 'A decision is stuck',
+    evidence: 'The decision has been retrying past its backoff.',
+    beganAt: '2026-09-03T04:45:00.000Z',
+    suggestedRepair: null,
+    occurrence: 0,
+    workItemId: 'item-1',
+    title: 'A decision is stuck',
+    detail: 'The decision has been retrying past its backoff.',
+    occurredAt: '2026-09-03T05:00:00.000Z',
+    read: false,
+    archived: false,
+    target: { kind: 'work-item', workItemId: 'item-1', board: 'work' },
+  };
+}
+
 function mentionItem(): FactoryMentionAttentionItem {
   return {
     key: `factory:${FACTORY_ID}:attention:mention:comment-1:0`,
@@ -154,14 +196,16 @@ function renderAttention() {
 function attentionView(value: string | null): FactoryAttentionView {
   return value === 'unread' || value === 'archived' ? value : 'open';
 }
-function stubAttention(initialItems: FactoryAttentionItem[], initialApprovalCount = 0) {
+function stubAttention(initialItems: FactoryAttentionItem[]) {
   let items = initialItems;
-  let approvalCount = initialApprovalCount;
   const retried: string[] = [];
+  const settled: string[] = [];
+  const listed: string[] = [];
   const receipts: string[] = [];
   server.use(
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/attention`, ({ request }) => {
       const url = new URL(request.url);
+      listed.push(url.search);
       const view = attentionView(url.searchParams.get('view'));
       const limit = Number(url.searchParams.get('limit') ?? 50);
       const visible = items.filter(item => {
@@ -169,23 +213,12 @@ function stubAttention(initialItems: FactoryAttentionItem[], initialApprovalCoun
         if (view === 'unread') return !item.read && !item.archived;
         return !item.archived;
       });
-      const unread = (rows: FactoryAttentionItem[]) => rows.filter(row => !row.read && !row.archived).length;
-      const badge = items.filter(item => item.kind !== 'activity');
-      const activity = items.filter(item => item.kind === 'activity');
-      const latest = badge[0];
-      const tierParam = url.searchParams.get('tier');
-      const tiered = tierParam === 'badge' ? visible.filter(item => item.kind !== 'activity') : visible;
+      const requestedKinds = url.searchParams.getAll('kind');
+      const matching = requestedKinds.length > 0 ? visible.filter(item => requestedKinds.includes(item.kind)) : visible;
       return HttpResponse.json({
-        items: tiered.slice(0, limit),
-        openCount: badge.filter(item => !item.archived).length + approvalCount,
-        approvalCount,
-        badgeCount: unread(badge) + approvalCount,
-        unreadCount: unread(badge),
-        activityUnreadCount: unread(activity),
-        latestOccurrenceKey: latest?.key ?? null,
-        latestOccurrenceAt: latest?.occurredAt ?? null,
-        latestOccurrenceUnread: latest !== undefined && !latest.read && !latest.archived,
-        hasMore: tiered.length > limit,
+        items: matching.slice(0, limit),
+        kinds: attentionKindSummaries(items),
+        hasMore: matching.length > limit,
       });
     }),
     http.post(
@@ -212,16 +245,20 @@ function stubAttention(initialItems: FactoryAttentionItem[], initialApprovalCoun
       items = items.filter(item => item.kind !== 'automation-failed' || item.decisionId !== params.decisionId);
       return HttpResponse.json({ decision: { id: params.decisionId, status: 'retry' } });
     }),
+    http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/decisions/:decisionId/:action`, ({ params }) => {
+      settled.push(`${params.decisionId}/${params.action}`);
+      items = items.filter(item => item.kind !== 'automation-proposed' || item.decisionId !== params.decisionId);
+      return HttpResponse.json({ decision: { id: params.decisionId, status: params.action } });
+    }),
   );
   return {
     setItems: (nextItems: FactoryAttentionItem[]) => {
       items = nextItems;
     },
     retried,
+    settled,
     receipts,
-    setApprovalCount: (count: number) => {
-      approvalCount = count;
-    },
+    listed,
   };
 }
 
@@ -258,7 +295,7 @@ describe('Sidebar attention', () => {
 
     await waitFor(() => expect(api.retried).toEqual([DECISION_ID]));
     await waitForMutationsIdle(client);
-    expect(await screen.findByText('Nothing needs attention.')).toBeVisible();
+    expect(await screen.findByText('Nothing needs you.')).toBeVisible();
   });
 
   it('keeps read failures open and hides archived failures', async () => {
@@ -317,7 +354,7 @@ describe('Sidebar attention', () => {
     const { client } = renderAttention();
     const emptyTrigger = await screen.findByRole('button', { name: 'Needs attention' });
     await user.click(emptyTrigger);
-    await screen.findByText('Nothing needs attention.');
+    await screen.findByText('Nothing needs you.');
     await user.click(emptyTrigger);
     expect(oscillatorStart).not.toHaveBeenCalled();
 
@@ -373,6 +410,23 @@ describe('Sidebar attention', () => {
     await screen.findByRole('button', { name: 'Needs attention, 1 open' });
   });
 
+  it('surfaces a supervisor finding in the badge and routes its receipt through the finding key', async () => {
+    const api = stubAttention([supervisorFindingItem()]);
+    const user = userEvent.setup();
+    const { client } = renderAttention();
+
+    await user.click(await screen.findByRole('button', { name: 'Needs attention, 1 unread, 1 open' }));
+
+    expect(await screen.findByText('finding')).toBeVisible();
+    expect(screen.getByText('The decision has been retrying past its backoff.')).toBeVisible();
+    expect(screen.queryByRole('button', { name: /Retry/ })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Mark A decision is stuck as read' }));
+    await waitForMutationsIdle(client);
+
+    expect(api.receipts).toEqual([`supervisor-finding/decision-stuck:${DECISION_ID}/0/read`]);
+  });
+
   it('does not offer Retry for a deterministic failure', async () => {
     stubAttention([{ ...attentionItem(), failureCode: 'unsupported_provider_item', canRetry: false }]);
     const user = userEvent.setup();
@@ -384,21 +438,63 @@ describe('Sidebar attention', () => {
     expect(screen.getByRole('link', { name: 'Open thread for Fix the loader' })).toBeVisible();
   });
 
-  it('shows proposed work as one project queue', async () => {
-    stubAttention([], 12);
+  it('a parked run stays out of the badge and the sound, one tab away in the preview', async () => {
+    const api = stubAttention([]);
     const user = userEvent.setup();
-    renderAttention();
+    const { client } = renderAttention();
+    await screen.findByRole('button', { name: 'Needs attention' });
 
-    await user.click(await screen.findByRole('button', { name: 'Needs attention, 12 waiting for approval, 12 open' }));
+    api.setItems([proposedItem()]);
+    await client.invalidateQueries({ queryKey: queryKeys.factoryAttentionRoot(FACTORY_ID) });
+    await waitForMutationsIdle(client);
 
-    expect(screen.getByText('waiting for approval')).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: /items waiting for approval/i })).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'View all attention' })).toHaveAttribute(
-      'href',
-      `/factories/${FACTORY_ID}/attention`,
-    );
-    expect(screen.queryByRole('button', { name: /mark/i })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Needs attention' }));
+    expect(await screen.findByText('Nothing needs you.')).toBeVisible();
+    expect(screen.queryByText('Waiting for approval to run review')).not.toBeInTheDocument();
+    expect(oscillatorStart).not.toHaveBeenCalled();
+    expect(api.listed).not.toContain('?view=open&kind=automation-proposed&limit=25');
+
+    await user.click(screen.getByRole('tab', { name: 'Approvals 1' }));
+    expect(await screen.findByText('Waiting for approval to run review')).toBeVisible();
+    await waitForMutationsIdle(client);
+    expect(api.listed).toContain('?view=open&kind=automation-proposed&limit=25');
+    expect(screen.getByRole('button', { name: 'Needs attention' })).toBeVisible();
+    expect(oscillatorStart).not.toHaveBeenCalled();
   });
+  it('the sidebar and the Overview preview share one attention query', async () => {
+    const api = stubAttention([attentionItem()]);
+    const { client } = renderWithProviders(
+      <MemoryRouter initialEntries={[`/factories/${FACTORY_ID}/overview`]}>
+        <MainSidebarProvider storageKey="sidebar-attention-shared" mobileBreakpoint={0}>
+          <Routes>
+            <Route
+              path="/factories/:factoryId/*"
+              element={
+                <>
+                  <MainSidebar>
+                    <MainSidebar.Bottom>
+                      <MainSidebar.NavList>
+                        <SidebarAttention />
+                      </MainSidebar.NavList>
+                    </MainSidebar.Bottom>
+                  </MainSidebar>
+                  <AttentionPreview factoryProjectId={FACTORY_ID} />
+                </>
+              }
+            />
+          </Routes>
+        </MainSidebarProvider>
+      </MemoryRouter>,
+    );
+
+    await screen.findByRole('button', { name: 'Needs attention, 1 unread, 1 open' });
+    expect(await screen.findByText('No active Factory binding for role work.')).toBeVisible();
+    await waitForMutationsIdle(client);
+    expect(api.listed).toEqual([
+      '?view=open&kind=automation-failed&kind=supervisor-finding&kind=agent-waiting&kind=mention&limit=25',
+    ]);
+  });
+
   it('deduplicates persisted sound claims by scope and occurrence', async () => {
     await playAttentionSoundOnce('user-1:factory-1', 'failure-1');
     const notesPerPlayback = oscillatorStart.mock.calls.length;
@@ -409,15 +505,26 @@ describe('Sidebar attention', () => {
     expect(oscillatorStart).toHaveBeenCalledTimes(notesPerPlayback);
   });
 
-  it('keeps the popover on the badge tier when newer activity fills the page', async () => {
+  it('keeps the popover on what needs a person when newer activity fills the page', async () => {
     const chatter = ['item-2', 'item-3', 'item-4', 'item-5', 'item-6'].map(id => activityItem(id, `Chatter on ${id}`));
     stubAttention([...chatter, mentionItem()]);
     const user = userEvent.setup();
-    renderAttention();
+    const { client } = renderAttention();
 
-    await user.click(await screen.findByRole('button', { name: 'Needs attention, 1 unread, 1 open' }));
+    const trigger = await screen.findByRole('button', { name: 'Needs attention, 1 unread, 1 open' });
+    await user.click(trigger);
 
     expect(screen.getByText('Fix the loader')).toBeVisible();
+    expect(screen.queryByText(/Chatter on/)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('tab', { name: 'Activity 5' }));
+    expect(await screen.findByText('Chatter on item-2')).toBeVisible();
+    await waitForMutationsIdle(client);
+    expect(screen.queryByText('Fix the loader')).not.toBeInTheDocument();
+
+    await user.click(trigger);
+    await user.click(trigger);
+    expect(await screen.findByText('Fix the loader')).toBeVisible();
     expect(screen.queryByText(/Chatter on/)).not.toBeInTheDocument();
   });
 });

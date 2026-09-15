@@ -25,14 +25,14 @@ export function SchedulesList({ schedules, isLoading, search = '' }: SchedulesLi
     );
   }, [schedules, search]);
 
-  const { containerRef, getRowProps } = useDataListKeyboard({ count: filtered.length });
+  const { containerRef, getRowProps } = useDataListKeyboard({ count: filtered.length, global: true });
 
   if (isLoading) {
     return <DataListSkeleton columns={COLUMNS} />;
   }
 
   return (
-    <DataList columns={COLUMNS} variant="striped" className="min-w-0" scrollRef={containerRef}>
+    <DataList columns={COLUMNS} className="min-w-0" scrollRef={containerRef}>
       <DataList.Top>
         <DataList.TopCell>Target</DataList.TopCell>
         <DataList.TopCell>Schedule ID</DataList.TopCell>

@@ -51,6 +51,14 @@ After running an experiment, the **Experiments** tab shows all runs for that dat
 
 In the **Experiments** tab, select **Compare** and choose two or more experiments to compare their scores and results side by side.
 
+## Delete experiments
+
+In Studio, open the global **Experiments** list and select **Delete Experiment** from a row, or delete the experiment from its details page. The global list also lets you delete experiments orphaned by dataset deletion, which no longer have a dataset details page.
+
+Deleting an experiment permanently removes its result records, plus the observability traces it produced and their associated spans, scores, feedback, metrics, and logs. A storage adapter without trace deletion support leaves the traces in place, logs a warning, and still deletes the experiment with its result records.
+
+You can also delete experiments with the [Core API](/reference/datasets/deleteExperiment) or [Client SDK](/reference/client-js/datasets#deleteexperiment). The same operation is available through the [server routes](/reference/server/routes#delete-an-experiment).
+
 ## Experiment targets
 
 You can point an experiment at a registered agent, workflow, or scorer.
@@ -317,7 +325,7 @@ Teardown failures are logged rather than propagated. By the time `afterEach` run
 
 When an experiment runs an agent that calls side-effecting tools, attach static tool mocks to individual dataset items to make the run deterministic. During the experiment, a mocked tool returns its declared output instead of executing. Tools without a mock on the item run live by default.
 
-Mocks live on the dataset item, so they version with the row and travel with the test case. Each mock declares a tool name, the arguments it expects, and the output to return:
+Mocks are stored and versioned with the dataset item. Each mock specifies the tool name and expected arguments, along with the output to return:
 
 ```typescript title="src/mastra/experiments/tool-mocks.ts"
 await dataset.addItem({
@@ -359,7 +367,7 @@ The item value takes precedence over the experiment value. A denied call fails w
 
 ### Matching and consumption
 
-Arguments are matched strictly: object key order is ignored and array order is substantial, plus there is no type coercion. A mock is served only when the agent calls the tool with arguments that deep-equal the mock's `args`.
+Arguments are matched strictly: object key order is ignored, but array order matters. Values aren't coerced to other types. A mock is served only when the agent calls the tool with arguments that deep-equal the mock's `args`.
 
 When an item declares several mocks for the same tool and arguments, they're consumed in order, the first call gets the first mock, the next call gets the second, and so on. Ordering is tracked per `(toolName, args)` group and is independent across different arguments.
 
@@ -392,7 +400,7 @@ While mock interception is active, the agent's tools execute sequentially so rep
 
 ### Diagnostics
 
-Each item result carries a `toolMockReport` describing what the run did with the item's mocks:
+Each item result includes a `toolMockReport` listing which mocks were used and which tool calls ran without a mock:
 
 ```typescript
 for (const item of summary.results) {

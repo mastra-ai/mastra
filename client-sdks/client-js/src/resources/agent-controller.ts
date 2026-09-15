@@ -6,6 +6,7 @@ import type {
 } from '@mastra/core/agent-controller';
 export type { MastraDBMessage, MastraMessageContentV2, MastraMessagePart } from '@mastra/core/agent-controller';
 import type { RequestContext } from '@mastra/core/request-context';
+import type { StorageListMessagesInput, StorageListMessagesOutput } from '@mastra/core/storage';
 
 import type {
   AgentControllerActiveRun,
@@ -48,6 +49,32 @@ type WireEventOf<T extends AgentControllerWireEvent['type']> = Extract<AgentCont
 /** A `MastraDBMessage` before {@link hydrateMessage} turns its `createdAt` back into a `Date`. */
 type SerializedMastraDBMessage = WireEventOf<'message_start'>['message'];
 
+type AgentControllerModernListMessagesOptions = Omit<StorageListMessagesInput, 'threadId' | 'resourceId'> & {
+  limit?: never;
+};
+
+type AgentControllerLegacyPagedListMessagesOptions = {
+  /** @deprecated Use `perPage` instead. May only be combined with `page`. */
+  limit: number;
+  page?: number;
+  perPage?: never;
+  orderBy?: never;
+  filter?: never;
+  include?: never;
+};
+
+/** Pagination, ordering, filtering, and include options for an Agent Controller thread's messages. */
+export type AgentControllerListMessagesOptions =
+  | AgentControllerModernListMessagesOptions
+  | AgentControllerLegacyPagedListMessagesOptions;
+
+/** A page of hydrated Agent Controller thread messages. */
+export type AgentControllerListMessagesResult = StorageListMessagesOutput;
+
+type SerializedAgentControllerListMessagesResult = Omit<StorageListMessagesOutput, 'messages'> & {
+  messages: SerializedMastraDBMessage[];
+};
+
 /** An `AgentControllerThread` before {@link hydrateThread} turns its timestamps back into `Date`s. */
 type SerializedThread = WireEventOf<'thread_created'>['thread'];
 
@@ -79,7 +106,7 @@ type NotificationEvent =
 /** The timestamps the SDK gives back as `Date`s. {@link hydrateKnownEvent} is typed against this, so the two cannot drift. */
 type Hydrated<T> = T extends { type: 'thread_created' }
   ? Omit<T, 'thread'> & { thread: AgentControllerThread }
-  : T extends { type: 'message_start' | 'message_update' | 'message_end' }
+  : T extends { type: 'message_start' }
     ? Omit<T, 'message'> & { message: MastraDBMessage }
     : T;
 
@@ -191,8 +218,6 @@ function isKnownParsedEvent(event: ParsedEvent): event is AgentControllerWireEve
 function hydrateKnownEvent(event: AgentControllerWireEvent | NotificationEvent): KnownAgentControllerEvent {
   switch (event.type) {
     case 'message_start':
-    case 'message_update':
-    case 'message_end':
       return { ...event, message: hydrateMessage(event.message) };
     case 'thread_created':
       return { ...event, thread: hydrateThread(event.thread) };
@@ -413,6 +438,9 @@ export class AgentControllerSession extends BaseResource {
         while (!cancelled) {
           const { done, value } = await reader.read();
           if (done) return cancelled ? { kind: 'cancelled' } : { kind: 'done' };
+          // A read() that resolved just before unsubscribe() must not deliver its
+          // frame: cancellation happened while we were awaiting.
+          if (cancelled) return { kind: 'cancelled' };
           buffer += decoder.decode(value, { stream: true });
 
           let separator: { index: number; length: number } | null;
@@ -429,6 +457,9 @@ export class AgentControllerSession extends BaseResource {
               } catch {
                 continue;
               }
+              // An earlier onEvent in this same buffered chunk may have called
+              // unsubscribe(); stop before delivering any further frames.
+              if (cancelled) return { kind: 'cancelled' };
               try {
                 options.onEvent(event);
               } catch (cause) {
@@ -500,6 +531,9 @@ export class AgentControllerSession extends BaseResource {
         let attempts = 0;
         let reconnectedResponse: Response | undefined;
         while (!reconnectedResponse) {
+          // A requestStream() that rejected after unsubscribe() must not surface
+          // as a terminal onError: honor cancellation before exhausting the budget.
+          if (cancelled) return;
           if (attempts >= reconnectOptions.maxRetries) {
             reportTerminalError(result);
             return;
@@ -524,6 +558,13 @@ export class AgentControllerSession extends BaseResource {
           options.onReconnect?.();
         } catch {
           // Consumer callback failures must not kill the stream loop.
+        }
+        // onReconnect may have called unsubscribe(). The new response has not yet
+        // acquired a reader (pump() runs on the next iteration), so unsubscribe()
+        // had nothing to cancel — cancel its body here before the loop exits.
+        if (cancelled) {
+          void response.body?.cancel().catch(() => {});
+          return;
         }
       }
     };
@@ -685,13 +726,47 @@ export class AgentControllerSession extends BaseResource {
     });
   }
 
-  /** List messages for a specific thread. */
-  async listMessages(threadId: string, limit?: number): Promise<MastraDBMessage[]> {
-    const params = limit != null ? `?limit=${limit}` : '';
-    const body = await this.request<{ messages: SerializedMastraDBMessage[] }>(
-      this.url(`${this.base()}/threads/${encodeURIComponent(threadId)}/messages${params}`),
+  /** List messages for a specific thread, preserving the legacy array-returning limit overload. */
+  async listMessages(threadId: string, limit?: number): Promise<MastraDBMessage[]>;
+  async listMessages(
+    threadId: string,
+    options: AgentControllerListMessagesOptions,
+  ): Promise<AgentControllerListMessagesResult>;
+  async listMessages(
+    threadId: string,
+    options?: number | AgentControllerListMessagesOptions,
+  ): Promise<MastraDBMessage[] | AgentControllerListMessagesResult> {
+    const queryParams = new URLSearchParams();
+    const legacy = typeof options === 'number' || options === undefined;
+
+    if (typeof options === 'number') {
+      queryParams.set('limit', String(options));
+    } else if (options === undefined) {
+      queryParams.set('perPage', 'false');
+    } else {
+      const { limit, page, perPage, orderBy, filter, include } = options;
+      if (
+        limit !== undefined &&
+        (perPage !== undefined || orderBy !== undefined || filter !== undefined || include !== undefined)
+      ) {
+        throw new Error('limit can only be combined with page; use perPage with orderBy, filter, or include');
+      }
+      if (limit !== undefined) queryParams.set('limit', String(limit));
+      if (page !== undefined) queryParams.set('page', String(page));
+      if (perPage !== undefined) queryParams.set('perPage', String(perPage));
+      if (orderBy) queryParams.set('orderBy', JSON.stringify(orderBy));
+      if (filter) queryParams.set('filter', JSON.stringify(filter));
+      if (include) queryParams.set('include', JSON.stringify(include));
+    }
+
+    const query = queryParams.toString();
+    const body = await this.request<SerializedAgentControllerListMessagesResult>(
+      this.url(`${this.base()}/threads/${encodeURIComponent(threadId)}/messages${query ? `?${query}` : ''}`),
     );
-    return body.messages.map(hydrateMessage);
+    const messages = body.messages.map(hydrateMessage);
+
+    if (legacy) return messages;
+    return { ...body, messages };
   }
 
   /**

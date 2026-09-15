@@ -92,8 +92,8 @@ export class BackgroundTasksPG extends BackgroundTasksStorage {
 
   constructor(config: PgDomainConfig) {
     super();
-    const { client, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
-    this.#db = new PgDB({ client, schemaName, skipDefaultIndexes });
+    const { client, readClient, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
+    this.#db = new PgDB({ client, readClient, schemaName, skipDefaultIndexes });
     this.#schema = schemaName || 'public';
     this.#skipDefaultIndexes = skipDefaultIndexes;
     this.#indexes = indexes?.filter(idx => (BackgroundTasksPG.MANAGED_TABLES as readonly string[]).includes(idx.table));
@@ -382,7 +382,7 @@ export class BackgroundTasksPG extends BackgroundTasksStorage {
     const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
     // Count total matching rows (before pagination)
-    const countResult = await this.#db.client.oneOrNone<{ count: string }>(
+    const countResult = await this.#db.readClient.oneOrNone<{ count: string }>(
       `SELECT COUNT(*) as count FROM ${table} ${where}`,
       params.slice(0, paramIdx - 1),
     );
@@ -409,7 +409,7 @@ export class BackgroundTasksPG extends BackgroundTasksStorage {
       }
     }
 
-    const rows = await this.#db.client.manyOrNone(sql, params);
+    const rows = await this.#db.readClient.manyOrNone(sql, params);
     return { tasks: rows.map(rowToTask), total };
   }
 
@@ -459,7 +459,7 @@ export class BackgroundTasksPG extends BackgroundTasksStorage {
 
   async getRunningCount(): Promise<number> {
     const table = getTableName(getSchemaName(this.#schema));
-    const result = await this.#db.client.oneOrNone<{ count: string }>(
+    const result = await this.#db.readClient.oneOrNone<{ count: string }>(
       `SELECT COUNT(*) FROM ${table} WHERE "status" = 'running'`,
     );
     return Number(result?.count ?? 0);
@@ -467,7 +467,7 @@ export class BackgroundTasksPG extends BackgroundTasksStorage {
 
   async getRunningCountByAgent(agentId: string): Promise<number> {
     const table = getTableName(getSchemaName(this.#schema));
-    const result = await this.#db.client.oneOrNone<{ count: string }>(
+    const result = await this.#db.readClient.oneOrNone<{ count: string }>(
       `SELECT COUNT(*) FROM ${table} WHERE "status" = 'running' AND "agent_id" = $1`,
       [agentId],
     );

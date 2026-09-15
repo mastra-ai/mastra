@@ -10,6 +10,8 @@ npm install @mastra/redis-streams
 
 ## Usage
 
+Requires Redis 7.0 or later.
+
 ```typescript
 import { Mastra } from '@mastra/core/mastra';
 import { RedisStreamsPubSub } from '@mastra/redis-streams';

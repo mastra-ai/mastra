@@ -10,6 +10,8 @@
  * over the trace data -- since branches are conceptually a subset of traces.
  */
 
+import { randomUUID } from 'node:crypto';
+
 import type { ClickHouseClient } from '@clickhouse/client';
 import { BRANCH_SPAN_TYPES, listBranchesArgsSchema, toTraceSpans, TraceStatus } from '@mastra/core/storage';
 import type {
@@ -29,7 +31,18 @@ import type {
   SpanRecord,
 } from '@mastra/core/storage';
 
-import { TABLE_SPAN_EVENTS, TABLE_TRACE_BRANCHES, TABLE_TRACE_BRANCHES_DELTA, TABLE_TRACE_ROOTS } from './ddl';
+import type { ClickhouseReplicationConfig } from '../../../db/replication';
+import {
+  TABLE_FEEDBACK_EVENTS,
+  TABLE_LOG_EVENTS,
+  TABLE_METRIC_EVENTS,
+  TABLE_SCORE_EVENTS,
+  TABLE_SPAN_EVENTS,
+  TABLE_TRACE_BRANCHES,
+  TABLE_TRACE_BRANCHES_DELTA,
+  TABLE_TRACE_ROOTS,
+} from './ddl';
+import { recordDeletionRequest } from './deletion-requests';
 import { CH_SETTINGS, CH_INSERT_SETTINGS, spanRecordToRow, rowToSpanRecord } from './helpers';
 import type { ClickHouseDeltaCursorStrategy } from './polling';
 import { assertDeltaPollingSupported, deltaPollingSupported, validateCursorId } from './polling';
@@ -193,16 +206,45 @@ export async function getTraceLight(
 // ---------------------------------------------------------------------------
 
 /**
- * Delete traces by traceId.
- * Issues lightweight DELETE against both span_events and trace_roots.
+ * Delete traces by traceId, cascading to trace-derived tables and trace-linked
+ * signal events (metrics, logs, scores, feedback). Signal rows with a NULL
+ * traceId are never affected.
  *
- * Targets rows by tracing identity: traceId + dedupeKey (which starts with traceId).
- * The dedupeKey condition is redundant for correctness (dedupeKey = traceId:spanId)
- * but satisfies the design-doc requirement that trace deletes reference dedupeKey
- * and helps the engine narrow within the sorted ORDER BY key.
+ * On the tracing tables, rows are targeted by tracing identity: traceId +
+ * dedupeKey (which starts with traceId). The dedupeKey condition is redundant
+ * for correctness (dedupeKey = traceId:spanId) but satisfies the design-doc
+ * requirement that trace deletes reference dedupeKey and helps the engine
+ * narrow within the sorted ORDER BY key. Signal tables key on their own event
+ * ids, so they are targeted by traceId alone.
+ *
+ * `trace_branches` must be deleted explicitly: its MV fires on insert only,
+ * so span deletes never propagate to it. Delta tables self-expire via TTL and
+ * discovery tables self-heal, so neither needs explicit deletes.
+ *
+ * Records the predicate before using lightweight DELETE FROM on every table.
+ * Lightweight deletes hide rows through ClickHouse's delete mask; physical
+ * removal depends on the deployment's configured retention and merge policy.
+ *
+ * When the optional tenant scope (`organizationId` / `resourceId`) is set,
+ * every DELETE additionally requires the row's tenant columns to match.
  */
-export async function batchDeleteTraces(client: ClickHouseClient, args: BatchDeleteTracesArgs): Promise<void> {
+export async function batchDeleteTraces(
+  client: ClickHouseClient,
+  args: BatchDeleteTracesArgs,
+  replication?: ClickhouseReplicationConfig,
+): Promise<void> {
   if (args.traceIds.length === 0) return;
+
+  await recordDeletionRequest(client, {
+    requestId: randomUUID(),
+    organizationId: args.organizationId,
+    resourceId: args.resourceId,
+    signal: 'traces',
+    predicateType: 'traceIds',
+    predicateValues: [...args.traceIds],
+    requestedAt: new Date().toISOString(),
+    replication,
+  });
 
   // Build parameterized IN list and dedupeKey prefix conditions
   const params: Record<string, string> = {};
@@ -219,17 +261,38 @@ export async function batchDeleteTraces(client: ClickHouseClient, args: BatchDel
   const traceInList = traceInPlaceholders.join(', ');
   const dedupeCondition = dedupeOrParts.length === 1 ? dedupeOrParts[0] : `(${dedupeOrParts.join(' OR ')})`;
 
-  // Lightweight deletes (DELETE FROM) are immediately visible to subsequent reads,
-  // unlike ALTER TABLE ... DELETE which schedules an async mutation.
+  // Optional tenant scope conditions applied to every table
+  let scopeCondition = '';
+  if (args.organizationId !== undefined) {
+    params.scope_org = args.organizationId;
+    scopeCondition += ` AND organizationId = {scope_org:String}`;
+  }
+  if (args.resourceId !== undefined) {
+    params.scope_res = args.resourceId;
+    scopeCondition += ` AND resourceId = {scope_res:String}`;
+  }
+
+  const tracingTables = [TABLE_SPAN_EVENTS, TABLE_TRACE_ROOTS, TABLE_TRACE_BRANCHES];
+  const signalTables = [TABLE_METRIC_EVENTS, TABLE_LOG_EVENTS, TABLE_SCORE_EVENTS, TABLE_FEEDBACK_EVENTS];
+
+  // Wait for every replica to apply the lightweight delete mask before the
+  // operation resolves. Physical byte removal is handled separately by the
+  // deployment's retention and merge policy.
   await Promise.all([
-    client.command({
-      query: `DELETE FROM ${TABLE_SPAN_EVENTS} WHERE traceId IN (${traceInList}) AND ${dedupeCondition}`,
-      query_params: params,
-    }),
-    client.command({
-      query: `DELETE FROM ${TABLE_TRACE_ROOTS} WHERE traceId IN (${traceInList}) AND ${dedupeCondition}`,
-      query_params: params,
-    }),
+    ...tracingTables.map(table =>
+      client.command({
+        query: `DELETE FROM ${table} WHERE traceId IN (${traceInList}) AND ${dedupeCondition}${scopeCondition}`,
+        query_params: params,
+        clickhouse_settings: { lightweight_deletes_sync: '2' },
+      }),
+    ),
+    ...signalTables.map(table =>
+      client.command({
+        query: `DELETE FROM ${table} WHERE traceId IN (${traceInList})${scopeCondition}`,
+        query_params: params,
+        clickhouse_settings: { lightweight_deletes_sync: '2' },
+      }),
+    ),
   ]);
 }
 

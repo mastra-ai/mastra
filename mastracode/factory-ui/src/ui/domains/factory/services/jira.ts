@@ -45,6 +45,8 @@ export interface JiraIssue {
   labels: string[];
   createdAt: string;
   updatedAt: string;
+  /** Jira project the issue was read from; matches an intake binding's `sourceId`. */
+  sourceId?: string | null;
 }
 
 export interface JiraIssuePage {

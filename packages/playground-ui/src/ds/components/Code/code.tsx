@@ -1,25 +1,11 @@
 import * as React from 'react';
-import type { ThemedToken } from 'shiki/core';
 
-import { highlight } from '../CodeEditor/highlight';
+import { tokenStyle, useHighlight } from './use-highlight';
+import type { Highlighted } from './use-highlight';
 
 export interface CodeProps extends React.HTMLAttributes<HTMLPreElement> {
   code: string;
   lang?: string;
-}
-
-function tokenStyle(token: ThemedToken): React.CSSProperties | undefined {
-  if (token.htmlStyle && typeof token.htmlStyle === 'object') {
-    return token.htmlStyle as React.CSSProperties;
-  }
-
-  return token.color ? { color: token.color } : undefined;
-}
-
-interface Highlighted {
-  code: string;
-  lang: string;
-  tokens: ThemedToken[][];
 }
 
 /** Colors from an earlier pass still hold when the new code only appends to the old. */
@@ -42,26 +28,7 @@ function usableHighlight(highlighted: Highlighted | null, code: string, lang?: s
  * the newly arrived tail waits, uncolored, for the next pass.
  */
 export const Code = React.memo(function Code({ code, lang, ...props }: CodeProps) {
-  const [highlighted, setHighlighted] = React.useState<Highlighted | null>(null);
-
-  React.useEffect(() => {
-    if (!lang) {
-      setHighlighted(null);
-      return;
-    }
-
-    let cancelled = false;
-
-    void highlight(code, lang)
-      .then(tokens => {
-        if (!cancelled && tokens?.length) setHighlighted({ code, lang, tokens });
-      })
-      .catch(() => {});
-
-    return () => {
-      cancelled = true;
-    };
-  }, [code, lang]);
+  const highlighted = useHighlight(code, lang);
 
   const usable = usableHighlight(highlighted, code, lang);
   if (!usable) {

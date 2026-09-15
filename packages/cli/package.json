@@ -1,6 +1,6 @@
 {
   "name": "mastra",
-  "version": "1.27.3-alpha.7",
+  "version": "1.31.0-alpha.0",
   "license": "Apache-2.0",
   "description": "cli for mastra",
   "type": "module",
@@ -22,7 +22,8 @@
     "dist"
   ],
   "scripts": {
-    "generate:api-manifest": "pnpm --filter @mastra/server generate:api-cli-route-metadata",
+    "generate:api-manifest": "pnpm --filter @mastra/server generate:api-cli-route-metadata && pnpm --filter @mastra/factory generate:api-cli-route-metadata",
+    "generate:mcp-api-operations": "tsx scripts/generate-mcp-api-operations.ts",
     "build:lib": "tsdown --silent --config tsdown.config.ts",
     "prepack": "tsx ../../scripts/generate-package-docs.ts",
     "test": "vitest run",

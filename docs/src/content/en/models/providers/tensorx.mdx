@@ -7,7 +7,7 @@ description: "Browse TensorX model IDs, capabilities, context windows, and prici
 
 # <img src="https://models.dev/logos/tensorx.svg" alt="TensorX logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />TensorX
 
-Access 25 TensorX models through Mastra's model router. Authentication is handled automatically using the `TENSORX_API_KEY` environment variable.
+Access 26 TensorX models through Mastra's model router. Authentication is handled automatically using the `TENSORX_API_KEY` environment variable.
 
 Learn more in the [TensorX documentation](https://docs.tensorx.ai/).
 
@@ -116,6 +116,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 384000,
     "inputCost": 1.75,
     "outputCost": 3.5
+  },
+  {
+    "model": "tensorx/deepseek/deepseek-v4.1-flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 384000,
+    "inputCost": 0.5,
+    "outputCost": 1.5
   },
   {
     "model": "tensorx/minimax/minimax-m2.5",
@@ -383,5 +395,4 @@ const agent = new Agent({
   }
 });
 ```
-
 

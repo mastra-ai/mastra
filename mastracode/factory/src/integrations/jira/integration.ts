@@ -374,7 +374,6 @@ export class JiraIntegration implements FactoryIntegration {
       jira: this,
       auth: ctx.auth,
       intake: ctx.storage.intake,
-      projects: ctx.storage.projects,
     });
   }
 

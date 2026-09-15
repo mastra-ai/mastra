@@ -1,9 +1,12 @@
+import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import {
+  Agent,
   createSignal,
   isTransientSignalMessage as coreIsTransientSignalMessage,
   MessageList,
 } from '@mastra/core/agent';
-import type { MastraDBMessage } from '@mastra/core/agent';
+import type { AgentSignalType, MastraDBMessage } from '@mastra/core/agent';
+import { filterSystemReminderMessages } from '@mastra/core/memory';
 import type { MemoryConfig } from '@mastra/core/memory';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
@@ -2438,6 +2441,214 @@ describe('Memory', () => {
     });
   });
 
+  describe('recall signal exclusions', () => {
+    const target = { threadId: 'recall-signals', resourceId: 'recall-owner' };
+    const signalTypes: AgentSignalType[] = [
+      'user',
+      'state',
+      'reactive',
+      'notification',
+      'user-message',
+      'system-reminder',
+    ];
+    let memory: Memory;
+    let messages: MastraDBMessage[];
+
+    beforeEach(async () => {
+      memory = new Memory({ storage: new InMemoryStore(), options: { semanticRecall: false } });
+      await memory.createThread(target);
+      const message = (
+        id: string,
+        role: MastraDBMessage['role'],
+        content: MastraDBMessage['content'],
+      ): MastraDBMessage => ({
+        ...target,
+        id,
+        role,
+        content,
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+      });
+      messages = [
+        ...signalTypes.map(type =>
+          message(type, 'signal', {
+            format: 2,
+            parts: [{ type: 'text', text: `Signal ${type}` }],
+            metadata: { signal: { type } },
+          }),
+        ),
+        message('plain-user', 'user', { format: 2, parts: [{ type: 'text', text: 'ordinary user message' }] }),
+        message('plain-assistant', 'assistant', { format: 2, parts: [{ type: 'text', text: 'ordinary response' }] }),
+        message('embedded-markup', 'user', {
+          format: 2,
+          parts: [{ type: 'text', text: 'quote <system-reminder>example</system-reminder>' }],
+        }),
+        message('legacy-metadata', 'user', {
+          format: 2,
+          parts: [{ type: 'text', text: 'old guidance' }],
+          metadata: { dynamicAgentsMdReminder: {} },
+        }),
+        message('legacy-system-metadata', 'user', {
+          format: 2,
+          parts: [{ type: 'text', text: 'older guidance' }],
+          metadata: { systemReminder: {} },
+        }),
+        message('legacy-markup', 'user', {
+          format: 2,
+          parts: [{ type: 'text', text: '<system-reminder>legacy</system-reminder>' }],
+        }),
+        message('encoded-precedence', 'user', {
+          format: 2,
+          parts: [{ type: 'data-signal', data: { type: 'notification' } }],
+          metadata: { systemReminder: {} },
+        }),
+        message('encoded-legacy-user', 'assistant', {
+          format: 2,
+          parts: [{ type: 'data-user-message', data: { type: 'user-message' } }],
+        }),
+        message('unknown', 'signal', {
+          format: 2,
+          parts: [{ type: 'data-signal', data: { type: 'future' } }],
+          metadata: { signal: { type: 'future' } },
+        }),
+        message('malformed', 'assistant', { format: 2, parts: [{ type: 'data-signal', data: null }] }),
+      ];
+      messages.forEach((message, index) => {
+        message.createdAt = new Date(Date.UTC(2024, 0, 1, 0, index));
+      });
+      await memory.saveMessages({ messages });
+    });
+
+    const legacyIds = ['legacy-metadata', 'legacy-system-metadata', 'legacy-markup'];
+    const exclusionCases: { hideSignals: boolean | AgentSignalType[] | undefined; hidden: string[] }[] = [
+      { hideSignals: undefined, hidden: [] },
+      { hideSignals: false, hidden: [] },
+      { hideSignals: true, hidden: [...signalTypes, ...legacyIds, 'encoded-precedence', 'encoded-legacy-user'] },
+      { hideSignals: [], hidden: [] },
+      { hideSignals: ['reactive'], hidden: ['reactive'] },
+      { hideSignals: ['system-reminder'], hidden: ['system-reminder', ...legacyIds] },
+      { hideSignals: ['reactive', 'system-reminder'], hidden: ['reactive', 'system-reminder', ...legacyIds] },
+      { hideSignals: ['user'], hidden: ['user'] },
+      { hideSignals: ['user-message'], hidden: ['user-message', 'encoded-legacy-user'] },
+      { hideSignals: ['state', 'notification'], hidden: ['state', 'notification', 'encoded-precedence'] },
+      {
+        hideSignals: signalTypes,
+        hidden: [...signalTypes, ...legacyIds, 'encoded-precedence', 'encoded-legacy-user'],
+      },
+    ];
+    describe.each([undefined, false, true])('includeSystemReminders=%s', includeSystemReminders => {
+      it.each(exclusionCases)(
+        'matches explicit stored types with exclusions $hideSignals',
+        async ({ hideSignals, hidden }) => {
+          const rawStore = await memory.storage.getStore('memory');
+          const before = await rawStore!.listMessages({ ...target, perPage: false });
+          const result = await memory.recall({ ...target, perPage: false, includeSystemReminders, hideSignals });
+          const hiddenIds =
+            hideSignals === undefined && !includeSystemReminders
+              ? ['reactive', 'system-reminder', ...legacyIds, 'encoded-precedence']
+              : hidden;
+          expect(result.messages.map(message => message.id)).toEqual(
+            messages.filter(message => !hiddenIds.includes(message.id)).map(message => message.id),
+          );
+          // The inline peer-compatible implementation and core helper must agree.
+          expect(result.messages).toEqual(
+            filterSystemReminderMessages(
+              new MessageList().add(before.messages, 'memory').get.all.db(),
+              includeSystemReminders,
+              hideSignals,
+            ),
+          );
+          expect(await rawStore!.listMessages({ ...target, perPage: false })).toEqual(before);
+          expect(result).toMatchObject({ total: messages.length, page: 0, perPage: false, hasMore: false });
+        },
+      );
+    });
+
+    it('keeps subsequent model memory identical after caller-only recall exclusions', async () => {
+      const model = new MockLanguageModelV2({
+        doStream: async () => ({
+          stream: convertArrayToReadableStream([
+            { type: 'text-start', id: 'text' },
+            { type: 'text-delta', id: 'text', delta: 'done' },
+            { type: 'text-end', id: 'text' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+          ]),
+        }),
+      });
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2024-01-01T00:00:00Z'));
+      try {
+        for (const hideSignals of [[], signalTypes, false, true]) {
+          const isolated = new Memory({ storage: new InMemoryStore(), options: { semanticRecall: false } });
+          await isolated.createThread(target);
+          const saved = signalTypes.map((type, i) =>
+            createSignal({ id: `signal-${i}`, type, contents: `context-${i}`, createdAt: new Date(0) }).toDBMessage(
+              target,
+            ),
+          );
+          await isolated.saveMessages({ messages: saved });
+          const store = await isolated.storage.getStore('memory');
+          const before = await store!.listMessages({ ...target, perPage: false });
+          const recalled = await isolated.recall({ ...target, perPage: false, hideSignals });
+          expect(recalled.messages).toHaveLength(
+            hideSignals === true || (Array.isArray(hideSignals) && hideSignals.length) ? 0 : 6,
+          );
+          expect(await store!.listMessages({ ...target, perPage: false })).toEqual(before);
+          const agent = new Agent({
+            id: 'recall-proof',
+            name: 'Recall proof',
+            instructions: 'Continue',
+            model,
+            memory: isolated,
+          });
+          const output = await agent.stream('next turn', {
+            memory: { thread: target.threadId, resource: target.resourceId },
+          });
+          await output.consumeStream();
+          for (let i = 0; i < 6; i++)
+            expect(JSON.stringify(model.doStreamCalls.at(-1)?.prompt)).toContain(`context-${i}`);
+        }
+        expect(model.doStreamCalls).toHaveLength(4);
+        for (const call of model.doStreamCalls.slice(1)) expect(call.prompt).toEqual(model.doStreamCalls[0]?.prompt);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('filters after pagination without refilling pages or changing totals', async () => {
+      for (const orderBy of [undefined, { field: 'createdAt' as const, direction: 'ASC' as const }]) {
+        for (const page of [0, 1, 2, 3]) {
+          const unfiltered = await memory.recall({ ...target, perPage: 4, page, orderBy, hideSignals: [] });
+          const filtered = await memory.recall({ ...target, perPage: 4, page, orderBy, hideSignals: signalTypes });
+          expect(await memory.recall({ ...target, perPage: 4, page, orderBy, hideSignals: false })).toEqual(unfiltered);
+          expect(await memory.recall({ ...target, perPage: 4, page, orderBy, hideSignals: true })).toEqual(filtered);
+          expect(filtered).toEqual({
+            ...unfiltered,
+            messages: filterSystemReminderMessages(unfiltered.messages, undefined, signalTypes),
+          });
+        }
+      }
+      const emptyPage = await memory.recall({
+        ...target,
+        perPage: 4,
+        page: 0,
+        orderBy: { field: 'createdAt', direction: 'ASC' },
+        hideSignals: signalTypes,
+      });
+      expect(emptyPage).toMatchObject({ messages: [], total: messages.length, hasMore: true, page: 0, perPage: 4 });
+      const noTotal = await memory.recall({ ...target, perPage: 4, includeTotal: false, hideSignals: [] });
+      const filteredNoTotal = await memory.recall({
+        ...target,
+        perPage: 4,
+        includeTotal: false,
+        hideSignals: signalTypes,
+      });
+      expect(filteredNoTotal).toEqual({
+        ...noTotal,
+        messages: filterSystemReminderMessages(noTotal.messages, undefined, signalTypes),
+      });
+    });
+  });
+
   describe('lastMessages: false (disable conversation history)', () => {
     let memory: Memory;
     const resourceId = 'test-resource';
@@ -3130,6 +3341,109 @@ describe('Memory', () => {
 
       expect(parentSpan.createChildSpan).not.toHaveBeenCalled();
       expect(childSpan.error).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('updateThreadResourceId', () => {
+    it('skips vector migration for a same-resource transfer when semantic recall is not configured', async () => {
+      const mockVector = {
+        createIndex: vi.fn().mockResolvedValue(undefined),
+        upsert: vi.fn().mockResolvedValue(undefined),
+        query: vi.fn().mockResolvedValue([]),
+        listIndexes: vi.fn().mockResolvedValue(['memory_messages']),
+        deleteVectors: vi.fn().mockResolvedValue(undefined),
+        describeIndex: vi.fn().mockResolvedValue({ dimension: 1536 }),
+        id: 'mock-vector',
+      } as any;
+
+      // No embedder / no semanticRecall => nothing to migrate => storage no-op preserved.
+      const memory = new Memory({
+        storage: new InMemoryStore(),
+        vector: mockVector,
+        options: { lastMessages: 10, generateTitle: false },
+      });
+
+      await memory.saveThread({
+        thread: {
+          id: 'noop-thread',
+          resourceId: 'resource-a',
+          title: 'Noop',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+
+      const result = await memory.updateThreadResourceId({ threadId: 'noop-thread', resourceId: 'resource-a' });
+
+      expect(result.resourceId).toBe('resource-a');
+      expect(mockVector.deleteVectors).not.toHaveBeenCalled();
+      expect(mockVector.upsert).not.toHaveBeenCalled();
+    });
+
+    it('re-runs vector migration on a same-resource call so a failed prior migration can be repaired', async () => {
+      const mockVector = {
+        createIndex: vi.fn().mockResolvedValue(undefined),
+        upsert: vi.fn().mockResolvedValue(undefined),
+        query: vi.fn().mockResolvedValue([]),
+        listIndexes: vi.fn().mockResolvedValue(['memory_messages']),
+        deleteVectors: vi.fn().mockResolvedValue(undefined),
+        describeIndex: vi.fn().mockResolvedValue({ dimension: 1536 }),
+        id: 'mock-vector',
+      } as any;
+      const mockEmbedder = {
+        doEmbed: vi.fn().mockResolvedValue({ embeddings: [new Array(1536).fill(0.1)] }),
+        modelId: 'mock-embedder',
+        specificationVersion: 'v1',
+        provider: 'mock',
+      } as any;
+
+      const memory = new Memory({
+        storage: new InMemoryStore(),
+        vector: mockVector,
+        embedder: mockEmbedder,
+        options: { semanticRecall: { scope: 'resource' }, lastMessages: 10, generateTitle: false },
+      });
+
+      await memory.saveThread({
+        thread: {
+          id: 'repair-thread',
+          resourceId: 'resource-a',
+          title: 'Repair',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+      await memory.saveMessages({
+        messages: [
+          {
+            id: 'repair-msg-1',
+            threadId: 'repair-thread',
+            resourceId: 'resource-a',
+            role: 'user',
+            content: { format: 2, parts: [{ type: 'text', text: 'hello repair' }] },
+            createdAt: new Date(),
+          },
+        ] as any,
+      });
+
+      // Ignore the upsert performed by the initial saveMessages so we only assert on the
+      // upsert the retry rebuilds.
+      mockVector.upsert.mockClear();
+      mockVector.deleteVectors.mockClear();
+
+      const result = await memory.updateThreadResourceId({ threadId: 'repair-thread', resourceId: 'resource-a' });
+
+      expect(result.resourceId).toBe('resource-a');
+      // With vector migration configured we must NOT short-circuit, so a retry after a
+      // storage-succeeded/migration-failed state can rebuild the stale vectors.
+      expect(mockVector.deleteVectors).toHaveBeenCalled();
+      // The rebuild must re-embed the thread's messages under the (unchanged) resource so
+      // resource-scoped recall keeps surfacing them — proving the migration actually ran.
+      expect(mockVector.upsert).toHaveBeenCalled();
+      const upsertArg = mockVector.upsert.mock.calls.at(-1)![0];
+      expect(upsertArg.metadata).toEqual(
+        expect.arrayContaining([expect.objectContaining({ resource_id: 'resource-a', thread_id: 'repair-thread' })]),
+      );
     });
   });
 });

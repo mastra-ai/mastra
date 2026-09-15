@@ -31,7 +31,7 @@ export function TextFieldBlock({
   labelSize,
   layout = 'vertical',
   placeholder,
-  size = 'default',
+  size = 'md',
   testId,
   className,
   ...props

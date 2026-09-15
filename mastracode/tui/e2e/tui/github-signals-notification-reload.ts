@@ -112,7 +112,6 @@ values
     await runtime.waitForScreenText(/E2E GitHub notification reload fixture/i, terminal, 8_000);
     terminal.write('\r');
 
-    await runtime.waitForScreenText(/Switched to: E2E GitHub notification reload fixture/i, terminal, 8_000);
     await runtime.waitForScreenText(/notification from github/i, terminal, 8_000);
     await runtime.waitForScreenText(/high · pull-request-ci-recovered · seen/i, terminal, 8_000);
     await runtime.waitForScreenText(/mastra-ai\/mastra#17641/i, terminal, 8_000);

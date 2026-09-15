@@ -1,8 +1,9 @@
 import { json } from '@codemirror/lang-json';
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
+import { Chunk } from '@codemirror/merge';
 import { SearchCursor } from '@codemirror/search';
 import type { Extension } from '@codemirror/state';
-import { StateEffect, StateField, RangeSetBuilder } from '@codemirror/state';
+import { StateEffect, StateField, RangeSetBuilder, Text } from '@codemirror/state';
 import type { DecorationSet } from '@codemirror/view';
 import { Decoration, EditorView } from '@codemirror/view';
 import { tags as t } from '@lezer/highlight';
@@ -66,13 +67,51 @@ function searchHighlightExtension(): Extension {
   return [searchHighlightField, searchHighlightTheme];
 }
 
+// -- Diff highlight extension -------------------------------------------------
+
+export interface DataCodeSectionDiff {
+  /** The other document to compare against. */
+  against: string;
+  /** `a` = this document is the "before" (changes in red), `b` = "after" (changes in green). */
+  side: 'a' | 'b';
+}
+
+// `EditorView.theme` (not baseTheme) so these win over the app theme's `.cm-activeLine { background: transparent }`.
+const diffLineTheme = EditorView.theme({
+  '.cm-line.cm-diff-removed, .cm-line.cm-diff-removed.cm-activeLine': {
+    backgroundColor: 'color-mix(in srgb, var(--accent2) 18%, transparent)',
+  },
+  '.cm-line.cm-diff-added, .cm-line.cm-diff-added.cm-activeLine': {
+    backgroundColor: 'color-mix(in srgb, var(--accent1) 18%, transparent)',
+  },
+});
+
+function diffHighlightExtension(doc: string, { against, side }: DataCodeSectionDiff): Extension {
+  const [a, b] = side === 'a' ? [doc, against] : [against, doc];
+  const text = Text.of(doc.split('\n'));
+  const line = Decoration.line({ class: side === 'a' ? 'cm-diff-removed' : 'cm-diff-added' });
+  const builder = new RangeSetBuilder<Decoration>();
+  for (const chunk of Chunk.build(Text.of(a.split('\n')), Text.of(b.split('\n')))) {
+    const from = side === 'a' ? chunk.fromA : chunk.fromB;
+    const to = side === 'a' ? chunk.endA : chunk.endB;
+    if (from >= to) continue;
+    for (let pos = from; pos <= Math.min(to, text.length);) {
+      const l = text.lineAt(pos);
+      builder.add(l.from, l.from, line);
+      if (l.to >= to) break;
+      pos = l.to + 1;
+    }
+  }
+  return [EditorView.decorations.of(builder.finish()), diffLineTheme];
+}
+
 // -- Themes -------------------------------------------------------------------
 
 function buildDarkTheme(): Extension {
   return draculaInit({
     settings: {
       fontFamily: 'var(--font-mono)',
-      fontSize: '0.75rem',
+      fontSize: 'var(--text-ui-sm)',
       lineHighlight: 'transparent',
       gutterBackground: 'transparent',
       gutterForeground: '#939393',
@@ -87,7 +126,7 @@ function buildLightTheme(): Extension {
     '&': {
       backgroundColor: 'transparent',
       color: 'var(--neutral6)',
-      fontSize: '0.75rem',
+      fontSize: 'var(--text-ui-sm)',
     },
     '&.cm-editor .cm-scroller': {
       fontFamily: 'var(--font-mono)',
@@ -143,6 +182,8 @@ export interface DataCodeSectionProps {
   codeStr?: string;
   simplified?: boolean;
   className?: string;
+  /** Highlight lines that differ from another document. */
+  diff?: DataCodeSectionDiff;
 }
 
 export function DataCodeSection({
@@ -152,8 +193,10 @@ export function DataCodeSection({
   icon,
   simplified = false,
   className,
+  diff,
 }: DataCodeSectionProps) {
   const theme = useCodemirrorTheme();
+  const diffExtension = useMemo(() => (diff ? diffHighlightExtension(codeStr, diff) : []), [codeStr, diff]);
   const [showAsMultilineText, setShowAsMultilineText] = useState(false);
   const [searchMinimized, setSearchMinimized] = useState(true);
   const [searchQuery, setSearchQueryState] = useState('');
@@ -288,7 +331,7 @@ export function DataCodeSection({
         ) : (
           <ReactCodeMirror
             ref={editorRef}
-            extensions={[json(), EditorView.lineWrapping, searchHighlightExtension()]}
+            extensions={[json(), EditorView.lineWrapping, searchHighlightExtension(), diffExtension]}
             theme={theme}
             value={codeStr}
             editable={false}
@@ -351,7 +394,7 @@ export function DataCodeSection({
             ) : (
               <ReactCodeMirror
                 ref={expandedEditorRef}
-                extensions={[json(), EditorView.lineWrapping, searchHighlightExtension()]}
+                extensions={[json(), EditorView.lineWrapping, searchHighlightExtension(), diffExtension]}
                 theme={theme}
                 value={codeStr}
                 editable={false}

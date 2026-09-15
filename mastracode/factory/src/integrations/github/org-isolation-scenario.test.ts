@@ -447,12 +447,15 @@ describe('two users in one org each get their own sandbox + session workspace', 
     });
     // Materialization memoizes the session sandbox in-process; git write
     // routes resolve through the memo, not persisted columns.
-    getSessionSandbox(session.id, 'a1/feat-x', () =>
-      ({
-        id: 'sb-a1-session',
-        provider: 'stub',
-        executeCommand: async () => ({ exitCode: 0, stdout: '', stderr: '' }),
-      }) as never,
+    getSessionSandbox(
+      session.id,
+      'a1/feat-x',
+      () =>
+        ({
+          id: 'sb-a1-session',
+          provider: 'stub',
+          executeCommand: async () => ({ exitCode: 0, stdout: '', stderr: '' }),
+        }) as never,
     ).workdir = '/workspace/a1/feat-x';
 
     // User 2 cannot address user 1's session workspace.
@@ -494,12 +497,15 @@ describe('cross-user session workspaces are rejected', () => {
         sandboxId: `sb-${userId}`,
         sandboxWorkdir: `/workspace/sessions/${userId}/feat-x`,
       });
-      getSessionSandbox(session.id, `sessions/${userId}`, () =>
-        ({
-          id: `sb-${userId}`,
-          provider: 'stub',
-          executeCommand: async () => ({ exitCode: 0, stdout: '', stderr: '' }),
-        }) as never,
+      getSessionSandbox(
+        session.id,
+        `sessions/${userId}`,
+        () =>
+          ({
+            id: `sb-${userId}`,
+            provider: 'stub',
+            executeCommand: async () => ({ exitCode: 0, stdout: '', stderr: '' }),
+          }) as never,
       ).workdir = `/workspace/sessions/${userId}/feat-x`;
       sessions.set(userId, session);
     }
@@ -564,13 +570,7 @@ describe('install flow binds the installation to the org', () => {
 
     const repos = await user2.request('/web/github/repos');
     expect(repos.status).toBe(200);
-    expect(tables.repositories).toHaveLength(1);
-    expect(tables.repositories[0]).toMatchObject({
-      installationId: tables.installations[0]!.id,
-      externalId: '99',
-      slug: 'octo/hello',
-      defaultBranch: 'main',
-    });
+    expect(tables.repositories).toHaveLength(0);
     expect(await repos.json()).toMatchObject({
       repos: [
         {
@@ -578,7 +578,6 @@ describe('install flow binds the installation to the org', () => {
           fullName: 'octo/hello',
           installationId: 7,
           installationStorageId: tables.installations[0]!.id,
-          repositoryStorageId: tables.repositories[0]!.id,
           sandboxProvider: 'custom',
           // Display-only listing guess: repos clone into the VM's home.
           sandboxWorkdir: '~/hello',

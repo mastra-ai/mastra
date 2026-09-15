@@ -69,8 +69,6 @@ const paths = {
   workflowRunLink: (workflowId: string, runId: string) => `/workflows/${workflowId}/runs/${runId}`,
   datasetLink: (datasetId: string) => `/datasets/${datasetId}`,
   datasetItemLink: (datasetId: string, itemId: string) => `/datasets/${datasetId}/items/${itemId}`,
-  datasetItemCompareLink: (datasetId: string, itemId: string, secondItemId: string) =>
-    `/datasets/${datasetId}/items/${itemId}/compare/${secondItemId}`,
   experimentLink: (experimentId: string) => `/experiments/${experimentId}`,
 } satisfies LinkComponentProviderProps['paths'];
 
@@ -114,6 +112,16 @@ describe('Agents page', () => {
 
       expect(await screen.findByText('Purpose')).not.toBeNull();
       expect(await screen.findByText('Find reliable sources and summarize the evidence.')).not.toBeNull();
+    });
+
+    it('links each table row to a new chat thread for the agent', async () => {
+      useAgentsResponse();
+      renderPage();
+
+      fireEvent.click(await screen.findByRole('button', { name: 'List view' }));
+
+      const row = await screen.findByRole('link', { name: /Research Agent/ });
+      expect(row.getAttribute('href')).toBe(paths.agentNewThreadLink('researcher'));
     });
 
     it('shows model details when the provider is hovered', async () => {

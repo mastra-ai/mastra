@@ -253,8 +253,11 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
             if (repaired) {
               toolCallInput = repaired;
             } else {
+              // Log only metadata: raw tool inputs can carry credentials or PII.
               console.error('Error converting tool call input to JSON', {
-                input: value.input,
+                toolCallId: value.toolCallId,
+                toolName: value.toolName,
+                inputLength: value.input.length,
               });
               toolCallInput = undefined;
             }
@@ -655,10 +658,10 @@ function isV3Usage(usage: unknown): usage is LanguageModelV3Usage {
   return (
     typeof u.inputTokens === 'object' &&
     u.inputTokens !== null &&
-    'total' in (u.inputTokens as object) &&
+    'total' in u.inputTokens &&
     typeof u.outputTokens === 'object' &&
     u.outputTokens !== null &&
-    'total' in (u.outputTokens as object)
+    'total' in u.outputTokens
   );
 }
 

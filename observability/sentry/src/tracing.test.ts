@@ -12,11 +12,27 @@ import type { TracingEvent, AnyExportedSpan, ToolCallAttributes } from '@mastra/
 import { SpanType, TracingEventType } from '@mastra/core/observability';
 import * as Sentry from '@sentry/node';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { SentryExporter } from './tracing';
+import { SentryExporter, buildSpanTypeConfig } from './tracing';
 import type { SentryExporterConfig } from './tracing';
 
 // Mock Sentry module
 vi.mock('@sentry/node');
+
+describe('buildSpanTypeConfig', () => {
+  // @mastra/sentry's peer range admits a @mastra/core older than the one that
+  // introduced a given SpanType member. There, `SpanType.X` is undefined, and a
+  // plain object literal would map it under a literal "undefined" key that then
+  // matches any span whose type is undefined.
+  it('drops entries whose span type is missing from the paired core', () => {
+    const config = buildSpanTypeConfig([
+      [SpanType.AGENT_RUN, { opType: 'gen_ai.invoke_agent', opName: 'invoke_agent' }],
+      [undefined, { opType: 'ai.skill', opName: 'skill' }],
+    ]);
+
+    expect(config).toEqual({ [SpanType.AGENT_RUN]: { opType: 'gen_ai.invoke_agent', opName: 'invoke_agent' } });
+    expect(Object.keys(config)).not.toContain('undefined');
+  });
+});
 
 describe('SentryExporter', () => {
   // Mock objects
@@ -288,6 +304,24 @@ describe('SentryExporter', () => {
       });
 
       // Should not create any span or breadcrumb for chunks
+      expect(SentryMock.startInactiveSpan).not.toHaveBeenCalled();
+      expect(SentryMock.addBreadcrumb).not.toHaveBeenCalled();
+    });
+
+    it('should skip MODEL_INFERENCE spans so MODEL_GENERATION stays the single chat span', async () => {
+      const inferenceSpan = createMockSpan({
+        id: 'inference-span',
+        name: 'inference: 0',
+        type: SpanType.MODEL_INFERENCE,
+        isRoot: false,
+        attributes: { model: 'gpt-4', usage: { inputTokens: 10, outputTokens: 5 } },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: inferenceSpan,
+      });
+
       expect(SentryMock.startInactiveSpan).not.toHaveBeenCalled();
       expect(SentryMock.addBreadcrumb).not.toHaveBeenCalled();
     });

@@ -25,6 +25,7 @@ import { whoamiAction } from './commands/auth/whoami';
 import { configureCreateCommand } from './commands/create/create';
 import { registerEnvDbCommands } from './commands/db/index.js';
 import { unifiedDeployAction } from './commands/deploy/index.js';
+import { envSuggestionsAction } from './commands/env/deploy-suggestions.js';
 import { registerEnvCommands } from './commands/env/index.js';
 import { buildExperimentWorker } from './commands/experiment/build';
 import { COMPONENTS, LLMProvider } from './commands/init/utils';
@@ -262,6 +263,10 @@ program
   .option('--skip-build', 'Skip the build step and use existing .mastra/output')
   .option('--skip-preflight', 'Skip the pre-deploy build/env validation')
   .option('--region <region>', 'Region for new environments (e.g., us, eu)')
+  .option(
+    '--workers <mode>',
+    'Background worker deployment mode: "dedicated" (dedicated workers service, recommended; requires Redis) or "in-process" (run background tasks inside the API server container; spins down an existing workers service). Prompts on new environments when omitted.',
+  )
   .option('--debug', 'Enable debug logs', false)
   .action(wrapAction(unifiedDeployAction));
 
@@ -309,8 +314,9 @@ deployCommand
 
 if (coreFeatures.has('deploy-diagnosis')) {
   deployCommand
-    .command('suggestions [deploy-id]')
-    .description('Show deploy suggestions for a failed deploy')
+    .command('diagnosis [deploy-id]')
+    .alias('suggestions')
+    .description('Diagnose a failed deploy and show fix suggestions')
     .action(wrapAction(suggestionsAction));
 }
 
@@ -368,6 +374,16 @@ const envCommand = registerEnvCommands(program);
 // Databases: mastra env db ...
 registerEnvDbCommands(envCommand);
 
+if (coreFeatures.has('deploy-diagnosis')) {
+  envCommand
+    .command('diagnosis [deploy-id]')
+    .alias('suggestions')
+    .description('Diagnose a failed environment deploy and show fix suggestions')
+    .option('--project <project>', 'Project name, slug, or ID (default: linked project)')
+    .option('--environment <name>', 'Environment name, slug, or ID (default: only env, or required when >1)')
+    .action(wrapAction(envSuggestionsAction));
+}
+
 // ---- Server commands ----
 
 const serverCommand = program.command('server').description('Manage Mastra Server deployments');
@@ -387,8 +403,9 @@ const serverDeployCommand = serverCommand
 
 if (coreFeatures.has('deploy-diagnosis')) {
   serverDeployCommand
-    .command('suggestions [deploy-id]')
-    .description('Show deploy suggestions for a failed deploy')
+    .command('diagnosis [deploy-id]')
+    .alias('suggestions')
+    .description('Diagnose a failed deploy and show fix suggestions')
     .option('--org <id>', 'Organization ID')
     .action(wrapAction(serverSuggestionsAction));
 }

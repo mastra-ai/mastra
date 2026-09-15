@@ -25,6 +25,33 @@ workflow.sleep(5000)
     description: 'The number of milliseconds to pause execution, or a callback that returns the delay',
     isOptional: false,
   },
+  {
+    name: 'options',
+    type: 'StepFlowEntryOptions',
+    description:
+      'Optional identity and display metadata for this graph entry. Preserved through serialization and storage; has no effect on execution.',
+    isOptional: true,
+    properties: [
+      {
+        name: 'id',
+        type: 'string',
+        description: 'Stable entry id. Overrides the generated sleep step id.',
+        isOptional: true,
+      },
+      {
+        name: 'description',
+        type: 'string',
+        description: 'Human-readable description of this control-flow operation',
+        isOptional: true,
+      },
+      {
+        name: 'metadata',
+        type: 'Record<string, unknown>',
+        description: 'JSON-serializable metadata, for example a display title for visual editors',
+        isOptional: true,
+      },
+    ],
+  },
 ]}
 />
 

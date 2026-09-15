@@ -59,7 +59,7 @@ beforeAll(() => {
     ) as { version: string };
     linkedLocalVersions[name] = linkedManifest.version;
     const baseVersion = linkedManifest.version.split('-')[0]!;
-    registryVersions[name] = { latest: baseVersion, alpha: `${baseVersion}-alpha.0` };
+    registryVersions[name] = { latest: `${Number.parseInt(baseVersion) + 1}.0.0`, alpha: `${baseVersion}-alpha.0` };
   }
 
   const memoryVersion = JSON.parse(
@@ -67,7 +67,10 @@ beforeAll(() => {
   ).version as string;
   linkedLocalVersions['@mastra/memory'] = memoryVersion;
   const memoryBaseVersion = memoryVersion.split('-')[0]!;
-  registryVersions['@mastra/memory'] = { latest: memoryBaseVersion, alpha: `${memoryBaseVersion}-alpha.0` };
+  registryVersions['@mastra/memory'] = {
+    latest: `${Number.parseInt(memoryBaseVersion) + 1}.0.0`,
+    alpha: `${memoryBaseVersion}-alpha.0`,
+  };
 
   fakeBinDir = path.join(workDir, 'bin');
   fs.mkdirSync(fakeBinDir);
@@ -85,6 +88,9 @@ console.log(version);
 `,
     { mode: 0o755 },
   );
+
+  // Skill installation is independent of dependency version selection.
+  fs.writeFileSync(path.join(fakeBinDir, 'npx'), '#!/usr/bin/env node\n', { mode: 0o755 });
 
   sentinel = path.join(webRoot, '.env.test-sentinel');
   fs.writeFileSync(sentinel, 'SECRET=leaked\n');
@@ -108,8 +114,8 @@ describe.skipIf(process.platform === 'win32')('sync-template.mjs', () => {
     expect(fs.existsSync(unsafeOutDir)).toBe(existedBefore);
   });
 
-  it('generates a minimal server scaffold with exact published dependencies', () => {
-    const result = runSync(['--out', outDir]);
+  it.each(['latest', 'alpha'])('generates a minimal server scaffold with exact published dependencies (%s)', tag => {
+    const result = runSync(['--out', outDir, ...(tag === 'latest' ? [] : ['--tag', tag])]);
     expect(result.status).toBe(0);
 
     expect(fs.existsSync(path.join(outDir, 'src/mastra/index.ts'))).toBe(true);
@@ -152,8 +158,10 @@ describe.skipIf(process.platform === 'win32')('sync-template.mjs', () => {
     }
     for (const [name, localVersion] of Object.entries(linkedLocalVersions)) {
       const baseVersion = localVersion.split('-')[0]!;
-      const expectedVersion = localVersion.includes('-alpha.') ? `${baseVersion}-alpha.0` : baseVersion;
-      expect(allDeps[name], `${name} must match its local source release`).toBe(expectedVersion);
+      const expectedVersion = tag === 'latest' ? `${Number.parseInt(baseVersion) + 1}.0.0` : `${baseVersion}-alpha.0`;
+      expect(allDeps[name], `${name} must resolve ${tag} independently of its local source release`).toBe(
+        expectedVersion,
+      );
     }
 
     expect(Object.keys(pkg.dependencies).sort()).toEqual([
@@ -189,7 +197,11 @@ describe.skipIf(process.platform === 'win32')('sync-template.mjs', () => {
     expect(tsconfig.include).toEqual(['src/**/*']);
     expect(tsconfig.exclude).toEqual(['node_modules']);
 
-    expect(fs.readFileSync(path.join(outDir, '.npmrc'), 'utf8')).toBe('legacy-peer-deps=true\n');
+    if (tag === 'latest') {
+      expect(fs.existsSync(path.join(outDir, '.npmrc'))).toBe(false);
+    } else {
+      expect(fs.readFileSync(path.join(outDir, '.npmrc'), 'utf8')).toBe('legacy-peer-deps=true\n');
+    }
     const pnpmWorkspace = fs.readFileSync(path.join(outDir, 'pnpm-workspace.yaml'), 'utf8');
     expect(pnpmWorkspace).toMatch(/^minimumReleaseAgeExclude:\n  - '@mastra\/\*'\n  - mastra$/m);
     expect(pnpmWorkspace).toMatch(/^allowBuilds:/m);

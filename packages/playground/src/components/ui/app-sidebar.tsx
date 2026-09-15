@@ -1,3 +1,4 @@
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
 import { MainSidebar, useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import type { NavLink } from '@mastra/playground-ui/components/MainSidebar';
@@ -14,9 +15,12 @@ import { getPermissionForRoute, hasRoutePermission } from '@/domains/auth/route-
 import { isAuthenticated } from '@/domains/auth/types';
 import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
 import { MastraVersionFooter } from '@/domains/configuration/components/mastra-version-footer';
+import { useFeedbackInboxCount } from '@/domains/feedback/hooks/use-feedback';
+import { useInboxDatasetReviewCount } from '@/domains/review/hooks/use-inbox-review-items';
 import { useNavigationCommand } from '@/lib/command';
 import { useLinkComponent } from '@/lib/framework';
 import { useMastraPlatform } from '@/lib/mastra-platform/hooks/use-mastra-platform';
+import { getIsLinkActive } from '@/lib/nav/get-is-link-active';
 import { bottomNav, mainNav } from '@/lib/nav/nav-items';
 import type { NavItem } from '@/lib/nav/nav-items';
 
@@ -32,13 +36,6 @@ function toSidebarLink(item: NavItem): NavLink {
   return { name: item.name, url: item.url, icon: <Icon /> };
 }
 
-function getIsLinkActive(item: NavItem, pathname: string): boolean {
-  // Exact match or sub-path match (with / boundary so sibling routes don't match by prefix)
-  const matches = (url: string) => pathname === url || pathname.startsWith(url + '/');
-  if (matches(item.url)) return true;
-  return item.activePaths?.some(matches) ?? false;
-}
-
 export function AppSidebar() {
   const { Link } = useLinkComponent();
   const { state, isMobile, setOpenMobile } = useMainSidebar();
@@ -52,6 +49,12 @@ export function AppSidebar() {
   const { data: authCapabilities } = useAuthCapabilities();
   const { isCmsAvailable, isLoading: isCmsLoading } = useIsCmsAvailable();
   const { hasPermission, hasAnyPermission, isLoading: isPermissionsLoading } = usePermissions();
+  const canReadInbox =
+    !isPermissionsLoading && hasRoutePermission(getPermissionForRoute('/inbox'), hasPermission, hasAnyPermission);
+  const feedbackInboxCountQuery = useFeedbackInboxCount({ enabled: canReadInbox });
+  const datasetReviewCountQuery = useInboxDatasetReviewCount({ enabled: canReadInbox });
+  const hasInboxItems =
+    (feedbackInboxCountQuery.data?.pagination?.total ?? 0) > 0 || (datasetReviewCountQuery.data ?? 0) > 0;
 
   const isUserAuthenticated = authCapabilities && isAuthenticated(authCapabilities);
   const cmsOnlyLinks = new Set(['/prompts']);
@@ -112,7 +115,7 @@ export function AppSidebar() {
           <span className="flex h-7 items-center justify-between pr-2 pl-3">
             <span className="flex min-w-0 flex-1 items-center gap-2">
               <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
-              <span className="font-display truncate text-sm font-semibold tracking-tight whitespace-nowrap">
+              <span className="font-display text-ui-md truncate font-semibold tracking-tight whitespace-nowrap">
                 Mastra Studio
               </span>
               {!isMobile && <MainSidebar.Trigger />}
@@ -122,7 +125,7 @@ export function AppSidebar() {
         ) : (
           <span className="flex h-7 items-center gap-2 pr-2 pl-3">
             <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
-            <span className="font-display truncate text-sm font-semibold tracking-tight whitespace-nowrap">
+            <span className="font-display text-ui-md truncate font-semibold tracking-tight whitespace-nowrap">
               Mastra Studio
             </span>
             {!isMobile && <MainSidebar.Trigger />}
@@ -153,7 +156,7 @@ export function AppSidebar() {
                 {state !== 'collapsed' && (
                   <kbd
                     aria-hidden="true"
-                    className="border-border1 bg-surface4 text-neutral3 ml-auto rounded border px-1.5 py-0.5 font-mono text-[10px] leading-none"
+                    className="border-border1 bg-surface4 text-neutral3 text-ui-xs ml-auto rounded border px-1.5 py-0.5 font-mono leading-none"
                   >
                     {commandShortcutLabel}
                   </kbd>
@@ -203,8 +206,18 @@ export function AppSidebar() {
                     LinkComponent={Link}
                     state={state}
                     link={toSidebarLink(item)}
-                    isActive={getIsLinkActive(item, pathname)}
-                  />
+                    isActive={getIsLinkActive(item, pathname, filtered)}
+                  >
+                    {item.url === '/inbox' && hasInboxItems && state !== 'collapsed' ? (
+                      <Badge
+                        variant="yellow"
+                        size="sm"
+                        indicator="dot"
+                        className="ml-auto"
+                        aria-label="Items need review"
+                      />
+                    ) : null}
+                  </MainSidebar.NavLink>
                 ))}
               </MainSidebar.NavList>
             </MainSidebar.NavSection>
@@ -228,7 +241,7 @@ export function AppSidebar() {
         )}
         {state !== 'collapsed' && (
           <>
-            <hr className="bg-border1 mx-6 my-2 h-px border-0" />
+            <hr className="bg-border1 mx-3 my-2 h-px border-0" />
             <MastraVersionFooter collapsed={false} />
           </>
         )}

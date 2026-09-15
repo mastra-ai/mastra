@@ -15,6 +15,7 @@ import { useState } from 'react';
 import { Link, Outlet, useParams, useNavigate, useSearchParams } from 'react-router';
 import {
   DatasetItemsView,
+  DatasetTagsEditor,
   DatasetVersions,
   DuplicateDatasetDialog,
   ExperimentTriggerDialog,
@@ -86,8 +87,7 @@ function DatasetPage() {
           titleSlot="Dataset not found"
           descriptionSlot={`No dataset with id "${datasetId}".`}
           actionSlot={
-            <Button as={Link} to="/datasets">
-              <ArrowLeft />
+            <Button as={Link} to="/datasets" icon={<ArrowLeft />}>
               Back to Datasets
             </Button>
           }
@@ -118,12 +118,13 @@ function DatasetPage() {
 
   return (
     <DatasetItemPanelProvider datasetId={datasetId} items={unfilteredItems} isLoadingItems={isUnfilteredLoading}>
-      <div className="relative h-full overflow-hidden">
+      <div className="h-full">
         <PageLayout height="full" className="grid-rows-[1fr] p-0">
           <PageLayout.MainArea>
             <DatasetItemsView
               datasetId={datasetId}
               onAddItemClick={() => setAddItemDialogOpen(true)}
+              belowToolbarSlot={<DatasetTagsEditor datasetId={datasetId} />}
               leftSlot={
                 <span className="text-ui-sm text-neutral3 mr-3 whitespace-nowrap">
                   {dataset?.createdAt ? `Created ${format(new Date(dataset.createdAt), 'MMM d')}` : ''}
@@ -131,8 +132,7 @@ function DatasetPage() {
               }
               rightSlot={
                 <ButtonsGroup>
-                  <Button as={Link} to={`/experiments?dataset=${datasetId}`}>
-                    <FlaskConical />
+                  <Button as={Link} to={`/experiments?dataset=${datasetId}`} icon={<FlaskConical />}>
                     View experiments
                   </Button>
                   <DatasetVersions
@@ -147,8 +147,7 @@ function DatasetPage() {
                       <TooltipTrigger asChild>
                         <span className="cursor-not-allowed">
                           <div className="pointer-events-none opacity-50" inert aria-disabled="true">
-                            <Button variant="primary">
-                              <Play />
+                            <Button variant="primary" icon={<Play />}>
                               Run Experiment
                             </Button>
                           </div>
@@ -157,8 +156,7 @@ function DatasetPage() {
                       <TooltipContent>Add items to the dataset before running an experiment</TooltipContent>
                     </Tooltip>
                   ) : (
-                    <Button variant="primary" onClick={() => setExperimentDialogOpen(true)}>
-                      <Play />
+                    <Button variant="primary" onClick={() => setExperimentDialogOpen(true)} icon={<Play />}>
                       Run Experiment
                     </Button>
                   )}

@@ -1,4 +1,7 @@
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { discoverPackages } from './check-package-readmes.mjs';
 import { describe, expect, test } from 'vitest';
 import routing from './ci-routing.cjs';
 
@@ -255,6 +258,79 @@ describe('workspace cloud workflow routing', () => {
 });
 
 describe('quality assurance CI routing', () => {
+  test('uses checker eligibility and includes deleted READMEs without selecting nested or ignored files', () => {
+    const root = mkdtempSync(join(tmpdir(), 'readme-routing-'));
+    try {
+      const packages = [
+        { directory: 'packages/public', name: '@mastra/public' },
+        { directory: 'packages/core', name: '@mastra/core' },
+        { directory: 'packages/internal', name: '@internal/test' },
+        { directory: 'packages/private', name: '@mastra/private', private: true },
+        { directory: 'packages/unrelated', name: 'unrelated' },
+        { directory: 'packages/create-mastra', name: 'create-mastra' },
+        { directory: 'mastracode/mastra-factory', name: 'create-factory' },
+      ];
+      for (const pkg of packages) {
+        mkdirSync(join(root, pkg.directory), { recursive: true });
+        writeFileSync(join(root, pkg.directory, 'package.json'), JSON.stringify(pkg));
+      }
+      // No README files exist: deleting one must still trigger validation.
+      const readmes = discoverPackages(root).map(pkg => `${pkg.relativeDirectory}/README.md`);
+      const changedFiles = [
+        ...packages.map(pkg => `${pkg.directory}/README.md`),
+        'README.md',
+        'docs/README.md',
+        'packages/public/src/README.md',
+      ];
+      expect(qualityAssuranceInputs(changedFiles, readmes)).toMatchObject({
+        hasReadmeInputs: true,
+        readmeReasons: [
+          'packages/public/README.md',
+          'packages/create-mastra/README.md',
+          'mastracode/mastra-factory/README.md',
+        ],
+      });
+      expect(
+        qualityAssuranceInputs(
+          changedFiles.filter(file => !readmes.includes(file)),
+          readmes,
+        ),
+      ).toMatchObject({
+        hasReadmeInputs: false,
+        readmeReasons: [],
+      });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test.each([
+    '.github/scripts/check-package-readmes.mjs',
+    '.github/scripts/check-package-readmes.test.mjs',
+    '.github/scripts/ci-routing.cjs',
+    '.github/workflows/lint.yml',
+  ])('runs README validation when its infrastructure changes: %s', file => {
+    expect(qualityAssuranceInputs([file])).toMatchObject({ hasReadmeInputs: true, readmeReasons: [file] });
+  });
+
+  test('skips README validation for empty or unrelated changes', () => {
+    for (const files of [[], ['packages/public/src/index.ts'], ['docs/page.mdx']]) {
+      expect(qualityAssuranceInputs(files, ['packages/public/README.md'])).toMatchObject({
+        hasReadmeInputs: false,
+        readmeReasons: [],
+      });
+    }
+  });
+
+  test('wires eligible README discovery and the conditional job into the QA workflow', () => {
+    const workflow = readFileSync(new URL('../workflows/lint.yml', import.meta.url), 'utf8');
+    expect(workflow).toContain('qualityAssuranceInputs(changedFiles, packageReadmePaths)');
+    expect(workflow).toContain('discoverPackages(process.cwd())');
+    expect(workflow).toContain('has_readme_inputs: ${{ steps.filter.outputs.has_readme_inputs }}');
+    expect(workflow).toContain("if: needs.changes.outputs.has_readme_inputs == 'true'");
+    expect(workflow).toContain('run: node .github/scripts/check-package-readmes.mjs');
+  });
+
   test('runs only relevant checks for unrelated code', () => {
     expect(qualityAssuranceInputs(['packages/core/src/agent/index.ts'])).toMatchObject({
       hasAgentsInputs: false,
@@ -286,6 +362,8 @@ describe('quality assurance CI routing', () => {
     expect(qualityAssuranceInputs(changedFiles)).toEqual({
       hasAgentsInputs: true,
       hasPeerdepsInputs: true,
+      hasReadmeInputs: true,
+      readmeReasons: ['invalid-input'],
       agentsReasons: ['invalid-input'],
       peerdepsReasons: ['invalid-input'],
     });

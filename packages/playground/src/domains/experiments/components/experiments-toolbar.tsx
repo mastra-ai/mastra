@@ -1,10 +1,12 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
+import { ButtonsGroup, ButtonsGroupText } from '@mastra/playground-ui/components/ButtonsGroup';
 import { SelectFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
-import { GitCompare, MoveRightIcon, Play, XIcon } from 'lucide-react';
+import { GitCompare, Play, XIcon, X } from 'lucide-react';
 import { EXPERIMENT_STATUS_OPTIONS } from './experiments-list-options';
+import type { DatasetTargetType } from '@/domains/datasets/components/target-type-options';
+import { TargetFilter } from '@/domains/shared/components/target-filter';
 
 export interface ExperimentsToolbarDatasetOption {
   value: string;
@@ -19,13 +21,17 @@ export interface ExperimentsToolbarProps {
   datasetFilter: string;
   onDatasetFilterChange: (value: string) => void;
   datasetOptions: ExperimentsToolbarDatasetOption[];
+  targetType: DatasetTargetType | '';
+  onTargetTypeChange: (type: DatasetTargetType | '') => void;
+  targetId: string;
+  onTargetIdChange: (id: string) => void;
   onReset?: () => void;
   hasActiveFilters?: boolean;
   onRunClick?: () => void;
   runTooltip?: string;
   /** When omitted the Compare entry point is hidden. */
   onCompareClick?: () => void;
-  /** When provided, the toolbar renders the comparison selection controls instead of the filters. */
+  /** When provided, the comparison selection controls replace the Compare/Run actions. */
   selection?: ExperimentsToolbarSelection;
 }
 
@@ -45,6 +51,10 @@ export function ExperimentsToolbar({
   datasetFilter,
   onDatasetFilterChange,
   datasetOptions,
+  targetType,
+  onTargetTypeChange,
+  targetId,
+  onTargetIdChange,
   onReset,
   hasActiveFilters,
   onRunClick,
@@ -52,35 +62,11 @@ export function ExperimentsToolbar({
   onCompareClick,
   selection,
 }: ExperimentsToolbarProps) {
-  if (selection) {
-    const { selectedCount, onExecuteCompare, onCancelSelection, compareDisabledReason } = selection;
-    const canCompare = selectedCount === 2 && !compareDisabledReason;
-    return (
-      <div className="flex w-full items-center justify-end gap-4">
-        <div className="flex items-center gap-5">
-          <div className="text-neutral3 flex items-center gap-2 pl-6 text-sm">
-            <Badge size="md" variant={selectedCount < 2 ? 'red' : 'green'}>
-              {selectedCount}
-            </Badge>
-            <span>of 2 experiments selected</span>
-            {compareDisabledReason && <span className="text-accent2">— {compareDisabledReason}</span>}
-            <MoveRightIcon />
-          </div>
-          <ButtonsGroup>
-            <Button variant="primary" disabled={!canCompare} onClick={onExecuteCompare}>
-              <GitCompare className="h-4 w-4" />
-              Compare Experiments
-            </Button>
-            <Button onClick={onCancelSelection}>Cancel</Button>
-          </ButtonsGroup>
-        </div>
-      </div>
-    );
-  }
+  const canCompare = selection?.selectedCount === 2 && !selection.compareDisabledReason;
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <div className="max-w-120 min-w-64 flex-1">
+    <div className="min-h-form-md flex flex-wrap items-center gap-2">
+      <div className="max-w-120 min-w-48 flex-1">
         <ListSearch
           label="Search experiments"
           placeholder="Filter by experiment, dataset, or target"
@@ -107,26 +93,54 @@ export function ExperimentsToolbar({
           onValueChange={onDatasetFilterChange}
           className="whitespace-nowrap"
         />
+        <TargetFilter
+          targetType={targetType}
+          targetId={targetId}
+          onTargetTypeChange={onTargetTypeChange}
+          onTargetIdChange={onTargetIdChange}
+        />
         {onReset && hasActiveFilters && (
-          <Button onClick={onReset} size="sm" variant="default">
-            <XIcon className="size-3" /> Reset
+          <Button onClick={onReset} size="sm" variant="default" icon={<XIcon />}>
+            Reset
           </Button>
         )}
       </ButtonsGroup>
-      <ButtonsGroup className="ml-auto shrink-0">
-        {onCompareClick && (
-          <Button onClick={onCompareClick} tooltip="Select two experiments of the same dataset to compare">
-            <GitCompare />
-            Compare
+      {selection ? (
+        <ButtonsGroup className="ml-auto shrink-0 whitespace-nowrap">
+          <ButtonsGroupText className="gap-2">
+            <Badge size="sm" variant={selection.selectedCount < 2 ? 'red' : 'green'}>
+              {selection.selectedCount} / 2
+            </Badge>
+            selected
+            {selection.compareDisabledReason && (
+              <span className="text-accent2">· {selection.compareDisabledReason}</span>
+            )}
+          </ButtonsGroupText>
+          <Button variant="primary" disabled={!canCompare} onClick={selection.onExecuteCompare} icon={<GitCompare />}>
+            Compare Experiments
           </Button>
-        )}
-        {onRunClick && (
-          <Button onClick={onRunClick} tooltip={runTooltip} variant="primary">
-            <Play />
-            Run Experiment
+          <Button icon={<X />} onClick={selection.onCancelSelection}>
+            Cancel
           </Button>
-        )}
-      </ButtonsGroup>
+        </ButtonsGroup>
+      ) : (
+        <ButtonsGroup className="ml-auto shrink-0">
+          {onCompareClick && (
+            <Button
+              onClick={onCompareClick}
+              tooltip="Select two experiments of the same dataset to compare"
+              icon={<GitCompare />}
+            >
+              Compare
+            </Button>
+          )}
+          {onRunClick && (
+            <Button onClick={onRunClick} tooltip={runTooltip} variant="primary" icon={<Play />}>
+              Run Experiment
+            </Button>
+          )}
+        </ButtonsGroup>
+      )}
     </div>
   );
 }

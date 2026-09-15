@@ -1,4 +1,6 @@
 import type { Agent } from '../agent';
+import type { SpanChunk } from '../agent/message-list/message-part-spans';
+import { isSpanChunk, MessagePartSpans } from '../agent/message-list/message-part-spans';
 import type {
   MastraDBMessage,
   MastraMessagePart,
@@ -40,10 +42,7 @@ type StreamIgnoredChunk =
   | StreamPayloadChunk<'start'>
   | StreamPayloadChunk<'abort'>
   | StreamPayloadChunk<'response-metadata'>
-  | StreamPayloadChunk<'text-end'>
-  | StreamPayloadChunk<'reasoning-end'>
   | StreamPayloadChunk<'reasoning-signature'>
-  | StreamPayloadChunk<'redacted-reasoning'>
   | StreamPayloadChunk<'source'>
   | StreamPayloadChunk<'file'>
   | StreamPayloadChunk<'reasoning-file'>
@@ -68,10 +67,7 @@ type StreamIgnoredChunk =
   | StreamObjectChunk<'object-result'>;
 type StreamChunk =
   | StreamIgnoredChunk
-  | StreamPayloadChunk<'text-start'>
-  | StreamPayloadChunk<'text-delta'>
-  | StreamPayloadChunk<'reasoning-start'>
-  | StreamPayloadChunk<'reasoning-delta'>
+  | SpanChunk
   | StreamPayloadChunk<'tool-call-input-streaming-start'>
   | StreamPayloadChunk<'tool-call-delta'>
   | StreamPayloadChunk<'tool-call-input-streaming-end'>
@@ -225,12 +221,16 @@ async function abortDeadline(run: Session['run'], guard: AbortSignal, graceMs: n
 type StreamState = {
   currentMessage: MastraDBMessage;
   lastFinishedMessage?: MastraDBMessage;
+  messageStarted: boolean;
   isSuspended: boolean;
-  textContentById: Map<string, { index: number; text: string }>;
-  thinkingContentById: Map<string, { index: number; text: string }>;
+  spans: MessagePartSpans;
+  announcedTextSpans: Set<string>;
+  announcedReasoningSpans: Set<string>;
+  messageIdObserved: boolean;
   toolPartById: Map<string, number>;
   /** Response ids offered by `step-start` — an id binds to at most one display message. */
   offeredResponseIds: Set<string>;
+  completedToolPrelude: boolean;
   /**
    * Set when a stream ends on a non-success finish reason (e.g. `content-filter`,
    * `error`, `length`). Carries the user-facing message so the run finalizes
@@ -299,6 +299,10 @@ export class SessionRunEngine {
     return state.currentMessage.content.parts.length > 0;
   }
 
+  private isCurrentMessageObserved(state: StreamState): boolean {
+    return this.hasCurrentMessageContent(state) || state.messageIdObserved;
+  }
+
   private setStopReason(message: MastraDBMessage, stopReason: string, force = false): void {
     message.content.metadata ??= {};
     const metadata = message.content.metadata;
@@ -314,25 +318,73 @@ export class SessionRunEngine {
     message.content.metadata.errorMessage = errorMessage;
   }
 
+  private startCurrentMessage(state: StreamState): boolean {
+    if (state.messageStarted) return false;
+    this.#session.emit({ type: 'message_start', message: structuredClone(state.currentMessage) });
+    state.messageStarted = true;
+    return true;
+  }
+
+  private emitMessagePart(state: StreamState, index: number): void {
+    if (this.startCurrentMessage(state)) return;
+    const part = state.currentMessage.content.parts[index];
+    if (!part) return;
+    this.#session.emit({
+      type: 'message_update',
+      id: state.currentMessage.id,
+      event: { type: 'part', index, part: structuredClone(part) },
+    });
+  }
+
+  private emitInitialPart(state: StreamState, index: number, part: MastraMessagePart): void {
+    if (!state.messageStarted) {
+      const message = structuredClone(state.currentMessage);
+      message.content.parts[index] = part;
+      state.messageIdObserved = true;
+      this.#session.emit({ type: 'message_start', message });
+      state.messageStarted = true;
+      return;
+    }
+
+    this.#session.emit({
+      type: 'message_update',
+      id: state.currentMessage.id,
+      event: { type: 'part', index, part },
+    });
+  }
+
+  private finishCurrentMessage(state: StreamState): void {
+    if (!state.messageStarted) return;
+    this.#session.emit({ type: 'message_end', id: state.currentMessage.id });
+    state.messageStarted = false;
+  }
+
   private finishCurrentMessageAndRotate(state: StreamState): void {
-    if (!this.hasCurrentMessageContent(state)) return;
+    if (!this.isCurrentMessageObserved(state)) return;
     this.setStopReason(state.currentMessage, 'complete');
-    this.#session.emit({ type: 'message_end', message: state.currentMessage });
+    this.finishCurrentMessage(state);
     state.lastFinishedMessage = state.currentMessage;
     state.currentMessage = this.createEmptyAssistantMessage();
-    state.textContentById.clear();
-    state.thinkingContentById.clear();
+    state.spans.clear();
+    state.announcedTextSpans.clear();
+    state.announcedReasoningSpans.clear();
+    state.messageIdObserved = false;
     state.toolPartById.clear();
+    state.completedToolPrelude = false;
   }
 
   createStreamState(): StreamState {
     return {
       currentMessage: this.createEmptyAssistantMessage(),
+      messageStarted: false,
       isSuspended: false,
-      textContentById: new Map<string, { index: number; text: string }>(),
-      thinkingContentById: new Map<string, { index: number; text: string }>(),
+      spans: new MessagePartSpans({ providerMetadata: false }),
+      announcedTextSpans: new Set(),
+      announcedReasoningSpans: new Set(),
+      messageIdObserved: false,
       toolPartById: new Map<string, number>(),
       offeredResponseIds: new Set<string>(),
+      completedToolPrelude: false,
     };
   }
 
@@ -353,6 +405,7 @@ export class SessionRunEngine {
     const { toolCallId, toolName, result, isError, providerMetadata } = outcome;
     const toolIndex = state.toolPartById.get(toolCallId);
     const existing = toolIndex !== undefined ? state.currentMessage.content.parts[toolIndex] : undefined;
+    const partIndex = toolIndex ?? state.currentMessage.content.parts.length;
     if (existing && existing.type === 'tool-invocation') {
       existing.toolInvocation = Object.assign(existing.toolInvocation, {
         state: 'result' as const,
@@ -378,7 +431,9 @@ export class SessionRunEngine {
         toolInvocationPart.providerMetadata = providerMetadata;
       }
       state.currentMessage.content.parts.push(toolInvocationPart);
+      state.toolPartById.set(toolCallId, partIndex);
     }
+    this.emitMessagePart(state, partIndex);
     this.#session.emit({
       type: 'tool_end',
       toolCallId,
@@ -386,7 +441,6 @@ export class SessionRunEngine {
       isError,
       ...(providerMetadata ? { providerMetadata } : {}),
     });
-    this.#session.emit({ type: 'message_update', message: state.currentMessage });
   }
 
   private abortForOmFailure({ operationType, stage, error }: { operationType: string; stage: string; error: string }) {
@@ -471,7 +525,6 @@ export class SessionRunEngine {
     );
 
     this.#session.run.reset();
-    await this.#session.drainFollowUpQueue();
 
     return result;
   }
@@ -493,6 +546,54 @@ export class SessionRunEngine {
       this.#session.run.setRunId({ runId: chunk.runId });
     }
 
+    if (isSpanChunk(chunk)) {
+      const partIndex = state.currentMessage.content.parts.length;
+      if (chunk.type === 'text-start') {
+        state.spans.fold(state.currentMessage.content.parts, chunk);
+        const part = state.spans.openTextSpan(state.currentMessage.content.parts, chunk.payload.id);
+        state.announcedTextSpans.add(chunk.payload.id);
+        this.emitInitialPart(state, partIndex, structuredClone(part));
+        return undefined;
+      }
+      if (chunk.type === 'reasoning-start') {
+        state.spans.fold(state.currentMessage.content.parts, chunk);
+        const part = state.spans.openReasoningSpan(state.currentMessage.content.parts, chunk.payload.id);
+        state.announcedReasoningSpans.add(chunk.payload.id);
+        this.emitInitialPart(state, partIndex, structuredClone(part));
+        return undefined;
+      }
+
+      const folded = state.spans.fold(state.currentMessage.content.parts, chunk);
+      if (!folded) return undefined;
+
+      const index = state.currentMessage.content.parts.indexOf(folded.part);
+      if (index === -1) return undefined;
+
+      if (chunk.type === 'text-delta' && folded.part.type === 'text') {
+        if (!state.announcedTextSpans.delete(chunk.payload.id) && folded.created) {
+          this.emitInitialPart(state, index, { ...folded.part, text: '' });
+        }
+        this.#session.emit({
+          type: 'message_update',
+          id: state.currentMessage.id,
+          event: { type: 'text-delta', delta: chunk.payload.text },
+        });
+      } else if (chunk.type === 'reasoning-delta' && folded.part.type === 'reasoning') {
+        if (!state.announcedReasoningSpans.delete(chunk.payload.id) && folded.created) {
+          this.emitMessagePart(state, index);
+        } else {
+          this.#session.emit({
+            type: 'message_update',
+            id: state.currentMessage.id,
+            event: { type: 'reasoning-delta', index, delta: chunk.payload.text },
+          });
+        }
+      } else {
+        this.emitMessagePart(state, index);
+      }
+      return undefined;
+    }
+
     switch (chunk.type) {
       case 'step-start': {
         // Adopt the loop's response message id so the streamed turn and its
@@ -503,75 +604,22 @@ export class SessionRunEngine {
         // An emitted id never changes, and an id binds to one message only.
         const messageId = getString(getPayload(chunk).messageId);
         if (!messageId || state.offeredResponseIds.has(messageId)) break;
-        if (state.offeredResponseIds.size > 0) this.finishCurrentMessageAndRotate(state);
+        // A resumed tool can finish before the first model step starts. Seal
+        // that tool-only prelude without changing its already observable id.
+        if (
+          state.offeredResponseIds.size > 0 ||
+          (state.completedToolPrelude &&
+            state.currentMessage.content.parts.every(
+              part => part.type === 'tool-invocation' && part.toolInvocation.state === 'result',
+            ))
+        ) {
+          this.finishCurrentMessageAndRotate(state);
+        }
+        state.completedToolPrelude = false;
         state.offeredResponseIds.add(messageId);
-        if (!this.hasCurrentMessageContent(state)) {
+        if (!this.isCurrentMessageObserved(state)) {
           state.currentMessage.id = messageId;
         }
-        break;
-      }
-
-      case 'text-start': {
-        // A late start for an id already seeded by an orphan delta must not
-        // create a duplicate part or reset the accumulated text.
-        if (state.textContentById.has(getString(getPayload(chunk).id) ?? '')) break;
-        const textIndex = state.currentMessage.content.parts.length;
-        state.currentMessage.content.parts.push({ type: 'text', text: '' });
-        state.textContentById.set(getString(getPayload(chunk).id) ?? '', { index: textIndex, text: '' });
-        this.#session.emit({ type: 'message_start', message: state.currentMessage });
-        break;
-      }
-
-      case 'text-delta': {
-        const id = getString(getPayload(chunk).id) ?? '';
-        let textState = state.textContentById.get(id);
-        if (!textState) {
-          // Deltas can arrive without a seeded part — e.g. after a step-start
-          // rotation cleared the map mid-text. Seed a part instead of silently
-          // dropping the text, otherwise the folded message loses content.
-          const textIndex = state.currentMessage.content.parts.length;
-          state.currentMessage.content.parts.push({ type: 'text', text: '' });
-          textState = { index: textIndex, text: '' };
-          state.textContentById.set(id, textState);
-          this.#session.emit({ type: 'message_start', message: state.currentMessage });
-        }
-        textState.text += getString(getPayload(chunk).text) ?? '';
-        const textContent = state.currentMessage.content.parts[textState.index];
-        if (textContent && textContent.type === 'text') {
-          textContent.text = textState.text;
-        }
-        this.#session.emit({ type: 'message_update', message: state.currentMessage });
-        break;
-      }
-
-      case 'reasoning-start': {
-        // Mirror text-start: a late start for an already-seeded id is a no-op.
-        if (state.thinkingContentById.has(getString(getPayload(chunk).id) ?? '')) break;
-        const thinkingIndex = state.currentMessage.content.parts.length;
-        state.currentMessage.content.parts.push({ type: 'reasoning', reasoning: '', details: [] });
-        state.thinkingContentById.set(getString(getPayload(chunk).id) ?? '', { index: thinkingIndex, text: '' });
-        this.#session.emit({ type: 'message_update', message: state.currentMessage });
-        break;
-      }
-
-      case 'reasoning-delta': {
-        const id = getString(getPayload(chunk).id) ?? '';
-        let thinkingState = state.thinkingContentById.get(id);
-        if (!thinkingState) {
-          // Same tolerance as text-delta: seed the part rather than silently
-          // dropping reasoning whose start chunk never seeded the id.
-          const thinkingIndex = state.currentMessage.content.parts.length;
-          state.currentMessage.content.parts.push({ type: 'reasoning', reasoning: '', details: [] });
-          thinkingState = { index: thinkingIndex, text: '' };
-          state.thinkingContentById.set(id, thinkingState);
-        }
-        thinkingState.text += getString(getPayload(chunk).text) ?? '';
-        const thinkingContent = state.currentMessage.content.parts[thinkingState.index];
-        if (thinkingContent && thinkingContent.type === 'reasoning') {
-          thinkingContent.reasoning = thinkingState.text;
-          thinkingContent.details = [{ type: 'text', text: thinkingState.text }];
-        }
-        this.#session.emit({ type: 'message_update', message: state.currentMessage });
         break;
       }
 
@@ -622,13 +670,13 @@ export class SessionRunEngine {
           },
         });
         state.toolPartById.set(toolCallId, toolIndex);
+        this.emitMessagePart(state, toolIndex);
         this.#session.emit({
           type: 'tool_start',
           toolCallId,
           toolName,
           args,
         });
-        this.#session.emit({ type: 'message_update', message: state.currentMessage });
         break;
       }
 
@@ -681,14 +729,16 @@ export class SessionRunEngine {
           },
         };
 
+        const partIndex = toolIndex ?? state.currentMessage.content.parts.length;
         if (existing && existing.type === 'tool-invocation') {
           existing.toolInvocation = Object.assign(existing.toolInvocation, toolInvocation);
         } else {
           state.currentMessage.content.parts.push({ type: 'tool-invocation', toolInvocation });
+          state.toolPartById.set(toolCallId, partIndex);
         }
 
+        this.emitMessagePart(state, partIndex);
         this.#session.emit({ type: 'tool_end', toolCallId, result: reason, isError: false, denied: true });
-        this.#session.emit({ type: 'message_update', message: state.currentMessage });
         break;
       }
 
@@ -791,65 +841,70 @@ export class SessionRunEngine {
       case 'error': {
         const streamError = getErrorFromUnknown(getPayload(chunk).error);
         this.#session.emit({ type: 'error', error: streamError });
-
-        // A run that dies after emitting `tool_suspended` (e.g. persisting the
-        // suspended snapshot failed) leaves its parked suspensions unresumable:
-        // answering them would fail with a misleading "could not find a
-        // suspended run" error that masks this primary failure. Retract them so
-        // the UI dismisses the prompts and the user sees the real error.
-        const failedRunId = chunk.runId ?? this.#session.run.getRunId();
-        if (failedRunId) {
-          for (const { toolCallId, toolName } of this.#session.suspensions.deleteForRun({ runId: failedRunId })) {
-            this.#session.emit({
-              type: 'tool_suspension_cancelled',
-              toolCallId,
-              toolName,
-              reason: streamError.message,
-            });
-          }
-        }
+        this.retractFailedRunSuspensions({
+          runId: chunk.runId ?? this.#session.run.getRunId(),
+          reason: streamError.message,
+        });
         break;
       }
 
       case 'step-finish': {
+        state.completedToolPrelude =
+          state.offeredResponseIds.size === 0 &&
+          this.hasCurrentMessageContent(state) &&
+          state.currentMessage.content.parts.every(
+            part => part.type === 'tool-invocation' && part.toolInvocation.state === 'result',
+          );
         const usage = getRecord(getPayload(chunk).output)?.usage;
         const usageRecord = getRecord(usage);
         if (usageRecord) {
-          const promptTokens =
-            getUsageNumber(usageRecord, 'promptTokens') ?? getUsageNumber(usageRecord, 'inputTokens') ?? 0;
-          const completionTokens =
-            getUsageNumber(usageRecord, 'completionTokens') ?? getUsageNumber(usageRecord, 'outputTokens') ?? 0;
-          const totalTokens = getUsageNumber(usageRecord, 'totalTokens') ?? promptTokens + completionTokens;
-          const stepUsage: TokenUsage = {
-            promptTokens,
-            completionTokens,
-            totalTokens,
-          };
-          addOptionalUsageField(stepUsage, 'reasoningTokens', getUsageNumber(usageRecord, 'reasoningTokens'));
-          addOptionalUsageField(stepUsage, 'cachedInputTokens', getUsageNumber(usageRecord, 'cachedInputTokens'));
-          addOptionalUsageField(
-            stepUsage,
-            'cacheCreationInputTokens',
-            getUsageNumber(usageRecord, 'cacheCreationInputTokens'),
-          );
-          addOptionalUsageField(
-            stepUsage,
-            'cacheCreationInputTokens5m',
-            getUsageNumber(usageRecord, 'cacheCreationInputTokens5m'),
-          );
-          addOptionalUsageField(
-            stepUsage,
-            'cacheCreationInputTokens1h',
-            getUsageNumber(usageRecord, 'cacheCreationInputTokens1h'),
-          );
-          if (usageRecord.raw !== undefined) {
-            stepUsage.raw = usageRecord.raw;
+          // A step whose usage payload carries no usable primary count (missing,
+          // nested-object, or all-undefined shapes) must NOT be coerced into a
+          // {0,0,0} tally: doing so fabricates a false `usage_update` event and
+          // persists a false zero that is indistinguishable from a measured zero.
+          // Only fold/persist/emit when at least one primary count is present.
+          // A genuine measured zero arrives as an explicit numeric 0, which
+          // `getUsageNumber` reports as present.
+          const rawPrompt = getUsageNumber(usageRecord, 'promptTokens') ?? getUsageNumber(usageRecord, 'inputTokens');
+          const rawCompletion =
+            getUsageNumber(usageRecord, 'completionTokens') ?? getUsageNumber(usageRecord, 'outputTokens');
+          const rawTotal = getUsageNumber(usageRecord, 'totalTokens');
+          const hasPrimaryCount = rawPrompt !== undefined || rawCompletion !== undefined || rawTotal !== undefined;
+          if (hasPrimaryCount) {
+            const promptTokens = rawPrompt ?? 0;
+            const completionTokens = rawCompletion ?? 0;
+            const totalTokens = rawTotal ?? promptTokens + completionTokens;
+            const stepUsage: TokenUsage = {
+              promptTokens,
+              completionTokens,
+              totalTokens,
+            };
+            addOptionalUsageField(stepUsage, 'reasoningTokens', getUsageNumber(usageRecord, 'reasoningTokens'));
+            addOptionalUsageField(stepUsage, 'cachedInputTokens', getUsageNumber(usageRecord, 'cachedInputTokens'));
+            addOptionalUsageField(
+              stepUsage,
+              'cacheCreationInputTokens',
+              getUsageNumber(usageRecord, 'cacheCreationInputTokens'),
+            );
+            addOptionalUsageField(
+              stepUsage,
+              'cacheCreationInputTokens5m',
+              getUsageNumber(usageRecord, 'cacheCreationInputTokens5m'),
+            );
+            addOptionalUsageField(
+              stepUsage,
+              'cacheCreationInputTokens1h',
+              getUsageNumber(usageRecord, 'cacheCreationInputTokens1h'),
+            );
+            if (usageRecord.raw !== undefined) {
+              stepUsage.raw = usageRecord.raw;
+            }
+
+            this.#session.addUsage(stepUsage);
+
+            this.#machinery.persistTokenUsage().catch(() => {});
+            this.#session.emit({ type: 'usage_update', usage: stepUsage });
           }
-
-          this.#session.addUsage(stepUsage);
-
-          this.#machinery.persistTokenUsage().catch(() => {});
-          this.#session.emit({ type: 'usage_update', usage: stepUsage });
         }
         break;
       }
@@ -1074,7 +1129,7 @@ export class SessionRunEngine {
         if (payload) {
           const message = this.createSignalMessage('data-signal', payload);
           this.#session.emit({ type: 'message_start', message });
-          this.#session.emit({ type: 'message_end', message });
+          this.#session.emit({ type: 'message_end', id: message.id });
         }
         break;
       }
@@ -1084,7 +1139,7 @@ export class SessionRunEngine {
           this.finishCurrentMessageAndRotate(state);
           const message = this.createSignalMessage('data-user-message', payload);
           this.#session.emit({ type: 'message_start', message });
-          this.#session.emit({ type: 'message_end', message });
+          this.#session.emit({ type: 'message_end', id: message.id });
         }
         break;
       }
@@ -1094,7 +1149,7 @@ export class SessionRunEngine {
         if (payload) {
           const message = this.createSignalMessage('data-system-reminder', payload);
           this.#session.emit({ type: 'message_start', message });
-          this.#session.emit({ type: 'message_end', message });
+          this.#session.emit({ type: 'message_end', id: message.id });
         }
         break;
       }
@@ -1207,19 +1262,21 @@ export class SessionRunEngine {
 
     const toolIndex = state.toolPartById.get(toolCallId);
     const existing = toolIndex !== undefined ? state.currentMessage.content.parts[toolIndex] : undefined;
+    const partIndex = toolIndex ?? state.currentMessage.content.parts.length;
     if (existing && existing.type === 'tool-invocation') {
       existing.toolInvocation = Object.assign(existing.toolInvocation, toolInvocation);
     } else {
       state.currentMessage.content.parts.push({ type: 'tool-invocation', toolInvocation });
+      state.toolPartById.set(toolCallId, partIndex);
     }
 
+    this.emitMessagePart(state, partIndex);
     this.#session.emit({ type: 'tool_end', toolCallId, result: ABORTED_BY_USER_REASON, isError: false, denied: true });
-    this.#session.emit({ type: 'message_update', message: state.currentMessage });
   }
 
   private finishStreamState(state: StreamState): { message: MastraDBMessage; suspended?: boolean } {
     if (this.hasCurrentMessageContent(state) || !state.lastFinishedMessage) {
-      this.#session.emit({ type: 'message_end', message: state.currentMessage });
+      this.finishCurrentMessage(state);
       return { message: state.currentMessage, suspended: state.isSuspended || undefined };
     }
 
@@ -1244,19 +1301,32 @@ export class SessionRunEngine {
           : 'complete';
     await this.#session.finishAgentRun(reason);
     this.#session.run.reset();
-    await this.#session.drainFollowUpQueue();
+  }
+
+  private retractFailedRunSuspensions({ runId, reason }: { runId: string | null; reason: string }): void {
+    if (!runId) return;
+
+    for (const { toolCallId, toolName } of this.#session.suspensions.deleteForRun({ runId })) {
+      this.#session.emit({
+        type: 'tool_suspension_cancelled',
+        toolCallId,
+        toolName,
+        reason,
+      });
+    }
   }
 
   private async handleSubscribedStreamError(error: unknown): Promise<void> {
     if (error instanceof Error && error.name === 'AbortError') {
       await this.#session.finishAgentRun('aborted');
     } else {
-      this.#session.emit({ type: 'error', error: getErrorFromUnknown(error) });
+      const streamError = getErrorFromUnknown(error);
+      this.#session.emit({ type: 'error', error: streamError });
+      this.retractFailedRunSuspensions({ runId: this.#session.run.getRunId(), reason: streamError.message });
       await this.#session.finishAgentRun('error');
     }
     this.#session.stream.detach();
     this.#session.run.reset();
-    await this.#session.drainFollowUpQueue();
   }
 
   async processSubscribedThreadStream(subscription: AgentThreadSubscription<StreamChunk>): Promise<void> {

@@ -544,8 +544,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 1000000,
-    "maxOutput": 32000,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
     "inputCost": 1.25,
     "outputCost": 4.25
   },
@@ -1294,18 +1294,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 2.4
   },
   {
-    "model": "orcarouter/qwen/qwen3.8-27b-free",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": true,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 65536,
-    "maxOutput": 32768,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
     "model": "orcarouter/qwen/qwen3.8-max",
     "imageInput": true,
     "audioInput": false,
@@ -1325,7 +1313,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 256000,
-    "maxOutput": 64000,
+    "maxOutput": 128000,
     "inputCost": 0.18,
     "outputCost": 0.59
   },
@@ -1337,7 +1325,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 256000,
-    "maxOutput": 64000,
+    "maxOutput": 128000,
     "inputCost": null,
     "outputCost": null
   },
@@ -1448,6 +1436,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 128000,
     "inputCost": 0.075,
     "outputCost": 0.25
+  },
+  {
+    "model": "orcarouter/z-ai/glm-5.3-flash-free",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 128000,
+    "inputCost": null,
+    "outputCost": null
   }
 ]}
 />
@@ -1482,10 +1482,9 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "orcarouter/z-ai/glm-5.3-flash"
+      ? "orcarouter/z-ai/glm-5.3-flash-free"
       : "orcarouter/anthropic/claude-fable-5";
   }
 });
 ```
-
 

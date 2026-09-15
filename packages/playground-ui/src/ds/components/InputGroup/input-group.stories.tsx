@@ -190,12 +190,6 @@ export const Sizes: Story = {
         </InputGroupAddon>
         <InputGroupInput placeholder="Medium" />
       </InputGroup>
-      <InputGroup size="default">
-        <InputGroupAddon>
-          <SearchIcon />
-        </InputGroupAddon>
-        <InputGroupInput placeholder="Default" />
-      </InputGroup>
       <InputGroup size="lg">
         <InputGroupAddon>
           <SearchIcon />

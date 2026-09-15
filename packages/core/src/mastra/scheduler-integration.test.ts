@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
+import { NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID } from '../notifications/workflow';
 import { MockStore } from '../storage/mock';
 import { createWorkflow as createDefaultWorkflow } from '../workflows';
 import { createStep, createWorkflow as createEventedWorkflow } from '../workflows/evented';
@@ -93,25 +94,34 @@ describe('Mastra — workflow scheduler integration', () => {
     expect(scheduler!.isRunning).toBe(false);
   });
 
-  it('starts the scheduler by default when all workers are started', async () => {
+  it('does not instantiate the scheduler or poll storage when no schedules are configured', async () => {
     const storage = new MockStore();
+    const schedulesStore = (await storage.getStore('schedules'))!;
+    const calls = recordStoreCalls(schedulesStore);
 
     const mastra = new Mastra({
       logger: false,
       ...withoutNotificationDispatch,
       storage,
+      scheduler: { tickIntervalMs: 20 },
     });
 
     await mastra.startWorkers();
-    await waitForScheduler(mastra);
+    // Several tick intervals: if a scheduler were running it would have
+    // polled `listDueSchedules` many times by now.
+    await new Promise(resolve => setTimeout(resolve, 200));
 
-    expect(mastra.scheduler).toBeDefined();
-    expect(mastra.scheduler!.isRunning).toBe(true);
+    // An idle app with storage must not keep the database awake — a
+    // permanent poll loop breaks scale-to-zero on serverless hosts. The
+    // only permitted read is the one-shot boot probe for persisted rows.
+    expect(mastra.scheduler).toBeUndefined();
+    expect(calls.filter(m => m === 'listDueSchedules')).toHaveLength(0);
+    expect(calls.filter(m => m === 'listSchedules').length).toBeLessThanOrEqual(1);
 
     await mastra.shutdown();
   });
 
-  it('starts the scheduler when only unscheduled workflows are registered', async () => {
+  it('does not instantiate the scheduler when only unscheduled workflows are registered', async () => {
     const storage = new MockStore();
 
     const wf = createDefaultWorkflow({
@@ -136,10 +146,11 @@ describe('Mastra — workflow scheduler integration', () => {
     });
 
     await mastra.startWorkers();
-    await waitForScheduler(mastra);
+    await flushAsyncInit();
 
-    expect(mastra.scheduler).toBeDefined();
-    expect(mastra.scheduler!.isRunning).toBe(true);
+    // Boot-time cold rehydration may probe the schedules store; the
+    // invariant under test is that no scheduler worker is created.
+    expect(mastra.scheduler).toBeUndefined();
 
     await mastra.shutdown();
   });
@@ -1018,6 +1029,100 @@ describe('Mastra — workflow scheduler integration', () => {
       await flushAsyncInit();
 
       expect(calls).toEqual([]);
+      expect(mastra.scheduler).toBeUndefined();
+
+      await mastra.shutdown();
+    });
+
+    it('still detects existing agent schedules when the scheduler is not explicitly disabled', async () => {
+      const storage = new MockStore();
+      const schedulesStore = (await storage.getStore('schedules'))!;
+      const listSchedules = vi.spyOn(schedulesStore, 'listSchedules');
+      // Simulate a row persisted by another process before worker boot.
+      const future = Date.now() + 3_600_000;
+      await schedulesStore.createSchedule({
+        id: 'cold-boot-agent-sched',
+        target: { type: 'agent', agentId: 'a1', prompt: 'check in' },
+        cron: '0 0 1 1 *',
+        status: 'active',
+        nextFireAt: future,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        ownerType: 'agent',
+        ownerId: 'a1',
+      });
+
+      const mastra = new Mastra({
+        logger: false,
+        ...withoutNotificationDispatch,
+        storage,
+        scheduler: { tickIntervalMs: 600_000 },
+      });
+
+      await mastra.startWorkers();
+      await waitForScheduler(mastra);
+
+      expect(listSchedules).toHaveBeenCalled();
+      expect(mastra.scheduler).toBeDefined();
+
+      await mastra.shutdown();
+    });
+
+    it('detects an imperative workflow schedule persisted by a previous process', async () => {
+      const storage = new MockStore();
+      const schedulesStore = (await storage.getStore('schedules'))!;
+      // `schedules.create({ workflowId })` rows carry no `ownerType`, so a probe
+      // filtered on `ownerType: 'agent'` would miss them and the schedule would
+      // never fire after a restart.
+      const future = Date.now() + 3_600_000;
+      // `schedule_` is the imperative id prefix; `wf_` is reserved for
+      // declarative rows, which init() would treat as an orphan and delete.
+      await schedulesStore.createSchedule({
+        id: 'schedule_cold-boot-workflow-sched',
+        target: { type: 'workflow', workflowId: 'some-wf' },
+        cron: '0 0 1 1 *',
+        status: 'active',
+        nextFireAt: future,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+
+      const mastra = new Mastra({
+        logger: false,
+        ...withoutNotificationDispatch,
+        storage,
+        scheduler: { tickIntervalMs: 600_000 },
+      });
+
+      await mastra.startWorkers();
+      await waitForScheduler(mastra);
+      expect(mastra.scheduler).toBeDefined();
+      expect(await schedulesStore.getSchedule('schedule_cold-boot-workflow-sched')).toBeTruthy();
+
+      await mastra.shutdown();
+    });
+
+    it('ignores a leftover dispatcher row when notification dispatch is disabled', async () => {
+      const storage = new MockStore();
+      const schedulesStore = (await storage.getStore('schedules'))!;
+      await schedulesStore.createSchedule({
+        id: NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID,
+        target: { type: 'workflow', workflowId: 'notification-dispatch' },
+        cron: '*/1 * * * *',
+        status: 'active',
+        nextFireAt: Date.now() + 60_000,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+
+      const mastra = new Mastra({
+        logger: false,
+        ...withoutNotificationDispatch,
+        storage,
+      });
+
+      await mastra.startWorkers();
+      await flushAsyncInit();
       expect(mastra.scheduler).toBeUndefined();
 
       await mastra.shutdown();

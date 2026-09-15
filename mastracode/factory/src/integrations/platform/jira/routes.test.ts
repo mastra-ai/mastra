@@ -58,7 +58,6 @@ function buildApp(
       jira: (options.withJira ?? true) ? jira : undefined,
       auth: fakeRouteAuth({ enabled: options.authEnabled ?? true }),
       intake: (options.withIntake ?? true) ? seed.intake : undefined,
-      projects: seed.projects,
       appDbConfigured: options.appDbConfigured ?? true,
     }),
   );
@@ -84,7 +83,6 @@ beforeEach(async () => {
   vi.spyOn(jira, 'listActiveIssues').mockImplementation(listActiveJiraIssues as never);
   await seed.intake.saveConfig({
     orgId: 'org1',
-    userId: 'u1',
     config: { jira: { enabled: true, sourceIds: ['1'] } },
   });
   vi.clearAllMocks();
@@ -231,7 +229,6 @@ describe('issues route', () => {
   it('404s when Jira intake is disabled in settings', async () => {
     await seed.intake.saveConfig({
       orgId: 'org1',
-      userId: 'u1',
       config: { jira: { enabled: false, sourceIds: null } },
     });
     const res = await buildApp(org1()).request('/web/jira/issues');
@@ -243,7 +240,6 @@ describe('issues route', () => {
   it('returns an empty page without calling Jira when no projects are selected', async () => {
     await seed.intake.saveConfig({
       orgId: 'org1',
-      userId: 'u1',
       config: { jira: { enabled: true, sourceIds: null } },
     });
     const res = await buildApp(org1()).request('/web/jira/issues');
@@ -298,13 +294,12 @@ describe('issues route — Factory source bindings', () => {
     }
   };
 
-  const bind = (sourceId: string, factoryProjectId: string) =>
-    seed.intake.setBinding({ orgId: 'org1', integrationId: 'jira', sourceId, factoryProjectId });
+  const bind = (sourceId: string, factoryProjectId: string, board = 'work') =>
+    seed.intake.setBinding({ orgId: 'org1', integrationId: 'jira', sourceId, factoryProjectId, board });
 
   beforeEach(async () => {
     await seed.intake.saveConfig({
       orgId: 'org1',
-      userId: 'u1',
       config: { jira: { enabled: true, sourceIds: ['1', '2'] } },
     });
   });
@@ -340,13 +335,30 @@ describe('issues route — Factory source bindings', () => {
     expect(listActiveJiraIssues).not.toHaveBeenCalled();
   });
 
-  it('falls back to the full selection for a single-Factory org with no bindings', async () => {
+  it('withholds the selection from a single-Factory org with no bindings', async () => {
     await seedProjects(1);
 
     const res = await buildApp(org1()).request(`/web/jira/issues?factoryProjectId=${projectA}`);
 
     expect(res.status).toBe(200);
-    expect(listActiveJiraIssues).toHaveBeenCalledWith(undefined, ['1', '2']);
+    expect(await res.json()).toEqual({ issues: [], nextCursor: null });
+    expect(listActiveJiraIssues).not.toHaveBeenCalled();
+  });
+
+  it('withholds a source routed to the Factory without a board', async () => {
+    await seedProjects(2);
+    await seed.intake.setBinding({
+      orgId: 'org1',
+      integrationId: 'jira',
+      sourceId: '1',
+      factoryProjectId: projectA,
+    });
+
+    const res = await buildApp(org1()).request(`/web/jira/issues?factoryProjectId=${projectA}`);
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ issues: [], nextCursor: null });
+    expect(listActiveJiraIssues).not.toHaveBeenCalled();
   });
 
   it('forwards the pagination cursor together with the scoped selection', async () => {

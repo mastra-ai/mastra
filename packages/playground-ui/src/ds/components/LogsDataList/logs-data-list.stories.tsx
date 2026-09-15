@@ -60,7 +60,7 @@ function Header() {
 export const Populated: Story = {
   render: () => (
     <div className="h-80">
-      <LogsDataList columns={columns} variant="striped">
+      <LogsDataList columns={columns}>
         <Header />
         {logs.map(log => (
           <LogsDataList.RowButton key={log.id} onClick={fn()}>
@@ -72,17 +72,6 @@ export const Populated: Story = {
             <LogsDataList.DataCell data={log.data} />
           </LogsDataList.RowButton>
         ))}
-      </LogsDataList>
-    </div>
-  ),
-};
-
-export const NoMatches: Story = {
-  render: () => (
-    <div className="h-64">
-      <LogsDataList columns={columns}>
-        <Header />
-        <LogsDataList.NoMatch message="No logs match your filters" />
       </LogsDataList>
     </div>
   ),

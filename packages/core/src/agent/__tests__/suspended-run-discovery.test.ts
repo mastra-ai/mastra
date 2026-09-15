@@ -339,6 +339,137 @@ describe('suspended-run discovery', () => {
       expect((await agent.listSuspendedRuns({ resourceId: 'resource-1', perPage: 2 })).runs).toHaveLength(3);
     }, 30000);
 
+    it('scans bounded storage pages while filtering and counting across workflow names', async () => {
+      const storage = new InMemoryStore();
+      const { agent } = createSuspendedSetup({ storage });
+      const { runId } = await suspendRun(agent, 'thread-1', 'resource-1');
+      const workflowsStore = (await storage.getStore('workflows'))!;
+      const seedRun = await workflowsStore.getWorkflowRunById({ runId, workflowName: 'agentic-loop' });
+      expect(seedRun).not.toBeNull();
+      const seedSnapshot = seedRun!.snapshot as WorkflowRunState;
+      type StoredRun = Awaited<ReturnType<typeof workflowsStore.listWorkflowRuns>>['runs'][number];
+
+      let timestamp = 0;
+      const createRun = (runId: string, snapshot: WorkflowRunState | string, workflowName = 'agentic-loop') => {
+        const createdAt = new Date(timestamp++);
+        return {
+          runId,
+          workflowName,
+          resourceId: 'resource-1',
+          snapshot,
+          createdAt,
+          updatedAt: createdAt,
+        } satisfies StoredRun;
+      };
+      const snapshotForAgent = (agentId: string) => {
+        const snapshot = structuredClone(seedSnapshot);
+        for (const key in snapshot.context) {
+          const step = snapshot.context[key];
+          if (step?.status === 'suspended' && step.suspendPayload) {
+            step.suspendPayload.__agentId = agentId;
+          }
+        }
+        return snapshot;
+      };
+      const unrelatedRuns = Array.from({ length: 100 }, (_, index) =>
+        createRun(`other-${index}`, snapshotForAgent('other-agent')),
+      );
+      const runningSnapshot = structuredClone(seedSnapshot);
+      runningSnapshot.status = 'running';
+      const regularRuns = [
+        ...unrelatedRuns,
+        createRun('regular-first', structuredClone(seedSnapshot)),
+        createRun('regular-second', JSON.stringify(seedSnapshot)),
+        createRun('malformed', '{'),
+        createRun('not-suspended', runningSnapshot),
+        ...Array.from({ length: 96 }, (_, index) => createRun(`other-late-${index}`, snapshotForAgent('other-agent'))),
+        createRun('regular-third', structuredClone(seedSnapshot)),
+      ];
+      const durableSnapshot = structuredClone(seedSnapshot);
+      for (const step of Object.values(durableSnapshot.context)) {
+        if (step?.status === 'suspended' && step.suspendPayload) {
+          delete step.suspendPayload.__agentId;
+          delete step.suspendPayload.__streamState;
+        }
+      }
+      durableSnapshot.context.input = {
+        agentId: agent.id,
+        messageListState: { memoryInfo: { threadId: 'thread-1', resourceId: 'resource-1' } },
+      };
+      const durableRuns = [createRun('durable-first', durableSnapshot, DurableStepIds.AGENTIC_LOOP)];
+      const summaryReads = new Set<string>();
+      for (const run of [...regularRuns, ...durableRuns]) {
+        if (typeof run.snapshot === 'string') continue;
+        for (const step of Object.values(run.snapshot.context)) {
+          if (step?.status !== 'suspended' || !step.suspendPayload) continue;
+          const metadata = step.suspendPayload.__workflow_meta;
+          Object.defineProperty(step.suspendPayload, '__workflow_meta', {
+            get() {
+              summaryReads.add(run.runId);
+              return metadata;
+            },
+          });
+        }
+      }
+      const runsByWorkflow = new Map([
+        ['agentic-loop', regularRuns],
+        [DurableStepIds.AGENTIC_LOOP, durableRuns],
+      ]);
+      const listSpy = vi.spyOn(workflowsStore, 'listWorkflowRuns').mockImplementation(async args => {
+        const workflowRuns = runsByWorkflow.get(args?.workflowName!) ?? [];
+        const currentPage = args?.page ?? 0;
+        const currentPerPage = args?.perPage ?? workflowRuns.length;
+        if (typeof currentPerPage !== 'number') throw new Error('expected numeric storage page size');
+
+        return {
+          runs: workflowRuns.slice(currentPage * currentPerPage, (currentPage + 1) * currentPerPage),
+          total: workflowRuns.length,
+        };
+      });
+
+      const firstPage = await agent.listSuspendedRuns({ resourceId: 'resource-1', perPage: 1, page: 0 });
+      expect(firstPage).toMatchObject({ total: 4, runs: [{ runId: 'regular-first' }] });
+      expect([...summaryReads]).toEqual(['regular-first']);
+      expect(listSpy.mock.calls.map(([args]) => [args?.workflowName, args?.page, args?.perPage])).toEqual([
+        ['agentic-loop', 0, 100],
+        ['agentic-loop', 1, 100],
+        ['agentic-loop', 2, 100],
+        [DurableStepIds.AGENTIC_LOOP, 0, 100],
+      ]);
+      expect(listSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ status: 'suspended', resourceId: 'resource-1', perPage: 100 }),
+      );
+
+      listSpy.mockClear();
+      summaryReads.clear();
+      const secondPage = await agent.listSuspendedRuns({
+        resourceId: 'resource-1',
+        threadId: 'thread-1',
+        perPage: 2,
+        page: 1,
+      });
+      expect(secondPage).toMatchObject({
+        total: 4,
+        runs: [{ runId: 'regular-third' }, { runId: 'durable-first', threadId: 'thread-1', resourceId: 'resource-1' }],
+      });
+      expect([...summaryReads]).toEqual(['regular-third', 'durable-first']);
+
+      runsByWorkflow.set(
+        'agentic-loop',
+        Array.from({ length: 100 }, (_, index) => createRun(`exact-multiple-${index}`, structuredClone(seedSnapshot))),
+      );
+      runsByWorkflow.set(DurableStepIds.AGENTIC_LOOP, []);
+      listSpy.mockClear();
+
+      const outOfRangePage = await agent.listSuspendedRuns({ resourceId: 'resource-1', perPage: 10, page: 10 });
+      expect(outOfRangePage).toEqual({ runs: [], total: 100 });
+      expect(listSpy.mock.calls.map(([args]) => [args?.workflowName, args?.page, args?.perPage])).toEqual([
+        ['agentic-loop', 0, 100],
+        ['agentic-loop', 1, 100],
+        [DurableStepIds.AGENTIC_LOOP, 0, 100],
+      ]);
+    }, 30000);
+
     it('only returns runs owned by the listing agent', async () => {
       const storage = new InMemoryStore();
       const agentA = new Agent({

@@ -20,6 +20,15 @@ const WORKFLOW_GETTERS = ['getWorkflow', 'getWorkflowById'];
 const WORKFLOW_METHODS_TO_WRAP = ['execute', 'createRun', 'createRun'];
 
 /**
+ * Maps a tracing proxy back to the instance it wraps. `wrapMastra` returns a
+ * Proxy that forwards property reads but is a distinct object identity from its
+ * target, so identity-sensitive lookups keyed on the Mastra instance would treat
+ * the proxy as a different Mastra. Cycles are impossible: a proxy's recorded
+ * target always existed before the proxy was created.
+ */
+const tracingProxyTargets = new WeakMap<object, object>();
+
+/**
  * Helper function to detect NoOp spans to avoid unnecessary wrapping
  */
 function isNoOpSpan(span: AnySpan): boolean {
@@ -57,7 +66,7 @@ export function wrapMastra<T extends Mastra | (Mastra & MastraPrimitives) | Mast
   }
 
   try {
-    return new Proxy(mastra, {
+    const proxy = new Proxy(mastra, {
       get(target, prop) {
         try {
           if (AGENT_GETTERS.includes(prop as string)) {
@@ -85,10 +94,28 @@ export function wrapMastra<T extends Mastra | (Mastra & MastraPrimitives) | Mast
         }
       },
     });
+    tracingProxyTargets.set(proxy, mastra);
+    return proxy;
   } catch (error) {
     console.warn('Tracing: Failed to create proxy, using original Mastra instance', error);
     return mastra;
   }
+}
+
+/**
+ * Resolve a tracing proxy back to the underlying instance. Returns the argument
+ * unchanged when it is not a proxy this module created. Transitive: a tool
+ * executed inside a traced workflow step receives an already-wrapped mastra and
+ * `tools/tool-builder/builder.ts` wraps it again, so nesting is real.
+ */
+export function unwrapMastraTracingProxy<T>(mastra: T): T {
+  let current: any = mastra;
+  let target = tracingProxyTargets.get(current);
+  while (target) {
+    current = target;
+    target = tracingProxyTargets.get(current);
+  }
+  return current as T;
 }
 
 /**

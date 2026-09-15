@@ -91,10 +91,8 @@ export function ExperimentTraceTimelineTools({
           <Button
             onClick={() => handleToggle('other' as ExperimentUISpanType)}
             className={fadedTypes?.includes('other') ? 'opacity-40' : ''}
+            icon={<CircleDashedIcon />}
           >
-            <Icon>
-              <CircleDashedIcon />
-            </Icon>
             Other
           </Button>
         )}
