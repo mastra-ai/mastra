@@ -46,9 +46,10 @@ import type {
   GetAgentBuilderActionsResponse,
   AgentControllerSessionState,
   AgentControllerThreadInfo,
+  WorkflowRunResult,
 } from '../src/index.js';
 import type { AgentBuilder } from '../src/resources/agent-builder.js';
-import type { Agent } from '../src/resources/agent.js';
+import type { Agent, AgentVoice } from '../src/resources/agent.js';
 import type { MCPTool } from '../src/resources/mcp-tool.js';
 import type { MemoryThread } from '../src/resources/memory-thread.js';
 import type {
@@ -291,6 +292,29 @@ type _AgentControllerThread = Expect<
     AgentControllerThreadInfo,
     RouteResponse<'GET /agent-controller/:controllerId/sessions/:resourceId/threads'>['threads'][number]
   >
+>;
+type _VoiceSpeakers = Expect<
+  Equal<ReturnType<AgentVoice['getSpeakers']>, Promise<RouteResponse<'GET /agents/:agentId/voice/speakers'>>>
+>;
+type _VoiceListen = Expect<
+  Equal<ReturnType<AgentVoice['listen']>, Promise<RouteResponse<'POST /agents/:agentId/voice/listen'>>>
+>;
+type _VoiceListenerCompatibility = Expect<
+  Equal<
+    Awaited<ReturnType<AgentVoice['getListener']>>,
+    RouteResponse<'GET /agents/:agentId/voice/listener'> & { enabled: boolean }
+  >
+>;
+type _WorkflowStartAsyncInput = Expect<
+  Parameters<Run['startAsync']>[0] extends Omit<Body<'POST /workflows/:workflowId/start-async'>, 'requestContext'>
+    ? true
+    : false
+>;
+type _WorkflowStartAsyncPublicResult = Expect<Equal<Awaited<ReturnType<Run['startAsync']>>, WorkflowRunResult>>;
+type _WorkflowResumeAsyncPublicResult = Expect<Equal<Awaited<ReturnType<Run['resumeAsync']>>, WorkflowRunResult>>;
+type _WorkflowRestartAsyncPublicResult = Expect<Equal<Awaited<ReturnType<Run['restartAsync']>>, WorkflowRunResult>>;
+type _WorkflowTimeTravelAsyncPublicResult = Expect<
+  Equal<Awaited<ReturnType<Run['timeTravelAsync']>>, WorkflowRunResult>
 >;
 void scoreRequest;
 void createResponse;
