@@ -89,4 +89,99 @@ describe('AgentController OM failure abort behavior', () => {
     expect(session.run.isAbortRequested()).toBe(false);
     expect(events.some(e => e.type === 'message_start')).toBe(false);
   });
+
+  it('continues the stream after an observer/provider buffering failure under continue policy', async () => {
+    const { session } = await createSession();
+    const events: AgentControllerEvent[] = [];
+    session.subscribe(event => events.push(event));
+
+    session.run.ensureAbortController();
+
+    await (session as any).processStream({
+      fullStream: (async function* () {
+        yield {
+          type: 'data-om-buffering-failed',
+          data: {
+            cycleId: 'c3',
+            operationType: 'observation',
+            error: 'fetch failed',
+            failurePolicy: 'continue',
+            failureKind: 'observer-provider',
+          },
+        };
+        yield { type: 'text-start', payload: { id: 't3' } };
+      })(),
+    });
+
+    const failureIndex = events.findIndex(e => e.type === 'om_buffering_failed');
+    const continuationIndex = events.findIndex(e => e.type === 'message_start');
+    expect(failureIndex).toBeGreaterThanOrEqual(0);
+    expect(continuationIndex).toBeGreaterThan(failureIndex);
+    expect(events.some(e => e.type === 'error')).toBe(false);
+    expect(events.some(e => e.type === 'agent_end' && e.reason === 'aborted')).toBe(false);
+  });
+
+  it('continues the stream after an awaited observer/provider failure under continue policy', async () => {
+    const { session } = await createSession();
+    const events: AgentControllerEvent[] = [];
+    session.subscribe(event => events.push(event));
+
+    session.run.ensureAbortController();
+
+    await (session as any).processStream({
+      fullStream: (async function* () {
+        yield {
+          type: 'data-om-observation-failed',
+          data: {
+            cycleId: 'c4',
+            operationType: 'observation',
+            error: 'fetch failed',
+            durationMs: 50,
+            failurePolicy: 'continue',
+            failureKind: 'observer-provider',
+          },
+        };
+        yield { type: 'text-start', payload: { id: 't4' } };
+      })(),
+    });
+
+    const failureIndex = events.findIndex(e => e.type === 'om_observation_failed');
+    const continuationIndex = events.findIndex(e => e.type === 'message_start');
+    expect(failureIndex).toBeGreaterThanOrEqual(0);
+    expect(continuationIndex).toBeGreaterThan(failureIndex);
+    expect(events.some(e => e.type === 'error')).toBe(false);
+    expect(events.some(e => e.type === 'agent_end' && e.reason === 'aborted')).toBe(false);
+  });
+
+  it.each(['data-om-buffering-failed', 'data-om-observation-failed'] as const)(
+    'fails closed for %s when continue lacks observer/provider classification',
+    async type => {
+      const { session } = await createSession();
+      const events: AgentControllerEvent[] = [];
+      session.subscribe(event => {
+        events.push(event);
+      });
+      session.run.ensureAbortController();
+
+      await (session as any).processStream({
+        fullStream: (async function* () {
+          yield {
+            type,
+            data: {
+              cycleId: 'fail-closed',
+              operationType: 'observation',
+              error: 'storage failed',
+              durationMs: 50,
+              failurePolicy: 'continue',
+            },
+          };
+          yield { type: 'text-start', payload: { id: 'blocked' } };
+        })(),
+      });
+
+      expect(events.some(e => e.type === 'error')).toBe(true);
+      expect(events.some(e => e.type === 'agent_end' && e.reason === 'aborted')).toBe(true);
+      expect(events.some(e => e.type === 'message_start')).toBe(false);
+    },
+  );
 });

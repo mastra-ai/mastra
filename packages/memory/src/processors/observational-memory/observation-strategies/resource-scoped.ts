@@ -520,6 +520,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
           startedAt: this.startedAt,
           tokensAttempted,
           error,
+          failurePolicy: this.observationConfig.onFailure,
           recordId: this.opts.record.id,
           threadId,
         });
