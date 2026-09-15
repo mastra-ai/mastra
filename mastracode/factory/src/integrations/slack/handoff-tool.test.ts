@@ -88,7 +88,11 @@ describe('channelThreadCoordinates', () => {
 });
 
 describe('handOffSlackThread', () => {
-  const input = { factoryProjectId: 'fp-2', summary: 'Rename the Header component. Found src/Header.tsx in acme/web.' };
+  const input = {
+    factoryProjectId: 'fp-2',
+    factoryName: 'Web',
+    summary: 'Rename the Header component. Found src/Header.tsx in acme/web.',
+  };
 
   it('creates the target session, rebinds the thread, posts the card, and wakes the new session', async () => {
     process.env.MASTRACODE_PUBLIC_URL = 'https://mc.example.com';
@@ -145,6 +149,13 @@ describe('handOffSlackThread', () => {
       { deps: makeDeps({ metadata: { channel_platform: 'discord' } }).deps, ctx: requestContextFor() },
     ],
     ['unknown factory', { deps: makeDeps({ target: null }).deps, ctx: requestContextFor() }],
+    [
+      'name does not match the id',
+      {
+        deps: makeDeps({ target: { id: 'fp-2', name: 'API', slackWorkItemsEnabled: false } }).deps,
+        ctx: requestContextFor(),
+      },
+    ],
     ['target without a repository', { deps: makeDeps({ hasRepo: false }).deps, ctx: requestContextFor() }],
   ])('refuses without touching the thread: %s', async (_label, { deps, ctx }) => {
     const result = await handOffSlackThread(deps, ctx, input);
@@ -196,6 +207,15 @@ describe('createFactoryHandoffTool', () => {
     expect(createFactoryHandoffTool(requestContextFor({ orgId: '' }), deps)).toEqual({});
     expect(createFactoryHandoffTool(requestContextFor({ threadId: null }), deps)).toEqual({});
     expect(createFactoryHandoffTool(requestContextFor({ factoryProjectId: undefined }), deps)).toEqual({});
-    expect(Object.keys(createFactoryHandoffTool(requestContextFor(), deps))).toEqual(['factory_handoff']);
+    const tools = createFactoryHandoffTool(requestContextFor(), deps);
+    expect(Object.keys(tools)).toEqual(['factory_handoff']);
+  });
+
+  it('requires a human approval before it executes', () => {
+    const { deps } = makeDeps();
+    const tools = createFactoryHandoffTool(requestContextFor(), deps) as {
+      factory_handoff: { requireApproval?: boolean };
+    };
+    expect(tools.factory_handoff.requireApproval).toBe(true);
   });
 });

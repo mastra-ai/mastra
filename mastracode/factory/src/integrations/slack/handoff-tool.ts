@@ -24,7 +24,13 @@ import {
 const SLACK_PLATFORM = 'slack';
 
 const handoffInputSchema = z.object({
-  factoryProjectId: z.string().min(1).describe('The factory to continue in, from factory_locate.'),
+  factoryProjectId: z.string().min(1).describe('The id of the factory to continue in, from factory_locate.'),
+  factoryName: z
+    .string()
+    .min(1)
+    .describe(
+      'The name of that factory exactly as factory_locate returned it, so the approval card shows where the thread is going.',
+    ),
   summary: z
     .string()
     .min(1)
@@ -111,6 +117,12 @@ export async function handOffSlackThread(
 
   const target = await deps.projects.get({ orgId, id: input.factoryProjectId });
   if (!target) return { status: 'refused', reason: 'No factory with that id in this organization.' };
+  if (!sameFactoryName(target.name, input.factoryName)) {
+    return {
+      status: 'refused',
+      reason: `Factory ${input.factoryProjectId} is named ${target.name}, not ${input.factoryName}. Use the id and name factory_locate returned together.`,
+    };
+  }
 
   const previousSession = await deps.sourceControl.sessions.getBySessionId(controller.resourceId);
   const sessionId = await resolveSlackFactorySession({
@@ -209,6 +221,10 @@ async function previousCardTeamId(
   return card?.externalSource?.workspaceId;
 }
 
+function sameFactoryName(a: string, b: string): boolean {
+  return a.trim().toLowerCase() === b.trim().toLowerCase();
+}
+
 function handoffMessage(factoryName: string, summary: string): string {
   return [
     `This Slack thread was handed to the ${factoryName} factory from another factory's session. Continue the work here in this repository; the person is waiting in the same thread.`,
@@ -227,8 +243,9 @@ export function createFactoryHandoffTool(requestContext: RequestContext, deps: H
     factory_handoff: createTool({
       id: 'factory_handoff',
       description:
-        'Move this Slack conversation to another factory in the organization and continue the work there. Only call it after factory_locate showed the work belongs in that factory and the person confirmed in the thread, or when they already told you to fix it and exactly one factory matched. After it returns, reply with one short sentence and stop; the other factory’s session takes over this thread.',
+        'Move this Slack conversation to another factory in the organization and continue the work there. Call it after factory_locate showed the work belongs in that factory. Slack posts an approval card the person has to accept before anything moves; nothing happens if they deny it. After it returns, reply with one short sentence and stop; the other factory’s session takes over this thread.',
       inputSchema: handoffInputSchema,
+      requireApproval: true,
       execute: async input => handOffSlackThread(deps, requestContext, input),
     }),
   };
