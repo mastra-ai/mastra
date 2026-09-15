@@ -3,7 +3,6 @@ import type { VariantProps } from 'class-variance-authority';
 import * as React from 'react';
 
 import { controlSizeClasses } from '@/ds/primitives/control-size';
-import '@/ds/primitives/focus.css';
 import {
   inputOutlineAndFocusStyle,
   inputSurfaceAndFocusStyle,
@@ -18,11 +17,15 @@ const inputVariants = cva(
     'transition-all duration-normal ease-out-custom',
     'placeholder:text-neutral2 placeholder:transition-opacity placeholder:duration-normal',
     'focus:placeholder:opacity-70',
-    // Native number spinners clip pill corners; compose InputGroup buttons for a stepper.
+    // type="number": hide native browser spinner arrows (they clip the pill).
+    // For incrementable numeric inputs, compose <InputGroup> with +/- buttons
+    // instead — see the NumberWithStepper story. WebKit uses the spin-button
+    // pseudo-elements; Firefox needs `appearance: textfield` on the input.
     '[&::-webkit-outer-spin-button]:m-0 [&::-webkit-outer-spin-button]:appearance-none',
     '[&::-webkit-inner-spin-button]:m-0 [&::-webkit-inner-spin-button]:appearance-none',
     '[&[type=number]]:[appearance:textfield]',
-    // Custom InputGroup clear buttons replace the browser's search-clear control.
+    // type="search": drop WebKit's native clear button so the DS owns the search chrome.
+    // Compose an <InputGroup> with an InputGroupButton to add a clear control.
     '[&::-webkit-search-cancel-button]:appearance-none',
   ),
   {
@@ -58,11 +61,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
     return (
       <input
         type={type}
-        className={cn(
-          inputVariants({ variant, size }),
-          error && 'border-error hover:border-error focus-visible:border-error',
-          className,
-        )}
+        className={cn(inputVariants({ variant, size }), error && 'border-error focus-visible:border-error', className)}
         data-testid={testId}
         ref={ref}
         aria-invalid={error}

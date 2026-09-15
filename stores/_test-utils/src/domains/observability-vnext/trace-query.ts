@@ -996,6 +996,7 @@ export interface ThreadQueryConformanceCase {
   name: string;
   request: QueryThreadsInput;
   expected: Array<{ threadId: string }>;
+  requiresStrictFeedbackValueTypes?: boolean;
 }
 
 export const THREAD_QUERY_CONFORMANCE_CASES: ThreadQueryConformanceCase[] = [

@@ -7,11 +7,107 @@
  * stdout/stderr streams.
  */
 
+import { randomUUID } from 'node:crypto';
 import type { Duplex } from 'node:stream';
 
 import { ProcessHandle, SandboxProcessManager } from '@mastra/core/workspace';
 import type { CommandResult, ProcessInfo, SpawnProcessOptions } from '@mastra/core/workspace';
 import type { Container, Exec, ExecInspectInfo } from 'dockerode';
+
+/**
+ * Directory (inside the container) where each spawned process records the PGID
+ * of its process group. Created with mode 700 so only the (root) exec user can
+ * write the PGID files.
+ */
+const PROC_DIR = '/tmp/.mastra-proc';
+
+/**
+ * Wrapper (run as the exec command) that places the user command in its own
+ * process group and records the group's PGID so kill() can signal the whole
+ * group later.
+ *
+ * Docker's exec-inspect `Pid` is a host/daemon-namespace PID and cannot be used
+ * with an in-container `kill`, so we need a container-namespace identity. We use
+ * a *kernel-enforced* process group as that identity:
+ *
+ *   1. `setsid -w` re-execs the command as a new session/process-group leader,
+ *      so its PID == PGID. Every descendant inherits that PGID (unless it calls
+ *      `setsid` itself) and stays reachable even if it re-parents to PID 1.
+ *      `-w` keeps the wrapper (and thus the exec) alive for the whole lifetime
+ *      and propagates the child's exit status — without it `setsid` forks and
+ *      returns immediately, so the exec would appear to finish while the real
+ *      work keeps running.
+ *   2. The leader writes its own PID (`$$`) — the PGID — to a private file that
+ *      only this process wrote, so the identity is kernel-owned and cannot be
+ *      forged by another container process.
+ *
+ * If `setsid -w` is unavailable in the image (e.g. BusyBox), we degrade
+ * gracefully: the command runs directly and we record its PID so kill() can
+ * still signal it (descendant coverage is then best-effort). The probe
+ * `setsid -w true` also covers images without setsid at all.
+ *
+ * Positional args: $1 = pgid file path, $2 = user command. The script text is a
+ * static constant; runtime values travel only as argv, never interpolated into
+ * the command string.
+ */
+const SPAWN_WRAPPER = `
+umask 077
+d="\${1%/*}"
+mkdir -p "$d" 2>/dev/null
+chmod 700 "$d" 2>/dev/null
+if setsid -w true >/dev/null 2>&1; then
+  exec setsid -w sh -c 'echo $$ > "$1" || exit 126; sh -c "$2"; ret=$?; rm -f "$1" 2>/dev/null; exit $ret' sh "$1" "$2"
+fi
+echo $$ > "$1" || exit 126
+sh -c "$2"
+ret=$?
+rm -f "$1" 2>/dev/null
+exit $ret
+`;
+
+/**
+ * Kill script: read the recorded PGID and SIGKILL the whole process group.
+ * A negative PID targets the kernel-owned process group, so descendants that
+ * re-parented to PID 1 are still caught. We SIGSTOP the
+ * group first to freeze fork races, then SIGKILL. The file may not exist yet if
+ * kill races the leader's first write, so we briefly wait for it.
+ *
+ * Positional arg: $1 = pgid file path (static script; no interpolation).
+ */
+const KILL_SCRIPT = `
+f="$1"
+i=0
+while [ ! -r "$f" ] && [ "$i" -lt 40 ]; do sleep 0.05; i=$((i + 1)); done
+# If the PGID was never recorded (file absent/unreadable after the wait, or
+# empty), we have no group to signal or verify — report failure rather than
+# falsely claiming the tree was terminated.
+[ -r "$f" ] || exit 1
+pgid=$(cat "$f" 2>/dev/null)
+rm -f "$f" 2>/dev/null
+[ -n "$pgid" ] || exit 1
+kill -STOP -"$pgid" 2>/dev/null
+kill -KILL -"$pgid" 2>/dev/null
+# Fallback for images without setsid: the leader is not a group leader, so also
+# signal it directly.
+kill -KILL "$pgid" 2>/dev/null
+# Verify the group is actually gone before reporting success. kill -0 probes
+# for the group's existence without sending a signal, and we poll while it
+# still reports the group alive. When the probe finally fails we must inspect
+# why: ESRCH ("no such process") means every member was reaped, so report
+# success; EPERM or any other error means termination is unconfirmed (e.g. a
+# member dropped privileges and became unsignalable), so exit nonzero and let
+# kill() report failure instead of falsely claiming the tree was terminated.
+j=0
+while err=$(kill -0 -"$pgid" 2>&1); do
+  j=$((j + 1))
+  [ "$j" -ge 40 ] && exit 1
+  sleep 0.05
+done
+case "$err" in
+  *[Ss]uch\\ process*) exit 0 ;;
+  *) exit 1 ;;
+esac
+`;
 
 // =============================================================================
 // Docker Process Handle
@@ -38,12 +134,15 @@ class DockerProcessHandle extends ProcessHandle {
   private _waitPromise: Promise<CommandResult> | null = null;
   private _stdinStream: Duplex | null = null;
   private _execStream: NodeJS.ReadWriteStream | null = null;
+  /** @internal Container path of the file holding this process group's PGID. */
+  readonly _pgidFile: string;
 
   constructor(
     exec: Exec,
     container: Container,
     startTime: number,
     stdinStream: Duplex | null,
+    pgidFile: string,
     options?: SpawnProcessOptions,
   ) {
     super(options);
@@ -52,6 +151,7 @@ class DockerProcessHandle extends ProcessHandle {
     this._container = container;
     this._startTime = startTime;
     this._stdinStream = stdinStream;
+    this._pgidFile = pgidFile;
   }
 
   get exitCode(): number | undefined {
@@ -93,36 +193,32 @@ class DockerProcessHandle extends ProcessHandle {
     if (this._exitCode !== undefined) return false;
 
     try {
-      // Get the PID inside the container from exec inspect.
-      // Single retry with 50ms delay — Docker may not have assigned a PID yet
-      // if kill() is called immediately after spawn(). A polling loop with
-      // backoff would be more robust under heavy load, but overkill in practice.
-      let info = await this._inspectExec();
-      if (!info.Running || !info.Pid) {
-        await new Promise(r => setTimeout(r, 50));
-        info = await this._inspectExec();
-      }
-
-      if (!info.Running) {
-        this._killed = true;
-        this._destroyStream();
-        return false;
-      }
-
-      const pid = info.Pid;
-      if (!pid) {
-        this._killed = true;
-        this._destroyStream();
-        return false;
-      }
-
-      // Kill the process group (negative PID), fall back to direct PID
+      // Kill the process group inside the *container's* PID namespace. We must
+      // not use exec.inspect().Pid here: that is the host/daemon-namespace PID
+      // and does not correspond to PIDs an in-container `kill` can address. The
+      // recorded PGID targets a kernel-owned group, so descendants that were
+      // re-parented to PID 1 are still caught.
       const killExec = await this._container.exec({
-        Cmd: ['sh', '-c', `kill -9 -${pid} 2>/dev/null || kill -9 ${pid}`],
+        // Static script; the pgid file path is passed as $1 (sh sets $0='sh',
+        // $1=path) so no runtime value is ever interpolated into the command.
+        Cmd: ['sh', '-c', KILL_SCRIPT, 'sh', this._pgidFile],
         AttachStdout: false,
         AttachStderr: false,
       });
       await killExec.start({});
+
+      // Exec.start() resolves when the exec stream is opened, not when the
+      // helper script exits. Poll inspect() until it finishes so we only report
+      // success once the process tree has actually been killed — otherwise
+      // wait() could resolve with exit 137 while targets are still running.
+      let killInfo = await killExec.inspect();
+      while (killInfo.Running) {
+        await new Promise(resolve => setTimeout(resolve, 10));
+        killInfo = await killExec.inspect();
+      }
+      if (killInfo.ExitCode !== 0) {
+        throw new Error(`kill helper exited with code ${killInfo.ExitCode}`);
+      }
 
       // Mark as killed and destroy stream so wait() resolves.
       // Docker exec streams don't close automatically when the process is killed externally.
@@ -130,8 +226,6 @@ class DockerProcessHandle extends ProcessHandle {
       this._destroyStream();
       return true;
     } catch (error: unknown) {
-      this._killed = true;
-      this._destroyStream();
       // ESRCH / "no such process" is expected if the process exited between inspect and kill
       const msg = error instanceof Error ? error.message.toLowerCase() : '';
       if (!msg.includes('no such process') && !msg.includes('esrch')) {
@@ -213,14 +307,18 @@ export class DockerProcessManager extends SandboxProcessManager {
   async spawn(command: string, options: SpawnProcessOptions = {}): Promise<ProcessHandle> {
     const container = this.container;
 
-    // The base spawn wrapper already merged the sandbox env into options.env
+    // Private file (unguessable name) where the command's process group records
+    // its PGID, so kill() can signal the whole kernel-owned group later.
+    const pgidFile = `${PROC_DIR}/${randomUUID()}`;
     const envArray = Object.entries({ ...options.env })
       .filter((entry): entry is [string, string] => entry[1] !== undefined)
       .map(([k, v]) => `${k}=${v}`);
 
-    // Create exec instance
+    // Create exec instance. The command is wrapped so it runs in its own process
+    // group (via setsid) and records its PGID; args travel positionally so the
+    // wrapper text stays a static constant.
     const exec = await container.exec({
-      Cmd: ['sh', '-c', command],
+      Cmd: ['sh', '-c', SPAWN_WRAPPER, 'sh', pgidFile, command],
       AttachStdout: true,
       AttachStderr: true,
       AttachStdin: true,
@@ -233,7 +331,7 @@ export class DockerProcessManager extends SandboxProcessManager {
     const stream = await exec.start({ hijack: true, stdin: true });
 
     const startTime = Date.now();
-    const handle = new DockerProcessHandle(exec, container, startTime, stream, options);
+    const handle = new DockerProcessHandle(exec, container, startTime, stream, pgidFile, options);
     handle._setExecStream(stream);
 
     // Create the wait promise that resolves when the stream ends
@@ -342,9 +440,23 @@ export class DockerProcessManager extends SandboxProcessManager {
         if (handle.exitCode === undefined) {
           handle._killed = true;
           handle._timedOut = true;
-          handle.kill().catch(() => {});
-          // Ensure stream is destroyed even if kill() fails (e.g., PID not found)
-          handle._destroyStream();
+          // Await kill() so the process tree is actually terminated before the
+          // stream is torn down. Destroying the stream first would resolve
+          // wait() with exit 137 while the targets are still running — the exact
+          // bug this fix addresses. Only force-destroy the stream if kill()
+          // fails to make progress, as a last resort to unblock wait().
+          const forceClose = () => {
+            if (handle.exitCode === undefined) {
+              handle._killed = true;
+              handle._destroyStream();
+            }
+          };
+          handle
+            .kill()
+            .then(killed => {
+              if (!killed) forceClose();
+            })
+            .catch(forceClose);
         }
       }, timeoutMs);
       // Clear timer when process exits naturally
