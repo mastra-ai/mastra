@@ -121,7 +121,7 @@ export function generateValidDataFromSchema(schema: z.ZodTypeAny, fieldName?: st
   // through to `undefined` for any query schema that uses a top-level
   // preprocess (e.g. legacy-shape back-compat shims).
   while (typeName === 'ZodPipe' && def?.out) {
-    schema = def.out;
+    schema = getZodTypeName(def.out) === 'ZodTransform' ? def.in : def.out;
     typeName = getZodTypeName(schema);
     def = getZodDef(schema);
   }
@@ -304,6 +304,10 @@ export function generateValidDataFromSchema(schema: z.ZodTypeAny, fieldName?: st
         continue;
       }
       obj[key] = generateValidDataFromSchema(fieldSchema as z.ZodTypeAny, key);
+    }
+    if ('predicateScope' in shape && 'path' in shape) {
+      obj.predicateScope = 'trace';
+      obj.path = 'entityName';
     }
     return obj;
   }
