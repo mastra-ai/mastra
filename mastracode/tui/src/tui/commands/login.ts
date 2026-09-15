@@ -12,11 +12,18 @@ function toManagedAccounts(accounts: OAuthAccountRecord[]) {
   return accounts.map(account => ({ id: account.id, label: account.label, active: account.active }));
 }
 
+function withProviderPrefix(providerName: string, label: string): string {
+  const normalizedProviderName = providerName.toLowerCase();
+  const normalizedLabel = label.toLowerCase();
+  return normalizedLabel === normalizedProviderName || normalizedLabel.startsWith(`${normalizedProviderName} `)
+    ? label
+    : `${providerName} ${label}`;
+}
+
 /**
  * After a successful login the account was just registered — offer a
- * one-shot rename before the dialog closes. Escape or empty submit keeps the
- * label the registry resolved (re-authenticated accounts keep their previous
- * label; new accounts fall back to the provider hook or the default).
+ * one-shot rename before the dialog closes. Escape keeps the resolved label;
+ * empty submit keeps it under the provider's full display name.
  *
  * The typed text is a postfix on the provider's full display name: typing
  * "work" for Anthropic labels the account "Anthropic (Claude Pro/Max) work",
@@ -32,13 +39,11 @@ async function promptForAccountName(
   if (!authStorage) return;
   const provider = getOAuthProviders().find(p => p.id === providerId);
   const baseLabel = provider?.name ?? providerId;
-  const input = await dialog.promptOptional(
-    `Name this account — saved as "${baseLabel} <name>" (Enter to keep "${account.label}")`,
-  );
+  const defaultLabel = withProviderPrefix(baseLabel, account.label);
+  const input = await dialog.promptOptional(`Name this account (Enter to keep "${defaultLabel}")`);
   if (input === null) return;
   const name = input.trim();
-  if (!name) return;
-  const label = name.toLowerCase().startsWith(baseLabel.toLowerCase()) ? name : `${baseLabel} ${name}`;
+  const label = name ? withProviderPrefix(baseLabel, name) : defaultLabel;
   if (label !== account.label) {
     authStorage.renameAccount(providerId, account.id, label);
   }
