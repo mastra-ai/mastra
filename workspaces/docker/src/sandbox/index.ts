@@ -49,24 +49,16 @@ type DockerSandboxUlimit = {
 
 type DockerSandboxTmpfs = Record<string, string>;
 
-/**
- * A single Docker mount, mapped 1:1 onto an entry of `HostConfig.Mounts`.
- *
- * Unlike `volumes` (which maps to `HostConfig.Binds` / the `-v` syntax), mounts
- * can express options that `Binds` cannot — most notably `volumeOptions.subpath`,
- * which mounts a subdirectory of a named volume. Requires Docker Engine 26.0+
- * (API v1.45+) for `subpath` support.
- */
-export type DockerSandboxMount = {
-  /** Mount kind. */
-  type: 'volume' | 'bind' | 'tmpfs';
+/** Options applied to a `volume` mount. */
+type DockerSandboxVolumeMount = {
+  type: 'volume';
   /** Absolute path of the mount inside the container. */
   target: string;
-  /** Volume name (for `volume`) or host path (for `bind`). Omit for `tmpfs`. */
-  source?: string;
+  /** Named volume to mount. */
+  source: string;
   /** Mount read-only. */
   readOnly?: boolean;
-  /** Options applied when `type` is `volume`. */
+  /** Options applied to the named volume. */
   volumeOptions?: {
     /** Mount a subdirectory of the named volume (Docker Engine 26.0+). */
     subpath?: string;
@@ -75,12 +67,32 @@ export type DockerSandboxMount = {
     /** Labels applied to the volume when it is created. */
     labels?: Record<string, string>;
   };
-  /** Options applied when `type` is `bind`. */
+};
+
+/** Options applied to a `bind` mount. */
+type DockerSandboxBindMount = {
+  type: 'bind';
+  /** Absolute path of the mount inside the container. */
+  target: string;
+  /** Host path to bind into the container. */
+  source: string;
+  /** Mount read-only. */
+  readOnly?: boolean;
+  /** Options applied to the bind mount. */
   bindOptions?: {
     /** Bind propagation mode. */
     propagation?: 'private' | 'rprivate' | 'shared' | 'rshared' | 'slave' | 'rslave';
   };
-  /** Options applied when `type` is `tmpfs`. */
+};
+
+/** Options applied to a `tmpfs` mount. */
+type DockerSandboxTmpfsMount = {
+  type: 'tmpfs';
+  /** Absolute path of the mount inside the container. */
+  target: string;
+  /** Mount read-only. */
+  readOnly?: boolean;
+  /** Options applied to the tmpfs mount. */
   tmpfsOptions?: {
     /** Size of the tmpfs mount in bytes. */
     sizeBytes?: number;
@@ -88,6 +100,20 @@ export type DockerSandboxMount = {
     mode?: number;
   };
 };
+
+/**
+ * A single Docker mount, mapped 1:1 onto an entry of `HostConfig.Mounts`.
+ *
+ * Unlike `volumes` (which maps to `HostConfig.Binds` / the `-v` syntax), mounts
+ * can express options that `Binds` cannot — most notably `volumeOptions.subpath`,
+ * which mounts a subdirectory of a named volume. Requires Docker Engine 26.0+
+ * (API v1.45+) for `subpath` support.
+ *
+ * This is a discriminated union on `type`: `volume` and `bind` mounts require a
+ * `source` and only accept their own option group, while `tmpfs` mounts take no
+ * `source`. These invariants mirror what Docker enforces at container creation.
+ */
+export type DockerSandboxMount = DockerSandboxVolumeMount | DockerSandboxBindMount | DockerSandboxTmpfsMount;
 
 // =============================================================================
 // Docker Sandbox Options
@@ -897,12 +923,12 @@ function toDockerMount(mount: DockerSandboxMount): Docker.MountSettings {
   const settings: Docker.MountSettings = {
     Type: mount.type,
     Target: mount.target,
-    Source: mount.source ?? '',
+    Source: mount.type === 'tmpfs' ? '' : mount.source,
   };
 
   if (mount.readOnly !== undefined) settings.ReadOnly = mount.readOnly;
 
-  if (mount.volumeOptions) {
+  if (mount.type === 'volume' && mount.volumeOptions) {
     const { subpath, noCopy, labels } = mount.volumeOptions;
     // The @types/dockerode VolumeOptions marks NoCopy/Labels/DriverConfig as
     // required, but the Docker API treats them as optional; build a partial.
@@ -915,11 +941,11 @@ function toDockerMount(mount: DockerSandboxMount): Docker.MountSettings {
     }
   }
 
-  if (mount.bindOptions?.propagation !== undefined) {
+  if (mount.type === 'bind' && mount.bindOptions?.propagation !== undefined) {
     settings.BindOptions = { Propagation: mount.bindOptions.propagation };
   }
 
-  if (mount.tmpfsOptions) {
+  if (mount.type === 'tmpfs' && mount.tmpfsOptions) {
     const { sizeBytes, mode } = mount.tmpfsOptions;
     const tmpfsOptions: Record<string, unknown> = {};
     if (sizeBytes !== undefined) tmpfsOptions.SizeBytes = sizeBytes;

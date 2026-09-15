@@ -57,6 +57,11 @@ const workspace = new Workspace({
 
 `volumes` and `mounts` can be combined; both are passed through to Docker.
 
+> **Note:** Docker does not create `volumeOptions.subpath` for you — the
+> subdirectory must already exist inside the named volume before the container
+> starts, otherwise the mount fails. Provision it ahead of time (for example,
+> with a one-off container that creates `conversations/abc123` in the volume).
+
 ## Documentation
 
 - [Docker Sandbox integration guide](https://mastra.ai/integrations/sandboxes/docker)

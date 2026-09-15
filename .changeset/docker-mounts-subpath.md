@@ -26,4 +26,4 @@ const workspace = new Workspace({
 });
 ```
 
-Subpath mounting requires Docker Engine 26.0 or newer.
+Subpath mounting requires Docker Engine 26.0 or newer. Docker does not create the subpath directory — it must already exist inside the named volume before the container starts, so provision it ahead of time.

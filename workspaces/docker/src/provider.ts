@@ -163,42 +163,67 @@ export const dockerSandboxProvider: SandboxProvider<DockerProviderConfig> = {
         type: 'array',
         description: 'Mounts mapped 1:1 onto Docker HostConfig.Mounts (supports volume subpath)',
         items: {
-          type: 'object',
-          required: ['type', 'target'],
-          additionalProperties: false,
-          properties: {
-            type: { type: 'string', enum: ['volume', 'bind', 'tmpfs'] },
-            target: { type: 'string' },
-            source: { type: 'string' },
-            readOnly: { type: 'boolean' },
-            volumeOptions: {
+          oneOf: [
+            {
               type: 'object',
+              required: ['type', 'target', 'source'],
               additionalProperties: false,
               properties: {
-                subpath: { type: 'string' },
-                noCopy: { type: 'boolean' },
-                labels: { type: 'object', additionalProperties: { type: 'string' } },
-              },
-            },
-            bindOptions: {
-              type: 'object',
-              additionalProperties: false,
-              properties: {
-                propagation: {
-                  type: 'string',
-                  enum: ['private', 'rprivate', 'shared', 'rshared', 'slave', 'rslave'],
+                type: { const: 'volume' },
+                target: { type: 'string' },
+                source: { type: 'string' },
+                readOnly: { type: 'boolean' },
+                volumeOptions: {
+                  type: 'object',
+                  additionalProperties: false,
+                  properties: {
+                    subpath: { type: 'string' },
+                    noCopy: { type: 'boolean' },
+                    labels: { type: 'object', additionalProperties: { type: 'string' } },
+                  },
                 },
               },
             },
-            tmpfsOptions: {
+            {
               type: 'object',
+              required: ['type', 'target', 'source'],
               additionalProperties: false,
               properties: {
-                sizeBytes: { type: 'number' },
-                mode: { type: 'number' },
+                type: { const: 'bind' },
+                target: { type: 'string' },
+                source: { type: 'string' },
+                readOnly: { type: 'boolean' },
+                bindOptions: {
+                  type: 'object',
+                  additionalProperties: false,
+                  properties: {
+                    propagation: {
+                      type: 'string',
+                      enum: ['private', 'rprivate', 'shared', 'rshared', 'slave', 'rslave'],
+                    },
+                  },
+                },
               },
             },
-          },
+            {
+              type: 'object',
+              required: ['type', 'target'],
+              additionalProperties: false,
+              properties: {
+                type: { const: 'tmpfs' },
+                target: { type: 'string' },
+                readOnly: { type: 'boolean' },
+                tmpfsOptions: {
+                  type: 'object',
+                  additionalProperties: false,
+                  properties: {
+                    sizeBytes: { type: 'number' },
+                    mode: { type: 'number' },
+                  },
+                },
+              },
+            },
+          ],
         },
       },
     },
