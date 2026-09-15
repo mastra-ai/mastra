@@ -30,6 +30,11 @@ let replyDelivered = new Promise<void>((resolve, reject) => {
   resolveReplyDelivered = resolve;
   rejectReplyDelivered = reject;
 });
+let abortRecoveryArmed = false;
+let resolveAbortRecovery: (() => void) | undefined;
+let abortRecovery = new Promise<void>(resolve => {
+  resolveAbortRecovery = resolve;
+});
 
 function resetSignalDelivery(): void {
   requestDelivered = new Promise<void>((resolve, reject) => {
@@ -42,6 +47,10 @@ function resetSignalDelivery(): void {
   replyDelivered = new Promise<void>((resolve, reject) => {
     resolveReplyDelivered = resolve;
     rejectReplyDelivered = reject;
+  });
+  abortRecoveryArmed = false;
+  abortRecovery = new Promise<void>(resolve => {
+    resolveAbortRecovery = resolve;
   });
 }
 
@@ -70,6 +79,15 @@ export const notificationSignalInterruptScenario = {
         const mastra = result.controller.getMastra();
         const hostAgent = mastra?.getAgentById('code-agent');
         if (!mastra || !hostAgent) throw new Error('Mastra Code agent was unavailable');
+
+        const ensureCurrentSubscription = result.session.thread.ensureCurrentSubscription.bind(result.session.thread);
+        result.session.thread.ensureCurrentSubscription = async () => {
+          await ensureCurrentSubscription();
+          if (abortRecoveryArmed) {
+            abortRecoveryArmed = false;
+            resolveAbortRecovery?.();
+          }
+        };
 
         const peerAgent = new Agent({
           id: 'code-agent',
@@ -195,7 +213,14 @@ export const notificationSignalInterruptScenario = {
     await runtime.waitForScreenText(/Originating run text/i, terminal, 15_000);
 
     await requestDelivered;
+    abortRecoveryArmed = true;
     terminal.keyCtrlC();
+    await Promise.race([
+      abortRecovery,
+      runtime.sleep(10_000).then(() => {
+        throw new Error('Timed out waiting for the thread subscription to recover after abort');
+      }),
+    ]);
     releasePeerReply?.();
     await replyDelivered;
     await runtime.sleep(500);
