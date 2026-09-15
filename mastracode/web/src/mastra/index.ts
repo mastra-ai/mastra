@@ -293,6 +293,9 @@ export const factory = new MastraFactory({
     if (!useLocalSandbox && hasPlatformSandboxEnv) {
       return new PlatformSandbox({
         id: ctx.sessionId,
+        // Physical VM id from a prior start (undefined on first start) so
+        // resume reattaches the original VM instead of provisioning a replacement.
+        sandboxId: ctx.sandboxId,
         template: createPlatformRepoTemplate(ctx),
       });
     }
@@ -300,6 +303,7 @@ export const factory = new MastraFactory({
     if (!useLocalSandbox && process.env.E2B_API_KEY?.trim()) {
       return new E2BSandbox({
         id: ctx.sessionId,
+        sandboxId: ctx.sandboxId,
         template: createE2BRepoTemplate(ctx),
       });
     }

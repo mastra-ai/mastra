@@ -17,7 +17,7 @@ const mocks = vi.hoisted(() => ({
   updates: [] as Array<{ set: Record<string, unknown>; where: unknown }>,
   /** When set, the stub models a local-provider callback rooted at <localRoot>/<sessionId>. */
   localRoot: null as string | null,
-  createSandbox: vi.fn((ctx: { sessionId: string }) => {
+  createSandbox: vi.fn((ctx: { sessionId: string; sandboxId?: string }) => {
     // Models a well-behaved provider: lazy start via ensureRunning() on the
     // first command/info call (coalesced, failures never latch), the hook
     // installed through setOnStart invoked inside start() with outcome
@@ -26,6 +26,10 @@ const mocks = vi.hoisted(() => ({
     let onStart: ((hook: { sandbox: unknown; outcome?: 'created' | 'connected' }) => Promise<void>) | undefined;
     const sandbox: any = {
       id: `sbx-${ctx.sessionId}`,
+      // Physical, reattachable VM id — distinct from the logical `id` — as a
+      // real provider (e.g. Railway) exposes. Reflects the reattach id when the
+      // callback is given one, else the freshly provisioned VM id.
+      sandboxId: ctx.sandboxId ?? `vm-${ctx.sessionId}`,
       provider: mocks.localRoot ? 'local' : 'stub',
       status: 'pending',
       ...(mocks.localRoot ? { workingDirectory: `${mocks.localRoot}/${ctx.sessionId}` } : {}),
@@ -801,6 +805,30 @@ describe('GitHub session workspace preparation', () => {
     expect(mocks.runSetupCommand).toHaveBeenCalledTimes(2);
     expect(mocks.sessions.find(session => session.id === 'session-a')?.sandboxWorkdir).toBe(workdirA);
     expect(mocks.sessions.find(session => session.id === 'session-b')?.sandboxWorkdir).toBe(workdirB);
+  });
+
+  it("persists the provider's physical sandboxId, not the logical session id", async () => {
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+
+    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+
+    // The bug persisted `target.id` (logical) as sandboxId; it must now persist
+    // the provider's physical VM id so resume can reattach to the same VM.
+    expect(mocks.sessions.find(session => session.id === 'session-a')?.sandboxId).toBe('vm-session-a');
+  });
+
+  it('forwards a persisted physical sandboxId back into the sandbox callback on resume', async () => {
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a', sandboxId: 'vm-original' });
+
+    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+
+    // The persisted physical id must reach the host callback so a physical-id
+    // reattach provider (e.g. Railway) resumes the original VM.
+    expect(mocks.createSandbox).toHaveBeenCalledWith(expect.objectContaining({ sandboxId: 'vm-original' }));
   });
 
   it('skips the setup command on a VM that already carries the marker, but still materializes and checks out', async () => {
