@@ -177,7 +177,7 @@ export class Run extends BaseResource {
     params: Omit<Body<'POST /workflows/:workflowId/start-async'>, 'requestContext'> & {
       requestContext?: RequestContext | Record<string, any>;
     },
-  ): Promise<RouteResponse<'POST /workflows/:workflowId/start-async'>> {
+  ): Promise<WorkflowRunResult> {
     const searchParams = new URLSearchParams();
 
     searchParams.set('runId', this.runId);
