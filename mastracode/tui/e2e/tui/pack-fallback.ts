@@ -10,9 +10,9 @@
  *  - both notices render live (pool exhausted + pack hop),
  *  - raw outbound request order is Kimi then Anthropic, with no Kimi
  *    request after the first Anthropic one,
- *  - stickiness: the session switches to the landed pack live (status line)
- *    and stays on it after an app restart + thread reload, with both
- *    notices re-rendered from persisted parts.
+ *  - stickiness: the session switches to the landed pack live (status line),
+ *    stays on it after restart, and an abort + retrigger starts directly on
+ *    the landed provider with no new request to the failed primary.
  */
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -29,12 +29,16 @@ const KIMI_MODEL_ID = 'kimi-for-coding/kimi-for-coding';
 const ANTHROPIC_BUILD_MODEL_ID = 'anthropic/claude-fable-5';
 const PROMPT = 'Hop to the fallback pack when this one is exhausted.';
 const RESPONSE_TEXT = 'Completed on the fallback pack.';
+const INTERRUPTED_TEXT = 'Fallback run started before interruption.';
+const FOLLOWUP_RESPONSE_TEXT = 'Fallback follow-up completed after interruption.';
 const ACCOUNT_ACCESS = 'mc-hop-kimi-access';
 const ACCOUNT_DEVICE = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 
 // Test-only handles wired by prepare/inProcessApp so run() can reach them.
 let outbound: Array<{ host: string; bearer: string }> = [];
 let restartApp: (() => Promise<void>) | undefined;
+let interruptNextAnthropicResponse = false;
+let nextAnthropicResponseText = RESPONSE_TEXT;
 
 function requestUrl(input: RequestInfo | URL): string {
   if (typeof input === 'string') return input;
@@ -52,7 +56,7 @@ function rateLimitResponse(): Response {
   );
 }
 
-function completionResponse(): Response {
+function completionResponse(text = RESPONSE_TEXT): Response {
   const events: Array<[string, object]> = [
     [
       'message_start',
@@ -71,10 +75,7 @@ function completionResponse(): Response {
       },
     ],
     ['content_block_start', { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } }],
-    [
-      'content_block_delta',
-      { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: RESPONSE_TEXT } },
-    ],
+    ['content_block_delta', { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text } }],
     ['content_block_stop', { type: 'content_block_stop', index: 0 }],
     [
       'message_delta',
@@ -86,13 +87,54 @@ function completionResponse(): Response {
   return new Response(body, { status: 200, headers: { 'content-type': 'text/event-stream' } });
 }
 
+function interruptedCompletionResponse(): Response {
+  const encoder = new TextEncoder();
+  let finishTimer: ReturnType<typeof setTimeout> | undefined;
+  const initialEvents: Array<[string, object]> = [
+    [
+      'message_start',
+      {
+        type: 'message_start',
+        message: {
+          id: 'msg_interrupted',
+          type: 'message',
+          role: 'assistant',
+          model: 'claude-fable-5',
+          content: [],
+          stop_reason: null,
+          stop_sequence: null,
+          usage: { input_tokens: 12, output_tokens: 1 },
+        },
+      },
+    ],
+    ['content_block_start', { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } }],
+    [
+      'content_block_delta',
+      { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: INTERRUPTED_TEXT } },
+    ],
+  ];
+  const initialBody = initialEvents
+    .map(([event, payload]) => `event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`)
+    .join('');
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(encoder.encode(initialBody));
+      finishTimer = setTimeout(() => controller.close(), 30_000);
+    },
+    cancel() {
+      if (finishTimer) clearTimeout(finishTimer);
+    },
+  });
+  return new Response(stream, { status: 200, headers: { 'content-type': 'text/event-stream' } });
+}
+
 export const packFallbackScenario: McE2eScenario = {
   name: 'pack-fallback',
   description:
     'Asserts the /models fallback picker recomputes its full-chain preview as the cursor moves across ' +
     'candidates, then exhausts a single-account Kimi pack and asserts the turn hops to the Anthropic ' +
-    'fallback pack, renders both notices, and the thread sticks to the landed pack across restart.',
-  testName: 'hops to the fallback pack on pool exhaustion and sticks to it across restart',
+    'fallback pack, renders both notices, and the thread sticks across restart and abort/retrigger.',
+  testName: 'hops to the fallback pack and preserves it across restart and abort/retrigger',
   prepare({ appDataDir }) {
     const settingsPath = join(appDataDir, 'settings.json');
     const settings = readMutableSettingsFixture(settingsPath);
@@ -150,6 +192,8 @@ export const packFallbackScenario: McE2eScenario = {
   async inProcessApp({ startMastraCodeApp }) {
     const patches = createGlobalPatchScope();
     outbound = [];
+    interruptNextAnthropicResponse = false;
+    nextAnthropicResponseText = RESPONSE_TEXT;
     const originalFetch = globalThis.fetch.bind(globalThis);
     patches.setProperty(globalThis, 'fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = requestUrl(input);
@@ -160,7 +204,13 @@ export const packFallbackScenario: McE2eScenario = {
       }
       if (hostname === 'api.anthropic.com') {
         outbound.push({ host: 'anthropic', bearer: '' });
-        return completionResponse();
+        if (interruptNextAnthropicResponse) {
+          interruptNextAnthropicResponse = false;
+          return interruptedCompletionResponse();
+        }
+        const responseText = nextAnthropicResponseText;
+        nextAnthropicResponseText = RESPONSE_TEXT;
+        return completionResponse(responseText);
       }
       return originalFetch(input, init);
     });
@@ -168,11 +218,10 @@ export const packFallbackScenario: McE2eScenario = {
     let currentStop: (() => Promise<void>) | undefined;
     const start = async () => {
       const app = await startMastraCodeApp();
-      currentStop = async () => {
-        await patches.stopApp(app.stop);
-      };
+      currentStop = app.stop;
     };
     restartApp = async () => {
+      await currentStop?.();
       await start();
     };
 
@@ -180,8 +229,11 @@ export const packFallbackScenario: McE2eScenario = {
       await start();
       return {
         stop: async () => {
-          await currentStop?.();
-          patches.restore();
+          try {
+            await currentStop?.();
+          } finally {
+            patches.restore();
+          }
         },
       };
     } catch (error) {
@@ -282,7 +334,6 @@ export const packFallbackScenario: McE2eScenario = {
 
     // Restart on the same app data and reload the thread: stickiness holds
     // and both notices re-render from persisted parts.
-    await runtime.stopApp?.();
     await restartApp?.();
     await runtime.waitForScreenText(/Project:\s+mastra/i, terminal, 30_000);
 
@@ -296,5 +347,28 @@ export const packFallbackScenario: McE2eScenario = {
     await runtime.waitForScreenText(/fable-5/i, terminal, 10_000);
     await runtime.waitForScreenText(/Using fallback Anthropic \(hop-kimi failed\)/i, terminal, 10_000);
     runtime.printScreen('after restart history reload', terminal);
+
+    // Abort a new request after the fallback stream begins, then retrigger.
+    // Both requests must start directly on the persisted fallback pack.
+    const abortSequenceStart = outbound.length;
+    interruptNextAnthropicResponse = true;
+    terminal.submit('Start a fallback run that will be interrupted.');
+    await runtime.waitForScreenText(new RegExp(INTERRUPTED_TEXT), terminal, 20_000);
+    terminal.keyCtrlC();
+    await runtime.waitForScreenText(/Interrupted/i, terminal, 10_000);
+    await runtime.sleep(500);
+
+    nextAnthropicResponseText = FOLLOWUP_RESPONSE_TEXT;
+    terminal.submit('Continue on the fallback pack after interruption.');
+    await runtime.waitForScreenText(new RegExp(FOLLOWUP_RESPONSE_TEXT), terminal, 30_000);
+    await runtime.waitForScreenText(/Using fallback Anthropic \(hop-kimi failed\)/i, terminal, 10_000);
+
+    const abortSequenceRequests = outbound.slice(abortSequenceStart);
+    if (abortSequenceRequests.length < 2 || abortSequenceRequests.some(request => request.host !== 'anthropic')) {
+      throw new Error(
+        `Expected abort and retrigger to stay on Anthropic, saw: ${JSON.stringify(abortSequenceRequests)}`,
+      );
+    }
+    runtime.printScreen('after fallback abort and retrigger', terminal);
   },
 };
