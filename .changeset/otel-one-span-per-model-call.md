@@ -8,7 +8,7 @@ Previously the generation span (the whole agent loop) was exported as the `chat`
 
 **Before**, a two-step tool-calling agent arrived at the backend as:
 
-```
+```text
 invoke_agent weather-agent
 └── chat gpt-5                gen_ai.usage.input_tokens=146   ← loop total
     ├── model_step            (no attributes)
@@ -20,7 +20,7 @@ invoke_agent weather-agent
 
 **After**, only the span that made the call carries `gen_ai.request.model`, the messages and `gen_ai.usage.*`:
 
-```
+```text
 invoke_agent weather-agent
 └── model_generation gpt-5    (no usage)
     ├── agent_step weather-agent
