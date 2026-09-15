@@ -5,7 +5,7 @@ This guide provides instructions for developers who want to contribute to or wor
 ## Prerequisites
 
 - **Node.js** (v22.13.0 or later)
-- **pnpm** (v11.x — repo pins `pnpm@11.21.0` in root `package.json:packageManager`, `engines` requires `>=11.0.0`; run `corepack enable && corepack prepare pnpm@11.21.0 --activate`): Mastra uses pnpm for package management
+- **pnpm** (v11.21.0 or later): Mastra uses pnpm for package management
 - **Docker** (for local development services): Only needed for a subset of tests, not required for general development
 
 ## Getting started
