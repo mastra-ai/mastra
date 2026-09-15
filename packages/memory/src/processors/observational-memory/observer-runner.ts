@@ -159,6 +159,10 @@ export class ObserverRunner {
     memory?: MastraMemory,
     extractors = this.observationConfig.extractors ?? [],
   ): Agent {
+    const agentModel =
+      this.observationConfig.onFailure === 'continue' && Array.isArray(model)
+        ? model.map(fallback => ({ ...fallback, maxRetries: 0 }))
+        : model;
     const agent = new Agent({
       id: isMultiThread ? 'multi-thread-observer' : 'observational-memory-observer',
       name: isMultiThread ? 'multi-thread-observer' : 'Observer',
@@ -168,7 +172,7 @@ export class ObserverRunner {
         this.observationConfig.threadTitle,
         extractors,
       ),
-      model,
+      model: agentModel,
       ...(memory ? { memory } : {}),
     });
     if (this.mastra) {
