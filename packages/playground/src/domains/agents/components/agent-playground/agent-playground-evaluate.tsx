@@ -22,6 +22,7 @@ import { ExperimentsIcon } from '@mastra/playground-ui/icons/ExperimentsIcon';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   CircleSlashIcon,
   ChevronLeft,
@@ -46,9 +47,11 @@ import { ExperimentResultsPanel } from './agent-playground-eval';
 import { AgentPlaygroundReview } from './agent-playground-review';
 import { AttachButton } from './attach-button';
 import { DatasetDetailView } from './dataset-detail-view';
-import { formatVersionLabel } from './format-version-label';
+import { RunExperimentButton } from './run-experiment-button';
 import { ScorerDetailView } from './scorer-detail-view';
 import { ScorerMiniEditor } from './scorer-mini-editor';
+import { DatasetsList } from '@/domains/datasets/components/datasets-list/datasets-list';
+import { ExperimentTriggerDialog } from '@/domains/datasets/components/experiment-trigger/experiment-trigger-dialog';
 import { GenerateConfigDialog, GenerateReviewDialog } from '@/domains/datasets/components/generate-items-dialog';
 import { useGenerationTasks } from '@/domains/datasets/context/generation-context';
 import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
@@ -109,6 +112,7 @@ function EvaluateDocsLink({ href, children }: { href: string; children: ReactNod
 
 export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: AgentPlaygroundEvaluateProps) {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get('tab');
   const activeTab: AgentEvalTab =
@@ -128,6 +132,7 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
   const [attachDatasetId, setAttachDatasetId] = useState('');
   const [showAttachScorerDialog, setShowAttachScorerDialog] = useState(false);
   const [attachScorerSearch, setAttachScorerSearch] = useState('');
+  const [showRunExperimentDialog, setShowRunExperimentDialog] = useState(false);
   const [generateDatasetId, setGenerateDatasetId] = useState<string | null>(null);
   const [reviewDatasetId, setReviewDatasetId] = useState<string | null>(null);
 
@@ -188,14 +193,6 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
     setShowAttachDialog(false);
     setAttachDatasetId('');
   };
-
-  const datasetExperimentMap = (experiments || []).reduce<Record<string, AgentExperiment>>((acc, exp) => {
-    const current = acc[exp.datasetId];
-    if (!current || getExperimentStartedAtTime(exp.startedAt) > getExperimentStartedAtTime(current.startedAt)) {
-      acc[exp.datasetId] = exp;
-    }
-    return acc;
-  }, {});
 
   const datasetMap = useMemo(() => {
     const map = new Map<string, DatasetRecord>();
@@ -343,14 +340,6 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
     });
   }, [experiments, experimentsSearch, datasetMap]);
 
-  const filteredDatasets = useMemo(() => {
-    if (!datasetsSearch) return datasets;
-    const term = datasetsSearch.toLowerCase();
-    return datasets.filter(
-      ds => ds.name.toLowerCase().includes(term) || (ds.description ?? '').toLowerCase().includes(term),
-    );
-  }, [datasets, datasetsSearch]);
-
   const filteredScorers = useMemo(() => {
     if (!scorersSearch) return attachedScorers;
     const term = scorersSearch.toLowerCase();
@@ -362,9 +351,6 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
 
   const { containerRef: experimentsContainerRef, getRowProps: getExperimentRowProps } = useDataListKeyboard({
     count: filteredExperiments.length,
-  });
-  const { containerRef: datasetsContainerRef, getRowProps: getDatasetRowProps } = useDataListKeyboard({
-    count: filteredDatasets.length,
   });
   const { containerRef: scorersContainerRef, getRowProps: getScorerRowProps } = useDataListKeyboard({
     count: filteredScorers.length,
@@ -526,7 +512,7 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
             descriptionSlot="Run an experiment against a dataset to see results here."
             actionSlot={
               <div className="flex flex-col items-center gap-2">
-                <Button variant="primary" onClick={() => setActiveTab('datasets')} icon={<Plus />}>
+                <Button variant="primary" onClick={() => setShowRunExperimentDialog(true)} icon={<Plus />}>
                   Run Experiment
                 </Button>
                 <EvaluateDocsLink href="https://mastra.ai/docs/evals/experiments">
@@ -594,7 +580,7 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
 
   function renderDatasetsTab() {
     if (isLoadingDatasets) {
-      return <DataListSkeleton columns="minmax(10rem,1fr) auto auto auto auto" />;
+      return <DatasetsList datasets={[]} experiments={[]} isLoading />;
     }
 
     if (!datasets.length) {
@@ -630,67 +616,36 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
     }
 
     return (
-      <DataList columns="minmax(10rem,1fr) auto auto auto auto" className="min-w-0" scrollRef={datasetsContainerRef}>
-        <DataList.Top>
-          <DataList.TopCell>Name</DataList.TopCell>
-          <DataList.TopCell>Tags</DataList.TopCell>
-          <DataList.TopCell>Latest Experiment</DataList.TopCell>
-          <DataList.TopCell>Status</DataList.TopCell>
-          <DataList.TopCell>Updated</DataList.TopCell>
-        </DataList.Top>
-
-        {filteredDatasets.map((ds, index) => {
-          const exp = datasetExperimentMap[ds.id];
+      <DatasetsList
+        datasets={datasets}
+        experiments={experiments ?? []}
+        isLoading={false}
+        search={datasetsSearch}
+        keyboardGlobal={false}
+        selectedDatasetId={detailView?.type === 'dataset' ? detailView.id : undefined}
+        onSelectDataset={ds => setDetailView({ type: 'dataset', id: ds.id })}
+        renderTrailingCell={ds => {
           const genTask = generationTasks[ds.id];
-          const isGenerating = genTask?.status === 'generating';
-          const isFeatured = detailView?.type === 'dataset' && detailView.id === ds.id;
-
-          return (
-            <DataList.RowButton
-              key={ds.id}
-              featured={isFeatured}
-              onClick={() => setDetailView({ type: 'dataset', id: ds.id })}
-              {...getDatasetRowProps(index)}
-            >
-              <DataList.Cell className="text-neutral4 min-w-0">
-                <span className="block truncate">{ds.name}</span>
-              </DataList.Cell>
-              <DataList.Cell>
-                {ds.tags?.length ? (
-                  <div className="flex gap-1">
-                    {ds.tags.slice(0, 2).map(tag => (
-                      <Badge key={tag}>{tag}</Badge>
-                    ))}
-                    {ds.tags.length > 2 && <Badge>+{ds.tags.length - 2}</Badge>}
-                  </div>
-                ) : (
-                  <span className="text-neutral2">—</span>
-                )}
-              </DataList.Cell>
-              <DataList.Cell>
-                {exp ? <ExperimentBadge experiment={exp} /> : <span className="text-neutral2">No experiments</span>}
-              </DataList.Cell>
-              <DataList.Cell>
-                {isGenerating ? (
-                  <div className="flex items-center gap-1">
-                    <Spinner className="size-3" />
-                    <Txt variant="ui-xs" className="text-warning1">
-                      Generating...
-                    </Txt>
-                  </div>
-                ) : genTask?.error ? (
-                  <Txt variant="ui-xs" className="text-negative1">
-                    Failed
-                  </Txt>
-                ) : (
-                  <span className="text-neutral2">—</span>
-                )}
-              </DataList.Cell>
-              <DataList.Cell>{formatDate(ds.updatedAt)}</DataList.Cell>
-            </DataList.RowButton>
-          );
-        })}
-      </DataList>
+          if (genTask?.status === 'generating') {
+            return (
+              <div className="flex items-center gap-1">
+                <Spinner className="size-3" />
+                <Txt variant="ui-xs" className="text-warning1">
+                  Generating...
+                </Txt>
+              </div>
+            );
+          }
+          if (genTask?.error) {
+            return (
+              <Txt variant="ui-xs" className="text-negative1">
+                Failed
+              </Txt>
+            );
+          }
+          return null;
+        }}
+      />
     );
   }
 
@@ -775,6 +730,16 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
   function renderDialogs() {
     return (
       <>
+        {showRunExperimentDialog && (
+          <ExperimentTriggerDialog
+            open
+            onOpenChange={setShowRunExperimentDialog}
+            initialTargetType="agent"
+            initialTargetId={agentId}
+            onSuccess={() => void queryClient.invalidateQueries({ queryKey: ['agent-experiments', agentId] })}
+          />
+        )}
+
         {/* Generate Config Dialog */}
         {generateDatasetId && (
           <GenerateConfigDialog
@@ -924,8 +889,8 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
         onValueChange={handleTabChange}
         className="flex h-full flex-col overflow-hidden"
       >
-        {/* Same p-1.5 as the parent agent tab bar so the pills line up. */}
-        <div className="border-border1 flex items-center justify-between gap-x-2 border-b p-1.5">
+        {/* Same spacing as PageLayout.TopArea (p-4 / pb-3) so the tabs line up with the traces toolbar. */}
+        <div className="flex items-center justify-between gap-x-2 px-4 pt-4 pb-3">
           <TabList variant="pill-ghost" className="min-w-0 flex-nowrap overflow-x-auto">
             <Tab value="experiments">
               <Icon size="sm">
@@ -955,6 +920,9 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
 
           {/* Tab-specific actions */}
           <div className="ml-auto flex shrink-0 items-center gap-2 whitespace-nowrap">
+            {activeTab === 'experiments' && !!experiments?.length && (
+              <RunExperimentButton onClick={() => setShowRunExperimentDialog(true)} />
+            )}
             {activeTab === 'datasets' && (
               <>
                 <CreateButton
@@ -993,7 +961,7 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
 
         {/* Search bar below tabs */}
         {activeTab !== 'review' && (
-          <div className="px-1.5 py-2">
+          <div className="px-4 pb-3">
             {activeTab === 'experiments' && (
               <InputGroup variant="outline">
                 <InputGroupAddon align="inline-start">
@@ -1039,11 +1007,11 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
           </div>
         )}
 
-        <div className="flex-1 overflow-hidden px-1.5 pb-4">
-          <TabContent value="review" className="h-full overflow-hidden">
+        <div className="flex-1 overflow-hidden px-4 pb-4">
+          <TabContent value="review" className="h-full overflow-hidden py-0">
             <AgentPlaygroundReview agentId={agentId} onCreateScorer={handleCreateScorerFromFailures} />
           </TabContent>
-          <TabContent value="experiments" className="h-full overflow-hidden">
+          <TabContent value="experiments" className="h-full overflow-hidden py-0">
             <Columns className={hasDetailPanel && detailView?.type === 'experiment' ? 'grid-cols-[1fr_1fr]' : ''}>
               <Column>
                 <Column.Content
@@ -1056,7 +1024,7 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
             </Columns>
           </TabContent>
 
-          <TabContent value="datasets" className="h-full overflow-hidden">
+          <TabContent value="datasets" className="h-full overflow-hidden py-0">
             <Columns className={hasDetailPanel && detailView?.type === 'dataset' ? 'grid-cols-[1fr_1fr]' : ''}>
               <Column>
                 <Column.Content className={!isLoadingDatasets && !datasets.length ? 'content-stretch' : undefined}>
@@ -1067,7 +1035,7 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
             </Columns>
           </TabContent>
 
-          <TabContent value="scorers" className="h-full overflow-hidden">
+          <TabContent value="scorers" className="h-full overflow-hidden py-0">
             <Columns
               className={
                 hasDetailPanel &&
@@ -1095,56 +1063,6 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
       </Tabs>
 
       {renderDialogs()}
-    </div>
-  );
-}
-
-// --- Sub-components ---
-
-function ExperimentBadge({ experiment }: { experiment: AgentExperiment }) {
-  const { status, failedCount, totalItems } = experiment;
-
-  const versionTags = [
-    experiment.datasetVersion != null ? formatVersionLabel('Dataset', experiment.datasetVersion) : null,
-    experiment.agentVersion ? formatVersionLabel('Agent', experiment.agentVersion) : null,
-  ].filter(Boolean);
-
-  const versionLine =
-    versionTags.length > 0 ? (
-      <Txt variant="ui-xs" className="text-neutral3">
-        {versionTags.join(' · ')}
-      </Txt>
-    ) : null;
-
-  if (status === 'running' || status === 'pending') {
-    return (
-      <div className="flex flex-col">
-        <Txt variant="ui-xs" className="text-warning1">
-          {status === 'running' ? 'Running...' : 'Pending...'}
-        </Txt>
-        {versionLine}
-      </div>
-    );
-  }
-
-  if (totalItems === 0) {
-    return (
-      <div className="flex flex-col">
-        <Txt variant="ui-xs" className="text-neutral3">
-          No results
-        </Txt>
-        {versionLine}
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex flex-col">
-      <Txt variant="ui-xs" className="text-neutral3">
-        {totalItems} items
-        {failedCount > 0 && <span className="text-error"> · {failedCount} errored</span>}
-      </Txt>
-      {versionLine}
     </div>
   );
 }
