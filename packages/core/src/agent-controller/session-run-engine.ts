@@ -557,9 +557,9 @@ export class SessionRunEngine {
       }
       if (chunk.type === 'reasoning-start') {
         state.spans.fold(state.currentMessage.content.parts, chunk);
-        state.spans.openReasoningSpan(state.currentMessage.content.parts, chunk.payload.id);
+        const part = state.spans.openReasoningSpan(state.currentMessage.content.parts, chunk.payload.id);
         state.announcedReasoningSpans.add(chunk.payload.id);
-        this.emitInitialPart(state, partIndex, { type: 'reasoning', reasoning: '', details: [] });
+        this.emitInitialPart(state, partIndex, structuredClone(part));
         return undefined;
       }
 

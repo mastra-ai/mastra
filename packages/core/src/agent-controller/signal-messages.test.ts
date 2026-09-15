@@ -1668,7 +1668,11 @@ describe('AgentController signal messages', () => {
       {
         type: 'message_update',
         id: expect.any(String),
-        event: { type: 'part', index: 1, part: { type: 'reasoning', reasoning: '', details: [] } },
+        event: {
+          type: 'part',
+          index: 1,
+          part: { type: 'reasoning', reasoning: '', details: [{ type: 'text', text: '' }] },
+        },
       },
       {
         type: 'message_update',
