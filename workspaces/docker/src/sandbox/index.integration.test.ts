@@ -133,3 +133,90 @@ describe('DockerSandbox writeFiles (integration)', () => {
     expect(result.stdout.trim()).toBe('ok');
   }, 120000);
 });
+
+/**
+ * kill() namespace correctness + zombie reaping — replicates the repro from
+ * issue #23773 where kill() reported exit 137 but left processes running in the
+ * container, and where the default PID 1 (`sleep infinity`) never reaped
+ * children so PIDs accumulated against pidsLimit.
+ */
+describe('DockerSandbox process kill (integration)', () => {
+  let sandbox: DockerSandbox;
+
+  beforeAll(async () => {
+    sandbox = new DockerSandbox({
+      id: `kill-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      image: 'node:22-slim',
+      timeout: 60000,
+    });
+    await sandbox._start();
+  }, 120000);
+
+  afterAll(async () => {
+    try {
+      await sandbox._destroy();
+    } catch {
+      // Ignore cleanup errors
+    }
+  });
+
+  const countProcesses = async (): Promise<number> => {
+    // Count PIDs directly from /proc so we don't depend on ps being installed.
+    const result = await sandbox.executeCommand!('sh', ['-c', 'ls -d /proc/[0-9]* | wc -l']);
+    expect(result.exitCode).toBe(0);
+    return parseInt(result.stdout.trim(), 10);
+  };
+
+  it('kill() actually terminates the process tree and PID count returns to baseline', async () => {
+    const baseline = await countProcesses();
+
+    // Spawn a shell that forks a child sleep, mirroring the repro's process tree.
+    const handle = await sandbox.processes!.spawn('sh -c "sleep 300 & sleep 300"');
+    // Give the tree time to establish.
+    await new Promise(r => setTimeout(r, 1000));
+
+    const duringPids = await countProcesses();
+    expect(duringPids).toBeGreaterThan(baseline);
+
+    const killed = await handle.kill();
+    expect(killed).toBe(true);
+    await handle.wait();
+
+    // Poll until the container settles back to (approximately) baseline. With an
+    // init reaper as PID 1, killed processes are reaped rather than lingering.
+    // Allow a small margin for the transient counting exec itself.
+    const tolerance = 1;
+    let settled = baseline;
+    for (let i = 0; i < 20; i++) {
+      await new Promise(r => setTimeout(r, 500));
+      settled = await countProcesses();
+      if (settled <= baseline + tolerance) break;
+    }
+
+    // The killed tree (3 procs) is gone; we are back near baseline, not stuck
+    // at the elevated during-count (the pre-fix bug left processes running).
+    expect(settled).toBeLessThanOrEqual(baseline + tolerance);
+    expect(settled).toBeLessThan(duringPids);
+  }, 120000);
+
+  it('does not leak PIDs across repeated spawn/kill cycles', async () => {
+    const baseline = await countProcesses();
+
+    for (let cycle = 0; cycle < 3; cycle++) {
+      const handle = await sandbox.processes!.spawn('sh -c "sleep 300 & sleep 300"');
+      await new Promise(r => setTimeout(r, 500));
+      await handle.kill();
+      await handle.wait();
+    }
+
+    let settled = baseline;
+    for (let i = 0; i < 20; i++) {
+      await new Promise(r => setTimeout(r, 500));
+      settled = await countProcesses();
+      if (settled <= baseline + 1) break;
+    }
+
+    // No accumulation of zombies/orphans after several kill cycles.
+    expect(settled).toBeLessThanOrEqual(baseline + 1);
+  }, 120000);
+});

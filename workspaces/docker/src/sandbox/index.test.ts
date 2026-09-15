@@ -264,6 +264,24 @@ describe('DockerSandbox', () => {
       expect(sandbox.workingDirectory).toBe('/workspace');
     });
 
+    it('enables an init process (HostConfig.Init) by default to reap zombies', async () => {
+      const sandbox = new DockerSandbox();
+      await sandbox._start();
+
+      expect(mockDocker.createContainer).toHaveBeenCalledWith(
+        expect.objectContaining({ HostConfig: expect.objectContaining({ Init: true }) }),
+      );
+    });
+
+    it('allows disabling the init process via the init option', async () => {
+      const sandbox = new DockerSandbox({ init: false });
+      await sandbox._start();
+
+      expect(mockDocker.createContainer).toHaveBeenCalledWith(
+        expect.objectContaining({ HostConfig: expect.objectContaining({ Init: false }) }),
+      );
+    });
+
     it('should include environment variables', async () => {
       const sandbox = new DockerSandbox({
         env: { NODE_ENV: 'test', API_KEY: 'secret' },
@@ -986,29 +1004,51 @@ describe('DockerSandbox', () => {
       expect(result.timedOut).toBeUndefined();
     });
 
-    it('should use process group kill (negative PID)', async () => {
-      mockExec.inspect.mockResolvedValue({
-        Running: true,
-        ExitCode: null,
-        Pid: 42,
-      });
+    it('should inject a unique MASTRA_PROC_ID marker into each spawned exec', async () => {
+      const sandbox = new DockerSandbox();
+      await sandbox._start();
 
+      await sandbox.processes!.spawn('sleep 100');
+      await sandbox.processes!.spawn('sleep 100');
+
+      const firstEnv = mockContainer.exec.mock.calls[0]?.[0].Env as string[];
+      const secondEnv = mockContainer.exec.mock.calls[1]?.[0].Env as string[];
+
+      const firstMarker = firstEnv.find(e => e.startsWith('MASTRA_PROC_ID='));
+      const secondMarker = secondEnv.find(e => e.startsWith('MASTRA_PROC_ID='));
+
+      expect(firstMarker).toBeDefined();
+      expect(secondMarker).toBeDefined();
+      // Each spawn gets a distinct marker so kill() targets only its own tree
+      expect(firstMarker).not.toEqual(secondMarker);
+    });
+
+    it('should kill by marker in the container PID namespace (not host PID)', async () => {
       const sandbox = new DockerSandbox();
       await sandbox._start();
 
       const handle = await sandbox.processes!.spawn('sleep 100');
 
-      // Reset the mock to capture the kill exec call
-      mockContainer.exec.mockResolvedValueOnce({
-        id: 'kill-exec',
-        start: vi.fn().mockResolvedValue(undefined),
-      });
+      const spawnEnv = mockContainer.exec.mock.calls[0]?.[0].Env as string[];
+      const marker = spawnEnv.find(e => e.startsWith('MASTRA_PROC_ID='))!.split('=')[1];
+
+      // Capture the kill exec call
+      const killStart = vi.fn().mockResolvedValue(undefined);
+      mockContainer.exec.mockResolvedValueOnce({ id: 'kill-exec', start: killStart });
 
       await handle.kill();
 
-      // The second exec call should be the kill command with negative PID
       const killCall = mockContainer.exec.mock.calls[1]?.[0];
-      expect(killCall.Cmd).toEqual(['sh', '-c', 'kill -9 -42 2>/dev/null || kill -9 42']);
+      expect(killCall.Cmd[0]).toBe('sh');
+      expect(killCall.Cmd[1]).toBe('-c');
+      const script = killCall.Cmd[2] as string;
+      // Script scans /proc for the marker rather than using a host PID
+      expect(script).toContain(`MASTRA_PROC_ID=${marker}`);
+      expect(script).toContain('/proc/');
+      expect(script).toContain('kill -STOP');
+      expect(script).toContain('kill -KILL');
+      expect(script).not.toContain('kill -9 -42');
+      expect(killStart).toHaveBeenCalled();
     });
 
     it('should mark explicit kill results as killed without timeout', async () => {

@@ -7,11 +7,77 @@
  * stdout/stderr streams.
  */
 
+import { randomUUID } from 'node:crypto';
 import type { Duplex } from 'node:stream';
 
 import { ProcessHandle, SandboxProcessManager } from '@mastra/core/workspace';
 import type { CommandResult, ProcessInfo, SpawnProcessOptions } from '@mastra/core/workspace';
 import type { Container, Exec, ExecInspectInfo } from 'dockerode';
+
+/**
+ * Env var injected into every spawned exec so that, at kill time, we can find
+ * the process (and its descendants) inside the *container's* PID namespace.
+ * Docker's exec-inspect `Pid` is in the host/daemon namespace and does not
+ * correspond to PIDs visible to an in-container `kill`, so we identify the
+ * process tree by this marker instead.
+ */
+const PROC_MARKER_ENV = 'MASTRA_PROC_ID';
+
+/**
+ * Build a POSIX-sh script that kills every process in the container carrying
+ * `MASTRA_PROC_ID=<marker>` plus all of their descendants. Children may replace
+ * their environment (so they lose the marker) or be re-parented to PID 1 (so a
+ * PPID walk from the marked roots alone misses them); we therefore union both
+ * criteria and iterate until the set is stable to catch fork races. The set is
+ * SIGSTOPped first to freeze it, then SIGKILLed.
+ *
+ * The marker is a UUID (no shell metacharacters), so interpolation is safe.
+ */
+function buildKillScript(marker: string): string {
+  return `
+marker='${PROC_MARKER_ENV}=${marker}'
+collect() {
+  found=''
+  for d in /proc/[0-9]*; do
+    pid=\${d#/proc/}
+    [ -r "$d/environ" ] || continue
+    if tr '\\0' '\\n' < "$d/environ" 2>/dev/null | grep -qxF "$marker"; then
+      found="$found $pid"
+    fi
+  done
+  # Expand to descendants by repeatedly adding any pid whose parent is in the set.
+  changed=1
+  while [ "$changed" = 1 ]; do
+    changed=0
+    for d in /proc/[0-9]*; do
+      pid=\${d#/proc/}
+      [ -r "$d/stat" ] || continue
+      ppid=$(awk '{print $4}' "$d/stat" 2>/dev/null)
+      for p in $found; do
+        if [ "$ppid" = "$p" ]; then
+          case " $found " in
+            *" $pid "*) ;;
+            *) found="$found $pid"; changed=1 ;;
+          esac
+        fi
+      done
+    done
+  done
+  echo "$found"
+}
+prev=''
+i=0
+while [ "$i" -lt 5 ]; do
+  set=$(collect)
+  [ -n "$set" ] && kill -STOP $set 2>/dev/null
+  [ "$set" = "$prev" ] && break
+  prev="$set"
+  i=$((i + 1))
+done
+[ -n "$prev" ] && kill -KILL $prev 2>/dev/null
+exit 0
+`;
+}
 
 // =============================================================================
 // Docker Process Handle
@@ -38,12 +104,15 @@ class DockerProcessHandle extends ProcessHandle {
   private _waitPromise: Promise<CommandResult> | null = null;
   private _stdinStream: Duplex | null = null;
   private _execStream: NodeJS.ReadWriteStream | null = null;
+  /** @internal Marker used to locate this process tree in the container PID namespace. */
+  readonly _procMarker: string;
 
   constructor(
     exec: Exec,
     container: Container,
     startTime: number,
     stdinStream: Duplex | null,
+    procMarker: string,
     options?: SpawnProcessOptions,
   ) {
     super(options);
@@ -52,6 +121,7 @@ class DockerProcessHandle extends ProcessHandle {
     this._container = container;
     this._startTime = startTime;
     this._stdinStream = stdinStream;
+    this._procMarker = procMarker;
   }
 
   get exitCode(): number | undefined {
@@ -93,32 +163,13 @@ class DockerProcessHandle extends ProcessHandle {
     if (this._exitCode !== undefined) return false;
 
     try {
-      // Get the PID inside the container from exec inspect.
-      // Single retry with 50ms delay — Docker may not have assigned a PID yet
-      // if kill() is called immediately after spawn(). A polling loop with
-      // backoff would be more robust under heavy load, but overkill in practice.
-      let info = await this._inspectExec();
-      if (!info.Running || !info.Pid) {
-        await new Promise(r => setTimeout(r, 50));
-        info = await this._inspectExec();
-      }
-
-      if (!info.Running) {
-        this._killed = true;
-        this._destroyStream();
-        return false;
-      }
-
-      const pid = info.Pid;
-      if (!pid) {
-        this._killed = true;
-        this._destroyStream();
-        return false;
-      }
-
-      // Kill the process group (negative PID), fall back to direct PID
+      // Locate and kill the process tree inside the *container's* PID namespace
+      // via the marker env var. We must not use exec.inspect().Pid here: that is
+      // the host/daemon-namespace PID and does not correspond to PIDs an
+      // in-container `kill` can address. The sweep also catches children that
+      // dropped the marker or were re-parented to PID 1.
       const killExec = await this._container.exec({
-        Cmd: ['sh', '-c', `kill -9 -${pid} 2>/dev/null || kill -9 ${pid}`],
+        Cmd: ['sh', '-c', buildKillScript(this._procMarker)],
         AttachStdout: false,
         AttachStderr: false,
       });
@@ -213,8 +264,11 @@ export class DockerProcessManager extends SandboxProcessManager {
   async spawn(command: string, options: SpawnProcessOptions = {}): Promise<ProcessHandle> {
     const container = this.container;
 
-    // The base spawn wrapper already merged the sandbox env into options.env
-    const envArray = Object.entries({ ...options.env })
+    // Unique marker so kill() can find this process (and its descendants) in the
+    // container PID namespace. The base spawn wrapper already merged the sandbox
+    // env into options.env; the marker is injected last so it always wins.
+    const procMarker: string = randomUUID();
+    const envArray = Object.entries({ ...options.env, [PROC_MARKER_ENV]: procMarker })
       .filter((entry): entry is [string, string] => entry[1] !== undefined)
       .map(([k, v]) => `${k}=${v}`);
 
@@ -233,7 +287,7 @@ export class DockerProcessManager extends SandboxProcessManager {
     const stream = await exec.start({ hijack: true, stdin: true });
 
     const startTime = Date.now();
-    const handle = new DockerProcessHandle(exec, container, startTime, stream, options);
+    const handle = new DockerProcessHandle(exec, container, startTime, stream, procMarker, options);
     handle._setExecStream(stream);
 
     // Create the wait promise that resolves when the stream ends
