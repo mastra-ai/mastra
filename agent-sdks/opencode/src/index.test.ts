@@ -283,13 +283,22 @@ describe('OpenCodeSDKAgent', () => {
       const agent = new OpenCodeSDKAgent({ id: 'opencode-agent', description: 'OpenCode', client });
       const abortController = new AbortController();
 
-      await agent.stream('Stream prompt', { runId: 'cancelled-stream-run', signal: abortController.signal });
+      const stream = await agent.stream('Stream prompt', {
+        runId: 'cancelled-stream-run',
+        signal: abortController.signal,
+      });
 
       await vi.waitFor(() => expect(createdSessionIds).toHaveLength(1));
       abortController.abort();
 
+      const chunks = [];
+      for await (const chunk of stream.fullStream) {
+        chunks.push(chunk);
+      }
+
       await vi.waitFor(() => expect(sessionAbort).toHaveBeenCalledTimes(1));
       expect(sessionAbort).toHaveBeenCalledWith({ sessionID: createdSessionIds[0] });
+      expect(chunks.map(chunk => chunk.type)).toEqual(['start', 'step-start', 'response-metadata', 'text-start']);
     });
   });
 

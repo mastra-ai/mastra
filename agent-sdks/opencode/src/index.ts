@@ -486,7 +486,16 @@ function runOpenCodeAsMastraStream<OUTPUT>(
   const abortController = new AbortController();
   let sessionId: string | undefined;
   let cancelled = false;
+  let externallyAborted = false;
+  let streamController: ReadableStreamDefaultController<ChunkType> | undefined;
+  let streamClosed = false;
   let abortPromise: Promise<void> | undefined;
+
+  const closeStream = (): void => {
+    if (streamClosed) return;
+    streamClosed = true;
+    streamController?.close();
+  };
 
   const abortRun = async (): Promise<void> => {
     cancelled = true;
@@ -496,15 +505,25 @@ function runOpenCodeAsMastraStream<OUTPUT>(
     await abortPromise;
   };
 
-  const handleAbort = () => void abortRun();
+  const handleAbort = (): void => {
+    externallyAborted = true;
+    closeStream();
+    void abortRun().catch(error => telemetry.fail(error));
+  };
   if (runOptions?.signal?.aborted) {
-    void abortRun();
+    handleAbort();
   } else {
     runOptions?.signal?.addEventListener('abort', handleAbort, { once: true });
   }
 
   return new ReadableStream<ChunkType>({
     start: async controller => {
+      streamController = controller;
+      if (externallyAborted) {
+        closeStream();
+        return;
+      }
+
       const textId = randomUUID();
       const responseId = randomUUID();
 
@@ -551,7 +570,7 @@ function runOpenCodeAsMastraStream<OUTPUT>(
           costContext: lastInfo ? getOpenCodeCostContext(lastInfo) : undefined,
           object: await getStructuredOutputFromValue(lastInfo?.structured ?? text, runOptions?.structuredOutput),
         });
-        controller.close();
+        closeStream();
       } catch (error) {
         if (cancelled) return;
         controller.enqueue({
@@ -560,7 +579,7 @@ function runOpenCodeAsMastraStream<OUTPUT>(
           from: ChunkFrom.AGENT,
           payload: { error },
         });
-        controller.close();
+        closeStream();
       } finally {
         runOptions?.signal?.removeEventListener('abort', handleAbort);
       }
