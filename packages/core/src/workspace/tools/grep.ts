@@ -4,7 +4,7 @@ import { pMap } from '../../utils/p-map';
 import { WORKSPACE_TOOLS } from '../constants';
 import { UnsupportedGrepPatternError } from '../errors';
 import type { FilesystemGrepResult } from '../filesystem';
-import { isTextFile } from '../filesystem/fs-utils';
+import { isEnoentError, isTextFile } from '../filesystem/fs-utils';
 import { loadGitignore } from '../gitignore';
 import type { GlobMatcher } from '../glob';
 import { createGlobMatcher, extractGlobBase, isGlobPattern } from '../glob';
@@ -282,9 +282,14 @@ Usage:
             filePaths = collectFiles(searchPath);
           }
         } catch (err) {
-          // Target could not be resolved (missing path, permission error, etc.).
+          // Target could not be resolved. A genuinely missing path is reported
+          // as "not found"; any other failure (permission, IO) is a read error.
           if (strict) throw err;
-          targetNotFound = true;
+          if (isEnoentError(err)) {
+            targetNotFound = true;
+          } else {
+            skippedReadErrorCount++;
+          }
           filePaths = [];
         }
       }

@@ -819,6 +819,25 @@ describe('workspace_grep', () => {
       expect(result).toContain('target path not found: nothing searched');
     });
 
+    it('reports a non-missing target resolution failure as a read error, not "not found"', async () => {
+      await fs.mkdir(path.join(tempDir, 'sub'), { recursive: true });
+      await fs.writeFile(path.join(tempDir, 'sub', 'a.ts'), 'const needle = 1;');
+
+      const filesystem = new FailingLocalFilesystem({ basePath: tempDir });
+      filesystem.errorCode = 'EACCES';
+      filesystem.failStatFor = p => p.endsWith('sub') || p === 'sub';
+      const workspace = new Workspace({ filesystem });
+      const tools = await createWorkspaceTools(workspace);
+
+      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute(
+        { pattern: 'needle', path: 'sub' },
+        { workspace },
+      );
+
+      expect(result).toContain('path skipped: read error');
+      expect(result).not.toContain('target path not found');
+    });
+
     it('reports a read error when a subdirectory cannot be listed but still searches the rest', async () => {
       await fs.mkdir(path.join(tempDir, 'good'), { recursive: true });
       await fs.mkdir(path.join(tempDir, 'bad'), { recursive: true });
