@@ -1,9 +1,12 @@
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { IMastraLogger } from '@mastra/core/logger';
 import * as pkg from 'empathic/package';
 import type { WorkspacesRoot } from 'find-workspaces';
 import { findWorkspacesRoot, findWorkspaces } from 'find-workspaces';
+import type { RollupOutput } from 'rollup';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
+  assertNoUnpackagedWorkspaceImports,
   collectTransitiveWorkspaceDependencies,
   packWorkspaceDependencies,
   getWorkspaceInformation,
@@ -338,5 +341,76 @@ describe('workspaceDependencies', () => {
       exports: undefined,
     });
     expect(result.isWorkspacePackage).toBe(true);
+  });
+});
+
+describe('assertNoUnpackagedWorkspaceImports', () => {
+  type WorkspaceMap = Parameters<typeof assertNoUnpackagedWorkspaceImports>[0]['workspaceMap'];
+
+  const createOutput = ({
+    imports = [],
+    dynamicImports = [],
+  }: {
+    imports?: string[];
+    dynamicImports?: string[];
+  }): RollupOutput =>
+    ({
+      output: [
+        {
+          type: 'chunk',
+          imports: [],
+          dynamicImports: [],
+          code: [
+            ...imports.map(dependency => `import '${dependency}';`),
+            ...dynamicImports.map(dependency => `import('${dependency}');`),
+          ].join('\n'),
+        },
+      ],
+    }) as unknown as RollupOutput;
+
+  const createWorkspaceMap = (...packageNames: string[]) =>
+    new Map(packageNames.map(packageName => [packageName, {}])) as WorkspaceMap;
+
+  it('throws for unpackaged workspace imports in generated chunks', () => {
+    const output = createOutput({
+      imports: ['@internal/b/subpath', './local.mjs', 'react'],
+      dynamicImports: ['@internal/a'],
+    });
+
+    let error: unknown;
+    try {
+      assertNoUnpackagedWorkspaceImports({
+        output,
+        workspaceMap: createWorkspaceMap('@internal/a', '@internal/b'),
+        usedWorkspacePackages: new Set(),
+      });
+    } catch (caughtError) {
+      error = caughtError;
+    }
+
+    expect(error).toBeInstanceOf(MastraError);
+    expect(error).toMatchObject({
+      id: 'DEPLOYER_BUNDLER_UNPACKAGED_WORKSPACE_IMPORT',
+      domain: ErrorDomain.DEPLOYER,
+      category: ErrorCategory.USER,
+      details: { packageNames: '@internal/a, @internal/b' },
+    });
+    expect((error as Error).message).toContain('"@internal/a", "@internal/b"');
+    expect((error as Error).message).toContain('using "workspace:*"');
+  });
+
+  it('allows packaged workspace imports and non-workspace imports', () => {
+    const output = createOutput({
+      imports: ['@internal/a/subpath', './local.mjs', 'react'],
+      dynamicImports: ['node:fs'],
+    });
+
+    expect(() =>
+      assertNoUnpackagedWorkspaceImports({
+        output,
+        workspaceMap: createWorkspaceMap('@internal/a', '@internal/b'),
+        usedWorkspacePackages: new Set(['@internal/a']),
+      }),
+    ).not.toThrow();
   });
 });

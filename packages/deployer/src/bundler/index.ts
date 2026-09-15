@@ -20,6 +20,7 @@ import { getPackageName, isBareModuleSpecifier, shouldSkipInstall, slash } from 
 import { DepsService } from '../services/deps';
 import { FileService } from '../services/fs';
 import {
+  assertNoUnpackagedWorkspaceImports,
   collectTransitiveWorkspaceDependencies,
   getWorkspaceInformation,
   packWorkspaceDependencies,
@@ -765,7 +766,13 @@ export abstract class Bundler extends MastraBundler {
         },
       );
 
-      await bundler.write();
+      const bundleOutput = await bundler.write();
+      assertNoUnpackagedWorkspaceImports({
+        output: bundleOutput,
+        workspaceMap: analyzedBundleInfo.workspaceMap,
+        usedWorkspacePackages: transitiveWorkspaceDependencies.usedWorkspacePackages,
+      });
+
       const toolImports: string[] = [];
       const toolsExports: string[] = [];
       Array.from(Object.keys(inputOptions.input || {}))
@@ -819,7 +826,9 @@ export const tools = [${toolsExports.join(', ')}]`,
     } catch (error) {
       if (
         error instanceof MastraError &&
-        (error.id === 'DEPLOYER_BUNDLER_FACTORY_UI_MISSING' || error.id === 'DEPLOYER_PNPM_IGNORED_BUILDS')
+        (error.id === 'DEPLOYER_BUNDLER_FACTORY_UI_MISSING' ||
+          error.id === 'DEPLOYER_PNPM_IGNORED_BUILDS' ||
+          error.id === 'DEPLOYER_BUNDLER_UNPACKAGED_WORKSPACE_IMPORT')
       ) {
         throw error;
       }
