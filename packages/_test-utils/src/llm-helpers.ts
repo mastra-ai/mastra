@@ -379,3 +379,69 @@ export function shouldSkipLLMTest(mode: string, provider: keyof ProviderApiKeys,
   // For all other cases (live, record, update, or auto without recordings), skip
   return true;
 }
+
+function isJsonSchemaTypeArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every(item => typeof item === 'string');
+}
+
+function isBareAnyOf(value: unknown): value is { anyOf: unknown[] } {
+  return (
+    !!value &&
+    typeof value === 'object' &&
+    !Array.isArray(value) &&
+    Array.isArray((value as { anyOf?: unknown }).anyOf) &&
+    Object.keys(value).length === 1
+  );
+}
+
+/**
+ * Canonicalize JSON Schema union encodings so LLM recording hashes stay
+ * stable across Zod `toJSONSchema` changes (`type: [T, U]` vs
+ * `anyOf: [{type:T},{type:U}]`, nested vs flattened `anyOf`).
+ */
+export function canonicalizeJsonSchemaNullability(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(canonicalizeJsonSchemaNullability);
+  }
+  if (value === null || typeof value !== 'object') {
+    return value;
+  }
+
+  const next: Record<string, unknown> = {};
+  for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
+    next[key] = canonicalizeJsonSchemaNullability(nested);
+  }
+
+  if (isJsonSchemaTypeArray(next.type) && next.type.length >= 2) {
+    const { type, ...rest } = next;
+    return canonicalizeJsonSchemaNullability({
+      ...rest,
+      anyOf: type.map(t => ({ type: t })),
+    });
+  }
+
+  if (Array.isArray(next.anyOf)) {
+    const flattened: unknown[] = [];
+    for (const item of next.anyOf) {
+      if (isBareAnyOf(item)) {
+        flattened.push(...item.anyOf);
+      } else {
+        flattened.push(item);
+      }
+    }
+    next.anyOf = flattened;
+  }
+
+  return next;
+}
+
+/**
+ * `transformRequest` helper for LLM recordings: walk the request body and
+ * canonicalize JSON Schema union encodings before hashing.
+ */
+export function canonicalizeRequestJsonSchema({ url, body }: { url: string; body: unknown }): {
+  url: string;
+  body: unknown;
+} {
+  return { url, body: canonicalizeJsonSchemaNullability(body) };
+}
