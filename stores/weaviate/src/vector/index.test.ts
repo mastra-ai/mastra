@@ -14,7 +14,7 @@ describe('WeaviateVector', () => {
   beforeAll(async () => {
     weaviate = new WeaviateVector({ id: 'weaviate-test' });
     await weaviate.createIndex({ indexName: testIndex, dimension });
-  });
+  }, 50000);
 
   afterAll(async () => {
     await weaviate.deleteIndex({ indexName: testIndex });

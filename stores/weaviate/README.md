@@ -19,13 +19,15 @@ import { WeaviateVector } from '@mastra/weaviate';
 // Local / self-hosted (docker)
 const store = new WeaviateVector({
   id: 'weaviate',
-  scheme: 'http',
-  host: 'localhost:8080',
+  httpHost: 'localhost',
+  httpPort: 8080,
+  grpcHost: 'localhost',
+  grpcPort: 50051,
 });
 
-await store.createIndex({ indexName: 'documents', dimension: 1536 });
+await store.createIndex({ indexName: 'documents', dimension: 1536, metric: 'cosine' });
 
-await store.upsert({
+const ids = await store.upsert({
   indexName: 'documents',
   vectors: [/* embeddings */],
   metadata: [{ text: 'hello world' }],
@@ -36,6 +38,7 @@ const results = await store.query({
   indexName: 'documents',
   queryVector: [/* embedding */],
   topK: 5,
+  filter: { text: { $eq: 'hello world' } }, // optional filter
 });
 ```
 
@@ -44,7 +47,12 @@ const results = await store.query({
 ```ts
 const store = new WeaviateVector({
   id: 'weaviate',
-  cloudUrl: process.env.WEAVIATE_URL,
+  httpHost: 'my-cluster.weaviate.network',
+  httpPort: 443,
+  httpSecure: true,
+  grpcHost: 'grpc-my-cluster.weaviate.network',
+  grpcPort: 443,
+  grpcSecure: true,
   apiKey: process.env.WEAVIATE_API_KEY,
 });
 ```
@@ -56,3 +64,17 @@ const store = new WeaviateVector({
   queries and results.
 - **Collection names.** Weaviate capitalises the first letter of collection names.
   `WeaviateVector` normalises index names for you so you can pass names like `documents`.
+  Note that names differing only in the first letter's case (e.g. `documents` and
+  `Documents`) cannot coexist.
+
+## Documentation
+
+- [@mastra/weaviate documentation](https://mastra.ai/reference/vectors/weaviate)
+
+## Changelog
+
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/stores/weaviate/CHANGELOG.md) for version history and release notes.
+
+## Support
+
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.

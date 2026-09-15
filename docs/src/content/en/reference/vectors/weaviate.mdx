@@ -7,7 +7,7 @@ packages:
 
 # Weaviate vector store
 
-The `WeaviateVector` class provides vector search using [Weaviate](https://weaviate.io/), an open-source vector database. Collections are created with `vectorizer: none` — Mastra supplies the embeddings — and Mastra manages ids, distance metrics, and metadata filtering on your behalf.
+The `WeaviateVector` class provides vector search using [Weaviate](https://weaviate.io/), an open-source vector database. Collections are created with `vectorizer: none`, so Mastra supplies the embeddings, and Mastra manages ids, distance metrics, and metadata filtering on your behalf.
 
 ## Constructor options
 
@@ -228,9 +228,9 @@ const results = await store.query({
 
 ### Notes and limitations
 
-- Weaviate does not distinguish an explicitly stored `null` from an absent field, so null round-tripping is not supported.
-- `$regex`, `$size`, `$elemMatch`, `$nor`, and `$contains` are not supported.
-- Collection names are capitalized by Weaviate; the original index name is preserved in the collection description and returned by `listIndexes()` and `describeIndex()`.
+- Weaviate doesn't distinguish an explicitly stored `null` from an absent field, so null round-tripping isn't supported.
+- `$regex`, `$size`, `$elemMatch`, `$nor`, and `$contains` aren't supported.
+- Collection names are capitalized by Weaviate. The original index name is preserved in the collection description and returned by `listIndexes()` and `describeIndex()`.
 
 ## Related
 

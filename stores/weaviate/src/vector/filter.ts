@@ -1,3 +1,4 @@
+import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import { BaseFilterTranslator } from '@mastra/core/vector/filter';
 import type {
   VectorFilter,
@@ -9,23 +10,14 @@ import type {
 import { Filters } from 'weaviate-client';
 import type { FilterValue } from 'weaviate-client';
 
+import { encodeMetaKey } from './encoding';
+
 /**
  * The subset of Weaviate's collection filter API used by the translator.
  * Provided at translate time via `collection.filter`.
  */
 export interface WeaviateFilterApi {
   byProperty: (name: string, length?: boolean) => WeaviateFilterProperty;
-}
-
-/**
- * Weaviate reserves certain property names (e.g. `id`); metadata keys that
- * collide are stored under a stable prefix. Kept in sync with the adapter.
- */
-const RESERVED_META_KEYS = new Set(['id', 'vector', '_additional']);
-const META_KEY_PREFIX = 'mastraMeta_';
-
-function encodeMetaKey(key: string): string {
-  return RESERVED_META_KEYS.has(key) ? `${META_KEY_PREFIX}${key}` : key;
 }
 
 interface WeaviateFilterProperty {
@@ -195,7 +187,7 @@ export class WeaviateFilterTranslator extends BaseFilterTranslator<WeaviateVecto
       case '$not':
         return this.translateField(field, value, api);
       default:
-        throw new Error(`Unsupported operator: ${op}`);
+        throw unsupportedOperatorError(op, field);
     }
   }
 
@@ -258,7 +250,18 @@ export class WeaviateFilterTranslator extends BaseFilterTranslator<WeaviateVecto
       case '$not':
         return this.negateField(field, value, api);
       default:
-        throw new Error(`Unsupported operator: ${op}`);
+        throw unsupportedOperatorError(op, field);
     }
   }
+}
+
+/** Builds a user-facing error for an operator Weaviate cannot translate. */
+function unsupportedOperatorError(op: string, field: string): MastraError {
+  return new MastraError({
+    id: 'STORAGE_WEAVIATE_FILTER_UNSUPPORTED_OPERATOR',
+    text: `Unsupported filter operator "${op}" on field "${field}"`,
+    domain: ErrorDomain.STORAGE,
+    category: ErrorCategory.USER,
+    details: { operator: op, field },
+  });
 }

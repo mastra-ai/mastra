@@ -16,6 +16,7 @@ import type {
 import weaviate, { generateUuid5 } from 'weaviate-client';
 import type { WeaviateClient, Collection } from 'weaviate-client';
 
+import { encodeMetaKey, decodeMetaKey, encodeMetaProperties } from './encoding';
 import { WeaviateFilterTranslator } from './filter';
 import type { WeaviateVectorFilter } from './filter';
 
@@ -37,30 +38,6 @@ const REVERSE_DISTANCE_MAPPING: Record<string, 'cosine' | 'euclidean' | 'dotprod
 
 /** Reserved property used to round-trip the caller-supplied vector id. */
 const MASTRA_ID_PROPERTY = 'mastraId';
-
-/**
- * Weaviate reserves certain property names (e.g. `id`, `vector`). Metadata keys
- * that collide are stored under a stable prefix and restored on read.
- */
-const RESERVED_META_KEYS = new Set(['id', 'vector', '_additional']);
-const META_KEY_PREFIX = 'mastraMeta_';
-
-function encodeMetaKey(key: string): string {
-  return RESERVED_META_KEYS.has(key) ? `${META_KEY_PREFIX}${key}` : key;
-}
-
-function decodeMetaKey(key: string): string {
-  return key.startsWith(META_KEY_PREFIX) ? key.slice(META_KEY_PREFIX.length) : key;
-}
-
-function encodeMetaProperties(metadata?: Record<string, any>): Record<string, any> {
-  if (!metadata) return {};
-  const out: Record<string, any> = {};
-  for (const [key, value] of Object.entries(metadata)) {
-    out[encodeMetaKey(key)] = value;
-  }
-  return out;
-}
 
 /** Metadata stored on a collection's description to preserve Mastra semantics. */
 interface CollectionMeta {
@@ -267,6 +244,20 @@ export class WeaviateVector extends MastraVector<WeaviateVectorFilter> {
       const collectionName = this.toCollectionName(indexName);
 
       if (await client.collections.exists(collectionName)) {
+        // Weaviate capitalises the first letter of collection names, so distinct
+        // Mastra index names (e.g. `documents` and `Documents`) map to one
+        // collection. Reject the collision instead of silently sharing storage.
+        const existingConfig = await client.collections.get(collectionName).config.get();
+        const existingMeta = this.parseMeta(existingConfig.description);
+        if (existingMeta && existingMeta.name !== indexName) {
+          throw new MastraError({
+            id: createVectorErrorId('WEAVIATE', 'CREATE_INDEX', 'NAME_COLLISION'),
+            text: `Index name "${indexName}" collides with existing index "${existingMeta.name}" (Weaviate collection "${collectionName}"). Weaviate capitalises the first letter of collection names, so these names cannot coexist.`,
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            details: { indexName, existingName: existingMeta.name, collectionName },
+          });
+        }
         await this.validateExistingIndex(indexName, dimension, metric);
         return;
       }
@@ -570,10 +561,19 @@ export class WeaviateVector extends MastraVector<WeaviateVectorFilter> {
 
       const collection = await this.getCollection(indexName);
 
+      // Mirror upsert's schema handling: create any missing properties with
+      // `field` tokenization and encode reserved keys, otherwise updated metadata
+      // would be auto-schemad with `word` tokenization (breaking exact-match
+      // filters) or clash with Weaviate's reserved property names.
+      if (update.metadata) {
+        await this.ensureProperties(collection, this.toCollectionName(indexName), [update.metadata]);
+      }
+      const encodedProperties = update.metadata ? encodeMetaProperties(update.metadata) : undefined;
+
       const applyUpdate = async (uuid: string) => {
         await collection.data.update({
           id: uuid,
-          ...(update.metadata ? { properties: update.metadata } : {}),
+          ...(encodedProperties ? { properties: encodedProperties } : {}),
           ...(update.vector ? { vectors: update.vector } : {}),
         });
       };
