@@ -1,6 +1,7 @@
 import { Agent } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { modelSupportsAttachments } from '@mastra/core/llm';
+import type { WidenModelId } from '@mastra/core/llm';
 import type { Mastra } from '@mastra/core/mastra';
 import type { MastraMemory } from '@mastra/core/memory';
 import type { ObservabilityContext } from '@mastra/core/observability';
@@ -159,10 +160,12 @@ export class ObserverRunner {
     memory?: MastraMemory,
     extractors = this.observationConfig.extractors ?? [],
   ): Agent {
-    const agentModel =
-      this.observationConfig.onFailure === 'continue' && Array.isArray(model)
-        ? model.map(fallback => ({ ...fallback, maxRetries: 0 }))
-        : model;
+    // Read the model into the widened type before branching on it so the
+    // conditional does not force TypeScript to enumerate every model-id literal.
+    let agentModel: WidenModelId<ConcreteObservationModel> = model;
+    if (this.observationConfig.onFailure === 'continue' && Array.isArray(agentModel)) {
+      agentModel = agentModel.map(fallback => ({ ...fallback, maxRetries: 0 }));
+    }
     const agent = new Agent({
       id: isMultiThread ? 'multi-thread-observer' : 'observational-memory-observer',
       name: isMultiThread ? 'multi-thread-observer' : 'Observer',
