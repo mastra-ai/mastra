@@ -10,6 +10,7 @@ import {
   DialogFooter,
 } from '@mastra/playground-ui/components/Dialog';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Label } from '@mastra/playground-ui/components/Label';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
@@ -18,7 +19,18 @@ import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
-import { CheckCircle, ChevronDown, FilterIcon, GaugeIcon, Sparkles, Trash2, XIcon, Check, X } from 'lucide-react';
+import {
+  ClipboardCheck,
+  CheckCircle,
+  ChevronDown,
+  FilterIcon,
+  GaugeIcon,
+  Sparkles,
+  Trash2,
+  XIcon,
+  Check,
+  X,
+} from 'lucide-react';
 import { useState, useCallback, useRef, useMemo, useEffect } from 'react';
 import { usePlaygroundModel } from '../../context/playground-model-context';
 import { useReviewQueue } from '../../context/review-queue-context';
@@ -506,7 +518,7 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
       </Dialog>
 
       {/* Main layout: toolbar + List + Detail Panel */}
-      <Columns className={cn('p-4', featuredItem ? 'grid-cols-[1fr_1fr]' : '')}>
+      <Columns className={cn(featuredItem ? 'grid-cols-[1fr_1fr]' : '')}>
         <Column>
           <Column.Toolbar>
             {/* Filters (left) */}
@@ -715,18 +727,15 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
               <Spinner className="h-4 w-4" />
             </div>
           ) : displayItems.length === 0 ? (
-            <div className="flex flex-1 items-center justify-center">
-              <div className="px-5 text-center">
-                <Txt variant="ui-sm" className="text-neutral3 block">
-                  {showCompleted ? 'No completed reviews yet' : 'No items to review'}
-                </Txt>
-                <Txt variant="ui-xs" className="text-neutral3 mt-2 block">
-                  {showCompleted
-                    ? 'Items marked as complete will appear here for auditing.'
-                    : 'When you identify failures in experiment results, send them here to annotate, cluster, and create scorers from failure patterns.'}
-                </Txt>
-              </div>
-            </div>
+            <EmptyState
+              iconSlot={<ClipboardCheck />}
+              titleSlot={showCompleted ? 'No completed reviews yet' : 'No items to review'}
+              descriptionSlot={
+                showCompleted
+                  ? 'Items you mark as complete will appear here.'
+                  : 'Send experiment results to review from the Experiments tab to triage and tag them here.'
+              }
+            />
           ) : (
             <ExperimentResultsList
               results={displayItems}

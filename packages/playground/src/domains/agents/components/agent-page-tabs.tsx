@@ -1,14 +1,16 @@
+import { Button } from '@mastra/playground-ui/components/Button';
 import { Tab, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
-import { ExternalLink, FlaskConical, ClipboardCheck, GitBranch, MessageSquare } from 'lucide-react';
+import { ExternalLink, FlaskConical, GitBranch, MessageSquare } from 'lucide-react';
 
+import { AgentConfigToggle } from './agent-config-toggle';
 import { useLinkComponent } from '@/lib/framework';
 
 /** Tabs that render a pill in the bar. Routes without a pill pass `'none'`. */
-export type AgentPageTab = 'chat' | 'versions' | 'evaluate' | 'review' | 'traces';
+export type AgentPageTab = 'chat' | 'versions' | 'evaluate' | 'traces';
 
 interface AgentPageTabsProps {
   agentId: string;
@@ -16,7 +18,6 @@ interface AgentPageTabsProps {
   activeTab: AgentPageTab | 'none';
   showPlayground?: boolean;
   showObservability?: boolean;
-  reviewBadge?: number;
   rightSlot?: React.ReactNode;
 }
 
@@ -38,14 +39,12 @@ function AgentTab({
   value,
   icon,
   label,
-  badge,
   disabled,
   disabledReason,
 }: {
   value: AgentPageTab;
   icon: React.ReactNode;
   label: string;
-  badge?: number;
   disabled?: boolean;
   disabledReason?: React.ReactNode;
 }) {
@@ -55,11 +54,6 @@ function AgentTab({
       <Txt variant="ui-sm" className="text-inherit">
         {label}
       </Txt>
-      {badge !== undefined && badge > 0 && (
-        <span className="bg-accent1 text-ui-sm ml-1 min-w-[18px] rounded-full px-1.5 py-0 text-center leading-[18px] font-medium text-white">
-          {badge}
-        </span>
-      )}
     </>
   );
 
@@ -86,17 +80,10 @@ export function AgentPageTabs({
   activeTab,
   showPlayground = false,
   showObservability = false,
-  reviewBadge,
   rightSlot,
 }: AgentPageTabsProps) {
   const { navigate } = useLinkComponent();
 
-  const playgroundDisabledReason = !showPlayground ? (
-    <p>
-      Configure <code>@mastra/editor</code> to use the Editor.{' '}
-      <DocsLink href="https://mastra.ai/docs/editor/overview">Learn more</DocsLink>
-    </p>
-  ) : undefined;
   const observabilityDisabledReason = !showObservability ? (
     <p>
       Add <code>@mastra/observability</code> to enable this tab.{' '}
@@ -108,7 +95,6 @@ export function AgentPageTabs({
     chat: `/agents/${agentId}/threads/new`,
     versions: `/agents/${agentId}/editor`,
     evaluate: `/agents/${agentId}/evaluate`,
-    review: `/agents/${agentId}/review`,
     traces: `/agents/${agentId}/traces`,
   };
 
@@ -130,24 +116,9 @@ export function AgentPageTabs({
         <TabList variant="pill-ghost">
           <AgentTab value="chat" icon={<MessageSquare />} label="Chat" />
           <AgentTab
-            value="versions"
-            icon={<GitBranch />}
-            label="Editor"
-            disabled={!showPlayground}
-            disabledReason={playgroundDisabledReason}
-          />
-          <AgentTab
             value="evaluate"
             icon={<FlaskConical />}
             label="Evaluate"
-            disabled={!showObservability}
-            disabledReason={observabilityDisabledReason}
-          />
-          <AgentTab
-            value="review"
-            icon={<ClipboardCheck />}
-            label="Review"
-            badge={reviewBadge}
             disabled={!showObservability}
             disabledReason={observabilityDisabledReason}
           />
@@ -160,7 +131,23 @@ export function AgentPageTabs({
           />
         </TabList>
       </Tabs>
-      {rightSlot && <div className="ml-auto flex items-center gap-2">{rightSlot}</div>}
+      <div className="ml-auto flex items-center gap-2">
+        {rightSlot}
+        <AgentConfigToggle />
+        {showPlayground && (
+          <Button
+            variant={activeTab === 'versions' ? 'default' : 'ghost'}
+            size="icon-sm"
+            aria-label="Editor"
+            aria-current={activeTab === 'versions' ? 'page' : undefined}
+            data-testid="agent-editor-tab"
+            tooltip="Editor"
+            onClick={() => handleTabChange('versions')}
+          >
+            <GitBranch />
+          </Button>
+        )}
+      </div>
     </div>
   );
 }

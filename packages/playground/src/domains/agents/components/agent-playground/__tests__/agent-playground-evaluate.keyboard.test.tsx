@@ -94,6 +94,24 @@ const setupHandlers = (experiments: DatasetExperiment[] = []) => {
   );
 };
 
+describe('Evaluate navigation', () => {
+  describe('when opened on the Review tab', () => {
+    it('shows the review queue empty state', async () => {
+      setupHandlers();
+      renderWithProviders(<Harness />, { router: { initialEntries: ['/agents/chef-agent/evaluate?tab=review'] } });
+      expect(await screen.findByText('No items to review')).not.toBeNull();
+      expect(screen.getByRole('tab', { name: 'Review' }).getAttribute('aria-selected')).toBe('true');
+    });
+  });
+  describe('when opened on Experiments', () => {
+    it('provides Run options inside Evaluate', async () => {
+      setupHandlers();
+      renderWithProviders(<Harness />, { router: true });
+      expect(await screen.findByTestId('agent-top-bar-run-options-trigger')).not.toBeNull();
+    });
+  });
+});
+
 const renderDatasetsTab = async () => {
   setupHandlers();
   const utils = renderWithProviders(<Harness />, { router: true });
