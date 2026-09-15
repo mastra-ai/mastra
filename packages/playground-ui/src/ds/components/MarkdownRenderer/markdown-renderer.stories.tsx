@@ -29,6 +29,13 @@ export const Default: Story = {
   },
 };
 
+export const EmbeddedCode: Story = {
+  args: {
+    codeBlockVariant: 'embedded',
+    children: 'Follow these instructions.\n\n    Ask for a location.\n    Keep responses concise.',
+  },
+};
+
 export const Headings: Story = {
   args: {
     children: `# Heading 1
