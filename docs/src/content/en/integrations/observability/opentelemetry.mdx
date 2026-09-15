@@ -726,13 +726,13 @@ With the `OtelBridge`, your traces maintain proper hierarchy across OTEL and Mas
 ```
 HTTP POST /api/chat (from Hono middleware)
 └── agent.assistant (from Mastra via OtelBridge)
-    └── model_generation gpt-5.4 (generation loop)
+    └── model_generation __AI_SDK_OPENAI_MODEL_BASE__ (generation loop)
         ├── agent_step assistant (turn 1)
-        │   ├── chat gpt-5.4 (LLM call)
+        │   ├── chat __AI_SDK_OPENAI_MODEL_BASE__ (LLM call)
         │   └── execute_tool search (tool execution)
         │       └── HTTP GET api.example.com (from OTEL auto-instrumentation)
         └── agent_step assistant (turn 2)
-            └── chat gpt-5.4 (follow-up LLM call)
+            └── chat __AI_SDK_OPENAI_MODEL_BASE__ (follow-up LLM call)
 ```
 
 ### Multi-service distributed tracing
@@ -745,9 +745,9 @@ Service A: HTTP POST /api/process
 
 Service B: HTTP POST /api/analyze (incoming call - same trace!)
 └── agent.analyzer (Mastra agent inherits trace context)
-    └── model_generation gpt-5.4
+    └── model_generation __AI_SDK_OPENAI_MODEL_BASE__
         └── agent_step analyzer
-            └── chat gpt-5.4
+            └── chat __AI_SDK_OPENAI_MODEL_BASE__
 ```
 
 Both services must have:
