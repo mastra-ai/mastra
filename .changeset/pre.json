@@ -187,5 +187,33 @@
     "@mastra/s3": "0.6.3",
     "@mastra/vercel": "1.6.0"
   },
-  "changesets": []
+  "changesets": [
+    "arize-chat-span-kind",
+    "arthur-chat-span-kind",
+    "automated-provider-registry-20260915-122946",
+    "calm-dolphins-retry",
+    "curly-bags-throw",
+    "factory-intake-org-scope",
+    "fluffy-ducks-shine",
+    "fresh-parrots-fix",
+    "full-bananas-doubt",
+    "happy-tigers-fix",
+    "honest-hounds-fold",
+    "jolly-apples-shop",
+    "jolly-cooks-reply",
+    "many-monkeys-trade",
+    "mighty-schools-attack",
+    "otel-one-span-per-model-call",
+    "posthog-ai-capture-endpoint",
+    "quiet-tools-share-schema",
+    "real-parents-chew",
+    "sentry-skip-inference-spans",
+    "shaky-readers-listen",
+    "silly-mice-chew",
+    "strong-dodos-remain",
+    "studio-settings-reachable-without-login",
+    "tidy-agent-evaluation-tabs",
+    "twenty-tires-beg",
+    "witty-lions-persist"
+  ]
 }
