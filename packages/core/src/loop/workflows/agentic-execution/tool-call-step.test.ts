@@ -22,6 +22,18 @@ const createMessageList = () =>
     },
   }) as unknown as MessageList;
 
+/**
+ * The engine fires `suspendOptions.onSuspendPersisted` once the suspended
+ * snapshot is durable — that is when a step's suspension chunk reaches the
+ * stream. A bare `vi.fn()` would never run it, so these mocks honour the same
+ * contract the real `suspend()` does.
+ */
+const suspendMock = (impl?: (...args: any[]) => any) =>
+  vi.fn(async (_payload?: any, options?: any) => {
+    await options?.onSuspendPersisted?.();
+    return impl?.(_payload, options);
+  });
+
 const makeBaseExecuteParams = (suspend: Mock, overrides: any = {}) => ({
   runId: 'test-run-id',
   workflowId: 'test-workflow-id',
@@ -50,7 +62,7 @@ describe('createToolCallStep background task resume with falsy payload', () => {
 
   const runBackgroundResume = async (resumeData: unknown) => {
     const controller = { enqueue: vi.fn() };
-    const streamState = { serialize: vi.fn().mockReturnValue('serialized-state') };
+    const streamState = { serialize: vi.fn().mockReturnValue('serialized-state'), markSuspended: vi.fn() };
     const messageList = createMessageList();
     const backgroundTaskManager = {
       // A suspended task already exists for this tool call, so the step should
@@ -94,7 +106,7 @@ describe('createToolCallStep background task resume with falsy payload', () => {
 
   const runBackgroundDispatchOnResume = async (resumeData: unknown) => {
     const controller = { enqueue: vi.fn() };
-    const streamState = { serialize: vi.fn().mockReturnValue('serialized-state') };
+    const streamState = { serialize: vi.fn().mockReturnValue('serialized-state'), markSuspended: vi.fn() };
     const messageList = createMessageList();
     const backgroundTaskManager = {
       // No suspended task, so this resume turn dispatches instead. The chunk comes
@@ -163,7 +175,7 @@ describe('createToolCallStep background task resume with falsy payload', () => {
   it('records the background result to memory on a same-run resume with a falsy payload', async () => {
     // When no matching tool-invocation is on the list, the result is appended as a standalone
     // tool message so memory still records it. A falsy resume payload must not skip that.
-    const streamState = { serialize: vi.fn().mockReturnValue('serialized-state') };
+    const streamState = { serialize: vi.fn().mockReturnValue('serialized-state'), markSuspended: vi.fn() };
     const added: any[] = [];
     const messageList = {
       get: {
@@ -257,7 +269,7 @@ describe('createToolCallStep background task stream replay', () => {
 
   it('should replay a synthetic tool-call only once per resumed background task stream', async () => {
     const controller = { enqueue: vi.fn() };
-    const streamState = { serialize: vi.fn().mockReturnValue('serialized-state') };
+    const streamState = { serialize: vi.fn().mockReturnValue('serialized-state'), markSuspended: vi.fn() };
     const messageList = createMessageList();
     const backgroundTaskManager = {
       enqueue: vi.fn(async (_payload: any, context: any) => {
@@ -809,7 +821,7 @@ describe('createToolCallStep background task stream replay', () => {
 describe('createToolCallStep tool execution error handling', () => {
   let controller: { enqueue: Mock };
   let suspend: Mock;
-  let streamState: { serialize: Mock };
+  let streamState: { serialize: Mock; markSuspended: Mock };
   let messageList: MessageList;
 
   const makeInputData = () => ({
@@ -847,8 +859,8 @@ describe('createToolCallStep tool execution error handling', () => {
 
   beforeEach(() => {
     controller = { enqueue: vi.fn() };
-    suspend = vi.fn();
-    streamState = { serialize: vi.fn().mockReturnValue('serialized-state') };
+    suspend = suspendMock();
+    streamState = { serialize: vi.fn().mockReturnValue('serialized-state'), markSuspended: vi.fn() };
     messageList = {
       get: {
         input: { aiV5: { model: () => [] } },
@@ -1014,8 +1026,8 @@ describe('createToolCallStep tool-level FGA delegation', () => {
   // forwards the actor to the wrapped tool.
   it('does not call the FGA provider directly and forwards the actor to the tool', async () => {
     const controller = { enqueue: vi.fn() };
-    const suspend = vi.fn();
-    const streamState = { serialize: vi.fn().mockReturnValue('serialized-state') };
+    const suspend = suspendMock();
+    const streamState = { serialize: vi.fn().mockReturnValue('serialized-state'), markSuspended: vi.fn() };
     const messageList = createMessageList();
     const toolResult = { ok: true };
     const tools = {
@@ -1080,7 +1092,7 @@ describe('createToolCallStep tool-level FGA delegation', () => {
 describe('createToolCallStep tool approval workflow', () => {
   let controller: { enqueue: Mock };
   let suspend: Mock;
-  let streamState: { serialize: Mock };
+  let streamState: { serialize: Mock; markSuspended: Mock };
   let tools: Record<string, { execute: Mock; requireApproval: boolean }>;
   let messageList: MessageList;
   let toolCallStep: ReturnType<typeof createToolCallStep>;
@@ -1113,9 +1125,10 @@ describe('createToolCallStep tool approval workflow', () => {
       enqueue: vi.fn(),
     };
     neverResolve = new Promise(() => {});
-    suspend = vi.fn().mockReturnValue(neverResolve);
+    suspend = suspendMock(() => neverResolve);
     streamState = {
       serialize: vi.fn().mockReturnValue('serialized-state'),
+      markSuspended: vi.fn(),
     };
     tools = {
       'test-tool': {
@@ -1160,17 +1173,20 @@ describe('createToolCallStep tool approval workflow', () => {
     );
 
     expect(suspend).toHaveBeenCalledWith(
-      {
+      expect.objectContaining({
         requireToolApproval: {
           toolCallId: 'test-call-id',
           toolName: 'test-tool',
           args: { param: 'test' },
         },
         __streamState: 'serialized-state',
-      },
-      {
+      }),
+      // `onSuspendPersisted` carries the approval chunk, emitted once the
+      // suspended snapshot is durable.
+      expect.objectContaining({
         resumeLabel: 'test-call-id',
-      },
+        onSuspendPersisted: expect.any(Function),
+      }),
     );
 
     expectNoToolExecution();
@@ -1277,7 +1293,12 @@ describe('createToolCallStep tool approval workflow', () => {
   });
 
   it('advertises an optional reason on the approval resume schema (#20495)', async () => {
-    suspend.mockResolvedValueOnce('suspended');
+    // `mockResolvedValueOnce` would replace the implementation and skip
+    // `onSuspendPersisted`, which is what emits the approval chunk.
+    suspend.mockImplementationOnce(async (_payload: any, options: any) => {
+      await options?.onSuspendPersisted?.();
+      return 'suspended';
+    });
     await toolCallStep.execute(makeExecuteParams());
 
     const approvalChunk = controller.enqueue.mock.calls
@@ -1516,7 +1537,7 @@ describe('createToolCallStep tool approval workflow', () => {
 describe('createToolCallStep delegated agent tool metadata', () => {
   let controller: { enqueue: Mock };
   let suspend: Mock;
-  let streamState: { serialize: Mock };
+  let streamState: { serialize: Mock; markSuspended: Mock };
   let neverResolve: Promise<never>;
 
   const createAssistantMessage = (
@@ -1609,8 +1630,8 @@ describe('createToolCallStep delegated agent tool metadata', () => {
   beforeEach(() => {
     controller = { enqueue: vi.fn() };
     neverResolve = new Promise(() => {});
-    suspend = vi.fn().mockReturnValue(neverResolve);
-    streamState = { serialize: vi.fn().mockReturnValue('serialized-state') };
+    suspend = suspendMock(() => neverResolve);
+    streamState = { serialize: vi.fn().mockReturnValue('serialized-state'), markSuspended: vi.fn() };
   });
 
   afterEach(() => {
@@ -1860,7 +1881,7 @@ describe('createToolCallStep delegated agent tool metadata', () => {
 
 describe('createToolCallStep suspension metadata cleanup on resume', () => {
   let controller: { enqueue: Mock };
-  let streamState: { serialize: Mock };
+  let streamState: { serialize: Mock; markSuspended: Mock };
 
   const createSuspendedAssistantMessage = (toolCallId: string, toolName: string) => ({
     id: 'assistant-suspended',
@@ -1939,7 +1960,7 @@ describe('createToolCallStep suspension metadata cleanup on resume', () => {
 
   beforeEach(() => {
     controller = { enqueue: vi.fn() };
-    streamState = { serialize: vi.fn().mockReturnValue('serialized-state') };
+    streamState = { serialize: vi.fn().mockReturnValue('serialized-state'), markSuspended: vi.fn() };
   });
 
   afterEach(() => {
@@ -2092,7 +2113,7 @@ describe('createToolCallStep suspension metadata cleanup on resume', () => {
 describe('createToolCallStep needsApprovalFn enriched context', () => {
   let controller: { enqueue: Mock };
   let suspend: Mock;
-  let streamState: { serialize: Mock };
+  let streamState: { serialize: Mock; markSuspended: Mock };
   let messageList: MessageList;
   let neverResolve: Promise<never>;
 
@@ -2117,8 +2138,8 @@ describe('createToolCallStep needsApprovalFn enriched context', () => {
   beforeEach(() => {
     controller = { enqueue: vi.fn() };
     neverResolve = new Promise(() => {});
-    suspend = vi.fn().mockReturnValue(neverResolve);
-    streamState = { serialize: vi.fn().mockReturnValue('serialized-state') };
+    suspend = suspendMock(() => neverResolve);
+    streamState = { serialize: vi.fn().mockReturnValue('serialized-state'), markSuspended: vi.fn() };
     messageList = createMessageList();
   });
 
@@ -2191,7 +2212,7 @@ describe('createToolCallStep needsApprovalFn enriched context', () => {
 describe('createToolCallStep global requireToolApproval function', () => {
   let controller: { enqueue: Mock };
   let suspend: Mock;
-  let streamState: { serialize: Mock };
+  let streamState: { serialize: Mock; markSuspended: Mock };
   let messageList: MessageList;
   let neverResolve: Promise<never>;
 
@@ -2222,8 +2243,8 @@ describe('createToolCallStep global requireToolApproval function', () => {
   beforeEach(() => {
     controller = { enqueue: vi.fn() };
     neverResolve = new Promise(() => {});
-    suspend = vi.fn().mockReturnValue(neverResolve);
-    streamState = { serialize: vi.fn().mockReturnValue('serialized-state') };
+    suspend = suspendMock(() => neverResolve);
+    streamState = { serialize: vi.fn().mockReturnValue('serialized-state'), markSuspended: vi.fn() };
     messageList = createMessageList();
   });
 
@@ -2326,7 +2347,7 @@ describe('createToolCallStep provider-executed tools', () => {
       close: vi.fn(),
       error: vi.fn(),
     } as unknown as ReadableStreamDefaultController;
-    suspend = vi.fn();
+    suspend = suspendMock();
     messageList = createMessageList();
   });
 
@@ -2404,7 +2425,7 @@ describe('createToolCallStep provider-executed tools', () => {
 describe('createToolCallStep requestContext forwarding', () => {
   let controller: { enqueue: Mock };
   let suspend: Mock;
-  let streamState: { serialize: Mock };
+  let streamState: { serialize: Mock; markSuspended: Mock };
   let messageList: MessageList;
 
   const makeInputData = () => ({
@@ -2442,7 +2463,7 @@ describe('createToolCallStep requestContext forwarding', () => {
 
   beforeEach(() => {
     controller = { enqueue: vi.fn() };
-    suspend = vi.fn();
+    suspend = suspendMock();
     streamState = { serialize: vi.fn().mockReturnValue('serialized') };
     messageList = {
       get: {
@@ -2527,7 +2548,7 @@ describe('createToolCallStep requestContext forwarding', () => {
 describe('createToolCallStep malformed JSON args (issue #9815)', () => {
   let controller: { enqueue: Mock };
   let suspend: Mock;
-  let streamState: { serialize: Mock };
+  let streamState: { serialize: Mock; markSuspended: Mock };
   let tools: Record<string, { execute: Mock }>;
   let messageList: MessageList;
 
@@ -2561,9 +2582,10 @@ describe('createToolCallStep malformed JSON args (issue #9815)', () => {
     controller = {
       enqueue: vi.fn(),
     };
-    suspend = vi.fn();
+    suspend = suspendMock();
     streamState = {
       serialize: vi.fn().mockReturnValue('serialized-state'),
+      markSuspended: vi.fn(),
     };
     tools = {
       'test-tool': {
