@@ -1,4 +1,4 @@
-// AUTO-GENERATED from rhysbalevicius/integration-templates @ 3ad35d4bf046 — do not edit by hand.
+// AUTO-GENERATED from rhysbalevicius/integration-templates @ b5c56f19353e — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -17,7 +17,7 @@ const ProviderResponseSchema = z
     incident_timeline_items: z.array(
       z
         .object({
-          activity_log_id: z.string().optional(),
+          activity_log_id: z.string().nullable().optional(),
           created_at: z.string(),
           creator: z
             .object({

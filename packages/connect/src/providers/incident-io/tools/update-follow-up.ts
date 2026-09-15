@@ -1,4 +1,4 @@
-// AUTO-GENERATED from rhysbalevicius/integration-templates @ 3ad35d4bf046 — do not edit by hand.
+// AUTO-GENERATED from rhysbalevicius/integration-templates @ b5c56f19353e — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -7,8 +7,8 @@ import type { PlatformProxy, PlatformProxyRequest } from '../../../runtime/platf
 export const updateFollowUpInputSchema = z.object({
   id: z.string(),
   body: z.object({
-    assignee_id: z.string().optional(),
-    assignee_team_id: z.string().optional(),
+    assignee_id: z.string().nullable().optional(),
+    assignee_team_id: z.string().nullable().optional(),
     description: z.string().optional(),
     follow_up_category_id: z.string().optional(),
     follow_up_priority_option_id: z.string().optional(),

@@ -1,4 +1,4 @@
-// AUTO-GENERATED from rhysbalevicius/integration-templates @ 3ad35d4bf046 — do not edit by hand.
+// AUTO-GENERATED from rhysbalevicius/integration-templates @ b5c56f19353e — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -9,6 +9,12 @@ export const listScheduleEntriesInputSchema = z
     schedule_id: z.string(),
     entry_window_start: z.string().optional(),
     entry_window_end: z.string().optional(),
+    after: z
+      .string()
+      .optional()
+      .describe(
+        'Cursor from next_cursor. The provider continues a window by re-issuing the request with entry_window_start set to this value, so it replaces entry_window_start when present; keep entry_window_end unchanged.',
+      ),
   })
   .passthrough();
 
@@ -103,10 +109,11 @@ export function listScheduleEntriesTool(proxy: PlatformProxy) {
         params['schedule_id'] = Array.isArray(input['schedule_id'])
           ? input['schedule_id'].join(',')
           : String(input['schedule_id']);
-      if (input['entry_window_start'] !== undefined)
-        params['entry_window_start'] = Array.isArray(input['entry_window_start'])
-          ? input['entry_window_start'].join(',')
-          : String(input['entry_window_start']);
+      const entryWindowStart = input['after'] ?? input['entry_window_start'];
+      if (entryWindowStart !== undefined)
+        params['entry_window_start'] = Array.isArray(entryWindowStart)
+          ? entryWindowStart.join(',')
+          : String(entryWindowStart);
       if (input['entry_window_end'] !== undefined)
         params['entry_window_end'] = Array.isArray(input['entry_window_end'])
           ? input['entry_window_end'].join(',')

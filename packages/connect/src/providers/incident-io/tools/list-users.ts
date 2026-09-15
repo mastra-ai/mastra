@@ -1,4 +1,4 @@
-// AUTO-GENERATED from rhysbalevicius/integration-templates @ 3ad35d4bf046 — do not edit by hand.
+// AUTO-GENERATED from rhysbalevicius/integration-templates @ b5c56f19353e — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -9,7 +9,7 @@ export const listUsersInputSchema = z
     email: z.string().optional(),
     slack_user_id: z.string().optional(),
     include_inactive: z.boolean().optional(),
-    page_size: z.number().int().min(1).max(10000).optional(),
+    page_size: z.number().int().min(1).max(250).optional(),
     after: z.string().optional(),
   })
   .passthrough();

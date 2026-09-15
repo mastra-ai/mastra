@@ -1,4 +1,4 @@
-// AUTO-GENERATED from rhysbalevicius/integration-templates @ 3ad35d4bf046 — do not edit by hand.
+// AUTO-GENERATED from rhysbalevicius/integration-templates @ b5c56f19353e — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -13,8 +13,8 @@ const ProviderResponseSchema = z
         .object({
           created_at: z.string(),
           id: z.string(),
-          last_sync_error: z.string().optional(),
-          last_synced_at: z.string().optional(),
+          last_sync_error: z.string().nullable().optional(),
+          last_synced_at: z.string().nullable().optional(),
           mirror_window_days: z.number().int().min(1).max(90).optional(),
           replica_fallback_user_id: z.string(),
           replica_provider: z.enum(['native', 'pagerduty', 'opsgenie', 'jsm']),
@@ -23,7 +23,7 @@ const ProviderResponseSchema = z
           sources: z.array(z.object({ layer_id: z.string(), rotation_id: z.string() }).passthrough()),
           updated_at: z.string(),
           user_statuses: z.array(
-            z.object({ external_user_id: z.string().optional(), user_id: z.string() }).passthrough(),
+            z.object({ external_user_id: z.string().nullable().optional(), user_id: z.string() }).passthrough(),
           ),
         })
         .passthrough(),

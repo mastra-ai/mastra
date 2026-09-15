@@ -1,4 +1,4 @@
-// AUTO-GENERATED from rhysbalevicius/integration-templates @ 3ad35d4bf046 — do not edit by hand.
+// AUTO-GENERATED from rhysbalevicius/integration-templates @ b5c56f19353e — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -9,7 +9,7 @@ export const updateActionInputSchema = z
     id: z.string(),
     body: z
       .object({
-        assignee_id: z.string().optional(),
+        assignee_id: z.string().nullable().optional(),
         description: z.string(),
         status: z.enum(['outstanding', 'completed', 'deleted', 'not_doing']),
       })

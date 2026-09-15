@@ -1,4 +1,4 @@
-// AUTO-GENERATED from rhysbalevicius/integration-templates @ 3ad35d4bf046 — do not edit by hand.
+// AUTO-GENERATED from rhysbalevicius/integration-templates @ b5c56f19353e — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -43,11 +43,13 @@ const ProviderResponseSchema = z
             slack_user_id: z.string().optional(),
           })
           .passthrough()
+          .nullable()
           .optional(),
-        assignee_team: z.object({ id: z.string(), name: z.string() }).passthrough().optional(),
+        assignee_team: z.object({ id: z.string(), name: z.string() }).passthrough().nullable().optional(),
         category: z
           .object({ description: z.string().optional(), id: z.string(), name: z.string(), rank: z.number().int() })
           .passthrough()
+          .nullable()
           .optional(),
         completed_at: z.string().optional(),
         created_at: z.string(),
@@ -90,6 +92,7 @@ const ProviderResponseSchema = z
             ]),
           })
           .passthrough()
+          .nullable()
           .optional(),
         id: z.string(),
         incident_id: z.string(),
@@ -97,6 +100,7 @@ const ProviderResponseSchema = z
         priority: z
           .object({ description: z.string().optional(), id: z.string(), name: z.string(), rank: z.number().int() })
           .passthrough()
+          .nullable()
           .optional(),
         status: z.enum(['outstanding', 'completed', 'deleted', 'not_doing']),
         title: z.string(),

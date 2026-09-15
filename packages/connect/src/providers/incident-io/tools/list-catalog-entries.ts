@@ -1,4 +1,4 @@
-// AUTO-GENERATED from rhysbalevicius/integration-templates @ 3ad35d4bf046 — do not edit by hand.
+// AUTO-GENERATED from rhysbalevicius/integration-templates @ b5c56f19353e — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -7,7 +7,7 @@ import type { PlatformProxy, PlatformProxyRequest } from '../../../runtime/platf
 export const listCatalogEntriesInputSchema = z
   .object({
     catalog_type_id: z.string(),
-    page_size: z.number().int().min(1).max(250),
+    page_size: z.number().int().min(1).max(250).optional(),
     after: z.string().optional(),
     identifier: z.string().optional(),
   })

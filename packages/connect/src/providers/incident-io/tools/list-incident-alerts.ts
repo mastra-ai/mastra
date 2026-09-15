@@ -1,4 +1,4 @@
-// AUTO-GENERATED from rhysbalevicius/integration-templates @ 3ad35d4bf046 — do not edit by hand.
+// AUTO-GENERATED from rhysbalevicius/integration-templates @ b5c56f19353e — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -6,7 +6,7 @@ import type { PlatformProxy, PlatformProxyRequest } from '../../../runtime/platf
 
 export const listIncidentAlertsInputSchema = z
   .object({
-    page_size: z.number().int().min(1).max(50),
+    page_size: z.number().int().min(1).max(50).optional(),
     after: z.string().optional(),
     alert_id: z.string().optional(),
     incident_id: z.string().optional(),

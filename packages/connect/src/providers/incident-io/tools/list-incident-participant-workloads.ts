@@ -1,4 +1,4 @@
-// AUTO-GENERATED from rhysbalevicius/integration-templates @ 3ad35d4bf046 — do not edit by hand.
+// AUTO-GENERATED from rhysbalevicius/integration-templates @ b5c56f19353e — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -33,7 +33,7 @@ const ProviderResponseSchema = z
         })
         .passthrough(),
     ),
-    metadata: z.object({ data_synced_at: z.string().optional() }).passthrough(),
+    metadata: z.object({ data_synced_at: z.string().nullable().optional() }).passthrough(),
   })
   .passthrough();
 
