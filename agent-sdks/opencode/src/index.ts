@@ -363,6 +363,8 @@ async function runOpenCodeSession<OUTPUT>(
   telemetry: SDKAgentTelemetry<OUTPUT>,
   runOptions: OpenCodeSDKAgentRunOptions<OUTPUT> | undefined,
   onTextDelta?: (delta: string) => void,
+  signal?: AbortSignal,
+  onSessionId?: (sessionId: string) => Promise<void>,
 ): Promise<OpenCodeSessionRunResult> {
   const callId = randomUUID();
   const startedToolCallIds = new Set<string>();
@@ -383,55 +385,65 @@ async function runOpenCodeSession<OUTPUT>(
         workspace: runOptions?.promptOptions?.workspace,
         agent: runOptions?.promptOptions?.agent,
       }));
+    await onSessionId?.(sessionId);
+    signal?.throwIfAborted();
+
     const events = streamManager.listenStream(sessionId);
+    const stopListening = () => void events.return();
+    signal?.addEventListener('abort', stopListening, { once: true });
 
-    await promptOpenCodeSessionAsync(client, prompt, {
-      ...runOptions?.promptOptions,
-      sessionID: sessionId,
-      format: getOpenCodeOutputFormat(runOptions),
-    });
-
-    for await (const event of events) {
-      handleOpenCodeStreamEvent(event, {
-        assistantMessageId,
-        setAssistantMessageId: id => (assistantMessageId = id),
-        // TODO : is lastinfo the last agent message after stream finish or mid messages multiple possible for acculatesd cost , ceck opencode docs , ts structs
-        setLastInfo: info => (lastInfo = info),
-        onTextDelta: delta => {
-          sawDelta = true;
-          text += delta;
-          onTextDelta?.(delta);
-        },
-        onLastPartText: value => (lastPartText = value),
-        onToolPart: part => recordOpenCodeToolPart(part, telemetry, startedToolCallIds),
-        onSubtaskPart: part => recordOpenCodeSubtaskStart(part, telemetry, startedSubtaskIds),
-        onPartRemoved: partId => recordOpenCodeSubtaskEnd(partId, telemetry, startedSubtaskIds),
-        onCommandExecuted: properties =>
-          recordOpenCodeInstantToolEvent(telemetry, `command:${properties.name}`, {
-            arguments: properties.arguments,
-            messageID: properties.messageID,
-          }),
-        onTodoUpdated: properties =>
-          recordOpenCodeInstantToolEvent(telemetry, 'todo.updated', { todos: properties.todos }),
-        onPermissionAsked: permission => recordOpenCodePermissionAsked(permission, telemetry, startedPermissionIds),
-        onPermissionReplied: (requestId, reply) =>
-          telemetry.endToolCall({ toolCallId: requestId, output: { reply } }),
-        onPermissionV2Asked: permission => recordOpenCodePermissionV2Asked(permission, telemetry, startedPermissionIds),
-        onPermissionV2Replied: (requestId, reply) =>
-          telemetry.endToolCall({ toolCallId: requestId, output: { reply } }),
+    try {
+      await promptOpenCodeSessionAsync(client, prompt, {
+        ...runOptions?.promptOptions,
+        sessionID: sessionId,
+        format: getOpenCodeOutputFormat(runOptions),
       });
-    }
 
-    if (!sawDelta && lastPartText) {
-      text = lastPartText;
-      onTextDelta?.(lastPartText);
-    }
+      for await (const event of events) {
+        signal?.throwIfAborted();
+        handleOpenCodeStreamEvent(event, {
+          assistantMessageId,
+          setAssistantMessageId: id => (assistantMessageId = id),
+          // TODO : is lastinfo the last agent message after stream finish or mid messages multiple possible for acculatesd cost , ceck opencode docs , ts structs
+          setLastInfo: info => (lastInfo = info),
+          onTextDelta: delta => {
+            sawDelta = true;
+            text += delta;
+            onTextDelta?.(delta);
+          },
+          onLastPartText: value => (lastPartText = value),
+          onToolPart: part => recordOpenCodeToolPart(part, telemetry, startedToolCallIds),
+          onSubtaskPart: part => recordOpenCodeSubtaskStart(part, telemetry, startedSubtaskIds),
+          onPartRemoved: partId => recordOpenCodeSubtaskEnd(partId, telemetry, startedSubtaskIds),
+          onCommandExecuted: properties =>
+            recordOpenCodeInstantToolEvent(telemetry, `command:${properties.name}`, {
+              arguments: properties.arguments,
+              messageID: properties.messageID,
+            }),
+          onTodoUpdated: properties =>
+            recordOpenCodeInstantToolEvent(telemetry, 'todo.updated', { todos: properties.todos }),
+          onPermissionAsked: permission => recordOpenCodePermissionAsked(permission, telemetry, startedPermissionIds),
+          onPermissionReplied: (requestId, reply) =>
+            telemetry.endToolCall({ toolCallId: requestId, output: { reply } }),
+          onPermissionV2Asked: permission => recordOpenCodePermissionV2Asked(permission, telemetry, startedPermissionIds),
+          onPermissionV2Replied: (requestId, reply) =>
+            telemetry.endToolCall({ toolCallId: requestId, output: { reply } }),
+        });
+      }
 
-    if (lastInfo?.error) {
-      throw new Error(getOpenCodeErrorMessage(lastInfo.error));
-    }
+      if (!sawDelta && lastPartText) {
+        text = lastPartText;
+        onTextDelta?.(lastPartText);
+      }
 
-    return { text, lastInfo };
+      if (lastInfo?.error) {
+        throw new Error(getOpenCodeErrorMessage(lastInfo.error));
+      }
+
+      return { text, lastInfo };
+    } finally {
+      signal?.removeEventListener('abort', stopListening);
+    }
   } finally {
     streamManager.closeStream(callId);
   }
@@ -471,6 +483,26 @@ function runOpenCodeAsMastraStream<OUTPUT>(
   telemetry: SDKAgentTelemetry<OUTPUT>,
   runOptions?: OpenCodeSDKAgentRunOptions<OUTPUT>,
 ): ReadableStream<ChunkType> {
+  const abortController = new AbortController();
+  let sessionId: string | undefined;
+  let cancelled = false;
+  let abortPromise: Promise<void> | undefined;
+
+  const abortRun = async (): Promise<void> => {
+    cancelled = true;
+    abortController.abort();
+    if (!sessionId) return;
+    abortPromise ??= client.session.abort({ sessionID: sessionId }).then(() => undefined);
+    await abortPromise;
+  };
+
+  const handleAbort = () => void abortRun();
+  if (runOptions?.signal?.aborted) {
+    void abortRun();
+  } else {
+    runOptions?.signal?.addEventListener('abort', handleAbort, { once: true });
+  }
+
   return new ReadableStream<ChunkType>({
     start: async controller => {
       const textId = randomUUID();
@@ -492,8 +524,17 @@ function runOpenCodeAsMastraStream<OUTPUT>(
           prompt,
           telemetry,
           runOptions,
-          delta => enqueueTextDelta(controller, runId, textId, delta),
+          delta => {
+            if (!cancelled) enqueueTextDelta(controller, runId, textId, delta);
+          },
+          abortController.signal,
+          async id => {
+            sessionId = id;
+            if (cancelled) await abortRun();
+          },
         );
+
+        if (cancelled) return;
 
         const finalModelId = lastInfo ? getResponseModelId(lastInfo) : modelId;
         const usage = lastInfo ? toV3UsageFromTokens(lastInfo.tokens) : EMPTY_V3_USAGE;
@@ -512,6 +553,7 @@ function runOpenCodeAsMastraStream<OUTPUT>(
         });
         controller.close();
       } catch (error) {
+        if (cancelled) return;
         controller.enqueue({
           type: 'error',
           runId,
@@ -519,8 +561,11 @@ function runOpenCodeAsMastraStream<OUTPUT>(
           payload: { error },
         });
         controller.close();
+      } finally {
+        runOptions?.signal?.removeEventListener('abort', handleAbort);
       }
     },
+    cancel: abortRun,
   });
 }
 

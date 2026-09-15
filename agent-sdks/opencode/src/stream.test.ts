@@ -149,8 +149,8 @@ describe('OpenCodeStreamManager', () => {
     expect(eventSources[1]).not.toBe(events);
   });
 
-  it('propagates a subscription failure to every active listener across sessions', async () => {
-    const { client, events } = createMockOpenCodeClient();
+  it('propagates a subscription failure and reconnects on the next openStream', async () => {
+    const { client, events, eventSources, subscribe } = createMockOpenCodeClient();
     const manager = new OpenCodeStreamManager(client);
     await manager.openStream('call-1');
 
@@ -161,5 +161,10 @@ describe('OpenCodeStreamManager', () => {
 
     await expect(sessionA.next()).rejects.toThrow('subscription dropped');
     await expect(sessionB.next()).rejects.toThrow('subscription dropped');
+
+    await manager.openStream('call-2');
+    expect(subscribe).toHaveBeenCalledTimes(2);
+    expect(eventSources).toHaveLength(2);
+    expect(eventSources[1]).not.toBe(events);
   });
 });

@@ -277,6 +277,20 @@ describe('OpenCodeSDKAgent', () => {
         'finish',
       ]);
     });
+
+    it('aborts the OpenCode session when the consumer cancels before session.idle', async () => {
+      const { client, createdSessionIds, sessionAbort } = createMockOpenCodeClient();
+      const agent = new OpenCodeSDKAgent({ id: 'opencode-agent', description: 'OpenCode', client });
+      const abortController = new AbortController();
+
+      await agent.stream('Stream prompt', { runId: 'cancelled-stream-run', signal: abortController.signal });
+
+      await vi.waitFor(() => expect(createdSessionIds).toHaveLength(1));
+      abortController.abort();
+
+      await vi.waitFor(() => expect(sessionAbort).toHaveBeenCalledTimes(1));
+      expect(sessionAbort).toHaveBeenCalledWith({ sessionID: createdSessionIds[0] });
+    });
   });
 
   describe('resumeGenerate / resumeStream', () => {
@@ -311,7 +325,7 @@ describe('OpenCodeSDKAgent', () => {
     });
 
     it('resumeStream reuses the given sessionId and streams the continuation', async () => {
-      const { client, events, sessionCreate } = createMockOpenCodeClient();
+      const { client, events, sessionCreate, sessionPromptAsync } = createMockOpenCodeClient();
       const agent = new OpenCodeSDKAgent({ id: 'opencode-agent', description: 'OpenCode', client });
 
       const streamPromise = agent.resumeStream(
@@ -320,6 +334,7 @@ describe('OpenCodeSDKAgent', () => {
       );
 
       const stream = await streamPromise;
+      await vi.waitFor(() => expect(sessionPromptAsync).toHaveBeenCalledTimes(1));
       events.push(
         messageUpdatedEvent(
           'existing-session',
