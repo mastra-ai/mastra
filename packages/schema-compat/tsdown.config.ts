@@ -30,7 +30,6 @@ export default defineConfig({
         '@internal/ai-v6',
         '@standard-schema/spec',
         '@types/json-schema',
-        'ajv',
         'zod-to-json-schema',
         'zod-from-json-schema-v3',
       ]),
