@@ -11,6 +11,7 @@ import type {
   MastraToolInvocationPart,
 } from '../state/types';
 import type { AIV5Type, AIV6Type, MessageSource } from '../types';
+import { getResponseResultProviderMetadata, preserveResponseItemIdsOnMerge } from '../utils/response-item-metadata';
 import { sanitizeToolName } from '../utils/tool-name';
 import { AIV5Adapter } from './AIV5Adapter';
 
@@ -83,7 +84,10 @@ function getToolNameFromUIPart(part: AIV6Type.ToolUIPart | AIV6Type.DynamicToolU
  * v6 splits tool provider metadata across `callProviderMetadata` and
  * `resultProviderMetadata`, but a Mastra part has one slot. Reading only the call half
  * dropped the `toModelOutput` projection prompt building looks for (issue #22012).
- * The result half wins on conflict, being the later of the two.
+ * The result half wins on conflict, being the later of the two — except for Responses
+ * item ids: a hosted tool (e.g. OpenAI `tool_search`) gives its call and output distinct
+ * ids and replay needs both, so the call's stays as `itemId` and the result's is kept
+ * beside it as `resultItemId`.
  */
 function mergeToolUIPartProviderMetadata(
   part: AIV6Type.ToolUIPart | AIV6Type.DynamicToolUIPart,
@@ -102,7 +106,13 @@ function mergeToolUIPartProviderMetadata(
     merged[providerKey] = callValue ? { ...callValue, ...resultValue } : resultValue;
   }
 
-  return toMastraProviderMetadata(merged);
+  return toMastraProviderMetadata(
+    preserveResponseItemIdsOnMerge(
+      callMetadata as Record<string, unknown>,
+      resultMetadata as Record<string, unknown>,
+      merged as Record<string, unknown>,
+    ) as AIV6Type.ProviderMetadata,
+  );
 }
 
 function createToolInvocationPartFromUIPart(part: AIV6Type.ToolUIPart | AIV6Type.DynamicToolUIPart) {
@@ -693,6 +703,12 @@ export class AIV6Adapter {
             },
             {
               preliminary: part.preliminary,
+              // v6 has a dedicated slot for result-side metadata. Surface the result's
+              // Responses item id there when it differs from the call's, so a
+              // toUIMessage → fromUIMessage round trip keeps both ids.
+              resultProviderMetadata: getResponseResultProviderMetadata(
+                part.providerMetadata as Record<string, unknown> | undefined,
+              ),
               approval:
                 part.toolInvocation.approval?.approved === true
                   ? {
