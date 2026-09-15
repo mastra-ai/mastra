@@ -244,6 +244,76 @@ describe('Structured output with memory - assistant message in final position (#
     expect(nonSystemMessages.at(-1)).toMatchObject({ role: 'assistant' });
   });
 
+  it('guards Gemini 3 assistant-role input without configured input processors or memory', async () => {
+    const capturedPrompts: any[] = [];
+    const mockModel = new MockLanguageModelV2({
+      provider: 'google',
+      modelId: 'gemini-3.5-flash-lite',
+      doGenerate: async options => {
+        capturedPrompts.push(options.prompt);
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text: JSON.stringify({ answer: 'done' }) }],
+          warnings: [],
+        };
+      },
+    });
+    const agent = new Agent({
+      id: 'gemini-3-trailing-assistant-guard-test',
+      name: 'Gemini 3 Trailing Assistant Guard Test',
+      instructions: 'Return a structured response.',
+      model: mockModel,
+    });
+
+    await agent.generate(
+      [
+        { role: 'user', content: 'Give me a verdict.' },
+        { role: 'assistant', content: 'Draft response' },
+      ],
+      { structuredOutput: { schema: z.object({ answer: z.string() }) } },
+    );
+
+    const nonSystemMessages = capturedPrompts[0].filter((message: any) => message.role !== 'system');
+    expect(nonSystemMessages.at(-1)).toMatchObject({ role: 'user' });
+  });
+
+  it('preserves the trailing assistant turn for Gemini 2.5', async () => {
+    const capturedPrompts: any[] = [];
+    const mockModel = new MockLanguageModelV2({
+      provider: 'google',
+      modelId: 'gemini-2.5-flash',
+      doGenerate: async options => {
+        capturedPrompts.push(options.prompt);
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text: JSON.stringify({ answer: 'done' }) }],
+          warnings: [],
+        };
+      },
+    });
+    const agent = new Agent({
+      id: 'gemini-2-5-trailing-assistant-test',
+      name: 'Gemini 2.5 Trailing Assistant Test',
+      instructions: 'Return a structured response.',
+      model: mockModel,
+    });
+
+    await agent.generate(
+      [
+        { role: 'user', content: 'Give me a verdict.' },
+        { role: 'assistant', content: 'Draft response' },
+      ],
+      { structuredOutput: { schema: z.object({ answer: z.string() }) } },
+    );
+
+    const nonSystemMessages = capturedPrompts[0].filter((message: any) => message.role !== 'system');
+    expect(nonSystemMessages.at(-1)).toMatchObject({ role: 'assistant' });
+  });
+
   it('should not send prompt ending with assistant message when using stream with assistant-role input, structuredOutput and memory', async () => {
     const threadId = randomUUID();
     const resourceId = 'user-12800-stream';
