@@ -1,11 +1,24 @@
-// AUTO-GENERATED from rhysbalevicius/integration-templates @ 06fb7396c6b2 — do not edit by hand.
+// AUTO-GENERATED from rhysbalevicius/integration-templates @ ac255e042871 — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import type { PlatformProxy, PlatformProxyRequest } from '../../../runtime/platform-proxy.js';
 
 export const shareEmailInputSchema = z
-  .object({ email_id: z.string(), body: z.object({ expires_in: z.string().optional() }).passthrough() })
+  .object({
+    email_id: z.string(),
+    body: z
+      .object({
+        expires_in: z
+          .string()
+          .optional()
+          .describe(
+            'How long the link stays valid, as a duration such as "10m", "2 hours", or "1 day". Defaults to 48h and cannot exceed 48 hours.',
+          ),
+      })
+      .passthrough()
+      .optional(),
+  })
   .passthrough();
 
 const ProviderResponseSchema = z
@@ -26,7 +39,7 @@ export function shareEmailTool(proxy: PlatformProxy) {
         // https://raw.githubusercontent.com/resend/resend-openapi/68c1b66c20ad62020962838832e53af10558c2f5/resend.yaml,
         endpoint: `/emails/${encodeURIComponent(input['email_id'])}/share`,
         retries: 0,
-        data: input.body,
+        ...(input.body !== undefined && { data: input.body }),
       };
       const response = await platformProxy.post(config);
       const data = ProviderResponseSchema.parse(response.data);

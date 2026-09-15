@@ -1,4 +1,4 @@
-// AUTO-GENERATED from rhysbalevicius/integration-templates @ 06fb7396c6b2 — do not edit by hand.
+// AUTO-GENERATED from rhysbalevicius/integration-templates @ ac255e042871 — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -24,7 +24,8 @@ export const listAudiencesOutputSchema = ProviderResponseSchema;
 export function listAudiencesTool(proxy: PlatformProxy) {
   return createTool({
     id: 'resend_list_audiences',
-    description: 'Retrieve a list of audiences in Resend.',
+    description:
+      'Retrieve a list of audiences in Resend. Deprecated by the provider in favour of Segments: prefer list-segments. The endpoint still works but will be removed in the future.',
     inputSchema: listAudiencesInputSchema,
     outputSchema: listAudiencesOutputSchema,
     execute: async (input, { requestContext }): Promise<z.infer<typeof listAudiencesOutputSchema>> => {

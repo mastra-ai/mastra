@@ -1,18 +1,21 @@
-// AUTO-GENERATED from rhysbalevicius/integration-templates @ 06fb7396c6b2 — do not edit by hand.
+// AUTO-GENERATED from rhysbalevicius/integration-templates @ ac255e042871 — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import type { PlatformProxy, PlatformProxyRequest } from '../../../runtime/platform-proxy.js';
 
+const KeySchema = z
+  .string()
+  .max(50)
+  .regex(/^[A-Za-z0-9_]+$/, { message: 'Only alphanumeric characters and underscores are allowed' })
+  .describe('Property key of up to 50 alphanumeric or underscore characters. Example: "plan"');
+
 export const createContactPropertyInputSchema = z
   .object({
-    body: z
-      .object({
-        key: z.string(),
-        type: z.enum(['string', 'number']),
-        fallback_value: z.union([z.string(), z.number()]).optional(),
-      })
-      .passthrough(),
+    body: z.discriminatedUnion('type', [
+      z.object({ key: KeySchema, type: z.literal('string'), fallback_value: z.string().optional() }).passthrough(),
+      z.object({ key: KeySchema, type: z.literal('number'), fallback_value: z.number().optional() }).passthrough(),
+    ]),
   })
   .passthrough();
 

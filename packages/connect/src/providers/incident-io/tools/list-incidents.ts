@@ -1,4 +1,4 @@
-// AUTO-GENERATED from rhysbalevicius/integration-templates @ 0a9bc570eb76 — do not edit by hand.
+// AUTO-GENERATED from rhysbalevicius/integration-templates @ c4fb0d5d5b2c — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -209,10 +209,10 @@ const ProviderResponseSchema = z
             })
             .passthrough()
             .optional(),
-          slack_channel_id: z.string(),
+          slack_channel_id: z.string().optional(),
           slack_channel_name: z.string().optional(),
           slack_channel_url: z.string().optional(),
-          slack_team_id: z.string(),
+          slack_team_id: z.string().optional(),
           summary: z.string().optional(),
           team_ids: z.array(z.string()),
           updated_at: z.string(),

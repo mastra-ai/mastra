@@ -1,4 +1,4 @@
-// AUTO-GENERATED from rhysbalevicius/integration-templates @ 06fb7396c6b2 — do not edit by hand.
+// AUTO-GENERATED from rhysbalevicius/integration-templates @ ac255e042871 — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -23,7 +23,10 @@ export const createContactImportInputSchema = z.object({
         last_name: z.string().optional(),
         unsubscribed: z.string().optional(),
         properties: z
-          .record(z.string(), z.object({ column: z.string(), type: z.enum(['string', 'number']) }).passthrough())
+          .record(
+            z.string(),
+            z.object({ column: z.string(), type: z.enum(['string', 'number', 'boolean']) }).passthrough(),
+          )
           .optional(),
       })
       .passthrough()

@@ -31,12 +31,12 @@ export const TEMPLATE_PIN_OVERRIDES: Readonly<Record<string, TemplatePin>> = {
   // NangoHQ/integration-templates#667
   resend: {
     repo: 'rhysbalevicius/integration-templates',
-    sha: '06fb7396c6b29e2126ef1ed1db7f7fe33789a39c',
+    sha: 'ac255e0428716e292f196f34f0252ead03b8a091',
   },
   // NangoHQ/integration-templates#668
   'incident-io': {
     repo: 'rhysbalevicius/integration-templates',
-    sha: '0a9bc570eb7663204885b9e4f3e8dee6284ad5bd',
+    sha: 'c4fb0d5d5b2c677f794d836a470013da46c347a2',
   },
 };
 
