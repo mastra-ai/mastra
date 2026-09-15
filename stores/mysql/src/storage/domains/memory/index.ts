@@ -2099,12 +2099,13 @@ export class MemoryMySQL extends MemoryStorage {
         'lastBufferedAtTokens',
         'lastBufferedAtTime',
         'observedTimezone',
+        'metadata',
         'createdAt',
         'updatedAt',
       ]
         .map(omCol)
         .join(', ');
-      const placeholders = Array.from({ length: 24 }, () => '?').join(', ');
+      const placeholders = Array.from({ length: 25 }, () => '?').join(', ');
 
       await this.pool.execute(`INSERT INTO ${OM_TABLE_QUOTED} (${cols}) VALUES (${placeholders})`, [
         id,
@@ -2129,6 +2130,7 @@ export class MemoryMySQL extends MemoryStorage {
         0,
         null,
         record.observedTimezone || null,
+        record.metadata ? JSON.stringify(record.metadata) : null,
         nowSql,
         nowSql,
       ]);

@@ -8091,6 +8091,7 @@ describe('Resource Scope: other-conversation blocks after observation', () => {
       ].join('\n\n'),
       tokenCount: 50,
       lastObservedAt: threadAObservedAt, // Resource-level cursor set to Thread A's observation time
+      observedMessageIds: ['msg-a-1', 'msg-a-2'],
     });
 
     // Verify setup: resource-level lastObservedAt is set

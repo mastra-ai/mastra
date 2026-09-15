@@ -1,4 +1,4 @@
-import { MASTRA_THREAD_BRANCH_METADATA_KEY } from '@mastra/core/memory';
+import { MASTRA_THREAD_BRANCH_METADATA_KEY, MemoryRunState } from '@mastra/core/memory';
 import type { MastraDBMessage, ObservationalMemoryRecord } from '@mastra/core/memory';
 import { InMemoryStore } from '@mastra/core/storage';
 import type { MemoryStorage } from '@mastra/core/storage';
@@ -6,6 +6,11 @@ import { describe, expect, it, vi } from 'vitest';
 
 import xxhash from 'xxhash-wasm';
 import { Memory } from '../index';
+import {
+  getDurableObservedMessageIds,
+  withDurableObservationCursor,
+} from '../processors/observational-memory/message-utils';
+import { ObservationStrategy } from '../processors/observational-memory/observation-strategies';
 
 const resourceId = 'branch-om-resource';
 const firstTime = new Date('2026-01-01T00:00:00.000Z');
@@ -79,6 +84,36 @@ describe('branch-owned Observational Memory', () => {
       expect(cloned?.id).not.toBe(source.id);
       expect(await store.getObservationalMemoryHistory(branch.thread.id, resourceId)).toHaveLength(1);
       expect(await store.getObservationalMemory(scope === 'thread' ? 'root' : null, resourceId)).toBe(source);
+    },
+  );
+
+  it.each(['thread', 'resource'] as const)(
+    'clamps a post-fork %s-scoped cursor so child messages remain observable',
+    async scope => {
+      const storage = new InMemoryStore();
+      const memory = new Memory({
+        storage,
+        options: { observationalMemory: { enabled: true, scope } },
+      });
+      const store = (await memory.storage.getStore('memory'))!;
+      await seedSource(memory, store);
+      const source = await seedRecord(store, scope);
+      Object.assign(source, { lastObservedAt: secondTime, observedMessageIds: ['reachable', 'post-fork'] });
+
+      const branch = await memory.branchThread({ threadId: 'root', branchPointMessageId: 'reachable' });
+      const cloned = (await store.getObservationalMemory(branch.thread.id, resourceId))!;
+      expect(cloned.lastObservedAt).toEqual(firstTime);
+      expect(cloned.observedMessageIds).toEqual(['reachable']);
+
+      const childTime = new Date((firstTime.getTime() + secondTime.getTime()) / 2);
+      await memory.saveMessages({ messages: [{ ...message('child-between', childTime), threadId: branch.thread.id }] });
+      const restarted = new Memory({
+        storage,
+        options: { observationalMemory: { enabled: true, scope } },
+      });
+      const restartedEngine = (await restarted.omEngine)!;
+      const loaded = await restartedEngine.loadUnobservedMessages({ threadId: branch.thread.id, resourceId });
+      expect(loaded.map(item => item.id)).toEqual(['child-between']);
     },
   );
 
@@ -191,6 +226,205 @@ describe('branch-owned Observational Memory', () => {
     const rootContext = await engine.getOtherThreadsContext(resourceId, 'root');
     expect(rootContext).toContain('ordinary-tail');
     expect(rootContext).not.toContain('branch-tail');
+  });
+
+  it('fails closed when resource-scoped OM encounters falsey malformed branch metadata', async () => {
+    const memory = new Memory({
+      storage: new InMemoryStore(),
+      options: { observationalMemory: { enabled: true, scope: 'resource' } },
+    });
+    const store = (await memory.storage.getStore('memory'))!;
+    await seedSource(memory, store);
+    await seedRecord(store, 'resource');
+    await store.saveThread({
+      thread: {
+        id: 'malformed',
+        resourceId,
+        title: 'Malformed branch',
+        metadata: { [MASTRA_THREAD_BRANCH_METADATA_KEY]: null },
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+    const engine = (await memory.omEngine)!;
+    const record = (await engine.getRecord('root', resourceId))!;
+    const strategy = ObservationStrategy.create(engine, {
+      threadId: 'root',
+      resourceId,
+      record,
+      messages: [],
+    });
+
+    await expect(strategy.prepare()).rejects.toMatchObject({ id: 'BRANCH_LINEAGE_CORRUPT' });
+  });
+
+  it('uses reachable logical history for non-OM context', async () => {
+    const memory = new Memory({
+      storage: new InMemoryStore(),
+      options: { lastMessages: 10 },
+    });
+    const store = (await memory.storage.getStore('memory'))!;
+    await seedSource(memory, store);
+    const branch = await memory.branchThread({ threadId: 'root', branchPointMessageId: 'reachable' });
+    const sibling = await memory.branchThread({ threadId: 'root', branchPointMessageId: 'reachable' });
+    await memory.saveMessages({
+      messages: [
+        { ...message('branch-tail', new Date('2026-01-01T00:02:00.000Z')), threadId: branch.thread.id },
+        { ...message('sibling-tail', new Date('2026-01-01T00:03:00.000Z')), threadId: sibling.thread.id },
+      ],
+    });
+
+    const context = await memory.getContext({ threadId: branch.thread.id, resourceId });
+    expect(context.messages.map(item => item.id)).toEqual(['reachable', 'branch-tail']);
+  });
+
+  it.each(['thread', 'resource'] as const)(
+    'uses reachable history and exact observed IDs for %s-scoped OM context',
+    async scope => {
+      const memory = new Memory({
+        storage: new InMemoryStore(),
+        options: { observationalMemory: { enabled: true, scope } },
+      });
+      const store = (await memory.storage.getStore('memory'))!;
+      await memory.createThread({ threadId: 'root', resourceId });
+      await memory.saveMessages({
+        messages: [
+          message('a-observed', firstTime),
+          message('b-equal-time-unobserved', firstTime),
+          message('parent-tail', secondTime),
+        ],
+      });
+      const source = await seedRecord(store, scope);
+      Object.assign(source, {
+        lastObservedAt: firstTime,
+        observedMessageIds: ['a-observed'],
+        bufferedMessageIds: [],
+      });
+      const branch = await memory.branchThread({
+        threadId: 'root',
+        branchPointMessageId: 'b-equal-time-unobserved',
+      });
+      const sibling = await memory.branchThread({ threadId: 'root', branchPointMessageId: 'a-observed' });
+      await memory.saveMessages({
+        messages: [
+          { ...message('branch-tail', new Date('2026-01-01T00:02:00.000Z')), threadId: branch.thread.id },
+          { ...message('sibling-tail', new Date('2026-01-01T00:03:00.000Z')), threadId: sibling.thread.id },
+        ],
+      });
+
+      const engine = (await memory.omEngine)!;
+      const loaded = await engine.loadUnobservedMessages({ threadId: branch.thread.id, resourceId });
+      expect(loaded.map(item => item.id)).toEqual(['b-equal-time-unobserved', 'branch-tail']);
+      const context = await memory.getContext({ threadId: branch.thread.id, resourceId });
+      expect(context.messages.map(item => item.id)).toEqual(['b-equal-time-unobserved', 'branch-tail']);
+
+      if (scope === 'resource') {
+        const record = (await engine.getRecord(branch.thread.id, resourceId))!;
+        record.bufferedObservationChunks = [
+          {
+            id: 'buffered-chunk',
+            cycleId: 'buffered-cycle',
+            observations: 'buffered observations',
+            tokenCount: 1,
+            messageIds: ['b-equal-time-unobserved'],
+            messageTokens: 1,
+            lastObservedAt: firstTime,
+            createdAt: firstTime,
+          },
+        ];
+        const strategy = ObservationStrategy.create(engine, {
+          threadId: branch.thread.id,
+          resourceId,
+          record,
+          messages: [],
+        });
+        const prepared = await strategy.prepare();
+        expect(prepared.messages.map(item => item.id)).toEqual(['branch-tail']);
+      }
+    },
+  );
+
+  it('isolates resource-scoped sibling context in a shared run state', async () => {
+    const memory = new Memory({
+      storage: new InMemoryStore(),
+      options: { observationalMemory: { enabled: true, scope: 'resource' } },
+    });
+    const store = (await memory.storage.getStore('memory'))!;
+    await seedSource(memory, store);
+    await seedRecord(store, 'resource');
+    const left = await memory.branchThread({ threadId: 'root', branchPointMessageId: 'reachable' });
+    const right = await memory.branchThread({ threadId: 'root', branchPointMessageId: 'reachable' });
+    await memory.saveMessages({
+      messages: [
+        { ...message('left-tail', new Date('2026-01-01T00:02:00.000Z')), threadId: left.thread.id },
+        { ...message('right-tail', new Date('2026-01-01T00:03:00.000Z')), threadId: right.thread.id },
+      ],
+    });
+    const runState = new MemoryRunState({ memory, threadId: left.thread.id, resourceId });
+
+    const leftContext = await memory.getContext({ threadId: left.thread.id, resourceId, runState });
+    const rightContext = await memory.getContext({ threadId: right.thread.id, resourceId, runState });
+    expect(leftContext.messages.map(item => item.id)).toEqual(['left-tail']);
+    expect(rightContext.messages.map(item => item.id)).toEqual(['right-tail']);
+  });
+
+  it('includes unobserved equal-timestamp messages in resource cross-thread context', async () => {
+    const memory = new Memory({
+      storage: new InMemoryStore(),
+      options: { observationalMemory: { enabled: true, scope: 'resource' } },
+    });
+    const store = (await memory.storage.getStore('memory'))!;
+    await memory.createThread({ threadId: 'root', resourceId });
+    await memory.createThread({ threadId: 'ordinary', resourceId });
+    await memory.saveMessages({
+      messages: [
+        { ...message('already-observed', firstTime), threadId: 'ordinary' },
+        { ...message('equal-time-unobserved', firstTime), threadId: 'ordinary' },
+      ],
+    });
+    const record = await seedRecord(store, 'resource');
+    Object.assign(record, { lastObservedAt: firstTime, observedMessageIds: ['already-observed'] });
+    const engine = (await memory.omEngine)!;
+
+    const context = await engine.getOtherThreadsContext(resourceId, 'root');
+    expect(context).toContain('equal-time-unobserved');
+    expect(context).not.toContain('already-observed');
+  });
+
+  it('keeps equal-timestamp observation cursors durable across reflection and restart', async () => {
+    const storage = new InMemoryStore();
+    const memory = new Memory({
+      storage,
+      options: { observationalMemory: { enabled: true, scope: 'thread' } },
+    });
+    const store = (await memory.storage.getStore('memory'))!;
+    await memory.createThread({ threadId: 'root', resourceId });
+    await memory.saveMessages({ messages: [message('a-observed', firstTime), message('b-unobserved', firstTime)] });
+    const source = await seedRecord(store, 'thread');
+    Object.assign(source, { lastObservedAt: firstTime, observedMessageIds: ['a-observed'] });
+    const firstReflection = await store.createReflectionGeneration({
+      currentRecord: withDurableObservationCursor(source),
+      reflection: 'first reflection',
+      tokenCount: 1,
+    });
+    Object.assign(firstReflection, { lastObservedAt: firstTime, observedMessageIds: ['b-unobserved'] });
+    const secondReflection = await store.createReflectionGeneration({
+      currentRecord: withDurableObservationCursor(firstReflection),
+      reflection: 'second reflection',
+      tokenCount: 1,
+    });
+    expect(secondReflection.observedMessageIds).toBeUndefined();
+
+    const restarted = new Memory({
+      storage,
+      options: { observationalMemory: { enabled: true, scope: 'thread' } },
+    });
+    await restarted.saveMessages({ messages: [message('c-new-equal-time', firstTime)] });
+    const restartedEngine = (await restarted.omEngine)!;
+    const restartedRecord = (await restartedEngine.getRecord('root', resourceId))!;
+    expect(getDurableObservedMessageIds(restartedRecord)).toEqual(['a-observed', 'b-unobserved']);
+    const loaded = await restartedEngine.loadUnobservedMessages({ threadId: 'root', resourceId });
+    expect(loaded.map(item => item.id)).toEqual(['c-new-equal-time']);
   });
 
   it('skips cloning when OM is disabled or has no active source record', async () => {
