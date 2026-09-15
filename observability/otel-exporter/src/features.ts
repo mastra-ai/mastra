@@ -1,51 +1,25 @@
 /**
  * Feature detection for paired @mastra/core and @mastra/observability versions.
  *
- * `coreFeatures` is a hard peer dependency, so it can be imported statically.
- * `observabilityFeatures` is loaded via dynamic import so this exporter degrades
- * gracefully against older `@mastra/observability` versions that don't export it
- * (per the pattern documented in `observability/mastra/src/features.ts`).
+ * Both are resolved synchronously so span classification is stable from the
+ * very first span: `OtelBridge.createSpan()` picks the OTEL SpanKind at
+ * `startSpan()` time, where it can no longer change, so detection must not
+ * depend on a pending dynamic import.
  *
- * Detection runs once at module load. Callers consume the result through the
- * sync `isModelInferenceEnabled()` accessor; `SpanConverter.convertSpan` awaits
- * `whenObservabilityFeaturesLoaded()` first so conversions never observe the
- * unresolved state.
+ * `@mastra/observability` is a hard dependency, but older versions do not
+ * export `observabilityFeatures`. The namespace import reads it as `undefined`
+ * in that case instead of failing to link, which is the graceful fallback
+ * documented in `observability/mastra/src/features.ts`.
  */
 
 import { coreFeatures } from '@mastra/core/features';
+import * as observability from '@mastra/observability';
 
 const FEATURE = 'model-inference-span';
 
-let observabilityFeatures: ReadonlySet<string> | undefined;
-let featureLoadPromise: Promise<void> | undefined;
-let overriddenForTest = false;
-
-function loadObservabilityFeatures(): Promise<void> {
-  if (!featureLoadPromise) {
-    featureLoadPromise = import('@mastra/observability')
-      .then(mod => {
-        if (overriddenForTest) return;
-        observabilityFeatures = (mod as { observabilityFeatures?: ReadonlySet<string> }).observabilityFeatures;
-      })
-      .catch(() => {
-        // Older @mastra/observability without the `observabilityFeatures` export.
-      });
-  }
-  return featureLoadPromise;
-}
-
-// Kick off detection at module load so the cached value is ready by the time
-// the first span is emitted.
-void loadObservabilityFeatures();
-
-/**
- * Resolves once feature detection has settled. `SpanConverter.convertSpan`
- * awaits this so the very first span is classified with the same result as
- * every later one.
- */
-export function whenObservabilityFeaturesLoaded(): Promise<void> {
-  return loadObservabilityFeatures();
-}
+let observabilityFeatures: ReadonlySet<string> | undefined = (
+  observability as { observabilityFeatures?: ReadonlySet<string> }
+).observabilityFeatures;
 
 /**
  * Returns true when both packages report the `model-inference-span` feature,
@@ -59,11 +33,8 @@ export function isModelInferenceEnabled(): boolean {
 
 /**
  * @internal Test-only override. Allows tests to simulate a paired older or
- * newer `@mastra/observability` without juggling dynamic imports.
+ * newer `@mastra/observability` without juggling module mocks.
  */
 export function __setObservabilityFeaturesForTest(features: ReadonlySet<string> | undefined): void {
-  overriddenForTest = true;
   observabilityFeatures = features;
-  // Mark detection complete so isModelInferenceEnabled stops waiting.
-  featureLoadPromise = Promise.resolve();
 }

@@ -20,7 +20,6 @@ import {
   ATTR_TELEMETRY_SDK_VERSION,
 } from '@opentelemetry/semantic-conventions';
 
-import { whenObservabilityFeaturesLoaded } from './features.js';
 import { getAttributes, getSpanName, isModelCallSpan } from './gen-ai-semantics.js';
 import type { OtelExporterConfig } from './types.js';
 
@@ -92,7 +91,6 @@ export class SpanConverter {
    * Convert a Mastra Span to an OpenTelemetry ReadableSpan
    */
   async convertSpan(span: AnyExportedSpan): Promise<ReadableSpan> {
-    await whenObservabilityFeaturesLoaded();
     await this.initIfNeeded();
 
     if (!this.resource || !this.scope) {
