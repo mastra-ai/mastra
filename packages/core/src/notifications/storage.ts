@@ -4,6 +4,7 @@ import type {
   CreateNotificationInput,
   ListDueNotificationsInput,
   ListNotificationsInput,
+  MarkNotificationDeliveredInput,
   NotificationRecord,
   NotificationStatus,
   UpdateNotificationInput,
@@ -44,6 +45,31 @@ export abstract class NotificationsStorage extends StorageDomain {
       }
     }
     return updated;
+  }
+
+  /**
+   * Record that a signal carrying this notification was sent.
+   *
+   * Always stamps `deliveredSignalId` and `lastDeliveryAttemptAt`, but only promotes
+   * `status` from `pending` to `delivered`. The dispatcher reads the record, sends the
+   * signal (which can take seconds), then writes — if the agent marked the notification
+   * seen/dismissed/archived in that window, an unconditional `status: 'delivered'` write
+   * would silently downgrade it.
+   *
+   * Adapters should override this with a single conditional write. This default
+   * re-reads the record right before writing, which narrows the race but does not
+   * close it. Returns `null` when the notification does not exist.
+   */
+  async markNotificationDelivered(input: MarkNotificationDeliveredInput): Promise<NotificationRecord | null> {
+    const current = await this.getNotification({ threadId: input.threadId, id: input.id });
+    if (!current) return null;
+    return this.updateNotification({
+      id: input.id,
+      threadId: input.threadId,
+      ...(current.status === 'pending' ? { status: 'delivered' } : {}),
+      deliveredSignalId: input.deliveredSignalId,
+      lastDeliveryAttemptAt: input.lastDeliveryAttemptAt,
+    });
   }
 }
 
@@ -234,6 +260,21 @@ export class InMemoryNotificationsStorage extends NotificationsStorage {
       updated.push(cloneRecord(next));
     }
     return updated;
+  }
+
+  override async markNotificationDelivered(input: MarkNotificationDeliveredInput): Promise<NotificationRecord | null> {
+    const existing = this.#notifications.get(notificationKey(input.threadId, input.id));
+    if (!existing) return null;
+    const now = new Date();
+    const next: NotificationRecord = {
+      ...existing,
+      ...(existing.status === 'pending' ? { status: 'delivered', deliveredAt: now } : {}),
+      deliveredSignalId: input.deliveredSignalId,
+      lastDeliveryAttemptAt: input.lastDeliveryAttemptAt,
+      updatedAt: now,
+    };
+    this.#notifications.set(notificationKey(next.threadId, next.id), next);
+    return cloneRecord(next);
   }
 
   async dangerouslyClearAll(): Promise<void> {

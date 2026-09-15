@@ -25,6 +25,14 @@ import type { MongoDBDomainConfig, MongoDBIndexConfig } from '../../types';
 /** Ids per updateMany/find command — keeps the `$in` filter far below MongoDB's 16 MiB BSON limit. */
 const BULK_ID_BATCH_SIZE = 500;
 
+// Kept inline so this adapter also builds against a core that predates the type export.
+type MarkNotificationDeliveredInput = {
+  id: string;
+  threadId: string;
+  deliveredSignalId: string;
+  lastDeliveryAttemptAt: Date;
+};
+
 const statusTimestamp = (status: NotificationStatus, now: Date) => {
   if (status === 'delivered') return { deliveredAt: now };
   if (status === 'seen') return { seenAt: now };
@@ -380,6 +388,31 @@ export class NotificationsMongoDB extends NotificationsStorage {
       for (const row of rows) updated.push(rowToNotification(row));
     }
     return updated;
+  }
+
+  async markNotificationDelivered(input: MarkNotificationDeliveredInput): Promise<NotificationRecord | null> {
+    const collection = await this.getCollection();
+    const now = new Date();
+    const isPending = { $eq: ['$status', 'pending'] };
+    // Single conditional write (aggregation pipeline update): only a still-pending
+    // document is promoted to delivered, so a concurrent seen/dismissed/archived
+    // write is never downgraded.
+    const row = await collection.findOneAndUpdate(
+      { threadId: input.threadId, id: input.id },
+      [
+        {
+          $set: {
+            status: { $cond: [isPending, 'delivered', '$status'] },
+            deliveredAt: { $cond: [isPending, now, '$deliveredAt'] },
+            deliveredSignalId: input.deliveredSignalId,
+            lastDeliveryAttemptAt: input.lastDeliveryAttemptAt,
+            updatedAt: now,
+          },
+        },
+      ],
+      { returnDocument: 'after' },
+    );
+    return row ? rowToNotification(row) : null;
   }
 
   private async findCoalescable(input: CreateNotificationInput): Promise<NotificationRecord | undefined> {
