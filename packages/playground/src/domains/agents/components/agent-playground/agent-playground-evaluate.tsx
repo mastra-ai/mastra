@@ -1000,7 +1000,7 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
 
         {/* Search bar below tabs */}
         {activeTab !== 'review' && (
-          <div className="px-4 py-2">
+          <div className="px-1.5 py-2">
             {activeTab === 'experiments' && (
               <InputGroup variant="outline">
                 <InputGroupAddon align="inline-start">
@@ -1043,7 +1043,7 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
           </div>
         )}
 
-        <div className="flex-1 overflow-hidden px-4 pb-4">
+        <div className="flex-1 overflow-hidden px-1.5 pb-4">
           <TabContent value="review" className="h-full overflow-hidden">
             <AgentPlaygroundReview agentId={agentId} onCreateScorer={handleCreateScorerFromFailures} />
           </TabContent>
