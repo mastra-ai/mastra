@@ -18,7 +18,6 @@ import { formatCompact, formatCost } from '@/domains/metrics/components/metrics-
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { AgentIcon, WorkflowIcon } from '@/ds/icons';
 import type { LinkComponent } from '@/ds/types/link-component';
-import { cn } from '@/lib/utils';
 
 function formatEntityType(entityType: string): string {
   return entityType
@@ -42,7 +41,6 @@ export interface TraceSummaryDescriptionProps {
   /** When provided (with `LinkComponent`), the entity name links to the entity's page. */
   entityHref?: string;
   LinkComponent?: LinkComponent;
-  className?: string;
 }
 
 function SummaryItem({ label, children }: { label: string; children: ReactNode }) {
@@ -62,14 +60,11 @@ function SummaryItem({ label, children }: { label: string; children: ReactNode }
   );
 }
 
-/** Compact trace metadata shown under the trace side-panel heading. */
-export function TraceSummaryDescription({
-  rootSpan,
-  usage,
-  entityHref,
-  LinkComponent,
-  className,
-}: TraceSummaryDescriptionProps) {
+/**
+ * Compact trace metadata items for the trace header. Renders a fragment so the
+ * parent (`PageHeader.Meta`) owns the row layout.
+ */
+export function TraceSummaryDescription({ rootSpan, usage, entityHref, LinkComponent }: TraceSummaryDescriptionProps) {
   const startedAt = rootSpan.startedAt ? new Date(rootSpan.startedAt) : null;
   const endedAt = rootSpan.endedAt ? new Date(rootSpan.endedAt) : null;
   const duration = formatSpanDuration(startedAt, endedAt);
@@ -84,12 +79,7 @@ export function TraceSummaryDescription({
   const Link = LinkComponent ?? 'a';
 
   return (
-    <div
-      className={cn(
-        'flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-ui-xs leading-ui-xs text-neutral3',
-        className,
-      )}
-    >
+    <>
       {entityName && (
         <Tooltip>
           <TooltipTrigger asChild>
@@ -140,6 +130,6 @@ export function TraceSummaryDescription({
           </SummaryItem>
         </>
       )}
-    </div>
+    </>
   );
 }

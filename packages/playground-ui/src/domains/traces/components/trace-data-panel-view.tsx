@@ -280,7 +280,7 @@ export function TraceDataPanelView({
               <TraceIdButton id={traceId} />
             </PageHeader.Title>
             {!collapsed && rootSpan && (
-              <PageHeader.Meta beside>
+              <PageHeader.Meta beside className="text-ui-xs leading-ui-xs text-neutral3 gap-x-3">
                 <TraceSummaryDescription
                   rootSpan={rootSpan}
                   usage={usage}
