@@ -130,6 +130,9 @@ describe('SidebarNew colors', () => {
     const sidebar = container.querySelector('aside[aria-label="Sidebar"] > div');
     expect(sidebar?.className).toContain('bg-sidebar');
     expect(sidebar?.className).toContain('text-foreground');
+    expect(sidebar?.className).toContain('[--neutral3:var(--muted-foreground)]');
+    expect(sidebar?.className).toContain('[--neutral5:var(--foreground)]');
+    expect(sidebar?.className).toContain('[--neutral6:var(--foreground)]');
     expect(sidebar?.className).toContain('[--sidebar-nav-active:var(--selected)]');
     expect(sidebar?.className).toContain('[--sidebar-nav-hover:var(--sidebar-accent)]');
     expect(screen.getByText('Mastra').className).toContain('text-foreground');
