@@ -310,4 +310,16 @@ describe('MastraPlatformTraceTarget', () => {
         }),
     ).toThrow('different target project');
   });
+
+  it('accepts only request timeouts supported by Node timers', () => {
+    const options = { accessToken: 'secret-token', projectId: 'project_1' };
+
+    expect(() => new MastraPlatformTraceTarget(options, { requestTimeoutMs: 2_147_483_647 })).not.toThrow();
+    expect(() => new MastraPlatformTraceTarget(options, { requestTimeoutMs: 1.5 })).toThrow(
+      'request timeout must be an integer',
+    );
+    expect(() => new MastraPlatformTraceTarget(options, { requestTimeoutMs: 2_147_483_648 })).toThrow(
+      'request timeout must be an integer',
+    );
+  });
 });

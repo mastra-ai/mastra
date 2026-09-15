@@ -7,6 +7,7 @@ const DEFAULT_MAX_ATTEMPTS = 5;
 const DEFAULT_MAX_RETRY_AFTER_MS = 30_000;
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 const DEFAULT_SPANS_PER_SECOND = 100;
+const MAX_TIMER_DELAY_MS = 2_147_483_647;
 const OBSERVABILITY_CAPABILITIES_HEADER = 'x-mastra-observability-capabilities';
 const QUOTA_PAUSE_CAPABILITY = 'quota-pause-v1';
 
@@ -70,8 +71,12 @@ export class MastraPlatformTraceTarget implements TraceImportTarget {
     if (!Number.isInteger(this.maxAttempts) || this.maxAttempts < 1) {
       throw new Error('Mastra Platform max attempts must be a positive integer.');
     }
-    if (!Number.isFinite(this.requestTimeoutMs) || this.requestTimeoutMs <= 0) {
-      throw new Error('Mastra Platform request timeout must be greater than zero.');
+    if (
+      !Number.isInteger(this.requestTimeoutMs) ||
+      this.requestTimeoutMs <= 0 ||
+      this.requestTimeoutMs > MAX_TIMER_DELAY_MS
+    ) {
+      throw new Error(`Mastra Platform request timeout must be an integer from 1 to ${MAX_TIMER_DELAY_MS}.`);
     }
     if (!Number.isFinite(this.spansPerSecond) || this.spansPerSecond <= 0) {
       throw new Error('Mastra Platform spans per second must be greater than zero.');
