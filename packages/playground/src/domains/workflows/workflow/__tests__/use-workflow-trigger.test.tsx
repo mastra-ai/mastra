@@ -141,15 +141,13 @@ describe('useWaitingStepKey', () => {
     });
   });
 
-  describe('when a paused run resolved a conditional branch', () => {
-    it('skips the un-taken arm and waits on the join step', async () => {
-      // The conditional resolved to `long-text`, so `short-text` was never run and has no
-      // result. The waited step must jump past the never-taken arm to the join.
+  describe('when a paused run has completed one conditional branch', () => {
+    it('evaluates an unreported sibling rather than assuming it did not match', async () => {
       serveWorkflowRun('branch-workflow', branchWorkflow, pausedRunBranchResolvedState);
 
       renderWithRun('branch-workflow', pausedRunBranchResolvedState.runId, <WaitingProbe />);
 
-      await waitFor(() => expect(screen.getByTestId('waiting').textContent).toBe('mapping_join'));
+      await waitFor(() => expect(screen.getByTestId('waiting').textContent).toBe('short-text'));
     });
   });
 });

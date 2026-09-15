@@ -1,41 +1,46 @@
 // @vitest-environment jsdom
 import type { GetWorkflowResponse } from '@mastra/client-js';
-import type { WorkflowRunState } from '@mastra/core/workflows';
+import { WorkflowGraphCanvas } from '@mastra/playground-ui/components/Workflow';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type * as XyFlowReact from '@xyflow/react';
-import type * as React from 'react';
+import { ReactFlowProvider } from '@xyflow/react';
+import { useContext, useLayoutEffect } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { useWorkflowSelectedStep } from '../../context/use-workflow-selected-step';
 import { WorkflowRunContext } from '../../context/workflow-run-context';
+import type { WorkflowRunContextType } from '../../context/workflow-run-context';
 import { WorkflowSelectedStepProvider } from '../../context/workflow-selected-step-context';
 import { WorkflowStepDetailProvider } from '../../context/workflow-step-detail-provider';
 import { WorkflowGraph } from '../workflow-graph';
+import { twoStepWorkflow as baseWorkflow } from './fixtures/workflow-debug-step-controls';
 
-// The viewport refocus is the one place the graph reaches into the external
-// React Flow library imperatively (getNodes/setCenter). We mock only that lib
-// boundary so we can assert the imperative pan/zoom call without a real canvas.
 const reactFlowViewport = vi.hoisted(() => ({
-  getNodes: vi.fn(),
+  getNodes: vi.fn<() => XyFlowReact.Node[]>(() => []),
+  fitView: vi.fn(),
+  nodesInitialized: true,
   setCenter: vi.fn(),
 }));
 
-// Captures the latest onNodesChange handler React Flow is wired with, so a test
-// can deterministically simulate React Flow's post-mount layout pass (which in a
-// real browser updates the node state and is what should re-trigger the focus
-// effect). jsdom never lays out, so we drive that node-state settle explicitly.
-const reactFlowControl = vi.hoisted(() => ({
-  onNodesChange: undefined as ((changes: unknown[]) => void) | undefined,
-}));
+const reactFlowControl = vi.hoisted<{
+  onNodesChange?: XyFlowReact.ReactFlowProps['onNodesChange'];
+  resize?: (width: number, height: number) => void;
+}>(() => ({}));
 
 vi.mock('@xyflow/react', async importOriginal => {
-  const actual = (await importOriginal()) as typeof XyFlowReact;
+  const actual = await importOriginal<typeof XyFlowReact>();
 
   return {
     ...actual,
     useReactFlow: () => reactFlowViewport,
-    ReactFlow: ({ children, nodes, onNodesChange }: any) => {
+    useNodesInitialized: () => reactFlowViewport.nodesInitialized,
+    ReactFlow: ({ children, nodes, onNodesChange }: XyFlowReact.ReactFlowProps) => {
+      const store = actual.useStoreApi();
+      useLayoutEffect(() => {
+        store.setState({ width: 1200, height: 800 });
+      }, [store]);
       reactFlowControl.onNodesChange = onNodesChange;
+      reactFlowControl.resize = (width, height) => store.setState({ width, height });
       return (
         <div data-testid="react-flow-stub" data-node-count={nodes?.length ?? 0}>
           {children}
@@ -48,33 +53,57 @@ vi.mock('@xyflow/react', async importOriginal => {
 afterEach(() => {
   cleanup();
   reactFlowViewport.getNodes.mockReset();
+  reactFlowViewport.getNodes.mockReturnValue([]);
+  reactFlowViewport.fitView.mockReset();
   reactFlowViewport.setCenter.mockReset();
   reactFlowControl.onNodesChange = undefined;
+  reactFlowControl.resize = undefined;
+  reactFlowViewport.nodesInitialized = true;
 });
 
 function stepGraph(...stepIds: string[]): GetWorkflowResponse['stepGraph'] {
   return stepIds.map(stepId => ({
     type: 'step',
     step: { id: stepId, description: '' },
-  })) as GetWorkflowResponse['stepGraph'];
+  }));
 }
 
-const singleStepWorkflow = {
+const singleStepWorkflow: GetWorkflowResponse = {
+  ...baseWorkflow,
   name: 'Wf',
   stepGraph: stepGraph('step-a'),
-} as unknown as GetWorkflowResponse;
+};
 
-const twoStepWorkflow = {
+describe('WorkflowGraph fallback', () => {
+  describe('when the workflow has no steps', () => {
+    it('shows an explicit empty state', () => {
+      render(<Harness workflow={{ ...singleStepWorkflow, stepGraph: [] }} />);
+      expect(screen.getByRole('status').textContent).toBe('This workflow has no steps to display.');
+    });
+  });
+  describe('when the server supplies an unsupported graph entry', () => {
+    it('keeps the definition inspectable and recovers when the graph is replaced', async () => {
+      const workflow: GetWorkflowResponse = {
+        ...singleStepWorkflow,
+        stepGraph: JSON.parse('[{"type":"future-step","id":"future-operation"}]'),
+      };
+      const view = render(<Harness workflow={workflow} />);
+      expect(await screen.findByRole('alert')).not.toBeNull();
+      expect(screen.getByText('Graph unavailable')).not.toBeNull();
+      fireEvent.click(screen.getByText('View workflow definition'));
+      expect(screen.getByText(/"future-operation"/)).not.toBeNull();
+      view.rerender(<Harness workflow={singleStepWorkflow} />);
+      expect(await screen.findByTestId('react-flow-stub')).not.toBeNull();
+      expect(screen.queryByRole('alert')).toBeNull();
+    });
+  });
+});
+
+const twoStepWorkflow: GetWorkflowResponse = {
+  ...baseWorkflow,
   name: 'Wf',
   stepGraph: stepGraph('step-a', 'step-b'),
-} as unknown as GetWorkflowResponse;
-
-function makeSnapshot(runId: string, ...stepIds: string[]): WorkflowRunState {
-  return {
-    runId,
-    serializedStepGraph: stepGraph(...stepIds),
-  } as WorkflowRunState;
-}
+};
 
 function SelectStepButton({ stepId }: { stepId: string }) {
   const { setSelectedStepId } = useWorkflowSelectedStep();
@@ -86,22 +115,24 @@ function SelectStepButton({ stepId }: { stepId: string }) {
   );
 }
 
-// Mirrors the page-level provider arrangement: WorkflowSelectedStepProvider and
-// WorkflowRunContext live above WorkflowGraph, which owns ReactFlowProvider.
 function Harness({
   contextValue,
   workflow,
+  workflowId = 'wf',
   selectableStepId,
 }: {
-  contextValue: React.ComponentProps<typeof WorkflowRunContext.Provider>['value'];
+  contextValue?: Partial<WorkflowRunContextType>;
   workflow: GetWorkflowResponse;
+  workflowId?: string;
   selectableStepId?: string;
 }) {
+  const defaultContext = useContext(WorkflowRunContext);
+
   return (
     <WorkflowSelectedStepProvider>
       <WorkflowStepDetailProvider>
-        <WorkflowRunContext.Provider value={contextValue}>
-          <WorkflowGraph workflowId="wf" workflow={workflow} />
+        <WorkflowRunContext.Provider value={{ ...defaultContext, ...contextValue }}>
+          <WorkflowGraph workflowId={workflowId} workflow={workflow} />
           {selectableStepId ? <SelectStepButton stepId={selectableStepId} /> : null}
         </WorkflowRunContext.Provider>
       </WorkflowStepDetailProvider>
@@ -125,182 +156,194 @@ const twoNodes = [
 ];
 
 describe('WorkflowGraph', () => {
-  it('focuses and zooms the graph viewport when a workflow step is selected', async () => {
-    reactFlowViewport.getNodes.mockReturnValue([
-      {
-        id: 'node-step-a',
-        data: { label: 'step-a' },
-        measured: { width: 300, height: 120 },
-        position: { x: 40, y: 80 },
-      },
-    ] as never);
+  describe('when the workflow changes', () => {
+    it('replaces the canvas nodes when switching workflows without a loading screen', async () => {
+      const { rerender } = render(<Harness workflowId="first" workflow={singleStepWorkflow} />);
 
-    render(
-      <Harness
-        contextValue={{ snapshot: makeSnapshot('run-a', 'step-a') } as never}
-        workflow={singleStepWorkflow}
-        selectableStepId="step-a"
-      />,
-    );
+      await waitFor(() => expect(screen.getByTestId('react-flow-stub').getAttribute('data-node-count')).toBe('3'));
 
-    fireEvent.click(screen.getByRole('button', { name: 'Select step-a' }));
+      rerender(<Harness workflowId="second" workflow={twoStepWorkflow} />);
 
-    await waitFor(() => {
-      expect(reactFlowViewport.setCenter).toHaveBeenCalledWith(190, 140, { duration: 300, zoom: 1 });
-    });
-    expect(document.activeElement).toBe(screen.getByTestId('workflow-graph-viewport'));
-  });
+      await waitFor(() => expect(screen.getByTestId('react-flow-stub').getAttribute('data-node-count')).toBe('4'));
 
-  it('auto-focuses the step a paused run is waiting on, without any selection', async () => {
-    reactFlowViewport.getNodes.mockReturnValue(twoNodes as never);
+      rerender(<Harness workflowId="first" workflow={singleStepWorkflow} />);
 
-    // step-a already succeeded, so the paused run is waiting on step-b.
-    render(
-      <Harness
-        contextValue={
-          {
-            workflow: twoStepWorkflow,
-            result: { status: 'paused', steps: { 'step-a': { status: 'success' } } },
-          } as never
-        }
-        workflow={twoStepWorkflow}
-      />,
-    );
-
-    // Center of step-b: x 440 + 300/2 = 590, y 80 + 120/2 = 140.
-    await waitFor(() => {
-      expect(reactFlowViewport.setCenter).toHaveBeenCalledWith(590, 140, { duration: 300, zoom: 1 });
+      await waitFor(() => expect(screen.getByTestId('react-flow-stub').getAttribute('data-node-count')).toBe('3'));
     });
   });
 
-  it('auto-focuses the suspended step of a suspended run, without any selection', async () => {
-    reactFlowViewport.getNodes.mockReturnValue(twoNodes as never);
+  describe('when a step is selected', () => {
+    it('focuses and zooms the graph viewport when a workflow step is selected', async () => {
+      reactFlowViewport.getNodes.mockReturnValue([
+        {
+          id: 'node-step-a',
+          data: { label: 'step-a' },
+          measured: { width: 300, height: 120 },
+          position: { x: 40, y: 80 },
+        },
+      ]);
 
-    // step-a succeeded and step-b is suspended (waiting on human input). A
-    // suspended run is not 'paused', so the viewport must still center on the
-    // step the run is suspended at.
-    render(
-      <Harness
-        contextValue={
-          {
+      render(<Harness workflow={singleStepWorkflow} selectableStepId="step-a" />);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Select step-a' }));
+
+      await waitFor(() => {
+        expect(reactFlowViewport.setCenter).toHaveBeenCalledWith(190, 140, { duration: 300, zoom: 1 });
+      });
+      expect(document.activeElement).toBe(screen.getByTestId('workflow-graph-viewport'));
+    });
+  });
+
+  describe('when a run updates without a step selection', () => {
+    it.each(['paused', 'suspended', 'failed'] as const)('preserves the camera for a %s run', async status => {
+      reactFlowViewport.getNodes.mockReturnValue(twoNodes);
+      const view = render(<Harness workflow={twoStepWorkflow} />);
+      const canvas = screen.getByTestId('react-flow-stub');
+      reactFlowViewport.fitView.mockClear();
+      view.rerender(
+        <Harness
+          workflow={twoStepWorkflow}
+          contextValue={{
             workflow: twoStepWorkflow,
             result: {
-              status: 'suspended',
-              steps: { 'step-a': { status: 'success' }, 'step-b': { status: 'suspended' } },
+              status,
+              input: {},
+              steps: {
+                'step-a': { status: 'success', payload: {}, output: {}, startedAt: 1, endedAt: 2 },
+                'step-b': { status: 'suspended', payload: {}, startedAt: 3, suspendPayload: {} },
+              },
             },
-          } as never
-        }
-        workflow={twoStepWorkflow}
-      />,
-    );
-
-    // Center of step-b: x 440 + 300/2 = 590, y 80 + 120/2 = 140.
-    await waitFor(() => {
-      expect(reactFlowViewport.setCenter).toHaveBeenCalledWith(590, 140, { duration: 300, zoom: 1 });
+          }}
+        />,
+      );
+      expect(screen.getByTestId('react-flow-stub')).toBe(canvas);
+      expect(reactFlowViewport.setCenter).not.toHaveBeenCalled();
+      expect(reactFlowViewport.fitView).not.toHaveBeenCalled();
     });
   });
 
-  it('refocuses the next suspended step after a resume advances the run', async () => {
-    reactFlowViewport.getNodes.mockReturnValue(twoNodes as never);
-
-    // The run starts suspended at step-a; the graph centers it.
-    const { rerender } = render(
-      <Harness
-        contextValue={
-          {
-            workflow: twoStepWorkflow,
-            result: { status: 'suspended', steps: { 'step-a': { status: 'suspended' } } },
-          } as never
-        }
-        workflow={twoStepWorkflow}
-      />,
-    );
-
-    await waitFor(() => {
-      expect(reactFlowViewport.setCenter).toHaveBeenCalledWith(190, 140, { duration: 300, zoom: 1 });
+  describe('when selecting another run of the same workflow', () => {
+    it('retains the mounted canvas', () => {
+      const view = render(<Harness workflow={twoStepWorkflow} />);
+      const canvas = screen.getByTestId('react-flow-stub');
+      for (const runId of ['first-run', 'second-run']) {
+        view.rerender(
+          <Harness
+            workflow={twoStepWorkflow}
+            contextValue={{
+              runSnapshot: {
+                runId,
+                context: {},
+                status: 'success',
+                serializedStepGraph: structuredClone(twoStepWorkflow.stepGraph),
+              },
+              snapshot: {
+                runId,
+                context: {},
+                status: 'success',
+                serializedStepGraph: structuredClone(twoStepWorkflow.stepGraph),
+              },
+            }}
+          />,
+        );
+        expect(screen.getByTestId('react-flow-stub')).toBe(canvas);
+      }
     });
+  });
 
-    // Resume advances the run: step-a is now done and step-b is the new
-    // suspended step. The viewport must follow to step-b.
-    rerender(
-      <Harness
-        contextValue={
-          {
+  describe('when node measurement finishes after the first paint', () => {
+    it('retries centering on the waiting step once nodes lay out after the first paint', async () => {
+      reactFlowViewport.nodesInitialized = false;
+      let nodesLaidOut = false;
+      reactFlowViewport.getNodes.mockImplementation(() => (nodesLaidOut ? twoNodes : []));
+
+      render(
+        <Harness
+          contextValue={{
             workflow: twoStepWorkflow,
             result: {
-              status: 'suspended',
-              steps: { 'step-a': { status: 'success' }, 'step-b': { status: 'suspended' } },
+              status: 'paused',
+              input: {},
+              steps: { 'step-a': { status: 'success', payload: {}, output: {}, startedAt: 1, endedAt: 2 } },
             },
-          } as never
-        }
-        workflow={twoStepWorkflow}
-      />,
-    );
+          }}
+          workflow={twoStepWorkflow}
+          selectableStepId="step-b"
+        />,
+      );
 
-    await waitFor(() => {
-      expect(reactFlowViewport.setCenter).toHaveBeenCalledWith(590, 140, { duration: 300, zoom: 1 });
+      fireEvent.click(screen.getByRole('button', { name: 'Select step-b' }));
+      expect(reactFlowViewport.setCenter).not.toHaveBeenCalled();
+
+      nodesLaidOut = true;
+      reactFlowViewport.nodesInitialized = true;
+      act(() => {
+        reactFlowControl.onNodesChange?.([{ id: 'node-step-a', type: 'position', position: { x: 1, y: 0 } }]);
+      });
+
+      await waitFor(() => {
+        expect(reactFlowViewport.setCenter).toHaveBeenCalledWith(590, 140, { duration: 300, zoom: 1 });
+      });
     });
   });
 
-  it('retries centering on the waiting step once nodes lay out after the first paint', async () => {
-    // Reproduces the reported refocus race: when landing on a paused :runId page,
-    // React Flow has not registered/measured its nodes on the first focus attempt.
-    // getNodes() is empty then, so the initial run finds nothing. The focus effect
-    // must retry once the node state settles (it depends on `nodes`), otherwise the
-    // viewport never centers on the step the run is waiting on.
-    let nodesLaidOut = false;
-    reactFlowViewport.getNodes.mockImplementation(() => (nodesLaidOut ? (twoNodes as never) : ([] as never)));
+  describe('when a step is selected during debug', () => {
+    it('lets an explicit selection override the waited step', async () => {
+      reactFlowViewport.getNodes.mockReturnValue(twoNodes);
 
-    render(
-      <Harness
-        contextValue={
-          {
+      render(
+        <Harness
+          contextValue={{
             workflow: twoStepWorkflow,
-            result: { status: 'paused', steps: { 'step-a': { status: 'success' } } },
-          } as never
-        }
-        workflow={twoStepWorkflow}
-      />,
-    );
+            result: {
+              status: 'paused',
+              input: {},
+              steps: { 'step-a': { status: 'success', payload: {}, output: {}, startedAt: 1, endedAt: 2 } },
+            },
+          }}
+          workflow={twoStepWorkflow}
+          selectableStepId="step-a"
+        />,
+      );
 
-    // First paint: React Flow has not registered/measured its nodes, so getNodes()
-    // is empty and the focus attempt finds nothing — nothing is centered.
-    expect(reactFlowViewport.setCenter).not.toHaveBeenCalled();
+      fireEvent.click(screen.getByRole('button', { name: 'Select step-a' }));
 
-    // React Flow's layout pass settles the node state. getNodes() now resolves the
-    // waiting node, and the node-state change must re-trigger the focus effect.
-    nodesLaidOut = true;
-    act(() => {
-      reactFlowControl.onNodesChange?.([{ id: 'node-step-a', type: 'position', position: { x: 1, y: 0 } }]);
+      await waitFor(() => {
+        expect(reactFlowViewport.setCenter).toHaveBeenCalledWith(190, 140, { duration: 300, zoom: 1 });
+      });
     });
-
-    // Center of step-b: x 440 + 300/2 = 590, y 80 + 120/2 = 140.
-    await waitFor(() => {
-      expect(reactFlowViewport.setCenter).toHaveBeenCalledWith(590, 140, { duration: 300, zoom: 1 });
+  });
+  describe('when the user expands a node after positioning the canvas', () => {
+    it('preserves the camera when the node measurements change', async () => {
+      render(<Harness workflow={twoStepWorkflow} />);
+      expect(screen.getByTestId('react-flow-stub')).not.toBeNull();
+      fireEvent.pointerDown(screen.getByTestId('workflow-graph-viewport'));
+      reactFlowViewport.fitView.mockClear();
+      act(() => {
+        reactFlowControl.onNodesChange?.([
+          { id: 'node-step-a', type: 'dimensions', dimensions: { width: 688, height: 820 } },
+        ]);
+      });
+      expect(reactFlowViewport.fitView).not.toHaveBeenCalled();
+      expect(reactFlowViewport.setCenter).not.toHaveBeenCalled();
     });
   });
 
-  it('lets an explicit selection override the waited step', async () => {
-    reactFlowViewport.getNodes.mockReturnValue(twoNodes as never);
-
-    render(
-      <Harness
-        contextValue={
-          {
-            workflow: twoStepWorkflow,
-            result: { status: 'paused', steps: { 'step-a': { status: 'success' } } },
-          } as never
-        }
-        workflow={twoStepWorkflow}
-        selectableStepId="step-a"
-      />,
-    );
-
-    fireEvent.click(screen.getByRole('button', { name: 'Select step-a' }));
-
-    // Selection wins: center of step-a (190, 140), not step-b (590, 140).
-    await waitFor(() => {
-      expect(reactFlowViewport.setCenter).toHaveBeenCalledWith(190, 140, { duration: 300, zoom: 1 });
+  describe('when the nested inspector acquires its final panel size', () => {
+    it('fits the panel after resizing but preserves its camera when a node expands', () => {
+      const tree = (nodes: XyFlowReact.Node[]) => (
+        <ReactFlowProvider>
+          <WorkflowGraphCanvas variant="nested" nodes={nodes} edges={[]} />
+        </ReactFlowProvider>
+      );
+      const view = render(tree(twoNodes));
+      expect(reactFlowViewport.fitView).toHaveBeenCalled();
+      reactFlowViewport.fitView.mockClear();
+      act(() => reactFlowControl.resize?.(420, 900));
+      expect(reactFlowViewport.fitView).toHaveBeenCalled();
+      reactFlowViewport.fitView.mockClear();
+      view.rerender(tree(twoNodes.map(node => ({ ...node, measured: { width: 688, height: 820 } }))));
+      expect(reactFlowViewport.fitView).not.toHaveBeenCalled();
     });
   });
 });

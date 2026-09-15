@@ -154,7 +154,10 @@ export function parseSchema(schema: AnySchema): ParsedSchema {
 
 export class CustomZodProvider<T extends AnySchema> implements SchemaProvider {
   private _schema: T;
-  constructor(schema: T) {
+  constructor(
+    schema: T,
+    private options: { preserveEmptyValues?: boolean } = {},
+  ) {
     if (!schema) {
       throw new Error('CustomZodProvider: schema is required');
     }
@@ -166,7 +169,7 @@ export class CustomZodProvider<T extends AnySchema> implements SchemaProvider {
   }
 
   validateSchema(values: any): SchemaValidation {
-    const cleanedValues = removeEmptyValues(values);
+    const cleanedValues = this.options.preserveEmptyValues ? values : removeEmptyValues(values);
     try {
       const validationResult = (this._schema as any).safeParse(cleanedValues);
       if (validationResult.success) {

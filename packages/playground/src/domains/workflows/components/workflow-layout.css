@@ -1,0 +1,125 @@
+.workflow-layout-container {
+  container: workflow-layout / inline-size;
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+.workflow-layout-surfaces {
+  position: relative;
+  height: 100%;
+  min-height: 0;
+}
+.workflow-layout-canvas {
+  position: absolute;
+  inset: 0;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+.workflow-canvas-container {
+  container-type: size;
+}
+.workflow-inspection-overlay {
+  position: absolute;
+  top: 48px;
+  right: 8px;
+  z-index: 30;
+  max-width: calc(100% - 16px);
+  max-height: calc(100% - 64px);
+  pointer-events: none;
+}
+.workflow-inspection-overlay > section {
+  pointer-events: auto;
+}
+.workflow-data-overlay {
+  width: 440px;
+}
+.workflow-data-inspector {
+  max-height: calc(100cqh - 64px);
+}
+.workflow-left-overlay,
+.workflow-right-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  pointer-events: none;
+}
+.workflow-left-overlay [data-separator],
+.workflow-right-overlay [data-separator],
+.workflow-left-panel button[aria-label='Expand panel'],
+.workflow-information-panel > section {
+  pointer-events: auto;
+}
+.workflow-information-panel > section {
+  box-shadow: var(--shadow-panel);
+}
+.workflow-panel-separator {
+  align-self: flex-start;
+}
+.workflow-information-panel [data-slot='form-submit-row'] {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  padding-block: 12px;
+  background: var(--surface3);
+  box-shadow: 0 -1px var(--border1);
+}
+@container workflow-layout (max-width: 900px) {
+  .workflow-layout-surfaces[data-has-panels] {
+    display: grid;
+    grid-template-rows: minmax(180px, 1fr) minmax(0, 44%);
+  }
+  .workflow-layout-canvas {
+    position: relative;
+    grid-row: 1;
+  }
+  .workflow-left-overlay,
+  .workflow-right-overlay {
+    position: relative;
+    grid-row: 2;
+    grid-column: 1;
+    overflow: hidden;
+  }
+  .workflow-left-overlay [data-testid='left-slot'],
+  .workflow-right-overlay [data-testid='right-slot'] {
+    flex: 1 1 100% !important;
+  }
+  .workflow-left-panel {
+    --panel-min-w: 0px !important;
+  }
+  .workflow-left-panel > [hidden] {
+    display: block;
+  }
+  .workflow-left-panel button[aria-label='Expand panel'],
+  .workflow-left-overlay [data-separator],
+  .workflow-right-overlay [data-separator],
+  [data-testid='left-overlay-filler'],
+  [data-testid='right-overlay-filler'] {
+    display: none;
+  }
+  .workflow-information-panel {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    pointer-events: auto;
+    background: var(--surface2);
+  }
+  .workflow-information-panel > section {
+    max-height: 100%;
+    flex: none;
+  }
+  .workflow-information-panel > .workflow-recent-runs {
+    max-height: 240px;
+  }
+  .workflow-graph-detail-layout:has([data-testid='workflow-step-detail']) > [data-testid='workflow-graph'],
+  .workflow-graph-detail-layout:has([data-testid='workflow-step-detail']) > [data-separator] {
+    display: none;
+  }
+  .workflow-graph-detail-layout > [data-testid='workflow-step-detail'] {
+    flex: 1 1 100% !important;
+  }
+}

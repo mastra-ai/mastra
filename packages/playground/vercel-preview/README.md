@@ -9,7 +9,7 @@ The app is intentionally serverless-friendly:
 - in-memory storage only — no file-backed storage, no LibSQL or DuckDB dependency
 - one deterministic tool
 - one memory-enabled agent that can be opened at `/agents/studio-preview-agent/chat/new`
-- three deterministic workflows with seeded run history
+- five deterministic workflows, with seeded history for approval, batch processing, and countdown
 - deterministic demo data seeded on startup so most Studio surfaces render populated
 
 ## Seeded demo data
@@ -32,6 +32,25 @@ The workflows under `src/mastra/workflows/` run without API keys or external ser
 - **request-review** — requests up to 1,000 follow the automatic approval branch. Larger requests suspend at `review-request`; resume with `approved: true` to complete or `approved: false` to inspect a failed run. Its history includes both approval paths, a declined request, and a request awaiting review.
 - **document-batch** — processes three sample documents with foreach and a nested workflow. Open the nested graph to inspect parallel word-count and excerpt steps, then inspect the mapped report.
 - **countdown** — repeats a step until the remaining count reaches zero. Inputs are bounded from 0 to 10.
+- **delayed-report** — waits eight seconds before returning the supplied message. Run it to inspect a real waiting state and its transition to completion.
+- **order-fulfillment** — a longer scenario with parallel inventory/risk checks, approval branches, a nested packing workflow, a foreach loop with concurrency two, parallel label/quality steps per item, a two-second delay, and dispatch. Local delays make running states visible; nothing is purchased, printed, or shipped.
+
+Try these order-fulfillment inputs:
+
+| Behavior               | Input and action                                                                                                     |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| Complete automatically | Set Approval to `automatic`, then Run.                                                                               |
+| Human approval         | Keep Approval `manual`; Run pauses at request-approval. Check Approved and Resume.                                   |
+| Rejection              | Use manual approval, uncheck Approved, then Resume. Packing never starts.                                            |
+| Dispatch failure       | Set Approval to `automatic` and enable Fail Dispatch. Packing completes before dispatch fails.                       |
+| Cancellation           | Run with automatic approval and cancel while a step is running.                                                      |
+| Debugging              | Enable Step by step and press Start debug. Inspect outputs between Run next step actions. See the limitations below. |
+
+The timeline appears after the run has step events. Open a recent run or start a new one, then expand **Timeline** at the bottom of the canvas. It is hidden on a new workflow before execution because there are no timings yet. Approval suspension is separate from debug pausing: it requires response data and **Resume**.
+
+Known debug limitations with this advanced example: **Continue full run** from an unfinished parallel section can omit a sibling output, and resuming manual approval after stepping through its branch can leave the run suspended. Normal execution, including manual approval/resume, is unaffected. Use the normal Run path when checking end-to-end completion.
+
+Workflow cards combine a running title shimmer with the shared activity edge. Nested workflows and loops expand inline inside dashed groups. Completed foreach runs expose an item selector for inspecting each iteration’s actual step results. Data controls open the floating inspector while keeping the canvas interactive.
 
 `src/mastra/seed/workflow-runs.ts` generates the history by executing these workflows through Mastra, including suspend/resume. Startup awaits this seed so the first workflow request sees populated history. Repeated seed calls reuse the same promise and preserve live review decisions within the process.
 

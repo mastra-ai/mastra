@@ -1,5 +1,6 @@
 import { Database } from 'lucide-react';
 import { useState } from 'react';
+import type { MouseEventHandler } from 'react';
 import { WorkflowCodeContent } from './workflow-code-dialog-content';
 import { Button } from '@/ds/components/Button';
 import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from '@/ds/components/Dialog';
@@ -9,11 +10,19 @@ export interface WorkflowEdgeDataButtonProps {
   previousStepId?: string;
   output?: unknown;
   label?: string;
+  selected?: boolean;
+  onInspect?: MouseEventHandler<HTMLButtonElement>;
 }
 
 const hasPayload = (value: unknown) => value !== undefined;
 
-export const WorkflowEdgeDataButton = ({ previousStepId, output, label }: WorkflowEdgeDataButtonProps) => {
+export const WorkflowEdgeDataButton = ({
+  previousStepId,
+  output,
+  label,
+  selected,
+  onInspect,
+}: WorkflowEdgeDataButtonProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const hasOutput = hasPayload(output);
   const dataLabel = label ?? (previousStepId ? `${previousStepId} output` : 'Previous output');
@@ -26,8 +35,10 @@ export const WorkflowEdgeDataButton = ({ previousStepId, output, label }: Workfl
     <>
       <Button
         size="sm"
-        onClick={() => setIsOpen(true)}
-        className="border-border1 bg-surface3/95 text-neutral5 hover:bg-surface4 h-7 rounded-full border px-2 shadow-lg"
+        onClick={onInspect ?? (() => setIsOpen(true))}
+        aria-label={onInspect ? `View ${dataLabel}` : undefined}
+        aria-pressed={selected}
+        className="h-7 rounded-lg border border-border1 bg-surface3 px-2 text-neutral5 shadow-panel hover:bg-surface4 aria-pressed:border-neutral3 aria-pressed:bg-surface4"
         icon={<Database className="text-accent1" />}
       >
         Data
@@ -39,8 +50,8 @@ export const WorkflowEdgeDataButton = ({ previousStepId, output, label }: Workfl
             <DialogTitle>Step output</DialogTitle>
           </DialogHeader>
           <DialogBody className="overflow-auto" style={{ maxHeight: 700 }}>
-            <div className="border-border1 bg-surface2 min-w-0 rounded-lg border p-3">
-              <Txt variant="ui-sm" className="text-neutral5 mb-2 block">
+            <div className="min-w-0 rounded-lg border border-border1 bg-surface2 p-3">
+              <Txt variant="ui-sm" className="mb-2 block text-neutral5">
                 {dataLabel}
               </Txt>
               <WorkflowCodeContent data={output} />

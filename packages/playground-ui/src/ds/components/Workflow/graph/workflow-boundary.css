@@ -1,0 +1,24 @@
+.workflow-boundary-rail {
+  width: 112px;
+  height: 38px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--neutral4);
+}
+.workflow-boundary-rail::after {
+  content: '';
+  position: absolute;
+  inset: auto 0 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--neutral3) 40%, var(--neutral3) 60%, transparent);
+}
+.workflow-boundary-rail[data-boundary-role='end']::after {
+  top: 0;
+  bottom: auto;
+  height: 4px;
+  border-block: 1px solid var(--neutral3);
+  background: none;
+  mask-image: linear-gradient(90deg, transparent, black 40%, black 60%, transparent);
+}

@@ -6,11 +6,9 @@ import { ReactFlowProvider } from '@xyflow/react';
 import { List, X } from 'lucide-react';
 
 import { useWorkflowStepDetail } from '../context/workflow-step-detail-context';
+import { WorkflowDataInspector } from '../workflow/data/workflow-data-inspector';
 import { WorkflowNestedGraph } from '../workflow/workflow-nested-graph';
 
-/**
- * Content for the step detail tab panel (Map Config or Nested Workflow)
- */
 export function WorkflowStepDetailContent() {
   const { stepDetail, closeStepDetail } = useWorkflowStepDetail();
 
@@ -18,10 +16,11 @@ export function WorkflowStepDetailContent() {
     return null;
   }
 
+  if (stepDetail.type === 'data') return <WorkflowDataInspector selection={stepDetail.selection} />;
+
   return (
     <div className="flex h-full flex-col" data-testid="workflow-step-detail-panel">
-      {/* Header with title and close button */}
-      <div className="border-border1 bg-surface1 flex items-center justify-between border-b px-4 py-3">
+      <div className="border-border1 bg-surface1 flex items-center justify-between border-b px-4 py-3 pl-12 lg:pl-4">
         <div className="flex items-center gap-2">
           {stepDetail.type === 'map-config' && <List className="h-4 w-4" style={{ color: BADGE_COLORS.map }} />}
           {stepDetail.type === 'nested-graph' && (
@@ -67,10 +66,6 @@ export function WorkflowStepDetailContent() {
   );
 }
 
-/**
- * Side panel that surfaces the step detail content (Map Config or Nested Workflow)
- * next to the workflow graph. Renders nothing until a step detail is opened.
- */
 export function WorkflowStepDetailPanel() {
   const { stepDetail } = useWorkflowStepDetail();
 

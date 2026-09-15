@@ -1,53 +1,81 @@
 import type { SerializedStepFlowEntry } from '@mastra/core/workflows';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { WorkflowGraphCanvas } from '@mastra/playground-ui/components/Workflow';
-import { useNodesState, useEdgesState } from '@xyflow/react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
+import { WorkflowGraphCanvas, WORKFLOW_BOUNDARY_NODE_TYPE } from '@mastra/playground-ui/components/Workflow';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import { useCurrentRun } from '../context/use-current-run';
+import { useWorkflowGraphNodes } from './use-workflow-graph-nodes';
 import { useWorkflowGraphRuntime } from './use-workflow-graph-runtime';
-import { constructNodesAndEdges } from './utils';
-import type { WorkflowGraphEdge, WorkflowGraphNode } from './utils';
+import { WorkflowGraphBoundary } from './workflow-graph-boundary';
+import { getWorkflowGraphGroups } from './workflow-graph-groups';
+import { getWorkflowIterationScopes } from './workflow-iteration-scopes';
 
 export interface WorkflowNestedGraphProps {
   stepGraph: SerializedStepFlowEntry[];
   open: boolean;
   workflowName: string;
+  isForEach?: boolean;
+  embedded?: boolean;
 }
 
-export function WorkflowNestedGraph({ stepGraph, open, workflowName }: WorkflowNestedGraphProps) {
-  const { nodes: initialNodes, edges: initialEdges } = constructNodesAndEdges({
-    stepGraph,
-  });
-  const [isMounted, setIsMounted] = useState(false);
-  const [nodes, _, onNodesChange] = useNodesState<WorkflowGraphNode>(initialNodes);
-  const [edges] = useEdgesState<WorkflowGraphEdge>(initialEdges);
-  const { edgeTypes, nodeTypes, styledEdges } = useWorkflowGraphRuntime({ edges, workflowName, stepGraph });
+export function WorkflowNestedGraph(props: WorkflowNestedGraphProps) {
+  return (
+    <WorkflowGraphBoundary stepGraph={props.stepGraph}>
+      <WorkflowNestedGraphContent {...props} />
+    </WorkflowGraphBoundary>
+  );
+}
 
-  useEffect(() => {
-    if (open) {
-      const timer = setTimeout(() => {
-        setIsMounted(true);
-      }, 500);
-      return () => clearTimeout(timer);
-    }
-  }, [open]);
+function WorkflowNestedGraphContent({ stepGraph, open, workflowName, isForEach, embedded }: WorkflowNestedGraphProps) {
+  const { nodes, edges, onNodesChange } = useWorkflowGraphNodes(stepGraph);
+  const { steps } = useCurrentRun();
+  const iterations = getWorkflowIterationScopes(Object.keys(steps), workflowName);
+  const [selectedIteration, setSelectedIteration] = useState<string>();
+  const activeIteration = iterations.find(iteration => iteration.value === selectedIteration) ?? iterations[0];
+
+  const { edgeTypes, nodeTypes, styledEdges } = useWorkflowGraphRuntime({
+    edges,
+    workflowName: activeIteration?.value ?? workflowName,
+  });
+
+  const labeledNodes = nodes.map(node => {
+    if (!isForEach || node.type !== WORKFLOW_BOUNDARY_NODE_TYPE) return node;
+    const label = node.data.boundaryRole === 'start' ? 'Each item' : 'Item result';
+    return { ...node, data: { ...node.data, label } };
+  });
 
   return (
-    <div className="bg-surface1 relative h-full w-full">
-      {isMounted ? (
-        <WorkflowGraphCanvas
-          variant="nested"
-          nodes={nodes}
-          edges={styledEdges}
-          edgeTypes={edgeTypes}
-          nodeTypes={nodeTypes}
-          onNodesChange={onNodesChange}
-        />
-      ) : (
-        <div className="flex h-full w-full items-center justify-center">
-          <Spinner />
+    <div className="relative flex h-full w-full flex-col">
+      {activeIteration && (
+        <div className="nodrag nopan border-border1 flex items-center gap-3 border-b px-4 py-2">
+          <span className="text-ui-sm text-neutral3">Iteration</span>
+          <Select value={activeIteration.value} onValueChange={setSelectedIteration} items={iterations}>
+            <SelectTrigger aria-label="Loop item" size="sm" className="w-36">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {iterations.map(iteration => (
+                <SelectItem key={iteration.value} value={iteration.value}>
+                  {iteration.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       )}
+      <div className="min-h-0 flex-1">
+        {open && (
+          <WorkflowGraphCanvas
+            variant={embedded ? 'inline' : 'nested'}
+            groups={getWorkflowGraphGroups(nodes)}
+            nodes={labeledNodes}
+            edges={styledEdges}
+            edgeTypes={edgeTypes}
+            nodeTypes={nodeTypes}
+            onNodesChange={onNodesChange}
+          />
+        )}
+      </div>
     </div>
   );
 }

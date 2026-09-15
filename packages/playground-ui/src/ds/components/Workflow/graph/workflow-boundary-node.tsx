@@ -1,6 +1,7 @@
 import { Handle, Position } from '@xyflow/react';
 import type { NodeProps } from '@xyflow/react';
 
+import './workflow-boundary.css';
 import type { WorkflowBoundaryNodeModel } from './types';
 import { Txt } from '@/ds/components/Txt';
 
@@ -13,7 +14,8 @@ export const WorkflowBoundaryNode = ({ data }: NodeProps<WorkflowBoundaryNodeMod
       <div
         data-workflow-boundary-node
         data-testid={`workflow-boundary-${data.boundaryRole}`}
-        className="border-border1 bg-surface3 text-neutral5 flex size-14 items-center justify-center rounded-full border"
+        data-boundary-role={data.boundaryRole}
+        className="workflow-boundary-rail"
       >
         <Txt variant="ui-xs" className="font-medium">
           {data.label}

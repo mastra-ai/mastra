@@ -1,0 +1,25 @@
+.workflow-zoom-compact .workflow-zoom-range {
+  display: none;
+}
+.workflow-group-viewport {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  transform-origin: 0 0;
+}
+.workflow-parallel-group {
+  position: absolute;
+  pointer-events: none;
+  border: 1px dashed color-mix(in srgb, var(--neutral3) 25%, var(--border1));
+  border-radius: var(--radius-xl);
+  background: color-mix(in srgb, var(--neutral3) 3%, transparent);
+}
+.workflow-parallel-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 20px;
+  color: var(--neutral3);
+  font-size: var(--text-ui-xs);
+}

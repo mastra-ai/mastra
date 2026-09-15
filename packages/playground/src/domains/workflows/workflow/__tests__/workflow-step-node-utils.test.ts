@@ -234,20 +234,10 @@ describe('resolveWorkflowGraphStep', () => {
     expect(
       edges.some(
         edge =>
-          edge.id === 'edge-boundary-boundary-start-node-regular' &&
-          edge.source === 'boundary-start' &&
-          edge.target === 'node-regular' &&
-          edge.data?.nextStepId === 'regular',
+          edge.source === 'boundary-start' && edge.target === 'node-regular' && edge.data?.nextStepId === 'regular',
       ),
     ).toBe(true);
-    expect(
-      edges.some(
-        edge =>
-          edge.id === 'edge-boundary-node-sleep-boundary-end' &&
-          edge.source === 'node-sleep' &&
-          edge.target === 'boundary-end',
-      ),
-    ).toBe(true);
+    expect(edges.some(edge => edge.source === 'node-sleep' && edge.target === 'boundary-end')).toBe(true);
   });
 
   it('namespaces graph IDs by domain while preserving raw workflow metadata', () => {

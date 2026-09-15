@@ -36,7 +36,6 @@ describe('WorkflowInputData', () => {
       );
 
       fireEvent.click(screen.getByRole('button', { name: 'Add Input item' }));
-      fireEvent.click(screen.getByRole('button', { name: 'Expand object' }));
       fireEvent.change(await screen.findByRole('textbox', { name: /email/i }), {
         target: { value: 'ada@example.com' },
       });

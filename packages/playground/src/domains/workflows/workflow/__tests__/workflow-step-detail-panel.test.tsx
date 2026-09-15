@@ -15,14 +15,8 @@ afterEach(() => cleanup());
 
 const nestedStepGraph: SerializedStepFlowEntry[] = [{ type: 'step', step: { id: 'inner-step', description: '' } }];
 
-// Covers the panel mechanism itself: the action bar (rendered inside the graph nodes)
-// and the WorkflowStepDetailPanel sharing one WorkflowStepDetailProvider, plus the
-// View/Hide toggle. It mirrors how `workflow-graph.tsx` composes the two, but mounts
-// them explicitly. It does NOT reproduce #18346 ("panel never mounted in the graph"):
-// that wiring lives inside ReactFlow nodes, which only render once measured, and jsdom
-// has no layout — so the original bug is only reachable via a real browser (Playwright).
 const renderNodeWithPanel = (data: WorkflowStepNodeData) => {
-  const props = {
+  const props: NodeProps<WorkflowStepNode> = {
     id: data.label,
     type: WORKFLOW_STEP_NODE_TYPE,
     data,
@@ -32,7 +26,7 @@ const renderNodeWithPanel = (data: WorkflowStepNodeData) => {
     zIndex: 0,
     positionAbsoluteX: 0,
     positionAbsoluteY: 0,
-  } as NodeProps<WorkflowStepNode>;
+  };
 
   return render(
     <ReactFlowProvider>
@@ -61,21 +55,18 @@ describe('WorkflowStepDetailPanel', () => {
           component: 'WORKFLOW',
           serializedStepFlow: nestedStepGraph,
         },
-      } as SerializedStepFlowEntry),
+      }),
     });
 
-    // Panel is hidden until the action is triggered.
     expect(screen.queryByText('extract-customer Workflow')).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: 'Step actions' }));
-    fireEvent.click(await screen.findByText('View nested graph'));
+    fireEvent.click(await screen.findByText('Open in inspector'));
 
-    // The detail panel now renders the nested workflow.
     expect(await screen.findByText('extract-customer Workflow')).not.toBeNull();
 
-    // The action label flips to "Hide nested graph" and toggles the panel back off.
     fireEvent.click(screen.getByRole('button', { name: 'Step actions' }));
-    fireEvent.click(await screen.findByText('Hide nested graph'));
+    fireEvent.click(await screen.findByText('Close inspector'));
 
     await waitFor(() => expect(screen.queryByText('extract-customer Workflow')).toBeNull());
   });

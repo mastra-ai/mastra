@@ -1,0 +1,52 @@
+.workflow-condition-gate {
+  width: 274px;
+  padding: 2px;
+  background: var(--surface2);
+  border: 1px solid var(--border1);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  box-shadow: var(--shadow-panel);
+}
+.workflow-condition-gate:has(:focus-visible) {
+  outline: 2px solid var(--accent3);
+  outline-offset: 3px;
+}
+.workflow-condition-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 46px;
+  padding: 0 10px;
+  font-size: var(--text-ui-xs);
+  color: var(--neutral3);
+}
+.workflow-condition-details {
+  max-height: 220px;
+  overflow: auto;
+  padding: 14px;
+  background: var(--surface3);
+  border-radius: calc(var(--radius-xl) - 3px);
+  color: var(--neutral5);
+  font-size: var(--text-ui-xs);
+}
+.workflow-condition-details pre {
+  white-space: pre-wrap;
+  overflow-wrap: normal;
+  line-height: 1.7;
+}
+.workflow-condition-empty {
+  padding: 12px;
+  background: var(--surface3);
+  border-radius: calc(var(--radius-xl) - 3px);
+  font-size: var(--text-ui-xs);
+  color: var(--neutral3);
+}
+.workflow-condition-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding: 6px 10px;
+}
+
+.workflow-condition-actions:empty {
+  display: none;
+}

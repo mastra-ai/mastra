@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { WorkflowStepCardView } from '../cards/workflow-step-card-view';
+import { WorkflowStepCardView } from '../cards/step/workflow-step-card-view';
 import type { WorkflowCardDisplayStatus } from '../types';
 
 const meta = {
@@ -9,7 +9,7 @@ const meta = {
   argTypes: {
     displayStatus: {
       control: 'select',
-      options: [undefined, 'running', 'success', 'failed', 'waiting', 'suspended', 'skipped', 'tripwire'],
+      options: [undefined, 'running', 'success', 'failed', 'waiting', 'paused', 'suspended', 'skipped', 'tripwire'],
     },
     actionBar: { control: false },
     date: { control: false },
@@ -24,8 +24,8 @@ export const StepTypes: Story = {
   render: () => (
     <div className="flex flex-wrap gap-6">
       <WorkflowStepCardView label="Regular step" description="Run a custom function." />
-      <WorkflowStepCardView label="Agent step" description="Ask the support agent to draft a reply." />
-      <WorkflowStepCardView label="Tool step" description="Look up an order." />
+      <WorkflowStepCardView label="Agent step" nodeKind="agent" description="Ask the support agent to draft a reply." />
+      <WorkflowStepCardView label="Tool step" nodeKind="tool" description="Look up an order." />
       <WorkflowStepCardView label="Mapping" mapConfig="return { customerId: input.id }" />
       <WorkflowStepCardView label="Parallel branch" isParallel />
       <WorkflowStepCardView label="For each customer" isForEach />
@@ -43,6 +43,7 @@ const statuses: WorkflowCardDisplayStatus[] = [
   'success',
   'failed',
   'waiting',
+  'paused',
   'suspended',
   'skipped',
   'tripwire',
@@ -52,12 +53,7 @@ export const ExecutionStates: Story = {
   render: () => (
     <div className="flex flex-wrap gap-6">
       {statuses.map(status => (
-        <WorkflowStepCardView
-          key={status ?? 'idle'}
-          label={status ?? 'idle'}
-          displayStatus={status}
-          hasStep={status !== undefined}
-        />
+        <WorkflowStepCardView key={status ?? 'idle'} label={status ?? 'idle'} displayStatus={status} />
       ))}
     </div>
   ),

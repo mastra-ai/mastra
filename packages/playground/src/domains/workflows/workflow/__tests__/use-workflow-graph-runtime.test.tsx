@@ -6,7 +6,9 @@ import { describe, expect, it } from 'vitest';
 
 import { WorkflowRunContext } from '../../context/workflow-run-context';
 import { useWorkflowGraphRuntime } from '../use-workflow-graph-runtime';
+import { constructNodesAndEdges } from '../utils';
 import { WORKFLOW_BOUNDARY_NODE_TYPE } from '../workflow-step-node-utils';
+import { branchWorkflow } from './fixtures/workflow-debug-step-controls';
 
 const workflowRunContextValue = {
   result: {
@@ -126,6 +128,28 @@ describe('useWorkflowGraphRuntime', () => {
 
     expect(shortEdge?.data?.edgeStatus).toBe('idle');
     expect(longEdge?.data?.edgeStatus).toBe('success');
+  });
+
+  it('keeps both taken branches active when multiple conditions match', () => {
+    const context: typeof workflowRunContextValue = {
+      ...workflowRunContextValue,
+      workflow: branchWorkflow,
+      result: {
+        status: 'paused',
+        steps: {
+          'short-text': { status: 'success', startedAt: 100, endedAt: 200 },
+          'long-text': { status: 'success', startedAt: 100, endedAt: 200 },
+        },
+      },
+    };
+    const conditionalWrapper = ({ children }: PropsWithChildren) => (
+      <WorkflowRunContext.Provider value={context}>{children}</WorkflowRunContext.Provider>
+    );
+    const { edges } = constructNodesAndEdges(branchWorkflow);
+    const { result } = renderHook(() => useWorkflowGraphRuntime({ edges }), { wrapper: conditionalWrapper });
+    const branchEdges = result.current.styledEdges.filter(edge => edge.data?.conditionNode);
+    expect(branchEdges.length).toBeGreaterThan(0);
+    expect(branchEdges.every(edge => edge.data?.edgeStatus === 'success')).toBe(true);
   });
 
   it('keeps the workflow-input boundary edge idle before the first step starts', () => {

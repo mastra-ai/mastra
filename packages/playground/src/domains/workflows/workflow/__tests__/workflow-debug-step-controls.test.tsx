@@ -127,13 +127,12 @@ describe('WorkflowDebugStepControls', () => {
     expect(button.disabled).toBe(true);
   });
 
-  it('skips the un-taken branch arm and targets the post-branch map step', () => {
-    // start + short-text succeeded; long-text was never taken (absent from steps).
-    // The next runnable step must be the post-branch map join, not the dead arm.
+  it('skips an explicitly skipped branch arm and targets the post-branch map step', () => {
     const branchResult = {
       status: 'paused',
       input: { text: 'A' },
       steps: {
+        'long-text': { status: 'skipped', startedAt: Date.now(), endedAt: Date.now() },
         start: {
           status: 'success',
           payload: { text: 'A' },

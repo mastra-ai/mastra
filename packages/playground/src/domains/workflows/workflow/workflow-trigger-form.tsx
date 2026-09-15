@@ -1,9 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from '@mastra/playground-ui/components/Dialog';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
-import { FormInput, Loader2, Play } from 'lucide-react';
+import { Loader2, Play } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { useState } from 'react';
 import type { ZodSchema } from 'zod';
 
 import { WorkflowInputData } from './workflow-input-data';
@@ -22,6 +20,7 @@ export interface WorkflowTriggerFormProps {
   heading?: string;
   headingSlot?: ReactNode;
   collapsible?: boolean;
+  submitButtonLabel?: string;
 }
 
 export function WorkflowTriggerForm({
@@ -38,50 +37,10 @@ export function WorkflowTriggerForm({
   heading,
   headingSlot,
   collapsible,
+  submitButtonLabel = 'Run',
 }: WorkflowTriggerFormProps) {
-  const [isInputDialogOpen, setIsInputDialogOpen] = useState(false);
-
-  if (zodSchema && isViewingRun) {
-    return (
-      <div>
-        {headingSlot && <div className="pb-3">{headingSlot}</div>}
-        <div className="flex flex-col gap-1 px-5">
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="w-full justify-start"
-            onClick={() => setIsInputDialogOpen(true)}
-            icon={<FormInput className="text-neutral3" />}
-          >
-            <span className="truncate">Run input</span>
-          </Button>
-        </div>
-        <Dialog open={isInputDialogOpen} onOpenChange={setIsInputDialogOpen}>
-          <DialogContent className="max-w-3xl">
-            <DialogHeader>
-              <DialogTitle>Workflow input</DialogTitle>
-            </DialogHeader>
-            <DialogBody className="max-h-[90vh]">
-              <WorkflowInputData
-                schema={zodSchema}
-                defaultValues={defaultValues}
-                isSubmitLoading={isStreaming}
-                submitButtonLabel="Run"
-                onSubmit={onExecute}
-                withoutSubmit
-                isReadOnly
-                disableSubmit={disableSubmit}
-                isProcessorWorkflow={isProcessorWorkflow}
-                collapsible={false}
-                hideHeading
-                hideInputTypeLabel
-              />
-            </DialogBody>
-          </DialogContent>
-        </Dialog>
-      </div>
-    );
+  if (isViewingRun) {
+    return headingSlot && <div className="pb-3">{headingSlot}</div>;
   }
 
   if (zodSchema) {
@@ -90,7 +49,8 @@ export function WorkflowTriggerForm({
         schema={zodSchema}
         defaultValues={defaultValues}
         isSubmitLoading={isStreaming}
-        submitButtonLabel="Run"
+        submitButtonLabel={submitButtonLabel}
+        inputTypeLabel="Next run input"
         submitButtonVariant="primary"
         submitButtonIcon={
           <Icon>
@@ -111,10 +71,6 @@ export function WorkflowTriggerForm({
     );
   }
 
-  if (isViewingRun) {
-    return null;
-  }
-
   return (
     <div className="flex items-center justify-between gap-1">
       {leftActions ?? <div />}
@@ -130,7 +86,7 @@ export function WorkflowTriggerForm({
               <Play />
             </Icon>
           )}
-          Run
+          {submitButtonLabel}
         </Button>
       </div>
     </div>

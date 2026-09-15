@@ -4,7 +4,7 @@ import { Label } from '@mastra/playground-ui/components/Label';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Loader2 } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { useEffect, useRef, useCallback, useMemo } from 'react';
+import { useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react';
 import type { UseFormReturn } from 'react-hook-form';
 import { z } from 'zod';
 import { AutoForm } from './auto-form';
@@ -17,6 +17,7 @@ interface DynamicFormProps {
   onSubmit?: (values: any) => void | Promise<void>;
   onValuesChange?: (values: any) => void;
   defaultValues?: any;
+  preserveEmptyValues?: boolean;
   isSubmitLoading?: boolean;
   submitButtonLabel?: string;
   submitButtonClassName?: string;
@@ -35,11 +36,18 @@ function isZodObjectLike(schema: any): boolean {
   return getShape(schema) !== undefined;
 }
 
+const ROOT_FIELD_KEY = '\u200B';
+
+function getFormInput(values: Record<string, unknown>, isWrapped: boolean) {
+  return isWrapped ? values[ROOT_FIELD_KEY] : values;
+}
+
 export function DynamicForm({
   schema,
   onSubmit,
   onValuesChange,
   defaultValues,
+  preserveEmptyValues,
   isSubmitLoading,
   submitButtonLabel,
   submitButtonClassName,
@@ -57,7 +65,9 @@ export function DynamicForm({
   const formRef = useRef<UseFormReturn<any> | null>(null);
   const isNotZodObject = !isZodObjectLike(schema);
   const onValuesChangeRef = useRef(onValuesChange);
-  onValuesChangeRef.current = onValuesChange;
+  useLayoutEffect(() => {
+    onValuesChangeRef.current = onValuesChange;
+  }, [onValuesChange]);
 
   useEffect(() => {
     return () => {
@@ -73,12 +83,7 @@ export function DynamicForm({
       if (!onValuesChangeRef.current) return;
 
       subscriptionRef.current = form.watch(values => {
-        const normalizedValues = isNotZodObject
-          ? values && Object.prototype.hasOwnProperty.call(values, '\u200B')
-            ? values['\u200B']
-            : {}
-          : values;
-        onValuesChangeRef.current?.(normalizedValues);
+        onValuesChangeRef.current?.(getFormInput(values, isNotZodObject));
       });
     },
     [isNotZodObject],
@@ -96,8 +101,9 @@ export function DynamicForm({
     (form: UseFormReturn<any>) => {
       formRef.current = form;
       subscribeToValues(form);
+      onValuesChangeRef.current?.(getFormInput(form.getValues(), isNotZodObject));
     },
-    [subscribeToValues],
+    [subscribeToValues, isNotZodObject],
   );
 
   const schemaProvider = useMemo(() => {
@@ -112,22 +118,24 @@ export function DynamicForm({
       if (isNotZodObject) {
         const rootSchema = s.description ? s : s.describe('Input');
 
-        // using a non-printable character to avoid conflicts with the form data
         return z.object({
-          '\u200B': rootSchema,
+          [ROOT_FIELD_KEY]: rootSchema,
         });
       }
       return s;
     };
 
-    return new CustomZodProvider(normalizeSchema(schema) as any);
-  }, [schema, isNotZodObject]);
+    return new CustomZodProvider(normalizeSchema(schema), { preserveEmptyValues });
+  }, [schema, isNotZodObject, preserveEmptyValues]);
 
   const uiComponents = useMemo(
     () => ({
       SubmitButton: ({ children: buttonChildren }: { children: React.ReactNode }) =>
         onSubmit ? (
-          <div className={cn('flex items-center justify-between gap-1', submitButtonFullWidth && 'block')}>
+          <div
+            data-slot="form-submit-row"
+            className={cn('flex items-center justify-between gap-1', submitButtonFullWidth && 'block')}
+          >
             {!submitButtonFullWidth && (leftActions ?? <div />)}
             <div className={cn('flex items-center gap-1', submitButtonFullWidth && 'w-full')}>
               {submitActions}
@@ -180,18 +188,13 @@ export function DynamicForm({
 
   const normalizedDefaultValues = useMemo(
     () =>
-      isNotZodObject ? (defaultValues === undefined ? undefined : { '\u200B': defaultValues }) : (defaultValues as any),
+      isNotZodObject ? (defaultValues === undefined ? undefined : { [ROOT_FIELD_KEY]: defaultValues }) : defaultValues,
     [isNotZodObject, defaultValues],
   );
 
   const handleSubmit = useCallback(
     async (values: any) => {
-      const normalizedValues = isNotZodObject
-        ? values && Object.prototype.hasOwnProperty.call(values, '\u200B')
-          ? values['\u200B']
-          : {}
-        : values;
-      await onSubmit?.(normalizedValues);
+      await onSubmit?.(getFormInput(values, isNotZodObject));
     },
     [onSubmit, isNotZodObject],
   );

@@ -1,10 +1,7 @@
 import type { SerializedStepFlowEntry, WorkflowStepStatus } from '@mastra/core/workflows';
 import type { ReactNode } from 'react';
 
-export type WorkflowCardDisplayStatus =
-  | Extract<WorkflowStepStatus, 'running' | 'success' | 'failed' | 'suspended' | 'waiting' | 'skipped'>
-  | 'tripwire'
-  | undefined;
+export type WorkflowCardDisplayStatus = WorkflowStepStatus | 'tripwire' | undefined;
 
 export type WorkflowConditionType = 'if' | 'else' | 'when' | 'until' | 'while' | 'dountil' | 'dowhile';
 
@@ -31,13 +28,16 @@ export type WorkflowCardCondition =
       conj?: never;
     };
 
-export type WorkflowConditionCodeCondition = Extract<WorkflowCardCondition, { fnString: string }>;
-
 export interface WorkflowStepCardViewProps {
   label: string;
+  nodeKind?: 'step' | 'agent' | 'tool' | 'map' | 'delay' | 'wait-until';
+  onSelect?: () => void;
+  body?: ReactNode;
+  bodyLayout?: 'content' | 'graph';
+  initiallyOpen?: boolean;
+  onOpenBody?: () => void;
   description?: string;
   displayStatus?: WorkflowCardDisplayStatus;
-  hasStep?: boolean;
   isNestedWorkflowStep?: boolean;
   stepKey?: string;
   isSelected?: boolean;
@@ -65,11 +65,5 @@ export interface WorkflowConditionCardViewProps {
   type?: WorkflowCardCondition['type'];
   conditions: WorkflowCardCondition[];
   previousDisplayStatus?: WorkflowCardDisplayStatus;
-  isOpen: boolean;
-  onOpenChange: (open: boolean) => void;
-  openDialog: boolean;
-  onOpenDialogChange: (open: boolean) => void;
-  dialogCondition?: WorkflowConditionCodeCondition;
-  onConditionClick: (condition: WorkflowConditionCodeCondition) => void;
   actionBar?: ReactNode;
 }

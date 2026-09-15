@@ -82,42 +82,23 @@ describe('collectGraphStepFlags', () => {
 });
 
 describe('isBranchArmBypassed', () => {
-  // A conditional with two arms (short, long) that both feed a single join.
-  const conditionalStepIds = new Set(['short', 'long']);
-  const stepsFlow = { join: ['short', 'long'] };
-  const stepSuccessors = { short: ['join'], long: ['join'] };
+  const graph = { conditionalStepIds: new Set(['short', 'long']), stepSuccessors: { short: ['join'], long: ['join'] } };
 
-  it('bypasses an un-taken conditional arm once a sibling on the join has succeeded', () => {
-    const isStepSuccess = (id: string) => id === 'short';
-
-    expect(isBranchArmBypassed({ stepId: 'long', conditionalStepIds, stepSuccessors, stepsFlow, isStepSuccess })).toBe(
-      true,
-    );
+  it('does not bypass an unknown branch merely because its sibling succeeded', () => {
+    expect(isBranchArmBypassed({ ...graph, stepId: 'long', steps: { short: { status: 'success' } } })).toBe(false);
   });
 
-  it('does not bypass an arm while no sibling has succeeded yet', () => {
-    const isStepSuccess = () => false;
-
-    expect(isBranchArmBypassed({ stepId: 'long', conditionalStepIds, stepSuccessors, stepsFlow, isStepSuccess })).toBe(
-      false,
-    );
+  it('bypasses an explicitly skipped conditional arm', () => {
+    expect(isBranchArmBypassed({ ...graph, stepId: 'long', steps: { long: { status: 'skipped' } } })).toBe(true);
   });
 
-  it('never bypasses a parallel arm even when a sibling on the shared join has succeeded', () => {
-    // Parallel arms are absent from conditionalStepIds, so every arm must still run.
-    const parallelConditionalStepIds = new Set<string>();
-    const parallelStepsFlow = { join: ['p1', 'p2'] };
-    const parallelSuccessors = { p1: ['join'], p2: ['join'] };
-    const isStepSuccess = (id: string) => id === 'p1';
+  it('does not revisit an absent arm after its downstream join has completed', () => {
+    expect(isBranchArmBypassed({ ...graph, stepId: 'long', steps: { join: { status: 'success' } } })).toBe(true);
+  });
 
+  it('does not treat a skipped parallel arm as a resolved input', () => {
     expect(
-      isBranchArmBypassed({
-        stepId: 'p2',
-        conditionalStepIds: parallelConditionalStepIds,
-        stepSuccessors: parallelSuccessors,
-        stepsFlow: parallelStepsFlow,
-        isStepSuccess,
-      }),
+      isBranchArmBypassed({ ...graph, stepId: 'parallel-arm', steps: { 'parallel-arm': { status: 'skipped' } } }),
     ).toBe(false);
   });
 });

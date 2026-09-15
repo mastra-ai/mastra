@@ -2,7 +2,7 @@ import {
   AlertCircleIcon,
   BracesIcon,
   Clock3Icon,
-  LayersIcon,
+  PanelRightIcon,
   PlayIcon,
   RotateCcwIcon,
   ShieldAlertIcon,
@@ -11,7 +11,7 @@ import {
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
 
 const actions = {
-  nested: { icon: LayersIcon, label: 'View nested graph', activeLabel: 'Hide nested graph' },
+  nested: { icon: PanelRightIcon, label: 'Open in inspector', activeLabel: 'Close inspector' },
   map: { icon: BracesIcon, label: 'Map config', activeLabel: 'Hide map config' },
   timeTravel: { icon: Clock3Icon, label: 'Time travel' },
   runStep: { icon: PlayIcon, label: 'Run step' },

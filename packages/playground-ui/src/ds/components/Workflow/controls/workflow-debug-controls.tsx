@@ -1,10 +1,14 @@
-import { Loader2, PlayIcon, StepForwardIcon } from 'lucide-react';
+import { Loader2, Pause, PlayIcon, StepForwardIcon } from 'lucide-react';
+import type { ReactNode } from 'react';
+import { Badge } from '@/ds/components/Badge';
 import { Button } from '@/ds/components/Button';
-import { Icon } from '@/ds/icons/Icon';
 
 export interface WorkflowDebugControlsProps {
   isStreaming?: boolean;
   canRunNextStep: boolean;
+  nextStepLabel?: string;
+  disabled?: boolean;
+  children?: ReactNode;
   onRunNextStep: () => void;
   onContinueRun: () => void;
 }
@@ -12,40 +16,53 @@ export interface WorkflowDebugControlsProps {
 export function WorkflowDebugControls({
   isStreaming,
   canRunNextStep,
+  nextStepLabel,
+  disabled,
+  children,
   onRunNextStep,
   onContinueRun,
 }: WorkflowDebugControlsProps) {
-  return (
-    <div className="flex flex-col gap-2" data-testid="workflow-debug-step-controls">
-      <Button
-        type="button"
-        variant="primary"
-        className="w-full"
-        onClick={onRunNextStep}
-        disabled={!canRunNextStep || isStreaming}
-      >
-        {isStreaming ? (
-          <Icon>
-            <Loader2 className="animate-spin" />
-          </Icon>
-        ) : (
-          <Icon>
-            <PlayIcon />
-          </Icon>
-        )}
-        Run next step
-      </Button>
+  const nextStepFallback = canRunNextStep ? 'Ready to advance' : 'Next step unavailable';
+  const actionsDisabled = !canRunNextStep || isStreaming || disabled;
 
-      <Button
-        type="button"
-        variant="ghost"
-        className="w-full"
-        onClick={onContinueRun}
-        disabled={isStreaming}
-        icon={<StepForwardIcon />}
-      >
-        Continue full run
-      </Button>
+  return (
+    <div className="flex min-w-0 flex-col gap-3" data-testid="workflow-debug-step-controls">
+      <div className="rounded-xl border border-border1/50 bg-surface2 p-3">
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <span className="text-ui-xs text-neutral3">Next step</span>
+          <Badge size="sm" icon={<Pause />} emphasis="muted">
+            Step by step
+          </Badge>
+        </div>
+        <div className="text-ui-md font-medium break-words text-neutral5" aria-live="polite">
+          {nextStepLabel || nextStepFallback}
+        </div>
+      </div>
+      <div className="flex items-center gap-2">
+        <Button
+          type="button"
+          variant="primary"
+          className="min-w-0 flex-1"
+          aria-label="Run next step"
+          onClick={onRunNextStep}
+          disabled={actionsDisabled}
+          icon={isStreaming ? <Loader2 className="motion-safe:animate-spin" /> : <StepForwardIcon />}
+        >
+          {isStreaming ? 'Running step…' : 'Run next step'}
+        </Button>
+
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-md"
+          tooltip="Continue full run"
+          onClick={onContinueRun}
+          disabled={actionsDisabled}
+        >
+          <PlayIcon />
+        </Button>
+        {children}
+      </div>
     </div>
   );
 }
