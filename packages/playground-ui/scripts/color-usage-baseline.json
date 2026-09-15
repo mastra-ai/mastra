@@ -15038,6 +15038,41 @@
         "count": 1
       },
       {
+        "file": "packages/playground-ui/src/ds/tokens/color-foundations.stories.tsx",
+        "token": "background-1",
+        "form": "css-variable",
+        "kind": "foundation",
+        "count": 1
+      },
+      {
+        "file": "packages/playground-ui/src/ds/tokens/color-foundations.stories.tsx",
+        "token": "background-2",
+        "form": "css-variable",
+        "kind": "foundation",
+        "count": 1
+      },
+      {
+        "file": "packages/playground-ui/src/ds/tokens/color-foundations.stories.tsx",
+        "token": "border1",
+        "form": "tailwind",
+        "kind": "legacy",
+        "count": 6
+      },
+      {
+        "file": "packages/playground-ui/src/ds/tokens/color-foundations.stories.tsx",
+        "token": "neutral3",
+        "form": "tailwind",
+        "kind": "legacy",
+        "count": 9
+      },
+      {
+        "file": "packages/playground-ui/src/ds/tokens/color-foundations.stories.tsx",
+        "token": "neutral4",
+        "form": "tailwind",
+        "kind": "legacy",
+        "count": 1
+      },
+      {
         "file": "packages/playground-ui/src/ds/tokens/tokens.stories.tsx",
         "token": "background",
         "form": "tailwind",
@@ -15202,6 +15237,34 @@
         "file": "packages/playground-ui/src/ds/tokens/tokens.stories.tsx",
         "token": "surface3",
         "form": "css-variable",
+        "kind": "legacy",
+        "count": 1
+      },
+      {
+        "file": "packages/playground-ui/src/ds/tokens/typography-foundations.stories.tsx",
+        "token": "border1",
+        "form": "tailwind",
+        "kind": "legacy",
+        "count": 6
+      },
+      {
+        "file": "packages/playground-ui/src/ds/tokens/typography-foundations.stories.tsx",
+        "token": "neutral3",
+        "form": "tailwind",
+        "kind": "legacy",
+        "count": 8
+      },
+      {
+        "file": "packages/playground-ui/src/ds/tokens/typography-foundations.stories.tsx",
+        "token": "neutral4",
+        "form": "tailwind",
+        "kind": "legacy",
+        "count": 1
+      },
+      {
+        "file": "packages/playground-ui/src/ds/tokens/typography-foundations.stories.tsx",
+        "token": "surface2",
+        "form": "tailwind",
         "kind": "legacy",
         "count": 1
       },
@@ -15653,7 +15716,7 @@
   "summary": {
     "production": 3609,
     "tests": 141,
-    "stories": 801,
+    "stories": 835,
     "tokens": 61
   }
 }

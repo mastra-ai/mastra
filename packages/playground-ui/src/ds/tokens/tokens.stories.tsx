@@ -123,14 +123,6 @@ const SwatchGrid = ({ entries }: { entries: [string, string][] }) => (
   </div>
 );
 
-const variableEntry = (token: string): [string, string] => [token, `var(--${token})`];
-
-const foundationEntries: [string, string][] = [
-  ...Array.from({ length: 3 }, (_, index) => variableEntry(`background-${index + 1}`)),
-  ...Array.from({ length: 10 }, (_, index) => variableEntry(`gray-${index + 1}`)),
-  ...Array.from({ length: 10 }, (_, index) => variableEntry(`gray-alpha-${index + 1}`)),
-];
-
 const semanticEntries: [string, string][] = [
   ['background', Colors.background],
   ['sidebar', Colors.sidebar],
@@ -144,17 +136,6 @@ const semanticEntries: [string, string][] = [
 ];
 
 const semanticBorderEntries: [string, string][] = [['border', BorderColors.border]];
-
-export const NeutralFoundations: Story = {
-  render: () => (
-    <div>
-      <SectionTitle note="Foundation values are theme inputs. Components must not reference these names directly.">
-        Neutral foundations
-      </SectionTitle>
-      <SwatchGrid entries={foundationEntries} />
-    </div>
-  ),
-};
 
 const SurfacePreview = ({ semantic }: { semantic: boolean }) => {
   const tokens = semantic
