@@ -41,15 +41,17 @@ import type { ToolAction } from '../tools';
 import type { IdGeneratorContext } from '../types';
 import { deepMerge } from '../utils';
 import type { MastraEmbeddingModel, MastraEmbeddingOptions, MastraVector } from '../vector';
+
+import { assertNoReservedThreadBranchMetadata, createThreadBranchError } from './branching';
+import { persistGeneratedMessages } from './internal';
 import {
   advanceMemoryTokenBoundary,
   getMemoryTokenBoundary,
   normalizeMessageHistoryConfig,
 } from './message-history-config';
+import { assertNoReservedThreadBranchMetadata, createThreadBranchError } from './branching';
 import { checkThreadFGA } from './thread-fga';
 import type { CheckThreadFGAOptions } from './thread-fga';
-
-import { assertNoReservedThreadBranchMetadata, createThreadBranchError } from './branching';
 import type {
   SharedMemoryConfig,
   StorageThreadType,
@@ -610,6 +612,20 @@ https://mastra.ai/en/docs/memory/overview`,
      */
     embeddedMessages?: Map<string, string>;
   }): Promise<{ messages: MastraDBMessage[]; usage?: { tokens: number } }>;
+
+  /** @internal Framework-owned generated-message persistence hook. */
+  protected __mastraPersistGeneratedMessages(
+    args: {
+      messages: MastraDBMessage[];
+      memoryConfig?: MemoryConfig | undefined;
+      observabilityContext?: Partial<ObservabilityContext>;
+      /** @internal See `MastraMemory.saveMessages`. */
+      embeddedMessages?: Map<string, string>;
+    },
+    _generatedMessageIds: readonly string[],
+  ): Promise<{ messages: MastraDBMessage[]; usage?: { tokens: number } }> {
+    return this.saveMessages(args);
+  }
 
   /**
    * Retrieves messages for a specific thread with optional semantic recall
@@ -1220,6 +1236,7 @@ https://mastra.ai/en/docs/memory/overview`,
                     maxTokens: lastMessages.maxTokens,
                     atMaxRemoveTokens: lastMessages.atMaxRemoveTokens!,
                   },
+            persistMessages: (input, generatedMessageIds) => persistGeneratedMessages(this, input, generatedMessageIds),
           }),
         );
       }

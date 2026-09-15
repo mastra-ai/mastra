@@ -6,6 +6,7 @@ import type { LeaseProvider, PubSub } from '../events/pubsub';
 import { reachesOtherProcesses } from '../events/reach';
 import type { EventCallback } from '../events/types';
 import { AGENTIC_LOOP_WORKFLOW_ID } from '../loop/loop-builder';
+import { persistGeneratedMessages } from '../memory/internal';
 import { parseMemoryRequestContext } from '../memory/types';
 import {
   MASTRA_AUTH_TOKEN_KEY,
@@ -4801,9 +4802,8 @@ export class AgentThreadStreamRuntime {
     if (signal.transient) return;
     const memory = await agent.getMemory({ requestContext });
     if (!memory) return;
-    await memory.saveMessages({
-      messages: [signal.toDBMessage({ resourceId, threadId })],
-    });
+    const message = signal.toDBMessage({ resourceId, threadId });
+    await persistGeneratedMessages(memory, { messages: [message] }, [message.id]);
   }
 
   #broadcastPersistedSignal(

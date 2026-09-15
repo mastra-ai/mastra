@@ -1,5 +1,6 @@
 import type { IMastraLogger } from '../../logger';
 import type { MemoryConfigInternal } from '../../memory';
+import { persistGeneratedMessages } from '../../memory/internal';
 import type { MastraMemory } from '../../memory/memory';
 import { isRunFenceConflictError } from '../../storage/run-fencing';
 import { filterMessagesForPersistence } from '../filter-messages-for-persistence';
@@ -160,14 +161,21 @@ export class SaveQueueManager {
     const newMessages = filterMessagesForPersistence(drained.messages);
     if (newMessages.length > 0 && this.memory) {
       const savedAt = Date.now();
+      // Only IDs that survived filtering may be reported as generated.
+      const compactedIds = new Set(newMessages.map(message => message.id));
+      const generatedMessageIds = drained.generatedMessageIds.filter(id => compactedIds.has(id));
       let saved: Awaited<ReturnType<MastraMemory['saveMessages']>>;
       try {
-        saved = await this.memory.saveMessages({
-          messages: newMessages,
-          memoryConfig,
-          // The SemanticRecall output processor may have embedded these already in this run.
-          embeddedMessages: messageList.getEmbeddedMessages(),
-        });
+        saved = await persistGeneratedMessages(
+          this.memory,
+          {
+            messages: newMessages,
+            memoryConfig,
+            // The SemanticRecall output processor may have embedded these already in this run.
+            embeddedMessages: messageList.getEmbeddedMessages(),
+          },
+          generatedMessageIds,
+        );
       } catch (error) {
         // Nothing else writes drained messages, so a later save must retry them.
         drained.restore();

@@ -197,6 +197,7 @@ export class ObservationStep {
       // response messages synchronously. If sealing/rotation happens after that drain,
       // the sealed messages get re-added as memory (unsealed) and all new content keeps
       // appending to the same assistant message — producing the "mega-message" bug.
+      const generatedResponseIds = new Set(messageList.get.response.db().map(message => message.id));
       const candidates = om.getUnobservedMessages(unobservedMessages, statusSnapshot.record, {
         excludeBuffered: true,
       });
@@ -220,7 +221,10 @@ export class ObservationStep {
 
         this.turn.abortSignal?.throwIfAborted();
         if (this.turn.memory) {
-          await this.turn.memory.persistMessages(safeCandidates);
+          await this.turn.memory.persistMessages(
+            safeCandidates,
+            safeCandidates.filter(message => generatedResponseIds.has(message.id)).map(message => message.id),
+          );
         }
 
         // Once a buffered chunk has been sealed and persisted, it should no longer
@@ -306,7 +310,13 @@ export class ObservationStep {
         if (messagesToSave.length > 0) {
           messageList.add(messagesToSave, 'memory');
           try {
-            await om.persistMessages(messagesToSave, threadId, resourceId);
+            await om.persistMessages(
+              messagesToSave,
+              threadId,
+              resourceId,
+              undefined,
+              newOutput.map(message => message.id),
+            );
           } catch (error) {
             restoreDrainedMessages(messageList, newInput, 'input');
             restoreDrainedMessages(messageList, newOutput, 'response');
@@ -326,9 +336,16 @@ export class ObservationStep {
         // starve them. Persisting alone is enough for post-observation cleanup to operate
         // on stored state; persistMessages is an upsert, so the step > 0 drain re-saving
         // these messages later is harmless.
-        const pending = [...messageList.get.input.db(), ...messageList.get.response.db()];
+        const pendingOutput = messageList.get.response.db();
+        const pending = [...messageList.get.input.db(), ...pendingOutput];
         if (pending.length > 0) {
-          await om.persistMessages(pending, threadId, resourceId);
+          await om.persistMessages(
+            pending,
+            threadId,
+            resourceId,
+            undefined,
+            pendingOutput.map(message => message.id),
+          );
         }
         // The in-flight prompt was just observed, but the model still needs it to answer —
         // protect it (and everything else pending) from cleanup by identity rather than

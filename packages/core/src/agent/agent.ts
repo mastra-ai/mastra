@@ -77,6 +77,8 @@ import { mastraCtorHolder } from '../mastra/mastra-ctor-holder';
 import { createRunScope } from '../mastra/run-scope';
 import { DEFAULT_RESTART_CONCURRENCY, runWithConcurrency } from '../mastra/run-with-concurrency';
 import type { VersionOverrides } from '../mastra/types';
+import { mergeVersionOverrides } from '../mastra/types';
+import { persistGeneratedMessages } from '../memory/internal';
 import type { MastraMemory } from '../memory/memory';
 import { normalizeMessageHistoryConfig } from '../memory/message-history-config';
 import { getMemoryRunState } from '../memory/run-state';
@@ -6761,9 +6763,9 @@ export class Agent<
                       ...(startResult.threadMetadata ? { metadata: startResult.threadMetadata } : {}),
                     });
 
-                    await memory.saveMessages({
-                      messages: [userMessage, assistantMessage],
-                    });
+                    await persistGeneratedMessages(memory, { messages: [userMessage, assistantMessage] }, [
+                      assistantMessage.id,
+                    ]);
                   } catch (memoryError) {
                     this.logger.error('Failed to save rejection to sub-agent memory', {
                       agent: this.name,
@@ -7022,9 +7024,11 @@ export class Agent<
                       });
                     }
 
-                    await memory.saveMessages({
-                      messages: fullSubAgentMessages,
-                    });
+                    await persistGeneratedMessages(
+                      memory,
+                      { messages: fullSubAgentMessages },
+                      agentResponseMessages.map(message => message.id),
+                    );
                   } catch (memoryError) {
                     this.logger.error('Failed to save messages to sub-agent memory', {
                       agent: this.name,
@@ -7215,9 +7219,13 @@ export class Agent<
 
                     // Apply tool transcript transforms, as the worker's own saves do, so this
                     // same-id re-save can't overwrite redacted rows with raw tool payloads.
-                    await streamMemory.saveMessages({
-                      messages: streamResult.messageList.transformMessagesForTranscript(fullSubAgentMessages),
-                    });
+                    await persistGeneratedMessages(
+                      streamMemory,
+                      {
+                        messages: streamResult.messageList.transformMessagesForTranscript(fullSubAgentMessages),
+                      },
+                      agentResponseMessages.map(message => message.id),
+                    );
                   } catch (memoryError) {
                     this.logger.error('Failed to save messages to sub-agent memory', {
                       agent: this.name,
@@ -7375,9 +7383,9 @@ export class Agent<
                         actor: invocationActor,
                       });
                       try {
-                        await supervisorMemory.saveMessages({
-                          messages: [feedbackMessage],
-                        });
+                        await persistGeneratedMessages(supervisorMemory, { messages: [feedbackMessage] }, [
+                          feedbackMessage.id,
+                        ]);
                       } catch (memoryError) {
                         this.logger.error('Failed to save feedback to supervisor memory', {
                           agent: this.name,
@@ -7481,9 +7489,9 @@ export class Agent<
                         actor: invocationActor,
                       });
                       try {
-                        await supervisorMemory.saveMessages({
-                          messages: [feedbackMessage],
-                        });
+                        await persistGeneratedMessages(supervisorMemory, { messages: [feedbackMessage] }, [
+                          feedbackMessage.id,
+                        ]);
                       } catch (memoryError) {
                         this.logger.error('Failed to save feedback to supervisor memory', {
                           agent: this.name,

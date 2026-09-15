@@ -1762,20 +1762,29 @@ export class MessageList {
 
   /**
    * Same as {@link drainUnsavedMessages}, plus `restore`, which marks the drained
-   * messages unsaved again so a later save writes them after this one failed.
+   * messages unsaved again so a later save writes them after this one failed, and
+   * `generatedMessageIds`, the IDs of the response messages this run generated.
    */
-  public drainUnsavedMessagesForSave(): { messages: MastraDBMessage[]; restore: () => void } {
+  public drainUnsavedMessagesForSave(): {
+    messages: MastraDBMessage[];
+    generatedMessageIds: string[];
+    restore: () => void;
+  } {
     const userMessages = [...this.newUserMessages];
     const responseMessages = [...this.newResponseMessages];
     const resaveIds = [...this.#messagesToResave];
     const messages = this.messages.filter(
       m => this.newUserMessages.has(m) || this.newResponseMessages.has(m) || this.#messagesToResave.has(m.id),
     );
+    const generatedMessageIds = messages
+      .filter(message => this.newResponseMessages.has(message))
+      .map(message => message.id);
     this.newUserMessages.clear();
     this.newResponseMessages.clear();
     this.#messagesToResave.clear();
     return {
       messages: messages.map(message => this.transformMessageForTranscript(message)),
+      generatedMessageIds,
       restore: () => {
         for (const message of userMessages) {
           if (this.messages.includes(message)) this.newUserMessages.add(message);

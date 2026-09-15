@@ -22,6 +22,11 @@ export interface MessageHistoryOptions {
   lastMessages?: number | false;
   tokenLimit?: { maxTokens: number; atMaxRemoveTokens: number };
   tokenCounter?: { countMessage(message: MastraDBMessage): number | Promise<number> };
+  /** @internal Framework persistence hook used to preserve Memory-level mutation guarantees. */
+  persistMessages?: (
+    input: { messages: MastraDBMessage[] },
+    generatedMessageIds: readonly string[],
+  ) => Promise<{ messages: MastraDBMessage[] }>;
 }
 
 /**
@@ -66,12 +71,14 @@ export class MessageHistory implements Processor {
   private lastMessages?: number | false;
   private tokenLimit?: MessageHistoryOptions['tokenLimit'];
   private tokenCounter?: MessageHistoryOptions['tokenCounter'];
+  private persistMessagesHook?: MessageHistoryOptions['persistMessages'];
 
   constructor(options: MessageHistoryOptions) {
     this.storage = options.storage;
     this.lastMessages = options.lastMessages;
     this.tokenLimit = options.tokenLimit;
     this.tokenCounter = options.tokenCounter;
+    this.persistMessagesHook = options.persistMessages;
   }
 
   /**
@@ -330,7 +337,12 @@ export class MessageHistory implements Processor {
     const span = this.memorySpan(observabilityContext);
     span?.update({ attributes: { messageCount: messagesToSave.length } });
 
-    await this.persistMessages({ messages: messagesToSave, threadId, resourceId });
+    await this.persistMessages({
+      messages: messagesToSave,
+      generatedMessageIds: newOutput.map(message => message.id),
+      threadId,
+      resourceId,
+    });
 
     return messageList;
   }
@@ -342,8 +354,13 @@ export class MessageHistory implements Processor {
    * This method can be called externally by other processors (e.g., ObservationalMemory)
    * that need to save messages incrementally.
    */
-  async persistMessages(args: { messages: MastraDBMessage[]; threadId: string; resourceId?: string }): Promise<void> {
-    const { messages, threadId, resourceId } = args;
+  async persistMessages(args: {
+    messages: MastraDBMessage[];
+    generatedMessageIds?: readonly string[];
+    threadId: string;
+    resourceId?: string;
+  }): Promise<void> {
+    const { messages, generatedMessageIds = [], threadId, resourceId } = args;
 
     if (messages.length === 0) {
       return;
@@ -375,7 +392,15 @@ export class MessageHistory implements Processor {
       });
     }
 
-    // Persist messages after thread is guaranteed to exist
+    // Persist messages after thread is guaranteed to exist.
+    if (this.persistMessagesHook) {
+      const persistedIds = new Set(filtered.map(message => message.id));
+      await this.persistMessagesHook(
+        { messages: filtered },
+        generatedMessageIds.filter(messageId => persistedIds.has(messageId)),
+      );
+      return;
+    }
     await this.storage.saveMessages({ messages: filtered });
     noteThreadMessagesSaved({ threadId, resourceId, savedAt });
   }
