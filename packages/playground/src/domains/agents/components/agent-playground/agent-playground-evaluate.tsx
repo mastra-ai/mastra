@@ -995,7 +995,7 @@ export function AgentPlaygroundEvaluate({ agentId }: AgentPlaygroundEvaluateProp
 
         {/* Search bar below tabs */}
         {activeTab !== 'review' && (
-          <div className="border-border1 border-b px-4 py-2">
+          <div className="px-4 py-2">
             {activeTab === 'experiments' && (
               <InputGroup variant="outline">
                 <InputGroupAddon align="inline-start">
