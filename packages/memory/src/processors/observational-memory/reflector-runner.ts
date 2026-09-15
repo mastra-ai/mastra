@@ -39,7 +39,7 @@ import {
   createObservationFailedMarker,
   createObservationStartMarker,
 } from './markers';
-import { getObservableMessages } from './message-utils';
+import { getObservableMessages, withDurableObservationCursor } from './message-utils';
 import type { ModelByInputTokens } from './model-by-input-tokens';
 import { didProviderChange } from './model-context';
 import { alignLineCutToObservationGroups } from './observation-groups';
@@ -1269,7 +1269,7 @@ export class ReflectorRunner {
           return { kind: 'not-applied', headId: head.id };
         }
         const result = await this.storage.swapBufferedReflectionToActive({
-          currentRecord: freshRecord,
+          currentRecord: withDurableObservationCursor(freshRecord),
           tokenCount: combinedTokenCount,
           newRecordId,
         });
@@ -1674,7 +1674,7 @@ export class ReflectorRunner {
         () => {
           abortSignal?.throwIfAborted();
           return this.storage.createReflectionGeneration({
-            currentRecord: record,
+            currentRecord: withDurableObservationCursor(record),
             reflection: reflectResult.observations,
             tokenCount: reflectionTokenCount,
             newRecordId,

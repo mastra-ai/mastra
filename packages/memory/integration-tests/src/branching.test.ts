@@ -44,6 +44,56 @@ getBranchingTests('LibSQL', async () => {
   };
 });
 
+describe('shared-history branch Observational Memory integration', () => {
+  it('preserves equal-timestamp cursor IDs through LibSQL reflection persistence and restart', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'memory-branch-om-integration-'));
+    const dbPath = join(directory, 'test.db');
+    const storage = new LibSQLStore({ id: randomUUID(), url: `file:${dbPath}` });
+    const memory = new Memory({
+      storage,
+      options: { observationalMemory: { enabled: true, scope: 'thread' }, generateTitle: false },
+    });
+
+    try {
+      await memory.createThread({ threadId: 'root', resourceId });
+      await memory.saveMessages({ messages: [message('observed', 'root', 1), message('unobserved', 'root', 1)] });
+      const store = (await storage.getStore('memory'))!;
+      const record = await store.initializeObservationalMemory({
+        threadId: 'root',
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+      const cursorTime = new Date(baseTime.getTime() + 1);
+      await store.createReflectionGeneration({
+        currentRecord: {
+          ...record,
+          lastObservedAt: cursorTime,
+          metadata: {
+            __mastra_observation_cursor: {
+              lastObservedAt: cursorTime.toISOString(),
+              messageIds: ['observed'],
+            },
+          },
+        },
+        reflection: 'reflected observations',
+        tokenCount: 1,
+      });
+
+      const restarted = new Memory({
+        storage,
+        options: { observationalMemory: { enabled: true, scope: 'thread' }, generateTitle: false },
+      });
+      const engine = (await restarted.omEngine)!;
+      const loaded = await engine.loadUnobservedMessages({ threadId: 'root', resourceId });
+      expect(loaded.map(item => item.id)).toEqual(['unobserved']);
+    } finally {
+      await memory.settled();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+});
+
 describe('shared-history branch semantic recall integration', () => {
   it('returns only reachable model-facing context through real Memory, LibSQL storage, and vector search', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'memory-branch-integration-'));

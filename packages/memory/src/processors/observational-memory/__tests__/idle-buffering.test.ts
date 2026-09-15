@@ -369,6 +369,7 @@ describe('turn.end() idle buffering', () => {
       threadId,
       resourceId,
       new Set(),
+      ['unsaved-2'],
     );
     expect(mockOM.buffer).toHaveBeenCalledTimes(1);
   });

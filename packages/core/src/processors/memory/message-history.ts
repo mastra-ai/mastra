@@ -3,6 +3,7 @@ import type { MastraDBMessage, MessageList } from '../../agent';
 import { filterMessagesForPersistence } from '../../agent/filter-messages-for-persistence';
 import { noteThreadMessagesSaved } from '../../agent/thread-saves';
 import { loadMessageHistory, parseMemoryRequestContext } from '../../memory';
+import type { StorageThreadType } from '../../memory';
 import { getMemoryTokenBoundary, isAfterMemoryTokenBoundary } from '../../memory/message-history-config';
 import { SpanType } from '../../observability';
 import type { ObservabilityContext, MemoryOperationAttributes } from '../../observability';
@@ -24,9 +25,11 @@ export interface MessageHistoryOptions {
   tokenCounter?: { countMessage(message: MastraDBMessage): number | Promise<number> };
   /** @internal Framework persistence hook used to preserve Memory-level mutation guarantees. */
   persistMessages?: (
-    input: { messages: MastraDBMessage[] },
+    input: { messages: MastraDBMessage[]; thread?: StorageThreadType },
     generatedMessageIds: readonly string[],
   ) => Promise<{ messages: MastraDBMessage[] }>;
+  /** @internal Whether the persistence hook atomically creates a supplied missing thread. */
+  persistMessagesCreatesThread?: boolean;
 }
 
 /**
@@ -72,6 +75,7 @@ export class MessageHistory implements Processor {
   private tokenLimit?: MessageHistoryOptions['tokenLimit'];
   private tokenCounter?: MessageHistoryOptions['tokenCounter'];
   private persistMessagesHook?: MessageHistoryOptions['persistMessages'];
+  private persistMessagesCreatesThread: boolean;
 
   constructor(options: MessageHistoryOptions) {
     this.storage = options.storage;
@@ -79,6 +83,7 @@ export class MessageHistory implements Processor {
     this.tokenLimit = options.tokenLimit;
     this.tokenCounter = options.tokenCounter;
     this.persistMessagesHook = options.persistMessages;
+    this.persistMessagesCreatesThread = options.persistMessagesCreatesThread ?? false;
   }
 
   /**
@@ -378,33 +383,27 @@ export class MessageHistory implements Processor {
     // Nothing to write when it already exists: re-writing the row we just read
     // would clobber a title generated concurrently with this save.
     const thread = await this.storage.getThreadById({ threadId });
-    if (!thread) {
-      // Auto-create thread if it doesn't exist
-      await this.storage.saveThread({
-        thread: {
+    const threadToCreate = thread
+      ? undefined
+      : {
           id: threadId,
           resourceId: resourceId || threadId,
           title: '',
           metadata: {},
           createdAt: new Date(),
           updatedAt: new Date(),
-        },
-      });
+        };
+
+    const persistedIds = new Set(filtered.map(message => message.id));
+    const persistedGeneratedIds = generatedMessageIds.filter(messageId => persistedIds.has(messageId));
+    if (this.persistMessagesHook && (persistedGeneratedIds.length > 0 || this.persistMessagesCreatesThread)) {
+      await this.persistMessagesHook({ messages: filtered, thread: threadToCreate }, persistedGeneratedIds);
+      return;
     }
 
-    // Persist messages after thread is guaranteed to exist.
+    if (threadToCreate) await this.storage.saveThread({ thread: threadToCreate });
     if (this.persistMessagesHook) {
-      const ordered = filtered.toSorted((left, right) => {
-        const threadOrder = (left.threadId ?? '').localeCompare(right.threadId ?? '');
-        if (threadOrder !== 0) return threadOrder;
-        const timestampOrder = new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime();
-        return timestampOrder || left.id.localeCompare(right.id);
-      });
-      const persistedIds = new Set(ordered.map(message => message.id));
-      await this.persistMessagesHook(
-        { messages: ordered },
-        generatedMessageIds.filter(messageId => persistedIds.has(messageId)),
-      );
+      await this.persistMessagesHook({ messages: filtered }, persistedGeneratedIds);
       return;
     }
     await this.storage.saveMessages({ messages: filtered });
