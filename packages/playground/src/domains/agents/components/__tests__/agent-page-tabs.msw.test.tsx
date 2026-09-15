@@ -97,6 +97,49 @@ afterEach(() => {
 });
 
 describe('AgentLayout tool tabs', () => {
+  describe('when the editor is unavailable', () => {
+    it('omits the Editor tab', async () => {
+      server.use(...commonHandlers());
+      renderLayout();
+      await screen.findByRole('tab', { name: 'Chat' });
+      expect(screen.queryByRole('tab', { name: 'Editor' })).toBeNull();
+      const editor = screen.getByRole('button', { name: 'Editor' });
+      expect(editor.textContent).toBe('');
+      expect(editor.getAttribute('aria-disabled')).toBe('true');
+    });
+  });
+
+  describe('when the editor is configured', () => {
+    it('renders the selected Editor after Chat, Traces, and Evals', async () => {
+      server.use(...commonHandlers(enabledPackages));
+      renderLayout('/agents/agent-1/editor');
+      const editor = await screen.findByRole('tab', { name: 'Editor' });
+      expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Chat', 'Traces', 'Evals', 'Editor']);
+      expect(editor.getAttribute('aria-selected')).toBe('true');
+      expect(screen.queryByRole('button', { name: 'Editor' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Evals' })).toBeNull();
+    });
+  });
+
+  describe('when observability is unavailable', () => {
+    it('offers Evals as an icon-only setup hint instead of a tab', async () => {
+      server.use(...commonHandlers());
+      renderLayout();
+      const evals = await screen.findByRole('button', { name: 'Evals' });
+      expect(evals.textContent).toBe('');
+      expect(evals.getAttribute('aria-disabled')).toBe('true');
+      expect(screen.queryByRole('tab', { name: 'Evals' })).toBeNull();
+    });
+  });
+
+  describe('when the agent tabs render', () => {
+    it('does not expose Review as a top-level tab', async () => {
+      server.use(...commonHandlers(enabledPackages));
+      renderLayout();
+      await screen.findByRole('tab', { name: 'Chat' });
+      expect(screen.queryByRole('tab', { name: 'Review' })).toBeNull();
+    });
+  });
   it('renders the tool tabs without a Channels tab (channels moved to settings)', async () => {
     const onPlatforms = vi.fn();
     server.use(
@@ -109,7 +152,7 @@ describe('AgentLayout tool tabs', () => {
 
     renderLayout();
 
-    expect(await screen.findByText('Agent traces')).not.toBeNull();
+    expect(await screen.findByText('Traces')).not.toBeNull();
     expect(screen.getByRole('tab', { name: 'Chat' })).not.toBeNull();
     // Overview is now a side panel toggled from the header, not a tab.
     expect(screen.queryByRole('tab', { name: 'Overview' })).toBeNull();
@@ -127,28 +170,7 @@ describe('AgentLayout tool tabs', () => {
 
     const chatTab = await screen.findByRole('tab', { name: 'Chat' });
     expect(chatTab.getAttribute('aria-selected')).toBe('true');
-    expect(screen.getByRole('tab', { name: 'Agent traces' }).getAttribute('aria-selected')).toBe('false');
-  });
-
-  it('lets the tab list keep the full row width on mobile by wrapping the right-slot controls', async () => {
-    server.use(...commonHandlers(enabledPackages));
-
-    renderLayout('/agents/agent-1/evaluate');
-
-    // Below lg the right-slot buttons wrap onto their own line, right-aligned,
-    // instead of stealing width from the (scrollable) tab list.
-    const runOptionsTrigger = await screen.findByTestId('agent-top-bar-run-options-trigger');
-    const rightSlot = runOptionsTrigger.parentElement!;
-    expect(rightSlot.className).toContain('ml-auto');
-
-    const tabsRow = rightSlot.parentElement!;
-    expect(tabsRow.className).toContain('max-lg:flex-wrap');
-
-    // flex-1 (basis 0) never wraps; on mobile the tabs need their content-sized
-    // basis back (flex-auto) so the row can decide to wrap the right slot.
-    const tabsRoot = screen.getByRole('tablist').parentElement!.parentElement!;
-    expect(tabsRoot.className).toContain('min-w-0');
-    expect(tabsRoot.className).toContain('max-lg:flex-auto');
+    expect(screen.getByRole('tab', { name: 'Traces' }).getAttribute('aria-selected')).toBe('false');
   });
 
   it('keeps run options out of the Editor tab bar because the editor chat composer owns them', async () => {
@@ -156,16 +178,17 @@ describe('AgentLayout tool tabs', () => {
 
     renderLayout('/agents/agent-1/editor');
 
-    expect(await screen.findByRole('tab', { name: /editor/i })).not.toBeNull();
+    expect(await screen.findByRole('tab', { name: 'Editor' })).not.toBeNull();
     expect(screen.queryByTestId('agent-top-bar-run-options-trigger')).toBeNull();
     expect(screen.queryByTestId('agent-tracing-controls-trigger')).toBeNull();
   });
 
-  it('keeps the top-bar run options control on Evaluate because there is no composer', async () => {
+  it('keeps run options out of the top-level Evaluate tab bar', async () => {
     server.use(...commonHandlers(enabledPackages));
 
     renderLayout('/agents/agent-1/evaluate');
 
-    expect(await screen.findByTestId('agent-top-bar-run-options-trigger')).not.toBeNull();
+    await screen.findByRole('tab', { name: 'Editor' });
+    expect(screen.queryByTestId('agent-top-bar-run-options-trigger')).toBeNull();
   });
 });

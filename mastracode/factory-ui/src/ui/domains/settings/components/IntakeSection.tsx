@@ -34,9 +34,9 @@ interface SourceSectionProps {
 function GithubIntakeSection({ config, busy, update, slugs }: SourceSectionProps & { slugs: string[] }) {
   return (
     <SettingsSubsection
-      scope="personal"
+      scope="org"
       title="GitHub issues"
-      description="Open issues from the repositories you select. Teammates choose their own. Pull requests always appear in Review."
+      description="Open issues from the selected repositories feed every member's board. Pull requests always appear in Review."
     >
       <SettingsContainer>
         <SettingsRow label="Sync GitHub issues">
@@ -104,7 +104,7 @@ function LinearIntakeSection({
       ? 'Connect a Linear workspace to sync its issues.'
       : reauthRequired
         ? 'Linear authorization expired. Reconnect to keep syncing issues.'
-        : 'Active issues from the projects you select. Teammates choose their own.';
+        : "Active issues from the selected projects feed every member's board.";
 
   const action = !serverConfigured ? undefined : !connected ? (
     <Button size="sm" onClick={() => connectLinear(baseUrl)}>
@@ -126,7 +126,7 @@ function LinearIntakeSection({
   );
 
   return (
-    <SettingsSubsection scope="personal" title="Linear issues" description={description} action={action}>
+    <SettingsSubsection scope="org" title="Linear issues" description={description} action={action}>
       <SettingsContainer>
         <SettingsRow label="Sync Linear issues">
           <Switch

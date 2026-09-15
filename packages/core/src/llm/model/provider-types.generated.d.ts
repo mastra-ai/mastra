@@ -362,7 +362,6 @@ export type ProviderModelsMap = {
     'claw-medium',
     'cohere/command-r-plus-08-2024',
     'command-a-reasoning-08-2025',
-    'deepclaude',
     'deepcogito/cogito-v1-preview-qwen-32B',
     'deepseek-ai/DeepSeek-R1-0528',
     'deepseek-ai/DeepSeek-V3.1',
@@ -816,6 +815,7 @@ export type ProviderModelsMap = {
     'deepseek-v4-flash-0731',
     'deepseek-v4-pro',
     'deepseek-v4-pro-0813',
+    'deepseek-v4.1-flash',
     'e5-large-v2',
     'fal-ai/elevenlabs/tts/multilingual-v2',
     'fal-ai/fast-sdxl',
@@ -1191,6 +1191,7 @@ export type ProviderModelsMap = {
     'anthropic/claude-sonnet-4-5-20250929',
     'anthropic/claude-sonnet-4-6',
     'anthropic/claude-sonnet-5',
+    'atria/atria-dawn-preview',
     'aws-bedrock/claude-fable-5',
     'aws-bedrock/claude-fable-5-1',
     'aws-bedrock/claude-haiku-4-5',
@@ -1502,10 +1503,8 @@ export type ProviderModelsMap = {
     'together-ai/deepseek-v4-flash',
     'together-ai/deepseek-v4-pro',
     'together-ai/deepseek-v4.1-flash',
-    'together-ai/gemma-4-31b-it',
     'together-ai/glm-4.7',
     'together-ai/gpt-oss-120b',
-    'together-ai/gpt-oss-20b',
     'together-ai/kimi-k3',
     'together-ai/minimax-m3',
     'vertex-anthropic/claude-haiku-4-5',
@@ -3904,6 +3903,7 @@ export type ProviderModelsMap = {
   ];
   readonly llmgateway: readonly [
     'Qwen3.8-27B',
+    'atria-dawn-preview',
     'auto',
     'claude-fable-5',
     'claude-fable-5-1',
@@ -4337,6 +4337,7 @@ export type ProviderModelsMap = {
   ];
   readonly empiriolabs: readonly [
     'deepseek-v3-2',
+    'deepseek-v4-1-flash',
     'deepseek-v4-flash',
     'deepseek-v4-flash-0731',
     'deepseek-v4-pro',
@@ -4636,7 +4637,6 @@ export type ProviderModelsMap = {
     'google/gemini-2.5-flash-lite',
     'google/gemini-2.5-pro',
     'google/gemini-2.5-pro-preview',
-    'google/gemini-2.5-pro-preview-05-06',
     'google/gemini-3-flash-preview',
     'google/gemini-3-pro-image',
     'google/gemini-3-pro-image-preview',
@@ -4756,7 +4756,6 @@ export type ProviderModelsMap = {
     'openai/gpt-3.5-turbo-instruct',
     'openai/gpt-4',
     'openai/gpt-4-turbo',
-    'openai/gpt-4-turbo-preview',
     'openai/gpt-4.1',
     'openai/gpt-4.1-mini',
     'openai/gpt-4.1-nano',
@@ -5492,7 +5491,6 @@ export type ProviderModelsMap = {
     'google/gemini-2.5-flash-lite',
     'google/gemini-2.5-pro',
     'google/gemini-2.5-pro-preview',
-    'google/gemini-2.5-pro-preview-05-06',
     'google/gemini-3-flash-preview',
     'google/gemini-3-pro-image',
     'google/gemini-3-pro-image-preview',
@@ -5609,7 +5607,6 @@ export type ProviderModelsMap = {
     'openai/gpt-3.5-turbo-instruct',
     'openai/gpt-4',
     'openai/gpt-4-turbo',
-    'openai/gpt-4-turbo-preview',
     'openai/gpt-4.1',
     'openai/gpt-4.1-mini',
     'openai/gpt-4.1-nano',
@@ -6979,6 +6976,7 @@ export type ProviderModelsMap = {
     'qwen3.8-max',
   ];
   readonly 'tencent-token-plan': readonly ['hy3', 'hy4-preview'];
+  readonly vispark: readonly ['vispark/vision-large', 'vispark/vision-medium', 'vispark/vision-small'];
   readonly neosmith: readonly [
     'neosmith.intelligent-basic',
     'neosmith.intelligent-maestro',

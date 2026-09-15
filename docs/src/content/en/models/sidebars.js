@@ -1001,6 +1001,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/vispark',
+          label: 'Vispark',
+        },
+        {
+          type: 'doc',
           id: 'providers/vivgrid',
           label: 'Vivgrid',
         },
