@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import type { MastraClient } from '@mastra/client-js';
 import { MastraReactProvider } from '@mastra/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { focusManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
@@ -112,6 +112,67 @@ describe('useTraceQuery', () => {
       });
       expect(result.current.fetchStatus).toBe('idle');
       expect(onRequest).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('when the time window changes', () => {
+    it('keeps previous rows until the new response arrives', async () => {
+      let release = () => {};
+      const gate = new Promise<void>(resolve => {
+        release = resolve;
+      });
+      let requests = 0;
+      server.use(
+        http.post(`${BASE_URL}/api/observability/traces/query`, async () => {
+          if (++requests > 1) await gate;
+          return HttpResponse.json(requests === 1 ? firstTraceQueryPage : lastTraceQueryPage);
+        }),
+      );
+      const { result, rerender } = renderHook(({ query }) => useTraceQuery({ query }), {
+        initialProps: { query },
+        wrapper: makeWrapper(),
+      });
+      await waitFor(() => expect(result.current.data).toEqual(firstTraceQueryPage.traces));
+      rerender({ query: { timeRange: { ...query.timeRange, to: '2026-09-03T00:00:00Z' } } });
+      expect(result.current.data).toEqual(firstTraceQueryPage.traces);
+      expect(result.current.isLoading).toBe(false);
+      await act(async () => release());
+      await waitFor(() => expect(result.current.data).toEqual(lastTraceQueryPage.traces));
+    });
+  });
+
+  describe('when polling is enabled', () => {
+    it('issues another POST after the configured interval', async () => {
+      const onRequest = vi.fn();
+      server.use(
+        http.post(`${BASE_URL}/api/observability/traces/query`, () => {
+          onRequest();
+          return HttpResponse.json(lastTraceQueryPage);
+        }),
+      );
+      focusManager.setFocused(true);
+      const { result, rerender } = renderHook(({ interval }) => useTraceQuery({ query, refetchInterval: interval }), {
+        initialProps: { interval: 0 },
+        wrapper: makeWrapper(),
+      });
+      await waitFor(() => expect(result.current.data).toEqual(lastTraceQueryPage.traces));
+      vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+      try {
+        rerender({ interval: 10_000 });
+        const initialRequests = onRequest.mock.calls.length;
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(9_999);
+        });
+        expect(onRequest).toHaveBeenCalledTimes(initialRequests);
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(1);
+        });
+        await waitFor(() => expect(onRequest.mock.calls.length).toBeGreaterThan(initialRequests));
+      } finally {
+        cleanup();
+        vi.useRealTimers();
+        focusManager.setFocused(undefined);
+      }
     });
   });
 

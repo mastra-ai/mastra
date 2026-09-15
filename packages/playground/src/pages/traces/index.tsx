@@ -21,17 +21,18 @@ import { useTraceListNavigation } from '@mastra/playground-ui/domains/traces/hoo
 import { useTraceOrBranchSpans } from '@mastra/playground-ui/domains/traces/hooks/use-trace-or-branch-spans';
 import { useTraceUrlState } from '@mastra/playground-ui/domains/traces/hooks/use-trace-url-state';
 import { useTraceUsage } from '@mastra/playground-ui/domains/traces/hooks/use-trace-usage';
-import { useTraces } from '@mastra/playground-ui/domains/traces/hooks/use-traces';
 import {
   buildTraceListFilters,
   createTracePropertyFilterFields,
   neutralizeFilterTokens,
 } from '@mastra/playground-ui/domains/traces/trace-filters';
 import { hasTraceUsageColumn, isTraceUsageColumn } from '@mastra/playground-ui/domains/traces/trace-list-columns';
+import { buildTraceQueryRequest } from '@mastra/playground-ui/domains/traces/trace-query-filters';
 import type { SpanTab } from '@mastra/playground-ui/domains/traces/types';
 import { isBranchesNotSupportedError } from '@mastra/playground-ui/utils/errors';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
+import { useTracesListSource } from './hooks/use-traces-list-source';
 import { useObservabilityStorageCapabilities } from '@/domains/configuration/hooks/use-observability-storage-capabilities';
 import { AddTraceMocksToItemDialog } from '@/domains/observability/components/add-trace-mocks-to-item-dialog';
 import { TraceAsItemDialog } from '@/domains/observability/components/trace-as-item-dialog';
@@ -192,7 +193,8 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   );
 
   const {
-    data: tracesData,
+    rows: traces,
+    source,
     isLoading: isTracesLoading,
     isFetchingNextPage,
     hasNextPage,
@@ -201,9 +203,20 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
     autoRefetch: autoRefetchTraces,
     setAutoRefetch: setAutoRefetchTraces,
     recentlyAddedKeys: recentlyAddedTraceKeys,
-  } = useTraces({ filters: traceFilters, listMode: url.listMode });
-
-  const traces = useMemo(() => tracesData?.spans ?? [], [tracesData?.spans]);
+  } = useTracesListSource({
+    filters: traceFilters,
+    listMode: url.listMode,
+    rolling: !url.selectedDateTo,
+    query: now =>
+      buildTraceQueryRequest({
+        rootEntityType: traceFilters?.entityType ?? undefined,
+        status: url.selectedStatus,
+        dateFrom: url.selectedDateFrom,
+        dateTo: url.selectedDateTo,
+        tokens: url.filterTokens,
+        now,
+      }),
+  });
   const traceColumns = useTraceColumnPreferences();
   const observabilityCapabilities = useObservabilityStorageCapabilities();
   const usageDisabledReason =
@@ -293,7 +306,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
     !!url.selectedEntityOption ||
     !!url.selectedStatus ||
     url.filterTokens.length > 0 ||
-    url.datePreset !== 'last-24h' ||
+    url.datePreset !== 'last-7d' ||
     !!url.selectedDateTo;
 
   const toolbarControls = (
@@ -427,7 +440,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
             // the previous mode's row count, and `isLoading` doesn't flash when switching with
             // cached data (so the existing scroll-reset effect in TracesListView wouldn't fire).
             // A fresh mount gives the virtualizer a clean count from the current `traces` array.
-            key={url.listMode}
+            key={`${url.listMode}:${source}`}
             traces={traces}
             isLoading={isTracesLoading}
             isFetchingNextPage={isFetchingNextPage}

@@ -4,6 +4,7 @@ import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import TracesPage from '..';
+import { traceQueryPage } from './fixtures/trace-query';
 import {
   branchList,
   emptyEntityNames,
@@ -52,6 +53,7 @@ const setTracePageHandlers = (systemPackages: GetSystemPackagesResponse) => {
     http.get(`${TEST_BASE_URL}/api/system/packages`, () => HttpResponse.json(systemPackages)),
     http.get(`${TEST_BASE_URL}/api/scores/scorers`, () => HttpResponse.json(emptyScorers)),
     http.get(`${TEST_BASE_URL}/api/datasets`, () => HttpResponse.json(buildListDatasetsResponse([]))),
+    http.post(`${TEST_BASE_URL}/api/observability/traces/query`, () => HttpResponse.json(traceQueryPage)),
     http.get(`${TEST_BASE_URL}/api/observability/traces`, () => HttpResponse.json(traceList)),
     // The list fetches the lightweight projection first; serve the same rows there.
     http.get(`${TEST_BASE_URL}/api/observability/traces/light`, () => HttpResponse.json(traceList)),
@@ -210,6 +212,19 @@ describe('Traces page usage columns', () => {
       const setMultiTurnThreadHandlers = () => {
         setThreadedTraceHandlers();
         server.use(
+          http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async ({ request }) => {
+            const body = await request.json();
+            if (JSON.stringify(body).includes('threadId')) {
+              return HttpResponse.json({
+                traces: [
+                  traceQueryPage.traces[0],
+                  { ...traceQueryPage.traces[0], traceId: 'trace-b', rootSpanId: 'span-b' },
+                ],
+                page: { next: null },
+              });
+            }
+            return HttpResponse.json(traceQueryPage);
+          }),
           // The page list keeps its single row; only thread-scoped requests see both turns.
           http.get(`${TEST_BASE_URL}/api/observability/traces/light`, ({ request }) =>
             HttpResponse.json(new URL(request.url).searchParams.get('threadId') ? threadTraceList : traceList),
