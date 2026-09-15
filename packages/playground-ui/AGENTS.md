@@ -10,6 +10,7 @@
 
 <rules>
 
+- Load `mastra-frontend` before every UI change and follow its decision flows.
 - Test data flows with Vitest, MSW, typed `@mastra/client-js` fixtures, and the real React Query stack. Mock only the network. Use Playwright only when MSW cannot model the journey.
 - Consumer `className` MUST NOT override a DS component's look. Do not add `asChild`; use Base UI's `render` prop.
 
@@ -30,6 +31,6 @@
 
 <verification>
 
-Review the matching `Foundations/Updated` story before changing either system. Verify light and dark themes at mobile, tablet, and desktop widths. Run narrow tests before E2E and include handoff screenshots.
+Review the matching `Foundations/Updated` story before changing either system. Verify light and dark at mobile, tablet, and desktop widths. Run narrow tests before E2E; include handoff screenshots.
 
 </verification>
