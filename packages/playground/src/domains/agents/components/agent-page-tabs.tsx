@@ -116,37 +116,41 @@ export function AgentPageTabs({
         <TabList variant="pill-ghost">
           <AgentTab value="chat" icon={<MessageSquare />} label="Chat" />
           <AgentTab
-            value="evaluate"
-            icon={<FlaskConical />}
-            label="Evaluate"
-            disabled={!showObservability}
-            disabledReason={observabilityDisabledReason}
-          />
-          <AgentTab
             value="traces"
             icon={<TraceIcon />}
-            label="Agent traces"
+            label="Traces"
             disabled={!showObservability}
             disabledReason={observabilityDisabledReason}
           />
+          {showObservability && <AgentTab value="evaluate" icon={<FlaskConical />} label="Evals" />}
+          {showPlayground && <AgentTab value="versions" icon={<GitBranch />} label="Editor" />}
         </TabList>
       </Tabs>
       <div className="ml-auto flex items-center gap-2">
         {rightSlot}
-        <AgentConfigToggle />
-        {showPlayground && (
+        {!showObservability && (
           <Button
-            variant={activeTab === 'versions' ? 'default' : 'ghost'}
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Evals"
+            aria-disabled="true"
+            tooltip={observabilityDisabledReason}
+          >
+            <FlaskConical />
+          </Button>
+        )}
+        {!showPlayground && (
+          <Button
+            variant="ghost"
             size="icon-sm"
             aria-label="Editor"
-            aria-current={activeTab === 'versions' ? 'page' : undefined}
-            data-testid="agent-editor-tab"
-            tooltip="Editor"
-            onClick={() => handleTabChange('versions')}
+            aria-disabled="true"
+            tooltip="Add @mastra/editor to enable the Editor."
           >
             <GitBranch />
           </Button>
         )}
+        <AgentConfigToggle />
       </div>
     </div>
   );
