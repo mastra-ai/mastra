@@ -79,6 +79,7 @@ import {
   serializeThreadBranchMetadata,
   toPublicThreadBranchMetadata,
 } from './branching/lineage';
+import { assertResourceHasNoReadyBranches, getThreadBranchParticipation, queryThreadMessages } from './branching/query';
 import type { ObservationalMemory, ObservationalMemoryConfig } from './processors/observational-memory';
 import { KnowledgeSemanticIndexCoordinator, Subconscious } from './processors/observational-memory/subconscious';
 import { createKnowledgeTools } from './processors/observational-memory/subconscious/knowledge-tools';
@@ -417,13 +418,12 @@ const DEFAULT_EMBEDDING_CACHE_MAX_SIZE = 1000;
  * if packaged docs are unavailable.
  */
 export class Memory extends MastraMemory {
-<<<<<<< HEAD
-  protected override createMemoryTokenCounter() {
-    return new TokenCounter();
-=======
   override get supportsThreadBranching(): boolean {
     return true;
->>>>>>> c27336a04da9 (feat(memory): define shared-history thread lineage)
+  }
+
+  protected override createMemoryTokenCounter() {
+    return new TokenCounter();
   }
 
   private _omEngine: Promise<ObservationalMemory | null> | undefined;
@@ -653,6 +653,7 @@ export class Memory extends MastraMemory {
 
   async listMessagesByResourceId(args: StorageListMessagesByResourceIdInput): Promise<StorageListMessagesOutput> {
     const memoryStore = await this.getMemoryStore();
+    await assertResourceHasNoReadyBranches(memoryStore, args.resourceId);
     return memoryStore.listMessagesByResourceId(args);
   }
 
@@ -885,8 +886,17 @@ export class Memory extends MastraMemory {
           storedBoundary.atMaxRemoveTokens === history.atMaxRemoveTokens
             ? storedBoundary
             : undefined;
+        const branchAwareMemoryStore = new Proxy(memoryStore, {
+          get(target, property, receiver) {
+            if (property === 'listMessages') {
+              return (input: StorageListMessagesInput) => queryThreadMessages(target, input);
+            }
+            const value = Reflect.get(target, property, receiver);
+            return typeof value === 'function' ? value.bind(target) : value;
+          },
+        });
         const loaded = await loadMessageHistory({
-          storage: memoryStore,
+          storage: branchAwareMemoryStore,
           threadId,
           resourceId,
           boundary,
@@ -900,7 +910,7 @@ export class Memory extends MastraMemory {
         rawMessages = loaded.messages;
 
         if (include.length) {
-          const semanticMessages = await memoryStore.listMessages({
+          const semanticMessages = await queryThreadMessages(memoryStore, {
             threadId,
             resourceId,
             perPage: 0,
@@ -924,7 +934,7 @@ export class Memory extends MastraMemory {
         // When history is disabled by config, use perPage: 0 so only semantic recall
         // include results are returned (not the full message history)
         const effectivePerPage = historyDisabledByConfig ? 0 : perPage;
-        const paginatedResult = await memoryStore.listMessages({
+        const paginatedResult = await queryThreadMessages(memoryStore, {
           threadId,
           resourceId,
           perPage: effectivePerPage,
@@ -3479,8 +3489,11 @@ Notes:
       throw createThreadBranchError('BRANCH_NOT_FOUND', 'The requested thread branch is unavailable.');
     }
     const config = this.getMergedThreadConfig(memoryConfig);
+    const participation = await getThreadBranchParticipation(memoryStore, args.sourceThreadId);
 
-    const result = await memoryStore.copyThread(args);
+    const result = participation.participant
+      ? await this.copyReachableBranchHistory(memoryStore, args, sourceThreadRaw!)
+      : await memoryStore.copyThread(args);
 
     // Fetch source thread once for working memory and OM cloning
     const sourceThread = await this.getThreadById({ threadId: args.sourceThreadId });
@@ -3543,6 +3556,89 @@ Notes:
     }
 
     return { ...result, thread: sanitizeThread(result.thread) };
+  }
+
+  private async copyReachableBranchHistory(
+    memoryStore: MemoryStorage,
+    args: StorageCloneThreadInput,
+    sourceThread: StorageThreadType,
+  ): Promise<StorageCopyThreadOutput> {
+    const destinationThreadId = args.newThreadId ?? this.generateId();
+    if (await memoryStore.getThreadById({ threadId: destinationThreadId })) {
+      throw new Error(`Thread with id ${destinationThreadId} already exists`);
+    }
+
+    const filter = args.options?.messageFilter;
+    const logicalResult = await queryThreadMessages(memoryStore, {
+      threadId: args.sourceThreadId,
+      resourceId: sourceThread.resourceId,
+      perPage: false,
+      includeTotal: false,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+      ...(filter?.startDate || filter?.endDate
+        ? {
+            filter: {
+              dateRange: {
+                ...(filter.startDate ? { start: filter.startDate } : {}),
+                ...(filter.endDate ? { end: filter.endDate } : {}),
+              },
+            },
+          }
+        : {}),
+    });
+
+    let selectedMessages = logicalResult.messages;
+    if (filter?.messageIds) {
+      const selectedIds = new Set(filter.messageIds);
+      selectedMessages = selectedMessages.filter(message => selectedIds.has(message.id));
+    }
+    if (
+      args.options?.messageLimit &&
+      args.options.messageLimit > 0 &&
+      selectedMessages.length > args.options.messageLimit
+    ) {
+      selectedMessages = selectedMessages.slice(-args.options.messageLimit);
+    }
+
+    const now = new Date();
+    const lastMessageId = selectedMessages.at(-1)?.id;
+    const thread: StorageThreadType = {
+      id: destinationThreadId,
+      resourceId: args.resourceId || sourceThread.resourceId,
+      title: args.title || (sourceThread.title ? `Clone of ${sourceThread.title}` : undefined),
+      metadata: {
+        ...args.metadata,
+        clone: {
+          sourceThreadId: args.sourceThreadId,
+          clonedAt: now,
+          ...(lastMessageId ? { lastMessageId } : {}),
+        } satisfies ThreadCloneMetadata,
+      },
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    const messageIdMap: Record<string, string> = {};
+    const copiedMessages = selectedMessages.map(message => {
+      const id = this.generateId();
+      messageIdMap[message.id] = id;
+      return {
+        ...message,
+        id,
+        threadId: destinationThreadId,
+        resourceId: thread.resourceId,
+      };
+    });
+
+    await memoryStore.saveThread({ thread });
+    try {
+      if (copiedMessages.length > 0) await memoryStore.saveMessages({ messages: copiedMessages });
+    } catch (error) {
+      await memoryStore.deleteThread({ threadId: destinationThreadId });
+      throw error;
+    }
+
+    return { thread, messageIdMap };
   }
 
   /**
