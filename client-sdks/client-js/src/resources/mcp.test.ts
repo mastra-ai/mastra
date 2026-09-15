@@ -1,4 +1,5 @@
 import type { ServerDetailInfo } from '@mastra/core/mcp';
+import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, beforeEach, it, vi } from 'vitest';
 import { MastraClient } from '../client';
 import type { McpServerListResponse } from '../types';
@@ -209,6 +210,18 @@ describe('MCP Server Registry Client Methods', () => {
           body: JSON.stringify({ data: { foo: 'bar' } }),
         }),
       );
+    });
+
+    it('serializes request context in the query string instead of the body', async () => {
+      const requestContext = new RequestContext();
+      requestContext.set('userId', 'u-42');
+      mockFetchResponse({ ok: true });
+
+      await client.getMcpServerTool(serverId, toolId).execute({ data: { foo: 'bar' }, requestContext });
+
+      const [url, init] = (global.fetch as any).mock.calls.at(-1) as [string, RequestInit];
+      expect(url).toContain(`/api/mcp/${serverId}/tools/${toolId}/execute?requestContext=`);
+      expect(JSON.parse(init.body as string)).toEqual({ data: { foo: 'bar' } });
     });
 
     it('should POST an empty JSON object when no data is provided', async () => {

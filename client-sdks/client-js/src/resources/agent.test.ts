@@ -1978,6 +1978,7 @@ describe('Agent Voice Resource', () => {
       `${clientOptions.baseUrl}/api/agents/test-agent/voice/speak`,
       expect.objectContaining({
         method: 'POST',
+        body: JSON.stringify({ text: 'test', options: { speaker: 'speaker1' } }),
         headers: expect.objectContaining(clientOptions.headers),
       }),
     );

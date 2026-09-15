@@ -44,6 +44,7 @@ describe('Express Server Adapter', () => {
   createRouteAdapterTestSuite({
     suiteName: 'Express Adapter Integration Tests',
     emptyBodyNormalization: { withoutContentType: 'undefined', withJsonContentType: 'empty-object' },
+    supportsPostQueryRequestContext: true,
 
     setupAdapter: async (context: AdapterTestContext, options?: AdapterSetupOptions) => {
       // Create Express app

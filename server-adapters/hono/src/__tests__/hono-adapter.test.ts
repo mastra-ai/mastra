@@ -50,6 +50,7 @@ async function waitFor(assertion: () => boolean, timeout = 500): Promise<void> {
 describe('Hono Server Adapter', () => {
   createRouteAdapterTestSuite({
     suiteName: 'Hono Adapter Integration Tests',
+    supportsPostQueryRequestContext: true,
 
     setupAdapter: async (context: AdapterTestContext, options?: AdapterSetupOptions) => {
       const app = new Hono();
