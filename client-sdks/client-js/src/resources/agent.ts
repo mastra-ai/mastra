@@ -18,7 +18,7 @@ import type { Tool, ToolObserve } from '@mastra/core/tools';
 import { standardSchemaToJSONSchema, toStandardSchema } from '@mastra/schema-compat/schema';
 import type { JSONSchema7 } from 'json-schema';
 import { createObservabilityCollector } from '../observability/collector';
-import type { PathParams, RouteResponse } from '../route-types.generated.js';
+import type { Body, PathParams, RouteResponse } from '../route-types.generated.js';
 import type {
   ZodSchema,
   GenerateLegacyParams,
@@ -3494,10 +3494,12 @@ export class Agent extends BaseResource {
    * @returns Promise containing the tool execution results
    */
   executeTool(
-    toolId: ToolId,
-    params: { data: any; requestContext?: RequestContext | Record<string, any> },
-  ): Promise<any> {
-    const body = {
+    toolId: PathParams<'POST /agents/:agentId/tools/:toolId/execute'>['toolId'],
+    params: Omit<Body<'POST /agents/:agentId/tools/:toolId/execute'>, 'requestContext'> & {
+      requestContext?: RequestContext | Record<string, any>;
+    },
+  ): Promise<RouteResponse<'POST /agents/:agentId/tools/:toolId/execute'>> {
+    const body: Body<'POST /agents/:agentId/tools/:toolId/execute'> = {
       data: params.data,
       requestContext: parseClientRequestContext(params.requestContext),
     };
@@ -3512,7 +3514,7 @@ export class Agent extends BaseResource {
    * @param params - Parameters for updating the model
    * @returns Promise containing the updated model
    */
-  updateModel(params: UpdateModelParams): Promise<{ message: string }> {
+  updateModel(params: UpdateModelParams): Promise<RouteResponse<'POST /agents/:agentId/model'>> {
     return this.request(`/agents/${this.agentId}/model`, {
       method: 'POST',
       body: params,
@@ -3523,7 +3525,7 @@ export class Agent extends BaseResource {
    * Resets the agent's model to the original model that was set during construction
    * @returns Promise containing a success message
    */
-  resetModel(): Promise<{ message: string }> {
+  resetModel(): Promise<RouteResponse<'POST /agents/:agentId/model/reset'>> {
     return this.request(`/agents/${this.agentId}/model/reset`, {
       method: 'POST',
       body: {},
@@ -3535,7 +3537,10 @@ export class Agent extends BaseResource {
    * @param params - Parameters for updating the model
    * @returns Promise containing the updated model
    */
-  updateModelInModelList({ modelConfigId, ...params }: UpdateModelInModelListParams): Promise<{ message: string }> {
+  updateModelInModelList({
+    modelConfigId,
+    ...params
+  }: UpdateModelInModelListParams): Promise<RouteResponse<'POST /agents/:agentId/models/:modelConfigId'>> {
     return this.request(`/agents/${this.agentId}/models/${modelConfigId}`, {
       method: 'POST',
       body: params,
@@ -3547,7 +3552,7 @@ export class Agent extends BaseResource {
    * @param params - Parameters for reordering the model list
    * @returns Promise containing the updated model list
    */
-  reorderModelList(params: ReorderModelListParams): Promise<{ message: string }> {
+  reorderModelList(params: ReorderModelListParams): Promise<RouteResponse<'POST /agents/:agentId/models/reorder'>> {
     return this.request(`/agents/${this.agentId}/models/reorder`, {
       method: 'POST',
       body: params,

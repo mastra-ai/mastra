@@ -425,24 +425,12 @@ export type StreamParams<OUTPUT = undefined> = StreamParamsBase<OUTPUT> & {
  */
 export type AdminProviderId = ModelProviderId | (string & {});
 
-export type UpdateModelParams = {
-  modelId: string;
-  provider: AdminProviderId;
-};
+export type UpdateModelParams = GeneratedRequest<Body<'POST /agents/:agentId/model'>>;
 
-export type UpdateModelInModelListParams = {
-  modelConfigId: string;
-  model?: {
-    modelId: string;
-    provider: AdminProviderId;
-  };
-  maxRetries?: number;
-  enabled?: boolean;
-};
+export type UpdateModelInModelListParams = PathParams<'POST /agents/:agentId/models/:modelConfigId'> &
+  GeneratedRequest<Body<'POST /agents/:agentId/models/:modelConfigId'>>;
 
-export type ReorderModelListParams = {
-  reorderedModelIds: string[];
-};
+export type ReorderModelListParams = GeneratedRequest<Body<'POST /agents/:agentId/models/reorder'>>;
 
 export type GetToolResponse = GeneratedResponse<'GET /tools/:toolId'>;
 
@@ -1999,48 +1987,26 @@ export type ListDatasetsParams = GeneratedRequest<QueryParams<'GET /datasets'>>;
 
 export type DatasetExperiment = GeneratedResponse<'GET /experiments'>['experiments'][number];
 
-export interface DatasetExperimentResult {
-  id: string;
-  experimentId: string;
-  itemId: string;
-  itemDatasetVersion: number | null;
-  input: unknown;
-  output: unknown | null;
-  groundTruth: unknown | null;
-  metadata?: Record<string, unknown> | null;
-  /** Structured failure info, as persisted by the experiment runner. */
-  error: { message: string; stack?: string; code?: string } | null;
-  startedAt: string | Date;
-  completedAt: string | Date;
-  retryCount: number;
-  attempt?: number;
-  traceId: string | null;
-  status: 'needs-review' | 'reviewed' | 'complete' | null;
-  tags: string[] | null;
-  comment?: string | null;
-  toolMockReport?: ToolMockReport | null;
-  /**
-   * Aggregated scorer runs. Absent on endpoints that return raw result rows
-   * (scores live in the scores store, keyed by `runId = experimentId`).
-   */
-  scores?: Array<{
-    scorerId: string;
-    scorerName: string;
-    score: number | null;
-    reason: string | null;
-    error: string | null;
-  }>;
-  createdAt: string | Date;
-}
+export type DatasetExperimentResult =
+  GeneratedResponse<'GET /datasets/:datasetId/experiments/:experimentId/results'>['results'][number] & {
+    /**
+     * Aggregated scorer runs are a client convenience: score records are fetched
+     * from the scores store rather than embedded in the route response.
+     */
+    scores?: Array<{
+      scorerId: string;
+      scorerName: string;
+      score: number | null;
+      reason: string | null;
+      error: string | null;
+    }>;
+  };
 
-export interface UpdateExperimentResultParams {
-  datasetId: string;
-  experimentId: string;
-  resultId: string;
-  status?: 'needs-review' | 'reviewed' | 'complete' | null;
-  tags?: string[];
-  comment?: string | null;
-}
+export type UpdateExperimentResultParams =
+  PathParams<'PATCH /datasets/:datasetId/experiments/:experimentId/results/:resultId'> &
+    WithoutIndexSignatures<
+      GeneratedRequest<Body<'PATCH /datasets/:datasetId/experiments/:experimentId/results/:resultId'>>
+    >;
 
 export type CreateDatasetParams = WithoutIndexSignatures<GeneratedRequest<Body<'POST /datasets'>>>;
 
