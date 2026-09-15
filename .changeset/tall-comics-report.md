@@ -2,4 +2,4 @@
 '@mastra/auth-better-auth': patch
 ---
 
-Fixed user-enumeration and cross-site request forgery advisories by updating better-auth to 1.7.4.
+Fixed Better Auth so attackers cannot tell whether an account exists or send requests as a signed-in user from another site. Updated better-auth to 1.7.4.
