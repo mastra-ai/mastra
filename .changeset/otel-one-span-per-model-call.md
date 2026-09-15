@@ -2,42 +2,17 @@
 '@mastra/otel-exporter': minor
 ---
 
-Export token usage on the model call span only, so Langfuse, Phoenix and other OpenTelemetry backends count each call once and show per-call usage.
+Export token usage on the model call span only, so OpenTelemetry backends such as Langfuse and Phoenix count each call once and show per-call usage. Fixes #23872.
 
-Previously the generation span (the whole agent loop) was exported as the `chat` call with the loop's total usage, and the model step and inference spans exported nothing. Backends could not show which call consumed the tokens, where output hit the length limit, or how the cache hit ratio changed between calls.
+- `model_inference` is exported as `chat {model}` with model, messages, `gen_ai.usage.*` and response attributes.
+- `model_generation` is now a parent span without model or usage attributes.
+- `model_step` is exported as `agent_step` with `mastra.model_step.step_index` and `is_continued`.
+- Paired with an older `@mastra/observability` that emits no inference spans, `model_generation` keeps the `chat` role as before.
 
-**Before**, a two-step tool-calling agent arrived at the backend as:
-
-```text
-invoke_agent weather-agent
-└── chat gpt-5                gen_ai.usage.input_tokens=146   ← loop total
-    ├── model_step            (no attributes)
-    │   ├── model_inference   (no attributes)
-    │   └── execute_tool weather
-    └── model_step            (no attributes)
-        └── model_inference   (no attributes)
-```
-
-**After**, only the span that made the call carries `gen_ai.request.model`, the messages and `gen_ai.usage.*`:
-
-```text
-invoke_agent weather-agent
-└── model_generation gpt-5    (no usage)
-    ├── agent_step weather-agent
-    │   ├── chat gpt-5        gen_ai.usage.input_tokens=61
-    │   └── execute_tool weather
-    └── agent_step weather-agent
-        └── chat gpt-5        gen_ai.usage.input_tokens=85
-```
-
-No configuration change is needed. The same exporter setup now emits the per-call `chat` spans:
+No configuration change is needed:
 
 ```ts
-import { OtelExporter } from '@mastra/otel-exporter';
-
-const exporter = new OtelExporter({
-  provider: { custom: { endpoint: 'http://localhost:4318/v1/traces' } },
-});
+new OtelExporter({ provider: { custom: { endpoint: 'http://localhost:4318/v1/traces' } } });
 ```
 
-Backends sum the `chat` spans to the same total as before and can now show each call. When paired with an older `@mastra/observability` that does not emit inference spans, the generation span keeps the `chat` role as before. Dashboards that read usage from the old generation span should read the `chat` spans instead. Fixes #23872.
+Dashboards that read usage from the `chat {model}` generation span should read the per-call `chat` spans instead; the trace total is unchanged.
