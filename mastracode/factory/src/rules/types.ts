@@ -355,6 +355,13 @@ export interface FactoryUpsertLinkedWorkItemDecision extends FactoryCommitDecisi
   board: FactoryRuleBoard;
   source: WorkItemSource;
   sourceKey: string;
+  /**
+   * Org-wide ownership key for the external record, when one Factory at a time
+   * may hold a live card for it (a stable Linear issue id, for instance). The
+   * store enforces it with a unique index, so a second project's materialization
+   * is refused rather than duplicated.
+   */
+  claimKey?: string;
   title: string;
   url: string | null;
   stage: FactoryRuleStage;

@@ -1,6 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { ToolCallProvider } from '@mastra/playground-ui/domains/chat/context/tool-call-context';
 import { TracesErrorContent } from '@mastra/playground-ui/domains/traces/components/traces-error-content';
 import { useTraceSpans } from '@mastra/playground-ui/domains/traces/hooks/use-trace-spans';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -8,7 +9,6 @@ import { ListTreeIcon } from 'lucide-react';
 
 import { formatTraceThreadMessages } from './format-trace-thread-messages';
 import { MessageRow } from '@/lib/ai-ui/messages/message-row';
-import { ToolCallProvider } from '@/services/tool-call-provider';
 
 export interface TraceThreadItemViewProps {
   traceId: string;

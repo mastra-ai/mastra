@@ -1,7 +1,7 @@
 {
   "name": "@mastra/playground-ui",
   "type": "module",
-  "version": "54.0.0",
+  "version": "55.1.0-alpha.0",
   "description": "Mastra Playground components",
   "sideEffects": [
     "**/*.css"
@@ -111,7 +111,31 @@
         "default": "./dist/components/*.es.js"
       }
     },
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./new/settings": {
+      "import": {
+        "types": "./dist/new/settings.d.ts",
+        "default": "./dist/new/settings.es.js"
+      }
+    },
+    "./new/sidebar": {
+      "import": {
+        "types": "./dist/new/sidebar.d.ts",
+        "default": "./dist/new/sidebar.es.js"
+      }
+    },
+    "./new/layout/app-shell": {
+      "import": {
+        "types": "./dist/new/layout/app-shell.d.ts",
+        "default": "./dist/new/layout/app-shell.es.js"
+      }
+    },
+    "./layout/tabbed-container": {
+      "import": {
+        "types": "./dist/layout/tabbed-container.d.ts",
+        "default": "./dist/layout/tabbed-container.es.js"
+      }
+    }
   },
   "scripts": {
     "build": "vite build",
@@ -151,9 +175,13 @@
     "@tanstack/react-virtual": "^3.13.22",
     "@uiw/codemirror-theme-dracula": "^4.25.11",
     "@uiw/react-codemirror": "^4.25.11",
+    "@xyflow/react": "^12.10.1",
     "cmdk": "^1.1.1",
     "date-fns": "catalog:",
+    "mdast-util-gfm": "^3.1.0",
+    "mdast-util-to-markdown": "^2.1.2",
     "prettier": "^3.9.5",
+    "prism-react-renderer": "^2.4.1",
     "react-day-picker": "^8.10.1",
     "react-markdown": "^9.1.0",
     "react-resizable-panels": "^4.7.3",
@@ -163,6 +191,7 @@
     "shiki": "^1.29.2",
     "sonner": "^2.0.7",
     "use-debounce": "^10.1.0",
+    "zod": "^3.25.0",
     "zustand": "^5.0.12"
   },
   "peerDependencies": {
@@ -194,6 +223,7 @@
     "@tanstack/react-query": "^5.90.21",
     "@testing-library/react": "^16.3.2",
     "@types/json-schema": "^7.0.15",
+    "@types/mdast": "^4.0.4",
     "@types/node": "22.20.1",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",

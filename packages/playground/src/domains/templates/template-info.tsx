@@ -20,7 +20,7 @@ export function TemplateInfo({ title, description, githubUrl, isLoading, infoDat
 
   return (
     <>
-      <div className={cn('grid mt-8 items-center')}>
+      <div className={cn('grid mt-5 items-center')}>
         <div
           className={cn(
             'text-header-lg flex items-center gap-3',
@@ -43,7 +43,7 @@ export function TemplateInfo({ title, description, githubUrl, isLoading, infoDat
       <div className="grid gap-x-24 lg:grid-cols-[1fr_1fr]">
         <div className="grid">
           <p
-            className={cn('mb-4 text-ui-md text-neutral4 mt-2 leading-7', {
+            className={cn('mb-4 text-ui-md text-neutral4 mt-2', {
               'bg-surface4 rounded-lg ': isLoading,
             })}
           >

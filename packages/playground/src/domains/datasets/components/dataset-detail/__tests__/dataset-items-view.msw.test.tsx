@@ -56,13 +56,13 @@ describe('DatasetItemsView', () => {
     expect(screen.queryByText('Review')).toBeNull();
   });
 
-  it('renders the left slot before the "Add Item" action, on the toolbar row', async () => {
+  it('renders the left slot before the "New item" action, on the toolbar row', async () => {
     renderView();
     await screen.findByText('item-a');
 
     const toolbar = screen.getByTestId('dataset-items-toolbar');
     const left = within(toolbar).getByText('left slot');
-    const addItem = within(toolbar).getByRole('button', { name: /add item/i });
+    const addItem = within(toolbar).getByRole('button', { name: /new item/i });
     expect(left.compareDocumentPosition(addItem) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 

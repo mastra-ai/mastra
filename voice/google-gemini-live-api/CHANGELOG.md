@@ -1,5 +1,34 @@
 # @mastra/voice-google-gemini-live
 
+## 0.14.10
+
+### Patch Changes
+
+- Fix missing usage events when Gemini Live sends usage metadata alongside response content, setup, or tool calls. Preserve content-derived modality and normal message routing while processing usage independently. ([#23835](https://github.com/mastra-ai/mastra/pull/23835))
+
+- Fixed realtime audio input to include the configured sample rate in its MIME type, so Gemini Live can interpret incoming PCM audio at the correct rate. ([#23834](https://github.com/mastra-ai/mastra/pull/23834))
+
+- Updated dependencies [[`ffe16f1`](https://github.com/mastra-ai/mastra/commit/ffe16f17447449b7155f1f15992e3c9e5f6511ac), [`80608ed`](https://github.com/mastra-ai/mastra/commit/80608ede1a9e5d7d8488ac511245bf327e8987e3)]:
+  - @mastra/schema-compat@1.3.10
+
+## 0.14.10-alpha.1
+
+### Patch Changes
+
+- Fix missing usage events when Gemini Live sends usage metadata alongside response content, setup, or tool calls. Preserve content-derived modality and normal message routing while processing usage independently. ([#23835](https://github.com/mastra-ai/mastra/pull/23835))
+
+- Fixed realtime audio input to include the configured sample rate in its MIME type, so Gemini Live can interpret incoming PCM audio at the correct rate. ([#23834](https://github.com/mastra-ai/mastra/pull/23834))
+
+- Updated dependencies [[`ffe16f1`](https://github.com/mastra-ai/mastra/commit/ffe16f17447449b7155f1f15992e3c9e5f6511ac)]:
+  - @mastra/schema-compat@1.3.10-alpha.1
+
+## 0.14.10-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`80608ed`](https://github.com/mastra-ai/mastra/commit/80608ede1a9e5d7d8488ac511245bf327e8987e3)]:
+  - @mastra/schema-compat@1.3.10-alpha.0
+
 ## 0.14.9
 
 ### Patch Changes

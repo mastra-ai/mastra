@@ -2,6 +2,8 @@ import { z } from 'zod/v4';
 import { createTool } from '../../tools';
 import { pMap } from '../../utils/p-map';
 import { WORKSPACE_TOOLS } from '../constants';
+import { UnsupportedGrepPatternError } from '../errors';
+import type { FilesystemGrepResult } from '../filesystem';
 import { isTextFile } from '../filesystem/fs-utils';
 import { loadGitignore } from '../gitignore';
 import type { GlobMatcher } from '../glob';
@@ -68,6 +70,13 @@ Usage:
     const { workspace, filesystem } = requireFilesystem(context);
     await emitWorkspaceMetadata(context, WORKSPACE_TOOLS.FILESYSTEM.GREP);
 
+    // Honor provider-configured text extensions when available; otherwise use
+    // the built-in set. Track files skipped solely for an unsupported extension
+    // so the summary can distinguish "no matches" from "nothing searched".
+    const isText = (filename: string): boolean =>
+      filesystem.isTextFile ? filesystem.isTextFile(filename) : isTextFile(filename);
+    let skippedExtensionCount = 0;
+
     const span = startWorkspaceSpan(context, workspace, {
       category: 'filesystem',
       operation: 'grep',
@@ -112,8 +121,13 @@ Usage:
       const targetIsIgnored = rawIgnoreFilter && searchPathNormalized && rawIgnoreFilter(searchPathNormalized + '/');
       const ignoreFilter = targetIsIgnored ? undefined : rawIgnoreFilter;
 
+      const MAX_LINE_LENGTH = 500;
+      const GLOBAL_CAP = 1000;
+      const normalizedContextLines = Math.max(0, Math.floor(contextLines));
+
       // Collect files to search
-      let filePaths: string[];
+      let filePaths: string[] = [];
+      let nativeResults: FilesystemGrepResult[] | undefined;
 
       // Never search inside .git even when explicitly targeted
       const normalizedSearch = searchPath.replace(/\/$/, '');
@@ -124,9 +138,50 @@ Usage:
         try {
           const stat = await filesystem.stat(searchPath);
           if (stat.type === 'file') {
-            // Single file — search it directly
-            filePaths = isTextFile(searchPath) ? [searchPath] : [];
-          } else {
+            // Single file — search it directly. When the user targets an explicit
+            // file whose extension isn't recognized as text, report it so the
+            // summary distinguishes "no matches" from "file was never searched".
+            if (isText(searchPath)) {
+              filePaths = [searchPath];
+            } else {
+              filePaths = [];
+              skippedExtensionCount++;
+            }
+          } else if (typeof filesystem.grep === 'function') {
+            // Directory + native grep capability — one provider call instead of
+            // walking the tree and reading every file host-side. Host-side
+            // filtering (gitignore/glob/hidden/.git) is applied to the results.
+            // Any failure (including UnsupportedGrepPatternError) falls back to
+            // the walk below.
+            try {
+              nativeResults = await filesystem.grep({
+                pattern,
+                path: searchPath,
+                caseSensitive,
+                includeHidden,
+                maxCountPerFile: maxCount,
+                maxTotalMatches: GLOBAL_CAP,
+                contextLines: normalizedContextLines,
+              });
+            } catch (error) {
+              nativeResults = undefined;
+              // The fallback walk costs one round trip per directory and file on
+              // remote filesystems, so make the downgrade visible.
+              const reason = error instanceof Error ? error.message : String(error);
+              if (error instanceof UnsupportedGrepPatternError) {
+                workspace.logger?.info(
+                  `Native grep on "${filesystem.provider}" filesystem does not support pattern "${pattern}"; falling back to host-side search`,
+                );
+              } else {
+                workspace.logger?.warn(
+                  `Native grep failed on "${filesystem.provider}" filesystem; falling back to host-side search for "${searchPath}"`,
+                  { error: reason },
+                );
+              }
+            }
+          }
+
+          if (stat.type !== 'file' && !nativeResults) {
             // Directory — walk recursively with bounded concurrent listings
             const entriesByDirectory = new Map<string, Awaited<ReturnType<typeof filesystem.readdir>>>();
             let directoryFrontier = [searchPath];
@@ -185,10 +240,15 @@ Usage:
                 }
 
                 if (entry.type === 'file') {
-                  // Skip non-text files
-                  if (!isTextFile(entry.name)) continue;
-                  // Apply glob filter (createGlobMatcher normalizes leading slashes)
+                  // Apply glob filter first (createGlobMatcher normalizes leading
+                  // slashes) so files the user didn't ask for are never considered.
                   if (globMatcher && !globMatcher(fullPath)) continue;
+                  // Skip non-text files. Directory-level skips are intentionally not
+                  // reported: the native-grep capability path cannot enumerate
+                  // zero-match unsupported files without a directory walk (which the
+                  // delegation contract forbids), so a per-directory skip count would
+                  // diverge between the native and fallback code paths.
+                  if (!isText(entry.name)) continue;
                   files.push(fullPath);
                 } else if (entry.type === 'directory' && !entry.isSymlink) {
                   files.push(...collectFiles(fullPath));
@@ -208,10 +268,122 @@ Usage:
       const filesWithMatches = new Set<string>();
       let totalMatchCount = 0;
       let truncated = false;
-      const MAX_LINE_LENGTH = 500;
-      const GLOBAL_CAP = 1000;
-      const normalizedContextLines = Math.max(0, Math.floor(contextLines));
       let emittedContextHunk = false;
+
+      /**
+       * Format one file's matches into outputLines. Shared between the native
+       * capability path and the host-side walk so output is byte-identical.
+       * `getLine` returns the text of a 0-based line index, or undefined when
+       * the line is unavailable (out of bounds, or outside provider context).
+       */
+      const emitFileMatches = (
+        filePath: string,
+        fileMatches: Array<{ lineIndex: number; columnIndex: number }>,
+        getLine: (lineIndex: number) => string | undefined,
+      ): void => {
+        if (normalizedContextLines > 0) {
+          const hunks: Array<{
+            start: number;
+            end: number;
+            matchesByLine: Map<number, number>;
+          }> = [];
+
+          for (const match of fileMatches) {
+            const start = Math.max(0, match.lineIndex - normalizedContextLines);
+            const end = match.lineIndex + normalizedContextLines;
+            const previousHunk = hunks[hunks.length - 1];
+
+            if (previousHunk && start <= previousHunk.end + 1) {
+              previousHunk.end = Math.max(previousHunk.end, end);
+              previousHunk.matchesByLine.set(match.lineIndex, match.columnIndex);
+            } else {
+              hunks.push({
+                start,
+                end,
+                matchesByLine: new Map([[match.lineIndex, match.columnIndex]]),
+              });
+            }
+          }
+
+          for (const hunk of hunks) {
+            if (emittedContextHunk) {
+              outputLines.push('--');
+            }
+            emittedContextHunk = true;
+
+            for (let i = hunk.start; i <= hunk.end; i++) {
+              const columnIndex = hunk.matchesByLine.get(i);
+              const line = getLine(i);
+              if (line === undefined) continue;
+
+              if (columnIndex !== undefined) {
+                let lineContent = line;
+                if (lineContent.length > MAX_LINE_LENGTH) {
+                  lineContent = lineContent.slice(0, MAX_LINE_LENGTH) + '...';
+                }
+                outputLines.push(`${filePath}:${i + 1}:${columnIndex + 1}: ${lineContent}`);
+              } else {
+                outputLines.push(`${filePath}:${i + 1}- ${line}`);
+              }
+            }
+          }
+        } else {
+          for (const match of fileMatches) {
+            let lineContent = getLine(match.lineIndex) ?? '';
+            if (lineContent.length > MAX_LINE_LENGTH) {
+              lineContent = lineContent.slice(0, MAX_LINE_LENGTH) + '...';
+            }
+            outputLines.push(`${filePath}:${match.lineIndex + 1}:${match.columnIndex + 1}: ${lineContent}`);
+          }
+        }
+      };
+
+      // Format native capability results with the same host-side filtering
+      // (gitignore/glob/hidden/.git/text) and limits as the walk path.
+      if (nativeResults) {
+        for (const result of nativeResults) {
+          if (truncated) break;
+
+          const rel = result.path.replace(/^\.\//, '');
+          const segments = rel.split('/');
+          if (segments.includes('.git')) continue;
+          if (!includeHidden && segments.some(segment => segment.startsWith('.'))) continue;
+          // Not counted as a skip — see the directory-walk note above on why
+          // per-directory skip reporting is omitted for parity across paths.
+          if (!isText(segments[segments.length - 1]!)) continue;
+
+          const fullPath = searchPath.endsWith('/') ? `${searchPath}${rel}` : `${searchPath}/${rel}`;
+          if (ignoreFilter) {
+            const relativePath = fullPath.replace(/^\.\//, '');
+            if (ignoreFilter(relativePath)) continue;
+          }
+          if (globMatcher && !globMatcher(fullPath)) continue;
+
+          const lineTextByIndex = new Map<number, string>();
+          const fileMatches: Array<{ lineIndex: number; columnIndex: number }> = [];
+          let fileMatchCount = 0;
+
+          for (const match of result.matches) {
+            const lineIndex = match.line - 1;
+            lineTextByIndex.set(lineIndex, match.text);
+            match.before?.forEach((text, i) => lineTextByIndex.set(lineIndex - match.before!.length + i, text));
+            match.after?.forEach((text, i) => lineTextByIndex.set(lineIndex + 1 + i, text));
+
+            filesWithMatches.add(fullPath);
+            fileMatches.push({ lineIndex, columnIndex: match.column });
+            totalMatchCount++;
+            fileMatchCount++;
+
+            if (maxCount !== undefined && fileMatchCount >= maxCount) break;
+            if (totalMatchCount >= GLOBAL_CAP) {
+              truncated = true;
+              break;
+            }
+          }
+
+          emitFileMatches(fullPath, fileMatches, i => lineTextByIndex.get(i));
+        }
+      }
 
       for (let batchStart = 0; batchStart < filePaths.length && !truncated; batchStart += GREP_FILESYSTEM_CONCURRENCY) {
         const batchPaths = filePaths.slice(batchStart, batchStart + GREP_FILESYSTEM_CONCURRENCY);
@@ -261,59 +433,7 @@ Usage:
             }
           }
 
-          if (normalizedContextLines > 0) {
-            const hunks: Array<{
-              start: number;
-              end: number;
-              matchesByLine: Map<number, number>;
-            }> = [];
-
-            for (const match of fileMatches) {
-              const start = Math.max(0, match.lineIndex - normalizedContextLines);
-              const end = Math.min(lines.length - 1, match.lineIndex + normalizedContextLines);
-              const previousHunk = hunks[hunks.length - 1];
-
-              if (previousHunk && start <= previousHunk.end + 1) {
-                previousHunk.end = Math.max(previousHunk.end, end);
-                previousHunk.matchesByLine.set(match.lineIndex, match.columnIndex);
-              } else {
-                hunks.push({
-                  start,
-                  end,
-                  matchesByLine: new Map([[match.lineIndex, match.columnIndex]]),
-                });
-              }
-            }
-
-            for (const hunk of hunks) {
-              if (emittedContextHunk) {
-                outputLines.push('--');
-              }
-              emittedContextHunk = true;
-
-              for (let i = hunk.start; i <= hunk.end; i++) {
-                const columnIndex = hunk.matchesByLine.get(i);
-
-                if (columnIndex !== undefined) {
-                  let lineContent = lines[i]!;
-                  if (lineContent.length > MAX_LINE_LENGTH) {
-                    lineContent = lineContent.slice(0, MAX_LINE_LENGTH) + '...';
-                  }
-                  outputLines.push(`${filePath}:${i + 1}:${columnIndex + 1}: ${lineContent}`);
-                } else {
-                  outputLines.push(`${filePath}:${i + 1}- ${lines[i]}`);
-                }
-              }
-            }
-          } else {
-            for (const match of fileMatches) {
-              let lineContent = lines[match.lineIndex]!;
-              if (lineContent.length > MAX_LINE_LENGTH) {
-                lineContent = lineContent.slice(0, MAX_LINE_LENGTH) + '...';
-              }
-              outputLines.push(`${filePath}:${match.lineIndex + 1}:${match.columnIndex + 1}: ${lineContent}`);
-            }
-          }
+          emitFileMatches(filePath, fileMatches, i => lines[i]);
         }
       }
 
@@ -322,6 +442,11 @@ Usage:
       summaryParts.push(`across ${filesWithMatches.size} file${filesWithMatches.size !== 1 ? 's' : ''}`);
       if (truncated) {
         summaryParts.push(`(truncated at ${GLOBAL_CAP})`);
+      }
+      if (skippedExtensionCount > 0) {
+        summaryParts.push(
+          `(${skippedExtensionCount} file${skippedExtensionCount !== 1 ? 's' : ''} skipped: unsupported extension)`,
+        );
       }
       const summary = summaryParts.join(' ');
       outputLines.unshift(summary, '---');

@@ -405,9 +405,11 @@ async function checkoutSessionBranchImpl(
   }
 
   const pullRequestSession = pullRequestNumber !== undefined;
-  if (pullRequestSession) {
-    await sh(sandbox, `git -C ${shellQuote(workdir)} config credential.helper ${shellQuote(GH_CREDENTIAL_HELPER)}`);
-  }
+  // Every session pushes its branch over plain HTTPS; git authenticates through
+  // gh's GH_TOKEN via this helper. Install it before the already-on-branch early
+  // return so non-PR (issue/Linear/manual) sessions get it too — the helper
+  // writes no credential, it just delegates to gh.
+  await sh(sandbox, `git -C ${shellQuote(workdir)} config credential.helper ${shellQuote(GH_CREDENTIAL_HELPER)}`);
 
   const current = await sh(sandbox, `git -C ${shellQuote(workdir)} branch --show-current`);
   if (current.exitCode === 0 && current.stdout.trim() === branch) return;

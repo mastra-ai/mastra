@@ -5,12 +5,12 @@ import { getTokenLimitMessage, isTokenLimitExceeded } from '../utils/span-utils'
 import { SpanSummaryDescription } from './span-summary-description';
 import { SpanTokenUsage } from './span-token-usage';
 import type { TokenUsage } from './span-token-usage';
+import { TraceIdButton } from './trace-id-button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
 import { DataPanel } from '@/ds/components/DataPanel';
 import { Notice } from '@/ds/components/Notice';
 import { Tab, TabContent, TabList, Tabs } from '@/ds/components/Tabs';
-import { truncateString } from '@/lib/truncate-string';
 
 function buildDialogTitle(sectionTitle: string, icon: ReactNode, span: { spanId: string; traceId: string }) {
   return (
@@ -20,10 +20,10 @@ function buildDialogTitle(sectionTitle: string, icon: ReactNode, span: { spanId:
         {sectionTitle}
       </span>
       <span>
-        › Span <b className="text-neutral3">#{span.spanId}</b>
+        › Span <b className="text-neutral3">{span.spanId}</b>
       </span>
       <span>
-        › Trace <b className="text-neutral3">#{span.traceId}</b>
+        › Trace <b className="text-neutral3">{span.traceId}</b>
       </span>
     </>
   );
@@ -77,19 +77,21 @@ export function SpanDataPanelView({
       {/* Two-line header (heading + summary); neighbouring panel headers use min-h-16 to stay level. */}
       <DataPanel.Header className="min-h-16 py-2">
         <div className="flex min-w-0 flex-1 flex-col gap-1">
-          <DataPanel.Heading className="whitespace-nowrap">
-            Span <b># {truncateString(spanId, 12)}</b>
+          <DataPanel.Heading className="items-center whitespace-nowrap">
+            Span
+            <TraceIdButton id={spanId} />
           </DataPanel.Heading>
           {span && <SpanSummaryDescription span={span} />}
         </div>
         <ButtonsGroup className="ml-auto shrink-0 self-start">
           <DataPanel.NextPrevNav
+            variant="ghost"
             onPrevious={onPrevious}
             onNext={onNext}
             previousLabel="Previous span"
             nextLabel="Next span"
           />
-          <DataPanel.CloseButton onClick={onClose} />
+          <DataPanel.CloseButton variant="ghost" onClick={onClose} />
         </ButtonsGroup>
       </DataPanel.Header>
 
@@ -250,7 +252,7 @@ function SpanDataPanelContent({
   return (
     <DataPanel.Content>
       <Tabs defaultTab="details" value={activeTab} onValueChange={onTabChange}>
-        <TabList variant="pill-ghost" className="px-0">
+        <TabList variant="pill-ghost">
           <Tab value="details">Details</Tab>
           <Tab value="feedback">Feedback{feedbackTabBadge}</Tab>
         </TabList>

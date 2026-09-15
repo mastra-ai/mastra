@@ -22,6 +22,8 @@ export interface ToolCallGroupStep {
   toolName: string;
   args: unknown;
   status: ToolCallStatus;
+  /** A successful tool result was recorded. Supply for every step to enable outcome counts; omit to keep legacy summaries. */
+  hasResult?: boolean;
 }
 
 export interface ToolCallGroupProps {
@@ -73,10 +75,30 @@ function GroupProgress({ steps }: { steps: ToolCallGroupStep[] }) {
       </Txt>
     );
   }
-  if (steps.some(step => step.status === 'error')) {
-    return <X size={13} role="img" aria-label="Failed" className="text-error shrink-0" />;
-  }
-  return null;
+  const failed = steps.filter(step => step.status === 'error').length;
+  const errorIndicator =
+    failed > 0 ? <X size={13} role="img" aria-label="Failed" className="text-error shrink-0" /> : null;
+  // Older consumers only supply visual status, which cannot distinguish completed from interrupted calls.
+  if (steps.some(step => step.hasResult === undefined)) return errorIndicator;
+
+  const succeeded = steps.filter(step => step.status === 'idle' && step.hasResult).length;
+  const incomplete = steps.length - succeeded - failed;
+  const summary = [
+    succeeded > 0 && `${succeeded} OK`,
+    failed > 0 && `${failed} failed`,
+    incomplete > 0 && `${incomplete} incomplete`,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
+  return (
+    <>
+      {errorIndicator}
+      <Txt as="span" variant="ui-xs" className="text-icon3 shrink-0 tabular-nums">
+        {summary}
+      </Txt>
+    </>
+  );
 }
 
 function GroupKinds({ steps }: { steps: ToolCallGroupStep[] }) {

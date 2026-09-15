@@ -216,6 +216,27 @@ function isPlainObjectOrArray(value: unknown): boolean {
 let _probeBudgetActive = false;
 let _probeBudgetRemaining = 0;
 
+/**
+ * Carries typed, request-specific values through agents, tools, and workflows.
+ * Pass the instance as `requestContext` when starting an operation.
+ *
+ * @example
+ * ```typescript
+ * import { RequestContext } from '@mastra/core/request-context';
+ *
+ * const requestContext = new RequestContext<{ locale: string }>([
+ *   ['locale', 'en'],
+ * ]);
+ * ```
+ *
+ * @see For documentation bundled with your installed package, locate
+ * `@mastra/core/package.json` with your project's resolver or package-manager
+ * tooling, then read `dist/docs/SKILL.md` from that package root and follow its
+ * reference links. Use package-manager tools for virtual or archived packages.
+ *
+ * @see [Request context documentation](https://mastra.ai/docs/server/request-context)
+ * if packaged docs are unavailable.
+ */
 export class RequestContext<Values extends Record<string, any> | unknown = unknown> {
   private registry = new Map<string, unknown>();
 

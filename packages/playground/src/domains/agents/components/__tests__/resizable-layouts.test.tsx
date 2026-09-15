@@ -10,6 +10,7 @@ import { AgentLayout } from '../agent-layout';
 const resizeLeftPanel = vi.hoisted(() => vi.fn());
 const collapseLeftPanel = vi.hoisted(() => vi.fn());
 const expandLeftPanel = vi.hoisted(() => vi.fn());
+const toggleLeftPanel = vi.hoisted(() => vi.fn());
 const memoryTimelineState = vi.hoisted(() => ({ isPanelOpen: false }));
 const defaultLayoutId = vi.hoisted(() => ({ value: '' }));
 
@@ -84,22 +85,29 @@ vi.mock('@mastra/playground-ui/resize/collapsible-panel', async () => {
       direction,
       collapsible,
       collapsedSize,
+      expandShortcut,
       ref,
       ...props
     }: {
       direction: 'left' | 'right';
       collapsible?: boolean;
       collapsedSize?: number;
+      expandShortcut?: string;
       ref?: Ref<CollapsiblePanelHandle>;
       [key: string]: unknown;
     }) => {
-      useImperativeHandle(ref, () => ({ collapse: collapseLeftPanel, expand: expandLeftPanel }));
+      useImperativeHandle(ref, () => ({
+        collapse: collapseLeftPanel,
+        expand: expandLeftPanel,
+        toggle: toggleLeftPanel,
+      }));
       return (
         <aside
           data-testid={`collapsible-${props.id}`}
           data-direction={direction}
           data-collapsible={collapsible}
           data-collapsed-size={collapsedSize}
+          data-expand-shortcut={expandShortcut}
           className={props.className as string}
         >
           <Panel {...(props as Parameters<typeof Panel>[0])} />
@@ -118,6 +126,7 @@ afterEach(() => {
   resizeLeftPanel.mockClear();
   collapseLeftPanel.mockClear();
   expandLeftPanel.mockClear();
+  toggleLeftPanel.mockClear();
   memoryTimelineState.isPanelOpen = false;
 });
 
@@ -159,6 +168,7 @@ describe('resizable service layouts', () => {
     expect(leftSlot.getAttribute('data-direction')).toBe('left');
     expect(leftSlot.getAttribute('data-collapsible')).toBe('true');
     expect(leftSlot.getAttribute('data-collapsed-size')).toBe('0');
+    expect(leftSlot.getAttribute('data-expand-shortcut')).toBe('{');
     expect(leftSlot.textContent).toContain('threads');
 
     // … and the right slot only appears when a rightSlot is provided.

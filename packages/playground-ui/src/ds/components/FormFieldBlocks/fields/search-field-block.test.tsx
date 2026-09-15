@@ -245,32 +245,32 @@ describe('SearchFieldBlock — minimizing', () => {
 
 describe('SearchFieldBlock — sizing', () => {
   it.each([
+    ['xs', 'px-7', 'size-3'],
     ['sm', 'px-8', 'size-3.5'],
     ['md', 'px-9', 'size-4'],
-    ['default', 'px-10', 'size-[1.125rem]'],
-    ['lg', 'px-11', 'size-5'],
-  ])('leaves room for the icon at size %s', (size, padding, iconSize) => {
-    const { container } = render(<SearchFieldBlock name="search" size={size as 'sm' | 'md' | 'default' | 'lg'} />);
+    ['lg', 'px-10', 'size-[1.125rem]'],
+  ] as const)('leaves room for the icon at size %s', (size, padding, iconSize) => {
+    const { container } = render(<SearchFieldBlock name="search" size={size} />);
 
     expect(screen.getByRole('textbox').classList.contains(padding)).toBe(true);
     expect(container.querySelector('svg')?.classList.contains(iconSize)).toBe(true);
   });
 
-  it('leaves the default room when no size was given', () => {
+  it('leaves the medium room when no size was given', () => {
     const { container } = render(<SearchFieldBlock name="search" />);
 
-    expect(screen.getByRole('textbox').classList.contains('px-10')).toBe(true);
-    expect(container.querySelector('svg')?.classList.contains('size-[1.125rem]')).toBe(true);
+    expect(screen.getByRole('textbox').classList.contains('px-9')).toBe(true);
+    expect(container.querySelector('svg')?.classList.contains('size-4')).toBe(true);
   });
 
   // The buttons carry the field's own height, so the row keeps one line.
   it.each([
+    ['xs', 'h-form-xs'],
     ['sm', 'h-form-sm'],
     ['md', 'h-form-md'],
-    ['default', 'h-form-default'],
-    ['lg', 'h-form-default'],
-  ])('sizes the minimized button to a %s field', (size, height) => {
-    render(<SearchFieldBlock name="search" isMinimized size={size as 'sm' | 'md' | 'default' | 'lg'} />);
+    ['lg', 'h-form-lg'],
+  ] as const)('sizes the minimized button to a %s field', (size, height) => {
+    render(<SearchFieldBlock name="search" isMinimized size={size} />);
 
     expect(screen.getByRole('button', { name: 'Search' }).classList.contains(height)).toBe(true);
   });
@@ -287,9 +287,9 @@ describe('SearchFieldBlock — sizing', () => {
     expect(screen.getByRole('button', { name: 'Clear search' }).classList.contains('h-form-md')).toBe(true);
   });
 
-  it('gives the clear button the roomy size when the field has none', () => {
+  it('gives the clear button the medium size when the field has none', () => {
     render(<SearchFieldBlock name="search" value="weather" onReset={vi.fn()} />);
 
-    expect(screen.getByRole('button', { name: 'Clear search' }).classList.contains('h-form-default')).toBe(true);
+    expect(screen.getByRole('button', { name: 'Clear search' }).classList.contains('h-form-md')).toBe(true);
   });
 });

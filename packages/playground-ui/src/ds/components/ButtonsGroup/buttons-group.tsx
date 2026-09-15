@@ -49,12 +49,12 @@ const buttonsGroupVariants = cva(
           '[&>*:has(~_*:not([aria-hidden=true]):not([data-base-ui-focus-guard]):not([aria-owns]))]:rounded-r-none',
           '[&>*:not(:first-child):not([aria-hidden=true]):not([data-base-ui-focus-guard]):not([aria-owns])]:rounded-l-none',
           // One-line seam: `-ml-px` overlaps adjacent borders onto the same pixel. Filled
-          // segments (opaque bg: default/primary/destructive buttons, the text chip) keep
-          // their own border — the bg hides the neighbour's. Transparent/outline segments
+          // segments (opaque bg: default/outline/primary/destructive buttons, the text chip) keep
+          // their own border — the bg hides the neighbour's. Transparent segments
           // null their left border at rest (so the neighbour's shows without doubling) and
           // reveal it on hover / keyboard-focus, where the z-10 lift paints the complete border.
           '[&>*:not([data-slot=buttons-group-separator]):not([aria-hidden=true]):not([data-base-ui-focus-guard]):not([aria-owns]):not(:first-child)]:-ml-px',
-          '[&>*:not([data-slot=buttons-group-separator]):not([data-slot=buttons-group-text]):not([data-variant=default]):not([data-variant=primary]):not([data-variant=destructive]):not([aria-hidden=true]):not([data-base-ui-focus-guard]):not([aria-owns]):not(:first-child):not(:hover):not(:focus-visible):not(:has(:focus-visible))]:border-l-transparent',
+          '[&>*:not([data-slot=buttons-group-separator]):not([data-slot=buttons-group-text]):not([data-variant=default]):not([data-variant=primary]):not([data-variant=destructive]):not([aria-hidden=true]):not([data-variant=outline]):not([data-base-ui-focus-guard]):not([aria-owns]):not(:first-child):not(:hover):not(:focus-visible):not(:has(:focus-visible))]:border-l-transparent',
           // Borderless filled variants get an inset-shadow divider.
           '[&>[data-variant=primary]:not([aria-hidden=true]):not(:first-child)]:shadow-[inset_1px_0_0_0_var(--color-border1)]',
           '[&>[data-variant=destructive]:not([aria-hidden=true]):not(:first-child)]:shadow-[inset_1px_0_0_0_var(--color-border1)]',
@@ -80,7 +80,7 @@ const buttonsGroupVariants = cva(
           '[&>:first-child]:rounded-t-xl',
           '[&>:last-child]:rounded-b-xl',
           '[&>*:not([data-slot=buttons-group-separator]):not(:first-child)]:-mt-px',
-          '[&>*:not([data-slot=buttons-group-separator]):not([data-slot=buttons-group-text]):not([data-variant=default]):not([data-variant=primary]):not([data-variant=destructive]):not(:first-child):not(:hover):not(:focus-visible):not(:has(:focus-visible))]:border-t-transparent',
+          '[&>*:not([data-slot=buttons-group-separator]):not([data-slot=buttons-group-text]):not([data-variant=default]):not([data-variant=primary]):not([data-variant=destructive]):not(:first-child):not([data-variant=outline]):not(:hover):not(:focus-visible):not(:has(:focus-visible))]:border-t-transparent',
           '[&>[data-variant=primary]:not(:first-child)]:shadow-[inset_0_1px_0_0_var(--color-border1)]',
           '[&>[data-variant=destructive]:not(:first-child)]:shadow-[inset_0_1px_0_0_var(--color-border1)]',
           '[&>*:not([data-slot=buttons-group-separator])]:transition-[color,background-color]',
@@ -158,12 +158,11 @@ const buttonsGroupTextVariants = cva(
         xs: controlSizeClasses.xs,
         sm: controlSizeClasses.sm,
         md: controlSizeClasses.md,
-        default: controlSizeClasses.default,
         lg: controlSizeClasses.lg,
       },
     },
     defaultVariants: {
-      size: 'default',
+      size: 'md',
     },
   },
 );
@@ -173,7 +172,7 @@ export type ButtonsGroupTextProps = React.ComponentPropsWithoutRef<'div'> & {
 };
 
 export const ButtonsGroupText = React.forwardRef<HTMLDivElement, ButtonsGroupTextProps>(
-  ({ className, size = 'default', ...props }, ref) => {
+  ({ className, size = 'md', ...props }, ref) => {
     return (
       <div
         ref={ref}

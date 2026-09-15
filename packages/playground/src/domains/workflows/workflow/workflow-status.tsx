@@ -1,11 +1,11 @@
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { TripwireNotice } from '@mastra/playground-ui/domains/chat/messages/tripwire-notice';
 import { CheckIcon } from '@mastra/playground-ui/icons/CheckIcon';
 import { CrossIcon } from '@mastra/playground-ui/icons/CrossIcon';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { CirclePause, HourglassIcon, Loader2, ShieldAlert } from 'lucide-react';
 import { WorkflowCard } from './workflow-card';
-import { TripwireNotice } from '@/lib/ai-ui/messages/tripwire-notice';
 
 export interface TripwireInfo {
   reason?: string;

@@ -1,6 +1,6 @@
 import type { GetSystemPackagesResponse } from '@mastra/client-js';
 import { serializeTraceColumnPreferences } from '@mastra/playground-ui/domains/traces/trace-list-columns';
-import { act, fireEvent, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import TracesPage from '..';
@@ -180,7 +180,7 @@ describe('Traces page usage columns', () => {
 
       const { queryClient } = renderPage('/traces?traceId=trace-a');
 
-      expect(await screen.findByRole('heading', { name: 'Messages' })).not.toBeNull();
+      expect(await screen.findByTestId('messages-panel')).not.toBeNull();
       expect(screen.queryByRole('tab', { name: 'Messages' })).toBeNull();
       expect(screen.getByRole('dialog', { name: 'Trace details' }).className).toContain('w-4/5');
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
@@ -191,9 +191,56 @@ describe('Traces page usage columns', () => {
 
       const { queryClient } = renderPage('/traces?traceId=trace-a&spanId=span-a');
 
-      expect(await screen.findByRole('heading', { name: 'Messages' })).not.toBeNull();
+      expect(await screen.findByTestId('messages-panel')).not.toBeNull();
       await waitFor(() => expect(screen.getByRole('dialog', { name: 'Trace details' }).className).toContain('w-full'));
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    });
+
+    describe('given the thread has another trace', () => {
+      const threadedTraceB = {
+        ...threadedTraceSpans,
+        traceId: 'trace-b',
+        spans: threadedTraceSpans.spans.map(span => ({ ...span, traceId: 'trace-b', spanId: 'span-b' })),
+      };
+      const threadTraceList = {
+        spans: [threadedTraceB.spans[0], threadedTraceSpans.spans[0]],
+        pagination: { total: 2, page: 0, perPage: 25, hasMore: false },
+      };
+
+      const setMultiTurnThreadHandlers = () => {
+        setThreadedTraceHandlers();
+        server.use(
+          // The page list keeps its single row; only thread-scoped requests see both turns.
+          http.get(`${TEST_BASE_URL}/api/observability/traces/light`, ({ request }) =>
+            HttpResponse.json(new URL(request.url).searchParams.get('threadId') ? threadTraceList : traceList),
+          ),
+          http.get(`${TEST_BASE_URL}/api/observability/traces/trace-b`, () => HttpResponse.json(threadedTraceB)),
+          http.get(`${TEST_BASE_URL}/api/mcp/v0/servers`, () => HttpResponse.json({ servers: [], totalCount: 0 })),
+        );
+      };
+
+      it('when "View full thread" is clicked, then the side panel shows every turn at full width, and "Back to trace" restores the trace', async () => {
+        setMultiTurnThreadHandlers();
+
+        const { queryClient } = renderPage('/traces?traceId=trace-a');
+        const dialog = () => screen.getByRole('dialog', { name: 'Trace details' });
+
+        fireEvent.click(await screen.findByRole('button', { name: 'View full thread' }));
+
+        expect(await screen.findByTestId('thread-view-by-trace')).not.toBeNull();
+        await waitFor(() => expect(dialog().querySelectorAll('[data-trace-id]')).toHaveLength(2));
+        expect(dialog().className).toContain('w-full');
+        expect(screen.queryByTestId('messages-panel')).toBeNull();
+        // The page did not navigate away from the traces list.
+        expect(screen.getByRole('button', { name: 'Back to trace' })).not.toBeNull();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Back to trace' }));
+
+        expect(await screen.findByTestId('messages-panel')).not.toBeNull();
+        expect(screen.queryByTestId('thread-view-by-trace')).toBeNull();
+        expect(dialog().className).toContain('w-4/5');
+        await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      });
     });
 
     it('given a trace without a thread id, then no Messages column renders and the panel is half width', async () => {
@@ -203,7 +250,7 @@ describe('Traces page usage columns', () => {
       const { queryClient } = renderPage('/traces?traceId=trace-a');
 
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
-      expect(screen.queryByRole('heading', { name: 'Messages' })).toBeNull();
+      expect(screen.queryByTestId('messages-panel')).toBeNull();
       expect(screen.getByRole('dialog', { name: 'Trace details' }).className).toContain('w-1/2');
     });
   });
@@ -287,6 +334,45 @@ describe('Traces page auto refresh toggle', () => {
 });
 
 describe('Traces side panel header actions', () => {
+  describe('when a registered scorer is selected', () => {
+    it('submits the selected trace for scoring and opens its scores', async () => {
+      setTracePageHandlers(metricsCapableSystemPackages);
+      const onScore = vi.fn();
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/feedback`, () => HttpResponse.json(emptyFeedback)),
+        http.get(`${TEST_BASE_URL}/api/scores/scorers`, () =>
+          HttpResponse.json({
+            quality: {
+              scorer: { config: { id: 'quality', name: 'Quality scorer' } },
+              agentIds: [],
+              agentNames: [],
+              workflowIds: [],
+              isRegistered: true,
+              source: 'code',
+            },
+          } satisfies typeof emptyScorers),
+        ),
+        http.post(`${TEST_BASE_URL}/api/observability/traces/score`, async ({ request }) => {
+          onScore(await request.json());
+          return HttpResponse.json({ status: 'success', message: 'Scoring started' });
+        }),
+      );
+      const { queryClient } = renderPage('/traces?traceId=trace-a');
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      fireEvent.click(await screen.findByRole('button', { name: 'Score trace' }));
+      fireEvent.click(await screen.findByRole('combobox', { name: 'Select scorer' }));
+      fireEvent.click(await screen.findByRole('option', { name: 'Quality scorer' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Start Scoring' }));
+      await waitFor(() =>
+        expect(onScore).toHaveBeenCalledWith({
+          scorerName: 'quality',
+          targets: [{ traceId: 'trace-a', spanId: 'span-a' }],
+        }),
+      );
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Score trace' })).toBeNull());
+      expect(screen.getByRole('tab', { name: /scores/i }).getAttribute('aria-selected')).toBe('true');
+    });
+  });
   it('shows the trace actions in the panel header when a trace is selected', async () => {
     setTracePageHandlers(metricsCapableSystemPackages);
     server.use(
@@ -297,9 +383,10 @@ describe('Traces side panel header actions', () => {
     const { queryClient } = renderPage('/traces?traceId=trace-a');
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
+    expect(await screen.findByRole('button', { name: 'Score trace' })).not.toBeNull();
     fireEvent.click(await screen.findByRole('button', { name: 'Trace actions' }));
 
-    expect(await screen.findByRole('menuitem', { name: 'Evaluate trace' })).not.toBeNull();
+    expect(screen.queryByRole('menuitem', { name: 'Evaluate trace' })).toBeNull();
     expect(screen.getByRole('menuitem', { name: 'Add full trace to dataset' })).not.toBeNull();
     // The parent trace panel is no longer collapsible.
     expect(screen.queryByRole('menuitem', { name: /collapse panel/i })).toBeNull();
@@ -325,6 +412,21 @@ describe('Traces side panel Scores tab', () => {
   };
 
   describe('when the trace has scores', () => {
+    it('opens score details in the right-hand trace column and closes them independently', async () => {
+      await openScoresTab(traceSpanScores);
+      fireEvent.click(await screen.findByText('score-1'));
+
+      const heading = await screen.findByRole('heading', { name: /Score # score-1/i });
+      const columns = heading.closest('[data-trace-columns]');
+      expect(columns).not.toBeNull();
+      expect(columns?.lastElementChild?.contains(heading)).toBe(true);
+      const detailColumn = columns?.lastElementChild;
+      if (!(detailColumn instanceof HTMLElement)) throw new Error('Missing score detail column');
+      fireEvent.click(within(detailColumn).getByRole('button', { name: /close/i }));
+      await waitFor(() => expect(screen.queryByRole('heading', { name: /Score # score-1/i })).toBeNull());
+      expect(screen.getByRole('tab', { name: /scores/i }).getAttribute('aria-selected')).toBe('true');
+    });
+
     it('renders the score chart legend above the scores table', async () => {
       await openScoresTab(traceSpanScores);
 
@@ -338,6 +440,28 @@ describe('Traces side panel Scores tab', () => {
       // Table rows still render from the same data.
       expect(screen.getByText('score-1')).not.toBeNull();
       expect(screen.getByText('score-3')).not.toBeNull();
+    });
+  });
+
+  describe('when a span is open', () => {
+    it('closes the span side panel so the scores get the room', async () => {
+      setTracePageHandlers(metricsCapableSystemPackages);
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/traces/trace-a/spans/span-a`, () =>
+          HttpResponse.json({ span: traceSpans.spans[0] }),
+        ),
+        http.get(`${TEST_BASE_URL}/api/observability/traces/trace-a`, () => HttpResponse.json(traceSpans)),
+        http.get(`${TEST_BASE_URL}/api/observability/feedback`, () => HttpResponse.json(emptyFeedback)),
+      );
+
+      const { queryClient } = renderPage('/traces?traceId=trace-a&spanId=span-a');
+      expect(await screen.findByRole('heading', { name: /^Span/ })).not.toBeNull();
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+
+      fireEvent.click(screen.getByRole('tab', { name: /scores/i }));
+
+      await waitFor(() => expect(screen.queryByRole('heading', { name: /^Span/ })).toBeNull());
+      expect(screen.getByRole('tab', { name: /scores/i }).getAttribute('aria-selected')).toBe('true');
     });
   });
 

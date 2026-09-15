@@ -1,0 +1,307 @@
+import { spawn } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
+import { existsSync, readdirSync, rmSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
+import { afterEach, describe, expect, it } from 'vitest';
+
+const tsxBin = fileURLToPath(new URL('../../../node_modules/.bin/tsx', import.meta.url));
+const childScript = fileURLToPath(new URL('./fixtures/cross-process-agent-signals-child.mts', import.meta.url));
+const activeChildren = new Set<ReturnType<typeof spawn>>();
+
+type ChildEvent = {
+  event: string;
+  role: 'owner' | 'sender';
+  pid: number;
+  [key: string]: unknown;
+};
+
+function startChild(role: 'owner' | 'sender', resourceId: string, scenario = 'request-reply', args: string[] = []) {
+  const child = spawn(tsxBin, [childScript, role, resourceId, scenario, ...args], { stdio: ['pipe', 'pipe', 'pipe'] });
+  activeChildren.add(child);
+  child.once('close', () => activeChildren.delete(child));
+  const events: ChildEvent[] = [];
+  const waiters = new Map<string, Array<(event: ChildEvent) => void>>();
+  let stdout = '';
+  let stderr = '';
+
+  child.stdout.setEncoding('utf8');
+  child.stdout.on('data', chunk => {
+    stdout += chunk;
+    const lines = stdout.split('\n');
+    stdout = lines.pop() ?? '';
+    for (const line of lines) {
+      if (!line) continue;
+      const event = JSON.parse(line) as ChildEvent;
+      events.push(event);
+      for (const resolve of waiters.get(event.event) ?? []) resolve(event);
+      waiters.delete(event.event);
+    }
+  });
+  child.stderr.setEncoding('utf8');
+  child.stderr.on('data', chunk => {
+    stderr += chunk;
+  });
+
+  return {
+    child,
+    events,
+    get stderr() {
+      return stderr;
+    },
+    waitFor(eventName: string, timeoutMs = 10_000) {
+      const existing = events.find(event => event.event === eventName);
+      if (existing) return Promise.resolve(existing);
+      return new Promise<ChildEvent>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          reject(
+            new Error(
+              `Timed out waiting for ${role}:${eventName}. Events: ${JSON.stringify(events)}. stderr: ${stderr}`,
+            ),
+          );
+        }, timeoutMs);
+        const resolveWithCleanup = (event: ChildEvent) => {
+          clearTimeout(timeout);
+          resolve(event);
+        };
+        waiters.set(eventName, [...(waiters.get(eventName) ?? []), resolveWithCleanup]);
+      });
+    },
+    result: new Promise<number | null>(resolve => child.on('close', resolve)),
+  };
+}
+
+async function waitForChildEvent(
+  children: Array<ReturnType<typeof startChild>>,
+  eventName: string,
+  timeoutMs = 10_000,
+) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const event = children.flatMap(child => child.events).find(candidate => candidate.event === eventName);
+    if (event) return event;
+    await new Promise(resolve => setTimeout(resolve, 25));
+  }
+  throw new Error(
+    `Timed out waiting for ${eventName}. Events: ${JSON.stringify(children.flatMap(child => child.events))}. stderr: ${children.map(child => child.stderr).join('\n')}`,
+  );
+}
+
+describe.skipIf(process.platform === 'win32')('cross-agent signals over Unix sockets', () => {
+  const resourceId = `agent-signals-${randomUUID().slice(0, 8)}`;
+  const socketDir = `/tmp/mc/${resourceId}`;
+
+  afterEach(async () => {
+    await Promise.all(
+      [...activeChildren].map(
+        child =>
+          new Promise<void>((resolve, reject) => {
+            if (child.exitCode !== null || child.signalCode !== null) {
+              resolve();
+              return;
+            }
+            const timeout = setTimeout(
+              () => reject(new Error(`Child process ${child.pid ?? 'unknown'} did not exit after SIGKILL`)),
+              1_000,
+            );
+            child.once('close', () => {
+              clearTimeout(timeout);
+              resolve();
+            });
+            child.kill('SIGKILL');
+          }),
+      ),
+    );
+    activeChildren.clear();
+    rmSync(socketDir, { recursive: true, force: true });
+  });
+
+  it('discovers thread peers and completes a request/reply across processes', async () => {
+    const owner = startChild('owner', resourceId);
+    await owner.waitFor('thread-owned');
+
+    const sender = startChild('sender', resourceId);
+    const senderOwned = await sender.waitFor('thread-owned');
+    const senderDiscovery = await sender.waitFor('discovered');
+    const ownerRequest = await owner.waitFor('request');
+    const ownerDiscovery = await owner.waitFor('discovered');
+    const ownerSend = await owner.waitFor('send-result');
+    const senderSend = await sender.waitFor('send-result');
+    const senderReply = await sender.waitFor('reply');
+    await sender.waitFor('pass');
+
+    expect(existsSync(socketDir)).toBe(true);
+    expect(readdirSync(socketDir).some(name => name.endsWith('.sock'))).toBe(true);
+
+    owner.child.stdin.write('close\n');
+    owner.child.stdin.end();
+    sender.child.stdin.write('close\n');
+    sender.child.stdin.end();
+    const [ownerCode, senderCode] = await Promise.all([owner.result, sender.result]);
+
+    expect(owner.child.pid).not.toBe(sender.child.pid);
+    expect(senderOwned.threadId).toBe('sender-thread');
+    expect(senderDiscovery.peerThreadId).toBe('owner-thread');
+    expect(ownerDiscovery.peerThreadId).toBe('sender-thread');
+    expect(ownerRequest.text).toBe('owner-response');
+    expect(senderReply.text).toBe('sender-response');
+    expect(senderSend.action).toBe('deliver');
+    expect(ownerSend.action).toBe('deliver');
+    expect(owner.stderr).toBe('');
+    expect(sender.stderr).toBe('');
+    expect(ownerCode).toBe(0);
+    expect(senderCode).toBe(0);
+
+    expect(existsSync(socketDir)).toBe(true);
+    const leftoverSockets = readdirSync(socketDir).filter(name => name.endsWith('.sock'));
+    expect(leftoverSockets).toEqual([]);
+  }, 30_000);
+
+  it('releases old ownership while delayed replies keep their captured thread destination', async () => {
+    const owner = startChild('owner', resourceId, 'thread-transition');
+    await owner.waitFor('thread-owned');
+
+    const sender = startChild('sender', resourceId, 'thread-transition');
+    await sender.waitFor('thread-owned');
+    await sender.waitFor('request-send');
+    const capturedRoute = await owner.waitFor('captured-route');
+
+    sender.child.stdin.write('transition\n');
+    const transitioned = await sender.waitFor('transitioned');
+    owner.child.stdin.write('reply\n');
+
+    const transitionDiscovery = await owner.waitFor('transition-discovery');
+    const delayedSend = await owner.waitFor('delayed-send');
+    const delayedReply = await sender.waitFor('delayed-reply');
+
+    owner.child.stdin.write('close\n');
+    sender.child.stdin.write('close\n');
+    owner.child.stdin.end();
+    sender.child.stdin.end();
+    const [ownerCode, senderCode] = await Promise.all([owner.result, sender.result]);
+
+    expect(capturedRoute.threadId).toBe('sender-thread');
+    expect(transitioned).toMatchObject({ fromThreadId: 'sender-thread', threadId: 'sender-thread-2' });
+    expect(transitionDiscovery).toMatchObject({ hasOldThread: false, hasNewThread: true });
+    expect(delayedSend.targetThreadId).toBe('sender-thread');
+    expect(delayedReply).toMatchObject({ threadId: 'sender-thread', text: 'owner-response' });
+    expect(owner.stderr).toBe('');
+    expect(sender.stderr).toBe('');
+    expect(ownerCode).toBe(0);
+    expect(senderCode).toBe(0);
+
+    expect(existsSync(socketDir)).toBe(true);
+    const leftoverSockets = readdirSync(socketDir).filter(name => name.endsWith('.sock'));
+    expect(leftoverSockets).toEqual([]);
+  }, 30_000);
+
+  it('isolates discovery between resource socket namespaces', async () => {
+    const isolatedResourceId = `${resourceId}-isolated`;
+    const owner = startChild('owner', resourceId, 'claim-only');
+    await owner.waitFor('thread-owned');
+
+    const observer = startChild('sender', isolatedResourceId, 'discovery-probe');
+    const discovery = await observer.waitFor('discovered');
+
+    owner.child.stdin.write('close\n');
+    observer.child.stdin.write('close\n');
+    owner.child.stdin.end();
+    observer.child.stdin.end();
+    const [ownerCode, observerCode] = await Promise.all([owner.result, observer.result]);
+
+    expect(discovery).toMatchObject({ hasPeer: false });
+    expect(owner.stderr).toBe('');
+    expect(observer.stderr).toBe('');
+    expect(ownerCode).toBe(0);
+    expect(observerCode).toBe(0);
+    rmSync(`/tmp/mc/${isolatedResourceId}`, { recursive: true, force: true });
+  }, 30_000);
+
+  it('allows exactly one process to claim ownership of a thread', async () => {
+    const owner = startChild('owner', resourceId, 'ownership-contention');
+    const ownerClaim = await owner.waitFor('claim-result');
+
+    const contender = startChild('sender', resourceId, 'ownership-contention');
+    const contenderClaim = await contender.waitFor('claim-result');
+
+    owner.child.stdin.write('close\n');
+    contender.child.stdin.write('close\n');
+    owner.child.stdin.end();
+    contender.child.stdin.end();
+    const [ownerCode, contenderCode] = await Promise.all([owner.result, contender.result]);
+
+    expect(ownerClaim).toMatchObject({ claimed: true, threadId: 'contended-thread' });
+    expect(contenderClaim).toMatchObject({ claimed: false, threadId: 'contended-thread' });
+    expect(owner.stderr).toBe('');
+    expect(contender.stderr).toBe('');
+    expect(ownerCode).toBe(0);
+    expect(contenderCode).toBe(0);
+  }, 30_000);
+
+  it('fences simultaneous process claims so exactly one owner accepts an idle wake', async () => {
+    const startAt = String(Date.now() + 3_000);
+    const firstOwner = startChild('owner', resourceId, 'simultaneous-owner-wake', [startAt]);
+    const secondOwner = startChild('sender', resourceId, 'simultaneous-owner-wake', [startAt]);
+    await Promise.all([firstOwner.waitFor('ready'), secondOwner.waitFor('ready')]);
+
+    const [firstClaim, secondClaim] = await Promise.all([
+      firstOwner.waitFor('claim-result'),
+      secondOwner.waitFor('claim-result'),
+    ]);
+    const wakeSender = startChild('sender', resourceId, 'simultaneous-wake-sender');
+    const sendResult = await wakeSender.waitFor('send-result');
+    await waitForChildEvent([firstOwner, secondOwner], 'model-stream');
+    await new Promise(resolve => setTimeout(resolve, 500));
+    const modelStreams = [...firstOwner.events, ...secondOwner.events].filter(event => event.event === 'model-stream');
+
+    firstOwner.child.stdin.write('close\n');
+    secondOwner.child.stdin.write('close\n');
+    firstOwner.child.stdin.end();
+    secondOwner.child.stdin.end();
+    const [firstCode, secondCode, senderCode] = await Promise.all([
+      firstOwner.result,
+      secondOwner.result,
+      wakeSender.result,
+    ]);
+
+    expect(firstClaim.claimed).toBe(true);
+    expect(secondClaim.claimed).toBe(true);
+    expect(sendResult.action).toBe('deliver');
+    if (modelStreams.length !== 1) {
+      throw new Error(
+        `Model stream count ${modelStreams.length}. First stderr: ${firstOwner.stderr}. Second stderr: ${secondOwner.stderr}`,
+      );
+    }
+    expect(firstOwner.stderr).toBe('');
+    expect(secondOwner.stderr).toBe('');
+    expect(wakeSender.stderr).toBe('');
+    expect(firstCode).toBe(0);
+    expect(secondCode).toBe(0);
+    expect(senderCode).toBe(0);
+  }, 30_000);
+
+  it('stops advertising a thread after its owner process exits abruptly', async () => {
+    const owner = startChild('owner', resourceId, 'claim-only');
+    await owner.waitFor('thread-owned');
+
+    const before = startChild('sender', resourceId, 'discovery-probe');
+    const beforeDiscovery = await before.waitFor('discovered');
+    before.child.stdin.write('close\n');
+    before.child.stdin.end();
+    expect(await before.result).toBe(0);
+
+    owner.child.kill('SIGKILL');
+    expect(await owner.result).not.toBe(0);
+
+    const after = startChild('sender', resourceId, 'discovery-probe');
+    const afterDiscovery = await after.waitFor('discovered');
+    after.child.stdin.write('close\n');
+    after.child.stdin.end();
+    expect(await after.result).toBe(0);
+
+    expect(beforeDiscovery).toMatchObject({ hasPeer: true, peerThreadId: 'owner-thread' });
+    expect(afterDiscovery).toMatchObject({ hasPeer: false });
+    expect(before.stderr).toBe('');
+    expect(after.stderr).toBe('');
+  }, 30_000);
+});

@@ -41,7 +41,7 @@ import {
   getFactoryAuthUserFromContext,
   getFactoryAuthUserId,
 } from './auth.js';
-import { createBoardRegistry, workItemPhaseSemantics } from './boards/index.js';
+import { createBoardRegistry, isTerminalWorkItem } from './boards/index.js';
 import type { BoardRegistry, InstalledBoard } from './boards/index.js';
 import { touchFeed } from './feed-events.js';
 import type { FactoryIntegration, IntegrationPostToolContext, IntegrationTools } from './integrations/base.js';
@@ -67,6 +67,7 @@ import {
   registerTenantCredentialResolver,
 } from './routes/tenant-credentials.js';
 import { FactoryDecisionDispatcher } from './rules/dispatcher.js';
+import type { FactoryRuleActor } from './rules/index.js';
 import { FactoryPhaseStateProcessor } from './rules/processor.js';
 import { createTerminalStageCleanup } from './rules/terminal-cleanup.js';
 import { createFactoryTransitionTools } from './rules/tools.js';
@@ -77,6 +78,7 @@ import type { MastraFactorySandboxConfig } from './sandbox/session-sandbox.js';
 import { createPlaintextFactorySecretEncryption } from './secret-encryption.js';
 import type { FactorySecretEncryption } from './secret-encryption.js';
 import { handleServerError } from './server-error.js';
+import { refreshFactorySessionMemorySettings } from './session/factory-session.js';
 import { observeSessionFilesystem } from './session/filesystem-capture.js';
 import { observeSessionFirstExec } from './session/first-exec-capture.js';
 import { observeSessionFirstMessage } from './session/first-message-capture.js';
@@ -425,7 +427,7 @@ export class MastraFactory {
     const auditStorage = storage.registerDomain(new AuditStorage());
     const workItemsStorage = storage.registerDomain(new WorkItemsStorage());
     workItemsStorage.onAttentionChanged(scope => touchFeed(eventBus, scope));
-    workItemsStorage.useTerminalPhasePredicate(item => workItemPhaseSemantics(this.#boards, item)?.kind === 'terminal');
+    workItemsStorage.useTerminalPhasePredicate(item => isTerminalWorkItem(this.#boards, item));
     const modelCredentialsStorage = storage.registerDomain(new ModelCredentialsStorage(secretEncryption));
     const modelPacksStorage = storage.registerDomain(new ModelPacksStorage());
     const memorySettingsStorage = storage.registerDomain(new MemorySettingsStorage());
@@ -604,7 +606,7 @@ export class MastraFactory {
     // reconcile walk (the active-binding set otherwise grows forever), and
     // finally release the item's sandboxes. Each step is best-effort — a
     // committed transition never fails on cleanup.
-    const onTerminalStage = workItemsReady
+    const terminalCleanup = workItemsReady
       ? createTerminalStageCleanup({
           workItems: workItemsStorage,
           // `factoryProcessor` is assigned below in this scope; the cleanup
@@ -612,10 +614,37 @@ export class MastraFactory {
           reconcileBinding: async (binding): Promise<void> => {
             await factoryProcessor?.reconcileBinding(binding);
           },
+          // Abort the live run on a retired seat so the model cannot keep
+          // executing unbound (or be resumed later) once its binding is revoked.
+          // `this.#prepared` is assigned below; cleanup only runs long after.
+          abortSession: async (binding): Promise<void> => {
+            const controller = this.#prepared?.base.controller;
+            if (!controller) return;
+            const session = await controller.getSessionByResource(binding.resourceId);
+            if (session?.stream.isActive()) session.abort();
+          },
           // Session retirement supersedes the older direct sandbox release: it
           // invalidates the session and stops/destroys its sandbox.
           ...(retireTerminalSessions ? { releaseSandboxes: retireTerminalSessions } : {}),
         })
+      : undefined;
+    const onTerminalStage = terminalCleanup
+      ? (args: {
+          orgId: string;
+          factoryProjectId: string;
+          workItemId: string;
+          revision: number;
+          actor: FactoryRuleActor;
+        }): Promise<void> =>
+          terminalCleanup({
+            orgId: args.orgId,
+            factoryProjectId: args.factoryProjectId,
+            workItemId: args.workItemId,
+            revision: args.revision,
+            // Leave the seat that drove its own terminal transition running; it
+            // is already returning from its transition tool call.
+            ...(args.actor.type === 'agent' ? { initiatingBindingId: args.actor.bindingId } : {}),
+          })
       : retireTerminalSessions;
     const transitionService = workItemsReady
       ? new FactoryTransitionService({
@@ -623,6 +652,11 @@ export class MastraFactory {
           boards: this.#boards,
           storage: workItemsStorage,
           audit: auditDomain,
+          autoApprovePlans: async ({ orgId, factoryProjectId }) => {
+            await factoryProjectsStorage.ensureReady();
+            const project = await factoryProjectsStorage.get({ orgId, id: factoryProjectId });
+            return project?.autoApprovePlans ?? false;
+          },
           ...(onTerminalStage ? { onTerminalStage } : {}),
           ...(githubIntegration
             ? {
@@ -803,6 +837,7 @@ export class MastraFactory {
                       requestContext,
                       storage: workItemsStorage,
                       transitionService,
+                      boards: this.#boards,
                       // Heals crash-resumed sessions: recovered addresses re-seed
                       // projectRepositoryId/baseRef from the source session record.
                       // Only offered while the source-control domain is ready — a
@@ -966,6 +1001,13 @@ export class MastraFactory {
                 },
                 reconcileToolResults: () => factoryProcessor?.reconcileAllBoundThreads() ?? Promise.resolve(),
                 prepareBinding,
+                refreshManagedMemorySettings: ({ binding, session }) =>
+                  refreshFactorySessionMemorySettings(session, {
+                    orgId: binding.orgId,
+                    factoryProjectId: binding.factoryProjectId,
+                    projects: factoryProjectsStorage,
+                    memorySettings: memorySettingsStorage,
+                  }),
                 feedReader: new FactoryFeedReader(workItemCommentsStorage),
                 primeCredentials: tenant => primeTenantCredentials({ tenant, credentials: modelCredentialsStorage }),
                 resolveLinkedWorkItemParentId: async ({ orgId, factoryProjectId, decision }) => {
@@ -1084,6 +1126,7 @@ export class MastraFactory {
       session =>
         hydrateSessionMemorySettings(session, {
           sourceControl: sourceControlStorage.forIntegration('github'),
+          projects: factoryProjectsStorage,
           memorySettings: memorySettingsStorage,
         }),
       { blocking: true },
@@ -1144,8 +1187,36 @@ export class MastraFactory {
       );
       // Integrations return a channels CONFIG; the factory owns construction.
       prepared.base.controller.setChannels(new AgentControllerChannels(integration.channels!(context)));
-      // A publisher posts through the channel SDK this loop just wired up.
-      const publisher = integration.feedPublisher?.(context);
+    }
+
+    // Feed publishers mirror web-feed comments outward (a chat bridge, a
+    // webhook, an issue tracker). Independent of channels(): an integration may
+    // publish without owning a chat channel. READY integrations only — the
+    // array is held by reference by CommentsDomain (see `feedPublishers` above),
+    // so pushing here wires the publisher into comment dispatch.
+    for (const { integration } of integrationRegistrations.filter(
+      ({ integration, ready }) => ready && integration.feedPublisher,
+    )) {
+      const context = buildIntegrationContext(
+        {
+          controller: prepared.base.controller,
+          publicOrigin,
+          auth: routeAuth,
+          stateSigner,
+          sandbox: sandboxConfig,
+          factoryStorage: storage,
+          integrationStorage,
+          sourceControlStorage,
+          configVersion,
+          boardRegistry: this.#boards,
+          factoryReady,
+          domains,
+          feed: commentsDomain,
+          ...(githubIntegration ? { sourceControlOwnerId: 'github' } : {}),
+        },
+        integration.id,
+      );
+      const publisher = integration.feedPublisher!(context);
       if (publisher) feedPublishers.push(publisher);
     }
 

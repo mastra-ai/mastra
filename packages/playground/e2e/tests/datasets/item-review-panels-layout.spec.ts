@@ -206,7 +206,7 @@ test.describe('Item and review panel layout', () => {
       await panel.getByText('Experiment tool call', { exact: true }).click();
       const span = panel
         .locator('section')
-        .filter({ has: page.getByText(/# span-child/) })
+        .filter({ has: page.getByRole('heading', { name: /span-child/ }) })
         .last();
       await expect(span).toBeVisible();
       await expect.poll(async () => (await panel.boundingBox())!.width).toBeGreaterThan(initialBox!.width * 1.5);

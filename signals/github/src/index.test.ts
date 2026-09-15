@@ -991,7 +991,23 @@ describe('GithubSignals', () => {
         }),
       }),
     );
-    expect(chunks).toEqual([]);
+    expect(chunks).toContainEqual(
+      expect.objectContaining({
+        type: 'data-signal',
+        data: expect.objectContaining({
+          type: 'reactive',
+          tagName: GITHUB_SYNC_STATUS_TAG,
+          contents: 'Subscribed to mastra-ai/mastra#123 in working mode.',
+          attributes: expect.objectContaining({
+            status: 'subscribed',
+            owner: 'mastra-ai',
+            repo: 'mastra',
+            number: 123,
+            mode: 'working',
+          }),
+        }),
+      }),
+    );
   });
 
   it('still subscribes when the baseline snapshot read fails and records the error', async () => {
@@ -1037,7 +1053,15 @@ describe('GithubSignals', () => {
     });
     // No baseline cursor and no baseline notification without a snapshot.
     expect(subscription.lastObservedContentHash).toBeUndefined();
-    expect(chunks).toEqual([]);
+    expect(chunks).toContainEqual(
+      expect.objectContaining({
+        type: 'data-signal',
+        data: expect.objectContaining({
+          tagName: GITHUB_SYNC_STATUS_TAG,
+          attributes: expect.objectContaining({ status: 'subscribed', number: 123 }),
+        }),
+      }),
+    );
   });
 
   it('preserves one-time hint state and granular cursors when resubscribing', async () => {
@@ -1273,7 +1297,20 @@ describe('GithubSignals', () => {
 
     const savedThread = vi.mocked(threadStore.saveThread).mock.calls[0]![0].thread;
     expect((savedThread.metadata?.mastra as any)[GITHUB_SIGNALS_METADATA_KEY].subscriptions).toEqual([]);
-    expect(chunks).toEqual([]);
+    expect(chunks).toContainEqual(
+      expect.objectContaining({
+        type: 'data-signal',
+        data: expect.objectContaining({
+          tagName: GITHUB_SYNC_STATUS_TAG,
+          attributes: expect.objectContaining({
+            status: 'unsubscribed',
+            owner: 'mastra-ai',
+            repo: 'mastra',
+            number: 123,
+          }),
+        }),
+      }),
+    );
   });
 
   it('returns processor-owned tools that persist subscribe and unsubscribe operations immediately', async () => {
@@ -2347,13 +2384,8 @@ describe('GithubSignals', () => {
             latestCommentUpdatedAt: '2026-06-05T22:05:00.000Z',
           }),
           metadata: expect.objectContaining({
-            github: expect.objectContaining({
-              latestCommentAuthor: 'devin-ai-integration',
-              // Full comment body is no longer persisted in notification metadata; only the excerpt.
-              latestCommentExcerpt: 'Acknowledged! The authorized comment should still be delivered.',
-              latestCommentUrl: 'https://github.com/mastra-ai/mastra/pull/17590#issuecomment-devin',
-              latestCommentUpdatedAt: '2026-06-05T22:05:00.000Z',
-            }),
+            // Agent-facing comment fields live in attributes only; metadata keeps sync bookkeeping.
+            github: expect.not.objectContaining({ latestCommentAuthor: expect.anything() }),
           }),
         }),
       ],
@@ -2637,14 +2669,8 @@ describe('GithubSignals', () => {
             latestCommentUpdatedAt: '2026-01-01T00:05:00.000Z',
           }),
           metadata: expect.objectContaining({
-            github: expect.objectContaining({
-              latestCommentAuthor: 'devin-ai-integration[bot]',
-              // Full comment body is no longer persisted in notification metadata; only the excerpt.
-              latestCommentExcerpt:
-                'Acknowledged! Third test comment received. Bot notification delivery is working after the rebuild/reload.',
-              latestCommentUrl: 'https://github.com/mastra-ai/mastra/pull/123#issuecomment-1',
-              latestCommentUpdatedAt: '2026-01-01T00:05:00.000Z',
-            }),
+            // Agent-facing comment fields live in attributes only; metadata keeps sync bookkeeping.
+            github: expect.not.objectContaining({ latestCommentAuthor: expect.anything() }),
           }),
         }),
       ],
@@ -3147,11 +3173,24 @@ describe('GithubSignals', () => {
           attributes: expect.objectContaining({
             ciState: 'failure',
             failingChecks: 'Quality assurance',
+            failingCheckUrls: 'Quality assurance: https://github.com/mastra-ai/mastra/actions/runs/1',
           }),
+          metadata: {
+            github: expect.not.objectContaining({
+              failingChecks: expect.anything(),
+              pendingChecks: expect.anything(),
+            }),
+          },
         }),
       ],
       expect.objectContaining({ resourceId: thread.resourceId, threadId: thread.id }),
     );
+    // Signal attributes are rendered with String(value), so every attribute must be a scalar —
+    // an object or array here would surface to the agent as "[object Object]".
+    const [sent] = sendNotificationSignal.mock.calls[0]![0] as Array<{ attributes: Record<string, unknown> }>;
+    for (const [key, value] of Object.entries(sent!.attributes)) {
+      expect(value === null || typeof value !== 'object', `attributes.${key} must be scalar`).toBe(true);
+    }
   });
 
   it('classifies CI recovery, review activity, terminal states, and bot-only noise', async () => {
@@ -4756,7 +4795,9 @@ describe('GithubSignals', () => {
           kind: 'pull-request-code-activity',
           summary: 'New head revision for mastra-ai/mastra#207: Review dedicated changes.',
           attributes: expect.objectContaining({ mode: 'review' }),
-          metadata: expect.objectContaining({ github: expect.objectContaining({ mode: 'review' }) }),
+          metadata: expect.objectContaining({
+            github: expect.objectContaining({ headSha: 'new-head', reviewStateHash: 'review-2' }),
+          }),
         }),
       ]),
     );
@@ -4992,7 +5033,19 @@ describe('GithubSignals', () => {
       requestContext: createRequestContext(reactiveThread),
       chunks,
     });
-    expect(chunks).toEqual([]);
+    expect(chunks).toContainEqual(
+      expect.objectContaining({
+        type: 'data-signal',
+        data: expect.objectContaining({
+          contents: 'Not subscribed to mastra-ai/mastra#212 in review mode because it is already closed.',
+          attributes: expect.objectContaining({
+            status: 'not_subscribed_terminal',
+            mode: 'review',
+            terminalState: 'closed',
+          }),
+        }),
+      }),
+    );
     toolProcessor.stopAllPolling();
   });
 

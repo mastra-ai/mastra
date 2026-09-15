@@ -7,17 +7,17 @@
 
 export type Simplify<T> = { [K in keyof T]: T[K] } & {};
 
-type Shared_Auxiliary_272 =
+type Shared_Auxiliary_275 =
   | string
   | number
   | boolean
   | null
-  | Shared_Auxiliary_272[]
+  | Shared_Auxiliary_275[]
   | {
-      [key: string]: Shared_Auxiliary_272;
+      [key: string]: Shared_Auxiliary_275;
     };
 
-type Shared_Auxiliary_588 =
+type Shared_Auxiliary_595 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -52,41 +52,41 @@ type Shared_Auxiliary_588 =
     }
   | {
       op: 'and' | 'or';
-      args: Shared_Auxiliary_588[];
+      args: Shared_Auxiliary_595[];
     }
   | {
       op: 'not';
-      arg: Shared_Auxiliary_588;
+      arg: Shared_Auxiliary_595;
     }
   | {
       spans:
         | {
-            some: Shared_Auxiliary_606;
+            some: Shared_Auxiliary_613;
           }
         | {
-            none: Shared_Auxiliary_606;
+            none: Shared_Auxiliary_613;
           };
     }
   | {
       scores:
         | {
-            some: Shared_Auxiliary_606;
+            some: Shared_Auxiliary_613;
           }
         | {
-            none: Shared_Auxiliary_606;
+            none: Shared_Auxiliary_613;
           };
     }
   | {
       feedback:
         | {
-            some: Shared_Auxiliary_606;
+            some: Shared_Auxiliary_613;
           }
         | {
-            none: Shared_Auxiliary_606;
+            none: Shared_Auxiliary_613;
           };
     };
 
-type Shared_Auxiliary_606 =
+type Shared_Auxiliary_613 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -121,14 +121,33 @@ type Shared_Auxiliary_606 =
     }
   | {
       op: 'and' | 'or';
-      args: Shared_Auxiliary_606[];
+      args: Shared_Auxiliary_613[];
     }
   | {
       op: 'not';
-      arg: Shared_Auxiliary_606;
+      arg: Shared_Auxiliary_613;
     };
 
-type Shared_Auxiliary_1146 =
+type Shared_Auxiliary_647 =
+  | {
+      op: 'and' | 'or';
+      args: Shared_Auxiliary_647[];
+    }
+  | {
+      op: 'not';
+      arg: Shared_Auxiliary_647;
+    }
+  | {
+      traces:
+        | {
+            some: Shared_Auxiliary_595;
+          }
+        | {
+            none: Shared_Auxiliary_595;
+          };
+    };
+
+type Shared_Auxiliary_1168 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -173,19 +192,19 @@ type Shared_Auxiliary_1146 =
     }
   | {
       op: 'and' | 'or';
-      args: Shared_Auxiliary_1146[];
+      args: Shared_Auxiliary_1168[];
     }
   | {
       op: 'not';
-      arg: Shared_Auxiliary_1146;
+      arg: Shared_Auxiliary_1168;
     };
 
-type Shared_Auxiliary_1286 = {
+type Shared_Auxiliary_1308 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: Shared_Auxiliary_1286[] | undefined;
+  children?: Shared_Auxiliary_1308[] | undefined;
 };
 
 type Shared_Type_0 = {
@@ -564,6 +583,12 @@ type Shared_Type_22 = {
 type Shared_Type_23 = {
   readOnly?: boolean | undefined;
   lastMessages?: (number | false) | undefined;
+  messageHistory?:
+    | {
+        maxTokens: number;
+        atMaxRemoveTokens?: number | undefined;
+      }
+    | undefined;
   semanticRecall?: (boolean | Shared_Type_21) | undefined;
   generateTitle?: (boolean | Shared_Type_22) | undefined;
 };
@@ -1139,7 +1164,7 @@ type Shared_Type_48 = {
   providerOptions?:
     | {
         [key: string]: {
-          [key: string]: Shared_Auxiliary_272;
+          [key: string]: Shared_Auxiliary_275;
         };
       }
     | undefined;
@@ -1153,7 +1178,7 @@ type Shared_Type_49 = {
   providerOptions?:
     | {
         [key: string]: {
-          [key: string]: Shared_Auxiliary_272;
+          [key: string]: Shared_Auxiliary_275;
         };
       }
     | undefined;
@@ -1168,13 +1193,13 @@ type Shared_Type_50 = {
     | undefined;
   metadata?:
     | {
-        [key: string]: Shared_Auxiliary_272;
+        [key: string]: Shared_Auxiliary_275;
       }
     | undefined;
   providerOptions?:
     | {
         [key: string]: {
-          [key: string]: Shared_Auxiliary_272;
+          [key: string]: Shared_Auxiliary_275;
         };
       }
     | undefined;
@@ -1199,7 +1224,7 @@ type Shared_Type_51 = {
   providerOptions?:
     | {
         [key: string]: {
-          [key: string]: Shared_Auxiliary_272;
+          [key: string]: Shared_Auxiliary_275;
         };
       }
     | undefined;
@@ -1268,7 +1293,7 @@ type Shared_Type_53 = {
   createdAt?: (string | Date) | undefined;
   metadata?:
     | {
-        [key: string]: Shared_Auxiliary_272;
+        [key: string]: Shared_Auxiliary_275;
       }
     | undefined;
   attributes?:
@@ -1281,7 +1306,7 @@ type Shared_Type_53 = {
   providerOptions?:
     | {
         [key: string]: {
-          [key: string]: Shared_Auxiliary_272;
+          [key: string]: Shared_Auxiliary_275;
         };
       }
     | undefined;
@@ -1294,7 +1319,7 @@ type Shared_Type_54 = {
   createdAt?: (string | Date) | undefined;
   metadata?:
     | {
-        [key: string]: Shared_Auxiliary_272;
+        [key: string]: Shared_Auxiliary_275;
       }
     | undefined;
   attributes?:
@@ -1307,7 +1332,7 @@ type Shared_Type_54 = {
   providerOptions?:
     | {
         [key: string]: {
-          [key: string]: Shared_Auxiliary_272;
+          [key: string]: Shared_Auxiliary_275;
         };
       }
     | undefined;
@@ -2618,7 +2643,7 @@ type Shared_Type_111 = {
       }
     | undefined;
   steps: Shared_Type_106;
-  predicates: Shared_Auxiliary_1146[];
+  predicates: Shared_Auxiliary_1168[];
 };
 
 type Shared_Type_112 = {
@@ -2641,7 +2666,7 @@ type Shared_Type_112 = {
         description?: string | undefined;
       };
   loopType: 'dowhile' | 'dountil';
-  predicate: Shared_Auxiliary_1146;
+  predicate: Shared_Auxiliary_1168;
 };
 
 type Shared_Type_113 =
@@ -2995,7 +3020,7 @@ type Shared_Type_126 = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_1286[] | undefined;
+  files?: Shared_Auxiliary_1308[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -3837,7 +3862,7 @@ export type PostAgentsAgentIdGenerate_Body = {
   providerOptions?:
     | {
         [key: string]: {
-          [key: string]: Shared_Auxiliary_272;
+          [key: string]: Shared_Auxiliary_275;
         };
       }
     | undefined;
@@ -3995,7 +4020,7 @@ export type PostAgentsAgentIdStreamUntilIdle_Body = {
   providerOptions?:
     | {
         [key: string]: {
-          [key: string]: Shared_Auxiliary_272;
+          [key: string]: Shared_Auxiliary_275;
         };
       }
     | undefined;
@@ -4570,7 +4595,7 @@ export type PostAgentsAgentIdResumeStream_Body = {
   providerOptions?:
     | {
         [key: string]: {
-          [key: string]: Shared_Auxiliary_272;
+          [key: string]: Shared_Auxiliary_275;
         };
       }
     | undefined;
@@ -4861,7 +4886,7 @@ export type PostAgentsAgentIdResumeStreamUntilIdle_Body = {
   providerOptions?:
     | {
         [key: string]: {
-          [key: string]: Shared_Auxiliary_272;
+          [key: string]: Shared_Auxiliary_275;
         };
       }
     | undefined;
@@ -7396,6 +7421,12 @@ export type GetMemoryConfig_Response = {
   memoryType?: ('local' | 'gateway') | undefined;
   config: {
     lastMessages?: (number | false) | undefined;
+    messageHistory?:
+      | {
+          maxTokens: number;
+          atMaxRemoveTokens?: number | undefined;
+        }
+      | undefined;
     semanticRecall?: (boolean | unknown) | undefined;
     workingMemory?:
       | {
@@ -7925,6 +7956,46 @@ export interface PostMemoryThreadsThreadIdClone_RouteContract {
   body: PostMemoryThreadsThreadIdClone_Body;
   request: PostMemoryThreadsThreadIdClone_Request;
   response: PostMemoryThreadsThreadIdClone_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /memory/threads/:threadId/transfer
+// ============================================================================
+export type PostMemoryThreadsThreadIdTransfer_PathParams = GetMemoryThreadsThreadId_PathParams;
+
+export type PostMemoryThreadsThreadIdTransfer_QueryParams = {
+  agentId?: string | undefined;
+};
+
+export type PostMemoryThreadsThreadIdTransfer_Body = {
+  resourceId: string;
+};
+
+export type PostMemoryThreadsThreadIdTransfer_Response = GetMemoryThreadsThreadId_Response;
+
+export type PostMemoryThreadsThreadIdTransfer_Request = Simplify<
+  (PostMemoryThreadsThreadIdTransfer_PathParams extends never
+    ? {}
+    : { params: PostMemoryThreadsThreadIdTransfer_PathParams }) &
+    (PostMemoryThreadsThreadIdTransfer_QueryParams extends never
+      ? {}
+      : {} extends PostMemoryThreadsThreadIdTransfer_QueryParams
+        ? { query?: PostMemoryThreadsThreadIdTransfer_QueryParams }
+        : { query: PostMemoryThreadsThreadIdTransfer_QueryParams }) &
+    (PostMemoryThreadsThreadIdTransfer_Body extends never
+      ? {}
+      : {} extends PostMemoryThreadsThreadIdTransfer_Body
+        ? { body?: PostMemoryThreadsThreadIdTransfer_Body }
+        : { body: PostMemoryThreadsThreadIdTransfer_Body })
+>;
+
+export interface PostMemoryThreadsThreadIdTransfer_RouteContract {
+  pathParams: PostMemoryThreadsThreadIdTransfer_PathParams;
+  queryParams: PostMemoryThreadsThreadIdTransfer_QueryParams;
+  body: PostMemoryThreadsThreadIdTransfer_Body;
+  request: PostMemoryThreadsThreadIdTransfer_Request;
+  response: PostMemoryThreadsThreadIdTransfer_Response;
   responseType: 'json';
 }
 
@@ -9146,7 +9217,7 @@ export type PostObservabilityTracesQuery_Body = {
     from: string;
     to: string;
   };
-  where?: Shared_Auxiliary_588 | undefined;
+  where?: Shared_Auxiliary_595 | undefined;
   group?:
     | {
         by: ['threadId'];
@@ -9207,6 +9278,52 @@ export interface PostObservabilityTracesQuery_RouteContract {
   body: PostObservabilityTracesQuery_Body;
   request: PostObservabilityTracesQuery_Request;
   response: PostObservabilityTracesQuery_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /observability/threads/query
+// ============================================================================
+export type PostObservabilityThreadsQuery_Body = {
+  traces: {
+    timeRange: {
+      from: string;
+      to: string;
+    };
+    where?: Shared_Auxiliary_595 | undefined;
+  };
+  where?: Shared_Auxiliary_647 | undefined;
+  page: {
+    limit: number;
+    after?: (string | null) | undefined;
+  };
+};
+
+export type PostObservabilityThreadsQuery_Response = {
+  threads: {
+    threadId: string;
+  }[];
+  page: {
+    next: string | null;
+  };
+};
+
+export type PostObservabilityThreadsQuery_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostObservabilityThreadsQuery_Body extends never
+      ? {}
+      : {} extends PostObservabilityThreadsQuery_Body
+        ? { body?: PostObservabilityThreadsQuery_Body }
+        : { body: PostObservabilityThreadsQuery_Body })
+>;
+
+export interface PostObservabilityThreadsQuery_RouteContract {
+  pathParams: never;
+  queryParams: never;
+  body: PostObservabilityThreadsQuery_Body;
+  request: PostObservabilityThreadsQuery_Request;
+  response: PostObservabilityThreadsQuery_Response;
   responseType: 'json';
 }
 
@@ -12433,7 +12550,7 @@ export type PostAgentsAgentIdGenerateLegacy_Body = {
   providerOptions?:
     | {
         [key: string]: {
-          [key: string]: Shared_Auxiliary_272;
+          [key: string]: Shared_Auxiliary_275;
         };
       }
     | undefined;
@@ -16887,7 +17004,7 @@ export type PostStoredSkills_Body = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_1286[] | undefined;
+  files?: Shared_Auxiliary_1308[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -16945,7 +17062,7 @@ export type PatchStoredSkillsStoredSkillId_Body = {
   /** List of asset file paths */
   assets?: (string[] | undefined) | undefined;
   /** Full file tree structure for the skill */
-  files?: (Shared_Auxiliary_1286[] | undefined) | undefined;
+  files?: (Shared_Auxiliary_1308[] | undefined) | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | (
@@ -17821,7 +17938,14 @@ export interface GetSystemApiSchema_RouteContract {
 // ============================================================================
 // Route: GET /datasets
 // ============================================================================
-export type GetDatasets_QueryParams = GetScoresRunRunId_QueryParams;
+export type GetDatasets_QueryParams = {
+  page: number | undefined;
+  perPage: number | undefined;
+  /** Only return records attached to targets of this type */
+  targetType?: ('agent' | 'workflow' | 'scorer' | 'processor') | undefined;
+  /** Only return datasets attached to at least one of these target IDs */
+  targetIds?: string[] | undefined;
+};
 
 export type GetDatasets_Response = {
   datasets: Shared_Type_127[];
@@ -18519,6 +18643,10 @@ export type GetExperiments_QueryParams = {
   comparisonId?: string | undefined;
   variantId?: string | undefined;
   trialIndex?: number | undefined;
+  /** Only return records attached to targets of this type */
+  targetType?: ('agent' | 'workflow' | 'scorer' | 'processor') | undefined;
+  /** Only return experiments run against this target ID */
+  targetId?: string | undefined;
 };
 
 export type GetExperiments_Response = {
@@ -19470,6 +19598,62 @@ export interface GetEditorBuilderSettings_RouteContract {
   request: GetEditorBuilderSettings_Request;
   response: GetEditorBuilderSettings_Response;
   responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /editor/workflow-builder/settings
+// ============================================================================
+export type GetEditorWorkflowBuilderSettings_Response = {
+  enabled: boolean;
+  modelPolicy?:
+    | {
+        active: boolean;
+        pickerVisible?: boolean | undefined;
+        allowed?: Shared_Type_151[] | undefined;
+        default?: Shared_Type_152 | undefined;
+      }
+    | undefined;
+};
+
+export type GetEditorWorkflowBuilderSettings_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetEditorWorkflowBuilderSettings_RouteContract {
+  pathParams: never;
+  queryParams: never;
+  body: never;
+  request: GetEditorWorkflowBuilderSettings_Request;
+  response: GetEditorWorkflowBuilderSettings_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /editor/workflow-builder/stream
+// ============================================================================
+export type PostEditorWorkflowBuilderStream_Body = PostAgentsAgentIdGenerate_Body;
+
+export type PostEditorWorkflowBuilderStream_Response = PostAgentsAgentIdGenerate_Response;
+
+export type PostEditorWorkflowBuilderStream_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostEditorWorkflowBuilderStream_Body extends never
+      ? {}
+      : {} extends PostEditorWorkflowBuilderStream_Body
+        ? { body?: PostEditorWorkflowBuilderStream_Body }
+        : { body: PostEditorWorkflowBuilderStream_Body })
+>;
+
+export interface PostEditorWorkflowBuilderStream_RouteContract {
+  pathParams: never;
+  queryParams: never;
+  body: PostEditorWorkflowBuilderStream_Body;
+  request: PostEditorWorkflowBuilderStream_Request;
+  response: PostEditorWorkflowBuilderStream_Response;
+  responseType: 'stream';
 }
 
 // ============================================================================
@@ -22366,6 +22550,7 @@ export interface RouteTypes {
   'PATCH /memory/threads/:threadId': PatchMemoryThreadsThreadId_RouteContract;
   'DELETE /memory/threads/:threadId': DeleteMemoryThreadsThreadId_RouteContract;
   'POST /memory/threads/:threadId/clone': PostMemoryThreadsThreadIdClone_RouteContract;
+  'POST /memory/threads/:threadId/transfer': PostMemoryThreadsThreadIdTransfer_RouteContract;
   'POST /memory/threads/:threadId/working-memory': PostMemoryThreadsThreadIdWorkingMemory_RouteContract;
   'POST /memory/messages/delete': PostMemoryMessagesDelete_RouteContract;
   'GET /memory/search': GetMemorySearch_RouteContract;
@@ -22396,6 +22581,7 @@ export interface RouteTypes {
   'POST /observability/traces/score': PostObservabilityTracesScore_RouteContract;
   'GET /observability/traces/:traceId/:spanId/scores': GetObservabilityTracesTraceIdSpanIdScores_RouteContract;
   'POST /observability/traces/query': PostObservabilityTracesQuery_RouteContract;
+  'POST /observability/threads/query': PostObservabilityThreadsQuery_RouteContract;
   'GET /observability/metrics': GetObservabilityMetrics_RouteContract;
   'GET /observability/logs': GetObservabilityLogs_RouteContract;
   'GET /observability/scores': GetObservabilityScores_RouteContract;
@@ -22598,6 +22784,8 @@ export interface RouteTypes {
   'GET /background-tasks': GetBackgroundTasks_RouteContract;
   'GET /background-tasks/:backgroundTaskId': GetBackgroundTasksBackgroundTaskId_RouteContract;
   'GET /editor/builder/settings': GetEditorBuilderSettings_RouteContract;
+  'GET /editor/workflow-builder/settings': GetEditorWorkflowBuilderSettings_RouteContract;
+  'POST /editor/workflow-builder/stream': PostEditorWorkflowBuilderStream_RouteContract;
   'GET /editor/builder/models/available': GetEditorBuilderModelsAvailable_RouteContract;
   'GET /editor/builder/infrastructure': GetEditorBuilderInfrastructure_RouteContract;
   'GET /editor/builder/registries': GetEditorBuilderRegistries_RouteContract;
@@ -23116,6 +23304,12 @@ export interface Client {
   '/editor/builder/settings': {
     GET: GetEditorBuilderSettings_RouteContract;
   };
+  '/editor/workflow-builder/settings': {
+    GET: GetEditorWorkflowBuilderSettings_RouteContract;
+  };
+  '/editor/workflow-builder/stream': {
+    POST: PostEditorWorkflowBuilderStream_RouteContract;
+  };
   '/embedders': {
     GET: GetEmbedders_RouteContract;
   };
@@ -23224,6 +23418,9 @@ export interface Client {
   '/memory/threads/:threadId/messages': {
     GET: GetMemoryThreadsThreadIdMessages_RouteContract;
   };
+  '/memory/threads/:threadId/transfer': {
+    POST: PostMemoryThreadsThreadIdTransfer_RouteContract;
+  };
   '/memory/threads/:threadId/working-memory': {
     GET: GetMemoryThreadsThreadIdWorkingMemory_RouteContract;
     POST: PostMemoryThreadsThreadIdWorkingMemory_RouteContract;
@@ -23312,6 +23509,9 @@ export interface Client {
   };
   '/observability/scores/timeseries': {
     POST: PostObservabilityScoresTimeseries_RouteContract;
+  };
+  '/observability/threads/query': {
+    POST: PostObservabilityThreadsQuery_RouteContract;
   };
   '/observability/traces': {
     GET: GetObservabilityTraces_RouteContract;

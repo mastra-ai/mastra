@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "1.66.0",
+  "version": "1.68.0-alpha.0",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -911,7 +911,9 @@
     "tokenx": "^1.3.0",
     "ws": "^8.21.0",
     "xxhash-wasm": "^1.1.0",
-    "@modelcontextprotocol/server": "2.0.0"
+    "@modelcontextprotocol/server": "2.0.0",
+    "hono": "^4.12.8",
+    "hono-openapi": "^1.3.1"
   },
   "peerDependencies": {
     "zod": "^3.25.0 || ^4.0.0"
@@ -968,8 +970,6 @@
     "arktype": "^2.2.0",
     "eslint": "^10.7.0",
     "fast-deep-equal": "^3.1.3",
-    "hono": "^4.12.8",
-    "hono-openapi": "^1.3.1",
     "rollup": "^4.62.2",
     "tinyglobby": "^0.2.17",
     "ts-morph": "^27.0.2",

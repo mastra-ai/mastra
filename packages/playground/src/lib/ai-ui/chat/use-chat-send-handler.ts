@@ -1,5 +1,6 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { RequestContext } from '@mastra/core/di';
+import type { ChatSendArgs } from '@mastra/playground-ui/domains/chat/context/chat-context';
 import { memoryStatusQueryKey } from '@mastra/playground-ui/domains/memory/hooks/use-memory-status';
 import { memoryThreadMessagesQueryKey } from '@mastra/playground-ui/domains/memory/hooks/use-memory-thread-messages';
 import { observationalMemoryQueryKey } from '@mastra/playground-ui/domains/memory/hooks/use-observational-memory';
@@ -8,7 +9,6 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useRef } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 
-import type { ChatSendArgs } from './chat-context';
 import { injectBufferingEnds } from '@/services/om-parts-converter';
 import {
   buildMaxStepsStreamErrorMessage,

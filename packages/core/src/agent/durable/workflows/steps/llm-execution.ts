@@ -10,12 +10,12 @@ import { buildLlmPromptArgs } from '../../../../loop/shared/build-llm-prompt-arg
 import { composeStepInput } from '../../../../loop/shared/compose-step-input';
 import { injectBackgroundTaskPrompt } from '../../../../loop/shared/inject-background-task-prompt';
 import { buildMemoryHeaders, mergeLlmCallHeaders } from '../../../../loop/shared/merge-llm-call-headers';
+import { recordTerminalErrorMessage } from '../../../../loop/shared/record-terminal-error-message';
 import { buildMessagesFromChunks } from '../../../../loop/workflows/agentic-execution/build-messages-from-chunks';
 import type { CollectedChunk } from '../../../../loop/workflows/agentic-execution/build-messages-from-chunks';
 import { endPendingProviderToolSpan } from '../../../../loop/workflows/agentic-execution/provider-tool-spans';
 import type { PendingProviderToolCall } from '../../../../loop/workflows/agentic-execution/provider-tool-spans';
 import type { Mastra } from '../../../../mastra';
-import { isSystemReminderSignalType } from '../../../../memory/system-reminders';
 import type {
   SpanType,
   AIModelGenerationSpan,
@@ -315,12 +315,32 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
         currentMessageId = messageList.rotateResponseMessageId(currentMessageId);
         return currentMessageId;
       };
+      let terminalAttemptContext:
+        | {
+            recordTerminalError: (error: unknown) => void;
+          }
+        | undefined;
 
       for (let modelIndex = 0; modelIndex < modelList.length; modelIndex++) {
         const modelEntry = modelList[modelIndex]!;
         const maxRetries = modelEntry.maxRetries || 0;
 
         for (let attempt = 0; attempt <= maxRetries; attempt++) {
+          // Capture this attempt before processors can rotate the active id. The
+          // fallback callback covers failures before a stream can materialize;
+          // it resolves currentMessageId only when the terminal error is known.
+          const attemptMessageId = currentMessageId;
+          terminalAttemptContext = {
+            recordTerminalError: error => {
+              recordTerminalErrorMessage({
+                messageList,
+                attemptId: attemptMessageId,
+                activeId: currentMessageId,
+                error,
+              });
+            },
+          };
+
           // Declared outside the try so the outer catch can persist
           // already-streamed partial output on abort (#22593). Assigned inside
           // once streaming state exists; undefined means nothing streamed yet.
@@ -501,6 +521,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                         },
                         undefined,
                         execOptions.autoResumeSuspendedTools,
+                        Boolean(registryEntry?.backgroundTaskManager),
                       );
                     } else {
                       convertedTools[name] = tool as CoreTool;
@@ -508,6 +529,13 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   }
                   currentTools = convertedTools as unknown as ToolSet;
                   if (registryEntry) {
+                    // Keep the full toolset this step started from so the NEXT step
+                    // (via resolveRuntimeDependencies) and its processors see the
+                    // complete catalog. Without this, a processor that withholds
+                    // tools (ToolSearchProcessor with includeResolvedTools) would
+                    // shrink the registry to `search_tools` on step 1 and the tool
+                    // it auto-loaded could never surface on step 2 (issue #22933).
+                    registryEntry.baseTools = tools;
                     // Store the exact per-step snapshot rather than merging onto the
                     // previous step's set. `currentTools` already starts from the full
                     // toolset resolved at the top of this step, so a snapshot keeps the
@@ -517,6 +545,11 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     // tool-call step even though the model was never shown them.
                     registryEntry.tools = convertedTools;
                   }
+                } else if (registryEntry?.baseTools) {
+                  // No processor narrowed this step, so the model sees the full
+                  // toolset; make the tool-call step resolve from the same set
+                  // instead of a previous step's narrowed snapshot.
+                  registryEntry.tools = registryEntry.baseTools;
                 }
               } catch (error) {
                 // Handle TripWire from processInputStep — emit tripwire chunk and
@@ -576,9 +609,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             if (pubsub) {
               const initialSignalEchoes = registryEntry?.initialSignalEchoes?.splice(0) ?? [];
               for (const initialSignal of initialSignalEchoes) {
-                if (!isSystemReminderSignalType(initialSignal.type)) {
-                  await emitChunkEvent(pubsub, runId, initialSignal.toDataPart() as any);
-                }
+                await emitChunkEvent(pubsub, runId, initialSignal.toDataPart() as any);
               }
 
               const isFirstModelRequest = stepIndex === 0;
@@ -589,9 +620,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 }
                 for (const preRunSignal of preRunSignals) {
                   const signalForTranscript = messageList.addSignal(preRunSignal);
-                  if (!isSystemReminderSignalType(signalForTranscript.type)) {
-                    await emitChunkEvent(pubsub, runId, signalForTranscript.toDataPart() as any);
-                  }
+                  await emitChunkEvent(pubsub, runId, signalForTranscript.toDataPart() as any);
                 }
               }
             }
@@ -673,6 +702,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 const requestStepResult = await requestStepRunner.runProcessLLMRequest({
                   prompt: inputMessages,
                   model: currentModel,
+                  messageList,
                   stepNumber: (inputData as any).accumulatedSteps?.length ?? 0,
                   steps: (inputData as any).accumulatedSteps ?? [],
                   retryCount: (inputData as any).processorRetryCount ?? 0,
@@ -954,7 +984,10 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // Called on the success path AND both abort returns: the
             // serialized messageListState is the only channel to finalize-run
             // persistence, so skipping this on abort would drop
-            // already-streamed partial output (#22593).
+            // already-streamed partial output (#22593). Keep this attempt's
+            // materialization id stable if an error processor later rotates the
+            // active id before the terminal-error branch runs.
+            const materializationMessageId = currentMessageId;
             materializeStreamedMessages = () => {
               const responseModelId = currentModel.modelId ?? responseMetadata?.modelId;
               const responseTraceId = getRootExportSpan(
@@ -972,7 +1005,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   : undefined;
               const builtMessages = buildMessagesFromChunks({
                 chunks: collectedChunks,
-                messageId: currentMessageId,
+                messageId: materializationMessageId,
                 tools: currentTools,
                 responseModelMetadata,
               });
@@ -988,6 +1021,17 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   registryEntry.messageList = messageList;
                 }
               }
+            };
+            terminalAttemptContext = {
+              recordTerminalError: error => {
+                materializeStreamedMessages?.();
+                recordTerminalErrorMessage({
+                  messageList,
+                  attemptId: materializationMessageId,
+                  activeId: currentMessageId,
+                  error,
+                });
+              },
             };
 
             // 10. Execute LLM call (or replay cached response)
@@ -1698,6 +1742,15 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   ...deferredStepFinishChunk,
                   payload: {
                     ...deferredStepFinishChunk.payload,
+                    // The regular loop stamps isContinued on every step-finish chunk it emits
+                    // (loop/workflows/agentic-loop/index.ts). Output processors depend on it:
+                    // ChatChannelOutputProcessor closes its render queue on the first chunk where the
+                    // flag is not `true`, so a durable chunk that omits it ends channel rendering at
+                    // the tool step and drops everything after it (#23341).
+                    stepResult: {
+                      ...deferredStepFinishChunk.payload?.stepResult,
+                      isContinued,
+                    },
                     _durableStepContent: stepContent,
                   },
                 };
@@ -1875,6 +1928,11 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
       // a deferred error chunk rather than crashing the loop.
       const fatalError =
         lastError ?? new Error('Exhausted all fallback models and reached the maximum number of retries.');
+
+      // Materialize only the final attempt before serializing MessageList. Its
+      // callback preserves partial parts and model metadata, then appends the
+      // Mastra-only error part; recovered attempts never reach this branch.
+      terminalAttemptContext?.recordTerminalError(fatalError);
 
       // End the root spans here too — this is the only error path that covers EventedAgent,
       // whose fire-and-forget launch never sees the failure (so emitError never runs).

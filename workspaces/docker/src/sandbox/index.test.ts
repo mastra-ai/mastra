@@ -17,7 +17,8 @@
  */
 
 import { createSandboxLifecycleTests } from '@internal/workspace-test-utils';
-import { SandboxNotReadyError } from '@mastra/core/workspace';
+import { SandboxAbortError, SandboxError, SandboxNotReadyError } from '@mastra/core/workspace';
+import { extract as tarExtract } from 'tar-stream';
 import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vitest';
 
 import { DockerSandbox } from './index';
@@ -31,6 +32,7 @@ const { mockContainer, mockExec, mockStream, mockDocker, resetMockDefaults } = v
     on: vi.fn(),
     write: vi.fn(),
     end: vi.fn(),
+    destroy: vi.fn(),
     writableEnded: false,
   };
 
@@ -56,6 +58,7 @@ const { mockContainer, mockExec, mockStream, mockDocker, resetMockDefaults } = v
       State: { Status: 'running', Running: true },
     }),
     exec: vi.fn().mockResolvedValue(mockExec),
+    putArchive: vi.fn().mockResolvedValue(undefined),
   };
 
   const mockFollowProgress = vi.fn((_stream: any, onFinish: (err: Error | null) => void) => {
@@ -86,6 +89,7 @@ const { mockContainer, mockExec, mockStream, mockDocker, resetMockDefaults } = v
       State: { Status: 'running', Running: true },
     });
     mockContainer.exec.mockReset().mockResolvedValue(mockExec);
+    mockContainer.putArchive.mockReset().mockResolvedValue(undefined);
     mockDocker.createContainer.mockReset().mockResolvedValue(mockContainer);
     mockDocker.getContainer.mockReset().mockReturnValue(mockContainer);
     mockDocker.getImage.mockReset().mockReturnValue({
@@ -104,6 +108,7 @@ const { mockContainer, mockExec, mockStream, mockDocker, resetMockDefaults } = v
     });
     mockStream.on.mockReset();
     mockStream.write.mockReset();
+    mockStream.destroy.mockReset();
     mockStream.writableEnded = false;
     mockStream.end.mockReset().mockImplementation((callback?: () => void) => {
       mockStream.writableEnded = true;
@@ -261,6 +266,24 @@ describe('DockerSandbox', () => {
       expect(sandbox.workingDirectory).toBe('/workspace');
     });
 
+    it('enables an init process (HostConfig.Init) by default to reap zombies', async () => {
+      const sandbox = new DockerSandbox();
+      await sandbox._start();
+
+      expect(mockDocker.createContainer).toHaveBeenCalledWith(
+        expect.objectContaining({ HostConfig: expect.objectContaining({ Init: true }) }),
+      );
+    });
+
+    it('allows disabling the init process via the init option', async () => {
+      const sandbox = new DockerSandbox({ init: false });
+      await sandbox._start();
+
+      expect(mockDocker.createContainer).toHaveBeenCalledWith(
+        expect.objectContaining({ HostConfig: expect.objectContaining({ Init: false }) }),
+      );
+    });
+
     it('should include environment variables', async () => {
       const sandbox = new DockerSandbox({
         env: { NODE_ENV: 'test', API_KEY: 'secret' },
@@ -383,6 +406,77 @@ describe('DockerSandbox', () => {
           Tmpfs: { '/tmp': 'rw,noexec,nosuid,size=64m' },
         }),
       );
+    });
+
+    it('should map mounts to HostConfig.Mounts', async () => {
+      const sandbox = new DockerSandbox({
+        mounts: [
+          {
+            type: 'volume',
+            source: 'project-data',
+            target: '/work',
+            readOnly: true,
+            volumeOptions: { subpath: 'shared', noCopy: true, labels: { team: 'platform' } },
+          },
+          {
+            type: 'bind',
+            source: '/host/cache',
+            target: '/cache',
+            bindOptions: { propagation: 'rslave' },
+          },
+          {
+            type: 'tmpfs',
+            target: '/scratch',
+            tmpfsOptions: { sizeBytes: 64 * 1024 * 1024, mode: 0o1777 },
+          },
+        ],
+      });
+      await sandbox._start();
+
+      const createCall = mockDocker.createContainer.mock.calls[0]?.[0];
+      expect(createCall.HostConfig.Mounts).toEqual([
+        {
+          Type: 'volume',
+          Source: 'project-data',
+          Target: '/work',
+          ReadOnly: true,
+          VolumeOptions: { Subpath: 'shared', NoCopy: true, Labels: { team: 'platform' } },
+        },
+        {
+          Type: 'bind',
+          Source: '/host/cache',
+          Target: '/cache',
+          BindOptions: { Propagation: 'rslave' },
+        },
+        {
+          Type: 'tmpfs',
+          Source: '',
+          Target: '/scratch',
+          TmpfsOptions: { SizeBytes: 64 * 1024 * 1024, Mode: 0o1777 },
+        },
+      ]);
+    });
+
+    it('should omit HostConfig.Mounts when no mounts are provided', async () => {
+      const sandbox = new DockerSandbox({});
+      await sandbox._start();
+
+      const createCall = mockDocker.createContainer.mock.calls[0]?.[0];
+      expect(createCall.HostConfig.Mounts).toBeUndefined();
+    });
+
+    it('should pass both Binds and Mounts when volumes and mounts are combined', async () => {
+      const sandbox = new DockerSandbox({
+        volumes: { '/host/data': '/container/data' },
+        mounts: [{ type: 'volume', source: 'vol', target: '/work', volumeOptions: { subpath: 'sub' } }],
+      });
+      await sandbox._start();
+
+      const createCall = mockDocker.createContainer.mock.calls[0]?.[0];
+      expect(createCall.HostConfig.Binds).toEqual(['/host/data:/container/data']);
+      expect(createCall.HostConfig.Mounts).toEqual([
+        { Type: 'volume', Source: 'vol', Target: '/work', VolumeOptions: { Subpath: 'sub' } },
+      ]);
     });
 
     it('should include labels with mastra metadata', async () => {
@@ -702,6 +796,73 @@ describe('DockerSandbox', () => {
       });
     });
 
+    it('should warn when requested mounts differ on reconnect', async () => {
+      mockDocker.listContainers.mockResolvedValue([{ Id: 'existing-container-id', State: 'running' }]);
+      mockContainer.inspect.mockResolvedValue({
+        Id: 'existing-container-id',
+        State: { Status: 'running', Running: true },
+        HostConfig: {
+          Mounts: [{ Type: 'volume', Source: 'vol', Target: '/work', VolumeOptions: { Subpath: 'a' } }],
+        },
+      });
+      const logger = {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        trackException: vi.fn(),
+        getTransports: vi.fn(() => new Map()),
+      };
+
+      const sandbox = new DockerSandbox({
+        id: 'existing-sandbox',
+        mounts: [{ type: 'volume', source: 'vol', target: '/work', volumeOptions: { subpath: 'b' } }],
+      });
+      (sandbox as any).__setLogger(logger);
+      await sandbox._start();
+
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('requested Docker option(s) mounts differ'), {
+        containerId: 'existing-container-id',
+        fields: ['mounts'],
+        hostConfigFields: ['Mounts'],
+      });
+    });
+
+    it('should not warn when requested mounts match on reconnect', async () => {
+      mockDocker.listContainers.mockResolvedValue([{ Id: 'existing-container-id', State: 'running' }]);
+      mockContainer.inspect.mockResolvedValue({
+        Id: 'existing-container-id',
+        State: { Status: 'running', Running: true },
+        HostConfig: {
+          Mounts: [
+            { Type: 'bind', Source: '/host/cache', Target: '/cache', BindOptions: { Propagation: 'rslave' } },
+            { Type: 'volume', Source: 'vol', Target: '/work', VolumeOptions: { Subpath: 'shared' } },
+          ],
+        },
+      });
+      const logger = {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        trackException: vi.fn(),
+        getTransports: vi.fn(() => new Map()),
+      };
+
+      // Requested in a different order than the inspected HostConfig to exercise normalization.
+      const sandbox = new DockerSandbox({
+        id: 'existing-sandbox',
+        mounts: [
+          { type: 'volume', source: 'vol', target: '/work', volumeOptions: { subpath: 'shared' } },
+          { type: 'bind', source: '/host/cache', target: '/cache', bindOptions: { propagation: 'rslave' } },
+        ],
+      });
+      (sandbox as any).__setLogger(logger);
+      await sandbox._start();
+
+      expect(logger.warn).not.toHaveBeenCalled();
+    });
+
     it('should not warn when empty hardening collections reconnect to unset HostConfig fields', async () => {
       mockDocker.listContainers.mockResolvedValue([{ Id: 'existing-container-id', State: 'running' }]);
       mockContainer.inspect.mockResolvedValue({
@@ -904,7 +1065,16 @@ describe('DockerSandbox', () => {
 
       expect(mockContainer.exec).toHaveBeenCalledWith(
         expect.objectContaining({
-          Cmd: ['sh', '-c', 'echo hello'],
+          // Command is wrapped so it runs in its own process group; the user
+          // command travels as the final positional arg.
+          Cmd: [
+            'sh',
+            '-c',
+            expect.stringContaining('setsid'),
+            'sh',
+            expect.stringMatching(/^\/tmp\/\.mastra-proc\//),
+            'echo hello',
+          ],
           AttachStdout: true,
           AttachStderr: true,
           AttachStdin: true,
@@ -983,38 +1153,89 @@ describe('DockerSandbox', () => {
       expect(result.timedOut).toBeUndefined();
     });
 
-    it('should use process group kill (negative PID)', async () => {
-      mockExec.inspect.mockResolvedValue({
-        Running: true,
-        ExitCode: null,
-        Pid: 42,
-      });
+    it('should run each spawned command in its own process group via a unique pgid file', async () => {
+      const sandbox = new DockerSandbox();
+      await sandbox._start();
 
+      await sandbox.processes!.spawn('sleep 100');
+      await sandbox.processes!.spawn('sleep 100');
+
+      const firstCmd = mockContainer.exec.mock.calls[0]?.[0].Cmd as string[];
+      const secondCmd = mockContainer.exec.mock.calls[1]?.[0].Cmd as string[];
+
+      // Command is wrapped: ['sh', '-c', SPAWN_WRAPPER, 'sh', pgidFile, command]
+      expect(firstCmd[0]).toBe('sh');
+      expect(firstCmd[2]).toContain('setsid');
+      expect(firstCmd[5]).toBe('sleep 100');
+
+      const firstPgidFile = firstCmd[4];
+      const secondPgidFile = secondCmd[4];
+      expect(firstPgidFile).toMatch(/^\/tmp\/\.mastra-proc\//);
+      // Each spawn gets a distinct pgid file so kill() targets only its own group
+      expect(firstPgidFile).not.toEqual(secondPgidFile);
+    });
+
+    it('should kill by process group in the container PID namespace (not host PID)', async () => {
       const sandbox = new DockerSandbox();
       await sandbox._start();
 
       const handle = await sandbox.processes!.spawn('sleep 100');
 
-      // Reset the mock to capture the kill exec call
+      const spawnCmd = mockContainer.exec.mock.calls[0]?.[0].Cmd as string[];
+      const pgidFile = spawnCmd[4];
+
+      // Capture the kill exec call
+      const killStart = vi.fn().mockResolvedValue(undefined);
+      mockContainer.exec.mockResolvedValueOnce({
+        id: 'kill-exec',
+        start: killStart,
+        inspect: vi.fn().mockResolvedValue({ Running: false, ExitCode: 0 }),
+      });
+
+      const killed = await handle.kill();
+      expect(killed).toBe(true);
+
+      const killCall = mockContainer.exec.mock.calls[1]?.[0];
+      expect(killCall.Cmd[0]).toBe('sh');
+      expect(killCall.Cmd[1]).toBe('-c');
+      const script = killCall.Cmd[2] as string;
+      // The pgid file path is passed as a positional arg ($1), not interpolated,
+      // so the script text is a static constant and the path travels in Cmd[4].
+      expect(killCall.Cmd[4]).toBe(pgidFile);
+      expect(pgidFile).not.toEqual('');
+      // Signals the whole process group (negative PID) — kernel-enforced.
+      expect(script).toContain('kill -STOP -"$pgid"');
+      expect(script).toContain('kill -KILL -"$pgid"');
+      expect(script).not.toContain('kill -9 -42');
+      expect(killStart).toHaveBeenCalled();
+    });
+
+    it('should report kill failure (not a false "killed") when the helper exits non-zero', async () => {
+      // Models the fail-closed guards in KILL_SCRIPT: when the PGID file is
+      // unreadable/empty the helper exits 1 rather than 0. kill() must surface
+      // that as false and must NOT mark the process killed or destroy the
+      // stream — otherwise wait() would resolve with a bogus exit 137 while the
+      // tree is still running (the exact bug this PR fixes).
+      const sandbox = new DockerSandbox();
+      await sandbox._start();
+
+      const handle = await sandbox.processes!.spawn('sleep 100');
+
+      // The kill helper exec runs but exits non-zero (unrecorded/empty PGID).
       mockContainer.exec.mockResolvedValueOnce({
         id: 'kill-exec',
         start: vi.fn().mockResolvedValue(undefined),
+        inspect: vi.fn().mockResolvedValue({ Running: false, ExitCode: 1 }),
       });
 
-      await handle.kill();
+      const killed = await handle.kill();
+      expect(killed).toBe(false);
 
-      // The second exec call should be the kill command with negative PID
-      const killCall = mockContainer.exec.mock.calls[1]?.[0];
-      expect(killCall.Cmd).toEqual(['sh', '-c', 'kill -9 -42 2>/dev/null || kill -9 42']);
+      // Stream was not destroyed, so wait() has not been resolved by kill().
+      expect(mockStream.destroy).not.toHaveBeenCalled();
     });
 
     it('should mark explicit kill results as killed without timeout', async () => {
-      mockExec.inspect.mockResolvedValue({
-        Running: true,
-        ExitCode: null,
-        Pid: 42,
-      });
-
       const sandbox = new DockerSandbox();
       await sandbox._start();
 
@@ -1215,6 +1436,20 @@ describe('dockerSandboxProvider', () => {
     );
   });
 
+  it('should create a DockerSandbox instance with mounts config', async () => {
+    const { dockerSandboxProvider } = await import('../provider');
+    const sandbox = dockerSandboxProvider.createSandbox({
+      image: 'node:22-slim',
+      mounts: [{ type: 'volume', source: 'project-data', target: '/work', volumeOptions: { subpath: 'shared' } }],
+    });
+    await sandbox._start();
+
+    const createCall = mockDocker.createContainer.mock.calls[0]?.[0];
+    expect(createCall.HostConfig.Mounts).toEqual([
+      { Type: 'volume', Source: 'project-data', Target: '/work', VolumeOptions: { Subpath: 'shared' } },
+    ]);
+  });
+
   it('should have config schema', async () => {
     const { dockerSandboxProvider } = await import('../provider');
     expect(dockerSandboxProvider.configSchema).toBeDefined();
@@ -1223,6 +1458,7 @@ describe('dockerSandboxProvider', () => {
     expect((dockerSandboxProvider.configSchema as any)?.properties?.memory).toBeDefined();
     expect((dockerSandboxProvider.configSchema as any)?.properties?.pidsLimit).toBeDefined();
     expect((dockerSandboxProvider.configSchema as any)?.properties?.capDrop).toBeDefined();
+    expect((dockerSandboxProvider.configSchema as any)?.properties?.mounts).toBeDefined();
   });
 });
 
@@ -1332,5 +1568,199 @@ describe('DockerSandbox.clone', () => {
 
     expect(child.id).not.toBe(template.id);
     expect(child['_constructorOptions']).toMatchObject({ image: 'node:22', env: { BASE: '1' } });
+  });
+});
+
+// =============================================================================
+// writeFiles
+// =============================================================================
+
+interface ParsedEntry {
+  name: string;
+  mode?: number;
+  content: string;
+}
+
+/** Parse the tar stream passed to container.putArchive into entries. */
+async function parsePutArchive(): Promise<ParsedEntry[]> {
+  const call = mockContainer.putArchive.mock.calls.at(-1);
+  if (!call) throw new Error('putArchive was not called');
+  const [stream, opts] = call as [NodeJS.ReadableStream, { path: string }];
+  expect(opts.path).toBe('/');
+
+  return await new Promise<ParsedEntry[]>((resolve, reject) => {
+    const entries: ParsedEntry[] = [];
+    const ex = tarExtract();
+    ex.on('entry', (header, entryStream, next) => {
+      const chunks: Buffer[] = [];
+      entryStream.on('data', chunk => chunks.push(chunk as Buffer));
+      entryStream.on('end', () => {
+        entries.push({ name: header.name, mode: header.mode, content: Buffer.concat(chunks).toString('utf8') });
+        next();
+      });
+      entryStream.resume();
+    });
+    ex.on('finish', () => resolve(entries));
+    ex.on('error', reject);
+    stream.pipe(ex);
+  });
+}
+
+describe('DockerSandbox writeFiles', () => {
+  beforeEach(() => {
+    resetMockDefaults();
+  });
+
+  it('throws SandboxNotReadyError when the sandbox has not started', async () => {
+    const sandbox = new DockerSandbox();
+    await expect(sandbox.writeFiles([{ path: 'a.txt', content: 'hi' }])).rejects.toBeInstanceOf(SandboxNotReadyError);
+    expect(mockContainer.putArchive).not.toHaveBeenCalled();
+  });
+
+  it('is a no-op for an empty file list', async () => {
+    const sandbox = new DockerSandbox();
+    await sandbox._start();
+
+    await sandbox.writeFiles([]);
+    expect(mockContainer.putArchive).not.toHaveBeenCalled();
+  });
+
+  it('resolves relative paths against the working directory', async () => {
+    const sandbox = new DockerSandbox({ workingDirectory: '/srv/app' });
+    await sandbox._start();
+
+    await sandbox.writeFiles([{ path: 'src/index.js', content: 'console.log(1)' }]);
+
+    const entries = await parsePutArchive();
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.name).toBe('srv/app/src/index.js');
+    expect(entries[0]!.content).toBe('console.log(1)');
+    expect(entries[0]!.mode).toBe(0o644);
+  });
+
+  it('keeps absolute paths and strips the leading slash for the tar entry', async () => {
+    const sandbox = new DockerSandbox({ workingDirectory: '/srv/app' });
+    await sandbox._start();
+
+    await sandbox.writeFiles([{ path: '/etc/config.json', content: '{}' }]);
+
+    const entries = await parsePutArchive();
+    expect(entries[0]!.name).toBe('etc/config.json');
+  });
+
+  it('preserves Buffer content and writes multiple files in one archive', async () => {
+    const sandbox = new DockerSandbox({ workingDirectory: '/workspace' });
+    await sandbox._start();
+
+    await sandbox.writeFiles([
+      { path: 'script.js', content: 'run()' },
+      { path: 'data.bin', content: Buffer.from('binary') },
+    ]);
+
+    expect(mockContainer.putArchive).toHaveBeenCalledTimes(1);
+    const entries = await parsePutArchive();
+    expect(entries.map(e => e.name)).toEqual(['workspace/script.js', 'workspace/data.bin']);
+    expect(entries.find(e => e.name === 'workspace/data.bin')!.content).toBe('binary');
+  });
+
+  it('wraps putArchive failures in a SandboxError', async () => {
+    const sandbox = new DockerSandbox();
+    await sandbox._start();
+    mockContainer.putArchive.mockRejectedValueOnce(new Error('boom'));
+
+    await expect(sandbox.writeFiles([{ path: 'a.txt', content: 'hi' }])).rejects.toBeInstanceOf(SandboxError);
+  });
+
+  it('honors an explicit file mode on the tar entry', async () => {
+    const sandbox = new DockerSandbox({ workingDirectory: '/workspace' });
+    await sandbox._start();
+
+    await sandbox.writeFiles([{ path: 'run.sh', content: '#!/bin/sh\n', mode: 0o600 }]);
+
+    const entries = await parsePutArchive();
+    expect(entries[0]!.mode).toBe(0o600);
+  });
+
+  it('rejects invalid modes without uploading', async () => {
+    const sandbox = new DockerSandbox({ workingDirectory: '/workspace' });
+    await sandbox._start();
+    mockContainer.putArchive.mockClear();
+
+    for (const bad of [0, 0o1000, -1]) {
+      await expect(sandbox.writeFiles([{ path: 'a', content: 'x', mode: bad }])).rejects.toBeInstanceOf(SandboxError);
+    }
+    expect(mockContainer.putArchive).not.toHaveBeenCalled();
+  });
+
+  it('rejects with SandboxAbortError when the signal is already aborted, without uploading', async () => {
+    const sandbox = new DockerSandbox();
+    await sandbox._start();
+
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      sandbox.writeFiles([{ path: 'a.txt', content: 'hi' }], { abortSignal: controller.signal }),
+    ).rejects.toBeInstanceOf(SandboxAbortError);
+    expect(mockContainer.putArchive).not.toHaveBeenCalled();
+  });
+
+  it('rejects an empty write when the signal is already aborted', async () => {
+    const sandbox = new DockerSandbox();
+    await sandbox._start();
+
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(sandbox.writeFiles([], { abortSignal: controller.signal })).rejects.toBeInstanceOf(SandboxAbortError);
+    expect(mockContainer.putArchive).not.toHaveBeenCalled();
+  });
+
+  it('aborts an in-flight upload and rejects with SandboxAbortError', async () => {
+    const sandbox = new DockerSandbox();
+    await sandbox._start();
+
+    // Model a real transfer: reject when the tar stream is destroyed (its body
+    // ends), which is what terminates the putArchive request.
+    mockContainer.putArchive.mockImplementationOnce((stream: NodeJS.ReadableStream) => {
+      return new Promise((_resolve, reject) => {
+        stream.on('error', err => reject(err));
+        stream.on('close', () => reject(new Error('stream closed')));
+      });
+    });
+
+    const controller = new AbortController();
+    const promise = sandbox.writeFiles([{ path: 'a.txt', content: 'hi' }], { abortSignal: controller.signal });
+    controller.abort();
+
+    await expect(promise).rejects.toBeInstanceOf(SandboxAbortError);
+    expect(mockContainer.putArchive).toHaveBeenCalledTimes(1);
+  });
+
+  it('completes normally and forwards the signal when a non-aborted signal is supplied', async () => {
+    const sandbox = new DockerSandbox({ workingDirectory: '/workspace' });
+    await sandbox._start();
+
+    const controller = new AbortController();
+    await sandbox.writeFiles([{ path: 'ok.txt', content: 'done' }], { abortSignal: controller.signal });
+
+    expect(mockContainer.putArchive).toHaveBeenCalledTimes(1);
+    const opts = mockContainer.putArchive.mock.calls.at(-1)![1] as { path: string; abortSignal?: AbortSignal };
+    expect(opts.path).toBe('/');
+    expect(opts.abortSignal).toBe(controller.signal);
+    const entries = await parsePutArchive();
+    expect(entries[0]!.name).toBe('workspace/ok.txt');
+    expect(entries[0]!.content).toBe('done');
+  });
+
+  it('removes the abort listener after completion so a later abort is a no-op', async () => {
+    const sandbox = new DockerSandbox();
+    await sandbox._start();
+
+    const controller = new AbortController();
+    await sandbox.writeFiles([{ path: 'a.txt', content: 'hi' }], { abortSignal: controller.signal });
+
+    // Listener was detached; aborting now must not throw or affect anything.
+    expect(() => controller.abort()).not.toThrow();
   });
 });

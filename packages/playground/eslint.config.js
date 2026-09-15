@@ -5,6 +5,15 @@ const reactHooks = (await import('eslint-plugin-react-hooks')).default;
 
 const config = await createConfig();
 
+// Typography must come from DS tokens (text-ui-* / text-header-*, or <Txt>).
+// Tailwind default sizes are aliased to tokens in playground-ui/theme.css as a safety net only.
+const TYPOGRAPHY_CLASS_PATTERN = '(^|\\s|:)text-(xs|sm|base|lg|xl|\\dxl)(\\s|$)|text-\\[\\d[^\\]]*(px|rem)\\]';
+const TYPOGRAPHY_MESSAGE = 'Use DS typography tokens (text-ui-* / text-header-*) — see Txt.';
+const restrictedTypographySelectors = [
+  { selector: `Literal[value=/${TYPOGRAPHY_CLASS_PATTERN}/]`, message: TYPOGRAPHY_MESSAGE },
+  { selector: `TemplateElement[value.raw=/${TYPOGRAPHY_CLASS_PATTERN}/]`, message: TYPOGRAPHY_MESSAGE },
+];
+
 const PLAYGROUND_UI_BROAD_IMPORT_MESSAGE =
   'Import from an exact @mastra/playground-ui subpath instead of a broad barrel.';
 
@@ -214,6 +223,17 @@ export default [
       'react-hooks/exhaustive-deps': 'warn',
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
       'no-restricted-syntax': ['error', ...restrictedPlaygroundUiBroadImportSelectors],
+    },
+  },
+  {
+    files: ['src/**/*.{ts,tsx}'],
+    ignores: ['src/**/*.{test,spec}.*', 'src/**/*.stories.*', 'src/**/__tests__/**'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        ...restrictedPlaygroundUiBroadImportSelectors,
+        ...restrictedTypographySelectors,
+      ],
     },
   },
   {
