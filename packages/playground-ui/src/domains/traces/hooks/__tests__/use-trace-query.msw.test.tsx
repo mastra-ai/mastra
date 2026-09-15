@@ -75,6 +75,75 @@ describe('useTraceQuery', () => {
     });
   });
 
+  describe('when a visible sentinel encounters a failed next page', () => {
+    it('keeps loaded rows, stops automatic requests, and allows explicit recovery', async () => {
+      let requests = 0;
+      let recover = false;
+      vi.stubGlobal(
+        'IntersectionObserver',
+        class {
+          constructor(private callback: IntersectionObserverCallback) {}
+          observe(target: Element) {
+            const rect = target.getBoundingClientRect();
+            this.callback(
+              [
+                {
+                  target,
+                  isIntersecting: true,
+                  intersectionRatio: 1,
+                  time: 0,
+                  boundingClientRect: rect,
+                  intersectionRect: rect,
+                  rootBounds: rect,
+                },
+              ],
+              this,
+            );
+          }
+          disconnect() {}
+          unobserve() {}
+          takeRecords() {
+            return [];
+          }
+          root = null;
+          rootMargin = '0px';
+          thresholds = [0];
+        },
+      );
+      server.use(
+        http.post(`${BASE_URL}/api/observability/traces/query`, async ({ request }) => {
+          const body: Parameters<MastraClient['queryTraces']>[0] = await request.json();
+          requests++;
+          if (!body.page?.after) return HttpResponse.json(firstTraceQueryPage);
+          return recover
+            ? HttpResponse.json(lastTraceQueryPage)
+            : HttpResponse.json({ error: 'Failed page' }, { status: 500 });
+        }),
+      );
+      try {
+        const { result, rerender } = renderHook(() => useTraceQuery({ query }), { wrapper: makeWrapper() });
+        await waitFor(() => expect(result.current.data).toEqual(firstTraceQueryPage.traces));
+        act(() => result.current.setEndOfListElement(document.createElement('div')));
+        await waitFor(() => expect(result.current.isError).toBe(true));
+        rerender();
+        await act(async () => {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        });
+        expect(requests).toBe(2);
+        expect(result.current.data).toEqual(firstTraceQueryPage.traces);
+        recover = true;
+        await act(async () => {
+          await result.current.fetchNextPage();
+        });
+        await waitFor(() => expect(result.current.hasNextPage).toBe(false));
+        expect(result.current.data).toEqual([...firstTraceQueryPage.traces, ...lastTraceQueryPage.traces]);
+        expect(requests).toBe(3);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
+  });
+
   describe('when pages contain duplicate trace IDs', () => {
     it('returns each trace only once', async () => {
       let requests = 0;

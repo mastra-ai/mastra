@@ -93,13 +93,14 @@ export function useTraceQuery({
     isError,
     error,
     refetch,
+    isFetchNextPageError,
   } = result;
 
   useEffect(() => {
-    if (enabled && inView && hasNextPage && !isFetching) {
+    if (enabled && inView && hasNextPage && !isFetching && !isFetchNextPageError) {
       void fetchNextPage();
     }
-  }, [enabled, inView, hasNextPage, isFetching, fetchNextPage]);
+  }, [enabled, inView, hasNextPage, isFetching, isFetchNextPageError, fetchNextPage]);
 
   return {
     data,
