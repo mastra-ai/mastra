@@ -1203,6 +1203,60 @@ describe('MastraFactory.prepare integrations', () => {
 
       await expect(factory.prepare()).rejects.toThrow(/\[slack, discord\] all provide channels/);
     });
+
+    it("collects a ready integration's feedPublisher even when it provides no channels", async () => {
+      const setChannels = withController();
+      const feedPublisher = vi.fn((_ctx: IntegrationContext) => ({ publish: vi.fn() }) as never);
+      const factory = new MastraFactory({
+        secretEncryption,
+        storage: fakeStorage(),
+        integrations: [fakeIntegration({ id: 'mirror', feedPublisher })],
+      });
+
+      await factory.prepare();
+
+      // Decoupled from channels(): the publisher is wired even though nothing
+      // attached channels.
+      expect(setChannels).not.toHaveBeenCalled();
+      expect(feedPublisher).toHaveBeenCalledOnce();
+      // Same context shape as routes()/workers().
+      const ctx = feedPublisher.mock.calls[0]![0];
+      expect(ctx.feed).toBeDefined();
+      expect(ctx.auth).toBeDefined();
+    });
+
+    it('collects a channel integration feedPublisher exactly once', async () => {
+      withController();
+      const feedPublisher = vi.fn((_ctx: IntegrationContext) => ({ publish: vi.fn() }) as never);
+      const channels = vi.fn((_ctx: IntegrationContext) => fakeChannelsConfig());
+      const factory = new MastraFactory({
+        secretEncryption,
+        storage: fakeStorage(),
+        integrations: [fakeIntegration({ id: 'chat-platform', channels, feedPublisher })],
+      });
+
+      await factory.prepare();
+
+      // Guards against a double-push: collection happens only in the feed pass,
+      // not also in the channels loop.
+      expect(feedPublisher).toHaveBeenCalledOnce();
+    });
+
+    it('does not collect a feedPublisher from an integration that is not ready', async () => {
+      withController();
+      const storage = fakeStorage();
+      vi.spyOn(storage, 'isDomainReady').mockReturnValue(false);
+      const feedPublisher = vi.fn((_ctx: IntegrationContext) => ({ publish: vi.fn() }) as never);
+      const factory = new MastraFactory({
+        secretEncryption,
+        storage,
+        integrations: [fakeIntegration({ id: 'mirror', feedPublisher })],
+      });
+
+      await factory.prepare();
+
+      expect(feedPublisher).not.toHaveBeenCalled();
+    });
   });
 });
 

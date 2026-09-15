@@ -23,7 +23,7 @@ test('API-prefixed routing accepts the default and explicit prefix but excludes 
 
 test('catalog matches every API-prefixed CLI command and its routing metadata', () => {
   const serverCommands = commands.filter(isApiPrefixedCommand);
-  assert.equal(serverCommands.length, 60);
+  assert.equal(serverCommands.length, 63);
   assert.deepEqual(
     MASTRA_API_OPERATIONS.map(operation => operation.name).sort(),
     serverCommands.map(command => operationName(command.name)).sort(),

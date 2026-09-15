@@ -1,5 +1,58 @@
 # @mastra/voice-openai-realtime
 
+## 0.14.0
+
+### Minor Changes
+
+- Added session hooks to `OpenAIRealtimeVoice` for applications that manage parts of the OpenAI Realtime session themselves. Every server event is now re-emitted as `openAIRealtime:<event.type>`, the socket emits `open` and `close`, and `sendEvent()` is public so you can send any client event, such as adding conversation items. ([#23916](https://github.com/mastra-ai/mastra/pull/23916))
+
+  ```typescript
+  voice.on('openAIRealtime:rate_limits.updated', event => console.log(event.rate_limits));
+  voice.on('close', ({ code, reason }) => console.log('socket closed', code, reason));
+
+  voice.sendEvent('conversation.item.create', {
+    item: { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'Hello' }] },
+  });
+  ```
+
+  Fixed the provider sending an extra `response.create` for function calls whose tools were not registered with `addTools()`. Tools declared directly through `session.update` are now left to the application, so OpenAI no longer rejects the application's own `response.create` with `conversation_already_has_active_response`. Fixes [#20219](https://github.com/mastra-ai/mastra/issues/20219).
+
+### Patch Changes
+
+- Fixed public realtime speech boundary events and complete input transcription payload delivery. Subscribe to the native event names to receive speech timestamps and transcription usage when provided, without changing existing `writing` events. ([#23432](https://github.com/mastra-ai/mastra/pull/23432))
+
+  ```typescript
+  voice.on('input_audio_buffer.speech_started', event => {
+    console.log(event.item_id, event.audio_start_ms);
+  });
+  voice.on('input_audio_buffer.speech_stopped', event => {
+    console.log(event.item_id, event.audio_end_ms);
+  });
+  voice.on('conversation.item.input_audio_transcription.completed', event => {
+    console.log(event.transcript, event.usage);
+  });
+  ```
+
+- Updated dependencies [[`ffe16f1`](https://github.com/mastra-ai/mastra/commit/ffe16f17447449b7155f1f15992e3c9e5f6511ac), [`80608ed`](https://github.com/mastra-ai/mastra/commit/80608ede1a9e5d7d8488ac511245bf327e8987e3)]:
+  - @mastra/schema-compat@1.3.10
+
+## 0.14.0-alpha.3
+
+### Minor Changes
+
+- Added session hooks to `OpenAIRealtimeVoice` for applications that manage parts of the OpenAI Realtime session themselves. Every server event is now re-emitted as `openAIRealtime:<event.type>`, the socket emits `open` and `close`, and `sendEvent()` is public so you can send any client event, such as adding conversation items. ([#23916](https://github.com/mastra-ai/mastra/pull/23916))
+
+  ```typescript
+  voice.on('openAIRealtime:rate_limits.updated', event => console.log(event.rate_limits));
+  voice.on('close', ({ code, reason }) => console.log('socket closed', code, reason));
+
+  voice.sendEvent('conversation.item.create', {
+    item: { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'Hello' }] },
+  });
+  ```
+
+  Fixed the provider sending an extra `response.create` for function calls whose tools were not registered with `addTools()`. Tools declared directly through `session.update` are now left to the application, so OpenAI no longer rejects the application's own `response.create` with `conversation_already_has_active_response`. Fixes [#20219](https://github.com/mastra-ai/mastra/issues/20219).
+
 ## 0.13.11-alpha.2
 
 ### Patch Changes

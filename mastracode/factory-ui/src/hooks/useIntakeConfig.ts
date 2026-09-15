@@ -12,7 +12,7 @@ import {
 } from '../ui/domains/factory/services/intake';
 import type { IntakeConfig } from '../ui/domains/factory/services/intake';
 
-/** The caller's intake source configuration (Settings › Intake). */
+/** The org's intake source configuration (Settings › Intake). */
 export function useIntakeConfigQuery(enabled: boolean = true) {
   const { baseUrl } = useApiConfig();
   return useQuery({

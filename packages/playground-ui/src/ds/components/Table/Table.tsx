@@ -1,6 +1,5 @@
 import type { CSSProperties, HTMLAttributes, ReactNode, ThHTMLAttributes } from 'react';
 import { forwardRef, useEffect, useRef } from 'react';
-import '@/ds/primitives/focus.css';
 import { cn } from '@/lib/utils';
 
 export interface TableProps {
@@ -76,7 +75,7 @@ export interface RowProps {
   style?: CSSProperties;
   onClick?: () => void;
   tabIndex?: number;
-  /** Focuses the row and scrolls it into view. */
+  /** When true, row receives focus and scrolls into view */
   isActive?: boolean;
 }
 
@@ -84,6 +83,7 @@ export const Row = forwardRef<HTMLTableRowElement, RowProps>(
   ({ className, children, selected = false, style, onClick, isActive = false, ...props }, ref) => {
     const internalRef = useRef<HTMLTableRowElement>(null);
 
+    // Merge forwarded ref with internal ref
     useEffect(() => {
       if (!ref) return;
       if (typeof ref === 'function') {
@@ -93,6 +93,7 @@ export const Row = forwardRef<HTMLTableRowElement, RowProps>(
       }
     }, [ref]);
 
+    // Focus and scroll into view when active
     useEffect(() => {
       if (isActive && internalRef.current) {
         internalRef.current.focus();
@@ -110,9 +111,11 @@ export const Row = forwardRef<HTMLTableRowElement, RowProps>(
       <tr
         className={cn(
           'border-b border-border1',
+          // Smooth hover transition
           'transition-colors duration-normal ease-out-custom',
           'hover:bg-surface3',
-          'ds-focus ds-focus-row',
+          // Focus state
+          'focus:bg-surface3 focus:ring-1 focus:ring-accent1/50 focus:outline-hidden focus:ring-inset',
           selected && 'bg-surface4',
           onClick && 'cursor-pointer',
           className,

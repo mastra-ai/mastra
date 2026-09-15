@@ -14,18 +14,20 @@ import {
   AgentChatLoadingSkeleton,
   AgentSidebarLoadingSkeleton,
 } from '@/domains/agents/components/agent-loading-skeletons';
+import { AgentUnavailable } from '@/domains/agents/components/agent-unavailable';
 import { ThreadsPanelShortcuts } from '@/domains/agents/components/threads-panel-shortcuts';
 import { ActivatedSkillsProvider } from '@/domains/agents/context/activated-skills-context';
-import { AgentSettingsProvider } from '@/domains/agents/context/agent-context';
 import { ObservationalMemoryProvider } from '@/domains/agents/context/agent-observational-memory-context';
 import { WorkingMemoryProvider } from '@/domains/agents/context/agent-working-memory-context';
 import { BrowserSessionProvider } from '@/domains/agents/context/browser-session-provider';
 import { BrowserToolCallsProvider } from '@/domains/agents/context/browser-tool-calls-context';
 import { MemoryTimelineProvider } from '@/domains/agents/context/memory-timeline-context';
+import { ThreadPreferencesProvider } from '@/domains/agents/context/thread-preferences-provider';
 import { useAgent } from '@/domains/agents/hooks/use-agent';
 import { buildAgentDefaultSettings } from '@/domains/agents/utils/agent-default-settings';
 import { getAgentSuggestedPrompts } from '@/domains/agents/utils/agent-suggested-prompts';
 import { ThreadInputProvider } from '@/domains/conversation/context/ThreadInputContext';
+import { cleanProviderId } from '@/domains/llm/utils';
 import { useMemory, useThreads } from '@/domains/memory/hooks/use-memory';
 import { ThreadViewByTrace } from '@/domains/traces/components/thread-view-by-trace';
 
@@ -103,7 +105,7 @@ function AgentThread() {
 
   // A 404 is authoritative even if a previous fetch left stale data in the cache.
   if (error && is404NotFoundError(error)) {
-    return <div className="py-4 text-center">Agent not found</div>;
+    return <AgentUnavailable />;
   }
 
   if (error) {
@@ -111,7 +113,7 @@ function AgentThread() {
   }
 
   if (!agent) {
-    return <div className="py-4 text-center">Agent not found</div>;
+    return <AgentUnavailable />;
   }
 
   const actualThreadId = isNewThread ? newThreadId : (threadId ?? newThreadId);
@@ -125,7 +127,13 @@ function AgentThread() {
   };
 
   return (
-    <AgentSettingsProvider agentId={agentId!} defaultSettings={defaultSettings}>
+    <ThreadPreferencesProvider
+      agentId={agentId!}
+      threadId={actualThreadId}
+      defaultProvider={cleanProviderId(agent.provider ?? '')}
+      defaultModel={agent.modelId ?? ''}
+      defaultSettings={defaultSettings}
+    >
       <WorkingMemoryProvider agentId={agentId!} threadId={actualThreadId} resourceId={agentId!}>
         <BrowserToolCallsProvider key={`browser-${agentId}-${actualThreadId}`}>
           <BrowserSessionProvider
@@ -186,7 +194,7 @@ function AgentThread() {
           </BrowserSessionProvider>
         </BrowserToolCallsProvider>
       </WorkingMemoryProvider>
-    </AgentSettingsProvider>
+    </ThreadPreferencesProvider>
   );
 }
 

@@ -70,6 +70,117 @@ const baseMessage = (over: Partial<MastraDBMessage>): MastraDBMessage =>
   }) as MastraDBMessage;
 
 describe('MessageRow chrome', () => {
+  describe('when a user message contains multiple text parts', () => {
+    it('copies the complete text without including footer content', async () => {
+      const writeText = vi.fn().mockResolvedValue(undefined);
+      Object.assign(navigator, { clipboard: { writeText } });
+
+      render(
+        <MessageRow
+          message={baseMessage({
+            role: 'user',
+            content: {
+              format: 2,
+              parts: [
+                { type: 'text', text: 'First paragraph' },
+                { type: 'text', text: 'Second paragraph' },
+              ],
+            },
+          })}
+          footer={<button>Existing action</button>}
+        />,
+        { wrapper: Providers },
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: 'Copy', exact: true }));
+      await waitFor(() => expect(writeText).toHaveBeenCalledWith('First paragraph\nSecond paragraph'));
+      expect(screen.getByRole('button', { name: 'Existing action' })).toBeTruthy();
+    });
+  });
+
+  describe('when a user message contains text and an attachment', () => {
+    it('copies only the text parts', async () => {
+      const writeText = vi.fn().mockResolvedValue(undefined);
+      Object.assign(navigator, { clipboard: { writeText } });
+
+      render(
+        <MessageRow
+          message={baseMessage({
+            role: 'user',
+            content: {
+              format: 2,
+              parts: [
+                { type: 'text', text: 'Please review this file.' },
+                { type: 'file', mimeType: 'text/plain', data: 'data:text/plain;base64,aGVsbG8=' },
+                { type: 'text', text: 'Keep the formatting.' },
+              ],
+            },
+          })}
+        />,
+        { wrapper: Providers },
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: 'Copy', exact: true }));
+      await waitFor(() => expect(writeText).toHaveBeenCalledWith('Please review this file.\nKeep the formatting.'));
+    });
+  });
+
+  describe('when a read-only user message has a footer action', () => {
+    it('keeps the footer action operable alongside Copy', () => {
+      const onHighlight = vi.fn();
+      render(
+        <MessageRow
+          message={baseMessage({
+            role: 'user',
+            content: { format: 2, parts: [{ type: 'text', text: 'Trace input' }] },
+          })}
+          readOnly
+          footer={<button onClick={onHighlight}>Highlight spans</button>}
+        />,
+        { wrapper: Providers },
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: 'Highlight spans' }));
+      expect(onHighlight).toHaveBeenCalledOnce();
+      expect(screen.getByRole('button', { name: 'Copy', exact: true })).toBeTruthy();
+    });
+  });
+
+  describe('when a user message has no non-whitespace text', () => {
+    it.each(['', '  \n  '])('does not offer to copy empty text (%j)', text => {
+      render(
+        <MessageRow
+          message={baseMessage({
+            role: 'user',
+            content: { format: 2, parts: [{ type: 'text', text }] },
+          })}
+        />,
+        { wrapper: Providers },
+      );
+
+      expect(screen.queryByRole('button', { name: 'Copy', exact: true })).toBeNull();
+    });
+  });
+
+  describe('when a user message contains only an attachment', () => {
+    it('does not offer to copy the attachment as text', () => {
+      render(
+        <MessageRow
+          message={baseMessage({
+            role: 'user',
+            content: {
+              format: 2,
+              parts: [{ type: 'file', mimeType: 'text/plain', data: 'data:text/plain;base64,aGVsbG8=' }],
+            },
+          })}
+        />,
+        { wrapper: Providers },
+      );
+
+      expect(screen.queryByRole('button', { name: 'Copy', exact: true })).toBeNull();
+    });
+  });
+
   it('shows a copy action on an assistant text message and copies the text', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.assign(navigator, { clipboard: { writeText } });

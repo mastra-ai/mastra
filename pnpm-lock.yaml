@@ -3470,8 +3470,8 @@ importers:
         specifier: workspace:*
         version: link:../mastra
       posthog-node:
-        specifier: ^5.46.1
-        version: 5.48.0(rxjs@7.8.2)
+        specifier: ^5.49.0
+        version: 5.52.1(rxjs@7.8.2)
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -4631,6 +4631,12 @@ importers:
       gray-matter:
         specifier: ^4.0.3
         version: 4.0.3(patch_hash=058d8be9f17b95a6f86e58debce82671ee3f258e44883a9da932cf16a717ebb8)
+      hono:
+        specifier: 4.12.34
+        version: 4.12.34
+      hono-openapi:
+        specifier: ^1.3.1
+        version: 1.3.1(@hono/standard-validator@0.2.2(@standard-schema/spec@1.1.0)(hono@4.12.34))(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.0(valibot@1.4.2(typescript@7.0.2)))(arktype@2.2.0)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.4.3))(zod@4.4.3))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.0(valibot@1.4.2(typescript@7.0.2)))(arktype@2.2.0)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.4.3))(zod@4.4.3))(@standard-schema/spec@1.1.0)(arktype@2.2.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.4.3))(@types/json-schema@7.0.15)(hono@4.12.34)(openapi-types@12.1.3)
       ignore:
         specifier: ^7.0.5
         version: 7.0.5
@@ -4818,12 +4824,6 @@ importers:
       fast-deep-equal:
         specifier: ^3.1.3
         version: 3.1.3
-      hono:
-        specifier: 4.12.34
-        version: 4.12.34
-      hono-openapi:
-        specifier: ^1.3.1
-        version: 1.3.1(@hono/standard-validator@0.2.2(@standard-schema/spec@1.1.0)(hono@4.12.34))(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.0(valibot@1.4.2(typescript@7.0.2)))(arktype@2.2.0)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.4.3))(zod@4.4.3))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.0(valibot@1.4.2(typescript@7.0.2)))(arktype@2.2.0)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.4.3))(zod@4.4.3))(@standard-schema/spec@1.1.0)(arktype@2.2.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.4.3))(@types/json-schema@7.0.15)(hono@4.12.34)(openapi-types@12.1.3)
       rollup:
         specifier: ^4.62.2
         version: 4.62.2
@@ -4859,50 +4859,31 @@ importers:
         version: 4.4.3
 
   packages/create-mastra:
-    dependencies:
-      commander:
-        specifier: ^14.0.3
-        version: 14.0.3
-      posthog-node:
-        specifier: ^5.46.1
-        version: 5.48.0(rxjs@7.8.2)
-      tinyexec:
-        specifier: ^1.1.1
-        version: 1.2.4
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
-      '@rollup/plugin-commonjs':
-        specifier: 29.0.3
-        version: 29.0.3(rollup@4.62.2)
-      '@rollup/plugin-json':
-        specifier: 6.1.0
-        version: 6.1.0(rollup@4.62.2)
-      '@rollup/plugin-node-resolve':
-        specifier: 16.0.3
-        version: 16.0.3(rollup@4.62.2)
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
-      esbuild:
-        specifier: ^0.28.0
-        version: 0.28.1
+      commander:
+        specifier: ^14.0.3
+        version: 14.0.3
       eslint:
         specifier: ^10.7.0
         version: 10.7.0(jiti@2.7.0)(supports-color@10.2.2)
       mastra:
         specifier: workspace:^
         version: link:../cli
-      rollup:
-        specifier: ^4.62.2
-        version: 4.62.2
-      rollup-plugin-esbuild:
-        specifier: ^6.2.1
-        version: 6.2.1(esbuild@0.28.1)(rollup@4.62.2)(supports-color@10.2.2)
-      rollup-plugin-node-externals:
-        specifier: ^8.1.2
-        version: 8.1.2(rollup@4.62.2)
+      posthog-node:
+        specifier: ^5.46.1
+        version: 5.48.0(rxjs@7.8.2)
+      tinyexec:
+        specifier: ^1.1.1
+        version: 1.2.4
+      tsdown:
+        specifier: 0.22.9
+        version: 0.22.9(@volar/typescript@2.4.23(typescript@7.0.2))(oxc-resolver@11.20.0)(tsx@4.23.1)(typescript@7.0.2)
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
@@ -5963,6 +5944,9 @@ importers:
       use-debounce:
         specifier: ^10.1.0
         version: 10.1.1(react@19.2.7)
+      zod:
+        specifier: ^3.25.0
+        version: 3.25.76
       zustand:
         specifier: ^5.0.12
         version: 5.0.13(@types/react@19.2.17)(immer@11.1.9)(react@19.2.7)(use-sync-external-store@1.6.0(react@19.2.7))
@@ -18497,6 +18481,9 @@ packages:
   '@posthog/core@1.46.8':
     resolution: {integrity: sha512-WQTSwlFhsWk09xngTimHiTyhFU8QZHFZEGSm+6brY3acwYdvTLcTxpIhgl/qOCgn/XoqlCFTZqU1ldWLxNntfA==}
 
+  '@posthog/core@1.53.2':
+    resolution: {integrity: sha512-Knx8442G2LyPVIzLvhcBX/TIdeHpZhrYrtZou3Uw8FWfbr9gQtQeOZDCog3MWcDxJ+4vAnMAAOzf5cYpc7Gxyw==}
+
   '@posthog/react@1.10.3':
     resolution: {integrity: sha512-Qu//fGQmVlX0B9kTA3LLg67e7AYLEmeuA0Bf1qSyUM0uUILcRQGjQezhNQPLYSTakOqvXEnl6fM2iQBF6Toxrw==}
     peerDependencies:
@@ -18512,6 +18499,9 @@ packages:
 
   '@posthog/types@1.402.1':
     resolution: {integrity: sha512-4PZ9wMYI8m8AqJuZ9YR1IAHGVtSnYbBVBgTevrKpzZbcSe/OUwhEV2Ks//rJh/L8eMTU8R5DrD4D/hlrOwaAiQ==}
+
+  '@posthog/types@1.411.1':
+    resolution: {integrity: sha512-Gd7tnSYctcSXup3naVlAgavvenByRao6rsSYdMgWgP35KE9jFn+rMHNRJeI5LNjJuLzMXHEVcgzAN7xcATefdw==}
 
   '@promptbook/utils@0.69.5':
     resolution: {integrity: sha512-xm5Ti/Hp3o4xHrsK9Yy3MS6KbDxYbq485hDsFvxqaNA7equHLPdo8H8faTitTeb14QCDfLW4iwCxdVYu5sn6YQ==}
@@ -19310,15 +19300,6 @@ packages:
 
   '@rollup/plugin-commonjs@29.0.2':
     resolution: {integrity: sha512-S/ggWH1LU7jTyi9DxZOKyxpVd4hF/OZ0JrEbeLjXk/DFXwRny0tjD2c992zOUYQobLrVkRVMDdmHP16HKP7GRg==}
-    engines: {node: '>=16.0.0 || 14 >= 14.17'}
-    peerDependencies:
-      rollup: ^2.68.0||^3.0.0||^4.0.0
-    peerDependenciesMeta:
-      rollup:
-        optional: true
-
-  '@rollup/plugin-commonjs@29.0.3':
-    resolution: {integrity: sha512-ZaOxZceP7SOUW7Lqw5IRVweSQYWaeIPnXIGLiB690EBA3FGJTO40EEr2L5yZplJWsgTCogILRSpcAe7+U0Otdg==}
     engines: {node: '>=16.0.0 || 14 >= 14.17'}
     peerDependencies:
       rollup: ^2.68.0||^3.0.0||^4.0.0
@@ -29616,6 +29597,15 @@ packages:
       rxjs:
         optional: true
 
+  posthog-node@5.52.1:
+    resolution: {integrity: sha512-Xt0xazhAR1Bf2DEnPPZETkWx19jckKeMkJ4qMMTv1xuyKSNjy8AXREEkiuDbJWWr3k6KpgoYH6sURWBROpRKlA==}
+    engines: {node: ^20.20.0 || >=22.22.0}
+    peerDependencies:
+      rxjs: ^7.0.0
+    peerDependenciesMeta:
+      rxjs:
+        optional: true
+
   powershell-utils@0.1.0:
     resolution: {integrity: sha512-dM0jVuXJPsDN6DvRpea484tCUaMiXWjuCn++HGTqUWzGDjv5tZkEZldAJ/UMlqRYGFrD/etByo4/xOuC/snX2A==}
     engines: {node: '>=20'}
@@ -36691,7 +36681,7 @@ snapshots:
 
   '@copilotkit/aimock@1.29.0(vitest@4.1.10)':
     optionalDependencies:
-      vitest: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.10)(@vitest/ui@4.1.10)(jsdom@27.4.0(@noble/hashes@2.2.0)(bufferutil@4.1.0)(supports-color@10.2.2))(msw@2.14.6(@types/node@22.19.15)(typescript@7.0.2))(vite@7.3.6(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.23.1)(yaml@2.9.0))
+      vitest: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.10)(@vitest/ui@4.1.10)(jsdom@27.4.0(@noble/hashes@2.2.0)(bufferutil@4.1.0)(supports-color@10.2.2))(msw@2.14.6(@types/node@22.19.15)(typescript@6.0.3))(vite@7.3.6(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.23.1)(yaml@2.9.0))
 
   '@couchbase/couchbase-darwin-arm64-napi@4.7.1':
     optional: true
@@ -43343,6 +43333,10 @@ snapshots:
     dependencies:
       '@posthog/types': 1.402.1
 
+  '@posthog/core@1.53.2':
+    dependencies:
+      '@posthog/types': 1.411.1
+
   '@posthog/react@1.10.3(@types/react@19.2.17)(posthog-js@1.404.1)(react@19.2.7)':
     dependencies:
       posthog-js: 1.404.1
@@ -43353,6 +43347,8 @@ snapshots:
   '@posthog/types@1.397.0': {}
 
   '@posthog/types@1.402.1': {}
+
+  '@posthog/types@1.411.1': {}
 
   '@promptbook/utils@0.69.5':
     dependencies:
@@ -44083,18 +44079,6 @@ snapshots:
   '@rolldown/pluginutils@1.0.1': {}
 
   '@rollup/plugin-commonjs@29.0.2(rollup@4.62.2)':
-    dependencies:
-      '@rollup/pluginutils': 5.3.0(rollup@4.62.2)
-      commondir: 1.0.1
-      estree-walker: 2.0.2
-      fdir: 6.5.0(picomatch@4.0.5)
-      is-reference: 1.2.1
-      magic-string: 0.30.21
-      picomatch: 4.0.5
-    optionalDependencies:
-      rollup: 4.62.2
-
-  '@rollup/plugin-commonjs@29.0.3(rollup@4.62.2)':
     dependencies:
       '@rollup/pluginutils': 5.3.0(rollup@4.62.2)
       commondir: 1.0.1
@@ -45188,7 +45172,7 @@ snapshots:
       '@stryker-mutator/util': 10.0.0
       semver: 7.8.5
       tslib: 2.8.1
-      vitest: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.10)(@vitest/ui@4.1.10)(jsdom@26.1.0(bufferutil@4.1.0)(supports-color@10.2.2))(msw@2.14.6(@types/node@22.19.15)(typescript@7.0.2))(vite@7.3.6(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.23.1)(yaml@2.9.0))
+      vitest: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.10)(@vitest/ui@4.1.10)(jsdom@27.4.0(@noble/hashes@2.2.0)(bufferutil@4.1.0)(supports-color@10.2.2))(msw@2.14.6(@types/node@22.19.15)(typescript@6.0.3))(vite@7.3.6(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.23.1)(yaml@2.9.0))
 
   '@supabase/auth-js@2.111.0':
     dependencies:
@@ -56115,6 +56099,12 @@ snapshots:
   posthog-node@5.48.0(rxjs@7.8.2):
     dependencies:
       '@posthog/core': 1.46.8
+    optionalDependencies:
+      rxjs: 7.8.2
+
+  posthog-node@5.52.1(rxjs@7.8.2):
+    dependencies:
+      '@posthog/core': 1.53.2
     optionalDependencies:
       rxjs: 7.8.2
 
