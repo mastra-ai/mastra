@@ -27,6 +27,7 @@ export interface MessageEntry {
   id: string;
   message: MastraDBMessage;
   runtimeTools?: Record<string, ToolCall>;
+  sourcePartIndexes?: number[];
   streaming?: boolean;
   steer?: boolean;
   deliveryStatus?: 'pending' | 'delivered' | 'failed';
@@ -216,13 +217,19 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent, viewerI
         const part = parts[partIndex];
         if (!part || part.type !== 'text') return state;
         parts[partIndex] = { ...part, text: part.text + event.event.delta };
-      } else if (event.event.type === 'reasoning-delta') {
-        const part = parts[event.event.index];
-        if (!part || part.type !== 'reasoning') return state;
-        const reasoning = part.reasoning + event.event.delta;
-        parts[event.event.index] = { ...part, reasoning, details: [{ type: 'text', text: reasoning }] };
       } else {
-        parts[event.event.index] = event.event.part;
+        const mappedIndex = entry.sourcePartIndexes?.indexOf(event.event.index);
+        if (mappedIndex === -1) return state;
+        const partIndex = mappedIndex ?? event.event.index;
+        if (event.event.type === 'reasoning-delta') {
+          const part = parts[partIndex];
+          if (!part || part.type !== 'reasoning') return state;
+          const reasoning = part.reasoning + event.event.delta;
+          parts[partIndex] = { ...part, reasoning, details: [{ type: 'text', text: reasoning }] };
+        } else {
+          if (mappedIndex !== undefined && partIndex >= parts.length) return state;
+          parts[partIndex] = event.event.part;
+        }
       }
 
       const message = { ...entry.message, content: { ...entry.message.content, parts } };
@@ -761,13 +768,16 @@ function upsertMessage(
   }
   const prev = idx !== -1 ? entries[idx] : undefined;
   const prevEntry = prev?.kind === 'message' ? prev : undefined;
-  const nextMessage =
+  const filtered =
     message.role === 'assistant'
       ? withoutToolPartsDrawnElsewhere(preserveRuntimeToolParts(message, prevEntry?.message), entries, idx)
-      : preserveOptimisticUserContent(message, prevEntry?.message, viewerId);
+      : undefined;
+  const nextMessage = filtered?.message ?? preserveOptimisticUserContent(message, prevEntry?.message, viewerId);
   const canonicalEntry = toMessageEntry(nextMessage, { streaming, runtimeTools: prevEntry?.runtimeTools, viewerId });
   // Changing the entry id remounts open cards.
-  const entry = prevEntry ? { ...canonicalEntry, id: prevEntry.id } : canonicalEntry;
+  const entry = prevEntry
+    ? { ...canonicalEntry, id: prevEntry.id, sourcePartIndexes: filtered?.sourcePartIndexes }
+    : { ...canonicalEntry, sourcePartIndexes: filtered?.sourcePartIndexes };
 
   if (idx === -1) entries.push(entry);
   else entries[idx] = entry;
@@ -779,7 +789,7 @@ function withoutToolPartsDrawnElsewhere(
   message: MastraDBMessage,
   entries: TimelineEntry[],
   own: number,
-): MastraDBMessage {
+): { message: MastraDBMessage; sourcePartIndexes?: number[] } {
   const drawnElsewhere = new Set<string>();
   for (const [index, entry] of entries.entries()) {
     if (index === own || entry.kind !== 'message' || entry.message.role !== 'assistant') continue;
@@ -788,15 +798,14 @@ function withoutToolPartsDrawnElsewhere(
       if (toolCallId) drawnElsewhere.add(toolCallId);
     }
   }
-  if (drawnElsewhere.size === 0) return message;
-
-  const parts = message.content.parts.filter(part => {
+  const sourcePartIndexes = message.content.parts.flatMap((part, index) => {
     const toolCallId = toolCallIdForPart(part);
-    return !toolCallId || !drawnElsewhere.has(toolCallId);
+    return toolCallId && drawnElsewhere.has(toolCallId) ? [] : [index];
   });
-  if (parts.length === message.content.parts.length) return message;
+  if (sourcePartIndexes.length === message.content.parts.length) return { message };
 
-  return { ...message, content: { ...message.content, parts } };
+  const parts = sourcePartIndexes.map(index => message.content.parts[index]!);
+  return { message: { ...message, content: { ...message.content, parts } }, sourcePartIndexes };
 }
 
 function preserveOptimisticUserContent(

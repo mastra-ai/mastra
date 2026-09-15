@@ -275,6 +275,23 @@ describe('transcript reducer message entries', () => {
     ]);
   });
 
+  it('translates updates after filtering a tool part drawn by an earlier entry', () => {
+    const tool = {
+      type: 'tool-invocation' as const,
+      toolInvocation: { state: 'call' as const, toolCallId: 'tool-1', toolName: 'view', args: { path: 'a.ts' } },
+    };
+    const earlier = dbMessage('assistant-0', 'assistant', [tool]);
+    const current = dbMessage('assistant-1', 'assistant', [tool, { type: 'text', text: 'Before' }]);
+    let state = createInitialTranscript({ messages: [earlier], threadId: 't1' });
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_start', message: current } });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: { type: 'message_update', id: current.id, event: { type: 'part', index: 1, part: { type: 'text', text: 'After' } } },
+    });
+
+    expect(messageParts(state.entries[1])).toEqual([{ type: 'text', text: 'After' }]);
+  });
+
   it('keeps accumulated text when a message_start is re-delivered', () => {
     const message = dbMessage('assistant-1', 'assistant', [{ type: 'text', text: '' }]);
     const started = transcriptReducer(initialTranscript, { type: 'event', event: { type: 'message_start', message } });
