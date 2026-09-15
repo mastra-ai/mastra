@@ -1,5 +1,5 @@
 import { MastraReactProvider } from '@mastra/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { focusManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
@@ -23,6 +23,7 @@ function wrapper({ children }: { children: ReactNode }) {
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
+  focusManager.setFocused(undefined);
 });
 function handlers() {
   const post = vi.fn();
@@ -78,6 +79,33 @@ describe('useTracesListSource', () => {
       });
       expect(requests.post).toHaveBeenCalledTimes(2);
       expect(requests.list).not.toHaveBeenCalled();
+      await act(async () => {
+        focusManager.setFocused(false);
+        focusManager.setFocused(true);
+        await new Promise(resolve => setTimeout(resolve, 100));
+      });
+      expect(requests.post).toHaveBeenCalledTimes(2);
+    });
+  });
+  describe('when automatic refresh starts disabled', () => {
+    it.each([true, false])('does not poll or refetch on focus with rolling=%s', async rolling => {
+      const requests = handlers();
+      const { result } = renderHook(() => useTracesListSource({ query, rolling, initialAutoRefetch: false }), {
+        wrapper,
+      });
+      await waitFor(() => expect(result.current.rows).toHaveLength(1));
+      vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(30_000);
+        focusManager.setFocused(false);
+        focusManager.setFocused(true);
+        await new Promise(resolve => setTimeout(resolve, 100));
+      });
+      expect(requests.post).toHaveBeenCalledTimes(1);
+      await act(async () => {
+        await result.current.refetch();
+      });
+      expect(requests.post).toHaveBeenCalledTimes(2);
     });
   });
   describe('when the store returns 501', () => {

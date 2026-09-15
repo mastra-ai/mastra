@@ -16,6 +16,7 @@ import {
 } from './fixtures/thread-traces';
 import { ActivatedSkillsProvider } from '@/domains/agents/context/activated-skills-context';
 import { BrowserToolCallsProvider } from '@/domains/agents/context/browser-tool-calls-context';
+import { emptyMcpServers } from '@/lib/ai-ui/__tests__/fixtures/agent';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
@@ -32,6 +33,8 @@ const newestFirstList = { ...threadTracesList, spans: [threadTracesList.spans[1]
 
 const installHandlers = ({ list = newestFirstList }: { list?: typeof threadTracesList } = {}) => {
   server.use(
+    http.get(`${TEST_BASE_URL}/api/mcp/v0/servers`, () => HttpResponse.json(emptyMcpServers)),
+    http.get(`${TEST_BASE_URL}/api/observability/feedback`, () => HttpResponse.json(listFeedbackResponse([]))),
     http.post(`${TEST_BASE_URL}/api/observability/traces/query`, () => HttpResponse.json(queryPageFromList(list))),
     http.get(`${TEST_BASE_URL}/api/observability/traces/light`, () => HttpResponse.json(list)),
     http.get(`${TEST_BASE_URL}/api/observability/traces`, () => HttpResponse.json(list)),
@@ -99,7 +102,49 @@ const renderView = ({ search = '' }: { search?: string } = {}) =>
 
 describe('ThreadViewByTrace', () => {
   describe('when the thread contains historical traces', () => {
-    afterEach(() => focusManager.setFocused(undefined));
+    afterEach(() => {
+      focusManager.setFocused(undefined);
+      vi.useRealTimers();
+      vi.unstubAllGlobals();
+    });
+
+    it('preserves paginated turns across refresh intervals and window focus', async () => {
+      const { intersect } = stubIntersectionObserver();
+      installHandlers();
+      const requested = vi.fn();
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async ({ request }) => {
+          const body = await request.json();
+          requested(body);
+          const next = requested.mock.calls.length === 2;
+          return HttpResponse.json({
+            ...queryPageFromList({
+              ...threadTracesList,
+              spans: [threadTracesList.spans[next ? 1 : 0]],
+            }),
+            page: { next: next ? null : 'thread-next' },
+          });
+        }),
+      );
+      vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] });
+      const { queryClient } = renderView();
+      await screen.findByText('Chef agent run');
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      const list = screen.getByTestId('thread-view-by-trace');
+      act(() => intersect(list.querySelector('[data-trace-id]')!.nextElementSibling!));
+      await screen.findByText('Chef agent follow-up');
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      expect(requested.mock.calls[1]![0]).toMatchObject({ page: { after: 'thread-next' } });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(30_000);
+        focusManager.setFocused(false);
+        focusManager.setFocused(true);
+        await new Promise(resolve => setTimeout(resolve, 100));
+      });
+      expect(requested).toHaveBeenCalledTimes(2);
+      expect(screen.getByText('Chef agent run')).toBeTruthy();
+      expect(screen.getByText('Chef agent follow-up')).toBeTruthy();
+    });
 
     it('refreshes only the selected trace on focus and stops after its detail closes', async () => {
       installHandlers();

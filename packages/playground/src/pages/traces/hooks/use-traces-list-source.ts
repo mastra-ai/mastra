@@ -6,16 +6,18 @@ import { useEffect, useState } from 'react';
 export function useTracesListSource({
   query: buildQuery,
   rolling = true,
+  initialAutoRefetch = true,
 }: {
   query: (now: Date) => TraceQueryArgs;
   rolling?: boolean;
+  initialAutoRefetch?: boolean;
 }) {
   const [now, setNow] = useState(() => new Date());
-  const [autoRefetch, setAutoRefetch] = useState(true);
+  const [autoRefetch, setAutoRefetch] = useState(initialAutoRefetch);
   const result = useTraceQuery({
     query: buildQuery(now),
     refetchInterval: autoRefetch && !rolling ? 10_000 : false,
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: autoRefetch,
   });
 
   // Moving the query key refreshes the cursor chain once, without a second polling request.

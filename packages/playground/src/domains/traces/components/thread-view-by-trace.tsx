@@ -24,6 +24,7 @@ export interface ThreadViewByTraceProps {
  */
 export function ThreadViewByTrace({ threadId }: ThreadViewByTraceProps) {
   const { rows, isLoading, setEndOfListElement, error } = useTracesListSource({
+    initialAutoRefetch: false,
     query: now => ({
       timeRange: {
         from: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString(),
