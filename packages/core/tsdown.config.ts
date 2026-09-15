@@ -141,6 +141,11 @@ export default defineConfig({
         'hono-openapi',
         '@internal/auth',
       ]),
+      {
+        rollupTypes: {
+          'tools/mcp-types.d.ts': ['@modelcontextprotocol/server', '@modelcontextprotocol/core'],
+        },
+      },
     );
 
     // Copy provider-registry.json to dist folder

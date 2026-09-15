@@ -4601,9 +4601,6 @@ importers:
       '@mastra/schema-compat':
         specifier: workspace:*
         version: link:../schema-compat
-      '@modelcontextprotocol/server':
-        specifier: 2.0.0
-        version: 2.0.0
       '@sindresorhus/slugify':
         specifier: ^2.2.1
         version: 2.2.1
@@ -4779,6 +4776,9 @@ importers:
       '@internal/voice':
         specifier: workspace:*
         version: link:../_internals/voice
+      '@modelcontextprotocol/server':
+        specifier: 2.0.0
+        version: 2.0.0
       '@openrouter/ai-sdk-provider':
         specifier: ^0.7.5
         version: 0.7.5(zod@4.4.3)
