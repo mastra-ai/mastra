@@ -13,9 +13,10 @@ const ProviderResponseSchema = z
     name: z.string().optional(),
     status: z
       .enum(['pending', 'verified', 'completed', 'blocked', 'expired', 'superseded', 'canceled', 'failed'])
+      .or(z.string())
       .optional(),
     domain_id: z.string().nullable().optional(),
-    region: z.enum(['us-east-1', 'eu-west-1', 'sa-east-1', 'ap-northeast-1']).nullable().optional(),
+    region: z.enum(['us-east-1', 'eu-west-1', 'sa-east-1', 'ap-northeast-1']).or(z.string()).nullable().optional(),
     record: z
       .object({
         type: z.literal('TXT').optional(),
@@ -25,7 +26,11 @@ const ProviderResponseSchema = z
       })
       .passthrough()
       .optional(),
-    blocked_reason: z.enum(['grace_period', 'recent_owner_activity', 'pending_scheduled_emails']).nullable().optional(),
+    blocked_reason: z
+      .enum(['grace_period', 'recent_owner_activity', 'pending_scheduled_emails'])
+      .or(z.string())
+      .nullable()
+      .optional(),
     failure_reason: z.string().nullable().optional(),
     created_at: z.string().optional(),
     expires_at: z.string().optional(),

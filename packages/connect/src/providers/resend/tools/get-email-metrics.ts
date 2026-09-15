@@ -51,8 +51,8 @@ const ProviderResponseSchema = z
     start_date: z.string().optional(),
     end_date: z.string().optional(),
     metrics: z.array(z.string()).optional(),
-    dimensions: z.array(z.enum(['period', 'domain', 'email', 'broadcast'])).optional(),
-    granularity: z.enum(['hourly', 'daily', 'weekly', 'monthly']).optional(),
+    dimensions: z.array(z.enum(['period', 'domain', 'email', 'broadcast']).or(z.string())).optional(),
+    granularity: z.enum(['hourly', 'daily', 'weekly', 'monthly']).or(z.string()).optional(),
     totals: z.record(z.string(), z.number()).optional(),
     data: z
       .array(
@@ -82,18 +82,10 @@ export function getEmailMetricsTool(proxy: PlatformProxy) {
     execute: async (input, { requestContext }): Promise<z.infer<typeof getEmailMetricsOutputSchema>> => {
       const platformProxy = proxy.withRequestContext(requestContext);
       const params: Record<string, string> = {};
-      if (input['start_date'] !== undefined)
-        params['start_date'] = Array.isArray(input['start_date'])
-          ? input['start_date'].join(',')
-          : String(input['start_date']);
-      if (input['end_date'] !== undefined)
-        params['end_date'] = Array.isArray(input['end_date']) ? input['end_date'].join(',') : String(input['end_date']);
-      if (input['timezone'] !== undefined)
-        params['timezone'] = Array.isArray(input['timezone']) ? input['timezone'].join(',') : String(input['timezone']);
-      if (input['granularity'] !== undefined)
-        params['granularity'] = Array.isArray(input['granularity'])
-          ? input['granularity'].join(',')
-          : String(input['granularity']);
+      if (input['start_date'] !== undefined) params['start_date'] = String(input['start_date']);
+      if (input['end_date'] !== undefined) params['end_date'] = String(input['end_date']);
+      if (input['timezone'] !== undefined) params['timezone'] = String(input['timezone']);
+      if (input['granularity'] !== undefined) params['granularity'] = String(input['granularity']);
       if (input['metrics'] !== undefined && input['metrics'].length > 0) params['metrics'] = input['metrics'].join(',');
       if (input['dimensions'] !== undefined && input['dimensions'].length > 0)
         params['dimensions'] = input['dimensions'].join(',');

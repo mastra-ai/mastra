@@ -29,7 +29,7 @@ const ProviderResponseSchema = z
           })
           .passthrough(),
         schedule_sync_target_id: z.string(),
-        sync_type: z.enum(['on_call', 'all_users', 'next_on_call']),
+        sync_type: z.enum(['on_call', 'all_users', 'next_on_call']).or(z.string()),
         updated_at: z.string(),
       })
       .passthrough(),

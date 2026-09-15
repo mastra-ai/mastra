@@ -24,7 +24,7 @@ const ProviderResponseSchema = z
           .object({
             id: z.string().optional(),
             key: z.string(),
-            type: z.enum(['string', 'number', 'boolean', 'object', 'list']),
+            type: z.enum(['string', 'number', 'boolean', 'object', 'list']).or(z.string()),
             fallback_value: z
               .union([z.string(), z.number(), z.boolean(), z.object({}).passthrough(), z.array(z.unknown())])
               .optional(),
@@ -36,7 +36,7 @@ const ProviderResponseSchema = z
       .optional(),
     created_at: z.string().optional(),
     updated_at: z.string().optional(),
-    status: z.enum(['draft', 'published']).optional(),
+    status: z.enum(['draft', 'published']).or(z.string()).optional(),
     published_at: z.string().nullable().optional(),
     has_unpublished_versions: z.boolean().optional(),
   })

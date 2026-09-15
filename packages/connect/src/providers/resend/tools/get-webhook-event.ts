@@ -12,7 +12,7 @@ const ProviderResponseSchema = z
     id: z.string().optional(),
     type: z.string().optional(),
     created_at: z.string().optional(),
-    status: z.enum(['pending', 'attempting', 'success', 'failed']).optional(),
+    status: z.enum(['pending', 'attempting', 'success', 'failed']).or(z.string()).optional(),
     next_attempt_at: z.string().nullable().optional(),
     payload: z.object({}).passthrough().optional(),
   })

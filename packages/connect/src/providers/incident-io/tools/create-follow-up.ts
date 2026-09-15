@@ -27,7 +27,7 @@ const ProviderResponseSchema = z
             email: z.string().optional(),
             id: z.string(),
             name: z.string(),
-            role: z.enum(['viewer', 'responder', 'administrator', 'owner', 'unset']),
+            role: z.enum(['viewer', 'responder', 'administrator', 'owner', 'unset']).or(z.string()),
             slack_user_id: z.string().optional(),
           })
           .passthrough()
@@ -50,7 +50,7 @@ const ProviderResponseSchema = z
                 email: z.string().optional(),
                 id: z.string(),
                 name: z.string(),
-                role: z.enum(['viewer', 'responder', 'administrator', 'owner', 'unset']),
+                role: z.enum(['viewer', 'responder', 'administrator', 'owner', 'unset']).or(z.string()),
                 slack_user_id: z.string().optional(),
               })
               .passthrough()
@@ -63,21 +63,23 @@ const ProviderResponseSchema = z
           .object({
             issue_name: z.string(),
             issue_permalink: z.string(),
-            provider: z.enum([
-              'asana',
-              'azure_devops',
-              'click_up',
-              'freshservice',
-              'linear',
-              'jira',
-              'salesforce',
-              'jira_server',
-              'github',
-              'gitlab',
-              'service_now',
-              'shortcut',
-              'notion',
-            ]),
+            provider: z
+              .enum([
+                'asana',
+                'azure_devops',
+                'click_up',
+                'freshservice',
+                'linear',
+                'jira',
+                'salesforce',
+                'jira_server',
+                'github',
+                'gitlab',
+                'service_now',
+                'shortcut',
+                'notion',
+              ])
+              .or(z.string()),
           })
           .passthrough()
           .nullable()
@@ -90,7 +92,7 @@ const ProviderResponseSchema = z
           .passthrough()
           .nullable()
           .optional(),
-        status: z.enum(['outstanding', 'completed', 'deleted', 'not_doing']),
+        status: z.enum(['outstanding', 'completed', 'deleted', 'not_doing']).or(z.string()),
         title: z.string(),
         updated_at: z.string(),
       })

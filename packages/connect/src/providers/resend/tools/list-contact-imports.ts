@@ -26,7 +26,7 @@ const ProviderResponseSchema = z
           .object({
             object: z.string().optional(),
             id: z.string().optional(),
-            status: z.enum(['queued', 'in_progress', 'completed', 'failed']).optional(),
+            status: z.enum(['queued', 'in_progress', 'completed', 'failed']).or(z.string()).optional(),
             created_at: z.string().optional(),
             completed_at: z.string().nullable().optional(),
             counts: z
@@ -58,14 +58,10 @@ export function listContactImportsTool(proxy: PlatformProxy) {
     execute: async (input, { requestContext }): Promise<z.infer<typeof listContactImportsOutputSchema>> => {
       const platformProxy = proxy.withRequestContext(requestContext);
       const params: Record<string, string> = {};
-      if (input['status'] !== undefined)
-        params['status'] = Array.isArray(input['status']) ? input['status'].join(',') : String(input['status']);
-      if (input['limit'] !== undefined)
-        params['limit'] = Array.isArray(input['limit']) ? input['limit'].join(',') : String(input['limit']);
-      if (input['after'] !== undefined)
-        params['after'] = Array.isArray(input['after']) ? input['after'].join(',') : String(input['after']);
-      if (input['before'] !== undefined)
-        params['before'] = Array.isArray(input['before']) ? input['before'].join(',') : String(input['before']);
+      if (input['status'] !== undefined) params['status'] = String(input['status']);
+      if (input['limit'] !== undefined) params['limit'] = String(input['limit']);
+      if (input['after'] !== undefined) params['after'] = String(input['after']);
+      if (input['before'] !== undefined) params['before'] = String(input['before']);
       const config: PlatformProxyRequest = {
         // https://raw.githubusercontent.com/resend/resend-openapi/68c1b66c20ad62020962838832e53af10558c2f5/resend.yaml,
         endpoint: `/contacts/imports`,

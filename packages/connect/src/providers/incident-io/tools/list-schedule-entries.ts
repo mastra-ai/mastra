@@ -37,7 +37,7 @@ const ProviderResponseSchema = z
                   email: z.string().optional(),
                   id: z.string(),
                   name: z.string(),
-                  role: z.enum(['viewer', 'responder', 'administrator', 'owner', 'unset']),
+                  role: z.enum(['viewer', 'responder', 'administrator', 'owner', 'unset']).or(z.string()),
                   slack_user_id: z.string().optional(),
                 })
                 .passthrough()
@@ -59,7 +59,7 @@ const ProviderResponseSchema = z
                   email: z.string().optional(),
                   id: z.string(),
                   name: z.string(),
-                  role: z.enum(['viewer', 'responder', 'administrator', 'owner', 'unset']),
+                  role: z.enum(['viewer', 'responder', 'administrator', 'owner', 'unset']).or(z.string()),
                   slack_user_id: z.string().optional(),
                 })
                 .passthrough()
@@ -81,7 +81,7 @@ const ProviderResponseSchema = z
                   email: z.string().optional(),
                   id: z.string(),
                   name: z.string(),
-                  role: z.enum(['viewer', 'responder', 'administrator', 'owner', 'unset']),
+                  role: z.enum(['viewer', 'responder', 'administrator', 'owner', 'unset']).or(z.string()),
                   slack_user_id: z.string().optional(),
                 })
                 .passthrough()
@@ -105,19 +105,13 @@ export function listScheduleEntriesTool(proxy: PlatformProxy) {
     execute: async (input, { requestContext }): Promise<z.infer<typeof listScheduleEntriesOutputSchema>> => {
       const platformProxy = proxy.withRequestContext(requestContext);
       const params: Record<string, string> = {};
-      if (input['schedule_id'] !== undefined)
-        params['schedule_id'] = Array.isArray(input['schedule_id'])
-          ? input['schedule_id'].join(',')
-          : String(input['schedule_id']);
+      if (input['schedule_id'] !== undefined) params['schedule_id'] = String(input['schedule_id']);
       const entryWindowStart = input['after'] ?? input['entry_window_start'];
       if (entryWindowStart !== undefined)
         params['entry_window_start'] = Array.isArray(entryWindowStart)
           ? entryWindowStart.join(',')
           : String(entryWindowStart);
-      if (input['entry_window_end'] !== undefined)
-        params['entry_window_end'] = Array.isArray(input['entry_window_end'])
-          ? input['entry_window_end'].join(',')
-          : String(input['entry_window_end']);
+      if (input['entry_window_end'] !== undefined) params['entry_window_end'] = String(input['entry_window_end']);
       const config: PlatformProxyRequest = {
         // https://api.incident.io/v1/openapiV3.json,
         endpoint: `/v2/schedule_entries`,

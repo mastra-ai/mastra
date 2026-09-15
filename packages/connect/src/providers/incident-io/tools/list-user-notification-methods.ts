@@ -14,7 +14,7 @@ const ProviderResponseSchema = z
           address: z.string(),
           id: z.string(),
           is_usable: z.boolean(),
-          method_type: z.enum(['app', 'email', 'microsoft_teams', 'phone', 'slack', 'whatsapp_message']),
+          method_type: z.enum(['app', 'email', 'microsoft_teams', 'phone', 'slack', 'whatsapp_message']).or(z.string()),
           phone_details: z.object({ supports_sms: z.boolean(), supports_voice: z.boolean() }).passthrough().optional(),
         })
         .passthrough(),

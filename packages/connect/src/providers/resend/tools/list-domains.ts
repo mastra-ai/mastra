@@ -26,6 +26,7 @@ const ProviderResponseSchema = z
             name: z.string().optional(),
             status: z
               .enum(['pending', 'verified', 'failed', 'not_started', 'partially_verified', 'partially_failed'])
+              .or(z.string())
               .optional(),
             created_at: z.string().optional(),
             region: z.string().optional(),
@@ -33,8 +34,8 @@ const ProviderResponseSchema = z
             click_tracking: z.boolean().optional(),
             capabilities: z
               .object({
-                sending: z.enum(['enabled', 'disabled']).optional(),
-                receiving: z.enum(['enabled', 'disabled']).optional(),
+                sending: z.enum(['enabled', 'disabled']).or(z.string()).optional(),
+                receiving: z.enum(['enabled', 'disabled']).or(z.string()).optional(),
               })
               .passthrough()
               .optional(),

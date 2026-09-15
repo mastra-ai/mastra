@@ -12,7 +12,7 @@ const ProviderResponseSchema = z
       z
         .object({
           app: z
-            .object({ push_notification_criticality: z.enum(['critical', 'active']) })
+            .object({ push_notification_criticality: z.enum(['critical', 'active']).or(z.string()) })
             .passthrough()
             .optional(),
           delay_seconds: z.number().int().min(0).max(1200).optional(),
@@ -21,15 +21,15 @@ const ProviderResponseSchema = z
             .object({
               all: z.object({}).passthrough().optional(),
               specific: z.object({ id: z.string() }).passthrough().optional(),
-              type: z.enum(['specific', 'all']),
+              type: z.enum(['specific', 'all']).or(z.string()),
             })
             .passthrough(),
-          method_type: z.enum(['app', 'email', 'microsoft_teams', 'phone', 'slack', 'whatsapp_message']),
+          method_type: z.enum(['app', 'email', 'microsoft_teams', 'phone', 'slack', 'whatsapp_message']).or(z.string()),
           phone: z
-            .object({ channel: z.enum(['sms', 'voice']) })
+            .object({ channel: z.enum(['sms', 'voice']).or(z.string()) })
             .passthrough()
             .optional(),
-          rule_type: z.enum(['high_urgency', 'low_urgency']),
+          rule_type: z.enum(['high_urgency', 'low_urgency']).or(z.string()),
         })
         .passthrough(),
     ),

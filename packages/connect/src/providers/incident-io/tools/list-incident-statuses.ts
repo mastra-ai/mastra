@@ -11,7 +11,9 @@ const ProviderResponseSchema = z
     incident_statuses: z.array(
       z
         .object({
-          category: z.enum(['triage', 'declined', 'merged', 'canceled', 'live', 'learning', 'closed', 'paused']),
+          category: z
+            .enum(['triage', 'declined', 'merged', 'canceled', 'live', 'learning', 'closed', 'paused'])
+            .or(z.string()),
           created_at: z.string(),
           description: z.string(),
           id: z.string(),

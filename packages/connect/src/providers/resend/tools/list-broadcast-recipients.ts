@@ -35,7 +35,7 @@ const ProviderResponseSchema = z
             contact_id: z.string().nullable().optional(),
             email: z.string().optional(),
             count: z.number().int().optional(),
-            bounce_type: z.enum(['permanent', 'transient', 'undetermined']).optional(),
+            bounce_type: z.enum(['permanent', 'transient', 'undetermined']).or(z.string()).optional(),
             clicked_links: z
               .array(z.object({ url: z.string().optional(), clicks: z.number().int().optional() }).passthrough())
               .optional(),
@@ -60,20 +60,12 @@ export function listBroadcastRecipientsTool(proxy: PlatformProxy) {
     execute: async (input, { requestContext }): Promise<z.infer<typeof listBroadcastRecipientsOutputSchema>> => {
       const platformProxy = proxy.withRequestContext(requestContext);
       const params: Record<string, string> = {};
-      if (input['type'] !== undefined)
-        params['type'] = Array.isArray(input['type']) ? input['type'].join(',') : String(input['type']);
-      if (input['email'] !== undefined)
-        params['email'] = Array.isArray(input['email']) ? input['email'].join(',') : String(input['email']);
-      if (input['bounce_type'] !== undefined)
-        params['bounce_type'] = Array.isArray(input['bounce_type'])
-          ? input['bounce_type'].join(',')
-          : String(input['bounce_type']);
-      if (input['limit'] !== undefined)
-        params['limit'] = Array.isArray(input['limit']) ? input['limit'].join(',') : String(input['limit']);
-      if (input['after'] !== undefined)
-        params['after'] = Array.isArray(input['after']) ? input['after'].join(',') : String(input['after']);
-      if (input['before'] !== undefined)
-        params['before'] = Array.isArray(input['before']) ? input['before'].join(',') : String(input['before']);
+      if (input['type'] !== undefined) params['type'] = String(input['type']);
+      if (input['email'] !== undefined) params['email'] = String(input['email']);
+      if (input['bounce_type'] !== undefined) params['bounce_type'] = String(input['bounce_type']);
+      if (input['limit'] !== undefined) params['limit'] = String(input['limit']);
+      if (input['after'] !== undefined) params['after'] = String(input['after']);
+      if (input['before'] !== undefined) params['before'] = String(input['before']);
       const config: PlatformProxyRequest = {
         // https://raw.githubusercontent.com/resend/resend-openapi/68c1b66c20ad62020962838832e53af10558c2f5/resend.yaml,
         endpoint: `/broadcasts/${encodeURIComponent(input['id'])}/recipients`,

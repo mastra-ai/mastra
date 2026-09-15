@@ -40,7 +40,7 @@ const ProviderResponseSchema = z
             })
             .passthrough(),
           schedule_sync_target_id: z.string(),
-          sync_type: z.enum(['on_call', 'all_users', 'next_on_call']),
+          sync_type: z.enum(['on_call', 'all_users', 'next_on_call']).or(z.string()),
           updated_at: z.string(),
         })
         .passthrough(),
@@ -59,12 +59,8 @@ export function listScheduleSyncRulesTool(proxy: PlatformProxy) {
     execute: async (input, { requestContext }): Promise<z.infer<typeof listScheduleSyncRulesOutputSchema>> => {
       const platformProxy = proxy.withRequestContext(requestContext);
       const params: Record<string, string> = {};
-      if (input['page_size'] !== undefined)
-        params['page_size'] = Array.isArray(input['page_size'])
-          ? input['page_size'].join(',')
-          : String(input['page_size']);
-      if (input['after'] !== undefined)
-        params['after'] = Array.isArray(input['after']) ? input['after'].join(',') : String(input['after']);
+      if (input['page_size'] !== undefined) params['page_size'] = String(input['page_size']);
+      if (input['after'] !== undefined) params['after'] = String(input['after']);
       const config: PlatformProxyRequest = {
         // https://api.incident.io/v1/openapiV3.json,
         endpoint: `/v2/schedules/${encodeURIComponent(input['schedule_id'])}/sync_rules`,

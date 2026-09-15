@@ -7,7 +7,12 @@ import type { PlatformProxy, PlatformProxyRequest } from '../../../runtime/platf
 export const getUserPagingProviderInputSchema = z.object({ user_id: z.string() }).passthrough();
 
 const ProviderResponseSchema = z
-  .object({ preferred_escalation_provider: z.enum(['native', 'opsgenie', 'pagerduty', 'splunk_on_call']).optional() })
+  .object({
+    preferred_escalation_provider: z
+      .enum(['native', 'opsgenie', 'pagerduty', 'splunk_on_call'])
+      .or(z.string())
+      .optional(),
+  })
   .passthrough();
 
 export const getUserPagingProviderOutputSchema = ProviderResponseSchema;

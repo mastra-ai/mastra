@@ -21,7 +21,7 @@ const ProviderResponseSchema = z
                 email: z.string().optional(),
                 id: z.string(),
                 name: z.string(),
-                role: z.enum(['viewer', 'responder', 'administrator', 'owner', 'unset']),
+                role: z.enum(['viewer', 'responder', 'administrator', 'owner', 'unset']).or(z.string()),
                 slack_user_id: z.string().optional(),
               })
               .passthrough()
@@ -35,7 +35,7 @@ const ProviderResponseSchema = z
               custom_field: z
                 .object({
                   description: z.string(),
-                  field_type: z.enum(['single_select', 'multi_select', 'text', 'link', 'numeric']),
+                  field_type: z.enum(['single_select', 'multi_select', 'text', 'link', 'numeric']).or(z.string()),
                   id: z.string(),
                   name: z.string().max(50),
                   options: z.array(
@@ -85,7 +85,7 @@ const ProviderResponseSchema = z
             z
               .object({
                 duration_metric: z.object({ id: z.string(), name: z.string() }).passthrough(),
-                status: z.enum(['success', 'timestamps_missing', 'calculating', 'invalid_timestamps']),
+                status: z.enum(['success', 'timestamps_missing', 'calculating', 'invalid_timestamps']).or(z.string()),
                 value_seconds: z.number().int().optional(),
               })
               .passthrough(),
@@ -95,21 +95,23 @@ const ProviderResponseSchema = z
           .object({
             issue_name: z.string(),
             issue_permalink: z.string(),
-            provider: z.enum([
-              'asana',
-              'azure_devops',
-              'click_up',
-              'freshservice',
-              'linear',
-              'jira',
-              'salesforce',
-              'jira_server',
-              'github',
-              'gitlab',
-              'service_now',
-              'shortcut',
-              'notion',
-            ]),
+            provider: z
+              .enum([
+                'asana',
+                'azure_devops',
+                'click_up',
+                'freshservice',
+                'linear',
+                'jira',
+                'salesforce',
+                'jira_server',
+                'github',
+                'gitlab',
+                'service_now',
+                'shortcut',
+                'notion',
+              ])
+              .or(z.string()),
           })
           .passthrough()
           .optional(),
@@ -123,7 +125,7 @@ const ProviderResponseSchema = z
                   email: z.string().optional(),
                   id: z.string(),
                   name: z.string(),
-                  role: z.enum(['viewer', 'responder', 'administrator', 'owner', 'unset']),
+                  role: z.enum(['viewer', 'responder', 'administrator', 'owner', 'unset']).or(z.string()),
                   slack_user_id: z.string().optional(),
                 })
                 .passthrough()
@@ -136,7 +138,7 @@ const ProviderResponseSchema = z
                   instructions: z.string(),
                   name: z.string().min(1),
                   required: z.boolean().optional(),
-                  role_type: z.enum(['lead', 'reporter', 'custom']),
+                  role_type: z.enum(['lead', 'reporter', 'custom']).or(z.string()),
                   shortform: z.string(),
                   updated_at: z.string(),
                 })
@@ -146,7 +148,9 @@ const ProviderResponseSchema = z
         ),
         incident_status: z
           .object({
-            category: z.enum(['triage', 'declined', 'merged', 'canceled', 'live', 'learning', 'closed', 'paused']),
+            category: z
+              .enum(['triage', 'declined', 'merged', 'canceled', 'live', 'learning', 'closed', 'paused'])
+              .or(z.string()),
             created_at: z.string(),
             description: z.string(),
             id: z.string(),
@@ -169,7 +173,7 @@ const ProviderResponseSchema = z
           .optional(),
         incident_type: z
           .object({
-            create_in_triage: z.enum(['always', 'optional']),
+            create_in_triage: z.enum(['always', 'optional']).or(z.string()),
             created_at: z.string(),
             description: z.string(),
             id: z.string(),
@@ -181,7 +185,7 @@ const ProviderResponseSchema = z
           .passthrough()
           .optional(),
         last_activity_at: z.string(),
-        mode: z.enum(['standard', 'retrospective', 'test', 'tutorial']),
+        mode: z.enum(['standard', 'retrospective', 'test', 'tutorial']).or(z.string()),
         ms_teams_channel_url: z.string().optional(),
         name: z.string(),
         permalink: z.string().optional(),
@@ -206,7 +210,7 @@ const ProviderResponseSchema = z
         summary: z.string().optional(),
         team_ids: z.array(z.string()),
         updated_at: z.string(),
-        visibility: z.enum(['public', 'private']),
+        visibility: z.enum(['public', 'private']).or(z.string()),
         workload_minutes_late: z.number().optional(),
         workload_minutes_sleeping: z.number().optional(),
         workload_minutes_total: z.number().optional(),

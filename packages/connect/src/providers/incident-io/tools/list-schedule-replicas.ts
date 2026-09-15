@@ -17,7 +17,7 @@ const ProviderResponseSchema = z
           last_synced_at: z.string().nullable().optional(),
           mirror_window_days: z.number().int().min(1).max(90).optional(),
           replica_fallback_user_id: z.string(),
-          replica_provider: z.enum(['native', 'pagerduty', 'opsgenie', 'jsm']),
+          replica_provider: z.enum(['native', 'pagerduty', 'opsgenie', 'jsm']).or(z.string()),
           replica_provider_id: z.string(),
           schedule_id: z.string(),
           sources: z.array(z.object({ layer_id: z.string(), rotation_id: z.string() }).passthrough()),

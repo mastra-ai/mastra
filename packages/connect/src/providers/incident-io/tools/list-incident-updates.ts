@@ -24,7 +24,9 @@ const ProviderResponseSchema = z
           message: z.string().optional(),
           new_incident_status: z
             .object({
-              category: z.enum(['triage', 'declined', 'merged', 'canceled', 'live', 'learning', 'closed', 'paused']),
+              category: z
+                .enum(['triage', 'declined', 'merged', 'canceled', 'live', 'learning', 'closed', 'paused'])
+                .or(z.string()),
               created_at: z.string(),
               description: z.string(),
               id: z.string(),
@@ -53,7 +55,7 @@ const ProviderResponseSchema = z
                   email: z.string().optional(),
                   id: z.string(),
                   name: z.string(),
-                  role: z.enum(['viewer', 'responder', 'administrator', 'owner', 'unset']),
+                  role: z.enum(['viewer', 'responder', 'administrator', 'owner', 'unset']).or(z.string()),
                   slack_user_id: z.string().optional(),
                 })
                 .passthrough()
@@ -82,16 +84,9 @@ export function listIncidentUpdatesTool(proxy: PlatformProxy) {
     execute: async (input, { requestContext }): Promise<z.infer<typeof listIncidentUpdatesOutputSchema>> => {
       const platformProxy = proxy.withRequestContext(requestContext);
       const params: Record<string, string> = {};
-      if (input['incident_id'] !== undefined)
-        params['incident_id'] = Array.isArray(input['incident_id'])
-          ? input['incident_id'].join(',')
-          : String(input['incident_id']);
-      if (input['page_size'] !== undefined)
-        params['page_size'] = Array.isArray(input['page_size'])
-          ? input['page_size'].join(',')
-          : String(input['page_size']);
-      if (input['after'] !== undefined)
-        params['after'] = Array.isArray(input['after']) ? input['after'].join(',') : String(input['after']);
+      if (input['incident_id'] !== undefined) params['incident_id'] = String(input['incident_id']);
+      if (input['page_size'] !== undefined) params['page_size'] = String(input['page_size']);
+      if (input['after'] !== undefined) params['after'] = String(input['after']);
       const config: PlatformProxyRequest = {
         // https://api.incident.io/v1/openapiV3.json,
         endpoint: `/v2/incident_updates`,

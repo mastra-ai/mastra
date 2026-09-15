@@ -24,7 +24,7 @@ const ProviderResponseSchema = z
             id: z.string(),
             resolved_at: z.string().optional(),
             source_url: z.string().optional(),
-            status: z.enum(['firing', 'resolved']),
+            status: z.enum(['firing', 'resolved']).or(z.string()),
             title: z.string(),
             updated_at: z.string(),
           })
@@ -37,18 +37,11 @@ const ProviderResponseSchema = z
             id: z.string(),
             name: z.string(),
             reference: z.string(),
-            status_category: z.enum([
-              'triage',
-              'declined',
-              'merged',
-              'canceled',
-              'active',
-              'post-incident',
-              'closed',
-              'paused',
-            ]),
+            status_category: z
+              .enum(['triage', 'declined', 'merged', 'canceled', 'active', 'post-incident', 'closed', 'paused'])
+              .or(z.string()),
             summary: z.string().optional(),
-            visibility: z.enum(['public', 'private']),
+            visibility: z.enum(['public', 'private']).or(z.string()),
           })
           .passthrough(),
       })

@@ -13,13 +13,13 @@ const ProviderResponseSchema = z
         active: z.array(
           z
             .object({
-              participant_type: z.enum(['observer', 'collaborator', 'responder']),
+              participant_type: z.enum(['observer', 'collaborator', 'responder']).or(z.string()),
               user: z
                 .object({
                   email: z.string().optional(),
                   id: z.string(),
                   name: z.string(),
-                  role: z.enum(['viewer', 'responder', 'administrator', 'owner', 'unset']),
+                  role: z.enum(['viewer', 'responder', 'administrator', 'owner', 'unset']).or(z.string()),
                   slack_user_id: z.string().optional(),
                 })
                 .passthrough(),
@@ -29,13 +29,13 @@ const ProviderResponseSchema = z
         passive: z.array(
           z
             .object({
-              participant_type: z.enum(['observer', 'collaborator', 'responder']),
+              participant_type: z.enum(['observer', 'collaborator', 'responder']).or(z.string()),
               user: z
                 .object({
                   email: z.string().optional(),
                   id: z.string(),
                   name: z.string(),
-                  role: z.enum(['viewer', 'responder', 'administrator', 'owner', 'unset']),
+                  role: z.enum(['viewer', 'responder', 'administrator', 'owner', 'unset']).or(z.string()),
                   slack_user_id: z.string().optional(),
                 })
                 .passthrough(),
@@ -58,10 +58,7 @@ export function listIncidentParticipantsTool(proxy: PlatformProxy) {
     execute: async (input, { requestContext }): Promise<z.infer<typeof listIncidentParticipantsOutputSchema>> => {
       const platformProxy = proxy.withRequestContext(requestContext);
       const params: Record<string, string> = {};
-      if (input['incident_id'] !== undefined)
-        params['incident_id'] = Array.isArray(input['incident_id'])
-          ? input['incident_id'].join(',')
-          : String(input['incident_id']);
+      if (input['incident_id'] !== undefined) params['incident_id'] = String(input['incident_id']);
       const config: PlatformProxyRequest = {
         // https://api.incident.io/v1/openapiV3.json,
         endpoint: `/v2/incident_participants`,

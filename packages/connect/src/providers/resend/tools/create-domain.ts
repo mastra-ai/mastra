@@ -33,11 +33,12 @@ const ProviderResponseSchema = z
     created_at: z.string().optional(),
     status: z
       .enum(['pending', 'verified', 'failed', 'not_started', 'partially_verified', 'partially_failed'])
+      .or(z.string())
       .optional(),
     capabilities: z
       .object({
-        sending: z.enum(['enabled', 'disabled']).optional(),
-        receiving: z.enum(['enabled', 'disabled']).optional(),
+        sending: z.enum(['enabled', 'disabled']).or(z.string()).optional(),
+        receiving: z.enum(['enabled', 'disabled']).or(z.string()).optional(),
       })
       .passthrough()
       .optional(),
@@ -45,11 +46,14 @@ const ProviderResponseSchema = z
       .array(
         z
           .object({
-            record: z.enum(['SPF', 'DKIM', 'Receiving', 'Tracking', 'TrackingCAA']).optional(),
+            record: z.enum(['SPF', 'DKIM', 'Receiving', 'Tracking', 'TrackingCAA']).or(z.string()).optional(),
             name: z.string().optional(),
-            type: z.enum(['MX', 'TXT', 'CNAME', 'CAA']).optional(),
+            type: z.enum(['MX', 'TXT', 'CNAME', 'CAA']).or(z.string()).optional(),
             ttl: z.string().optional(),
-            status: z.enum(['pending', 'verified', 'failed', 'temporary_failure', 'not_started']).optional(),
+            status: z
+              .enum(['pending', 'verified', 'failed', 'temporary_failure', 'not_started'])
+              .or(z.string())
+              .optional(),
             value: z.string().optional(),
             priority: z.number().int().optional(),
           })

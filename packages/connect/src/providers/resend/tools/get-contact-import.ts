@@ -10,7 +10,7 @@ const ProviderResponseSchema = z
   .object({
     object: z.string().optional(),
     id: z.string().optional(),
-    status: z.enum(['queued', 'in_progress', 'completed', 'failed']).optional(),
+    status: z.enum(['queued', 'in_progress', 'completed', 'failed']).or(z.string()).optional(),
     created_at: z.string().optional(),
     completed_at: z.string().nullable().optional(),
     counts: z

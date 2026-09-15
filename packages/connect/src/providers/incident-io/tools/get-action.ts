@@ -15,7 +15,7 @@ const ProviderResponseSchema = z
             email: z.string().optional(),
             id: z.string(),
             name: z.string(),
-            role: z.enum(['viewer', 'responder', 'administrator', 'owner', 'unset']),
+            role: z.enum(['viewer', 'responder', 'administrator', 'owner', 'unset']).or(z.string()),
             slack_user_id: z.string().optional(),
           })
           .passthrough()
@@ -31,7 +31,7 @@ const ProviderResponseSchema = z
                 email: z.string().optional(),
                 id: z.string(),
                 name: z.string(),
-                role: z.enum(['viewer', 'responder', 'administrator', 'owner', 'unset']),
+                role: z.enum(['viewer', 'responder', 'administrator', 'owner', 'unset']).or(z.string()),
                 slack_user_id: z.string().optional(),
               })
               .passthrough()
@@ -42,7 +42,7 @@ const ProviderResponseSchema = z
         description: z.string(),
         id: z.string(),
         incident_id: z.string(),
-        status: z.enum(['outstanding', 'completed', 'deleted', 'not_doing']),
+        status: z.enum(['outstanding', 'completed', 'deleted', 'not_doing']).or(z.string()),
         updated_at: z.string(),
       })
       .passthrough(),

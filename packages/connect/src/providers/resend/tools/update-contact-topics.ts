@@ -21,7 +21,9 @@ const ProviderResponseSchema = z
     contact_id: z.string().optional(),
     topics: z
       .array(
-        z.object({ id: z.string().optional(), subscription: z.enum(['opt_in', 'opt_out']).optional() }).passthrough(),
+        z
+          .object({ id: z.string().optional(), subscription: z.enum(['opt_in', 'opt_out']).or(z.string()).optional() })
+          .passthrough(),
       )
       .optional(),
   })

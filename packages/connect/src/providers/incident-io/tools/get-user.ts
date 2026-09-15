@@ -22,11 +22,11 @@ const ProviderResponseSchema = z
         id: z.string(),
         is_active: z.boolean(),
         name: z.string(),
-        role: z.enum(['viewer', 'responder', 'administrator', 'owner', 'unset']),
+        role: z.enum(['viewer', 'responder', 'administrator', 'owner', 'unset']).or(z.string()),
         seats: z
           .object({
-            on_call: z.enum(['full_access', 'viewer_only', 'none']),
-            response: z.enum(['full_access', 'viewer_only', 'none']),
+            on_call: z.enum(['full_access', 'viewer_only', 'none']).or(z.string()),
+            response: z.enum(['full_access', 'viewer_only', 'none']).or(z.string()),
           })
           .passthrough(),
         slack_user_id: z.string().optional(),

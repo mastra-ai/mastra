@@ -62,7 +62,7 @@ const ProviderResponseSchema = z
           id: z.string(),
           resolved_at: z.string().optional(),
           source_url: z.string().optional(),
-          status: z.enum(['firing', 'resolved']),
+          status: z.enum(['firing', 'resolved']).or(z.string()),
           tags: z.array(z.object({ id: z.string(), name: z.string() }).passthrough()).optional(),
           title: z.string(),
           updated_at: z.string(),
@@ -84,12 +84,8 @@ export function listAlertsTool(proxy: PlatformProxy) {
     execute: async (input, { requestContext }): Promise<z.infer<typeof listAlertsOutputSchema>> => {
       const platformProxy = proxy.withRequestContext(requestContext);
       const params: Record<string, string> = {};
-      if (input['page_size'] !== undefined)
-        params['page_size'] = Array.isArray(input['page_size'])
-          ? input['page_size'].join(',')
-          : String(input['page_size']);
-      if (input['after'] !== undefined)
-        params['after'] = Array.isArray(input['after']) ? input['after'].join(',') : String(input['after']);
+      if (input['page_size'] !== undefined) params['page_size'] = String(input['page_size']);
+      if (input['after'] !== undefined) params['after'] = String(input['after']);
       const config: PlatformProxyRequest = {
         // https://api.incident.io/v1/openapiV3.json,
         endpoint: `/v2/alerts`,

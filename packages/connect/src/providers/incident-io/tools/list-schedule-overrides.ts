@@ -32,7 +32,7 @@ const ProviderResponseSchema = z
               email: z.string().optional(),
               id: z.string(),
               name: z.string(),
-              role: z.enum(['viewer', 'responder', 'administrator', 'owner', 'unset']),
+              role: z.enum(['viewer', 'responder', 'administrator', 'owner', 'unset']).or(z.string()),
               slack_user_id: z.string().optional(),
             })
             .passthrough()
@@ -58,22 +58,11 @@ export function listScheduleOverridesTool(proxy: PlatformProxy) {
     execute: async (input, { requestContext }): Promise<z.infer<typeof listScheduleOverridesOutputSchema>> => {
       const platformProxy = proxy.withRequestContext(requestContext);
       const params: Record<string, string> = {};
-      if (input['schedule_id'] !== undefined)
-        params['schedule_id'] = Array.isArray(input['schedule_id'])
-          ? input['schedule_id'].join(',')
-          : String(input['schedule_id']);
-      if (input['rotation_id'] !== undefined)
-        params['rotation_id'] = Array.isArray(input['rotation_id'])
-          ? input['rotation_id'].join(',')
-          : String(input['rotation_id']);
-      if (input['layer_id'] !== undefined)
-        params['layer_id'] = Array.isArray(input['layer_id']) ? input['layer_id'].join(',') : String(input['layer_id']);
-      if (input['page_size'] !== undefined)
-        params['page_size'] = Array.isArray(input['page_size'])
-          ? input['page_size'].join(',')
-          : String(input['page_size']);
-      if (input['after'] !== undefined)
-        params['after'] = Array.isArray(input['after']) ? input['after'].join(',') : String(input['after']);
+      if (input['schedule_id'] !== undefined) params['schedule_id'] = String(input['schedule_id']);
+      if (input['rotation_id'] !== undefined) params['rotation_id'] = String(input['rotation_id']);
+      if (input['layer_id'] !== undefined) params['layer_id'] = String(input['layer_id']);
+      if (input['page_size'] !== undefined) params['page_size'] = String(input['page_size']);
+      if (input['after'] !== undefined) params['after'] = String(input['after']);
       const config: PlatformProxyRequest = {
         // https://api.incident.io/v1/openapiV3.json,
         endpoint: `/v2/schedule_overrides`,

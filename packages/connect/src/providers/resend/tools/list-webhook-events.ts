@@ -19,7 +19,7 @@ const ProviderResponseSchema = z
             id: z.string().optional(),
             type: z.string().optional(),
             created_at: z.string().optional(),
-            status: z.enum(['pending', 'attempting', 'success', 'failed']).optional(),
+            status: z.enum(['pending', 'attempting', 'success', 'failed']).or(z.string()).optional(),
           })
           .passthrough(),
       )
@@ -39,10 +39,8 @@ export function listWebhookEventsTool(proxy: PlatformProxy) {
     execute: async (input, { requestContext }): Promise<z.infer<typeof listWebhookEventsOutputSchema>> => {
       const platformProxy = proxy.withRequestContext(requestContext);
       const params: Record<string, string> = {};
-      if (input['limit'] !== undefined)
-        params['limit'] = Array.isArray(input['limit']) ? input['limit'].join(',') : String(input['limit']);
-      if (input['after'] !== undefined)
-        params['after'] = Array.isArray(input['after']) ? input['after'].join(',') : String(input['after']);
+      if (input['limit'] !== undefined) params['limit'] = String(input['limit']);
+      if (input['after'] !== undefined) params['after'] = String(input['after']);
       const config: PlatformProxyRequest = {
         // https://raw.githubusercontent.com/resend/resend-openapi/68c1b66c20ad62020962838832e53af10558c2f5/resend.yaml,
         endpoint: `/webhooks/${encodeURIComponent(input['webhook_id'])}/events`,

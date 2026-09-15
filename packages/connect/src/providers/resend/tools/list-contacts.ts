@@ -49,16 +49,10 @@ export function listContactsTool(proxy: PlatformProxy) {
     execute: async (input, { requestContext }): Promise<z.infer<typeof listContactsOutputSchema>> => {
       const platformProxy = proxy.withRequestContext(requestContext);
       const params: Record<string, string> = {};
-      if (input['segment_id'] !== undefined)
-        params['segment_id'] = Array.isArray(input['segment_id'])
-          ? input['segment_id'].join(',')
-          : String(input['segment_id']);
-      if (input['limit'] !== undefined)
-        params['limit'] = Array.isArray(input['limit']) ? input['limit'].join(',') : String(input['limit']);
-      if (input['after'] !== undefined)
-        params['after'] = Array.isArray(input['after']) ? input['after'].join(',') : String(input['after']);
-      if (input['before'] !== undefined)
-        params['before'] = Array.isArray(input['before']) ? input['before'].join(',') : String(input['before']);
+      if (input['segment_id'] !== undefined) params['segment_id'] = String(input['segment_id']);
+      if (input['limit'] !== undefined) params['limit'] = String(input['limit']);
+      if (input['after'] !== undefined) params['after'] = String(input['after']);
+      if (input['before'] !== undefined) params['before'] = String(input['before']);
       const config: PlatformProxyRequest = {
         // https://raw.githubusercontent.com/resend/resend-openapi/68c1b66c20ad62020962838832e53af10558c2f5/resend.yaml,
         endpoint: `/contacts`,

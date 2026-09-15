@@ -11,7 +11,7 @@ const ProviderResponseSchema = z
     incident_types: z.array(
       z
         .object({
-          create_in_triage: z.enum(['always', 'optional']),
+          create_in_triage: z.enum(['always', 'optional']).or(z.string()),
           created_at: z.string(),
           description: z.string(),
           id: z.string(),

@@ -11,7 +11,7 @@ const ProviderResponseSchema = z
     resources: z.array(
       z
         .object({
-          category: z.enum(['primitive', 'custom', 'external']),
+          category: z.enum(['primitive', 'custom', 'external']).or(z.string()),
           description: z.string(),
           engine_resource_type: z.string(),
           label: z.string(),

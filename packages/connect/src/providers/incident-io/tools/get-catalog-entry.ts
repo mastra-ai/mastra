@@ -36,44 +36,46 @@ const ProviderResponseSchema = z
       .object({
         annotations: z.record(z.string(), z.string()),
         categories: z.array(
-          z.enum(['customer', 'issue-tracker', 'product-feature', 'service', 'on-call', 'team', 'user']),
+          z.enum(['customer', 'issue-tracker', 'product-feature', 'service', 'on-call', 'team', 'user']).or(z.string()),
         ),
-        color: z.enum(['yellow', 'green', 'blue', 'violet', 'pink', 'cyan', 'orange']),
+        color: z.enum(['yellow', 'green', 'blue', 'violet', 'pink', 'cyan', 'orange']).or(z.string()),
         created_at: z.string(),
         description: z.string(),
         dynamic_resource_parameter: z.string().optional(),
         engine_resource_type: z.string(),
         estimated_count: z.number().int().optional(),
-        icon: z.enum([
-          'alert',
-          'bolt',
-          'box',
-          'briefcase',
-          'browser',
-          'bulb',
-          'calendar',
-          'clock',
-          'cog',
-          'components',
-          'database',
-          'doc',
-          'email',
-          'escalation-path',
-          'files',
-          'flag',
-          'folder',
-          'globe',
-          'incident-template',
-          'money',
-          'server',
-          'severity',
-          'status-page',
-          'store',
-          'star',
-          'tag',
-          'user',
-          'users',
-        ]),
+        icon: z
+          .enum([
+            'alert',
+            'bolt',
+            'box',
+            'briefcase',
+            'browser',
+            'bulb',
+            'calendar',
+            'clock',
+            'cog',
+            'components',
+            'database',
+            'doc',
+            'email',
+            'escalation-path',
+            'files',
+            'flag',
+            'folder',
+            'globe',
+            'incident-template',
+            'money',
+            'server',
+            'severity',
+            'status-page',
+            'store',
+            'star',
+            'tag',
+            'user',
+            'users',
+          ])
+          .or(z.string()),
         id: z.string(),
         is_editable: z.boolean(),
         is_team_type: z.boolean().optional(),
@@ -91,7 +93,9 @@ const ProviderResponseSchema = z
                   array: z.boolean(),
                   backlink_attribute: z.string().optional(),
                   id: z.string(),
-                  mode: z.enum(['', 'api', 'dashboard', 'external', 'internal', 'dynamic', 'backlink', 'path']),
+                  mode: z
+                    .enum(['', 'api', 'dashboard', 'external', 'internal', 'dynamic', 'backlink', 'path'])
+                    .or(z.string()),
                   name: z.string(),
                   path: z
                     .array(z.object({ attribute_id: z.string(), attribute_name: z.string() }).passthrough())
@@ -123,8 +127,7 @@ export function getCatalogEntryTool(proxy: PlatformProxy) {
     execute: async (input, { requestContext }): Promise<z.infer<typeof getCatalogEntryOutputSchema>> => {
       const platformProxy = proxy.withRequestContext(requestContext);
       const params: Record<string, string> = {};
-      if (input['expand'] !== undefined)
-        params['expand'] = Array.isArray(input['expand']) ? input['expand'].join(',') : String(input['expand']);
+      if (input['expand'] !== undefined) params['expand'] = String(input['expand']);
       const config: PlatformProxyRequest = {
         // https://api.incident.io/v1/openapiV3.json,
         endpoint: `/v3/catalog_entries/${encodeURIComponent(input['id'])}`,

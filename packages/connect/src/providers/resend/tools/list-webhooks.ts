@@ -43,12 +43,9 @@ export function listWebhooksTool(proxy: PlatformProxy) {
     execute: async (input, { requestContext }): Promise<z.infer<typeof listWebhooksOutputSchema>> => {
       const platformProxy = proxy.withRequestContext(requestContext);
       const params: Record<string, string> = {};
-      if (input['limit'] !== undefined)
-        params['limit'] = Array.isArray(input['limit']) ? input['limit'].join(',') : String(input['limit']);
-      if (input['after'] !== undefined)
-        params['after'] = Array.isArray(input['after']) ? input['after'].join(',') : String(input['after']);
-      if (input['before'] !== undefined)
-        params['before'] = Array.isArray(input['before']) ? input['before'].join(',') : String(input['before']);
+      if (input['limit'] !== undefined) params['limit'] = String(input['limit']);
+      if (input['after'] !== undefined) params['after'] = String(input['after']);
+      if (input['before'] !== undefined) params['before'] = String(input['before']);
       const config: PlatformProxyRequest = {
         // https://raw.githubusercontent.com/resend/resend-openapi/68c1b66c20ad62020962838832e53af10558c2f5/resend.yaml,
         endpoint: `/webhooks`,

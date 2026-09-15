@@ -27,7 +27,7 @@ const ProviderResponseSchema = z
                 email: z.string().optional(),
                 id: z.string(),
                 name: z.string(),
-                role: z.enum(['viewer', 'responder', 'administrator', 'owner', 'unset']),
+                role: z.enum(['viewer', 'responder', 'administrator', 'owner', 'unset']).or(z.string()),
                 slack_user_id: z.string().optional(),
               })
               .passthrough(),
@@ -35,9 +35,9 @@ const ProviderResponseSchema = z
           exported_urls: z.array(z.string()),
           id: z.string(),
           incident_id: z.string(),
-          status: z.enum(['in_progress', 'in_review', 'completed']),
+          status: z.enum(['in_progress', 'in_review', 'completed']).or(z.string()),
           title: z.string(),
-          type: z.enum(['in_app', 'external']),
+          type: z.enum(['in_app', 'external']).or(z.string()),
           updated_at: z.string(),
         })
         .passthrough(),
@@ -58,18 +58,10 @@ export function listPostmortemDocumentsTool(proxy: PlatformProxy) {
     execute: async (input, { requestContext }): Promise<z.infer<typeof listPostmortemDocumentsOutputSchema>> => {
       const platformProxy = proxy.withRequestContext(requestContext);
       const params: Record<string, string> = {};
-      if (input['page_size'] !== undefined)
-        params['page_size'] = Array.isArray(input['page_size'])
-          ? input['page_size'].join(',')
-          : String(input['page_size']);
-      if (input['after'] !== undefined)
-        params['after'] = Array.isArray(input['after']) ? input['after'].join(',') : String(input['after']);
-      if (input['incident_id'] !== undefined)
-        params['incident_id'] = Array.isArray(input['incident_id'])
-          ? input['incident_id'].join(',')
-          : String(input['incident_id']);
-      if (input['sort_by'] !== undefined)
-        params['sort_by'] = Array.isArray(input['sort_by']) ? input['sort_by'].join(',') : String(input['sort_by']);
+      if (input['page_size'] !== undefined) params['page_size'] = String(input['page_size']);
+      if (input['after'] !== undefined) params['after'] = String(input['after']);
+      if (input['incident_id'] !== undefined) params['incident_id'] = String(input['incident_id']);
+      if (input['sort_by'] !== undefined) params['sort_by'] = String(input['sort_by']);
       const config: PlatformProxyRequest = {
         // https://api.incident.io/v1/openapiV3.json,
         endpoint: `/v1/postmortem_documents`,

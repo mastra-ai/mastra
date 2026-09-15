@@ -59,7 +59,7 @@ const ProviderResponseSchema = z
         id: z.string(),
         resolved_at: z.string().optional(),
         source_url: z.string().optional(),
-        status: z.enum(['firing', 'resolved']),
+        status: z.enum(['firing', 'resolved']).or(z.string()),
         tags: z.array(z.object({ id: z.string(), name: z.string() }).passthrough()).optional(),
         title: z.string(),
         updated_at: z.string(),

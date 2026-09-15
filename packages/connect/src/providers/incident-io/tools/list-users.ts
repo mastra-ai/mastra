@@ -32,11 +32,11 @@ const ProviderResponseSchema = z
           id: z.string(),
           is_active: z.boolean(),
           name: z.string(),
-          role: z.enum(['viewer', 'responder', 'administrator', 'owner', 'unset']),
+          role: z.enum(['viewer', 'responder', 'administrator', 'owner', 'unset']).or(z.string()),
           seats: z
             .object({
-              on_call: z.enum(['full_access', 'viewer_only', 'none']),
-              response: z.enum(['full_access', 'viewer_only', 'none']),
+              on_call: z.enum(['full_access', 'viewer_only', 'none']).or(z.string()),
+              response: z.enum(['full_access', 'viewer_only', 'none']).or(z.string()),
             })
             .passthrough(),
           slack_user_id: z.string().optional(),
@@ -57,22 +57,11 @@ export function listUsersTool(proxy: PlatformProxy) {
     execute: async (input, { requestContext }): Promise<z.infer<typeof listUsersOutputSchema>> => {
       const platformProxy = proxy.withRequestContext(requestContext);
       const params: Record<string, string> = {};
-      if (input['email'] !== undefined)
-        params['email'] = Array.isArray(input['email']) ? input['email'].join(',') : String(input['email']);
-      if (input['slack_user_id'] !== undefined)
-        params['slack_user_id'] = Array.isArray(input['slack_user_id'])
-          ? input['slack_user_id'].join(',')
-          : String(input['slack_user_id']);
-      if (input['include_inactive'] !== undefined)
-        params['include_inactive'] = Array.isArray(input['include_inactive'])
-          ? input['include_inactive'].join(',')
-          : String(input['include_inactive']);
-      if (input['page_size'] !== undefined)
-        params['page_size'] = Array.isArray(input['page_size'])
-          ? input['page_size'].join(',')
-          : String(input['page_size']);
-      if (input['after'] !== undefined)
-        params['after'] = Array.isArray(input['after']) ? input['after'].join(',') : String(input['after']);
+      if (input['email'] !== undefined) params['email'] = String(input['email']);
+      if (input['slack_user_id'] !== undefined) params['slack_user_id'] = String(input['slack_user_id']);
+      if (input['include_inactive'] !== undefined) params['include_inactive'] = String(input['include_inactive']);
+      if (input['page_size'] !== undefined) params['page_size'] = String(input['page_size']);
+      if (input['after'] !== undefined) params['after'] = String(input['after']);
       const config: PlatformProxyRequest = {
         // https://api.incident.io/v1/openapiV3.json,
         endpoint: `/v2/users`,

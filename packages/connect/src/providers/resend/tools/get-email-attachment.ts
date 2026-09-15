@@ -15,7 +15,7 @@ const ProviderResponseSchema = z
     filename: z.string().nullable().optional(),
     content_type: z.string().optional(),
     content_id: z.string().optional(),
-    content_disposition: z.enum(['inline', 'attachment']).nullable().optional(),
+    content_disposition: z.enum(['inline', 'attachment']).or(z.string()).nullable().optional(),
     download_url: z.string().optional(),
     expires_at: z.string().optional(),
     size: z.number().int().optional(),

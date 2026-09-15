@@ -33,7 +33,7 @@ const ProviderResponseSchema = z
                 email: z.string().optional(),
                 id: z.string(),
                 name: z.string(),
-                role: z.enum(['viewer', 'responder', 'administrator', 'owner', 'unset']),
+                role: z.enum(['viewer', 'responder', 'administrator', 'owner', 'unset']).or(z.string()),
                 slack_user_id: z.string().optional(),
               })
               .passthrough()

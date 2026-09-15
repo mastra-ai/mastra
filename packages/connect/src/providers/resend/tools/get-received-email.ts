@@ -30,7 +30,7 @@ const ProviderResponseSchema = z
             filename: z.string().nullable().optional(),
             content_type: z.string().optional(),
             content_id: z.string().optional(),
-            content_disposition: z.enum(['inline', 'attachment']).nullable().optional(),
+            content_disposition: z.enum(['inline', 'attachment']).or(z.string()).nullable().optional(),
             size: z.number().int().optional(),
           })
           .passthrough(),

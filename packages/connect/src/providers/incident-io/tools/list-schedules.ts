@@ -31,20 +31,23 @@ const ProviderResponseSchema = z
                     handover_start_at: z.string(),
                     handovers: z.array(
                       z
-                        .object({ interval: z.number().int(), interval_type: z.enum(['hourly', 'daily', 'weekly']) })
+                        .object({
+                          interval: z.number().int(),
+                          interval_type: z.enum(['hourly', 'daily', 'weekly']).or(z.string()),
+                        })
                         .passthrough(),
                     ),
                     id: z.string(),
                     layers: z.array(z.object({ id: z.string().optional(), name: z.string().optional() }).passthrough()),
                     name: z.string(),
-                    scheduling_mode: z.enum(['fair', 'sequential']).optional(),
+                    scheduling_mode: z.enum(['fair', 'sequential']).or(z.string()).optional(),
                     users: z.array(
                       z
                         .object({
                           email: z.string().optional(),
                           id: z.string(),
                           name: z.string(),
-                          role: z.enum(['viewer', 'responder', 'administrator', 'owner', 'unset']),
+                          role: z.enum(['viewer', 'responder', 'administrator', 'owner', 'unset']).or(z.string()),
                           slack_user_id: z.string().optional(),
                         })
                         .passthrough(),
@@ -55,15 +58,9 @@ const ProviderResponseSchema = z
                           .object({
                             end_time: z.string(),
                             start_time: z.string(),
-                            weekday: z.enum([
-                              'monday',
-                              'tuesday',
-                              'wednesday',
-                              'thursday',
-                              'friday',
-                              'saturday',
-                              'sunday',
-                            ]),
+                            weekday: z
+                              .enum(['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'])
+                              .or(z.string()),
                           })
                           .passthrough(),
                       )
@@ -73,15 +70,9 @@ const ProviderResponseSchema = z
                         .object({
                           end_time: z.string(),
                           start_time: z.string(),
-                          weekday: z.enum([
-                            'monday',
-                            'tuesday',
-                            'wednesday',
-                            'thursday',
-                            'friday',
-                            'saturday',
-                            'sunday',
-                          ]),
+                          weekday: z
+                            .enum(['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'])
+                            .or(z.string()),
                         })
                         .passthrough(),
                     ),
@@ -107,7 +98,7 @@ const ProviderResponseSchema = z
                       email: z.string().optional(),
                       id: z.string(),
                       name: z.string(),
-                      role: z.enum(['viewer', 'responder', 'administrator', 'owner', 'unset']),
+                      role: z.enum(['viewer', 'responder', 'administrator', 'owner', 'unset']).or(z.string()),
                       slack_user_id: z.string().optional(),
                     })
                     .passthrough()
@@ -137,7 +128,7 @@ const ProviderResponseSchema = z
                       email: z.string().optional(),
                       id: z.string(),
                       name: z.string(),
-                      role: z.enum(['viewer', 'responder', 'administrator', 'owner', 'unset']),
+                      role: z.enum(['viewer', 'responder', 'administrator', 'owner', 'unset']).or(z.string()),
                       slack_user_id: z.string().optional(),
                     })
                     .passthrough()
@@ -167,12 +158,8 @@ export function listSchedulesTool(proxy: PlatformProxy) {
     execute: async (input, { requestContext }): Promise<z.infer<typeof listSchedulesOutputSchema>> => {
       const platformProxy = proxy.withRequestContext(requestContext);
       const params: Record<string, string> = {};
-      if (input['page_size'] !== undefined)
-        params['page_size'] = Array.isArray(input['page_size'])
-          ? input['page_size'].join(',')
-          : String(input['page_size']);
-      if (input['after'] !== undefined)
-        params['after'] = Array.isArray(input['after']) ? input['after'].join(',') : String(input['after']);
+      if (input['page_size'] !== undefined) params['page_size'] = String(input['page_size']);
+      if (input['after'] !== undefined) params['after'] = String(input['after']);
       const config: PlatformProxyRequest = {
         // https://api.incident.io/v1/openapiV3.json,
         endpoint: `/v2/schedules`,

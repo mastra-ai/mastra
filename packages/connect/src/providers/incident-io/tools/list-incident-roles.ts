@@ -16,7 +16,7 @@ const ProviderResponseSchema = z
           id: z.string(),
           instructions: z.string(),
           name: z.string().min(1),
-          role_type: z.enum(['lead', 'reporter', 'custom']),
+          role_type: z.enum(['lead', 'reporter', 'custom']).or(z.string()),
           shortform: z.string(),
           updated_at: z.string(),
         })

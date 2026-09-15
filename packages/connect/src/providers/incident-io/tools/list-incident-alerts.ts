@@ -28,7 +28,7 @@ const ProviderResponseSchema = z
               id: z.string(),
               resolved_at: z.string().optional(),
               source_url: z.string().optional(),
-              status: z.enum(['firing', 'resolved']),
+              status: z.enum(['firing', 'resolved']).or(z.string()),
               title: z.string(),
               updated_at: z.string(),
             })
@@ -41,18 +41,11 @@ const ProviderResponseSchema = z
               id: z.string(),
               name: z.string(),
               reference: z.string(),
-              status_category: z.enum([
-                'triage',
-                'declined',
-                'merged',
-                'canceled',
-                'active',
-                'post-incident',
-                'closed',
-                'paused',
-              ]),
+              status_category: z
+                .enum(['triage', 'declined', 'merged', 'canceled', 'active', 'post-incident', 'closed', 'paused'])
+                .or(z.string()),
               summary: z.string().optional(),
-              visibility: z.enum(['public', 'private']),
+              visibility: z.enum(['public', 'private']).or(z.string()),
             })
             .passthrough(),
         })
@@ -73,18 +66,10 @@ export function listIncidentAlertsTool(proxy: PlatformProxy) {
     execute: async (input, { requestContext }): Promise<z.infer<typeof listIncidentAlertsOutputSchema>> => {
       const platformProxy = proxy.withRequestContext(requestContext);
       const params: Record<string, string> = {};
-      if (input['page_size'] !== undefined)
-        params['page_size'] = Array.isArray(input['page_size'])
-          ? input['page_size'].join(',')
-          : String(input['page_size']);
-      if (input['after'] !== undefined)
-        params['after'] = Array.isArray(input['after']) ? input['after'].join(',') : String(input['after']);
-      if (input['alert_id'] !== undefined)
-        params['alert_id'] = Array.isArray(input['alert_id']) ? input['alert_id'].join(',') : String(input['alert_id']);
-      if (input['incident_id'] !== undefined)
-        params['incident_id'] = Array.isArray(input['incident_id'])
-          ? input['incident_id'].join(',')
-          : String(input['incident_id']);
+      if (input['page_size'] !== undefined) params['page_size'] = String(input['page_size']);
+      if (input['after'] !== undefined) params['after'] = String(input['after']);
+      if (input['alert_id'] !== undefined) params['alert_id'] = String(input['alert_id']);
+      if (input['incident_id'] !== undefined) params['incident_id'] = String(input['incident_id']);
       const config: PlatformProxyRequest = {
         // https://api.incident.io/v1/openapiV3.json,
         endpoint: `/v2/incident_alerts`,

@@ -11,7 +11,7 @@ const ProviderResponseSchema = z
     object: z.string().optional(),
     id: z.string(),
     key: z.string(),
-    type: z.enum(['string', 'number']),
+    type: z.enum(['string', 'number']).or(z.string()),
     fallback_value: z.union([z.string(), z.number()]).optional(),
     created_at: z.string().optional(),
   })

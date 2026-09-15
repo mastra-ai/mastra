@@ -14,8 +14,8 @@ const ProviderResponseSchema = z
     object: z.string().optional(),
     name: z.string().optional(),
     description: z.string().optional(),
-    default_subscription: z.enum(['opt_in', 'opt_out']).optional(),
-    visibility: z.enum(['public', 'private']).optional(),
+    default_subscription: z.enum(['opt_in', 'opt_out']).or(z.string()).optional(),
+    visibility: z.enum(['public', 'private']).or(z.string()).optional(),
     created_at: z.string().optional(),
   })
   .passthrough();
