@@ -1,4 +1,5 @@
 export * from './tool';
+export type { DeferredTool } from './deferred-tool';
 export * from './types';
 export * from './ui-types';
 export { getTransformedToolPayload, hasTransformedToolPayload } from './payload-transform';

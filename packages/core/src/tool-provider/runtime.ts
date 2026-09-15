@@ -1,8 +1,11 @@
 import type { IMastraLogger } from '../logger';
 import { MASTRA_RESOURCE_ID_KEY } from '../request-context';
 import type { RequestContext } from '../request-context';
+import { getRequestContextExecutionSource } from '../request-context/execution-source';
+import type { DeferredTool } from '../tools/deferred-tool';
+import type { Tool } from '../tools/tool';
 import type { ToolAction } from '../tools/types';
-import type { ToolProvider, ToolProviderConnection, ToolProviders } from './types';
+import type { ResolveToolsOpts, ToolProvider, ToolProviderConnection, ToolProviders } from './types';
 import { SHARED_BUCKET_ID } from './types';
 
 /**
@@ -89,8 +92,77 @@ export async function resolveStoredToolProviders(
   lookup: ToolProviderLookup,
   opts: ResolveStoredToolProvidersOpts = {},
 ): Promise<Record<string, ToolAction<any, any, any>>> {
+  return resolveStoredToolProvidersInternal(toolProviders, lookup, opts, false) as Promise<
+    Record<string, ToolAction<any, any, any>>
+  >;
+}
+
+/** Build searchable metadata using selected descriptions, without fetching executable schemas. */
+export async function deferStoredToolProviders(
+  toolProviders: ToolProviders | undefined,
+  lookup: ToolProviderLookup,
+  opts: ResolveStoredToolProvidersOpts = {},
+): Promise<Record<string, DeferredTool>> {
+  return resolveStoredToolProvidersInternal(toolProviders, lookup, opts, true) as Promise<Record<string, DeferredTool>>;
+}
+
+async function resolveStoredToolProvidersInternal(
+  toolProviders: ToolProviders | undefined,
+  lookup: ToolProviderLookup,
+  opts: ResolveStoredToolProvidersOpts,
+  deferred: boolean,
+): Promise<Record<string, ToolAction<any, any, any> | DeferredTool>> {
   const { requestContext, authorId, logger } = opts;
-  const out: Record<string, ToolAction<any, any, any>> = {};
+  const out: Record<string, ToolAction<any, any, any> | DeferredTool> = {};
+  const resolve = async (
+    provider: ToolProvider,
+    options: ResolveToolsOpts,
+    pinned: boolean,
+  ): Promise<Record<string, ToolAction<any, any, any> | DeferredTool>> => {
+    if (!deferred) return provider.resolveToolsVNext!(options);
+    return Object.fromEntries(
+      options.toolSlugs.map(slug => [
+        slug,
+        {
+          id: slug,
+          description: options.toolMeta[slug]?.description ?? slug,
+          binding: JSON.stringify([
+            provider.info.id,
+            options.toolkit,
+            options.connectionId,
+            options.kind,
+            options.scope,
+            options.authorId,
+            slug,
+          ]),
+          resolve: async ({ requestContext: currentContext }: { requestContext?: RequestContext }) => {
+            if (
+              getRequestContextExecutionSource(currentContext) !==
+              getRequestContextExecutionSource(options.requestContext)
+            )
+              throw new Error('Deferred provider tool request identity changed');
+            if (pinned) {
+              if (!provider.getConnectionStatus || !options.toolkit)
+                throw new Error('Deferred connection health unavailable');
+              const status = await provider.getConnectionStatus({
+                items: [{ connectionId: options.connectionId, toolkit: options.toolkit }],
+              });
+              if (!status[options.connectionId]?.connected)
+                throw new Error('Deferred tool connection is no longer active');
+            }
+            const resolved = await provider.resolveToolsVNext!({
+              ...options,
+              toolSlugs: [slug],
+              requestContext: currentContext,
+            });
+            const tool = resolved[slug];
+            if (!tool) throw new Error(`Deferred provider tool unavailable: ${slug}`);
+            return { ...tool, id: slug } as Tool<any, any>;
+          },
+        } satisfies DeferredTool,
+      ]),
+    );
+  };
   logger?.debug(`[resolveStoredToolProviders] called`, {
     providerIds: Object.keys(toolProviders ?? {}),
     authorId,
@@ -142,16 +214,20 @@ export async function resolveStoredToolProviders(
           );
 
           try {
-            const resolved = await provider.resolveToolsVNext({
-              toolSlugs,
-              toolMeta: tools,
-              connectionId: resolvedAuthorId,
-              authorId: resolvedAuthorId,
-              kind: 'author',
-              toolkit,
-              scope: 'caller-supplied',
-              requestContext,
-            });
+            const resolved = await resolve(
+              provider,
+              {
+                toolSlugs,
+                toolMeta: tools,
+                connectionId: resolvedAuthorId,
+                authorId: resolvedAuthorId,
+                kind: 'author',
+                toolkit,
+                scope: 'caller-supplied',
+                requestContext,
+              },
+              false,
+            );
 
             for (const [slug, tool] of Object.entries(resolved)) {
               out[slug] = { ...tool, id: slug } as ToolAction<any, any, any>;
@@ -208,18 +284,22 @@ export async function resolveStoredToolProviders(
 
         const resolvedAuthorId = resolveConnectionAuthorId(connection, authorId, requestContext, logger);
 
-        let resolved: Record<string, ToolAction<any, any, any>>;
+        let resolved: Record<string, ToolAction<any, any, any> | DeferredTool>;
         try {
-          resolved = await provider.resolveToolsVNext({
-            toolSlugs: slugsForToolkit,
-            toolMeta: cfg.tools ?? {},
-            connectionId: connection.connectionId,
-            authorId: resolvedAuthorId,
-            kind: connection.kind,
-            toolkit,
-            scope: connection.scope,
-            requestContext,
-          });
+          resolved = await resolve(
+            provider,
+            {
+              toolSlugs: slugsForToolkit,
+              toolMeta: cfg.tools ?? {},
+              connectionId: connection.connectionId,
+              authorId: resolvedAuthorId,
+              kind: connection.kind,
+              toolkit,
+              scope: connection.scope,
+              requestContext,
+            },
+            true,
+          );
         } catch (error) {
           logger?.warn(
             `[resolveStoredToolProviders] Failed to resolve tools for ${providerId}/${toolkit} ` +
@@ -238,7 +318,21 @@ export async function resolveStoredToolProviders(
             ...tool,
             id: renamedSlug,
             description,
-          } as ToolAction<any, any, any>;
+            ...('resolve' in tool
+              ? {
+                  resolve: async (args: { requestContext?: RequestContext }) => {
+                    const executable = await tool.resolve(args);
+                    return {
+                      ...executable,
+                      id: renamedSlug,
+                      description: skipSuffix
+                        ? executable.description
+                        : appendRoutingHint(executable.description, connection),
+                    } as Tool<any, any>;
+                  },
+                }
+              : {}),
+          };
         }
       }
     }
