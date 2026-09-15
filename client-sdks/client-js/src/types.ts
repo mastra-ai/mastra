@@ -2021,10 +2021,7 @@ export type BatchDeleteDatasetItemsParams = PathParams<'DELETE /datasets/:datase
 export type GenerateDatasetItemsParams = PathParams<'POST /datasets/:datasetId/generate-items'> &
   WithoutIndexSignatures<GeneratedRequest<Body<'POST /datasets/:datasetId/generate-items'>>>;
 
-export interface GeneratedItem {
-  input: unknown;
-  groundTruth?: unknown;
-}
+export type GeneratedItem = GeneratedResponse<'POST /datasets/:datasetId/generate-items'>['items'][number];
 
 export type UpdateDatasetExperimentParams = PathParams<'PATCH /datasets/:datasetId/experiments/:experimentId'> &
   WithoutIndexSignatures<GeneratedRequest<Body<'PATCH /datasets/:datasetId/experiments/:experimentId'>>>;
@@ -2053,57 +2050,18 @@ export type DatasetExperimentResultRow = Omit<DatasetExperimentResult, 'scores'>
 export type RunExperimentItemResponse =
   GeneratedResponse<'POST /datasets/:datasetId/experiments/:experimentId/items/:itemId/run'>;
 
-export interface SubmitExperimentResultParams {
-  datasetId: string;
-  experimentId: string;
-  itemId: string;
-  /** Zero-based repetition index. Defaults to 0. Retried submissions with the same (experimentId, itemId, attempt) converge on one row. */
-  attempt?: number;
-  input?: unknown;
-  output?: unknown;
-  groundTruth?: unknown;
-  error?: { message: string; stack?: string; code?: string } | null;
-  startedAt?: Date;
-  completedAt?: Date;
-  traceId?: string;
-  /** Externally computed scores, persisted keyed by runId = experimentId. */
-  scores?: Array<{
-    scorerId: string;
-    scorerName?: string;
-    score: number;
-    reason?: string;
-    metadata?: Record<string, unknown>;
-  }>;
-}
+export type SubmitExperimentResultParams = PathParams<'POST /datasets/:datasetId/experiments/:experimentId/results'> &
+  WithoutIndexSignatures<GeneratedRequest<Body<'POST /datasets/:datasetId/experiments/:experimentId/results'>>>;
 
 export type FinalizeExperimentParams = PathParams<'POST /datasets/:datasetId/experiments/:experimentId/finalize'>;
 
 export type CompareExperimentsParams = PathParams<'POST /datasets/:datasetId/compare'> &
   WithoutIndexSignatures<GeneratedRequest<Body<'POST /datasets/:datasetId/compare'>>>;
 
-export interface DatasetItemVersionResponse {
-  id: string;
-  datasetId: string;
-  datasetVersion: number;
-  input: unknown;
-  groundTruth?: unknown;
-  expectedTrajectory?: unknown;
-  toolMocks?: DatasetItemToolMock[];
-  scorerIds?: string[];
-  requestContext?: Record<string, unknown>;
-  metadata?: Record<string, unknown>;
-  validTo: number | null;
-  isDeleted: boolean;
-  createdAt: string | Date;
-  updatedAt: string | Date;
-}
+export type DatasetItemVersionResponse =
+  GeneratedResponse<'GET /datasets/:datasetId/items/:itemId/versions/:datasetVersion'>;
 
-export interface DatasetVersionResponse {
-  id: string;
-  datasetId: string;
-  version: number;
-  createdAt: string | Date;
-}
+export type DatasetVersionResponse = GeneratedResponse<'GET /datasets/:datasetId/versions'>['versions'][number];
 
 export type CompareExperimentsResponse = GeneratedResponse<'POST /datasets/:datasetId/compare'>;
 
