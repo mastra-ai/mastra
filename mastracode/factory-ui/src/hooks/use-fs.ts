@@ -37,6 +37,30 @@ export function isPlanReadablePath(path: string | undefined): path is string {
   return Boolean(path?.startsWith('.artifacts/'));
 }
 
+/**
+ * Resolve a submitted plan `path` to a workspace-relative `.artifacts/…` path the
+ * session file route accepts. Relative `.artifacts/*` paths pass through; an
+ * absolute path (e.g. `/leadrvision/.artifacts/plans/issue.md`) is normalized
+ * against the authoritative `rootPath` from `/web/workspace/rendered/list`
+ * (the confined absolute `.artifacts` root). Traversal, wrong-root, backslash,
+ * and NUL inputs are rejected rather than guessed — the backend still enforces
+ * its own `assertRelativePath`/symlink guards.
+ */
+export function normalizePlanPath(path: string | undefined, rootPath: string | undefined): string | undefined {
+  if (!path) return undefined;
+  if (path.startsWith('.artifacts/')) return path;
+  // Only absolute posix paths are normalization candidates.
+  if (!path.startsWith('/')) return undefined;
+  if (path.includes('\\') || path.includes('\0')) return undefined;
+  if (path.split('/').includes('..')) return undefined;
+  if (!rootPath) return undefined;
+  const base = rootPath.endsWith('/') ? rootPath.slice(0, -1) : rootPath;
+  if (path !== base && !path.startsWith(`${base}/`)) return undefined;
+  const remainder = path.slice(base.length).replace(/^\/+/, '');
+  const relative = remainder ? `.artifacts/${remainder}` : '.artifacts';
+  return isPlanReadablePath(relative) ? relative : undefined;
+}
+
 function planFileUrl(workspacePath: string | undefined, path: string | undefined) {
   if (!workspacePath || !isPlanReadablePath(path)) return undefined;
   // The session file route only approves `.artifacts/*` reads without a thread
