@@ -1075,11 +1075,33 @@ export class Memory extends MastraMemory {
       const existingById = new Map(existingMessages.messages.map(message => [message.id, message]));
       const generatedIds = new Set(generatedMessageIds);
       const mixedTrustedBatch = generatedIds.size > 0 && generatedIds.size < messages.length;
+      const newGeneratedIds = new Set(generatedMessageIds.filter(messageId => !existingById.has(messageId)));
+      const orderedMessages = messages
+        .map(message => {
+          const existing = generatedIds.has(message.id) ? existingById.get(message.id) : undefined;
+          return existing ? { ...message, createdAt: existing.createdAt } : message;
+        })
+        .toSorted((left, right) => {
+          const threadOrder = (left.threadId ?? '').localeCompare(right.threadId ?? '');
+          if (threadOrder !== 0) return threadOrder;
+          const leftIsNewGenerated = newGeneratedIds.has(left.id);
+          const rightIsNewGenerated = newGeneratedIds.has(right.id);
+          if (leftIsNewGenerated !== rightIsNewGenerated) return leftIsNewGenerated ? 1 : -1;
+          return compareMessageTuples(left, right);
+        });
+      const explicitFloorByThread = new Map<string, number>();
+      for (const message of orderedMessages) {
+        if (!message.threadId || newGeneratedIds.has(message.id)) continue;
+        explicitFloorByThread.set(
+          message.threadId,
+          Math.max(explicitFloorByThread.get(message.threadId) ?? -Infinity, new Date(message.createdAt).getTime()),
+        );
+      }
       const latestTupleByThread = new Map<string, { createdAt: Date; id: string }>();
       const generatedFloorByThread = new Map<string, number>();
       const validatedMessages: MastraDBMessage[] = [];
 
-      for (const inputMessage of messages) {
+      for (const inputMessage of orderedMessages) {
         let message = inputMessage;
         if (!message.id || !message.threadId) {
           throw createThreadBranchError('BRANCH_INVALID_REQUEST', 'Branch-tree messages require IDs and thread IDs.');
@@ -1117,7 +1139,7 @@ export class Memory extends MastraMemory {
                 orderBy: { field: 'createdAt', direction: 'ASC' },
               });
               const latest = physical.messages.sort(compareMessageTuples).at(-1);
-              let floor = Date.now();
+              let floor = Math.max(Date.now(), explicitFloorByThread.get(message.threadId) ?? -Infinity);
               if (latest) floor = Math.max(floor, new Date(latest.createdAt).getTime());
               if (ownerBranch) floor = Math.max(floor, ownerBranch.branchPointCreatedAt.getTime());
               for (const lineage of readyLineages) {
@@ -1230,12 +1252,11 @@ export class Memory extends MastraMemory {
     assertNoReservedThreadBranchMetadata(args.filter?.metadata);
     const page = args.page ?? 0;
     const perPage = args.perPage ?? 100;
-    if (
-      !Number.isInteger(page) ||
-      page < 0 ||
-      (perPage === false ? page !== 0 : !Number.isInteger(perPage) || perPage <= 0)
-    ) {
-      throw createThreadBranchError('BRANCH_INVALID_REQUEST', 'Invalid thread pagination request.');
+    if (!Number.isInteger(page) || page < 0) {
+      throw new Error('page must be >= 0');
+    }
+    if (perPage !== false && (!Number.isInteger(perPage) || perPage < 0)) {
+      throw new Error('perPage must be >= 0');
     }
 
     const memoryStore = await this.getMemoryStore();
