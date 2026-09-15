@@ -243,7 +243,7 @@ export function IntakeSection() {
         <SettingsSubsection
           scope="org"
           title="Linear routing"
-          description="Each selected project feeds one factory. Until a project is routed, its issues are not picked up."
+          description="Each selected source feeds one factory. Until a source is routed, its issues are not picked up."
         >
           <SettingsContainer>
             <LinearRouting
