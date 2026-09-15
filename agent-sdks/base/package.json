@@ -18,6 +18,7 @@
     }
   },
   "scripts": {
+    "build": "pnpm build:lib",
     "build:lib": "tsdown --silent --config tsdown.config.ts"
   },
   "dependencies": {
