@@ -2,6 +2,7 @@ import { Agent } from '@mastra/core/agent';
 import { MastraError } from '@mastra/core/error';
 import { coreFeatures } from '@mastra/core/features';
 import { resolveModelConfig } from '@mastra/core/llm';
+import type { OpenAICompatibleConfig } from '@mastra/core/llm';
 import { RequestContext } from '@mastra/core/request-context';
 import type { DatasetItemSource, DatasetItemToolMock, TargetType } from '@mastra/core/storage';
 import { z } from 'zod';
@@ -834,6 +835,7 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
         scorerIds,
         version,
         agentVersion,
+        model,
         maxConcurrency,
         provenance,
         grouping,
@@ -850,6 +852,7 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
         scorerIds?: string[];
         version?: number;
         agentVersion?: string;
+        model?: string | OpenAICompatibleConfig;
         maxConcurrency?: number;
         provenance?: {
           source?: string;
@@ -907,6 +910,7 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
         scorers: scorerIds,
         version,
         agentVersion,
+        model,
         maxConcurrency,
         provenance,
         grouping,

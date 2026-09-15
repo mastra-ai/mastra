@@ -1907,4 +1907,70 @@ describe('runExperiment', () => {
       }
     });
   });
+
+  describe('model override', () => {
+    const outputText = (result: Awaited<ReturnType<typeof runExperiment>>) =>
+      (result.results[0]!.output as { text?: string } | undefined)?.text ?? result.results[0]!.output;
+
+    it('runs the dataset against the override model and leaves the registered agent on its own model', async () => {
+      const agent = new Agent({
+        id: 'model-override-agent',
+        name: 'Model override agent',
+        instructions: 'Reply.',
+        model: scriptedModel([{ text: 'from model A' }, { text: 'from model A' }, { text: 'from model A' }]),
+      });
+      vi.mocked(mastra.getAgentById).mockReturnValue(agent);
+      vi.mocked(mastra.getAgent).mockReturnValue(agent);
+
+      const withOverride = await runExperiment(mastra, {
+        data: [{ input: 'Hello' }],
+        targetType: 'agent',
+        targetId: agent.id,
+        model: scriptedModel([{ text: 'from model B' }]),
+      });
+      const withoutOverride = await runExperiment(mastra, {
+        data: [{ input: 'Hello' }],
+        targetType: 'agent',
+        targetId: agent.id,
+      });
+
+      expect(withOverride.succeededCount).toBe(1);
+      expect(outputText(withOverride)).toBe('from model B');
+      expect(withoutOverride.succeededCount).toBe(1);
+      expect(outputText(withoutOverride)).toBe('from model A');
+    });
+
+    it('rejects an inline task combined with a model override and marks the experiment failed', async () => {
+      const experiment = await experimentsStorage.createExperiment({
+        datasetId,
+        datasetVersion: 1,
+        targetType: 'agent',
+        targetId: 'inline',
+        totalItems: 2,
+      });
+
+      await expect(
+        runExperiment(mastra, {
+          datasetId,
+          experimentId: experiment.id,
+          task: async () => 'ignored',
+          model: 'openai/gpt-4o',
+        }),
+      ).rejects.toThrow('Experiment "model" override is only supported for agent targets');
+
+      const updated = await experimentsStorage.getExperimentById({ id: experiment.id });
+      expect(updated?.status).toBe('failed');
+    });
+
+    it('rejects a workflow target combined with a model override', async () => {
+      await expect(
+        runExperiment(mastra, {
+          datasetId,
+          targetType: 'workflow',
+          targetId: 'some-workflow',
+          model: 'openai/gpt-4o',
+        }),
+      ).rejects.toThrow('Experiment "model" override is only supported for agent targets (got "workflow")');
+    });
+  });
 });

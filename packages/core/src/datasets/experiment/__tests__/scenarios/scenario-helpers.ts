@@ -22,8 +22,10 @@ export type ScriptedTurn = { toolCalls: { id: string; toolName: string; args: un
  * per loop step. The last turn should be a `{ text }` turn so the agentic loop
  * terminates. This is the single mocked seam — everything else (tool wrapping,
  * the experiment executor, the mock matcher) is the real system.
+ *
+ * Pass a `modelId` to tell several scripted models apart (e.g. model-override scenarios).
  */
-export function scriptedModel(turns: ScriptedTurn[]): MockLanguageModelV2 {
+export function scriptedModel(turns: ScriptedTurn[], modelId?: string): MockLanguageModelV2 {
   if (turns.length === 0) {
     throw new Error('scriptedModel requires at least one turn');
   }
@@ -39,6 +41,7 @@ export function scriptedModel(turns: ScriptedTurn[]): MockLanguageModelV2 {
   };
 
   return new MockLanguageModelV2({
+    modelId,
     doGenerate: async () => {
       const turn = nextTurn();
       if ('text' in turn) {

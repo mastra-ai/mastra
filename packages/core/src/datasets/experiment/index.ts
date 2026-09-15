@@ -139,6 +139,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
     requestContext: globalRequestContext,
     agentVersion,
     versions,
+    model,
     persistence,
     beforeAll,
     afterAll,
@@ -305,6 +306,9 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
 
   try {
     if (config.task) {
+      if (model) {
+        throw new Error('Experiment "model" override is only supported for agent targets (got inline "task")');
+      }
       // Inline task path
       const taskFn = config.task;
       execFn = async (item, itemSignal) => {
@@ -330,7 +334,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
       };
     } else if (targetType && targetId) {
       // Registry-based target path (existing)
-      const resolved = await resolveTarget(mastra, targetType, targetId, agentVersion);
+      const resolved = await resolveTarget(mastra, targetType, targetId, agentVersion, model);
       if (!resolved) {
         throw new Error(`Target not found: ${targetType}/${targetId}`);
       }
