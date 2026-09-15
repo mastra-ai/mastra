@@ -1,7 +1,5 @@
 ---
 '@mastra/duckdb': minor
-'@mastra/clickhouse': patch
-'@mastra/pg': patch
 ---
 
 Added bounded trace-query field and value discovery for DuckDB observability storage.
