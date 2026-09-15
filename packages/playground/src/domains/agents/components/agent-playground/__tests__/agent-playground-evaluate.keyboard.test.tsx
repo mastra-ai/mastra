@@ -103,13 +103,6 @@ describe('Evaluate navigation', () => {
       expect(screen.getByRole('tab', { name: 'Review' }).getAttribute('aria-selected')).toBe('true');
     });
   });
-  describe('when opened on Experiments', () => {
-    it('provides Run options inside Evaluate', async () => {
-      setupHandlers();
-      renderWithProviders(<Harness />, { router: true });
-      expect(await screen.findByTestId('agent-top-bar-run-options-trigger')).not.toBeNull();
-    });
-  });
 });
 
 const renderDatasetsTab = async () => {
