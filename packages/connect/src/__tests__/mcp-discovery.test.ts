@@ -246,3 +246,39 @@ describe('catalog-backed MCP providers', () => {
     await expect(transport.fetch(transport.url)).rejects.toThrow('failed with [REDACTED]');
   });
 });
+
+describe('MCP tool approval', () => {
+  type ApprovalTool = { requireApproval?: boolean; needsApprovalFn?: (args: unknown, ctx?: unknown) => unknown };
+  const discover = async (integrations?: Record<string, { autoApproveTools?: string[] }>) => {
+    const gateway = createGatewayFetch();
+    const tools = connect({
+      projectId: 'project-1',
+      integrations,
+      client: { accessToken: PLATFORM_TOKEN, baseUrl: 'https://integrations.example.test', fetch: gateway.fetchMock },
+    });
+    resolvers.push(tools);
+    return (await tools()) as Record<string, ApprovalTool>;
+  };
+
+  it('requires approval for every discovered tool regardless of server annotations', async () => {
+    const discovered = await discover();
+    for (const key of ['catalog-mcp_list_records', 'catalog-mcp_update_record']) {
+      expect(discovered[key]!.requireApproval).toBe(true);
+      expect(await discovered[key]!.needsApprovalFn!({}, {})).toBe(true);
+    }
+  });
+
+  it('skips approval only for tools in the local autoApproveTools list', async () => {
+    const discovered = await discover({ [INTEGRATION_ID]: { autoApproveTools: ['catalog-mcp_list_records'] } });
+    expect(await discovered['catalog-mcp_list_records']!.needsApprovalFn!({}, {})).toBe(false);
+    expect(await discovered['catalog-mcp_update_record']!.needsApprovalFn!({}, {})).toBe(true);
+  });
+
+  it('skips the provider and warns when autoApproveTools names an unknown tool', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const discovered = await discover({ [INTEGRATION_ID]: { autoApproveTools: ['catalog-mcp_delete_everything'] } });
+    expect(discovered).toEqual({});
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('autoApproveTools'));
+    warnSpy.mockRestore();
+  });
+});

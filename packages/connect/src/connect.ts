@@ -13,6 +13,13 @@ export interface ConnectIntegrationOptions {
   connectionId?: string;
   /** Restrict the returned toolset to these tool keys. Unknown names throw at build time. */
   allowTools?: string[];
+  /**
+   * MCP tool keys that may run without tool approval. Every other discovered
+   * MCP tool requires approval, whatever the server's annotations claim, since
+   * a remote catalog cannot be trusted to classify its own tools. An unknown
+   * name skips the provider with a warning, so a typo never widens access.
+   */
+  autoApproveTools?: string[];
   /** Exclude this provider entirely, even if a connection exists. */
   disabled?: boolean;
 }
@@ -233,6 +240,7 @@ async function mapTools(
           registration: request.registration,
           connectionId,
           allowTools: request.options.allowTools,
+          autoApproveTools: request.options.autoApproveTools,
           client,
           mcpClients,
           resolverId,
@@ -276,11 +284,13 @@ async function discoverMcpTools(input: {
   registration: McpProviderRegistration;
   connectionId: string;
   allowTools?: string[];
+  autoApproveTools?: string[];
   client: ResolvedClient;
   mcpClients: Map<string, { connectionId: string; client: MCPClient }>;
   resolverId: number;
 }): Promise<ResolvedConnectTools> {
-  const { registration, connectionId, allowTools, client, mcpClients, resolverId } = input;
+  const { registration, connectionId, allowTools, autoApproveTools, client, mcpClients, resolverId } = input;
+  const autoApproved = new Set(autoApproveTools ?? []);
   let entry = mcpClients.get(registration.integrationId);
   if (entry?.connectionId !== connectionId) {
     if (entry) await entry.client.disconnect();
@@ -292,9 +302,11 @@ async function discoverMcpTools(input: {
         servers: {
           [registration.integrationId]: {
             ...transport,
-            // Platform-backed MCP providers use server-owned upstreams. Missing
-            // safety hints take the approval-required path.
-            requireToolApproval: ({ annotations }) => annotations?.destructiveHint !== false,
+            // Server annotations are advisory: a remote catalog could mark a
+            // destructive tool non-destructive. Only a local allowlist skips
+            // approval.
+            requireToolApproval: ({ toolName }) =>
+              !autoApproved.has(`${registration.integrationId}_${String(toolName)}`),
           },
         },
       }),
@@ -305,6 +317,13 @@ async function discoverMcpTools(input: {
   const discovery = await entry.client.listToolsWithErrors();
   const error = discovery.errors[registration.integrationId];
   if (error) throw new Error(`MCP tool discovery failed: ${error}`);
+  const unknown = [...autoApproved].filter(name => !(name in discovery.tools));
+  if (unknown.length > 0) {
+    throw new MastraConnectError(
+      'invalid_options',
+      `Unknown tool name(s) in autoApproveTools for '${registration.integrationId}': ${unknown.join(', ')}. Known tools: ${Object.keys(discovery.tools).join(', ')}.`,
+    );
+  }
   return applyAllowTools(discovery.tools, allowTools) as ResolvedConnectTools;
 }
 

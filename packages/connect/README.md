@@ -40,7 +40,7 @@ Every MCP provider uses `/v2/connections/:connectionId/mcp` for discovery and in
 
 The application sends only its Mastra Platform token. The transport is locked to the selected Platform connection URL. Platform removes caller authentication before Nango injects the provider credential and proxies each protocol request to the MCP server configured for that Nango integration.
 
-MCP tool catalogs can change independently of this package. Use `allowTools` to give an agent the smallest useful subset. Tools with `destructiveHint: true`, or without an explicit non-destructive hint, require tool approval. For multiple connections, the derived environment variable is `MASTRA_<INTEGRATION_ID>_CONNECTION_ID`, with punctuation converted to underscores.
+MCP tool catalogs can change independently of this package. Use `allowTools` to give an agent the smallest useful subset. Every discovered MCP tool requires tool approval; the server's annotations are advisory and cannot lift the requirement. List the tool keys an agent may run unattended in `autoApproveTools` for that integration, for example `neon: { autoApproveTools: ['neon_list_projects'] }`. For multiple connections, the derived environment variable is `MASTRA_<INTEGRATION_ID>_CONNECTION_ID`, with punctuation converted to underscores.
 
 ### Generated HTTP providers
 
