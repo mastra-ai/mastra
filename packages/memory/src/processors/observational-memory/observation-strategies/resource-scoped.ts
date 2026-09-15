@@ -1,5 +1,5 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
-import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
+import { MASTRA_THREAD_BRANCH_METADATA_KEY, getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
 import type { ThreadOMMetadata } from '@mastra/core/memory';
 import type { ProviderMetadata } from '@mastra/core/stream';
 
@@ -82,7 +82,14 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
   async prepare() {
     const { record, threadId: currentThreadId, messages: currentThreadMessages } = this.opts;
 
-    const { threads: allThreads } = await this.storage.listThreads({ filter: { resourceId: this.resourceId } });
+    const { threads: resourceThreads } = await this.storage.listThreads({
+      filter: { resourceId: this.resourceId },
+      perPage: false,
+    });
+    const branchOwned = record.threadId !== null;
+    const allThreads = branchOwned
+      ? resourceThreads.filter(thread => thread.id === currentThreadId)
+      : resourceThreads.filter(thread => !thread.metadata?.[MASTRA_THREAD_BRANCH_METADATA_KEY]);
     const threadMetadataMap = new Map<string, { lastObservedAt?: string }>();
 
     for (const thread of allThreads) {
@@ -96,13 +103,15 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
     for (const thread of allThreads) {
       const threadLastObservedAt = threadMetadataMap.get(thread.id)?.lastObservedAt;
       const startDate = threadLastObservedAt ? new Date(new Date(threadLastObservedAt).getTime() + 1) : undefined;
-
-      const result = await this.storage.listMessages({
+      const query = {
         threadId: thread.id,
-        perPage: false,
-        orderBy: { field: 'createdAt', direction: 'ASC' },
+        resourceId: this.resourceId,
+        perPage: false as const,
+        orderBy: { field: 'createdAt' as const, direction: 'ASC' as const },
         filter: startDate ? { dateRange: { start: startDate } } : undefined,
-      });
+      };
+      const result =
+        branchOwned && this.deps.memory ? await this.deps.memory.recall(query) : await this.storage.listMessages(query);
 
       const messages = result.messages.filter(msg => msg.role !== 'system');
       if (messages.length > 0) {
@@ -192,7 +201,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
         })),
     });
 
-    const freshRecord = await this.storage.getObservationalMemory(null, this.resourceId);
+    const freshRecord = await this.storage.getObservationalMemory(record.threadId, this.resourceId);
     const existingObservations = freshRecord?.activeObservations ?? record.activeObservations ?? '';
 
     const allMessages = Array.from(this.threadsWithMessages.values()).flat();

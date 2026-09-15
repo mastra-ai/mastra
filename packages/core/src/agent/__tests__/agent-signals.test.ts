@@ -19,6 +19,7 @@ import { createNotificationInboxTool } from '../../notifications/tool';
 import { RequestContext } from '../../request-context';
 import { MastraCompositeStore } from '../../storage/base';
 import { Agent } from '../agent';
+import type { MastraDBMessage } from '../message-list';
 import {
   createMessageSignal,
   createSignal,
@@ -2684,6 +2685,10 @@ describe('Agent signals', () => {
 
   it('uses the configured message ID generator for persisted sendMessage signal rows', async () => {
     const memory = new MockMemory();
+    const persistGenerated = vi.fn(async ({ messages }: { messages: MastraDBMessage[] }) =>
+      memory.saveMessages({ messages }),
+    );
+    (memory as any).__mastraPersistGeneratedMessages = persistGenerated;
     const threadId = 'configured-send-message-thread';
     const resourceId = 'configured-send-message-user';
     await memory.createThread({ threadId, resourceId });
@@ -2720,6 +2725,10 @@ describe('Agent signals', () => {
 
     await expect(result.persisted).resolves.toBeUndefined();
 
+    expect(persistGenerated).toHaveBeenCalledWith(
+      expect.objectContaining({ messages: [expect.objectContaining({ id: result.signal.id })] }),
+      [result.signal.id],
+    );
     expect(result.signal.id).toMatch(/^message_custom_\d+$/);
     const recalled = await memory.recall({ threadId, resourceId });
     const persistedSignal = recalled.messages.find(message => message.role === 'signal');

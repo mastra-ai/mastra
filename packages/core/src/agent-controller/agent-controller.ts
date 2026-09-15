@@ -12,6 +12,7 @@ import { GatewayManager } from '../llm/model/gateways';
 import { defaultGateways } from '../llm/model/gateways/defaults';
 import type { MastraModelConfig } from '../llm/model/shared.types';
 import { Mastra } from '../mastra';
+import { MASTRA_THREAD_BRANCH_METADATA_KEY, createThreadBranchError } from '../memory/branching';
 import type { MastraMemory } from '../memory/memory';
 import type { StorageThreadType } from '../memory/types';
 import type { TracingContext, TracingOptions } from '../observability';
@@ -47,6 +48,25 @@ import type {
   ModelAuthStatus,
   ToolCategory,
 } from './types';
+
+type RawThreadBranchMetadata = { state: 'pending' | 'ready'; parentThreadId: string };
+
+function getRawThreadBranchMetadata(thread: StorageThreadType): RawThreadBranchMetadata | null {
+  const value = thread.metadata?.[MASTRA_THREAD_BRANCH_METADATA_KEY];
+  if (value === undefined) return null;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw createThreadBranchError('BRANCH_LINEAGE_CORRUPT', 'Stored thread branch lineage is malformed.');
+  }
+  const branch = value as Record<string, unknown>;
+  if (
+    (branch.state !== 'pending' && branch.state !== 'ready') ||
+    typeof branch.parentThreadId !== 'string' ||
+    !branch.parentThreadId
+  ) {
+    throw createThreadBranchError('BRANCH_LINEAGE_CORRUPT', 'Stored thread branch lineage is malformed.');
+  }
+  return { state: branch.state, parentThreadId: branch.parentThreadId };
+}
 
 /**
  * Registry key for the session map. JSON-encodes the (resourceId, scope) pair
@@ -2094,6 +2114,25 @@ export class AgentController<TState = {}> {
         },
       },
     };
+
+    const { threads } = await memoryStorage.listThreads({ perPage: false });
+    const target = threads.find(thread => thread.id === threadId);
+    const targetBranch = target ? getRawThreadBranchMetadata(target) : null;
+    if (targetBranch?.state === 'pending') {
+      throw createThreadBranchError('BRANCH_NOT_FOUND', 'The requested thread branch is unavailable.');
+    }
+    if (
+      targetBranch?.state === 'ready' ||
+      threads.some(thread => {
+        const branch = getRawThreadBranchMetadata(thread);
+        return branch?.state === 'ready' && branch.parentThreadId === threadId;
+      })
+    ) {
+      throw createThreadBranchError(
+        'BRANCHING_UNSUPPORTED',
+        'AgentController raw-storage reminder persistence does not support branch-tree participants.',
+      );
+    }
 
     const result = await memoryStorage.saveMessages({ messages: [dbMessage] });
     const saved = result.messages[0] ?? dbMessage;

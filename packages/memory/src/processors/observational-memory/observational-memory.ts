@@ -4,7 +4,13 @@ import { coreFeatures } from '@mastra/core/features';
 import type { MastraModelConfig } from '@mastra/core/llm';
 import { resolveModelConfig } from '@mastra/core/llm';
 import type { Mastra } from '@mastra/core/mastra';
-import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
+import {
+  MASTRA_THREAD_BRANCH_METADATA_KEY,
+  createThreadBranchError,
+  getThreadOMMetadata,
+  setThreadOMMetadata,
+} from '@mastra/core/memory';
+import { persistGeneratedMessages } from '@mastra/core/memory/internal';
 import type { ObservabilityContext } from '@mastra/core/observability';
 import type { ProcessorContext, ProcessorStreamWriter } from '@mastra/core/processors';
 import { MessageHistory } from '@mastra/core/processors';
@@ -14,6 +20,7 @@ import type { ProviderMetadata } from '@mastra/core/stream';
 import xxhash from 'xxhash-wasm';
 
 import type { Memory } from '../..';
+import { parseThreadBranchMetadata } from '../../branching/lineage';
 import { WORKING_MEMORY_STATE_ID } from '../working-memory-state/processor';
 import { resolveActivationTTL } from './activation-ttl';
 import { BufferingCoordinator } from './buffering-coordinator';
@@ -666,7 +673,12 @@ export class ObservationalMemory {
     // Create internal MessageHistory for message persistence
     // OM handles message saving itself (in processOutputStep) instead of relying on
     // the Memory class's MessageHistory processor
-    this.messageHistory = new MessageHistory({ storage: this.storage });
+    this.messageHistory = new MessageHistory({
+      storage: this.storage,
+      persistMessages: config.memory
+        ? (input, generatedMessageIds) => persistGeneratedMessages(config.memory!, input, generatedMessageIds)
+        : undefined,
+    });
 
     this.observer = new ObserverRunner({
       observationConfig: this.observationConfig,
@@ -1137,12 +1149,27 @@ export class ObservationalMemory {
   /**
    * Get thread/resource IDs for storage lookup
    */
-  private getStorageIds(threadId: string, resourceId?: string): { threadId: string | null; resourceId: string } {
+  private async getStorageIds(
+    threadId: string,
+    resourceId?: string,
+  ): Promise<{ threadId: string | null; resourceId: string }> {
+    const resolvedResourceId = resourceId ?? threadId;
     if (this.scope === 'resource') {
-      return {
-        threadId: null,
-        resourceId: resourceId ?? threadId,
-      };
+      const thread = threadId ? await this.storage.getThreadById({ threadId }) : null;
+      const branch = thread ? parseThreadBranchMetadata(thread) : null;
+      if (branch?.state === 'pending') {
+        throw createThreadBranchError('BRANCH_NOT_FOUND', 'The requested thread branch is unavailable.');
+      }
+      if (branch) {
+        if (branch.observationalMemoryThreadId !== threadId) {
+          throw createThreadBranchError(
+            'BRANCH_LINEAGE_CORRUPT',
+            'Stored thread branch lineage contains an invalid Observational Memory locator.',
+          );
+        }
+        return { threadId, resourceId: resolvedResourceId };
+      }
+      return { threadId: null, resourceId: resolvedResourceId };
     }
     if (!threadId) {
       throw new Error(
@@ -1150,10 +1177,7 @@ export class ObservationalMemory {
           `This is a bug — getThreadContext should have caught this earlier.`,
       );
     }
-    return {
-      threadId,
-      resourceId: resourceId ?? threadId,
-    };
+    return { threadId, resourceId: resolvedResourceId };
   }
 
   /**
@@ -1161,7 +1185,7 @@ export class ObservationalMemory {
    * Returns the existing record if one exists, otherwise initializes a new one.
    */
   async getOrCreateRecord(threadId: string, resourceId?: string): Promise<ObservationalMemoryRecord> {
-    const ids = this.getStorageIds(threadId, resourceId);
+    const ids = await this.getStorageIds(threadId, resourceId);
     // Storage adapters identify thread-scoped records by threadId alone and
     // resource-scoped records by resourceId alone. The single-flight key must
     // mirror that identity so optional resourceId differences cannot split a
@@ -1847,6 +1871,7 @@ export class ObservationalMemory {
     messagesToSave: MastraDBMessage[],
     threadId: string,
     resourceId: string | undefined,
+    generatedMessageIds: readonly string[] = [],
   ): Promise<void> {
     const filteredMessages: MastraDBMessage[] = [];
     for (const msg of messagesToSave) {
@@ -1865,6 +1890,7 @@ export class ObservationalMemory {
     if (filteredMessages.length > 0) {
       await this.messageHistory.persistMessages({
         messages: filteredMessages,
+        generatedMessageIds,
         threadId,
         resourceId,
       });
@@ -2716,7 +2742,10 @@ ${formattedMessages}
    */
   /** @internal Used by ObservationTurn. */
   async getOtherThreadsContext(resourceId: string, currentThreadId: string): Promise<string | undefined> {
-    const { threads: allThreads } = await this.storage.listThreads({ filter: { resourceId } });
+    const currentThread = await this.storage.getThreadById({ threadId: currentThreadId, resourceId });
+    if (currentThread && parseThreadBranchMetadata(currentThread)) return undefined;
+
+    const { threads: allThreads } = await this.storage.listThreads({ filter: { resourceId }, perPage: false });
     const messagesByThread = new Map<string, MastraDBMessage[]>();
 
     // Fetch the OM record once so we can fall back to its lastObservedAt
@@ -2725,7 +2754,12 @@ ${formattedMessages}
     const recordLastObservedAt = record?.lastObservedAt;
 
     for (const thread of allThreads) {
-      if (thread.id === currentThreadId) continue;
+      if (
+        thread.id === currentThreadId ||
+        Object.prototype.hasOwnProperty.call(thread.metadata ?? {}, MASTRA_THREAD_BRANCH_METADATA_KEY)
+      ) {
+        continue;
+      }
 
       const omMetadata = getThreadOMMetadata(thread.metadata);
       const threadLastObservedAt = omMetadata?.lastObservedAt ?? recordLastObservedAt;
@@ -3951,7 +3985,7 @@ ${formattedMessages}
    * Get current observations for a thread/resource
    */
   async getObservations(threadId: string, resourceId?: string): Promise<string | undefined> {
-    const ids = this.getStorageIds(threadId, resourceId);
+    const ids = await this.getStorageIds(threadId, resourceId);
     const record = await this.storage.getObservationalMemory(ids.threadId, ids.resourceId);
     return record?.activeObservations;
   }
@@ -3960,7 +3994,7 @@ ${formattedMessages}
    * Get current record for a thread/resource
    */
   async getRecord(threadId: string, resourceId?: string): Promise<ObservationalMemoryRecord | null> {
-    const ids = this.getStorageIds(threadId, resourceId);
+    const ids = await this.getStorageIds(threadId, resourceId);
     return this.storage.getObservationalMemory(ids.threadId, ids.resourceId);
   }
 
@@ -3986,7 +4020,7 @@ ${formattedMessages}
     resourceId: string | undefined,
     config: Record<string, unknown>,
   ): Promise<void> {
-    const ids = this.getStorageIds(threadId, resourceId);
+    const ids = await this.getStorageIds(threadId, resourceId);
     const record = await this.storage.getObservationalMemory(ids.threadId, ids.resourceId);
     if (!record) {
       throw new Error(`No observational memory record found for thread ${ids.threadId}`);
@@ -4008,7 +4042,7 @@ ${formattedMessages}
     limit?: number,
     options?: ObservationalMemoryHistoryOptions,
   ): Promise<ObservationalMemoryRecord[]> {
-    const ids = this.getStorageIds(threadId, resourceId);
+    const ids = await this.getStorageIds(threadId, resourceId);
     return this.storage.getObservationalMemoryHistory(ids.threadId, ids.resourceId, limit, options);
   }
 
@@ -4016,7 +4050,7 @@ ${formattedMessages}
    * Clear all memory for a specific thread/resource
    */
   async clear(threadId: string, resourceId?: string): Promise<void> {
-    const ids = this.getStorageIds(threadId, resourceId);
+    const ids = await this.getStorageIds(threadId, resourceId);
     await this.storage.clearObservationalMemory(ids.threadId, ids.resourceId);
     // Clean up static maps to prevent memory leaks
     this.buffering.cleanupStaticMaps(ids.threadId ?? ids.resourceId, ids.resourceId);
