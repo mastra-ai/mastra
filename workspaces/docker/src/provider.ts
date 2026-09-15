@@ -52,6 +52,8 @@ export interface DockerProviderConfig {
   ulimits?: DockerSandboxOptions['ulimits'];
   /** tmpfs mount paths with options */
   tmpfs?: DockerSandboxOptions['tmpfs'];
+  /** Mounts mapped 1:1 onto Docker HostConfig.Mounts (supports volume subpath) */
+  mounts?: DockerSandboxOptions['mounts'];
 }
 
 export const dockerSandboxProvider: SandboxProvider<DockerProviderConfig> = {
@@ -156,6 +158,48 @@ export const dockerSandboxProvider: SandboxProvider<DockerProviderConfig> = {
         type: 'object',
         description: 'tmpfs mount paths with options',
         additionalProperties: { type: 'string' },
+      },
+      mounts: {
+        type: 'array',
+        description: 'Mounts mapped 1:1 onto Docker HostConfig.Mounts (supports volume subpath)',
+        items: {
+          type: 'object',
+          required: ['type', 'target'],
+          additionalProperties: false,
+          properties: {
+            type: { type: 'string', enum: ['volume', 'bind', 'tmpfs'] },
+            target: { type: 'string' },
+            source: { type: 'string' },
+            readOnly: { type: 'boolean' },
+            volumeOptions: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                subpath: { type: 'string' },
+                noCopy: { type: 'boolean' },
+                labels: { type: 'object', additionalProperties: { type: 'string' } },
+              },
+            },
+            bindOptions: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                propagation: {
+                  type: 'string',
+                  enum: ['private', 'rprivate', 'shared', 'rshared', 'slave', 'rslave'],
+                },
+              },
+            },
+            tmpfsOptions: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                sizeBytes: { type: 'number' },
+                mode: { type: 'number' },
+              },
+            },
+          },
+        },
       },
     },
   },

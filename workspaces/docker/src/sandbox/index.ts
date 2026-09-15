@@ -49,6 +49,46 @@ type DockerSandboxUlimit = {
 
 type DockerSandboxTmpfs = Record<string, string>;
 
+/**
+ * A single Docker mount, mapped 1:1 onto an entry of `HostConfig.Mounts`.
+ *
+ * Unlike `volumes` (which maps to `HostConfig.Binds` / the `-v` syntax), mounts
+ * can express options that `Binds` cannot — most notably `volumeOptions.subpath`,
+ * which mounts a subdirectory of a named volume. Requires Docker Engine 26.0+
+ * (API v1.45+) for `subpath` support.
+ */
+export type DockerSandboxMount = {
+  /** Mount kind. */
+  type: 'volume' | 'bind' | 'tmpfs';
+  /** Absolute path of the mount inside the container. */
+  target: string;
+  /** Volume name (for `volume`) or host path (for `bind`). Omit for `tmpfs`. */
+  source?: string;
+  /** Mount read-only. */
+  readOnly?: boolean;
+  /** Options applied when `type` is `volume`. */
+  volumeOptions?: {
+    /** Mount a subdirectory of the named volume (Docker Engine 26.0+). */
+    subpath?: string;
+    /** Disable copying data from the container path into the volume. */
+    noCopy?: boolean;
+    /** Labels applied to the volume when it is created. */
+    labels?: Record<string, string>;
+  };
+  /** Options applied when `type` is `bind`. */
+  bindOptions?: {
+    /** Bind propagation mode. */
+    propagation?: 'private' | 'rprivate' | 'shared' | 'rshared' | 'slave' | 'rslave';
+  };
+  /** Options applied when `type` is `tmpfs`. */
+  tmpfsOptions?: {
+    /** Size of the tmpfs mount in bytes. */
+    sizeBytes?: number;
+    /** File mode of the tmpfs mount, in octal (e.g. 0o1777). */
+    mode?: number;
+  };
+};
+
 // =============================================================================
 // Docker Sandbox Options
 // =============================================================================
@@ -105,6 +145,15 @@ export interface DockerSandboxOptions extends Omit<MastraSandboxOptions, 'proces
   ulimits?: DockerSandboxUlimit[];
   /** tmpfs mount paths with options (HostConfig.Tmpfs). */
   tmpfs?: DockerSandboxTmpfs;
+  /**
+   * Mounts mapped 1:1 onto `HostConfig.Mounts`.
+   *
+   * Use this instead of `volumes` when you need mount options that Docker's
+   * `-v`/`HostConfig.Binds` syntax cannot express — in particular
+   * `volumeOptions.subpath` (mount a subdirectory of a named volume). `volumes`
+   * and `mounts` may be combined; both are passed through to Docker.
+   */
+  mounts?: DockerSandboxMount[];
   /** Default command timeout in milliseconds
    * @default 300_000 // 5 minutes
    */
@@ -201,6 +250,7 @@ export class DockerSandbox extends MastraSandbox {
   private readonly _securityOpt?: string[];
   private readonly _ulimits?: DockerSandboxUlimit[];
   private readonly _tmpfs?: DockerSandboxTmpfs;
+  private readonly _mounts?: DockerSandboxMount[];
   private readonly _labels: Record<string, string>;
   private readonly _instructionsOverride?: InstructionsOption;
   private readonly _constructorOptions: DockerSandboxOptions;
@@ -246,6 +296,7 @@ export class DockerSandbox extends MastraSandbox {
     this._securityOpt = options.securityOpt;
     this._ulimits = options.ulimits;
     this._tmpfs = options.tmpfs;
+    this._mounts = options.mounts;
     this.setWorkingDirectory(options.workingDirectory ?? options.workingDir ?? '/workspace');
     this._labels = {
       ...options.labels,
@@ -361,6 +412,7 @@ export class DockerSandbox extends MastraSandbox {
         SecurityOpt: this._securityOpt,
         Ulimits: this._ulimits?.map(toDockerUlimit),
         Tmpfs: this._tmpfs,
+        Mounts: this._mounts?.map(toDockerMount),
       },
       // Keep stdin open for interactive use
       OpenStdin: true,
@@ -451,6 +503,7 @@ export class DockerSandbox extends MastraSandbox {
       ['SecurityOpt', this._securityOpt],
       ['Ulimits', this._ulimits],
       ['Tmpfs', this._tmpfs],
+      ['Mounts', this._mounts?.map(toDockerMount)],
     ];
 
     if (this._privilegedWasSet || hostConfig?.Privileged === true) {
@@ -840,6 +893,45 @@ function toDockerUlimit(ulimit: DockerSandboxUlimit): Docker.Ulimit {
   };
 }
 
+function toDockerMount(mount: DockerSandboxMount): Docker.MountSettings {
+  const settings: Docker.MountSettings = {
+    Type: mount.type,
+    Target: mount.target,
+    Source: mount.source ?? '',
+  };
+
+  if (mount.readOnly !== undefined) settings.ReadOnly = mount.readOnly;
+
+  if (mount.volumeOptions) {
+    const { subpath, noCopy, labels } = mount.volumeOptions;
+    // The @types/dockerode VolumeOptions marks NoCopy/Labels/DriverConfig as
+    // required, but the Docker API treats them as optional; build a partial.
+    const volumeOptions: Record<string, unknown> = {};
+    if (subpath !== undefined) volumeOptions.Subpath = subpath;
+    if (noCopy !== undefined) volumeOptions.NoCopy = noCopy;
+    if (labels !== undefined) volumeOptions.Labels = labels;
+    if (Object.keys(volumeOptions).length > 0) {
+      settings.VolumeOptions = volumeOptions as Docker.MountSettings['VolumeOptions'];
+    }
+  }
+
+  if (mount.bindOptions?.propagation !== undefined) {
+    settings.BindOptions = { Propagation: mount.bindOptions.propagation };
+  }
+
+  if (mount.tmpfsOptions) {
+    const { sizeBytes, mode } = mount.tmpfsOptions;
+    const tmpfsOptions: Record<string, unknown> = {};
+    if (sizeBytes !== undefined) tmpfsOptions.SizeBytes = sizeBytes;
+    if (mode !== undefined) tmpfsOptions.Mode = mode;
+    if (Object.keys(tmpfsOptions).length > 0) {
+      settings.TmpfsOptions = tmpfsOptions as Docker.MountSettings['TmpfsOptions'];
+    }
+  }
+
+  return settings;
+}
+
 function toDockerSandboxOptionName(field: keyof Docker.HostConfig): string {
   const optionNames: Partial<Record<keyof Docker.HostConfig, string>> = {
     Privileged: 'privileged',
@@ -855,6 +947,7 @@ function toDockerSandboxOptionName(field: keyof Docker.HostConfig): string {
     SecurityOpt: 'securityOpt',
     Ulimits: 'ulimits',
     Tmpfs: 'tmpfs',
+    Mounts: 'mounts',
   };
 
   return optionNames[field] ?? String(field);

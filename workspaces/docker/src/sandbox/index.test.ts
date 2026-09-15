@@ -388,6 +388,77 @@ describe('DockerSandbox', () => {
       );
     });
 
+    it('should map mounts to HostConfig.Mounts', async () => {
+      const sandbox = new DockerSandbox({
+        mounts: [
+          {
+            type: 'volume',
+            source: 'project-data',
+            target: '/work',
+            readOnly: true,
+            volumeOptions: { subpath: 'shared', noCopy: true, labels: { team: 'platform' } },
+          },
+          {
+            type: 'bind',
+            source: '/host/cache',
+            target: '/cache',
+            bindOptions: { propagation: 'rslave' },
+          },
+          {
+            type: 'tmpfs',
+            target: '/scratch',
+            tmpfsOptions: { sizeBytes: 64 * 1024 * 1024, mode: 0o1777 },
+          },
+        ],
+      });
+      await sandbox._start();
+
+      const createCall = mockDocker.createContainer.mock.calls[0]?.[0];
+      expect(createCall.HostConfig.Mounts).toEqual([
+        {
+          Type: 'volume',
+          Source: 'project-data',
+          Target: '/work',
+          ReadOnly: true,
+          VolumeOptions: { Subpath: 'shared', NoCopy: true, Labels: { team: 'platform' } },
+        },
+        {
+          Type: 'bind',
+          Source: '/host/cache',
+          Target: '/cache',
+          BindOptions: { Propagation: 'rslave' },
+        },
+        {
+          Type: 'tmpfs',
+          Source: '',
+          Target: '/scratch',
+          TmpfsOptions: { SizeBytes: 64 * 1024 * 1024, Mode: 0o1777 },
+        },
+      ]);
+    });
+
+    it('should omit HostConfig.Mounts when no mounts are provided', async () => {
+      const sandbox = new DockerSandbox({});
+      await sandbox._start();
+
+      const createCall = mockDocker.createContainer.mock.calls[0]?.[0];
+      expect(createCall.HostConfig.Mounts).toBeUndefined();
+    });
+
+    it('should pass both Binds and Mounts when volumes and mounts are combined', async () => {
+      const sandbox = new DockerSandbox({
+        volumes: { '/host/data': '/container/data' },
+        mounts: [{ type: 'volume', source: 'vol', target: '/work', volumeOptions: { subpath: 'sub' } }],
+      });
+      await sandbox._start();
+
+      const createCall = mockDocker.createContainer.mock.calls[0]?.[0];
+      expect(createCall.HostConfig.Binds).toEqual(['/host/data:/container/data']);
+      expect(createCall.HostConfig.Mounts).toEqual([
+        { Type: 'volume', Source: 'vol', Target: '/work', VolumeOptions: { Subpath: 'sub' } },
+      ]);
+    });
+
     it('should include labels with mastra metadata', async () => {
       const sandbox = new DockerSandbox({
         id: 'test-sandbox',
@@ -703,6 +774,73 @@ describe('DockerSandbox', () => {
         fields: ['ulimits'],
         hostConfigFields: ['Ulimits'],
       });
+    });
+
+    it('should warn when requested mounts differ on reconnect', async () => {
+      mockDocker.listContainers.mockResolvedValue([{ Id: 'existing-container-id', State: 'running' }]);
+      mockContainer.inspect.mockResolvedValue({
+        Id: 'existing-container-id',
+        State: { Status: 'running', Running: true },
+        HostConfig: {
+          Mounts: [{ Type: 'volume', Source: 'vol', Target: '/work', VolumeOptions: { Subpath: 'a' } }],
+        },
+      });
+      const logger = {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        trackException: vi.fn(),
+        getTransports: vi.fn(() => new Map()),
+      };
+
+      const sandbox = new DockerSandbox({
+        id: 'existing-sandbox',
+        mounts: [{ type: 'volume', source: 'vol', target: '/work', volumeOptions: { subpath: 'b' } }],
+      });
+      (sandbox as any).__setLogger(logger);
+      await sandbox._start();
+
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('requested Docker option(s) mounts differ'), {
+        containerId: 'existing-container-id',
+        fields: ['mounts'],
+        hostConfigFields: ['Mounts'],
+      });
+    });
+
+    it('should not warn when requested mounts match on reconnect', async () => {
+      mockDocker.listContainers.mockResolvedValue([{ Id: 'existing-container-id', State: 'running' }]);
+      mockContainer.inspect.mockResolvedValue({
+        Id: 'existing-container-id',
+        State: { Status: 'running', Running: true },
+        HostConfig: {
+          Mounts: [
+            { Type: 'bind', Source: '/host/cache', Target: '/cache', BindOptions: { Propagation: 'rslave' } },
+            { Type: 'volume', Source: 'vol', Target: '/work', VolumeOptions: { Subpath: 'shared' } },
+          ],
+        },
+      });
+      const logger = {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        trackException: vi.fn(),
+        getTransports: vi.fn(() => new Map()),
+      };
+
+      // Requested in a different order than the inspected HostConfig to exercise normalization.
+      const sandbox = new DockerSandbox({
+        id: 'existing-sandbox',
+        mounts: [
+          { type: 'volume', source: 'vol', target: '/work', volumeOptions: { subpath: 'shared' } },
+          { type: 'bind', source: '/host/cache', target: '/cache', bindOptions: { propagation: 'rslave' } },
+        ],
+      });
+      (sandbox as any).__setLogger(logger);
+      await sandbox._start();
+
+      expect(logger.warn).not.toHaveBeenCalled();
     });
 
     it('should not warn when empty hardening collections reconnect to unset HostConfig fields', async () => {
@@ -1218,6 +1356,20 @@ describe('dockerSandboxProvider', () => {
     );
   });
 
+  it('should create a DockerSandbox instance with mounts config', async () => {
+    const { dockerSandboxProvider } = await import('../provider');
+    const sandbox = dockerSandboxProvider.createSandbox({
+      image: 'node:22-slim',
+      mounts: [{ type: 'volume', source: 'project-data', target: '/work', volumeOptions: { subpath: 'shared' } }],
+    });
+    await sandbox._start();
+
+    const createCall = mockDocker.createContainer.mock.calls[0]?.[0];
+    expect(createCall.HostConfig.Mounts).toEqual([
+      { Type: 'volume', Source: 'project-data', Target: '/work', VolumeOptions: { Subpath: 'shared' } },
+    ]);
+  });
+
   it('should have config schema', async () => {
     const { dockerSandboxProvider } = await import('../provider');
     expect(dockerSandboxProvider.configSchema).toBeDefined();
@@ -1226,6 +1378,7 @@ describe('dockerSandboxProvider', () => {
     expect((dockerSandboxProvider.configSchema as any)?.properties?.memory).toBeDefined();
     expect((dockerSandboxProvider.configSchema as any)?.properties?.pidsLimit).toBeDefined();
     expect((dockerSandboxProvider.configSchema as any)?.properties?.capDrop).toBeDefined();
+    expect((dockerSandboxProvider.configSchema as any)?.properties?.mounts).toBeDefined();
   });
 });
 

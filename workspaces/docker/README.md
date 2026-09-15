@@ -29,6 +29,34 @@ const agent = new Agent({
 });
 ```
 
+### Volume subpath mounts
+
+Use `mounts` (mapped 1:1 onto Docker's `HostConfig.Mounts`) when you need mount
+options that the `-v`/`volumes` syntax cannot express — most notably mounting a
+subdirectory of a named volume. Requires Docker Engine 26.0+ (API v1.45+) for
+`subpath`.
+
+```typescript
+const workspace = new Workspace({
+  sandbox: new DockerSandbox({
+    image: 'node:22-slim',
+    mounts: [
+      // Read-only parent from a named volume
+      { type: 'volume', source: 'project-data', target: '/shared', readOnly: true },
+      // Writable per-conversation subdirectory of the same volume
+      {
+        type: 'volume',
+        source: 'project-data',
+        target: '/work',
+        volumeOptions: { subpath: 'conversations/abc123' },
+      },
+    ],
+  }),
+});
+```
+
+`volumes` and `mounts` can be combined; both are passed through to Docker.
+
 ## Documentation
 
 - [Docker Sandbox integration guide](https://mastra.ai/integrations/sandboxes/docker)
