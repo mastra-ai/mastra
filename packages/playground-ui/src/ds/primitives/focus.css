@@ -81,7 +81,7 @@
 .ds-focus-contour > [data-slot='focus-decoration'] {
   inset: 1px;
   z-index: 2;
-  padding: 1.5px;
+  padding: 1px;
   border-radius: inherit;
   background: conic-gradient(
     from 25deg,
