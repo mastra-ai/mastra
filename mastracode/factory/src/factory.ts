@@ -111,6 +111,7 @@ import type { WorkItemRow } from './storage/domains/work-items/base.js';
 import { FactorySupervisorHealthWorker } from './supervisor/health-worker.js';
 import { SUPERVISOR_INSTRUCTIONS } from './supervisor/instructions.js';
 import { createFactorySupervisorReadTools } from './supervisor/read-tools.js';
+import { createFactorySupervisorSessionTools } from './supervisor/session-tools.js';
 import { hydrateSupervisorSession, parseSupervisorResourceId, resolveSupervisorScope } from './supervisor/session.js';
 import { createFactorySupervisorWriteTools } from './supervisor/write-tools.js';
 import { timedPhase } from './timing.js';
@@ -841,6 +842,18 @@ export class MastraFactory {
                     );
                     if (userId) {
                       mergeTools(
+                        'factory-supervisor-sessions',
+                        createFactorySupervisorSessionTools({
+                          scope: supervisorScope,
+                          userId,
+                          workItems: workItemsStorage,
+                          audit: auditStorage,
+                          controller: prepared.base.controller,
+                          memorySettings: memorySettingsStorage,
+                          projects: factoryProjectsStorage,
+                        }),
+                      );
+                      mergeTools(
                         'factory-supervisor-write',
                         createFactorySupervisorWriteTools({
                           scope: supervisorScope,
@@ -862,8 +875,8 @@ export class MastraFactory {
                                   ),
                               }
                             : {}),
-                          signalSession: async ({ sessionId, message }) => {
-                            const session = await prepared.base.controller.getSessionByResource(sessionId);
+                          signalSession: async ({ resourceId, message }) => {
+                            const session = await prepared.base.controller.getSessionByResource(resourceId);
                             if (!session) throw new Error('The worker session is not currently available.');
                             await session.sendMessage({
                               content: message,
