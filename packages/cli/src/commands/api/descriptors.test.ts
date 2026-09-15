@@ -121,7 +121,6 @@ describe('api command descriptors', () => {
       factoryProjectDelete: ['projectDelete', ['id'], false, false, false],
       'factoryWork-itemList': ['workItemList', ['id'], false, false, false],
       'factoryWork-itemCreate': ['workItemCreate', ['id'], true, true, false],
-      'factoryWork-itemAutomation-run': ['workItemAutomationRun', ['id', 'workItemId'], true, true, false],
       'factoryWork-itemUpdate': ['workItemUpdate', ['id'], true, true, false],
       'factoryWork-itemDelete': ['workItemDelete', ['id'], false, false, false],
       'factoryWork-itemTransition': ['workItemTransition', ['id', 'workItemId'], true, true, false],

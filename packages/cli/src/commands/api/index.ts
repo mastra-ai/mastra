@@ -496,11 +496,6 @@ export function registerApiCommand(program: CommanderCommand): void {
       },
     ],
   });
-  addAction(factoryWorkItem, 'automation-run', FACTORY_API_ROUTE_CATALOG.workItemAutomationRun, {
-    description: 'Enqueue a deferred Factory skill dispatch',
-    input: 'required',
-    routePlacement: 'origin',
-  });
   addAction(factoryWorkItem, 'update', FACTORY_API_ROUTE_CATALOG.workItemUpdate, {
     description: 'Update Factory work-item metadata without changing its stage',
     input: 'required',
