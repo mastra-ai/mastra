@@ -23,9 +23,15 @@ describe('messageHistory history', () => {
     await memory.saveThread({
       thread: { id: 'thread', resourceId: 'resource', createdAt: new Date(), updatedAt: new Date() },
     });
-    await (await storage.getStore('memory'))!.saveMessages({ messages });
+    const store = (await storage.getStore('memory'))!;
+    await store.saveMessages({ messages });
+    const listMessages = vi.spyOn(store, 'listMessages');
     const recalled = await memory.recall({ threadId: 'thread', resourceId: 'resource' });
-    expect(recalled.messages).toHaveLength(15);
+    expect(recalled.messages.length).toBeGreaterThan(0);
+    expect(recalled.messages.length).toBeLessThan(messages.length);
+    expect(recalled.messages.at(-1)?.id).toBe('message-14');
+    expect(listMessages).not.toHaveBeenCalledWith(expect.objectContaining({ perPage: false }));
+    expect(listMessages.mock.calls.every(([input]) => input.includeTotal === false)).toBe(true);
     expect(
       (
         await memory.recall({
@@ -34,7 +40,7 @@ describe('messageHistory history', () => {
           threadConfig: { lastMessages: 3 },
         })
       ).messages.map(m => m.id),
-    ).toEqual(['message-12', 'message-13', 'message-14']);
+    ).toEqual(['message-13', 'message-14']);
     expect(
       (
         await memory.recall({
@@ -58,6 +64,20 @@ describe('messageHistory history', () => {
         })
       ).messages,
     ).toHaveLength(15);
+  });
+
+  it('treats a zero token budget as disabled before thread validation', async () => {
+    const storage = new InMemoryStore();
+    const store = (await storage.getStore('memory'))!;
+    const listMessages = vi.spyOn(store, 'listMessages');
+    const getThread = vi.spyOn(store, 'getThreadById');
+    const memory = new Memory({ storage, options: { messageHistory: { maxTokens: 0 } } });
+
+    await expect(memory.recall({ threadId: 'missing', resourceId: 'resource' })).resolves.toMatchObject({
+      messages: [],
+    });
+    expect(listMessages).not.toHaveBeenCalled();
+    expect(getThread).not.toHaveBeenCalled();
   });
 
   it('bounds direct context retrieval and respects matching persisted boundaries', async () => {

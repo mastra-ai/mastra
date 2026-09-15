@@ -810,6 +810,10 @@ https://mastra.ai/en/docs/memory/overview`,
     }
 
     const lastMessages = normalizeMessageHistoryConfig(effectiveConfig.lastMessages, effectiveConfig.messageHistory);
+    const messageTokenCounter =
+      lastMessages.maxTokens === undefined
+        ? undefined
+        : (this.createMemoryTokenCounter() ?? new TokenLimiterProcessor(lastMessages.maxTokens));
     if (lastMessages.enabled) {
       if (!memoryStore)
         throw new MastraError({
@@ -840,6 +844,7 @@ https://mastra.ai/en/docs/memory/overview`,
                     maxTokens: lastMessages.maxTokens,
                     atMaxRemoveTokens: lastMessages.atMaxRemoveTokens!,
                   },
+            tokenCounter: messageTokenCounter,
           }),
         );
       }
@@ -899,41 +904,45 @@ https://mastra.ai/en/docs/memory/overview`,
       lastMessages.enabled &&
       lastMessages.maxTokens !== undefined &&
       !isObservationalMemoryEnabled(effectiveConfig.observationalMemory) &&
-      !configuredProcessors.some(
-        p => !isProcessorWorkflow(p) && (p.id === 'token-limiter' || p.id === 'observational-memory'),
-      )
+      !configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'observational-memory')
     ) {
       const maxTokens = lastMessages.maxTokens;
       const atMaxRemoveTokens = lastMessages.atMaxRemoveTokens!;
-      processors.push(
-        new TokenLimiterProcessor({
-          limit: maxTokens,
-          trimMode: 'memory-only',
-          atMaxRemoveTokens,
-          tokenCounter: this.createMemoryTokenCounter(),
-          onMemoryTrim: async (removed, requestContext) => {
-            const memoryContext = (requestContext ?? context)?.get('MastraMemory') as MemoryRequestContext | undefined;
-            const thread = memoryContext?.thread;
-            if (!thread || effectiveConfig.readOnly) return;
-            const localMessages = removed.filter(message => message.threadId === thread.id);
-            if (!localMessages.length) return;
-            const latest = await memoryStore!.getThreadById({
-              threadId: thread.id,
-              resourceId: memoryContext.resourceId,
-            });
-            if (!latest) return;
-            const stored = getMemoryTokenBoundary(latest);
-            const previous =
-              stored?.maxTokens === maxTokens && stored.atMaxRemoveTokens === atMaxRemoveTokens ? stored : undefined;
-            const boundary = advanceMemoryTokenBoundary(previous, localMessages, maxTokens, atMaxRemoveTokens);
-            if (boundary === previous) return;
-            // Patch only our key: `updateThread` merges metadata, so sibling keys written
-            // between the read above and this write (working memory, titles) are not clobbered.
-            await memoryStore!.patchThread({ id: thread.id, metadata: { memoryTokenLimiter: boundary } });
-            thread.metadata = { ...thread.metadata, memoryTokenLimiter: boundary };
-          },
-        }),
-      );
+      const limiter = new TokenLimiterProcessor({
+        limit: maxTokens,
+        trimMode: 'memory-only',
+        atMaxRemoveTokens,
+        tokenCounter: messageTokenCounter,
+        onMemoryTrim: async (removed, requestContext) => {
+          const memoryContext = (requestContext ?? context)?.get('MastraMemory') as MemoryRequestContext | undefined;
+          const thread = memoryContext?.thread;
+          const executionConfig = memoryContext?.memoryConfig
+            ? this.getMergedThreadConfig(memoryContext.memoryConfig)
+            : effectiveConfig;
+          if (!thread || executionConfig.readOnly) return;
+          const localMessages = removed.filter(message => message.threadId === thread.id);
+          if (!localMessages.length) return;
+
+          const updated = await memoryStore!.updateThreadMetadata({
+            id: thread.id,
+            resourceId: memoryContext.resourceId,
+            update: latest => {
+              const stored = getMemoryTokenBoundary(latest);
+              const previous =
+                stored?.maxTokens === maxTokens && stored.atMaxRemoveTokens === atMaxRemoveTokens ? stored : undefined;
+              const boundary = advanceMemoryTokenBoundary(previous, localMessages, maxTokens, atMaxRemoveTokens);
+              return boundary === previous ? undefined : { memoryTokenLimiter: boundary };
+            },
+          });
+          if (updated) thread.metadata = updated.metadata;
+        },
+      });
+      processors.push({
+        id: 'memory-token-limiter',
+        name: 'Memory Token Limiter',
+        processInput: args => limiter.processInput(args),
+        processInputStep: args => limiter.processInputStep(args),
+      });
     }
 
     // Return only the auto-generated processors (not the configured ones)

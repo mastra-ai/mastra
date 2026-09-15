@@ -3,6 +3,7 @@ import { estimateTokenCount, sliceByTokens } from 'tokenx';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { parseDataUri, resolveFilePartMediaTypeAndData } from '../../agent/message-list/prompt/image-utils';
 import { TripWire } from '../../agent/trip-wire';
+import { groupLinkedToolMessages } from '../../memory/load-message-history';
 import type { ChunkType } from '../../stream';
 import type { ProcessInputArgs, ProcessInputStepArgs, ProcessOutputStreamArgs, Processor } from '../index';
 
@@ -33,7 +34,7 @@ export interface TokenLimiterOptions {
   /** In memory-only mode, free this many tokens below the limit (default 25%). */
   atMaxRemoveTokens?: number;
   /** Share memory's token estimator and per-part estimate cache. */
-  tokenCounter?: { countMessage(message: MastraDBMessage): number };
+  tokenCounter?: { countMessage(message: MastraDBMessage): number | Promise<number> };
   /** Persist a memory cursor after trimming. */
   onMemoryTrim?: (messages: MastraDBMessage[], requestContext?: ProcessInputArgs['requestContext']) => Promise<void>;
 }
@@ -165,33 +166,36 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
   ): Promise<void> {
     if (!messageList) return;
     const sources = messageList.makeMessageSourceChecker();
-    const candidates = messageList.get.remembered
-      .db()
-      .filter(
-        message =>
-          message.role !== 'system' &&
-          !sources.input.has(message.id) &&
-          !sources.output.has(message.id) &&
-          !sources.context.has(message.id),
-      )
-      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    const removableIds = new Set(
+      messageList.get.remembered
+        .db()
+        .filter(
+          message =>
+            message.role !== 'system' &&
+            !sources.input.has(message.id) &&
+            !sources.output.has(message.id) &&
+            !sources.context.has(message.id),
+        )
+        .map(message => message.id),
+    );
+    const candidateGroups = groupLinkedToolMessages(
+      messageList.get.all.db().sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()),
+    ).filter(group => group.every(message => removableIds.has(message.id)));
     const counts = new Map<string, number>();
     let total = TokenLimiterProcessor.TOKENS_PER_CONVERSATION;
     for (const message of messageList.getAllSystemMessages()) total += await this.countCoreSystemMessageTokens(message);
     for (const message of messageList.get.all.db()) {
-      const tokens = this.tokenCounter
-        ? this.tokenCounter.countMessage(message)
-        : await this.countInputMessageTokens(message);
+      const tokens = await this.countMessage(message);
       counts.set(message.id, tokens);
       total += tokens;
     }
     if (total <= this.maxTokens) return;
     const removed: MastraDBMessage[] = [];
     const target = this.maxTokens - this.atMaxRemoveTokens;
-    for (const message of candidates) {
+    for (const group of candidateGroups) {
       if (total <= target) break;
-      removed.push(message);
-      total -= counts.get(message.id) ?? 0;
+      removed.push(...group);
+      for (const message of group) total -= counts.get(message.id) ?? 0;
     }
     if (!removed.length) return;
     await this.onMemoryTrim?.(removed, requestContext);
@@ -305,6 +309,11 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
     const tokenString = message.role + message.content;
 
     return this.countTokens(tokenString) + TokenLimiterProcessor.TOKENS_PER_MESSAGE;
+  }
+
+  /** Count one persisted message with the same estimator used by input limiting. */
+  public async countMessage(message: MastraDBMessage): Promise<number> {
+    return this.tokenCounter ? this.tokenCounter.countMessage(message) : this.countInputMessageTokens(message);
   }
 
   /**

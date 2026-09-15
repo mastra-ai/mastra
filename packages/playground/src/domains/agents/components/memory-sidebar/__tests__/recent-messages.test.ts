@@ -8,6 +8,8 @@ describe('Recent message settings', () => {
     [0, undefined],
     [0, { maxTokens: 4000 }],
     [false, { maxTokens: 4000 }],
+    [undefined, { maxTokens: 0 }],
+    [10, { maxTokens: 0 }],
   ] as const)('when history is disabled by lastMessages=%j messageHistory=%j', (lastMessages, messageHistory) => {
     it('does not show an enabled message window', () => {
       expect(getRecentMessagesSettings(lastMessages, messageHistory)).toEqual({

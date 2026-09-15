@@ -965,7 +965,7 @@ type BaseMemoryConfig = {
    * @example
    * ```typescript
    * messageHistory: { maxTokens: 8000 } // frees 25% of the budget when exceeded
-   * messageTokens: { maxTokens: 8000, atMaxRemoveTokens: 1000 }
+   * messageHistory: { maxTokens: 8000, atMaxRemoveTokens: 1000 }
    * ```
    */
   messageHistory?: import('./message-history-config').MessageHistoryConfig;

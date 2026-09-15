@@ -8,7 +8,11 @@ export function getRecentMessagesSettings(
 ) {
   const maxTokens = messageHistory?.maxTokens;
   const maxMessages = typeof lastMessages === 'number' ? lastMessages : undefined;
-  const enabled = lastMessages !== false && maxMessages !== 0 && (maxMessages !== undefined || maxTokens !== undefined);
+  const enabled =
+    lastMessages !== false &&
+    maxMessages !== 0 &&
+    maxTokens !== 0 &&
+    (maxMessages !== undefined || maxTokens !== undefined);
 
   if (!enabled) {
     return { enabled, maxMessages: undefined, description: 'Recent message history is not included in context.' };

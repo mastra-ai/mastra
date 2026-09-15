@@ -49,7 +49,7 @@ export function normalizeMessageHistoryConfig(
     throw new Error('messageHistory.atMaxRemoveTokens must be a finite non-negative number no greater than maxTokens');
   }
   return {
-    enabled: maxMessages !== 0,
+    enabled: maxMessages !== 0 && maxTokens !== 0,
     maxMessages,
     maxTokens,
     atMaxRemoveTokens: atMaxRemoveTokens ?? maxTokens * 0.25,

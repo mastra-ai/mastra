@@ -55,6 +55,7 @@ import { mastraCtorHolder } from '../mastra/mastra-ctor-holder';
 import type { VersionOverrides } from '../mastra/types';
 import { mergeVersionOverrides } from '../mastra/types';
 import type { MastraMemory } from '../memory/memory';
+import { normalizeMessageHistoryConfig } from '../memory/message-history-config';
 import { getMemoryRunState } from '../memory/run-state';
 import type { MemoryConfig, MemoryConfigInternal } from '../memory/types';
 import {
@@ -4638,19 +4639,16 @@ export class Agent<
     }
 
     const threadConfig = memory.getMergedThreadConfig(memoryConfig || {});
-    const historyEnabled =
-      threadConfig.lastMessages !== false && (threadConfig.lastMessages || threadConfig.messageHistory);
-    if (!historyEnabled && !threadConfig.semanticRecall) {
+    const history = normalizeMessageHistoryConfig(threadConfig.lastMessages, threadConfig.messageHistory);
+    if (!history.enabled && !threadConfig.semanticRecall) {
       return { messages: [] };
     }
 
     return memory.recall({
       threadId,
       resourceId,
-      // When lastMessages is false (disabled), don't pass perPage so recall()
-      // can detect the disabled state from config and return empty history.
-      // When lastMessages is a number, pass it as perPage to limit results.
-      ...(typeof threadConfig.lastMessages === 'number' ? { perPage: threadConfig.lastMessages } : {}),
+      // Let recall apply the normalized count/token history configuration. In particular,
+      // token-only history must page backwards instead of mapping to `perPage: false`.
       // The agent only consumes `messages` from recall; skip the COUNT(*) work.
       includeTotal: false,
       threadConfig: memoryConfig,

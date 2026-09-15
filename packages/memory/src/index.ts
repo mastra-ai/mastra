@@ -10,6 +10,7 @@ import { coreFeatures } from '@mastra/core/features';
 import type { Mastra } from '@mastra/core/mastra';
 import {
   MastraMemory,
+  loadMessageHistory,
   normalizeMessageHistoryConfig,
   getMemoryTokenBoundary,
   isAfterMemoryTokenBoundary,
@@ -642,6 +643,8 @@ export class Memory extends MastraMemory {
         `Thread with id ${threadId} is for resource with id ${thread.resourceId} but resource ${resourceId} was queried.`,
       );
     }
+
+    return thread;
   }
 
   private createMemorySpan(
@@ -696,6 +699,9 @@ export class Memory extends MastraMemory {
     } = args;
     const config = this.getMergedThreadConfig(threadConfig || {});
     const semanticRecallEnabled = Boolean(config.semanticRecall);
+    const history = normalizeMessageHistoryConfig(config.lastMessages, config.messageHistory);
+    const historyDisabledByConfig = !history.enabled && perPageArg === undefined;
+    const shouldUseTokenLoader = perPageArg === undefined && history.enabled && history.maxTokens !== undefined;
 
     const span = this.createMemorySpan(
       'recall',
@@ -708,17 +714,27 @@ export class Memory extends MastraMemory {
     );
 
     try {
-      if (resourceId) await this.validateThreadIsOwnedByResource(threadId, resourceId, config);
+      // A disabled history configuration must not touch storage or validate thread ownership.
+      if (historyDisabledByConfig && (!config.semanticRecall || !vectorSearchString || !this.vector)) {
+        const result = {
+          messages: [],
+          usage: undefined,
+          total: 0,
+          page: page ?? 0,
+          perPage: 0,
+          hasMore: false,
+        };
+        span?.end({ output: { success: true }, attributes: { messageCount: 0 } });
+        return result;
+      }
 
-      // Use perPage from args if provided, otherwise use threadConfig.lastMessages
-      const history = normalizeMessageHistoryConfig(config.lastMessages, config.messageHistory);
-      const perPage = perPageArg !== undefined ? perPageArg : history.enabled ? (history.maxMessages ?? false) : 0;
+      const validatedThread = resourceId
+        ? await this.validateThreadIsOwnedByResource(threadId, resourceId, config)
+        : undefined;
 
-      // lastMessages: false means "disable conversation history entirely".
-      // When the resolved perPage is false from config (not an explicit caller override),
-      // return empty messages. This prevents recall() from treating false as "no limit"
-      // and returning ALL messages when the user intended to disable history.
-      const historyDisabledByConfig = !history.enabled && perPageArg === undefined;
+      // Use perPage from args if provided, otherwise use the normalized count limit.
+      // Token-only history is loaded through finite pages below and never maps to `false`.
+      const perPage = perPageArg !== undefined ? perPageArg : (history.maxMessages ?? 0);
 
       // When limiting messages (perPage !== false) without explicit orderBy, we need to:
       // 1. Query DESC to get the NEWEST messages (not oldest)
@@ -776,20 +792,6 @@ export class Memory extends MastraMemory {
 
       let usage: { tokens: number } | undefined;
 
-      // If history is disabled and there's no semantic recall to perform, return empty immediately
-      if (historyDisabledByConfig && (!config.semanticRecall || !vectorSearchString || !this.vector)) {
-        const result = {
-          messages: [],
-          usage: undefined,
-          total: 0,
-          page: page ?? 0,
-          perPage: 0,
-          hasMore: false,
-        };
-        span?.end({ output: { success: true }, attributes: { messageCount: 0 } });
-        return result;
-      }
-
       if (config?.semanticRecall && vectorSearchString && this.vector) {
         const result = await this.embedMessageContent(vectorSearchString!);
         usage = result.usage;
@@ -827,45 +829,88 @@ export class Memory extends MastraMemory {
 
       // Get raw messages from storage
       const memoryStore = await this.getMemoryStore();
+      const include = filteredVectorResults.map(r => ({
+        id: r.metadata?.message_id,
+        threadId: r.metadata?.thread_id,
+        withNextMessages:
+          typeof vectorConfig.messageRange === 'number' ? vectorConfig.messageRange : vectorConfig.messageRange.after,
+        withPreviousMessages:
+          typeof vectorConfig.messageRange === 'number' ? vectorConfig.messageRange : vectorConfig.messageRange.before,
+      }));
 
-      // When history is disabled by config, use perPage: 0 so only semantic recall
-      // include results are returned (not the full message history)
-      const effectivePerPage = historyDisabledByConfig ? 0 : perPage;
+      let rawMessages: MastraDBMessage[];
+      let resultPage: number;
+      let resultPerPage: number | false;
+      let total: number;
+      let hasMore: boolean;
 
-      const paginatedResult = await memoryStore.listMessages({
-        threadId,
-        resourceId,
-        perPage: effectivePerPage,
-        page,
-        orderBy: effectiveOrderBy,
-        filter,
-        ...(includeTotal !== undefined ? { includeTotal } : {}),
-        ...(filteredVectorResults?.length
-          ? {
-              include: filteredVectorResults.map(r => ({
-                id: r.metadata?.message_id,
-                threadId: r.metadata?.thread_id,
-                withNextMessages:
-                  typeof vectorConfig.messageRange === 'number'
-                    ? vectorConfig.messageRange
-                    : vectorConfig.messageRange.after,
-                withPreviousMessages:
-                  typeof vectorConfig.messageRange === 'number'
-                    ? vectorConfig.messageRange
-                    : vectorConfig.messageRange.before,
-              })),
-            }
-          : {}),
-      });
-      // Reverse to restore chronological order if we queried DESC to get newest messages
-      const rawMessages = shouldGetNewestAndReverse ? paginatedResult.messages.reverse() : paginatedResult.messages;
+      if (shouldUseTokenLoader) {
+        const thread = validatedThread ?? (await memoryStore.getThreadById({ threadId, resourceId }));
+        const storedBoundary = getMemoryTokenBoundary(thread);
+        const boundary =
+          storedBoundary !== undefined &&
+          storedBoundary.maxTokens === history.maxTokens &&
+          storedBoundary.atMaxRemoveTokens === history.atMaxRemoveTokens
+            ? storedBoundary
+            : undefined;
+        const loaded = await loadMessageHistory({
+          storage: memoryStore,
+          threadId,
+          resourceId,
+          boundary,
+          filter,
+          maxMessages: history.maxMessages,
+          maxTokens: history.maxTokens,
+          atMaxRemoveTokens: history.atMaxRemoveTokens,
+          tokenCounter: new TokenCounter(),
+          initialTokens: 24,
+        });
+        rawMessages = loaded.messages;
+
+        if (include.length) {
+          const semanticMessages = await memoryStore.listMessages({
+            threadId,
+            resourceId,
+            perPage: 0,
+            include,
+            includeTotal: false,
+          });
+          rawMessages = new MessageList({ threadId, resourceId })
+            .add(rawMessages, 'memory')
+            .add(
+              semanticMessages.messages.filter(message => !boundary || isAfterMemoryTokenBoundary(message, boundary)),
+              'memory',
+            )
+            .get.all.db();
+        }
+
+        resultPage = 0;
+        resultPerPage = history.maxMessages ?? false;
+        total = rawMessages.length;
+        hasMore = false;
+      } else {
+        // When history is disabled by config, use perPage: 0 so only semantic recall
+        // include results are returned (not the full message history)
+        const effectivePerPage = historyDisabledByConfig ? 0 : perPage;
+        const paginatedResult = await memoryStore.listMessages({
+          threadId,
+          resourceId,
+          perPage: effectivePerPage,
+          page,
+          orderBy: effectiveOrderBy,
+          filter,
+          ...(includeTotal !== undefined ? { includeTotal } : {}),
+          ...(include.length ? { include } : {}),
+        });
+        // Reverse to restore chronological order if we queried DESC to get newest messages
+        rawMessages = shouldGetNewestAndReverse ? paginatedResult.messages.reverse() : paginatedResult.messages;
+        ({ total, page: resultPage, perPage: resultPerPage, hasMore } = paginatedResult);
+      }
 
       const list = new MessageList({ threadId, resourceId }).add(rawMessages, 'memory');
 
       // Always return mastra-db format (V2)
       const messages = filterSystemReminderMessages(list.get.all.db(), includeSystemReminders, hideSignals);
-
-      const { total, page: resultPage, perPage: resultPerPage, hasMore } = paginatedResult;
       const recallResult = { messages, usage, total, page: resultPage, perPage: resultPerPage, hasMore };
 
       span?.end({
@@ -1947,50 +1992,54 @@ ${workingMemory}`;
       const lastMessages = normalizeMessageHistoryConfig(config.lastMessages, config.messageHistory);
       if (!lastMessages.enabled) {
         messages = [];
-      } else {
-        const storedBoundary =
-          lastMessages.maxTokens !== undefined
-            ? getMemoryTokenBoundary(await memoryStore.getThreadById({ threadId, resourceId }))
-            : undefined;
+      } else if (lastMessages.maxTokens !== undefined) {
+        const storedBoundary = getMemoryTokenBoundary(await memoryStore.getThreadById({ threadId, resourceId }));
         const boundary =
           storedBoundary?.maxTokens === lastMessages.maxTokens &&
-          storedBoundary?.atMaxRemoveTokens === lastMessages.atMaxRemoveTokens
+          storedBoundary.atMaxRemoveTokens === lastMessages.atMaxRemoveTokens
             ? storedBoundary
             : undefined;
+        const tokenCounter = this.createMemoryTokenCounter()!;
+        const loaded = await loadMessageHistory({
+          storage: memoryStore,
+          threadId,
+          resourceId,
+          boundary,
+          maxMessages: lastMessages.maxMessages,
+          maxTokens: lastMessages.maxTokens,
+          tokenCounter,
+          initialTokens: 24,
+        });
+        const messageList = new MessageList();
+        messageList.add(loaded.messages, 'memory');
+        if (systemParts.length) messageList.addSystem(systemParts.join('\n\n'));
+        const limiter = new TokenLimiterProcessor({
+          limit: lastMessages.maxTokens,
+          atMaxRemoveTokens: lastMessages.atMaxRemoveTokens,
+          trimMode: 'memory-only',
+          tokenCounter,
+        });
+        await limiter.processInput({
+          messageList,
+          messages: messageList.get.all.db(),
+          systemMessages: messageList.getAllSystemMessages(),
+          state: {},
+          retryCount: 0,
+          abort: reason => {
+            throw new Error(reason);
+          },
+        });
+        messages = messageList.get.all.db();
+      } else {
         const result = await memoryStore.listMessages({
           threadId,
           resourceId,
           orderBy: { field: 'createdAt', direction: 'DESC' },
-          perPage: lastMessages.maxMessages ?? false,
-          filter: boundary ? { dateRange: { start: new Date(boundary.createdAt) } } : undefined,
+          perPage: lastMessages.maxMessages!,
           // Only `messages` is consumed here; skip the COUNT(*) work.
           includeTotal: false,
         });
-        messages = result.messages
-          .filter(message => !boundary || isAfterMemoryTokenBoundary(message, boundary))
-          .reverse();
-        if (lastMessages.maxTokens !== undefined) {
-          const messageList = new MessageList();
-          messageList.add(messages, 'memory');
-          if (systemParts.length) messageList.addSystem(systemParts.join('\n\n'));
-          const limiter = new TokenLimiterProcessor({
-            limit: lastMessages.maxTokens,
-            atMaxRemoveTokens: lastMessages.atMaxRemoveTokens,
-            trimMode: 'memory-only',
-            tokenCounter: this.createMemoryTokenCounter(),
-          });
-          await limiter.processInput({
-            messageList,
-            messages: messageList.get.all.db(),
-            systemMessages: messageList.getAllSystemMessages(),
-            state: {},
-            retryCount: 0,
-            abort: reason => {
-              throw new Error(reason);
-            },
-          });
-          messages = messageList.get.all.db();
-        }
+        messages = result.messages.reverse();
       }
     }
 

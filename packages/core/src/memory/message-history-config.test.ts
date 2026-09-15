@@ -6,6 +6,7 @@ import { MessageHistory } from '../processors/memory/message-history';
 import { TokenLimiterProcessor } from '../processors/processors/token-limiter';
 import { RequestContext } from '../request-context';
 import { InMemoryStore } from '../storage';
+import { loadMessageHistory } from './load-message-history';
 import {
   advanceMemoryTokenBoundary,
   getMemoryTokenBoundary,
@@ -49,6 +50,8 @@ describe('token-based memory history', () => {
       atMaxRemoveTokens: 10,
     });
     expect(normalizeMessageHistoryConfig(false, { maxTokens: 100 }).enabled).toBe(false);
+    expect(normalizeMessageHistoryConfig(undefined, { maxTokens: 0 }).enabled).toBe(false);
+    expect(normalizeMessageHistoryConfig(3, { maxTokens: 0 }).enabled).toBe(false);
     for (const tokens of [
       { maxTokens: NaN },
       { maxTokens: Infinity },
@@ -76,6 +79,15 @@ describe('token-based memory history', () => {
     expect((withBoth as any).threadConfig.lastMessages).toBe(4);
   });
 
+  it('adds its memory limiter when a user token limiter is also configured', async () => {
+    const memory = new MockMemory({ options: { messageHistory: { maxTokens: 100 } } });
+    const processors = await memory.getInputProcessors([new TokenLimiterProcessor(1_000)]);
+
+    const limiter = processors.find(processor => processor.id === 'memory-token-limiter');
+    expect(limiter).toBeDefined();
+    expect(limiter?.processInputStep).toBeTypeOf('function');
+  });
+
   it('drops a chunk of oldest history and protects every current-turn source', async () => {
     const list = new MessageList();
     list.add([message('old', 0), message('recent', 1)], 'memory');
@@ -95,6 +107,47 @@ describe('token-based memory history', () => {
     expect(onMemoryTrim.mock.calls).toHaveLength(1);
     await expect(limiter.processInput(args(list))).resolves.toBe(list);
     expect(onMemoryTrim.mock.calls).toHaveLength(1);
+  });
+
+  it('trims linked tool-call and tool-result messages atomically', async () => {
+    const toolMessage = (id: string, state: 'call' | 'result', seconds: number): MastraDBMessage => ({
+      ...message(id, seconds),
+      role: 'assistant',
+      content: {
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state,
+              toolCallId: 'tool-call',
+              toolName: 'lookup',
+              args: {},
+              ...(state === 'result' ? { result: 'done' } : {}),
+            },
+          },
+        ],
+      },
+    });
+    const list = new MessageList();
+    list.add([toolMessage('call', 'call', 0), toolMessage('result', 'result', 1), message('recent', 2)], 'memory');
+    list.add(message('input', 3), 'input');
+    const onMemoryTrim = vi.fn(async () => {});
+    const limiter = new TokenLimiterProcessor({
+      limit: 350,
+      trimMode: 'memory-only',
+      atMaxRemoveTokens: 100,
+      tokenCounter: { countMessage: () => 100 },
+      onMemoryTrim,
+    });
+
+    await limiter.processInput(args(list));
+
+    expect(onMemoryTrim).toHaveBeenCalledWith(
+      expect.arrayContaining([expect.objectContaining({ id: 'call' }), expect.objectContaining({ id: 'result' })]),
+      undefined,
+    );
+    expect(list.get.all.db().map(item => item.id)).toEqual(['recent', 'input']);
   });
 
   it('does not throw or delete protected input when it alone exceeds the budget', async () => {
@@ -126,6 +179,116 @@ describe('token-based memory history', () => {
     expect(second.messageIds).toEqual(['first', 'second']);
   });
 
+  it('does not let concurrent metadata updates move a boundary backward', async () => {
+    const store = (await new InMemoryStore().getStore('memory'))!;
+    await store.saveThread({
+      thread: {
+        id: 'thread',
+        resourceId: 'resource',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+
+    const updateBoundary = (removed: MastraDBMessage[]) =>
+      store.updateThreadMetadata({
+        id: 'thread',
+        resourceId: 'resource',
+        update: latest => {
+          const previous = getMemoryTokenBoundary(latest);
+          const boundary = advanceMemoryTokenBoundary(previous, removed, 100, 25);
+          return boundary === previous ? undefined : { memoryTokenLimiter: boundary };
+        },
+      });
+
+    await Promise.all([updateBoundary([message('newer', 2)]), updateBoundary([message('older', 1)])]);
+
+    expect(getMemoryTokenBoundary(await store.getThreadById({ threadId: 'thread' }))?.createdAt).toBe(
+      message('newer', 2).createdAt.toISOString(),
+    );
+  });
+
+  it('loads token history through finite backwards pages', async () => {
+    const store = (await new InMemoryStore().getStore('memory'))!;
+    const storedMessages = Array.from({ length: 100 }, (_, index) => message(`message-${index}`, index));
+    await store.saveMessages({ messages: storedMessages });
+    const listMessages = vi.spyOn(store, 'listMessages');
+
+    const result = await loadMessageHistory({
+      storage: store,
+      threadId: 'thread',
+      resourceId: 'resource',
+      maxTokens: 50,
+      atMaxRemoveTokens: 0,
+      tokenCounter: { countMessage: () => 10 },
+      pageSize: 3,
+    });
+
+    expect(result.messages.map(item => item.id)).toEqual([
+      'message-95',
+      'message-96',
+      'message-97',
+      'message-98',
+      'message-99',
+    ]);
+    expect(listMessages.mock.calls.length).toBeGreaterThan(1);
+    expect(listMessages).not.toHaveBeenCalledWith(expect.objectContaining({ perPage: false }));
+    expect(listMessages.mock.calls.every(([input]) => input.perPage === 3 && input.includeTotal === false)).toBe(true);
+  });
+
+  it('loads every retained message across boundary-timestamp pages', async () => {
+    const store = (await new InMemoryStore().getStore('memory'))!;
+    const removed = message('removed');
+    const retained = ['retained-a', 'retained-b', 'retained-c', 'retained-d', 'retained-e'].map(id => message(id));
+    await store.saveMessages({ messages: [removed, ...retained] });
+
+    const result = await loadMessageHistory({
+      storage: store,
+      threadId: 'thread',
+      resourceId: 'resource',
+      boundary: advanceMemoryTokenBoundary(undefined, [removed], 100, 25),
+      maxMessages: 10,
+      pageSize: 2,
+    });
+
+    expect(result.messages.map(item => item.id)).toEqual(retained.map(item => item.id));
+  });
+
+  it('does not split linked tool messages at a history limit', async () => {
+    const store = (await new InMemoryStore().getStore('memory'))!;
+    const toolMessage = (id: string, state: 'call' | 'result', seconds: number): MastraDBMessage => ({
+      ...message(id, seconds),
+      role: 'assistant',
+      content: {
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state,
+              toolCallId: 'tool-call',
+              toolName: 'lookup',
+              args: {},
+              ...(state === 'result' ? { result: 'done' } : {}),
+            },
+          },
+        ],
+      },
+    });
+    await store.saveMessages({ messages: [toolMessage('call', 'call', 0), toolMessage('result', 'result', 1)] });
+
+    const result = await loadMessageHistory({
+      storage: store,
+      threadId: 'thread',
+      resourceId: 'resource',
+      maxMessages: 1,
+      tokenCounter: { countMessage: () => 1 },
+      pageSize: 1,
+    });
+
+    expect(result.messages).toEqual([]);
+  });
+
   it('persists trimming through real storage and does not reintroduce removed history next turn', async () => {
     const storage = new InMemoryStore();
     const store = (await storage.getStore('memory'))!;
@@ -145,7 +308,7 @@ describe('token-based memory history', () => {
     const memory = new MockMemory({ storage, options: { messageHistory: { maxTokens: 32, atMaxRemoveTokens: 0 } } });
     const processors = await memory.getInputProcessors([], context);
     const history = processors.find(p => p.id === 'message-history')!;
-    const limiter = processors.find(p => p.id === 'token-limiter')!;
+    const limiter = processors.find(p => p.id === 'memory-token-limiter')!;
     const list = new MessageList();
     await history.processInput!(args(list, context));
     expect(list.get.all.db()).toHaveLength(3);
@@ -160,6 +323,35 @@ describe('token-based memory history', () => {
     expect(next.get.all.db().map(m => m.id)).toEqual(list.get.all.db().map(m => m.id));
     // Trimming changes context, not stored chat history.
     expect((await store.listMessages({ threadId: 'thread', perPage: false })).messages).toHaveLength(3);
+  });
+
+  it('checks readOnly when the trim callback executes', async () => {
+    const storage = new InMemoryStore();
+    const store = (await storage.getStore('memory'))!;
+    const thread = await store.saveThread({
+      thread: {
+        id: 'thread',
+        resourceId: 'resource',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+    const context = new RequestContext();
+    context.set('MastraMemory', { thread, resourceId: 'resource' });
+    const memory = new MockMemory({ storage, options: { messageHistory: { maxTokens: 32, atMaxRemoveTokens: 0 } } });
+    const limiter = (await memory.getInputProcessors([], context)).find(p => p.id === 'memory-token-limiter')!;
+    context.set('MastraMemory', {
+      thread,
+      resourceId: 'resource',
+      memoryConfig: { readOnly: true, messageHistory: { maxTokens: 32, atMaxRemoveTokens: 0 } },
+    });
+    const list = new MessageList();
+    list.add([message('old'), message('newer', 1)], 'memory');
+    list.add(message('input', 2), 'input');
+
+    await limiter.processInput!(args(list, context));
+
+    expect(getMemoryTokenBoundary(await store.getThreadById({ threadId: 'thread' }))).toBeUndefined();
   });
 
   it('retains unremoved messages at the boundary timestamp', async () => {
@@ -179,6 +371,7 @@ describe('token-based memory history', () => {
       storage: store,
       lastMessages: false,
       tokenLimit: { maxTokens: 100, atMaxRemoveTokens: 25 },
+      tokenCounter: { countMessage: () => 1 },
     });
     const list = new MessageList();
     await history.processInput(args(list, context));

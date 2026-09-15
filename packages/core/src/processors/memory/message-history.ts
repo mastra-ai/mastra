@@ -1,7 +1,7 @@
 import type { OutputResult, Processor, ProcessorSpanPhase } from '..';
 import type { MastraDBMessage, MessageList } from '../../agent';
 import { isTransientSignalMessage } from '../../agent/signals';
-import { parseMemoryRequestContext } from '../../memory';
+import { loadMessageHistory, parseMemoryRequestContext } from '../../memory';
 import { getMemoryTokenBoundary, isAfterMemoryTokenBoundary } from '../../memory/message-history-config';
 import { removeWorkingMemoryTags } from '../../memory/working-memory-utils';
 import { SpanType } from '../../observability';
@@ -16,6 +16,7 @@ export interface MessageHistoryOptions {
   storage: MemoryStorage;
   lastMessages?: number | false;
   tokenLimit?: { maxTokens: number; atMaxRemoveTokens: number };
+  tokenCounter?: { countMessage(message: MastraDBMessage): number | Promise<number> };
 }
 
 /**
@@ -59,11 +60,13 @@ export class MessageHistory implements Processor {
   private storage: MemoryStorage;
   private lastMessages?: number | false;
   private tokenLimit?: MessageHistoryOptions['tokenLimit'];
+  private tokenCounter?: MessageHistoryOptions['tokenCounter'];
 
   constructor(options: MessageHistoryOptions) {
     this.storage = options.storage;
     this.lastMessages = options.lastMessages;
     this.tokenLimit = options.tokenLimit;
+    this.tokenCounter = options.tokenCounter;
   }
 
   /**
@@ -138,12 +141,26 @@ export class MessageHistory implements Processor {
           : undefined;
       const cacheKey = `history:${threadId}:${resourceId ?? ''}:${this.lastMessages ?? 'all'}:${JSON.stringify(boundary)}`;
       const loadMessages = async () => {
+        if (this.tokenLimit) {
+          const result = await loadMessageHistory({
+            storage: this.storage,
+            threadId,
+            resourceId,
+            boundary,
+            maxMessages: typeof this.lastMessages === 'number' ? this.lastMessages : undefined,
+            maxTokens: this.tokenLimit.maxTokens,
+            atMaxRemoveTokens: this.tokenLimit.atMaxRemoveTokens,
+            tokenCounter: this.tokenCounter,
+            includeOverflow: true,
+          });
+          return [...result.overflow, ...result.messages].reverse();
+        }
+
         const result = await this.storage.listMessages({
           threadId,
           resourceId,
           page: 0,
           perPage: this.lastMessages,
-          filter: boundary ? { dateRange: { start: new Date(boundary.createdAt) } } : undefined,
           orderBy: { field: 'createdAt', direction: 'DESC' },
           // Last-N history read only consumes `messages`; skip the COUNT(*) work.
           includeTotal: false,

@@ -139,9 +139,11 @@ export const agent = new Agent({
 })
 ```
 
-When remembered history exceeds `maxTokens`, the oldest messages are dropped until at least `atMaxRemoveTokens` tokens are freed (default: 25% of `maxTokens`). Removing history in chunks rather than one message at a time keeps the prompt prefix stable across several turns, so provider prompt caches stay warm. The current turn's input, the agent's responses, and system messages are never trimmed.
+Mastra counts the complete prompt against `maxTokens`, including remembered history, system instructions, context, and the current turn. When the prompt exceeds the budget, Mastra removes the oldest remembered messages until the prompt is at most `maxTokens - atMaxRemoveTokens`. `atMaxRemoveTokens` defaults to 25% of `maxTokens`. Removing history in chunks keeps the prompt prefix stable across several turns, which helps provider prompt caches stay warm.
 
-Trimmed messages stay in storage, but a per-thread boundary is persisted so they are excluded from later turns. Setting `messageHistory` without `lastMessages` disables the default 10-message cap; set both to combine a count cap with a token budget.
+System messages, context, the current turn's input, and the agent's responses are never trimmed. Linked tool calls and results are removed together. If protected content alone exceeds `maxTokens`, Mastra removes all remembered history but keeps the protected content.
+
+Trimmed messages stay in storage. During agent runs, Mastra persists a per-thread boundary so they're excluded from later turns. Setting `messageHistory` without `lastMessages` disables the default 10-message cap. Set both to combine a count cap with a token budget. Set `maxTokens` to `0` to disable message history.
 
 :::tip
 
