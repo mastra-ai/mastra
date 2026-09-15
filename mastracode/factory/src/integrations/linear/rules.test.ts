@@ -66,6 +66,63 @@ describe('LinearRules', () => {
     ]);
   });
 
+  it('does not mint a second card while another Factory holds a live card for the issue', async () => {
+    const { project, service, workItems } = await setup();
+    await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: 'other-factory',
+      input: {
+        externalSource: {
+          integrationId: 'linear',
+          type: 'issue',
+          externalId: `linear:${issue.identifier}`,
+          url: issue.url,
+        },
+        title: `${issue.identifier}: ${issue.title}`,
+        stages: ['intake'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+
+    await expect(
+      service.ingest({ orgId: 'org-1', userId: 'user-1', factoryProjectId: project.id, issues: [issue] }),
+    ).resolves.toEqual({ status: 'missing', ingested: 1 });
+
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
+    expect(await workItems.list({ orgId: 'org-1', factoryProjectId: project.id })).toEqual([]);
+  });
+
+  it('ingests an issue again once the other Factory finished its card', async () => {
+    const { project, service, workItems } = await setup();
+    await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: 'other-factory',
+      input: {
+        externalSource: {
+          integrationId: 'linear',
+          type: 'issue',
+          externalId: `linear:${issue.identifier}`,
+          url: issue.url,
+        },
+        title: `${issue.identifier}: ${issue.title}`,
+        stages: ['done'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+
+    await expect(
+      service.ingest({ orgId: 'org-1', userId: 'user-1', factoryProjectId: project.id, issues: [issue] }),
+    ).resolves.toEqual({ status: 'committed', ingested: 1 });
+
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toMatchObject([
+      { decision: { type: 'upsertLinkedWorkItem', sourceKey: `linear:${issue.identifier}` } },
+    ]);
+  });
+
   it('accepts installed custom linked targets and preserves committed ingress after uninstall', async () => {
     const decision = {
       type: 'upsertLinkedWorkItem' as const,

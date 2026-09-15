@@ -1,6 +1,7 @@
 import { boardForWorkItem } from '../../boards/index.js';
 import type { BoardRegistry } from '../../boards/index.js';
 import type { FactoryLinearRuleContext, FactoryRuleDecision } from '../../rules/types.js';
+import { isTerminalFactoryRuleStage } from '../../rules/types.js';
 import { assertFactoryDecisionTarget, validateFactoryRuleDecisions } from '../../rules/validation.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type { WorkItemRow, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
@@ -72,11 +73,28 @@ export class LinearRules {
     const itemsBySourceKey = new Map(items.map(item => [item.externalSource?.externalId, item]));
     const statuses: IngressStatus[] = [];
     for (const issue of input.issues) {
-      statuses.push(await this.#ingestIssue(input, issue, itemsBySourceKey.get(`linear:${issue.identifier}`)));
+      const relatedItem = itemsBySourceKey.get(`linear:${issue.identifier}`);
+      // One live card per Linear issue per org. When the winning source for an
+      // issue moves to a source routed elsewhere (a project deselected under a
+      // selected team, or the reverse), the card that already exists keeps the
+      // issue; this Factory must not mint a second one.
+      if (!relatedItem && (await this.#heldElsewhere(input, issue))) {
+        statuses.push('missing');
+        continue;
+      }
+      statuses.push(await this.#ingestIssue(input, issue, relatedItem));
     }
     if (statuses.some(status => status === 'committed')) return { status: 'committed', ingested: statuses.length };
     if (statuses.some(status => status === 'replayed')) return { status: 'replayed', ingested: statuses.length };
     return { status: 'missing', ingested: statuses.length };
+  }
+
+  async #heldElsewhere(input: LinearRulesIngress, issue: LinearIssueIngress): Promise<boolean> {
+    const rows = await this.options.storage.listBySource({
+      orgId: input.orgId,
+      source: { integrationId: 'linear', type: 'issue', externalId: `linear:${issue.identifier}` },
+    });
+    return rows.some(row => row.factoryProjectId !== input.factoryProjectId && !isTerminalFactoryRuleStage(row.stages));
   }
 
   async #ingestIssue(

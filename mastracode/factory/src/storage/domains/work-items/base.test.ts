@@ -160,6 +160,24 @@ describe('WorkItemsStorage', () => {
     expect(reused.item.title).toBe('Updated title');
   });
 
+  it('lists every card in the org linked from one external source', async () => {
+    const storage = await makeStorage();
+    const first = await storage.upsert({ orgId: 'org1', userId: 'user1', factoryProjectId: 'project1', input });
+    const second = await storage.upsert({ orgId: 'org1', userId: 'user1', factoryProjectId: 'project2', input });
+    await storage.upsert({ orgId: 'org2', userId: 'user1', factoryProjectId: 'project9', input });
+    await storage.upsert({
+      orgId: 'org1',
+      userId: 'user1',
+      factoryProjectId: 'project1',
+      input: { ...input, externalSource: { ...input.externalSource, externalId: '43' } },
+    });
+
+    const rows = await storage.listBySource({ orgId: 'org1', source: input.externalSource });
+
+    expect(rows.map(row => row.id).sort()).toEqual([first.item.id, second.item.id].sort());
+    expect(rows.every(row => row.orgId === 'org1')).toBe(true);
+  });
+
   it('purges replay state when a linked work item is deleted', async () => {
     const storage = await makeStorage();
     const scope = { orgId: 'org1', factoryProjectId: 'p1' };

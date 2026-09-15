@@ -1557,6 +1557,20 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     return rows.length === 1 ? toWorkItem(rows[0]!) : null;
   }
 
+  /**
+   * Every card in the org that was linked from one external source, across
+   * Factory projects. Source keys are unique per project, not per org, so an
+   * issue whose routing moved between projects can own one card in each; intake
+   * consults this before creating another.
+   */
+  async listBySource({ orgId, source }: { orgId: string; source: ExternalWorkItemSource }): Promise<WorkItemRow[]> {
+    const rows = await this.#db.findMany<WorkItemDbRow>('work_items', {
+      org_id: orgId,
+      source_key: externalSourceKey(source),
+    });
+    return rows.map(toWorkItem);
+  }
+
   async getForProject(orgId: string, factoryProjectId: string, id: string): Promise<WorkItemRow | null> {
     const row = await this.#db.findOne<WorkItemDbRow>('work_items', {
       id,
