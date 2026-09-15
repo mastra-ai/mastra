@@ -41,20 +41,24 @@ function getMemorySections(config: NonNullable<GetMemoryConfigResponse['config']
   ];
 
   if (config.semanticRecall) {
-    const semanticRecall = semanticRecallSchema.parse(config.semanticRecall === true ? {} : config.semanticRecall);
-    const messageRange = semanticRecall.messageRange;
-    const before = typeof messageRange === 'object' ? messageRange.before : messageRange;
-    const after = typeof messageRange === 'object' ? messageRange.after : messageRange;
+    const semanticRecall = semanticRecallSchema.safeParse(config.semanticRecall === true ? {} : config.semanticRecall);
+    if (semanticRecall.success) {
+      const messageRange = semanticRecall.data.messageRange;
+      const before = typeof messageRange === 'object' ? messageRange.before : messageRange;
+      const after = typeof messageRange === 'object' ? messageRange.after : messageRange;
 
-    sections.push({
-      title: 'Semantic Recall',
-      items: [
-        { label: 'Status', value: true },
-        { label: 'Scope', value: semanticRecall.scope ?? 'resource' },
-        { label: 'Top K Results', value: semanticRecall.topK ?? 4 },
-        { label: 'Message Range', value: `${before ?? 1} before, ${after ?? 1} after` },
-      ],
-    });
+      sections.push({
+        title: 'Semantic Recall',
+        items: [
+          { label: 'Status', value: true },
+          { label: 'Scope', value: semanticRecall.data.scope ?? 'resource' },
+          { label: 'Top K Results', value: semanticRecall.data.topK ?? 4 },
+          { label: 'Message Range', value: `${before ?? 1} before, ${after ?? 1} after` },
+        ],
+      });
+    } else {
+      sections.push({ title: 'Semantic Recall', items: [{ label: 'Configuration', value: 'Unavailable' }] });
+    }
   }
 
   const observationalMemory = config.observationalMemory;
@@ -110,7 +114,7 @@ export function AgentMemoryConfig({ agentId }: { agentId: string }) {
 
   if (isLoading) return <Skeleton className="h-28 w-full" />;
 
-  if (isError) {
+  if (isError && !data) {
     return (
       <div role="alert" className="flex flex-col items-start gap-2">
         <Txt variant="caption">Unable to load memory configuration</Txt>
