@@ -42,6 +42,38 @@ class DelayedLocalFilesystem extends LocalFilesystem {
   }
 }
 
+/**
+ * LocalFilesystem that throws for configured paths, to exercise the tool's
+ * error-handling without relying on real permission bits (flaky under CI/root).
+ */
+class FailingLocalFilesystem extends LocalFilesystem {
+  failStatFor?: (p: string) => boolean;
+  failReaddirFor?: (p: string) => boolean;
+  failReadFileFor?: (p: string) => boolean;
+  errorCode?: string;
+
+  private makeError(message: string): Error {
+    const err = new Error(message);
+    if (this.errorCode) (err as NodeJS.ErrnoException).code = this.errorCode;
+    return err;
+  }
+
+  async stat(inputPath: string, options?: Parameters<LocalFilesystem['stat']>[1]) {
+    if (this.failStatFor?.(inputPath)) throw this.makeError(`stat failed: ${inputPath}`);
+    return super.stat(inputPath, options);
+  }
+
+  async readdir(inputPath: string, options?: Parameters<LocalFilesystem['readdir']>[1]) {
+    if (this.failReaddirFor?.(inputPath)) throw this.makeError(`readdir failed: ${inputPath}`);
+    return super.readdir(inputPath, options);
+  }
+
+  async readFile(inputPath: string, options?: Parameters<LocalFilesystem['readFile']>[1]) {
+    if (this.failReadFileFor?.(inputPath)) throw this.makeError(`readFile failed: ${inputPath}`);
+    return super.readFile(inputPath, options);
+  }
+}
+
 describe('workspace_grep', () => {
   let tempDir: string;
 
@@ -769,5 +801,140 @@ describe('workspace_grep', () => {
 
     expect(result).toContain('1 match across 1 file');
     expect(result).not.toContain('skipped: unsupported extension');
+  });
+
+  describe('read-failure reporting', () => {
+    it('reports when the target path cannot be resolved instead of silent 0 matches', async () => {
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+      });
+      const tools = await createWorkspaceTools(workspace);
+
+      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute(
+        { pattern: 'needle', path: 'does-not-exist' },
+        { workspace },
+      );
+
+      expect(typeof result).toBe('string');
+      expect(result).toContain('target path not found: nothing searched');
+    });
+
+    it('reports a read error when a subdirectory cannot be listed but still searches the rest', async () => {
+      await fs.mkdir(path.join(tempDir, 'good'), { recursive: true });
+      await fs.mkdir(path.join(tempDir, 'bad'), { recursive: true });
+      await fs.writeFile(path.join(tempDir, 'good', 'a.ts'), 'const needle = 1;');
+      await fs.writeFile(path.join(tempDir, 'bad', 'b.ts'), 'const needle = 2;');
+
+      const filesystem = new FailingLocalFilesystem({ basePath: tempDir });
+      filesystem.failReaddirFor = p => p.endsWith('/bad') || p === 'bad' || p.endsWith('bad');
+      const workspace = new Workspace({ filesystem });
+      const tools = await createWorkspaceTools(workspace);
+
+      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute({ pattern: 'needle' }, { workspace });
+
+      expect(result).toContain('path skipped: read error');
+      expect(result).toContain('good/a.ts');
+    });
+
+    it('reports a read error when a file cannot be read but still returns other matches', async () => {
+      await fs.writeFile(path.join(tempDir, 'a.ts'), 'const needle = 1;');
+      await fs.writeFile(path.join(tempDir, 'b.ts'), 'const needle = 2;');
+
+      const filesystem = new FailingLocalFilesystem({ basePath: tempDir });
+      filesystem.failReadFileFor = p => p.endsWith('b.ts');
+      const workspace = new Workspace({ filesystem });
+      const tools = await createWorkspaceTools(workspace);
+
+      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute({ pattern: 'needle' }, { workspace });
+
+      expect(result).toContain('1 match across 1 file');
+      expect(result).toContain('path skipped: read error');
+      expect(result).toContain('a.ts');
+    });
+
+    it('does not report skips or not-found on a clean search', async () => {
+      await fs.writeFile(path.join(tempDir, 'a.ts'), 'const needle = 1;');
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+      });
+      const tools = await createWorkspaceTools(workspace);
+
+      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute({ pattern: 'needle' }, { workspace });
+
+      expect(result).toContain('1 match across 1 file');
+      expect(result).not.toContain('read error');
+      expect(result).not.toContain('target path not found');
+    });
+
+    describe('strict mode', () => {
+      it('throws when the target path cannot be resolved', async () => {
+        const workspace = new Workspace({
+          filesystem: new LocalFilesystem({ basePath: tempDir }),
+        });
+        const tools = await createWorkspaceTools(workspace);
+
+        await expect(
+          tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute(
+            { pattern: 'needle', path: 'does-not-exist', strict: true },
+            { workspace },
+          ),
+        ).rejects.toThrow();
+      });
+
+      it('throws when a directory cannot be listed', async () => {
+        await fs.mkdir(path.join(tempDir, 'bad'), { recursive: true });
+        await fs.writeFile(path.join(tempDir, 'bad', 'b.ts'), 'const needle = 2;');
+
+        const filesystem = new FailingLocalFilesystem({ basePath: tempDir });
+        filesystem.failReaddirFor = p => p.endsWith('bad');
+        const workspace = new Workspace({ filesystem });
+        const tools = await createWorkspaceTools(workspace);
+
+        await expect(
+          tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute({ pattern: 'needle', strict: true }, { workspace }),
+        ).rejects.toThrow();
+      });
+
+      it('throws when a file cannot be read', async () => {
+        await fs.writeFile(path.join(tempDir, 'a.ts'), 'const needle = 1;');
+
+        const filesystem = new FailingLocalFilesystem({ basePath: tempDir });
+        filesystem.failReadFileFor = p => p.endsWith('a.ts');
+        const workspace = new Workspace({ filesystem });
+        const tools = await createWorkspaceTools(workspace);
+
+        await expect(
+          tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute({ pattern: 'needle', strict: true }, { workspace }),
+        ).rejects.toThrow();
+      });
+    });
+
+    describe('gitignore read failures', () => {
+      it('propagates a non-ENOENT .gitignore read error instead of silently searching', async () => {
+        await fs.writeFile(path.join(tempDir, 'a.ts'), 'const needle = 1;');
+
+        const filesystem = new FailingLocalFilesystem({ basePath: tempDir });
+        filesystem.errorCode = 'EACCES';
+        filesystem.failReadFileFor = p => p.endsWith('.gitignore');
+        const workspace = new Workspace({ filesystem });
+        const tools = await createWorkspaceTools(workspace);
+
+        await expect(
+          tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute({ pattern: 'needle' }, { workspace }),
+        ).rejects.toThrow();
+      });
+
+      it('still searches when .gitignore is simply absent', async () => {
+        await fs.writeFile(path.join(tempDir, 'a.ts'), 'const needle = 1;');
+        const workspace = new Workspace({
+          filesystem: new LocalFilesystem({ basePath: tempDir }),
+        });
+        const tools = await createWorkspaceTools(workspace);
+
+        const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute({ pattern: 'needle' }, { workspace });
+
+        expect(result).toContain('1 match across 1 file');
+      });
+    });
   });
 });

@@ -62,9 +62,25 @@ Usage:
       .optional()
       .default(false)
       .describe('Include hidden files and directories (names starting with ".") in the search (default: false)'),
+    strict: z
+      .boolean()
+      .optional()
+      .default(false)
+      .describe(
+        'When true, any filesystem read failure (missing target path, unreadable directory, or unreadable file) ' +
+          'throws instead of being silently skipped. Use this when a partial search must not be mistaken for a complete one.',
+      ),
   }),
   execute: async (
-    { pattern, path: inputPath = '.', contextLines = 0, maxCount, caseSensitive = true, includeHidden = false },
+    {
+      pattern,
+      path: inputPath = '.',
+      contextLines = 0,
+      maxCount,
+      caseSensitive = true,
+      includeHidden = false,
+      strict = false,
+    },
     context,
   ) => {
     const { workspace, filesystem } = requireFilesystem(context);
@@ -76,6 +92,11 @@ Usage:
     const isText = (filename: string): boolean =>
       filesystem.isTextFile ? filesystem.isTextFile(filename) : isTextFile(filename);
     let skippedExtensionCount = 0;
+
+    // Track read failures so the summary can distinguish a partial/failed search
+    // from a genuinely empty one. In `strict` mode these throw instead.
+    let skippedReadErrorCount = 0;
+    let targetNotFound = false;
 
     const span = startWorkspaceSpan(context, workspace, {
       category: 'filesystem',
@@ -192,7 +213,9 @@ Usage:
                 async dir => {
                   try {
                     return await filesystem.readdir(dir);
-                  } catch {
+                  } catch (err) {
+                    if (strict) throw err;
+                    skippedReadErrorCount++;
                     return [];
                   }
                 },
@@ -258,8 +281,10 @@ Usage:
             };
             filePaths = collectFiles(searchPath);
           }
-        } catch {
-          // Path doesn't exist
+        } catch (err) {
+          // Target could not be resolved (missing path, permission error, etc.).
+          if (strict) throw err;
+          targetNotFound = true;
           filePaths = [];
         }
       }
@@ -393,7 +418,9 @@ Usage:
             try {
               const raw = await filesystem.readFile(filePath, { encoding: 'utf-8' });
               return typeof raw === 'string' ? raw : undefined;
-            } catch {
+            } catch (err) {
+              if (strict) throw err;
+              skippedReadErrorCount++;
               return undefined;
             }
           },
@@ -446,6 +473,14 @@ Usage:
       if (skippedExtensionCount > 0) {
         summaryParts.push(
           `(${skippedExtensionCount} file${skippedExtensionCount !== 1 ? 's' : ''} skipped: unsupported extension)`,
+        );
+      }
+      if (targetNotFound) {
+        summaryParts.push('(target path not found: nothing searched)');
+      }
+      if (skippedReadErrorCount > 0) {
+        summaryParts.push(
+          `(${skippedReadErrorCount} path${skippedReadErrorCount !== 1 ? 's' : ''} skipped: read error)`,
         );
       }
       const summary = summaryParts.join(' ');
