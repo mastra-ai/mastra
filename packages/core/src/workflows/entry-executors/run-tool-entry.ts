@@ -1,5 +1,6 @@
 import type { Mastra } from '../../mastra';
 import { resolveObservabilityContext } from '../../observability';
+import { noopObserve } from '../../tools/types';
 import type { ToolStepEntry } from '../types';
 import { resolveEntryActor } from './actor';
 import type { EntryExecuteContext } from './types';
@@ -38,6 +39,7 @@ export async function runToolEntry(entry: ToolStepEntry, ctx: EntryExecuteContex
     requestContext,
     actor: resolveEntryActor(entry.options as Record<string, unknown> | undefined, actor),
     ...observabilityContext,
+    observe: noopObserve,
     abortSignal,
     resumeData,
     workflow: {
