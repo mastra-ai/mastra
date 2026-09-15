@@ -365,6 +365,22 @@ describe('GatewayManager', () => {
     });
   });
 
+  describe('hasProviderAuth', () => {
+    it('resolves auth once through the first model of the provider', async () => {
+      const resolveAuth = vi.fn((_req: GatewayAuthRequest): GatewayAuthResult => ({ apiKey: 'k', source: 'gateway' }));
+      const manager = new GatewayManager([createFakeGateway({ id: 'acme', resolveAuth })]);
+
+      await expect(manager.hasProviderAuth('acme/acme', ['sonic-fast', 'sonic-slow'])).resolves.toBe(true);
+      expect(resolveAuth).toHaveBeenCalledTimes(1);
+      expect(resolveAuth).toHaveBeenCalledWith(expect.objectContaining({ modelId: 'sonic-fast' }));
+    });
+
+    it('is false for a provider that exposes no models', async () => {
+      const manager = new GatewayManager([createFakeGateway({ id: 'acme', apiKey: 'k' })]);
+      await expect(manager.hasProviderAuth('acme/acme', [])).resolves.toBe(false);
+    });
+  });
+
   describe('listProviders', () => {
     it('flattens providers from all gateways and stamps the gateway id', async () => {
       const gateway = createFakeGateway({ id: 'test-gateway', provider: 'acme', models: ['sonic-fast'] });

@@ -187,6 +187,12 @@ export class GatewayManager {
     }
   }
 
+  /** Auth is per provider, so the first model stands in for every model the provider exposes. */
+  async hasProviderAuth(providerKey: string, models: string[]): Promise<boolean> {
+    const sampleModel = models[0];
+    return sampleModel ? this.hasAuth(`${providerKey}/${sampleModel}`) : false;
+  }
+
   /**
    * Fetch and flatten providers from all gateways, deduped by provider key
    * (configured / earlier gateway wins). Each gateway's `fetchProviders()`
@@ -226,9 +232,7 @@ export class GatewayManager {
       const modelNames = providerConfig.models;
       if (!Array.isArray(modelNames)) continue;
 
-      // Auth is resolved once per provider (using the first model) via the
-      // gateway chain, then applied to every model the provider exposes.
-      const hasApiKey = modelNames[0] ? await this.hasAuth(`${provider}/${modelNames[0]}`) : false;
+      const hasApiKey = await this.hasProviderAuth(provider, modelNames);
 
       for (const modelName of modelNames) {
         models.push({

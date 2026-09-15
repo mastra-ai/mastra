@@ -11,8 +11,8 @@ import type { AIV5Type } from '@mastra/core/agent/message-list';
 import type { VersionOverrides } from '@mastra/core/di';
 import { mergeVersionOverrides, MASTRA_VERSIONS_KEY } from '@mastra/core/di';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { PROVIDER_REGISTRY, parseModelString, defaultGateways } from '@mastra/core/llm';
-import type { ProviderConfig, SystemMessage } from '@mastra/core/llm';
+import { parseModelString } from '@mastra/core/llm';
+import type { SystemMessage } from '@mastra/core/llm';
 import type {
   InputProcessor,
   OutputProcessor,
@@ -71,7 +71,6 @@ import {
   resumeStreamUntilIdleBodySchema,
   recoverBodySchema,
 } from '../schemas/agents';
-import type { ProviderListItem } from '../schemas/agents';
 import { createStoredAgentResponseSchema } from '../schemas/stored-agents';
 import { getAgentSkillResponseSchema, skillDisambiguationQuerySchema } from '../schemas/workspace';
 import type { InferParams, RouteSchemas, ServerRoute } from '../server-adapter/routes';
@@ -81,6 +80,7 @@ import type { Context } from '../types';
 import { toSlug } from '../utils';
 
 import { handleError } from './error';
+import { buildProvidersList, createGatewayManager, isModelUsable } from './provider-catalog';
 import { stripInjectedToolOverrideFields } from './tool-schema-overrides';
 import {
   sanitizeBody,
@@ -231,114 +231,6 @@ async function validateDurableToolCallAccess({
   ) {
     throw new HTTPException(403, { message: 'Access denied: tool call is not suspended on this durable run' });
   }
-}
-
-/**
- * Providers whose apiKeyEnvVar entries are aliases for the same credential (any one
- * suffices), rather than distinct required values (all needed — the default assumption).
- * Keep this list to cases with a confirmed alias relationship; see the "google" entry in
- * PROVIDER_OVERRIDES in packages/core/src/llm/model/gateways/models-dev.ts and #17343.
- */
-const ALIASED_API_KEY_ENV_VAR_PROVIDERS = new Set(['google']);
-
-/**
- * Checks if a provider has its required API key environment variable(s) configured.
- * Handles provider IDs with suffixes (e.g., "openai.chat" -> "openai").
- * Also handles custom gateway providers that are stored with gateway prefix (e.g., "acme/acme-openai").
- * @param providerId - The provider identifier (may include a suffix like ".chat" or be from a custom gateway)
- * @param customProviders - Optional record of custom gateway providers to check
- * @returns true if all required environment variables are set (or, for aliased providers, if any one is set), false otherwise
- */
-export function isProviderConnected(providerId: string, customProviders?: Record<string, ProviderConfig>): boolean {
-  // Vertex AI is a distinct provider from Google AI Studio and must not be collapsed to the
-  // "google" registry entry below (e.g. "google.vertex.chat", "google.vertex.anthropic.chat",
-  // or the bare docs-sidebar id "google-vertex"). Vertex has no registry entry of its own
-  // (provider-registry.json is machine-generated from gateway APIs, so a hand-authored Vertex
-  // entry there would be overwritten on the next regeneration).
-  //
-  // @ai-sdk/google-vertex's createVertex() calls loadSetting() for both project and location,
-  // which throws unconditionally when the env var is absent (no default) — see
-  // GOOGLE_VERTEX_PROJECT/GOOGLE_VERTEX_LOCATION in @ai-sdk/google-vertex's
-  // google-vertex-provider.ts. Both are therefore hard requirements we can check directly.
-  // GOOGLE_APPLICATION_CREDENTIALS is deliberately NOT required here: it's only one of several
-  // ways Application Default Credentials can be supplied (gcloud CLI login, GCE/Cloud Run
-  // metadata server also work with no env var at all), so requiring it would produce new false
-  // negatives for anyone authenticated through one of those other paths.
-  if (providerId === 'google-vertex' || providerId.startsWith('google.vertex')) {
-    return !!(process.env.GOOGLE_VERTEX_PROJECT && process.env.GOOGLE_VERTEX_LOCATION);
-  }
-
-  // Clean provider ID (e.g., "openai.chat" -> "openai")
-  const cleanId = providerId.includes('.') ? providerId.split('.')[0]! : providerId;
-
-  // First, try direct lookup in static registry
-  let provider: ProviderConfig | undefined = PROVIDER_REGISTRY[cleanId as keyof typeof PROVIDER_REGISTRY];
-
-  // If not found, check custom providers
-  if (!provider && customProviders) {
-    provider = customProviders[cleanId];
-  }
-
-  // If not found and doesn't contain a slash, check if it exists with a gateway prefix
-  // This handles custom gateway providers stored as "gateway/provider" in the registry
-  if (!provider && !cleanId.includes('/')) {
-    // Search for a provider ID that matches the pattern "*/cleanId"
-    const registryKeys = Object.keys(PROVIDER_REGISTRY);
-    const matchingKey = registryKeys.find(key => {
-      // Check if the key matches the pattern "gateway/providerId"
-      const parts = key.split('/');
-      return parts.length === 2 && parts[1] === cleanId;
-    });
-
-    if (matchingKey) {
-      provider = PROVIDER_REGISTRY[matchingKey as keyof typeof PROVIDER_REGISTRY];
-    }
-
-    if (!provider && customProviders) {
-      const customMatchingKey = Object.keys(customProviders).find(key => {
-        const parts = key.split('/');
-        return parts.length === 2 && parts[1] === cleanId;
-      });
-      if (customMatchingKey) {
-        provider = customProviders[customMatchingKey];
-      }
-    }
-  }
-
-  if (!provider) return false;
-
-  const envVars = Array.isArray(provider.apiKeyEnvVar) ? provider.apiKeyEnvVar : [provider.apiKeyEnvVar];
-
-  // Most providers with multiple apiKeyEnvVar entries need every one of them (e.g. Netlify's
-  // NETLIFY_TOKEN + NETLIFY_SITE_ID are two distinct required values, checked separately by
-  // NetlifyGateway.getApiKey — see packages/core/src/llm/model/gateways/netlify.ts). Google is a
-  // deliberate exception: GOOGLE_API_KEY and GOOGLE_GENERATIVE_AI_API_KEY are aliases for the same
-  // credential (see the "google" entry in PROVIDER_OVERRIDES in
-  // packages/core/src/llm/model/gateways/models-dev.ts, and #17343), so only one needs to be set.
-  if (ALIASED_API_KEY_ENV_VAR_PROVIDERS.has(cleanId)) {
-    return envVars.some(envVar => !!process.env[envVar]);
-  }
-  return envVars.every(envVar => !!process.env[envVar]);
-}
-
-async function createProviderConnectionChecker(
-  mastra: Context['mastra'],
-  customProviders?: Record<string, ProviderConfig>,
-): Promise<(providerId: string, modelId: string | undefined) => Promise<boolean>> {
-  // Older supported core versions do not export GatewayManager.
-  const coreLlm = await import('@mastra/core/llm');
-  const gatewayManager =
-    'GatewayManager' in coreLlm ? new coreLlm.GatewayManager(Object.values(mastra?.listGateways() ?? {})) : undefined;
-  return async (providerId, modelId) => {
-    if (isProviderConnected(providerId, customProviders)) return true;
-    if (!modelId || !gatewayManager) return false;
-    try {
-      return await gatewayManager.hasAuth(`${providerId}/${modelId}`);
-    } catch {
-      // hasAuth rethrows real gateway failures; one broken gateway must not empty the catalog
-      return false;
-    }
-  };
 }
 
 export interface SerializedProcessor {
@@ -1708,78 +1600,6 @@ export const STREAM_GENERATE_LEGACY_ROUTE = createRoute({
     }
   },
 });
-
-/**
- * Collect the full list of configured AI model providers (static registry +
- * gateway providers) in the shape returned by `GET /agents/providers`.
- *
- * Extracted so the agent-builder available-models endpoint can reuse the exact
- * same source data before applying the model policy.
- */
-export async function buildProvidersList(mastra: Context['mastra']): Promise<ProviderListItem[]> {
-  const allProviders: Record<string, ProviderConfig> = {};
-
-  // When AUTO_BLOCK_EXTERNAL_PROVIDERS is set, surface only providers from
-  // user-registered custom gateways. The static registry (OpenAI, Anthropic,
-  // Gemini, etc.) and the built-in default gateways (models.dev, netlify,
-  // mastra) are all treated as "external" and hidden — useful for enterprise
-  // deployments that route exclusively through their own gateway.
-  const blockExternalProviders =
-    process.env.AUTO_BLOCK_EXTERNAL_PROVIDERS === 'true' || process.env.AUTO_BLOCK_EXTERNAL_PROVIDERS === '1';
-  const defaultGatewayIds = new Set<string>(defaultGateways.map(gateway => gateway.id));
-
-  if (!blockExternalProviders) {
-    for (const [id, provider] of Object.entries(PROVIDER_REGISTRY)) {
-      allProviders[id] = provider as ProviderConfig;
-    }
-  }
-
-  // Include gateway providers (defaults + user-registered)
-  if (mastra) {
-    const allGateways = mastra.listGateways();
-    if (allGateways) {
-      for (const gateway of Object.values(allGateways)) {
-        // Skip models.dev gateway (already covered by PROVIDER_REGISTRY)
-        if (gateway.id === 'models.dev') continue;
-        // When blocking external providers, skip the built-in default gateways
-        // so only user-registered custom gateways remain.
-        if (blockExternalProviders && defaultGatewayIds.has(gateway.id)) continue;
-        try {
-          const gatewayProviders = await gateway.fetchProviders();
-          for (const [providerId, config] of Object.entries(gatewayProviders)) {
-            // Apply the same prefixing logic as registry-generator to avoid
-            // creating duplicate entries alongside PROVIDER_REGISTRY data.
-            // If providerId matches gateway.id, it's a unified gateway — use just the gateway ID.
-            // Otherwise, prefix with gateway.id (e.g., "netlify/anthropic").
-            const prefixedId = providerId === gateway.id ? gateway.id : `${gateway.id}/${providerId}`;
-            // Only add if not already present from PROVIDER_REGISTRY to prevent
-            // duplicates when PROVIDER_REGISTRY already has the prefixed key
-            // (e.g. dev mode where GatewayRegistry includes custom gateways).
-            if (!(prefixedId in allProviders)) {
-              allProviders[prefixedId] = config;
-            }
-          }
-        } catch (error) {
-          console.warn(`Failed to fetch providers from gateway "${gateway.id}":`, error);
-        }
-      }
-    }
-  }
-
-  const isConnected = await createProviderConnectionChecker(mastra, allProviders);
-  return Promise.all(
-    Object.entries(allProviders).map(async ([id, provider]) => ({
-      id,
-      name: provider.name,
-      label: (provider as any).label || provider.name,
-      description: (provider as any).description || '',
-      envVar: provider.apiKeyEnvVar,
-      connected: await isConnected(id, provider.models[0]),
-      docUrl: provider.docUrl,
-      models: [...provider.models],
-    })),
-  );
-}
 
 export const GET_PROVIDERS_ROUTE = createRoute({
   method: 'GET',
@@ -3532,28 +3352,20 @@ async function findConnectedModel(
   agent: Agent,
   mastra: Context['mastra'],
 ): Promise<Awaited<ReturnType<Agent['getModel']>> | null> {
-  const isConnected = await createProviderConnectionChecker(mastra);
+  const authManager = createGatewayManager(mastra);
   const modelList = await agent.getModelList();
 
   if (modelList && modelList.length > 0) {
-    // Find the first enabled model with a connected provider
     for (const modelConfig of modelList) {
-      if (modelConfig.enabled !== false) {
-        const model = modelConfig.model;
-        if (await isConnected(model.provider, model.modelId)) {
-          return model;
-        }
+      if (modelConfig.enabled !== false && (await isModelUsable(authManager, modelConfig.model))) {
+        return modelConfig.model;
       }
     }
     return null;
   }
 
-  // No model list, check the default model
   const defaultModel = await agent.getModel();
-  if (await isConnected(defaultModel.provider, defaultModel.modelId)) {
-    return defaultModel;
-  }
-  return null;
+  return (await isModelUsable(authManager, defaultModel)) ? defaultModel : null;
 }
 
 type EnhanceInstructionsResponse = z.infer<typeof enhanceInstructionsResponseSchema>;
