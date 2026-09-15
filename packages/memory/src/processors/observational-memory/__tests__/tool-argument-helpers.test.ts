@@ -139,13 +139,43 @@ describe('formatToolArgumentsForObserver', () => {
     expect(formatted).toMatch(/second:\n  \|/);
   });
 
-  it('caps a framed single preview at 500 tokens', () => {
+  it('lets a single large field consume the remaining aggregate budget', () => {
     const formatted = formatToolArgumentsForObserver({ content: 'line\n'.repeat(10_000) });
     const previewHeader = 'Large string previews (size-limited):\n';
     const preview = formatted.slice(formatted.indexOf(previewHeader) + previewHeader.length);
 
     expect(preview).toMatch(/^content:\n  \|/);
-    expect(estimateTokenCount(preview)).toBeLessThanOrEqual(500);
+    expect(estimateTokenCount(preview)).toBeGreaterThan(500);
+    expect(estimateTokenCount(formatted)).toBeLessThanOrEqual(2_000);
+  });
+
+  it('reclaims unused preview capacity for later large fields', () => {
+    const concise = `${'short preview '.repeat(20)}complete`;
+    const formatted = formatToolArgumentsForObserver(
+      { concise, extensive: 'long preview line\n'.repeat(10_000) },
+      { maxTokens: 600, maxCharacters: 2_000 },
+    );
+    const concisePreview = formatted.slice(formatted.indexOf('concise:\n'), formatted.indexOf('extensive:\n'));
+    const extensivePreview = formatted.slice(formatted.indexOf('extensive:\n'));
+
+    expect(concisePreview).toContain('complete');
+    expect(concisePreview).not.toContain('characters omitted');
+    expect(estimateTokenCount(extensivePreview)).toBeGreaterThan(300);
+    expect(estimateTokenCount(formatted)).toBeLessThanOrEqual(600);
+    expect(formatted.length).toBeLessThanOrEqual(2_000);
+  });
+
+  it('reserves aggregate capacity for a root string summary and adaptive preview', () => {
+    const formatted = formatToolArgumentsForObserver('root line\n'.repeat(10_000), {
+      maxTokens: 2_000,
+      maxCharacters: 7_000,
+    });
+    const preview = formatted.slice(formatted.indexOf('preview:\n'));
+
+    expect(formatted).toMatch(/^<string, \d+ characters; preview size-limited>\npreview:\n/);
+    expect(estimateTokenCount(preview)).toBeGreaterThan(500);
+    expect(estimateTokenCount(formatted)).toBeLessThanOrEqual(2_000);
+    expect(formatted.length).toBeLessThanOrEqual(7_000);
   });
 
   it('continues to later previews when an earlier path cannot fit its share', () => {

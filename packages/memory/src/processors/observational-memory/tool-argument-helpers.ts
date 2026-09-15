@@ -3,7 +3,6 @@ import { estimateTokenCount } from 'tokenx';
 import { safeSlice } from './string-utils';
 
 const DEFAULT_OBSERVER_TOOL_ARGUMENT_MAX_TOKENS = 2_000;
-const OBSERVER_TOOL_ARGUMENT_PREVIEW_MAX_TOKENS = 500;
 const OBSERVER_TOOL_ARGUMENT_INLINE_STRING_MAX_CHARS = 160;
 const OBSERVER_TOOL_ARGUMENT_MAX_DEPTH = 5;
 const OBSERVER_TOOL_ARGUMENT_MAX_ENTRIES_PER_CONTAINER = 20;
@@ -227,7 +226,7 @@ function indentPreview(value: string): string {
     .join('\n');
 }
 
-function formatPreview(path: string, value: string, limits: RenderLimits): string {
+function formatPreview(path: string, value: string, limits: RenderLimits, prefix = ''): string {
   const sanitizedValue = sanitizeSurrogates(value);
   const marker = (visible: string) => {
     const omitted = sanitizedValue.length - visible.length;
@@ -242,7 +241,8 @@ function formatPreview(path: string, value: string, limits: RenderLimits): strin
     const mid = Math.floor((low + high) / 2);
     const visible = safeSlice(sanitizedValue, mid);
     const candidate = marker(visible);
-    if (fits(candidate, limits)) {
+    const completeCandidate = prefix ? `${prefix}\n${candidate}` : candidate;
+    if (fits(completeCandidate, limits)) {
       best = candidate;
       low = mid + 1;
     } else {
@@ -286,11 +286,7 @@ export function formatToolArgumentsForObserver(
       return fits(primitive, limits) ? primitive : fits('…', limits) ? '…' : '';
     }
     const summary = `<string, ${value.length} characters; preview size-limited>`;
-    const previewLimits = {
-      maxTokens: Math.min(limits.maxTokens, OBSERVER_TOOL_ARGUMENT_PREVIEW_MAX_TOKENS),
-      maxCharacters: limits.maxCharacters,
-    };
-    const preview = formatPreview('preview', value, previewLimits);
+    const preview = formatPreview('preview', value, limits, summary);
     const rendered = appendWithinBudget(summary, preview, limits);
     if (rendered) {
       return rendered;
@@ -412,10 +408,10 @@ export function formatToolArgumentsForObserver(
     const remainingTokens = Math.max(0, limits.maxTokens - estimateTokenCount(rendered));
     const remainingCharacters = Math.max(0, limits.maxCharacters - rendered.length - 1);
     const previewLimits: RenderLimits = {
-      maxTokens: Math.min(OBSERVER_TOOL_ARGUMENT_PREVIEW_MAX_TOKENS, Math.floor(remainingTokens / remainingCount)),
-      maxCharacters: Math.floor(remainingCharacters / remainingCount),
+      maxTokens: estimateTokenCount(rendered) + Math.floor(remainingTokens / remainingCount),
+      maxCharacters: rendered.length + 1 + Math.floor(remainingCharacters / remainingCount),
     };
-    const preview = formatPreview(previews[index]!.path, previews[index]!.value, previewLimits);
+    const preview = formatPreview(previews[index]!.path, previews[index]!.value, previewLimits, rendered);
     if (!preview) {
       omittedPreviews++;
       continue;
