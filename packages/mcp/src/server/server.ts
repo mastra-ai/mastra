@@ -99,13 +99,13 @@ const toMCPRequestHandlerExtra = (ctx: ServerContext): MCPRequestHandlerExtra =>
 const normalizeUiResourceUriMeta = (meta: Record<string, unknown>): Record<string, unknown> => {
   const uiMeta = meta.ui as { resourceUri?: string } | undefined;
   const legacyUri = meta[RESOURCE_URI_META_KEY] as string | undefined;
-  if (uiMeta?.resourceUri && !legacyUri) {
-    return { ...meta, [RESOURCE_URI_META_KEY]: uiMeta.resourceUri };
-  }
-  if (legacyUri && !uiMeta?.resourceUri) {
-    return { ...meta, ui: { ...((meta.ui as object) ?? {}), resourceUri: legacyUri } };
-  }
-  return meta;
+  const resourceUri = uiMeta?.resourceUri || legacyUri;
+  if (!resourceUri) return meta;
+  return {
+    ...meta,
+    ui: { ...((meta.ui as object) ?? {}), resourceUri },
+    [RESOURCE_URI_META_KEY]: resourceUri,
+  };
 };
 
 /**
@@ -504,7 +504,7 @@ export class MCPServer extends MCPServerBase {
 
     // Advertise MCP Apps extension if any tool has UI metadata or appResources are configured
     const hasUiTools = Object.values(this.convertedTools).some(
-      tool => (tool.mcp?._meta as Record<string, any>)?.ui?.resourceUri,
+      tool => getUiResourceUriMeta(tool.mcp?._meta) !== undefined,
     );
     if (hasUiTools || opts.appResources) {
       capabilities.extensions = {
@@ -966,7 +966,7 @@ export class MCPServer extends MCPServerBase {
 
     // Re-apply extension capabilities for the new server instance
     const hasUiTools = Object.values(this.convertedTools).some(
-      tool => (tool.mcp?._meta as Record<string, any>)?.ui?.resourceUri,
+      tool => getUiResourceUriMeta(tool.mcp?._meta) !== undefined,
     );
     if (hasUiTools || this.hasUiResources) {
       capabilities.extensions = {
@@ -1244,15 +1244,16 @@ export class MCPServer extends MCPServerBase {
         // An author-supplied linkage (either form) wins over the descriptor's so nested and
         // legacy keys never disagree; other author `ui.*` fields are kept.
         const uiMeta = getUiResourceUriMeta(authorMeta) ?? getUiResourceUriMeta(tool.mcp?._meta);
-        if (uiMeta || authorMeta) {
-          const authorUi = authorMeta?.ui;
-          response._meta = {
-            ...authorMeta,
-            ...uiMeta,
-            ...(uiMeta && authorUi && typeof authorUi === 'object' && !Array.isArray(authorUi)
-              ? { ui: { ...(authorUi as Record<string, unknown>), ...(uiMeta.ui as Record<string, unknown>) } }
-              : {}),
-          };
+        const authorUi = authorMeta?.ui;
+        const mergedMeta = {
+          ...authorMeta,
+          ...uiMeta,
+          ...(uiMeta && authorUi && typeof authorUi === 'object' && !Array.isArray(authorUi)
+            ? { ui: { ...(authorUi as Record<string, unknown>), ...(uiMeta.ui as Record<string, unknown>) } }
+            : {}),
+        };
+        if (Object.keys(mergedMeta).length > 0) {
+          response._meta = mergedMeta;
         }
 
         return response;

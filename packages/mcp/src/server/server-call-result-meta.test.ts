@@ -4,6 +4,7 @@
  * `_meta` returned by an MCP-aware tool alongside `structuredContent` is preserved.
  */
 import http from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { createTool } from '@mastra/core/tools';
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
@@ -19,7 +20,7 @@ describe('MCPServer tools/call result _meta (Issue #21277)', () => {
   let server: MCPServer;
   let httpServer: http.Server;
   let client: Client;
-  const PORT = 9900 + Math.floor(Math.random() * 100);
+  let baseUrl: URL;
 
   beforeAll(async () => {
     const outputSchema = z.object({ temperature: z.number() });
@@ -42,12 +43,29 @@ describe('MCPServer tools/call result _meta (Issue #21277)', () => {
       execute: async () => ({ temperature: 22 }),
     });
 
+    const conflictingMetaTool = createTool({
+      id: 'conflicting-meta-tool',
+      description: 'Tool with conflicting nested and legacy app URIs',
+      inputSchema: z.object({}),
+      outputSchema,
+      mcp: { _meta: { ui: { resourceUri: APP_URI }, 'ui/resourceUri': LEGACY_URI } },
+      execute: async () => ({ temperature: 23 }),
+    });
+
     const authorMetaTool = createTool({
       id: 'author-meta-tool',
       description: 'MCP-aware tool returning its own _meta',
       inputSchema: z.object({}),
       outputSchema,
       mcp: { _meta: { ui: { resourceUri: APP_URI } } },
+      execute: async () => ({ temperature: 0 }),
+    });
+
+    const emptyMetaTool = createTool({
+      id: 'empty-meta-tool',
+      description: 'MCP-aware tool returning empty _meta',
+      inputSchema: z.object({}),
+      outputSchema,
       execute: async () => ({ temperature: 0 }),
     });
 
@@ -62,7 +80,7 @@ describe('MCPServer tools/call result _meta (Issue #21277)', () => {
     server = new MCPServer({
       name: 'CallResultMetaTestServer',
       version: '1.0.0',
-      tools: { appTool, legacyAppTool, authorMetaTool, plainTool },
+      tools: { appTool, legacyAppTool, conflictingMetaTool, authorMetaTool, emptyMetaTool, plainTool },
     });
 
     // The MCP-aware return shape ({ structuredContent, _meta }) bypasses core's output
@@ -71,15 +89,24 @@ describe('MCPServer tools/call result _meta (Issue #21277)', () => {
       structuredContent: { temperature: 23 },
       _meta: { ui: { resourceUri: 'ui://author/override.html' }, requestId: 'abc' },
     });
+    vi.spyOn(server.convertedTools.emptyMetaTool!, 'execute').mockResolvedValue({
+      structuredContent: { temperature: 27 },
+      _meta: {},
+    });
 
     httpServer = http.createServer(async (req, res) => {
-      const url = new URL(req.url || '', `http://localhost:${PORT}`);
+      const url = new URL(req.url || '', baseUrl);
       await server.startHTTP({ url, httpPath: '/http', req, res, options: { sessionIdGenerator: undefined } });
     });
-    await new Promise<void>(resolve => httpServer.listen(PORT, resolve));
+    baseUrl = await new Promise<URL>(resolve => {
+      httpServer.listen(0, '127.0.0.1', () => {
+        const address = httpServer.address() as AddressInfo;
+        resolve(new URL(`http://127.0.0.1:${address.port}`));
+      });
+    });
 
     client = new Client({ name: 'test-client', version: '1.0.0' }, { capabilities: {} });
-    await client.connect(new StreamableHTTPClientTransport(new URL(`http://localhost:${PORT}/http`)));
+    await client.connect(new StreamableHTTPClientTransport(new URL('/http', baseUrl)));
   });
 
   afterAll(async () => {
@@ -97,6 +124,18 @@ describe('MCPServer tools/call result _meta (Issue #21277)', () => {
   it('normalizes the legacy flat key into ui.resourceUri on the call result', async () => {
     const result = await client.callTool({ name: 'legacyAppTool', arguments: {} });
     expect(result._meta).toEqual({ ui: { resourceUri: LEGACY_URI }, 'ui/resourceUri': LEGACY_URI });
+  });
+
+  it('uses the nested descriptor URI consistently across tools/list and tools/call', async () => {
+    const { tools } = await client.listTools();
+    const listed = tools.find(tool => tool.name === 'conflictingMetaTool');
+    expect(listed?._meta).toMatchObject({
+      ui: { resourceUri: APP_URI },
+      'ui/resourceUri': APP_URI,
+    });
+
+    const result = await client.callTool({ name: 'conflictingMetaTool', arguments: {} });
+    expect(result._meta).toEqual({ ui: { resourceUri: APP_URI }, 'ui/resourceUri': APP_URI });
   });
 
   it('preserves _meta returned by an MCP-aware tool, letting the author override the descriptor', async () => {
@@ -145,6 +184,12 @@ describe('MCPServer tools/call result _meta (Issue #21277)', () => {
       'ui/resourceUri': APP_URI,
       customField: 'descriptor-only',
     });
+  });
+
+  it('omits empty author _meta without descriptor linkage', async () => {
+    const result = await client.callTool({ name: 'emptyMetaTool', arguments: {} });
+    expect(result.structuredContent).toEqual({ temperature: 27 });
+    expect(result._meta).toBeUndefined();
   });
 
   it('omits _meta when neither the descriptor nor the tool provides one', async () => {
