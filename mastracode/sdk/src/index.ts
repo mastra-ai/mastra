@@ -21,6 +21,7 @@ import { Mastra } from '@mastra/core/mastra';
 import { defaultNotificationDeliveryDecision } from '@mastra/core/notifications';
 import {
   AgentsMDInjector,
+  createBackgroundWorkSignalProcessor,
   isBadRequestError,
   PrefillErrorHandler,
   ProviderHistoryCompat,
@@ -49,6 +50,8 @@ import { PostgresStore } from '@mastra/pg';
 import { createThreadOwnershipManager } from './agent-connections/ownership.js';
 import { AgentConnectionsSignalProvider } from './agent-connections/signal-provider.js';
 import type { AgentConnectionsSignalProviderOptions } from './agent-connections/signal-provider.js';
+import { createBackgroundCompletionEvents } from './agents/background-completion-events.js';
+import { createBackgroundCompletionCallbacks } from './agents/background-completion.js';
 import { hasCredentialStoreProvider } from './agents/credential-resolver.js';
 import { getDynamicInstructions } from './agents/instructions.js';
 import { getDynamicMemory, hasSubconsciousTools } from './agents/memory.js';
@@ -447,6 +450,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   // Auth storage (shared with Claude Max / OpenAI providers and AgentController)
   const authStorage = createAuthStorage();
   const globalSettings = loadSettings(config?.settingsPath);
+  const backgroundToolsEnabled = globalSettings.backgroundTools?.enabled ?? false;
   const storedGatewayKey = authStorage.getStoredApiKey(MASTRA_GATEWAY_PROVIDER);
   const storedGatewayUrl = globalSettings.memoryGateway?.baseUrl;
 
@@ -784,6 +788,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   const mastraCodeInputProcessors: InputProcessor[] = [
     ...(config?.inputProcessors ?? []),
     new PlanRejectionAbortProcessor(),
+    ...(backgroundToolsEnabled ? [createBackgroundWorkSignalProcessor()] : []),
     new AgentsMDInjector({
       // Untrusted checkouts (review sessions on PR branches) must not have
       // the working tree's instruction files injected as system reminders —
@@ -907,7 +912,14 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         },
       },
     },
-    tools: createDynamicTools(mcpManager, config?.extraTools, config?.disabledTools, storage, pluginTools),
+    tools: createDynamicTools(
+      mcpManager,
+      config?.extraTools,
+      config?.disabledTools,
+      storage,
+      pluginTools,
+      backgroundToolsEnabled,
+    ),
     hooks: createToolHooks(hookManager, config?.postToolObserver),
     scorers: {
       outcome: {
@@ -1169,10 +1181,21 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   }
 
   const typedStateSchema = stateSchema as PublicSchema<MastraCodeState>;
-  const controller: AgentController<MastraCodeState> = new AgentController<MastraCodeState>({
+  const backgroundCompletionEvents = backgroundToolsEnabled ? createBackgroundCompletionEvents() : undefined;
+  let controller: AgentController<MastraCodeState>;
+  controller = new AgentController<MastraCodeState>({
     id: 'mastra-code',
     resourceId: project.resourceId,
     storage,
+    ...(backgroundToolsEnabled
+      ? {
+          backgroundTasks: {
+            enabled: true,
+            recoverStaleTasksOnStart: false,
+            ...createBackgroundCompletionCallbacks(() => controller, backgroundCompletionEvents),
+          },
+        }
+      : {}),
     observability,
     memory,
     pubsub: signalsPubSub,
@@ -1180,7 +1203,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     agent: codeAgent,
     subagents,
     gateways: [amazonBedrockGateway, mastraCodeGateway],
-    workspace: config?.workspace ?? (args => getDynamicWorkspace(args)),
+    workspace: config?.workspace ?? (args => getDynamicWorkspace({ ...args, backgroundToolsEnabled })),
     browser: config?.browser,
     idGenerator: config?.idGenerator,
     toolCategoryResolver: getToolCategory,
@@ -1327,6 +1350,8 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     builtinOmPacks,
     effectiveDefaults,
     githubSignals,
+    backgroundToolsEnabled,
+    backgroundCompletionEvents,
     // Identity for the single local session (Case 3). Servers ignore these and
     // mint per-request sessions with client-supplied resourceIds instead.
     sessionId,
@@ -1574,7 +1599,16 @@ export async function prepareAgentControllerMount(
   finalize: () => Promise<void>;
 }> {
   const base = await createMastraCodeAgentController(config);
-  const { controller, storage, authStorage, projectPath, codeAgent, mcpManager } = base;
+  const {
+    controller,
+    storage,
+    authStorage,
+    projectPath,
+    codeAgent,
+    mcpManager,
+    backgroundToolsEnabled,
+    backgroundCompletionEvents,
+  } = base;
   const controllerId = config?.controllerId ?? controller.id;
   const apiRoutes = config?.buildApiRoutes?.({ controller, authStorage });
   const extraServerConfig = config?.buildServerConfig?.({ controller, authStorage });
@@ -1589,6 +1623,15 @@ export async function prepareAgentControllerMount(
   const mastraArgs = {
     agentControllers: { [controllerId]: controller },
     storage,
+    ...(backgroundToolsEnabled
+      ? {
+          backgroundTasks: {
+            enabled: true,
+            recoverStaleTasksOnStart: false,
+            ...createBackgroundCompletionCallbacks(() => controller, backgroundCompletionEvents),
+          },
+        }
+      : {}),
     // Mirror the controller's internal-Mastra construction (which passes
     // `config.pubsub` through): the server-owned Mastra must run its event
     // bus on the same transport so streams/workflows/signals stay

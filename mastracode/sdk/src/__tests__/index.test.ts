@@ -143,6 +143,7 @@ function createMockSettings() {
       stagehand: { env: 'LOCAL' },
     },
     observability: { resources: {}, localTracing: false },
+    backgroundTools: { enabled: false },
     signals: {
       unixSocketPubSub: false,
       experimentalGithubSignals: false,
@@ -228,6 +229,7 @@ vi.mock('@mastra/core/processors', () => ({
   AgentsMDInjector: class {
     readonly id = 'agents-md-injector';
   },
+  createBackgroundWorkSignalProcessor: () => ({ id: 'background-work-signals' }),
   isBadRequestError: (error: unknown) =>
     typeof error === 'object' &&
     error !== null &&
@@ -485,6 +487,63 @@ describe('createMastraCode', () => {
     delete process.env.MC_E2E_SECONDARY_KEY;
     delete process.env.MASTRA_GATEWAY_API_KEY;
     delete process.env.MASTRA_GATEWAY_URL;
+  });
+
+  it('omits background task infrastructure unless background tools are enabled', async () => {
+    const { createMastraCode } = await import('../index.js');
+
+    const disabled = await createMastraCode();
+    expect(controllerConstructorMock.mock.calls[0]![0].backgroundTasks).toBeUndefined();
+    expect(disabled.backgroundCompletionEvents).toBeUndefined();
+
+    controllerConstructorMock.mockClear();
+    loadSettingsMock.mockReturnValue({
+      ...createMockSettings(),
+      backgroundTools: { enabled: true },
+    });
+
+    const enabled = await createMastraCode();
+    expect(controllerConstructorMock.mock.calls[0]![0].backgroundTasks.enabled).toBe(true);
+    expect(enabled.backgroundCompletionEvents).toBeDefined();
+  });
+
+  it('registers background signal processing only when background tools are enabled', async () => {
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode({ disablePlugins: true });
+    expect(resolveInputProcessors().map(processor => processor.id)).not.toContain('background-work-signals');
+
+    agentConstructorMock.mockClear();
+    loadSettingsMock.mockReturnValue({
+      ...createMockSettings(),
+      backgroundTools: { enabled: true },
+    });
+
+    await createMastraCode({ disablePlugins: true });
+    expect(resolveInputProcessors().map(processor => processor.id)).toContain('background-work-signals');
+  });
+
+  it('configures server-owned background tasks only when enabled', async () => {
+    const { prepareAgentControllerMount } = await import('../index.js');
+
+    const disabled = await prepareAgentControllerMount();
+    expect(disabled.mastraArgs.backgroundTasks).toBeUndefined();
+
+    loadSettingsMock.mockReturnValue({
+      ...createMockSettings(),
+      backgroundTools: { enabled: true },
+    });
+
+    const enabled = await prepareAgentControllerMount();
+    expect(enabled.mastraArgs.backgroundTasks).toEqual(
+      expect.objectContaining({
+        enabled: true,
+        recoverStaleTasksOnStart: false,
+        onTaskComplete: expect.any(Function),
+        onTaskFailed: expect.any(Function),
+        onTaskCancelled: expect.any(Function),
+      }),
+    );
   });
 
   it('registers the MastraCode gateway and app-provided model hooks on AgentController', async () => {
