@@ -1,7 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../agent';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '../agent/__tests__/mock-model';
+import { createDurableAgent } from '../agent/durable/create-durable-agent';
+import { EventEmitterPubSub } from '../events/event-emitter';
 import { Mastra } from '../mastra';
 import { InMemoryStore } from '../storage';
 import { createWorkflow } from '../workflows/create';
@@ -132,5 +134,45 @@ describe('suspendPayload on resume', () => {
     expect(resumed.status).toBe('success');
     expect(seen).toEqual([{ suspendPayload: { phase: 'confirm', amount: 990 }, resumeData: { confirmed: true } }]);
     if (resumed.status === 'success') expect(resumed.result).toEqual({ charged: 990 });
+  });
+
+  it('is handed back to a tool resumed by a durable agent', async () => {
+    const seen: Array<{ suspendPayload: unknown; resumeData: unknown }> = [];
+    const pubsub = new EventEmitterPubSub();
+    const agent = new Agent({
+      id: 'durable-confirm-agent',
+      name: 'Durable Confirm Agent',
+      instructions: 'Charge after confirmation.',
+      model: createModel(),
+      tools: { confirmTool: createConfirmTool(seen) },
+    });
+    const durableAgent = createDurableAgent({ agent, pubsub });
+    new Mastra({ agents: { durableAgent }, logger: false, storage: new InMemoryStore() });
+
+    let suspended: unknown;
+    const initial = await durableAgent.stream('Charge 990', {
+      onSuspended: data => {
+        suspended = data;
+      },
+    });
+    await vi.waitFor(() => expect(suspended).toBeDefined());
+
+    let finished = false;
+    const resumed = await durableAgent.resume(
+      initial.runId,
+      { confirmed: true },
+      {
+        onFinish: () => {
+          finished = true;
+        },
+      },
+    );
+    await vi.waitFor(() => expect(finished).toBe(true));
+
+    expect(seen).toEqual([{ suspendPayload: { phase: 'confirm', amount: 990 }, resumeData: { confirmed: true } }]);
+
+    resumed.cleanup();
+    initial.cleanup();
+    await pubsub.close();
   });
 });
