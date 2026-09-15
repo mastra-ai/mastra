@@ -88,9 +88,10 @@ test.describe('Agent observability tabs', () => {
       await mockTraceLists(page, url => (traceListUrl = url));
 
       await page.goto('/agents/weather-agent/overview');
-      await expect(page.getByRole('tab', { name: 'Evaluate' })).toBeVisible();
-      await expect(page.getByRole('tab', { name: 'Review' })).toBeVisible();
-      await page.getByRole('tab', { name: 'Agent traces' }).click();
+      await expect(page.getByRole('tab', { name: 'Evals' })).toBeVisible();
+      // Review lives inside Evals, not in the top-level tab bar.
+      await expect(page.getByRole('tab', { name: 'Review' })).toHaveCount(0);
+      await page.getByRole('tab', { name: 'Traces' }).click();
 
       // The traces tab navigates to /agents/:id/traces; the page then enriches the URL
       // with scope filter params, so we assert the path without anchoring on $.
@@ -110,9 +111,12 @@ test.describe('Agent observability tabs', () => {
       await mockSystemPackages(page, false);
 
       await page.goto('/agents/weather-agent/overview');
-      await page.getByRole('tab', { name: 'Agent traces' }).hover();
-
+      await page.getByRole('tab', { name: 'Traces' }).hover();
       await expect(page.getByRole('tooltip').getByText('Add @mastra/observability to enable this tab.')).toBeVisible();
+
+      // Evals drops out of the tab list and becomes an icon-only setup hint.
+      await expect(page.getByRole('tab', { name: 'Evals' })).toHaveCount(0);
+      await expect(page.getByRole('button', { name: 'Evals' })).toHaveAttribute('aria-disabled', 'true');
     });
   });
 

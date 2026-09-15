@@ -1,6 +1,6 @@
 ---
 title: 'Advanced trace queries'
-description: 'Query completed logical traces with recursive predicates, related span and score conditions, grouping, ordering, and cursor pagination.'
+description: 'Query completed traces and thread identities with recursive predicates, related records, ordering, and cursor pagination.'
 packages:
   - '@mastra/client-js'
   - '@mastra/server'
@@ -8,9 +8,9 @@ packages:
 
 # Advanced trace queries
 
-Use `POST /api/observability/traces/query` to find completed logical traces that match trace fields and related span or score records. The endpoint returns a fixed lightweight trace projection, or distinct thread IDs when you group by `threadId`.
+Use `queryTraces()` or `POST /api/observability/traces/query` to find completed logical traces that match trace fields and related span, score, or feedback records. Use `queryTraceThreads()` or `POST /api/observability/threads/query` to find thread identities that qualify across multiple eligible traces.
 
-The endpoint uses the same authentication as other observability routes and requires the `observability:read` permission. The configured observability store must support advanced trace queries.
+Both endpoints use the same authentication as other observability routes and require the `observability:read` permission. The configured observability store must support the requested trace-query or thread-query operation.
 
 ## Query traces with the client SDK
 
@@ -41,7 +41,74 @@ const result = await mastraClient.queryTraces({
 
 A `some` clause matches when one related record satisfies its complete nested predicate. In this example, `scorerId`, `scorerVersion`, and `score` must match on the same score record. A `none` clause uses anti-existence semantics: it matches when no related record satisfies its complete nested predicate. A trace with no related scores therefore matches `scores.none`.
 
-Span clauses examine the current root span and current child spans. The root `timeRange` applies only to the selected current root's `startedAt`. Related spans and scores can participate even when their own timestamps are outside that range. Related records correlate only through a matching non-null `traceId`.
+Span clauses examine the current root span and current child spans. The root `timeRange` applies only to the selected current root's `startedAt`. Related spans, scores, and feedback can participate even when their own timestamps are outside that range. Related records correlate only through a matching non-null `traceId`.
+
+## Query threads across traces
+
+Pass an eligible trace selection and an optional thread predicate to `queryTraceThreads()`:
+
+```typescript
+const result = await mastraClient.queryTraceThreads({
+  traces: {
+    timeRange: {
+      from: '2026-08-01T00:00:00.000Z',
+      to: '2026-08-08T00:00:00.000Z',
+    },
+    where: {
+      op: 'eq',
+      left: { path: 'environment' },
+      right: { literal: 'production' },
+    },
+  },
+  where: {
+    op: 'and',
+    args: [
+      {
+        traces: {
+          some: {
+            scores: {
+              some: {
+                op: 'lt',
+                left: { path: 'score' },
+                right: { literal: 0.6 },
+              },
+            },
+          },
+        },
+      },
+      {
+        traces: {
+          some: {
+            feedback: {
+              some: {
+                op: 'eq',
+                left: { path: 'feedbackType' },
+                right: { literal: 'clinician-correction' },
+              },
+            },
+          },
+        },
+      },
+    ],
+  },
+  page: { limit: 25 },
+})
+```
+
+The server applies `traces.timeRange` and `traces.where` first. This produces the complete eligible trace population. It then derives distinct non-null `threadId` values and evaluates the top-level `where` predicate against eligible traces in each thread.
+
+One `traces.some` clause requires one eligible trace to satisfy its complete nested trace predicate. Separate `traces.some` clauses are independent, so different traces in the same thread can satisfy them. Nested `spans.some`, `scores.some`, and `feedback.some` clauses still require one related record to satisfy every condition inside that clause.
+
+`traces.none: P` uses anti-existence semantics: it matches only when no eligible trace in the thread satisfies `P`. This differs from `traces.some: { feedback: { none: P } }`, which requires at least one eligible trace with no matching feedback record.
+
+The response contains identities only:
+
+```json
+{
+  "threads": [{ "threadId": "thread-123" }],
+  "page": { "next": null }
+}
+```
 
 ## Send an HTTP request
 
@@ -71,15 +138,24 @@ curl --request POST \
 
 ## Request fields
 
+### Trace queries
+
 | Field | Required | Description |
 | - | - | - |
-| `timeRange` | Yes | Trace start-time boundary. `from` is inclusive, `to` is exclusive, and the range can span at most 31 days. Both values must be ISO timestamps. |
-| `where` | No | Recursive trace predicate. Supports scalar conditions and `spans.some`, `spans.none`, `scores.some`, and `scores.none`. |
-| `group` | No | Set to `{ by: ['threadId'] }` to return distinct non-null thread IDs. |
-| `orderBy` | No | One item ordering ungrouped results by `startedAt` or `endedAt`, in `asc` or `desc` order. Defaults to `startedAt desc`. Not accepted with `group`. |
+| `timeRange` | Yes | Trace start-time boundary. `from` is inclusive and `to` is exclusive. Both values must be ISO timestamps, `from` must be earlier than `to`, and the range can't exceed 31 days. |
+| `where` | No | Recursive trace predicate. Supports scalar conditions and `spans`, `scores`, and `feedback` `some` or `none` clauses. |
+| `orderBy` | No | One item ordering results by `startedAt` or `endedAt`, in `asc` or `desc` order. Defaults to `startedAt desc`. |
 | `page` | No | `{ limit, after }`. `limit` defaults to 100 and has a maximum of 1000. Pass the opaque `page.next` value as `after`. |
 
-Unknown fields are rejected. The request can't select a projection, declare joins, or control authorization. Request bodies are limited to 256 KiB.
+### Thread queries
+
+| Field | Required | Description |
+| - | - | - |
+| `traces` | Yes | Eligible trace selection containing `timeRange` and an optional trace `where` predicate. |
+| `where` | No | Recursive thread predicate composed with boolean operators and `traces.some` or `traces.none`. Each quantifier contains a complete trace predicate. |
+| `page` | No | `{ limit, after }`. Thread identities always use fixed ordinal `threadId` ascending order. Pass the opaque `page.next` value as `after`. |
+
+Unknown fields are rejected. Requests can't select a projection, declare joins, request counts or measures, or control authorization. Request bodies are limited to 256 KiB.
 
 ## Query limits
 
@@ -87,10 +163,10 @@ The planner rejects a query before storage execution when it exceeds any of thes
 
 | Input | Maximum |
 | - | - |
-| Root `timeRange` | 31 days |
+| Trace selection `timeRange` | 31 days |
 | Predicate nesting depth | 12 levels |
 | Predicate nodes | 100 |
-| Related `spans` and `scores` clauses | 8 total |
+| Related `traces`, `spans`, `scores`, and `feedback` clauses | 8 total |
 | Values in one `in` or `notIn` set | 100 |
 | Comparison literals and membership values | 1,000 total |
 | String literal | 4,096 UTF-8 bytes |
@@ -340,30 +416,26 @@ An ungrouped query returns only lightweight completed traces:
 }
 ```
 
-A grouped query returns distinct non-null thread IDs in ascending order:
+A thread query returns distinct non-null thread IDs in ordinal ascending order:
 
-```typescript
-const result = await mastraClient.queryTraces({
-  timeRange: {
-    from: '2026-08-01T00:00:00.000Z',
-    to: '2026-08-08T00:00:00.000Z',
-  },
-  group: { by: ['threadId'] },
-})
-// { groups: [{ threadId: 'thread-123' }], page: { next: null } }
+```json
+{
+  "threads": [{ "threadId": "thread-123" }],
+  "page": { "next": null }
+}
 ```
 
 Related evidence isn't embedded in either response. Use the trace-detail and branch APIs to load spans after selecting a result.
 
 ## Pagination and errors
 
-Ordering is deterministic. Ungrouped ordering appends `traceId` ascending as a tie-breaker. Grouped queries always order by `threadId` ascending.
+Ordering is deterministic. Trace ordering appends `traceId` ascending as a tie-breaker. Thread queries always use raw ordinal `threadId` ascending order. Callers can't override it.
 
-Cursors are bound to the accepted normalized query shape and ordering. Reusing a cursor after changing the time range, predicates, grouping, or ordering returns `409`. A malformed cursor returns `400`.
+Cursors are bound to the operation, accepted normalized query, authorization state, and ordering. Reusing a cursor after changing the trace selection, predicates, or ordering returns `409`. Trace and thread cursors aren't interchangeable. A malformed cursor returns `400`.
 
 Cursor pagination is deterministic, but it isn't a database snapshot. Traces or replacement signals written between page requests can change later pages.
 
-PostgreSQL and ClickHouse stop an advanced trace query after 15 seconds by default and return `504` when the database timeout is exceeded. Set `traceQueryTimeoutMs` in the store's vNext observability configuration to an integer from 1 through 300,000 milliseconds to change the timeout. DuckDB doesn't currently provide query-scoped timeout or cancellation through its driver wrapper, so this `504` guarantee doesn't apply to DuckDB.
+PostgreSQL and ClickHouse stop advanced trace and thread queries after 15 seconds by default and return `504` when the database timeout is exceeded. Set `traceQueryTimeoutMs` in the store's vNext observability configuration to an integer from 1 through 300,000 milliseconds to change the timeout. DuckDB doesn't currently provide query-scoped timeout or cancellation through its driver wrapper, so this `504` guarantee doesn't apply to DuckDB.
 
 | Status | Meaning |
 | - | - |
@@ -371,12 +443,12 @@ PostgreSQL and ClickHouse stop an advanced trace query after 15 seconds by defau
 | `409` | The cursor doesn't match the query. |
 | `413` | The request body exceeds 256 KiB. |
 | `422` | The JSON is well formed, but the request is structurally or semantically invalid. The response includes stable issue codes and paths. |
-| `501` | The configured observability store doesn't support advanced trace queries. |
+| `501` | The configured observability store doesn't support the requested trace or thread query. |
 | `504` | A PostgreSQL or ClickHouse query exceeded its configured database execution timeout. |
 
 ## Limitations
 
-The endpoint returns completed traces only. It doesn't support running traces, custom projections, embedded evidence, summaries, aggregations, grouping by fields other than `threadId`, or conditions over an entire group.
+Both operations consider completed traces only. They don't support running traces, custom projections, embedded evidence, summaries, aggregations, counts, measures, or custom grouping.
 
 ## Related
 

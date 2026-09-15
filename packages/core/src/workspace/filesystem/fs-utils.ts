@@ -132,6 +132,9 @@ const MIME_TYPES: Record<string, string> = {
   tf: 'text/x-terraform',
   tfvars: 'text/x-terraform',
   mdx: 'text/markdown',
+  sas: 'text/plain',
+  log: 'text/plain',
+  jsonl: 'application/jsonl',
   // Images
   png: 'image/png',
   jpg: 'image/jpeg',
@@ -263,14 +266,30 @@ const TEXT_EXTENSIONS = new Set([
   '.r',
   '.tf',
   '.tfvars',
+  '.sas',
+  '.log',
+  '.jsonl',
 ]);
 
 /**
- * Check if a file should be treated as text based on extension.
+ * Normalize a text extension to the internal form: lowercased and dot-prefixed.
+ * e.g. `SAS` -> `.sas`, `.LOG` -> `.log`.
  */
-export function isTextFile(filename: string): boolean {
+export function normalizeTextExtension(ext: string): string {
+  const lower = ext.trim().toLowerCase();
+  return lower.startsWith('.') ? lower : `.${lower}`;
+}
+
+/**
+ * Check if a file should be treated as text based on extension.
+ *
+ * @param filename - The filename (or path) to check.
+ * @param extraExtensions - Optional set of additional normalized extensions
+ *   (lowercased, dot-prefixed) to treat as text, in addition to the built-in set.
+ */
+export function isTextFile(filename: string, extraExtensions?: ReadonlySet<string>): boolean {
   const ext = path.extname(filename).toLowerCase();
-  return TEXT_EXTENSIONS.has(ext);
+  return TEXT_EXTENSIONS.has(ext) || (extraExtensions?.has(ext) ?? false);
 }
 
 // =============================================================================

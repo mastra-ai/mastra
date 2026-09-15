@@ -624,6 +624,11 @@ export class MastraFactory {
           boards: this.#boards,
           storage: workItemsStorage,
           audit: auditDomain,
+          autoApprovePlans: async ({ orgId, factoryProjectId }) => {
+            await factoryProjectsStorage.ensureReady();
+            const project = await factoryProjectsStorage.get({ orgId, id: factoryProjectId });
+            return project?.autoApprovePlans ?? false;
+          },
           ...(onTerminalStage ? { onTerminalStage } : {}),
           ...(githubIntegration
             ? {
@@ -1153,8 +1158,36 @@ export class MastraFactory {
       );
       // Integrations return a channels CONFIG; the factory owns construction.
       prepared.base.controller.setChannels(new AgentControllerChannels(integration.channels!(context)));
-      // A publisher posts through the channel SDK this loop just wired up.
-      const publisher = integration.feedPublisher?.(context);
+    }
+
+    // Feed publishers mirror web-feed comments outward (a chat bridge, a
+    // webhook, an issue tracker). Independent of channels(): an integration may
+    // publish without owning a chat channel. READY integrations only — the
+    // array is held by reference by CommentsDomain (see `feedPublishers` above),
+    // so pushing here wires the publisher into comment dispatch.
+    for (const { integration } of integrationRegistrations.filter(
+      ({ integration, ready }) => ready && integration.feedPublisher,
+    )) {
+      const context = buildIntegrationContext(
+        {
+          controller: prepared.base.controller,
+          publicOrigin,
+          auth: routeAuth,
+          stateSigner,
+          sandbox: sandboxConfig,
+          factoryStorage: storage,
+          integrationStorage,
+          sourceControlStorage,
+          configVersion,
+          boardRegistry: this.#boards,
+          factoryReady,
+          domains,
+          feed: commentsDomain,
+          ...(githubIntegration ? { sourceControlOwnerId: 'github' } : {}),
+        },
+        integration.id,
+      );
+      const publisher = integration.feedPublisher!(context);
       if (publisher) feedPublishers.push(publisher);
     }
 
