@@ -100,6 +100,23 @@ describe('MastraPlatformTraceTarget', () => {
     ]);
   });
 
+  it('caps Retry-After at the largest delay supported by Node timers', async () => {
+    const fetch = vi
+      .fn<Fetch>()
+      .mockResolvedValueOnce(new Response(null, { status: 429, headers: { 'Retry-After': '2147484' } }))
+      .mockResolvedValueOnce(acknowledgement());
+    const sleep = vi.fn(async () => undefined);
+    const target = new MastraPlatformTraceTarget(
+      { accessToken: 'secret-token', projectId: 'project_1' },
+      { fetch, sleep },
+    );
+
+    await target.upload(batch());
+
+    expect(sleep).toHaveBeenCalledOnce();
+    expect(sleep).toHaveBeenCalledWith(2_147_483_647, undefined);
+  });
+
   it('retries a network failure with the unchanged deterministic payload', async () => {
     const fetch = vi
       .fn<Fetch>()
