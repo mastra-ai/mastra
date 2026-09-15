@@ -792,4 +792,126 @@ describe('InMemorySkillsStorage', () => {
       ).rejects.toThrow('already exists');
     });
   });
+
+  describe('publishVersion', () => {
+    const publishedSnapshot = {
+      name: 'Published Skill',
+      description: 'Published description',
+      instructions: '# Published',
+      files: [{ name: 'SKILL.md', type: 'file' as const, content: '# Published' }],
+      tree: {
+        entries: {
+          'SKILL.md': {
+            blobHash: 'published-hash',
+            size: 11,
+            mimeType: 'text/markdown',
+          },
+        },
+      },
+    };
+
+    it('creates and activates the exact caller-known version without changing the source version', async () => {
+      await storage.create({
+        skill: {
+          id: 'publish-skill',
+          name: 'Draft Skill',
+          description: 'Draft description',
+          instructions: '# Draft',
+          files: [{ name: 'SKILL.md', type: 'file', content: '# Draft' }],
+        },
+      });
+      const sourceVersion = await storage.getLatestVersion('publish-skill');
+
+      const published = await storage.publishVersion({
+        skillId: 'publish-skill',
+        sourceVersionId: sourceVersion!.id,
+        versionId: 'published-version-id',
+        snapshot: publishedSnapshot,
+      });
+
+      expect(published.id).toBe('published-version-id');
+      expect((await storage.getById('publish-skill'))?.activeVersionId).toBe('published-version-id');
+      expect((await storage.getById('publish-skill'))?.status).toBe('published');
+      expect(await storage.getVersion(sourceVersion!.id)).toMatchObject({
+        id: sourceVersion!.id,
+        name: 'Draft Skill',
+        instructions: '# Draft',
+      });
+      expect(await storage.getVersion('published-version-id')).toMatchObject({
+        ...publishedSnapshot,
+        id: 'published-version-id',
+      });
+    });
+
+    it('rejects a source version belonging to another skill', async () => {
+      await storage.create({
+        skill: { id: 'publish-owner', name: 'Owner', description: 'desc', instructions: 'owner' },
+      });
+      await storage.create({
+        skill: { id: 'publish-other', name: 'Other', description: 'desc', instructions: 'other' },
+      });
+      const otherVersion = await storage.getLatestVersion('publish-other');
+
+      await expect(
+        storage.publishVersion({
+          skillId: 'publish-owner',
+          sourceVersionId: otherVersion!.id,
+          versionId: 'must-not-exist',
+          snapshot: publishedSnapshot,
+        }),
+      ).rejects.toThrow(/version.*publish-other.*publish-owner/i);
+      expect(await storage.getVersion('must-not-exist')).toBeNull();
+    });
+
+    it('removes the inactive version and preserves the previous active version when activation fails', async () => {
+      await storage.create({
+        skill: { id: 'publish-failure', name: 'Draft', description: 'desc', instructions: 'draft' },
+      });
+      const sourceVersion = await storage.getLatestVersion('publish-failure');
+      await storage.update({ id: 'publish-failure', activeVersionId: sourceVersion!.id, status: 'published' });
+      vi.spyOn(storage, 'update').mockRejectedValueOnce(new Error('activation failed'));
+
+      await expect(
+        storage.publishVersion({
+          skillId: 'publish-failure',
+          sourceVersionId: sourceVersion!.id,
+          versionId: 'inactive-orphan',
+          snapshot: publishedSnapshot,
+        }),
+      ).rejects.toThrow('activation failed');
+
+      expect(await storage.getVersion('inactive-orphan')).toBeNull();
+      expect((await storage.getById('publish-failure'))?.activeVersionId).toBe(sourceVersion!.id);
+      expect((await storage.getById('publish-failure'))?.status).toBe('published');
+    });
+
+    it('never activates a competing version when concurrent fallback publications conflict', async () => {
+      await storage.create({
+        skill: { id: 'publish-race', name: 'Draft', description: 'desc', instructions: 'draft' },
+      });
+      const sourceVersion = await storage.getLatestVersion('publish-race');
+
+      const results = await Promise.allSettled([
+        storage.publishVersion({
+          skillId: 'publish-race',
+          sourceVersionId: sourceVersion!.id,
+          versionId: 'race-a',
+          snapshot: { ...publishedSnapshot, instructions: 'A' },
+        }),
+        storage.publishVersion({
+          skillId: 'publish-race',
+          sourceVersionId: sourceVersion!.id,
+          versionId: 'race-b',
+          snapshot: { ...publishedSnapshot, instructions: 'B' },
+        }),
+      ]);
+
+      const fulfilled = results.find(result => result.status === 'fulfilled');
+      const rejected = results.find(result => result.status === 'rejected');
+      expect(fulfilled?.status).toBe('fulfilled');
+      expect(rejected?.status).toBe('rejected');
+      if (fulfilled?.status !== 'fulfilled') throw new Error('Expected one publication to succeed');
+      expect((await storage.getById('publish-race'))?.activeVersionId).toBe(fulfilled.value.id);
+    });
+  });
 });

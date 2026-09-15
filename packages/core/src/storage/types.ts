@@ -1998,6 +1998,8 @@ export interface StorageSkillFileNode {
   type: 'file' | 'folder';
   content?: string;
   children?: StorageSkillFileNode[];
+  encoding?: 'utf-8' | 'base64';
+  mimeType?: string;
 }
 
 /**
