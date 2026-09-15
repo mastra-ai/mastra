@@ -30,4 +30,14 @@ invoke_agent weather-agent
         └── chat gpt-5        gen_ai.usage.input_tokens=85
 ```
 
+No configuration change is needed. The same exporter setup now emits the per-call `chat` spans:
+
+```ts
+import { OtelExporter } from '@mastra/otel-exporter';
+
+const exporter = new OtelExporter({
+  provider: { custom: { endpoint: 'http://localhost:4318/v1/traces' } },
+});
+```
+
 Backends sum the `chat` spans to the same total as before and can now show each call. When paired with an older `@mastra/observability` that does not emit inference spans, the generation span keeps the `chat` role as before. Dashboards that read usage from the old generation span should read the `chat` spans instead. Fixes #23872.
