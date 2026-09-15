@@ -771,6 +771,10 @@ export function defaultOMProgressState(): OMProgressState {
 // Events
 // =============================================================================
 
+export type AgentControllerTaskState =
+  | { threadId: string | null; status: 'loading' | 'unavailable'; tasks?: never }
+  | { threadId: string; status: 'ready'; tasks: TaskItemSnapshot[] };
+
 /**
  * Events emitted by the controller that UIs can subscribe to.
  *
@@ -957,8 +961,10 @@ export type AgentControllerEvent =
       durationMs: number;
     }
   | { type: 'subagent_model_changed'; modelId: string; scope: 'global' | 'thread'; agentType?: string }
+  | { type: 'task_snapshot'; snapshot: AgentControllerTaskState }
   | {
       type: 'task_updated';
+      threadId: string;
       tasks: TaskItemSnapshot[];
     }
   | {

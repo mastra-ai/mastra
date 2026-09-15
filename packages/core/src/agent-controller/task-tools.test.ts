@@ -300,11 +300,8 @@ describe('task tool display bridge', () => {
     const events: AgentControllerEvent[] = [];
     session.subscribe(event => events.push(event));
 
-    // Real controller request context — wires emitEvent -> controller.emit, the
-    // display-only bridge the agnostic task tools call when present.
     const requestContext: RequestContext = await (controller as any).buildRequestContext(session);
 
-    // Storage with the always-wired threadState domain so the tool can persist.
     const storage = new InMemoryStore();
 
     const result = await (taskWriteTool as any).execute(
@@ -312,8 +309,7 @@ describe('task tool display bridge', () => {
       {
         requestContext,
         mastra: { getStorage: () => storage },
-        // Memory-backed agent context so the tool is not gated to a no-op.
-        agent: { threadId: 'thread-1', resourceId: 'resource-1', messages: [] },
+        agent: { threadId: session.thread.requireId(), resourceId: session.identity.getResourceId(), messages: [] },
       },
     );
 
@@ -321,17 +317,14 @@ describe('task tool display bridge', () => {
 
     const taskUpdated = events.filter(event => event.type === 'task_updated');
     expect(taskUpdated).toHaveLength(1);
-    expect((taskUpdated[0] as Extract<AgentControllerEvent, { type: 'task_updated' }>).tasks).toEqual([
+    expect(taskUpdated[0]?.tasks).toEqual([
       { id: 'task_write_tests', content: 'Write tests', status: 'pending', activeForm: 'Writing tests' },
     ]);
 
-    // The controller display snapshot tracks the emitted task list (display-only;
-    // the task list itself lives on the agent state-signal lane, not in state).
     expect(session.displayState.get().tasks).toEqual([
       { id: 'task_write_tests', content: 'Write tests', status: 'pending', activeForm: 'Writing tests' },
     ]);
 
-    // Tasks are no longer mirrored into controller session state.
     expect(session.state.get().tasks).toBeUndefined();
   });
 });

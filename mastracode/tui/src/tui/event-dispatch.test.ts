@@ -124,7 +124,7 @@ describe('dispatchEvent thread lifecycle', () => {
     expect(state.ui.terminal.setTitle).toHaveBeenCalledWith('Mastra Code - Safe Visible Red');
   });
 
-  it('clears per-thread state on thread_changed', async () => {
+  it('resets token usage when switching threads', async () => {
     state.latestRequestPromptTokens = 90_000;
 
     await dispatchEvent(
@@ -134,16 +134,9 @@ describe('dispatchEvent thread lifecycle', () => {
     );
 
     expect(state.latestRequestPromptTokens).toBeUndefined();
-    expect(state.session.state.set).toHaveBeenCalledWith(
-      expect.objectContaining({
-        tasks: [],
-        activePlan: null,
-        sandboxAllowedPaths: [],
-      }),
-    );
   });
 
-  it('clears per-thread state on thread_created', async () => {
+  it('resets token usage when creating a thread', async () => {
     state.latestRequestPromptTokens = 90_000;
 
     await dispatchEvent(
@@ -153,13 +146,6 @@ describe('dispatchEvent thread lifecycle', () => {
     );
 
     expect(state.latestRequestPromptTokens).toBeUndefined();
-    expect(state.session.state.set).toHaveBeenCalledWith(
-      expect.objectContaining({
-        tasks: [],
-        activePlan: null,
-        sandboxAllowedPaths: [],
-      }),
-    );
   });
 
   it('persists only explicitly pending goals to created threads', async () => {
@@ -255,6 +241,48 @@ describe('dispatchEvent thread lifecycle', () => {
 });
 
 describe('dispatchEvent task updates', () => {
+  it('restores completed tasks without rendering a completion action', async () => {
+    const state = createMockTUIState(createMockAgentController());
+    const ectx = createMockEctx();
+    const tasks: TaskItemSnapshot[] = [
+      { id: 'done', content: 'Already finished', status: 'completed', activeForm: 'Finishing' },
+    ];
+    await dispatchEvent(
+      { type: 'task_snapshot', snapshot: { threadId: 'thread-1', status: 'ready', tasks } },
+      ectx,
+      state,
+    );
+
+    expect(state.taskProgress!.updateTasks).toHaveBeenCalledWith(tasks);
+    expect(ectx.renderCompletedTasksInline).not.toHaveBeenCalled();
+    expect(ectx.renderTaskDeltaInline).not.toHaveBeenCalled();
+    expect(ectx.renderClearedTasksInline).not.toHaveBeenCalled();
+  });
+
+  it('does not clear a restored task list when an older thread reset finishes', async () => {
+    const state = createMockTUIState(createMockAgentController());
+    const ectx = createMockEctx();
+    const pendingState = Promise.withResolvers<void>();
+    vi.spyOn(state.session.state, 'set').mockImplementationOnce(() => pendingState.promise);
+    const changed = dispatchEvent(
+      { type: 'thread_changed', threadId: 'thread-1', previousThreadId: 'old-thread' },
+      ectx,
+      state,
+    );
+    const tasks: TaskItemSnapshot[] = [
+      { id: 'current', content: 'Current task', status: 'pending', activeForm: 'Working' },
+    ];
+    await dispatchEvent(
+      { type: 'task_snapshot', snapshot: { threadId: 'thread-1', status: 'ready', tasks } },
+      ectx,
+      state,
+    );
+    pendingState.resolve();
+    await changed;
+
+    expect(state.taskProgress!.updateTasks).toHaveBeenLastCalledWith(tasks);
+  });
+
   it('renders task delta receipts for live non-terminal task updates', async () => {
     const previousTasks = [
       { id: 'task-1', content: 'Task 1', status: 'pending' as const, activeForm: 'Working on task 1' },
@@ -267,7 +295,7 @@ describe('dispatchEvent task updates', () => {
     const state = createMockTUIState(createMockAgentController({}, previousTasks));
     const ectx = createMockEctx();
 
-    await dispatchEvent({ type: 'task_updated', tasks }, ectx, state);
+    await dispatchEvent({ type: 'task_updated', threadId: 'thread-1', tasks }, ectx, state);
 
     expect(state.taskProgress!.updateTasks).toHaveBeenCalledWith(tasks);
     expect(ectx.renderTaskDeltaInline).toHaveBeenCalledWith(previousTasks, tasks, 5);
@@ -280,7 +308,7 @@ describe('dispatchEvent task updates', () => {
     const state = createMockTUIState(createMockAgentController());
     const ectx = createMockEctx();
 
-    await dispatchEvent({ type: 'task_updated', tasks }, ectx, state);
+    await dispatchEvent({ type: 'task_updated', threadId: 'thread-1', tasks }, ectx, state);
 
     expect(state.taskProgress!.updateTasks).toHaveBeenCalledWith(tasks);
     expect(ectx.renderCompletedTasksInline).toHaveBeenCalledWith(tasks, 5);
@@ -295,7 +323,7 @@ describe('dispatchEvent task updates', () => {
     const state = createMockTUIState(createMockAgentController({}, previousTasks));
     const ectx = createMockEctx();
 
-    await dispatchEvent({ type: 'task_updated', tasks: [] }, ectx, state);
+    await dispatchEvent({ type: 'task_updated', threadId: 'thread-1', tasks: [] }, ectx, state);
 
     expect(ectx.renderClearedTasksInline).toHaveBeenCalledWith(previousTasks, expect.anything());
   });

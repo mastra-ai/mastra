@@ -358,12 +358,16 @@ async function resolveTaskStore(context: TaskToolContext): Promise<ResolvedThrea
  * lives in the `threadState` store + state-signal lane, not in AgentController state.
  */
 interface AgentControllerDisplayBridge {
-  emitEvent?: (event: { type: 'task_updated'; tasks: TaskItemSnapshot[] }) => void;
+  emitEvent?: (event: { type: 'task_updated'; threadId: string; tasks: TaskItemSnapshot[] }) => void;
 }
 
-function emitTaskDisplayUpdate(requestContext: RequestContext | undefined, tasks: TaskItemSnapshot[]): void {
+function emitTaskDisplayUpdate(
+  requestContext: RequestContext | undefined,
+  threadId: string,
+  tasks: TaskItemSnapshot[],
+): void {
   const controllerCtx = requestContext?.get('controller') as AgentControllerDisplayBridge | undefined;
-  controllerCtx?.emitEvent?.({ type: 'task_updated', tasks });
+  controllerCtx?.emitEvent?.({ type: 'task_updated', threadId, tasks });
 }
 
 function noMemoryResult(): TaskToolResult {
@@ -409,7 +413,7 @@ async function applyTaskMutation(
     await store.setState({ threadId, type: TASK_STATE_TYPE, value: result.tasks });
     // Surface the new list to the task state processor for this step's snapshot.
     context.requestContext?.set(TASKS_REQUEST_CONTEXT_KEY, result.tasks);
-    emitTaskDisplayUpdate(context.requestContext, result.tasks);
+    emitTaskDisplayUpdate(context.requestContext, threadId, result.tasks);
   }
   return result;
 }

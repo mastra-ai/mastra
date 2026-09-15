@@ -169,6 +169,7 @@ export type ScenarioName =
   | 'task-inline-transitions'
   | 'task-patch-tools'
   | 'task-progress-events'
+  | 'task-state-reload'
   | 'terminal-resize-reflow'
   | 'task-prompt-context-next-turn'
   | 'thread-history'

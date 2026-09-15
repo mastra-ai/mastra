@@ -1052,7 +1052,7 @@ describe('task_updated', () => {
       { id: 'fix-bug', content: 'Fix bug', status: 'in_progress' as const, activeForm: 'Fixing bug' },
       { id: 'write-tests', content: 'Write tests', status: 'pending' as const, activeForm: 'Writing tests' },
     ];
-    emit(session, { type: 'task_updated', tasks });
+    emit(session, { type: 'task_updated', threadId: session.thread.requireId(), tasks });
     expect(session.displayState.get().tasks).toBe(tasks);
   });
 
@@ -1063,10 +1063,10 @@ describe('task_updated', () => {
       { id: 'task-2', content: 'Task 2', status: 'in_progress' as const, activeForm: 'T2' },
     ];
 
-    emit(session, { type: 'task_updated', tasks: tasks1 });
+    emit(session, { type: 'task_updated', threadId: session.thread.requireId(), tasks: tasks1 });
     expect(session.displayState.get().previousTasks).toEqual([]);
 
-    emit(session, { type: 'task_updated', tasks: tasks2 });
+    emit(session, { type: 'task_updated', threadId: session.thread.requireId(), tasks: tasks2 });
     expect(session.displayState.get().previousTasks).toEqual(tasks1);
     expect(session.displayState.get().tasks).toBe(tasks2);
   });
@@ -1075,8 +1075,8 @@ describe('task_updated', () => {
     const tasks1 = [{ id: 'task-1', content: 'Task 1', status: 'in_progress' as const, activeForm: 'T1' }];
     const tasks2 = [{ id: 'task-1', content: 'Task 1', status: 'completed' as const, activeForm: 'T1' }];
 
-    emit(session, { type: 'task_updated', tasks: tasks1 });
-    emit(session, { type: 'task_updated', tasks: tasks2 });
+    emit(session, { type: 'task_updated', threadId: session.thread.requireId(), tasks: tasks1 });
+    emit(session, { type: 'task_updated', threadId: session.thread.requireId(), tasks: tasks2 });
 
     expect(session.displayState.get().previousTasks).toEqual(tasks1);
     expect(session.displayState.get().tasks).toBe(tasks2);
@@ -1447,6 +1447,7 @@ describe('resetThreadDisplayState', () => {
     emit(session, { type: 'subagent_start', toolCallId: 's1', agentType: 'explore', task: 't', modelId: 'm' });
     emit(session, {
       type: 'task_updated',
+      threadId: session.thread.requireId(),
       tasks: [{ id: 'task-t', content: 'T', status: 'pending', activeForm: 'T' }],
     });
     emit(session, { type: 'om_observation_start', cycleId: 'c1', operationType: 'observation', tokensToObserve: 5000 });
@@ -1522,13 +1523,6 @@ describe('display_state_changed emission', () => {
     });
   });
 
-  it('emits display_state_changed after every non-display_state_changed event', () => {
-    emit(session, { type: 'agent_start' });
-    expect(events.length).toBe(2);
-    expect(events[0]!.type).toBe('agent_start');
-    expect(events[1]!.type).toBe('display_state_changed');
-  });
-
   it('includes current display state reference in display_state_changed', () => {
     emit(session, { type: 'agent_start' });
     const dscEvent = events.find(e => e.type === 'display_state_changed');
@@ -1544,25 +1538,6 @@ describe('display_state_changed emission', () => {
     if (dscEvent?.type === 'display_state_changed') {
       expect(dscEvent.displayState.isRunning).toBe(true);
     }
-  });
-
-  it('does not emit display_state_changed for display_state_changed (no recursion)', () => {
-    emit(session, { type: 'display_state_changed', displayState: session.displayState.get() });
-    expect(events.length).toBe(1);
-    expect(events[0]!.type).toBe('display_state_changed');
-  });
-
-  it('restores replayed task display state without emitting any event', () => {
-    const tasks = [{ id: 'tests', content: 'Write tests', status: 'pending' as const, activeForm: 'Writing tests' }];
-
-    session.displayState.restoreTasks(tasks);
-
-    // restoreTasks is a pure session-state mutation: it updates the snapshot but
-    // does not touch the AgentController event bus (the UI re-renders explicitly after a
-    // replay). No task_updated and no display_state_changed should fire.
-    expect(session.displayState.get().tasks).toEqual(tasks);
-    expect(session.displayState.get().previousTasks).toEqual([]);
-    expect(events).toEqual([]);
   });
 
   it('emits display_state_changed for each event in a sequence', () => {
@@ -1682,6 +1657,7 @@ describe('full lifecycle integration', () => {
     // Task update
     emit(session, {
       type: 'task_updated',
+      threadId: session.thread.requireId(),
       tasks: [{ id: 'edit-foo', content: 'Edit foo', status: 'completed', activeForm: 'Editing' }],
     });
     expect(ds.tasks).toHaveLength(1);

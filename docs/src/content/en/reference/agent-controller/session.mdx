@@ -105,6 +105,11 @@ The session is organized into sub-objects, each owning one domain of per-convers
     description: 'The pending tool-approval gate. See approval methods below.',
   },
   {
+    name: 'tasks',
+    type: 'SessionTasks',
+    description: 'Current-thread task availability and task list. See task-state methods below.',
+  },
+  {
     name: 'displayState',
     type: 'SessionDisplayState',
     description:
@@ -142,6 +147,8 @@ Returns: `Record<string, string>`
 
 Subscribe to this session's isolated event bus. The method returns an unsubscribe function.
 
+Each subscription immediately receives a `task_snapshot` for the current thread. This snapshot restores state for that subscriber only. It doesn't emit `task_updated` activity or notify existing subscribers. Subsequent task snapshots and live updates use the same event bus.
+
 ```typescript
 const unsubscribe = session.subscribe(event => {
   console.log(event.type)
@@ -151,6 +158,29 @@ unsubscribe()
 ```
 
 Returns: `() => void`
+
+### Task state
+
+#### `tasks.get()`
+
+Read the current `AgentControllerTaskState` without opening another subscription.
+
+```typescript
+const snapshot = session.tasks.get()
+if (snapshot.status === 'ready') {
+  console.log(snapshot.threadId, snapshot.tasks)
+}
+```
+
+The snapshot has three states:
+
+- `loading`: the thread isn't bound yet or its tasks are being read.
+- `ready`: `threadId` identifies the active thread and `tasks` is its authoritative list. An empty array clears the previous list.
+- `unavailable`: task storage couldn't be read. This isn't an empty task list.
+
+Thread changes discard the previous binding. Failed reads preserve known live tasks for the same thread. Reads superseded by a thread change or live update are ignored.
+
+`task_snapshot` events carry this state in `event.snapshot`. `task_updated` events represent live mutations and carry both `threadId` and the complete `tasks` list. Use snapshots to restore a task panel without creating activity or completion receipts. Message history isn't the source of current tasks.
 
 ### Messages and run control
 
