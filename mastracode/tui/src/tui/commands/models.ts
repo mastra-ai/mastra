@@ -6,6 +6,7 @@ import {
   saveSettings,
   stripMastraCodeCustomProviderPrefix,
   THREAD_ACTIVE_MODEL_PACK_ID_KEY,
+  THREAD_FALLBACK_STATUS_KEY,
 } from '@mastra/code-sdk/onboarding/settings';
 import { ModelSelectorComponent } from '../components/model-selector.js';
 import type { ModelItem } from '../components/model-selector.js';
@@ -28,6 +29,9 @@ async function switchCurrentModeModel(ctx: SlashCommandContext, selectedModelId:
   const threadSettings = parseThreadSettings(thread?.metadata);
   const previousModeSetting = thread?.metadata?.[modeSettingKey];
   const previousPackSetting = thread?.metadata?.[THREAD_ACTIVE_MODEL_PACK_ID_KEY];
+  const previousFallbackStatus = thread?.metadata?.[THREAD_FALLBACK_STATUS_KEY];
+  const previousSessionPackId = (ctx.state.session.state?.get?.() as { activeModelPackId?: string } | undefined)
+    ?.activeModelPackId;
   const activePackId = threadSettings.activeModelPackId ?? nextSettings.models.activeModelPackId;
   const builtinPack = activePackId ? getBuiltinModePack(activePackId) : undefined;
   const customPack = activePackId?.startsWith('custom:')
@@ -80,6 +84,8 @@ async function switchCurrentModeModel(ctx: SlashCommandContext, selectedModelId:
 
   let modeSettingSaved = false;
   let packSettingSaved = false;
+  let sessionPackSaved = false;
+  let fallbackStatusCleared = false;
   let globalSettingsWriteStarted = false;
   try {
     await ctx.state.session.thread.setSetting({ key: modeSettingKey, value: modelId });
@@ -95,6 +101,9 @@ async function switchCurrentModeModel(ctx: SlashCommandContext, selectedModelId:
     saveSettings(nextSettings);
     await ctx.state.session.model.switch({ modelId, scope: 'global' });
     await ctx.state.session.state.set({ activeModelPackId: nextPackId });
+    sessionPackSaved = true;
+    await ctx.state.session.thread.setSetting({ key: THREAD_FALLBACK_STATUS_KEY, value: undefined });
+    fallbackStatusCleared = true;
   } catch (error) {
     if (globalSettingsWriteStarted) {
       try {
@@ -105,6 +114,17 @@ async function switchCurrentModeModel(ctx: SlashCommandContext, selectedModelId:
     }
 
     const rollbacks: Array<Promise<unknown>> = [];
+    if (sessionPackSaved) {
+      rollbacks.push(ctx.state.session.state.set({ activeModelPackId: previousSessionPackId }));
+    }
+    if (fallbackStatusCleared) {
+      rollbacks.push(
+        ctx.state.session.thread.setSetting({
+          key: THREAD_FALLBACK_STATUS_KEY,
+          value: previousFallbackStatus,
+        }),
+      );
+    }
     if (packSettingSaved) {
       rollbacks.push(
         ctx.state.session.thread.setSetting({
@@ -123,6 +143,7 @@ async function switchCurrentModeModel(ctx: SlashCommandContext, selectedModelId:
     throw error;
   }
 
+  ctx.state.fallbackStatus = undefined;
   ctx.updateStatusLine();
   ctx.showInfo(`Switched ${modeId} mode to ${modelId}`);
 }

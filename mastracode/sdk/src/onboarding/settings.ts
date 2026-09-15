@@ -4,7 +4,8 @@
  * so they carry across threads and restarts.
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { MastraBrowser } from '@mastra/core/browser';
 import type { LSPConfig } from '@mastra/core/workspace';
@@ -970,7 +971,7 @@ function migrateFromAuth(settingsPath: string): boolean {
     delete authData[key];
   }
   try {
-    writeFileSync(authPath, JSON.stringify(authData, null, 2), 'utf-8');
+    writeFileAtomically(authPath, JSON.stringify(authData, null, 2));
   } catch {
     // Non-fatal — settings are saved, auth cleanup can fail
   }
@@ -1181,24 +1182,19 @@ export function resolveModePackModels(
 }
 
 /**
- * The pack a session's current model came from. Prefer the explicitly active
- * pack when its model matches: multiple packs may intentionally use the same
- * model, and first-match inference would otherwise attach the wrong fallback
- * chain. Sessions on a manual /model override match no pack — callers treat
- * that as "no fallback chain".
+ * Resolve a session's explicitly active pack when its mode model still matches.
+ * Model matching alone is not pack identity: multiple packs may intentionally
+ * use the same model, and inference would attach an unrelated fallback chain.
  */
 export function findModePackForModel(
   settings: GlobalSettings,
   packs: Array<{ id: string; models: Record<string, string> }>,
   modelId: string,
   modeId: string,
-  activePackId = settings.models.activeModelPackId,
+  activePackId: string | undefined,
 ): { id: string; models: Record<string, string> } | undefined {
   const activePack = packs.find(pack => pack.id === activePackId);
-  if (activePack && resolveModePackModels(settings, activePack)[modeId] === modelId) {
-    return activePack;
-  }
-  return packs.find(pack => resolveModePackModels(settings, pack)[modeId] === modelId);
+  return activePack && resolveModePackModels(settings, activePack)[modeId] === modelId ? activePack : undefined;
 }
 
 export function resolveModelDefaults(
@@ -1311,6 +1307,16 @@ function getSignalSettingsForSave(settings: GlobalSettings, filePath: string): S
   return settings.signals;
 }
 
+function writeFileAtomically(filePath: string, content: string): void {
+  const tempPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
+  try {
+    writeFileSync(tempPath, content, 'utf-8');
+    renameSync(tempPath, filePath);
+  } finally {
+    rmSync(tempPath, { force: true });
+  }
+}
+
 export function saveSettings(settings: GlobalSettings, filePath: string = getSettingsPath()): void {
   const dir = dirname(filePath);
   if (!existsSync(dir)) {
@@ -1319,7 +1325,7 @@ export function saveSettings(settings: GlobalSettings, filePath: string = getSet
   const signals = getSignalSettingsForSave(settings, filePath);
   settings.signals = signals;
   loadedSignalSettings.set(settings, cloneSignalSettings(signals));
-  writeFileSync(filePath, JSON.stringify(settings, null, 2), 'utf-8');
+  writeFileAtomically(filePath, JSON.stringify(settings, null, 2));
 }
 
 /** Marker file name to track which provider last used a profile. */

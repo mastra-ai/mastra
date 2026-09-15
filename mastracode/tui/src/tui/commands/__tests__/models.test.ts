@@ -25,6 +25,7 @@ vi.mock('@mastra/code-sdk/onboarding/settings', () => ({
   }),
   stripMastraCodeCustomProviderPrefix: (modelId: string) => modelId,
   THREAD_ACTIVE_MODEL_PACK_ID_KEY: 'activeModelPackId',
+  THREAD_FALLBACK_STATUS_KEY: 'mastracodeFallbackStatus',
 }));
 
 vi.mock('@mastra/code-sdk/onboarding/packs', () => ({
@@ -351,7 +352,10 @@ describe('handleModelCommand', () => {
     };
     const invalidateAvailableModelsCache = vi.fn();
     const switchModel = vi.fn(async () => undefined);
-    const threadSettings: Record<string, unknown> = { activeModelPackId: 'openai' };
+    const threadSettings: Record<string, unknown> = {
+      activeModelPackId: 'openai',
+      mastracodeFallbackStatus: { usingPack: 'OpenAI', failedPack: 'Anthropic' },
+    };
     const setSetting = vi.fn(async ({ key, value }: { key: string; value: unknown }) => {
       threadSettings[key] = value;
     });
@@ -397,6 +401,7 @@ describe('handleModelCommand', () => {
           },
         },
         ui: { hideOverlay: vi.fn() },
+        fallbackStatus: { usingPack: 'OpenAI', failedPack: 'Anthropic' },
       },
       updateStatusLine: vi.fn(),
       showInfo: vi.fn(),
@@ -421,6 +426,8 @@ describe('handleModelCommand', () => {
     expect(savedSettings.customModelPacks).toEqual([]);
     expect(setSetting).toHaveBeenNthCalledWith(1, { key: 'modeModelId_build', value: model.id });
     expect(setSetting).toHaveBeenNthCalledWith(2, { key: 'activeModelPackId', value: 'openai' });
+    expect(setSetting).toHaveBeenNthCalledWith(3, { key: 'mastracodeFallbackStatus', value: undefined });
+    expect(ctx.state.fallbackStatus).toBeUndefined();
   });
 
   it('keeps mode selections isolated between threads', async () => {

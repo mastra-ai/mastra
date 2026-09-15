@@ -2307,6 +2307,7 @@ export class AgentController<TState = {}> {
       getState: () => session.state.get(),
       setState: updates => session.state.set(updates),
       updateState: updater => session.state.update(updater),
+      setThreadSetting: setting => session.thread.setSetting(setting),
       threadId: scope?.threadId ?? session.thread.getId(),
       resourceId: scope?.resourceId ?? session.identity.getResourceId(),
       scope: this.#sessionScopes.get(session),

@@ -7,6 +7,8 @@ import type { ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import type { Component } from '@earendil-works/pi-tui';
 import type { BackgroundCompletionEvent } from '@mastra/code-sdk/agents/background-completion-events';
+import { PACK_FALLBACK_STATE_KEY } from '@mastra/code-sdk/auth/account-rotation-processor';
+import type { PendingPackFallback } from '@mastra/code-sdk/auth/account-rotation-processor';
 import { getOAuthProviders } from '@mastra/code-sdk/auth/storage';
 import {
   getAvailableModePacks,
@@ -143,6 +145,18 @@ export async function syncInitialThreadState(state: TUIState): Promise<void> {
   setCurrentThreadTitle(state, initThread?.title);
   const metadata = initThread?.metadata as Record<string, unknown> | undefined;
   syncFallbackStatusFromMetadata(state, metadata);
+  const pendingFallback = metadata?.[PACK_FALLBACK_STATE_KEY] as Partial<PendingPackFallback> | null | undefined;
+  if (
+    pendingFallback &&
+    typeof pendingFallback === 'object' &&
+    typeof pendingFallback.fromPackId === 'string' &&
+    typeof pendingFallback.toPackId === 'string' &&
+    typeof pendingFallback.toModelId === 'string' &&
+    (pendingFallback.reason === 'pool-exhausted' || pendingFallback.reason === 'persistent-outage') &&
+    typeof pendingFallback.at === 'string'
+  ) {
+    await state.session.state.set({ [PACK_FALLBACK_STATE_KEY]: pendingFallback as PendingPackFallback });
+  }
   state.activeGithubPrSubscriptions = getGithubPrSubscriptionsFromMetadata(metadata);
   // Prefer the durable ThreadState objective; fall back to the legacy
   // thread-metadata goal for threads created before the migration.
@@ -1110,15 +1124,6 @@ export class MastraTUI {
     syncFallbackStatusFromMetadata(this.state, metadata);
     await this.state.session.state.set({ activeModelPackId: resolvedPackId });
     updateStatusLine(this.state);
-
-    if (resolvedPackId && settings.models.activeModelPackId !== resolvedPackId) {
-      // Re-read settings to avoid overwriting concurrent changes
-      const fresh = loadSettings();
-      if (fresh.models.activeModelPackId !== resolvedPackId) {
-        fresh.models.activeModelPackId = resolvedPackId;
-        saveSettings(fresh);
-      }
-    }
   }
 
   private showHookWarnings(event: string, warnings: string[]): void {
