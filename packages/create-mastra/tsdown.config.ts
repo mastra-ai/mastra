@@ -13,5 +13,8 @@ export default defineConfig({
   fixedExtension: false,
   deps: {
     onlyBundle: false,
+    // `mastra` is a workspace devDependency imported by source; declare the
+    // bundling explicitly so the package-output check can see it is intended.
+    alwaysBundle: ['mastra'],
   },
 });
