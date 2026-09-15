@@ -948,6 +948,24 @@ export class GeminiLiveVoice extends MastraVoice<
         this.log('Updating speaker to:', config.speaker);
       }
 
+      // Update thinking configuration if provided. Mirrors `sendInitialConfig`: public config is
+      // camelCase, the wire format is snake_case. Merge into any existing generation_config so a
+      // speaker + thinkingConfig update in the same call don't clobber each other.
+      if (config.thinkingConfig) {
+        hasUpdates = true;
+        const tc = config.thinkingConfig;
+        updateMessage.session.generation_config = {
+          ...updateMessage.session.generation_config,
+          thinking_config: {
+            ...(tc.includeThoughts !== undefined && { include_thoughts: tc.includeThoughts }),
+            ...(tc.thinkingBudget !== undefined && { thinking_budget: tc.thinkingBudget }),
+          },
+        };
+
+        this.options.thinkingConfig = tc;
+        this.log('Updating thinkingConfig');
+      }
+
       // Update instructions if provided
       if (config.instructions !== undefined) {
         hasUpdates = true;
@@ -1896,6 +1914,10 @@ export class GeminiLiveVoice extends MastraVoice<
             };
           };
         };
+        thinking_config?: {
+          include_thoughts?: boolean;
+          thinking_budget?: number;
+        };
       };
       system_instruction?: {
         parts: Array<{
@@ -1965,6 +1987,18 @@ export class GeminiLiveVoice extends MastraVoice<
             voice_name: this.options.speaker,
           },
         },
+      };
+    }
+
+    // Forward caller-supplied thinking configuration. Public config is camelCase; the wire
+    // format is snake_case (`thinking_config.include_thoughts` / `thinking_budget`), matching
+    // the translation done for `speech_config` above. Each sub-field is guarded so an empty
+    // `thinkingConfig: {}` doesn't emit a bare `thinking_config` object.
+    if (this.options.thinkingConfig) {
+      const tc = this.options.thinkingConfig;
+      generationConfig.thinking_config = {
+        ...(tc.includeThoughts !== undefined && { include_thoughts: tc.includeThoughts }),
+        ...(tc.thinkingBudget !== undefined && { thinking_budget: tc.thinkingBudget }),
       };
     }
 
