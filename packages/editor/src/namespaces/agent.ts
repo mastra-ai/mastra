@@ -1,5 +1,3 @@
-import { createHash } from 'node:crypto';
-
 import { Memory } from '@mastra/memory';
 import { Agent } from '@mastra/core/agent';
 import type { AgentInstructions, ToolsInput } from '@mastra/core/agent';
@@ -48,6 +46,7 @@ import { CrudEditorNamespace } from './base';
 import type { StorageAdapter } from './base';
 import { EditorMCPNamespace } from './mcp';
 import { createVersionFromSnapshotUpdate, getProvidedSnapshotFields } from './versioned-update';
+import { computeInlineWorkspaceIdentity } from './workspace-identity';
 
 type AgentEditorConfig = false | { instructions?: boolean; tools?: boolean | { description?: boolean } };
 
@@ -396,9 +395,8 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
         });
         this.logger?.debug(`[ensureStoredWorkspace] Persisted runtime workspace '${workspaceRef.workspaceId}' to DB`);
       } else if (workspaceRef.type === 'inline') {
-        // Derive a deterministic ID from the inline config
-        const configHash = createHash('sha256').update(JSON.stringify(workspaceRef.config)).digest('hex').slice(0, 12);
-        const workspaceId = `inline-${configHash}`;
+        // Derive a deterministic, key-order-independent ID from the inline config
+        const { workspaceId, configHash } = computeInlineWorkspaceIdentity(workspaceRef.config);
 
         // Check if already stored in DB
         const existing = await workspaceNs.getById(workspaceId);
@@ -1860,8 +1858,8 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     if (workspaceRef.type === 'inline') {
       // Use a deterministic ID based on config content to avoid leaking
       // duplicate workspace instances on repeated calls.
-      const configHash = createHash('sha256').update(JSON.stringify(workspaceRef.config)).digest('hex').slice(0, 12);
-      return workspaceNs.hydrateSnapshotToWorkspace(`inline-${configHash}`, workspaceRef.config, hydrateOptions);
+      const { workspaceId } = computeInlineWorkspaceIdentity(workspaceRef.config);
+      return workspaceNs.hydrateSnapshotToWorkspace(workspaceId, workspaceRef.config, hydrateOptions);
     }
 
     if (workspaceRef.type === 'provider') {
