@@ -124,7 +124,7 @@ describe('resolveLinkedSender', () => {
 const linkKey = { platform: 'slack', externalTeamId: 'T-1', externalUserId: 'U-sender' };
 
 function makeProjects(factories: Array<{ id: string; name?: string; slackWorkItemsEnabled?: boolean }>) {
-  const projects = factories.map(factory => ({ slackWorkItemsEnabled: false, ...factory }));
+  const projects = factories.map(factory => ({ name: factory.id, slackWorkItemsEnabled: false, ...factory }));
   return {
     get: vi.fn(async ({ id }: { id: string }) => projects.find(f => f.id === id) ?? null),
     list: vi.fn(async () => projects),
@@ -163,7 +163,12 @@ describe('resolveFactoryForLink', () => {
       projects,
     });
 
-    expect(result).toEqual({ status: 'resolved', factoryProjectId: 'fp-2', slackWorkItemsEnabled: false });
+    expect(result).toEqual({
+      status: 'resolved',
+      factoryProjectId: 'fp-2',
+      factoryName: 'fp-2',
+      slackWorkItemsEnabled: false,
+    });
     expect(projects.get).toHaveBeenCalledWith({ orgId: 'org-1', id: 'fp-2' });
     // Existing default: nothing re-stamped, no card.
     expect(accountLinks.setDefaultFactory).not.toHaveBeenCalled();
@@ -184,7 +189,12 @@ describe('resolveFactoryForLink', () => {
       projects,
     });
 
-    expect(result).toEqual({ status: 'resolved', factoryProjectId: 'fp-only', slackWorkItemsEnabled: false });
+    expect(result).toEqual({
+      status: 'resolved',
+      factoryProjectId: 'fp-only',
+      factoryName: 'fp-only',
+      slackWorkItemsEnabled: false,
+    });
     expect(accountLinks.setDefaultFactory).toHaveBeenCalledWith({
       ...linkKey,
       userId: 'user-1',
@@ -273,6 +283,106 @@ describe('resolveFactoryForLink', () => {
 
     expect(result).toEqual({ status: 'blocked' });
     expect(thread.postEphemeral).not.toHaveBeenCalled();
+  });
+});
+
+describe('resolveFactoryForLink context routing', () => {
+  const twoFactories = () =>
+    makeProjects([
+      { id: 'fp-1', name: 'Default' },
+      { id: 'fp-2', name: 'Web', slackWorkItemsEnabled: true },
+    ]);
+  const linkWithDefault = { orgId: 'org-1', userId: 'user-1', defaultFactoryProjectId: 'fp-1', linkedAt: new Date() };
+
+  function contextMessage(text: string) {
+    return { ...makeMessage('T-1'), id: '1700.42', text };
+  }
+
+  function contextThread() {
+    const thread = makeThread();
+    thread.id = 'slack:C-1:1700.42';
+    return thread;
+  }
+
+  it('an explicit factory name beats the link default', async () => {
+    const projects = twoFactories();
+    const result = await resolveFactoryForLink({
+      thread: contextThread(),
+      message: contextMessage('factory: Web fix the header'),
+      link: linkWithDefault,
+      key: linkKey,
+      accountLinks: makeLinkStore(),
+      projects,
+      routeByContext: true,
+    });
+    expect(result).toEqual({
+      status: 'resolved',
+      factoryProjectId: 'fp-2',
+      factoryName: 'Web',
+      slackWorkItemsEnabled: true,
+    });
+    expect(projects.get).not.toHaveBeenCalled();
+  });
+
+  it('a referenced issue beats the link default', async () => {
+    const resolver = vi.fn().mockResolvedValue([{ reference: 'PROD-35', factoryProjectId: 'fp-2' }]);
+    const result = await resolveFactoryForLink({
+      thread: contextThread(),
+      message: contextMessage('can you fix PROD-35?'),
+      link: linkWithDefault,
+      key: linkKey,
+      accountLinks: makeLinkStore(),
+      projects: twoFactories(),
+      referenceResolvers: [resolver],
+      routeByContext: true,
+    });
+    expect(result).toMatchObject({ status: 'resolved', factoryProjectId: 'fp-2' });
+    expect(resolver).toHaveBeenCalledWith({ orgId: 'org-1', text: expect.stringContaining('PROD-35') });
+  });
+
+  it('falls back to the link default when context resolves nothing or is ambiguous', async () => {
+    const ambiguous = vi.fn().mockResolvedValue([
+      { reference: 'A-1', factoryProjectId: 'fp-1' },
+      { reference: 'B-1', factoryProjectId: 'fp-2' },
+    ]);
+    const result = await resolveFactoryForLink({
+      thread: contextThread(),
+      message: contextMessage('A-1 and B-1'),
+      link: linkWithDefault,
+      key: linkKey,
+      accountLinks: makeLinkStore(),
+      projects: twoFactories(),
+      referenceResolvers: [ambiguous],
+      routeByContext: true,
+    });
+    expect(result).toMatchObject({ status: 'resolved', factoryProjectId: 'fp-1' });
+  });
+
+  it('skips context routing unless asked, and for a single-factory org', async () => {
+    const resolver = vi.fn().mockResolvedValue([{ reference: 'PROD-35', factoryProjectId: 'fp-2' }]);
+    const followUp = await resolveFactoryForLink({
+      thread: contextThread(),
+      message: contextMessage('factory: Web PROD-35'),
+      link: linkWithDefault,
+      key: linkKey,
+      accountLinks: makeLinkStore(),
+      projects: twoFactories(),
+      referenceResolvers: [resolver],
+    });
+    expect(followUp).toMatchObject({ factoryProjectId: 'fp-1' });
+
+    const single = await resolveFactoryForLink({
+      thread: contextThread(),
+      message: contextMessage('PROD-35'),
+      link: { orgId: 'org-1', userId: 'user-1', linkedAt: new Date() },
+      key: linkKey,
+      accountLinks: makeLinkStore(),
+      projects: makeProjects([{ id: 'fp-only' }]),
+      referenceResolvers: [resolver],
+      routeByContext: true,
+    });
+    expect(single).toMatchObject({ factoryProjectId: 'fp-only' });
+    expect(resolver).not.toHaveBeenCalled();
   });
 });
 
@@ -454,9 +564,7 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
 
     await expect(resolve(resolveArgs({ id: 'slack:D-1:1700.42', isDM: true } as any))).resolves.toBe('us-new');
 
-    expect(deps.sourceControl.sessions.create).toHaveBeenCalledWith(
-      expect.objectContaining({ visibility: 'private' }),
-    );
+    expect(deps.sourceControl.sessions.create).toHaveBeenCalledWith(expect.objectContaining({ visibility: 'private' }));
   });
 
   // Top-level DM and channel conversations use the empty-threadTs thread form
@@ -465,14 +573,17 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
   it.each([
     { id: 'slack:D-1:', branch: 'slack/D-1' },
     { id: 'slack:C-1:', branch: 'slack/C-1' },
-  ])('a top-level conversation thread (empty threadTs) derives its branch from the channel id ($id)', async ({ id, branch }) => {
-    const deps = makeResolverDeps();
-    const resolve = createChannelResourceIdResolver(deps as any);
+  ])(
+    'a top-level conversation thread (empty threadTs) derives its branch from the channel id ($id)',
+    async ({ id, branch }) => {
+      const deps = makeResolverDeps();
+      const resolve = createChannelResourceIdResolver(deps as any);
 
-    await expect(resolve(resolveArgs({ id }))).resolves.toBe('us-new');
+      await expect(resolve(resolveArgs({ id }))).resolves.toBe('us-new');
 
-    expect(deps.sourceControl.sessions.create).toHaveBeenCalledWith(expect.objectContaining({ branch }));
-  });
+      expect(deps.sourceControl.sessions.create).toHaveBeenCalledWith(expect.objectContaining({ branch }));
+    },
+  );
 
   it('a repeat message on the same thread reuses the existing session, no second row', async () => {
     const sourceControl = makeSourceControl({ existingSession: { sessionId: 'us-existing' } });
@@ -524,6 +635,44 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
 
     await expect(resolve(resolveArgs())).resolves.toBe('channel:slack:C-1:1700.42');
     expect(warn).toHaveBeenCalled();
+  });
+});
+
+describe('repo-backed thread sessions follow context routing', () => {
+  it('a referenced issue picks the repo of that factory instead of the link default', async () => {
+    const sourceControl = {
+      integrationId: 'github',
+      connections: {
+        list: vi.fn().mockResolvedValue([{ id: 'conn-gh', integrationId: 'github', createdByUserId: 'owner-1' }]),
+      },
+      projectRepositories: { list: vi.fn().mockResolvedValue([{ id: 'pr-2', repositoryId: 'repo-2', branch: null }]) },
+      repositories: { get: vi.fn().mockResolvedValue({ defaultBranch: 'main', slug: 'acme/web' }) },
+      sessions: {
+        getForBranch: vi.fn().mockResolvedValue(null),
+        create: vi.fn().mockResolvedValue({ sessionId: 'us-web' }),
+      },
+    };
+    const deps = {
+      accountLinks: {
+        getAccountLink: vi
+          .fn()
+          .mockResolvedValue({ orgId: 'org-1', userId: 'user-1', defaultFactoryProjectId: 'fp-1' }),
+      },
+      projects: makeProjects([{ id: 'fp-1' }, { id: 'fp-2', name: 'Web' }]),
+      sourceControl,
+      referenceResolvers: [vi.fn().mockResolvedValue([{ reference: 'PROD-35', factoryProjectId: 'fp-2' }])],
+    };
+    const resolve = createChannelResourceIdResolver(deps as any);
+
+    await expect(
+      resolve({
+        platform: 'slack',
+        thread: { id: 'slack:C-1:1700.42' } as any,
+        message: { ...makeMessage('T-1'), id: '1700.42', text: 'fix PROD-35' },
+        defaultResourceId: 'slack:U-sender',
+      }),
+    ).resolves.toBe('us-web');
+    expect(sourceControl.connections.list).toHaveBeenCalledWith({ orgId: 'org-1', factoryProjectId: 'fp-2' });
   });
 });
 
@@ -683,6 +832,55 @@ describe('View Session card link', () => {
     expect(actions.children[0].url).toBe(
       `https://mc.example.com/threads/uuid-thread-1?resourceId=${encodeURIComponent('channel:slack:C-1:1700.42')}`,
     );
+  });
+});
+
+describe('View Session card factory name', () => {
+  function makeNamedDeps(text: string) {
+    const accountLinks = {
+      getAccountLink: vi.fn().mockResolvedValue({ orgId: 'org-1', userId: 'user-1', defaultFactoryProjectId: 'fp-1' }),
+      setDefaultFactory: vi.fn().mockResolvedValue(true),
+    };
+    const store = {
+      listThreads: vi.fn().mockResolvedValue({ threads: [{ id: 'uuid-thread-1', resourceId: 'us-42' }] }),
+    };
+    const mastra = { getStorage: () => ({ getStore: () => Promise.resolve(store) }) };
+    const projects = makeProjects([
+      { id: 'fp-1', name: 'Default' },
+      { id: 'fp-2', name: 'Web' },
+    ]);
+    const thread = makeThread();
+    thread.id = 'slack:C-1:1700.42';
+    thread.isSubscribed = vi.fn().mockResolvedValue(false);
+    thread.post = vi.fn();
+    const message = { ...makeMessage('T-1'), id: '1700.42', text };
+    return { deps: { accountLinks, projects }, mastra, thread, message };
+  }
+
+  it('names the factory the session landed in, and links into it', async () => {
+    process.env.MASTRACODE_PUBLIC_URL = 'https://mc.example.com';
+    const { deps, mastra, thread, message } = makeNamedDeps('factory: Web fix the header');
+    const handlers = createHandlers(deps as any);
+
+    await handlers.onMention!(thread, message, vi.fn(), handlerCtx(mastra));
+
+    const card = thread.post.mock.calls[0][0];
+    expect(card.children.find((c: any) => c.type === 'text')?.content).toBe('In Web');
+    const actions = card.children.find((c: any) => c.type === 'actions');
+    expect(actions.children[0].url).toBe(
+      'https://mc.example.com/factories/fp-2/workspaces/us-42/threads/uuid-thread-1',
+    );
+  });
+
+  it('a subscribed follow-up never re-routes', async () => {
+    const { deps, mastra, thread, message } = makeNamedDeps('factory: Web fix the header');
+    thread.isSubscribed = vi.fn().mockResolvedValue(true);
+    const handlers = createHandlers(deps as any);
+
+    await handlers.onMention!(thread, message, vi.fn(), handlerCtx(mastra));
+
+    expect(deps.projects.list).not.toHaveBeenCalled();
+    expect(thread.post).not.toHaveBeenCalled();
   });
 });
 
@@ -1076,7 +1274,9 @@ describe('Slack aside ingest', () => {
     } as any;
   }
 
-  function makeAsideDeps({ link = { orgId: 'org-1', userId: 'user-1' } as { orgId?: string; userId: string } | null } = {}) {
+  function makeAsideDeps({
+    link = { orgId: 'org-1', userId: 'user-1' } as { orgId?: string; userId: string } | null,
+  } = {}) {
     const thread = makeThread();
     thread.id = 'slack:C-1:1700.42';
     thread.post = vi.fn();

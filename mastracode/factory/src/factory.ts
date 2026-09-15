@@ -1165,28 +1165,33 @@ export class MastraFactory {
           .join(', ')}] all provide channels, but only one may. Remove all but one.`,
       );
     }
-    for (const { integration } of channelRegistrations) {
-      const context = buildIntegrationContext(
-        {
-          controller: prepared.base.controller,
-          publicOrigin,
-          auth: routeAuth,
-          stateSigner,
-          sandbox: sandboxConfig,
-          factoryStorage: storage,
-          integrationStorage,
-          sourceControlStorage,
-          configVersion,
-          boardRegistry: this.#boards,
-          factoryReady,
-          domains,
-          feed: commentsDomain,
-          ...(githubIntegration ? { sourceControlOwnerId: 'github' } : {}),
-        },
-        integration.id,
+    const channelContextDeps = {
+      controller: prepared.base.controller,
+      publicOrigin,
+      auth: routeAuth,
+      stateSigner,
+      sandbox: sandboxConfig,
+      factoryStorage: storage,
+      integrationStorage,
+      sourceControlStorage,
+      configVersion,
+      boardRegistry: this.#boards,
+      factoryReady,
+      domains,
+      feed: commentsDomain,
+      ...(githubIntegration ? { sourceControlOwnerId: 'github' } : {}),
+    };
+    const referenceResolvers = integrationRegistrations
+      .filter(({ integration, ready }) => ready && integration.referenceResolver)
+      .map(({ integration }) =>
+        integration.referenceResolver!(buildIntegrationContext(channelContextDeps, integration.id)),
       );
+    for (const { integration } of channelRegistrations) {
+      const context = buildIntegrationContext(channelContextDeps, integration.id);
       // Integrations return a channels CONFIG; the factory owns construction.
-      prepared.base.controller.setChannels(new AgentControllerChannels(integration.channels!(context)));
+      prepared.base.controller.setChannels(
+        new AgentControllerChannels(integration.channels!({ ...context, referenceResolvers })),
+      );
     }
 
     // Feed publishers mirror web-feed comments outward (a chat bridge, a

@@ -1155,6 +1155,28 @@ describe('MastraFactory.prepare integrations', () => {
       expect(channels.mock.calls[0]![0].storage.sourceControlOwner).toBeUndefined();
     });
 
+    it('hands the channels context the reference resolvers of every ready integration', async () => {
+      withController();
+      const channels = vi.fn((_ctx: IntegrationContext) => fakeChannelsConfig());
+      const linearResolver = vi.fn(async () => []);
+      const githubResolver = vi.fn(async () => []);
+      const referenceResolver = vi.fn((_ctx: IntegrationContext) => linearResolver);
+      const factory = new MastraFactory({
+        secretEncryption,
+        storage: fakeStorage(),
+        integrations: [
+          fakeIntegration({ id: 'linear', referenceResolver }),
+          fakeIntegration({ id: 'github', referenceResolver: () => githubResolver }),
+          fakeIntegration({ id: 'chat-platform', channels }),
+        ],
+      });
+
+      await factory.prepare();
+
+      expect(channels.mock.calls[0]![0].referenceResolvers).toEqual([linearResolver, githubResolver]);
+      expect(referenceResolver.mock.calls[0]![0].storage.intake).toBeDefined();
+    });
+
     it('leaves the controller alone when no integration provides channels', async () => {
       const setChannels = withController();
       const factory = new MastraFactory({

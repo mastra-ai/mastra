@@ -1302,6 +1302,94 @@ describe('AgentChannels', () => {
       const agentIds = threads.map(t => (t.metadata as any).channel_ownerId).sort();
       expect(agentIds).toEqual(['agent-a', 'agent-b']);
     });
+
+    describe('rebindThread', () => {
+      const coordinates = { platform: 'discord', externalThreadId: 'channel-1:thread-1', channelId: 'channel-1' };
+
+      it('moves the channel mapping to a new thread and retires the old one', async () => {
+        const mockMastra = makeMastra();
+        await agentChannels.initialize(mockMastra);
+        const chatThread = makeChatThread({ adapter: agentChannels.adapters.discord });
+        await (agentChannels as any).processChatMessage(chatThread, message, mockMastra, new RequestContext());
+        const memoryStore = await mockMastra.getStorage().getStore('memory');
+        const [original] = (await memoryStore.listThreads({ filter: { metadata: legacyFilter }, perPage: 10 })).threads;
+
+        const { previous, thread } = await agentChannels.rebindThread({
+          ...coordinates,
+          resourceId: 'session-b',
+          threadId: 'session-b',
+          mastra: mockMastra,
+        });
+
+        expect(previous?.id).toBe(original!.id);
+        expect(thread).toMatchObject({ id: 'session-b', resourceId: 'session-b' });
+        expect(thread.metadata).toMatchObject({
+          ...legacyFilter,
+          channel_ownerId: 'test-agent',
+          channel_handedOffFrom: original!.id,
+        });
+
+        const retired = await memoryStore.getThreadById({ threadId: original!.id });
+        expect(retired!.metadata).toMatchObject({
+          channel_platform: 'handed-off',
+          channel_handedOffPlatform: 'discord',
+          channel_handedOffTo: 'session-b',
+          channel_externalThreadId: 'channel-1:thread-1',
+        });
+
+        const mapping = await (agentChannels as any).findThreadMapping({ ...coordinates, mastra: mockMastra });
+        expect(mapping.thread.id).toBe('session-b');
+      });
+
+      it('routes the next inbound message to the rebound thread', async () => {
+        const mockMastra = makeMastra();
+        await agentChannels.initialize(mockMastra);
+        const chatThread = makeChatThread({ adapter: agentChannels.adapters.discord });
+        await (agentChannels as any).processChatMessage(chatThread, message, mockMastra, new RequestContext());
+        await agentChannels.rebindThread({
+          ...coordinates,
+          resourceId: 'session-b',
+          threadId: 'session-b',
+          mastra: mockMastra,
+        });
+        mockAgent.sendMessage.mockClear();
+
+        await (agentChannels as any).processChatMessage(chatThread, message, mockMastra, new RequestContext());
+
+        expect(mockAgent.sendMessage).toHaveBeenCalledWith(
+          expect.anything(),
+          expect.objectContaining({ resourceId: 'session-b', threadId: 'session-b' }),
+        );
+      });
+
+      it('binds a thread that never had a mapping without a previous', async () => {
+        const mockMastra = makeMastra();
+        await agentChannels.initialize(mockMastra);
+
+        const { previous, thread } = await agentChannels.rebindThread({
+          ...coordinates,
+          resourceId: 'session-b',
+          threadId: 'session-b',
+          mastra: mockMastra,
+        });
+
+        expect(previous).toBeUndefined();
+        expect(thread.metadata).not.toHaveProperty('channel_handedOffFrom');
+      });
+
+      it('refuses a thread id that already exists', async () => {
+        const mockMastra = makeMastra();
+        await agentChannels.initialize(mockMastra);
+        const memoryStore = await mockMastra.getStorage().getStore('memory');
+        await memoryStore.saveThread({
+          thread: { id: 'taken', resourceId: 'x', title: 't', createdAt: new Date(), updatedAt: new Date() },
+        });
+
+        await expect(
+          agentChannels.rebindThread({ ...coordinates, resourceId: 'x', threadId: 'taken', mastra: mockMastra }),
+        ).rejects.toThrow(/already exists/);
+      });
+    });
   });
 
   describe('resolveThreadId', () => {

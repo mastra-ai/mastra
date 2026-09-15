@@ -63,6 +63,8 @@ import { resolveWaitUntil } from './wait-until';
  *
  * @internal Created automatically by the Agent when `channels` config is provided.
  */
+const HANDED_OFF_PLATFORM = 'handed-off';
+
 export class AgentChannels {
   readonly adapters: Record<string, Adapter>;
   private chat: Chat | null = null;
@@ -1681,6 +1683,64 @@ export class AgentChannels {
     }
 
     return { thread: undefined, memoryStore, metadata };
+  }
+
+  async rebindThread({
+    externalThreadId,
+    channelId,
+    platform,
+    resourceId,
+    threadId,
+    mastra,
+  }: {
+    externalThreadId: string;
+    channelId: string;
+    platform: string;
+    resourceId: string;
+    threadId: string;
+    mastra?: Mastra;
+  }): Promise<{ previous: StorageThreadType | undefined; thread: StorageThreadType }> {
+    const resolvedMastra = mastra ?? this.getMastra();
+    if (!resolvedMastra) {
+      throw new Error(
+        'AgentChannels.rebindThread requires a Mastra instance: pass `mastra` or bind the channels to an agent.',
+      );
+    }
+    const {
+      thread: previous,
+      memoryStore,
+      metadata,
+    } = await this.findThreadMapping({ externalThreadId, channelId, platform, mastra: resolvedMastra });
+
+    if (await memoryStore.getThreadById({ threadId }).catch(() => null)) {
+      throw new Error(`Cannot rebind ${platform} thread ${externalThreadId}: thread ${threadId} already exists`);
+    }
+
+    if (previous) {
+      await memoryStore.patchThread({
+        id: previous.id,
+        metadata: {
+          ...((previous.metadata ?? {}) as Record<string, unknown>),
+          channel_platform: HANDED_OFF_PLATFORM,
+          channel_handedOffPlatform: platform,
+          channel_handedOffTo: threadId,
+        },
+      });
+    }
+
+    const boundMetadata: Record<string, unknown> = { ...metadata };
+    if (previous) boundMetadata.channel_handedOffFrom = previous.id;
+    const thread = await memoryStore.saveThread({
+      thread: {
+        id: threadId,
+        title: `${platform} conversation`,
+        resourceId,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        metadata: boundMetadata,
+      },
+    });
+    return { previous, thread };
   }
 
   /**

@@ -130,6 +130,28 @@ Restart the dev server — varlock reads `.env` at startup.
 DM the bot. It replies with a Connect card; that flow binds your Slack identity
 to your Mastra user, and messages then run as you.
 
+#### 4. Which factory a request lands in
+
+A mention or DM that starts a new session picks its factory in this order:
+
+1. A factory named in the message: `factory: Web fix the header`,
+   `[Web] fix the header`, or `fix the header in the Web factory`.
+2. A Linear issue key or link (`PROD-35`, `linear.app/.../issue/PROD-35`) in
+   the message, or in the root message of the thread you replied in, when a
+   factory's Linear intake binding covers that issue's project or team.
+3. A `github.com/owner/repo` link to a repository linked to a factory.
+4. Your default factory from **Settings → Connections**.
+
+References that point at different factories are ignored and the default
+applies. Replies in a thread that already has a session stay in that session.
+The "New session started" card names the factory it landed in.
+
+If the request landed in a factory whose repository doesn't contain what it's
+about, the agent searches the other factories' repositories, tells you where
+it found it, and asks whether to continue there. Reply yes and the thread moves:
+a "Continuing in <factory>" card appears, the new factory's session picks up
+the request in the same thread, and later replies go to it.
+
 A quick tunnel gets a new hostname each run. When it changes, replace the
 hostname in `MASTRACODE_CHANNELS_PUBLIC_URL` and in the Slack app's **Event
 Subscriptions**, **Interactivity & Shortcuts**, and **OAuth & Permissions** settings.

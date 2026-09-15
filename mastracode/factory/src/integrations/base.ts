@@ -55,6 +55,13 @@ export interface IntegrationHooks {
  */
 export type IntegrationTools = Extract<NonNullable<MastraCodeConfig['extraTools']>, Record<string, unknown>>;
 
+export interface ReferencedFactoryProject {
+  reference: string;
+  factoryProjectId: string;
+}
+
+export type FactoryReferenceResolver = (input: { orgId: string; text: string }) => Promise<ReferencedFactoryProject[]>;
+
 export interface IntegrationPostToolContext {
   toolName: string;
   input: unknown;
@@ -98,6 +105,7 @@ export interface IntegrationContext {
   workItems?: Pick<WorkItemsStorage, 'clearSessionReferences'>;
   /** Feed slice for ingesting platform messages; present once work items are ready. */
   feed?: Pick<CommentsDomain, 'createComment'>;
+  referenceResolvers?: FactoryReferenceResolver[];
   /** Persistence handles pre-scoped to this integration's stable id. */
   storage: {
     generic: IntegrationStorageHandle;
@@ -250,6 +258,7 @@ export interface FactoryIntegration {
    * owning a chat channel.
    */
   feedPublisher?(ctx: IntegrationContext): WorkItemFeedPublisher;
+  referenceResolver?(ctx: IntegrationContext): FactoryReferenceResolver;
   /**
    * Non-secret config snapshot (booleans + names only, never values). The
    * factory merges it into system diagnostics/startup logs.

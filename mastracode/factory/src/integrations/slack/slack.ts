@@ -30,12 +30,16 @@ import type { FactoryActorExternalIdentity } from '../../storage/domains/comment
 import { actorFromChannelAuthor } from '../../storage/domains/comments/actor.js';
 import type { CommentsDomain } from '../../storage/domains/comments/domain.js';
 import type { MemorySettingsStorage } from '../../storage/domains/memory-settings/base.js';
-import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
-import type { SourceControlStorageHandle } from '../../storage/domains/source-control/base.js';
+import type { FactoryProject, FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
+import type {
+  SourceControlSessionVisibility,
+  SourceControlStorageHandle,
+} from '../../storage/domains/source-control/base.js';
 import type { ExternalWorkItemSource, WorkItemRow, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
-import type { FactoryChannelsConfig } from '../base.js';
+import type { FactoryChannelsConfig, FactoryReferenceResolver } from '../base.js';
 
 import { resolveEmojiShortcodes } from './emoji.js';
+import { resolveFactoryFromContext } from './factory-routing.js';
 import { slackCommentSource } from './feed-publisher.js';
 
 // Derive the thread/message types from the core handler signature rather than
@@ -111,6 +115,7 @@ interface SlackChannelDeps {
    * the card the thread created. Unset → asides stay ignored, as before.
    */
   feed?: Pick<CommentsDomain, 'createComment'>;
+  referenceResolvers?: FactoryReferenceResolver[];
   /** Overrides applied to the Slack channel adapter entry. */
   adapterOptions?: SlackAdapterChannelConfig;
 }
@@ -136,7 +141,7 @@ function rawTeamId(rawPayload: unknown): string | undefined {
  * The Slack team id survives onto a normalized chat Message only on
  * `message.raw` (the Slack Events API envelope).
  */
-function slackTeamId(message: HandlerMessage): string | undefined {
+function slackTeamId(message: Pick<HandlerMessage, 'raw'>): string | undefined {
   return rawTeamId(message.raw);
 }
 
@@ -220,7 +225,7 @@ type FactoryRouteResult =
   /** No factory resolved — prompt card posted (when possible), do not dispatch. */
   | { status: 'blocked' }
   /** The Factory project this sender's runs route to. */
-  | { status: 'resolved'; factoryProjectId: string; slackWorkItemsEnabled: boolean };
+  | { status: 'resolved'; factoryProjectId: string; factoryName: string; slackWorkItemsEnabled: boolean };
 
 /**
  * Decide which Factory project a linked sender's run belongs to:
@@ -239,6 +244,8 @@ export async function resolveFactoryForLink({
   key,
   accountLinks,
   projects,
+  referenceResolvers,
+  routeByContext = false,
 }: {
   thread: HandlerThread;
   message: HandlerMessage;
@@ -246,11 +253,35 @@ export async function resolveFactoryForLink({
   key: ChannelAccountLinkKey;
   accountLinks: ChannelIdentityStorage;
   projects?: FactoryProjectsStorage;
+  referenceResolvers?: FactoryReferenceResolver[];
+  routeByContext?: boolean;
 }): Promise<FactoryRouteResult> {
   if (!projects) return { status: 'ungated' };
   // Factories are org-scoped; a personal account (no org) has none and lands
   // on the prompt below.
   const orgId = link.orgId ?? '';
+
+  let factories: FactoryProject[] | undefined;
+  const listFactories = async () => (factories ??= orgId ? await projects.list({ orgId }) : []);
+
+  const routable = routeByContext ? await listFactories() : [];
+  if (routable.length > 1) {
+    const context = await resolveFactoryFromContext({
+      thread,
+      message,
+      orgId,
+      factories: routable,
+      referenceResolvers,
+    });
+    if (context.status === 'resolved') {
+      return {
+        status: 'resolved',
+        factoryProjectId: context.factory.id,
+        factoryName: context.factory.name,
+        slackWorkItemsEnabled: context.factory.slackWorkItemsEnabled,
+      };
+    }
+  }
 
   if (link.defaultFactoryProjectId) {
     const existing = await projects.get({ orgId, id: link.defaultFactoryProjectId });
@@ -258,18 +289,20 @@ export async function resolveFactoryForLink({
       return {
         status: 'resolved',
         factoryProjectId: existing.id,
+        factoryName: existing.name,
         slackWorkItemsEnabled: existing.slackWorkItemsEnabled,
       };
     }
   }
 
-  const factories = orgId ? await projects.list({ orgId }) : [];
-  if (factories.length === 1) {
-    const only = factories[0]!;
+  const candidates = await listFactories();
+  if (candidates.length === 1) {
+    const only = candidates[0]!;
     await accountLinks.setDefaultFactory({ ...key, userId: link.userId, factoryProjectId: only.id });
     return {
       status: 'resolved',
       factoryProjectId: only.id,
+      factoryName: only.name,
       slackWorkItemsEnabled: only.slackWorkItemsEnabled,
     };
   }
@@ -282,7 +315,7 @@ export async function resolveFactoryForLink({
         title: 'Pick a default factory',
         children: [
           CardText(
-            factories.length === 0
+            candidates.length === 0
               ? 'Your account has no factory yet. Create one in the web app, then message me again.'
               : 'Your account has several factories. Pick which one Slack sessions should go to, then message me again.',
           ),
@@ -311,7 +344,7 @@ export async function resolveFactoryForLink({
  * ref. Fall back to the last non-empty segment (the channel id): one
  * deterministic branch per top-level conversation.
  */
-function threadBranch(threadId: string): string {
+export function threadBranch(threadId: string): string {
   const segments = threadId.split(':');
   const tail = segments.findLast(segment => segment.length > 0) ?? threadId;
   return `slack/${tail.replace(/[^A-Za-z0-9_/-]/g, '-')}`;
@@ -330,7 +363,7 @@ function threadBranch(threadId: string): string {
  * gate's job; this hook must never post.
  */
 export function createChannelResourceIdResolver(deps: SlackChannelDeps): ResolveResourceId {
-  const { accountLinks, projects, sourceControl } = deps;
+  const { accountLinks, projects, sourceControl, referenceResolvers } = deps;
   return async ({ platform, thread, message }) => {
     // NOT the hook's `defaultResourceId`: configuring a custom resolver
     // bypasses AgentControllerChannels' own `channel:{thread.id}` derivation
@@ -353,44 +386,77 @@ export function createChannelResourceIdResolver(deps: SlackChannelDeps): Resolve
       // dispatch gate has already run (and stamped a lone factory) by the
       // time a new thread is created, so this is a read-only re-resolve.
       const orgId = link.orgId ?? '';
+      const factories = orgId ? await projects.list({ orgId }) : [];
       let factoryProjectId: string | undefined;
-      if (link.defaultFactoryProjectId && (await projects.get({ orgId, id: link.defaultFactoryProjectId }))) {
-        factoryProjectId = link.defaultFactoryProjectId;
-      } else if (orgId) {
-        const factories = await projects.list({ orgId });
-        if (factories.length === 1) factoryProjectId = factories[0]!.id;
+      if (factories.length > 1) {
+        const context = await resolveFactoryFromContext({ thread, message, orgId, factories, referenceResolvers });
+        if (context.status === 'resolved') factoryProjectId = context.factory.id;
       }
+      if (
+        !factoryProjectId &&
+        link.defaultFactoryProjectId &&
+        factories.some(f => f.id === link.defaultFactoryProjectId)
+      ) {
+        factoryProjectId = link.defaultFactoryProjectId;
+      }
+      if (!factoryProjectId && factories.length === 1) factoryProjectId = factories[0]!.id;
       if (!factoryProjectId) return chatOnlyResourceId;
 
-      const repo = await resolveFactorySourceRepository({ sourceControl, orgId, factoryProjectId });
-      if (!repo.found) return chatOnlyResourceId;
-
-      const branch = threadBranch(thread.id);
-      // Attributed to the Slack sender, not to whoever connected the repository:
-      // unlike an autonomous rule run, a Slack thread has a real interactive user.
-      const existing = await sourceControl.sessions.getForBranch({
-        projectRepositoryId: repo.projectRepositoryId,
-        userId: link.userId,
-        branch,
-      });
-      if (existing) return existing.sessionId;
-      const session = await sourceControl.sessions.create({
-        sessionId: randomUUID(),
-        projectRepositoryId: repo.projectRepositoryId,
+      const sessionId = await resolveSlackFactorySession({
+        sourceControl,
         orgId,
         userId: link.userId,
-        branch,
-        baseBranch: repo.baseBranch,
+        factoryProjectId,
+        externalThreadId: thread.id,
         // DMs are the only private origin; channel threads are org-visible.
         visibility: thread.isDM ? 'private' : 'org',
       });
-      return session.sessionId;
+      return sessionId ?? chatOnlyResourceId;
     } catch (error) {
       // Fall back to a chat-only session rather than dropping the message.
       console.warn('[slack] repo-backed session resolution failed for thread', thread.id, error);
       return chatOnlyResourceId;
     }
   };
+}
+
+export async function resolveSlackFactorySession({
+  sourceControl,
+  orgId,
+  userId,
+  factoryProjectId,
+  externalThreadId,
+  visibility,
+}: {
+  sourceControl: SourceControlStorageHandle;
+  orgId: string;
+  userId: string;
+  factoryProjectId: string;
+  externalThreadId: string;
+  visibility: SourceControlSessionVisibility;
+}): Promise<string | undefined> {
+  const repo = await resolveFactorySourceRepository({ sourceControl, orgId, factoryProjectId });
+  if (!repo.found) return undefined;
+
+  const branch = threadBranch(externalThreadId);
+  // Attributed to the Slack sender, not to whoever connected the repository:
+  // unlike an autonomous rule run, a Slack thread has a real interactive user.
+  const existing = await sourceControl.sessions.getForBranch({
+    projectRepositoryId: repo.projectRepositoryId,
+    userId,
+    branch,
+  });
+  if (existing) return existing.sessionId;
+  const session = await sourceControl.sessions.create({
+    sessionId: randomUUID(),
+    projectRepositoryId: repo.projectRepositoryId,
+    orgId,
+    userId,
+    branch,
+    baseBranch: repo.baseBranch,
+    visibility,
+  });
+  return session.sessionId;
 }
 
 /**
@@ -481,6 +547,35 @@ export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSe
 }
 
 /**
+ * The web route for a channel-created thread. A routed repo-backed thread's
+ * resourceId IS the Factory user-session id, so the link lands on the same
+ * route a web-started run navigates to; chat-only threads keep the literal
+ * `channel` segment and carry the real resource in `?resourceId=`, as does
+ * the unrouted fallback, which has no workspace segment at all
+ * (`ChannelThreadRedirect` forwards the search through).
+ */
+export function buildSessionDeepLink({
+  factoryProjectId,
+  resourceId,
+  threadId,
+}: {
+  factoryProjectId?: string;
+  resourceId: string;
+  threadId: string;
+}): string | undefined {
+  if (!process.env.MASTRACODE_PUBLIC_URL) return undefined;
+  const isChatOnly = resourceId.startsWith('channel:');
+  const workspaceSegment = isChatOnly ? 'channel' : encodeURIComponent(resourceId);
+  const threadPath = factoryProjectId
+    ? `/factories/${encodeURIComponent(factoryProjectId)}/workspaces/${workspaceSegment}/threads/${encodeURIComponent(threadId)}`
+    : `/threads/${threadId}`;
+  const needsResourceParam = isChatOnly || !factoryProjectId;
+  return needsResourceParam
+    ? `${process.env.MASTRACODE_PUBLIC_URL}${threadPath}?resourceId=${encodeURIComponent(resourceId)}`
+    : `${process.env.MASTRACODE_PUBLIC_URL}${threadPath}`;
+}
+
+/**
  * The internal Mastra thread the framework created for a channel conversation.
  * The handler's `thread.id` is the platform thread id (e.g. `slack:C123:ts`),
  * NOT the internal UUID — the mapping lives in the stored thread's channel
@@ -515,10 +610,16 @@ async function findInternalThread(mastra: Mastra | undefined, thread: HandlerThr
 async function gateDispatch(
   thread: HandlerThread,
   message: HandlerMessage,
-  { accountLinks, projects }: SlackChannelDeps,
+  { accountLinks, projects, referenceResolvers }: SlackChannelDeps,
   ctx: ChannelHandlerContext,
+  { routeByContext = false }: { routeByContext?: boolean } = {},
 ): Promise<{
-  routed?: { link: ChannelAccountLink; factoryProjectId: string; slackWorkItemsEnabled: boolean };
+  routed?: {
+    link: ChannelAccountLink;
+    factoryProjectId: string;
+    factoryName: string;
+    slackWorkItemsEnabled: boolean;
+  };
 } | null> {
   const sender = await resolveLinkedSender({ thread, message, accountLinks });
   if (sender.status === 'blocked') return null;
@@ -532,13 +633,22 @@ async function gateDispatch(
     // credentials.
     ctx.requestContext.set('user', { id: sender.link.userId, organizationId: sender.link.orgId });
 
-    const route = await resolveFactoryForLink({ thread, message, ...sender, accountLinks, projects });
+    const route = await resolveFactoryForLink({
+      thread,
+      message,
+      ...sender,
+      accountLinks,
+      projects,
+      referenceResolvers,
+      routeByContext,
+    });
     if (route.status === 'blocked') return null;
     if (route.status === 'resolved') {
       return {
         routed: {
           link: sender.link,
           factoryProjectId: route.factoryProjectId,
+          factoryName: route.factoryName,
           slackWorkItemsEnabled: route.slackWorkItemsEnabled,
         },
       };
@@ -552,7 +662,12 @@ async function gateDispatch(
  * them, so the team scopes the card's key — without it two workspaces could
  * hold one key and an aside would land on another tenant's card.
  */
-export function slackThreadSource(thread: HandlerThread, teamId?: string): ExternalWorkItemSource {
+export interface SlackThreadRef {
+  id: string;
+  adapter: { name: string };
+}
+
+export function slackThreadSource(thread: SlackThreadRef, teamId?: string): ExternalWorkItemSource {
   return {
     integrationId: thread.adapter.name,
     type: 'slack-thread',
@@ -562,9 +677,9 @@ export function slackThreadSource(thread: HandlerThread, teamId?: string): Exter
 }
 
 /** Cards written before the key carried a team are still keyed bare. */
-async function findThreadWorkItem(
+export async function findThreadWorkItem(
   workItems: WorkItemsStorage,
-  thread: HandlerThread,
+  thread: SlackThreadRef,
   teamId?: string,
 ): Promise<WorkItemRow | null> {
   const scoped = await workItems.getBySource(slackThreadSource(thread, teamId));
@@ -596,9 +711,9 @@ export async function upsertThreadWorkItem({
   url,
 }: {
   workItems: WorkItemsStorage;
-  thread: HandlerThread;
-  message: HandlerMessage;
-  link: ChannelAccountLink;
+  thread: SlackThreadRef;
+  message: Pick<HandlerMessage, 'text' | 'raw'>;
+  link: Pick<ChannelAccountLink, 'orgId' | 'userId'>;
   factoryProjectId: string;
   /**
    * The repo-backed Factory session to bind under the `chat` role, or
@@ -636,13 +751,13 @@ function createNewSessionChatHandler(deps: SlackChannelDeps): ChannelHandler {
     // created (which would otherwise be tenant-less and fail credential
     // resolution). This handler is the only gate — core dispatches whatever
     // reaches it — so every slot that can start a run must call it.
-    const gate = await gateDispatch(thread, message, deps, ctx);
-    if (!gate) return;
-
     // A mention on a not-yet-subscribed thread is a NEW session. The
     // default handler auto-subscribes, so once subscribed this is a
     // follow-up mention — don't re-announce.
     const isNewSession = !(await thread.isSubscribed());
+
+    const gate = await gateDispatch(thread, message, deps, ctx, { routeByContext: isNewSession });
+    if (!gate) return;
 
     // Run the framework handler first so the internal Mastra thread and
     // controller session are created before we build the deep link.
@@ -661,35 +776,17 @@ function createNewSessionChatHandler(deps: SlackChannelDeps): ChannelHandler {
     }
 
     // When the sender routed to a factory we know exactly which workspace the
-    // session belongs to — deep-link straight into it. A repo-backed thread's
-    // resourceId IS the Factory user-session id, so the link lands on the same
-    // route a web-started run navigates to; chat-only threads keep the literal
-    // `channel` segment (the real resource rides the `?resourceId=` override).
-    // Unrouted senders fall back to the factory-agnostic /threads/ redirect.
-    // One predicate drives both the path segment and the query param, so the
-    // two can never disagree about what the URL already carries.
+    // session belongs to — deep-link straight into it. Unrouted senders fall
+    // back to the factory-agnostic /threads/ redirect.
     const isChatOnly = internalThread.resourceId.startsWith('channel:');
-    const workspaceSegment = isChatOnly ? 'channel' : encodeURIComponent(internalThread.resourceId);
-    const threadPath = gate.routed
-      ? `/factories/${encodeURIComponent(gate.routed.factoryProjectId)}/workspaces/${workspaceSegment}/threads/${encodeURIComponent(internalThread.id)}`
-      : `/threads/${internalThread.id}`;
-
-    // The param is an override for a URL that can't otherwise name its
-    // resource. A routed repo-backed thread already spells the resourceId out
-    // as its workspace segment, so appending it again is duplication the app
-    // ignores. Chat-only threads need it (their segment is the literal string
-    // `channel`), and so does the unrouted fallback, which has no workspace
-    // segment at all — `ChannelThreadRedirect` forwards the search through.
-    //
     // One shared deep-link: the card's button and the work-item `url` read the
     // SAME value so they can never drift. Undefined without a public origin —
     // the card is then skipped, but the work item is still created (url omitted).
-    const needsResourceParam = isChatOnly || !gate.routed;
-    const deepLink = process.env.MASTRACODE_PUBLIC_URL
-      ? needsResourceParam
-        ? `${process.env.MASTRACODE_PUBLIC_URL}${threadPath}?resourceId=${encodeURIComponent(internalThread.resourceId)}`
-        : `${process.env.MASTRACODE_PUBLIC_URL}${threadPath}`
-      : undefined;
+    const deepLink = buildSessionDeepLink({
+      factoryProjectId: gate.routed?.factoryProjectId,
+      resourceId: internalThread.resourceId,
+      threadId: internalThread.id,
+    });
 
     // A dispatched, routed new-session thread becomes a Work-board card in
     // Building. Only routed senders (linked → factory) have the org/user/factory
@@ -719,7 +816,10 @@ function createNewSessionChatHandler(deps: SlackChannelDeps): ChannelHandler {
     await thread.post(
       Card({
         title: 'New session started',
-        children: [Actions([LinkButton({ url: deepLink, label: 'View session' })])],
+        children: [
+          ...(gate.routed ? [CardText(`In ${gate.routed.factoryName}`)] : []),
+          Actions([LinkButton({ url: deepLink, label: 'View session' })]),
+        ],
       }),
     );
   };

@@ -19,14 +19,17 @@
  */
 
 import type { TypingStatusFn } from '@mastra/core/channels';
+import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 import type { SlackAdapterChannelConfig } from '@mastra/slack';
 
 import type { WorkItemFeedPublisher } from '../../storage/domains/comments/feed-sync.js';
-import type { FactoryChannelsConfig, FactoryIntegration, IntegrationContext } from '../base.js';
+import type { FactoryChannelsConfig, FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
 
 import { createSlackConnectRoutes } from './connect-route.js';
 import { SlackFeedPublisher } from './feed-publisher.js';
+import { createFactoryHandoffTool } from './handoff-tool.js';
+import type { HandoffDeps } from './handoff-tool.js';
 import { createSlackChannelsConfig } from './slack.js';
 
 /**
@@ -115,6 +118,7 @@ export class SlackIntegration implements FactoryIntegration {
    * boot before diagnostics are served.
    */
   #repoBackedSessions = false;
+  #handoff: HandoffDeps | undefined;
 
   constructor(config: SlackIntegrationConfig) {
     if (!config.signingSecret) {
@@ -130,6 +134,19 @@ export class SlackIntegration implements FactoryIntegration {
     // (GitHub, when registered) — no config-level wiring by the entry.
     const sourceControlOwner = ctx.storage.sourceControlOwner;
     this.#repoBackedSessions = Boolean(sourceControlOwner);
+    const { controller, factoryStorage } = ctx;
+    this.#handoff =
+      sourceControlOwner && controller && factoryStorage
+        ? {
+            channels: () => controller.getChannels(),
+            threads: () => factoryStorage.getMastraStorage().getStore('memory'),
+            accountLinks: ctx.storage.channelIdentity,
+            projects: ctx.storage.projects,
+            sourceControl: sourceControlOwner,
+            workItems: ctx.runtime?.workItems,
+            feed: ctx.feed,
+          }
+        : undefined;
     return createSlackChannelsConfig({
       slack: {
         clientId: this.#config.clientId,
@@ -143,12 +160,18 @@ export class SlackIntegration implements FactoryIntegration {
       memorySettings: ctx.storage.memorySettings,
       workItems: ctx.runtime?.workItems,
       feed: ctx.feed,
+      referenceResolvers: ctx.referenceResolvers,
       adapterOptions: {
         toolDisplay: 'hidden',
         typingStatus: factoryTypingStatus,
         ...adapterOverrides(this.#config.adapterOptions),
       },
     });
+  }
+
+  sessionTools({ requestContext }: { requestContext: RequestContext }): IntegrationTools {
+    if (!this.#handoff) return {};
+    return createFactoryHandoffTool(requestContext, this.#handoff);
   }
 
   feedPublisher(ctx: IntegrationContext): WorkItemFeedPublisher {

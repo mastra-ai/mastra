@@ -36,15 +36,21 @@ import type {
 import type { RouteAuth } from '../../routes/route.js';
 import type { IntegrationStorageHandle } from '../../storage/domains/integrations/base.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
-import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
+import type { FactoryIntegration, FactoryReferenceResolver, IntegrationContext, IntegrationTools } from '../base.js';
 import { IssueReconcileWorker } from '../issue-reconcile-worker.js';
 import { buildLinearAgentTools } from './agent-tools.js';
 import type { LinearEventRules, LinearRuleOverrides } from './default-rules.js';
 import { resolveLinearRules } from './default-rules.js';
 import { attachLinearIssueReconciler } from './issue-reconciler.js';
 import { linearIssueReconciliationEnabled, linearIssueReconciliationInterval } from './reconciliation-config.js';
+import { createLinearReferenceResolver } from './reference-resolver.js';
 import { buildLinearRoutes } from './routes.js';
 import { attachLinearRules } from './rules.js';
+import {
+  decodeSelfManagedTeamSourceId,
+  encodeSelfManagedTeamSourceId,
+  isSelfManagedTeamSourceId,
+} from './source-ids.js';
 import type { LinearConnectionRow, LinearStorageHandle, UpsertLinearConnectionInput } from './storage.js';
 
 const LINEAR_GRAPHQL_URL = 'https://api.linear.app/graphql';
@@ -1157,6 +1163,10 @@ export class LinearIntegration implements FactoryIntegration {
     });
   }
 
+  referenceResolver(ctx: IntegrationContext): FactoryReferenceResolver {
+    return createLinearReferenceResolver({ linear: this, intake: ctx.storage.intake });
+  }
+
   /**
    * Org-scoped agent tools: issue detail + comment tools for sessions whose
    * project belongs to an org with an active Linear connection.
@@ -1178,25 +1188,6 @@ function getLinearAccessToken(connection: IntegrationConnection): string {
     throw new Error('Linear capabilities require an OAuth connection.');
   }
   return connection.accessToken;
-}
-
-/**
- * Self-managed source ids. Projects use their raw Linear project id (no prefix,
- * preserving existing intake bindings). Teams are prefixed so the two never
- * collide and callers can tell them apart.
- */
-const SELF_MANAGED_TEAM_SOURCE_PREFIX = 'linear-team:';
-
-function encodeSelfManagedTeamSourceId(teamId: string): string {
-  return `${SELF_MANAGED_TEAM_SOURCE_PREFIX}${teamId}`;
-}
-
-function isSelfManagedTeamSourceId(sourceId: string): boolean {
-  return sourceId.startsWith(SELF_MANAGED_TEAM_SOURCE_PREFIX);
-}
-
-function decodeSelfManagedTeamSourceId(sourceId: string): string {
-  return sourceId.slice(SELF_MANAGED_TEAM_SOURCE_PREFIX.length);
 }
 
 /**
