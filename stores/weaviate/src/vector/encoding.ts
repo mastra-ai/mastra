@@ -4,8 +4,13 @@
  * module is the single source of truth shared by the adapter and the filter
  * translator — they must encode keys identically or filters will silently miss.
  */
-export const RESERVED_META_KEYS = new Set(['id', 'vector', '_additional']);
+/** Internal property used to round-trip the caller's original id. */
+export const MASTRA_ID_PROPERTY = 'mastraId';
 export const META_KEY_PREFIX = 'mastraMeta_';
+// `mastraId` is reserved too: the adapter writes the caller's original id under
+// this property, so a user metadata key of the same name must be encoded to
+// avoid clobbering (or being clobbered by) the internal value.
+export const RESERVED_META_KEYS = new Set(['id', 'vector', '_additional', MASTRA_ID_PROPERTY]);
 
 export function encodeMetaKey(key: string): string {
   // Encode reserved names, and also escape any genuine user key that already

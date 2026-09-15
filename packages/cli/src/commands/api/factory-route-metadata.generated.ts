@@ -796,9 +796,13 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                         "type": "object",
                         "properties": {
                           "outcome": {
-                            "type": [
-                              "string",
-                              "null"
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
                             ]
                           },
                           "to": {

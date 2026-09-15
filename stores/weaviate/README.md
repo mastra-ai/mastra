@@ -57,7 +57,7 @@ const store = new WeaviateVector({
 });
 ```
 
-## Notes
+### Notes
 
 - **IDs.** Weaviate object IDs must be UUIDs. `WeaviateVector` accepts arbitrary string
   IDs, maps them to deterministic UUIDs internally, and returns your original IDs from

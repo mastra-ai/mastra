@@ -73,6 +73,26 @@ describe('WeaviateVector', () => {
     expect(results?.[0]?.metadata?.mastraMeta_id).toBe('user-value');
   }, 50000);
 
+  it('round-trips a user metadata key named like the internal id property', async () => {
+    const [id] = await weaviate.upsert({
+      indexName: testIndex,
+      vectors: [[0.0, 0.5, 0.5]],
+      metadata: [{ mastraId: 'user-supplied', label: 'reserved-name' }],
+    });
+
+    const results = await weaviate.query({
+      indexName: testIndex,
+      queryVector: [0.0, 0.5, 0.5],
+      topK: 1,
+      filter: { label: 'reserved-name' },
+    });
+
+    // The caller's original id is returned as `id`, and their `mastraId` metadata
+    // is preserved rather than clobbering (or being clobbered by) the internal one.
+    expect(results?.[0]?.id).toBe(id);
+    expect(results?.[0]?.metadata?.mastraId).toBe('user-supplied');
+  }, 50000);
+
   it('does not mutate the schema when an update is rejected for an empty filter', async () => {
     await expect(
       weaviate.updateVector({

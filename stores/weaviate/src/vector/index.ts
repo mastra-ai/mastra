@@ -16,7 +16,7 @@ import type {
 import weaviate, { generateUuid5 } from 'weaviate-client';
 import type { WeaviateClient, Collection } from 'weaviate-client';
 
-import { encodeMetaKey, decodeMetaKey, encodeMetaProperties } from './encoding';
+import { encodeMetaKey, decodeMetaKey, encodeMetaProperties, MASTRA_ID_PROPERTY } from './encoding';
 import { WeaviateFilterTranslator } from './filter';
 import type { WeaviateVectorFilter } from './filter';
 
@@ -37,7 +37,6 @@ const REVERSE_DISTANCE_MAPPING: Record<string, 'cosine' | 'euclidean' | 'dotprod
 };
 
 /** Reserved property used to round-trip the caller-supplied vector id. */
-const MASTRA_ID_PROPERTY = 'mastraId';
 
 /** Metadata stored on a collection's description to preserve Mastra semantics. */
 interface CollectionMeta {
@@ -607,9 +606,22 @@ export class WeaviateVector extends MastraVector<WeaviateVectorFilter> {
       }
 
       const filters = this.transformFilter(collection, filter!);
-      const matches = await collection.query.fetchObjects({ limit: 10000, ...(filters ? { filters } : {}) });
-      for (const obj of matches.objects) {
-        await applyUpdate(obj.uuid);
+      // Page through the full match set so large filters don't silently update
+      // only the first page and report success. Collect all uuids first, then
+      // apply, so mutations can't shift the pagination window mid-iteration.
+      const PAGE_SIZE = 1000;
+      const uuids: string[] = [];
+      for (let offset = 0; ; offset += PAGE_SIZE) {
+        const page = await collection.query.fetchObjects({
+          limit: PAGE_SIZE,
+          offset,
+          ...(filters ? { filters } : {}),
+        });
+        for (const obj of page.objects) uuids.push(obj.uuid);
+        if (page.objects.length < PAGE_SIZE) break;
+      }
+      for (const uuid of uuids) {
+        await applyUpdate(uuid);
       }
     } catch (error) {
       if (error instanceof MastraError) throw error;

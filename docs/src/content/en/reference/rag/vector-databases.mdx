@@ -582,7 +582,7 @@ Each vector database enforces specific naming conventions for indexes and collec
     Index names map to Weaviate collections, which:
 
     - Are capitalized by Weaviate (the first letter is upper-cased)
-    - Should contain only alphanumeric characters and underscores
+    - Should contain only letters, numbers, and the `_` character
     - Preserve the original Mastra index name in the collection description, so `listIndexes()` and `describeIndex()` return the name you supplied
     - Example: `my_collection` is stored as `My_collection` and returned as `my_collection`
   </TabItem>
