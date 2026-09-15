@@ -77,6 +77,8 @@ describe('token-based memory history', () => {
     expect((withTokens as any).threadConfig.lastMessages).toBeUndefined();
     const withBoth = new MockMemory({ options: { lastMessages: 4, messageHistory: { maxTokens: 100 } } });
     expect((withBoth as any).threadConfig.lastMessages).toBe(4);
+    const withExplicitDefault = new MockMemory({ options: { lastMessages: 10 } });
+    expect(withExplicitDefault.getMergedThreadConfig({ messageHistory: { maxTokens: 100 } }).lastMessages).toBe(10);
   });
 
   it('adds its memory limiter when a user token limiter is also configured', async () => {

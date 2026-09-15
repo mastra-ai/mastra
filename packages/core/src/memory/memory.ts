@@ -132,11 +132,13 @@ export abstract class MastraMemory extends MastraBase {
   embedder?: MastraEmbeddingModel<string>;
   embedderOptions?: MastraEmbeddingOptions;
   protected threadConfig: MemoryConfigInternal = { ...memoryDefaultOptions };
+  private readonly hasExplicitLastMessages: boolean;
   #mastra?: Mastra;
 
   constructor(config: { id?: string; name: string } & SharedMemoryConfig) {
     super({ component: 'MEMORY', name: config.name });
     this.id = config.id ?? config.name ?? 'default-memory';
+    this.hasExplicitLastMessages = config.options?.lastMessages !== undefined;
 
     if (config.options) this.threadConfig = this.getMergedThreadConfig(config.options);
 
@@ -403,6 +405,7 @@ https://mastra.ai/en/docs/memory/overview`,
     if (
       config?.messageHistory !== undefined &&
       config.lastMessages === undefined &&
+      !this.hasExplicitLastMessages &&
       this.threadConfig.messageHistory === undefined &&
       this.threadConfig.lastMessages === memoryDefaultOptions.lastMessages
     ) {
