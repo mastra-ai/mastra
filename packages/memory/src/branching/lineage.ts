@@ -137,11 +137,11 @@ async function loadPhysicalMessages(memoryStore: MemoryStorage, thread: StorageT
   return messages.sort(compareMessageTuples);
 }
 
-export async function resolveThreadLineage(
+export async function resolveThreadLineageEntries(
   memoryStore: MemoryStorage,
   threadId: string,
   options: { includePending?: boolean } = {},
-): Promise<ResolvedThreadLineage> {
+): Promise<ResolvedThreadLineageEntry[]> {
   const reverseEntries: ResolvedThreadLineageEntry[] = [];
   const visited = new Set<string>();
   let currentId: string | undefined = threadId;
@@ -178,7 +178,15 @@ export async function resolveThreadLineage(
     depth += 1;
   }
 
-  const entries = reverseEntries.reverse();
+  return reverseEntries.reverse();
+}
+
+export async function resolveThreadLineage(
+  memoryStore: MemoryStorage,
+  threadId: string,
+  options: { includePending?: boolean } = {},
+): Promise<ResolvedThreadLineage> {
+  const entries = await resolveThreadLineageEntries(memoryStore, threadId, options);
   let reachableMessages: MastraDBMessage[] = [];
   for (const entry of entries) {
     const physicalMessages = await loadPhysicalMessages(memoryStore, entry.thread);
@@ -217,7 +225,7 @@ export async function resolveThreadLineage(
 export async function listRawThreads(memoryStore: MemoryStorage, resourceId?: string): Promise<StorageThreadType[]> {
   const { threads } = await memoryStore.listThreads({
     perPage: false,
-    ...(resourceId ? { filter: { resourceId } } : {}),
+    ...(resourceId !== undefined ? { filter: { resourceId } } : {}),
   });
   return threads.sort((a, b) => {
     const timeDifference = a.createdAt.getTime() - b.createdAt.getTime();
