@@ -3,4 +3,4 @@
 '@mastra/pg': patch
 ---
 
-Factory storage updates that hit a unique index now throw the same `UniqueViolationError` as inserts, so callers can tell a lost claim from any other write failure.
+Fixed unique-index update errors in the Factory storage adapters. Updates now throw `UniqueViolationError`, the same error inserts already threw, so callers can handle a duplicate claim consistently.
