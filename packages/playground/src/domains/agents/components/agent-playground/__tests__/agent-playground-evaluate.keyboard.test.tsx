@@ -99,7 +99,7 @@ describe('Evaluate navigation', () => {
     it('shows the review queue empty state', async () => {
       setupHandlers();
       renderWithProviders(<Harness />, { router: { initialEntries: ['/agents/chef-agent/evaluate?tab=review'] } });
-      expect(await screen.findByText('No items to review')).not.toBeNull();
+      expect(await screen.findByText('No items to review yet')).not.toBeNull();
       expect(screen.getByRole('tab', { name: 'Review' }).getAttribute('aria-selected')).toBe('true');
     });
   });

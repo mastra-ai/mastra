@@ -10,8 +10,9 @@ import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Tabs, TabContent, TabList, Tab } from '@mastra/playground-ui/components/Tabs';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { CircleSlashIcon, ChevronLeft, Paperclip, SearchIcon } from 'lucide-react';
+import { CircleSlashIcon, ChevronLeft, ExternalLinkIcon, Paperclip, Plus, SearchIcon } from 'lucide-react';
 import { useState, useMemo, useCallback, useEffect } from 'react';
+import type { ReactNode } from 'react';
 import { useWatch } from 'react-hook-form';
 import { useNavigate, useSearchParams } from 'react-router';
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
@@ -75,6 +76,14 @@ function formatDate(dateStr: string | Date | undefined | null): string {
 function getExperimentStartedAtTime(startedAt: AgentExperiment['startedAt']): number {
   if (!startedAt) return 0;
   return startedAt instanceof Date ? startedAt.getTime() : new Date(startedAt).getTime();
+}
+
+function EvaluateDocsLink({ href, children }: { href: string; children: ReactNode }) {
+  return (
+    <Button variant="ghost" as="a" href={href} target="_blank" rel="noopener noreferrer" icon={<ExternalLinkIcon />}>
+      {children}
+    </Button>
+  );
 }
 
 export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: AgentPlaygroundEvaluateProps) {
@@ -482,11 +491,21 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
 
     if (!experiments?.length) {
       return (
-        <div className="flex h-full items-center-safe justify-center-safe py-20">
+        <div className="flex h-full items-center justify-center">
           <EmptyState
-            iconSlot={<CircleSlashIcon className="text-neutral3 size-10" />}
-            titleSlot="No Experiments Yet"
-            descriptionSlot="Run experiments against your datasets to see results here."
+            iconSlot={<CircleSlashIcon />}
+            titleSlot="No Experiments yet"
+            descriptionSlot="Run an experiment against a dataset to see results here."
+            actionSlot={
+              <div className="flex flex-col items-center gap-2">
+                <Button variant="primary" onClick={() => setActiveTab('datasets')} icon={<Plus />}>
+                  Run Experiment
+                </Button>
+                <EvaluateDocsLink href="https://mastra.ai/docs/evals/experiments">
+                  Experiments Documentation
+                </EvaluateDocsLink>
+              </div>
+            }
           />
         </div>
       );
@@ -552,11 +571,31 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
 
     if (!datasets.length) {
       return (
-        <div className="flex h-full items-center-safe justify-center-safe py-20">
+        <div className="flex h-full items-center justify-center">
           <EmptyState
-            iconSlot={<CircleSlashIcon className="text-neutral3 size-10" />}
-            titleSlot="No Datasets"
-            descriptionSlot="Create or attach a dataset to begin testing your agent."
+            iconSlot={<CircleSlashIcon />}
+            titleSlot="No Datasets yet"
+            descriptionSlot="Create or attach a dataset to start evaluating this agent."
+            actionSlot={
+              <div className="flex flex-col items-center gap-2">
+                {unattachedDatasets.length > 0 ? (
+                  <Button variant="primary" onClick={() => setShowAttachDialog(true)} icon={<Paperclip />}>
+                    Attach Dataset
+                  </Button>
+                ) : (
+                  <Button
+                    variant="primary"
+                    onClick={() =>
+                      void navigate(`/datasets/new?targetType=agent&targetIds=${encodeURIComponent(agentId)}`)
+                    }
+                    icon={<Plus />}
+                  >
+                    Create Dataset
+                  </Button>
+                )}
+                <EvaluateDocsLink href="https://mastra.ai/docs/evals/datasets">Datasets Documentation</EvaluateDocsLink>
+              </div>
+            }
           />
         </div>
       );
@@ -634,11 +673,25 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
 
     if (!attachedScorers.length) {
       return (
-        <div className="flex h-full items-center-safe justify-center-safe py-20">
+        <div className="flex h-full items-center justify-center">
           <EmptyState
-            iconSlot={<CircleSlashIcon className="text-neutral3 size-10" />}
-            titleSlot="No Scorers Attached"
-            descriptionSlot="Attach or create a scorer to evaluate your agent's performance."
+            iconSlot={<CircleSlashIcon />}
+            titleSlot="No Scorers yet"
+            descriptionSlot="Attach or create a scorer to evaluate this agent's responses."
+            actionSlot={
+              <div className="flex flex-col items-center gap-2">
+                {unattachedScorers.length > 0 ? (
+                  <Button variant="primary" onClick={() => setShowAttachScorerDialog(true)} icon={<Paperclip />}>
+                    Attach Scorer
+                  </Button>
+                ) : (
+                  <Button variant="primary" onClick={() => setDetailView({ type: 'new-scorer' })} icon={<Plus />}>
+                    Create Scorer
+                  </Button>
+                )}
+                <EvaluateDocsLink href="https://mastra.ai/docs/evals/overview">Scorers Documentation</EvaluateDocsLink>
+              </div>
+            }
           />
         </div>
       );
@@ -855,8 +908,8 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
         onValueChange={handleTabChange}
         className="flex h-full flex-col overflow-hidden"
       >
-        <div className="border-border1 flex items-center justify-between border-b">
-          <TabList className="border-b-0">
+        <div className="border-border1 flex flex-wrap items-center justify-between gap-x-2 border-b">
+          <TabList className="shrink-0 border-b-0">
             <Tab value="experiments">Experiments</Tab>
             <Tab value="datasets">Datasets</Tab>
             <Tab value="scorers">Scorers</Tab>
@@ -864,7 +917,7 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
           </TabList>
 
           {/* Tab-specific actions */}
-          <div className="flex items-center gap-2">
+          <div className="ml-auto flex shrink-0 items-center gap-2 whitespace-nowrap">
             {activeTab === 'datasets' && (
               <>
                 {unattachedDatasets.length > 0 && (

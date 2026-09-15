@@ -20,8 +20,9 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
 import {
-  ClipboardCheck,
   CheckCircle,
+  CircleSlashIcon,
+  ExternalLinkIcon,
   ChevronDown,
   FilterIcon,
   GaugeIcon,
@@ -727,15 +728,29 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
               <Spinner className="h-4 w-4" />
             </div>
           ) : displayItems.length === 0 ? (
-            <EmptyState
-              iconSlot={<ClipboardCheck />}
-              titleSlot={showCompleted ? 'No completed reviews yet' : 'No items to review'}
-              descriptionSlot={
-                showCompleted
-                  ? 'Items you mark as complete will appear here.'
-                  : 'Send experiment results to review from the Experiments tab to triage and tag them here.'
-              }
-            />
+            <div className="flex h-full items-center justify-center">
+              <EmptyState
+                iconSlot={<CircleSlashIcon />}
+                titleSlot={showCompleted ? 'No completed reviews yet' : 'No items to review yet'}
+                descriptionSlot={
+                  showCompleted
+                    ? 'Items you mark as complete will appear here.'
+                    : 'Send experiment results to review from the Experiments tab to triage and tag them here.'
+                }
+                actionSlot={
+                  <Button
+                    variant="ghost"
+                    as="a"
+                    href="https://mastra.ai/docs/evals/overview"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    icon={<ExternalLinkIcon />}
+                  >
+                    Evals Documentation
+                  </Button>
+                }
+              />
+            </div>
           ) : (
             <ExperimentResultsList
               results={displayItems}
