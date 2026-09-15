@@ -13,7 +13,7 @@ import { createHash } from 'node:crypto';
 export function stableStringify(value: unknown): string {
   return JSON.stringify(value, (_key, val) => {
     if (val && typeof val === 'object' && !Array.isArray(val)) {
-      const sorted: Record<string, unknown> = {};
+      const sorted = Object.create(null) as Record<string, unknown>;
       for (const k of Object.keys(val as Record<string, unknown>).sort()) {
         sorted[k] = (val as Record<string, unknown>)[k];
       }

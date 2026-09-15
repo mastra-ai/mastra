@@ -33,6 +33,16 @@ describe('computeInlineWorkspaceIdentity', () => {
 
     expect(a.workspaceId).not.toBe(b.workspaceId);
   });
+
+  it('preserves an own __proto__ key parsed from JSON', () => {
+    const withProto = JSON.parse('{"name":"Workspace","__proto__":{"injected":true}}');
+    const withoutProto = { name: 'Workspace' };
+
+    const a = computeInlineWorkspaceIdentity(withProto);
+    const b = computeInlineWorkspaceIdentity(withoutProto);
+
+    expect(a.workspaceId).not.toBe(b.workspaceId);
+  });
 });
 
 describe('stableStringify', () => {
