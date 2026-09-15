@@ -16,8 +16,10 @@ import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
 import type { RouteAuth } from '../../routes/route.js';
+import { isTerminalFactoryRuleStage } from '../../rules/types.js';
 import type { StateSigner } from '../../state-signing.js';
 import type { IntakeStorage } from '../../storage/domains/intake/base.js';
+import type { WorkItemsStorage } from '../../storage/domains/work-items/base.js';
 import type { LinearIntegration } from './integration.js';
 import { LinearReauthRequiredError } from './integration.js';
 import type { LinearRulesIngress } from './rules.js';
@@ -74,6 +76,12 @@ export interface MountLinearRoutesOptions {
    */
   projects?: { list(input: { orgId: string }): Promise<unknown[]> };
   ingestFactoryIssues?: (input: LinearRulesIngress) => Promise<unknown>;
+  /**
+   * Work-item lookup so the detail route can keep serving a card this Factory
+   * already holds after the issue's winning source was routed elsewhere. When
+   * absent, details resolve only through sources routed to the Factory.
+   */
+  workItems?: Pick<WorkItemsStorage, 'getByProjectSource'>;
 }
 
 /**
@@ -485,14 +493,28 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions): ApiRoute[]
             selectedIds,
           }),
         );
-        if (routedSourceIds.length === 0) return c.json({ error: 'issue_not_found' }, 404);
+        // A card this Factory already ingested stays readable after its issue's
+        // winning source moved to a source routed elsewhere: the fetch widens to
+        // every selected source (never beyond the selection), and the routing
+        // check is waived for that card alone. Without a live card, the strict
+        // routed-source rule applies.
+        const held = options.workItems
+          ? await options.workItems.getByProjectSource({
+              orgId: resolved.tenant.orgId,
+              factoryProjectId,
+              source: { integrationId: 'linear', type: 'issue', externalId: `linear:${identifier}` },
+            })
+          : null;
+        const holdsLiveCard = held != null && !isTerminalFactoryRuleStage(held.stages);
+        if (routedSourceIds.length === 0 && !holdsLiveCard) return c.json({ error: 'issue_not_found' }, 404);
+        const fetchSourceIds = holdsLiveCard ? selectedIds : routedSourceIds;
 
         try {
           const accessToken = await linear.getFreshAccessToken(connection);
-          const issue = await linear.fetchIssueDetail(accessToken, issueReference, selectedIds, routedSourceIds);
+          const issue = await linear.fetchIssueDetail(accessToken, issueReference, selectedIds, fetchSourceIds);
           const matchesReference = issueId !== undefined ? issue?.id === issueId : issue?.identifier === identifier;
           const winningSourceId = issue ? winningLinearSourceId(linear, selectedIds, issue) : null;
-          const isRouted = winningSourceId != null && routedSourceIds.includes(winningSourceId);
+          const isRouted = winningSourceId != null && (holdsLiveCard || routedSourceIds.includes(winningSourceId));
           // Reads exactly like an issue that doesn't exist.
           if (!issue || !matchesReference || !isRouted) {
             return c.json({ error: 'issue_not_found' }, 404);

@@ -89,6 +89,7 @@ function buildApp(
       intake: seed.intake,
       projects: seed.projects,
       ingestFactoryIssues: options.ingestFactoryIssues,
+      workItems: seed.workItems,
     }),
   );
   return app;
@@ -759,6 +760,84 @@ describe('issue detail route', () => {
     expect(await res.json()).toEqual({ error: 'issue_not_found' });
     expect(fetchIssueDetail).toHaveBeenCalledWith('linear-token', 'ENG-42', ['proj-1', teamSourceId], [teamSourceId]);
   });
+  it('keeps serving a card the Factory holds after its winning source moved to another Factory', async () => {
+    const teamSourceId = 'linear-team:team-1';
+    await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'project-1' } });
+    await seed.intake.saveConfig({
+      orgId: 'org1',
+      userId: 'u1',
+      config: { linear: { enabled: true, sourceIds: ['proj-1', teamSourceId] } },
+    });
+    await seed.intake.setBinding({
+      orgId: 'org1',
+      integrationId: 'linear',
+      sourceId: teamSourceId,
+      factoryProjectId: projectB,
+      board: 'work',
+    });
+    // Ingested on B while the team was the winning source; the project is now selected and wins.
+    await seed.workItems.upsert({
+      orgId: 'org1',
+      userId: 'u1',
+      factoryProjectId: projectB,
+      input: {
+        externalSource: { integrationId: 'linear', type: 'issue', externalId: 'linear:ENG-42', url: issueDetail.url },
+        title: 'ENG-42: Fix intake sync',
+        stages: ['intake'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    fetchIssueDetail.mockResolvedValue({ ...issueDetail, teamId: 'team-1' });
+
+    const res = await buildApp(org1()).request(`/web/linear/issues/ENG-42?factoryProjectId=${projectB}`);
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ identifier: 'ENG-42', description: 'The sync runs the wrong way.' });
+    // Fetch scope widens to the whole selection, never beyond it.
+    expect(fetchIssueDetail).toHaveBeenCalledWith(
+      'linear-token',
+      'ENG-42',
+      ['proj-1', teamSourceId],
+      ['proj-1', teamSourceId],
+    );
+  });
+
+  it('stops serving a held card once it is finished', async () => {
+    const teamSourceId = 'linear-team:team-1';
+    await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'project-1' } });
+    await seed.intake.saveConfig({
+      orgId: 'org1',
+      userId: 'u1',
+      config: { linear: { enabled: true, sourceIds: ['proj-1', teamSourceId] } },
+    });
+    await seed.intake.setBinding({
+      orgId: 'org1',
+      integrationId: 'linear',
+      sourceId: teamSourceId,
+      factoryProjectId: projectB,
+      board: 'work',
+    });
+    await seed.workItems.upsert({
+      orgId: 'org1',
+      userId: 'u1',
+      factoryProjectId: projectB,
+      input: {
+        externalSource: { integrationId: 'linear', type: 'issue', externalId: 'linear:ENG-42', url: issueDetail.url },
+        title: 'ENG-42: Fix intake sync',
+        stages: ['done'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    fetchIssueDetail.mockResolvedValue({ ...issueDetail, teamId: 'team-1' });
+
+    const res = await buildApp(org1()).request(`/web/linear/issues/ENG-42?factoryProjectId=${projectB}`);
+
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: 'issue_not_found' });
+  });
+
   it("hides an issue outside the Factory project's own sources", async () => {
     await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'project-1' } });
     await seed.intake.setBinding({
