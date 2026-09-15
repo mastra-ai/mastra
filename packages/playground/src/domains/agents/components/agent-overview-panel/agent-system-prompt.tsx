@@ -40,8 +40,8 @@ export function AgentSystemPrompt({ instructions, children }: { instructions: st
         }
       >
         {hasInstructions ? (
-          <>
-            <div className="h-form-sm mb-2 flex items-center justify-end gap-1">
+          <div className="group/prompt relative min-w-0 pointer-coarse:pt-8">
+            <div className="bg-surface2 absolute top-0 right-0 z-10 flex items-center gap-1 rounded-md opacity-0 group-focus-within/prompt:opacity-100 group-hover/prompt:opacity-100 pointer-coarse:opacity-100">
               {activeTab === 'source' && (
                 <Button
                   variant="ghost"
@@ -73,7 +73,7 @@ export function AgentSystemPrompt({ instructions, children }: { instructions: st
                 )}
               />
             </TabContent>
-          </>
+          </div>
         ) : (
           <Txt variant="caption">No system prompt configured</Txt>
         )}
