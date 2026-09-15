@@ -3,7 +3,7 @@ import { Txt } from '../components/Txt/Txt';
 import { FontSizes, LineHeights } from './fonts';
 
 const meta: Meta = {
-  title: 'Tiger Team/Foundations/Typography',
+  title: 'Foundations/Updated/Typography',
   parameters: {
     layout: 'padded',
     docs: {
