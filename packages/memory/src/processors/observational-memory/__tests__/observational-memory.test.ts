@@ -1803,10 +1803,45 @@ describe('Observer Agent Helpers', () => {
 
       const formatted = formatMessagesForObserver([message]);
 
-      expect((formatted.match(/^Tool Call lookup(?: \([^)]*\))?: \{$/gm) ?? []).length).toBe(1);
+      expect((formatted.match(/^Tool Call lookup(?: \([^)]*\))?: query: "alpha"$/gm) ?? []).length).toBe(1);
       expect((formatted.match(/^Tool Result lookup(?: \([^)]*\))?: \{$/gm) ?? []).length).toBe(1);
-      expect((formatted.match(/^  "query": "alpha"$/gm) ?? []).length).toBe(1);
       expect((formatted.match(/^  "answer": "done"$/gm) ?? []).length).toBe(1);
+    });
+
+    it('bounds large completed tool arguments without hiding later sibling fields', () => {
+      const content = 'export const generated = true;\n'.repeat(2_000);
+      const message = createToolInvocationMessage([
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'large-args-1',
+            toolName: 'write_file',
+            args: { content, path: 'src/generated.ts', overwrite: true },
+            result: 'written',
+          },
+        },
+      ]);
+
+      const formatted = formatMessagesForObserver([message]);
+      const uncappedZero = formatMessagesForObserver([message], { maxPartLength: 0 });
+      const passivelyFormatted = formatMessagesForObserver([message], { maxPartLength: 500 });
+      const minimallyFormatted = formatMessagesForObserver([message], { maxPartLength: 1 });
+
+      for (const text of [formatted, uncappedZero, passivelyFormatted]) {
+        expect(text).toContain(`content: <string, ${content.length} characters; preview size-limited>`);
+        expect(text).toContain('path: "src/generated.ts"');
+        expect(text).toContain('overwrite: true');
+        expect(text.indexOf('path: "src/generated.ts"')).toBeLessThan(
+          text.indexOf('Large string previews (size-limited):'),
+        );
+        expect(text).not.toContain(content);
+      }
+      expect((formatted.match(/^Tool Call write_file(?: \([^)]*\))?: content: /gm) ?? []).length).toBe(1);
+      expect((uncappedZero.match(/^Tool Call write_file(?: \([^)]*\))?: content: /gm) ?? []).length).toBe(1);
+      expect((minimallyFormatted.match(/^Tool Call write_file(?: \([^)]*\))?: …$/gm) ?? []).length).toBe(1);
+      expect((formatted.match(/^Tool Result write_file(?: \([^)]*\))?: written$/gm) ?? []).length).toBe(1);
+      expect(passivelyFormatted.length).toBeLessThan(formatted.length);
     });
 
     it.each([
@@ -1849,7 +1884,7 @@ describe('Observer Agent Helpers', () => {
 
       expect(callIndex).toBeGreaterThanOrEqual(0);
       expect(resultIndex).toBeGreaterThan(callIndex);
-      expect((formatted.match(/^Tool Call lookup(?: \([^)]*\))?: \{$/gm) ?? []).length).toBe(1);
+      expect((formatted.match(/^Tool Call lookup(?: \([^)]*\))?: query: "split"$/gm) ?? []).length).toBe(1);
       expect((formatted.match(/^Tool Result lookup(?: \([^)]*\))?: split-result$/gm) ?? []).length).toBe(1);
     });
 
@@ -1906,11 +1941,10 @@ describe('Observer Agent Helpers', () => {
 
       const formatted = formatMessagesForObserver([message]);
 
-      expect((formatted.match(/^Tool Call search(?: \([^)]*\))?: \{$/gm) ?? []).length).toBe(1);
+      expect((formatted.match(/^Tool Call search(?: \([^)]*\))?: query: "terminal"$/gm) ?? []).length).toBe(1);
       expect((formatted.match(/^Tool Result search(?: \([^)]*\))?: complete$/gm) ?? []).length).toBe(1);
-      expect(formatted).toContain('"query": "terminal"');
-      expect(formatted).not.toContain('"query": "partial"');
-      expect(formatted).not.toContain('"query": "approval-responded"');
+      expect(formatted).not.toContain('query: "partial"');
+      expect(formatted).not.toContain('query: "approval-responded"');
     });
 
     it('keeps repeated tool names distinct by tool call ID and uses the latest terminal outcome', () => {
@@ -1949,13 +1983,13 @@ describe('Observer Agent Helpers', () => {
 
       const formatted = formatMessagesForObserver([message]);
 
-      expect((formatted.match(/^Tool Call lookup(?: \([^)]*\))?: \{$/gm) ?? []).length).toBe(2);
+      expect((formatted.match(/^Tool Call lookup(?: \([^)]*\))?: query: "/gm) ?? []).length).toBe(2);
       expect((formatted.match(/^Tool Result lookup(?: \([^)]*\))?: /gm) ?? []).length).toBe(2);
       expect(formatted).not.toContain('stale-one');
       expect(formatted).toContain('final-one');
       expect(formatted).toContain('final-two');
-      expect(formatted).toContain('"query": "one-final"');
-      expect(formatted).toContain('"query": "two"');
+      expect(formatted).toContain('query: "one-final"');
+      expect(formatted).toContain('query: "two"');
     });
 
     it('renders error and denial terminal states with visible fallbacks', () => {
@@ -2022,7 +2056,7 @@ describe('Observer Agent Helpers', () => {
 
       const formatted = formatMessagesForObserver([message]);
 
-      expect((formatted.match(/^Tool Call (?:write|remove)(?: \([^)]*\))?: \{$/gm) ?? []).length).toBe(6);
+      expect((formatted.match(/^Tool Call (?:write|remove)(?: \([^)]*\))?: path: "\/tmp\//gm) ?? []).length).toBe(6);
       expect((formatted.match(/^Tool Error write(?: \([^)]*\))?: /gm) ?? []).length).toBe(3);
       expect((formatted.match(/^Tool Denied remove(?: \([^)]*\))?: /gm) ?? []).length).toBe(3);
       expect(formatted).toContain('disk full');
@@ -2147,15 +2181,14 @@ describe('Observer Agent Helpers', () => {
       const multiHistory = observerTextContent(buildMultiThreadObserverHistoryMessage(byThread, threadOrder));
 
       for (const text of [singleText, singleHistory]) {
-        expect((text.match(/^Tool Call skill(?: \([^)]*\))?: \{$/gm) ?? []).length).toBe(1);
+        expect((text.match(/^Tool Call skill(?: \([^)]*\))?: name: "first-skill"$/gm) ?? []).length).toBe(1);
         expect((text.match(/^Tool Result skill(?: \([^)]*\))?: first instructions$/gm) ?? []).length).toBe(1);
-        expect((text.match(/^  "name": "first-skill"$/gm) ?? []).length).toBe(1);
       }
       for (const text of [multiText, multiHistory]) {
-        expect((text.match(/^Tool Call skill(?: \([^)]*\))?: \{$/gm) ?? []).length).toBe(2);
+        expect((text.match(/^Tool Call skill(?: \([^)]*\))?: name: "(?:first|second)-skill"$/gm) ?? []).length).toBe(2);
         expect((text.match(/^Tool Result skill(?: \([^)]*\))?: /gm) ?? []).length).toBe(2);
-        expect((text.match(/^  "name": "first-skill"$/gm) ?? []).length).toBe(1);
-        expect((text.match(/^  "name": "second-skill"$/gm) ?? []).length).toBe(1);
+        expect((text.match(/^Tool Call skill(?: \([^)]*\))?: name: "first-skill"$/gm) ?? []).length).toBe(1);
+        expect((text.match(/^Tool Call skill(?: \([^)]*\))?: name: "second-skill"$/gm) ?? []).length).toBe(1);
       }
     });
   });
@@ -2267,8 +2300,10 @@ describe('Observer Agent Helpers', () => {
       expect(actorCallCount).toBe(2);
       expect(registeredToolNames).toContain('skill');
       expect(skillResult).toBe(skillInstructions);
-      expect((observerPrompt.match(/^Tool Call skill(?: \([^)]*\))?: \{$/gm) ?? []).length).toBe(1);
-      expect((observerPrompt.match(new RegExp(`^  "name": "${skillName}"$`, 'gm')) ?? []).length).toBe(1);
+      expect(
+        (observerPrompt.match(new RegExp(`^Tool Call skill(?: \\([^)]*\\))?: name: "${skillName}"$`, 'gm')) ?? [])
+          .length,
+      ).toBe(1);
       expect(
         (observerPrompt.match(/^Tool Result skill(?: \([^)]*\))?: # Observer Provenance Skill$/gm) ?? []).length,
       ).toBe(1);
@@ -2431,8 +2466,8 @@ describe('Observer Agent Helpers', () => {
       ]);
       expect(joinedText).not.toContain('superseded outcome');
       expect(joinedText).toContain('latest outcome');
-      expect(joinedText).toContain('"url": "https://example.com/final"');
-      expect((joinedText.match(/^Tool Call screenshot(?: \([^)]*\))?: \{$/gm) ?? []).length).toBe(1);
+      expect(joinedText).toContain('url: "https://example.com/final"');
+      expect((joinedText.match(/^Tool Call screenshot(?: \([^)]*\))?: url: /gm) ?? []).length).toBe(1);
       expect((joinedText.match(/^Tool Result screenshot(?: \([^)]*\))?: /gm) ?? []).length).toBe(1);
     });
 
@@ -2686,7 +2721,7 @@ describe('Observer Agent Helpers', () => {
 
       expect(textParts[0].text).toContain('## New Message History to Observe');
       expect(textParts[1].text).toBe(
-        `Dec 4 2024:\nAssistant (10:30 AM): I found two candidate vendors.\nReasoning: Comparing price and delivery windows.\nTool Call web_search (10:31 AM): {\n  "query": "best local print vendors"\n}\nTool Result web_search: {\n  "topVendor": "Acme Print",\n  "etaDays": 3\n}\nDec 5 2024:\nFile (9:00 AM): [File #1: quote.pdf]`,
+        `Dec 4 2024:\nAssistant (10:30 AM): I found two candidate vendors.\nReasoning: Comparing price and delivery windows.\nTool Call web_search (10:31 AM): query: "best local print vendors"\nTool Result web_search: {\n  "topVendor": "Acme Print",\n  "etaDays": 3\n}\nDec 5 2024:\nFile (9:00 AM): [File #1: quote.pdf]`,
       );
       expect(historyMessage.content).toContainEqual(
         expect.objectContaining({

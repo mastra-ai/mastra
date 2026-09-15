@@ -12,6 +12,7 @@ import {
   stripExtractorSections,
 } from './extractor';
 import { safeSlice } from './string-utils';
+import { formatToolArgumentsForObserver } from './tool-argument-helpers';
 import {
   DEFAULT_OBSERVER_TOOL_RESULT_MAX_TOKENS,
   formatToolResultForObserver,
@@ -1112,7 +1113,7 @@ function formatObserverMessage(
           toolFormatting.emittedCalls.add(inv.toolCallId);
           pushLine(
             `Tool Call ${exchange.signature.toolName}`,
-            maybeTruncate(JSON.stringify(exchange.signature.args, null, 2) ?? 'undefined', maxLen),
+            formatToolArgumentsForObserver(exchange.signature.args, { maxCharacters: maxLen || undefined }),
             partCreatedAt,
           );
         }
@@ -1178,7 +1179,7 @@ function formatObserverMessage(
         if (!exchange) {
           pushLine(
             `Tool Call ${inv.toolName}`,
-            maybeTruncate(JSON.stringify(inv.args, null, 2) ?? 'undefined', maxLen),
+            formatToolArgumentsForObserver(inv.args, { maxCharacters: maxLen || undefined }),
             partCreatedAt,
           );
         }
