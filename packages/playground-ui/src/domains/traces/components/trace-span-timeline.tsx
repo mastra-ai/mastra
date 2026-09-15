@@ -52,7 +52,7 @@ export function TraceSpanTimeline({
 
   return (
     <>
-      {leadingSlot && <div className="px-2 pt-1.5">{leadingSlot}</div>}
+      {leadingSlot}
       <SpanTypeLegend spans={hierarchicalSpans} />
       <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(12rem,1fr)] content-start items-start gap-y-px overflow-hidden py-1">
         <div

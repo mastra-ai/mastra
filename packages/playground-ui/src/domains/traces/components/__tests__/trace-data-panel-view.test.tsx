@@ -212,7 +212,7 @@ describe('TraceDataPanelView — header actions', () => {
     expect(screen.queryByRole('menuitem', { name: /evaluate trace/i })).toBeNull();
 
     openTraceActions();
-    expect(screen.getByRole('menuitem', { name: /evaluate trace/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /score trace/i })).toBeTruthy();
   });
 
   it('keeps the trace actions reachable in the header even while the panel is collapsed', () => {
@@ -230,7 +230,7 @@ describe('TraceDataPanelView — header actions', () => {
     // The body is hidden while collapsed, so these can only come from the header menu.
     expect(screen.queryByText('agent run')).toBeNull();
     openTraceActions();
-    expect(screen.getByRole('menuitem', { name: /evaluate trace/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /score trace/i })).toBeTruthy();
     expect(screen.getByRole('menuitem', { name: /add full trace to dataset/i })).toBeTruthy();
     expect(screen.getByRole('menuitem', { name: /add tool mocks to item/i })).toBeTruthy();
   });
@@ -492,7 +492,7 @@ describe('TraceDataPanelView — the actions row', () => {
 
     expect(screen.queryByText(/available in Mastra Studio/)).toBeNull();
     openTraceActions();
-    expect(screen.getByRole('menuitem', { name: /evaluate trace/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /score trace/i })).toBeTruthy();
   });
 
   it('never shows the actions row on the trace page', () => {
@@ -518,7 +518,7 @@ describe('TraceDataPanelView — the actions row', () => {
     render(<TraceDataPanelView {...baseProps} onEvaluateTrace={onEvaluateTrace} />);
 
     openTraceActions();
-    fireEvent.click(screen.getByRole('menuitem', { name: /evaluate trace/i }));
+    fireEvent.click(screen.getByRole('button', { name: /score trace/i }));
 
     expect(onEvaluateTrace).toHaveBeenCalledTimes(1);
   });

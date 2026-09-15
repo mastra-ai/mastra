@@ -191,14 +191,16 @@ const AssistantActionBar = ({
   isSpeaking,
   onReadAloud,
   onStopSpeaking,
+  className,
 }: {
   text: string;
   modelMetadata?: { modelId: string; modelProvider: string };
   isSpeaking?: boolean;
   onReadAloud?: (text: string) => void;
   onStopSpeaking?: () => void;
+  className?: string;
 }) => (
-  <div className="relative flex items-center gap-1 transition-all">
+  <div className={cn('relative flex items-center gap-1 transition-all', className)}>
     {modelMetadata && (
       <div className="text-icon5 text-ui-xs leading-ui-xs flex items-center gap-1 pr-2">
         <ProviderLogo providerId={modelMetadata.modelProvider} size={14} />
@@ -347,8 +349,11 @@ export const MessageRow = memo(function MessageRow({
 
   if (dbMessage === null) return null;
 
+  // Revealed on hover/focus like the copy button; always visible on touch devices where there is no hover.
+  const hoverRevealClassName = 'group-focus-within:opacity-100 group-hover:opacity-100 pointer-fine:opacity-0';
+
   // Same inset as a tool badge's trailing slot, so a user message's action lines up with the tool below it.
-  const footerSlot = footer ? <div className="pr-1">{footer}</div> : null;
+  const footerSlot = footer ? <div className={cn('pr-1', hoverRevealClassName)}>{footer}</div> : null;
 
   // Same object once caught up, so the factory keeps the part it is filling in mounted.
   const shownMessage = revealing ? { ...dbMessage, content: { ...dbMessage.content, parts: shownParts } } : dbMessage;
@@ -378,7 +383,7 @@ export const MessageRow = memo(function MessageRow({
         {(canCopy || footerSlot) && (
           <div className="mt-1 flex items-center gap-2">
             {canCopy && (
-              <div className="group-focus-within:opacity-100 group-hover:opacity-100 pointer-fine:opacity-0">
+              <div className={hoverRevealClassName}>
                 <CopyButton text={text} className="pointer-coarse:min-h-11 pointer-coarse:min-w-11" />
               </div>
             )}
@@ -401,7 +406,9 @@ export const MessageRow = memo(function MessageRow({
       {(showActionBar || footerSlot) && (
         <div className="mt-4 flex min-h-6 items-center gap-2">
           {showActionBar && (
+            // In the live chat the assistant's actions stay visible; in read-only (trace) views they appear on hover.
             <AssistantActionBar
+              className={readOnly ? hoverRevealClassName : undefined}
               text={getTextFromParts(message)}
               modelMetadata={modelMetadata}
               isSpeaking={isSpeaking}
