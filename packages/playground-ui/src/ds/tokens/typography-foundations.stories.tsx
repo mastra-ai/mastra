@@ -58,8 +58,8 @@ const TypeRow = ({ token }: { token: TypographyToken }) => (
 );
 
 const TypeScale = ({ title, tokens }: { title: string; tokens: TypographyToken[] }) => (
-  <section className="min-w-0 rounded-lg border border-border1 px-4">
-    <div className="flex items-center justify-between gap-4 border-b border-border1 py-4">
+  <section className="min-w-0">
+    <div className="flex items-center justify-between gap-4 border-b border-border1 pb-3">
       <Txt as="h2" variant="header-sm" className="font-medium">
         {title}
       </Txt>
@@ -74,7 +74,7 @@ const TypeScale = ({ title, tokens }: { title: string; tokens: TypographyToken[]
 );
 
 const HierarchySpecimen = ({ role, token, sample }: { role: string; token: TypographyToken; sample: string }) => (
-  <div className="flex min-h-32 min-w-0 flex-col justify-between gap-5 rounded-lg border border-border1 bg-surface3 p-4">
+  <div className="flex min-h-28 min-w-0 flex-col justify-between gap-5 border-t border-border1 py-4">
     <div className="flex items-center justify-between gap-3">
       <Txt variant="ui-xs" font="mono" className="text-neutral3 uppercase">
         {role}
@@ -92,31 +92,36 @@ const HierarchySpecimen = ({ role, token, sample }: { role: string; token: Typog
 export const TypographyFoundations: Story = {
   name: 'Typography foundations',
   render: () => (
-    <div className="max-w-320 flex flex-col gap-8 rounded-xl border border-border1 bg-surface2 p-5 sm:p-8">
-      <header className="max-w-180 flex flex-col gap-2">
-        <Txt as="h1" variant="header-lg" className="font-semibold">
-          Typography foundations
+    <div className="max-w-320 bg-surface2 px-5 sm:px-8">
+      <header className="grid gap-5 border-y border-border1 py-6 sm:grid-cols-[10rem_minmax(0,1fr)] sm:py-8">
+        <Txt variant="ui-xs" font="mono" className="text-neutral3 uppercase">
+          Type system / 10 tokens
         </Txt>
-        <Txt variant="ui-md" className="text-neutral4">
-          Ten tokens define font size and line height. Txt consumes this scale; it does not define another one.
-        </Txt>
+        <div className="max-w-180 flex flex-col gap-2">
+          <Txt as="h1" variant="header-lg" className="font-semibold">
+            Typography foundations
+          </Txt>
+          <Txt variant="ui-md" className="text-neutral4">
+            Font size and line height travel as one value. Txt is one component interface to the same scale.
+          </Txt>
+        </div>
       </header>
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+      <div className="grid grid-cols-1 gap-8 py-8 xl:grid-cols-2 xl:gap-12">
         <TypeScale title="UI scale" tokens={uiTokens} />
         <TypeScale title="Heading scale" tokens={headingTokens} />
       </div>
 
-      <section className="flex flex-col gap-4">
-        <div className="flex flex-col gap-1">
+      <section className="border-t border-border1 py-8">
+        <div className="mb-5 flex items-baseline justify-between gap-4">
           <Txt as="h2" variant="header-sm" className="font-medium">
-            Heading hierarchy
+            Role map
           </Txt>
-          <Txt variant="ui-sm" className="text-neutral3">
-            The role selects the token. Element choice still follows document structure.
+          <Txt variant="ui-xs" font="mono" className="text-neutral3 uppercase">
+            Semantic hierarchy
           </Txt>
         </div>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-x-6 sm:grid-cols-2 xl:grid-cols-4">
           <HierarchySpecimen role="Hero" token="header-xl" sample="Build agents that ship" />
           <HierarchySpecimen role="Page" token="header-md" sample="Agent overview" />
           <HierarchySpecimen role="Section" token="header-sm" sample="Recent activity" />
@@ -124,19 +129,11 @@ export const TypographyFoundations: Story = {
         </div>
       </section>
 
-      <footer className="grid gap-3 border-t border-border1 pt-4 sm:grid-cols-2">
-        <div className="flex flex-col gap-1">
-          <Txt variant="ui-xs" font="mono" className="text-neutral3 uppercase">
-            Foundation
-          </Txt>
-          <Txt variant="ui-sm">text-ui-* and text-header-* pair size with leading.</Txt>
-        </div>
-        <div className="flex flex-col gap-1">
-          <Txt variant="ui-xs" font="mono" className="text-neutral3 uppercase">
-            Component API
-          </Txt>
-          <Txt variant="ui-sm">Txt applies a foundation token through its variant prop.</Txt>
-        </div>
+      <footer className="flex flex-col gap-1 border-t border-border1 py-5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-8">
+        <Txt variant="ui-sm">Foundation: text-ui-* and text-header-*.</Txt>
+        <Txt variant="ui-sm" className="text-neutral3">
+          Txt applies these tokens through its variant prop.
+        </Txt>
       </footer>
     </div>
   ),
