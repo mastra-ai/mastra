@@ -1,4 +1,3 @@
-import { generateKeyPairSync } from 'node:crypto';
 import {
   DirectoryNotEmptyError,
   DirectoryNotFoundError,
@@ -13,6 +12,25 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GoogleDriveFilesystem } from './index';
 
 const FOLDER_MIME = 'application/vnd.google-apps.folder';
+
+async function generateServiceAccountKey(): Promise<{ privateKey: string; publicKey: CryptoKey }> {
+  const keyPair = await globalThis.crypto.subtle.generateKey(
+    {
+      name: 'RSASSA-PKCS1-v1_5',
+      modulusLength: 2048,
+      publicExponent: new Uint8Array([1, 0, 1]),
+      hash: 'SHA-256',
+    },
+    true,
+    ['sign', 'verify'],
+  );
+  return {
+    privateKey: `-----BEGIN PRIVATE KEY-----\n${Buffer.from(
+      await globalThis.crypto.subtle.exportKey('pkcs8', keyPair.privateKey),
+    ).toString('base64')}\n-----END PRIVATE KEY-----\n`,
+    publicKey: keyPair.publicKey,
+  };
+}
 
 interface FakeFile {
   id: string;
@@ -526,13 +544,9 @@ describe('GoogleDriveFilesystem', () => {
     });
 
     it('normalizes service account private keys with literal \\n escapes (as stored in .env files)', async () => {
-      const { privateKey } = generateKeyPairSync('rsa', {
-        modulusLength: 2048,
-        privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
-        publicKeyEncoding: { type: 'spki', format: 'pem' },
-      });
+      const { privateKey, publicKey } = await generateServiceAccountKey();
       // Simulate what .env files do — replace real newlines with the two-character `\n` sequence
-      const escapedKey = (privateKey as string).replace(/\n/g, '\\n');
+      const escapedKey = privateKey.replace(/\n/g, '\\n');
 
       const previousFetch = globalThis.fetch;
       const tokenFetch = vi.fn().mockResolvedValue(
@@ -551,9 +565,24 @@ describe('GoogleDriveFilesystem', () => {
         folderId: 'root-folder',
         serviceAccount: { clientEmail: 'svc@example.iam.gserviceaccount.com', privateKey: escapedKey },
       });
-      // If the key isn't normalized, createSign().sign() throws DECODER routines::unsupported.
       await expect(sa._init()).resolves.toBeUndefined();
       expect(tokenFetch).toHaveBeenCalledTimes(1);
+      const tokenRequest = tokenFetch.mock.calls[0]![1] as RequestInit;
+      const assertion = new URLSearchParams(tokenRequest.body as URLSearchParams).get('assertion');
+      expect(assertion).toBeTruthy();
+      const [encodedHeader, encodedClaim, encodedSignature] = assertion!.split('.');
+      expect(JSON.parse(Buffer.from(encodedHeader!, 'base64url').toString())).toMatchObject({
+        alg: 'RS256',
+        typ: 'JWT',
+      });
+      await expect(
+        globalThis.crypto.subtle.verify(
+          'RSASSA-PKCS1-v1_5',
+          publicKey,
+          Buffer.from(encodedSignature!, 'base64url'),
+          new TextEncoder().encode(`${encodedHeader}.${encodedClaim}`),
+        ),
+      ).resolves.toBe(true);
     });
 
     it.each<[string, (pem: string) => string]>([
@@ -568,12 +597,8 @@ describe('GoogleDriveFilesystem', () => {
       // also wrapped in quotes. This is what the real-world bug report looked like.
       ['doubly-quoted with escaped inner quotes', pem => `\\"${pem.replace(/\n/g, '\\n')}\\",`],
     ])('normalizes private keys with %s', async (_label, transform) => {
-      const { privateKey } = generateKeyPairSync('rsa', {
-        modulusLength: 2048,
-        privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
-        publicKeyEncoding: { type: 'spki', format: 'pem' },
-      });
-      const key = transform(privateKey as string);
+      const { privateKey } = await generateServiceAccountKey();
+      const key = transform(privateKey);
 
       const previousFetch = globalThis.fetch;
       const tokenFetch = vi.fn().mockResolvedValue(
