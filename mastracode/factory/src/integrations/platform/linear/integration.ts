@@ -552,6 +552,8 @@ export class PlatformLinearIntegration implements FactoryIntegration {
           );
           projects.push(...result.projects);
           if (!result.pageInfo.hasNextPage || !result.pageInfo.endCursor) break;
+          // A page that hands back the cursor it was asked for would replay forever.
+          if (result.pageInfo.endCursor === after) throw invalidLinearCursor();
           after = result.pageInfo.endCursor;
         }
         return projects.map(project => ({ workspace, project }));
@@ -578,6 +580,8 @@ export class PlatformLinearIntegration implements FactoryIntegration {
           );
           teams.push(...result.teams);
           if (!result.pageInfo.hasNextPage || !result.pageInfo.endCursor) break;
+          // A page that hands back the cursor it was asked for would replay forever.
+          if (result.pageInfo.endCursor === after) throw invalidLinearCursor();
           after = result.pageInfo.endCursor;
         }
         return teams.map(team => ({ workspace, team }));
@@ -683,6 +687,8 @@ export class PlatformLinearIntegration implements FactoryIntegration {
           `${API_PREFIX}/workspaces/${encodeURIComponent(workspace.linearWorkspaceId)}/issues?${query}`,
         );
         const next = result.pageInfo.hasNextPage ? result.pageInfo.endCursor : null;
+        // A page that hands back the cursor it was asked for would replay forever.
+        if (next !== null && next === after) throw invalidLinearCursor();
         nextState[sourceId] = next;
         hasNextPage ||= next !== null;
         return result.issues

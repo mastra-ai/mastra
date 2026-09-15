@@ -716,6 +716,65 @@ describe('PlatformLinearIntegration', () => {
     ).rejects.toMatchObject({ code: 'invalid_cursor' });
   });
 
+  it('rejects a team page that hands back the cursor it was asked for', async () => {
+    const teamSourceId = `linear-team:${Buffer.from(
+      JSON.stringify({ workspaceId: 'workspace-1', teamId: 'team-1' }),
+    ).toString('base64url')}`;
+    const fetchImpl = vi.fn<typeof fetch>(async input => {
+      const url = String(input);
+      if (url.endsWith('/workspaces')) return json({ workspaces: [workspace] });
+      if (url.includes('/workspace-1/teams')) {
+        // Every page claims more follows and repeats the same cursor.
+        return json({
+          teams: [{ id: 'team-1', key: 'ENG', name: 'Engineering' }],
+          pageInfo: { hasNextPage: true, endCursor: 'stuck' },
+        });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    const integration = createIntegration(fetchImpl);
+
+    await expect(
+      integration.intake.listIssues({
+        connection: { type: 'oauth', accessToken: 'unused-provider-token' },
+        sourceIds: [teamSourceId],
+        attributionSourceIds: [teamSourceId],
+      }),
+    ).rejects.toMatchObject({ code: 'invalid_cursor' });
+    // The first page is asked without a cursor and the second with it; nothing beyond that.
+    expect(fetchImpl.mock.calls.filter(call => String(call[0]).includes('/workspace-1/teams'))).toHaveLength(2);
+  });
+
+  it('rejects an issue page that hands back the cursor it was asked for', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async input => {
+      const url = String(input);
+      if (url.endsWith('/workspaces')) return json({ workspaces: [workspace] });
+      if (url.includes('/workspace-1/projects')) {
+        return json({ projects: [project], pageInfo: { hasNextPage: false, endCursor: null } });
+      }
+      if (url.includes('/workspace-1/issues')) {
+        return json({ issues: [issue], pageInfo: { hasNextPage: true, endCursor: 'stuck' } });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    const integration = createIntegration(fetchImpl);
+    const first = await integration.intake.listItems({
+      orgId: 'org-1',
+      userId: 'user-1',
+      sourceIds: [project1SourceId],
+    });
+    expect(first.nextCursor).not.toBeNull();
+
+    await expect(
+      integration.intake.listItems({
+        orgId: 'org-1',
+        userId: 'user-1',
+        sourceIds: [project1SourceId],
+        cursor: first.nextCursor!,
+      }),
+    ).rejects.toMatchObject({ code: 'invalid_cursor' });
+  });
+
   it('propagates platform rate limits through Linear capabilities', async () => {
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
       new Response(JSON.stringify({ detail: 'Rate limited' }), {
