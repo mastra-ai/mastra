@@ -700,4 +700,74 @@ describe('workspace_grep', () => {
     expect(result).toContain('src/app.ts');
     expect(result).not.toContain('generated.js');
   });
+
+  it('should not search files with an unregistered extension by default', async () => {
+    await fs.writeFile(path.join(tempDir, 'a.sasx'), 'findme');
+    const workspace = new Workspace({
+      filesystem: new LocalFilesystem({ basePath: tempDir }),
+    });
+    const tools = await createWorkspaceTools(workspace);
+
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute({ pattern: 'findme' }, { workspace });
+
+    expect(result).toContain('0 matches across 0 files');
+    expect(result).not.toContain('a.sasx');
+  });
+
+  it('should search files whose extension is registered via textExtensions', async () => {
+    await fs.writeFile(path.join(tempDir, 'a.sasx'), 'findme');
+    const workspace = new Workspace({
+      filesystem: new LocalFilesystem({ basePath: tempDir, textExtensions: ['.sasx'] }),
+    });
+    const tools = await createWorkspaceTools(workspace);
+
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute({ pattern: 'findme' }, { workspace });
+
+    expect(result).toContain('1 match across 1 file');
+    expect(result).toContain('a.sasx');
+  });
+
+  it('should search the newly built-in .sas / .log / .jsonl extensions', async () => {
+    await fs.writeFile(path.join(tempDir, 'a.sas'), 'findme');
+    await fs.writeFile(path.join(tempDir, 'b.log'), 'findme');
+    await fs.writeFile(path.join(tempDir, 'c.jsonl'), 'findme');
+    const workspace = new Workspace({
+      filesystem: new LocalFilesystem({ basePath: tempDir }),
+    });
+    const tools = await createWorkspaceTools(workspace);
+
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute({ pattern: 'findme' }, { workspace });
+
+    expect(result).toContain('3 matches across 3 files');
+  });
+
+  it('should report a skip when an explicit file has an unsupported extension', async () => {
+    await fs.writeFile(path.join(tempDir, 'a.bin'), 'findme');
+    const workspace = new Workspace({
+      filesystem: new LocalFilesystem({ basePath: tempDir }),
+    });
+    const tools = await createWorkspaceTools(workspace);
+
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute(
+      { pattern: 'findme', path: 'a.bin' },
+      { workspace },
+    );
+
+    expect(result).toContain('0 matches across 0 files');
+    expect(result).toContain('1 file skipped: unsupported extension');
+  });
+
+  it('should not report skips for unsupported files during directory traversal', async () => {
+    await fs.writeFile(path.join(tempDir, 'a.ts'), 'findme');
+    await fs.writeFile(path.join(tempDir, 'b.bin'), 'findme');
+    const workspace = new Workspace({
+      filesystem: new LocalFilesystem({ basePath: tempDir }),
+    });
+    const tools = await createWorkspaceTools(workspace);
+
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute({ pattern: 'findme' }, { workspace });
+
+    expect(result).toContain('1 match across 1 file');
+    expect(result).not.toContain('skipped: unsupported extension');
+  });
 });

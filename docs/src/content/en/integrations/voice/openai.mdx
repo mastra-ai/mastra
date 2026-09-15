@@ -464,6 +464,30 @@ Disconnects from the OpenAI Realtime session and cleans up resources. Should be 
 
 Returns: `void`
 
+#### `sendEvent()`
+
+Sends a raw client event to the OpenAI Realtime session. Use this for session control that has no dedicated method, such as adding conversation items. Events sent before the session is created are queued and sent once it is.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'type',
+    type: 'string',
+    description: 'OpenAI Realtime client event type, such as conversation.item.create.',
+    isOptional: false,
+  },
+  {
+    name: 'data',
+    type: 'Record<string, unknown>',
+    description: 'Event payload sent alongside the type.',
+    isOptional: true,
+    defaultValue: '{}',
+  },
+]}
+/>
+
+Returns: `void`
+
 #### `getSpeakers()`
 
 Returns a list of available voice speakers.
@@ -542,34 +566,28 @@ The OpenAIRealtimeVoice class emits the following events:
 
 #### OpenAI Realtime Events
 
-You can also listen to [OpenAI Realtime utility events](https://github.com/openai/openai-realtime-api-beta#reference-client-utility-events) by prefixing with 'openAIRealtime:':
+Every server event received from the OpenAI Realtime API is also emitted with the `openAIRealtime:` prefix, using the [OpenAI server event type](https://platform.openai.com/docs/api-reference/realtime-server-events) as the suffix. The callback receives the complete event payload.
+
+```typescript
+voice.on('openAIRealtime:rate_limits.updated', event => {
+  console.log(event.rate_limits)
+})
+```
+
+#### Socket Events
 
 <PropertiesTable
   content={[
   {
-    name: 'openAIRealtime:conversation.created',
+    name: 'open',
     type: 'event',
-    description: 'Emitted when a new conversation is created.',
+    description: 'Emitted when the WebSocket connection to OpenAI opens.',
   },
   {
-    name: 'openAIRealtime:conversation.interrupted',
+    name: 'close',
     type: 'event',
-    description: 'Emitted when a conversation is interrupted.',
-  },
-  {
-    name: 'openAIRealtime:conversation.updated',
-    type: 'event',
-    description: 'Emitted when a conversation is updated.',
-  },
-  {
-    name: 'openAIRealtime:conversation.item.appended',
-    type: 'event',
-    description: 'Emitted when an item is appended to the conversation.',
-  },
-  {
-    name: 'openAIRealtime:conversation.item.completed',
-    type: 'event',
-    description: 'Emitted when an item in the conversation is completed.',
+    description:
+      'Emitted when the WebSocket connection closes, including when OpenAI closes it. Callback receives { code: number, reason: string }.',
   },
 ]}
 />

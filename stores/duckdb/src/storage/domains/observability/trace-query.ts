@@ -199,7 +199,7 @@ function compileFeedbackScalarPredicate(predicate: TrustedTraceQueryScalarPredic
     return { sql: `s.value IS ${predicate.operator === 'exists' ? 'NOT ' : ''}NULL`, values: [] };
   }
   const sample = predicate.type === 'membership' ? predicate.values[0] : predicate.value;
-  const field = typeof sample === 'number' ? 'TRY_CAST(s.value AS DOUBLE)' : 's.value';
+  const field = typeof sample === 'number' ? 's.valueNumber' : 's.valueString';
   return compileScalarPredicate(predicate, { value: { sql: field, parameterType: 'scalar' } });
 }
 

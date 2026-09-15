@@ -107,6 +107,18 @@ export interface GeminiLiveVoiceConfig {
   tools?: GeminiToolConfig[];
   /** Session configuration */
   sessionConfig?: GeminiSessionConfig;
+  /**
+   * Thinking configuration for reasoning-capable models. Forwarded to the Live API
+   * setup frame as `generation_config.thinking_config`. On native-audio thinking
+   * models, set `includeThoughts: false` to stop the model's reasoning from being
+   * spoken/surfaced as the reply, or bound it with `thinkingBudget`.
+   */
+  thinkingConfig?: {
+    /** Whether the model should include its thoughts in the response. */
+    includeThoughts?: boolean;
+    /** Token budget for the model's thinking. */
+    thinkingBudget?: number;
+  };
   /** Audio configuration for input/output */
   audioConfig?: Partial<AudioConfig>;
   /** Enable debug logging */
@@ -382,6 +394,10 @@ export interface UpdateMessage {
             voice_name: string;
           };
         };
+      };
+      thinking_config?: {
+        include_thoughts?: boolean;
+        thinking_budget?: number;
       };
     };
     system_instruction?: {

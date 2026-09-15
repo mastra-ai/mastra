@@ -7,15 +7,20 @@
     "accounts/fireworks/models/kimi-k2p6",
     "accounts/fireworks/models/kimi-k2p7-code",
     "accounts/fireworks/models/kimi-k3",
-    "accounts/fireworks/models/minimax-m3",
     "accounts/fireworks/models/mistral-large-3-fp8",
     "accounts/fireworks/models/muse-glimmer-30b",
     "accounts/fireworks/models/qwen3p7-plus",
-    "accounts/fireworks/routers/kimi-k3-fast"
+    "accounts/fireworks/models/qwen3p8-max",
+    "accounts/fireworks/routers/deepseek-flash-latest",
+    "accounts/fireworks/routers/glm-flash-latest",
+    "accounts/fireworks/routers/kimi-fast-latest",
+    "accounts/fireworks/routers/kimi-k3-fast",
+    "accounts/fireworks/routers/kimi-latest"
   ],
   "temperature": [
     "accounts/fireworks/models/deepseek-v4-flash-0731",
     "accounts/fireworks/models/deepseek-v4-flash-vision-exp",
+    "accounts/fireworks/models/deepseek-v4-pro",
     "accounts/fireworks/models/deepseek-v4-pro-0813",
     "accounts/fireworks/models/deepseek-v4p1-flash",
     "accounts/fireworks/models/glm-5p2",
@@ -25,6 +30,7 @@
     "accounts/fireworks/models/inkling",
     "accounts/fireworks/models/kimi-k2p6",
     "accounts/fireworks/models/kimi-k2p7-code",
+    "accounts/fireworks/models/minimax-m2p7",
     "accounts/fireworks/models/minimax-m3",
     "accounts/fireworks/models/mistral-large-3-fp8",
     "accounts/fireworks/models/muse-glimmer-30b",
@@ -33,12 +39,19 @@
     "accounts/fireworks/models/qwen3p7-plus",
     "accounts/fireworks/models/qwen3p8-2p4t-a95b",
     "accounts/fireworks/models/qwen3p8-max",
+    "accounts/fireworks/routers/deepseek-flash-latest",
+    "accounts/fireworks/routers/deepseek-pro-latest",
     "accounts/fireworks/routers/glm-5p2-fast",
-    "accounts/fireworks/routers/glm-5p3-fast"
+    "accounts/fireworks/routers/glm-5p3-fast",
+    "accounts/fireworks/routers/glm-fast-latest",
+    "accounts/fireworks/routers/glm-flash-latest",
+    "accounts/fireworks/routers/glm-latest",
+    "accounts/fireworks/routers/minimax-latest"
   ],
   "structuredOutput": [
     "accounts/fireworks/models/deepseek-v4-flash-0731",
     "accounts/fireworks/models/deepseek-v4-flash-vision-exp",
+    "accounts/fireworks/models/deepseek-v4-pro",
     "accounts/fireworks/models/deepseek-v4-pro-0813",
     "accounts/fireworks/models/deepseek-v4p1-flash",
     "accounts/fireworks/models/glm-5p3",
@@ -47,7 +60,14 @@
     "accounts/fireworks/models/muse-glimmer-30b",
     "accounts/fireworks/models/nemotron-lightning-3p5-30b-a3b",
     "accounts/fireworks/models/qwen3p8-2p4t-a95b",
+    "accounts/fireworks/routers/deepseek-flash-latest",
+    "accounts/fireworks/routers/deepseek-pro-latest",
     "accounts/fireworks/routers/glm-5p3-fast",
-    "accounts/fireworks/routers/kimi-k3-fast"
+    "accounts/fireworks/routers/glm-fast-latest",
+    "accounts/fireworks/routers/glm-flash-latest",
+    "accounts/fireworks/routers/glm-latest",
+    "accounts/fireworks/routers/kimi-fast-latest",
+    "accounts/fireworks/routers/kimi-k3-fast",
+    "accounts/fireworks/routers/kimi-latest"
   ]
 }

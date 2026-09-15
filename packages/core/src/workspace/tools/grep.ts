@@ -70,6 +70,13 @@ Usage:
     const { workspace, filesystem } = requireFilesystem(context);
     await emitWorkspaceMetadata(context, WORKSPACE_TOOLS.FILESYSTEM.GREP);
 
+    // Honor provider-configured text extensions when available; otherwise use
+    // the built-in set. Track files skipped solely for an unsupported extension
+    // so the summary can distinguish "no matches" from "nothing searched".
+    const isText = (filename: string): boolean =>
+      filesystem.isTextFile ? filesystem.isTextFile(filename) : isTextFile(filename);
+    let skippedExtensionCount = 0;
+
     const span = startWorkspaceSpan(context, workspace, {
       category: 'filesystem',
       operation: 'grep',
@@ -131,8 +138,15 @@ Usage:
         try {
           const stat = await filesystem.stat(searchPath);
           if (stat.type === 'file') {
-            // Single file — search it directly
-            filePaths = isTextFile(searchPath) ? [searchPath] : [];
+            // Single file — search it directly. When the user targets an explicit
+            // file whose extension isn't recognized as text, report it so the
+            // summary distinguishes "no matches" from "file was never searched".
+            if (isText(searchPath)) {
+              filePaths = [searchPath];
+            } else {
+              filePaths = [];
+              skippedExtensionCount++;
+            }
           } else if (typeof filesystem.grep === 'function') {
             // Directory + native grep capability — one provider call instead of
             // walking the tree and reading every file host-side. Host-side
@@ -226,10 +240,15 @@ Usage:
                 }
 
                 if (entry.type === 'file') {
-                  // Skip non-text files
-                  if (!isTextFile(entry.name)) continue;
-                  // Apply glob filter (createGlobMatcher normalizes leading slashes)
+                  // Apply glob filter first (createGlobMatcher normalizes leading
+                  // slashes) so files the user didn't ask for are never considered.
                   if (globMatcher && !globMatcher(fullPath)) continue;
+                  // Skip non-text files. Directory-level skips are intentionally not
+                  // reported: the native-grep capability path cannot enumerate
+                  // zero-match unsupported files without a directory walk (which the
+                  // delegation contract forbids), so a per-directory skip count would
+                  // diverge between the native and fallback code paths.
+                  if (!isText(entry.name)) continue;
                   files.push(fullPath);
                 } else if (entry.type === 'directory' && !entry.isSymlink) {
                   files.push(...collectFiles(fullPath));
@@ -329,7 +348,9 @@ Usage:
           const segments = rel.split('/');
           if (segments.includes('.git')) continue;
           if (!includeHidden && segments.some(segment => segment.startsWith('.'))) continue;
-          if (!isTextFile(segments[segments.length - 1]!)) continue;
+          // Not counted as a skip — see the directory-walk note above on why
+          // per-directory skip reporting is omitted for parity across paths.
+          if (!isText(segments[segments.length - 1]!)) continue;
 
           const fullPath = searchPath.endsWith('/') ? `${searchPath}${rel}` : `${searchPath}/${rel}`;
           if (ignoreFilter) {
@@ -421,6 +442,11 @@ Usage:
       summaryParts.push(`across ${filesWithMatches.size} file${filesWithMatches.size !== 1 ? 's' : ''}`);
       if (truncated) {
         summaryParts.push(`(truncated at ${GLOBAL_CAP})`);
+      }
+      if (skippedExtensionCount > 0) {
+        summaryParts.push(
+          `(${skippedExtensionCount} file${skippedExtensionCount !== 1 ? 's' : ''} skipped: unsupported extension)`,
+        );
       }
       const summary = summaryParts.join(' ');
       outputLines.unshift(summary, '---');
