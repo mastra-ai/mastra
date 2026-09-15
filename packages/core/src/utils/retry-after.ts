@@ -59,6 +59,10 @@ function parseRetryAfterHeader(value: string, now: number): number | undefined {
     return Number.isFinite(seconds) ? seconds * 1_000 : undefined;
   }
 
+  if (/^[+-]?\d*\.?\d+(?:e[+-]?\d+)?$/i.test(normalizedValue)) {
+    return undefined;
+  }
+
   const retryAt = Date.parse(normalizedValue);
   return Number.isFinite(retryAt) && retryAt > now ? retryAt - now : undefined;
 }
