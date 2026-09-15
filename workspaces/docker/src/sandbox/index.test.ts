@@ -32,6 +32,7 @@ const { mockContainer, mockExec, mockStream, mockDocker, resetMockDefaults } = v
     on: vi.fn(),
     write: vi.fn(),
     end: vi.fn(),
+    destroy: vi.fn(),
     writableEnded: false,
   };
 
@@ -107,6 +108,7 @@ const { mockContainer, mockExec, mockStream, mockDocker, resetMockDefaults } = v
     });
     mockStream.on.mockReset();
     mockStream.write.mockReset();
+    mockStream.destroy.mockReset();
     mockStream.writableEnded = false;
     mockStream.end.mockReset().mockImplementation((callback?: () => void) => {
       mockStream.writableEnded = true;
@@ -1068,6 +1070,31 @@ describe('DockerSandbox', () => {
       expect(script).toContain('kill -KILL -"$pgid"');
       expect(script).not.toContain('kill -9 -42');
       expect(killStart).toHaveBeenCalled();
+    });
+
+    it('should report kill failure (not a false "killed") when the helper exits non-zero', async () => {
+      // Models the fail-closed guards in KILL_SCRIPT: when the PGID file is
+      // unreadable/empty the helper exits 1 rather than 0. kill() must surface
+      // that as false and must NOT mark the process killed or destroy the
+      // stream — otherwise wait() would resolve with a bogus exit 137 while the
+      // tree is still running (the exact bug this PR fixes).
+      const sandbox = new DockerSandbox();
+      await sandbox._start();
+
+      const handle = await sandbox.processes!.spawn('sleep 100');
+
+      // The kill helper exec runs but exits non-zero (unrecorded/empty PGID).
+      mockContainer.exec.mockResolvedValueOnce({
+        id: 'kill-exec',
+        start: vi.fn().mockResolvedValue(undefined),
+        inspect: vi.fn().mockResolvedValue({ Running: false, ExitCode: 1 }),
+      });
+
+      const killed = await handle.kill();
+      expect(killed).toBe(false);
+
+      // Stream was not destroyed, so wait() has not been resolved by kill().
+      expect(mockStream.destroy).not.toHaveBeenCalled();
     });
 
     it('should mark explicit kill results as killed without timeout', async () => {
