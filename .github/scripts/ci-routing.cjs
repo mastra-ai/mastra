@@ -1,3 +1,4 @@
+const { execFileSync } = require('node:child_process');
 const { readdirSync, readFileSync } = require('node:fs');
 const { join } = require('node:path');
 
@@ -198,9 +199,152 @@ function qualityAssuranceInputs(changedFiles, packageReadmePaths = []) {
   };
 }
 
+const IGNORED_MANIFEST_PREFIXES = ['docs/', 'examples/', 'explorations/'];
+const TEST_FILE_RE = /\.(?:test|spec)(?:-d)?\.tsx?$/;
+const DEPENDENCY_FIELDS = ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies'];
+const TEST_FILE_PATTERNS = [
+  '*.test.ts',
+  '**/*.test.ts',
+  '*.test.tsx',
+  '**/*.test.tsx',
+  '*.spec.ts',
+  '**/*.spec.ts',
+  '*.spec.tsx',
+  '**/*.spec.tsx',
+  '*.test-d.ts',
+  '**/*.test-d.ts',
+  '*.test-d.tsx',
+  '**/*.test-d.tsx',
+  '*.spec-d.ts',
+  '**/*.spec-d.ts',
+  '*.spec-d.tsx',
+  '**/*.spec-d.tsx',
+];
+
+function packageDirFromChangedManifest(file) {
+  if (typeof file !== 'string') {
+    return null;
+  }
+
+  if (file === 'package.json' || !file.endsWith('/package.json')) {
+    return null;
+  }
+
+  if (file.includes('/node_modules/') || IGNORED_MANIFEST_PREFIXES.some(prefix => file.startsWith(prefix))) {
+    return null;
+  }
+
+  return file.slice(0, -'package.json'.length);
+}
+
+function dependencyFieldsChanged(before, after) {
+  const left = before && typeof before === 'object' ? before : {};
+  const right = after && typeof after === 'object' ? after : {};
+  return DEPENDENCY_FIELDS.some(field => JSON.stringify(left[field] ?? {}) !== JSON.stringify(right[field] ?? {}));
+}
+
+function gitJsonAt(sha, file, execFileSyncImpl) {
+  try {
+    return JSON.parse(execFileSyncImpl('git', ['show', `${sha}:${file}`], { encoding: 'utf8' }));
+  } catch {
+    return null;
+  }
+}
+
+function gitManifestDependencyFieldsChanged(file, baseSha, headSha, execFileSyncImpl = execFileSync) {
+  if (typeof file !== 'string' || !baseSha || !headSha) {
+    return false;
+  }
+
+  const after = gitJsonAt(headSha, file, execFileSyncImpl);
+  if (!after) {
+    return false;
+  }
+
+  return dependencyFieldsChanged(gitJsonAt(baseSha, file, execFileSyncImpl) ?? {}, after);
+}
+
+function discoverRepoTestFiles(execFileSyncImpl = execFileSync, cwd = process.cwd()) {
+  let output = '';
+  try {
+    output = execFileSyncImpl('git', ['ls-files', ...TEST_FILE_PATTERNS], { encoding: 'utf8', cwd });
+  } catch {
+    return [];
+  }
+
+  return [
+    ...new Set(
+      output
+        .split(/\r?\n/)
+        .filter(
+          line =>
+            line && !line.includes('__fixtures__') && !line.includes('/fixtures/') && !line.includes('node_modules'),
+        ),
+    ),
+  ];
+}
+
+function testsForChangedPackageManifests(changedFiles, testFiles, didDependencyFieldsChange) {
+  if (!Array.isArray(changedFiles) || !Array.isArray(testFiles) || typeof didDependencyFieldsChange !== 'function') {
+    return [];
+  }
+
+  const dirs = changedFiles.flatMap(file => {
+    const dir = packageDirFromChangedManifest(file);
+    if (!dir || !didDependencyFieldsChange(file)) {
+      return [];
+    }
+    return [dir];
+  });
+
+  if (dirs.length === 0) {
+    return [];
+  }
+
+  return [
+    ...new Set(
+      testFiles.filter(testFile => {
+        if (typeof testFile !== 'string' || !TEST_FILE_RE.test(testFile)) {
+          return false;
+        }
+
+        if (testFile.includes('__fixtures__') || testFile.includes('/fixtures/')) {
+          return false;
+        }
+
+        return dirs.some(dir => testFile.startsWith(dir));
+      }),
+    ),
+  ].sort();
+}
+
+function planAffectedUnitTests({
+  graphAffectedTests = [],
+  graphTestFileCount = 0,
+  changedFiles,
+  repoTestFiles,
+  didDependencyFieldsChange,
+  hasChangedSource,
+}) {
+  const manifestTests = testsForChangedPackageManifests(changedFiles, repoTestFiles, didDependencyFieldsChange);
+  const affectedTests = [...new Set([...(graphAffectedTests || []), ...manifestTests])].sort();
+  const count = affectedTests.length;
+  const total = Math.max(graphTestFileCount || 0, Array.isArray(repoTestFiles) ? repoTestFiles.length : 0, 1);
+  const ratio = count / total;
+  const runFull = (Boolean(hasChangedSource) || manifestTests.length > 0) && ratio > 0.5;
+
+  return { affectedTests, manifestTests, count, total, ratio, runFull };
+}
+
 module.exports = {
+  TEST_FILE_PATTERNS,
+  dependencyFieldsChanged,
+  discoverRepoTestFiles,
   discoverWorkspacePackages,
+  gitManifestDependencyFieldsChanged,
+  planAffectedUnitTests,
   qualityAssuranceInputs,
   selectWorkspacePackages,
+  testsForChangedPackageManifests,
   validateWorkspacePackages,
 };

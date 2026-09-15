@@ -26,6 +26,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
 const require = createRequire(import.meta.url);
 const { buildWorkspaceSourceAliases } = require('./workspace-source-aliases.cjs');
+const { discoverRepoTestFiles } = require('../.github/scripts/ci-routing.cjs');
 
 // ---------------------------------------------------------------------------
 // CLI argument parsing
@@ -101,48 +102,7 @@ if (!flags.git && positional.length === 0) {
 // ---------------------------------------------------------------------------
 
 function discoverTestFiles() {
-  // Use two patterns: '*.test.ts' catches top-level files (e.g. src/foo.test.ts)
-  // and '**/*.test.ts' catches nested files. Dedupe via Set.
-  // Also include .test.tsx and .spec.ts/.spec.tsx for completeness.
-  const patterns = [
-    '*.test.ts',
-    '**/*.test.ts',
-    '*.test.tsx',
-    '**/*.test.tsx',
-    '*.spec.ts',
-    '**/*.spec.ts',
-    '*.spec.tsx',
-    '**/*.spec.tsx',
-    '*.test-d.ts',
-    '**/*.test-d.ts',
-    '*.test-d.tsx',
-    '**/*.test-d.tsx',
-    '*.spec-d.ts',
-    '**/*.spec-d.ts',
-    '*.spec-d.tsx',
-    '**/*.spec-d.tsx',
-  ];
-
-  const files = new Set();
-  for (const pattern of patterns) {
-    try {
-      const output = execSync(`git ls-files '${pattern}'`, {
-        cwd: ROOT,
-        encoding: 'utf-8',
-        stdio: ['pipe', 'pipe', 'pipe'],
-      });
-      for (const line of output.trim().split('\n')) {
-        if (!line) continue;
-        // Exclude fixtures and node_modules
-        if (line.includes('__fixtures__') || line.includes('/fixtures/') || line.includes('node_modules')) continue;
-        files.add(line);
-      }
-    } catch {
-      // git ls-files may fail silently for patterns with no matches
-    }
-  }
-
-  return [...files];
+  return discoverRepoTestFiles(undefined, ROOT);
 }
 
 // ---------------------------------------------------------------------------

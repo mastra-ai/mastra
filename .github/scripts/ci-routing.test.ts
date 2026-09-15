@@ -5,8 +5,18 @@ import { discoverPackages } from './check-package-readmes.mjs';
 import { describe, expect, test } from 'vitest';
 import routing from './ci-routing.cjs';
 
-const { discoverWorkspacePackages, qualityAssuranceInputs, selectWorkspacePackages, validateWorkspacePackages } =
-  routing;
+const {
+  TEST_FILE_PATTERNS,
+  dependencyFieldsChanged,
+  discoverRepoTestFiles,
+  discoverWorkspacePackages,
+  gitManifestDependencyFieldsChanged,
+  planAffectedUnitTests,
+  qualityAssuranceInputs,
+  selectWorkspacePackages,
+  testsForChangedPackageManifests,
+  validateWorkspacePackages,
+} = routing;
 const majorVersionWorkflow = readFileSync(new URL('../workflows/major-version-check.yml', import.meta.url), 'utf8');
 const prebuildWorkflow = readFileSync(new URL('../workflows/prebuild.yml', import.meta.url), 'utf8');
 const workspaceCloudWorkflow = readFileSync(
@@ -254,6 +264,95 @@ describe('workspace cloud workflow routing', () => {
     expect(workspaceCloudWorkflow).toContain('DIFF_RANGE="origin/main...$HEAD_SHA"');
     expect(workspaceCloudWorkflow).not.toMatch(/DIFF_RANGE=.*ARTIFACT_(?:BASE|HEAD)_SHA/);
     expect(workspaceCloudWorkflow).not.toMatch(/git ls-tree[^\n]*ARTIFACT_HEAD_SHA/);
+  });
+});
+
+describe('package.json dependency-bump unit test routing', () => {
+  const arizeTests = ['observability/arize/src/tracing.config.test.ts', 'observability/arize/src/tracing.test.ts'];
+  const inventory = [
+    ...arizeTests,
+    'packages/core/src/agent/agent.test.ts',
+    'docs/src/ignored.test.ts',
+    'examples/agent/src/example.test.ts',
+    'observability/arize/src/__fixtures__/skip.test.ts',
+  ];
+  const arizeOnly = file => file === 'observability/arize/package.json';
+  const pkgs = n => Array.from({ length: n }, (_, i) => `pkg-${String(i).padStart(3, '0')}`);
+  const plan = (nChanged, nTests, depsChanged) =>
+    planAffectedUnitTests({
+      graphAffectedTests: [],
+      graphTestFileCount: 1,
+      changedFiles: pkgs(nChanged).map(id => `${id}/package.json`),
+      repoTestFiles: pkgs(nTests).map(id => `${id}/src/a.test.ts`),
+      didDependencyFieldsChange: depsChanged,
+      hasChangedSource: false,
+    });
+
+  test('selects own-package tests for dependency bumps and ignores version-only, lockfile, and docs manifests', () => {
+    expect(
+      testsForChangedPackageManifests(
+        ['observability/arize/package.json', 'pnpm-lock.yaml', '.changeset/arize-bump.md'],
+        inventory,
+        arizeOnly,
+      ),
+    ).toEqual(arizeTests);
+    expect(testsForChangedPackageManifests(['pnpm-lock.yaml'], inventory, () => true)).toEqual([]);
+    expect(testsForChangedPackageManifests(['package.json'], inventory, () => true)).toEqual([]);
+    expect(testsForChangedPackageManifests(['docs/package.json'], inventory, () => true)).toEqual([]);
+    expect(testsForChangedPackageManifests(['observability/arize/package.json'], inventory, () => false)).toEqual([]);
+    expect(
+      testsForChangedPackageManifests(
+        ['observability/arize/package.json', 'packages/core/package.json'],
+        inventory,
+        () => true,
+      ),
+    ).toEqual([...arizeTests, 'packages/core/src/agent/agent.test.ts']);
+    expect(testsForChangedPackageManifests(undefined, inventory, () => true)).toEqual([]);
+    expect(
+      dependencyFieldsChanged(
+        { version: '1.0.0', dependencies: { x: '1' } },
+        { version: '1.0.1', dependencies: { x: '1' } },
+      ),
+    ).toBe(false);
+    expect(
+      dependencyFieldsChanged(
+        { version: '1.0.0', dependencies: { x: '1' } },
+        { version: '1.0.0', dependencies: { x: '2' } },
+      ),
+    ).toBe(true);
+  });
+
+  test('gitManifestDependencyFieldsChanged treats version-only as unchanged and added manifests as changed', () => {
+    const manifests = {
+      'base:observability/arize/package.json': { version: '1.0.0', dependencies: { x: '1' } },
+      'head:observability/arize/package.json': { version: '1.0.1', dependencies: { x: '1' } },
+      'head:packages/core/package.json': { version: '1.0.0', dependencies: { y: '1' } },
+    };
+    const exec = (_cmd, args) => {
+      if (!manifests[args[1]]) throw new Error(args[1]);
+      return JSON.stringify(manifests[args[1]]);
+    };
+    expect(gitManifestDependencyFieldsChanged('observability/arize/package.json', 'base', 'head', exec)).toBe(false);
+    expect(gitManifestDependencyFieldsChanged('packages/core/package.json', 'base', 'head', exec)).toBe(true);
+  });
+
+  test('version-only changeset PRs select nothing; large dep-bump sets shard', () => {
+    expect(plan(56, 100, () => false)).toMatchObject({ count: 0, total: 100, runFull: false });
+    expect(plan(60, 100, () => true)).toMatchObject({ count: 60, total: 100, runFull: true });
+  });
+
+  test('prebuild uses the shared planner instead of a lockfile full suite or inlined git ls-files', () => {
+    expect(prebuildWorkflow).toContain("grep -E '/src/.*\\.(ts|tsx)$'");
+    expect(prebuildWorkflow).toContain('planAffectedUnitTests({');
+    expect(prebuildWorkflow).toContain('gitManifestDependencyFieldsChanged');
+    expect(prebuildWorkflow).toContain('discoverRepoTestFiles()');
+    expect(prebuildWorkflow).not.toContain('const runFull = hasChangedSource && ratio > 0.5;');
+    expect(prebuildWorkflow).not.toContain('const total = data.testFiles || 1;');
+    expect(prebuildWorkflow).not.toContain("'*.test.ts'");
+    expect(TEST_FILE_PATTERNS).toContain('**/*.test.ts');
+    expect(discoverRepoTestFiles(() => 'observability/arize/src/tracing.test.ts\n')).toEqual([
+      'observability/arize/src/tracing.test.ts',
+    ]);
   });
 });
 
