@@ -193,6 +193,7 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
           stepIndex: state.iterationCount,
           agentSpanData: state.agentSpanData,
           modelSpanData: state.modelSpanData,
+          processorRetryCount: state.processorRetryCount,
         };
       },
       { id: 'map-to-llm-input' },

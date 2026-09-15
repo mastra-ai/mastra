@@ -105,6 +105,7 @@ export function createBaseIterationStateUpdate(input: IterationStateUpdateInput)
     // rebuilds the state for the next iteration, so we must carry the
     // flag forward explicitly.
     pendingFeedbackStop: currentState.pendingFeedbackStop,
+    processorRetryCount: executionOutput.processorRetryCount ?? currentState.processorRetryCount,
     // Carry span identity forward unchanged so every iteration shares one trace.
     agentSpanData: currentState.agentSpanData,
     modelSpanData: currentState.modelSpanData,

@@ -109,6 +109,9 @@ export const baseIterationStateSchema = z.object({
   // Set when onIterationComplete returns { continue: false, feedback } — allows
   // one more LLM turn with the feedback, then stops on the next predicate eval.
   pendingFeedbackStop: z.boolean().optional(),
+  // Output-processor retries spent so far, carried so maxProcessorRetries
+  // bounds the whole run rather than each iteration
+  processorRetryCount: z.number().optional(),
   // Span data, carried unchanged so every iteration shares one trace
   agentSpanData: z.any().optional(),
   modelSpanData: z.any().optional(),
