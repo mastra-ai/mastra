@@ -276,9 +276,13 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
         ],
       };
 
+      const currentAttemptMessage: MessageInput = {
+        role: 'assistant',
+        content: [{ type: 'text', text: this.buildStructuringPrompt(streamParts) }],
+      };
       const messages: MessageListInput = [
         ...(messageList?.get?.input?.db() || []),
-        ...(messageList?.get?.response?.db() || []),
+        currentAttemptMessage,
         promptMessage,
       ];
 
