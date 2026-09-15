@@ -4471,6 +4471,106 @@ LIMIT 1`,
         await client.close();
       }
     });
+
+    it('keeps the predicateValues skip index through init and migration and guards lookups through it', async () => {
+      const client = createClient({
+        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+        username: process.env.CLICKHOUSE_USERNAME || 'default',
+        password: process.env.CLICKHOUSE_PASSWORD || 'password',
+      });
+      const listIndexes = async () => {
+        const result = await client.query({
+          query: `SELECT name, type, expr FROM system.data_skipping_indices WHERE database = currentDatabase() AND table = {table:String}`,
+          query_params: { table: TABLE_DELETION_REQUESTS },
+          format: 'JSONEachRow',
+        });
+        return (await result.json()) as Array<{ name: string; type: string; expr: string }>;
+      };
+
+      try {
+        // Fresh install: CREATE TABLE carries the index.
+        expect(await listIndexes()).toEqual([
+          { name: 'idx_predicateValues', type: 'bloom_filter', expr: 'predicateValues' },
+        ]);
+
+        // Existing deployment created before the index: init() must add it via ALL_MIGRATIONS
+        // and re-running init() must not issue the ALTER again.
+        await client.command({
+          query: `ALTER TABLE ${TABLE_DELETION_REQUESTS} DROP INDEX IF EXISTS idx_predicateValues`,
+        });
+        expect(await listIndexes()).toEqual([]);
+
+        const originalCommand = client.command.bind(client);
+        const commands: string[] = [];
+        const spy = vi.spyOn(client, 'command').mockImplementation(async args => {
+          commands.push((args as { query: string }).query);
+          return originalCommand(args);
+        });
+        try {
+          await new ObservabilityStorageClickhouseVNext({ client }).init();
+          expect(commands.filter(q => /^\s*ALTER\s+TABLE/i.test(q) && q.includes('idx_predicateValues'))).toEqual([
+            `ALTER TABLE ${TABLE_DELETION_REQUESTS} ADD INDEX IF NOT EXISTS idx_predicateValues predicateValues TYPE bloom_filter(0.01) GRANULARITY 2`,
+          ]);
+          commands.length = 0;
+          await new ObservabilityStorageClickhouseVNext({ client }).init();
+          expect(commands.filter(q => /^\s*ALTER\s+TABLE/i.test(q))).toEqual([]);
+        } finally {
+          spy.mockRestore();
+        }
+        expect(await listIndexes()).toEqual([
+          { name: 'idx_predicateValues', type: 'bloom_filter', expr: 'predicateValues' },
+        ]);
+
+        // Guard lookups through the indexed column stay correct: the deleted id is blocked,
+        // a sibling id in the same scope is not.
+        const feedback = (feedbackId: string) => ({
+          feedbackId,
+          timestamp: new Date('2026-09-01T12:00:01Z'),
+          traceId: 'index-trace-1',
+          spanId: null,
+          feedbackSource: 'user' as const,
+          feedbackType: 'rating' as const,
+          value: 1,
+          comment: null,
+          experimentId: null,
+          organizationId: 'org-1',
+          resourceId: 'resource-1',
+          metadata: null,
+        });
+        await storage.createFeedback({ feedback: feedback('index-feedback-deleted') });
+        await storage.createFeedback({ feedback: feedback('index-feedback-kept') });
+        await storage.deleteFeedback({
+          feedbackIds: ['index-feedback-deleted'],
+          organizationId: 'org-1',
+          resourceId: 'resource-1',
+        });
+
+        // The guard's query plan must select the skip index, not just tolerate it.
+        const explainResult = await client.query({
+          query: `EXPLAIN indexes = 1
+            SELECT 1 AS found FROM ${TABLE_DELETION_REQUESTS} FINAL
+            WHERE signal = 'feedback'
+              AND predicateType = 'itemIds'
+              AND has(predicateValues, {feedbackId:String})
+              AND (organizationId = '' OR organizationId = {organizationId:String})
+              AND (resourceId = '' OR resourceId = {resourceId:String})
+            LIMIT 1`,
+          query_params: { feedbackId: 'index-feedback-deleted', organizationId: 'org-1', resourceId: 'resource-1' },
+          format: 'TabSeparatedRaw',
+        });
+        expect(await explainResult.text()).toContain('Name: idx_predicateValues');
+
+        await expect(
+          storage.updateFeedbackReviewStatus({ feedbackId: 'index-feedback-deleted', reviewStatus: 'reviewed' }),
+        ).rejects.toThrow('Feedback record not found');
+        await expect(
+          storage.updateFeedbackReviewStatus({ feedbackId: 'index-feedback-kept', reviewStatus: 'reviewed' }),
+        ).resolves.toMatchObject({ feedbackId: 'index-feedback-kept', reviewStatus: 'reviewed' });
+        expect((await storage.listFeedback({})).feedback.map(f => f.feedbackId)).toEqual(['index-feedback-kept']);
+      } finally {
+        await client.close();
+      }
+    });
   });
 
   // ==========================================================================

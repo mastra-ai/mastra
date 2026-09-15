@@ -23,6 +23,16 @@ export const semanticRecallConfig: GetMemoryConfigResponse = {
   },
 };
 
+export const tokenLimitedMemoryConfig: GetMemoryConfigResponse = {
+  ...semanticRecallConfig,
+  config: { ...semanticRecallConfig.config, lastMessages: undefined, messageHistory: { maxTokens: 4000 } },
+};
+
+export const cappedTokenLimitedMemoryConfig: GetMemoryConfigResponse = {
+  ...semanticRecallConfig,
+  config: { ...semanticRecallConfig.config, lastMessages: 20, messageHistory: { maxTokens: 4000 } },
+};
+
 export const observationalMemoryConfig: GetMemoryConfigResponse = {
   memoryType: 'local',
   config: {

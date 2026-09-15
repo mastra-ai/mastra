@@ -7,17 +7,17 @@
 
 export type Simplify<T> = { [K in keyof T]: T[K] } & {};
 
-type Shared_Auxiliary_272 =
+type Shared_Auxiliary_275 =
   | string
   | number
   | boolean
   | null
-  | Shared_Auxiliary_272[]
+  | Shared_Auxiliary_275[]
   | {
-      [key: string]: Shared_Auxiliary_272;
+      [key: string]: Shared_Auxiliary_275;
     };
 
-type Shared_Auxiliary_591 =
+type Shared_Auxiliary_595 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -52,41 +52,41 @@ type Shared_Auxiliary_591 =
     }
   | {
       op: 'and' | 'or';
-      args: Shared_Auxiliary_591[];
+      args: Shared_Auxiliary_595[];
     }
   | {
       op: 'not';
-      arg: Shared_Auxiliary_591;
+      arg: Shared_Auxiliary_595;
     }
   | {
       spans:
         | {
-            some: Shared_Auxiliary_609;
+            some: Shared_Auxiliary_613;
           }
         | {
-            none: Shared_Auxiliary_609;
+            none: Shared_Auxiliary_613;
           };
     }
   | {
       scores:
         | {
-            some: Shared_Auxiliary_609;
+            some: Shared_Auxiliary_613;
           }
         | {
-            none: Shared_Auxiliary_609;
+            none: Shared_Auxiliary_613;
           };
     }
   | {
       feedback:
         | {
-            some: Shared_Auxiliary_609;
+            some: Shared_Auxiliary_613;
           }
         | {
-            none: Shared_Auxiliary_609;
+            none: Shared_Auxiliary_613;
           };
     };
 
-type Shared_Auxiliary_609 =
+type Shared_Auxiliary_613 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -121,33 +121,33 @@ type Shared_Auxiliary_609 =
     }
   | {
       op: 'and' | 'or';
-      args: Shared_Auxiliary_609[];
+      args: Shared_Auxiliary_613[];
     }
   | {
       op: 'not';
-      arg: Shared_Auxiliary_609;
+      arg: Shared_Auxiliary_613;
     };
 
-type Shared_Auxiliary_643 =
+type Shared_Auxiliary_647 =
   | {
       op: 'and' | 'or';
-      args: Shared_Auxiliary_643[];
+      args: Shared_Auxiliary_647[];
     }
   | {
       op: 'not';
-      arg: Shared_Auxiliary_643;
+      arg: Shared_Auxiliary_647;
     }
   | {
       traces:
         | {
-            some: Shared_Auxiliary_591;
+            some: Shared_Auxiliary_595;
           }
         | {
-            none: Shared_Auxiliary_591;
+            none: Shared_Auxiliary_595;
           };
     };
 
-type Shared_Auxiliary_1174 =
+type Shared_Auxiliary_1178 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -192,19 +192,19 @@ type Shared_Auxiliary_1174 =
     }
   | {
       op: 'and' | 'or';
-      args: Shared_Auxiliary_1174[];
+      args: Shared_Auxiliary_1178[];
     }
   | {
       op: 'not';
-      arg: Shared_Auxiliary_1174;
+      arg: Shared_Auxiliary_1178;
     };
 
-type Shared_Auxiliary_1314 = {
+type Shared_Auxiliary_1318 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: Shared_Auxiliary_1314[] | undefined;
+  children?: Shared_Auxiliary_1318[] | undefined;
 };
 
 type Shared_Type_0 = {
@@ -583,6 +583,12 @@ type Shared_Type_22 = {
 type Shared_Type_23 = {
   readOnly?: boolean | undefined;
   lastMessages?: (number | false) | undefined;
+  messageHistory?:
+    | {
+        maxTokens: number;
+        atMaxRemoveTokens?: number | undefined;
+      }
+    | undefined;
   semanticRecall?: (boolean | Shared_Type_21) | undefined;
   generateTitle?: (boolean | Shared_Type_22) | undefined;
 };
@@ -1158,7 +1164,7 @@ type Shared_Type_48 = {
   providerOptions?:
     | {
         [key: string]: {
-          [key: string]: Shared_Auxiliary_272;
+          [key: string]: Shared_Auxiliary_275;
         };
       }
     | undefined;
@@ -1172,7 +1178,7 @@ type Shared_Type_49 = {
   providerOptions?:
     | {
         [key: string]: {
-          [key: string]: Shared_Auxiliary_272;
+          [key: string]: Shared_Auxiliary_275;
         };
       }
     | undefined;
@@ -1187,13 +1193,13 @@ type Shared_Type_50 = {
     | undefined;
   metadata?:
     | {
-        [key: string]: Shared_Auxiliary_272;
+        [key: string]: Shared_Auxiliary_275;
       }
     | undefined;
   providerOptions?:
     | {
         [key: string]: {
-          [key: string]: Shared_Auxiliary_272;
+          [key: string]: Shared_Auxiliary_275;
         };
       }
     | undefined;
@@ -1218,7 +1224,7 @@ type Shared_Type_51 = {
   providerOptions?:
     | {
         [key: string]: {
-          [key: string]: Shared_Auxiliary_272;
+          [key: string]: Shared_Auxiliary_275;
         };
       }
     | undefined;
@@ -1287,7 +1293,7 @@ type Shared_Type_53 = {
   createdAt?: (string | Date) | undefined;
   metadata?:
     | {
-        [key: string]: Shared_Auxiliary_272;
+        [key: string]: Shared_Auxiliary_275;
       }
     | undefined;
   attributes?:
@@ -1300,7 +1306,7 @@ type Shared_Type_53 = {
   providerOptions?:
     | {
         [key: string]: {
-          [key: string]: Shared_Auxiliary_272;
+          [key: string]: Shared_Auxiliary_275;
         };
       }
     | undefined;
@@ -1313,7 +1319,7 @@ type Shared_Type_54 = {
   createdAt?: (string | Date) | undefined;
   metadata?:
     | {
-        [key: string]: Shared_Auxiliary_272;
+        [key: string]: Shared_Auxiliary_275;
       }
     | undefined;
   attributes?:
@@ -1326,7 +1332,7 @@ type Shared_Type_54 = {
   providerOptions?:
     | {
         [key: string]: {
-          [key: string]: Shared_Auxiliary_272;
+          [key: string]: Shared_Auxiliary_275;
         };
       }
     | undefined;
@@ -2637,7 +2643,7 @@ type Shared_Type_111 = {
       }
     | undefined;
   steps: Shared_Type_106;
-  predicates: Shared_Auxiliary_1174[];
+  predicates: Shared_Auxiliary_1178[];
 };
 
 type Shared_Type_112 = {
@@ -2660,7 +2666,7 @@ type Shared_Type_112 = {
         description?: string | undefined;
       };
   loopType: 'dowhile' | 'dountil';
-  predicate: Shared_Auxiliary_1174;
+  predicate: Shared_Auxiliary_1178;
 };
 
 type Shared_Type_113 =
@@ -3014,7 +3020,7 @@ type Shared_Type_126 = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_1314[] | undefined;
+  files?: Shared_Auxiliary_1318[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -3856,7 +3862,7 @@ export type PostAgentsAgentIdGenerate_Body = {
   providerOptions?:
     | {
         [key: string]: {
-          [key: string]: Shared_Auxiliary_272;
+          [key: string]: Shared_Auxiliary_275;
         };
       }
     | undefined;
@@ -4014,7 +4020,7 @@ export type PostAgentsAgentIdStreamUntilIdle_Body = {
   providerOptions?:
     | {
         [key: string]: {
-          [key: string]: Shared_Auxiliary_272;
+          [key: string]: Shared_Auxiliary_275;
         };
       }
     | undefined;
@@ -4589,7 +4595,7 @@ export type PostAgentsAgentIdResumeStream_Body = {
   providerOptions?:
     | {
         [key: string]: {
-          [key: string]: Shared_Auxiliary_272;
+          [key: string]: Shared_Auxiliary_275;
         };
       }
     | undefined;
@@ -4880,7 +4886,7 @@ export type PostAgentsAgentIdResumeStreamUntilIdle_Body = {
   providerOptions?:
     | {
         [key: string]: {
-          [key: string]: Shared_Auxiliary_272;
+          [key: string]: Shared_Auxiliary_275;
         };
       }
     | undefined;
@@ -7415,6 +7421,12 @@ export type GetMemoryConfig_Response = {
   memoryType?: ('local' | 'gateway') | undefined;
   config: {
     lastMessages?: (number | false) | undefined;
+    messageHistory?:
+      | {
+          maxTokens: number;
+          atMaxRemoveTokens?: number | undefined;
+        }
+      | undefined;
     semanticRecall?: (boolean | unknown) | undefined;
     workingMemory?:
       | {
@@ -9205,7 +9217,7 @@ export type PostObservabilityTracesQuery_Body = {
     from: string;
     to: string;
   };
-  where?: Shared_Auxiliary_591 | undefined;
+  where?: Shared_Auxiliary_595 | undefined;
   group?:
     | {
         by: ['threadId'];
@@ -9278,9 +9290,9 @@ export type PostObservabilityThreadsQuery_Body = {
       from: string;
       to: string;
     };
-    where?: Shared_Auxiliary_591 | undefined;
+    where?: Shared_Auxiliary_595 | undefined;
   };
-  where?: Shared_Auxiliary_643 | undefined;
+  where?: Shared_Auxiliary_647 | undefined;
   page: {
     limit: number;
     after?: (string | null) | undefined;
@@ -12628,7 +12640,7 @@ export type PostAgentsAgentIdGenerateLegacy_Body = {
   providerOptions?:
     | {
         [key: string]: {
-          [key: string]: Shared_Auxiliary_272;
+          [key: string]: Shared_Auxiliary_275;
         };
       }
     | undefined;
@@ -17082,7 +17094,7 @@ export type PostStoredSkills_Body = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_1314[] | undefined;
+  files?: Shared_Auxiliary_1318[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -17140,7 +17152,7 @@ export type PatchStoredSkillsStoredSkillId_Body = {
   /** List of asset file paths */
   assets?: (string[] | undefined) | undefined;
   /** Full file tree structure for the skill */
-  files?: (Shared_Auxiliary_1314[] | undefined) | undefined;
+  files?: (Shared_Auxiliary_1318[] | undefined) | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | (
