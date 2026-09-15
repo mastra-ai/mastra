@@ -423,7 +423,7 @@ describe('22573 idle', () => {
       const turn = new ObservationTurn({ om: mockOM as any, threadId: 'idle-buffer-thread', messageList: list });
       await turn.start();
       await turn.end();
-      expect(mockOM.persistMessages).toHaveBeenCalledWith(list.get.all.db(), 'idle-buffer-thread', undefined);
+      expect(mockOM.persistMessages).toHaveBeenCalledWith(list.get.all.db(), 'idle-buffer-thread', undefined, []);
       if (expected) {
         expect(mockOM.buffer).toHaveBeenCalledWith(expect.objectContaining({ messages: messages.slice(0, expected) }));
       } else {
@@ -461,6 +461,7 @@ describe('22573 idle', () => {
             list.get.all.db(),
             'idle-buffer-thread',
             'idle-buffer-resource',
+            source === 'response' ? [message.id] : [],
           );
         }
         expect(mockOM.buffer).not.toHaveBeenCalled();
