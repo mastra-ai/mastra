@@ -286,13 +286,16 @@ export class AuthStorage {
   }
 
   /**
-   * Login to an OAuth provider.
+   * Login to an OAuth provider. Resolves to the registered account record.
+   * Pass `activate: false` to add the account without making it active (the
+   * first account for a provider is always activated — a provider with
+   * accounts must have an active one).
    */
   async login(
     providerId: OAuthProviderId,
     callbacks: OAuthLoginCallbacks,
-    opts?: { replaceAccountId?: string },
-  ): Promise<void> {
+    opts?: { replaceAccountId?: string; activate?: boolean },
+  ): Promise<OAuthAccountRecord> {
     const provider = getOAuthProvider(providerId);
     if (!provider) {
       throw new Error(`Unknown OAuth provider: ${providerId}`);
@@ -301,8 +304,8 @@ export class AuthStorage {
     const credentials = await provider.login(callbacks);
     // Route through the account registry: the new account is appended (or
     // updated in place — by id collision or an explicit replaceAccountId for
-    // re-authentication) and becomes the active account.
-    await this.addAccount(providerId, credentials, opts);
+    // re-authentication) and becomes the active account unless activate:false.
+    return this.addAccount(providerId, credentials, opts);
   }
 
   /**
@@ -373,7 +376,8 @@ export class AuthStorage {
   }
 
   /**
-   * Register OAuth credentials as an account for a provider, making it active.
+   * Register OAuth credentials as an account for a provider, making it active
+   * unless `activate: false` is passed.
    *
    * With `replaceAccountId` (re-authentication of a picked account), the
    * target entry's tokens are replaced in place — id re-keyed to the new
@@ -382,11 +386,16 @@ export class AuthStorage {
    * never matches the new token hash. Otherwise, when the new credentials
    * hash to an existing entry's id (same refresh token), that entry is
    * updated in place; a genuinely new account is appended and activated.
+   *
+   * `activate: false` only applies to the plain add path (re-authentication
+   * always activates its target): the new/updated entry keeps the active
+   * state it had, and the previously active account stays active. The first
+   * account of a provider is activated regardless.
    */
   async addAccount(
     providerId: string,
     creds: OAuthCredentials,
-    opts?: { label?: string; replaceAccountId?: string },
+    opts?: { label?: string; replaceAccountId?: string; activate?: boolean },
   ): Promise<OAuthAccountRecord> {
     this.reload();
     const entries = this.accountEntries(providerId);
@@ -448,6 +457,16 @@ export class AuthStorage {
         active: false,
         ...creds,
       };
+    }
+
+    // activate:false (add-another): keep the current active account. The
+    // first account of a provider always activates — a non-empty registry
+    // must have an active entry. An id collision with the already-active
+    // entry also falls through to activateInMemory so its fresh tokens move
+    // into the legacy slot (tokens are single-homed).
+    if (opts?.activate === false && freshEntries.length > 0 && !existing?.active) {
+      this.save();
+      return { ...(this.data[this.accountKeyFor(id)] as OAuthAccountRecord) };
     }
 
     const activated = this.activateInMemory(providerId, id);
@@ -643,6 +662,7 @@ export class AuthStorage {
    * account-switch notice with the request that triggered the change.
    */
   async getOAuthCredential(providerId: string): Promise<OAuthCredential | undefined> {
+    this.reload();
     const cred = this.data[providerId];
     if (cred?.type !== 'oauth') return undefined;
 
@@ -681,11 +701,50 @@ export class AuthStorage {
 
   /** Get API key for a provider, refreshing OAuth tokens if needed. */
   async getApiKey(providerId: string): Promise<string | undefined> {
+    this.reload();
     const cred = this.data[providerId];
     if (cred?.type === 'api_key') return cred.key;
 
     const oauth = await this.getOAuthCredential(providerId);
     const provider = oauth ? getOAuthProvider(providerId) : undefined;
     return oauth && provider ? provider.getApiKey(oauth) : undefined;
+  }
+
+  /**
+   * Force one refresh of the active OAuth account's tokens, regardless of
+   * expiry. The account-rotation error processor calls this when a provider
+   * rejects a not-yet-expired token (401/403) — server-side clock skew and
+   * refresh-token races surface that way. Returns the fresh access token, or
+   * undefined when the refresh fails or there is no OAuth credential.
+   * Shares the per-instance refresh dedupe with `getApiKey`.
+   */
+  async forceRefreshActiveAccount(providerId: string): Promise<string | undefined> {
+    this.reload();
+    const cred = this.get(providerId);
+    if (cred?.type !== 'oauth') return undefined;
+    const provider = getOAuthProvider(providerId);
+    if (!provider) return undefined;
+
+    const activeEntry = this.getActiveAccount(providerId);
+    const refreshKey = activeEntry ? `${providerId}:${activeEntry.id}` : providerId;
+    const pending = this.refreshPromises.get(refreshKey);
+    const refresh =
+      pending ??
+      (async (): Promise<OAuthCredentials | undefined> => {
+        try {
+          const fresh = await provider.refreshToken(cred);
+          this.persistRefreshedCredential(providerId, activeEntry?.id, fresh);
+          return fresh;
+        } catch {
+          return undefined;
+        }
+      })();
+    if (!pending) this.refreshPromises.set(refreshKey, refresh);
+    try {
+      const creds = await refresh;
+      return creds ? provider.getApiKey(creds) : undefined;
+    } finally {
+      if (!pending) this.refreshPromises.delete(refreshKey);
+    }
   }
 }

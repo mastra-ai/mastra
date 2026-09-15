@@ -11,6 +11,7 @@
  *   - pi-mono:  https://github.com/badlogic/pi-mono/blob/main/packages/ai/src/utils/oauth/github-copilot.ts
  */
 
+import { createHash } from 'node:crypto';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import type { MastraModelConfig } from '@mastra/core/llm';
 import type { JSONSchema7 } from '@mastra/schema-compat';
@@ -328,13 +329,13 @@ interface CatalogCacheEntry {
   models: CopilotModelEntry[];
 }
 
-let catalogCache: CatalogCacheEntry | null = null;
-let inflightFetch: Promise<CopilotModelEntry[]> | null = null;
+const catalogCache = new Map<string, CatalogCacheEntry>();
+const inflightFetches = new Map<string, Promise<CopilotModelEntry[]>>();
 
 /** Reset the in-process Copilot catalog cache (test seam, also useful after logout). */
 export function clearCopilotCatalogCache(): void {
-  catalogCache = null;
-  inflightFetch = null;
+  catalogCache.clear();
+  inflightFetches.clear();
 }
 
 /**
@@ -351,31 +352,25 @@ export function clearCopilotCatalogCache(): void {
  */
 export async function getCopilotModelCatalog(opts: { authStorage?: AuthStorage } = {}): Promise<CopilotModelEntry[]> {
   const storage = opts.authStorage ?? getAuthStorage();
-  storage.reload();
 
-  const cred = storage.get(COPILOT_PROVIDER_ID);
-  if (!cred || cred.type !== 'oauth') {
-    return [];
-  }
+  // Resolve one coherent credential snapshot before consulting the cache so a
+  // token can never be paired with another account's enterprise endpoint.
+  const credential = await storage.getOAuthCredential(COPILOT_PROVIDER_ID);
+  if (!credential || credential.type !== 'oauth') return [];
+  const accessToken = credential.access;
+  const enterpriseUrl = (credential as GitHubCopilotCredentials).enterpriseUrl;
+  const baseUrl = getGitHubCopilotBaseUrl(accessToken, enterpriseUrl);
+  const credentialKey = createHash('sha256').update(`${accessToken}\0${baseUrl}`).digest('hex');
 
   const now = Date.now();
-  if (catalogCache && now - catalogCache.fetchedAt < catalogCache.ttl) {
-    return catalogCache.models;
-  }
+  const cached = catalogCache.get(credentialKey);
+  if (cached && now - cached.fetchedAt < cached.ttl) return cached.models;
 
-  if (inflightFetch) return inflightFetch;
+  const existingFetch = inflightFetches.get(credentialKey);
+  if (existingFetch) return existingFetch;
 
-  inflightFetch = (async (): Promise<CopilotModelEntry[]> => {
+  const fetchPromise = (async (): Promise<CopilotModelEntry[]> => {
     try {
-      // getApiKey() refreshes the Copilot bearer if it has expired.
-      const accessToken = await storage.getApiKey(COPILOT_PROVIDER_ID);
-      if (!accessToken) throw new Error('No Copilot bearer token');
-      storage.reload();
-
-      const refreshed = storage.get(COPILOT_PROVIDER_ID);
-      const enterpriseUrl = (refreshed as GitHubCopilotCredentials | undefined)?.enterpriseUrl;
-      const baseUrl = getGitHubCopilotBaseUrl(accessToken, enterpriseUrl);
-
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), CATALOG_FETCH_TIMEOUT_MS);
       try {
@@ -384,26 +379,26 @@ export async function getCopilotModelCatalog(opts: { authStorage?: AuthStorage }
           bearerToken: accessToken,
           signal: controller.signal,
         });
-        catalogCache = { fetchedAt: Date.now(), ttl: CATALOG_TTL_MS, models };
+        catalogCache.set(credentialKey, { fetchedAt: Date.now(), ttl: CATALOG_TTL_MS, models });
         return models;
       } finally {
         clearTimeout(timer);
       }
     } catch (error) {
-      catalogCache = {
+      catalogCache.set(credentialKey, {
         fetchedAt: Date.now(),
         ttl: CATALOG_FAILURE_TTL_MS,
         models: COPILOT_FALLBACK_MODELS,
-      };
+      });
       console.warn(
         'Failed to fetch live GitHub Copilot models, using fallback list:',
         error instanceof Error ? error.message : error,
       );
       return COPILOT_FALLBACK_MODELS;
     } finally {
-      inflightFetch = null;
+      inflightFetches.delete(credentialKey);
     }
   })();
-
-  return inflightFetch;
+  inflightFetches.set(credentialKey, fetchPromise);
+  return fetchPromise;
 }

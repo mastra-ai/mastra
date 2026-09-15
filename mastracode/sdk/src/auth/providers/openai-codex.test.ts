@@ -465,6 +465,28 @@ describe('Codex device login step primitives', () => {
     expect(JSON.parse(JSON.stringify(pending))).toEqual(pending);
   });
 
+  it('composes caller cancellation with a provider timeout', async () => {
+    let requestInit: RequestInit | undefined;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_input, init) => {
+        requestInit = init;
+        return new Response(JSON.stringify({ device_auth_id: 'device-123', user_code: 'ABCD-EFGH', interval: 3 }), {
+          status: 200,
+        });
+      }),
+    );
+    const { startCodexDeviceLogin } = await import('./openai-codex.js');
+    const controller = new AbortController();
+
+    await startCodexDeviceLogin({ signal: controller.signal });
+
+    expect(requestInit?.signal).toBeDefined();
+    expect(requestInit?.signal).not.toBe(controller.signal);
+    controller.abort();
+    expect(requestInit?.signal?.aborted).toBe(true);
+  });
+
   it('pollCodexDeviceLogin reports pending on 403 without throwing', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(new Response('', { status: 403 })));
     const { pollCodexDeviceLogin } = await import('./openai-codex.js');
@@ -534,7 +556,7 @@ describe('Codex device login step primitives', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('pollCodexDeviceLogin fails loudly on unexpected statuses with the response body', async () => {
+  it('pollCodexDeviceLogin redacts response bodies on unexpected statuses', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(new Response('server exploded', { status: 500 })));
     const { pollCodexDeviceLogin } = await import('./openai-codex.js');
 
@@ -548,7 +570,7 @@ describe('Codex device login step primitives', () => {
     });
     expect(result).toEqual({
       status: 'failed',
-      error: 'OpenAI Codex device authorization failed: 500 server exploded',
+      error: 'OpenAI Codex device authorization failed: 500',
     });
   });
 });

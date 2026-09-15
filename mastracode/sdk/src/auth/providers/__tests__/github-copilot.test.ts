@@ -328,7 +328,7 @@ describe('GitHub Copilot OAuth device flow', () => {
     await expect(loginPromise).rejects.toThrow(/Invalid GitHub Enterprise URL\/domain/);
   });
 
-  it('passes the AbortSignal into the underlying fetch calls', async () => {
+  it('composes the caller AbortSignal with provider timeouts for fetch calls', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-03-09T00:00:00Z'));
 
@@ -366,11 +366,12 @@ describe('GitHub Copilot OAuth device flow', () => {
     await vi.advanceTimersByTimeAsync(20_000);
     await loginPromise;
 
-    // Device code, access token, and copilot token requests should all carry the signal.
+    // Device code, access token, and copilot token requests should all carry a
+    // provider timeout composed with the caller's cancellation signal.
     expect(seenSignals.length).toBeGreaterThanOrEqual(3);
-    for (const signal of seenSignals) {
-      expect(signal).toBe(controller.signal);
-    }
+    expect(seenSignals.every(signal => signal && signal !== controller.signal)).toBe(true);
+    controller.abort();
+    expect(seenSignals.every(signal => signal?.aborted)).toBe(true);
   });
 
   it('honors AbortSignal cancellation between polls', async () => {
