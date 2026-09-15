@@ -388,6 +388,31 @@ describe('MessageRow', () => {
       expect(container.querySelectorAll('[data-testid="tool-badge"]')).toHaveLength(3);
     });
 
+    it('preserves a failed call and its error text when the group is expanded', () => {
+      renderRow(
+        withCalls([
+          toolCall('call-1'),
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              toolName: 'genericTool',
+              toolCallId: 'failed-call',
+              state: 'output-error',
+              args: {},
+              errorText: 'Grouped tool failed',
+            },
+          },
+          toolCall('call-3'),
+        ]),
+      );
+      const group = screen.getByRole('group', { name: 'Tool group: 3 steps' });
+      fireEvent.click(within(group).getByRole('button'));
+      expect(screen.getAllByRole('img', { name: 'Failed' })).toHaveLength(2);
+      const failedCard = screen.getAllByTestId('tool-badge')[1]!;
+      fireEvent.click(within(failedCard).getByRole('button'));
+      expect(failedCard.textContent).toContain('Grouped tool failed');
+    });
+
     it('summarizes successful results without expanding the group', () => {
       renderRow(withCalls([toolCall('call-1'), toolCall('call-2'), toolCall('call-3')]));
       expect(screen.getByText('3 OK')).toBeTruthy();

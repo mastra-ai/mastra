@@ -44,7 +44,7 @@ import {
   validateProviderId,
   type ProviderManifest,
 } from './provider-utils.js';
-import { TEMPLATE_SHA } from './templates-config.js';
+import { templatePinFor, type TemplatePin } from './templates-config.js';
 
 /** Module specifier the upstream templates import their SDK from. */
 const TEMPLATE_SDK_MODULE = 'nango';
@@ -177,6 +177,56 @@ function sanitizeVendoredSource(source: string): string {
   return source.replace(/^.*@nangohq\/custom-integrations-linting\/.*\r?\n/gm, '');
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function isArrayInputField(inputSchemaText: string, field: string): boolean {
+  return new RegExp(`(?:^|[\\s{,])${escapeRegExp(field)}\\s*:\\s*z\\s*\\.\\s*array\\s*\\(`).test(inputSchemaText);
+}
+
+/**
+ * Templates serialize every query parameter through an array-or-scalar
+ * branch. The input schema already fixes each field's shape, so fields it
+ * declares as scalars are serialized directly; array fields keep the join.
+ */
+function simplifyScalarQuerySerialization(execBody: string, inputSchemaText: string): string {
+  return execBody.replace(
+    /Array\.isArray\(input\[('[^']+')\]\)\s*\?\s*input\[\1\]\.join\(','\)\s*:\s*String\(input\[\1\]\)/g,
+    (match, quoted: string) =>
+      isArrayInputField(inputSchemaText, quoted.slice(1, -1)) ? match : `String(input[${quoted}])`,
+  );
+}
+
+/**
+ * Provider responses evolve independently of the template pin. Enums on the
+ * response side accept any string so a new provider value never rejects an
+ * otherwise valid response; request-side enums stay strict.
+ */
+function widenResponseEnums(statements: string[], inputSchemaName: string): string[] {
+  const declared = statements.map(statement => statement.match(/^(?:export\s+)?const\s+([A-Za-z_$][\w$]*)/)?.[1]);
+  const inputSide = new Set<string>([inputSchemaName]);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    statements.forEach((statement, index) => {
+      const name = declared[index];
+      if (!name || !inputSide.has(name)) return;
+      for (const other of declared) {
+        if (other && !inputSide.has(other) && new RegExp(`\\b${escapeRegExp(other)}\\b`).test(statement)) {
+          inputSide.add(other);
+          changed = true;
+        }
+      }
+    });
+  }
+  return statements.map((statement, index) => {
+    const name = declared[index];
+    if (name && inputSide.has(name)) return statement;
+    return statement.replace(/z\.enum\((\[[^\]]*\])\)(?!\.or\()/g, 'z.enum($1).or(z.string())');
+  });
+}
+
 function replaceProxyRequestType(source: string, usesProxyRequestType: boolean): string {
   return usesProxyRequestType ? source.replace(/\bProxyConfiguration\b/g, 'PlatformProxyRequest') : source;
 }
@@ -293,19 +343,26 @@ function extractAction(
   }
 
   const renamedExecBodyNode = execInitializer.getBody();
-  const execBody = replaceProxyRequestType(
-    sanitizeVendoredSource(
-      Node.isBlock(renamedExecBodyNode)
-        ? renamedExecBodyNode.getText()
-        : `{ return ${renamedExecBodyNode.getText()}; }`,
+  const inputSchemaText = inputDeclaration.getText();
+  const execBody = simplifyScalarQuerySerialization(
+    replaceProxyRequestType(
+      sanitizeVendoredSource(
+        Node.isBlock(renamedExecBodyNode)
+          ? renamedExecBodyNode.getText()
+          : `{ return ${renamedExecBodyNode.getText()}; }`,
+      ),
+      usesProxyRequestType,
     ),
-    usesProxyRequestType,
+    inputSchemaText,
   );
 
-  const moduleStatements = source
-    .getStatements()
-    .filter(statement => shouldKeepStatement(statement, createActionCall))
-    .map(statement => replaceProxyRequestType(sanitizeVendoredSource(statement.getText()), usesProxyRequestType));
+  const moduleStatements = widenResponseEnums(
+    source
+      .getStatements()
+      .filter(statement => shouldKeepStatement(statement, createActionCall))
+      .map(statement => replaceProxyRequestType(sanitizeVendoredSource(statement.getText()), usesProxyRequestType)),
+    inputSchemaName,
+  );
 
   return {
     kind: 'ok',
@@ -340,36 +397,76 @@ function modelOutputOverride(action: ExtractedAction): { importStatement: string
   };
 }
 
-function emitActionFile(action: ExtractedAction): string {
+/**
+ * Top-level response fields that must not leave a generated tool. The upstream
+ * template returns them because the provider does, but an agent has no use for
+ * a credential and must not see one.
+ */
+const OUTPUT_SECRET_FIELDS: Readonly<Record<string, Readonly<Record<string, readonly string[]>>>> = {
+  resend: {
+    'create-webhook': ['signing_secret'],
+    'get-webhook': ['signing_secret'],
+  },
+};
+
+function outputSecretFields(action: ExtractedAction): readonly string[] | undefined {
+  const provider = Object.prototype.hasOwnProperty.call(OUTPUT_SECRET_FIELDS, action.candidate.providerId)
+    ? OUTPUT_SECRET_FIELDS[action.candidate.providerId]
+    : undefined;
+  if (!provider) return undefined;
+  const fields = Object.prototype.hasOwnProperty.call(provider, action.candidate.actionSlug)
+    ? provider[action.candidate.actionSlug]
+    : undefined;
+  return fields && fields.length > 0 ? fields : undefined;
+}
+
+function emitActionFile(action: ExtractedAction, pin: TemplatePin): string {
   const proxyTypeImports = [action.usesProxyRequestType ? 'PlatformProxyRequest' : undefined].filter(
     (name): name is string => Boolean(name),
   );
   const proxyImport = `import type { PlatformProxy${proxyTypeImports.length > 0 ? `, ${proxyTypeImports.join(', ')}` : ''} } from '../../../runtime/platform-proxy.js';\n`;
   const modelOutput = modelOutputOverride(action);
+  const secretFields = outputSecretFields(action);
+  const redactImport = secretFields ? "import { withoutSecretFields } from '../../../runtime/redact.js';\n" : '';
+  const redactedSchemaName = `${action.outputSchemaName}Redacted`;
+  const omitKeys = (secretFields ?? []).map(field => `${JSON.stringify(field)}: true`).join(', ');
+  const redactedSchema = secretFields
+    ? `\n/** Provider secrets removed before the result leaves the tool. */\nexport const ${redactedSchemaName} = ${action.outputSchemaName}.omit({ ${omitKeys} });\n`
+    : '';
+  const outputSchemaName = secretFields ? redactedSchemaName : action.outputSchemaName;
+  const execute = secretFields
+    ? `    execute: async (input, { requestContext }): Promise<z.infer<typeof ${redactedSchemaName}>> => {
+      const platformProxy = proxy.withRequestContext(requestContext);
+      const result = await (async (): Promise<z.infer<typeof ${action.outputSchemaName}>> => {
+${execBodyStatements(action.execBody)}
+      })();
+      return withoutSecretFields(result, [${(secretFields ?? []).map(field => JSON.stringify(field)).join(', ')}]);
+    },`
+    : `    execute: async (input, { requestContext }): Promise<z.infer<typeof ${action.outputSchemaName}>> => {
+      const platformProxy = proxy.withRequestContext(requestContext);
+${execBodyStatements(action.execBody)}
+    },`;
 
-  return `// AUTO-GENERATED from NangoHQ/integration-templates @ ${TEMPLATE_SHA.slice(0, 12)} — do not edit by hand.
+  return `// AUTO-GENERATED from ${pin.repo} @ ${pin.sha.slice(0, 12)} — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
-${modelOutput ? `${modelOutput.importStatement}\n` : ''}${proxyImport}
+${modelOutput ? `${modelOutput.importStatement}\n` : ''}${proxyImport}${redactImport}
 ${action.moduleStatements.join('\n\n')}
-
+${redactedSchema}
 export function ${action.toolFactoryName}(proxy: PlatformProxy) {
   return createTool({
     id: '${action.candidate.toolKey}',
     description: ${JSON.stringify(action.description)},
     inputSchema: ${action.inputSchemaName},
-    outputSchema: ${action.outputSchemaName},
-${modelOutput ? `${modelOutput.toolProperty}\n` : ''}    execute: async (input, { requestContext }): Promise<z.infer<typeof ${action.outputSchemaName}>> => {
-      const platformProxy = proxy.withRequestContext(requestContext);
-${execBodyStatements(action.execBody)}
-    },
+    outputSchema: ${outputSchemaName},
+${modelOutput ? `${modelOutput.toolProperty}\n` : ''}${execute}
   });
 }
 `;
 }
 
-function emitToolsFile(integrationId: string, actions: ExtractedAction[]): string {
+function emitToolsFile(integrationId: string, actions: ExtractedAction[], pin: TemplatePin): string {
   const imports = actions
     .map(action => `import { ${action.toolFactoryName} } from './tools/${action.candidate.actionSlug}.js';`)
     .join('\n');
@@ -380,7 +477,7 @@ function emitToolsFile(integrationId: string, actions: ExtractedAction[]): strin
     .map(action => `    '${action.candidate.toolKey}': ${action.toolFactoryName}(platformProxy),`)
     .join('\n');
 
-  return `// AUTO-GENERATED from NangoHQ/integration-templates @ ${TEMPLATE_SHA.slice(0, 12)} — do not edit by hand.
+  return `// AUTO-GENERATED from ${pin.repo} @ ${pin.sha.slice(0, 12)} — do not edit by hand.
 import { createPlatformProxy } from '../../runtime/platform-proxy.js';
 import type { ProviderToolsOptions } from '../../toolset.js';
 import { applyAllowTools } from '../../toolset.js';
@@ -396,13 +493,13 @@ ${toolEntries}
 `;
 }
 
-function emitIndexFile(integrationId: string): string {
+function emitIndexFile(integrationId: string, pin: TemplatePin): string {
   const envVar = providerConnectionEnvVar(integrationId);
   const factoryName = `create${toPascal(integrationId)}Tools`;
   // Shared with updateProviderIndex so the emitted export always matches the
   // import the provider index writes (including leading-digit normalization).
   const registrationName = providerRegistrationName(integrationId);
-  return `// AUTO-GENERATED from NangoHQ/integration-templates @ ${TEMPLATE_SHA.slice(0, 12)} — do not edit by hand.
+  return `// AUTO-GENERATED from ${pin.repo} @ ${pin.sha.slice(0, 12)} — do not edit by hand.
 import type { ProviderRegistration } from '../../registry.js';
 import { ${factoryName} } from './tools.js';
 
@@ -432,11 +529,13 @@ export interface GenerateProviderResult {
 export async function generateProvider({
   providerId,
   localId = providerId,
-  expectedTemplateSha = TEMPLATE_SHA,
+  expectedTemplateSha,
 }: GenerateProviderOptions): Promise<GenerateProviderResult> {
   validateProviderId(providerId, 'Provider ID');
   validateProviderId(localId, 'Local ID');
   assertProviderEnvVarAvailable(localId);
+  const pin = templatePinFor(providerId);
+  const expectedSha = expectedTemplateSha ?? pin.sha;
 
   const actionDir = resolve(templatesDir, providerId, 'actions');
   if (!existsSync(actionDir)) {
@@ -444,9 +543,9 @@ export async function generateProvider({
   }
 
   const templateSha = currentTemplateSha();
-  if (templateSha !== expectedTemplateSha) {
+  if (templateSha !== expectedSha) {
     throw new Error(
-      `Template checkout is at ${templateSha}, but the generator expects ${expectedTemplateSha}. Run \`pnpm sync-templates\`.`,
+      `Template checkout is at ${templateSha}, but the generator expects ${expectedSha}. Run \`pnpm sync-templates ${providerId}\`.`,
     );
   }
 
@@ -481,16 +580,17 @@ export async function generateProvider({
 
   try {
     for (const action of extracted) {
-      writeFileSync(resolve(temporaryDir, 'tools', `${action.candidate.actionSlug}.ts`), emitActionFile(action));
+      writeFileSync(resolve(temporaryDir, 'tools', `${action.candidate.actionSlug}.ts`), emitActionFile(action, pin));
     }
-    writeFileSync(resolve(temporaryDir, 'tools.ts'), emitToolsFile(localId, extracted));
-    writeFileSync(resolve(temporaryDir, 'index.ts'), emitIndexFile(localId));
+    writeFileSync(resolve(temporaryDir, 'tools.ts'), emitToolsFile(localId, extracted, pin));
+    writeFileSync(resolve(temporaryDir, 'index.ts'), emitIndexFile(localId, pin));
     await formatGeneratedFiles(temporaryDir);
 
     const manifest: ProviderManifest = {
       providerId,
       localId,
       templateSha,
+      templateRepo: pin.repo,
       generatedAt: new Date().toISOString(),
       toolCount: extracted.length,
       skippedActions: skipped.map(action => ({ action: action.candidate.actionSlug, reason: action.reason })),

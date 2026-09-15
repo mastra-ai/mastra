@@ -10,6 +10,7 @@ export interface ToolPartFields {
   output: unknown;
   modelOutput?: unknown;
   state?: string;
+  errorText?: string;
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
@@ -38,6 +39,7 @@ export function readToolPart(part: ToolPart): ToolPartFields {
         invocation.state === 'result' && 'isError' in invocation && invocation.isError === true
           ? 'output-error'
           : invocation.state,
+      errorText: 'errorText' in invocation ? invocation.errorText : undefined,
     };
   }
   return {
@@ -47,5 +49,6 @@ export function readToolPart(part: ToolPart): ToolPartFields {
     output: part.output,
     modelOutput: readModelOutput(part),
     state: part.state,
+    errorText: part.errorText,
   };
 }

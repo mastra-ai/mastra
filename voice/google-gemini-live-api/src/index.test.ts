@@ -1145,6 +1145,62 @@ describe('GeminiLiveVoice', () => {
       expect(setupMsg.setup.generation_config.speech_config.voice_config.prebuilt_voice_config.voice_name).toBe('Puck');
     });
 
+    it('connect() should forward thinkingConfig.includeThoughts as generation_config.thinking_config.include_thoughts', async () => {
+      const v = new GeminiLiveVoice({ apiKey: 'k', thinkingConfig: { includeThoughts: false } });
+
+      vi.spyOn((v as any).connectionManager, 'waitForOpen').mockResolvedValue(undefined as any);
+      (v as any).waitForSessionCreated = vi.fn().mockResolvedValue(undefined);
+
+      await v.connect();
+
+      const wsSent = ((v as any).connectionManager.getWebSocket() as any).send as any;
+      const payloads = wsSent.mock.calls.map((c: any[]) => JSON.parse(c[0]));
+      const setupMsg = payloads.find((p: any) => p.setup);
+      expect(setupMsg.setup.generation_config.thinking_config).toEqual({ include_thoughts: false });
+    });
+
+    it('connect() should forward thinkingConfig.thinkingBudget as generation_config.thinking_config.thinking_budget', async () => {
+      const v = new GeminiLiveVoice({ apiKey: 'k', thinkingConfig: { thinkingBudget: 0 } });
+
+      vi.spyOn((v as any).connectionManager, 'waitForOpen').mockResolvedValue(undefined as any);
+      (v as any).waitForSessionCreated = vi.fn().mockResolvedValue(undefined);
+
+      await v.connect();
+
+      const wsSent = ((v as any).connectionManager.getWebSocket() as any).send as any;
+      const payloads = wsSent.mock.calls.map((c: any[]) => JSON.parse(c[0]));
+      const setupMsg = payloads.find((p: any) => p.setup);
+      expect(setupMsg.setup.generation_config.thinking_config).toEqual({ thinking_budget: 0 });
+    });
+
+    it('connect() should omit generation_config.thinking_config when thinkingConfig is not set', async () => {
+      const v = new GeminiLiveVoice({ apiKey: 'k' });
+
+      vi.spyOn((v as any).connectionManager, 'waitForOpen').mockResolvedValue(undefined as any);
+      (v as any).waitForSessionCreated = vi.fn().mockResolvedValue(undefined);
+
+      await v.connect();
+
+      const wsSent = ((v as any).connectionManager.getWebSocket() as any).send as any;
+      const payloads = wsSent.mock.calls.map((c: any[]) => JSON.parse(c[0]));
+      const setupMsg = payloads.find((p: any) => p.setup);
+      expect(setupMsg.setup.generation_config.thinking_config).toBeUndefined();
+    });
+
+    it('connect() should omit generation_config.thinking_config when thinkingConfig is an empty object', async () => {
+      const v = new GeminiLiveVoice({ apiKey: 'k', thinkingConfig: {} });
+
+      vi.spyOn((v as any).connectionManager, 'waitForOpen').mockResolvedValue(undefined as any);
+      (v as any).waitForSessionCreated = vi.fn().mockResolvedValue(undefined);
+
+      await v.connect();
+
+      const wsSent = ((v as any).connectionManager.getWebSocket() as any).send as any;
+      const payloads = wsSent.mock.calls.map((c: any[]) => JSON.parse(c[0]));
+      const setupMsg = payloads.find((p: any) => p.setup);
+      expect(setupMsg.setup.generation_config.thinking_config).toBeUndefined();
+    });
+
     it('connect() should pick up apiKey and model placed on realtimeConfig root (not inside options)', async () => {
       const v = new GeminiLiveVoice({
         realtimeConfig: {
@@ -1237,6 +1293,32 @@ describe('GeminiLiveVoice', () => {
       const names = updateMsg.session.tools[0].function_declarations.map((d: any) => d.name);
       expect(names).toContain('fromConfig');
       expect(names).toContain('registered');
+    });
+
+    it('updateSessionConfig({ thinkingConfig }) should emit session.generation_config.thinking_config and update internal options', async () => {
+      setTimeout(() => {
+        (voice as any).eventManager.getEventEmitter().emit('session.updated', { ok: true } as any);
+      }, 10);
+
+      await voice.updateSessionConfig({ thinkingConfig: { includeThoughts: false } });
+
+      const calls = mockWs.send.mock.calls.map((c: any[]) => JSON.parse(c[0]));
+      const updateMsg = calls.find((p: any) => p.session?.generation_config?.thinking_config !== undefined);
+      expect(updateMsg).toBeDefined();
+      expect(updateMsg.session.generation_config.thinking_config).toEqual({ include_thoughts: false });
+      expect((voice as any).options.thinkingConfig).toEqual({ includeThoughts: false });
+    });
+
+    it('updateSessionConfig({ thinkingConfig: {} }) should not emit session.generation_config.thinking_config', async () => {
+      setTimeout(() => {
+        (voice as any).eventManager.getEventEmitter().emit('session.updated', { ok: true } as any);
+      }, 10);
+
+      await voice.updateSessionConfig({ thinkingConfig: {}, instructions: 'hi' });
+
+      const calls = mockWs.send.mock.calls.map((c: any[]) => JSON.parse(c[0]));
+      const withThinking = calls.find((p: any) => p.session?.generation_config?.thinking_config !== undefined);
+      expect(withThinking).toBeUndefined();
     });
 
     it('updateSessionConfig({ tools }) should emit the same single-container function_declarations shape as setup', async () => {

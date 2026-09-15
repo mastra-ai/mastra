@@ -91,14 +91,31 @@ describe('callProxy retry policy', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it('never retries a POST even when the template asks for retries', async () => {
+  it('retries a POST that carries an Idempotency-Key header', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('socket hang up'))
+      .mockResolvedValueOnce(Response.json({ id: 'sent' }));
+    const proxy = makeProxy(fetchMock);
+    const response = await proxy.post({
+      endpoint: 'emails',
+      data: { a: 1 },
+      headers: { 'Idempotency-Key': 'send-once' },
+      retries: 3,
+    });
+    expect(response.data).toEqual({ id: 'sent' });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(new Headers(fetchMock.mock.calls[1]![1].headers).get('idempotency-key')).toBe('send-once');
+  });
+
+  it('never retries a POST without an idempotency key even when the template asks for retries', async () => {
     const fetchMock = vi.fn().mockRejectedValue(new Error('socket hang up'));
     const proxy = makeProxy(fetchMock);
     await expect(proxy.post({ endpoint: 'items', data: { a: 1 }, retries: 3 })).rejects.toThrow('socket hang up');
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it('never retries a PATCH even when the template asks for retries', async () => {
+  it('never retries a PATCH without an idempotency key even when the template asks for retries', async () => {
     const fetchMock = vi.fn().mockRejectedValue(new Error('socket hang up'));
     const proxy = makeProxy(fetchMock);
     await expect(proxy.patch({ endpoint: 'items/1', data: { a: 1 }, retries: 3 })).rejects.toThrow('socket hang up');

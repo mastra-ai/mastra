@@ -29,14 +29,14 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@chat-adapter/slack": "^4.34.0"
+    "@chat-adapter/slack": "^4.37.0"
   },
   "devDependencies": {
     "@mastra/core": "workspace:*",
     "@types/node": "^22.20.1",
     "tsdown": "0.22.9",
     "typescript": "catalog:",
-    "vitest": "^4.1.10",
+    "vitest": "^4.1.11",
     "zod": "catalog:"
   },
   "peerDependencies": {
