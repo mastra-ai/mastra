@@ -1,0 +1,116 @@
+---
+title: "OpenAI Live | Voice"
+description: "Add real-time speech-to-speech to Mastra with OpenAI's Live API (gpt-live-1), full-duplex audio, transcripts, tool calls, and backend delegation."
+packages:
+  - "@mastra/node-audio"
+  - "@mastra/voice-openai-live"
+---
+
+# OpenAI Live
+
+The `OpenAILiveVoice` class provides real-time speech-to-speech capabilities backed by OpenAI's [Live API](https://developers.openai.com/api/docs/guides/live) (`gpt-live-1`). It opens a full-duplex WebSocket to the Live endpoint (`wss://api.openai.com/v1/live/sessions`) and emits events for assistant audio, transcribed text, and tool calls.
+
+This is a separate provider from [`@mastra/voice-openai-realtime`](/integrations/voice/openai). The Live API is a distinct, **server-driven** protocol — a different endpoint with its own event vocabulary. The model listens and speaks at the same time and decides when each turn starts and ends; there is no client event to create, cancel, or truncate a response. Reasoning and tools are delegated to a backend model while the voice layer handles the acoustic loop. It is not a model-id swap on the Realtime provider.
+
+> **Note:** The Live API is transported over a server WebSocket only. WebRTC and SIP are not yet supported by this provider.
+
+> **Server-driven turns:** Because GPT-Live controls its own turns, there is no `response.create`. `speak()` appends text to the conversation context and asks the model to say it, but the model decides when and whether to speak (useful for greetings after the session starts). To open a call, call `speak()` once the session is ready.
+
+## Usage example
+
+```typescript title="src/mastra/voice.ts"
+import { OpenAILiveVoice } from '@mastra/voice-openai-live'
+import { playAudio, getMicrophoneStream } from '@mastra/node-audio'
+
+const voice = new OpenAILiveVoice({
+  apiKey: process.env.OPENAI_API_KEY,
+  model: 'gpt-live-1',
+  speaker: 'marin',
+  delegation: {
+    type: 'responses',
+    responses: {
+      model: 'gpt-4o',
+      tool_choice: 'auto',
+    },
+  },
+})
+
+// Establish the Live session
+await voice.connect()
+
+// Listen for assistant audio as a readable stream
+voice.on('speaker', stream => {
+  stream.pipe(playAudio())
+})
+
+// Listen for transcribed assistant text
+voice.on('writing', ({ text, role }) => {
+  console.log(`${role}: ${text}`)
+})
+
+// Stream microphone audio in real time
+await voice.send(getMicrophoneStream())
+
+// Disconnect when done
+voice.close()
+```
+
+## Configuration
+
+| Option | Type | Default | Description |
+| - | - | - | - |
+| `apiKey` | `string` | `process.env.OPENAI_API_KEY` | OpenAI API key. |
+| `model` | `string` | `gpt-live-1` | Live model id. |
+| `speaker` | `string` | `marin` | Voice id. |
+| `url` | `string` | Live endpoint | Override the Live WebSocket URL. |
+| `userAgent` | `string` | `mastra-voice-openai-live` | `User-Agent` header identifying your app. |
+| `instructions` | `string` | — | System instructions for the session. |
+| `tools` | `ToolsInput` | — | Mastra tools advertised to the session. |
+| `delegation` | `object` | — | Backend delegation config forwarded to the Live session. |
+| `sessionConfig` | `object` | — | Extra fields merged into the session config. |
+| `connectTimeoutMs` | `number` | `15000` | Connection handshake timeout in ms. |
+
+## Delegation
+
+GPT-Live delegates reasoning and tool execution to a backend model. Under the default `responses` delegation, tools are advertised to the backend under `responses.tools` (not at the top level of the session), and the nested `responses` object requires its own backend `model`. Pass a `delegation` object to configure that backend:
+
+```typescript
+const voice = new OpenAILiveVoice({
+  delegation: {
+    type: 'responses',
+    responses: {
+      model: 'gpt-4o',
+      tool_choice: 'auto',
+    },
+  },
+})
+```
+
+## Events
+
+`OpenAILiveVoice` emits the following events:
+
+- `speaker` — a Node.js readable stream of output audio for playback.
+- `speaking` — `{ audio }` buffers of output audio as they arrive.
+- `writing` — `{ text, role }` assistant transcript deltas.
+- `error` — connection or protocol errors.
+
+## Tools
+
+Register tools with `addTools` or the `tools` constructor option. Tools require `responses` delegation (the `client` delegation mode has no tool channel). When the backend requests a tool via a `delegation.created` event, `OpenAILiveVoice` executes the matching tool, emits `tool-call-start` and `tool-call-result` events, and returns the result via `delegation.function_call_output.create`. The server resumes on its own — no response event is sent:
+
+```typescript
+voice.addTools({
+  getWeather: {
+    description: 'Get the current weather for a city',
+    inputSchema: z.object({ city: z.string() }),
+    execute: async ({ context }) => getWeather(context.city),
+  },
+})
+```
+
+## Related
+
+- [Speech-to-Speech reference](/reference/voice/speech-to-speech)
+- [Voice overview](/reference/voice/overview)
+- [OpenAI Realtime](/integrations/voice/openai)
