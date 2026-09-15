@@ -72,6 +72,19 @@ describe('token-based memory history', () => {
     expect(normalizeMessageHistoryConfig(undefined)).toEqual({ enabled: false, maxMessages: undefined });
   });
 
+  it('preserves explicit MockMemory history disablement', async () => {
+    const withCount = new MockMemory({ enableMessageHistory: false, options: { lastMessages: 5 } });
+    const withTokens = new MockMemory({
+      enableMessageHistory: false,
+      options: { messageHistory: { maxTokens: 100 } },
+    });
+
+    expect((withCount as any).threadConfig.lastMessages).toBe(false);
+    expect((withTokens as any).threadConfig.lastMessages).toBe(false);
+    expect(await withCount.getInputProcessors()).toEqual([]);
+    expect(await withTokens.getInputProcessors()).toEqual([]);
+  });
+
   it('drops the default count window when only messageHistory is configured', async () => {
     const withTokens = new MockMemory({ options: { messageHistory: { maxTokens: 100 } } });
     expect((withTokens as any).threadConfig.lastMessages).toBeUndefined();
