@@ -120,7 +120,7 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
   const [showAttachDialog, setShowAttachDialog] = useState(false);
   const [attachDatasetId, setAttachDatasetId] = useState('');
   const [showAttachScorerDialog, setShowAttachScorerDialog] = useState(false);
-  const [attachScorerSearch, setAttachScorerSearch] = useState('');
+  const [attachScorerId, setAttachScorerId] = useState('');
   const [showRunExperimentDialog, setShowRunExperimentDialog] = useState(false);
   const [generateDatasetId, setGenerateDatasetId] = useState<string | null>(null);
   const [reviewDatasetId, setReviewDatasetId] = useState<string | null>(null);
@@ -181,6 +181,11 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
   const closeAttachDialog = () => {
     setShowAttachDialog(false);
     setAttachDatasetId('');
+  };
+
+  const closeAttachScorerDialog = () => {
+    setShowAttachScorerDialog(false);
+    setAttachScorerId('');
   };
 
   const datasetMap = useMemo(() => {
@@ -590,10 +595,14 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
           <EmptyState
             iconSlot={<CircleSlashIcon />}
             titleSlot="No Scorers yet"
-            descriptionSlot="Attach or create a scorer to evaluate this agent's responses."
+            descriptionSlot={
+              isCodeAgentOverride
+                ? 'Attaching scorers from Studio is only available for agents created in the editor. Configure scorers for this agent in code.'
+                : "Attach or create a scorer to evaluate this agent's responses."
+            }
             actionSlot={
               <div className="flex flex-col items-center gap-2">
-                {unattachedScorers.length > 0 ? (
+                {isCodeAgentOverride ? null : unattachedScorers.length > 0 ? (
                   <Button variant="primary" onClick={() => setShowAttachScorerDialog(true)} icon={<Paperclip />}>
                     Attach Scorer
                   </Button>
@@ -742,67 +751,51 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
         </Dialog>
 
         {/* Attach Existing Scorer Dialog */}
-        <Dialog open={showAttachScorerDialog} onOpenChange={setShowAttachScorerDialog}>
+        <Dialog
+          open={showAttachScorerDialog}
+          onOpenChange={open => (open ? setShowAttachScorerDialog(true) : closeAttachScorerDialog())}
+        >
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Attach Existing Scorer</DialogTitle>
             </DialogHeader>
-            <DialogBody className="max-h-[50vh] overflow-y-auto">
-              <InputGroup variant="outline">
-                <InputGroupAddon align="inline-start">
-                  <SearchIcon />
-                </InputGroupAddon>
-                <InputGroupInput
-                  type="search"
-                  aria-label="Search scorers"
-                  placeholder="Search scorers..."
-                  value={attachScorerSearch}
-                  onChange={event => setAttachScorerSearch(event.target.value)}
-                />
-              </InputGroup>
-              {unattachedScorers
-                .filter(([id, scorer]) => {
-                  if (!attachScorerSearch) return true;
-                  const name = scorer.scorer?.name || id;
-                  return name.toLowerCase().includes(attachScorerSearch.toLowerCase());
-                })
-                .map(([id, scorer]) => (
-                  <button
-                    key={id}
-                    type="button"
-                    className="hover:bg-surface3 flex w-full items-center justify-between rounded-md px-3 py-2 text-left transition-colors"
-                    onClick={async () => {
-                      try {
-                        await attachScorer(id, scorer);
-                        toast.success(`Scorer "${scorer.scorer?.name || id}" attached`);
-                        setShowAttachScorerDialog(false);
-                      } catch {
-                        toast.error('Failed to attach scorer');
-                      }
-                    }}
-                  >
-                    <div>
-                      <Txt variant="ui-sm" className="font-medium">
-                        {scorer.scorer?.name || id}
-                      </Txt>
-                      {scorer.scorer?.description && (
-                        <Txt variant="ui-xs" className="text-neutral3 block">
-                          {scorer.scorer.description}
-                        </Txt>
-                      )}
-                    </div>
-                  </button>
-                ))}
-              {unattachedScorers.filter(([id, scorer]) => {
-                if (!attachScorerSearch) return true;
-                const name = scorer.scorer?.name || id;
-                return name.toLowerCase().includes(attachScorerSearch.toLowerCase());
-              }).length === 0 && (
-                <Txt variant="ui-sm" className="text-neutral3 block py-4 text-center">
-                  No scorers available to attach
-                </Txt>
-              )}
+            <DialogBody>
+              <Combobox
+                options={unattachedScorers.map(([id, scorer]) => ({
+                  value: id,
+                  label: scorer.scorer?.name || id,
+                  description: scorer.scorer?.description ?? undefined,
+                }))}
+                value={attachScorerId}
+                onValueChange={setAttachScorerId}
+                placeholder="Select a scorer..."
+                searchPlaceholder="Search scorers..."
+                emptyText="No scorers available to attach"
+                className="w-full"
+              />
             </DialogBody>
+            <DialogFooter>
+              <Button onClick={closeAttachScorerDialog}>Cancel</Button>
+              <Button
+                variant="primary"
+                icon={<Paperclip />}
+                disabled={!attachScorerId || updateStoredAgent.isPending || createStoredAgent.isPending}
+                onClick={async () => {
+                  const entry = unattachedScorers.find(([id]) => id === attachScorerId);
+                  if (!entry) return;
+                  const [id, scorer] = entry;
+                  try {
+                    await attachScorer(id, scorer);
+                    toast.success(`Scorer "${scorer.scorer?.name || id}" attached`);
+                    closeAttachScorerDialog();
+                  } catch {
+                    toast.error('Failed to attach scorer');
+                  }
+                }}
+              >
+                Attach
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       </>
@@ -870,7 +863,7 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
                 )}
               </>
             )}
-            {activeTab === 'scorers' && (
+            {activeTab === 'scorers' && !isCodeAgentOverride && (
               <>
                 <CreateButton
                   variant="ghost"
