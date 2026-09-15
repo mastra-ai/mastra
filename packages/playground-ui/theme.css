@@ -95,7 +95,7 @@
   --muted-foreground: var(--gray-9);
   --border: var(--gray-alpha-2);
   --ring: var(--gray-8);
-  --sidebar-accent: var(--gray-alpha-2);
+  --sidebar-accent: var(--gray-alpha-1);
 
   /* Notice admonition colors — bg uses /20 alpha overlay; fg is the on-surface text/icon color */
   --notice-success: oklch(0.92 0.27 138);
@@ -246,7 +246,7 @@ html.light {
   --muted-foreground: var(--gray-9);
   --border: var(--gray-alpha-3);
   --ring: var(--gray-8);
-  --sidebar-accent: var(--gray-alpha-2);
+  --sidebar-accent: var(--gray-alpha-1);
 
   /* Notice admonition colors — bg keeps saturation, fg flips to deep tint for contrast on light surface */
   --notice-success: oklch(0.55 0.2 140);
