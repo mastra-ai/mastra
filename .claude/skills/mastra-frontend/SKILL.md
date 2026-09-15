@@ -57,7 +57,7 @@ Class strings MUST remain complete and statically detectable. Use `cn()` for con
 | Section heading | `header-sm` |
 | Panel heading   | `ui-md`     |
 
-Review `Tiger Team/Foundations/Typography` in Storybook before changing typography tokens, `Txt`, or heading conventions. The paired size and line-height are one contract.
+Review `Foundations/Updated/Typography` in Storybook before changing typography tokens, `Txt`, or heading conventions. The paired size and line-height are one contract.
 
 ## Color foundations and semantics
 
@@ -73,7 +73,7 @@ Review `Tiger Team/Foundations/Typography` in Storybook before changing typograp
 - A new semantic alias MUST name a role, not a visual value. Prefer `sidebar-background` over `dark-gray`.
 - Theme-aware tokens MUST switch through `:root` and `html.light`. Components MUST NOT add `dark:` color overrides for behavior already represented by a token.
 
-Review `Tiger Team/Foundations/Color` in Storybook before changing color foundations, semantic aliases, or theme mappings.
+Review `Foundations/Updated/Color` in Storybook before changing color foundations, semantic aliases, or theme mappings.
 
 ## Theme and token wiring
 

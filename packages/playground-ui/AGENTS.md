@@ -30,6 +30,6 @@
 
 <verification>
 
-Review the matching `Tiger Team/Foundations` story before changing either system. Verify light and dark themes at mobile, tablet, and desktop widths. Run narrow tests before E2E and include handoff screenshots.
+Review the matching `Foundations/Updated` story before changing either system. Verify light and dark themes at mobile, tablet, and desktop widths. Run narrow tests before E2E and include handoff screenshots.
 
 </verification>
