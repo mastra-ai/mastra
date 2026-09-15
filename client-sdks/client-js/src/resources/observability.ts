@@ -21,6 +21,8 @@ import type {
   PaginationInfo,
   ScoreTracesRequest,
   ScoreTracesResponse,
+  DeleteTracesRequest,
+  DeleteTracesResponse,
   ListScoresResponse,
   Trajectory,
   ListLogsArgs,
@@ -322,10 +324,10 @@ export class Observability extends BaseResource {
    * @param params - IDs of the traces to delete
    * @returns Promise resolving to `{ success: true }` once the delete is issued
    */
-  deleteTraces(params: { traceIds: string[] }): Promise<{ success: true }> {
+  deleteTraces(params: DeleteTracesRequest): Promise<DeleteTracesResponse> {
     return this.request(`/observability/traces/delete`, {
       method: 'POST',
-      body: { traceIds: params.traceIds },
+      body: params,
     });
   }
 

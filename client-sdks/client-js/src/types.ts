@@ -93,6 +93,7 @@ type RequestContextOptions = {
 
 type GeneratedRequest<T> = OptionalizeUndefined<T>;
 type GeneratedResponse<T extends RouteKey> = Serialized<RouteResponse<T>>;
+export type SerializedRouteResponse<T extends RouteKey> = GeneratedResponse<T>;
 type WithoutIndexSignatures<T> = {
   [K in keyof T as string extends K ? never : number extends K ? never : symbol extends K ? never : K]: T[K];
 };
