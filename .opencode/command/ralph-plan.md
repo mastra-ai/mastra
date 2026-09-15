@@ -1,1 +1,1 @@
-../../.mastracode/commands/ralph-plan.md
+/Users/damienschneider/.mastracode/web/sandboxes/mastra-ai/mastra/.mastracode/commands/ralph-plan.md

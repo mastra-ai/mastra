@@ -1,1 +1,1 @@
-../../.mastracode/commands/gh-new-pr.md
+/Users/damienschneider/.mastracode/web/sandboxes/mastra-ai/mastra/.mastracode/commands/gh-new-pr.md
