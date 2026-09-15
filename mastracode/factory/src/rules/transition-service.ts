@@ -83,6 +83,9 @@ export interface FactoryTransitionServiceOptions {
     workItemId: string;
     stage: FactoryRuleStage;
     revision: number;
+    /** The actor that committed this terminal transition. Lets cleanup leave
+     * the seat that drove its own transition (an agent tool call) untouched. */
+    actor: FactoryRuleActor;
   }) => Promise<void> | void;
   /** Upper bound on how long a committed transition waits for
    * `onTerminalStage` before returning (default 30s). The cleanup continues
@@ -99,6 +102,13 @@ export interface FactoryTransitionServiceOptions {
     workItemId: string;
     item: WorkItemRow;
   }) => Promise<void> | void;
+  /**
+   * Resolves whether a project auto-approves produced plans. Mirrors the
+   * dispatcher's resolver so the two share a single authoritative predicate
+   * (`plansPreapprovedAt` on the item, or this per-project setting). Unset means
+   * off: a plan nobody armed for auto-advance is a plan a person must review.
+   */
+  autoApprovePlans?: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
 }
 
 function rejection(
@@ -220,6 +230,7 @@ export class FactoryTransitionService {
   readonly #onTerminalStage: FactoryTransitionServiceOptions['onTerminalStage'];
   readonly #terminalCleanupTimeoutMs: number;
   readonly #onAccepted: FactoryTransitionServiceOptions['onAccepted'];
+  readonly #autoApprovePlans: FactoryTransitionServiceOptions['autoApprovePlans'];
   readonly #audit: AuditRecorder | undefined;
 
   constructor(options: FactoryTransitionServiceOptions) {
@@ -230,6 +241,7 @@ export class FactoryTransitionService {
     this.#timeoutMs = options.timeoutMs ?? RULE_TIMEOUT_MS;
     this.#onTerminalStage = options.onTerminalStage;
     this.#onAccepted = options.onAccepted;
+    this.#autoApprovePlans = options.autoApprovePlans;
     this.#terminalCleanupTimeoutMs = options.terminalCleanupTimeoutMs ?? TERMINAL_CLEANUP_TIMEOUT_MS;
   }
 
@@ -416,6 +428,15 @@ export class FactoryTransitionService {
     try {
       evaluation = await withRuleTimeout(
         (async () => {
+          // Single authoritative plan-approval predicate, shared with the dispatcher's
+          // `#plansAreAutoApproved`: a per-item preapproval, or the project setting.
+          // Resolved inside the timed block so a resolver rejection surfaces as a
+          // committed rule_error and a slow lookup is bounded by RULE_TIMEOUT_MS.
+          const plansAutoApproved =
+            item.plansPreapprovedAt != null ||
+            (this.#autoApprovePlans
+              ? await this.#autoApprovePlans({ orgId: request.orgId, factoryProjectId: request.factoryProjectId })
+              : false);
           const policy = boardTransitionPolicyResultSchema.parse(
             await board.transitionPolicy?.(
               immutablePolicySnapshot({
@@ -424,6 +445,7 @@ export class FactoryTransitionService {
                 initialEntry: request.initialEntry ?? false,
                 reenter: request.reenter ?? false,
                 isHumanTransition: isHumanTransition(request),
+                plansAutoApproved,
                 requestedTriageType: request.triageType,
               }),
             ),
@@ -594,6 +616,7 @@ export class FactoryTransitionService {
             workItemId: request.workItemId,
             stage: result.stage,
             revision: result.revision,
+            actor: request.actor,
           }),
         );
         // A late rejection after the timeout wins the race must not surface

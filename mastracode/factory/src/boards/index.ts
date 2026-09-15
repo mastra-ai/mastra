@@ -8,7 +8,13 @@ export type {
   BoardToolRules,
   BoardTransition,
 } from './define-board.js';
-export { boardForWorkItem, resolveBoardToolRule, resolvePhaseSemantics, workItemPhaseSemantics } from './semantics.js';
+export {
+  boardForWorkItem,
+  isTerminalWorkItem,
+  resolveBoardToolRule,
+  resolvePhaseSemantics,
+  workItemPhaseSemantics,
+} from './semantics.js';
 export type { PhaseSemantics } from './semantics.js';
 export type {
   BoardTransitionPolicy,
