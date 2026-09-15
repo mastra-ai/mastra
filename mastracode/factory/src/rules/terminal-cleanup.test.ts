@@ -72,6 +72,63 @@ describe('createTerminalStageCleanup', () => {
     ]);
   });
 
+  it('aborts the live run on each active seat before revoking its binding', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const work = await prepareBinding(storage, { issue: 1, role: 'work', session: 'session-1' });
+    const review = await prepareBinding(storage, { issue: 1, role: 'review', session: 'session-2' });
+
+    const order: string[] = [];
+    const abortSession = vi.fn(async () => {
+      order.push('abort');
+    });
+    const revoke = storage.revokeRunBindingsForWorkItem.bind(storage);
+    vi.spyOn(storage, 'revokeRunBindingsForWorkItem').mockImplementation(async input => {
+      order.push('revoke');
+      return revoke(input);
+    });
+    const cleanup = createTerminalStageCleanup({ workItems: storage, abortSession });
+
+    await cleanup({ orgId: 'org-1', factoryProjectId: PROJECT_ID, workItemId: work.item.id });
+
+    // Every live seat is aborted before the single revocation pass.
+    expect(order).toEqual(['abort', 'abort', 'revoke']);
+    expect(abortSession.mock.calls.map(([b]: any[]) => b.id).sort()).toEqual(
+      [work.binding.id, review.binding.id].sort(),
+    );
+  });
+
+  it('leaves the seat that drove its own terminal transition running', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const work = await prepareBinding(storage, { issue: 1, role: 'work', session: 'session-1' });
+    const review = await prepareBinding(storage, { issue: 1, role: 'review', session: 'session-2' });
+
+    const abortSession = vi.fn(async () => {});
+    const cleanup = createTerminalStageCleanup({ workItems: storage, abortSession });
+
+    await cleanup({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: work.item.id,
+      initiatingBindingId: work.binding.id,
+    });
+
+    expect(abortSession.mock.calls.map(([b]: any[]) => b.id)).toEqual([review.binding.id]);
+  });
+
+  it('does not abort a seat whose session has been rebound to another active item', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const stale = await prepareBinding(storage, { issue: 1, role: 'work', session: 'session-1' });
+    // A successor active binding reuses the same session address for another item.
+    await prepareBinding(storage, { issue: 2, role: 'work', session: 'session-1' });
+
+    const abortSession = vi.fn(async () => {});
+    const cleanup = createTerminalStageCleanup({ workItems: storage, abortSession });
+
+    await cleanup({ orgId: 'org-1', factoryProjectId: PROJECT_ID, workItemId: stale.item.id });
+
+    expect(abortSession).not.toHaveBeenCalled();
+  });
+
   it('does not revoke a re-entered card after terminal cleanup becomes stale', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const prepared = await prepareBinding(storage);

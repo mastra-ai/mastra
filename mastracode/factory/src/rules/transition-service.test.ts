@@ -1017,6 +1017,7 @@ describe('FactoryTransitionService', () => {
       workItemId: item.id,
       stage: 'done',
       revision: expect.any(Number),
+      actor: { type: 'human', id: 'user-1' },
     });
   });
 
