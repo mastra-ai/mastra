@@ -361,6 +361,88 @@ const agent = new Agent({
 })
 ```
 
+## Required skills
+
+Use `createToolSkillPolicy` to require skill instructions before a tool can be activated or executed. Keep dependency rules separate from tool definitions. Configure one mandatory policy on `Mastra` for all registered agents, delegated agents, and registered server tools.
+
+```typescript
+import { Agent } from '@mastra/core/agent';
+import { Mastra } from '@mastra/core/mastra';
+import { SkillSearchProcessor, ToolSearchProcessor, createToolSkillPolicy } from '@mastra/core/processors';
+
+const toolPolicy = createToolSkillPolicy({
+  generate_image: ['image-generation'],
+  edit_image: ['image-generation', 'image-editing'],
+  create_artifact: ({ phase, input }) =>
+    phase === 'execute' && (input as { type?: string })?.type === 'mini_app' ? ['mini-app-builder'] : [],
+});
+
+const skillSearch = new SkillSearchProcessor({ workspace, trackReadiness: true });
+const toolSearch = new ToolSearchProcessor({
+  tools: allTools,
+  search: { autoLoad: true },
+  storage: 'context',
+});
+const agent = new Agent({
+  id: 'creative-agent',
+  name: 'Creative agent',
+  instructions: 'Use the available tools to complete the request.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  inputProcessors: [skillSearch, toolSearch],
+});
+const mastra = new Mastra({ agents: { agent }, toolPolicy });
+```
+
+Rules use the tool names exposed to the model. An array requires every listed skill. A function can require skills for a specific server tool operation; return an empty array for operations that don't need a skill. Don't place dependencies on the discovery or loading tools, since that would block recovery.
+
+Run `SkillSearchProcessor` before `ToolSearchProcessor`. After `load_skill` succeeds, readiness begins on the next model step when the processor injects the instructions. Calling `load_skill` and the protected tool in parallel doesn't authorize that tool call.
+
+The existing `filter` still controls permission and visibility. Dependency failures keep permitted tools discoverable. Explicit loading returns `dependencyErrors`; automatic loading attaches `dependencyError` and `loaded: false` to blocked results. The context store doesn't restore those results as active tools. Execution returns the error object directly:
+
+```json
+{
+  "code": "MISSING_REQUIRED_SKILL",
+  "tool": "generate_image",
+  "missingSkills": ["image-generation"],
+  "retryable": true
+}
+```
+
+The agent calls the existing `load_skill` tool, then retries `load_tool` or `search_tools`. No separate retry loop is needed. A skill absent from the authorized catalog returns `REQUIRED_SKILL_UNAVAILABLE` with `retryable: false`.
+
+The global policy runs at the server execution boundary, independently of per-run hook overrides. An Agent or ToolSearchProcessor policy can add restrictions but cannot relax a global denial. Final activation checks also cover tools inserted by later processors. Policies check accepted input after defaults and transforms. Protected tools without a server executor are rejected with `TOOL_DEPENDENCY_UNENFORCEABLE`. Direct calls through `mastra.getTool()` and the registered tool map are protected; invoking an unregistered raw tool or an arbitrary function outside Mastra is outside this boundary.
+
+For rules stored outside the application, use a resolver:
+
+```typescript
+const mastra = new Mastra({
+  agents: { agent },
+  toolPolicy: {
+    resolve: async ({ requestContext, agentId, runId }) =>
+      createToolSkillPolicy(await readAuthorizedRules({ requestContext, agentId, runId })),
+  },
+});
+```
+
+Mastra resolves this once per native preparation and keeps the callback with that run. Every new preparation and warm or cold resume resolves fresh rules; direct registered tool calls resolve once per call. Controller auto-approvals can cause a separate native resume for each tool, so one conversation may resolve more than once. A single activation scan never resolves the rules per tool. Resolver failure stops execution. A saved decline can still settle without granting tool execution. The resolver reads product configuration only; SkillSearchProcessor remains the skill-loading authority.
+
+Readiness requires instructions in the current native context. A delegated child receives no parent readiness and needs its own skill processor to load instructions. During a saved-run resume, SkillSearchProcessor reloads previously successful native `load_skill` results through its existing loader against the current authorized workspace, then injects fresh instructions before the parked tool is rebuilt. No approval flag or message text alone grants readiness. The original accepted input and resume data remain owned by the native workflow.
+
+A blocked resume leaves its original saved call paused. Native Controller Sessions restore saved approvals and custom suspensions, retain their prompts after dependency errors, and retry the same operation after the configuration is repaired. Dependency fields survive the model transcript and the official controller event stream.
+
+A configuration resolver can report a safe, structured problem using the public error type:
+
+```typescript
+import { ToolPolicyError } from '@mastra/core/tools';
+
+throw new ToolPolicyError(
+  { code: 'REQUIRED_SKILL_UNAVAILABLE', missingSkills: ['image-generation'], retryable: false },
+  { message: 'The required published skill is unavailable.' },
+);
+```
+
+Unexpected resolver errors become `TOOL_POLICY_UNAVAILABLE` with `retryable: true`. Their original cause stays private. Tools remain blocked until a fresh preparation succeeds.
+
 ## Related
 
 - [Processors](/docs/agents/processors)

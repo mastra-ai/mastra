@@ -175,6 +175,8 @@ export interface ProcessOutputResultArgs<
 export interface ProcessInputStepArgs<TTripwireMetadata = unknown> extends ProcessorMessageContext<TTripwireMetadata> {
   /** The active agent run ID, when this processor is running inside an agent loop */
   runId?: string;
+  /** Native prepared mandatory policy; processor return values cannot replace it. */
+  toolPolicy?: import('../tools/tool-policy').ToolPolicy;
   /** The current step number (0-indexed) */
   stepNumber: number;
   steps: Array<StepResult<any>>;
@@ -995,6 +997,10 @@ export type {
   BackgroundWorkTerminalStatus,
 } from './background-work-signals';
 export * from './memory';
+export { getSkillReadiness } from './processors/skill-readiness';
+export type { SkillReadiness } from './processors/skill-readiness';
+export { createToolSkillPolicy } from './processors/tool-skill-dependencies';
+export type { ToolSkillDependencies } from './processors/tool-skill-dependencies';
 export type { TripWireOptions } from '../agent/trip-wire';
 export {
   ProcessorStepSchema,

@@ -56,6 +56,7 @@ import type { SignalProvider } from '../signals/signal-provider';
 import type { AgentSkillsInput } from '../skills/types';
 import type { MastraModelOutput } from '../stream/base/output';
 import type { AgentChunkType, MastraOnFinishCallbackArgs, ModelManagerModelConfig } from '../stream/types';
+import type { ToolPolicy } from '../tools/tool-policy';
 import type { ToolAction, ToolHooks, VercelTool, VercelToolV5 } from '../tools';
 import type { WebSearchToolPlaceholder } from '../tools/builtin/web-search';
 import type { ToolPayloadTransformPolicy } from '../tools/types';
@@ -742,6 +743,8 @@ interface AgentConfigBase<
    * If a workspace also defines tool hooks, workspace hooks wrap the workspace tool first, then agent hooks wrap the exposed tool call.
    */
   hooks?: ToolHooks;
+  /** Mandatory execution policy. Per-run hooks cannot override this policy. */
+  toolPolicy?: ToolPolicy;
   /**
    * Workflows that the agent can execute. Can be static or dynamically resolved.
    */

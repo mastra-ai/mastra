@@ -27,6 +27,7 @@ import { SpanType, wrapMastra, EntityType, getOrCreateSpan, createObservabilityC
 import type { AnySpan } from '../../observability';
 import { executeWithContext } from '../../observability/utils';
 import { RequestContext } from '../../request-context';
+import { PROCESSOR_TOOL_OWNER, getProcessorToolOwner } from '../../processors/tool-provenance';
 import { isStandardSchemaWithJSON, toStandardSchema, standardSchemaToJSONSchema } from '../../schema';
 import type { StandardSchemaWithJSON } from '../../schema';
 import { getNeedsApprovalFn, isVercelTool, isProviderDefinedTool } from '../../tools/toolchecks';
@@ -36,6 +37,8 @@ import { isZodObject, safeExtendZodObject } from '../../utils/zod-utils';
 import type { SuspendOptions } from '../../workflows';
 import { markBuilderValidatedInput } from '../builder-validation-context';
 import { createToolObserve } from '../observe';
+import { checkExecutionPolicy, markPolicyExecutor, TOOL_EXECUTION_POLICY } from '../tool-policy-execution';
+import { captureToolInput, restoreToolInput, TOOL_INPUT_STATE } from '../resumable-input';
 import { ToolStream } from '../stream';
 import type {
   CoreTool,
@@ -614,10 +617,15 @@ export class CoreToolBuilder extends MastraBase {
         let suspendData = null;
 
         if (isVercelTool(tool)) {
+          const {
+            [TOOL_INPUT_STATE]: _toolInputState,
+            [TOOL_EXECUTION_POLICY]: _toolPolicy,
+            ...publicOptions
+          } = execOptions;
           // Handle Vercel tools (AI SDK tools)
           result = await executeWithContext({
             span: toolSpan,
-            fn: async () => tool?.execute?.(args, execOptions as ToolExecutionOptions),
+            fn: async () => tool?.execute?.(args, publicOptions as ToolExecutionOptions),
           });
         } else {
           // Handle Mastra tools - wrap mastra instance with tracing context for context propagation
@@ -651,6 +659,9 @@ export class CoreToolBuilder extends MastraBase {
             memory: options.memory,
             runId: options.runId,
             requestContext: mergeRequestContexts(options.requestContext, execOptions.requestContext),
+            ...(execOptions[TOOL_EXECUTION_POLICY]
+              ? { [TOOL_EXECUTION_POLICY]: execOptions[TOOL_EXECUTION_POLICY] }
+              : {}),
             actor: execOptions.actor,
             // Workspace for file operations and command execution
             // Execution-time workspace (from prepareStep/processInputStep) takes precedence over build-time workspace
@@ -748,7 +759,7 @@ export class CoreToolBuilder extends MastraBase {
 
           const resumeData = execOptions.resumeData;
 
-          if (resumeData) {
+          if (resumeData !== undefined) {
             const resumeValidation = validateToolInput(resumeSchema, resumeData, options.name);
             if (resumeValidation.error) {
               logger?.warn(resumeValidation.error.message);
@@ -760,9 +771,9 @@ export class CoreToolBuilder extends MastraBase {
           result = await executeWithContext({
             span: toolSpan,
             fn: async () => {
-              if (inputValidationSchema) {
-                markBuilderValidatedInput(toolContext);
-              }
+              // createExecute already validated (or restored) this input even
+              // when the provider needs no compatibility layer.
+              markBuilderValidatedInput(toolContext);
               return tool?.execute?.(args, toolContext);
             },
           });
@@ -808,7 +819,7 @@ export class CoreToolBuilder extends MastraBase {
       }
     };
 
-    return async (args: unknown, execOptions?: MastraToolInvocationOptions) => {
+    return markPolicyExecutor(async (args: unknown, execOptions?: MastraToolInvocationOptions) => {
       let logger = options.logger || this.logger;
 
       // Create tool span early so validation failures are always observable.
@@ -877,11 +888,15 @@ export class CoreToolBuilder extends MastraBase {
       try {
         logger.debug(start, { ...logData, ...rest, model: logModelObject });
 
-        // When a tool is being resumed (resumeData present in execOptions), skip input
-        // validation. The original args were already validated during the initial
-        // execution, and during resume the tool's execute function checks resumeData
-        // and returns early without using the input args.
-        const isResuming = !!execOptions?.resumeData;
+        // Resume with the input accepted by the first invocation. Revalidating
+        // would repeat user transforms; using raw model args loses conversion.
+        const isResuming = execOptions?.resumeData !== undefined;
+        if (isResuming)
+          args = restoreToolInput(
+            execOptions,
+            args,
+            options.name.startsWith('agent-') || options.name.startsWith('workflow-'),
+          );
 
         const parameters = inputValidationSchema ?? this.getParameters();
         if (!isResuming) {
@@ -903,10 +918,18 @@ export class CoreToolBuilder extends MastraBase {
           }
         }
 
+        captureToolInput(execOptions, args, { toolName: options.name, toolCallId: execOptions?.toolCallId });
+
         // there is a small delay in stream output so we add an immediate to ensure the stream is ready
         return await new Promise((resolve, reject) => {
           setImmediate(async () => {
             try {
+              const decision = await checkExecutionPolicy(execOptions, args);
+              if (decision?.allowed === false) {
+                toolSpan?.end({ output: decision.error, attributes: { success: false } });
+                resolve(decision.error);
+                return;
+              }
               const result = await execFunction(args, execOptions!, toolSpan);
               resolve(result);
             } catch (err) {
@@ -933,7 +956,7 @@ export class CoreToolBuilder extends MastraBase {
         logger.trackException(mastraError, { ...logData, ...rest, model: logModelObject });
         throw mastraError;
       }
-    };
+    });
   }
 
   buildV5() {
@@ -1135,8 +1158,10 @@ export class CoreToolBuilder extends MastraBase {
         : undefined,
     };
 
+    const processorToolOwner = getProcessorToolOwner(this.originalTool);
     return {
       ...definition,
+      ...(processorToolOwner === undefined ? {} : { [PROCESSOR_TOOL_OWNER]: processorToolOwner }),
       id: 'id' in this.originalTool ? this.originalTool.id : undefined,
       parameters: processedInputSchema ?? z.object({}),
       outputSchema: processedOutputSchema,

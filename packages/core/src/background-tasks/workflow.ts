@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { InternalSpans } from '../observability';
+import { createToolInputState, persistedToolInput, TOOL_INPUT_STATE } from '../tools/resumable-input';
 import { createStep, createWorkflow } from '../workflows';
 import type { SuspendOptions } from '../workflows';
 import type { BackgroundTaskManager } from './manager';
@@ -138,7 +139,9 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
       // safely run all its side effects synchronously inside the
       // tool's call.
       let pendingSuspend: { data?: unknown; suspendOptions?: SuspendOptions } | undefined;
+      const toolInputState = createToolInputState(suspendData);
       const wrappedSuspend = async (data?: unknown, suspendOptions?: SuspendOptions) => {
+        persistedToolInput(toolInputState);
         await storage.updateTask(taskId, {
           status: 'suspended',
           suspendPayload: data,
@@ -158,12 +161,17 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
 
       try {
         const args = { ...task.args };
-        const suspendedToolRunId = (suspendData as { suspendedToolRunId?: unknown } | undefined)?.suspendedToolRunId;
+        const originalSuspendData =
+          (suspendData as { __mastraBackgroundPayload?: unknown } | undefined)?.__mastraBackgroundPayload ??
+          suspendData;
+        const suspendedToolRunId = (originalSuspendData as { suspendedToolRunId?: unknown } | undefined)
+          ?.suspendedToolRunId;
         if (resumeData !== undefined && !args.suspendedToolRunId && typeof suspendedToolRunId === 'string') {
           args.suspendedToolRunId = suspendedToolRunId;
         }
 
         const result = await executor.execute(args, {
+          [TOOL_INPUT_STATE]: toolInputState,
           abortSignal: abortController.signal,
           onProgress,
           suspend: wrappedSuspend,
@@ -186,7 +194,11 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
             : pendingSuspend.data && typeof pendingSuspend.data === 'object'
               ? { ...(pendingSuspend.data as Record<string, unknown>), suspendedToolRunId: agentRunId }
               : { suspendedToolRunId: agentRunId };
-          return suspend(engineData, opts as SuspendOptions);
+          return suspend(
+            { __mastraBackgroundPayload: engineData, __mastraToolInput: persistedToolInput(toolInputState) },
+            opts as SuspendOptions,
+          );
+
         }
 
         return { taskId, outcome: 'success' as const, result };

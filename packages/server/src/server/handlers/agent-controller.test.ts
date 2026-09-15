@@ -560,6 +560,54 @@ describe('agent-controller routes', () => {
       expect(received.errorType).toBe('provider');
     });
 
+    it('preserves only dependency recovery fields on the controller event stream', async () => {
+      const stream = (await STREAM_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-err',
+        abortSignal: new AbortController().signal,
+      } as any)) as ReadableStream<unknown>;
+
+      const reader = stream.getReader();
+
+      const controller = mastra.getAgentController('code')!;
+      await controller.init();
+      const session = await controller.createSession({ resourceId: 'user-err', id: 'user-err', ownerId: 'code' });
+      session.emit({
+        type: 'error',
+        error: Object.assign(new Error('Load the skill'), {
+          name: 'ToolDependencyError',
+          code: 'MISSING_REQUIRED_SKILL',
+          tool: 'protected_tool',
+          missingSkills: ['required'],
+          retryable: true,
+          privateField: 'not-on-wire',
+        }),
+        errorType: 'provider',
+      } as any);
+
+      let received: any;
+      for (let i = 0; i < 10 && received === undefined; i++) {
+        const { value } = await reader.read();
+        if (value && typeof value === 'object' && (value as any).type === 'error') received = value;
+      }
+      await reader.cancel();
+
+      expect(received).toBeDefined();
+      // Error's message/name are non-enumerable; the wire event must carry them
+      // as plain properties so JSON.stringify doesn't send `"error": {}`.
+      expect(received.error).toEqual({
+        name: 'ToolDependencyError',
+        message: 'Load the skill',
+        code: 'MISSING_REQUIRED_SKILL',
+        tool: 'protected_tool',
+        missingSkills: ['required'],
+        retryable: true,
+      });
+      expect(JSON.parse(JSON.stringify(received)).error.message).toBe('Load the skill');
+      expect(received.errorType).toBe('provider');
+    });
+
     it('flattens Error instances on every event that carries one, not just on `error`', async () => {
       const stream = (await STREAM_AGENT_CONTROLLER_SESSION_ROUTE.handler({
         mastra,

@@ -20,6 +20,11 @@ export type Jsonify<T> = T extends { toJSON(): infer R }
 export interface WireError {
   name: string;
   message: string;
+  code?: string;
+  tool?: string;
+  missingSkills?: string[];
+  unavailableSkills?: string[];
+  retryable?: boolean;
 }
 
 /** `Object.fromEntries` stringifies keys, so the record is keyed by string whatever the Map was. */

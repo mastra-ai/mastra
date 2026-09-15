@@ -244,6 +244,9 @@ export interface WorkspaceSkills {
    */
   list(): Promise<SkillMetadata[]>;
 
+  /** Unique names in the current authorized catalog, without resolving each candidate's filesystem path. */
+  listNames?(): Promise<string[]>;
+
   /**
    * Get a specific skill by name (full content).
    * Also accepts a skill path for disambiguation when multiple skills share the same name.

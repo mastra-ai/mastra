@@ -515,7 +515,23 @@ function toWireEvent(event: AgentControllerEvent): JsonReadyAgentControllerEvent
     return { ...event, displayState: toWireDisplayState(event.displayState) };
   }
   if (carriesError(event)) {
-    return { ...event, error: { name: event.error.name, message: event.error.message } };
+    const error = event.error as Error & Record<string, unknown>;
+    const dependency =
+      error.name === 'ToolDependencyError'
+        ? {
+            ...(typeof error.code === 'string' ? { code: error.code } : {}),
+            ...(typeof error.tool === 'string' ? { tool: error.tool } : {}),
+            ...(Array.isArray(error.missingSkills) && error.missingSkills.every(value => typeof value === 'string')
+              ? { missingSkills: error.missingSkills as string[] }
+              : {}),
+            ...(Array.isArray(error.unavailableSkills) &&
+            error.unavailableSkills.every(value => typeof value === 'string')
+              ? { unavailableSkills: error.unavailableSkills as string[] }
+              : {}),
+            ...(typeof error.retryable === 'boolean' ? { retryable: error.retryable } : {}),
+          }
+        : {};
+    return { ...event, error: { name: error.name, message: error.message, ...dependency } };
   }
   return event;
 }

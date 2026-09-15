@@ -25,6 +25,7 @@ function createAgentMock(activeRunId: () => string | null) {
     getConfiguredProcessorWorkflows: vi.fn(async () => []),
     listScorers: vi.fn(async () => []),
     getChannels: vi.fn(() => null),
+    listSuspendedRuns: vi.fn(async () => ({ runs: [], total: 0 })),
     subscribeToThread: vi.fn(async () => createSubscription(activeRunId)),
     subscribeThreadEvents: vi.fn((_scope, listener) => {
       listener({ type: 'queue-count-changed', count: 0 });

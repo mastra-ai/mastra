@@ -229,6 +229,11 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     return skillData;
   }
 
+  async listNames(): Promise<string[]> {
+    await this.#ensureInitialized();
+    return [...this.#skills.keys()];
+  }
+
   async has(name: string): Promise<boolean> {
     await this.#ensureInitialized();
     return ((await this.#resolveByName(name)) ?? this.#resolveByPath(name) ?? this.#resolveByAlias(name)) !== null;
