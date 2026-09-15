@@ -326,12 +326,16 @@ describe('Tab', () => {
       const enabledTab = screen.getByRole('tab', { name: 'Enabled' });
       const disabledTab = screen.getByRole('tab', { name: 'Disabled' });
 
+      expect(enabledTab.tabIndex).toBe(0);
+      expect(disabledTab.tabIndex).toBe(0);
       expect(disabledTab.getAttribute('aria-disabled')).toBe('true');
       expect(disabledTab.hasAttribute('data-disabled')).toBe(true);
       expect(disabledTab.className).toContain('aria-disabled:cursor-not-allowed');
       expect(disabledTab.className).toContain('data-[disabled]:cursor-not-allowed');
 
       fireEvent.click(disabledTab);
+      fireEvent.keyDown(disabledTab, { key: 'Enter' });
+      fireEvent.keyDown(disabledTab, { key: ' ' });
 
       expect(enabledTab.getAttribute('aria-selected')).toBe('true');
       expect(disabledTab.getAttribute('aria-selected')).toBe('false');

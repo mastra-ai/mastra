@@ -43,7 +43,7 @@ export function WorkflowGraphCanvas<NodeType extends Node, EdgeType extends Edge
       ref={graphRef}
       tabIndex={-1}
       data-testid="workflow-graph-viewport"
-      className={variant === 'nested' ? 'bg-surface1 size-full outline-none' : 'bg-surface2 size-full outline-none'}
+      className={variant === 'nested' ? 'bg-surface1 size-full' : 'bg-surface2 size-full'}
     >
       <ReactFlow
         nodes={nodes}

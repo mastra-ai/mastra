@@ -71,7 +71,7 @@ export function BrowserViewPanel() {
         className={cn(
           'flex flex-col w-full max-w-5xl max-h-full',
           'bg-surface2 rounded-xl border border-border1 shadow-2xl overflow-hidden',
-          'transition-transform duration-200 outline-none',
+          'transition-transform duration-200',
           isModal ? 'scale-100' : 'scale-95',
         )}
         onClick={e => e.stopPropagation()}

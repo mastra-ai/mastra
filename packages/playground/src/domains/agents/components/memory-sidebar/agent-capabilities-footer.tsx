@@ -100,7 +100,7 @@ function CapabilityItem({ view, label, status, description, docsHref, enabled, t
       rel="noopener noreferrer"
       className={cn(
         'group/capability-row flex min-w-0 items-start gap-2 rounded-md px-2 py-1.5 text-ui-xs text-neutral4 transition-colors duration-normal',
-        'hover:bg-surface4/60 hover:text-neutral6 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border2',
+        'hover:bg-surface4/60 hover:text-neutral6',
       )}
     >
       <span
@@ -302,7 +302,7 @@ export function AgentCapabilitiesFooter({ agentId }: { agentId: string }) {
           <button
             type="button"
             data-testid="agent-capabilities-footer"
-            className="text-neutral4 duration-normal hover:!text-neutral4 hover:bg-surface4 focus-visible:!text-neutral4 focus-visible:bg-surface4 focus-visible:ring-border2 active:bg-surface5/80 aria-expanded:bg-surface4/70 data-[panel-open]:bg-surface4/70 flex w-full cursor-pointer items-center gap-1.5 px-2 py-2 text-left transition-colors focus-visible:ring-1 focus-visible:outline-none focus-visible:ring-inset"
+            className="text-neutral4 duration-normal hover:!text-neutral4 hover:bg-surface4 focus-visible:!text-neutral4 focus-visible:bg-surface4 active:bg-surface5/80 aria-expanded:bg-surface4/70 data-[panel-open]:bg-surface4/70 flex w-full cursor-pointer items-center gap-1.5 px-2 py-2 text-left transition-colors"
           >
             <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
               <MemoryCapability agentId={agentId} view="chip" />

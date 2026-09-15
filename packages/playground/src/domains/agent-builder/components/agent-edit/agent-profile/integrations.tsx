@@ -121,7 +121,7 @@ const IntegrationCard = ({ platform, agentId, disabled, requiresLibrary, onSelec
       onClick={() => onSelect(installation)}
       disabled={disabled}
       data-testid={`integration-card-${platform.id}`}
-      className="border-border1 bg-surface3 hover:bg-surface4 focus-visible:ring-accent1 flex w-48 flex-col items-center gap-3 rounded-xl border px-4 py-4 text-center transition-colors focus-visible:ring-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+      className="border-border1 bg-surface3 hover:bg-surface4 flex w-48 flex-col items-center gap-3 rounded-xl border px-4 py-4 text-center transition-colors disabled:cursor-not-allowed disabled:opacity-60"
     >
       <div className="bg-surface4 grid size-14 place-items-center rounded-xl">
         <PlatformIcon platform={platform.id} className="h-7 w-7" />

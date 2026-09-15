@@ -304,7 +304,6 @@ describe('DataListRoot', () => {
       expect(errorRow.className).toContain('data-[variant=error]:bg-notice-destructive/10');
       expect(errorRow.className).toContain('hover:bg-surface3');
       expect(errorRow.className).toContain('active:bg-surface4');
-      expect(errorRow.className).toContain('focus-visible:ring-accent1');
       expect(defaultRow.dataset.variant).toBe('default');
     });
 

@@ -86,7 +86,7 @@ export const AgentBuilderStarter = () => {
 
         <form
           onSubmit={handleSubmit}
-          className="starter-prompt border-border1 bg-surface2 duration-normal ease-out-custom focus-within:border-neutral3 rounded-2xl border transition-colors"
+          className="ds-focus ds-focus-field-within starter-prompt border-border1 bg-surface2 duration-normal ease-out-custom rounded-2xl border transition-colors"
           style={{ viewTransitionName: 'chat-composer' }}
         >
           <Textarea
@@ -99,7 +99,7 @@ export const AgentBuilderStarter = () => {
             onChange={e => setMessage(e.target.value)}
             onKeyDown={handleKeyDown}
             disabled={isCreating}
-            className="text-ui-md placeholder:text-neutral3 min-h-[112px] resize-none px-5 py-4 outline-none focus:outline-none focus-visible:outline-none"
+            className="text-ui-md placeholder:text-neutral3 min-h-[112px] resize-none px-5 py-4"
             rows={3}
           />
 

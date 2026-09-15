@@ -1,5 +1,6 @@
 import { Switch as SwitchPrimitive } from '@base-ui/react/switch';
 import * as React from 'react';
+import '@/ds/primitives/focus.css';
 
 import { cn } from '@/lib/utils';
 import './switch.css';
@@ -22,13 +23,10 @@ const Switch = React.forwardRef<HTMLButtonElement, SwitchProps>(
     const onIcon = checkedIcon ?? icon;
     const offIcon = uncheckedIcon ?? icon;
 
-    // Base UI's Switch.Root defaults to a `<span>` and forwards `id` to its
-    // hidden checkbox input. Render a native `<button>` (with `nativeButton`) so
-    // the consumer's `id` — and the click target — lands on the visible control,
-    // matching the previous Radix behavior.
+    // A native button keeps the consumer's id and click target on the visible switch.
     const renderProps =
       asChild && React.isValidElement(children)
-        ? { render: children as React.ReactElement }
+        ? { render: children }
         : { render: <button type="button" />, nativeButton: true };
 
     return (
@@ -36,11 +34,11 @@ const Switch = React.forwardRef<HTMLButtonElement, SwitchProps>(
         ref={ref}
         data-slot="switch"
         className={cn(
-          'peer group/switch inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-0 bg-neutral6/[0.14] p-0.5 outline-hidden',
+          'peer group/switch inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-0 bg-neutral6/[0.14] p-0.5',
           'transition-colors duration-normal ease-out-custom motion-reduce:transition-none',
           'hover:bg-neutral6/[0.18]',
           'active:bg-neutral6/[0.22]',
-          'focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-neutral5/55 focus-visible:outline-solid',
+          'ds-focus ds-focus-orbit ds-focus-within',
           'data-[checked]:bg-neutral6/[0.92]',
           'data-[checked]:hover:bg-neutral6',
           'data-[checked]:active:bg-neutral5',

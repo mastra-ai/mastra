@@ -85,7 +85,7 @@ export function PromptBlockPickerDialog({ open, onOpenChange, onSelect }: Prompt
                 value={search}
                 onChange={e => handleSearchChange(e.target.value)}
                 placeholder="Search prompt blocks..."
-                className="text-ui-sm text-neutral6 placeholder:text-neutral3 flex-1 bg-transparent outline-hidden"
+                className="text-ui-sm text-neutral6 placeholder:text-neutral3 flex-1 bg-transparent"
               />
             </div>
 

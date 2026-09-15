@@ -1,0 +1,214 @@
+@layer base {
+  :focus-visible {
+    outline: 2px solid var(--neutral5, currentColor);
+    outline-offset: 2px;
+  }
+
+  @media (forced-colors: active) {
+    :focus-visible {
+      outline-color: Highlight;
+    }
+  }
+}
+
+.ds-focus {
+  --ds-focus-progress: 0;
+  --ds-focus-color: var(--neutral5);
+  --ds-focus-line-gradient: linear-gradient(90deg, transparent 5%, var(--ds-focus-color) 50%, transparent 95%);
+}
+
+.ds-focus:focus-visible,
+.ds-focus-within:has(:focus-visible),
+.ds-focus-field-within:has(:is(input, textarea, [contenteditable='true']):focus-visible) {
+  --ds-focus-progress: 1;
+}
+
+.ds-focus-line:not(.ds-focus-orbit, .ds-focus-contour):focus-visible,
+:is(.ds-focus-orbit, .ds-focus-row, .ds-focus-ring):focus-visible,
+.ds-focus-field:not([aria-invalid='true']):focus-visible,
+.ds-focus-contour:has(> [data-slot='focus-decoration']):focus-visible,
+.ds-focus-field-within :is(input, textarea, [contenteditable='true']):focus-visible,
+:is(.ds-focus-orbit, .ds-focus-ring).ds-focus-within :focus-visible,
+.ds-focus-row > .data-list-row-target:focus-visible,
+.ds-focus-row > [data-tree-folder-trigger]:focus-visible,
+[data-tree-item-kind='folder']:has(> * > .ds-focus-row):focus-visible {
+  outline: none;
+}
+
+.ds-focus-row > [data-tree-folder-trigger] {
+  background-image: none;
+}
+
+.ds-focus-field:focus-visible:not([aria-invalid='true']),
+.ds-focus-field-within:has(:is(input, textarea, [contenteditable='true']):focus-visible):not(
+  :has([aria-invalid='true'])
+) {
+  border-color: var(--ds-focus-field-color, color-mix(in oklab, var(--neutral5) 50%, transparent));
+}
+
+.ds-focus-field-within:has([aria-invalid='true']):has(:is(input, textarea, [contenteditable='true']):focus-visible) {
+  outline: 2px solid var(--neutral5);
+  outline-offset: 2px;
+}
+
+.ds-focus-ring:is(:focus-visible, :has(:focus-visible)) {
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--neutral6) 60%, transparent);
+}
+
+.ds-focus-line {
+  --ds-focus-color: currentColor;
+  background-image: var(--ds-focus-line-gradient);
+  background-repeat: no-repeat;
+  background-position: center calc(100% - 1px);
+  background-size: calc(var(--ds-focus-progress) * max(60%, 100% - 2em)) 1px;
+  transition:
+    background-size 240ms cubic-bezier(0.2, 0.7, 0.2, 1),
+    background-color 180ms,
+    color 180ms,
+    border-color 180ms;
+}
+
+@layer components {
+  .ds-focus-orbit,
+  .ds-focus-contour {
+    position: relative;
+  }
+}
+
+.ds-focus-orbit::before,
+.ds-focus-orbit::after,
+.ds-focus-contour > [data-slot='focus-decoration'] {
+  position: absolute;
+  pointer-events: none;
+  content: '';
+  opacity: var(--ds-focus-progress);
+  transition:
+    opacity 180ms ease-out,
+    transform 280ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.ds-focus-orbit::before,
+.ds-focus-orbit::after {
+  width: 0;
+  height: 0;
+  border-radius: 50%;
+  transform: scale(calc(0.8 + var(--ds-focus-progress) * 0.2));
+  transition:
+    opacity 180ms ease-out,
+    left 280ms cubic-bezier(0.2, 0.7, 0.2, 1),
+    transform 280ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.ds-focus-orbit::before {
+  top: 0;
+  left: calc(50% + var(--ds-focus-progress) * 25%);
+  box-shadow: 0 -5px 1.5px 1.5px var(--ds-focus-color);
+}
+
+.ds-focus-orbit::after {
+  bottom: 0;
+  left: calc(50% - var(--ds-focus-progress) * 25%);
+  box-shadow: 0 5px 1.5px 1.5px var(--ds-focus-color);
+}
+
+.ds-focus-orbit {
+  --ds-focus-color: var(--neutral5);
+}
+
+.ds-focus-contour {
+  --ds-focus-color: var(--neutral5);
+}
+
+.ds-focus-line:is(.ds-focus-orbit, .ds-focus-contour) {
+  background-image: none;
+}
+
+.ds-focus-contour > [data-slot='focus-decoration'] {
+  inset: 1px;
+  z-index: 2;
+  padding: 1px;
+  border-radius: inherit;
+  background: conic-gradient(
+    from 25deg,
+    transparent,
+    var(--ds-focus-color) 70deg,
+    transparent 140deg 180deg,
+    var(--ds-focus-color) 250deg,
+    transparent 320deg 360deg
+  );
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  transform: scale(calc(0.94 + var(--ds-focus-progress) * 0.06));
+}
+
+.ds-focus-row {
+  background-image: var(--ds-focus-line-gradient), var(--ds-focus-line-gradient);
+  background-position:
+    center 1px,
+    center calc(100% - 1px);
+  background-repeat: no-repeat;
+  background-size: calc(var(--ds-focus-progress) * 100%) 1px;
+  transition:
+    background-size 240ms cubic-bezier(0.2, 0.7, 0.2, 1),
+    background-color 180ms;
+}
+
+[data-tree-item-kind='folder']:focus-visible > * > [data-tree-folder-row],
+.ds-focus-row:has(
+  > .data-list-row-target:focus-visible,
+  > [data-tree-folder-trigger]:focus-visible,
+  [data-slot='checkbox']:focus-visible,
+  [data-slot='checkbox'] :focus-visible
+) {
+  --ds-focus-progress: 1;
+}
+
+.ds-focus-row [data-slot='checkbox']::before,
+.ds-focus-row [data-slot='checkbox']::after {
+  display: none;
+}
+
+.ds-focus:disabled {
+  --ds-focus-progress: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ds-focus,
+  .ds-focus::before,
+  .ds-focus::after,
+  .ds-focus-contour > [data-slot='focus-decoration'] {
+    transition: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .ds-focus-line,
+  .ds-focus-row {
+    background-image: none;
+  }
+
+  .ds-focus::before,
+  .ds-focus::after,
+  [data-slot='focus-decoration'] {
+    display: none;
+  }
+
+  .ds-focus:is(
+    .ds-focus-line,
+    .ds-focus-orbit,
+    .ds-focus-row,
+    .ds-focus-contour,
+    .ds-focus-field,
+    .ds-focus-field-within,
+    .ds-focus-ring
+  ) {
+    outline: calc(2px * var(--ds-focus-progress)) solid Highlight;
+    outline-offset: -2px;
+  }
+
+  .ds-focus-ring {
+    box-shadow: none;
+  }
+}

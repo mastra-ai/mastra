@@ -151,7 +151,7 @@ const WorkflowTimelineRow = ({
         onSelectStep(row.stepId);
       }}
       className={cn(
-        'grid grid-cols-[auto_auto_auto_minmax(0,10rem)_minmax(0,1fr)_auto_5rem] items-center gap-2 rounded-md border border-transparent px-2 py-1 text-left transition-colors focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-accent1',
+        'grid grid-cols-[auto_auto_auto_minmax(0,10rem)_minmax(0,1fr)_auto_5rem] items-center gap-2 rounded-md border border-transparent px-2 py-1 text-left transition-colors',
         canSelect && 'cursor-pointer',
         canSelect && 'hover:bg-surface4',
         canSelect && isHovered && !isSelected && 'border-neutral6 bg-surface4',

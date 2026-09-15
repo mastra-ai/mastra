@@ -5,6 +5,7 @@ import { Monitor, Moon, Sun } from 'lucide-react';
 import { useTheme } from '../ThemeProvider';
 import type { Theme } from '../ThemeProvider/theme-context';
 import { transitions } from '@/ds/primitives/transitions';
+import '@/ds/primitives/focus.css';
 import { cn } from '@/lib/utils';
 
 export interface ThemeToggleOption {
@@ -116,7 +117,7 @@ export const ThemeToggle = ({
             // Base UI exposes `data-checked` instead of Radix's `data-state="checked"`.
             'text-icon3 hover:text-icon6 data-[checked]:text-icon6',
             sizeConfig.item,
-            'focus-visible:outline-hidden',
+            'ds-focus ds-focus-orbit ds-focus-within',
             'active:scale-90 motion-reduce:transition-none',
             transitions.colors,
             transitions.transform,

@@ -48,7 +48,7 @@ export function RouteHeader() {
         </Breadcrumb>
       )}
 
-      <div className="ml-auto flex shrink-0 items-center gap-2 overflow-hidden">
+      <div className="ml-auto flex shrink-0 items-center gap-2">
         <RouteHeaderActionsSlot className="contents" />
       </div>
     </Header>

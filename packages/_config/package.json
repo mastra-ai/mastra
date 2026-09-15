@@ -6,10 +6,13 @@
   "main": "src/index.js",
   "private": true,
   "exports": {
+    "./focus": "./src/focus.js",
     "./eslint": "./src/eslint.js",
     "./prettier": "./src/prettier.js"
   },
-  "scripts": {},
+  "scripts": {
+    "test": "node --test src/focus.test.js"
+  },
   "keywords": [],
   "author": "",
   "license": "Apache-2.0",

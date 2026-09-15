@@ -552,7 +552,7 @@ export function DatasetDetailView({
                   placeholder="Search scorers..."
                   value={attachScorerSearch}
                   onChange={e => setAttachScorerSearch(e.target.value)}
-                  className="border-border1 bg-surface2 text-text1 placeholder:text-neutral3 focus:ring-accent1 text-ui-md w-full rounded border px-3 py-1.5 focus:ring-1 focus:outline-none"
+                  className="border-border1 bg-surface2 text-text1 placeholder:text-neutral3 text-ui-md w-full rounded border px-3 py-1.5"
                 />
                 {unattachedScorerEntries
                   .filter(([id, scorer]) => {

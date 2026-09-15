@@ -1,4 +1,6 @@
+import { useRender } from '@base-ui/react/use-render';
 import type { HTMLAttributes, ReactNode } from 'react';
+import '@/ds/primitives/focus.css';
 
 import { Icon } from '../../icons/Icon';
 import { transitions } from '@/ds/primitives/transitions';
@@ -90,6 +92,7 @@ export type BadgeProps = HTMLAttributes<HTMLSpanElement> &
     emphasis?: BadgeEmphasis;
     size?: BadgeSize;
     children?: ReactNode;
+    render?: useRender.RenderProp;
   };
 
 export const Badge = ({
@@ -100,6 +103,7 @@ export const Badge = ({
   size = 'md',
   className,
   children,
+  render,
   ...props
 }: BadgeProps) => {
   const hasIcon = Boolean(icon);
@@ -107,9 +111,12 @@ export const Badge = ({
   const sizeStyles = badgeSizeStyles[size];
   const paddingClass = withLeadingVisual ? sizeStyles.withLeadingVisual : sizeStyles.withoutLeadingVisual;
 
-  return (
-    <span
-      className={cn(
+  return useRender({
+    defaultTagName: 'span',
+    render,
+    props: {
+      ...props,
+      className: cn(
         'inline-flex w-fit max-w-full shrink-0 items-center rounded-[7px] font-medium',
         'inset-ring-1 inset-ring-current/5',
         'inset-shadow-xs inset-shadow-white/5 dark:inset-shadow-[0_3px_10px_-2px_white] dark:inset-shadow-white/7',
@@ -118,23 +125,27 @@ export const Badge = ({
         sizeStyles.badge,
         paddingClass,
         transitions.colors,
+        render && 'ds-focus ds-focus-contour',
         className,
-      )}
-      {...props}
-    >
-      {indicator !== undefined ? (
-        <span
-          aria-hidden="true"
-          className={cn(
-            'shrink-0 rounded-full',
-            badgeToneStyles[variant].indicator,
-            sizeStyles.indicator,
-            indicator === 'pulse' && 'motion-safe:animate-pulse motion-reduce:animate-none',
-          )}
-        />
-      ) : null}
-      {hasIcon ? <Icon size="sm">{icon}</Icon> : null}
-      {children}
-    </span>
-  );
+      ),
+      children: (
+        <>
+          {indicator !== undefined ? (
+            <span
+              aria-hidden="true"
+              className={cn(
+                'shrink-0 rounded-full',
+                badgeToneStyles[variant].indicator,
+                sizeStyles.indicator,
+                indicator === 'pulse' && 'motion-safe:animate-pulse motion-reduce:animate-none',
+              )}
+            />
+          ) : null}
+          {hasIcon ? <Icon size="sm">{icon}</Icon> : null}
+          {children}
+          {render && <span aria-hidden="true" data-slot="focus-decoration" />}
+        </>
+      ),
+    },
+  });
 };

@@ -2,47 +2,43 @@ import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
 import * as React from 'react';
 import type { LinkComponent } from '@/ds/types/link-component';
+import '@/ds/primitives/focus.css';
 import { cn } from '@/lib/utils';
 
-const cardVariants = cva(
-  // Base styles
-  'duration-normal rounded-lg transition-all ease-out-custom motion-reduce:transition-none',
-  {
-    variants: {
-      appearance: {
-        outlined: 'border border-border1 bg-surface2',
-        surface: 'bg-surface3',
-      },
-      elevation: {
-        flat: '',
-        raised: 'shadow-card',
-        elevated: 'shadow-elevated',
-      },
-      interactive: {
-        true: 'cursor-pointer active:scale-99',
-        false: '',
-      },
+const cardVariants = cva('duration-normal rounded-lg transition-all ease-out-custom motion-reduce:transition-none', {
+  variants: {
+    appearance: {
+      outlined: 'border border-border1 bg-surface2',
+      surface: 'bg-surface3',
     },
-    compoundVariants: [
-      {
-        appearance: 'outlined',
-        interactive: true,
-        className: 'hover:border-border2 hover:bg-surface3',
-      },
-      {
-        appearance: 'surface',
-        interactive: true,
-        className:
-          'hover:bg-surface4 focus-visible:bg-surface4 focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-border2 active:bg-surface5',
-      },
-    ],
-    defaultVariants: {
-      appearance: 'outlined',
-      elevation: 'flat',
-      interactive: false,
+    elevation: {
+      flat: '',
+      raised: 'shadow-card',
+      elevated: 'shadow-elevated',
+    },
+    interactive: {
+      true: 'ds-focus ds-focus-row cursor-pointer active:scale-99',
+      false: '',
     },
   },
-);
+  compoundVariants: [
+    {
+      appearance: 'outlined',
+      interactive: true,
+      className: 'hover:border-border2 hover:bg-surface3',
+    },
+    {
+      appearance: 'surface',
+      interactive: true,
+      className: 'hover:bg-surface4 focus-visible:bg-surface4 active:bg-surface5',
+    },
+  ],
+  defaultVariants: {
+    appearance: 'outlined',
+    elevation: 'flat',
+    interactive: false,
+  },
+});
 
 export type CardProps = React.HTMLAttributes<HTMLDivElement> &
   VariantProps<typeof cardVariants> & {
@@ -75,7 +71,6 @@ export function CardLink({ className, appearance, elevation, LinkComponent: Link
   return <Link className={cn(cardVariants({ appearance, elevation, interactive: true }), className)} {...props} />;
 }
 
-// Card Header component
 export type CardHeaderProps = React.HTMLAttributes<HTMLDivElement>;
 
 export const CardHeader = React.forwardRef<HTMLDivElement, CardHeaderProps>(({ className, ...props }, ref) => (
@@ -83,7 +78,6 @@ export const CardHeader = React.forwardRef<HTMLDivElement, CardHeaderProps>(({ c
 ));
 CardHeader.displayName = 'CardHeader';
 
-// Card Title component
 export type CardTitleProps = React.HTMLAttributes<HTMLHeadingElement>;
 
 export const CardTitle = React.forwardRef<HTMLHeadingElement, CardTitleProps>(({ className, ...props }, ref) => (
@@ -95,7 +89,6 @@ export const CardTitle = React.forwardRef<HTMLHeadingElement, CardTitleProps>(({
 ));
 CardTitle.displayName = 'CardTitle';
 
-// Card Description component
 export type CardDescriptionProps = React.HTMLAttributes<HTMLParagraphElement>;
 
 export const CardDescription = React.forwardRef<HTMLParagraphElement, CardDescriptionProps>(
@@ -103,7 +96,6 @@ export const CardDescription = React.forwardRef<HTMLParagraphElement, CardDescri
 );
 CardDescription.displayName = 'CardDescription';
 
-// Card Content component
 const cardContentVariants = cva('', {
   variants: {
     density: {
@@ -125,7 +117,6 @@ export const CardContent = React.forwardRef<HTMLDivElement, CardContentProps>(
 );
 CardContent.displayName = 'CardContent';
 
-// Card Footer component
 export type CardFooterProps = React.HTMLAttributes<HTMLDivElement>;
 
 export const CardFooter = React.forwardRef<HTMLDivElement, CardFooterProps>(({ className, ...props }, ref) => (

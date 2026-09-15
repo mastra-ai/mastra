@@ -1,6 +1,7 @@
 import { MenuIcon } from 'lucide-react';
 import type { ComponentPropsWithoutRef } from 'react';
 import { useMainSidebar } from './main-sidebar-context';
+import '@/ds/primitives/focus.css';
 import { cn } from '@/lib/utils';
 
 export type MainSidebarMobileTriggerProps = ComponentPropsWithoutRef<'button'> & {
@@ -35,7 +36,7 @@ export function MainSidebarMobileTrigger({
         // compound selector, not `in-*` — its `:where()` ties with a consumer's later `.inline-flex`
         "[[data-sidebar-mobile='false']_&]:hidden",
         'text-neutral4 hover:bg-sidebar-nav-hover hover:text-neutral6',
-        'focus-visible:ring-1 focus-visible:ring-accent1 focus-visible:outline-hidden',
+        'ds-focus ds-focus-orbit',
         className,
       )}
     >

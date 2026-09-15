@@ -47,7 +47,7 @@ export function ProposalTag({
             }
           }}
           onBlur={handleConfirm}
-          className="text-neutral4 text-ui-sm w-20 bg-transparent py-0.5 outline-hidden"
+          className="text-neutral4 text-ui-sm w-20 bg-transparent py-0.5"
         />
         <button
           type="button"

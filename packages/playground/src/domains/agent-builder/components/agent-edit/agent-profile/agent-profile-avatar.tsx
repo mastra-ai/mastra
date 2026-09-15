@@ -45,7 +45,7 @@ export const AgentProfileAvatar = ({ disabled = false }: AgentProfileAvatarProps
             type="button"
             onClick={() => fileInputRef.current?.click()}
             disabled={disabled}
-            className="focus-visible:ring-neutral3 relative rounded-full focus-visible:ring-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+            className="relative rounded-full disabled:cursor-not-allowed disabled:opacity-60"
             aria-label="Upload avatar"
             data-testid="agent-configure-avatar-trigger"
           >

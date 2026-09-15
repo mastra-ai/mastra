@@ -2,8 +2,8 @@ import type { ComponentPropsWithoutRef, ElementType, ReactNode } from 'react';
 import { forwardRef } from 'react';
 import { dataListStickyStartStyles } from './shared';
 import type { DataListSticky } from './shared';
+import { Button } from '@/ds/components/Button';
 import { Checkbox } from '@/ds/components/Checkbox';
-import { Tooltip, TooltipTrigger, TooltipContent } from '@/ds/components/Tooltip';
 import { cn } from '@/lib/utils';
 
 export type DataListTopCellProps = {
@@ -34,8 +34,6 @@ export const DataListTopCell = forwardRef<HTMLSpanElement, DataListTopCellProps>
         )}
         {...rest}
       >
-        {/* Plain string/number titles truncate with an ellipsis; element children
-            (icons, smart long/short labels, checkboxes) render as-is. */}
         {isText ? <span className="min-w-0 truncate">{children}</span> : children}
       </Component>
     );
@@ -48,20 +46,41 @@ export type DataListTopCellWithTooltipProps = {
   className?: string;
 };
 
+function DataListHeaderTooltip({
+  children,
+  tooltip,
+  className,
+  iconOnly = false,
+}: DataListTopCellWithTooltipProps & { iconOnly?: boolean }) {
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size={iconOnly ? 'icon-sm' : 'sm'}
+      tooltip={tooltip}
+      className={cn('max-w-full', className)}
+    >
+      {typeof children === 'string' || typeof children === 'number' ? (
+        <span className="truncate">{children}</span>
+      ) : (
+        children
+      )}
+    </Button>
+  );
+}
+
 export function DataListTopCellWithTooltip({ children, tooltip, className }: DataListTopCellWithTooltipProps) {
   return (
-    <Tooltip>
-      <TooltipTrigger>
-        <DataListTopCell className={className}>{children}</DataListTopCell>
-      </TooltipTrigger>
-      <TooltipContent>{tooltip}</TooltipContent>
-    </Tooltip>
+    <DataListTopCell className={className}>
+      <DataListHeaderTooltip tooltip={tooltip}>{children}</DataListHeaderTooltip>
+    </DataListTopCell>
   );
 }
 
 export type DataListTopCellSmartProps = {
   long: ReactNode;
   short: ReactNode;
+  shortIsIcon?: boolean;
   tooltip?: string;
   breakpoint?: 'sm' | 'md' | 'lg' | 'xl' | '2xl';
   className?: string;
@@ -78,6 +97,7 @@ const breakpointClasses: Record<'sm' | 'md' | 'lg' | 'xl' | '2xl', { show: strin
 export function DataListTopCellSmart({
   long,
   short,
+  shortIsIcon = false,
   tooltip,
   breakpoint = '2xl',
   className,
@@ -85,22 +105,25 @@ export function DataListTopCellSmart({
   const tooltipText = tooltip ?? (typeof long === 'string' ? long : undefined);
   const bp = breakpointClasses[breakpoint];
 
-  const content = (
-    <>
-      <span className={cn('items-center gap-1', bp.show)}>{long}</span>
-      <span className={cn('items-center gap-1', bp.hide)}>{short}</span>
-    </>
-  );
-
   if (tooltipText) {
     return (
-      <DataListTopCellWithTooltip tooltip={tooltipText} className={cn('flex [&_svg]:size-[1.3em]', className)}>
-        {content}
-      </DataListTopCellWithTooltip>
+      <DataListTopCell className={className}>
+        <DataListHeaderTooltip tooltip={tooltipText} className={bp.show}>
+          {long}
+        </DataListHeaderTooltip>
+        <DataListHeaderTooltip tooltip={tooltipText} iconOnly={shortIsIcon} className={bp.hide}>
+          {short}
+        </DataListHeaderTooltip>
+      </DataListTopCell>
     );
   }
 
-  return <DataListTopCell className={cn('flex [&_svg]:size-[1.3em]', className)}>{content}</DataListTopCell>;
+  return (
+    <DataListTopCell className={cn('flex [&_svg]:size-[1.3em]', className)}>
+      <span className={cn('items-center gap-1', bp.show)}>{long}</span>
+      <span className={cn('items-center gap-1', bp.hide)}>{short}</span>
+    </DataListTopCell>
+  );
 }
 
 export interface DataListTopSelectCellProps {

@@ -1,5 +1,6 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
+@import './ds/primitives/focus.css';
 
 /* Tokens (:root/html.light + @theme) live in ../theme.css so they also ship raw
    as @mastra/playground-ui/theme.css. Edit tokens there, not here. */

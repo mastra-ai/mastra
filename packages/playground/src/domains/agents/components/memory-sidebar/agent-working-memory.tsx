@@ -97,7 +97,7 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
                               type="button"
                               onClick={handleCopy}
                               aria-label="Copy working memory"
-                              className="focus-visible:ring-accent1 absolute inset-0 z-10 rounded-lg focus-visible:ring-2 focus-visible:outline-hidden"
+                              className="absolute inset-0 z-10 rounded-lg"
                             />
                             <div className="pointer-events-none">
                               <MarkdownRenderer>{workingMemoryData}</MarkdownRenderer>

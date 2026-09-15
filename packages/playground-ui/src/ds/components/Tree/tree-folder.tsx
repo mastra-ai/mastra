@@ -56,7 +56,7 @@ export const TreeFolder = React.forwardRef<HTMLLIElement, TreeFolderProps>(
         data-tree-item-kind="folder"
         data-tree-item-id={id}
         tabIndex={-1}
-        className={cn('flex flex-col outline-hidden', className)}
+        className={cn('flex flex-col', className)}
         onFocus={handleFocus}
         onBlur={handleBlur}
       >

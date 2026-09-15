@@ -39,7 +39,7 @@ export const ManageConnectionList = ({
                   disabled={disabled}
                   onClick={() => onSelect(connection.connectionId)}
                   data-testid={`${testIdPrefix}-list-item-${connection.connectionId}`}
-                  className="focus-visible:after:ring-accent1 flex w-full items-center justify-between gap-2 text-left outline-none after:absolute after:inset-0 after:rounded-lg focus-visible:after:ring-2"
+                  className="flex w-full items-center justify-between gap-2 text-left"
                 >
                   <EntityName className="truncate">{connection.label?.trim() || 'Unnamed connection'}</EntityName>
                   <Icon className="text-neutral3 shrink-0">

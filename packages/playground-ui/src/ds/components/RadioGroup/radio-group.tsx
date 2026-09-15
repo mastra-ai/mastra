@@ -1,6 +1,7 @@
 import { Radio as RadioPrimitive } from '@base-ui/react/radio';
 import { RadioGroup as RadioGroupPrimitive } from '@base-ui/react/radio-group';
 import * as React from 'react';
+import '@/ds/primitives/focus.css';
 
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
@@ -25,16 +26,15 @@ const RadioGroupItem = React.forwardRef<HTMLSpanElement, RadioGroupItemProps>(({
       data-slot="radio-group-item"
       className={cn(
         'flex size-4 shrink-0 cursor-pointer items-center justify-center rounded-full',
-        'border border-neutral6/[0.06] bg-neutral6/[0.12] text-surface1 outline-hidden',
+        'border border-neutral6/[0.06] bg-neutral6/[0.12] text-surface1',
         transitions.all,
         'hover:border-neutral6/[0.12] hover:bg-neutral6/[0.16]',
         'active:scale-95 active:border-neutral6/[0.18] active:bg-neutral6/[0.18]',
-        'focus-visible:border-neutral5/50 focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-neutral5/55 focus-visible:outline-solid',
-        // Base UI exposes `data-checked`/`data-unchecked` instead of Radix's `data-state`.
+        'ds-focus ds-focus-orbit ds-focus-within',
         'data-[checked]:border-neutral6 data-[checked]:bg-neutral6 data-[checked]:text-surface1',
         'data-[checked]:hover:border-neutral5 data-[checked]:hover:bg-neutral5',
         'data-[checked]:active:border-neutral4 data-[checked]:active:bg-neutral4',
-        // Base UI's Radio.Root is a `<span>`, so `:disabled` never matches; target `data-disabled`.
+        // Base UI renders a span, so :disabled never matches the visible control.
         'data-[disabled]:cursor-not-allowed data-[disabled]:border-neutral6/[0.38] data-[disabled]:bg-neutral6/[0.38] data-[disabled]:hover:border-neutral6/[0.38] data-[disabled]:hover:bg-neutral6/[0.38] data-[disabled]:active:scale-100',
         'data-[disabled]:data-[checked]:border-neutral6/[0.38] data-[disabled]:data-[checked]:bg-neutral6/[0.38] data-[disabled]:data-[checked]:text-neutral6',
         className,

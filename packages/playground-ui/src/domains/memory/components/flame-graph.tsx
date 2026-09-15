@@ -498,7 +498,7 @@ export function FlameGraph({
   if (!hasData) return null;
 
   return (
-    <div className="flex flex-col pr-2 pb-2 [&_.recharts-surface]:outline-none">
+    <div className="flex flex-col pr-2 pb-2">
       <CombinedRow
         label="Messages"
         areaData={contextData}

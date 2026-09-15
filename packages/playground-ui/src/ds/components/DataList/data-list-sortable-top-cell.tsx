@@ -56,7 +56,7 @@ export function DataListSortableTopCell({
         type="button"
         onClick={() => onSortChange(nextDirection)}
         className={cn(
-          'relative flex h-10 w-full touch-manipulation items-center gap-1 overflow-visible rounded-sm outline-none',
+          'relative flex h-10 w-full touch-manipulation items-center gap-1 overflow-visible rounded-sm',
           align === 'start' ? 'justify-start text-left' : 'justify-end text-right',
           sortDirection ? 'text-neutral4' : 'text-neutral3',
           'hover:text-neutral4',
