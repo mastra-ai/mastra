@@ -1208,15 +1208,32 @@ describe('createInngestAgent shouldPersistSnapshot handling (#23915)', () => {
 
       expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('ignoring the shouldPersistSnapshot option'));
 
-      // The option must not leak into the workflow: the pinned suspended-only
-      // policy stays in effect (Inngest's replay owns durability; Mastra
-      // snapshots exist purely for HITL resume).
-      const [workflow] = durableAgent.getDurableWorkflows();
-      const predicate = (workflow as any).options.shouldPersistSnapshot;
-      expect(predicate({ stepResults: {}, workflowStatus: 'suspended' })).toBe(true);
-      expect(predicate({ stepResults: {}, workflowStatus: 'running' })).toBe(false);
-      expect(predicate({ stepResults: {}, workflowStatus: 'pending' })).toBe(false);
-      expect(predicate({ stepResults: {}, workflowStatus: 'success' })).toBe(false);
+      // The option must not leak into the workflows: the pinned suspended-only
+      // policy stays in effect on every durable workflow (Inngest's replay
+      // owns durability; Mastra snapshots exist purely for HITL resume).
+      // Probe the complete WorkflowRunStatus matrix so no status can silently
+      // start persisting.
+      const allStatuses = [
+        'running',
+        'success',
+        'failed',
+        'tripwire',
+        'suspended',
+        'waiting',
+        'pending',
+        'canceled',
+        'bailed',
+        'paused',
+        'skipped',
+      ] as const;
+      const workflows = durableAgent.getDurableWorkflows();
+      expect(workflows.length).toBeGreaterThan(0);
+      for (const workflow of workflows) {
+        const predicate = (workflow as any).options.shouldPersistSnapshot;
+        for (const workflowStatus of allStatuses) {
+          expect(predicate({ stepResults: {}, workflowStatus })).toBe(workflowStatus === 'suspended');
+        }
+      }
     } finally {
       warnSpy.mockRestore();
     }

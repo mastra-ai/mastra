@@ -1639,6 +1639,7 @@ export class DurableAgent<
       maxSteps: this.#maxSteps,
       cleanupTimeoutMs: this.#cleanupTimeoutMs,
       shouldCache: this.#shouldCache,
+      shouldPersistSnapshot: this.userShouldPersistSnapshot,
     });
 
     // Preserve runtime state set after construction (mastra registration and the

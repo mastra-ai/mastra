@@ -20,7 +20,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { Mastra } from '../../../mastra';
 import { InMemoryStore } from '../../../storage';
-import type { ShouldPersistSnapshotFn } from '../../../workflows/types';
+import type { ShouldPersistSnapshotFn, WorkflowRunStatus } from '../../../workflows/types';
 import { Agent } from '../../agent';
 import type { ToolsInput } from '../../types';
 import { createDurableAgent } from '../create-durable-agent';
@@ -91,8 +91,13 @@ interface Harness {
   durableAgent: any;
   logger: ReturnType<typeof fakeLogger>;
   recorded: PersistRecord[];
-  /** Wait until the durable engine's post-stream bookkeeping writes settle. */
-  waitForQuiesce: () => Promise<void>;
+  /**
+   * Wait until terminal cleanup deletes the run's snapshot rows. The delete
+   * only fires after `run.start()` resolves (durable-agent.ts
+   * `executeWorkflow`), i.e. after every engine persist for the run, so it is
+   * a deterministic "no more writes are coming" barrier.
+   */
+  waitForRunCleanup: (runId: string) => Promise<void>;
 }
 
 /**
@@ -134,15 +139,18 @@ async function setup(options: {
     return originalPersist(args);
   };
 
-  const waitForQuiesce = async () => {
-    let seen = -1;
-    while (seen !== recorded.length) {
-      seen = recorded.length;
-      await new Promise(resolve => setTimeout(resolve, 150));
-    }
+  const deletedRunIds = new Set<string>();
+  const originalDelete = workflowsStore.deleteWorkflowRunById.bind(workflowsStore);
+  workflowsStore.deleteWorkflowRunById = async (args: any) => {
+    deletedRunIds.add(args.runId);
+    return originalDelete(args);
   };
 
-  return { durableAgent, logger, recorded, waitForQuiesce };
+  const waitForRunCleanup = async (runId: string) => {
+    await vi.waitFor(() => expect(deletedRunIds.has(runId)).toBe(true), { timeout: 30000 });
+  };
+
+  return { durableAgent, logger, recorded, waitForRunCleanup };
 }
 
 async function drain(stream: AsyncIterable<any>): Promise<string[]> {
@@ -155,6 +163,25 @@ async function drain(stream: AsyncIterable<any>): Promise<string[]> {
 
 const runningWrites = (recorded: PersistRecord[]) => recorded.filter(r => r.status === 'running');
 
+/** Every member of {@link WorkflowRunStatus}, for exhaustive policy probes. */
+const ALL_STATUSES: readonly WorkflowRunStatus[] = [
+  'running',
+  'success',
+  'failed',
+  'tripwire',
+  'suspended',
+  'waiting',
+  'pending',
+  'canceled',
+  'bailed',
+  'paused',
+  'skipped',
+];
+
+/** The statuses a policy persists, probed with empty step results. */
+const persistedStatuses = (policy: ShouldPersistSnapshotFn): WorkflowRunStatus[] =>
+  ALL_STATUSES.filter(workflowStatus => policy({ workflowStatus, stepResults: {} })).sort();
+
 describe('durable agent snapshot-persistence policy (issue #23915)', () => {
   describe('default policy with recovery off', () => {
     it('does not persist running checkpoints and the run completes normally', async () => {
@@ -165,7 +192,7 @@ describe('durable agent snapshot-persistence policy (issue #23915)', () => {
         inputSchema: z.object({ index: z.number() }),
         execute: toolExecute,
       };
-      const { durableAgent, recorded, waitForQuiesce } = await setup({
+      const { durableAgent, recorded, waitForRunCleanup } = await setup({
         agentId: 'default-off-agent',
         model: createLoopingModel(2, 'echoTool'),
         tools: { echoTool },
@@ -173,7 +200,7 @@ describe('durable agent snapshot-persistence policy (issue #23915)', () => {
 
       const result: any = await durableAgent.stream('Call the tool twice');
       const chunkTypes = await drain(result.fullStream);
-      await waitForQuiesce();
+      await waitForRunCleanup(result.runId);
 
       // The loop actually ran: both tool iterations executed and the stream
       // finished without an error chunk.
@@ -181,9 +208,35 @@ describe('durable agent snapshot-persistence policy (issue #23915)', () => {
       expect(chunkTypes).not.toContain('error');
       // The point of the change: zero `running` writes reached storage.
       expect(runningWrites(recorded)).toHaveLength(0);
-      // The predicate was actually consulted — other statuses still persist.
+      // The predicate was actually consulted — other statuses still persist,
+      // and every write that landed is one of the always-persisted resume
+      // statuses (no terminal or bookkeeping statuses slip through either).
       expect(recorded.length).toBeGreaterThan(0);
+      for (const { status } of recorded) {
+        expect(['pending', 'paused', 'suspended']).toContain(status);
+      }
     }, 60000);
+
+    it('resolves the exact status matrix: pending|paused|suspended always, running only when recovery is auto', async () => {
+      const noTools = {};
+      const off = await setup({
+        agentId: 'matrix-off-agent',
+        model: createLoopingModel(0, 'unused'),
+        tools: noTools,
+      });
+      const auto = await setup({
+        agentId: 'matrix-auto-agent',
+        model: createLoopingModel(0, 'unused'),
+        tools: noTools,
+        recovery: 'auto',
+      });
+
+      const offPolicy = (off.durableAgent as any).resolveShouldPersistSnapshot() as ShouldPersistSnapshotFn;
+      const autoPolicy = (auto.durableAgent as any).resolveShouldPersistSnapshot() as ShouldPersistSnapshotFn;
+
+      expect(persistedStatuses(offPolicy)).toEqual(['paused', 'pending', 'suspended']);
+      expect(persistedStatuses(autoPolicy)).toEqual(['paused', 'pending', 'running', 'suspended']);
+    });
 
     it('leaves listActiveRuns() empty while a run is in flight', async () => {
       let release!: () => void;
@@ -199,7 +252,7 @@ describe('durable agent snapshot-persistence policy (issue #23915)', () => {
           return { ok: true };
         },
       };
-      const { durableAgent, recorded, waitForQuiesce } = await setup({
+      const { durableAgent, recorded, waitForRunCleanup } = await setup({
         agentId: 'inflight-off-agent',
         model: createLoopingModel(1, 'blockingTool'),
         tools: { blockingTool },
@@ -217,7 +270,7 @@ describe('durable agent snapshot-persistence policy (issue #23915)', () => {
 
       release();
       await drained;
-      await waitForQuiesce();
+      await waitForRunCleanup(result.runId);
       expect(runningWrites(recorded)).toHaveLength(0);
     }, 60000);
   });
@@ -318,7 +371,7 @@ describe('durable agent snapshot-persistence policy (issue #23915)', () => {
           return { ok: true };
         },
       };
-      const { durableAgent, recorded, waitForQuiesce } = await setup({
+      const { durableAgent, recorded, waitForRunCleanup } = await setup({
         agentId: 'inflight-auto-agent',
         model: createLoopingModel(1, 'blockingTool'),
         tools: { blockingTool },
@@ -340,7 +393,7 @@ describe('durable agent snapshot-persistence policy (issue #23915)', () => {
 
       release();
       await drained;
-      await waitForQuiesce();
+      await waitForRunCleanup(result.runId);
       expect(runningWrites(recorded).length).toBeGreaterThan(0);
     }, 60000);
   });
@@ -353,7 +406,7 @@ describe('durable agent snapshot-persistence policy (issue #23915)', () => {
         inputSchema: z.object({ index: z.number() }),
         execute: async () => ({ ok: true }),
       };
-      const { durableAgent, logger, recorded, waitForQuiesce } = await setup({
+      const { durableAgent, logger, recorded, waitForRunCleanup } = await setup({
         agentId: 'manual-recovery-agent',
         model: createLoopingModel(2, 'echoTool'),
         tools: { echoTool },
@@ -366,7 +419,7 @@ describe('durable agent snapshot-persistence policy (issue #23915)', () => {
 
       const result: any = await durableAgent.stream('Call the tool twice');
       await drain(result.fullStream);
-      await waitForQuiesce();
+      await waitForRunCleanup(result.runId);
 
       expect(runningWrites(recorded).length).toBeGreaterThan(0);
       // A predicate covering the full set trips no guardrail.
@@ -382,7 +435,7 @@ describe('durable agent snapshot-persistence policy (issue #23915)', () => {
         inputSchema: z.object({ index: z.number() }),
         execute: async () => ({ ok: true }),
       };
-      const { durableAgent, logger, recorded, waitForQuiesce } = await setup({
+      const { durableAgent, logger, recorded, waitForRunCleanup } = await setup({
         agentId: 'invisible-agent',
         model: createLoopingModel(1, 'echoTool'),
         tools: { echoTool },
@@ -392,7 +445,7 @@ describe('durable agent snapshot-persistence policy (issue #23915)', () => {
 
       const result: any = await durableAgent.stream('Call the tool');
       await drain(result.fullStream);
-      await waitForQuiesce();
+      await waitForRunCleanup(result.runId);
 
       expect(runningWrites(recorded)).toHaveLength(0);
       expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining("does not persist 'running'"));
@@ -439,12 +492,11 @@ describe('durable agent snapshot-persistence policy (issue #23915)', () => {
       (eventedAgent as any).getWorkflow();
       expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('ignoring the shouldPersistSnapshot option'));
 
-      // The pinned policy persists the full set — the user predicate (which
-      // only allowed `suspended`) had no effect.
+      // The pinned policy persists exactly the full active set — the user
+      // predicate (which only allowed `suspended`) had no effect, and no
+      // terminal status is persisted either.
       const pinned = (eventedAgent as any).resolveShouldPersistSnapshot() as ShouldPersistSnapshotFn;
-      for (const workflowStatus of ['pending', 'paused', 'suspended', 'running'] as const) {
-        expect(pinned({ workflowStatus, stepResults: {} })).toBe(true);
-      }
+      expect(persistedStatuses(pinned)).toEqual(['paused', 'pending', 'running', 'suspended']);
       expect(userPredicate({ workflowStatus: 'running', stepResults: {} })).toBe(false);
     });
   });
