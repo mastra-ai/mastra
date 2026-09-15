@@ -1,25 +1,30 @@
 ---
 name: code-best-practices
-description: Mastra Engineering code quality and performance guidelines. Use when writing, reviewing, or refactoring code across backend packages, frontend apps, shared libraries, scripts, and tests. Covers general code structure, JavaScript performance, TypeScript type safety, React patterns, and truthful UI states.
+description: Code quality and performance guidelines from Mastra Engineering. Use when writing, reviewing, or refactoring code. Includes general JavaScript, TypeScript, and React rules.
 ---
 
 # Code Best Practices
 
-Use this skill for code changes throughout the repository. Select guidance by the code being changed; React-specific patterns apply only to React code.
+## Overview
 
-## Choose the Relevant References
+Routing and priority guide for code performance and quality, containing 26 rules across 9 categories. Rule files hold the detailed explanations, examples, review smells, and impact metrics.
 
-Read each matching reference, then open the individual rules relevant to the change. For TypeScript changes, read both type-safety rules, including when working on tests or backend code.
+## When to Apply
 
-| Code being changed                                                             | Reference                              |
-| ------------------------------------------------------------------------------ | -------------------------------------- |
-| Functions, APIs, async operations, or JavaScript performance                   | [General code](references/general.md)  |
-| TypeScript, including fixtures and test helpers                                | [TypeScript](references/typescript.md) |
-| React components, hooks, client data fetching, rendering, or frontend bundles  | [React](references/react.md)           |
-| User-visible data, errors, loading, mutations, or simulated behavior in any UI | [UI states](references/ui.md)          |
+Reference these guidelines when:
 
-Start with correctness and type safety, then address the performance or structure rules relevant to the task. Use the rule files for detailed examples and review smells; do not load every rule by default.
+- Writing new code
+- Implementing data fetching
+- Reviewing code for performance issues
+- Refactoring existing code
+- Optimizing bundle size or load times
 
-## Maintaining the Skill
+## References
 
-Keep each rule in one canonical file and link to it from the relevant reference. Add another category here when its guidance does not belong in an existing reference.
+Rule files are the canonical source for detailed guidance and examples:
+
+- [General code](references/general/index.md) — functions, APIs, async operations, and JavaScript performance.
+- [TypeScript](references/typescript/index.md) — type safety in production and tests.
+- [React](references/react/index.md) — components, hooks, rendering, client data fetching, bundles, and UI tests.
+
+Load only the relevant rule file when implementing or reviewing a specific pattern. Use the catalog to choose the right rule without loading every example.
