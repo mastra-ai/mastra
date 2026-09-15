@@ -26,12 +26,6 @@ const backgrounds = [
 const grayTokens = Array.from({ length: 10 }, (_, index) => `gray-${index + 1}`);
 const grayAlphaTokens = Array.from({ length: 10 }, (_, index) => `gray-alpha-${index + 1}`);
 
-const TokenName = ({ children }: { children: React.ReactNode }) => (
-  <Txt variant="ui-sm" font="mono" className="truncate">
-    {children}
-  </Txt>
-);
-
 const BackgroundSwatch = ({ token, role }: { token: string; role: string }) => (
   <div className="flex min-w-0 flex-col gap-2">
     <div
@@ -41,7 +35,9 @@ const BackgroundSwatch = ({ token, role }: { token: string; role: string }) => (
       style={{ borderRadius: 'var(--radius-md)', background: `var(--${token})` }}
     />
     <div className="flex min-w-0 items-start justify-between gap-2">
-      <TokenName>{token}</TokenName>
+      <Txt variant="ui-sm" font="mono" className="truncate">
+        {token}
+      </Txt>
       <Txt variant="ui-sm" className="shrink-0 text-neutral3">
         {role}
       </Txt>
