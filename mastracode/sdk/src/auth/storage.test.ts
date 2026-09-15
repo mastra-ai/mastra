@@ -136,6 +136,22 @@ describe('AuthStorage multi-account registry', () => {
     expect(JSON.parse(readFileSync(resultPath, 'utf8'))).toEqual({ parseFailures: 0, missingSlots: 0 });
   });
 
+  it('reloads before generic writes so stale instances preserve unrelated credentials', () => {
+    const { storage, authPath } = makeStorage();
+    const staleStorage = new AuthStorage(authPath);
+
+    storage.set('apikey:anthropic', { type: 'api_key', key: 'anthropic-key' });
+    staleStorage.set('apikey:xai', { type: 'api_key', key: 'xai-key' });
+
+    expect(readAuthJson(authPath)).toMatchObject({
+      'apikey:anthropic': { type: 'api_key', key: 'anthropic-key' },
+      'apikey:xai': { type: 'api_key', key: 'xai-key' },
+    });
+
+    storage.remove('apikey:anthropic');
+    expect(readAuthJson(authPath)).toEqual({ 'apikey:xai': { type: 'api_key', key: 'xai-key' } });
+  });
+
   it('treats the slot as the winner when an external writer replaced its tokens (slot-wins migration)', () => {
     const entry1 = accountRecord('old-r1', 'old-a1', { active: true, label: 'Work' });
     const entry2 = accountRecord('r2', 'a2');
@@ -236,29 +252,9 @@ describe('AuthStorage multi-account registry', () => {
     expect(storage.isLoggedIn(PROVIDER)).toBe(false);
   });
 
-  it('rotates to a sibling account when the active account refresh fails', async () => {
+  it('leaves account switching to the rotation processor when an automatic refresh fails', async () => {
     const entry1 = accountRecord('r1', 'a1', { active: true, expires: PAST });
     const entry2 = accountRecord('r2', 'a2');
-    const { storage } = makeStorage({
-      [PROVIDER]: oauthCred('r1', 'a1', PAST),
-      [`accounts:${entry1.id}`]: entry1,
-      [`accounts:${entry2.id}`]: entry2,
-    });
-
-    vi.spyOn(anthropicOAuthProvider, 'refreshToken').mockImplementation(async (creds: OAuthCredentials) => {
-      if (creds.refresh === 'r1') throw new Error('refresh rejected');
-      return { ...creds };
-    });
-
-    const key = await storage.getApiKey(PROVIDER);
-    expect(key).toBe('a2');
-    expect(storage.get(PROVIDER)).toMatchObject({ type: 'oauth', refresh: 'r2', access: 'a2' });
-    expect(storage.getActiveAccount(PROVIDER)?.id).toBe(entry2.id);
-  });
-
-  it('restores the originally active account and keeps every credential when the whole pool fails to refresh', async () => {
-    const entry1 = accountRecord('r1', 'a1', { active: true, expires: PAST });
-    const entry2 = accountRecord('r2', 'a2', { expires: PAST });
     const { storage } = makeStorage({
       [PROVIDER]: oauthCred('r1', 'a1', PAST),
       [`accounts:${entry1.id}`]: entry1,
@@ -268,33 +264,10 @@ describe('AuthStorage multi-account registry', () => {
     const refreshMock = vi.spyOn(anthropicOAuthProvider, 'refreshToken').mockRejectedValue(new Error('down'));
 
     expect(await storage.getApiKey(PROVIDER)).toBeUndefined();
-    // Original active restored, nothing deleted.
-    expect(storage.get(PROVIDER)).toMatchObject({ refresh: 'r1' });
+    expect(refreshMock).toHaveBeenCalledOnce();
+    expect(storage.get(PROVIDER)).toMatchObject({ refresh: 'r1', access: 'a1' });
     expect(storage.getActiveAccount(PROVIDER)?.id).toBe(entry1.id);
     expect(storage.listAccounts(PROVIDER)).toHaveLength(2);
-    // Both instances got their refresh attempt.
-    expect(refreshMock).toHaveBeenCalledTimes(2);
-  });
-
-  it('refreshes an expired sibling during rotation instead of dead-ending the walk', async () => {
-    const entry1 = accountRecord('r1', 'a1', { active: true, expires: PAST });
-    const entry2 = accountRecord('r2', 'a2-stale', { expires: PAST });
-    const { storage } = makeStorage({
-      [PROVIDER]: oauthCred('r1', 'a1', PAST),
-      [`accounts:${entry1.id}`]: entry1,
-      [`accounts:${entry2.id}`]: entry2,
-    });
-
-    vi.spyOn(anthropicOAuthProvider, 'refreshToken').mockImplementation(async (creds: OAuthCredentials) => {
-      if (creds.refresh === 'r1') throw new Error('refresh rejected');
-      return { refresh: 'r2', access: 'a2-fresh', expires: FUTURE };
-    });
-
-    const key = await storage.getApiKey(PROVIDER);
-    expect(key).toBe('a2-fresh');
-    expect(storage.get(PROVIDER)).toMatchObject({ refresh: 'r2', access: 'a2-fresh' });
-    // The active registry entry mirrors the fresh tokens.
-    expect(storage.getActiveAccount(PROVIDER)).toMatchObject({ id: entry2.id, access: 'a2-fresh' });
   });
 
   it('does not overwrite a newly active account when another account finishes refreshing', async () => {
@@ -439,43 +412,6 @@ describe('AuthStorage multi-account registry', () => {
     expect(reopened.listAccounts(PROVIDER).map(a => a.label)).toEqual(['Work', 'Personal']);
     expect(reopened.getActiveAccount(PROVIDER)?.id).toBe(before!.id);
     expect(reopened.get(PROVIDER)).toMatchObject({ type: 'oauth', refresh: 'r2', access: 'a2' });
-  });
-
-  it('a rotation-walk sibling refresh is deduped against concurrent callers (per-instance keys)', async () => {
-    const entry1 = accountRecord('r1', 'a1', { active: true, expires: PAST });
-    const entry2 = accountRecord('r2', 'a2-stale', { expires: PAST });
-    const { storage } = makeStorage({
-      [PROVIDER]: oauthCred('r1', 'a1', PAST),
-      [`accounts:${entry1.id}`]: entry1,
-      [`accounts:${entry2.id}`]: entry2,
-    });
-
-    const siblingRefreshes: string[] = [];
-    let resolveR2!: () => void;
-    vi.spyOn(anthropicOAuthProvider, 'refreshToken').mockImplementation(
-      (creds: OAuthCredentials) =>
-        new Promise<OAuthCredentials>((resolve, reject) => {
-          if (creds.refresh === 'r1') {
-            reject(new Error('refresh rejected'));
-            return;
-          }
-          siblingRefreshes.push(creds.refresh);
-          resolveR2 = () => resolve({ refresh: 'r2', access: 'a2-fresh', expires: FUTURE });
-        }),
-    );
-
-    // Walk: r1 fails inline → activates r2 → sibling refresh goes pending.
-    const walk = storage.getApiKey(PROVIDER);
-    await vi.waitFor(() => expect(siblingRefreshes).toEqual(['r2']));
-
-    // A concurrent caller that reloaded mid-walk sees r2 active + expired
-    // and must join the in-flight sibling refresh instead of double-spending
-    // the (single-use) refresh token.
-    const concurrent = storage.getApiKey(PROVIDER);
-    resolveR2();
-    expect(await walk).toBe('a2-fresh');
-    expect(await concurrent).toBe('a2-fresh');
-    expect(siblingRefreshes).toEqual(['r2']); // exactly one r2 refresh
   });
 
   it('login routes through the account registry: a second login keeps the first account intact', async () => {

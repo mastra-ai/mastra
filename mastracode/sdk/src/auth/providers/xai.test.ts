@@ -65,10 +65,10 @@ describe('startXAIDeviceLogin', () => {
     await expect(startXAIDeviceLogin()).rejects.toThrow(/non-https verification_uri/);
   });
 
-  it('throws on a failed device code request with the response body', async () => {
-    fetchMock.mockResolvedValueOnce(new Response('nope', { status: 400 }));
+  it('throws on a failed device code request without exposing the response body', async () => {
+    fetchMock.mockResolvedValueOnce(new Response('upstream-secret', { status: 400 }));
 
-    await expect(startXAIDeviceLogin()).rejects.toThrow(/400 nope/);
+    await expect(startXAIDeviceLogin()).rejects.toThrow('Failed to initiate xAI device authorization: 400');
   });
 });
 
@@ -215,10 +215,10 @@ describe('refreshXAIToken', () => {
     expect(creds.refresh).toBe('new-rt');
   });
 
-  it('throws with the response body on failure', async () => {
-    fetchMock.mockResolvedValueOnce(new Response('invalid_grant', { status: 400 }));
+  it('throws without exposing the response body on failure', async () => {
+    fetchMock.mockResolvedValueOnce(new Response('upstream-secret', { status: 400 }));
 
-    await expect(refreshXAIToken('old-rt')).rejects.toThrow(/400 invalid_grant/);
+    await expect(refreshXAIToken('old-rt')).rejects.toThrow('xAI token refresh failed: 400');
   });
 });
 

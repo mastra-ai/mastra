@@ -126,6 +126,12 @@ export interface CredentialStore {
    * credentials first. Implementations own refresh serialization.
    */
   getApiKey(provider: string): Promise<string | undefined>;
+  /**
+   * Ready-to-use OAuth credential snapshot. Optional because deployed stores
+   * have no local account registry. Local wrappers use this to keep the access
+   * token and account-specific metadata from the same account.
+   */
+  getOAuthCredential?(provider: string): Promise<OAuthCredential | undefined>;
 
   /**
    * Registered OAuth accounts for a provider, in insertion order. Optional so
