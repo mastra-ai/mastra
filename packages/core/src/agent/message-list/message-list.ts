@@ -1860,7 +1860,54 @@ export class MessageList {
 
           let newParts: typeof incomingParts;
 
-          if (incomingParts.length <= sealedPartCount) {
+          const existingToolCallIds = new Set(
+            existingParts.flatMap(part =>
+              part.type === 'tool-invocation' && part.toolInvocation ? [part.toolInvocation.toolCallId] : [],
+            ),
+          );
+          const resumedToolInvocations = incomingParts.filter(
+            part =>
+              part.type === 'tool-invocation' &&
+              part.toolInvocation &&
+              existingToolCallIds.has(part.toolInvocation.toolCallId),
+          );
+
+          if (resumedToolInvocations.length > 0) {
+            // A workflow resume returns the accumulated assistant message with the
+            // pending tool invocation updated to approval-responded/result. Update
+            // only those invocations on the sealed message so provider-signed
+            // reasoning remains in its original assistant message and is not copied
+            // into a second one.
+            MessageMerger.merge(existingMessage, {
+              ...messageV2,
+              content: {
+                format: 2,
+                parts: resumedToolInvocations,
+              },
+            });
+            this.pushMessageToSource(existingMessage, messageSource);
+
+            const isCompleteSnapshot =
+              incomingParts.length >= sealedPartCount &&
+              incomingParts.slice(0, sealedPartCount).every((part, index) => {
+                const existingPart = existingParts[index];
+                if (!existingPart) return false;
+                if (part.type === 'tool-invocation' && existingPart.type === 'tool-invocation') {
+                  return part.toolInvocation?.toolCallId === existingPart.toolInvocation?.toolCallId;
+                }
+                return CacheKeyGenerator.fromDBParts([part]) === CacheKeyGenerator.fromDBParts([existingPart]);
+              });
+
+            // Accumulated snapshots contain all parts through the seal boundary;
+            // partial stream flushes do not. In either case, the resumed tool
+            // invocation was merged above and must not be appended again.
+            newParts = isCompleteSnapshot
+              ? incomingParts.slice(sealedPartCount)
+              : incomingParts.filter(part => !resumedToolInvocations.includes(part));
+            if (newParts.length === 0) {
+              return this;
+            }
+          } else if (incomingParts.length <= sealedPartCount) {
             // Incoming message has fewer or equal parts than the sealed boundary.
             // Check if these are truly stale (same content as the sealed message) or
             // new content flushed independently (e.g., text deltas flushed with the
