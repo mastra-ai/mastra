@@ -930,9 +930,9 @@ export const mastra = new Mastra({
     });
   });
 
-  describe.sequential('subpath-only externals', () => {
+  describe.sequential('transitive workspace subpath externals', () => {
     it(
-      'should build transitive workspace dependencies with subpath-only exports and externals true',
+      'should compile a transitive TypeScript subpath from a workspace package with a root export',
       async () => {
         const isolatedFixturePath = await mkdtemp(join(tmpdir(), `mastra-monorepo-subpath-test-${pkgManager}-`));
         await setupMonorepo(isolatedFixturePath, pkgManager);
@@ -952,7 +952,19 @@ export const mastra = new Mastra({
         let proc: ReturnType<typeof execaNode> | undefined;
 
         try {
-          await writeFile(mastraConfigPath, originalMastraConfig.replace(/externals:\s*\[[^\]]*\]/, 'externals: true'));
+          await writeFile(
+            mastraConfigPath,
+            originalMastraConfig.replace(
+              /externals:\s*\[[^\]]*\]/,
+              `externals: true,
+    transpilePackages: [
+      '@inner/transitive-a',
+      '@inner/transitive-b',
+      '@inner/transitive-c',
+      '@inner/subpath-only',
+    ]`,
+            ),
+          );
 
           await runBuild(isolatedFixturePath);
 
@@ -975,7 +987,7 @@ export const mastra = new Mastra({
               if (errMsg && errMsg.includes('falling back to an in-memory store')) {
                 return;
               }
-              reject(new Error('failed to start subpath-only externals build: ' + errMsg));
+              reject(new Error('failed to start transitive workspace subpath build: ' + errMsg));
             });
             proc!.stdout?.on('data', data => {
               console.log(data?.toString());
