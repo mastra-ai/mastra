@@ -36,26 +36,24 @@ const samples: Record<TypographyToken, string> = {
   'header-xl': 'Hero heading',
 };
 
-const formatSize = (value: string) => `${Number.parseFloat(value) * 16}px`;
+const TypeRow = ({ token }: { token: TypographyToken }) => {
+  const fontSizePx = Number.parseFloat(FontSizes[token]) * 16;
+  const lineHeightPx = Math.round((fontSizePx * Number.parseFloat(LineHeights[token])) / 100);
 
-const formatLineHeight = (size: string, lineHeight: string) => {
-  const pixels = Number.parseFloat(size) * 16;
-  return `${Math.round((pixels * Number.parseFloat(lineHeight)) / 100)}px`;
+  return (
+    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-b border-border1 py-3 last:border-b-0 sm:grid-cols-[6.5rem_4.5rem_minmax(0,1fr)] sm:gap-3">
+      <Txt variant="ui-sm" font="mono" className="text-neutral3">
+        {token}
+      </Txt>
+      <Txt variant="ui-xs" font="mono" className="text-neutral3 tabular-nums">
+        {fontSizePx}px / {lineHeightPx}px
+      </Txt>
+      <Txt variant={token} className="col-span-2 min-w-0 sm:col-span-1 sm:truncate">
+        {samples[token]}
+      </Txt>
+    </div>
+  );
 };
-
-const TypeRow = ({ token }: { token: TypographyToken }) => (
-  <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-b border-border1 py-3 last:border-b-0 sm:grid-cols-[6.5rem_4.5rem_minmax(0,1fr)] sm:gap-3">
-    <Txt variant="ui-sm" font="mono" className="text-neutral3">
-      {token}
-    </Txt>
-    <Txt variant="ui-xs" font="mono" className="text-neutral3 tabular-nums">
-      {formatSize(FontSizes[token])} / {formatLineHeight(FontSizes[token], LineHeights[token])}
-    </Txt>
-    <Txt variant={token} className="col-span-2 min-w-0 sm:col-span-1 sm:truncate">
-      {samples[token]}
-    </Txt>
-  </div>
-);
 
 const TypeScale = ({ title, tokens }: { title: string; tokens: TypographyToken[] }) => (
   <section className="min-w-0">
