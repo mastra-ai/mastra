@@ -4,9 +4,9 @@ import type { PreparedTraceBatch } from '../types.js';
 
 const DEFAULT_ENDPOINT = 'https://observability.mastra.ai';
 const DEFAULT_MAX_ATTEMPTS = 5;
+const DEFAULT_MAX_RETRY_AFTER_MS = 30_000;
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 const DEFAULT_SPANS_PER_SECOND = 100;
-const MAX_TIMER_DELAY_MS = 2_147_483_647;
 const OBSERVABILITY_CAPABILITIES_HEADER = 'x-mastra-observability-capabilities';
 const QUOTA_PAUSE_CAPABILITY = 'quota-pause-v1';
 
@@ -261,10 +261,10 @@ function parseRetryAfter(value: string | null, fallback: number): number {
   if (!retryAfter) return fallback;
 
   const seconds = Number(retryAfter);
-  if (Number.isFinite(seconds) && seconds >= 0) return Math.min(seconds * 1000, MAX_TIMER_DELAY_MS);
+  if (Number.isFinite(seconds) && seconds >= 0) return Math.min(seconds * 1000, DEFAULT_MAX_RETRY_AFTER_MS);
 
   const date = Date.parse(retryAfter);
-  return Number.isFinite(date) ? Math.min(Math.max(0, date - Date.now()), MAX_TIMER_DELAY_MS) : fallback;
+  return Number.isFinite(date) ? Math.min(Math.max(0, date - Date.now()), DEFAULT_MAX_RETRY_AFTER_MS) : fallback;
 }
 
 async function sleep(milliseconds: number, signal?: AbortSignal): Promise<void> {

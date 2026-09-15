@@ -116,10 +116,10 @@ describe('MastraPlatformTraceTarget', () => {
     ]);
   });
 
-  it('caps Retry-After at the largest delay supported by Node timers', async () => {
+  it('caps provider-controlled Retry-After delays', async () => {
     const fetch = vi
       .fn<typeof globalThis.fetch>()
-      .mockResolvedValueOnce(new Response(null, { status: 429, headers: { 'Retry-After': '2147484' } }))
+      .mockResolvedValueOnce(new Response(null, { status: 429, headers: { 'Retry-After': '120' } }))
       .mockResolvedValueOnce(acknowledgement());
     const sleep = vi.fn(async () => undefined);
     const target = new MastraPlatformTraceTarget(
@@ -130,7 +130,7 @@ describe('MastraPlatformTraceTarget', () => {
     await target.upload(batch());
 
     expect(sleep).toHaveBeenCalledOnce();
-    expect(sleep).toHaveBeenCalledWith(2_147_483_647, undefined);
+    expect(sleep).toHaveBeenCalledWith(30_000, undefined);
   });
 
   it('paces consecutive whole-trace batches to the default span rate', async () => {
