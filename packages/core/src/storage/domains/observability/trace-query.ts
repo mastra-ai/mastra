@@ -212,7 +212,7 @@ export const getTraceQueryFieldsResponseSchema = z
 export const getTraceQueryValuesResponseSchema = z
   .object({
     values: z
-      .array(z.object({ value: z.string(), count: z.number().int().nonnegative() }).strict())
+      .array(z.object({ value: literalStringSchema, count: z.number().int().nonnegative() }).strict())
       .max(TRACE_QUERY_DISCOVERY_MAX_LIMIT),
     valuesTruncated: z.boolean(),
   })

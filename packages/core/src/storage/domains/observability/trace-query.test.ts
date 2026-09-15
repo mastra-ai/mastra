@@ -1350,6 +1350,18 @@ describe('trace-query discovery contract', () => {
       }).success,
     ).toBe(true);
     expect(getTraceQueryValuesResponseSchema.safeParse({ values, valuesTruncated: true }).success).toBe(false);
+    expect(
+      getTraceQueryValuesResponseSchema.safeParse({
+        values: [{ value: 'é'.repeat(TRACE_QUERY_MAX_STRING_BYTES / 2), count: 1 }],
+        valuesTruncated: false,
+      }).success,
+    ).toBe(true);
+    expect(
+      getTraceQueryValuesResponseSchema.safeParse({
+        values: [{ value: 'é'.repeat(TRACE_QUERY_MAX_STRING_BYTES / 2 + 1), count: 1 }],
+        valuesTruncated: false,
+      }).success,
+    ).toBe(false);
   });
 
   it('derives ordered canonical descriptors and value eligibility from one registry', () => {
