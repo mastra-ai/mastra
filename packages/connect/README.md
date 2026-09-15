@@ -1,10 +1,16 @@
-# Platform connection tools
+# @mastra/connect
 
 `@mastra/connect` exposes tools backed by connections attached to a Mastra Platform project. Provider credentials stay in the platform connection. Tool traffic passes through Platform so calls can be authorized, audited, and counted without logging arguments or results.
 
-## Resend and incident.io
+## Installation
 
-Attach a connection to your project using integration ID `resend` or `incident-io`. Configure the Platform project ID and access token, then pass the resolver to your agent's `tools` option:
+```bash
+npm install @mastra/connect
+```
+
+## Usage
+
+Attach a connection to your Platform project using integration ID `resend` or `incident-io`. Configure the Platform project ID and access token, then pass the resolver to your agent's `tools` option:
 
 ```ts
 import { connect } from '@mastra/connect';
@@ -26,7 +32,7 @@ The resolver discovers active project connections. Where multiple connections ma
 | Resend      | Generated HTTP tools | Emails and attachments, domains, templates, audiences, contacts, segments, topics, broadcasts, webhooks, and metrics                                      |
 | incident.io | Generated HTTP tools | Incidents, updates, actions, follow-ups, timelines, alerts, on-call schedules, teams, users, postmortems, catalog reads, and incident configuration reads |
 
-## Generated HTTP providers
+### Generated HTTP providers
 
 Resend and incident.io use checked-in tools generated from their provider contracts. Tool inputs preserve provider field names. Mutations put their JSON request payload under `body`.
 
@@ -46,8 +52,19 @@ Resend requires a verified sending domain and a key authorized for the operation
 
 List tools return one provider page and preserve its response envelope. When `next_cursor` is present, pass it as `after` for Resend and incident.io. Preserve filters and sort options between pages.
 
-## Template provenance
+### Template provenance
 
 Resend and incident.io are generated from integration-template contributions [#667](https://github.com/NangoHQ/integration-templates/pull/667) and [#668](https://github.com/NangoHQ/integration-templates/pull/668). Until they land upstream, each provider manifest pins the contributing repository and exact commit and records generated file checksums.
 
-See [maintainer generation commands](./scripts/README.md) and [third-party notices](./NOTICE.md). Generated-provider tests use OpenAPI examples and synthetic fixtures.
+## Documentation
+
+- [Mastra Platform](https://mastra.ai/docs/mastra-platform/overview)
+- [Maintainer generation commands](./scripts/README.md) and [third-party notices](./NOTICE.md). Generated-provider tests use OpenAPI examples and synthetic fixtures.
+
+## Changelog
+
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/packages/connect/CHANGELOG.md) for version history and release notes.
+
+## Support
+
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.
