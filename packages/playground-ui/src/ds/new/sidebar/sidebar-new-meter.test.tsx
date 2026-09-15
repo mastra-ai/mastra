@@ -123,6 +123,10 @@ describe('SidebarNew colors', () => {
               </SidebarNew.NavStack.View>
             </SidebarNew.NavStack>
           </SidebarNew.Nav>
+          <SidebarNew.Footer>
+            <div>Credits</div>
+            <button type="button">Account</button>
+          </SidebarNew.Footer>
         </SidebarNew>
       </SidebarNew.Provider>,
     );
@@ -138,6 +142,11 @@ describe('SidebarNew colors', () => {
     expect(screen.getByText('Mastra').className).toContain('text-foreground');
     expect(screen.getByText('Project').className).toContain('text-muted-foreground');
     expect(container.querySelector('.bg-border')).not.toBeNull();
+
+    const footer = container.querySelector('[data-slot="sidebar-new-footer"]');
+    expect(footer?.className).toContain('flex');
+    expect(footer?.className).toContain('flex-col');
+    expect(footer?.className).toContain('gap-1.5');
 
     const back = screen.getByRole('button', { name: 'Back to main navigation: Settings' });
     expect(back.className).toContain('text-muted-foreground');
