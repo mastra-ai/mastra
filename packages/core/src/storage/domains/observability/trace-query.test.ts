@@ -20,6 +20,7 @@ import {
   queryThreadsResultSchema,
   resolveTraceQueryTimeoutMs,
   traceQueryGroupResponseSchema,
+  traceQueryPaginatedTraceResponseSchema,
   traceQueryRequestSchema,
   traceQueryTraceResponseSchema,
   TraceQueryCursorError,
@@ -56,9 +57,42 @@ function validationError(fn: () => unknown): TraceQueryValidationError {
 }
 
 describe('traceQueryRequestSchema', () => {
-  it('normalizes page defaults without coercing values', () => {
+  it('normalizes keyset and list-compatible page defaults', () => {
     expect(parsed()).toMatchObject({ page: { limit: 100 } });
+    expect(parsed({ ...baseRequest, pagination: {} })).toMatchObject({ pagination: { page: 0, perPage: 10 } });
+    expect(parsed({ ...baseRequest, pagination: { page: 2, perPage: 100 } })).toMatchObject({
+      pagination: { page: 2, perPage: 100 },
+    });
     expect(traceQueryRequestSchema.safeParse({ ...baseRequest, page: { limit: '10' } }).success).toBe(false);
+    expect(traceQueryRequestSchema.safeParse({ ...baseRequest, pagination: { page: -1 } }).success).toBe(false);
+    expect(traceQueryRequestSchema.safeParse({ ...baseRequest, pagination: { perPage: 0 } }).success).toBe(false);
+    expect(traceQueryRequestSchema.safeParse({ ...baseRequest, pagination: { perPage: 101 } }).success).toBe(false);
+  });
+
+  it('rejects mixed and grouped list-compatible pagination during planning', () => {
+    const mixed = validationError(() =>
+      planTraceQuery(parsed({ ...baseRequest, page: { limit: 10 }, pagination: { page: 0, perPage: 10 } })),
+    );
+    expect(mixed.issues).toContainEqual(
+      expect.objectContaining({ code: 'pagination_mode_conflict', path: ['pagination'] }),
+    );
+
+    const grouped = validationError(() =>
+      planTraceQuery(parsed({ ...baseRequest, group: { by: ['threadId'] }, pagination: { page: 0, perPage: 10 } })),
+    );
+    expect(grouped.issues).toContainEqual(
+      expect.objectContaining({ code: 'group_pagination_not_supported', path: ['pagination'] }),
+    );
+  });
+
+  it('builds a normalized page plan without cursor state', () => {
+    expect(planTraceQuery(parsed({ ...baseRequest, pagination: { page: 3, perPage: 25 } }))).toMatchObject({
+      result: 'traces',
+      paginationMode: 'page',
+      page: 3,
+      perPage: 25,
+      orderBy: { field: 'startedAt', direction: 'desc' },
+    });
   });
 
   it('rejects unknown and experimental request properties', () => {
@@ -1317,6 +1351,22 @@ describe('trace-query responses and storage capability', () => {
       status: 'success',
     };
     expect(traceQueryTraceResponseSchema.safeParse({ traces: [trace], page: { next: null } }).success).toBe(true);
+    expect(
+      traceQueryPaginatedTraceResponseSchema.safeParse({
+        traces: [trace],
+        pagination: { total: 1, page: 0, perPage: 10, hasMore: false },
+      }).success,
+    ).toBe(true);
+    expect(
+      traceQueryTraceResponseSchema.safeParse({
+        traces: [trace],
+        page: { next: null },
+        pagination: { total: 1, page: 0, perPage: 10, hasMore: false },
+      }).success,
+    ).toBe(false);
+    expect(traceQueryPaginatedTraceResponseSchema.safeParse({ traces: [trace], page: { next: null } }).success).toBe(
+      false,
+    );
     expect(
       traceQueryTraceResponseSchema.safeParse({ traces: [{ ...trace, scores: [] }], page: { next: null } }).success,
     ).toBe(false);

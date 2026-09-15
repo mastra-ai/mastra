@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod/v4';
+import { paginationArgsSchema, paginationInfoSchema } from '../shared';
 import type { FeedbackRecord } from './feedback';
 import type { ScoreRecord } from './scores';
 import type { SpanRecord } from './tracing';
@@ -153,8 +154,7 @@ const pageSchema = z
     limit: z.number().int().min(1).max(1000).default(100),
     after: z.string().min(1).nullable().optional(),
   })
-  .strict()
-  .default({ limit: 100 });
+  .strict();
 
 const traceQueryRequestObjectSchema = z
   .object({
@@ -175,9 +175,11 @@ const traceQueryRequestObjectSchema = z
       )
       .length(1)
       .optional(),
-    page: pageSchema,
+    page: pageSchema.optional(),
+    pagination: paginationArgsSchema.optional(),
   })
-  .strict();
+  .strict()
+  .transform(request => (request.page || request.pagination ? request : { ...request, page: { limit: 100 } }));
 
 export const traceQueryRequestSchema = z.preprocess((input, context) => {
   const issuePath = findPredicateComplexityIssue(input, [['where']]);
@@ -192,7 +194,7 @@ const queryThreadsInputObjectSchema = z
   .object({
     traces: traceSelectionSchema,
     where: threadPredicateSchema.optional(),
-    page: pageSchema,
+    page: pageSchema.default({ limit: 100 }),
   })
   .strict();
 
@@ -225,13 +227,20 @@ const responsePageSchema = z.object({ next: z.string().nullable() }).strict();
 export const traceQueryTraceResponseSchema = z
   .object({ traces: z.array(traceQueryTraceSchema), page: responsePageSchema })
   .strict();
+export const traceQueryPaginatedTraceResponseSchema = z
+  .object({ traces: z.array(traceQueryTraceSchema), pagination: paginationInfoSchema })
+  .strict();
 export const traceQueryGroupResponseSchema = z
   .object({
     groups: z.array(z.object({ threadId: z.string() }).strict()),
     page: responsePageSchema,
   })
   .strict();
-export const traceQueryResponseSchema = z.union([traceQueryTraceResponseSchema, traceQueryGroupResponseSchema]);
+export const traceQueryResponseSchema = z.union([
+  traceQueryTraceResponseSchema,
+  traceQueryPaginatedTraceResponseSchema,
+  traceQueryGroupResponseSchema,
+]);
 
 export const threadIdentitySchema = z.object({ threadId: z.string() }).strict();
 export const queryThreadsResultSchema = z
@@ -279,6 +288,7 @@ export type TraceQueryRequest = z.input<typeof traceQueryRequestObjectSchema>;
 export type NormalizedTraceQueryRequest = z.output<typeof traceQueryRequestObjectSchema>;
 export type TraceQueryTrace = z.infer<typeof traceQueryTraceSchema>;
 export type TraceQueryTraceResponse = z.infer<typeof traceQueryTraceResponseSchema>;
+export type TraceQueryPaginatedTraceResponse = z.infer<typeof traceQueryPaginatedTraceResponseSchema>;
 export type TraceQueryGroupResponse = z.infer<typeof traceQueryGroupResponseSchema>;
 export type TraceQueryResponse = z.infer<typeof traceQueryResponseSchema>;
 
@@ -349,24 +359,39 @@ export type TrustedThreadPredicate =
 export interface TrustedTraceQueryBasePlan {
   timeRange: { from: string; to: string };
   where?: TrustedTraceQueryPredicate;
+}
+
+export interface TrustedTraceQueryKeysetPlan {
+  paginationMode: 'keyset';
   limit: number;
   binding: string;
 }
 
-export interface TrustedTraceQueryTracesPlan extends TrustedTraceQueryBasePlan {
+export interface TrustedTraceQueryPagePlan {
+  paginationMode: 'page';
+  page: number;
+  perPage: number;
+}
+
+interface TrustedTraceQueryTracesBasePlan extends TrustedTraceQueryBasePlan {
   result: 'traces';
   orderBy: {
     field: 'startedAt' | 'endedAt';
     direction: 'asc' | 'desc';
   };
-  cursor?: { sortValue: string; traceId: string };
 }
 
-export interface TrustedTraceQueryGroupsPlan extends TrustedTraceQueryBasePlan {
-  result: 'groups';
-  orderBy: { field: 'threadId'; direction: 'asc' };
-  cursor?: { threadId: string };
-}
+export type TrustedTraceQueryKeysetTracesPlan = TrustedTraceQueryTracesBasePlan &
+  TrustedTraceQueryKeysetPlan & { cursor?: { sortValue: string; traceId: string } };
+export type TrustedTraceQueryPaginatedTracesPlan = TrustedTraceQueryTracesBasePlan & TrustedTraceQueryPagePlan;
+export type TrustedTraceQueryTracesPlan = TrustedTraceQueryKeysetTracesPlan | TrustedTraceQueryPaginatedTracesPlan;
+
+export type TrustedTraceQueryGroupsPlan = TrustedTraceQueryBasePlan &
+  TrustedTraceQueryKeysetPlan & {
+    result: 'groups';
+    orderBy: { field: 'threadId'; direction: 'asc' };
+    cursor?: { threadId: string };
+  };
 
 export type TrustedTraceQueryPlan = TrustedTraceQueryTracesPlan | TrustedTraceQueryGroupsPlan;
 
@@ -383,7 +408,10 @@ export interface TrustedThreadQueryPlan {
   cursor?: { threadId: string };
 }
 
-export type TraceQueryCursorPlan = TrustedTraceQueryPlan | TrustedThreadQueryPlan;
+export type TraceQueryCursorPlan =
+  | TrustedTraceQueryKeysetTracesPlan
+  | TrustedTraceQueryGroupsPlan
+  | TrustedThreadQueryPlan;
 export type TraceQueryCursorValues =
   | { result: 'traces'; sortValue: string; traceId: string }
   | { result: 'groups'; threadId: string }
@@ -399,7 +427,9 @@ export type TraceQueryIssueCode =
   | 'operator_not_allowed'
   | 'invalid_operands'
   | 'invalid_literal'
-  | 'group_order_not_supported';
+  | 'group_order_not_supported'
+  | 'pagination_mode_conflict'
+  | 'group_pagination_not_supported';
 
 export interface TraceQueryIssue {
   code: TraceQueryIssueCode;
@@ -640,25 +670,40 @@ export function planTraceQuery(
       message: 'Grouped trace queries use fixed threadId ordering',
     });
   }
+  if (request.page && request.pagination) {
+    issues.push({
+      code: 'pagination_mode_conflict',
+      path: ['pagination'],
+      message: 'Trace queries cannot combine keyset and page pagination',
+    });
+  }
+  if (request.group && request.pagination) {
+    issues.push({
+      code: 'group_pagination_not_supported',
+      path: ['pagination'],
+      message: 'Grouped trace queries do not support page pagination',
+    });
+  }
 
   const state: PlannerState = { nodes: 0, relatedClauses: 0, literalUnits: 0, issues };
   const where = request.where ? planPredicate(request.where, 'trace', ['where'], 1, state) : undefined;
   if (issues.length > 0) throw new TraceQueryValidationError(issues);
 
   const timeRange = { from: from.toISOString(), to: to.toISOString() };
-  const limit = request.page.limit;
 
   if (request.group) {
     const result = 'groups' as const;
     const orderBy = { field: 'threadId', direction: 'asc' } as const;
     const binding = digestBinding({ timeRange, where, result, orderBy, authorization: options.authorizationBinding });
-    const cursor = request.page.after ? decodeTraceQueryCursor(request.page.after, result, binding) : undefined;
+    const page = request.page!;
+    const cursor = page.after ? decodeTraceQueryCursor(page.after, result, binding) : undefined;
     return {
       result,
       timeRange,
       where,
       orderBy,
-      limit,
+      paginationMode: 'keyset',
+      limit: page.limit,
       binding,
       cursor: cursor?.result === 'groups' ? { threadId: cursor.threadId } : undefined,
     };
@@ -666,14 +711,28 @@ export function planTraceQuery(
 
   const result = 'traces' as const;
   const orderBy = request.orderBy?.[0] ?? ({ field: 'startedAt', direction: 'desc' } as const);
+  if (request.pagination) {
+    return {
+      result,
+      timeRange,
+      where,
+      orderBy,
+      paginationMode: 'page',
+      page: request.pagination.page,
+      perPage: request.pagination.perPage,
+    };
+  }
+
+  const page = request.page!;
   const binding = digestBinding({ timeRange, where, result, orderBy, authorization: options.authorizationBinding });
-  const cursor = request.page.after ? decodeTraceQueryCursor(request.page.after, result, binding) : undefined;
+  const cursor = page.after ? decodeTraceQueryCursor(page.after, result, binding) : undefined;
   return {
     result,
     timeRange,
     where,
     orderBy,
-    limit,
+    paginationMode: 'keyset',
+    limit: page.limit,
     binding,
     cursor: cursor?.result === 'traces' ? { sortValue: cursor.sortValue, traceId: cursor.traceId } : undefined,
   };

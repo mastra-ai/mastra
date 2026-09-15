@@ -296,6 +296,21 @@ describe('ClickHouse advanced trace query', () => {
     expect(Object.values(compiled.query_params).at(-1)).toBe(5);
   });
 
+  it('compiles typed list-compatible count and offset queries over the same candidates', () => {
+    const pagePlan = plan({
+      orderBy: [{ field: 'endedAt', direction: 'asc' }],
+      pagination: { page: 2, perPage: 25 },
+    });
+    const count = compileClickHouseTraceQuery(pagePlan, 'count');
+    const data = compileClickHouseTraceQuery(pagePlan);
+
+    expect(count.query).toContain('SELECT count() AS total\nFROM candidates');
+    expect(data.query).toContain('ORDER BY endedAt ASC, traceId ASC');
+    expect(data.query).toContain('LIMIT {trace_query_3:UInt64} OFFSET {trace_query_4:UInt64}');
+    expect(data.query_params).toMatchObject({ trace_query_3: 25, trace_query_4: 50 });
+    expect(count.query.split('candidates AS')[0]).toBe(data.query.split('candidates AS')[0]);
+  });
+
   it('compiles thread qualification over full eligible roots with dependencies from both scopes', () => {
     const metadataKey = ` actor'role `;
     const metadataValue = `clinician' OR TRUE`;
@@ -430,6 +445,32 @@ describe('ClickHouse advanced trace query', () => {
       page: { next: expect.any(String) },
     });
     expect(Object.keys(response.traces[0]!)).toHaveLength(10);
+  });
+
+  it('returns exact list-compatible pagination metadata with timeout settings on both queries', async () => {
+    const countJson = vi.fn().mockResolvedValue([{ total: '3' }]);
+    const dataJson = vi.fn().mockResolvedValue([traceRow('trace-c', '2026-01-01T10:00:00.000Z')]);
+    const query = vi.fn().mockResolvedValueOnce({ json: countJson }).mockResolvedValueOnce({ json: dataJson });
+    const response = await queryTraces(
+      { query } as unknown as ClickHouseClient,
+      plan({ pagination: { page: 1, perPage: 2 } }),
+      15_000,
+    );
+
+    expect(query).toHaveBeenCalledTimes(2);
+    expect(query).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ clickhouse_settings: expect.objectContaining({ max_execution_time: 15 }) }),
+    );
+    expect(query).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ clickhouse_settings: expect.objectContaining({ max_execution_time: 15 }) }),
+    );
+    expect(response).toMatchObject({
+      traces: [{ traceId: 'trace-c' }],
+      pagination: { total: 3, page: 1, perPage: 2, hasMore: false },
+    });
+    expect(response).not.toHaveProperty('page');
   });
 
   it('reuses the execution timeout and returns fixed thread identities with a next cursor', async () => {
