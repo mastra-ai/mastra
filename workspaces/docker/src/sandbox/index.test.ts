@@ -925,7 +925,16 @@ describe('DockerSandbox', () => {
 
       expect(mockContainer.exec).toHaveBeenCalledWith(
         expect.objectContaining({
-          Cmd: ['sh', '-c', 'echo hello'],
+          // Command is wrapped so it runs in its own process group; the user
+          // command travels as the final positional arg.
+          Cmd: [
+            'sh',
+            '-c',
+            expect.stringContaining('setsid'),
+            'sh',
+            expect.stringMatching(/^\/tmp\/\.mastra-proc\//),
+            'echo hello',
+          ],
           AttachStdout: true,
           AttachStderr: true,
           AttachStdin: true,
@@ -1004,33 +1013,36 @@ describe('DockerSandbox', () => {
       expect(result.timedOut).toBeUndefined();
     });
 
-    it('should inject a unique MASTRA_PROC_ID marker into each spawned exec', async () => {
+    it('should run each spawned command in its own process group via a unique pgid file', async () => {
       const sandbox = new DockerSandbox();
       await sandbox._start();
 
       await sandbox.processes!.spawn('sleep 100');
       await sandbox.processes!.spawn('sleep 100');
 
-      const firstEnv = mockContainer.exec.mock.calls[0]?.[0].Env as string[];
-      const secondEnv = mockContainer.exec.mock.calls[1]?.[0].Env as string[];
+      const firstCmd = mockContainer.exec.mock.calls[0]?.[0].Cmd as string[];
+      const secondCmd = mockContainer.exec.mock.calls[1]?.[0].Cmd as string[];
 
-      const firstMarker = firstEnv.find(e => e.startsWith('MASTRA_PROC_ID='));
-      const secondMarker = secondEnv.find(e => e.startsWith('MASTRA_PROC_ID='));
+      // Command is wrapped: ['sh', '-c', SPAWN_WRAPPER, 'sh', pgidFile, command]
+      expect(firstCmd[0]).toBe('sh');
+      expect(firstCmd[2]).toContain('setsid');
+      expect(firstCmd[5]).toBe('sleep 100');
 
-      expect(firstMarker).toBeDefined();
-      expect(secondMarker).toBeDefined();
-      // Each spawn gets a distinct marker so kill() targets only its own tree
-      expect(firstMarker).not.toEqual(secondMarker);
+      const firstPgidFile = firstCmd[4];
+      const secondPgidFile = secondCmd[4];
+      expect(firstPgidFile).toMatch(/^\/tmp\/\.mastra-proc\//);
+      // Each spawn gets a distinct pgid file so kill() targets only its own group
+      expect(firstPgidFile).not.toEqual(secondPgidFile);
     });
 
-    it('should kill by marker in the container PID namespace (not host PID)', async () => {
+    it('should kill by process group in the container PID namespace (not host PID)', async () => {
       const sandbox = new DockerSandbox();
       await sandbox._start();
 
       const handle = await sandbox.processes!.spawn('sleep 100');
 
-      const spawnEnv = mockContainer.exec.mock.calls[0]?.[0].Env as string[];
-      const marker = spawnEnv.find(e => e.startsWith('MASTRA_PROC_ID='))!.split('=')[1];
+      const spawnCmd = mockContainer.exec.mock.calls[0]?.[0].Cmd as string[];
+      const pgidFile = spawnCmd[4];
 
       // Capture the kill exec call
       const killStart = vi.fn().mockResolvedValue(undefined);
@@ -1047,14 +1059,13 @@ describe('DockerSandbox', () => {
       expect(killCall.Cmd[0]).toBe('sh');
       expect(killCall.Cmd[1]).toBe('-c');
       const script = killCall.Cmd[2] as string;
-      // The marker is passed as a positional arg ($1), not interpolated, so the
-      // script text is a static constant and the marker travels in Cmd[4].
-      expect(script).toContain('MASTRA_PROC_ID=$1');
-      expect(script).not.toContain(marker);
-      expect(killCall.Cmd[4]).toBe(marker);
-      expect(script).toContain('/proc/');
-      expect(script).toContain('kill -STOP');
-      expect(script).toContain('kill -KILL');
+      // The pgid file path is passed as a positional arg ($1), not interpolated,
+      // so the script text is a static constant and the path travels in Cmd[4].
+      expect(killCall.Cmd[4]).toBe(pgidFile);
+      expect(pgidFile).not.toEqual('');
+      // Signals the whole process group (negative PID) — kernel-enforced.
+      expect(script).toContain('kill -STOP -"$pgid"');
+      expect(script).toContain('kill -KILL -"$pgid"');
       expect(script).not.toContain('kill -9 -42');
       expect(killStart).toHaveBeenCalled();
     });

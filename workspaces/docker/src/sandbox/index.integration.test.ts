@@ -219,4 +219,36 @@ describe('DockerSandbox process kill (integration)', () => {
     // No accumulation of zombies/orphans after several kill cycles.
     expect(settled).toBeLessThanOrEqual(baseline + 1);
   }, 120000);
+
+  it('kill() catches a descendant that drops its environment and re-parents away', async () => {
+    const baseline = await countProcesses();
+
+    // An intermediate shell forks a grandchild that re-execs with a *cleared*
+    // environment (so it carries no marker), then the intermediate exits so the
+    // grandchild re-parents away and loses its ancestry link to the leader. The
+    // leader itself stays alive (trailing `sleep`) so the process is still
+    // running when we kill it. Only a kernel-enforced process-group kill can
+    // reach the orphan — an env-marker/PPID sweep would miss it.
+    const handle = await sandbox.processes!.spawn('sh -c "sh -c \'env -i sleep 300 &\'; sleep 300"');
+    await new Promise(r => setTimeout(r, 1000));
+
+    const duringPids = await countProcesses();
+    expect(duringPids).toBeGreaterThan(baseline);
+
+    const killed = await handle.kill();
+    expect(killed).toBe(true);
+    await handle.wait();
+
+    let settled = baseline;
+    for (let i = 0; i < 20; i++) {
+      await new Promise(r => setTimeout(r, 500));
+      settled = await countProcesses();
+      if (settled <= baseline + 1) break;
+    }
+
+    // The orphaned, environment-less sleep is gone: the process group kill
+    // reached it despite the missing marker and severed ancestry.
+    expect(settled).toBeLessThanOrEqual(baseline + 1);
+    expect(settled).toBeLessThan(duringPids);
+  }, 120000);
 });

@@ -6,7 +6,7 @@ Fixed `DockerProcessHandle.kill()` reporting exit code 137 while the process kep
 
 **Namespace-correct kill**
 
-`kill()` previously used the host PID from `exec.inspect()`, which does not match the PIDs an in-container `kill` can address, so the signal missed the target and the process stayed alive. Each spawned process is now tagged with a unique `MASTRA_PROC_ID` marker; `kill()` scans `/proc` inside the container for that marker (plus descendants), then `SIGSTOP`s and `SIGKILL`s the whole tree in the container's own PID namespace.
+`kill()` previously used the host PID from `exec.inspect()`, which does not match the PIDs an in-container `kill` can address, so the signal missed the target and the process stayed alive. Each spawned command now runs in its own session/process group (`setsid -w`) and records its PGID to a private file; `kill()` then `SIGSTOP`s and `SIGKILL`s the whole kernel-owned process group in the container's own PID namespace. Because the group identity is enforced by the kernel, descendants are still terminated even if they drop their environment or re-parent to PID 1, and the identity cannot be forged by another container process. Images without `setsid -w` (e.g. BusyBox) fall back to signalling the recorded leader PID directly.
 
 **Zombie reaping via an init process**
 
