@@ -109,7 +109,7 @@ function SidebarNewStory() {
             value="$4"
             status="Credits are low"
             tone="warning"
-            icon={<AlertTriangle className="size-3 shrink-0 text-notice-warning" aria-hidden />}
+            icon={<AlertTriangle className="text-notice-warning size-3 shrink-0" aria-hidden />}
             href="/organization/billing"
             linkLabel="Credit balance"
           />
