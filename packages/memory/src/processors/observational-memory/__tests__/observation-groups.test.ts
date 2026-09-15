@@ -103,4 +103,31 @@ describe('reconcileObservationGroupsFromReflection', () => {
     const rerendered = renderObservationGroupsForReflection(reconciled)!;
     expect(reconcileObservationGroupsFromReflection(rerendered, reconciled)).toContain('range="m1:m2,m3:m4"');
   });
+
+  it('preserves each source range when duplicate-content groups are rendered and reconciled', () => {
+    const source = `<observation-group id="g1" range="1:2">- Same fact</observation-group>
+<observation-group id="g2" range="3:4">- Same fact</observation-group>`;
+    const rendered = renderObservationGroupsForReflection(source)!;
+
+    expect(reconcileObservationGroupsFromReflection(rendered, source)).toBe(
+      `<observation-group id="g1" range="1:2" kind="reflection">
+- Same fact
+</observation-group>
+
+<observation-group id="g2" range="3:4" kind="reflection">
+- Same fact
+</observation-group>`,
+    );
+  });
+});
+
+describe('malformed observation group input', () => {
+  it('processes repeated unterminated group openings in linear time', () => {
+    const observations = '<observation-group >' + 'a<observation-group >'.repeat(10_000);
+    const start = performance.now();
+
+    expect(renderObservationGroupsForReflection(observations)).toBeNull();
+
+    expect(performance.now() - start).toBeLessThan(200);
+  });
 });

@@ -12,7 +12,15 @@ interface ReflectionObservationGroupSection {
   body: string;
 }
 
-const OBSERVATION_GROUP_PATTERN = /<observation-group\s([^>]*)>([\s\S]*?)<\/observation-group>/g;
+interface ObservationGroupTag {
+  start: number;
+  end: number;
+  attributeString: string;
+  content: string;
+}
+
+const OBSERVATION_GROUP_OPEN = '<observation-group';
+const OBSERVATION_GROUP_CLOSE = '</observation-group>';
 const ATTRIBUTE_PATTERN = /([\w][\w-]*)="([^"]*)"/g;
 const REFLECTION_GROUP_SPLIT_PATTERN = /^##\s+Group\s+/m;
 
@@ -27,6 +35,51 @@ function parseObservationGroupAttributes(attributeString: string): Record<string
   }
 
   return attributes;
+}
+
+function findObservationGroupTags(observations: string): ObservationGroupTag[] {
+  const tags: ObservationGroupTag[] = [];
+  let cursor = 0;
+
+  while (cursor < observations.length) {
+    const start = observations.indexOf(OBSERVATION_GROUP_OPEN, cursor);
+    if (start === -1) break;
+
+    const attributesStart = start + OBSERVATION_GROUP_OPEN.length;
+    if (!/\s/.test(observations[attributesStart] ?? '')) {
+      cursor = attributesStart;
+      continue;
+    }
+
+    const openEnd = observations.indexOf('>', attributesStart);
+    if (openEnd === -1) break;
+
+    const closeStart = observations.indexOf(OBSERVATION_GROUP_CLOSE, openEnd + 1);
+    if (closeStart === -1) break;
+
+    tags.push({
+      start,
+      end: closeStart + OBSERVATION_GROUP_CLOSE.length,
+      attributeString: observations.slice(attributesStart, openEnd),
+      content: observations.slice(openEnd + 1, closeStart),
+    });
+    cursor = closeStart + OBSERVATION_GROUP_CLOSE.length;
+  }
+
+  return tags;
+}
+
+function replaceObservationGroupTags(observations: string, replace: (tag: ObservationGroupTag) => string): string {
+  const parts: string[] = [];
+  let cursor = 0;
+
+  for (const tag of findObservationGroupTags(observations)) {
+    parts.push(observations.slice(cursor, tag.start), replace(tag));
+    cursor = tag.end;
+  }
+
+  parts.push(observations.slice(cursor));
+  return parts.join('');
 }
 
 function parseReflectionObservationGroupSections(content: string): ReflectionObservationGroupSection[] {
@@ -77,10 +130,9 @@ export function parseObservationGroups(observations: string): ObservationGroup[]
   }
 
   const groups: ObservationGroup[] = [];
-  let match: RegExpExecArray | null;
 
-  while ((match = OBSERVATION_GROUP_PATTERN.exec(observations)) !== null) {
-    const attributes = parseObservationGroupAttributes(match[1] ?? '');
+  for (const tag of findObservationGroupTags(observations)) {
+    const attributes = parseObservationGroupAttributes(tag.attributeString);
     const id = attributes.id;
     const range = attributes.range;
 
@@ -92,7 +144,7 @@ export function parseObservationGroups(observations: string): ObservationGroup[]
       id,
       range,
       kind: attributes.kind,
-      content: match[2]!.trim(),
+      content: tag.content.trim(),
     });
   }
 
@@ -104,8 +156,7 @@ export function stripObservationGroups(observations: string): string {
     return observations;
   }
 
-  return observations
-    .replace(OBSERVATION_GROUP_PATTERN, (_match, _attributes, content: string) => content.trim())
+  return replaceObservationGroupTags(observations, tag => tag.content.trim())
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
@@ -150,12 +201,10 @@ export function renderObservationGroupsForReflection(observations: string): stri
     return null;
   }
 
-  // Walk the string positionally: keep ungrouped text in place, replace each
-  // <observation-group> tag with the rendered ## Group heading.
-  const result = observations.replace(OBSERVATION_GROUP_PATTERN, (_match, attributeString: string, content: string) => {
-    const attributes = parseObservationGroupAttributes(attributeString);
-    if (!attributes.id || !attributes.range) return content.trim();
-    return `## Group \`${attributes.id}\`\n_range: \`${attributes.range}\`_\n\n${content.trim()}`;
+  const result = replaceObservationGroupTags(observations, tag => {
+    const attributes = parseObservationGroupAttributes(tag.attributeString);
+    if (!attributes.id || !attributes.range) return tag.content.trim();
+    return `## Group \`${attributes.id}\`\n_range: \`${attributes.range}\`_\n\n${tag.content.trim()}`;
   });
 
   return result.replace(/\n{3,}/g, '\n\n').trim();
@@ -173,6 +222,8 @@ export function deriveObservationGroupProvenance(content: string, groups: Observ
   }
 
   return sections.map((section, index) => {
+    const canonicalGroupId = getCanonicalGroupId(section.heading, index);
+    const identifiedGroup = groups.find(group => group.id === canonicalGroupId);
     const bodyLines = new Set(
       section.body
         .split('\n')
@@ -189,8 +240,13 @@ export function deriveObservationGroupProvenance(content: string, groups: Observ
     });
 
     const fallbackGroup = groups[Math.min(index, groups.length - 1)];
-    const resolvedGroups = matchingGroups.length > 0 ? matchingGroups : fallbackGroup ? [fallbackGroup] : [];
-    const canonicalGroupId = getCanonicalGroupId(section.heading, index);
+    const resolvedGroups = identifiedGroup
+      ? [identifiedGroup]
+      : matchingGroups.length > 0
+        ? matchingGroups
+        : fallbackGroup
+          ? [fallbackGroup]
+          : [];
 
     return {
       id: canonicalGroupId,
