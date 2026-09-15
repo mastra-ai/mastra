@@ -1,5 +1,3 @@
-import { createHash } from 'node:crypto';
-
 import type { ObjectRow } from '../shared/connection';
 import { normalizeIdentifier } from '../vector/identifiers';
 import type { OracleQueryBinds, OracleTxClient } from './db';
@@ -100,7 +98,7 @@ export class OracleMigrationRegistry {
     // Run migrations in the order provided by OracleStore. Normal init skips
     // unchanged repeatables; explicit migrate() can force reconciliation after upgrades.
     for (const migration of migrations) {
-      const normalized = normalizeMigration(migration);
+      const normalized = await normalizeMigration(migration);
       const current = applied.get(normalized.id);
 
       if (current && current.kind !== normalized.kind) {
@@ -210,14 +208,15 @@ type NormalizedOracleMigration = Omit<OracleMigration, 'kind' | 'description' | 
   description?: string;
 };
 
-function normalizeMigration(migration: OracleMigration): NormalizedOracleMigration {
+async function normalizeMigration(migration: OracleMigration): Promise<NormalizedOracleMigration> {
   // Normalize before checksum calculation so equivalent ids/names produce stable
   // ledger records across platforms and CI environments.
   const id = normalizeMigrationId(migration.id);
   const name = normalizeMigrationName(migration.name);
   const kind = migration.kind ?? 'versioned';
   const description = normalizeMigrationDescription(migration.description);
-  const checksum = normalizeMigrationChecksum(migration.checksum) ?? checksumMigration({ id, name, kind, description });
+  const checksum =
+    normalizeMigrationChecksum(migration.checksum) ?? (await checksumMigration({ id, name, kind, description }));
 
   return {
     ...migration,
@@ -269,13 +268,15 @@ function normalizeMigrationChecksum(value: string | undefined): string | undefin
   return checksum;
 }
 
-function checksumMigration(input: {
+async function checksumMigration(input: {
   id: string;
   name: string;
   kind: OracleMigrationKind;
   description?: string;
-}): string {
+}): Promise<string> {
   // The checksum covers migration identity/description so accidental edits to
   // versioned migrations are caught before any DDL runs.
-  return createHash('sha256').update(JSON.stringify(input)).digest('hex').toUpperCase();
+  return Buffer.from(await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(input))))
+    .toString('hex')
+    .toUpperCase();
 }
