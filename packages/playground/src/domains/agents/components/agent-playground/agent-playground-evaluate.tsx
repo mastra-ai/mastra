@@ -44,6 +44,7 @@ import { mapScorersToApi, mapInstructionBlocksToApi } from '../../utils/agent-fo
 import { AgentTopBarRunOptions } from '../agent-top-bar-controls';
 import { ExperimentResultsPanel } from './agent-playground-eval';
 import { AgentPlaygroundReview } from './agent-playground-review';
+import { AttachButton } from './attach-button';
 import { DatasetDetailView } from './dataset-detail-view';
 import { formatVersionLabel } from './format-version-label';
 import { ScorerDetailView } from './scorer-detail-view';
@@ -967,9 +968,7 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
                   New dataset
                 </CreateButton>
                 {unattachedDatasets.length > 0 && (
-                  <Button variant="ghost" size="sm" onClick={() => setShowAttachDialog(true)} icon={<Paperclip />}>
-                    Attach
-                  </Button>
+                  <AttachButton tooltip="Attach an existing dataset" onClick={() => setShowAttachDialog(true)} />
                 )}
               </>
             )}
@@ -984,14 +983,7 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
                   New scorer
                 </CreateButton>
                 {unattachedScorers.length > 0 && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setShowAttachScorerDialog(true)}
-                    icon={<Paperclip />}
-                  >
-                    Attach
-                  </Button>
+                  <AttachButton tooltip="Attach an existing scorer" onClick={() => setShowAttachScorerDialog(true)} />
                 )}
               </>
             )}

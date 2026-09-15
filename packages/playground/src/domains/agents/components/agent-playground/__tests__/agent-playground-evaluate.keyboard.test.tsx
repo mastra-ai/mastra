@@ -190,6 +190,37 @@ describe('AgentPlaygroundEvaluate', () => {
     });
   });
 
+  describe('shortcuts', () => {
+    it('opens Run options on U', async () => {
+      setupHandlers();
+      renderWithProviders(<Harness />, { router: true });
+      await screen.findByTestId('agent-top-bar-run-options-trigger');
+
+      fireEvent.keyDown(window, { key: 'u' });
+
+      expect(await screen.findByRole('heading', { name: 'Run options' })).toBeTruthy();
+    });
+
+    it('opens the Attach dataset dialog on A from the Datasets tab', async () => {
+      setupHandlers();
+      server.use(
+        http.get('*/api/datasets', () =>
+          HttpResponse.json({
+            datasets: [...datasets, { ...makeDataset('ds-4', 'Dataset Four'), targetIds: ['other-agent'] }],
+            pagination: { total: 4, page: 0, perPage: 100, hasMore: false },
+          }),
+        ),
+      );
+      renderWithProviders(<Harness />, { router: true });
+      fireEvent.click(screen.getByRole('tab', { name: 'Datasets' }));
+      await screen.findByRole('button', { name: 'Attach' });
+
+      fireEvent.keyDown(window, { key: 'a' });
+
+      expect(await screen.findByRole('dialog', { name: 'Attach Existing Dataset' })).toBeTruthy();
+    });
+  });
+
   describe('when the datasets tab renders rows', () => {
     it('applies a roving tabindex across dataset rows', async () => {
       await renderDatasetsTab();
