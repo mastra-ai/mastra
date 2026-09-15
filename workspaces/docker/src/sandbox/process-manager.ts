@@ -31,11 +31,12 @@ const PROC_MARKER_ENV = 'MASTRA_PROC_ID';
  * criteria and iterate until the set is stable to catch fork races. The set is
  * SIGSTOPped first to freeze it, then SIGKILLed.
  *
- * The marker is a UUID (no shell metacharacters), so interpolation is safe.
+ * The marker value is passed to the script as a positional argument ($1) rather
+ * than interpolated into the script text, so the command string is a static
+ * constant and cannot be influenced by any runtime value.
  */
-function buildKillScript(marker: string): string {
-  return `
-marker='${PROC_MARKER_ENV}=${marker}'
+const KILL_SCRIPT = `
+marker="${PROC_MARKER_ENV}=$1"
 collect() {
   found=''
   for d in /proc/[0-9]*; do
@@ -52,7 +53,12 @@ collect() {
     for d in /proc/[0-9]*; do
       pid=\${d#/proc/}
       [ -r "$d/stat" ] || continue
-      ppid=$(awk '{print $4}' "$d/stat" 2>/dev/null)
+      # Parse PPID after the closing ')' of comm; the process name may itself
+      # contain spaces or parentheses, so field-splitting the whole line is wrong.
+      stat=$(cat "$d/stat" 2>/dev/null) || continue
+      rest=\${stat##*) }
+      ppid=\${rest#* }
+      ppid=\${ppid%% *}
       for p in $found; do
         if [ "$ppid" = "$p" ]; then
           case " $found " in
@@ -77,7 +83,6 @@ done
 [ -n "$prev" ] && kill -KILL $prev 2>/dev/null
 exit 0
 `;
-}
 
 // =============================================================================
 // Docker Process Handle
@@ -169,11 +174,26 @@ class DockerProcessHandle extends ProcessHandle {
       // in-container `kill` can address. The sweep also catches children that
       // dropped the marker or were re-parented to PID 1.
       const killExec = await this._container.exec({
-        Cmd: ['sh', '-c', buildKillScript(this._procMarker)],
+        // Static script; the marker is passed as $1 (sh sets $0='sh', $1=marker)
+        // so no runtime value is ever interpolated into the command string.
+        Cmd: ['sh', '-c', KILL_SCRIPT, 'sh', this._procMarker],
         AttachStdout: false,
         AttachStderr: false,
       });
       await killExec.start({});
+
+      // Exec.start() resolves when the exec stream is opened, not when the
+      // helper script exits. Poll inspect() until it finishes so we only report
+      // success once the process tree has actually been killed — otherwise
+      // wait() could resolve with exit 137 while targets are still running.
+      let killInfo = await killExec.inspect();
+      while (killInfo.Running) {
+        await new Promise(resolve => setTimeout(resolve, 10));
+        killInfo = await killExec.inspect();
+      }
+      if (killInfo.ExitCode !== 0) {
+        throw new Error(`kill helper exited with code ${killInfo.ExitCode}`);
+      }
 
       // Mark as killed and destroy stream so wait() resolves.
       // Docker exec streams don't close automatically when the process is killed externally.
@@ -181,8 +201,6 @@ class DockerProcessHandle extends ProcessHandle {
       this._destroyStream();
       return true;
     } catch (error: unknown) {
-      this._killed = true;
-      this._destroyStream();
       // ESRCH / "no such process" is expected if the process exited between inspect and kill
       const msg = error instanceof Error ? error.message.toLowerCase() : '';
       if (!msg.includes('no such process') && !msg.includes('esrch')) {

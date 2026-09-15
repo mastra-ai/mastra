@@ -1034,16 +1034,24 @@ describe('DockerSandbox', () => {
 
       // Capture the kill exec call
       const killStart = vi.fn().mockResolvedValue(undefined);
-      mockContainer.exec.mockResolvedValueOnce({ id: 'kill-exec', start: killStart });
+      mockContainer.exec.mockResolvedValueOnce({
+        id: 'kill-exec',
+        start: killStart,
+        inspect: vi.fn().mockResolvedValue({ Running: false, ExitCode: 0 }),
+      });
 
-      await handle.kill();
+      const killed = await handle.kill();
+      expect(killed).toBe(true);
 
       const killCall = mockContainer.exec.mock.calls[1]?.[0];
       expect(killCall.Cmd[0]).toBe('sh');
       expect(killCall.Cmd[1]).toBe('-c');
       const script = killCall.Cmd[2] as string;
-      // Script scans /proc for the marker rather than using a host PID
-      expect(script).toContain(`MASTRA_PROC_ID=${marker}`);
+      // The marker is passed as a positional arg ($1), not interpolated, so the
+      // script text is a static constant and the marker travels in Cmd[4].
+      expect(script).toContain('MASTRA_PROC_ID=$1');
+      expect(script).not.toContain(marker);
+      expect(killCall.Cmd[4]).toBe(marker);
       expect(script).toContain('/proc/');
       expect(script).toContain('kill -STOP');
       expect(script).toContain('kill -KILL');
@@ -1052,12 +1060,6 @@ describe('DockerSandbox', () => {
     });
 
     it('should mark explicit kill results as killed without timeout', async () => {
-      mockExec.inspect.mockResolvedValue({
-        Running: true,
-        ExitCode: null,
-        Pid: 42,
-      });
-
       const sandbox = new DockerSandbox();
       await sandbox._start();
 
