@@ -29,7 +29,7 @@ describe('getRetryAfterMs', () => {
     expect(getRetryAfterMs(errorWithHeaders({ 'Retry-After': '5' }), NOW)).toBe(5_000);
   });
 
-  it.each(['-3', '+3', '1.5', '-0.5', '1e3'])('ignores malformed numeric Retry-After value %s', value => {
+  it.each(['-3', '+3', '1.5', '-0.5', '1e3', '2027.'])('ignores malformed numeric Retry-After value %s', value => {
     expect(getRetryAfterMs(errorWithHeaders({ 'retry-after': value }), NOW)).toBeUndefined();
   });
 

@@ -59,7 +59,7 @@ function parseRetryAfterHeader(value: string, now: number): number | undefined {
     return Number.isFinite(seconds) ? seconds * 1_000 : undefined;
   }
 
-  if (/^[+-]?\d*\.?\d+(?:e[+-]?\d+)?$/i.test(normalizedValue)) {
+  if (/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(normalizedValue)) {
     return undefined;
   }
 
