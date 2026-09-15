@@ -14,7 +14,7 @@ const meta: Meta = {
     docs: {
       description: {
         component:
-          'All design tokens available in `packages/playground-ui`. Sourced from `src/ds/tokens/*.ts` and mirrored in the Tailwind v4 `@theme` block of `src/index.css`. Use these tokens through their Tailwind utility classes (e.g. `text-ui-lg`, `bg-surface2`, `p-4`) rather than raw CSS values.',
+          'Design tokens available in `packages/playground-ui`. The raw CSS contract lives in `theme.css`; TypeScript mirrors the component-facing tokens in `src/ds/tokens`. Components use semantic color roles rather than foundation values.',
       },
     },
   },
@@ -22,6 +22,9 @@ const meta: Meta = {
 
 export default meta;
 type Story = StoryObj;
+
+const isFontVariant = (token: string): token is keyof typeof FontSizes => token in FontSizes;
+const isLineHeight = (token: string): token is keyof typeof LineHeights => token in LineHeights;
 
 const Row = ({ name, meta, preview }: { name: string; meta: React.ReactNode; preview: React.ReactNode }) => (
   <div
@@ -64,15 +67,17 @@ export const Typography: Story = {
         Typography
       </SectionTitle>
       {Object.entries(FontSizes).map(([token, size]) => {
+        if (!isFontVariant(token) || !isLineHeight(token)) return null;
         const isHeader = token.startsWith('header');
-        const variant = token as keyof typeof FontSizes;
+        const variant = token;
+        const lineHeight = LineHeights[token];
         return (
           <Row
             key={token}
             name={token}
             meta={
               <>
-                {size} / {LineHeights[token as keyof typeof LineHeights]}
+                {size} / {lineHeight}
               </>
             }
             preview={
@@ -118,11 +123,141 @@ const SwatchGrid = ({ entries }: { entries: [string, string][] }) => (
   </div>
 );
 
+const semanticEntries: [string, string][] = [
+  ['background', Colors.background],
+  ['sidebar', Colors.sidebar],
+  ['card', Colors.card],
+  ['popover', Colors.popover],
+  ['muted', Colors.muted],
+  ['foreground', Colors.foreground],
+  ['muted-foreground', Colors['muted-foreground']],
+  ['ring', Colors.ring],
+  ['sidebar-accent', Colors['sidebar-accent']],
+  ['selected', Colors.selected],
+];
+
+const semanticBorderEntries: [string, string][] = [['border', BorderColors.border]];
+
+const SurfacePreview = ({ semantic }: { semantic: boolean }) => {
+  const tokens = semantic
+    ? { sidebar: 'sidebar', canvas: 'background', card: 'card', muted: 'muted', popover: 'popover' }
+    : { sidebar: 'surface1', canvas: 'surface2', card: 'surface3', muted: 'surface4', popover: 'surface3' };
+
+  return (
+    <div
+      className="grid min-h-80 grid-cols-[9rem_1fr] overflow-hidden rounded-lg border"
+      style={{
+        color: semantic ? 'var(--foreground)' : 'var(--neutral6)',
+        borderColor: semantic ? 'var(--border)' : 'var(--border1)',
+      }}
+    >
+      <div className="p-4" style={{ background: `var(--${tokens.sidebar})` }}>
+        <Txt variant="ui-sm">Sidebar</Txt>
+        <div className="mt-4 space-y-2">
+          <div
+            className="h-6 rounded"
+            style={{ background: semantic ? 'var(--sidebar-accent)' : 'var(--sidebar-nav-hover)' }}
+          />
+          <div
+            className="h-6 rounded"
+            style={{ background: semantic ? 'var(--selected)' : 'var(--sidebar-nav-active)' }}
+          />
+        </div>
+      </div>
+      <div className="relative p-4" style={{ background: `var(--${tokens.canvas})` }}>
+        <Txt variant="ui-sm">Main canvas</Txt>
+        <div
+          className="mt-4 rounded-lg border p-4"
+          style={{
+            background: `var(--${tokens.card})`,
+            borderColor: semantic ? 'var(--border)' : 'var(--border1)',
+          }}
+        >
+          <Txt variant="ui-sm">Card</Txt>
+          <div className="mt-3 rounded-md p-3" style={{ background: `var(--${tokens.muted})` }}>
+            <Txt variant="ui-sm">Muted region</Txt>
+          </div>
+        </div>
+        <div
+          className="absolute right-6 bottom-6 w-36 rounded-md border p-3 shadow-lg"
+          style={{
+            background: `var(--${tokens.popover})`,
+            borderColor: semantic ? 'var(--border)' : 'var(--border1)',
+          }}
+        >
+          <Txt variant="ui-sm">Popover</Txt>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export const SurfaceMigration: Story = {
+  render: () => (
+    <div>
+      <SectionTitle note="This compares the current numbered surface hierarchy with the planned semantic roles. It is not a global token replacement table.">
+        Surface migration
+      </SectionTitle>
+      <div className="grid gap-6 xl:grid-cols-2">
+        <div>
+          <Txt as="h3" variant="header-sm">
+            Current: surface1–4
+          </Txt>
+          <div className="mt-3">
+            <SurfacePreview semantic={false} />
+          </div>
+        </div>
+        <div>
+          <Txt as="h3" variant="header-sm">
+            Proposed: semantic roles
+          </Txt>
+          <div className="mt-3">
+            <SurfacePreview semantic />
+          </div>
+        </div>
+      </div>
+      <div className="text-ui-sm mt-6 grid gap-2 md:grid-cols-2">
+        <div className="font-mono">surface1 → sidebar</div>
+        <div className="font-mono">surface2 → background</div>
+        <div className="font-mono">surface3 → card / popover</div>
+        <div className="font-mono">surface4 → muted</div>
+      </div>
+    </div>
+  ),
+};
+
+export const SemanticNeutrals: Story = {
+  render: () => (
+    <div>
+      <SectionTitle note="Component-facing roles. Tailwind utilities use the same names, such as bg-card and text-muted-foreground.">
+        Semantic neutrals
+      </SectionTitle>
+      <SwatchGrid entries={[...semanticEntries, ...semanticBorderEntries]} />
+      <SectionTitle note="These combinations already exist in observation and dataset call sites.">
+        Existing consumer combinations
+      </SectionTitle>
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="border-border bg-background text-foreground rounded-md border p-4">
+          <div className="text-ui-sm font-medium">Observation summary</div>
+          <div className="text-ui-sm text-muted-foreground mt-1">Today, 12 minutes ago</div>
+          <div className="bg-muted text-ui-xs text-muted-foreground mt-3 inline-flex rounded px-2 py-1">
+            Thread support-triage
+          </div>
+        </div>
+        <div className="border-border bg-muted rounded-md border p-4">
+          <div className="text-ui-sm text-foreground font-medium">Dataset import</div>
+          <div className="text-ui-sm text-muted-foreground mt-1">No validation issues found.</div>
+        </div>
+      </div>
+    </div>
+  ),
+};
+
 export const ColorsStory: Story = {
   name: 'Colors',
   render: () => {
     const all = Object.entries(Colors);
-    const groups: Record<string, [string, string][]> = {
+    const groups = {
       Surface: all.filter(([k]) => k.startsWith('surface')),
       Neutral: all.filter(([k]) => k.startsWith('neutral')),
       Accent: all.filter(([k]) => k.startsWith('accent')),

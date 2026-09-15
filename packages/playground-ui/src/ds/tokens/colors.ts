@@ -26,6 +26,16 @@ export const Colors = {
   neutral4: 'var(--neutral4)',
   neutral5: 'var(--neutral5)',
   neutral6: 'var(--neutral6)',
+  background: 'var(--background)',
+  sidebar: 'var(--sidebar)',
+  card: 'var(--card)',
+  popover: 'var(--popover)',
+  muted: 'var(--muted)',
+  foreground: 'var(--foreground)',
+  'muted-foreground': 'var(--muted-foreground)',
+  ring: 'var(--ring)',
+  'sidebar-accent': 'var(--sidebar-accent)',
+  selected: 'var(--selected)',
 
   // Semantic state colors
   error: 'var(--error)',
@@ -37,4 +47,5 @@ export const Colors = {
 export const BorderColors = {
   border1: 'var(--border1)',
   border2: 'var(--border2)',
+  border: 'var(--border)',
 };

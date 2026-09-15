@@ -140,10 +140,11 @@
   "scripts": {
     "build": "vite build",
     "dev": "vite build && vite build --watch --mode development",
-    "test": "vitest",
+    "test": "node --test scripts/check-color-usage.test.mjs && vitest",
     "test:mutate": "stryker run --mutate",
     "typecheck": "tsc",
-    "lint": "oxlint . && eslint .",
+    "lint": "node scripts/check-color-usage.mjs --check && oxlint . && eslint .",
+    "lint:colors": "node scripts/check-color-usage.mjs --check",
     "lint:fix": "oxlint --fix . && eslint --fix .",
     "build:publish": "pnpm build && yalc push",
     "preview": "vite preview",

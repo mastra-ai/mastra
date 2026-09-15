@@ -1,6 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { compile } from 'tailwindcss';
 import { describe, expect, it } from 'vitest';
+import { BorderColors, Colors } from './ds/tokens/colors';
 
 // Guards the @mastra/playground-ui/theme.css contract: it must ship as RAW,
 // uncompiled CSS (with the `@theme {}` directive intact) so a consumer's own
@@ -9,6 +11,104 @@ import { describe, expect, it } from 'vitest';
 // directive would be stripped and consumers could no longer generate utilities.
 const pkgRoot = resolve(__dirname, '..');
 const pkg = JSON.parse(readFileSync(resolve(pkgRoot, 'package.json'), 'utf8'));
+
+const semanticTokens = [
+  'background',
+  'sidebar',
+  'card',
+  'popover',
+  'muted',
+  'foreground',
+  'muted-foreground',
+  'border',
+  'ring',
+  'sidebar-accent',
+  'selected',
+] as const;
+
+const deferredSemanticTokens = [
+  'card-foreground',
+  'popover-foreground',
+  'tertiary-foreground',
+  'disabled-foreground',
+  'contrast-foreground',
+  'secondary',
+  'secondary-foreground',
+  'accent',
+  'accent-foreground',
+  'input',
+  'sidebar-foreground',
+  'sidebar-accent-foreground',
+  'sidebar-border',
+  'sidebar-ring',
+] as const;
+
+const darkAliases = {
+  background: 'background-2',
+  sidebar: 'background-1',
+  card: 'background-3',
+  popover: 'background-3',
+  muted: 'gray-1',
+  foreground: 'gray-10',
+  'muted-foreground': 'gray-9',
+  border: 'gray-alpha-2',
+  ring: 'gray-8',
+  'sidebar-accent': 'gray-alpha-1',
+  selected: 'gray-alpha-2',
+} as const;
+
+const lightAliases = {
+  ...darkAliases,
+  border: 'gray-alpha-3',
+} as const;
+
+const parseVariables = (css: string) => {
+  const variables = new Map<string, string>();
+
+  for (const match of css.matchAll(/--([\w-]+):\s*([^;]+);/g)) {
+    const name = match[1];
+    const value = match[2]?.trim();
+    if (name && value) variables.set(name, value);
+  }
+
+  return variables;
+};
+
+const resolveToken = (token: string, variables: Map<string, string>, seen: string[] = []): string => {
+  if (seen.includes(token)) throw new Error(`Token cycle: ${[...seen, token].join(' -> ')}`);
+  const value = variables.get(token);
+  if (!value) throw new Error(`Missing token: ${token}`);
+  const reference = value.match(/^var\(--([\w-]+)\)$/)?.[1];
+  return reference ? resolveToken(reference, variables, [...seen, token]) : value;
+};
+
+const oklchLightness = (value: string) => {
+  const lightness = value.match(/^oklch\(([\d.]+)%?\s+0(?:\.0+)?(?:%|\s)/)?.[1];
+  if (!lightness) throw new Error(`Expected an achromatic oklch value, received ${value}`);
+  const parsed = Number(lightness);
+  return value.startsWith(`oklch(${lightness}%`) ? parsed / 100 : parsed;
+};
+
+const luminance = (lightness: number) => lightness ** 3;
+
+const wcagContrast = (foreground: number, background: number) => {
+  const [lighter = 0, darker = 0] = [luminance(foreground), luminance(background)].sort((left, right) => right - left);
+  return (lighter + 0.05) / (darker + 0.05);
+};
+
+const apcaContrast = (foreground: number, background: number) => {
+  const clamp = (value: number) => (value < 0.022 ? value + (0.022 - value) ** 1.414 : value);
+  const foregroundY = clamp(luminance(foreground));
+  const backgroundY = clamp(luminance(background));
+
+  if (backgroundY > foregroundY) {
+    const contrast = (backgroundY ** 0.56 - foregroundY ** 0.57) * 1.14;
+    return contrast < 0.1 ? 0 : (contrast - 0.027) * 100;
+  }
+
+  const contrast = (backgroundY ** 0.65 - foregroundY ** 0.62) * 1.14;
+  return contrast > -0.1 ? 0 : (contrast + 0.027) * 100;
+};
 
 describe('theme.css export', () => {
   const themeCss = readFileSync(resolve(pkgRoot, 'theme.css'), 'utf8');
@@ -86,6 +186,112 @@ describe('theme.css export', () => {
       expect(darkTheme).toContain(`--${token}: rgb(255 255 255 /`);
       expect(lightTheme).toContain(`--${token}: rgb(0 0 0 /`);
       expect(themeCss).not.toContain(`--color-${token}:`);
+    }
+  });
+
+  it('defines the approved semantic alias graph in both themes', () => {
+    const rootBlock = themeCss.slice(themeCss.indexOf(':root {'), themeCss.indexOf('html.light'));
+    const lightStart = themeCss.indexOf('html.light');
+    const lightBlock = themeCss.slice(lightStart, themeCss.indexOf('\n}\n\n@theme', lightStart) + 2);
+    const rootVariables = parseVariables(rootBlock);
+    const lightVariables = new Map([...rootVariables, ...parseVariables(lightBlock)]);
+
+    for (const [token, reference] of Object.entries(darkAliases)) {
+      expect(rootVariables.get(token)).toBe(`var(--${reference})`);
+    }
+
+    for (const [token, reference] of Object.entries(lightAliases)) {
+      expect(lightVariables.get(token)).toBe(`var(--${reference})`);
+    }
+
+    for (const token of semanticTokens) {
+      expect(() => resolveToken(token, rootVariables)).not.toThrow();
+      expect(() => resolveToken(token, lightVariables)).not.toThrow();
+      expect(themeCss).toContain(`--color-${token}: var(--${token});`);
+    }
+  });
+
+  it('exports semantic tokens to TypeScript consumers', () => {
+    const exportedColors = { ...Colors, ...BorderColors };
+
+    for (const token of semanticTokens) {
+      expect(exportedColors[token]).toBe(`var(--${token})`);
+    }
+  });
+
+  it('keeps unproven semantic roles out of the contract', () => {
+    const exportedColors = { ...Colors, ...BorderColors };
+
+    for (const token of deferredSemanticTokens) {
+      expect(themeCss).not.toContain(`--${token}:`);
+      expect(themeCss).not.toContain(`--color-${token}:`);
+      expect(Object.hasOwn(exportedColors, token)).toBe(false);
+    }
+  });
+
+  it('keeps foundations out of TypeScript and Tailwind exports', () => {
+    const colorSource = readFileSync(resolve(pkgRoot, 'src/ds/tokens/colors.ts'), 'utf8');
+
+    for (const token of [
+      'background-1',
+      'background-2',
+      'background-3',
+      ...Array.from({ length: 10 }, (_, index) => `gray-${index + 1}`),
+      ...Array.from({ length: 10 }, (_, index) => `gray-alpha-${index + 1}`),
+    ]) {
+      expect(themeCss).not.toContain(`--color-${token}:`);
+      expect(colorSource).not.toContain(`var(--${token})`);
+    }
+  });
+
+  it('compiles utilities for every semantic token', async () => {
+    const compiler = await compile(`${themeCss}\n@tailwind utilities;`);
+    const candidates = semanticTokens.flatMap(token => [
+      `bg-${token}`,
+      `text-${token}`,
+      `border-${token}`,
+      `ring-${token}`,
+    ]);
+    const output = compiler.build(candidates);
+
+    for (const token of semanticTokens) {
+      expect(output).toContain(`var(--${token})`);
+    }
+  });
+
+  it('keeps the focus ring visible on every neutral product surface', () => {
+    const rootBlock = themeCss.slice(themeCss.indexOf(':root {'), themeCss.indexOf('html.light'));
+    const lightStart = themeCss.indexOf('html.light');
+    const lightBlock = themeCss.slice(lightStart, themeCss.indexOf('\n}\n\n@theme', lightStart) + 2);
+    const darkVariables = parseVariables(rootBlock);
+    const lightVariables = new Map([...darkVariables, ...parseVariables(lightBlock)]);
+
+    for (const variables of [darkVariables, lightVariables]) {
+      const ringLightness = oklchLightness(resolveToken('ring', variables));
+      for (const background of ['sidebar', 'background', 'card', 'muted']) {
+        const backgroundLightness = oklchLightness(resolveToken(background, variables));
+        expect(wcagContrast(ringLightness, backgroundLightness)).toBeGreaterThanOrEqual(3);
+      }
+    }
+  });
+
+  it('meets text contrast gates on every neutral product surface', () => {
+    const rootBlock = themeCss.slice(themeCss.indexOf(':root {'), themeCss.indexOf('html.light'));
+    const lightStart = themeCss.indexOf('html.light');
+    const lightBlock = themeCss.slice(lightStart, themeCss.indexOf('\n}\n\n@theme', lightStart) + 2);
+    const darkVariables = parseVariables(rootBlock);
+    const lightVariables = new Map([...darkVariables, ...parseVariables(lightBlock)]);
+
+    for (const variables of [darkVariables, lightVariables]) {
+      for (const foreground of ['foreground', 'muted-foreground']) {
+        const foregroundLightness = oklchLightness(resolveToken(foreground, variables));
+
+        for (const background of ['sidebar', 'background', 'card', 'muted']) {
+          const backgroundLightness = oklchLightness(resolveToken(background, variables));
+          expect(wcagContrast(foregroundLightness, backgroundLightness)).toBeGreaterThanOrEqual(4.5);
+          expect(Math.abs(apcaContrast(foregroundLightness, backgroundLightness))).toBeGreaterThanOrEqual(60);
+        }
+      }
     }
   });
 
