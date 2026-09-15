@@ -59,6 +59,8 @@ Actions that need runtime helpers the platform proxy context doesn't implement, 
 
 Treat generated source as untrusted vendored code. Every template SHA update and generated diff requires security review before commit; passing automated checks is not sufficient.
 
+Provider responses that carry credentials an agent never needs, such as webhook signing secrets, are listed per action in `OUTPUT_SECRET_FIELDS` in `generate-provider.ts`. The generated tool removes those fields from its result and omits them from its output schema, and `src/__tests__/provider-actions.test.ts` covers the redaction.
+
 Generated code never references the upstream SDK: exec bodies receive a `platformProxy` context (`PlatformProxy` in `src/runtime/platform-proxy.ts`) that routes every request through the Mastra platform's `/v2/proxy` endpoint. Provider-specific generator overrides can also attach model-output adapters when raw provider output needs a safer model-facing representation, such as image data that should be sent as multimodal content instead of JSON text.
 
 ## Remove a provider

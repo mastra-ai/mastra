@@ -343,30 +343,70 @@ function modelOutputOverride(action: ExtractedAction): { importStatement: string
   };
 }
 
+/**
+ * Top-level response fields that must not leave a generated tool. The upstream
+ * template returns them because the provider does, but an agent has no use for
+ * a credential and must not see one.
+ */
+const OUTPUT_SECRET_FIELDS: Readonly<Record<string, Readonly<Record<string, readonly string[]>>>> = {
+  resend: {
+    'create-webhook': ['signing_secret'],
+    'get-webhook': ['signing_secret'],
+  },
+};
+
+function outputSecretFields(action: ExtractedAction): readonly string[] | undefined {
+  const provider = Object.prototype.hasOwnProperty.call(OUTPUT_SECRET_FIELDS, action.candidate.providerId)
+    ? OUTPUT_SECRET_FIELDS[action.candidate.providerId]
+    : undefined;
+  if (!provider) return undefined;
+  const fields = Object.prototype.hasOwnProperty.call(provider, action.candidate.actionSlug)
+    ? provider[action.candidate.actionSlug]
+    : undefined;
+  return fields && fields.length > 0 ? fields : undefined;
+}
+
 function emitActionFile(action: ExtractedAction): string {
   const proxyTypeImports = [action.usesProxyRequestType ? 'PlatformProxyRequest' : undefined].filter(
     (name): name is string => Boolean(name),
   );
   const proxyImport = `import type { PlatformProxy${proxyTypeImports.length > 0 ? `, ${proxyTypeImports.join(', ')}` : ''} } from '../../../runtime/platform-proxy.js';\n`;
   const modelOutput = modelOutputOverride(action);
+  const secretFields = outputSecretFields(action);
+  const redactImport = secretFields ? "import { withoutSecretFields } from '../../../runtime/redact.js';\n" : '';
+  const redactedSchemaName = `${action.outputSchemaName}Redacted`;
+  const omitKeys = (secretFields ?? []).map(field => `${JSON.stringify(field)}: true`).join(', ');
+  const redactedSchema = secretFields
+    ? `\n/** Provider secrets removed before the result leaves the tool. */\nexport const ${redactedSchemaName} = ${action.outputSchemaName}.omit({ ${omitKeys} });\n`
+    : '';
+  const outputSchemaName = secretFields ? redactedSchemaName : action.outputSchemaName;
+  const execute = secretFields
+    ? `    execute: async (input, { requestContext }): Promise<z.infer<typeof ${redactedSchemaName}>> => {
+      const platformProxy = proxy.withRequestContext(requestContext);
+      const result = await (async (): Promise<z.infer<typeof ${action.outputSchemaName}>> => {
+${execBodyStatements(action.execBody)}
+      })();
+      return withoutSecretFields(result, [${(secretFields ?? []).map(field => JSON.stringify(field)).join(', ')}]);
+    },`
+    : `    execute: async (input, { requestContext }): Promise<z.infer<typeof ${action.outputSchemaName}>> => {
+      const platformProxy = proxy.withRequestContext(requestContext);
+${execBodyStatements(action.execBody)}
+    },`;
 
   return `// AUTO-GENERATED from ${activePin.repo} @ ${activePin.sha.slice(0, 12)} — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
-${modelOutput ? `${modelOutput.importStatement}\n` : ''}${proxyImport}
+${modelOutput ? `${modelOutput.importStatement}\n` : ''}${proxyImport}${redactImport}
 ${action.moduleStatements.join('\n\n')}
-
+${redactedSchema}
 export function ${action.toolFactoryName}(proxy: PlatformProxy) {
   return createTool({
     id: '${action.candidate.toolKey}',
     description: ${JSON.stringify(action.description)},
     inputSchema: ${action.inputSchemaName},
-    outputSchema: ${action.outputSchemaName},
-${modelOutput ? `${modelOutput.toolProperty}\n` : ''}    execute: async (input, { requestContext }): Promise<z.infer<typeof ${action.outputSchemaName}>> => {
-      const platformProxy = proxy.withRequestContext(requestContext);
-${execBodyStatements(action.execBody)}
-    },
+    outputSchema: ${outputSchemaName},
+${modelOutput ? `${modelOutput.toolProperty}\n` : ''}${execute}
   });
 }
 `;

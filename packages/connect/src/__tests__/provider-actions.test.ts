@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, it, vi } from 'vitest';
+import type { z } from 'zod';
 
 import { PROVIDERS } from '../index.js';
 import { listIncidentsInputSchema } from '../providers/incident-io/tools/list-incidents.js';
@@ -68,6 +69,36 @@ describe('generated Resend schema constraints', () => {
       }).success,
     ).toBe(false);
   });
+});
+
+describe('generated Resend secret redaction', () => {
+  it.each(['resend_create_webhook', 'resend_get_webhook'])(
+    '%s never returns the webhook signing secret',
+    async tool => {
+      const upstream = {
+        object: 'webhook',
+        id: 'wh_1',
+        endpoint: 'https://example.test/hooks',
+        signing_secret: 'whsec_never_shown',
+      };
+      const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(Response.json(upstream));
+      const provider = PROVIDERS.find(entry => entry.integrationId === 'resend')!;
+      const tools = provider.createTools({
+        connectionId: 'connection',
+        client: { baseUrl: 'https://platform.example.test', accessToken: 'test-platform-token', fetch: fetchMock },
+      });
+      const input =
+        tool === 'resend_create_webhook'
+          ? { body: { endpoint: 'https://example.test/hooks', events: ['email.sent'] } }
+          : { webhook_id: 'wh_1' };
+      const result = await tools[tool]!.execute!(input, { requestContext: new RequestContext() });
+      expect(result).toEqual({ object: 'webhook', id: 'wh_1', endpoint: 'https://example.test/hooks' });
+      expect(JSON.stringify(result)).not.toContain('whsec_never_shown');
+      expect(Object.keys((tools[tool]!.outputSchema as z.ZodObject<z.ZodRawShape>).shape)).not.toContain(
+        'signing_secret',
+      );
+    },
+  );
 });
 
 describe('generated incident.io schema constraints', () => {
