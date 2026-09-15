@@ -493,6 +493,15 @@ export interface WorkflowErrorCallbackInfo {
   stepExecutionPath?: string[];
 }
 
+/**
+ * Predicate deciding whether a workflow run snapshot is persisted for a given
+ * status transition. Returning false skips the storage write entirely.
+ */
+export type ShouldPersistSnapshotFn = (params: {
+  stepResults: Record<string, StepResult<any, any, any, any>>;
+  workflowStatus: WorkflowRunStatus;
+}) => boolean;
+
 export interface WorkflowOptions {
   tracingPolicy?: TracingPolicy;
   validateInputs?: boolean;
@@ -516,10 +525,7 @@ export interface WorkflowOptions {
    * dedicated opt-in path (`recovery.durableAgents: 'auto'`).
    */
   autoRestartActiveRuns?: boolean;
-  shouldPersistSnapshot?: (params: {
-    stepResults: Record<string, StepResult<any, any, any, any>>;
-    workflowStatus: WorkflowRunStatus;
-  }) => boolean;
+  shouldPersistSnapshot?: ShouldPersistSnapshotFn;
 
   /**
    * Acknowledges that `resume()` calls for this workflow cannot be de-duplicated

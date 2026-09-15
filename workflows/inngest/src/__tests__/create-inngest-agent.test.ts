@@ -1181,3 +1181,58 @@ describe('InngestAgent observability tracing', () => {
     });
   });
 });
+
+describe('createInngestAgent shouldPersistSnapshot handling (#23915)', () => {
+  const inngest = new Inngest({
+    id: 'create-inngest-agent-persistence-policy',
+    baseUrl: `http://localhost:${INNGEST_PORT}`,
+  });
+
+  function makeAgent(id: string) {
+    return new Agent({
+      id,
+      name: id,
+      instructions: 'Test',
+      model: createMockModel() as any,
+    });
+  }
+
+  it('warns and ignores a user-provided shouldPersistSnapshot', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const durableAgent = createInngestAgent({
+        agent: makeAgent('persistence-warn'),
+        inngest,
+        shouldPersistSnapshot: () => true,
+      });
+
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('ignoring the shouldPersistSnapshot option'));
+
+      // The option must not leak into the workflow: the pinned suspended-only
+      // policy stays in effect (Inngest's replay owns durability; Mastra
+      // snapshots exist purely for HITL resume).
+      const [workflow] = durableAgent.getDurableWorkflows();
+      const predicate = (workflow as any).options.shouldPersistSnapshot;
+      expect(predicate({ stepResults: {}, workflowStatus: 'suspended' })).toBe(true);
+      expect(predicate({ stepResults: {}, workflowStatus: 'running' })).toBe(false);
+      expect(predicate({ stepResults: {}, workflowStatus: 'pending' })).toBe(false);
+      expect(predicate({ stepResults: {}, workflowStatus: 'success' })).toBe(false);
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it('does not warn when shouldPersistSnapshot is not set', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      createInngestAgent({ agent: makeAgent('persistence-no-warn'), inngest });
+
+      const persistenceWarnings = warnSpy.mock.calls.filter(
+        call => typeof call[0] === 'string' && call[0].includes('shouldPersistSnapshot'),
+      );
+      expect(persistenceWarnings).toHaveLength(0);
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+});
