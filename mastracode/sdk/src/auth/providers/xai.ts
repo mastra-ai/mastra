@@ -170,7 +170,7 @@ async function pollXAITokenOnce(
   try {
     body = JSON.parse(text) as { error?: string; interval?: number };
   } catch {
-    // Non-JSON error body — fail loudly below with the raw text.
+    // Non-JSON upstream bodies are intentionally omitted from user-visible errors.
   }
 
   switch (body.error) {

@@ -34,6 +34,12 @@ export const COPILOT_HEADERS = {
 
 const INITIAL_POLL_INTERVAL_MULTIPLIER = 1.2;
 const SLOW_DOWN_POLL_INTERVAL_MULTIPLIER = 1.4;
+const OAUTH_REQUEST_TIMEOUT_MS = 15_000;
+
+function requestSignal(signal?: AbortSignal): AbortSignal {
+  const timeout = AbortSignal.timeout(OAUTH_REQUEST_TIMEOUT_MS);
+  return signal ? AbortSignal.any([timeout, signal]) : timeout;
+}
 
 type DeviceCodeResponse = {
   device_code: string;
@@ -108,7 +114,7 @@ export function getGitHubCopilotBaseUrl(token?: string, enterpriseDomain?: strin
 }
 
 async function fetchJson(url: string, init: RequestInit, signal?: AbortSignal): Promise<unknown> {
-  const response = await fetch(url, signal ? { ...init, signal } : init);
+  const response = await fetch(url, { ...init, signal: requestSignal(signal) });
   if (!response.ok) {
     throw new Error(`${response.status} ${response.statusText}`.trim());
   }
@@ -469,12 +475,11 @@ export async function fetchCopilotModels(opts: {
       Authorization: `Bearer ${opts.bearerToken}`,
       ...COPILOT_HEADERS,
     },
-    signal: opts.signal,
+    signal: requestSignal(opts.signal),
   });
 
   if (!response.ok) {
-    const text = await response.text().catch(() => '');
-    throw new Error(`Failed to fetch Copilot models: ${response.status} ${response.statusText}: ${text}`);
+    throw new Error(`Failed to fetch Copilot models: ${response.status} ${response.statusText}`.trim());
   }
 
   const json = await response.json().catch(() => null);
@@ -560,6 +565,7 @@ export const githubCopilotOAuthProvider: OAuthProviderInterface = {
           Authorization: `Bearer ${credentials.refresh}`,
           Accept: 'application/vnd.github+json',
         },
+        signal: requestSignal(),
       });
       if (!response.ok) return undefined;
       const user = (await response.json()) as { login?: unknown };

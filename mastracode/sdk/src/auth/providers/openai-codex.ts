@@ -62,6 +62,7 @@ const DEFAULT_CALLBACK_PORT = 1455;
 const FALLBACK_CALLBACK_PORT = 1457;
 const DEFAULT_TOKEN_EXPIRES_IN_SECONDS = 3600;
 const DEVICE_AUTH_TIMEOUT_MS = 15 * 60 * 1000;
+const OAUTH_REQUEST_TIMEOUT_MS = 15_000;
 const SCOPE = 'openid profile email offline_access api.connectors.read api.connectors.invoke';
 const JWT_CLAIM_PATH = 'https://api.openai.com/auth';
 
@@ -96,6 +97,11 @@ type JwtPayload = {
   };
   [key: string]: unknown;
 };
+
+function requestSignal(signal?: AbortSignal): AbortSignal {
+  const timeout = AbortSignal.timeout(OAUTH_REQUEST_TIMEOUT_MS);
+  return signal ? AbortSignal.any([timeout, signal]) : timeout;
+}
 
 async function createState(): Promise<string> {
   const randomBytes = await getRandomBytes();
@@ -178,9 +184,15 @@ function tokenResponseToResult(json: TokenResponseJson, logPrefix: string): Toke
   };
 }
 
-async function exchangeAuthorizationCode(code: string, verifier: string, redirectUri: string): Promise<TokenResult> {
+async function exchangeAuthorizationCode(
+  code: string,
+  verifier: string,
+  redirectUri: string,
+  signal?: AbortSignal,
+): Promise<TokenResult> {
   const response = await fetch(TOKEN_URL, {
     method: 'POST',
+    signal: requestSignal(signal),
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
       grant_type: 'authorization_code',
@@ -203,6 +215,7 @@ async function refreshAccessToken(refreshToken: string): Promise<TokenResult> {
   try {
     const response = await fetch(TOKEN_URL, {
       method: 'POST',
+      signal: requestSignal(),
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
         grant_type: 'refresh_token',
@@ -432,7 +445,7 @@ export async function startCodexDeviceLogin(options?: { signal?: AbortSignal }):
       'User-Agent': 'mastracode',
     },
     body: JSON.stringify({ client_id: CLIENT_ID, originator: 'mastracode' }),
-    signal: options?.signal,
+    signal: requestSignal(options?.signal),
   });
 
   if (!response.ok) {
@@ -490,7 +503,7 @@ export async function pollCodexDeviceLogin(
       device_auth_id: pending.deviceAuthId,
       user_code: pending.userCode,
     }),
-    signal: options?.signal,
+    signal: requestSignal(options?.signal),
   });
 
   if (pollResponse.ok) {
@@ -507,6 +520,7 @@ export async function pollCodexDeviceLogin(
       data.authorization_code,
       data.code_verifier,
       DEVICE_REDIRECT_URI,
+      options?.signal,
     );
     if (tokenResult.type !== 'success') {
       return { status: 'failed', error: 'Token exchange failed' };
@@ -532,10 +546,9 @@ export async function pollCodexDeviceLogin(
   }
 
   if (pollResponse.status !== 403 && pollResponse.status !== 404) {
-    const text = await pollResponse.text().catch(() => '');
     return {
       status: 'failed',
-      error: `OpenAI Codex device authorization failed: ${pollResponse.status}${text ? ` ${text}` : ''}`,
+      error: `OpenAI Codex device authorization failed: ${pollResponse.status}`,
     };
   }
 
@@ -701,7 +714,7 @@ export async function loginOpenAICodex(options: {
       throw new Error('Missing authorization code');
     }
 
-    const tokenResult = await exchangeAuthorizationCode(code, verifier, server.redirectUri);
+    const tokenResult = await exchangeAuthorizationCode(code, verifier, server.redirectUri, options.signal);
     if (tokenResult.type !== 'success') {
       throw new Error('Token exchange failed');
     }
