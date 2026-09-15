@@ -399,6 +399,26 @@ describe('MastraMCPClient with Streamable HTTP', () => {
         content: [{ type: 'text', text: 'Hello, Stateful!' }],
       });
     });
+
+    it('preserves resource subscription requests on legacy connections', async () => {
+      const sdkClient = (client as unknown as { client: Client }).client;
+      const request = vi.spyOn(sdkClient, 'request').mockResolvedValue({});
+
+      await client.subscribeResource('resource://test');
+      await client.unsubscribeResource('resource://test');
+
+      expect(request).toHaveBeenNthCalledWith(
+        1,
+        { method: 'resources/subscribe', params: { uri: 'resource://test' } },
+        { timeout: 60000 },
+      );
+      expect(request).toHaveBeenNthCalledWith(
+        2,
+        { method: 'resources/unsubscribe', params: { uri: 'resource://test' } },
+        { timeout: 60000 },
+      );
+      request.mockRestore();
+    });
   });
 });
 
@@ -2778,16 +2798,19 @@ describe('MastraMCPClient - Roots Capability (Issue #8660)', () => {
     });
 
     await client.connect();
+    const sdkClient = (client as unknown as { client: Client }).client;
+    const notification = vi.spyOn(sdkClient, 'notification');
 
     // Verify sendRootsListChanged method exists
     expect(typeof client.sendRootsListChanged).toBe('function');
 
-    // Update roots - this should also send the notification
+    // Update roots - this should also send the notification on a legacy connection
     await client.setRoots([{ uri: 'file:///new-root', name: 'New Root' }]);
 
     // Verify roots were updated
     expect(client.roots).toHaveLength(1);
     expect(client.roots[0].uri).toBe('file:///new-root');
+    expect(notification).toHaveBeenCalledWith({ method: 'notifications/roots/list_changed' });
 
     await client.disconnect();
   });
