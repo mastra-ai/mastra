@@ -943,6 +943,37 @@ describe('MessageHistory', () => {
       expect(persistMessages).toHaveBeenCalledWith({ messages: [generated] }, [generated.id]);
     });
 
+    it('orders mixed generated-message upserts by their stored tuples before the internal hook', async () => {
+      const persistMessages = vi.fn().mockResolvedValue({ messages: [] });
+      const mockStorage = {
+        getThreadById: vi.fn().mockResolvedValue({ id: 'thread-1', resourceId: 'resource-1' }),
+      } as unknown as MemoryStorage;
+      const processor = new MessageHistory({ storage: mockStorage, persistMessages });
+      const createMessage = (id: string, role: 'user' | 'assistant', timestamp: number) => ({
+        role,
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        content: { format: 2 as const, parts: [{ type: 'text' as const, text: id }] },
+        id,
+        createdAt: new Date(timestamp),
+      });
+      const newestGenerated = createMessage('newest-generated', 'assistant', 3);
+      const oldestGeneratedUpsert = createMessage('oldest-generated-upsert', 'assistant', 1);
+      const explicit = createMessage('explicit', 'user', 2);
+
+      await processor.persistMessages({
+        messages: [newestGenerated, oldestGeneratedUpsert, explicit],
+        generatedMessageIds: [newestGenerated.id, oldestGeneratedUpsert.id],
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+      });
+
+      expect(persistMessages).toHaveBeenCalledWith({ messages: [oldestGeneratedUpsert, explicit, newestGenerated] }, [
+        newestGenerated.id,
+        oldestGeneratedUpsert.id,
+      ]);
+    });
+
     it('should drop transient signals but keep normal signals when persisting', async () => {
       const mockStorage = {
         saveMessages: vi.fn().mockResolvedValue(undefined),

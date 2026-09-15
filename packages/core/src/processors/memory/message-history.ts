@@ -351,9 +351,15 @@ export class MessageHistory implements Processor {
 
     // Persist messages after thread is guaranteed to exist.
     if (this.persistMessagesHook) {
-      const persistedIds = new Set(filtered.map(message => message.id));
+      const ordered = filtered.toSorted((left, right) => {
+        const threadOrder = (left.threadId ?? '').localeCompare(right.threadId ?? '');
+        if (threadOrder !== 0) return threadOrder;
+        const timestampOrder = new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime();
+        return timestampOrder || left.id.localeCompare(right.id);
+      });
+      const persistedIds = new Set(ordered.map(message => message.id));
       await this.persistMessagesHook(
-        { messages: filtered },
+        { messages: ordered },
         generatedMessageIds.filter(messageId => persistedIds.has(messageId)),
       );
       return;

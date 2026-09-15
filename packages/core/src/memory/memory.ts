@@ -1000,7 +1000,12 @@ https://mastra.ai/en/docs/memory/overview`,
           new MessageHistory({
             storage: memoryStore,
             lastMessages: typeof lastMessages === 'number' ? lastMessages : undefined,
-            persistMessages: (input, generatedMessageIds) => persistGeneratedMessages(this, input, generatedMessageIds),
+            ...(this.supportsThreadBranching
+              ? {
+                  persistMessages: (input, generatedMessageIds) =>
+                    persistGeneratedMessages(this, input, generatedMessageIds),
+                }
+              : {}),
           }),
         );
       }
