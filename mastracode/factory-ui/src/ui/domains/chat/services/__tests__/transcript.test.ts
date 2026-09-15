@@ -1462,8 +1462,10 @@ describe('live user-signal events render the same as their persisted copy', () =
 
     // Persisted-shaped copy first, then the live data-part copy with the same id.
     const persisted = signalMessage({ id: 'sig-1', type: 'user', tagName: 'user', text: 'hello from slack' });
+    const live = liveUserSignal();
     state = transcriptReducer(state, { type: 'event', event: { type: 'message_start', message: persisted } });
-    state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', id: liveUserSignal().id } });
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_start', message: live } });
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', id: live.id } });
 
     expect(firstEntryParts(state)).toEqual([{ type: 'text', text: 'hello from slack' }]);
   });
