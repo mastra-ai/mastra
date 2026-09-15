@@ -3,7 +3,8 @@ packages:
 
 pnpm:
   overrides:
-    hono@<4.12.34: 4.12.34
+    hono@<4.13.5: 4.13.5
+    zod@>=4.0.0 <4.5.5: 4.6.5
 
 # a dependency install script this project never needed must not fail a preview deploy
 strictDepBuilds: false

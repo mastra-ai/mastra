@@ -21,11 +21,11 @@ importers:
         specifier: link:../../../packages/memory
         version: link:../../memory
       hono:
-        specifier: ^4.12.34
+        specifier: ^4.13.5
         version: 4.13.5
       zod:
-        specifier: ^4.4.3
-        version: 4.4.3
+        specifier: ^4.6.4
+        version: 4.6.5
     devDependencies:
       '@types/node':
         specifier: 22.19.15
@@ -91,8 +91,8 @@ packages:
   undici-types@6.21.0:
     resolution: {integrity: sha512-iwDZqg0QAGrg9Rav5H4n0M64c3mkR59cJ6wQp+7C4nI0gsmExaedaYLNO44eT4AtBBwjbTiGPMlt2Md0T9H9JQ==}
 
-  zod@4.4.3:
-    resolution: {integrity: sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ==}
+  zod@4.6.5:
+    resolution: {integrity: sha512-v5l/aFXZQeai4awLbOpSoHecE9UiMrnfx75tEXLjNonXVARxQ5mOeipTjROUchszUNCqnE+hqAMujRsRHsut2Q==}
 
 snapshots:
 
@@ -133,4 +133,4 @@ snapshots:
 
   undici-types@6.21.0: {}
 
-  zod@4.4.3: {}
+  zod@4.6.5: {}

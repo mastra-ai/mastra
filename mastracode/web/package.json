@@ -39,11 +39,11 @@
     "@mastra/client-js": "link:../../client-sdks/client-js",
     "@mastra/hono": "link:../../server-adapters/hono",
     "@types/node": "22.20.1",
-    "hono": "^4.12.34",
+    "hono": "^4.13.5",
     "mastra": "link:../../packages/cli",
     "typescript": "^7.0.2",
     "varlock": "^1.9.0",
-    "vitest": "4.1.10",
+    "vitest": "4.1.11",
     "zod": "^4.3.6"
   },
   "engines": {

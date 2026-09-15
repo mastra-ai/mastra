@@ -32,7 +32,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "mysql2": "^3.11.3"
+    "mysql2": "^3.23.1"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",

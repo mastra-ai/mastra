@@ -14,6 +14,7 @@ overrides:
   '@mastra/rag': link:../../../../packages/rag
   '@mastra/ttsd': link:../../../../packages/ttsd
   '@internal/test-utils': link:../../../../packages/_test-utils
+  zod@>=4.0.0 <4.5.5: 4.6.5
 
 allowBuilds:
   esbuild: true

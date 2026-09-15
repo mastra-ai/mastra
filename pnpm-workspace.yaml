@@ -40,15 +40,15 @@ catalog:
   '@microsoft/api-extractor': ^7.57.7
   '@stryker-mutator/core': 10.0.0
   '@stryker-mutator/vitest-runner': 10.0.0
-  '@vitest/coverage-v8': 4.1.10
-  '@vitest/ui': 4.1.10
+  '@vitest/coverage-v8': 4.1.11
+  '@vitest/ui': 4.1.11
   date-fns: 4.4.0
   lucide-react: ^1.37.0
   react: ^19.2.5
   react-dom: ^19.2.5
   typescript: ^7.0.2
-  vitest: 4.1.10
-  zod: ^4.4.3
+  vitest: 4.1.11
+  zod: ^4.6.4
   tsx: ^4.23.1
   oxfmt: 0.59.0
 
@@ -123,12 +123,12 @@ packageExtensions:
       # client; if this resolves to a different vitest than the workspace,
       # a second SnapshotClient is created and every toMatchSnapshot() in
       # tests that import from that entrypoint fails. Keep these in sync.
-      vitest: 4.1.8
+      vitest: 4.1.11
   '@ai-sdk/provider-utils@3.0.28':
     dependencies:
       msw: ^2.12.11
       # See the note on the 3.0.25 entry — must track the catalog `vitest`.
-      vitest: 4.1.10
+      vitest: 4.1.11
   '@uiw/codemirror-theme-dracula@*':
     dependencies:
       '@babel/runtime': ^7.29.2
@@ -188,25 +188,52 @@ minimumReleaseAgeExclude:
   # Renovate security update: body-parser@2.3.0
   - body-parser@2.3.0
   # Renovate security update: protobufjs@8.6.6 || 7.6.5
-  - protobufjs@8.6.6 || 7.6.5
+  - protobufjs@8.6.6 || 7.6.5 || 7.6.6 || 8.8.0
   # Renovate security update: tar@7.5.21
   - tar@7.5.21
   # Renovate security update: webpack-dev-server@5.2.6
   - webpack-dev-server@5.2.6
   # Renovate security update: dompurify@3.4.13
   - dompurify@3.4.13
+  - dompurify@3.4.15
   # Renovate security update: fast-xml-parser@5.10.1
   - fast-xml-parser@5.10.1
   # Renovate security update: svgo@3.3.4
   - svgo@3.3.4
   # Renovate security update: @hono/node-server@2.0.10 || 2.0.5
   - "@hono/node-server@2.0.10 || 2.0.5"
+  - "@hono/node-server@1.19.17"
+  # Security bump: hono 4.13.5 (query-parser / toSSG / parseBody advisories)
+  - hono@4.13.5
+  # Security bump: tinypool 2.2.0, image-size 2.0.4, mysql2 3.24.4
+  - tinypool@2.2.0
+  - image-size@2.0.4
+  - mysql2@3.24.4
+  - '@fastify/busboy@3.2.2'
+  - ws@8.21.3 || 7.5.13
+  - undici@8.10.2 || 7.29.1 || 6.28.1
+  - qs@6.16.0
+  - joi@17.13.8
+  - nanoid@3.3.19
+  - browserslist@4.28.9
+  - ip-address@10.6.0
+  - '@opentelemetry/propagator-jaeger@2.11.0'
+  - '@clerk/shared@4.31.1'
+  - '@clerk/backend@3.17.2'
+  - better-auth@1.7.4
+  - js-yaml@5.4.1
+  - vitest@4.1.11
+  - '@vitest/coverage-v8@4.1.11'
+  - '@vitest/ui@4.1.11'
+  - deepmerge-ts@8.0.2
+  - zod@4.6.5
   # Renovate security update: brace-expansion@2.1.4 || 5.0.9
   - brace-expansion@2.1.4 || 5.0.9
   # Renovate security update: react-router@7.18.0
   - react-router@7.18.0
   # Renovate security update: js-yaml@5.2.2
   - js-yaml@5.2.2
+  - js-yaml@5.4.1
   # Renovate security update: better-auth@1.6.23
   - better-auth@1.6.23
   # Renovate security update: valibot@1.4.2
@@ -237,15 +264,15 @@ overrides:
   # which breaks react-router's build when renovate's pnpm dedupe floats it up.
   cookie: '>=1.1.1 <2'
   tmp: '>=0.2.7'
-  jsondiffpatch: '>=0.7.3'
+  jsondiffpatch: '>=0.7.6'
   ssri: '>=6.0.2'
   jws: ^4.0.1
   client-js-e2e-tests-zod-v3>zod: ^3.24.0
-  client-js-e2e-tests-zod-v4>zod: ^4.3.6
-  # >=1.6.13 fixes stored XSS via javascript: redirect_uri in oidc-provider/mcp
-  # (GHSA Dependabot alert #2266).
-  better-auth: ^1.6.23
-  js-yaml: ^5.2.2
+  client-js-e2e-tests-zod-v4>zod: ^4.6.4
+  # >=1.6.26 fixes user-enumeration (AIKIDO-2026-906996). Stay on 1.7.4
+  # rather than 1.6.33 because 1.6.33 is inside the 1-day minimumReleaseAge window.
+  better-auth: ^1.7.4
+  js-yaml: ^5.4.1
   glob@<=10.5.0: 10.5.0
   body-parser@<=2.2.1: 2.3.0
   inngest: ^4.2.2
@@ -258,13 +285,14 @@ overrides:
   # are within the parents' declared ranges).
   simple-git@<3.36.0: 3.36.0
   axios@>=1.0.0 <1.16.0: 1.18.0
-  protobufjs@>=7.0.0 <7.6.3: 7.6.5
-  protobufjs@>=8.0.0 <8.6.0: 8.6.6
+  protobufjs@>=7.0.0 <7.6.5: 7.6.6
+  protobufjs@>=8.0.0 <8.6.6: 8.8.0
   minimatch@>=5.0.0 <5.1.8: 5.1.8
   minimatch@>=9.0.0 <9.0.7: 9.0.7
-  ws@>=8.0.0 <8.21.0: 8.21.0
+  ws@>=7.0.0 <7.5.12: 7.5.13
+  ws@>=8.0.0 <8.21.1: 8.21.3
   webpack-dev-server@<5.2.5: 5.2.6
-  qs@>=6.7.0 <6.15.2: 6.15.2
+  qs@>=6.7.0 <6.16.0: 6.16.0
   fast-uri@<3.1.7: 3.1.7
   form-data@<2.5.6: 2.5.6
   form-data@>=4.0.0 <4.0.6: 4.0.6
@@ -273,23 +301,25 @@ overrides:
   brace-expansion@>=4.0.0 <5.0.9: 5.0.9
   immer@>=11.0.0 <11.1.9: 11.1.9
   '@clerk/shared@>=3.0.0 <3.47.5': 3.47.8
+  '@clerk/shared@>=4.0.0 <4.25.5': 4.31.1
   js-cookie@>=3.0.0 <3.0.7: 3.0.7
   path-to-regexp@<0.1.13: 0.1.13
-  joi@>=17.0.0 <17.13.4: 17.13.4
+  joi@>=17.0.0 <17.13.7: 17.13.8
   svgo@>=3.0.0 <3.3.3: 3.3.4
   # undici 5.x has no patched release; the only 5.x consumer is
   # @connectrpc/connect-node@1.7.0 (via @cursor/sdk), which is compatible with
   # the undici 6 Client/Pool APIs.
-  undici@<6.0.0: 6.28.0
-  undici@>=6.0.0 <6.28.0: 6.28.0
-  undici@>=7.0.0 <7.29.0: 7.29.0
-  undici@>=8.0.0 <8.9.0: 8.9.0
-  e2b>undici8: npm:undici@8.9.0
+  undici@<6.0.0: 6.28.1
+  undici@>=6.0.0 <6.28.1: 6.28.1
+  undici@>=7.0.0 <7.29.1: 7.29.1
+  undici@>=8.0.0 <8.10.2: 8.10.2
+  e2b>undici8: npm:undici@8.10.2
   multer@<2.3.0: 2.3.0
   '@hey-api/openapi-ts@<0.97.3': 0.97.3
   '@opentelemetry/core@>=2.0.0 <2.8.0': 2.10.0
-  '@opentelemetry/sdk-node@<0.217.0': 0.221.0
-  '@opentelemetry/exporter-prometheus@<0.217.0': 0.221.0
+  '@opentelemetry/sdk-node@<0.221.0': 0.221.0
+  '@opentelemetry/exporter-prometheus@<0.221.0': 0.221.0
+  '@opentelemetry/propagator-jaeger@<2.9.0': 2.11.0
   uuid@>=13.0.0 <13.0.1: 13.0.1
   # uuid <11.1.1 and tar <7.5.16 are pinned by transitive parents on old
   # majors (msal-node/google-gax/etc. declare uuid ^8-^10; the sqlite3
@@ -302,15 +332,23 @@ overrides:
   websocket-driver@<0.7.5: 0.7.5
   '@babel/core@>=7.0.0 <7.29.6': 8.0.1
   '@babel/plugin-transform-modules-systemjs@>=7.12.0 <7.29.4': 8.0.1
-  dompurify@>=3.0.0 <3.4.13: 3.4.13
-  hono@<4.12.34: 4.12.34
-  '@hono/node-server@<1.19.15': 1.19.15
-  nanoid@>=3.0.0 <3.3.18: 3.3.18
+  dompurify@>=3.0.0 <3.4.15: 3.4.15
+  hono@<4.13.5: 4.13.5
+  '@hono/node-server@<1.19.15': 1.19.17
+  nanoid@>=3.0.0 <3.3.19: 3.3.19
   nanoid@>=5.0.0 <5.1.16: 5.1.16
   postcss@<8.5.23: 8.5.23
-  ip-address@<10.3.1: 10.3.1
+  ip-address@<10.6.0: 10.6.0
   mermaid@>=11.0.0-alpha.1 <11.16.1: 11.16.1
-  sharp@<0.35.0: 0.35.3
+  sharp@<0.35.4: 0.35.4
+  image-size@<=2.0.2: 2.0.4
+  browserslist@<=4.28.6: 4.28.9
+  tinypool@>=2.0.0 <2.2.0: 2.2.0
+  mysql2@<=3.23.0: 3.24.4
+  '@fastify/busboy@<3.2.2': 3.2.2
+  vitest@>=4.1.0 <4.1.11: 4.1.11
+  zod@>=4.0.0 <4.5.5: 4.6.5
+  deepmerge-ts@<8.0.0: 8.0.2
   valibot@<1.4.2: 1.4.2
   find-my-way@<9.7.0: 9.9.0
   adm-zip@<0.6.0: 0.6.0

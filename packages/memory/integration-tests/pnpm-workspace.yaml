@@ -15,6 +15,12 @@ overrides:
   '@internal/test-utils': link:../../_test-utils
   '@internal/ai-v6': link:../../_vendored/ai_v6
   '@mastra/schema-compat': link:../../schema-compat
+  vitest@>=4.1.0 <4.1.11: 4.1.11
+  nanoid@>=3.0.0 <3.3.19: 3.3.19
+  undici@>=6.0.0 <6.28.1: 6.28.1
+  undici@>=7.0.0 <7.29.1: 7.29.1
+  jsondiffpatch: '>=0.7.6'
+  sharp@<0.35.4: 0.35.4
 
 allowBuilds:
   esbuild: false
