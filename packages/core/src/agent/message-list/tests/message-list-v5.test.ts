@@ -1976,6 +1976,151 @@ describe('MessageList V5 Support', () => {
       });
     });
 
+    it('keeps image-url tool-result parts unchanged for v6 (spec v3) models', async () => {
+      const list = new MessageList({ threadId, resourceId });
+
+      list.add('Fetch the radar image', 'input');
+
+      const continuationMessage: AIV5ModelMessage = {
+        role: 'assistant',
+        content: [
+          {
+            type: 'tool-call',
+            toolCallId: 'call-v6-url-1',
+            toolName: 'radarTool',
+            input: {},
+          },
+          {
+            type: 'tool-result',
+            toolCallId: 'call-v6-url-1',
+            toolName: 'radarTool',
+            output: { type: 'json', value: { ok: true } },
+            providerOptions: {
+              mastra: {
+                modelOutput: {
+                  type: 'content',
+                  value: [
+                    { type: 'text', text: 'radar image' },
+                    {
+                      type: 'image-url',
+                      url: 'https://example.com/radar.png',
+                      providerOptions: { repro: { traceId: 'preserve-me' } },
+                    },
+                  ],
+                },
+              },
+            },
+          },
+        ],
+      };
+
+      list.add(continuationMessage, 'input');
+
+      // The v3 spec consumes `image-url` tool results natively (including
+      // providerOptions); downgrading them to `media` would put a URL in the
+      // Base64-only `data` field and drop the part's providerOptions.
+      const prompt = await list.get.all.aiV6.llmPrompt();
+      const toolRole = prompt.find(m => m.role === 'tool');
+      const toolResultPart = (toolRole as any).content.find((p: any) => p.type === 'tool-result');
+      expect(toolResultPart.output).toEqual({
+        type: 'content',
+        value: [
+          { type: 'text', text: 'radar image' },
+          {
+            type: 'image-url',
+            url: 'https://example.com/radar.png',
+            providerOptions: { repro: { traceId: 'preserve-me' } },
+          },
+        ],
+      });
+    });
+
+    it('downgrades image-url tool-result parts to media for v5 (spec v2) models', async () => {
+      const list = new MessageList({ threadId, resourceId });
+
+      list.add('Fetch the radar image', 'input');
+
+      const continuationMessage: AIV5ModelMessage = {
+        role: 'assistant',
+        content: [
+          {
+            type: 'tool-call',
+            toolCallId: 'call-v5-url-1',
+            toolName: 'radarTool',
+            input: {},
+          },
+          {
+            type: 'tool-result',
+            toolCallId: 'call-v5-url-1',
+            toolName: 'radarTool',
+            output: { type: 'json', value: { ok: true } },
+            providerOptions: {
+              mastra: {
+                modelOutput: {
+                  type: 'content',
+                  value: [{ type: 'image-url', url: 'https://example.com/radar.png', mediaType: 'image/png' }],
+                },
+              },
+            },
+          },
+        ],
+      };
+
+      list.add(continuationMessage, 'input');
+
+      // v2 prompts have no URL image form; the legacy best-effort mapping
+      // keeps working for spec-v2 models.
+      const prompt = await list.get.all.aiV5.llmPrompt();
+      const toolRole = prompt.find(m => m.role === 'tool');
+      const toolResultPart = (toolRole as any).content.find((p: any) => p.type === 'tool-result');
+      expect(toolResultPart.output).toEqual({
+        type: 'content',
+        value: [{ type: 'media', data: 'https://example.com/radar.png', mediaType: 'image/png' }],
+      });
+    });
+
+    it('converts image-url tool-result parts to url-tagged files for v7 (spec v4) models', async () => {
+      const list = new MessageList({ threadId, resourceId });
+
+      list.add('Fetch the radar image', 'input');
+
+      const continuationMessage: AIV5ModelMessage = {
+        role: 'assistant',
+        content: [
+          {
+            type: 'tool-call',
+            toolCallId: 'call-v7-url-1',
+            toolName: 'radarTool',
+            input: {},
+          },
+          {
+            type: 'tool-result',
+            toolCallId: 'call-v7-url-1',
+            toolName: 'radarTool',
+            output: { type: 'json', value: { ok: true } },
+            providerOptions: {
+              mastra: {
+                modelOutput: {
+                  type: 'content',
+                  value: [{ type: 'image-url', url: 'https://example.com/radar.png' }],
+                },
+              },
+            },
+          },
+        ],
+      };
+
+      list.add(continuationMessage, 'input');
+
+      const prompt = await list.get.all.aiV7.llmPrompt();
+      const toolRole = prompt.find(m => m.role === 'tool');
+      const toolResultPart = (toolRole as any).content.find((p: any) => p.type === 'tool-result');
+      expect(toolResultPart.output).toEqual({
+        type: 'content',
+        value: [{ type: 'file', data: { type: 'url', url: 'https://example.com/radar.png' }, mediaType: 'image/jpeg' }],
+      });
+    });
+
     it('translates non-image tool-result media to file-data for v6 (spec v3) models', async () => {
       const list = new MessageList({ threadId, resourceId });
 
