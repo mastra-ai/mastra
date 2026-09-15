@@ -267,7 +267,7 @@ function handleSubagentProgress(
       component.addToolEnd(progress.toolName, progress.result, progress.isError ?? false);
       break;
     case 'finish':
-      component.finish(progress.isError ?? false, progress.durationMs ?? 0, progress.result);
+      component.finish(progress.isError ?? false, progress.durationMs, progress.result);
       break;
   }
 
@@ -763,7 +763,7 @@ export function handleToolEnd(ctx: EventHandlerContext, toolCallId: string, resu
   if (subagentComponent) {
     const resultText = formatToolResult(result);
     if (pluginSubagentToolCallIds.has(toolCallId)) {
-      subagentComponent.finish(isError, 0, resultText);
+      subagentComponent.finish(isError, undefined, resultText);
       state.pendingSubagents.delete(toolCallId);
       pluginSubagentToolCallIds.delete(toolCallId);
       flushRender(state);
