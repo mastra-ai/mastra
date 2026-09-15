@@ -140,6 +140,7 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
       url?: string;
       apiKey?: string;
       headers?: Record<string, string>;
+      api?: 'chat' | 'responses';
     };
 
     if (typeof config === 'string') {
@@ -151,6 +152,7 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
         url: config.url,
         apiKey: config.apiKey,
         headers: config.headers,
+        api: config.api,
       };
     } else {
       // config has 'id' field
@@ -159,6 +161,7 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
         url: config.url,
         apiKey: config.apiKey,
         headers: config.headers,
+        api: config.api,
       };
     }
 
@@ -168,6 +171,7 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
       url?: string;
       apiKey?: string;
       headers?: Record<string, string>;
+      api?: 'chat' | 'responses';
     } = {
       ...normalizedConfig,
       routerId: normalizedConfig.id,
@@ -514,6 +518,7 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
           resolvedTransport,
           websocketKey,
           authScopeKey,
+          this.config.api || 'chat',
         ]),
       )
       .digest('hex');
@@ -522,15 +527,24 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
       return cache.modelInstances.get(key)!;
     }
 
-    // If custom URL is provided, use it directly with openai-compatible
+    // If custom URL is provided, use it directly.
     if (this.config.url) {
-      const modelInstance = createOpenAICompatible({
-        name: providerId,
-        apiKey,
-        baseURL: this.config.url,
-        headers,
-        supportsStructuredOutputs: true,
-      }).chatModel(modelId);
+      // The openai-compatible provider only exposes Chat Completions. To reach the
+      // OpenAI Responses API on a custom endpoint, use the openai provider's responses().
+      const modelInstance =
+        this.config.api === 'responses'
+          ? createOpenAI({
+              apiKey,
+              baseURL: this.config.url,
+              headers,
+            }).responses(modelId)
+          : createOpenAICompatible({
+              name: providerId,
+              apiKey,
+              baseURL: this.config.url,
+              headers,
+              supportsStructuredOutputs: true,
+            }).chatModel(modelId);
       cache.modelInstances.set(key, modelInstance);
       this.setStreamTransportHandle({ resolvedTransport, responsesWebSocket });
       return modelInstance;
