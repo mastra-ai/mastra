@@ -10,7 +10,7 @@ import {
   getThreadOMMetadata,
   setThreadOMMetadata,
 } from '@mastra/core/memory';
-import { persistGeneratedMessages } from '@mastra/core/memory/internal';
+import { persistGeneratedMessages, persistMessagesWithThreadCreation } from '@mastra/core/memory/internal';
 import type { ObservabilityContext } from '@mastra/core/observability';
 import type { ProcessorContext, ProcessorStreamWriter } from '@mastra/core/processors';
 import { MessageHistory } from '@mastra/core/processors';
@@ -20,7 +20,8 @@ import type { ProviderMetadata } from '@mastra/core/stream';
 import xxhash from 'xxhash-wasm';
 
 import type { Memory } from '../..';
-import { parseThreadBranchMetadata } from '../../branching/lineage';
+import { compareMessageTuples, parseThreadBranchMetadata } from '../../branching/lineage';
+import { getThreadBranchParticipation } from '../../branching/query';
 import { WORKING_MEMORY_STATE_ID } from '../working-memory-state/processor';
 import { resolveActivationTTL } from './activation-ttl';
 import { BufferingCoordinator } from './buffering-coordinator';
@@ -236,8 +237,10 @@ import {
   findLastCompletedObservationBoundary,
   getUnobservedParts,
   getBufferedChunks,
+  getDurableObservedMessageIds,
   getObservableMessages,
   stripThreadTags,
+  withDurableObservationCursor,
 } from './message-utils';
 import { ModelByInputTokens } from './model-by-input-tokens';
 import { didProviderChange as hasProviderChanged } from './model-context';
@@ -711,8 +714,9 @@ export class ObservationalMemory {
     this.messageHistory = new MessageHistory({
       storage: this.storage,
       persistMessages: config.memory
-        ? (input, generatedMessageIds) => persistGeneratedMessages(config.memory!, input, generatedMessageIds)
+        ? (input, generatedMessageIds) => persistMessagesWithThreadCreation(config.memory!, input, generatedMessageIds)
         : undefined,
+      persistMessagesCreatesThread: config.memory?.supportsThreadBranching ?? false,
     });
 
     this.observer = new ObserverRunner({
@@ -1512,9 +1516,10 @@ export class ObservationalMemory {
     const lastObservedAt = record.lastObservedAt;
     // Safeguard: track message IDs that were already observed to prevent re-observation
     // This handles edge cases like process restarts where lastObservedAt might not capture all messages
-    const observedMessageIds = new Set<string>(
-      Array.isArray(record.observedMessageIds) ? record.observedMessageIds : [],
-    );
+    const observedMessageIds = new Set<string>([
+      ...(Array.isArray(record.observedMessageIds) ? record.observedMessageIds : []),
+      ...getDurableObservedMessageIds(record),
+    ]);
 
     // Only exclude buffered chunk message IDs when called from the buffering path.
     // The main agent context should still see buffered messages until activation.
@@ -1564,7 +1569,7 @@ export class ObservationalMemory {
           result.push(msg);
         } else {
           const msgDate = new Date(msg.createdAt);
-          if (msgDate > lastObservedAt) {
+          if (msgDate >= lastObservedAt) {
             result.push(msg);
           } else {
           }
@@ -1936,54 +1941,77 @@ export class ObservationalMemory {
    * Load messages from storage that haven't been observed yet.
    * Uses cursor-based query with lastObservedAt timestamp for efficiency.
    *
-   * In resource scope mode, loads messages for the entire resource (all threads).
-   * In thread scope mode, loads messages for just the current thread.
+   * Resource scope loads non-branch threads across the resource. A branch participant
+   * loads only its reachable path so parent and sibling tails cannot leak into OM.
    */
   private async loadMessagesFromStorage(
     threadId: string,
     resourceId: string | undefined,
     lastObservedAt?: Date,
   ): Promise<MastraDBMessage[]> {
-    // Add 1ms to lastObservedAt to make the filter exclusive (since dateRange.start is inclusive)
-    // This prevents re-loading the same messages that were already observed
-    const startDate = lastObservedAt ? new Date(lastObservedAt.getTime() + 1) : undefined;
+    // Reload the cursor timestamp inclusively, then use observed message IDs to remove
+    // processed rows. This avoids losing distinct messages with the same timestamp.
+    const startDate = lastObservedAt;
 
-    let result: { messages: MastraDBMessage[] };
+    const participation = await getThreadBranchParticipation(this.storage, threadId);
+    let messages: MastraDBMessage[];
 
-    if (this.scope === 'resource' && resourceId) {
-      // Resource scope: use the new listMessagesByResourceId method
-      result = await this.storage.listMessagesByResourceId({
-        resourceId,
-        perPage: false, // Get all messages (no pagination limit)
-        orderBy: { field: 'createdAt', direction: 'ASC' },
-        filter: startDate
-          ? {
-              dateRange: {
-                start: startDate,
-              },
-            }
-          : undefined,
-      });
-    } else {
-      // Thread scope: use listMessages with threadId
-      result = await this.storage.listMessages({
+    if (participation.participant) {
+      if (!this.memory) {
+        throw createThreadBranchError(
+          'BRANCHING_UNSUPPORTED',
+          'Observational Memory requires branch-aware Memory to load shared history.',
+        );
+      }
+      const result = await this.memory.recall({
         threadId,
-        perPage: false, // Get all messages (no pagination limit)
+        resourceId,
+        perPage: false,
         orderBy: { field: 'createdAt', direction: 'ASC' },
-        filter: startDate
-          ? {
-              dateRange: {
-                start: startDate,
-              },
-            }
-          : undefined,
       });
+      messages = result.messages;
+    } else if (this.scope === 'resource' && resourceId) {
+      const { threads } = await this.storage.listThreads({ filter: { resourceId }, perPage: false });
+      const safeThreads = threads.filter(thread => !thread.metadata?.[MASTRA_THREAD_BRANCH_METADATA_KEY]);
+      if (safeThreads.length === threads.length) {
+        const result = await this.storage.listMessagesByResourceId({
+          resourceId,
+          perPage: false,
+          includeTotal: false,
+          orderBy: { field: 'createdAt', direction: 'ASC' },
+          filter: startDate ? { dateRange: { start: startDate } } : undefined,
+        });
+        messages = result.messages;
+      } else {
+        const results = await Promise.all(
+          safeThreads.map(thread =>
+            this.storage.listMessages({
+              threadId: thread.id,
+              resourceId,
+              perPage: false,
+              includeTotal: false,
+              orderBy: { field: 'createdAt', direction: 'ASC' },
+              filter: startDate ? { dateRange: { start: startDate } } : undefined,
+            }),
+          ),
+        );
+        messages = results.flatMap(result => result.messages).sort(compareMessageTuples);
+      }
+    } else {
+      const result = await this.storage.listMessages({
+        threadId,
+        perPage: false,
+        includeTotal: false,
+        orderBy: { field: 'createdAt', direction: 'ASC' },
+        filter: startDate ? { dateRange: { start: startDate } } : undefined,
+      });
+      messages = result.messages;
     }
 
     // Exclude working-memory state signals so storage-loaded paths (e.g. observe()
     // without explicit messages, buffering token counts) never re-observe stored
     // working memory (#21961).
-    return result.messages.filter(msg => msg.role !== 'system' && !isWorkingMemoryStateSignal(msg));
+    return messages.filter(msg => msg.role !== 'system' && !isWorkingMemoryStateSignal(msg));
   }
 
   /**
@@ -2280,7 +2308,7 @@ ${formattedMessages}
     if (bufferCursor) {
       candidateMessages = candidateMessages.filter(msg => {
         if (!msg.createdAt) return true; // include messages without timestamps
-        return new Date(msg.createdAt) > bufferCursor;
+        return new Date(msg.createdAt) >= bufferCursor;
       });
     }
 
@@ -2787,6 +2815,13 @@ ${formattedMessages}
     // for threads whose metadata was never stamped.  See #15265.
     const record = await this.getRecord(currentThreadId, resourceId);
     const recordLastObservedAt = record?.lastObservedAt;
+    const persistedObservedMessageIds = new Set([
+      ...this.observedMessageIds,
+      ...(Array.isArray(record?.observedMessageIds) ? record.observedMessageIds : []),
+      ...(record ? getDurableObservedMessageIds(record) : []),
+      ...(Array.isArray(record?.bufferedMessageIds) ? record.bufferedMessageIds : []),
+      ...(record ? getBufferedChunks(record).flatMap(chunk => chunk.messageIds ?? []) : []),
+    ]);
 
     for (const thread of allThreads) {
       if (
@@ -2798,7 +2833,7 @@ ${formattedMessages}
 
       const omMetadata = getThreadOMMetadata(thread.metadata);
       const threadLastObservedAt = omMetadata?.lastObservedAt ?? recordLastObservedAt;
-      const startDate = threadLastObservedAt ? new Date(new Date(threadLastObservedAt).getTime() + 1) : undefined;
+      const startDate = threadLastObservedAt ? new Date(threadLastObservedAt) : undefined;
 
       const result = await this.storage.listMessages({
         threadId: thread.id,
@@ -2808,7 +2843,7 @@ ${formattedMessages}
       });
 
       const filtered = result.messages.filter(
-        message => !this.observedMessageIds.has(message.id) && !isWorkingMemoryStateSignal(message),
+        message => !persistedObservedMessageIds.has(message.id) && !isWorkingMemoryStateSignal(message),
       );
 
       if (filtered.length > 0) {
@@ -3281,9 +3316,12 @@ ${formattedMessages}
         candidateMessages = this.getUnobservedMessages(rawMessages, record, { excludeBuffered: true });
       }
 
-      // Apply cursor filtering only for storage-loaded messages.
-      // When messages are provided directly, they're fresh and shouldn't be filtered by cursor.
-      if (!opts.messages) {
+      // Apply cursor filtering only for storage-loaded, non-branch messages. Branch paths
+      // may contain unobserved messages tied at the cursor timestamp, so their ID sets are authoritative.
+      const branchParticipant = !opts.messages
+        ? (await getThreadBranchParticipation(this.storage, threadId)).participant
+        : false;
+      if (!opts.messages && !branchParticipant) {
         let bufferCursor = BufferingCoordinator.lastBufferedAtTime.get(bufferKey) ?? record.lastBufferedAtTime ?? null;
         if (record.lastObservedAt) {
           const lastObserved = new Date(record.lastObservedAt);
@@ -3295,7 +3333,7 @@ ${formattedMessages}
         if (bufferCursor) {
           candidateMessages = candidateMessages.filter(msg => {
             if (!msg.createdAt) return true;
-            return new Date(msg.createdAt) > bufferCursor;
+            return new Date(msg.createdAt) >= bufferCursor;
           });
         }
       }
@@ -3961,7 +3999,7 @@ ${formattedMessages}
       const reflectionTokenCount = this.tokenCounter.countObservations(reflectResult.observations);
 
       await this.storage.createReflectionGeneration({
-        currentRecord: record,
+        currentRecord: withDurableObservationCursor(record),
         reflection: reflectResult.observations,
         tokenCount: reflectionTokenCount,
       });

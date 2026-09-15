@@ -34,7 +34,7 @@ import {
   createObservationFailedMarker,
   createObservationStartMarker,
 } from './markers';
-import { getObservableMessages } from './message-utils';
+import { getObservableMessages, withDurableObservationCursor } from './message-utils';
 import type { ModelByInputTokens } from './model-by-input-tokens';
 import { didProviderChange } from './model-context';
 import { describeDegenerateOutput } from './observer-agent';
@@ -989,7 +989,7 @@ export class ReflectorRunner {
       `[OM:reflect] tryActivateBufferedReflection: activating, beforeTokens=${beforeTokens}, combinedTokenCount=${combinedTokenCount}, reflectedLineCount=${reflectedLineCount}, unreflectedLines=${unreflectedLines.length}`,
     );
     await this.storage.swapBufferedReflectionToActive({
-      currentRecord: freshRecord,
+      currentRecord: withDurableObservationCursor(freshRecord),
       tokenCount: combinedTokenCount,
     });
     if (committedContext) {
@@ -1360,7 +1360,7 @@ export class ReflectorRunner {
       const reflectionTokenCount = this.tokenCounter.countObservations(reflectResult.observations);
 
       await this.storage.createReflectionGeneration({
-        currentRecord: record,
+        currentRecord: withDurableObservationCursor(record),
         reflection: reflectResult.observations,
         tokenCount: reflectionTokenCount,
       });

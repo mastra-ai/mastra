@@ -919,6 +919,7 @@ describe('MessageHistory', () => {
           title: 'Test Thread',
           metadata: {},
         }),
+        listMessagesById: vi.fn().mockResolvedValue({ messages: [] }),
       } as unknown as MemoryStorage;
       const processor = new MessageHistory({ storage: mockStorage, persistMessages });
       const generated = {
@@ -943,35 +944,105 @@ describe('MessageHistory', () => {
       expect(persistMessages).toHaveBeenCalledWith({ messages: [generated] }, [generated.id]);
     });
 
-    it('orders mixed generated-message upserts by their stored tuples before the internal hook', async () => {
+    it('delegates missing-thread creation to validated persistence without raw storage side effects', async () => {
+      const error = new Error('invalid generated batch');
+      const persistMessages = vi.fn().mockRejectedValue(error);
+      const mockStorage = {
+        getThreadById: vi.fn().mockResolvedValue(null),
+        saveThread: vi.fn().mockResolvedValue(undefined),
+        deleteThread: vi.fn().mockResolvedValue(undefined),
+      } as unknown as MemoryStorage;
+      const processor = new MessageHistory({ storage: mockStorage, persistMessages });
+      const generated: MastraDBMessage = {
+        role: 'assistant',
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        content: { format: 2, parts: [{ type: 'text', text: 'Generated response' }] },
+        id: 'generated',
+        createdAt: new Date(),
+      };
+
+      await expect(
+        processor.persistMessages({
+          messages: [generated],
+          generatedMessageIds: [generated.id],
+          threadId: 'thread-1',
+          resourceId: 'resource-1',
+        }),
+      ).rejects.toBe(error);
+      expect(persistMessages).toHaveBeenCalledWith(
+        {
+          messages: [generated],
+          thread: expect.objectContaining({ id: 'thread-1', resourceId: 'resource-1' }),
+        },
+        [generated.id],
+      );
+      expect(mockStorage.saveThread).not.toHaveBeenCalled();
+      expect(mockStorage.deleteThread).not.toHaveBeenCalled();
+    });
+
+    it('delegates explicit-only missing-thread creation when the hook supports atomic creation', async () => {
+      const persistMessages = vi.fn().mockResolvedValue({ messages: [] });
+      const mockStorage = {
+        getThreadById: vi.fn().mockResolvedValue(null),
+        saveThread: vi.fn().mockResolvedValue(undefined),
+      } as unknown as MemoryStorage;
+      const processor = new MessageHistory({
+        storage: mockStorage,
+        persistMessages,
+        persistMessagesCreatesThread: true,
+      });
+      const explicit: MastraDBMessage = {
+        role: 'user',
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        content: { format: 2, parts: [{ type: 'text', text: 'Explicit input' }] },
+        id: 'explicit',
+        createdAt: new Date(),
+      };
+
+      await processor.persistMessages({ messages: [explicit], threadId: 'thread-1', resourceId: 'resource-1' });
+
+      expect(persistMessages).toHaveBeenCalledWith(
+        {
+          messages: [explicit],
+          thread: expect.objectContaining({ id: 'thread-1', resourceId: 'resource-1' }),
+        },
+        [],
+      );
+      expect(mockStorage.saveThread).not.toHaveBeenCalled();
+    });
+
+    it('preserves caller order for equal-timestamp mixed messages regardless of lexical IDs', async () => {
       const persistMessages = vi.fn().mockResolvedValue({ messages: [] });
       const mockStorage = {
         getThreadById: vi.fn().mockResolvedValue({ id: 'thread-1', resourceId: 'resource-1' }),
       } as unknown as MemoryStorage;
       const processor = new MessageHistory({ storage: mockStorage, persistMessages });
-      const createMessage = (id: string, role: 'user' | 'assistant', timestamp: number) => ({
-        role,
+      const createdAt = new Date(1);
+      const explicit: MastraDBMessage = {
+        role: 'user',
         threadId: 'thread-1',
         resourceId: 'resource-1',
-        content: { format: 2 as const, parts: [{ type: 'text' as const, text: id }] },
-        id,
-        createdAt: new Date(timestamp),
-      });
-      const newestGenerated = createMessage('newest-generated', 'assistant', 3);
-      const oldestGeneratedUpsert = createMessage('oldest-generated-upsert', 'assistant', 1);
-      const explicit = createMessage('explicit', 'user', 2);
+        content: { format: 2, parts: [{ type: 'text', text: 'explicit' }] },
+        id: 'z-explicit',
+        createdAt,
+      };
+      const generated: MastraDBMessage = {
+        ...explicit,
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'generated' }] },
+        id: 'a-generated',
+      };
 
       await processor.persistMessages({
-        messages: [newestGenerated, oldestGeneratedUpsert, explicit],
-        generatedMessageIds: [newestGenerated.id, oldestGeneratedUpsert.id],
+        messages: [explicit, generated],
+        generatedMessageIds: [generated.id],
         threadId: 'thread-1',
         resourceId: 'resource-1',
       });
 
-      expect(persistMessages).toHaveBeenCalledWith({ messages: [oldestGeneratedUpsert, explicit, newestGenerated] }, [
-        newestGenerated.id,
-        oldestGeneratedUpsert.id,
-      ]);
+      expect(persistMessages).toHaveBeenCalledWith({ messages: [explicit, generated] }, [generated.id]);
     });
 
     it('should drop transient signals but keep normal signals when persisting', async () => {
