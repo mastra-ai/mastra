@@ -30,8 +30,8 @@ describe('theme.css export', () => {
   it('exposes the background and gray foundation scales', () => {
     const [darkTheme, lightTheme] = themeCss.split('html.light');
     const darkColors = [
-      ['background-1', 'oklch(0.1591 0 0)'],
-      ['background-2', 'oklch(0 0 0)'],
+      ['background-1', 'oklch(0 0 0)'],
+      ['background-2', 'oklch(0.1591 0 0)'],
       ['background-3', 'oklch(0.1913 0 0)'],
       ['gray-1', 'oklch(0.2178 0 0)'],
       ['gray-2', 'oklch(0.2435 0 0)'],
@@ -45,9 +45,9 @@ describe('theme.css export', () => {
       ['gray-10', 'oklch(0.9851 0 0)'],
     ];
     const lightColors = [
-      ['background-1', 'oklch(0.9851 0 0)'],
-      ['background-2', 'oklch(1 0 0)'],
-      ['background-3', 'oklch(0.9642 0 0)'],
+      ['background-1', 'oklch(0.9642 0 0)'],
+      ['background-2', 'oklch(0.9851 0 0)'],
+      ['background-3', 'oklch(1 0 0)'],
       ['gray-1', 'oklch(0.9431 0 0)'],
       ['gray-2', 'oklch(0.9189 0 0)'],
       ['gray-3', 'oklch(0.8945 0 0)'],
