@@ -23,7 +23,7 @@ With [`MCPClient`](/reference/tools/mcp-client), your Mastra application connect
 
 MCP authorization is optional. For HTTP transports, implementations that support authorization should follow the specification. For stdio, the specification instead recommends obtaining credentials from the environment, not running this HTTP authorization flow. Choose the transport before choosing the credential mechanism.
 
-In the HTTP OAuth flow, the MCP server is the **protected resource**, not necessarily the service that signs users in. The **authorization server** authenticates the user and issues tokens. It can be separate from the MCP server. The **client** obtains and presents a token, while the **user** grants delegated access.
+In the HTTP OAuth flow, the MCP server is the **protected resource**, not necessarily the service that signs users in. The **authorization server** issues tokens and can be separate from the MCP server. The **client** obtains and presents a token. In user-delegated flows, the authorization server interacts with the **user** for authentication and consent as needed. Not every flow requires user interaction.
 
 ## Connect to protected MCP servers
 
@@ -50,7 +50,7 @@ For that integration, distinguish these protocol responsibilities:
 
 - Clients must implement Proof Key for Code Exchange (PKCE), verify the authorization server advertises support, and use `S256` when technically capable.
 - Redirect URIs must use HTTPS or localhost. Authorization servers must match registered redirect URIs exactly. Clients should use and verify OAuth `state`.
-- Clients must separately validate the authorization response's issuer according to the specification's [authorization response validation rules](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization#authorization-response-validation). Validating `state` isn't issuer validation.
+- Clients must reject any authorization response whose `iss` value doesn't exactly match the issuer recorded from validated authorization-server metadata, before exchanging the code. They must reject a missing `iss` when the server advertises `authorization_response_iss_parameter_supported: true`; otherwise, a missing `iss` is permitted. See the [authorization response validation rules](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization#authorization-response-validation). Validating `state` isn't issuer validation.
 
 Verify these responsibilities for your chosen integration before relying on its `authProvider` configuration. The [security considerations](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization/security-considerations) define the full rules.
 
