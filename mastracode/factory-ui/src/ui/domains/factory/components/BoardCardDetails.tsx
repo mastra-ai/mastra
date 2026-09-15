@@ -3,7 +3,7 @@ import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 
 import { useGitHubIssueDetail, useGitHubPullRequestDetail } from '../../../../hooks/useFactoryData';
 import { useLinearIssueDetail } from '../../../../hooks/useLinearData';
-import { githubNumberForItem, linearIdentifierForItem } from '../boardItems';
+import { githubNumberForItem, linearIdentifierForItem, linearIssueIdForItem } from '../boardItems';
 import type { WorkItem } from '../services/workItems';
 
 /** The card's source and metadata — a work item or an unfiled candidate. */
@@ -26,6 +26,7 @@ export function useSourceDescription(
 ) {
   const number = githubNumberForItem(item);
   const identifier = linearIdentifierForItem(item);
+  const linearIssueId = linearIssueIdForItem(item);
   const source = descriptionSource(item);
   const issue = useGitHubIssueDetail(
     source === 'issue' ? projectRepositoryId : undefined,
@@ -38,6 +39,7 @@ export function useSourceDescription(
   const linear = useLinearIssueDetail(
     source === 'linear' ? factoryProjectId : undefined,
     source === 'linear' ? identifier : undefined,
+    source === 'linear' ? linearIssueId : undefined,
   );
   return source === undefined ? undefined : { issue, pull, linear }[source];
 }

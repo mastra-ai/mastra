@@ -7,9 +7,9 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useApiConfig } from '../../../../api/config';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { useIntakeConfigQuery, useSaveIntakeConfigMutation } from '../../../../hooks/useIntakeConfig';
-import { useLinearProjectsQuery, useLinearStatusQuery } from '../../../../hooks/useLinearData';
-import { connectLinear, isLinearReauthError } from '../../factory/services/linear';
-import type { LinearProject, LinearStatus } from '../../factory/services/linear';
+import { useLinearProjectsQuery, useLinearStatusQuery, useLinearTeamsQuery } from '../../../../hooks/useLinearData';
+import { connectLinear, isLinearReauthError, linearTeamSourceId } from '../../factory/services/linear';
+import type { LinearProject, LinearStatus, LinearTeam } from '../../factory/services/linear';
 import type { IntakeConfig } from '../../factory/services/intake';
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import { SourcePicker } from './IntakeSourcePicker';
@@ -85,6 +85,7 @@ function LinearIntakeSection({
   status,
   connected,
   projects,
+  teams,
   reauthRequired,
   showPickers,
   baseUrl,
@@ -92,6 +93,7 @@ function LinearIntakeSection({
   status: LinearStatus | undefined;
   connected: boolean;
   projects: LinearProject[];
+  teams: LinearTeam[];
   reauthRequired: boolean;
 
   showPickers: boolean;
@@ -104,7 +106,7 @@ function LinearIntakeSection({
       ? 'Connect a Linear workspace to sync its issues.'
       : reauthRequired
         ? 'Linear authorization expired. Reconnect to keep syncing issues.'
-        : "Active issues from the selected projects feed every member's board.";
+        : "Active issues from the selected projects and teams feed every member's board. Selecting a whole team also covers its projectless issues.";
 
   const action = !serverConfigured ? undefined : !connected ? (
     <Button size="sm" onClick={() => connectLinear(baseUrl)}>
@@ -139,15 +141,15 @@ function LinearIntakeSection({
 
         {showPickers && (
           <SourcePicker
-            label="Linear projects"
-            groups={groupLinearProjectsByTeam(projects)}
+            label="Linear projects and teams"
+            groups={groupLinearSourcesByTeam(projects, teams, config.linear.sourceIds)}
             selectedIds={config.linear.sourceIds}
             disabled={busy}
             pending={busy}
-            onToggleItem={projectId =>
+            onToggleItem={sourceId =>
               update({
                 ...config,
-                linear: { ...config.linear, sourceIds: toggleId(config.linear.sourceIds, projectId) },
+                linear: { ...config.linear, sourceIds: toggleId(config.linear.sourceIds, sourceId) },
               })
             }
           />
@@ -167,6 +169,7 @@ export function IntakeSection() {
   const linearStatus = linearStatusQuery.data;
   const linearConnected = Boolean(linearStatus?.enabled && linearStatus.connected);
   const linearProjectsQuery = useLinearProjectsQuery(linearConnected);
+  const linearTeamsQuery = useLinearTeamsQuery(linearConnected);
 
   const config = configQuery.data;
 
@@ -193,9 +196,14 @@ export function IntakeSection() {
   };
   const busy = saveMutation.isPending;
   const linearProjects = linearProjectsQuery.data ?? [];
+  const linearTeams = linearTeamsQuery.data ?? [];
   const reauthRequired = isLinearReauthError(linearProjectsQuery.error);
   const routedProjectIds = config.linear.sourceIds ?? [];
-  const linearReady = linearConnected && config.linear.enabled && !reauthRequired && linearProjects.length > 0;
+  const linearReady =
+    linearConnected &&
+    config.linear.enabled &&
+    !reauthRequired &&
+    (linearProjects.length > 0 || linearTeams.length > 0);
 
   return (
     <div className="flex flex-col gap-8">
@@ -226,6 +234,7 @@ export function IntakeSection() {
         status={linearStatus}
         connected={linearConnected}
         projects={linearProjects}
+        teams={linearTeams}
         reauthRequired={reauthRequired}
         showPickers={linearReady}
         baseUrl={baseUrl}
@@ -234,12 +243,13 @@ export function IntakeSection() {
         <SettingsSubsection
           scope="org"
           title="Linear routing"
-          description="Each selected project feeds one factory. Until a project is routed, its issues are not picked up."
+          description="Each selected source feeds one factory. Until a source is routed, its issues are not picked up."
         >
           <SettingsContainer>
             <LinearRouting
               sourceIds={routedProjectIds}
               projects={linearProjects}
+              teams={linearTeams}
               factories={factoriesQuery.data ?? []}
             />
           </SettingsContainer>
@@ -249,20 +259,53 @@ export function IntakeSection() {
   );
 }
 
-function groupLinearProjectsByTeam(projects: LinearProject[]): SourcePickerGroup[] {
+function groupLinearSourcesByTeam(
+  projects: LinearProject[],
+  teams: LinearTeam[],
+  selectedIds: string[] | null,
+): SourcePickerGroup[] {
+  const selected = new Set(selectedIds ?? []);
+  const teamById = new Map(teams.map(team => [team.id, team]));
   const byTeam = new Map<string, SourcePickerGroup>();
   const orphans: LinearProject[] = [];
+
+  const ensureGroup = (teamId: string, teamName: string): SourcePickerGroup => {
+    const existing = byTeam.get(teamId);
+    if (existing) return existing;
+    // Only a returned team DTO can mint a selectable team source. Project
+    // metadata may arrive first, but it does not carry the backend's opaque id.
+    const team = teamById.get(teamId);
+    const group: SourcePickerGroup = {
+      id: teamId,
+      label: teamName,
+      items: team ? [{ id: linearTeamSourceId(team), label: `All issues in ${teamName}` }] : [],
+    };
+    byTeam.set(teamId, group);
+    return group;
+  };
+
+  // Seed a group per known team so a team with no projects is still selectable.
+  for (const team of teams) ensureGroup(team.id, team.name);
+
   for (const project of projects) {
     if (project.teams.length === 0) {
       orphans.push(project);
       continue;
     }
     for (const team of project.teams) {
-      const group = byTeam.get(team.id) ?? { id: team.id, label: team.name, items: [] };
-      group.items.push({ id: project.id, label: project.name });
-      byTeam.set(team.id, group);
+      const group = ensureGroup(team.id, teamById.get(team.id)?.name ?? team.name);
+      // A project is redundant when its whole team is already selected.
+      const knownTeam = teamById.get(team.id);
+      const teamSelected = knownTeam ? selected.has(linearTeamSourceId(knownTeam)) : false;
+      const projectSelected = selected.has(project.id);
+      group.items.push({
+        id: project.id,
+        label: project.name,
+        ...(teamSelected ? { hint: projectSelected ? 'project takes precedence' : 'included via team' } : {}),
+      });
     }
   }
+
   const groups = [...byTeam.values()].sort((a, b) => (a.label ?? '').localeCompare(b.label ?? ''));
   if (orphans.length) {
     groups.push({

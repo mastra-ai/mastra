@@ -8,6 +8,10 @@ import { Fragment, useState } from 'react';
 export interface SourcePickerItem {
   id: string;
   label: string;
+  /** Optional trailing note, e.g. marking a project redundant under a selected team. */
+  hint?: string;
+  /** When true, the row is shown but its checkbox cannot be toggled. */
+  disabled?: boolean;
 }
 
 export interface SourcePickerGroup {
@@ -94,12 +98,17 @@ export function SourcePicker({
                   >
                     <Checkbox
                       checked={selectedIds?.includes(item.id) ?? false}
-                      disabled={disabled}
+                      disabled={disabled || item.disabled}
                       onCheckedChange={() => onToggleItem(item.id)}
                     />
                     <Txt as="span" variant="ui-md" className="text-icon5 truncate">
                       {item.label}
                     </Txt>
+                    {item.hint && (
+                      <Txt as="span" variant="ui-xs" className="text-icon3 ml-auto shrink-0">
+                        {item.hint}
+                      </Txt>
+                    )}
                   </label>
                 ))}
               </Fragment>

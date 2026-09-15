@@ -27,6 +27,10 @@ export type BoardTransitionPolicyContext = Immutable<
     reenter: boolean;
     itemRevision: number;
     isHumanTransition: boolean;
+    /** Whether a produced plan may advance without a human review, mirroring the
+     * dispatcher's `#plansAreAutoApproved` predicate (`plansPreapprovedAt` or the
+     * project's `autoApprovePlans`). Resolved by the transition service. */
+    plansAutoApproved: boolean;
     requestedTriageType?: FactoryTriageType;
     item: FactoryRuleItemContext & { triageType: FactoryTriageType | null };
   }

@@ -1,5 +1,66 @@
 # @mastra/core
 
+## 1.68.0-alpha.0
+
+### Minor Changes
+
+- Durable agents no longer persist `running` checkpoints by default, and `createDurableAgent()` accepts a new `shouldPersistSnapshot` option to control snapshot persistence ([#23915](https://github.com/mastra-ai/mastra/issues/23915)). ([#23978](https://github.com/mastra-ai/mastra/pull/23978))
+
+  Previously, durable agents wrote a full workflow snapshot to storage on every step of every run, including `running` checkpoints that are only read by crash recovery. With recovery left at its default (`recovery.durableAgents: 'off'`), those writes were pure overhead — a single agent turn could generate over a thousand storage statements.
+
+  **What changed**
+
+  - Durable agents still always persist `pending`, `paused`, and `suspended` snapshots, so human-in-the-loop resume and tool approval keep working with no configuration.
+  - `running` checkpoints are now only written when the Mastra instance sets `recovery.durableAgents: 'auto'`, which is the setting that consumes them.
+  - `createDurableAgent()`, the `DurableAgent` constructor, and the agent-level `durable` config accept a `shouldPersistSnapshot` predicate to override the policy.
+  - Mastra logs a warning if a custom predicate excludes `suspended` or `paused` (breaks human-in-the-loop resume), or excludes `running` while automatic recovery is enabled (makes the agent invisible to recovery).
+  - Evented agents are unaffected: they always persist the full snapshot set (their engine coordinates workers through storage) and log a warning if `shouldPersistSnapshot` is set.
+
+  **Action required if you use manual recovery**: if you call `listActiveRuns()`, `recover()`, or `recoverActiveRuns()` without setting `recovery.durableAgents: 'auto'`, opt back into `running` checkpoints:
+
+  ```typescript
+  const durableAgent = createDurableAgent({
+    agent,
+    shouldPersistSnapshot: ({ workflowStatus }) =>
+      ['pending', 'paused', 'suspended', 'running'].includes(workflowStatus),
+  });
+  ```
+
+- Added Hono handler and route types to the server exports. ([#23992](https://github.com/mastra-ai/mastra/pull/23992))
+
+  ```ts
+  import type { MiddlewareHandler } from '@mastra/core/server';
+
+  const middleware: MiddlewareHandler = async (_context, next) => {
+    await next();
+  };
+  ```
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`1e68460`](https://github.com/mastra-ai/mastra/commit/1e68460205d0061c6dbc7a7e7a50950236af774b))
+
+- Ignore malformed numeric `Retry-After` values instead of parsing them as years and delaying retries up to the configured cap. ([#23997](https://github.com/mastra-ai/mastra/pull/23997))
+
+- **Breaking change** ([#22978](https://github.com/mastra-ai/mastra/pull/22978))
+
+  Agent Controller streams now emit one complete `message_start` payload, followed by ID-addressed `message_update` events for text, reasoning, and message-part changes. `message_end` now contains only the message ID.
+
+  **Migration**
+
+  Previously, consumers read the complete message from each update. Now, store the start payload by ID and apply subsequent updates to that message:
+
+  ```ts
+  if (event.type === 'message_start') messages.set(event.message.id, event.message);
+  if (event.type === 'message_update') applyUpdate(messages.get(event.id), event.event);
+  ```
+
+- Fixed shared tools exposing `_background` to agents that do not support background execution. ([#23120](https://github.com/mastra-ai/mastra/pull/23120))
+
+  Agents now advertise `_background` only for eligible tools. `suspendedToolRunId` and `resumeData` remain scoped to resumable tools. Repeated schema conversions no longer add nested validators.
+
+- Fixed durable agents giving delegated sub-agents a shared, parent-derived memory scope instead of one derived from the calling user. The durable execution path now stamps the caller's thread and resource identity onto delegated agent-tool calls, matching the regular agent loop, so each user's sub-agent conversations stay isolated and memory continuity works across turns. Fixes [#23903](https://github.com/mastra-ai/mastra/issues/23903). ([#23981](https://github.com/mastra-ai/mastra/pull/23981))
+
 ## 1.67.0
 
 ### Minor Changes

@@ -186,6 +186,9 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
   StorageResolvedAgentType,
   Agent
 > {
+  /** IDs of stored agents this namespace registered with Mastra. */
+  private _registeredStoredAgentIds = new Set<string>();
+
   protected async getStorageAdapter(): Promise<
     StorageAdapter<
       StorageCreateAgentInput,
@@ -422,6 +425,9 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
   }
 
   protected override onCacheEvict(id: string): void {
+    // Drop ownership tracking regardless of the registry outcome so the set
+    // never leaks stale IDs.
+    this._registeredStoredAgentIds.delete(id);
     // Only remove stored agents from the Mastra registry.
     // Code-defined agents must survive cache eviction because they live
     // in code and may only have a stored config overlay.
@@ -432,6 +438,22 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       }
     } catch {
       // Agent not found in registry — nothing to remove
+    }
+  }
+
+  /**
+   * Clear cached agents. Extends the base clear-all to also evict stored agents
+   * that were registered with Mastra via version-specific requests, which skip
+   * the value cache and would otherwise survive a no-ID clearCache().
+   */
+  override clearCache(id?: string): void {
+    super.clearCache(id);
+    // Targeted clears already ran onCacheEvict(id) (which pruned the set) via
+    // the base implementation; only clear-all needs to mop up untracked-in-cache
+    // registrations.
+    if (id) return;
+    for (const registeredId of Array.from(this._registeredStoredAgentIds)) {
+      this.onCacheEvict(registeredId);
     }
   }
 
@@ -1133,6 +1155,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     // endpoint to show the agent as "stored" instead of "code".
     if (!this.getCodeDefinedAgent(storedAgent.id)) {
       this.mastra?.addAgent(agent, storedAgent.id, { source: 'stored' });
+      this._registeredStoredAgentIds.add(storedAgent.id);
     }
     this.logger?.debug(`[createAgentFromStoredConfig] Successfully created agent "${storedAgent.id}"`);
 
