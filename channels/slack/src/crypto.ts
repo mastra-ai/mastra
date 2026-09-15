@@ -1,33 +1,38 @@
-import { createHmac, timingSafeEqual, createCipheriv, createDecipheriv, hkdfSync } from 'node:crypto';
+import { createCipheriv, createDecipheriv, hkdfSync } from 'node:crypto';
+
+const encoder = new TextEncoder();
 
 /**
  * Verify a Slack request signature.
  * @see https://api.slack.com/authentication/verifying-requests-from-slack
  */
-export function verifySlackRequest(params: {
+export async function verifySlackRequest(params: {
   signingSecret: string;
   timestamp: string;
   body: string;
   signature: string;
-}): boolean {
+}): Promise<boolean> {
   const { signingSecret, timestamp, body, signature } = params;
   // Check timestamp to prevent replay attacks (5 minute window)
   const now = Math.floor(Date.now() / 1000);
   const requestTime = parseInt(timestamp, 10);
-  if (Math.abs(now - requestTime) > 300) {
+  if (Math.abs(now - requestTime) > 300 || !/^v0=[0-9a-f]{64}$/.test(signature)) {
     return false;
   }
 
-  // Compute expected signature
-  const sigBasestring = `v0:${timestamp}:${body}`;
-  const expectedSignature = `v0=${createHmac('sha256', signingSecret).update(sigBasestring).digest('hex')}`;
-
-  // Timing-safe comparison
-  try {
-    return timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSignature));
-  } catch {
-    return false;
-  }
+  const key = await globalThis.crypto.subtle.importKey(
+    'raw',
+    encoder.encode(signingSecret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['verify'],
+  );
+  return globalThis.crypto.subtle.verify(
+    'HMAC',
+    key,
+    Buffer.from(signature.slice(3), 'hex'),
+    encoder.encode(`v0:${timestamp}:${body}`),
+  );
 }
 
 /**

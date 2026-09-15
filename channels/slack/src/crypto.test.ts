@@ -80,68 +80,74 @@ describe('verifySlackRequest', () => {
   const signingSecret = 'test-signing-secret';
   const body = 'token=abc&team_id=T123';
 
-  function makeSignature(secret: string, ts: string, b: string): string {
-    const { createHmac } = require('node:crypto');
-    const sig = createHmac('sha256', secret).update(`v0:${ts}:${b}`).digest('hex');
-    return `v0=${sig}`;
+  async function makeSignature(secret: string, ts: string, b: string): Promise<string> {
+    const key = await globalThis.crypto.subtle.importKey(
+      'raw',
+      new TextEncoder().encode(secret),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign'],
+    );
+    const signature = await globalThis.crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`v0:${ts}:${b}`));
+    return `v0=${Buffer.from(signature).toString('hex')}`;
   }
 
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
-  it('accepts a valid signature within the time window', () => {
+  it('accepts a valid signature within the time window', async () => {
     const timestamp = String(Math.floor(Date.now() / 1000));
-    const signature = makeSignature(signingSecret, timestamp, body);
+    const signature = await makeSignature(signingSecret, timestamp, body);
 
-    expect(verifySlackRequest({ signingSecret, timestamp, body, signature })).toBe(true);
+    await expect(verifySlackRequest({ signingSecret, timestamp, body, signature })).resolves.toBe(true);
   });
 
-  it('rejects an invalid signature', () => {
+  it('rejects an invalid signature', async () => {
     const timestamp = String(Math.floor(Date.now() / 1000));
 
-    expect(
+    await expect(
       verifySlackRequest({
         signingSecret,
         timestamp,
         body,
         signature: 'v0=0000000000000000000000000000000000000000000000000000000000000000',
       }),
-    ).toBe(false);
+    ).resolves.toBe(false);
   });
 
-  it('rejects a timestamp older than 5 minutes', () => {
+  it('rejects a timestamp older than 5 minutes', async () => {
     const oldTimestamp = String(Math.floor(Date.now() / 1000) - 301);
-    const signature = makeSignature(signingSecret, oldTimestamp, body);
+    const signature = await makeSignature(signingSecret, oldTimestamp, body);
 
-    expect(verifySlackRequest({ signingSecret, timestamp: oldTimestamp, body, signature })).toBe(false);
+    await expect(verifySlackRequest({ signingSecret, timestamp: oldTimestamp, body, signature })).resolves.toBe(false);
   });
 
-  it('accepts a timestamp at exactly 5 minutes (boundary)', () => {
+  it('accepts a timestamp at exactly 5 minutes (boundary)', async () => {
     const ts = String(Math.floor(Date.now() / 1000) - 300);
-    const signature = makeSignature(signingSecret, ts, body);
+    const signature = await makeSignature(signingSecret, ts, body);
 
-    expect(verifySlackRequest({ signingSecret, timestamp: ts, body, signature })).toBe(true);
+    await expect(verifySlackRequest({ signingSecret, timestamp: ts, body, signature })).resolves.toBe(true);
   });
 
-  it('rejects a future timestamp beyond 5 minutes', () => {
+  it('rejects a future timestamp beyond 5 minutes', async () => {
     const futureTs = String(Math.floor(Date.now() / 1000) + 301);
-    const signature = makeSignature(signingSecret, futureTs, body);
+    const signature = await makeSignature(signingSecret, futureTs, body);
 
-    expect(verifySlackRequest({ signingSecret, timestamp: futureTs, body, signature })).toBe(false);
+    await expect(verifySlackRequest({ signingSecret, timestamp: futureTs, body, signature })).resolves.toBe(false);
   });
 
-  it('rejects a signature with wrong length', () => {
+  it('rejects a signature with wrong length', async () => {
     const timestamp = String(Math.floor(Date.now() / 1000));
 
-    expect(
+    await expect(
       verifySlackRequest({
         signingSecret,
         timestamp,
         body,
         signature: 'v0=short',
       }),
-    ).toBe(false);
+    ).resolves.toBe(false);
   });
 });
 

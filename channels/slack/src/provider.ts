@@ -1,4 +1,3 @@
-import * as crypto from 'node:crypto';
 import type { Mastra } from '@mastra/core/mastra';
 import {
   type ChannelProvider,
@@ -98,19 +97,20 @@ export function resolveSlackAdapterConfig(channelConfig: SlackProviderConfig): S
  * Create a hash of the agent config for change detection.
  * Uses the resolved app name (config.name ?? agentName) to detect renames.
  */
-function hashConfig(
+async function hashConfig(
   opts: { description?: string; slashCommands?: SlackConnectOptions['slashCommands'] },
   baseUrl: string,
   resolvedAppName: string,
   resolvedDescription: string,
-): string {
+): Promise<string> {
   const normalized = JSON.stringify({
     name: resolvedAppName,
     description: resolvedDescription,
     slashCommands: opts.slashCommands,
     baseUrl,
   });
-  return crypto.createHash('sha256').update(normalized).digest('hex').slice(0, 16);
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(normalized));
+  return Buffer.from(digest).toString('hex').slice(0, 16);
 }
 
 /**
@@ -755,7 +755,7 @@ export class SlackProvider implements ChannelProvider {
     // Resolve current values: stored overrides (from connect()) > code-defined > defaults
     const resolvedAppName = installation.name ?? agent.name ?? installation.agentId;
     const resolvedDescription = installation.description || agent.getDescription() || 'AI assistant powered by Mastra';
-    const currentHash = hashConfig(
+    const currentHash = await hashConfig(
       { slashCommands: installation.slashCommands },
       baseUrl,
       resolvedAppName,
@@ -1179,7 +1179,7 @@ export class SlackProvider implements ChannelProvider {
     const authorizationUrl = authUrl.toString();
 
     // Store pending installation (includes auth URL for UI to fetch later)
-    const configHash = hashConfig(config, baseUrl, appName, appDescription);
+    const configHash = await hashConfig(config, baseUrl, appName, appDescription);
     const pendingInstallation = this.#encryptPendingInstallation({
       id: installationId,
       agentId,
@@ -1539,7 +1539,7 @@ export class SlackProvider implements ChannelProvider {
       return c.json({ error: 'Missing signature headers' }, 401);
     }
 
-    const isValid = verifySlackRequest({
+    const isValid = await verifySlackRequest({
       signingSecret: installation.signingSecret,
       timestamp,
       body: rawBody,
@@ -1639,7 +1639,7 @@ export class SlackProvider implements ChannelProvider {
       return c.json({ error: 'Missing signature headers' }, 401);
     }
 
-    const isValid = verifySlackRequest({
+    const isValid = await verifySlackRequest({
       signingSecret: installation.signingSecret,
       timestamp,
       body: rawBody,
