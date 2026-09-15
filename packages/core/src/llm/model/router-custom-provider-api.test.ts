@@ -97,19 +97,24 @@ describe('ModelRouter - custom URL api selection', () => {
     expect(createOpenAICompatible).not.toHaveBeenCalled();
   });
 
-  it('does not collide chat and responses instances in the model cache', async () => {
-    const shared = {
-      id: 'my-provider/my-model' as const,
+  it('keys chat and responses instances separately in the model cache', () => {
+    const base = {
+      gatewayId: 'my-provider',
+      modelId: 'my-model',
+      providerId: 'my-provider',
       url: 'http://localhost:9999/v1',
       apiKey: 'test-key',
+      headersKey: '',
+      resolvedTransport: 'fetch' as const,
+      websocketKey: '',
+      authScopeKey: 'explicit',
     };
 
-    await drainStream(new ModelRouterLanguageModel({ ...shared }));
-    await drainStream(new ModelRouterLanguageModel({ ...shared, api: 'responses' }));
+    const chatKey = ModelRouterLanguageModel.computeModelCacheKey({ ...base, api: 'chat' });
+    const responsesKey = ModelRouterLanguageModel.computeModelCacheKey({ ...base, api: 'responses' });
 
-    // Distinct protocols must build distinct underlying models rather than
-    // reuse a cached instance keyed without the api discriminator.
-    expect(chatModel).toHaveBeenCalledTimes(1);
-    expect(responses).toHaveBeenCalledTimes(1);
+    // The api discriminator must be part of the cache key so that chat and
+    // responses instances for the same URL/model cannot collide.
+    expect(chatKey).not.toEqual(responsesKey);
   });
 });

@@ -481,6 +481,47 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
     return streamResult;
   }
 
+  static computeModelCacheKey({
+    gatewayId,
+    modelId,
+    providerId,
+    url,
+    apiKey,
+    headersKey,
+    resolvedTransport,
+    websocketKey,
+    authScopeKey,
+    api,
+  }: {
+    gatewayId: string;
+    modelId: string;
+    providerId: string;
+    url: string;
+    apiKey: string;
+    headersKey: string;
+    resolvedTransport: OpenAITransport;
+    websocketKey: string;
+    authScopeKey: string;
+    api: 'chat' | 'responses';
+  }): string {
+    return createHash('sha256')
+      .update(
+        JSON.stringify([
+          gatewayId,
+          modelId,
+          providerId,
+          url,
+          apiKey,
+          headersKey,
+          resolvedTransport,
+          websocketKey,
+          authScopeKey,
+          api,
+        ]),
+      )
+      .digest('hex');
+  }
+
   private async resolveLanguageModel({
     modelId,
     providerId,
@@ -506,22 +547,18 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
     const useInstanceCache = this.shouldUseInstanceGatewayCache(auth);
     const cache = useInstanceCache ? this.instanceGatewayCache : this.getGatewayCache();
     const authScopeKey = useInstanceCache ? `${auth.source ?? ''}` : '';
-    const key = createHash('sha256')
-      .update(
-        JSON.stringify([
-          this.gatewayId,
-          modelId,
-          providerId,
-          this.config.url || '',
-          apiKey,
-          stableHeaderKey(headers),
-          resolvedTransport,
-          websocketKey,
-          authScopeKey,
-          this.config.api || 'chat',
-        ]),
-      )
-      .digest('hex');
+    const key = ModelRouterLanguageModel.computeModelCacheKey({
+      gatewayId: this.gatewayId,
+      modelId,
+      providerId,
+      url: this.config.url || '',
+      apiKey,
+      headersKey: stableHeaderKey(headers),
+      resolvedTransport,
+      websocketKey,
+      authScopeKey,
+      api: this.config.api || 'chat',
+    });
     if (cache.modelInstances.has(key)) {
       this.setStreamTransportFromCache({ cache, resolvedTransport, key, responsesWebSocket });
       return cache.modelInstances.get(key)!;
