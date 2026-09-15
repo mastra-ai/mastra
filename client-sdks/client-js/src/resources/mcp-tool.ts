@@ -35,11 +35,17 @@ export class MCPTool extends BaseResource {
    * @returns Promise containing the result of the tool execution.
    */
   execute(
-    params: Body<'POST /mcp/:serverId/tools/:toolId/execute'> & { requestContext?: RequestContext },
+    params: Omit<Body<'POST /mcp/:serverId/tools/:toolId/execute'>, 'requestContext'> & {
+      requestContext?: RequestContext | Record<string, unknown>;
+    },
   ): Promise<RouteResponse<'POST /mcp/:serverId/tools/:toolId/execute'>> {
-    return this.request(`/mcp/${encodeURIComponent(this.serverId)}/tools/${encodeURIComponent(this.toolId)}/execute`, {
-      method: 'POST',
-      body: params,
-    });
+    const { requestContext, ...body } = params;
+    return this.request(
+      `/mcp/${encodeURIComponent(this.serverId)}/tools/${encodeURIComponent(this.toolId)}/execute${requestContextQueryString(requestContext)}`,
+      {
+        method: 'POST',
+        body,
+      },
+    );
   }
 }
