@@ -241,6 +241,7 @@ describe('ObservationalMemory client input persistence', () => {
       observation: { messageTokens: 1, bufferTokens: false },
       reflection: { observationTokens: 1 },
     });
+    const persistSpy = vi.spyOn(om, 'persistMessages');
 
     await om.persistClientInputMessages(
       [
@@ -257,6 +258,11 @@ describe('ObservationalMemory client input persistence', () => {
       threadId,
       resourceId,
     );
+
+    // Assert the reconciled batch, not only the final storage state. Before the
+    // sealed-echo guard, persistMessages received the edited message and then
+    // silently filtered it because it was already sealed.
+    expect(persistSpy).toHaveBeenCalledWith([], threadId, resourceId);
 
     const { messages } = await storage.listMessages({
       threadId,

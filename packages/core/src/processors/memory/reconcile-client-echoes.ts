@@ -325,11 +325,11 @@ export function messagesContentEqual(a: MastraDBMessage, b: MastraDBMessage): bo
  * - For assistant (and system) messages, lossy or transitional echoes are
  *   merged into the stored canonical version so only supported client-authored
  *   changes (e.g. tool results) survive.
- * - For user messages the client IS the author of the content, so an
+ * - For unsealed user messages the client IS the author of the content, so an
  *   edit-and-resend that reuses the message ID is kept — but only the editable
- *   surface (text/content and the client's own parts). Server-authored
- *   observation markers and metadata (e.g. `mastra.sealed`) are retained from
- *   the stored record, so a lossy echo cannot erase them.
+ *   surface (text/content and the client's own parts). Once a user message is
+ *   sealed, edited echoes are dropped because the observation record already
+ *   depends on its canonical content.
  */
 export function reconcileClientEchoes(
   messages: MastraDBMessage[],
