@@ -40,7 +40,7 @@ import { deepMerge } from '../utils';
 import type { MastraEmbeddingModel, MastraEmbeddingOptions, MastraVector } from '../vector';
 
 import { assertNoReservedThreadBranchMetadata, createThreadBranchError } from './branching';
-import { persistGeneratedMessages } from './internal';
+import { persistGeneratedMessages, persistMessagesWithThreadCreation } from './internal';
 import {
   advanceMemoryTokenBoundary,
   getMemoryTokenBoundary,
@@ -511,10 +511,12 @@ https://mastra.ai/en/docs/memory/overview`,
       messages: MastraDBMessage[];
       memoryConfig?: MemoryConfig | undefined;
       observabilityContext?: Partial<ObservabilityContext>;
+      thread?: StorageThreadType;
     },
     _generatedMessageIds: readonly string[],
   ): Promise<{ messages: MastraDBMessage[]; usage?: { tokens: number } }> {
-    return this.saveMessages(args);
+    const { thread: _thread, ...saveArgs } = args;
+    return this.saveMessages(saveArgs);
   }
 
   /**
@@ -1089,7 +1091,8 @@ https://mastra.ai/en/docs/memory/overview`,
             ...(this.supportsThreadBranching
               ? {
                   persistMessages: (input, generatedMessageIds) =>
-                    persistGeneratedMessages(this, input, generatedMessageIds),
+                    persistMessagesWithThreadCreation(this, input, generatedMessageIds),
+                  persistMessagesCreatesThread: true,
                 }
               : {}),
           }),

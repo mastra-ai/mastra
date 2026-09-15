@@ -1,7 +1,10 @@
+import { MASTRA_THREAD_BRANCH_METADATA_KEY } from '@mastra/core/memory';
 import type { MastraDBMessage } from '@mastra/core/memory';
-import { persistGeneratedMessages } from '@mastra/core/memory/internal';
+import { persistGeneratedMessages, persistMessagesWithThreadCreation } from '@mastra/core/memory/internal';
+import { MessageHistory } from '@mastra/core/processors';
 import { InMemoryStore } from '@mastra/core/storage';
 import type { MemoryStorage } from '@mastra/core/storage';
+import type { MastraVector } from '@mastra/core/vector';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { Memory } from '../index';
@@ -30,6 +33,94 @@ describe('branch mutation integrity', () => {
     store = (await memory.storage.getStore('memory'))!;
     await memory.createThread({ threadId: 'root', resourceId });
     await memory.saveMessages({ messages: [message('fork', 'root', forkTime)] });
+  });
+
+  it('creates missing threads inside the validated persistence lock without deleting a concurrent writer', async () => {
+    const originalSaveMessages = store.saveMessages.bind(store);
+    let releaseFirst!: () => void;
+    let firstReachedSave!: () => void;
+    const firstAtSave = new Promise<void>(resolve => {
+      firstReachedSave = resolve;
+    });
+    const continueFirst = new Promise<void>(resolve => {
+      releaseFirst = resolve;
+    });
+    vi.spyOn(store, 'saveMessages').mockImplementation(async input => {
+      if (input.messages.some(item => item.id === 'first-generated')) {
+        firstReachedSave();
+        await continueFirst;
+        throw new Error('first persistence failed');
+      }
+      return originalSaveMessages(input);
+    });
+    const thread = {
+      id: 'generated-thread',
+      resourceId,
+      title: '',
+      metadata: {},
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    const first = persistGeneratedMessages(
+      memory,
+      { messages: [message('first-generated', thread.id, forkTime)], thread },
+      ['first-generated'],
+    );
+    await firstAtSave;
+    const concurrentMemory = new Memory({ storage: memory.storage });
+    const second = persistGeneratedMessages(
+      concurrentMemory,
+      { messages: [message('second-generated', thread.id, forkTime)], thread },
+      ['second-generated'],
+    );
+    releaseFirst();
+
+    await expect(first).rejects.toThrow('first persistence failed');
+    await expect(second).resolves.toMatchObject({ messages: [expect.objectContaining({ id: 'second-generated' })] });
+    expect(await store.getThreadById({ threadId: thread.id })).toMatchObject({ id: thread.id });
+    expect((await store.listMessagesById({ messageIds: ['first-generated', 'second-generated'] })).messages).toEqual([
+      expect.objectContaining({ id: 'second-generated' }),
+    ]);
+  });
+
+  it('preserves branch lineage when explicit-only missing-thread persistence races branch creation', async () => {
+    const originalGetThreadById = store.getThreadById.bind(store);
+    let releaseLookup!: () => void;
+    let lookupCompleted!: () => void;
+    const staleLookupReached = new Promise<void>(resolve => {
+      lookupCompleted = resolve;
+    });
+    const continuePersistence = new Promise<void>(resolve => {
+      releaseLookup = resolve;
+    });
+    vi.spyOn(store, 'getThreadById').mockImplementationOnce(async input => {
+      const stale = await originalGetThreadById(input);
+      lookupCompleted();
+      await continuePersistence;
+      return stale;
+    });
+    const processor = new MessageHistory({
+      storage: store,
+      persistMessages: (input, generatedIds) => persistMessagesWithThreadCreation(memory, input, generatedIds),
+      persistMessagesCreatesThread: true,
+    });
+    const explicit = message('explicit-race', 'race-child', new Date(forkTime.getTime() + 1));
+    const persistence = processor.persistMessages({
+      messages: [explicit],
+      threadId: 'race-child',
+      resourceId,
+    });
+    await staleLookupReached;
+    vi.spyOn(memory as any, 'generateId').mockReturnValue('race-child');
+    const branch = await memory.branchThread({ threadId: 'root', branchPointMessageId: 'fork' });
+    releaseLookup();
+
+    await expect(persistence).resolves.toBeUndefined();
+    expect(branch.thread.id).toBe('race-child');
+    expect((await store.getThreadById({ threadId: branch.thread.id }))?.metadata).toHaveProperty(
+      MASTRA_THREAD_BRANCH_METADATA_KEY,
+    );
+    expect((await store.listMessagesById({ messageIds: [explicit.id] })).messages).toEqual([explicit]);
   });
 
   it('normalizes trusted generated timestamps monotonically while explicit backdated rows fail closed', async () => {
@@ -117,6 +208,62 @@ describe('branch mutation integrity', () => {
     });
   });
 
+  it('does not alter vectors when message storage rejects an update', async () => {
+    const indexes = new Set<string>();
+    const deleteVectors = vi.fn().mockResolvedValue(undefined);
+    const upsert = vi.fn().mockResolvedValue(undefined);
+    const vector = {
+      id: 'mutation-vector',
+      createIndex: vi.fn(async ({ indexName }: { indexName: string }) => indexes.add(indexName)),
+      listIndexes: vi.fn(async () => [...indexes]),
+      describeIndex: vi.fn().mockResolvedValue({ dimension: 4 }),
+      deleteVectors,
+      upsert,
+      query: vi.fn().mockResolvedValue([]),
+    } as unknown as MastraVector;
+    const vectorMemory = new Memory({
+      storage: new InMemoryStore(),
+      vector,
+      embedder: {
+        doEmbed: vi.fn(async ({ values }: { values: string[] }) => ({
+          embeddings: values.map(() => [0.1, 0.1, 0.1, 0.1]),
+        })),
+        modelId: 'mock-embedder',
+        specificationVersion: 'v1',
+        provider: 'mock',
+      } as any,
+      options: { semanticRecall: { scope: 'thread' }, generateTitle: false },
+    });
+    const vectorStore = (await vectorMemory.storage.getStore('memory'))!;
+    await vectorMemory.createThread({ threadId: 'vector-root', resourceId });
+    await vectorMemory.saveMessages({
+      messages: [message('vector-message', 'vector-root', forkTime, 'before')],
+    });
+    await vectorMemory.settled();
+    deleteVectors.mockClear();
+    upsert.mockClear();
+    const updateMessages = vi
+      .spyOn(vectorStore, 'updateMessages')
+      .mockRejectedValueOnce(new Error('storage rejected update'));
+
+    await expect(
+      vectorMemory.updateMessages({ messages: [{ id: 'vector-message', content: { content: 'after' } }] }),
+    ).rejects.toThrow('storage rejected update');
+    expect(deleteVectors).not.toHaveBeenCalled();
+    expect(upsert).not.toHaveBeenCalled();
+
+    const persisted = (await vectorStore.listMessagesById({ messageIds: ['vector-message'] })).messages[0]!;
+    updateMessages.mockResolvedValueOnce([persisted]);
+    await vectorMemory.updateMessages({
+      messages: [{ id: 'vector-message', content: { content: undefined } }],
+    });
+    expect(upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: [expect.objectContaining({ message_id: 'vector-message', content: 'before' })],
+      }),
+    );
+  });
+
   it('enforces both equal-timestamp ID tie directions on parent and child writes', async () => {
     const branch = await memory.branchThread({ threadId: 'root', branchPointMessageId: 'fork' });
     const saveStorage = vi.spyOn(store, 'saveMessages');
@@ -142,7 +289,7 @@ describe('branch mutation integrity', () => {
     ).rejects.toMatchObject({ id: 'BRANCH_MUTATION_CONFLICT' });
   });
 
-  it('canonicalizes mixed batches and places new generated rows after explicit rows', async () => {
+  it('preserves mixed-batch input order and rejects invalid ordering atomically', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(forkTime.getTime());
     const branch = await memory.branchThread({ threadId: 'root', branchPointMessageId: 'fork' });
     const explicit = message('explicit', branch.thread.id, new Date(forkTime.getTime() + 10));
@@ -156,18 +303,45 @@ describe('branch mutation integrity', () => {
     expect(accepted.messages.map(item => item.id)).toEqual(['explicit', 'generated']);
     expect(accepted.messages[1]!.createdAt.getTime()).toBeGreaterThan(accepted.messages[0]!.createdAt.getTime());
 
-    const reorderedGenerated = message('reordered-generated', branch.thread.id, forkTime);
-    const reorderedExplicit = message('reordered-explicit', branch.thread.id, new Date(forkTime.getTime() + 20));
-    await persistGeneratedMessages(memory, { messages: [reorderedGenerated, reorderedExplicit] }, [
-      'reordered-generated',
-    ]);
-    const reordered = await store.listMessagesById({
-      messageIds: ['reordered-generated', 'reordered-explicit'],
-    });
-    const reorderedById = new Map(reordered.messages.map(item => [item.id, item]));
-    expect(reorderedById.get('reordered-generated')!.createdAt.getTime()).toBeGreaterThan(
-      reorderedById.get('reordered-explicit')!.createdAt.getTime(),
+    const rejectedGenerated = message('rejected-generated', branch.thread.id, forkTime);
+    const rejectedExplicit = message('rejected-explicit', branch.thread.id, forkTime);
+    await expect(
+      persistGeneratedMessages(memory, { messages: [rejectedGenerated, rejectedExplicit] }, ['rejected-generated']),
+    ).rejects.toMatchObject({ id: 'BRANCH_MUTATION_CONFLICT' });
+    expect(
+      (await store.listMessagesById({ messageIds: ['rejected-generated', 'rejected-explicit'] })).messages,
+    ).toEqual([]);
+  });
+
+  it('preserves caller order while accepting an existing generated-message upsert', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(forkTime.getTime());
+    const branch = await memory.branchThread({ threadId: 'root', branchPointMessageId: 'fork' });
+    const existing = message('existing-generated', branch.thread.id, forkTime);
+    await persistGeneratedMessages(memory, { messages: [existing] }, [existing.id]);
+    const storedBefore = (await store.listMessagesById({ messageIds: [existing.id] })).messages[0]!;
+    const saveStorage = vi.spyOn(store, 'saveMessages');
+    const explicit = message(
+      'explicit-after-existing',
+      branch.thread.id,
+      new Date(storedBefore.createdAt.getTime() + 10),
     );
+    const upsert = {
+      ...existing,
+      content: { ...existing.content, parts: [{ type: 'text' as const, text: 'updated' }] },
+    };
+
+    await persistGeneratedMessages(memory, { messages: [explicit, upsert] }, [upsert.id]);
+
+    expect(saveStorage.mock.calls.at(-1)?.[0].messages.map(item => item.id)).toEqual([explicit.id, upsert.id]);
+    const storedAfter = (await store.listMessagesById({ messageIds: [existing.id] })).messages[0]!;
+    expect(storedAfter.createdAt).toEqual(storedBefore.createdAt);
+
+    saveStorage.mockClear();
+    const backdated = message('zzz-backdated', branch.thread.id, forkTime);
+    await expect(
+      persistGeneratedMessages(memory, { messages: [upsert, backdated] }, [upsert.id]),
+    ).rejects.toMatchObject({ id: 'BRANCH_MUTATION_CONFLICT' });
+    expect(saveStorage).not.toHaveBeenCalled();
   });
 
   it('validates raw observational-memory persistence and its generated provenance', async () => {
@@ -308,6 +482,37 @@ describe('branch mutation integrity', () => {
     expect(await secondStore.getThreadById({ threadId: 'losing-branch' })).toBeNull();
   });
 
+  it('retries deletion when message ownership changes before locks are acquired', async () => {
+    const originalListMessagesById = store.listMessagesById.bind(store);
+    let releaseSnapshot!: () => void;
+    let snapshotRead!: () => void;
+    const snapshotReached = new Promise<void>(resolve => {
+      snapshotRead = resolve;
+    });
+    const continueDelete = new Promise<void>(resolve => {
+      releaseSnapshot = resolve;
+    });
+    vi.spyOn(store, 'listMessagesById').mockImplementationOnce(async input => {
+      const stale = await originalListMessagesById(input);
+      snapshotRead();
+      await continueDelete;
+      return stale;
+    });
+
+    const deletion = memory.deleteMessages(['fork']);
+    await snapshotReached;
+    await memory.updateThreadResourceId({ threadId: 'root', resourceId: 'moved-resource' });
+    const movedFork = (await originalListMessagesById({ messageIds: ['fork'] })).messages[0]!;
+    await store.updateMessages({ messages: [{ ...movedFork, resourceId: 'moved-resource' }] });
+    expect((await store.getThreadById({ threadId: 'root' }))?.resourceId).toBe('moved-resource');
+    expect((await originalListMessagesById({ messageIds: ['fork'] })).messages[0]?.resourceId).toBe('moved-resource');
+    await memory.branchThread({ threadId: 'root', branchPointMessageId: 'fork' });
+    releaseSnapshot();
+
+    await expect(deletion).rejects.toMatchObject({ id: 'BRANCH_MUTATION_CONFLICT' });
+    expect((await originalListMessagesById({ messageIds: ['fork'] })).messages).toHaveLength(1);
+  });
+
   it('discovers descendant protections beyond the default thread page', async () => {
     let branchId = 0;
     vi.spyOn(memory as any, 'generateId').mockImplementation(() => `branch-${branchId++}`);
@@ -317,6 +522,26 @@ describe('branch mutation integrity', () => {
 
     await expect(memory.deleteMessages(['fork'])).rejects.toMatchObject({ id: 'BRANCH_MUTATION_CONFLICT' });
     expect((await store.listMessagesById({ messageIds: ['fork'] })).messages).toHaveLength(1);
+  });
+
+  it('ignores malformed lineage metadata in unrelated resources during message mutations', async () => {
+    await store.saveThread({
+      thread: {
+        id: 'unrelated-corrupt',
+        resourceId: 'unrelated-resource',
+        title: '',
+        metadata: { [MASTRA_THREAD_BRANCH_METADATA_KEY]: { malformed: true } },
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+    const leaf = message('ordinary-leaf', 'root', new Date(forkTime.getTime() + 1));
+
+    await expect(memory.saveMessages({ messages: [leaf] })).resolves.toMatchObject({ messages: [leaf] });
+    await expect(
+      memory.updateMessages({ messages: [{ id: leaf.id, content: { content: 'updated' } }] }),
+    ).resolves.toHaveLength(1);
+    await expect(memory.deleteMessages([leaf.id])).resolves.toBeUndefined();
   });
 
   it('allows leaf deletion and removes its physical rows', async () => {
