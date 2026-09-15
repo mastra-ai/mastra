@@ -290,7 +290,7 @@ A stored tool invocation in `call` state accepts two client-authored terminal tr
 - `result`: The client contributes `state` and `result`. A v4-style error result can also contribute `isError` and `errorText`.
 - `output-error`: The client contributes `state` and `errorText` for a v6 error.
 
-The stored tool name, call ID, and args remain unchanged, and other client-supplied fields are dropped. For user messages, an edited resend replaces the stored copy. If the stored-record lookup fails, Mastra saves the original input and output instead of aborting persistence, which is why sending only the new message remains recommended.
+The stored tool name, call ID, and args remain unchanged, and other client-supplied fields are dropped. An edited resend can replace an unsealed user message, but edits to a sealed user message are ignored because observational memory already depends on its canonical content. If the stored-record lookup is unavailable or fails, Mastra aborts persistence rather than risk replacing a canonical record with a lossy echo. Sending only the new message remains recommended.
 
 See [Message history](/docs/memory/message-history) for more on how Mastra memory loads and stores messages.
 
