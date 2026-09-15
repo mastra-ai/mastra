@@ -73,6 +73,7 @@ function resolveOutputProcessors(): Array<{ id?: string }> {
 const controllerConstructorMock = vi.fn();
 const controllerOnSessionCreatedMock = vi.fn();
 const controllerOnSessionDeletedMock = vi.fn();
+const updateThreadPeerAdvertisementMock = vi.fn();
 const loadSettingsMock = vi.fn();
 const getAvailableModePacksMock = vi.fn(() => []);
 const getAvailableOmPacksMock = vi.fn(() => []);
@@ -171,6 +172,9 @@ vi.mock('@mastra/core/agent-controller', () => ({
     async init() {}
     getMastra() {
       return mastraStub;
+    }
+    getCurrentAgent() {
+      return { updateThreadPeerAdvertisement: updateThreadPeerAdvertisementMock };
     }
     onSessionCreated(listener: unknown, options?: unknown) {
       controllerOnSessionCreatedMock(listener, options);
@@ -475,6 +479,7 @@ describe('createMastraCode', () => {
     controllerConstructorMock.mockReset();
     controllerOnSessionCreatedMock.mockReset();
     controllerOnSessionDeletedMock.mockReset();
+    updateThreadPeerAdvertisementMock.mockReset();
     streamErrorRetryProcessorConstructorMock.mockReset();
     getAvailableModePacksMock.mockClear();
     getAvailableOmPacksMock.mockClear();
@@ -820,6 +825,40 @@ describe('createMastraCode', () => {
     ]);
     expect(controllerOnSessionCreatedMock).toHaveBeenCalledWith(expect.any(Function), { blocking: true });
     expect(controllerOnSessionDeletedMock).toHaveBeenCalledWith(expect.any(Function));
+  });
+
+  it('refreshes peer advertisements when observational memory updates a thread title', async () => {
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode({ crossAgentSignals: true });
+
+    const onSessionCreated = controllerOnSessionCreatedMock.mock.calls.find(call => call[1]?.blocking)?.[0] as
+      | ((session: any) => Promise<void>)
+      | undefined;
+    expect(onSessionCreated).toBeDefined();
+
+    let handleSessionEvent: ((event: any) => void) | undefined;
+    await onSessionCreated!({
+      subscribe: (handler: (event: any) => void) => {
+        handleSessionEvent = handler;
+        return vi.fn();
+      },
+      identity: { getResourceId: () => 'project-resource' },
+      thread: { getId: () => null },
+    });
+
+    handleSessionEvent!({
+      type: 'om_thread_title_updated',
+      cycleId: 'cycle-1',
+      threadId: 'thread-1',
+      newTitle: 'Observational memory title',
+    });
+
+    expect(updateThreadPeerAdvertisementMock).toHaveBeenCalledWith({
+      resourceId: 'project-resource',
+      threadId: 'thread-1',
+      peer: { title: 'Observational memory title' },
+    });
   });
 
   it('omits cross-agent signals unless experimental cross-agent communication is enabled', async () => {

@@ -1229,17 +1229,18 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   if (useCrossAgentSignals) {
     controller.onSessionCreated(
       async session => {
-        const threadOwnership = createThreadOwnershipManager(threadId =>
-          controller.getCurrentAgent(session).claimThreadOwnership({
+        const threadOwnership = createThreadOwnershipManager(async threadId => {
+          const thread = await session.thread.getById({ threadId });
+          return controller.getCurrentAgent(session).claimThreadOwnership({
             threadId,
             resourceId: session.identity.getResourceId(),
             streamOptions: () => session.machinery.buildStreamOptions({}),
             peer: {
-              label: `${project.name} (${threadId})`,
-              title: project.name,
+              label: project.name,
+              ...(thread?.title ? { title: thread.title } : {}),
             },
-          }),
-        );
+          });
+        });
 
         const claimThreadOwnership = async (threadId: string) => {
           try {
@@ -1251,6 +1252,13 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         const unsubscribeSession = session.subscribe(event => {
           if (event.type === 'thread_changed') void claimThreadOwnership(event.threadId);
           else if (event.type === 'thread_created') void claimThreadOwnership(event.thread.id);
+          else if (event.type === 'thread_title_updated' || event.type === 'om_thread_title_updated') {
+            controller.getCurrentAgent(session).updateThreadPeerAdvertisement({
+              resourceId: session.identity.getResourceId(),
+              threadId: event.threadId,
+              peer: { title: event.type === 'thread_title_updated' ? event.title : event.newTitle },
+            });
+          }
         });
         sessionPeerCleanup.set(session, () => {
           unsubscribeSession();
