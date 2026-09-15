@@ -275,7 +275,7 @@ describe('E2BSandbox', () => {
 
       expect(result?.outcome).toBe('created');
       expect((Sandbox.create as any).mock.calls[0]![0]).toBe(
-        repoTemplateRef({ cloneUrl: 'https://github.com/octocat/hello.git', sha: head }),
+        await repoTemplateRef({ cloneUrl: 'https://github.com/octocat/hello.git', sha: head }),
       );
     });
   });
@@ -364,8 +364,8 @@ describe('E2BSandbox', () => {
       const [, defaultId, buildOpts] = (Template.build as any).mock.calls[1]!;
       expect(buildOpts).toMatchObject({ cpuCount: 2, memoryMB: 2048 });
       // Sized defaults are their own template, distinct from the unsized one.
-      expect(defaultId).not.toBe(createDefaultMountableTemplate().id);
-      expect(defaultId).toBe(createDefaultMountableTemplate({ memoryMB: 2048 }).id);
+      expect(defaultId).not.toBe((await createDefaultMountableTemplate()).id);
+      expect(defaultId).toBe((await createDefaultMountableTemplate({ memoryMB: 2048 })).id);
     });
 
     it('retries on the fallback when creating from a registered-but-broken name 404s', async () => {
@@ -404,7 +404,7 @@ describe('E2BSandbox', () => {
       // Rung identity: repo ref -> default mountable id (repo specs carry no
       // named fallback).
       expect(calls[0]).toBe(spec.ref);
-      expect(calls[1]).toBe(createDefaultMountableTemplate().id);
+      expect(calls[1]).toBe((await createDefaultMountableTemplate()).id);
       // Cache coherence: the template that actually produced a sandbox is
       // cached, so a later create on this instance reuses it instead of
       // re-walking the ladder from the broken name.

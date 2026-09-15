@@ -1,5 +1,3 @@
-import { createHash } from 'node:crypto';
-
 /**
  * Setup completion marker shared by repo templates and their consumers.
  *
@@ -19,8 +17,10 @@ export function normalizeSetupCommands(setupCommand: string | readonly string[] 
 }
 
 /** The marker content for a setup command list: `sha256:<hex>` over the commands joined by newlines. */
-export function setupMarkerContent(setupCommand: string | readonly string[] | undefined): string {
-  const digest = createHash('sha256').update(normalizeSetupCommands(setupCommand).join('\n')).digest('hex');
+export async function setupMarkerContent(setupCommand: string | readonly string[] | undefined): Promise<string> {
+  const digest = Buffer.from(
+    await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(normalizeSetupCommands(setupCommand).join('\n'))),
+  ).toString('hex');
   return `sha256:${digest}`;
 }
 
