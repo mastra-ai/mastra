@@ -94,7 +94,7 @@ describe('MastraPlatformTraceTarget', () => {
 
   it('retries temporary responses, honors Retry-After, and sends the same body', async () => {
     const fetch = vi
-      .fn<Fetch>()
+      .fn<typeof globalThis.fetch>()
       .mockResolvedValueOnce(new Response(null, { status: 429, headers: { 'Retry-After': '2' } }))
       .mockResolvedValueOnce(new Response(null, { status: 503 }))
       .mockResolvedValueOnce(acknowledgement());
@@ -118,7 +118,7 @@ describe('MastraPlatformTraceTarget', () => {
 
   it('caps Retry-After at the largest delay supported by Node timers', async () => {
     const fetch = vi
-      .fn<Fetch>()
+      .fn<typeof globalThis.fetch>()
       .mockResolvedValueOnce(new Response(null, { status: 429, headers: { 'Retry-After': '2147484' } }))
       .mockResolvedValueOnce(acknowledgement());
     const sleep = vi.fn(async () => undefined);
@@ -135,7 +135,10 @@ describe('MastraPlatformTraceTarget', () => {
 
   it('paces consecutive whole-trace batches to the default span rate', async () => {
     let now = 1_000;
-    const fetch = vi.fn<Fetch>().mockResolvedValueOnce(acknowledgement(250)).mockResolvedValueOnce(acknowledgement());
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(acknowledgement(250))
+      .mockResolvedValueOnce(acknowledgement());
     const sleep = vi.fn(async (milliseconds: number) => {
       now += milliseconds;
     });
@@ -154,7 +157,7 @@ describe('MastraPlatformTraceTarget', () => {
 
   it('retries a network failure with the unchanged deterministic payload', async () => {
     const fetch = vi
-      .fn<Fetch>()
+      .fn<typeof globalThis.fetch>()
       .mockRejectedValueOnce(new Error('connection reset'))
       .mockResolvedValueOnce(acknowledgement());
     const sleep = vi.fn(async () => undefined);
@@ -171,7 +174,7 @@ describe('MastraPlatformTraceTarget', () => {
   });
 
   it('retries a lost or invalid acknowledgement without advancing on assumption', async () => {
-    const fetch = vi.fn<Fetch>().mockResolvedValue(acknowledgement(0));
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(acknowledgement(0));
     const sleep = vi.fn(async () => undefined);
     const target = new MastraPlatformTraceTarget(
       { accessToken: 'secret-token', projectId: 'project_1' },
