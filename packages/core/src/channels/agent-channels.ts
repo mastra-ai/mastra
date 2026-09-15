@@ -35,6 +35,7 @@ import type { InlineLinkRule } from './inline-media';
 import { ChatChannelOutputProcessor, CHAT_CHANNEL_RENDER_CONTEXT_KEY } from './output-processor';
 import type { ChatChannelRenderContext } from './output-processor';
 import { ChatChannelProcessor } from './processor';
+import { annotateSlackMentions } from './slack-mention-labels';
 import { MastraStateAdapter } from './state-adapter';
 import type { PendingApprovalRecord } from './stream-helpers';
 import type {
@@ -1187,7 +1188,15 @@ export class AgentChannels {
     }
 
     const richText = message.formatted ? chatModule().stringifyMarkdown(message.formatted).trim() : undefined;
-    const text = [historyBlock, richText || message.text].filter(Boolean).join('\n\n');
+    const body =
+      platform === 'slack'
+        ? await annotateSlackMentions({
+            state: this.stateAdapter,
+            raw: message.raw,
+            text: richText || message.text,
+          })
+        : richText || message.text;
+    const text = [historyBlock, body].filter(Boolean).join('\n\n');
     const parts: Exclude<AgentSignalContents, string> = [{ type: 'text', text }];
     const attachments = message.attachments.filter(a => a.url || a.fetchData);
 
