@@ -3280,12 +3280,11 @@ export class Agent extends BaseResource {
    * Approves a pending tool call and returns the complete response (non-streaming).
    * Used when `requireToolApproval` is enabled with generate() to allow the agent to proceed.
    */
-  async approveToolCallGenerate(params: {
-    runId: string;
-    toolCallId: string;
-    model?: string;
-    requestContext?: RequestContext | Record<string, any>;
-  }): Promise<any> {
+  async approveToolCallGenerate(
+    params: Omit<Body<'POST /agents/:agentId/approve-tool-call-generate'>, 'requestContext'> & {
+      requestContext?: RequestContext | Record<string, any>;
+    },
+  ): Promise<RouteResponse<'POST /agents/:agentId/approve-tool-call-generate'>> {
     const { requestContext, ...rest } = params;
     return this.request(`/agents/${this.agentId}/approve-tool-call-generate`, {
       method: 'POST',
@@ -3297,14 +3296,11 @@ export class Agent extends BaseResource {
    * Declines a pending tool call and returns the complete response (non-streaming).
    * Used when `requireToolApproval` is enabled with generate() to prevent tool execution.
    */
-  async declineToolCallGenerate(params: {
-    runId: string;
-    toolCallId: string;
-    model?: string;
-    /** Optional explanation surfaced to the model in place of the default decline message. */
-    reason?: string;
-    requestContext?: RequestContext | Record<string, any>;
-  }): Promise<any> {
+  async declineToolCallGenerate(
+    params: Omit<Body<'POST /agents/:agentId/decline-tool-call-generate'>, 'requestContext'> & {
+      requestContext?: RequestContext | Record<string, any>;
+    },
+  ): Promise<RouteResponse<'POST /agents/:agentId/decline-tool-call-generate'>> {
     const { requestContext, ...rest } = params;
     return this.request(`/agents/${this.agentId}/decline-tool-call-generate`, {
       method: 'POST',

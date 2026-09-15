@@ -300,19 +300,26 @@ export class Run extends BaseResource {
    * @param params - Object containing the step, resumeData and requestContext
    * @returns Promise containing the workflow resume results
    */
-  resumeAsync(params: WorkflowResumeParams): Promise<WorkflowRunResult> {
+  resumeAsync(
+    params: Omit<Body<'POST /workflows/:workflowId/resume-async'>, 'requestContext'> & {
+      requestContext?: RequestContext | Record<string, any>;
+    },
+  ): Promise<WorkflowRunResult> {
     const requestContext = parseClientRequestContext(params.requestContext);
-    return this.request<WorkflowRunResult>(`/workflows/${this.workflowId}/resume-async?runId=${this.runId}`, {
-      method: 'POST',
-      body: {
-        step: params.step,
-        resumeData: params.resumeData,
-        requestContext,
-        tracingOptions: params.tracingOptions,
-        perStep: params.perStep,
-        forEachIndex: params.forEachIndex,
+    return this.request<RouteResponse<'POST /workflows/:workflowId/resume-async'>>(
+      `/workflows/${this.workflowId}/resume-async?runId=${this.runId}`,
+      {
+        method: 'POST',
+        body: {
+          step: params.step,
+          resumeData: params.resumeData,
+          requestContext,
+          tracingOptions: params.tracingOptions,
+          perStep: params.perStep,
+          forEachIndex: params.forEachIndex,
+        },
       },
-    }).then(deserializeWorkflowError);
+    ).then(result => deserializeWorkflowError(result as WorkflowRunResult));
   }
 
   /**
