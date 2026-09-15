@@ -1308,9 +1308,11 @@ export const mastra = new Mastra({
             join(appDir, 'node_modules', 'mastra', 'dist', 'index.js'),
           );
 
-          expect(
-            Object.keys(first).filter(path => path.startsWith('tools/') && path.endsWith('.mjs')).length,
-          ).toBeGreaterThan(0);
+          const toolBundlePaths = Object.keys(first).filter(path => path.startsWith('tools/') && path.endsWith('.mjs'));
+          expect(toolBundlePaths.length).toBeGreaterThan(0);
+          expect(toolBundlePaths).toEqual(
+            expect.arrayContaining([expect.stringMatching(/^tools\/[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\.mjs$/)]),
+          );
           expect(second).toEqual(first);
         } finally {
           await rm(isolatedFixturePath, { recursive: true, force: true });
