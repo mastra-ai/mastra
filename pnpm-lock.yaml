@@ -987,9 +987,6 @@ importers:
       playwright-core:
         specifier: ^1.61.1
         version: 1.61.1
-      typed-emitter:
-        specifier: ^2.1.0
-        version: 2.1.0
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
