@@ -45,7 +45,7 @@ export function AgentOverviewPanel({ agentId }: AgentOverviewPanelProps) {
       </div>
 
       <ScrollArea className="min-h-0" viewPortClassName="h-full" mask={{ top: false }}>
-        <div className="p-4">{!isCollapsed && <AgentOverviewSections agentId={agentId} />}</div>
+        <div className="p-6">{!isCollapsed && <AgentOverviewSections agentId={agentId} />}</div>
       </ScrollArea>
     </Card>
   );
@@ -91,136 +91,139 @@ function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
   const hasChannels = Boolean(channelPlatforms?.length);
 
   return (
-    <>
-      {agent.modelList && (
-        <AgentMetadataSection title="Models" accent="blue" icon={<Boxes />}>
-          <AgentMetadataModelList
-            modelList={agent.modelList}
-            updateModelInModelList={updateModelInModelList}
-            reorderModelList={reorderModelList}
-          />
-        </AgentMetadataSection>
-      )}
-
-      {networkAgents.length > 0 && (
-        <AgentMetadataSection
-          title="Agents"
-          count={networkAgents.length}
-          accent="green"
-          icon={<Bot />}
-          hint={{ link: 'https://mastra.ai/en/docs/agents/overview', title: 'Agents documentation' }}
-        >
-          <AgentMetadataNetworkList agents={networkAgents} />
-        </AgentMetadataSection>
-      )}
-
-      <AgentMetadataSection
-        title="Tools"
-        count={tools.length}
-        accent="amber"
-        icon={<Wrench />}
-        hint={{
-          link: 'https://mastra.ai/en/docs/agents/using-tools-and-mcp',
-          title: 'Using Tools and MCP documentation',
-        }}
-      >
-        <AgentMetadataToolList tools={tools} agentId={agentId} />
-      </AgentMetadataSection>
-
-      <AgentMetadataSection
-        title="Workflows"
-        count={workflows.length}
-        accent="blue"
-        icon={<Workflow />}
-        hint={{ link: 'https://mastra.ai/en/docs/workflows/overview', title: 'Workflows documentation' }}
-      >
-        <AgentMetadataWorkflowList workflows={workflows} />
-      </AgentMetadataSection>
-
-      {workspaceTools.length > 0 && (
-        <AgentMetadataSection
-          title="Workspace Tools"
-          count={workspaceTools.length}
-          accent="green"
-          icon={<Folder />}
-          hint={{
-            link: 'https://mastra.ai/en/reference/workspace/workspace-class#agent-tools',
-            title: 'Workspace tools documentation',
-          }}
-        >
-          <AgentMetadataWorkspaceToolsList tools={workspaceTools} />
-        </AgentMetadataSection>
-      )}
-
-      {browserTools.length > 0 && (
-        <AgentMetadataSection
-          title="Browser Tools"
-          count={browserTools.length}
-          accent="cyan"
-          icon={<Globe />}
-          hint={{
-            link: 'https://mastra.ai/en/docs/agents/adding-browser-control',
-            title: 'Browser tools documentation',
-          }}
-        >
-          <AgentMetadataBrowserToolsList tools={browserTools} />
-        </AgentMetadataSection>
-      )}
-
-      {(inputProcessors.length > 0 || outputProcessors.length > 0) && (
-        <AgentMetadataSection
-          title="Processors"
-          accent="orange"
-          icon={<Cpu />}
-          hint={{ link: 'https://mastra.ai/docs/agents/processors', title: 'Processors documentation' }}
-        >
-          <AgentMetadataCombinedProcessorList inputProcessors={inputProcessors} outputProcessors={outputProcessors} />
-        </AgentMetadataSection>
-      )}
-
-      <AgentMetadataSection
-        title="Skills"
-        count={skills.length}
-        accent="purple"
-        icon={<Sparkles />}
-        hint={{ link: 'https://mastra.ai/en/docs/workspace/skills', title: 'Skills documentation' }}
-      >
-        <AgentMetadataSkillList skills={skills} agentId={agentId} workspaceId={agent.workspaceId} />
-      </AgentMetadataSection>
-
-      <AgentMetadataSection title="Scorers" accent="pink" icon={<Gauge />}>
-        <AgentMetadataScorerList entityId={agent.name} entityType="AGENT" />
-      </AgentMetadataSection>
-
-      <AgentMetadataSection title="Memory" accent="purple" icon={<Brain />}>
-        <AgentMemoryConfig agentId={agentId} />
-      </AgentMetadataSection>
-
-      {hasChannels && (
-        <AgentMetadataSection title="Channels" accent="cyan" icon={<Radio />}>
-          <AgentChannels agentId={agentId} />
-        </AgentMetadataSection>
-      )}
-
-      <AgentSystemPrompt instructions={extractPrompt(agent.instructions)}>
-        {!isCmsLoading && !isCmsAvailable && (
-          <Notice variant="warning" title="Read-only">
-            <Notice.Message>
-              To edit the system prompt in Studio, add <code className="font-medium">@mastra/editor</code> to your
-              project. See the{' '}
-              <a
-                href="https://mastra.ai/docs/editor/overview"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline"
-              >
-                documentation
-              </a>
-              .
-            </Notice.Message>
-          </Notice>
+    <div className="space-y-8">
+      <div className="space-y-8">
+        {agent.modelList && (
+          <AgentMetadataSection title="Models" accent="blue" icon={<Boxes />}>
+            <AgentMetadataModelList
+              modelList={agent.modelList}
+              updateModelInModelList={updateModelInModelList}
+              reorderModelList={reorderModelList}
+            />
+          </AgentMetadataSection>
         )}
-      </AgentSystemPrompt>
-    </>
+
+        {networkAgents.length > 0 && (
+          <AgentMetadataSection
+            title="Agents"
+            count={networkAgents.length}
+            accent="green"
+            icon={<Bot />}
+            hint={{ link: 'https://mastra.ai/en/docs/agents/overview', title: 'Agents documentation' }}
+          >
+            <AgentMetadataNetworkList agents={networkAgents} />
+          </AgentMetadataSection>
+        )}
+
+        <AgentMetadataSection
+          title="Tools"
+          count={tools.length}
+          accent="amber"
+          icon={<Wrench />}
+          hint={{
+            link: 'https://mastra.ai/en/docs/agents/using-tools-and-mcp',
+            title: 'Using Tools and MCP documentation',
+          }}
+        >
+          <AgentMetadataToolList tools={tools} agentId={agentId} />
+        </AgentMetadataSection>
+
+        <AgentMetadataSection
+          title="Workflows"
+          count={workflows.length}
+          accent="blue"
+          icon={<Workflow />}
+          hint={{ link: 'https://mastra.ai/en/docs/workflows/overview', title: 'Workflows documentation' }}
+        >
+          <AgentMetadataWorkflowList workflows={workflows} />
+        </AgentMetadataSection>
+
+        {workspaceTools.length > 0 && (
+          <AgentMetadataSection
+            title="Workspace Tools"
+            count={workspaceTools.length}
+            accent="green"
+            icon={<Folder />}
+            hint={{
+              link: 'https://mastra.ai/en/reference/workspace/workspace-class#agent-tools',
+              title: 'Workspace tools documentation',
+            }}
+          >
+            <AgentMetadataWorkspaceToolsList tools={workspaceTools} />
+          </AgentMetadataSection>
+        )}
+
+        {browserTools.length > 0 && (
+          <AgentMetadataSection
+            title="Browser Tools"
+            count={browserTools.length}
+            accent="cyan"
+            icon={<Globe />}
+            hint={{
+              link: 'https://mastra.ai/en/docs/agents/adding-browser-control',
+              title: 'Browser tools documentation',
+            }}
+          >
+            <AgentMetadataBrowserToolsList tools={browserTools} />
+          </AgentMetadataSection>
+        )}
+
+        {(inputProcessors.length > 0 || outputProcessors.length > 0) && (
+          <AgentMetadataSection
+            title="Processors"
+            accent="orange"
+            icon={<Cpu />}
+            hint={{ link: 'https://mastra.ai/docs/agents/processors', title: 'Processors documentation' }}
+          >
+            <AgentMetadataCombinedProcessorList inputProcessors={inputProcessors} outputProcessors={outputProcessors} />
+          </AgentMetadataSection>
+        )}
+
+        <AgentMetadataSection
+          title="Skills"
+          count={skills.length}
+          accent="purple"
+          icon={<Sparkles />}
+          hint={{ link: 'https://mastra.ai/en/docs/workspace/skills', title: 'Skills documentation' }}
+        >
+          <AgentMetadataSkillList skills={skills} agentId={agentId} workspaceId={agent.workspaceId} />
+        </AgentMetadataSection>
+
+        <AgentMetadataSection title="Scorers" accent="pink" icon={<Gauge />}>
+          <AgentMetadataScorerList entityId={agent.name} entityType="AGENT" />
+        </AgentMetadataSection>
+      </div>
+      <div className="border-border1 space-y-8 border-t pt-6">
+        <AgentMetadataSection title="Memory" accent="purple" icon={<Brain />}>
+          <AgentMemoryConfig agentId={agentId} />
+        </AgentMetadataSection>
+
+        {hasChannels && (
+          <AgentMetadataSection title="Channels" accent="cyan" icon={<Radio />}>
+            <AgentChannels agentId={agentId} />
+          </AgentMetadataSection>
+        )}
+
+        <AgentSystemPrompt instructions={extractPrompt(agent.instructions)}>
+          {!isCmsLoading && !isCmsAvailable && (
+            <Notice variant="warning" title="Read-only">
+              <Notice.Message>
+                To edit the system prompt in Studio, add <code className="font-medium">@mastra/editor</code> to your
+                project. See the{' '}
+                <a
+                  href="https://mastra.ai/docs/editor/overview"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline"
+                >
+                  documentation
+                </a>
+                .
+              </Notice.Message>
+            </Notice>
+          )}
+        </AgentSystemPrompt>
+      </div>
+    </div>
   );
 }

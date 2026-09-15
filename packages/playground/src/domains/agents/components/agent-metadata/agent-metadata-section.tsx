@@ -1,6 +1,7 @@
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { InfoIcon } from 'lucide-react';
 import { useLinkComponent } from '@/lib/framework';
 
@@ -39,19 +40,27 @@ export const AgentMetadataSection = ({
 }: AgentMetadataSectionProps) => {
   const { Link } = useLinkComponent();
   return (
-    <section className={`space-y-2 pb-6 last:pb-0 ${sectionAccentClasses[accent]}`}>
-      <header className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-        <Txt as="h3" variant="ui-smd" className="text-neutral5 flex shrink-0 items-center gap-2 font-medium">
+    <section
+      className={cn(
+        'group/metadata grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-3',
+        sectionAccentClasses[accent],
+      )}
+    >
+      <header className="col-span-2 group-has-[[data-slot=metadata-empty]]/metadata:col-span-1 flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-1">
+        <Txt as="h3" variant="ui-smd" className="text-neutral5 flex min-w-0 items-center gap-2 font-medium">
           {icon && (
-            <Icon aria-hidden="true" className="text-(--section-accent) shrink-0">
+            <Icon
+              aria-hidden="true"
+              className="text-(--section-accent) group-has-[[data-slot=metadata-empty]]/metadata:text-neutral3 shrink-0"
+            >
               {icon}
             </Icon>
           )}
-          <span className="flex items-center gap-1.5">
-            <span className="from-(--section-accent) to-neutral5 bg-linear-to-r bg-clip-text text-transparent forced-colors:bg-none forced-colors:text-inherit">
+          <span className="flex min-w-0 items-center gap-1.5">
+            <span className="from-(--section-accent) to-neutral5 bg-linear-to-r bg-clip-text text-transparent group-has-[[data-slot=metadata-empty]]/metadata:bg-none group-has-[[data-slot=metadata-empty]]/metadata:text-neutral3 forced-colors:bg-none forced-colors:text-inherit">
               {title}
             </span>
-            {count !== undefined && (
+            {count !== undefined && count > 0 && (
               <Txt as="span" variant="caption" className="font-normal tabular-nums">
                 {count}
               </Txt>
@@ -61,7 +70,13 @@ export const AgentMetadataSection = ({
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Link href={hint.link} aria-label={hint.title} target="_blank" rel="noopener noreferrer">
+                  <Link
+                    href={hint.link}
+                    aria-label={hint.title}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="opacity-0 group-hover/metadata:opacity-100 group-focus-within/metadata:opacity-100 pointer-coarse:opacity-100"
+                  >
                     <Icon className="text-neutral3" size="sm">
                       {hint.icon || <InfoIcon />}
                     </Icon>
@@ -74,7 +89,7 @@ export const AgentMetadataSection = ({
         </Txt>
         {actions && <div className="ml-auto flex shrink-0 items-center gap-1">{actions}</div>}
       </header>
-      {children}
+      <div className="col-span-2 min-w-0 group-has-[[data-slot=metadata-empty]]/metadata:col-span-1">{children}</div>
     </section>
   );
 };
