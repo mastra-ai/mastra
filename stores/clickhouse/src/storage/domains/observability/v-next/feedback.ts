@@ -27,7 +27,7 @@ import { parseFieldKey } from '@mastra/core/utils';
 import { isReplicationConfigured } from '../../../db/replication';
 import type { ClickhouseReplicationConfig } from '../../../db/replication';
 import { TABLE_DELETION_REQUESTS, TABLE_FEEDBACK_EVENTS, TABLE_FEEDBACK_EVENTS_DELTA } from './ddl';
-import { recordDeletionRequest } from './deletion-requests';
+import { markDeletionRequestApplied, recordDeletionRequest } from './deletion-requests';
 import { buildFeedbackFilterConditions, buildPaginationClause, buildSignalOrderByClause } from './filters';
 import type { FilterResult } from './filters';
 import { CH_INSERT_SETTINGS, CH_SETTINGS, feedbackRecordToRow, rowToFeedbackRecord } from './helpers';
@@ -223,10 +223,13 @@ export async function batchCreateFeedback(client: ClickHouseClient, args: BatchC
  * `organizationId` and `resourceId` values are ANDed into the predicate to
  * restrict deletion to records with matching scope fields.
  *
- * A durable deletion request is recorded before the lightweight delete. The
- * delete is immediately visible to subsequent reads; physical purge depends on
- * the table's configured retention TTL. The delta table is intentionally not
- * touched and expires through its fixed two-day TTL.
+ * A durable deletion request is recorded before the lightweight delete and
+ * marked applied once the delete succeeds. If the delete fails, the request
+ * stays unapplied and does not block updates to the still-visible rows; retry
+ * by calling this function again. The delete is immediately visible to
+ * subsequent reads; physical purge depends on the table's configured retention
+ * TTL. The delta table is intentionally not touched and expires through its
+ * fixed two-day TTL.
  */
 export async function deleteFeedback(
   client: ClickHouseClient,
@@ -235,7 +238,7 @@ export async function deleteFeedback(
 ): Promise<void> {
   if (args.feedbackIds.length === 0) return;
 
-  await recordDeletionRequest(client, {
+  const request = await recordDeletionRequest(client, {
     requestId: randomUUID(),
     organizationId: args.organizationId,
     resourceId: args.resourceId,
@@ -269,6 +272,8 @@ export async function deleteFeedback(
     query_params: params,
     clickhouse_settings: { lightweight_deletes_sync: isReplicationConfigured(replication) ? '2' : '1' },
   });
+
+  await markDeletionRequestApplied(client, request, replication);
 }
 
 // ============================================================================
@@ -297,6 +302,7 @@ async function hasFeedbackDeletionRequest(
      WHERE signal = 'feedback'
        AND predicateType = 'itemIds'
        AND has(predicateValues, {feedbackId:String})
+       AND lastAppliedAt > toDateTime64(0, 3)
        AND (organizationId = '' OR organizationId = {organizationId:String})
        AND (resourceId = '' OR resourceId = {resourceId:String})
      LIMIT 1`,

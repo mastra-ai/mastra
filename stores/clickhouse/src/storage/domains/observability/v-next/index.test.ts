@@ -4447,12 +4447,98 @@ LIMIT 1`,
         expect((await storage.listScores({})).scores).toEqual([]);
         expect((await storage.listFeedback({})).feedback).toEqual([]);
 
+        // Each request is upserted once more when marked applied, so count
+        // distinct requests under FINAL rather than raw row versions.
         const requestCountResult = await client.query({
-          query: `SELECT count() AS count FROM ${TABLE_DELETION_REQUESTS}`,
+          query: `SELECT count() AS count FROM ${TABLE_DELETION_REQUESTS} FINAL`,
           format: 'JSONEachRow',
         });
         const [requestCountRow] = (await requestCountResult.json()) as Array<{ count: string }>;
         expect(Number(requestCountRow?.count)).toBe(4);
+      } finally {
+        await client.close();
+      }
+    });
+
+    it('ignores unapplied requests after a failed delete and converges on retry', async () => {
+      const client = createClient({
+        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+        username: process.env.CLICKHOUSE_USERNAME || 'default',
+        password: process.env.CLICKHOUSE_PASSWORD || 'password',
+      });
+      const requestsFor = async (id: string) => {
+        const result = await client.query({
+          query: `SELECT signal, lastAppliedAt > toDateTime64(0, 3) AS applied
+                  FROM ${TABLE_DELETION_REQUESTS} FINAL
+                  WHERE has(predicateValues, {id:String}) ORDER BY requestedAt`,
+          query_params: { id },
+          format: 'JSONEachRow',
+        });
+        return (await result.json()) as Array<{ signal: string; applied: number }>;
+      };
+
+      try {
+        const flaky = new ObservabilityStorageClickhouseVNext({ client });
+        await flaky.init();
+        await flaky.createFeedback({
+          feedback: {
+            feedbackId: 'unapplied-feedback-1',
+            timestamp: new Date('2026-09-01T12:00:01Z'),
+            traceId: 'unapplied-trace-1',
+            spanId: null,
+            feedbackSource: 'user',
+            feedbackType: 'rating',
+            value: 1,
+            comment: 'still visible',
+            experimentId: null,
+            organizationId: 'org-1',
+            resourceId: 'resource-1',
+            metadata: null,
+          },
+        });
+
+        // Request insert succeeds, lightweight DELETE fails.
+        const originalCommand = client.command.bind(client);
+        const spy = vi.spyOn(client, 'command').mockImplementation(async args => {
+          const query = (args as { query: string }).query;
+          if (/^\s*DELETE FROM/i.test(query)) throw new Error('simulated delete failure');
+          return originalCommand(args);
+        });
+        try {
+          await expect(
+            flaky.deleteFeedback({
+              feedbackIds: ['unapplied-feedback-1'],
+              organizationId: 'org-1',
+              resourceId: 'resource-1',
+            }),
+          ).rejects.toThrow('simulated delete failure');
+        } finally {
+          spy.mockRestore();
+        }
+
+        expect(await requestsFor('unapplied-feedback-1')).toEqual([{ signal: 'feedback', applied: 0 }]);
+        expect((await flaky.listFeedback({})).feedback.map(f => f.feedbackId)).toEqual(['unapplied-feedback-1']);
+        await expect(
+          flaky.updateFeedbackReviewStatus({ feedbackId: 'unapplied-feedback-1', reviewStatus: 'reviewed' }),
+        ).resolves.toMatchObject({ feedbackId: 'unapplied-feedback-1', reviewStatus: 'reviewed' });
+
+        // Retry converges: row hidden, a request is marked applied, guard blocks.
+        await flaky.deleteFeedback({
+          feedbackIds: ['unapplied-feedback-1'],
+          organizationId: 'org-1',
+          resourceId: 'resource-1',
+        });
+        expect((await flaky.listFeedback({})).feedback).toEqual([]);
+        expect((await requestsFor('unapplied-feedback-1')).map(r => r.applied)).toEqual([0, 1]);
+        await expect(
+          flaky.updateFeedbackReviewStatus({ feedbackId: 'unapplied-feedback-1', reviewStatus: 'reviewed' }),
+        ).rejects.toThrow('Feedback record not found');
+
+        // Scores and traces mark their requests applied too.
+        await flaky.deleteScores({ scoreIds: ['applied-score-1'], organizationId: 'org-1', resourceId: 'resource-1' });
+        await flaky.batchDeleteTraces({ traceIds: ['applied-trace-1'] });
+        expect(await requestsFor('applied-score-1')).toEqual([{ signal: 'scores', applied: 1 }]);
+        expect(await requestsFor('applied-trace-1')).toEqual([{ signal: 'traces', applied: 1 }]);
       } finally {
         await client.close();
       }

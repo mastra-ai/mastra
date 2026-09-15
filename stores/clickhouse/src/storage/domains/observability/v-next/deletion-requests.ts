@@ -62,3 +62,31 @@ export async function recordDeletionRequest(
 
   return row;
 }
+
+/**
+ * Marks a recorded deletion request as applied after its lightweight DELETEs
+ * succeeded. The table is `ReplacingMergeTree(updatedAt)`, so re-inserting the
+ * row with a newer `updatedAt` supersedes the pending version on merge and
+ * under `FINAL`. Requests whose DELETE failed keep `lastAppliedAt` at the
+ * epoch; mutation guards ignore them, and re-invoking the delete API records a
+ * new request and converges.
+ */
+export async function markDeletionRequestApplied(
+  client: ClickHouseClient,
+  row: DeletionRequestRow,
+  replication?: ClickhouseReplicationConfig,
+): Promise<DeletionRequestRow> {
+  const appliedAt = new Date().toISOString();
+  const applied: DeletionRequestRow = { ...row, lastAppliedAt: appliedAt, updatedAt: appliedAt };
+
+  await client.insert({
+    table: TABLE_DELETION_REQUESTS,
+    values: [applied],
+    format: 'JSONEachRow',
+    clickhouse_settings: isReplicationConfigured(replication)
+      ? { ...CH_INSERT_SETTINGS, insert_quorum: 'auto', insert_quorum_parallel: 1 }
+      : CH_INSERT_SETTINGS,
+  });
+
+  return applied;
+}
