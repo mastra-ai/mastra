@@ -921,8 +921,8 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
         className="flex h-full flex-col overflow-hidden"
       >
         {/* Same p-1.5 as the parent agent tab bar so the pills line up. */}
-        <div className="border-border1 flex flex-wrap items-center justify-between gap-x-2 border-b p-1.5">
-          <TabList variant="pill-ghost" className="shrink-0">
+        <div className="border-border1 flex items-center justify-between gap-x-2 border-b p-1.5">
+          <TabList variant="pill-ghost" className="min-w-0 flex-nowrap overflow-x-auto">
             <Tab value="experiments">
               <Icon size="sm">
                 <ExperimentsIcon />
