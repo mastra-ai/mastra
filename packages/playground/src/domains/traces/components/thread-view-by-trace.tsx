@@ -3,7 +3,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ThreadTrace, useThreadTraceRow } from '@mastra/playground-ui/domains/traces/components/thread-trace';
 import { TracesErrorContent } from '@mastra/playground-ui/domains/traces/components/traces-error-content';
 import { ExternalLinkIcon } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 
 import { NeedsReviewDot } from '@/domains/traces/components/needs-review-dot';
@@ -23,9 +23,7 @@ export interface ThreadViewByTraceProps {
  * its detail panel on the side so the conversation stays readable.
  */
 export function ThreadViewByTrace({ threadId }: ThreadViewByTraceProps) {
-  const filters = useMemo(() => ({ threadId }), [threadId]);
-  const { rows, source, isLoading, setEndOfListElement, error } = useTracesListSource({
-    filters,
+  const { rows, isLoading, setEndOfListElement, error } = useTracesListSource({
     query: now => ({
       timeRange: {
         from: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString(),
@@ -36,7 +34,6 @@ export function ThreadViewByTrace({ threadId }: ThreadViewByTraceProps) {
     }),
   });
   const traceIds = rows.map(trace => trace.traceId);
-  if (source === 'list') traceIds.reverse();
 
   if (error) {
     return (
@@ -66,24 +63,16 @@ export function ThreadViewByTrace({ threadId }: ThreadViewByTraceProps) {
     );
   }
 
-  return (
-    <LoadedThreadViewByTrace
-      key={`${threadId}:${source}`}
-      traceIds={traceIds}
-      loadOlder={source === 'list'}
-      setEndOfListElement={setEndOfListElement}
-    />
-  );
+  return <LoadedThreadViewByTrace key={threadId} traceIds={traceIds} setEndOfListElement={setEndOfListElement} />;
 }
 
 interface LoadedThreadViewByTraceProps {
   traceIds: string[];
-  loadOlder: boolean;
   setEndOfListElement: (node: HTMLDivElement | null) => void;
 }
 
 /** Mounts once the first page is in, so state seeded from `traces` at mount only sees that page. */
-function LoadedThreadViewByTrace({ traceIds, loadOlder, setEndOfListElement }: LoadedThreadViewByTraceProps) {
+function LoadedThreadViewByTrace({ traceIds, setEndOfListElement }: LoadedThreadViewByTraceProps) {
   const railTurns = useThreadRailTurns(traceIds);
 
   // "View full thread" on the traces page lands here with the originating trace: that row starts
@@ -99,13 +88,12 @@ function LoadedThreadViewByTrace({ traceIds, loadOlder, setEndOfListElement }: L
     <ThreadTrace traceIds={traceIds} anchorTraceId={anchorTraceId}>
       <ThreadTrace.List data-testid="thread-view-by-trace">
         <ThreadTrace.Rail turns={railTurns} />
-        {loadOlder && <ThreadTrace.LoadMoreSentinel ref={setEndOfListElement} />}
         {traceIds.map((traceId, index) => (
           <ThreadTrace.Row key={traceId} traceId={traceId} isFirst={index === 0}>
             <ThreadTraceRowContent />
           </ThreadTrace.Row>
         ))}
-        {!loadOlder && <ThreadTrace.LoadMoreSentinel ref={setEndOfListElement} />}
+        <ThreadTrace.LoadMoreSentinel ref={setEndOfListElement} />
       </ThreadTrace.List>
       <ThreadTrace.SpanPanel />
     </ThreadTrace>

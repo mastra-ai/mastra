@@ -55,28 +55,8 @@ describe('useTracesListSource', () => {
       const requests = handlers();
       const { result } = renderHook(() => useTracesListSource({ query }), { wrapper });
       await waitFor(() => expect(result.current.rows[0]?.spanId).toBe('span-a'));
-      expect(result.current.source).toBe('query');
       expect(requests.post).toHaveBeenCalledTimes(1);
       expect(requests.list).not.toHaveBeenCalled();
-    });
-  });
-  describe('when filters require the legacy list', () => {
-    it('loads the list without querying traces', async () => {
-      const requests = handlers();
-      const filters = { status: 'running' as const };
-      const { result } = renderHook(() => useTracesListSource({ query: () => null, filters }), { wrapper });
-      await waitFor(() => expect(result.current.rows).toHaveLength(1));
-      expect(result.current.source).toBe('list');
-      expect(requests.post).not.toHaveBeenCalled();
-    });
-  });
-  describe('when branches mode is selected', () => {
-    it('loads branches without querying traces', async () => {
-      const requests = handlers();
-      const { result } = renderHook(() => useTracesListSource({ query, listMode: 'branches' }), { wrapper });
-      await waitFor(() => expect(result.current.rows).toHaveLength(1));
-      expect(requests.branches).toHaveBeenCalled();
-      expect(requests.post).not.toHaveBeenCalled();
     });
   });
   describe('when auto refresh is enabled', () => {
@@ -101,8 +81,8 @@ describe('useTracesListSource', () => {
     });
   });
   describe('when the store returns 501', () => {
-    it('falls back once and keeps using the list after remounting', async () => {
-      handlers();
+    it('exposes the query error without requesting a legacy endpoint', async () => {
+      const requests = handlers();
       const post = vi.fn();
       server.use(
         http.post(`${BASE}/traces/query`, () => {
@@ -111,13 +91,11 @@ describe('useTracesListSource', () => {
         }),
       );
       const first = renderHook(() => useTracesListSource({ query }), { wrapper });
-      await waitFor(() => expect(first.result.current.source).toBe('list'));
-      await waitFor(() => expect(first.result.current.rows).toHaveLength(1));
+      await waitFor(() => expect(first.result.current.error).toBeTruthy());
+      expect(first.result.current.rows).toHaveLength(0);
       expect(post).toHaveBeenCalledTimes(1);
-      first.unmount();
-      const second = renderHook(() => useTracesListSource({ query }), { wrapper });
-      await waitFor(() => expect(second.result.current.rows).toHaveLength(1));
-      expect(post).toHaveBeenCalledTimes(1);
+      expect(requests.list).not.toHaveBeenCalled();
+      expect(requests.branches).not.toHaveBeenCalled();
     });
   });
 });

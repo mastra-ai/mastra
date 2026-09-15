@@ -1,6 +1,6 @@
 import type { GetSystemPackagesResponse } from '@mastra/client-js';
 import { serializeTraceColumnPreferences } from '@mastra/playground-ui/domains/traces/trace-list-columns';
-import { act, fireEvent, screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import TracesPage from '..';
@@ -15,9 +15,6 @@ import {
   emptyTags,
   metricsCapableSystemPackages,
   metricsUnavailableSystemPackages,
-  rootBranchList,
-  rootBranchSpans,
-  subtraceBranchSpans,
   threadedTraceSpans,
   traceSpans,
   traceList,
@@ -270,56 +267,21 @@ describe('Traces page usage columns', () => {
     });
   });
 
-  describe('when Branches mode is selected', () => {
-    it('does not show trace totals in a root trace panel', async () => {
+  describe('when an old branches URL is opened', () => {
+    it('loads trace queries without requesting branches', async () => {
       setTracePageHandlers(metricsCapableSystemPackages);
+      const branches = vi.fn();
       server.use(
-        http.get(`${TEST_BASE_URL}/api/observability/branches`, () => HttpResponse.json(rootBranchList)),
-        http.get(`${TEST_BASE_URL}/api/observability/traces/trace-a/branches/span-a`, () =>
-          HttpResponse.json(rootBranchSpans),
-        ),
-        http.get(`${TEST_BASE_URL}/api/observability/feedback`, () => HttpResponse.json(emptyFeedback)),
+        http.get(`${TEST_BASE_URL}/api/observability/branches`, () => {
+          branches();
+          return HttpResponse.json(branchList);
+        }),
       );
-
-      const { queryClient } = renderPage('/traces?listMode=branches&traceId=trace-a&anchorSpanId=span-a');
-
-      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
-      expect(screen.queryByText('Trace est. cost')).toBeNull();
-      expect(onBreakdownRequest).not.toHaveBeenCalled();
-    });
-
-    it('suppresses usage columns and metric requests', async () => {
-      setTracePageHandlers(metricsCapableSystemPackages);
-
       const { queryClient } = renderPage('/traces?listMode=branches');
-
+      await waitFor(() => expect(onBreakdownRequest).toHaveBeenCalled());
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
-      expect(screen.queryByText('Input tokens')).toBeNull();
-      expect(onBreakdownRequest).not.toHaveBeenCalled();
-    });
-
-    it('does not show cached trace totals in a subtrace panel', async () => {
-      setTracePageHandlers(metricsCapableSystemPackages);
-      server.use(
-        http.get(`${TEST_BASE_URL}/api/observability/traces/trace-a/branches/span-a`, () =>
-          HttpResponse.json(subtraceBranchSpans),
-        ),
-        http.get(`${TEST_BASE_URL}/api/observability/feedback`, () => HttpResponse.json(emptyFeedback)),
-      );
-
-      const { queryClient } = renderPage('/traces?listMode=branches&traceId=trace-a&anchorSpanId=span-a');
-      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
-
-      act(() => {
-        queryClient.setQueryData(
-          ['trace-usage', `${TEST_BASE_URL}:/api`, ['trace-a']],
-          new Map([['trace-a', { inputTokens: 12_500, outputTokens: 405, estimatedCost: 0.01, costUnit: 'usd' }]]),
-        );
-      });
-
-      expect(screen.queryByText('Trace est. cost')).toBeNull();
-      expect(screen.queryByText('12.5K')).toBeNull();
-      expect(onBreakdownRequest).not.toHaveBeenCalled();
+      expect(branches).not.toHaveBeenCalled();
+      expect(screen.queryByRole('checkbox', { name: 'Subtraces' })).toBeNull();
     });
   });
 });
@@ -342,8 +304,7 @@ describe('Traces page auto refresh toggle', () => {
     fireEvent.click(toggle);
     expect(toggle.getAttribute('aria-checked')).toBe('true');
 
-    // Subtraces checkbox uses the short label.
-    expect(screen.getByRole('checkbox', { name: 'Subtraces' })).not.toBeNull();
+    expect(screen.queryByRole('checkbox', { name: 'Subtraces' })).toBeNull();
     expect(screen.queryByText('Show subtraces')).toBeNull();
   });
 });

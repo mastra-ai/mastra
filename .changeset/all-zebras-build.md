@@ -3,4 +3,4 @@
 'mastra': patch
 ---
 
-Added trace-query filtering and cursor pagination to Studio traces, with automatic fallback for unsupported filters and stores. Query-backed lists refresh every 10 seconds without new-row highlighting.
+Switched Studio traces and thread views to trace queries with cursor pagination. Removed unsupported filters, Running status, and Subtraces controls; unsupported stores now surface query errors instead of falling back to legacy lists. The default window is seven days, and query-backed lists refresh every 10 seconds without new-row highlighting.

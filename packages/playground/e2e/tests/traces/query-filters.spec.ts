@@ -1,6 +1,5 @@
 import { expect, test } from '@playwright/test';
 import { traceQueryPage } from '../../../src/pages/traces/__tests__/fixtures/trace-query';
-import { traceList } from '../../../src/pages/traces/__tests__/fixtures/traces';
 
 // URL filters must reach the appropriate endpoint and retain their meaning after reload.
 test.describe('Trace query filtering', () => {
@@ -19,20 +18,23 @@ test.describe('Trace query filtering', () => {
     });
   });
 
-  test.describe('when filtering by service name', () => {
-    test('falls back to the list endpoint', async ({ page }) => {
-      let queries = 0;
+  test.describe('when opening an obsolete service-name filter URL', () => {
+    test('uses trace queries without requesting a legacy list', async ({ page }) => {
+      let legacyRequests = 0;
       await page.route('**/api/observability/traces/query', route => {
-        queries++;
+        expect(route.request().postDataJSON().where).toBeUndefined();
         return route.fulfill({ json: traceQueryPage });
       });
-      await page.route('**/api/observability/traces/light?*', route => {
-        expect(new URL(route.request().url()).searchParams.get('serviceName')).toBe('preview-service');
-        return route.fulfill({ json: traceList });
+      page.on('request', request => {
+        if (
+          request.method() === 'GET' &&
+          /\/observability\/(traces(?:\/light)?|branches)$/.test(new URL(request.url()).pathname)
+        )
+          legacyRequests++;
       });
       await page.goto('/traces?filterServiceName=preview-service');
       await expect(page.getByText('Studio preview agent', { exact: true })).toBeVisible();
-      expect(queries).toBe(0);
+      expect(legacyRequests).toBe(0);
     });
   });
 });

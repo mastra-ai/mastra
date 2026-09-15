@@ -32,14 +32,13 @@ describe('buildTraceQueryRequest', () => {
     });
   });
 
-  it.each([...TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS])('falls back for active %s filters', fieldId => {
-    expect(buildTraceQueryRequest({ tokens: [{ fieldId, value: 'value' }], now })).toBeNull();
-    expect(buildTraceQueryRequest({ tokens: [{ fieldId, value: 'Any' }], now })).not.toBeNull();
+  it.each([...TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS])('ignores obsolete %s filters', fieldId => {
+    expect(buildTraceQueryRequest({ tokens: [{ fieldId, value: 'value' }], now }).where).toBeUndefined();
   });
 
-  it('falls back for running roots and running status tokens', () => {
-    expect(buildTraceQueryRequest({ tokens: [], status: 'running', now })).toBeNull();
-    expect(buildTraceQueryRequest({ tokens: [{ fieldId: 'status', value: ['success', 'running'] }], now })).toBeNull();
+  it('ignores unsupported running status filters', () => {
+    expect(buildTraceQueryRequest({ tokens: [], status: 'running', now }).where).toBeUndefined();
+    expect(buildTraceQueryRequest({ tokens: [{ fieldId: 'status', value: ['running'] }], now }).where).toBeUndefined();
   });
 
   it('preserves explicit dates and root filters', () => {

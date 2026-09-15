@@ -19,8 +19,7 @@ export function buildTraceQueryRequest({
   dateTo,
   tokens,
   now,
-}: Parameters<typeof buildTraceListFilters>[0] & { now: Date }): Pick<TraceQueryRequest, 'timeRange' | 'where'> | null {
-  if (status === 'running') return null;
+}: Parameters<typeof buildTraceListFilters>[0] & { now: Date }): Pick<TraceQueryRequest, 'timeRange' | 'where'> {
   const args: TraceQueryPredicate[] = [];
   const predicate = (path: string, values: string[]): TraceQueryScalarPredicate =>
     values.length === 1 && values[0] !== undefined
@@ -28,14 +27,14 @@ export function buildTraceQueryRequest({
       : { op: 'in', value: { path }, set: values };
 
   if (rootEntityType) args.push(predicate('entityType', [rootEntityType]));
-  if (status) args.push(predicate('status', [status]));
+  if (status && status !== 'running') args.push(predicate('status', [status]));
 
   for (const token of tokens) {
     const values = (Array.isArray(token.value) ? token.value : [token.value]).filter(
       (value): value is string => typeof value === 'string' && Boolean(value.trim()) && value !== 'Any',
     );
     if (!values.length) continue;
-    if (TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS.has(token.fieldId)) return null;
+    if (TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS.has(token.fieldId)) continue;
     switch (token.fieldId) {
       case 'entityId':
         // The query API matches entity IDs on any span, not only the root span.
@@ -46,7 +45,7 @@ export function buildTraceQueryRequest({
         args.push(predicate('entityType', values));
         break;
       case 'status':
-        if (values.includes('running')) return null;
+        if (values.includes('running')) break;
         args.push(predicate('status', values));
         break;
       case 'entityName':
@@ -57,7 +56,7 @@ export function buildTraceQueryRequest({
         args.push(predicate(token.fieldId, values));
         break;
       default:
-        return null;
+        break;
     }
   }
 
