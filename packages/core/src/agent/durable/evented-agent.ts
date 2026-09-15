@@ -11,12 +11,14 @@
  */
 
 import { createObservabilityContext } from '../../observability';
+import type { ShouldPersistSnapshotFn } from '../../workflows/types';
 import type { ToolsInput } from '../types';
 
 import { DurableAgent } from './durable-agent';
 import type { DurableAgentConfig } from './durable-agent';
 import { globalRunRegistry } from './run-registry';
 import type { DurableAgenticWorkflowInput } from './types';
+import { defaultShouldPersistSnapshot } from './workflows/create-durable-agentic-workflow';
 
 /**
  * Configuration for EventedAgent - wraps an existing Agent with fire-and-forget execution
@@ -67,6 +69,40 @@ export class EventedAgent<
    */
   constructor(config: EventedAgentConfig<TAgentId, TTools, TOutput>) {
     super(config);
+  }
+
+  /**
+   * EventedAgent owns its snapshot-persistence policy and always persists the
+   * full set (`pending | paused | suspended | running`), ignoring any
+   * user-supplied `shouldPersistSnapshot`.
+   *
+   * This is structural, not a default: the evented engine's initial `running`
+   * write creates the base snapshot row that later suspend-merges build on,
+   * and the fire-and-forget model coordinates workers through storage rather
+   * than in-process state. Skipping `running` would break suspension and
+   * multi-worker coordination.
+   *
+   * @internal
+   */
+  protected override resolveShouldPersistSnapshot(): ShouldPersistSnapshotFn {
+    return defaultShouldPersistSnapshot;
+  }
+
+  /**
+   * EventedAgent ignores user-supplied persistence policies (see
+   * {@link EventedAgent.resolveShouldPersistSnapshot}), so instead of probing
+   * the predicate, warn that it has no effect.
+   *
+   * @internal
+   */
+  protected override warnOnRiskyPersistencePolicy(): void {
+    if (this.userShouldPersistSnapshot) {
+      this.guardrailLogger?.warn(
+        `EventedAgent '${this.id}': ignoring the shouldPersistSnapshot option. ` +
+          `The evented engine requires the full snapshot set (pending|paused|suspended|running) — ` +
+          `the initial 'running' write creates the base row that suspend-merges and multi-worker coordination build on.`,
+      );
+    }
   }
 
   /**

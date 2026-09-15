@@ -1272,5 +1272,32 @@ describe('DurableAgent resume model metadata', () => {
 
       await pubsub.close();
     });
+
+    it('preserves a custom shouldPersistSnapshot policy on the fork', async () => {
+      const pubsub = new EventEmitterPubSub();
+      const baseAgent = new Agent({
+        id: 'fork-persist-agent',
+        name: 'Fork Persist Agent',
+        instructions: 'Code instructions',
+        model: 'openai/gpt-4o',
+      });
+      const customPredicate = ({ workflowStatus }: { workflowStatus: string }) => workflowStatus === 'suspended';
+      const durableAgent = createDurableAgent({
+        agent: baseAgent,
+        pubsub,
+        shouldPersistSnapshot: customPredicate,
+      });
+
+      const fork = durableAgent.__fork();
+
+      // The fork keeps the caller's persistence policy instead of reverting to
+      // the recovery-aware default (which would persist `pending`).
+      const forkPolicy = (fork as any).resolveShouldPersistSnapshot();
+      expect(forkPolicy).toBe(customPredicate);
+      expect(forkPolicy({ workflowStatus: 'pending', stepResults: {} })).toBe(false);
+      expect(forkPolicy({ workflowStatus: 'suspended', stepResults: {} })).toBe(true);
+
+      await pubsub.close();
+    });
   });
 });

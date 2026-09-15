@@ -15,6 +15,8 @@ import type {
   AnyExportedSpan,
   MCPToolCallAttributes,
   ModelGenerationAttributes,
+  ModelInferenceAttributes,
+  ModelStepAttributes,
   RagEmbeddingAttributes,
   ToolCallAttributes,
   UsageStats,
@@ -60,6 +62,7 @@ import {
   ATTR_SERVER_PORT,
   ATTR_GEN_AI_TOOL_NAME,
 } from '@opentelemetry/semantic-conventions/incubating';
+import { isModelInferenceEnabled } from './features';
 import { convertMastraMessagesToGenAIMessages } from './gen-ai-messages';
 
 /**
@@ -141,13 +144,40 @@ function addModelRequestAttributes(
   Object.assign(attributes, formatUsageMetrics(attrs.usage));
 }
 
+/** Attributes of whichever span represents the model call. */
+type ModelCallAttributes = ModelGenerationAttributes & ModelInferenceAttributes;
+
+/**
+ * Whether this span is exported as the GenAI inference (`chat`) span.
+ *
+ * Exactly one span per model call carries `gen_ai.request.model`, the messages
+ * and `gen_ai.usage.*`, because OTel backends (Langfuse, Phoenix, ...) sum usage
+ * across nested spans. With paired packages that emit MODEL_INFERENCE, that is
+ * the call; MODEL_GENERATION is then the parent loop and MODEL_STEP one turn of
+ * it. Older pairings only emit MODEL_GENERATION, which keeps the `chat` role.
+ */
+export function isModelCallSpan(type: SpanType): boolean {
+  return type === (isModelInferenceEnabled() ? SpanType.MODEL_INFERENCE : SpanType.MODEL_GENERATION);
+}
+
+export interface GenAISemanticsOptions {
+  /**
+   * Override {@link isModelCallSpan} for this span. Exporters that flatten the
+   * generation loop into a single `chat` span pass `true` for MODEL_GENERATION.
+   */
+  modelCall?: boolean;
+}
+
 /**
  * Get the operation name based on span type for gen_ai.operation.name
  */
-function getOperationName(span: AnyExportedSpan): string {
+function getOperationName(span: AnyExportedSpan, modelCall = isModelCallSpan(span.type)): string {
+  if (modelCall) {
+    return 'chat';
+  }
   switch (span.type) {
-    case SpanType.MODEL_GENERATION:
-      return 'chat';
+    case SpanType.MODEL_STEP:
+      return 'agent_step';
     case SpanType.RAG_EMBEDDING:
       return 'embeddings';
     case SpanType.TOOL_CALL:
@@ -171,8 +201,9 @@ function sanitizeSpanName(name: string): string {
 
 function getSpanIdentifier(span: AnyExportedSpan): string | undefined {
   switch (span.type) {
-    case SpanType.MODEL_GENERATION: {
-      const attrs = span.attributes as ModelGenerationAttributes;
+    case SpanType.MODEL_GENERATION:
+    case SpanType.MODEL_INFERENCE: {
+      const attrs = span.attributes as ModelCallAttributes | undefined;
       return attrs?.model;
     }
     case SpanType.RAG_EMBEDDING: {
@@ -205,11 +236,11 @@ function getSpanIdentifier(span: AnyExportedSpan): string | undefined {
 /**
  * Get an OTEL-compliant span name based on span type and attributes
  */
-export function getSpanName(span: AnyExportedSpan): string {
+export function getSpanName(span: AnyExportedSpan, options?: GenAISemanticsOptions): string {
   const identifier = getSpanIdentifier(span);
 
   if (identifier) {
-    const operation = getOperationName(span);
+    const operation = getOperationName(span, options?.modelCall);
     return `${operation} ${identifier}`;
   }
 
@@ -221,12 +252,13 @@ export function getSpanName(span: AnyExportedSpan): string {
  * Gets OpenTelemetry attributes from Mastra Span
  * Following OTEL Semantic Conventions for GenAI
  */
-export function getAttributes(span: AnyExportedSpan): Attributes {
+export function getAttributes(span: AnyExportedSpan, options?: GenAISemanticsOptions): Attributes {
   const attributes: Attributes = {};
   const spanType = span.type.toLowerCase();
+  const modelCall = options?.modelCall ?? isModelCallSpan(span.type);
 
   // Add gen_ai.operation.name based on span type
-  attributes[ATTR_GEN_AI_OPERATION_NAME] = getOperationName(span);
+  attributes[ATTR_GEN_AI_OPERATION_NAME] = getOperationName(span, modelCall);
 
   // Add span type for better visibility
   attributes['mastra.span.type'] = span.type;
@@ -236,7 +268,7 @@ export function getAttributes(span: AnyExportedSpan): Attributes {
   if (span.input !== undefined) {
     const inputStr = typeof span.input === 'string' ? span.input : JSON.stringify(span.input);
     // Add specific attributes based on span type
-    if (span.type === SpanType.MODEL_GENERATION) {
+    if (modelCall) {
       attributes[ATTR_GEN_AI_INPUT_MESSAGES] = convertMastraMessagesToGenAIMessages(inputStr);
     } else if (
       span.type === SpanType.TOOL_CALL ||
@@ -252,7 +284,7 @@ export function getAttributes(span: AnyExportedSpan): Attributes {
   if (span.output !== undefined) {
     const outputStr = typeof span.output === 'string' ? span.output : JSON.stringify(span.output);
     // Add specific attributes based on span type
-    if (span.type === SpanType.MODEL_GENERATION) {
+    if (modelCall) {
       attributes[ATTR_GEN_AI_OUTPUT_MESSAGES] = convertMastraMessagesToGenAIMessages(outputStr);
       // TODO
       // attributes['gen_ai.output.type'] = image/json/speech/text/<other>
@@ -268,8 +300,8 @@ export function getAttributes(span: AnyExportedSpan): Attributes {
   }
 
   // Add model-specific attributes using OTEL semantic conventions
-  if (span.type === SpanType.MODEL_GENERATION && span.attributes) {
-    const modelAttrs = span.attributes as ModelGenerationAttributes;
+  if (modelCall && span.attributes) {
+    const modelAttrs = span.attributes as ModelCallAttributes;
 
     addModelRequestAttributes(attributes, modelAttrs);
 
@@ -332,6 +364,16 @@ export function getAttributes(span: AnyExportedSpan): Attributes {
     }
     if (modelAttrs.serverPort !== undefined) {
       attributes[ATTR_SERVER_PORT] = modelAttrs.serverPort;
+    }
+  }
+
+  if (span.type === SpanType.MODEL_STEP && span.attributes) {
+    const stepAttrs = span.attributes as ModelStepAttributes;
+    if (stepAttrs.stepIndex !== undefined) {
+      attributes[`mastra.${spanType}.step_index`] = stepAttrs.stepIndex;
+    }
+    if (stepAttrs.isContinued !== undefined) {
+      attributes[`mastra.${spanType}.is_continued`] = stepAttrs.isContinued;
     }
   }
 
