@@ -623,7 +623,12 @@ describe('IntakeSection', () => {
       await userEvent.click(await screen.findByRole('option', { name: 'Not routed' }));
 
       await waitFor(() => expect(savedBindings).toHaveLength(1));
-      expect(savedBindings[0]).toEqual({ integrationId: 'jira', sourceId: '10001', factoryProjectId: null, board: null });
+      expect(savedBindings[0]).toEqual({
+        integrationId: 'jira',
+        sourceId: '10001',
+        factoryProjectId: null,
+        board: null,
+      });
     });
 
     it('surfaces rejected connections as reconnect guidance instead of an empty picker', async () => {

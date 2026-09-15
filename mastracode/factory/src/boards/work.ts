@@ -153,7 +153,11 @@ export const workBoard = defineBoard<'work', Record<WorkBoardPhase, BoardPhaseDe
       kind: 'working',
       role: 'triage',
       outcomes: allOtherPhases,
-      onEnter: { issue: triageIssueEntry, linearIssue: investigateTriagedLinearIssue, jiraIssue: investigateTriagedJiraIssue },
+      onEnter: {
+        issue: triageIssueEntry,
+        linearIssue: investigateTriagedLinearIssue,
+        jiraIssue: investigateTriagedJiraIssue,
+      },
     },
     planning: {
       title: 'Planning',
