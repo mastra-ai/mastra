@@ -88,7 +88,7 @@ function Bloom({ tone }: { tone: SidebarNewMeterTone }) {
   );
 }
 
-export interface SidebarNewMeterProps extends Omit<ComponentPropsWithoutRef<'div'>, 'children'> {
+interface SidebarNewMeterBaseProps extends Omit<ComponentPropsWithoutRef<'div'>, 'children'> {
   /** Short name for the measured thing, e.g. `Credits`. Hidden on a collapsed rail. */
   label: ReactNode;
   /** The figure itself. Rendered with tabular figures so it cannot shift width. */
@@ -101,15 +101,22 @@ export interface SidebarNewMeterProps extends Omit<ComponentPropsWithoutRef<'div
   icon?: ReactNode;
   /** Trailing control beside the label, kept outside the card link. */
   action?: ReactNode;
-  /** Makes the whole card navigate. The link covers the card as an overlay. */
-  href?: string;
-  /** Accessible name for the card link. */
-  linkLabel?: string;
   /** Overrides the Provider-level LinkComponent. Defaults to `<a>` when neither is set. */
   LinkComponent?: LinkComponent;
   /** Defaults to the Provider's state; pass to override. */
   state?: SidebarState;
 }
+
+type SidebarNewMeterLinkProps =
+  | {
+      /** Makes the whole card navigate. The link covers the card as an overlay. */
+      href: string;
+      /** Accessible name for the card link. Required whenever `href` is set. */
+      linkLabel: string;
+    }
+  | { href?: never; linkLabel?: never };
+
+export type SidebarNewMeterProps = SidebarNewMeterBaseProps & SidebarNewMeterLinkProps;
 
 export const SidebarNewMeter = forwardRef<HTMLDivElement, SidebarNewMeterProps>(function SidebarNewMeter(
   {
@@ -149,7 +156,9 @@ export const SidebarNewMeter = forwardRef<HTMLDivElement, SidebarNewMeterProps>(
       >
         <Bloom tone={tone} />
         {href ? <Link href={href} className="absolute inset-0 rounded-lg" aria-label={linkLabel} /> : null}
-        <span className="text-ui-xs text-neutral3 relative font-semibold tabular-nums">{value}</span>
+        <span className="text-ui-xs text-neutral3 pointer-events-none relative font-semibold tabular-nums">
+          {value}
+        </span>
       </div>
     );
   }

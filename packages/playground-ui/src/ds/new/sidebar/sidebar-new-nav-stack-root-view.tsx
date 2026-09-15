@@ -12,11 +12,11 @@ export function SidebarNewNavStackRootView({ children, className, ...props }: Si
 
   return (
     <div
+      {...props}
       data-slot="sidebar-new-nav-stack-root"
       aria-hidden={!active}
       inert={!active}
       className={sidebarNewNavStackPageClasses(active, 'root', className)}
-      {...props}
     >
       {children}
     </div>

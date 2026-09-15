@@ -43,12 +43,12 @@ export function SidebarNewNavStackView({
 
   return (
     <div
+      {...props}
       data-slot="sidebar-new-nav-stack-view"
       data-value={value}
       aria-hidden={!active}
       inert={!active}
       className={sidebarNewNavStackPageClasses(active, 'view', className)}
-      {...props}
     >
       <button
         ref={backRef}
