@@ -989,9 +989,9 @@ type ObserverToolExchange = {
 
 type ObserverToolFormattingState = {
   exchanges: Map<string, ObserverToolExchange>;
+  occurrences: Map<object, number>;
   emittedCalls: Set<string>;
   emittedOutcomes: Set<string>;
-  nextOccurrence: number;
 };
 
 function isCallLikeToolInvocation(invocation: ObserverToolInvocation): boolean {
@@ -1009,6 +1009,7 @@ function isTerminalToolInvocation(invocation: ObserverToolInvocation): boolean {
 
 function createObserverToolFormattingState(messages: MastraDBMessage[]): ObserverToolFormattingState {
   const exchanges = new Map<string, ObserverToolExchange>();
+  const occurrences = new Map<object, number>();
   let occurrence = 0;
 
   for (const message of messages) {
@@ -1022,6 +1023,7 @@ function createObserverToolFormattingState(messages: MastraDBMessage[]): Observe
       }
 
       const invocation = part.toolInvocation;
+      occurrences.set(part, occurrence);
       if (!isCallLikeToolInvocation(invocation) && !isTerminalToolInvocation(invocation)) {
         occurrence++;
         continue;
@@ -1049,10 +1051,18 @@ function createObserverToolFormattingState(messages: MastraDBMessage[]): Observe
 
   return {
     exchanges,
+    occurrences,
     emittedCalls: new Set(),
     emittedOutcomes: new Set(),
-    nextOccurrence: 0,
   };
+}
+
+function formatObserverToolArguments(args: unknown, maxCharacters?: number): string {
+  if (args === undefined) {
+    return maybeTruncate('[arguments unavailable]', maxCharacters);
+  }
+
+  return formatToolArgumentsForObserver(args, { maxCharacters: maxCharacters || undefined });
 }
 
 function formatObserverMessage(
@@ -1101,7 +1111,7 @@ function formatObserverMessage(
 
       if (part.type === 'tool-invocation') {
         const inv = part.toolInvocation;
-        const occurrence = toolFormatting.nextOccurrence++;
+        const occurrence = toolFormatting.occurrences.get(part);
         const exchange = toolFormatting.exchanges.get(inv.toolCallId);
 
         if (
@@ -1113,7 +1123,7 @@ function formatObserverMessage(
           toolFormatting.emittedCalls.add(inv.toolCallId);
           pushLine(
             `Tool Call ${exchange.signature.toolName}`,
-            formatToolArgumentsForObserver(exchange.signature.args, { maxCharacters: maxLen || undefined }),
+            formatObserverToolArguments(exchange.signature.args, maxLen),
             partCreatedAt,
           );
         }
@@ -1177,11 +1187,7 @@ function formatObserverMessage(
         }
 
         if (!exchange) {
-          pushLine(
-            `Tool Call ${inv.toolName}`,
-            formatToolArgumentsForObserver(inv.args, { maxCharacters: maxLen || undefined }),
-            partCreatedAt,
-          );
+          pushLine(`Tool Call ${inv.toolName}`, formatObserverToolArguments(inv.args, maxLen), partCreatedAt);
         }
         return;
       }

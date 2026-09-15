@@ -1871,7 +1871,12 @@ export class TokenCounter {
   }
 
   /**
-   * Count tokens in a single message
+   * Count tokens in a single message.
+   *
+   * Canonical terminal invocations carry their call signature and outcome in one part. Legacy or
+   * foreign histories may instead repeat the same signature across separate call and result
+   * messages; those signatures are intentionally counted once per message because this API has no
+   * sequence context. The conservative overcount can activate observation earlier, never later.
    */
   countMessage(message: MastraDBMessage): number {
     let payloadTokens = this.countString(message.role);

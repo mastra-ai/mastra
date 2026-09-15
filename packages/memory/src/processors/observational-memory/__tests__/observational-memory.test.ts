@@ -1835,6 +1835,68 @@ describe('Observer Agent Helpers', () => {
       expect((formatted.match(/^  "answer": "done"$/gm) ?? []).length).toBe(1);
     });
 
+    it('renders a neutral provenance marker when legacy terminal arguments are unavailable', () => {
+      const message = createToolInvocationMessage([
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'legacy-no-args',
+            toolName: 'read_file',
+            result: 'legacy contents',
+          },
+        },
+      ]);
+
+      const formatted = formatMessagesForObserver([message]);
+
+      expect((formatted.match(/^Tool Call read_file(?: \([^)]*\))?: \[arguments unavailable\]$/gm) ?? []).length).toBe(
+        1,
+      );
+      expect((formatted.match(/^Tool Result read_file(?: \([^)]*\))?: legacy contents$/gm) ?? []).length).toBe(1);
+      expect(formatted).not.toContain('<undefined>');
+    });
+
+    it('uses precomputed tool-part occurrences when skipped marker content contains tool-shaped data', () => {
+      const marker = {
+        ...createToolInvocationMessage([], '__temporal_marker'),
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'call',
+                toolCallId: 'ignored-marker-call',
+                toolName: 'ignored',
+                args: { value: 'ignored' },
+              },
+            },
+          ],
+          metadata: { reminderType: 'temporal-gap', gapText: '10 minutes later' },
+        },
+      } as unknown as MastraDBMessage;
+      const completed = createToolInvocationMessage([
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'after-marker',
+            toolName: 'lookup',
+            args: { query: 'after marker' },
+            result: 'found',
+          },
+        },
+      ]);
+
+      const formatted = formatMessagesForObserver([marker, completed]);
+
+      expect(formatted).toContain('10 minutes later');
+      expect((formatted.match(/^Tool Call lookup(?: \([^)]*\))?: query: "after marker"$/gm) ?? []).length).toBe(1);
+      expect((formatted.match(/^Tool Result lookup(?: \([^)]*\))?: found$/gm) ?? []).length).toBe(1);
+      expect(formatted).not.toContain('Tool Call ignored');
+    });
+
     it('bounds large completed tool arguments without hiding later sibling fields', () => {
       const content = 'export const generated = true;\n'.repeat(2_000);
       const message = createToolInvocationMessage([
