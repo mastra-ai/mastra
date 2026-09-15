@@ -204,7 +204,10 @@ const MIME_TYPES: Record<string, string> = {
  */
 export function getMimeType(filename: string): string {
   const ext = path.extname(filename).slice(1).toLowerCase();
-  return MIME_TYPES[ext] ?? 'application/octet-stream';
+  // Read via a local so inherited Object.prototype members (e.g. an extension of
+  // `constructor` or `__proto__`) never leak a non-string; only own string values map.
+  const mimeType = Object.hasOwn(MIME_TYPES, ext) ? MIME_TYPES[ext] : undefined;
+  return typeof mimeType === 'string' ? mimeType : 'application/octet-stream';
 }
 
 /**

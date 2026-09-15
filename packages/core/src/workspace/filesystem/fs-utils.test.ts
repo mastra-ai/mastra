@@ -174,6 +174,14 @@ describe('getMimeType', () => {
   it('returns application/octet-stream for a file with no extension', () =>
     expect(getMimeType('Makefile')).toBe('application/octet-stream'));
 
+  it('returns application/octet-stream for extensions matching Object.prototype members', () => {
+    expect(getMimeType('file.constructor')).toBe('application/octet-stream');
+    expect(getMimeType('file.__proto__')).toBe('application/octet-stream');
+    expect(getMimeType('file.hasOwnProperty')).toBe('application/octet-stream');
+    expect(getMimeType('file.toString')).toBe('application/octet-stream');
+    expect(getMimeType('file.valueOf')).toBe('application/octet-stream');
+  });
+
   it('is case-insensitive for extensions', () => expect(getMimeType('IMAGE.PNG')).toBe('image/png'));
 
   it('handles a filename with multiple dots correctly', () =>

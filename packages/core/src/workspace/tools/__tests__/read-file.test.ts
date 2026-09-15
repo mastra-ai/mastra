@@ -415,6 +415,22 @@ describe('workspace_read_file', () => {
     expect(result).not.toContain('binary file not readable as text');
   });
 
+  it('should read files whose extension matches an Object.prototype member as text', async () => {
+    // Extensions like .constructor / .__proto__ must not resolve to inherited object
+    // properties; they should fall back to application/octet-stream and read as text.
+    await fs.writeFile(path.join(tempDir, 'file.constructor'), 'plain text contents');
+    const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
+    const tools = await createWorkspaceTools(workspace);
+
+    const result = (await tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute(
+      { path: 'file.constructor' },
+      { workspace },
+    )) as string;
+
+    expect(typeof result).toBe('string');
+    expect(result).toContain('plain text contents');
+  });
+
   it('should read extensionless files as text', async () => {
     // Files like Makefile, Dockerfile, LICENSE etc. have no extension.
     await fs.writeFile(path.join(tempDir, 'Dockerfile'), 'FROM node:20\nWORKDIR /app');
