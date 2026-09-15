@@ -53,9 +53,6 @@ const PROXY_CONTEXT_METHODS = new Set([...PROXY_REQUEST_METHODS, 'getConnection'
 const UNSUPPORTED_PROXY_OPTIONS = ['responseType'] as const;
 const ALLOWED_TEMPLATE_SDK_IMPORTS = new Set(['createAction', 'ProxyConfiguration']);
 
-/** Pin of the provider currently being generated; stamped into headers and the manifest. */
-let activePin: TemplatePin = templatePinFor();
-
 interface ActionCandidate {
   providerId: string;
   file: string;
@@ -180,6 +177,56 @@ function sanitizeVendoredSource(source: string): string {
   return source.replace(/^.*@nangohq\/custom-integrations-linting\/.*\r?\n/gm, '');
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function isArrayInputField(inputSchemaText: string, field: string): boolean {
+  return new RegExp(`(?:^|[\\s{,])${escapeRegExp(field)}\\s*:\\s*z\\s*\\.\\s*array\\s*\\(`).test(inputSchemaText);
+}
+
+/**
+ * Templates serialize every query parameter through an array-or-scalar
+ * branch. The input schema already fixes each field's shape, so fields it
+ * declares as scalars are serialized directly; array fields keep the join.
+ */
+function simplifyScalarQuerySerialization(execBody: string, inputSchemaText: string): string {
+  return execBody.replace(
+    /Array\.isArray\(input\[('[^']+')\]\)\s*\?\s*input\[\1\]\.join\(','\)\s*:\s*String\(input\[\1\]\)/g,
+    (match, quoted: string) =>
+      isArrayInputField(inputSchemaText, quoted.slice(1, -1)) ? match : `String(input[${quoted}])`,
+  );
+}
+
+/**
+ * Provider responses evolve independently of the template pin. Enums on the
+ * response side accept any string so a new provider value never rejects an
+ * otherwise valid response; request-side enums stay strict.
+ */
+function widenResponseEnums(statements: string[], inputSchemaName: string): string[] {
+  const declared = statements.map(statement => statement.match(/^(?:export\s+)?const\s+([A-Za-z_$][\w$]*)/)?.[1]);
+  const inputSide = new Set<string>([inputSchemaName]);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    statements.forEach((statement, index) => {
+      const name = declared[index];
+      if (!name || !inputSide.has(name)) return;
+      for (const other of declared) {
+        if (other && !inputSide.has(other) && new RegExp(`\\b${escapeRegExp(other)}\\b`).test(statement)) {
+          inputSide.add(other);
+          changed = true;
+        }
+      }
+    });
+  }
+  return statements.map((statement, index) => {
+    const name = declared[index];
+    if (name && inputSide.has(name)) return statement;
+    return statement.replace(/z\.enum\((\[[^\]]*\])\)(?!\.or\()/g, 'z.enum($1).or(z.string())');
+  });
+}
+
 function replaceProxyRequestType(source: string, usesProxyRequestType: boolean): string {
   return usesProxyRequestType ? source.replace(/\bProxyConfiguration\b/g, 'PlatformProxyRequest') : source;
 }
@@ -296,19 +343,26 @@ function extractAction(
   }
 
   const renamedExecBodyNode = execInitializer.getBody();
-  const execBody = replaceProxyRequestType(
-    sanitizeVendoredSource(
-      Node.isBlock(renamedExecBodyNode)
-        ? renamedExecBodyNode.getText()
-        : `{ return ${renamedExecBodyNode.getText()}; }`,
+  const inputSchemaText = inputDeclaration.getText();
+  const execBody = simplifyScalarQuerySerialization(
+    replaceProxyRequestType(
+      sanitizeVendoredSource(
+        Node.isBlock(renamedExecBodyNode)
+          ? renamedExecBodyNode.getText()
+          : `{ return ${renamedExecBodyNode.getText()}; }`,
+      ),
+      usesProxyRequestType,
     ),
-    usesProxyRequestType,
+    inputSchemaText,
   );
 
-  const moduleStatements = source
-    .getStatements()
-    .filter(statement => shouldKeepStatement(statement, createActionCall))
-    .map(statement => replaceProxyRequestType(sanitizeVendoredSource(statement.getText()), usesProxyRequestType));
+  const moduleStatements = widenResponseEnums(
+    source
+      .getStatements()
+      .filter(statement => shouldKeepStatement(statement, createActionCall))
+      .map(statement => replaceProxyRequestType(sanitizeVendoredSource(statement.getText()), usesProxyRequestType)),
+    inputSchemaName,
+  );
 
   return {
     kind: 'ok',
@@ -366,7 +420,7 @@ function outputSecretFields(action: ExtractedAction): readonly string[] | undefi
   return fields && fields.length > 0 ? fields : undefined;
 }
 
-function emitActionFile(action: ExtractedAction): string {
+function emitActionFile(action: ExtractedAction, pin: TemplatePin): string {
   const proxyTypeImports = [action.usesProxyRequestType ? 'PlatformProxyRequest' : undefined].filter(
     (name): name is string => Boolean(name),
   );
@@ -393,7 +447,7 @@ ${execBodyStatements(action.execBody)}
 ${execBodyStatements(action.execBody)}
     },`;
 
-  return `// AUTO-GENERATED from ${activePin.repo} @ ${activePin.sha.slice(0, 12)} — do not edit by hand.
+  return `// AUTO-GENERATED from ${pin.repo} @ ${pin.sha.slice(0, 12)} — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -412,7 +466,7 @@ ${modelOutput ? `${modelOutput.toolProperty}\n` : ''}${execute}
 `;
 }
 
-function emitToolsFile(integrationId: string, actions: ExtractedAction[]): string {
+function emitToolsFile(integrationId: string, actions: ExtractedAction[], pin: TemplatePin): string {
   const imports = actions
     .map(action => `import { ${action.toolFactoryName} } from './tools/${action.candidate.actionSlug}.js';`)
     .join('\n');
@@ -423,7 +477,7 @@ function emitToolsFile(integrationId: string, actions: ExtractedAction[]): strin
     .map(action => `    '${action.candidate.toolKey}': ${action.toolFactoryName}(platformProxy),`)
     .join('\n');
 
-  return `// AUTO-GENERATED from ${activePin.repo} @ ${activePin.sha.slice(0, 12)} — do not edit by hand.
+  return `// AUTO-GENERATED from ${pin.repo} @ ${pin.sha.slice(0, 12)} — do not edit by hand.
 import { createPlatformProxy } from '../../runtime/platform-proxy.js';
 import type { ProviderToolsOptions } from '../../toolset.js';
 import { applyAllowTools } from '../../toolset.js';
@@ -439,13 +493,13 @@ ${toolEntries}
 `;
 }
 
-function emitIndexFile(integrationId: string): string {
+function emitIndexFile(integrationId: string, pin: TemplatePin): string {
   const envVar = providerConnectionEnvVar(integrationId);
   const factoryName = `create${toPascal(integrationId)}Tools`;
   // Shared with updateProviderIndex so the emitted export always matches the
   // import the provider index writes (including leading-digit normalization).
   const registrationName = providerRegistrationName(integrationId);
-  return `// AUTO-GENERATED from ${activePin.repo} @ ${activePin.sha.slice(0, 12)} — do not edit by hand.
+  return `// AUTO-GENERATED from ${pin.repo} @ ${pin.sha.slice(0, 12)} — do not edit by hand.
 import type { ProviderRegistration } from '../../registry.js';
 import { ${factoryName} } from './tools.js';
 
@@ -480,8 +534,8 @@ export async function generateProvider({
   validateProviderId(providerId, 'Provider ID');
   validateProviderId(localId, 'Local ID');
   assertProviderEnvVarAvailable(localId);
-  activePin = templatePinFor(providerId);
-  const expectedSha = expectedTemplateSha ?? activePin.sha;
+  const pin = templatePinFor(providerId);
+  const expectedSha = expectedTemplateSha ?? pin.sha;
 
   const actionDir = resolve(templatesDir, providerId, 'actions');
   if (!existsSync(actionDir)) {
@@ -526,17 +580,17 @@ export async function generateProvider({
 
   try {
     for (const action of extracted) {
-      writeFileSync(resolve(temporaryDir, 'tools', `${action.candidate.actionSlug}.ts`), emitActionFile(action));
+      writeFileSync(resolve(temporaryDir, 'tools', `${action.candidate.actionSlug}.ts`), emitActionFile(action, pin));
     }
-    writeFileSync(resolve(temporaryDir, 'tools.ts'), emitToolsFile(localId, extracted));
-    writeFileSync(resolve(temporaryDir, 'index.ts'), emitIndexFile(localId));
+    writeFileSync(resolve(temporaryDir, 'tools.ts'), emitToolsFile(localId, extracted, pin));
+    writeFileSync(resolve(temporaryDir, 'index.ts'), emitIndexFile(localId, pin));
     await formatGeneratedFiles(temporaryDir);
 
     const manifest: ProviderManifest = {
       providerId,
       localId,
       templateSha,
-      templateRepo: activePin.repo,
+      templateRepo: pin.repo,
       generatedAt: new Date().toISOString(),
       toolCount: extracted.length,
       skippedActions: skipped.map(action => ({ action: action.candidate.actionSlug, reason: action.reason })),
