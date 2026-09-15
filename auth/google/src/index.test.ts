@@ -1,5 +1,3 @@
-import { generateKeyPairSync } from 'node:crypto';
-
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -551,12 +549,20 @@ describe('MastraRBACGoogle', () => {
   });
 
   it('signs service-account JWTs and normalizes escaped private keys', async () => {
-    const { privateKey } = generateKeyPairSync('rsa', {
-      modulusLength: 2048,
-      privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
-      publicKeyEncoding: { type: 'spki', format: 'pem' },
-    });
-    const escapedKey = (privateKey as string).replace(/\n/g, '\\n');
+    const keyPair = await globalThis.crypto.subtle.generateKey(
+      {
+        name: 'RSASSA-PKCS1-v1_5',
+        modulusLength: 2048,
+        publicExponent: new Uint8Array([1, 0, 1]),
+        hash: 'SHA-256',
+      },
+      true,
+      ['sign', 'verify'],
+    );
+    const privateKey = `-----BEGIN PRIVATE KEY-----\n${Buffer.from(
+      await globalThis.crypto.subtle.exportKey('pkcs8', keyPair.privateKey),
+    ).toString('base64')}\n-----END PRIVATE KEY-----\n`;
+    const escapedKey = privateKey.replace(/\n/g, '\\n');
 
     mockFetch.mockImplementation(async (input: RequestInfo | URL) => {
       const url = input.toString();
@@ -587,6 +593,19 @@ describe('MastraRBACGoogle', () => {
     expect(mockFetch).toHaveBeenCalledTimes(2);
     expect(mockFetch.mock.calls[0]![0]).toBe('https://oauth2.googleapis.com/token');
     expect(mockFetch.mock.calls[0]![1]).toEqual(expect.objectContaining({ signal: expect.any(AbortSignal) }));
+    const tokenRequest = mockFetch.mock.calls[0]![1] as RequestInit;
+    const assertion = new URLSearchParams(tokenRequest.body as URLSearchParams).get('assertion');
+    expect(assertion).toBeTruthy();
+    const [encodedHeader, encodedClaim, encodedSignature] = assertion!.split('.');
+    expect(JSON.parse(Buffer.from(encodedHeader!, 'base64url').toString())).toMatchObject({ alg: 'RS256', typ: 'JWT' });
+    await expect(
+      globalThis.crypto.subtle.verify(
+        'RSASSA-PKCS1-v1_5',
+        keyPair.publicKey,
+        Buffer.from(encodedSignature!, 'base64url'),
+        new TextEncoder().encode(`${encodedHeader}.${encodedClaim}`),
+      ),
+    ).resolves.toBe(true);
     expect(mockFetch.mock.calls[1]![1]).toEqual(
       expect.objectContaining({
         headers: expect.objectContaining({ Authorization: 'Bearer service-account-token' }),
