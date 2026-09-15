@@ -2,8 +2,16 @@ import type { DatasetRecord } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button, CreateButton } from '@mastra/playground-ui/components/Button';
 import { Column, Columns } from '@mastra/playground-ui/components/Columns';
+import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@mastra/playground-ui/components/Dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogBody,
+  DialogFooter,
+} from '@mastra/playground-ui/components/Dialog';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@mastra/playground-ui/components/InputGroup';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
@@ -116,7 +124,7 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
   }
   const [detailView, setDetailView] = useState<DetailView>(null);
   const [showAttachDialog, setShowAttachDialog] = useState(false);
-  const [attachDatasetSearch, setAttachDatasetSearch] = useState('');
+  const [attachDatasetId, setAttachDatasetId] = useState('');
   const [showAttachScorerDialog, setShowAttachScorerDialog] = useState(false);
   const [attachScorerSearch, setAttachScorerSearch] = useState('');
   const [generateDatasetId, setGenerateDatasetId] = useState<string | null>(null);
@@ -781,65 +789,59 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
           )}
 
         {/* Attach Existing Dataset Dialog */}
-        <Dialog open={showAttachDialog} onOpenChange={setShowAttachDialog}>
+        <Dialog
+          open={showAttachDialog}
+          onOpenChange={open => {
+            setShowAttachDialog(open);
+            if (!open) setAttachDatasetId('');
+          }}
+        >
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Attach Existing Dataset</DialogTitle>
             </DialogHeader>
-            <DialogBody className="max-h-[50vh] overflow-y-auto">
-              <InputGroup variant="outline">
-                <InputGroupAddon align="inline-start">
-                  <SearchIcon />
-                </InputGroupAddon>
-                <InputGroupInput
-                  type="search"
-                  aria-label="Search datasets"
-                  placeholder="Search datasets..."
-                  onChange={event => setAttachDatasetSearch(event.target.value)}
-                />
-              </InputGroup>
-              {unattachedDatasets
-                .filter(ds => !attachDatasetSearch || ds.name.toLowerCase().includes(attachDatasetSearch.toLowerCase()))
-                .map(ds => (
-                  <button
-                    key={ds.id}
-                    type="button"
-                    className="hover:bg-surface3 flex w-full items-center justify-between rounded-md px-3 py-2 text-left transition-colors"
-                    onClick={async () => {
-                      try {
-                        await updateDataset.mutateAsync({
-                          datasetId: ds.id,
-                          // Classify legacy/untyped datasets without overwriting existing target types.
-                          targetType: ds.targetType ?? 'agent',
-                          targetIds: [...parseIdList(ds.targetIds), agentId],
-                        });
-                        toast.success(`Dataset "${ds.name}" attached`);
-                        setShowAttachDialog(false);
-                      } catch {
-                        toast.error('Failed to attach dataset');
-                      }
-                    }}
-                  >
-                    <div>
-                      <Txt variant="ui-sm" className="font-medium">
-                        {ds.name}
-                      </Txt>
-                      {ds.description && (
-                        <Txt variant="ui-xs" className="text-neutral3 block">
-                          {ds.description}
-                        </Txt>
-                      )}
-                    </div>
-                  </button>
-                ))}
-              {unattachedDatasets.filter(
-                ds => !attachDatasetSearch || ds.name.toLowerCase().includes(attachDatasetSearch.toLowerCase()),
-              ).length === 0 && (
-                <Txt variant="ui-sm" className="text-neutral3 block py-4 text-center">
-                  No datasets available to attach
-                </Txt>
-              )}
+            <DialogBody>
+              <Combobox
+                options={unattachedDatasets.map(ds => ({
+                  value: ds.id,
+                  label: ds.name,
+                  description: ds.description ?? undefined,
+                }))}
+                value={attachDatasetId}
+                onValueChange={setAttachDatasetId}
+                placeholder="Select a dataset..."
+                searchPlaceholder="Search datasets..."
+                emptyText="No datasets available to attach"
+                className="w-full"
+              />
             </DialogBody>
+            <DialogFooter>
+              <Button onClick={() => setShowAttachDialog(false)}>Cancel</Button>
+              <Button
+                variant="primary"
+                icon={<Paperclip />}
+                disabled={!attachDatasetId || updateDataset.isPending}
+                onClick={async () => {
+                  const ds = unattachedDatasets.find(item => item.id === attachDatasetId);
+                  if (!ds) return;
+                  try {
+                    await updateDataset.mutateAsync({
+                      datasetId: ds.id,
+                      // Classify legacy/untyped datasets without overwriting existing target types.
+                      targetType: ds.targetType ?? 'agent',
+                      targetIds: [...parseIdList(ds.targetIds), agentId],
+                    });
+                    toast.success(`Dataset "${ds.name}" attached`);
+                    setShowAttachDialog(false);
+                    setAttachDatasetId('');
+                  } catch {
+                    toast.error('Failed to attach dataset');
+                  }
+                }}
+              >
+                Attach
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
 
