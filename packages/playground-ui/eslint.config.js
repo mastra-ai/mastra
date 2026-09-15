@@ -1,4 +1,5 @@
 import { createConfig } from '@internal/lint/eslint';
+import { restrictedFocusSelectors } from '@internal/lint/focus';
 import reactRefresh from 'eslint-plugin-react-refresh';
 import storybook from 'eslint-plugin-storybook';
 import tailwindcss from 'eslint-plugin-tailwindcss';
@@ -59,6 +60,13 @@ export default [
     },
   },
   ...storybook.configs['flat/recommended'],
+  {
+    files: ['src/domains/**/*.ts?(x)'],
+    ignores: ['src/**/*.test.*', 'src/**/*.stories.*'],
+    rules: {
+      'no-restricted-syntax': ['error', ...restrictedTypographySelectors, ...restrictedFocusSelectors],
+    },
+  },
   {
     files: ['**/*.stories.tsx'],
     rules: {

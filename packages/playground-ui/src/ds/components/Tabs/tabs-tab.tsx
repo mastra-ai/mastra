@@ -68,7 +68,7 @@ export const Tab = ({
       : cn(
           'text-ui-smd font-normal text-neutral3',
           attention && 'relative',
-          'flex cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap outline-none',
+          'flex cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap',
           transitions.colors,
           'hover:text-neutral4',
           'data-[active]:text-neutral5',

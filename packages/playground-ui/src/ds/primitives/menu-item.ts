@@ -31,13 +31,13 @@ export const menuItemInsetClass = 'pl-[calc(.9em+1.1em+.75em)]';
 export const MENU_SIDE_OFFSET = 4;
 
 // Hide detached popups instead of showing them at the floating fallback origin.
-export const menuPositionerClass = 'z-50 outline-none data-[anchor-hidden]:hidden';
+export const menuPositionerClass = 'z-50 data-[anchor-hidden]:hidden';
 
 export const menuPopupClass = cn(
   'z-50 max-h-[min(var(--max-height-dropdown-max-height),var(--available-height))]',
   'w-max max-w-(--available-width) min-w-[max(11rem,var(--anchor-width))]',
   'origin-[var(--transform-origin)] overflow-x-hidden overflow-y-auto',
-  'rounded-xl border border-border1 bg-surface3 p-1 text-neutral4 shadow-dialog outline-none',
+  'rounded-xl border border-border1 bg-surface3 p-1 text-neutral4 shadow-dialog',
   'data-[closed]:animate-out data-[closed]:fade-out-0 data-[closed]:zoom-out-95 data-[open]:animate-in data-[open]:fade-in-0 data-[open]:zoom-in-95',
   'data-[side=bottom]:slide-in-from-top-1 data-[side=left]:slide-in-from-right-1 data-[side=right]:slide-in-from-left-1 data-[side=top]:slide-in-from-bottom-1',
 );
@@ -53,11 +53,10 @@ export const menuEmptyClass =
 
 export const menuSearchClasses = {
   container: cn(
-    'ds-focus ds-focus-within flex items-center gap-[.75em] border-b border-border1 px-[.9em] py-0.5 text-ui-smd',
+    'ds-focus flex items-center gap-[.75em] border-b border-border1 px-[.9em] py-0.5 text-ui-smd',
     inputFocusBorderWithin,
     transitions.colors,
   ),
   icon: 'size-[1.1em] shrink-0 text-neutral3',
-  input:
-    'h-form-md w-full bg-transparent text-ui-smd leading-ui-sm text-neutral6 outline-none placeholder:text-neutral3',
+  input: 'h-form-md w-full bg-transparent text-ui-smd leading-ui-sm text-neutral6 placeholder:text-neutral3',
 };

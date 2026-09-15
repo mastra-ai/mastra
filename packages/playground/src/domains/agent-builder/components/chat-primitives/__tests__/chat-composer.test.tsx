@@ -15,7 +15,7 @@ interface RenderOptions {
 
 const FormHarness = ({ agentId = 'agent_test', children }: { agentId?: string; children: React.ReactNode }) => {
   const methods = useForm<AgentBuilderEditFormValues>({
-    defaultValues: {} as AgentBuilderEditFormValues,
+    defaultValues: {},
   });
   return (
     <FormProvider {...methods}>
@@ -66,7 +66,7 @@ describe('ChatComposer', () => {
       canSubmit: false,
     });
     const submit = getByTestId('composer-submit');
-    const textarea = getByTestId('composer-input') as HTMLTextAreaElement;
+    const textarea = getByTestId<HTMLTextAreaElement>('composer-input');
 
     expect(submit.getAttribute('aria-label')).toBe('Generating…');
     expect(submit.querySelector('.animate-spin')).not.toBeNull();
@@ -76,11 +76,8 @@ describe('ChatComposer', () => {
 
   it('applies agent-color CSS variables to the composer container derived from the agentId', () => {
     const { getByTestId } = renderComposer({}, { agentId: 'agent_support' });
-    const container = getByTestId('composer-container') as HTMLDivElement;
+    const container = getByTestId<HTMLDivElement>('composer-container');
     expect(container.style.getPropertyValue('--agent-color-fg')).toMatch(/^hsl\(/);
     expect(container.style.getPropertyValue('--agent-color-bg')).toMatch(/^hsl\(/);
-    expect(container.className).toContain('border-border1');
-    expect(container.className).toContain('focus-within:border-[var(--agent-color-bg)]');
-    expect(container.className).not.toContain('focus-within:ring');
   });
 });

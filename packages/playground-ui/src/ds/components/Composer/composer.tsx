@@ -3,6 +3,7 @@ import { forwardRef } from 'react';
 
 import { ScrollArea } from '../ScrollArea';
 import { useComposerPointerAngle } from './use-composer-pointer-angle';
+import '@/ds/primitives/focus.css';
 import { cn } from '@/lib/utils';
 
 import './composer-ring.css';
@@ -32,7 +33,7 @@ export const ComposerBox = forwardRef<HTMLDivElement, ComposerBoxProps>(
       ref={ref}
       data-slot="composer-box"
       className={cn(
-        '@container relative mx-auto mt-auto w-full max-w-3xl overflow-hidden rounded-[22px] border border-border2/40 bg-surface3 transition-colors duration-normal focus-within:border-border2',
+        'ds-focus ds-focus-field-within @container relative mx-auto mt-auto w-full max-w-3xl overflow-hidden rounded-[22px] border border-border2/40 bg-surface3 transition-colors duration-normal',
         className,
       )}
       {...props}
@@ -88,7 +89,7 @@ export const ComposerInput = forwardRef<HTMLTextAreaElement, ComposerInputProps>
         ref={ref}
         data-slot="composer-input"
         className={cn(
-          'field-sizing-content min-h-14 w-full resize-none overflow-hidden bg-transparent px-3 pt-2.5 pb-2 text-ui-md leading-ui-md text-neutral6 outline-hidden placeholder:text-neutral3 focus:outline-hidden disabled:cursor-not-allowed disabled:opacity-50',
+          'field-sizing-content min-h-14 w-full resize-none overflow-hidden bg-transparent px-3 pt-2.5 pb-2 text-ui-md leading-ui-md text-neutral6 placeholder:text-neutral3 disabled:cursor-not-allowed disabled:opacity-50',
           className,
         )}
         {...props}

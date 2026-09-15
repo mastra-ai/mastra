@@ -51,7 +51,7 @@ export const WorkflowConditionCardView = ({
           {isCollapsible && (
             <CollapsibleTrigger
               aria-label={isOpen ? 'Collapse condition' : 'Expand condition'}
-              className="text-neutral3 hover:text-neutral5 focus-visible:ring-accent1 inline-flex size-5 items-center justify-center rounded-full focus-visible:ring-1 focus-visible:outline-hidden"
+              className="text-neutral3 hover:text-neutral5 inline-flex size-5 items-center justify-center rounded-full"
             >
               <Icon>
                 <ChevronDown

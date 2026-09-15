@@ -83,7 +83,7 @@ export const SkillWorkspaceLayout = ({
               data-testid="skill-edit-tab-chat"
               onClick={() => setActiveTab('chat')}
               className={cn(
-                'relative z-10 flex-1 rounded-full text-ui-md font-medium outline-none',
+                'relative z-10 flex-1 rounded-full text-ui-md font-medium',
                 'transition-colors duration-200',
                 activeTab === 'chat' ? 'text-neutral5' : 'text-neutral3 hover:text-neutral4',
               )}
@@ -97,7 +97,7 @@ export const SkillWorkspaceLayout = ({
               data-testid="skill-edit-tab-configure"
               onClick={() => setActiveTab('configure')}
               className={cn(
-                'relative z-10 flex-1 rounded-full text-ui-md font-medium outline-none',
+                'relative z-10 flex-1 rounded-full text-ui-md font-medium',
                 'transition-colors duration-200',
                 activeTab === 'configure' ? 'text-neutral5' : 'text-neutral3 hover:text-neutral4',
               )}

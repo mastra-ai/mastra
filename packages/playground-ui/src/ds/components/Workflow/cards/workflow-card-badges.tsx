@@ -27,7 +27,7 @@ export const WorkflowCardBadges = ({ indicators, className }: WorkflowCardIndica
                   tabIndex={0}
                   aria-label={indicator.label}
                   data-testid={`workflow-card-indicator-${indicator.id}`}
-                  className="text-neutral5 focus-visible:ring-accent1 inline-flex size-5 shrink-0 items-center justify-center focus-visible:ring-1 focus-visible:outline-hidden"
+                  className="text-neutral5 inline-flex size-5 shrink-0 items-center justify-center"
                 />
               }
             >

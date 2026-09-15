@@ -25,9 +25,9 @@ export const hoverEffects = {
 } as const;
 
 export const focusRing = {
-  default: 'focus:outline-hidden focus:ring-1 focus:ring-accent1 focus:shadow-focus-ring',
+  default: controlFocusStyle,
 
-  simple: 'focus:outline-hidden focus:ring-1 focus:ring-accent1',
+  simple: controlFocusStyle,
 
   visible: controlFocusStyle,
 } as const;

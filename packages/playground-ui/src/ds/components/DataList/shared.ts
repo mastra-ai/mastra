@@ -14,7 +14,7 @@ export const dataListRowStateStyles = [
 ] as const;
 
 export const dataListRowInteractiveStyles = [
-  'data-list-row-target grid grid-cols-subgrid gap-4 px-3 cursor-pointer outline-none',
+  'data-list-row-target grid grid-cols-subgrid gap-4 px-3 cursor-pointer',
 ] as const;
 
 export const dataListRowStyles = [

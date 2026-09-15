@@ -102,7 +102,7 @@ const CommandInput = React.forwardRef<React.ElementRef<typeof CommandPrimitive.I
     <div
       data-slot="command-input-wrapper"
       className={cn(
-        'ds-focus ds-focus-within flex items-center border-b border-border1 px-3',
+        'ds-focus flex items-center border-b border-border1 px-3',
         inputFocusBorderWithin,
         transitions.colors,
         wrapperClassName,
@@ -114,7 +114,6 @@ const CommandInput = React.forwardRef<React.ElementRef<typeof CommandPrimitive.I
         className={cn(
           'flex h-8 min-w-0 flex-1 rounded-md bg-transparent py-2 text-ui-smd leading-ui-sm text-neutral6',
           'placeholder:text-neutral3 disabled:cursor-not-allowed disabled:opacity-50',
-          'outline-none focus:outline-none focus-visible:outline-none',
           transitions.colors,
           className,
         )}
@@ -146,7 +145,6 @@ const CommandList = React.forwardRef<React.ElementRef<typeof CommandPrimitive.Li
       <CommandPrimitive.List
         ref={ref}
         className={cn(
-          'outline-none focus:outline-none focus-visible:outline-none',
           scrollArea ? 'overflow-visible' : 'max-h-dropdown-max-height overflow-x-hidden overflow-y-auto',
           className,
         )}
@@ -209,7 +207,6 @@ const CommandItem = React.forwardRef<
     ref={ref}
     className={cn(
       'ds-focus ds-focus-line relative flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 text-ui-smd leading-ui-sm text-neutral4 select-none',
-      'outline-none focus:outline-none focus-visible:outline-none',
       transitions.colors,
       'data-[selected=true]:bg-surface4 data-[selected=true]:text-neutral6',
       'data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50',

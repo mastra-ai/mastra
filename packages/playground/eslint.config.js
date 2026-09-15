@@ -1,4 +1,5 @@
 import { createConfig } from '@internal/lint/eslint';
+import { restrictedFocusSelectors } from '@internal/lint/focus';
 import reactRefresh from 'eslint-plugin-react-refresh';
 
 const reactHooks = (await import('eslint-plugin-react-hooks')).default;
@@ -233,6 +234,7 @@ export default [
         'error',
         ...restrictedPlaygroundUiBroadImportSelectors,
         ...restrictedTypographySelectors,
+        ...restrictedFocusSelectors,
       ],
     },
   },

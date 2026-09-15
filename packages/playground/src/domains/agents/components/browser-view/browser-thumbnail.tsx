@@ -98,11 +98,7 @@ export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps)
       <button
         type="button"
         onClick={handleToggleExpand}
-        className={cn(
-          'group flex items-center gap-3 w-full px-4 py-3',
-          'hover:bg-surface3 transition-colors',
-          'focus:outline-none focus:ring-2 focus:ring-accent1 focus:ring-inset',
-        )}
+        className={cn('group flex items-center gap-3 w-full px-4 py-3', 'hover:bg-surface3 transition-colors')}
       >
         {/* Thumbnail preview */}
         <div className="bg-surface3 border-border1 relative h-14 w-24 shrink-0 overflow-hidden rounded-md border">

@@ -117,7 +117,6 @@ describe('ToolCall', () => {
 
     expect(trigger.tagName).toBe('BUTTON');
     expect(document.activeElement).toBe(trigger);
-    expect(trigger.className).toContain('focus-visible');
   });
 
   it('reports controlled expansion without changing its own state', () => {

@@ -239,7 +239,7 @@ export function SearchSkillsPanel({ onSearch, results, isSearching, onResultClic
               value={query}
               onChange={e => setQuery(e.target.value)}
               placeholder="Search across skills..."
-              className="bg-surface3 border-border1 text-neutral6 placeholder:text-neutral3 focus:ring-accent1 text-ui-md w-full rounded-lg border py-2 pr-4 pl-10 focus:ring-2 focus:outline-hidden"
+              className="bg-surface3 border-border1 text-neutral6 placeholder:text-neutral3 text-ui-md w-full rounded-lg border py-2 pr-4 pl-10"
             />
           </div>
           <Button type="submit" disabled={!query.trim() || isSearching}>

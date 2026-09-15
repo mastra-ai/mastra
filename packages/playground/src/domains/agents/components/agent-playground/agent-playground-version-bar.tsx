@@ -151,7 +151,7 @@ export function AgentPlaygroundVersionBar({
         <Tooltip>
           <TooltipTrigger
             aria-label="Version information"
-            className="text-neutral3 hover:text-neutral5 shrink-0 rounded-sm transition-colors focus-visible:ring-1 focus-visible:ring-white/30 focus-visible:outline-hidden"
+            className="text-neutral3 hover:text-neutral5 shrink-0 rounded-sm transition-colors"
           >
             <Icon size="sm">
               <Info />
@@ -279,7 +279,7 @@ export function AgentPlaygroundVersionBar({
                   id="change-message"
                   placeholder="Describe what changed..."
                   value={changeMessage}
-                  className="focus:ring-white/50"
+
                   onChange={e => setChangeMessage(e.target.value)}
                   onKeyDown={e => {
                     if (e.key === 'Enter') {

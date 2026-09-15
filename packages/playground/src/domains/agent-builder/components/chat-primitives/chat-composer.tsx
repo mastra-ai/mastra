@@ -42,8 +42,9 @@ export const ChatComposer = ({
   const containerStyle = useMemo<CSSProperties>(
     () => ({
       viewTransitionName: 'chat-composer',
-      ['--agent-color-fg' as string]: agentColor.foreground,
-      ['--agent-color-bg' as string]: agentColor.background,
+      '--agent-color-fg': agentColor.foreground,
+      '--agent-color-bg': agentColor.background,
+      '--ds-focus-field-color': 'var(--agent-color-bg)',
     }),
     [agentColor],
   );
@@ -51,7 +52,7 @@ export const ChatComposer = ({
   return (
     <form onSubmit={onSubmit} className="shrink-0">
       <div
-        className="border-border1 bg-surface2 rounded-3xl border px-3 pt-2.5 transition-colors focus-within:border-[var(--agent-color-bg)]"
+        className="ds-focus ds-focus-field-within border-border1 bg-surface2 rounded-3xl border px-3 pt-2.5 transition-colors"
         style={containerStyle}
         data-testid={containerTestId}
       >

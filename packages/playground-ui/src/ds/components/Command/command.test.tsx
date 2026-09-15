@@ -172,21 +172,6 @@ describe('Command', () => {
     expect(viewport?.contains(list)).toBe(true);
   });
 
-  it('removes the browser focus outline from CommandList', () => {
-    render(
-      <Command>
-        <CommandList>
-          <CommandGroup heading="Navigation">
-            <CommandItem value="settings">Settings</CommandItem>
-          </CommandGroup>
-        </CommandList>
-      </Command>,
-    );
-
-    const list = screen.getByRole('listbox', { name: 'Suggestions' });
-    expect(list.classList.contains('focus-visible:outline-none')).toBe(true);
-  });
-
   it('preserves DOM order while filtering matching items', async () => {
     render(
       <CommandDialog open onOpenChange={() => {}}>

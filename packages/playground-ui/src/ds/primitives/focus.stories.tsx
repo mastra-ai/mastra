@@ -6,6 +6,7 @@ import { Checkbox } from '../components/Checkbox/checkbox';
 import { Combobox } from '../components/Combobox/combobox';
 import { DataList } from '../components/DataList/data-list';
 import { Input } from '../components/Input/input';
+import { InputGroup, InputGroupButton, InputGroupInput } from '../components/InputGroup/input-group';
 import { Tab, TabList, Tabs } from '../components/Tabs';
 import { AgentIcon } from '../icons/AgentIcon';
 
@@ -105,6 +106,38 @@ export const NativeFallback: Story = {
       </a>
       <Button>Design system action</Button>
       <Input aria-label="Name" placeholder="Name" />
+    </div>
+  ),
+};
+
+export const IncompleteFocusStyles: Story = {
+  render: () => (
+    <div className="flex flex-col items-start gap-4">
+      <button type="button" className="ds-focus rounded-md px-2 py-1">
+        Missing focus treatment
+      </button>
+      <button type="button" className="ds-focus ds-focus-contour rounded-md px-2 py-1">
+        Missing contour decoration
+      </button>
+      <Input variant="unstyled" aria-label="Standalone unstyled field" placeholder="Standalone unstyled field" />
+      <Input error aria-label="Invalid field" defaultValue="Invalid value" />
+      <InputGroupInput aria-label="Standalone group control" placeholder="Standalone group control" />
+    </div>
+  ),
+};
+
+export const CompositeField: Story = {
+  render: () => (
+    <div className="w-64 space-y-4">
+      <InputGroup>
+        <InputGroupInput aria-label="Search projects" placeholder="Search projects" />
+        <InputGroupButton aria-label="Add project" tooltip="Add project">
+          <Plus />
+        </InputGroupButton>
+      </InputGroup>
+      <InputGroup>
+        <InputGroupInput aria-label="Invalid project name" error defaultValue="Invalid value" />
+      </InputGroup>
     </div>
   ),
 };

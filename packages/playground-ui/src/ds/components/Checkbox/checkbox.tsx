@@ -26,7 +26,7 @@ const Checkbox = React.forwardRef<HTMLSpanElement, CheckboxProps>(
         data-slot="checkbox"
         className={cn(
           'peer flex size-4 shrink-0 cursor-pointer items-center justify-center rounded-[0.3125rem]',
-          'border border-neutral6/[0.06] bg-neutral6/[0.12] text-surface1 outline-hidden',
+          'border border-neutral6/[0.06] bg-neutral6/[0.12] text-surface1',
           transitions.all,
           'hover:border-neutral6/[0.12] hover:bg-neutral6/[0.16]',
           'active:scale-95 active:border-neutral6/[0.18] active:bg-neutral6/[0.18]',

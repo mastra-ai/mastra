@@ -1,13 +1,58 @@
+@layer base {
+  :focus-visible {
+    outline: 2px solid var(--neutral5, currentColor);
+    outline-offset: 2px;
+  }
+
+  @media (forced-colors: active) {
+    :focus-visible {
+      outline-color: Highlight;
+    }
+  }
+}
+
 .ds-focus {
   --ds-focus-progress: 0;
   --ds-focus-color: var(--neutral5);
   --ds-focus-line-gradient: linear-gradient(90deg, transparent 5%, var(--ds-focus-color) 50%, transparent 95%);
-  outline: none;
 }
 
 .ds-focus:focus-visible,
-.ds-focus-within:has(:focus-visible) {
+.ds-focus-within:has(:focus-visible),
+.ds-focus-field-within:has(:is(input, textarea, [contenteditable='true']):focus-visible) {
   --ds-focus-progress: 1;
+}
+
+.ds-focus-line:not(.ds-focus-orbit, .ds-focus-contour):focus-visible,
+:is(.ds-focus-orbit, .ds-focus-row, .ds-focus-ring):focus-visible,
+.ds-focus-field:not([aria-invalid='true']):focus-visible,
+.ds-focus-contour:has(> [data-slot='focus-decoration']):focus-visible,
+.ds-focus-field-within :is(input, textarea, [contenteditable='true']):focus-visible,
+:is(.ds-focus-orbit, .ds-focus-ring).ds-focus-within :focus-visible,
+.ds-focus-row > .data-list-row-target:focus-visible,
+.ds-focus-row > [data-tree-folder-trigger]:focus-visible,
+[data-tree-item-kind='folder']:has(> * > .ds-focus-row):focus-visible {
+  outline: none;
+}
+
+.ds-focus-row > [data-tree-folder-trigger] {
+  background-image: none;
+}
+
+.ds-focus-field:focus-visible:not([aria-invalid='true']),
+.ds-focus-field-within:has(:is(input, textarea, [contenteditable='true']):focus-visible):not(
+  :has([aria-invalid='true'])
+) {
+  border-color: var(--ds-focus-field-color, color-mix(in oklab, var(--neutral5) 50%, transparent));
+}
+
+.ds-focus-field-within:has([aria-invalid='true']):has(:is(input, textarea, [contenteditable='true']):focus-visible) {
+  outline: 2px solid var(--neutral5);
+  outline-offset: 2px;
+}
+
+.ds-focus-ring:is(:focus-visible, :has(:focus-visible)) {
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--neutral6) 60%, transparent);
 }
 
 .ds-focus-line {
@@ -150,8 +195,20 @@
     display: none;
   }
 
-  .ds-focus {
+  .ds-focus:is(
+    .ds-focus-line,
+    .ds-focus-orbit,
+    .ds-focus-row,
+    .ds-focus-contour,
+    .ds-focus-field,
+    .ds-focus-field-within,
+    .ds-focus-ring
+  ) {
     outline: calc(2px * var(--ds-focus-progress)) solid Highlight;
     outline-offset: -2px;
+  }
+
+  .ds-focus-ring {
+    box-shadow: none;
   }
 }

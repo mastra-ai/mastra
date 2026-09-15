@@ -71,11 +71,11 @@ const Slider = ({
             aria-label={ariaLabel}
             aria-labelledby={ariaLabelledBy}
             className={cn(
-              'relative block h-5 w-2.5 shrink-0 rounded-full border-2 border-neutral6 bg-neutral2 outline-hidden select-none',
+              'relative block h-5 w-2.5 shrink-0 rounded-full border-2 border-neutral6 bg-neutral2 select-none',
               'after:absolute after:-inset-2 after:content-[""]',
               'transition-shadow duration-normal',
               'hover:ring-2 hover:ring-neutral6/30',
-              'ds-focus ds-focus-within has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-neutral6/60',
+              'ds-focus ds-focus-ring ds-focus-within',
               'data-[orientation=vertical]:h-2.5 data-[orientation=vertical]:w-5',
               'data-[disabled]:pointer-events-none',
             )}

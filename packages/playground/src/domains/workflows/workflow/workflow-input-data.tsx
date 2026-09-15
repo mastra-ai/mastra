@@ -486,7 +486,7 @@ const WorkflowProcessorInput = ({
           placeholder="Enter a test message..."
           rows={4}
           disabled={isReadOnly}
-          className="border-border1 text-ui-sm text-neutral6 placeholder:text-neutral3 focus:ring-accent1 w-full rounded-md border bg-transparent p-3 focus:ring-2 focus:outline-hidden disabled:opacity-50"
+          className="border-border1 text-ui-sm text-neutral6 placeholder:text-neutral3 w-full rounded-md border bg-transparent p-3 disabled:opacity-50"
         />
       </div>
 

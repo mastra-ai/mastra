@@ -26,7 +26,7 @@ export function CodeDisplay({
               type="button"
               onClick={onCopy}
               aria-label="Copy code"
-              className="focus-visible:ring-accent1 absolute inset-0 z-10 rounded-md focus-visible:ring-2 focus-visible:outline-hidden"
+              className="absolute inset-0 z-10 rounded-md"
             />
           )}
           <pre className="text-ui-xs pointer-events-none font-mono whitespace-pre-wrap">{content}</pre>

@@ -14,7 +14,7 @@ import { cn } from '@/lib/utils';
 // Preserve the root's content minimum so flex layouts cannot collapse the control.
 const inputGroupBaseClassName = cn(
   'group/input-group relative flex w-full flex-1 items-center',
-  'ds-focus ds-focus-within border border-border1 text-neutral6',
+  'ds-focus border border-border1 text-neutral6',
   inputFocusBorderWithin,
   transitions.all,
   'has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-50',
@@ -152,7 +152,7 @@ const InputGroupInput = React.forwardRef<HTMLInputElement, InputGroupInputProps>
         data-testid={testId}
         aria-invalid={error}
         className={cn(
-          'min-w-0 flex-1 bg-transparent px-3 text-neutral6 outline-hidden',
+          'min-w-0 flex-1 bg-transparent px-3 text-neutral6',
           inputGroupControlHeightBySize,
           inputGroupControlTextBySize,
           'placeholder:text-neutral2 placeholder:transition-opacity placeholder:duration-normal',
@@ -186,7 +186,7 @@ const InputGroupTextarea = React.forwardRef<HTMLTextAreaElement, InputGroupTexta
         data-testid={testId}
         aria-invalid={error}
         className={cn(
-          'min-h-15 min-w-0 flex-1 resize-y bg-transparent px-3 py-2 text-neutral6 outline-hidden',
+          'min-h-15 min-w-0 flex-1 resize-y bg-transparent px-3 py-2 text-neutral6',
           inputGroupControlTextBySize,
           'placeholder:text-neutral2 placeholder:transition-opacity placeholder:duration-normal',
           'focus:placeholder:opacity-70',

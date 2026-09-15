@@ -1,5 +1,6 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
+@import './ds/primitives/focus.css';
 
 /* Tokens (:root/html.light + @theme) live in ../theme.css so they also ship raw
    as @mastra/playground-ui/theme.css. Edit tokens there, not here. */
@@ -66,11 +67,6 @@
 }
 
 @layer base {
-  :focus-visible {
-    outline: 2px solid var(--neutral5);
-    outline-offset: 2px;
-  }
-
   * {
     border-color: var(--border1);
   }

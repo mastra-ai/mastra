@@ -41,7 +41,7 @@ export const TreeFolderTrigger = React.forwardRef<HTMLDivElement, TreeFolderTrig
         <CollapsibleTrigger
           data-tree-folder-trigger="true"
           tabIndex={-1}
-          className="flex h-7 min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-sm px-1 outline-hidden focus-visible:ring-0 focus-visible:outline-hidden"
+          className="flex h-7 min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-sm px-1"
           style={{ paddingLeft: depth * 12 }}
           onMouseDown={e => {
             e.preventDefault();

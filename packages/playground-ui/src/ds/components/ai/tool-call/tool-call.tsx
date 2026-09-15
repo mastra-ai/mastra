@@ -82,7 +82,7 @@ export function ToolCall({
 export const ToolCallTrigger = ({ className, ...props }: ComponentProps<typeof CollapsibleTrigger>) => (
   <CollapsibleTrigger
     className={cn(
-      'group/row w-full cursor-pointer rounded-md text-left transition-colors hover:bg-neutral6/5 focus-visible:ring-1 focus-visible:ring-accent1 focus-visible:outline-hidden motion-reduce:transition-none',
+      'group/row w-full cursor-pointer rounded-md text-left transition-colors hover:bg-neutral6/5 motion-reduce:transition-none',
       className,
     )}
     {...props}

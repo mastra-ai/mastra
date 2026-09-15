@@ -3,8 +3,8 @@ import './focus.css';
 
 export const sharedFormElementDisabledStyle = 'disabled:opacity-50 disabled:cursor-not-allowed';
 
-export const inputFocusBorderVisible = 'focus-visible:border-neutral5/50';
-export const inputFocusBorderWithin = 'has-[:focus-visible]:not-has-[[aria-invalid=true]]:border-neutral5/50';
+export const inputFocusBorderVisible = 'ds-focus-field';
+export const inputFocusBorderWithin = 'ds-focus-field-within';
 
 export const controlFocusStyle = 'ds-focus ds-focus-line';
 export { controlFocusStyle as controlFocusBorderVisible };

@@ -68,7 +68,7 @@ export const AgentSelectableCard = ({
         aria-pressed={isSelected}
         aria-label={ariaLabel}
         className={cn(
-          'flex w-full items-center gap-3 text-left outline-none',
+          'flex w-full items-center gap-3 text-left',
           !disabled && 'cursor-pointer hover:opacity-90 active:opacity-80',
           disabled && 'cursor-not-allowed',
         )}

@@ -115,7 +115,7 @@ const DialogContent = React.forwardRef<HTMLDivElement, DialogContentProps>(
             initialFocus={initialFocus ?? (intent === 'destructive' ? closeRef : true)}
             aria-busy={pending || undefined}
             className={cn(
-              'fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-sm translate-[-50%] flex-col overflow-y-auto overscroll-contain rounded-xl border border-border2 bg-surface2 shadow-dialog outline-hidden',
+              'fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-sm translate-[-50%] flex-col overflow-y-auto overscroll-contain rounded-xl border border-border2 bg-surface2 shadow-dialog',
               'data-[ending-style]:scale-0.98 data-[starting-style]:scale-0.98 transition-[opacity,scale] duration-normal ease-out data-[ending-style]:opacity-0 data-[starting-style]:opacity-0 motion-reduce:transition-none',
               className,
             )}
@@ -149,7 +149,6 @@ const DialogContent = React.forwardRef<HTMLDivElement, DialogContentProps>(
             'fixed top-[50%] left-[50%] z-50 grid translate-[-50%]',
             'w-full max-w-[calc(100%-2rem)] sm:max-w-lg',
             'rounded-xl border border-border1/40 bg-surface2/96 shadow-dialog backdrop-blur-md',
-            'focus-visible:outline-hidden',
             className,
           )}
           {...props}
