@@ -330,11 +330,7 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions): ApiRoute[]
         }
 
         await intake.ensureReady();
-        const config = await intake.getConfig({
-          orgId: resolved.tenant.orgId,
-          userId: resolved.tenant.userId,
-          integrationIds: ['linear'],
-        });
+        const config = await intake.getConfig({ orgId: resolved.tenant.orgId, integrationIds: ['linear'] });
         const selection = config.linear!;
         if (!selection.enabled) {
           return c.json({ error: 'linear_intake_disabled', message: 'Linear intake is turned off in Settings.' }, 404);
@@ -418,11 +414,7 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions): ApiRoute[]
         }
 
         await intake.ensureReady();
-        const config = await intake.getConfig({
-          orgId: resolved.tenant.orgId,
-          userId: resolved.tenant.userId,
-          integrationIds: ['linear'],
-        });
+        const config = await intake.getConfig({ orgId: resolved.tenant.orgId, integrationIds: ['linear'] });
         const selection = config.linear!;
         if (!selection.enabled) {
           return c.json({ error: 'linear_intake_disabled', message: 'Linear intake is turned off in Settings.' }, 404);
