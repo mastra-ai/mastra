@@ -21,6 +21,16 @@ function CreateDatasetPage() {
           .filter(Boolean)
       : undefined;
 
+  const scopedAgentId = targetType === 'agent' && targetIds?.length === 1 ? targetIds[0] : undefined;
+
+  const handleSuccess = (datasetId: string) => {
+    if (scopedAgentId) {
+      void navigate(`/agents/${encodeURIComponent(scopedAgentId)}/evaluate?tab=datasets`);
+      return;
+    }
+    void navigate(`/datasets/${datasetId}`);
+  };
+
   return (
     <PageLayout height="full">
       <div />
@@ -40,7 +50,7 @@ function CreateDatasetPage() {
             <CreateDatasetForm
               targetType={targetType}
               targetIds={targetIds}
-              onSuccess={datasetId => void navigate(`/datasets/${datasetId}`)}
+              onSuccess={handleSuccess}
               onCancel={() => void navigate(-1)}
             />
           </Card>
