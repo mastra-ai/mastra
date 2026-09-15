@@ -7,7 +7,7 @@ description: "Browse Friendli model IDs, capabilities, context windows, and pric
 
 # <img src="https://models.dev/logos/friendli.svg" alt="Friendli logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Friendli
 
-Access 6 Friendli models through Mastra's model router. Authentication is handled automatically using the `FRIENDLI_TOKEN` environment variable.
+Access 7 Friendli models through Mastra's model router. Authentication is handled automatically using the `FRIENDLI_TOKEN` environment variable.
 
 Learn more in the [Friendli documentation](https://friendli.ai/docs/guides/serverless_endpoints/introduction).
 
@@ -53,7 +53,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 163840,
-    "maxOutput": 163840,
+    "maxOutput": 64000,
     "inputCost": 0.5,
     "outputCost": 1.5
   },
@@ -77,7 +77,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 196608,
-    "maxOutput": 196608,
+    "maxOutput": 131072,
     "inputCost": 0.3,
     "outputCost": 1.2
   },
@@ -89,7 +89,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 202752,
-    "maxOutput": 202752,
+    "maxOutput": 131072,
     "inputCost": 1.4,
     "outputCost": 4.4
   },
@@ -100,7 +100,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 1000000,
+    "contextWindow": 1048576,
     "maxOutput": 131072,
     "inputCost": 1.4,
     "outputCost": 4.4
@@ -113,9 +113,21 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1048576,
-    "maxOutput": 1048576,
-    "inputCost": 1.4,
-    "outputCost": 4.4
+    "maxOutput": 131072,
+    "inputCost": 1.26,
+    "outputCost": 3.96
+  },
+  {
+    "model": "friendli/zai-org/GLM-5.3-Flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
+    "inputCost": 0.15,
+    "outputCost": 0.5
   }
 ]}
 />
@@ -150,7 +162,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "friendli/zai-org/GLM-5.3"
+      ? "friendli/zai-org/GLM-5.3-Flash"
       : "friendli/MiniMaxAI/MiniMax-M2.5";
   }
 });

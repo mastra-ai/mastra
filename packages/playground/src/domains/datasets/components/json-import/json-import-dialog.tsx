@@ -11,6 +11,7 @@ import {
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { X } from 'lucide-react';
 import { useCallback, useMemo, useRef, useState } from 'react';
 
 import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
@@ -123,7 +124,7 @@ export function JSONImportDialog({ datasetId, datasetName, open, onOpenChange, o
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="flex max-h-[90vh] w-[960px] max-w-[calc(100vw-2rem)] flex-col gap-0 p-0">
-        <DialogHeader className="border-border1 border-b px-6 py-4">
+        <DialogHeader className="border-border1 border-b px-4 py-4">
           <DialogTitle>Import into dataset</DialogTitle>
           <DialogDescription className="text-ui-sm text-neutral3 not-sr-only">
             Add items to{' '}
@@ -138,7 +139,7 @@ export function JSONImportDialog({ datasetId, datasetName, open, onOpenChange, o
 
         <DialogBody className="max-h-none min-h-0 flex-1 overflow-y-auto p-0">
           <div className="divide-border1 grid divide-y md:grid-cols-[1.15fr_1fr] md:divide-x md:divide-y-0">
-            <div className="flex min-h-[360px] flex-col p-6">
+            <div className="flex min-h-[360px] flex-col p-4">
               <JSONSourcePanel
                 tab={tab}
                 onTabChange={setTab}
@@ -151,16 +152,16 @@ export function JSONImportDialog({ datasetId, datasetName, open, onOpenChange, o
                 isImporting={isImporting}
               />
             </div>
-            <div className="p-6">
+            <div className="p-4">
               <JSONFormatPanel />
             </div>
           </div>
         </DialogBody>
 
-        <DialogFooter className="border-border1 items-center border-t px-6 py-3 sm:justify-between">
+        <DialogFooter className="border-border1 items-center border-t px-4 py-3 sm:justify-between">
           <JSONImportStatus validation={validation} />
           <div className="flex gap-2">
-            <Button onClick={handleClose} disabled={isImporting}>
+            <Button icon={<X />} onClick={handleClose} disabled={isImporting}>
               Cancel
             </Button>
             <Button variant="primary" onClick={handleImport} disabled={validation.status !== 'ready' || isImporting}>

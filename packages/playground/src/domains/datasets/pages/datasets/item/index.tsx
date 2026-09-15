@@ -18,7 +18,7 @@ export interface DatasetItemPageProps {
  */
 export function DatasetItemPage({ item }: DatasetItemPageProps) {
   return (
-    <div className="h-full overflow-y-auto p-6">
+    <div className="h-full overflow-y-auto p-4">
       <DatasetItemContent item={item} />
     </div>
   );

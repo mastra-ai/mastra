@@ -5,6 +5,7 @@ import { ExternalLink, GitFork } from 'lucide-react';
 import { useCallback } from 'react';
 import { AgentObservationalMemory } from './agent-observational-memory';
 import { AgentWorkingMemory } from './agent-working-memory';
+import { getRecentMessagesSettings } from './lib/recent-messages';
 import { useThreadInput } from '@/domains/conversation';
 import {
   useMemoryConfig,
@@ -20,15 +21,6 @@ interface AgentMemoryProps {
   agentId: string;
   threadId: string;
   memoryType?: 'local' | 'gateway';
-}
-
-function getRecentMessagesDescription(lastMessages: number | false | undefined): string {
-  if (typeof lastMessages !== 'number') {
-    return 'Recent message history is not included in context.';
-  }
-
-  const messageLabel = lastMessages === 1 ? 'message' : 'messages';
-  return `Includes the last ${lastMessages} ${messageLabel} in context.`;
 }
 
 export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps) {
@@ -121,8 +113,7 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
               <h3 className="text-neutral5 text-ui-md font-medium">Clone Thread</h3>
               <p className="text-neutral3 text-ui-sm mt-1">Create a copy of this conversation</p>
             </div>
-            <Button onClick={handleCloneThread} disabled={isCloning}>
-              <GitFork className="mr-2 h-4 w-4" />
+            <Button onClick={handleCloneThread} disabled={isCloning} icon={<GitFork />}>
               {isCloning ? 'Cloning...' : 'Clone'}
             </Button>
           </div>
@@ -131,7 +122,9 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
 
       <div className="border-border1 border-b p-4">
         <h3 className="text-neutral5 text-ui-md font-medium">Recent Messages</h3>
-        <p className="text-neutral3 text-ui-sm mt-1">{getRecentMessagesDescription(config?.lastMessages)}</p>
+        <p className="text-neutral3 text-ui-sm mt-1">
+          {getRecentMessagesSettings(config?.lastMessages, config?.messageHistory).description}
+        </p>
       </div>
 
       {/* Observational Memory Section - moved above Semantic Recall */}

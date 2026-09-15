@@ -1,8 +1,7 @@
 import type { GetWorkflowResponse } from '@mastra/client-js';
-import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { WorkflowGraphPlaceholder } from '@mastra/playground-ui/components/Workflow';
 import { lodashTitleCase } from '@mastra/playground-ui/utils/string';
 import { ReactFlowProvider } from '@xyflow/react';
-import { AlertCircleIcon } from 'lucide-react';
 import { useContext } from 'react';
 import { WorkflowRunContext } from '../context/workflow-run-context';
 import { WorkflowGraphInner } from './workflow-graph-inner';
@@ -17,24 +16,8 @@ export interface WorkflowGraphProps {
 export function WorkflowGraph({ workflowId, workflow, isLoading }: WorkflowGraphProps) {
   const { snapshot } = useContext(WorkflowRunContext);
 
-  if (isLoading) {
-    return (
-      <div className="p-4">
-        <Skeleton className="h-full" />
-      </div>
-    );
-  }
-
-  if (!workflow) {
-    return (
-      <div className="grid h-full place-items-center">
-        <div className="flex flex-col items-center gap-2">
-          <AlertCircleIcon />
-          <div>We couldn&apos;t find {lodashTitleCase(workflowId)} workflow.</div>
-        </div>
-      </div>
-    );
-  }
+  if (isLoading) return <WorkflowGraphPlaceholder isLoading />;
+  if (!workflow) return <WorkflowGraphPlaceholder workflowName={lodashTitleCase(workflowId)} />;
 
   return (
     <ReactFlowProvider>

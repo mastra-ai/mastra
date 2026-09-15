@@ -292,6 +292,19 @@ const sandbox = new DockerSandbox({
 })
 ```
 
+## Write files
+
+Upload multiple files in one call with `writeFiles`. Relative paths resolve under the working directory. Set an optional per-file `mode` to control POSIX permissions; it must be an integer between `0o001` and `0o777`. When `mode` is omitted, new files are created with `0644`.
+
+```typescript
+await sandbox.writeFiles([
+  { path: 'src/index.js', content: "console.log('hello')\n" },
+  { path: 'run.sh', content: '#!/bin/sh\n', mode: 0o755 },
+])
+```
+
+Docker is the only built-in sandbox that applies an explicit `mode`. Providers that cannot honor per-file permissions (Vercel, E2B, Daytona, Cloudflare) reject a `writeFiles` call that includes a `mode` instead of silently dropping it.
+
 ## Bind mounts
 
 Mount host directories into the container using the `volumes` option:

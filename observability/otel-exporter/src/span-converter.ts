@@ -20,7 +20,7 @@ import {
   ATTR_TELEMETRY_SDK_VERSION,
 } from '@opentelemetry/semantic-conventions';
 
-import { getAttributes, getSpanName } from './gen-ai-semantics.js';
+import { getAttributes, getSpanName, isModelCallSpan } from './gen-ai-semantics.js';
 import type { OtelExporterConfig } from './types.js';
 
 export type SpanFormat = 'GenAI_v1_38_0';
@@ -191,8 +191,10 @@ async function getPackageVersion(pkgName: string): Promise<string | undefined> {
  * @returns The appropriate OTEL SpanKind
  */
 export function getSpanKind(type: SpanType): SpanKind {
+  if (isModelCallSpan(type)) {
+    return SpanKind.CLIENT;
+  }
   switch (type) {
-    case SpanType.MODEL_GENERATION:
     case SpanType.RAG_EMBEDDING:
     case SpanType.MCP_TOOL_CALL:
       return SpanKind.CLIENT;

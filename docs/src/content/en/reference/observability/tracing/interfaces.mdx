@@ -791,14 +791,36 @@ Processor attributes.
 
 ```typescript
 interface ProcessorRunAttributes {
-  /** Name of the Processor */
-  processorName: string
-
-  /** Processor type (input or output) */
-  processorType: 'input' | 'output'
+  /** Processor executor type (workflow or legacy) */
+  processorExecutor?: 'workflow' | 'legacy'
 
   /** Processor index in the agent */
   processorIndex?: number
+
+  /**
+   * Milliseconds spent inside `processOutputStream`, summed across every
+   * chunk. Only set on output stream processor spans. The span's own duration
+   * covers the whole stream, model latency included, so this is what
+   * separates a slow processor from a slow model.
+   */
+  hookDurationMs?: number
+
+  /** MessageList mutations performed by this processor */
+  messageListMutations?: Array<{
+    type: 'add' | 'addSystem' | 'removeByIds' | 'clear'
+    source?: string
+    count?: number
+    ids?: string[]
+    text?: string
+    tag?: string
+  }>
+
+  /** Tripwire abort details when a processor triggered a tripwire */
+  tripwireAbort?: {
+    reason?: string
+    retry?: boolean
+    metadata?: unknown
+  }
 }
 ```
 

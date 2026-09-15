@@ -1,5 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { ExperimentsIcon } from '@mastra/playground-ui/icons/ExperimentsIcon';
+import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
 import { CircleSlashIcon } from 'lucide-react';
 import { Link } from 'react-router';
 
@@ -18,10 +20,10 @@ export function InboxEmptyState() {
         }
         actionSlot={
           <div className="flex items-center gap-2">
-            <Button as={Link} to="/experiments" variant="outline">
+            <Button icon={<ExperimentsIcon />} as={Link} to="/experiments" variant="outline">
               Go to experiments
             </Button>
-            <Button as={Link} to="/traces" variant="outline">
+            <Button icon={<TraceIcon />} as={Link} to="/traces" variant="outline">
               Go to traces
             </Button>
           </div>

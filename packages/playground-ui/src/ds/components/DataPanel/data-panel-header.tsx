@@ -10,7 +10,7 @@ export function DataPanelHeader({ className, children }: DataPanelHeaderProps) {
     <div
       className={cn(
         // Horizontal padding (not margin) so the bottom border spans the full card width.
-        'flex min-h-14 items-center justify-between gap-2 px-4 py-3',
+        'flex min-h-10 items-center justify-between gap-2 px-3 py-2',
         // Bottom border only when something follows the header (i.e. the panel is expanded).
         // When the panel is collapsed and the header is the only child, the border auto-hides.
         'not-last:border-b not-last:border-border1',

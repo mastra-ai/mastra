@@ -6,7 +6,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/c
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { RefreshCcwIcon, ExternalLink } from 'lucide-react';
+import { RefreshCcwIcon, ExternalLink, X, Pencil } from 'lucide-react';
 import { useState } from 'react';
 import { useWorkingMemory } from '../../context/agent-working-memory-context';
 import { CodeDisplay } from './code-display';
@@ -139,6 +139,7 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button
+                        icon={<Pencil />}
                         type="button"
                         aria-disabled="true"
                         onClick={event => event.preventDefault()}
@@ -152,7 +153,12 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
                     </TooltipContent>
                   </Tooltip>
                 ) : (
-                  <Button onClick={() => setIsEditing(true)} disabled={isUpdating} className="text-ui-sm">
+                  <Button
+                    icon={<Pencil />}
+                    onClick={() => setIsEditing(true)}
+                    disabled={isUpdating}
+                    className="text-ui-sm"
+                  >
                     Edit Working Memory
                   </Button>
                 )}
@@ -175,6 +181,7 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
                   {isUpdating ? <RefreshCcwIcon className="h-3 w-3 animate-spin" /> : 'Save Changes'}
                 </Button>
                 <Button
+                  icon={<X />}
                   onClick={() => {
                     setEditState({ source: workingMemoryData, value: workingMemoryData ?? '' });
                     setIsEditing(false);

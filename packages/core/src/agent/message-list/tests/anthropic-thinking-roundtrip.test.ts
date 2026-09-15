@@ -115,6 +115,67 @@ describe('Anthropic signed thinking round-trip', () => {
     expect((assistant.content as any[]).map(part => part.type)).toEqual(['text']);
   });
 
+  it('keeps the Anthropic signature and drops the Kimi one for an Anthropic target', async () => {
+    const kimiDbMessage = AIV5Adapter.fromModelMessage({
+      id: 'msg-kimi-thinking',
+      role: 'assistant',
+      content: [
+        { type: 'reasoning', text: 'Kimi thinking.', providerOptions: { anthropic: { signature: 'sig-kimi' } } },
+        { type: 'text', text: 'Kimi answer.' },
+      ],
+    });
+    kimiDbMessage.content.metadata = { provider: 'kimi-for-coding', modelId: 'k3' };
+
+    const anthropicDbMessage = AIV5Adapter.fromModelMessage({
+      id: 'msg-anthropic-thinking-later',
+      role: 'assistant',
+      content: [
+        {
+          type: 'reasoning',
+          text: 'Claude thinking.',
+          providerOptions: { anthropic: { signature: 'sig-anthropic' } },
+        },
+        { type: 'text', text: 'Claude answer.' },
+      ],
+    });
+    anthropicDbMessage.content.metadata = { provider: 'anthropic.messages', modelId: 'claude-sonnet-4-6' };
+
+    const list = new MessageList();
+    list.add({ role: 'user', content: 'Think briefly.' }, 'input');
+    list.add(kimiDbMessage, 'memory');
+    list.add({ role: 'user', content: 'Again.' }, 'input');
+    list.add(anthropicDbMessage, 'memory');
+    list.add({ role: 'user', content: 'Continue.' }, 'input');
+
+    const prompt = list.get.all.aiV5.prompt();
+    const result = await new ProviderHistoryCompat().processLLMRequest({
+      prompt,
+      model: { provider: 'anthropic.messages' },
+      messageList: list,
+      stepNumber: 0,
+      steps: [],
+      state: {},
+      retryCount: 0,
+      abort: (() => {
+        throw new Error('abort');
+      }) as any,
+    });
+
+    const signatures = (result?.prompt ?? prompt).flatMap(message =>
+      Array.isArray(message.content)
+        ? message.content
+            .filter(part => part.type === 'reasoning')
+            .map(
+              part =>
+                (part as { providerOptions?: { anthropic?: { signature?: string } } }).providerOptions?.anthropic
+                  ?.signature,
+            )
+        : [],
+    );
+
+    expect(signatures).toEqual(['sig-anthropic']);
+  });
+
   it('does not change Gemini provider metadata on non-Anthropic replay', async () => {
     const prompt: LanguageModelV2Prompt = [
       {
