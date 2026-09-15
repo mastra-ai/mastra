@@ -113,6 +113,28 @@ describe('restricted Mastra Code embedding', () => {
       pluginCommandPaths: [],
       pluginInstructions: [],
     });
+
+    const stateSchema = controllerConfig.stateSchema;
+    expect(() => stateSchema.parse({ skipGlobalInstructions: false })).toThrow();
+    expect(() => stateSchema.parse({ pluginSkillPaths: ['/ambient/skill'] })).toThrow();
+    expect(() => stateSchema.parse({ pluginCommandPaths: ['/ambient/command'] })).toThrow();
+    expect(() => stateSchema.parse({ pluginInstructions: ['ambient instructions'] })).toThrow();
+  });
+
+  it('registers the controller under the requested key on a supplied Mastra instance', async () => {
+    const { mountRestrictedAgentControllerOnMastra } = await import('./restricted.js');
+    const agentControllers: Record<string, unknown> = {};
+    const mastra = {
+      listAgentControllers: () => agentControllers,
+      startWorkers: vi.fn(async () => {}),
+    };
+
+    const result = await mountRestrictedAgentControllerOnMastra(
+      createConfig({ mastra, controllerId: 'restricted-code' }),
+    );
+
+    expect(agentControllers['restricted-code']).toBe(result.controller);
+    expect(mastra.startWorkers).toHaveBeenCalledOnce();
   });
 
   it('does not inspect the host filesystem, process cwd, or credentials during initialization', async () => {
@@ -162,6 +184,12 @@ describe('restricted Mastra Code embedding', () => {
     );
     await expect(createRestrictedMastraCodeAgentController(createConfig({ memory: undefined }))).rejects.toThrow(
       'explicit memory policy',
+    );
+    await expect(createRestrictedMastraCodeAgentController(createConfig({ instructions: undefined }))).rejects.toThrow(
+      'explicit instructions',
+    );
+    await expect(createRestrictedMastraCodeAgentController(createConfig({ storage: undefined }))).rejects.toThrow(
+      'explicit storage',
     );
   });
 });

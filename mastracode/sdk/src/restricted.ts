@@ -34,7 +34,7 @@ const restrictedStateSchema = z.looseObject({
   branch: z.string().optional(),
   untrustedCheckout: z.boolean().optional(),
   baseRef: z.string().optional(),
-  skipGlobalInstructions: z.boolean().default(true),
+  skipGlobalInstructions: z.literal(true).default(true),
   configDir: z.string().default('.mastracode'),
   homeDir: z.string().optional(),
   gitBranch: z.string().optional(),
@@ -67,9 +67,9 @@ const restrictedStateSchema = z.looseObject({
     )
     .default([]),
   sandboxAllowedPaths: z.array(z.string()).default([]),
-  pluginSkillPaths: z.array(z.string()).default([]),
-  pluginCommandPaths: z.array(z.string()).default([]),
-  pluginInstructions: z.array(z.string()).default([]),
+  pluginSkillPaths: z.array(z.string()).max(0).default([]),
+  pluginCommandPaths: z.array(z.string()).max(0).default([]),
+  pluginInstructions: z.array(z.string()).max(0).default([]),
   activePlan: z
     .object({
       title: z.string(),
@@ -151,6 +151,8 @@ export interface RestrictedMastraCodeMountConfig extends RestrictedMastraCodeCon
 
 /** Validates required host authority decisions and returns the fixed tool allowlist. */
 function validateRestrictedConfig(config: RestrictedMastraCodeConfig): Set<string> {
+  if (config.instructions === undefined) throw new Error('Restricted Mastra Code requires explicit instructions');
+  if (config.storage === undefined) throw new Error('Restricted Mastra Code requires explicit storage');
   if (!config.project.resourceId.trim()) throw new Error('Restricted Mastra Code requires project.resourceId');
   if (!config.project.name.trim()) throw new Error('Restricted Mastra Code requires project.name');
   if (!config.project.rootPath.trim()) throw new Error('Restricted Mastra Code requires project.rootPath');
@@ -283,6 +285,7 @@ export async function mountRestrictedAgentControllerOnMastra(
 
   let mastra = config.mastra;
   if (mastra) {
+    mastra.listAgentControllers()[controllerId] = base.controller;
     base.controller.__registerMastra(mastra);
   } else {
     const apiRoutes = config.buildApiRoutes?.({ controller: base.controller });
