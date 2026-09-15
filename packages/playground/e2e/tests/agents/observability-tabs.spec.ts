@@ -1,3 +1,4 @@
+import type { MastraClient } from '@mastra/client-js';
 import type { Page } from '@playwright/test';
 import { test, expect } from '@playwright/test';
 import { resetStorage } from '../__utils__/reset-storage';
@@ -41,41 +42,12 @@ async function mockSystemPackages(page: Page, observabilityEnabled: boolean) {
   });
 }
 
-async function mockTraceLists(page: Page, onRequest?: (url: URL) => void) {
-  // The Traces page can request either branches or traces depending on list mode.
-  await page.route('**/api/observability/branches?**', async route => {
-    onRequest?.(new URL(route.request().url()));
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({
-        branches: [],
-        pagination: { page: 0, perPage: 25, total: 0, hasMore: false },
-      }),
-    });
-  });
-  await page.route('**/api/observability/traces?**', async route => {
-    onRequest?.(new URL(route.request().url()));
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({
-        spans: [],
-        pagination: { page: 0, perPage: 25, total: 0, hasMore: false },
-      }),
-    });
-  });
-  // The list asks for the lightweight projection first; same scope params apply.
-  await page.route('**/api/observability/traces/light?**', async route => {
-    onRequest?.(new URL(route.request().url()));
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({
-        spans: [],
-        pagination: { page: 0, perPage: 25, total: 0, hasMore: false },
-      }),
-    });
+async function mockTraceLists(page: Page, onRequest?: (query: Parameters<MastraClient['queryTraces']>[0]) => void) {
+  await page.route('**/api/observability/traces/query', async route => {
+    expect(route.request().method()).toBe('POST');
+    onRequest?.(route.request().postDataJSON());
+    const response: Awaited<ReturnType<MastraClient['queryTraces']>> = { traces: [], page: { next: null } };
+    await route.fulfill({ json: response });
   });
 }
 
@@ -84,8 +56,8 @@ test.describe('Agent observability tabs', () => {
     test('requests agent-scoped traces from the Traces tab', async ({ page }) => {
       await mockSystemPackages(page, true);
 
-      let traceListUrl: URL | undefined;
-      await mockTraceLists(page, url => (traceListUrl = url));
+      let traceQuery: Parameters<MastraClient['queryTraces']>[0] | undefined;
+      await mockTraceLists(page, query => (traceQuery = query));
 
       await page.goto('/agents/weather-agent/overview');
       await expect(page.getByRole('tab', { name: 'Evaluate' })).toBeVisible();
@@ -99,9 +71,14 @@ test.describe('Agent observability tabs', () => {
       // view ("filters applied" variant), not the standalone NoTracesInfo screen.
       await expect(page.getByText(/No traces found for applied filters/i)).toBeVisible();
       await expect
-        .poll(() => traceListUrl?.searchParams.get('entityType'), { message: 'trace list request is scoped to agent' })
-        .toBe('agent');
-      expect(traceListUrl?.searchParams.get('entityId')).toBe('weather-agent');
+        .poll(() => traceQuery?.where, { message: 'trace query is scoped to agent' })
+        .toEqual({
+          op: 'and',
+          args: expect.arrayContaining([
+            { op: 'eq', left: { path: 'entityType' }, right: { literal: 'agent' } },
+            { spans: { some: { op: 'eq', left: { path: 'entityId' }, right: { literal: 'weather-agent' } } } },
+          ]),
+        });
     });
   });
 
@@ -120,8 +97,8 @@ test.describe('Agent observability tabs', () => {
     test('pre-fills the agent filter as URL params', async ({ page }) => {
       await mockSystemPackages(page, true);
 
-      let traceListUrl: URL | undefined;
-      await mockTraceLists(page, url => (traceListUrl = url));
+      let traceQuery: Parameters<MastraClient['queryTraces']>[0] | undefined;
+      await mockTraceLists(page, query => (traceQuery = query));
 
       await page.goto('/agents/weather-agent/traces');
 
@@ -132,9 +109,14 @@ test.describe('Agent observability tabs', () => {
 
       // The API call should reflect those filter params (driven by URL state).
       await expect
-        .poll(() => traceListUrl?.searchParams.get('entityType'), { message: 'trace list request is scoped to agent' })
-        .toBe('agent');
-      expect(traceListUrl?.searchParams.get('entityId')).toBe('weather-agent');
+        .poll(() => traceQuery?.where, { message: 'trace query is scoped to agent' })
+        .toEqual({
+          op: 'and',
+          args: expect.arrayContaining([
+            { op: 'eq', left: { path: 'entityType' }, right: { literal: 'agent' } },
+            { spans: { some: { op: 'eq', left: { path: 'entityId' }, right: { literal: 'weather-agent' } } } },
+          ]),
+        });
     });
   });
 
