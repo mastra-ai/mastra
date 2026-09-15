@@ -53,7 +53,7 @@ const darkAliases = {
   'muted-foreground': 'gray-9',
   border: 'gray-alpha-2',
   ring: 'gray-8',
-  'sidebar-accent': 'gray-alpha-2',
+  'sidebar-accent': 'gray-alpha-1',
 } as const;
 
 const lightAliases = {
