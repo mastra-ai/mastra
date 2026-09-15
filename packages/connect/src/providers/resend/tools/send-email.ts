@@ -1,4 +1,4 @@
-// AUTO-GENERATED from rhysbalevicius/integration-templates @ b9fc364318f7 — do not edit by hand.
+// AUTO-GENERATED from rhysbalevicius/integration-templates @ 06fb7396c6b2 — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -6,7 +6,7 @@ import type { PlatformProxy, PlatformProxyRequest } from '../../../runtime/platf
 
 export const sendEmailInputSchema = z
   .object({
-    idempotency_key: z.string().max(256).optional(),
+    idempotency_key: z.string().min(1).max(256).optional(),
     body: z.object({
       from: z.string(),
       to: z.union([z.string(), z.array(z.string()).min(1).max(50)]),

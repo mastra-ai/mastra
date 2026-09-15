@@ -1,4 +1,4 @@
-// AUTO-GENERATED from rhysbalevicius/integration-templates @ b9fc364318f7 — do not edit by hand.
+// AUTO-GENERATED from rhysbalevicius/integration-templates @ 06fb7396c6b2 — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -62,8 +62,8 @@ export function createContactImportTool(proxy: PlatformProxy) {
     outputSchema: createContactImportOutputSchema,
     execute: async (input, { requestContext }): Promise<z.infer<typeof createContactImportOutputSchema>> => {
       const platformProxy = proxy.withRequestContext(requestContext);
-      // A fixed boundary keeps recorded requests stable; the CSV is text so a boundary collision is only possible by including this literal.
-      const boundary = '----NangoResendContactImportBoundary';
+      // A random boundary per request keeps CSV contents from being parsed as additional form parts.
+      const boundary = `----NangoResendContactImport${globalThis.crypto.randomUUID().replace(/-/g, '')}`;
       const filename = (input.body.filename ?? 'contacts.csv').replace(/["\r\n]/g, '_');
       let body =
         `--${boundary}\r\n` +

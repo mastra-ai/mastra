@@ -1,4 +1,4 @@
-// AUTO-GENERATED from rhysbalevicius/integration-templates @ b9fc364318f7 — do not edit by hand.
+// AUTO-GENERATED from rhysbalevicius/integration-templates @ 06fb7396c6b2 — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -47,7 +47,7 @@ const BatchEmailSchema = z
 
 export const sendEmailBatchInputSchema = z
   .object({
-    idempotency_key: z.string().max(256).optional(),
+    idempotency_key: z.string().min(1).max(256).optional(),
     body: z.array(BatchEmailSchema).min(1).max(100),
   })
   .passthrough();
