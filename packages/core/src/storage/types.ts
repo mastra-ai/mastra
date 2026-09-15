@@ -222,6 +222,52 @@ export type StorageListThreadsOutput = PaginationInfo & {
   threads: StorageThreadType[];
 };
 
+export type BranchThreadInput = {
+  threadId: string;
+  branchPointMessageId: string;
+  title?: string;
+  metadata?: Record<string, unknown>;
+};
+
+export type PublicThreadBranchMetadata = {
+  parentThreadId: string;
+  branchPointMessageId: string;
+  branchPointCreatedAt: Date;
+  branchCreatedAt: Date;
+};
+
+/** @internal Framework-owned branch state persisted in thread metadata. */
+export type InternalThreadBranchMetadata = PublicThreadBranchMetadata & {
+  observationalMemoryThreadId: string;
+  state: 'pending' | 'ready';
+};
+
+export type BranchThreadOutput = {
+  thread: StorageThreadType;
+  branch: PublicThreadBranchMetadata;
+};
+
+export type GetThreadBranchInput = {
+  threadId: string;
+};
+
+export type ListThreadBranchesInput = {
+  threadId: string;
+  page?: number;
+  perPage?: number | false;
+};
+
+export type ListThreadBranchesOutput = PaginationInfo & {
+  branches: BranchThreadOutput[];
+};
+
+export type ThreadBranchHistoryOutput = {
+  history: Array<{
+    thread: StorageThreadType;
+    branch: PublicThreadBranchMetadata | null;
+  }>;
+};
+
 /**
  * Metadata stored on cloned threads to track their origin
  */
