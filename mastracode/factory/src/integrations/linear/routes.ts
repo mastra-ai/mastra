@@ -307,7 +307,7 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions): ApiRoute[]
   );
 
   // ── List the workspace's active issues (cursor-paged) ───────────────────
-  // Respects the caller's intake config: disabled Linear intake 404s the
+  // Respects the org's intake config: disabled Linear intake 404s the
   // source, and an explicit project selection narrows the issue filter.
   routes.push(
     registerApiRoute('/web/linear/issues', {

@@ -46,13 +46,14 @@ export const LEGACY_INTAKE_USER_SETTINGS_SCHEMA: CollectionSchema = {
   uniqueIndexes: [{ name: 'intake_settings_org_user_unique', columns: ['org_id', 'user_id'] }],
 };
 
-/** What the org effectively saw while selections were personal: one member selecting a source polled it onto the shared board. */
+/** What the org effectively saw while selections were personal: a member's sources fed the shared board only while their switch was on. */
 export function mergeIntakeSelections(configs: readonly IntakeConfig[]): IntakeConfig {
   const merged: IntakeConfig = Object.create(null);
   for (const config of configs) {
     for (const [integrationId, selection] of Object.entries(config)) {
       const current = merged[integrationId] ?? { enabled: false, sourceIds: null };
-      const sourceIds = [...new Set([...(current.sourceIds ?? []), ...(selection.sourceIds ?? [])])];
+      const syncing = selection.enabled ? (selection.sourceIds ?? []) : [];
+      const sourceIds = [...new Set([...(current.sourceIds ?? []), ...syncing])];
       merged[integrationId] = {
         enabled: current.enabled || selection.enabled,
         sourceIds: sourceIds.length ? sourceIds : null,
@@ -65,7 +66,7 @@ export function mergeIntakeSelections(configs: readonly IntakeConfig[]): IntakeC
 /**
  * Binds an intake source to the Factory project its items belong to.
  *
- * Intake selections are per user and org-wide, so they cannot say *where* an
+ * Intake selections are org-wide, so they cannot say *where* an
  * ingested item should land. GitHub items are naturally scoped by their linked
  * repository; providers without that link (Linear) need this explicit binding
  * so viewing one project's board cannot materialize another project's items.
@@ -212,7 +213,7 @@ export class IntakeStorage extends FactoryStorageDomain {
     for (const [orgId, configs] of byOrg) {
       const folded = await this.ops.findOne('intake_org_settings', { org_id: orgId });
       if (folded) continue;
-      await this.saveConfig({ orgId, config: mergeIntakeSelections(configs) });
+      await this.#insertConfigIfAbsent(orgId, mergeIntakeSelections(configs));
     }
   }
 
@@ -251,11 +252,18 @@ export class IntakeStorage extends FactoryStorageDomain {
     const where = { org_id: orgId };
     const updated = await this.#db.updateMany('intake_org_settings', where, { config, updated_at: now });
     if (updated > 0) return;
+    if (await this.#insertConfigIfAbsent(orgId, config)) return;
+    await this.#db.updateMany('intake_org_settings', where, { config, updated_at: now });
+  }
+
+  async #insertConfigIfAbsent(orgId: string, config: IntakeConfig): Promise<boolean> {
+    const now = new Date();
     try {
-      await this.#db.insertOne('intake_org_settings', { ...where, config, created_at: now, updated_at: now });
+      await this.#db.insertOne('intake_org_settings', { org_id: orgId, config, created_at: now, updated_at: now });
+      return true;
     } catch (error) {
-      if (!(error instanceof UniqueViolationError)) throw error;
-      await this.#db.updateMany('intake_org_settings', where, { config, updated_at: now });
+      if (error instanceof UniqueViolationError) return false;
+      throw error;
     }
   }
 

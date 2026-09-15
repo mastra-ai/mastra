@@ -1,11 +1,11 @@
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { describe, expect, it, onTestFinished } from 'vitest';
 
-import { DEFAULT_INTAKE_CONFIG, IntakeStorage, mergeIntakeSelections, resolveIntakeLabelRoute } from './base.js';
+import { DEFAULT_INTAKE_CONFIG, IntakeStorage, resolveIntakeLabelRoute } from './base.js';
 
 async function makeStorage(url: string = ':memory:'): Promise<IntakeStorage> {
   const backend = new LibSQLFactoryStorage({ id: 'intake-test', url });
@@ -58,7 +58,9 @@ describe('IntakeStorage', () => {
   describe('legacy per-member selections', () => {
     // File-backed so a per-member deployment can write rows, close, and a later boot folds them.
     function tempDatabaseUrl(): string {
-      return `file:${join(mkdtempSync(join(tmpdir(), 'intake-fold-')), 'intake.db')}`;
+      const dir = mkdtempSync(join(tmpdir(), 'intake-fold-'));
+      onTestFinished(() => rmSync(dir, { recursive: true, force: true }));
+      return `file:${join(dir, 'intake.db')}`;
     }
 
     async function seedLegacyRows(url: string, rows: Array<{ orgId: string; userId: string; config: unknown }>) {
@@ -66,19 +68,22 @@ describe('IntakeStorage', () => {
       backend.registerDomain(new IntakeStorage());
       await backend.init();
       const now = new Date();
-      for (const row of rows) {
-        await backend.ops.insertOne('intake_settings', {
-          org_id: row.orgId,
-          user_id: row.userId,
-          config: row.config,
-          created_at: now,
-          updated_at: now,
-        });
+      try {
+        for (const row of rows) {
+          await backend.ops.insertOne('intake_settings', {
+            org_id: row.orgId,
+            user_id: row.userId,
+            config: row.config,
+            created_at: now,
+            updated_at: now,
+          });
+        }
+      } finally {
+        await backend.close();
       }
-      await backend.close();
     }
 
-    it('folds every member selection of an org into one shared selection at boot', async () => {
+    it('folds what members were syncing into one shared selection at boot, ignoring switched-off picks', async () => {
       const url = tempDatabaseUrl();
       await seedLegacyRows(url, [
         { orgId: 'org1', userId: 'alice', config: { github: { enabled: true, sourceIds: ['acme/app'] } } },
@@ -96,7 +101,7 @@ describe('IntakeStorage', () => {
       const storage = await makeStorage(url);
 
       expect(await storage.getConfig({ orgId: 'org1' })).toEqual({
-        github: { enabled: true, sourceIds: ['acme/app', 'acme/site'] },
+        github: { enabled: true, sourceIds: ['acme/app'] },
         linear: { enabled: true, sourceIds: ['proj-1'] },
       });
       expect(await storage.getConfig({ orgId: 'org2' })).toEqual({ github: { enabled: false, sourceIds: null } });
@@ -114,21 +119,6 @@ describe('IntakeStorage', () => {
 
       const secondBoot = await makeStorage(url);
       expect(await secondBoot.getConfig({ orgId: 'org1' })).toEqual(shared);
-    });
-  });
-
-  describe('mergeIntakeSelections', () => {
-    it('keeps every selected source and stays enabled while any member had the integration on', () => {
-      expect(
-        mergeIntakeSelections([
-          { github: { enabled: false, sourceIds: ['a'] } },
-          { github: { enabled: true, sourceIds: ['a', 'b'] }, linear: { enabled: false, sourceIds: null } },
-        ]),
-      ).toEqual({
-        github: { enabled: true, sourceIds: ['a', 'b'] },
-        linear: { enabled: false, sourceIds: null },
-      });
-      expect(mergeIntakeSelections([])).toEqual({});
     });
   });
 
