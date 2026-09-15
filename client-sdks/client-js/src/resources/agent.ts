@@ -339,16 +339,12 @@ export class AgentVoice extends BaseResource {
    * @returns Promise containing the audio data
    */
   async speak(text: string, options?: { speaker?: string; [key: string]: any }): Promise<Response> {
-    const body: Body<'POST /agents/:agentId/voice/speak'> = {
-      text,
-      speakerId: options?.speaker,
-    };
     return this.request<Response>(`/agents/${this.agentId}/voice/speak`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body,
+      body: { text, options },
       stream: true,
     });
   }
