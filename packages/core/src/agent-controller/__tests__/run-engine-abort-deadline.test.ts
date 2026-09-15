@@ -127,6 +127,29 @@ describe('SessionRunEngine — abort deadline', () => {
     expect(session.stream.isOpen()).toBe(false);
   });
 
+  it('Given an aborted subscribed run, When its abort chunk ends the consumer, Then it immediately re-subscribes for incoming signals', async () => {
+    const { engine, events, session } = createHarness();
+    const ensureCurrentSubscription = vi.spyOn(session.thread, 'ensureCurrentSubscription').mockResolvedValue();
+
+    const subscription = {
+      stream: (async function* () {
+        yield chunk({ type: 'text-start', payload: { id: 't1' } });
+        session.run.requestAbort();
+        yield chunk({ type: 'abort', payload: {} });
+      })(),
+      activeRunId: () => 'run-1',
+      abort: () => true,
+      unsubscribe: vi.fn(),
+    };
+    session.stream.attach({ subscription, key: 'thread-1' });
+
+    await engine.processSubscribedThreadStream(subscription);
+
+    expect(events).toContainEqual({ type: 'agent_end', reason: 'aborted' });
+    expect(subscription.unsubscribe).toHaveBeenCalledOnce();
+    expect(ensureCurrentSubscription).toHaveBeenCalledOnce();
+  });
+
   it('Given an aborted subscribed run that finishes within the grace period, Then the stale deadline does not kill a follow-up run', async () => {
     vi.useFakeTimers();
     const { engine, events, session } = createHarness();

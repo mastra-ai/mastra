@@ -2,7 +2,7 @@
   "fixtures": [
     {
       "match": {
-        "userMessage": "Start notification interrupt host run.",
+        "userMessage": "Start the originating run before the peer reply.",
         "model": "gpt-5.4-mini",
         "endpoint": "chat"
       },
@@ -12,12 +12,12 @@
         "tps": 2
       },
       "response": {
-        "content": "Initial interrupt host text completes before the idle notification wake begins."
+        "content": "Originating run text continues streaming until the user interrupts it."
       }
     },
     {
       "match": {
-        "userMessage": "Interrupt race notification marker: peer work completed",
+        "userMessage": "Abort race reply marker: peer work completed",
         "model": "gpt-5.4-mini",
         "endpoint": "chat"
       },
@@ -27,7 +27,7 @@
         "tps": 2
       },
       "response": {
-        "content": "Notification wake response that should be interrupted."
+        "content": "Reply notification wake response."
       }
     }
   ]
