@@ -34,7 +34,7 @@ jobs:
           package-manager-cache: false
 
       - name: Install dependencies
-        run: npm ci
+        run: npm install
         working-directory: scripts/gh-issue-triage
 
       - name: Label Issue
