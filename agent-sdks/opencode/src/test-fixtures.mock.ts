@@ -196,7 +196,13 @@ export function createMockOpenCodeClient() {
   });
   const sessionPromptAsync = vi.fn(async (_params: Record<string, unknown>) => ({ error: undefined }));
   const sessionAbort = vi.fn(async (_params: Record<string, unknown>) => ({ error: undefined }));
-  const subscribe = vi.fn(async (_params?: unknown, _options?: { signal?: AbortSignal }) => ({ stream: events }));
+  const eventSources = [events];
+  const subscribe = vi.fn(async (_params?: unknown, options?: { signal?: AbortSignal }) => {
+    const stream = subscribe.mock.calls.length === 1 ? events : new PushableEventSource();
+    if (stream !== events) eventSources.push(stream);
+    options?.signal?.addEventListener('abort', () => void stream.return(), { once: true });
+    return { stream };
+  });
 
   const client = {
     session: {
@@ -209,5 +215,5 @@ export function createMockOpenCodeClient() {
     },
   } as unknown as OpencodeClient;
 
-  return { client, events, createdSessionIds, sessionCreate, sessionPromptAsync, sessionAbort, subscribe };
+  return { client, events, eventSources, createdSessionIds, sessionCreate, sessionPromptAsync, sessionAbort, subscribe };
 }

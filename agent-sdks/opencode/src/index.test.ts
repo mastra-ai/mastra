@@ -353,7 +353,7 @@ describe('OpenCodeSDKAgent', () => {
 
   describe('client lifecycle', () => {
     it('resolves the client lazily and memoizes it across generate/stream calls (serverOptions variant)', async () => {
-      const { client: mockClient, events, createdSessionIds } = createMockOpenCodeClient();
+      const { client: mockClient, events, eventSources, createdSessionIds } = createMockOpenCodeClient();
       createOpencodeMock.mockResolvedValue({ client: mockClient, server: { url: 'http://x', close: vi.fn() } });
 
       const agent = new OpenCodeSDKAgent({
@@ -374,14 +374,49 @@ describe('OpenCodeSDKAgent', () => {
 
       const secondRun = agent.generate('Second prompt');
       await vi.waitFor(() => expect(createdSessionIds).toHaveLength(2));
-      events.push(
+      eventSources[1]!.push(
         messageUpdatedEvent(createdSessionIds[1]!, createAssistantMessage({ id: 'm2', sessionID: createdSessionIds[1]! })),
       );
-      events.push(sessionIdleEvent(createdSessionIds[1]!));
+      eventSources[1]!.push(sessionIdleEvent(createdSessionIds[1]!));
       await secondRun;
 
       expect(createOpencodeMock).toHaveBeenCalledTimes(1);
       expect(createOpencodeClientMock).not.toHaveBeenCalled();
+    });
+
+    it('retries client initialization after a transient startup failure', async () => {
+      const { client: mockClient, events, createdSessionIds } = createMockOpenCodeClient();
+      createOpencodeMock.mockRejectedValueOnce(new Error('startup failed'));
+      createOpencodeMock.mockResolvedValueOnce({ client: mockClient, server: { url: 'http://x', close: vi.fn() } });
+
+      const agent = new OpenCodeSDKAgent({
+        id: 'opencode-agent',
+        description: 'OpenCode',
+        serverOptions: {},
+      });
+
+      await expect(agent.generate('First prompt')).rejects.toThrow('startup failed');
+
+      const retry = agent.generate('Second prompt');
+      await vi.waitFor(() => expect(createdSessionIds).toHaveLength(1));
+      events.push(
+        messageUpdatedEvent(createdSessionIds[0]!, createAssistantMessage({ id: 'm1', sessionID: createdSessionIds[0]! })),
+      );
+      events.push(sessionIdleEvent(createdSessionIds[0]!));
+
+      await expect(retry).resolves.toEqual(expect.objectContaining({ text: '' }));
+      expect(createOpencodeMock).toHaveBeenCalledTimes(2);
+    });
+
+    it('rejects stream initialization failures instead of returning an unusable stream', async () => {
+      createOpencodeMock.mockRejectedValueOnce(new Error('startup failed'));
+      const agent = new OpenCodeSDKAgent({
+        id: 'opencode-agent',
+        description: 'OpenCode',
+        serverOptions: {},
+      });
+
+      await expect(agent.stream('Prompt')).rejects.toThrow('startup failed');
     });
 
     it('resolves the client lazily via createOpencodeClient for the config variant', async () => {

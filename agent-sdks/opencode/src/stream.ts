@@ -196,6 +196,13 @@ export class OpenCodeStreamManager implements OpenCodeStreamGate {
         if (signal.aborted) return;
         this.#dispatch(event);
       }
+      if (!signal.aborted) {
+        this.#endAllListeners();
+        if (this.#pumpAbort?.signal === signal) {
+          this.#pumpAbort = undefined;
+          this.#connecting = undefined;
+        }
+      }
     } catch (error) {
       if (!signal.aborted) this.#endAllListeners(error);
     }

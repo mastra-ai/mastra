@@ -133,16 +133,24 @@ export class OpenCodeSDKAgent extends Agent {
   }
 
   private resolveClient(): Promise<OpencodeClient> {
-    const generation = this.#clientGeneration;
-    this.#clientPromise ??= createOpenCodeClientFor(this.options).then(({ client, serverHandle }) => {
-      if (generation === this.#clientGeneration) {
-        this.#serverHandle = serverHandle;
-      } else {
-        // close() ran while this was spawning — never became active, so shut it down.
-        serverHandle?.close();
-      }
-      return client;
-    });
+    if (!this.#clientPromise) {
+      const generation = this.#clientGeneration;
+      const clientPromise = createOpenCodeClientFor(this.options).then(({ client, serverHandle }) => {
+        if (generation === this.#clientGeneration) {
+          this.#serverHandle = serverHandle;
+        } else {
+          // close() ran while this was spawning — never became active, so shut it down.
+          serverHandle?.close();
+        }
+        return client;
+      });
+      this.#clientPromise = clientPromise;
+      clientPromise.catch(() => {
+        if (this.#clientPromise === clientPromise) {
+          this.#clientPromise = undefined;
+        }
+      });
+    }
     return this.#clientPromise;
   }
 
@@ -243,8 +251,15 @@ export class OpenCodeSDKAgent extends Agent {
       mastra: this.#mastra,
     });
 
-    const client = await this.resolveClient();
-    const streamManager = await this.resolveStreamManager();
+    let client: OpencodeClient;
+    let streamManager: OpenCodeStreamManager;
+    try {
+      client = await this.resolveClient();
+      streamManager = await this.resolveStreamManager();
+    } catch (error) {
+      telemetry.fail(error);
+      throw error;
+    }
 
     return createMastraOutput<OUTPUT>({
       messages,
