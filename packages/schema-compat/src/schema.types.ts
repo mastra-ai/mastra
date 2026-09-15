@@ -16,13 +16,38 @@ export type ZodNumber = z4.ZodNumber | z3.ZodNumber;
 export type ZodDate = z4.ZodDate | z3.ZodDate;
 export type ZodDefault = z4.ZodDefault<any> | z3.ZodDefault<any>;
 
+export type AISdkSchemaLike<Output = unknown> = { _type: Output };
+
+/**
+ * A shallow structural boundary for Zod schemas.
+ *
+ * Using the full Zod v3 and v4 types in `PublicSchema` forces TypeScript to
+ * deeply compare both type trees whenever a concrete schema is inferred. The
+ * properties below are shared by supported Zod versions and mirror the shape
+ * checked by the runtime Zod guard.
+ */
+type StructuralZodSchema<Output = unknown, Input = Output> = {
+  readonly _output: Output;
+  readonly _input: Input;
+  parse(data: unknown): Output;
+  safeParse(data: unknown): unknown;
+} & ({ readonly _def: unknown } | { readonly _zod: unknown });
+
 export type PublicSchema<Output = unknown, Input = Output> =
-  | z4.ZodType<Output, Input>
-  | z3.Schema<Output, z3.ZodTypeDef, Input>
+  | StructuralZodSchema<Output, Input>
   | SchemaV4<Output>
   | SchemaV5<Output>
   | SchemaV6<Output>
   | JSONSchema7
-  | StandardSchemaWithJSON<Input, Output>;
+  | StandardSchemaWithJSON<Input, Output>
+  | AISdkSchemaLike<Output>;
 
-export type InferPublicSchema<T extends PublicSchema> = T extends PublicSchema<infer Output> ? Output : never;
+export type InferPublicSchema<T extends PublicSchema> = T extends { _output: infer Output }
+  ? Output
+  : T extends { _type: infer Output }
+    ? Output
+    : T extends { '~standard': { types: { output: infer O } } }
+      ? O
+      : T extends PublicSchema<infer Output>
+        ? Output
+        : never;

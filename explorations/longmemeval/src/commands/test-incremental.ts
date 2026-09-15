@@ -19,6 +19,7 @@ async function testContent(content: string): Promise<boolean> {
     const model = google('gemini-2.5-flash');
     await generateText({
       model,
+      allowSystemInMessages: false,
       prompt: content,
       providerOptions: { google: { safetySettings } },
       maxOutputTokens: 10,

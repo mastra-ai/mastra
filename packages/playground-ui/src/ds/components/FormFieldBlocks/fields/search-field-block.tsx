@@ -1,11 +1,10 @@
 import { SearchIcon, XIcon } from 'lucide-react';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type RefObject } from 'react';
 import { Button } from '../../Button';
 import { Input } from '../../Input';
 import type { InputProps } from '../../Input';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../Tooltip';
 import { FieldBlock } from '../block/field-block';
-import { VisuallyHidden } from '@/ds/primitives/visually-hidden';
 import { cn } from '@/lib/utils';
 
 export type SearchFieldBlockProps = {
@@ -28,6 +27,8 @@ export type SearchFieldBlockProps = {
   variant?: InputProps['variant'];
   isMinimized?: boolean;
   onMinimizedChange?: (minimized: boolean) => void;
+  /** Gives the caller access to the underlying input, e.g. to focus it from a keyboard shortcut. */
+  inputRef?: RefObject<HTMLInputElement | null>;
 };
 
 export function SearchFieldBlock({
@@ -48,9 +49,14 @@ export function SearchFieldBlock({
   variant,
   isMinimized,
   onMinimizedChange,
+  inputRef: externalInputRef,
 }: SearchFieldBlockProps) {
   const inputRef = useRef<HTMLInputElement>(null);
 
+  const setInputRef = (element: HTMLInputElement | null) => {
+    inputRef.current = element;
+    if (externalInputRef) externalInputRef.current = element;
+  };
   useEffect(() => {
     if (isMinimized === false) {
       inputRef.current?.focus();
@@ -78,21 +84,22 @@ export function SearchFieldBlock({
   return (
     <FieldBlock.Layout layout={layout} className={className}>
       {layout === 'horizontal' ? (
-        <FieldBlock.Column>
-          <FieldBlock.Label name={name} required={required}>
-            {labelIsHidden ? <VisuallyHidden>{label}</VisuallyHidden> : label}
-          </FieldBlock.Label>
-        </FieldBlock.Column>
-      ) : null}
-      <FieldBlock.Column>
-        {layout === 'vertical' && label && !labelIsHidden ? (
+        <FieldBlock.Column className={labelIsHidden ? 'sr-only' : undefined}>
           <FieldBlock.Label name={name} required={required}>
             {label}
           </FieldBlock.Label>
+        </FieldBlock.Column>
+      ) : null}
+      <FieldBlock.Column className={layout === 'horizontal' && labelIsHidden ? 'col-span-full' : undefined}>
+        {layout === 'vertical' && label ? (
+          <FieldBlock.Label name={name} required={required} className={labelIsHidden ? 'sr-only' : undefined}>
+            {label}
+          </FieldBlock.Label>
         ) : null}
-        <div className="relative group">
+        <div className="group relative">
           <Input
-            ref={inputRef}
+            ref={setInputRef}
+            id={`input-${name}`}
             name={name}
             disabled={disabled}
             value={value}
@@ -101,26 +108,26 @@ export function SearchFieldBlock({
             size={size}
             variant={variant}
             className={cn(
-              size === 'sm' && 'pl-8 pr-8',
-              size === 'md' && 'pl-9 pr-9',
-              (!size || size === 'default') && 'pl-10 pr-10',
-              size === 'lg' && 'pl-11 pr-11',
+              size === 'xs' && 'px-7',
+              size === 'sm' && 'px-8',
+              (!size || size === 'md') && 'px-9',
+              size === 'lg' && 'px-10',
             )}
           />
           <SearchIcon
             aria-hidden="true"
             className={cn(
-              'text-neutral4 opacity-50 group-has-focus:opacity-100 absolute left-3 top-1/2 -translate-y-1/2',
-              size === 'sm' && 'w-3.5 h-3.5',
-              size === 'md' && 'w-4 h-4',
-              (!size || size === 'default') && 'w-[1.125rem] h-[1.125rem]',
-              size === 'lg' && 'w-5 h-5',
+              'absolute top-1/2 left-3 -translate-y-1/2 text-neutral4 opacity-50 group-has-focus:opacity-100',
+              size === 'xs' && 'size-3',
+              size === 'sm' && 'size-3.5',
+              (!size || size === 'md') && 'size-4',
+              size === 'lg' && 'size-[1.125rem]',
             )}
           />
           {onReset && (value || isMinimized === false) && (
             <Button
               variant="ghost"
-              size={size || 'default'}
+              size={size || 'md'}
               aria-label="Clear search"
               onClick={() => {
                 if (value) {

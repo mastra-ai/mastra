@@ -15,12 +15,15 @@ export interface ScoresOverTimePoint {
   [scorer: string]: string | number;
 }
 
-export function useScoreMetrics() {
+export type ScoreMetricsDateRange = { start?: Date; end?: Date };
+
+export function useScoreMetrics(dateRange?: ScoreMetricsDateRange) {
   const client = useMastraClient();
   const requestContext = useMergedRequestContext();
+  const timestamp = dateRange?.start || dateRange?.end ? dateRange : undefined;
 
   return useQuery({
-    queryKey: ['score-metrics', requestContext],
+    queryKey: ['score-metrics', requestContext, timestamp?.start?.toISOString(), timestamp?.end?.toISOString()],
     queryFn: async () => {
       const scorersMap = await client.listScorers(requestContext);
       const scorerIds = Object.keys(scorersMap ?? {});
@@ -30,20 +33,28 @@ export function useScoreMetrics() {
       }
 
       // Fetch scores from the new observability scores API.
-      // Fetch per-scorer to keep queries bounded.
+      // Fetch per-scorer to keep queries bounded, paginating through all
+      // pages so no scores are silently dropped.
       const allResults = await Promise.all(
-        scorerIds.map(scorerId =>
-          client.listScores({
-            filters: { scorerId },
-            pagination: { page: 0, perPage: 100 },
-            orderBy: { field: 'timestamp', direction: 'DESC' },
-          }),
-        ),
+        scorerIds.map(async scorerId => {
+          const scores = [];
+          let page = 0;
+          while (true) {
+            const response = await client.listScores({
+              filters: { scorerId, timestamp },
+              pagination: { page, perPage: 100 },
+              orderBy: { field: 'timestamp', direction: 'DESC' },
+            });
+            scores.push(...response.scores);
+            if (!response.pagination?.hasMore) break;
+            page++;
+          }
+          return scores;
+        }),
       );
 
       const allScores: Array<{ scorerId: string; score: number; timestamp: string }> = [];
-      for (let i = 0; i < scorerIds.length; i++) {
-        const scores = allResults[i]?.scores ?? [];
+      for (const scores of allResults) {
         for (const s of scores) {
           allScores.push({
             scorerId: s.scorerId,

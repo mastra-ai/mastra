@@ -44,7 +44,10 @@ export class FileEnvService extends EnvService {
   }): Promise<string> {
     const regex = new RegExp(`^${key}=.*$`, 'm');
     if (data.match(regex)) {
-      data = data.replace(regex, `${key}=${value}`);
+      // Use a replacement function so `$` sequences in the value (e.g. `$&`,
+      // `$$`) are written literally instead of being interpreted as
+      // String.prototype.replace special patterns.
+      data = data.replace(regex, () => `${key}=${value}`);
     } else {
       data += `\n${key}=${value}`;
     }

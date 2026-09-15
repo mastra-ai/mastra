@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
+  TABLE_DATASETS,
+  TABLE_DATASET_ITEMS,
   TABLE_EXPERIMENTS,
   TABLE_EXPERIMENT_RESULTS,
   TABLE_SCHEMAS,
@@ -8,6 +10,7 @@ import {
   EXPERIMENT_RESULTS_SCHEMA,
   ExperimentsStorage,
   calculatePagination,
+  hasErrorCode,
   normalizePerPage,
 } from '@mastra/core/storage';
 import type {
@@ -16,16 +19,18 @@ import type {
   ExperimentResult,
   ExperimentReviewCounts,
   ExperimentResultStatus,
+  ExperimentTenancyFilters,
   CreateExperimentInput,
   UpdateExperimentInput,
   AddExperimentResultInput,
   UpdateExperimentResultInput,
+  UpsertExperimentResultInput,
   ListExperimentsInput,
   ListExperimentsOutput,
   ListExperimentResultsInput,
   ListExperimentResultsOutput,
 } from '@mastra/core/storage';
-import type { Pool } from 'mysql2/promise';
+import type { Pool, PoolConnection } from 'mysql2/promise';
 import type { StoreOperationsMySQL } from '../operations';
 import { generateTableSQL } from '../operations';
 import { formatTableName, parseDateTime, quoteIdentifier } from '../utils';
@@ -48,11 +53,21 @@ interface ExperimentRow {
   id: string;
   datasetId: string | null;
   datasetVersion: number | null;
-  targetType: string;
-  targetId: string;
+  agentVersion: string | null;
+  organizationId: string | null;
+  projectId: string | null;
+  targetType: string | null;
+  targetId: string | null;
+  scorerIds: string | null;
   name: string | null;
   description: string | null;
   metadata: string | null;
+  provenance: string | null;
+  runnerAttestation: string | null;
+  experimentSetId: string | null;
+  comparisonId: string | null;
+  variantId: string | null;
+  trialIndex: number | null;
   status: string;
   totalItems: number;
   succeededCount: number;
@@ -69,16 +84,21 @@ interface ExperimentResultRow {
   experimentId: string;
   itemId: string;
   itemDatasetVersion: number | null;
-  input: string;
+  organizationId: string | null;
+  projectId: string | null;
+  input: string | null;
   output: string | null;
   groundTruth: string | null;
+  metadata: string | null;
   error: string | null;
   startedAt: Date | string;
   completedAt: Date | string;
   retryCount: number;
+  attempt?: number | null;
   traceId: string | null;
   status: string | null;
   tags: string | null;
+  comment: string | null;
   createdAt: Date | string;
 }
 
@@ -93,10 +113,27 @@ export class ExperimentsMySQL extends ExperimentsStorage {
 
   /**
    * Returns default index definitions for the experiments domain tables.
-   * Currently no default indexes are defined for experiments.
    */
   static getDefaultIndexDefs(_prefix: string = ''): CreateIndexOptions[] {
-    return [];
+    return [
+      // Tenancy: leading-tenant indexes for multi-tenant scans (parity with
+      // pg/libsql/spanner/mongodb experiments adapters).
+      {
+        name: 'idx_experiments_grouping',
+        table: TABLE_EXPERIMENTS,
+        columns: ['experimentSetId', 'comparisonId', 'variantId', 'trialIndex'],
+      },
+      {
+        name: 'idx_experiments_org_project',
+        table: TABLE_EXPERIMENTS,
+        columns: ['organizationId', 'projectId'],
+      },
+      {
+        name: 'idx_experiment_results_org_project',
+        table: TABLE_EXPERIMENT_RESULTS,
+        columns: ['organizationId', 'projectId'],
+      },
+    ];
   }
 
   /**
@@ -127,6 +164,86 @@ export class ExperimentsMySQL extends ExperimentsStorage {
     this.#indexes = indexes?.filter(idx => (ExperimentsMySQL.MANAGED_TABLES as readonly string[]).includes(idx.table));
   }
 
+  async #withPurgeBarrier<T>(
+    experimentId: string,
+    itemId: string,
+    fn: (connection: PoolConnection, purgeMetadata: Record<string, unknown> | null) => Promise<T>,
+  ): Promise<T> {
+    const connection = await this.pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      const [experimentRows] = await connection.execute(
+        `SELECT ${quoteIdentifier('datasetId', 'column name')} FROM ${formatTableName(TABLE_EXPERIMENTS)} WHERE ${quoteIdentifier('id', 'column name')} = ?`,
+        [experimentId],
+      );
+      const datasetId = Array.isArray(experimentRows)
+        ? ((experimentRows[0] as { datasetId?: string | null } | undefined)?.datasetId ?? null)
+        : null;
+      let purgeMetadata: Record<string, unknown> | null = null;
+      if (datasetId) {
+        await connection.execute(
+          `SELECT ${quoteIdentifier('id', 'column name')} FROM ${formatTableName(TABLE_DATASETS)} WHERE ${quoteIdentifier('id', 'column name')} = ? FOR UPDATE`,
+          [datasetId],
+        );
+        const [itemRows] = await connection.execute(
+          `SELECT ${quoteIdentifier('metadata', 'column name')} FROM ${formatTableName(TABLE_DATASET_ITEMS)} WHERE ${quoteIdentifier('id', 'column name')} = ? AND ${quoteIdentifier('datasetId', 'column name')} = ?`,
+          [itemId, datasetId],
+        );
+        if (Array.isArray(itemRows)) {
+          const purgedRow = (itemRows as Array<{ metadata?: unknown }>).find(
+            row => parseJSON<Record<string, unknown>>(row.metadata)?.__purged === true,
+          );
+          purgeMetadata = purgedRow ? (parseJSON<Record<string, unknown>>(purgedRow.metadata) ?? null) : null;
+        }
+      }
+      const result = await fn(connection, purgeMetadata);
+      await connection.commit();
+      return result;
+    } catch (error) {
+      let transactionError = error;
+      try {
+        await connection.rollback();
+      } catch (rollbackError) {
+        transactionError = new AggregateError([error, rollbackError], 'Transaction and rollback both failed');
+      }
+      throw transactionError;
+    } finally {
+      connection.release();
+    }
+  }
+
+  async #ensureExperimentResultNaturalKey(): Promise<void> {
+    const tableName = formatTableName(TABLE_EXPERIMENT_RESULTS);
+    const indexName = 'idx_experiment_results_exp_item_attempt';
+
+    const [indexRows] = await this.pool.execute(
+      `SELECT 1 FROM information_schema.STATISTICS
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND INDEX_NAME = ?
+       LIMIT 1`,
+      [TABLE_EXPERIMENT_RESULTS, indexName],
+    );
+    if (Array.isArray(indexRows) && indexRows.length > 0) return;
+
+    try {
+      await this.pool.execute(
+        `CREATE UNIQUE INDEX ${quoteIdentifier(indexName, 'index name')} ON ${tableName} (${quoteIdentifier('experimentId', 'column name')}(191), ${quoteIdentifier('itemId', 'column name')}(191), ((COALESCE(${quoteIdentifier('attempt', 'column name')}, 0))))`,
+      );
+    } catch (error) {
+      if (hasErrorCode(error, new Set([1061, 'ER_DUP_KEYNAME']))) return;
+      if (!hasErrorCode(error, new Set([1062, 'ER_DUP_ENTRY']))) throw error;
+
+      throw new MastraError(
+        {
+          id: 'MYSQL_EXPERIMENT_RESULT_NATURAL_KEY_MIGRATION_REQUIRED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          text: 'Could not enforce experiment-result uniqueness. Resolve duplicate experiment, item, and attempt combinations before restarting the MySQL store.',
+        },
+        error,
+      );
+    }
+  }
+
   /**
    * Returns default index definitions for the experiments domain tables.
    */
@@ -136,11 +253,12 @@ export class ExperimentsMySQL extends ExperimentsStorage {
 
   /**
    * Creates default indexes for optimal query performance.
-   * Currently no default indexes are defined for experiments.
    */
   async createDefaultIndexes(): Promise<void> {
     if (this.#skipDefaultIndexes) return;
-    // No default indexes for experiments domain
+    for (const indexDef of this.getDefaultIndexDefinitions()) {
+      await this.operations.createIndex(indexDef);
+    }
   }
 
   /**
@@ -156,6 +274,30 @@ export class ExperimentsMySQL extends ExperimentsStorage {
   async init(): Promise<void> {
     await this.operations.createTable({ tableName: TABLE_EXPERIMENTS, schema: EXPERIMENTS_SCHEMA });
     await this.operations.createTable({ tableName: TABLE_EXPERIMENT_RESULTS, schema: EXPERIMENT_RESULTS_SCHEMA });
+    // Backfill tenancy columns on pre-existing tables so older deployments
+    // keep working when they upgrade in place.
+    await this.operations.alterTable({
+      tableName: TABLE_EXPERIMENTS,
+      schema: EXPERIMENTS_SCHEMA,
+      ifNotExists: [
+        'agentVersion',
+        'organizationId',
+        'projectId',
+        'provenance',
+        'runnerAttestation',
+        'experimentSetId',
+        'comparisonId',
+        'variantId',
+        'trialIndex',
+        'scorerIds',
+      ],
+    });
+    await this.operations.alterTable({
+      tableName: TABLE_EXPERIMENT_RESULTS,
+      schema: EXPERIMENT_RESULTS_SCHEMA,
+      ifNotExists: ['comment', 'metadata', 'organizationId', 'projectId', 'attempt'],
+    });
+    await this.#ensureExperimentResultNaturalKey();
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
   }
@@ -170,11 +312,21 @@ export class ExperimentsMySQL extends ExperimentsStorage {
       id: row.id,
       datasetId: row.datasetId ?? null,
       datasetVersion: row.datasetVersion ?? null,
-      targetType: row.targetType as Experiment['targetType'],
-      targetId: row.targetId,
+      agentVersion: row.agentVersion ?? null,
+      organizationId: row.organizationId ?? null,
+      projectId: row.projectId ?? null,
+      targetType: (row.targetType as Experiment['targetType']) ?? null,
+      targetId: row.targetId ?? null,
+      scorerIds: parseJSON<string[]>(row.scorerIds) ?? null,
       name: row.name ?? undefined,
       description: row.description ?? undefined,
       metadata: parseJSON<Record<string, unknown>>(row.metadata),
+      provenance: parseJSON<Experiment['provenance']>(row.provenance) ?? null,
+      runnerAttestation: parseJSON<Experiment['runnerAttestation']>(row.runnerAttestation) ?? null,
+      experimentSetId: row.experimentSetId ?? null,
+      comparisonId: row.comparisonId ?? null,
+      variantId: row.variantId ?? null,
+      trialIndex: row.trialIndex ?? null,
       status: row.status as Experiment['status'],
       totalItems: row.totalItems,
       succeededCount: row.succeededCount,
@@ -193,16 +345,21 @@ export class ExperimentsMySQL extends ExperimentsStorage {
       experimentId: row.experimentId,
       itemId: row.itemId,
       itemDatasetVersion: row.itemDatasetVersion ?? null,
-      input: parseJSON<Record<string, unknown>>(row.input),
+      organizationId: row.organizationId ?? null,
+      projectId: row.projectId ?? null,
+      input: row.input === null ? null : parseJSON<Record<string, unknown>>(row.input),
       output: row.output ? parseJSON<Record<string, unknown>>(row.output) : null,
       groundTruth: row.groundTruth ? parseJSON<Record<string, unknown>>(row.groundTruth) : null,
+      metadata: row.metadata ? (parseJSON<Record<string, unknown>>(row.metadata) ?? null) : null,
       error: row.error ? (parseJSON<{ message: string; stack?: string; code?: string }>(row.error) ?? null) : null,
       startedAt: parseDateTime(row.startedAt) ?? new Date(),
       completedAt: parseDateTime(row.completedAt) ?? new Date(),
       retryCount: row.retryCount,
+      attempt: row.attempt != null ? Number(row.attempt) : 0,
       traceId: row.traceId ?? null,
       status: (row.status as ExperimentResultStatus | null) ?? null,
       tags: row.tags ? (parseJSON<string[]>(row.tags) ?? null) : null,
+      comment: row.comment ?? null,
       createdAt: parseDateTime(row.createdAt) ?? new Date(),
     };
   }
@@ -218,11 +375,21 @@ export class ExperimentsMySQL extends ExperimentsStorage {
           id,
           datasetId: input.datasetId ?? null,
           datasetVersion: input.datasetVersion ?? null,
-          targetType: input.targetType,
-          targetId: input.targetId,
+          agentVersion: input.agentVersion ?? null,
+          organizationId: input.organizationId ?? null,
+          projectId: input.projectId ?? null,
+          targetType: input.targetType ?? null,
+          targetId: input.targetId ?? null,
+          scorerIds: input.scorerIds ? JSON.stringify(input.scorerIds) : null,
           name: input.name ?? null,
           description: input.description ?? null,
           metadata: input.metadata ? JSON.stringify(input.metadata) : null,
+          provenance: input.provenance ? JSON.stringify(input.provenance) : null,
+          runnerAttestation: input.runnerAttestation ? JSON.stringify(input.runnerAttestation) : null,
+          experimentSetId: input.experimentSetId ?? null,
+          comparisonId: input.comparisonId ?? null,
+          variantId: input.variantId ?? null,
+          trialIndex: input.trialIndex ?? null,
           status: 'pending',
           totalItems: input.totalItems,
           succeededCount: 0,
@@ -239,11 +406,21 @@ export class ExperimentsMySQL extends ExperimentsStorage {
         id,
         datasetId: input.datasetId,
         datasetVersion: input.datasetVersion,
-        targetType: input.targetType,
-        targetId: input.targetId,
+        agentVersion: input.agentVersion ?? null,
+        organizationId: input.organizationId ?? null,
+        projectId: input.projectId ?? null,
+        targetType: input.targetType ?? null,
+        targetId: input.targetId ?? null,
+        scorerIds: input.scorerIds ?? null,
         name: input.name,
         description: input.description,
         metadata: input.metadata,
+        provenance: input.provenance ?? null,
+        runnerAttestation: input.runnerAttestation ?? null,
+        experimentSetId: input.experimentSetId ?? null,
+        comparisonId: input.comparisonId ?? null,
+        variantId: input.variantId ?? null,
+        trialIndex: input.trialIndex ?? null,
         status: 'pending',
         totalItems: input.totalItems,
         succeededCount: 0,
@@ -312,11 +489,17 @@ export class ExperimentsMySQL extends ExperimentsStorage {
     }
   }
 
-  async getExperimentById(args: { id: string }): Promise<Experiment | null> {
+  async getExperimentById(args: { id: string; filters?: ExperimentTenancyFilters }): Promise<Experiment | null> {
     try {
+      // prepareWhereClause ignores undefined values, so this scopes the SELECT only
+      // when the caller passed tenancy filters.
       const row = await this.operations.load<ExperimentRow>({
         tableName: TABLE_EXPERIMENTS,
-        keys: { id: args.id },
+        keys: {
+          id: args.id,
+          organizationId: args.filters?.organizationId,
+          projectId: args.filters?.projectId,
+        },
       });
       return row ? this.mapExperiment(row) : null;
     } catch (error) {
@@ -341,6 +524,49 @@ export class ExperimentsMySQL extends ExperimentsStorage {
       if (args.datasetId) {
         conditions.push(`${quoteIdentifier('datasetId', 'column name')} = ?`);
         params.push(args.datasetId);
+      }
+      if (args.targetType) {
+        conditions.push(`${quoteIdentifier('targetType', 'column name')} = ?`);
+        params.push(args.targetType);
+      }
+      if (args.targetId) {
+        conditions.push(`${quoteIdentifier('targetId', 'column name')} = ?`);
+        params.push(args.targetId);
+      }
+      if (args.agentVersion) {
+        conditions.push(`${quoteIdentifier('agentVersion', 'column name')} = ?`);
+        params.push(args.agentVersion);
+      }
+      if (args.status) {
+        conditions.push(`${quoteIdentifier('status', 'column name')} = ?`);
+        params.push(args.status);
+      }
+      if (args.experimentSetId !== undefined) {
+        conditions.push(`${quoteIdentifier('experimentSetId', 'column name')} = ?`);
+        params.push(args.experimentSetId);
+      }
+      if (args.comparisonId !== undefined) {
+        conditions.push(`${quoteIdentifier('comparisonId', 'column name')} = ?`);
+        params.push(args.comparisonId);
+      }
+      if (args.variantId !== undefined) {
+        conditions.push(`${quoteIdentifier('variantId', 'column name')} = ?`);
+        params.push(args.variantId);
+      }
+      if (args.trialIndex !== undefined) {
+        conditions.push(`${quoteIdentifier('trialIndex', 'column name')} = ?`);
+        params.push(args.trialIndex);
+      }
+      if (args.filters) {
+        const { organizationId, projectId } = args.filters;
+        if (organizationId !== undefined) {
+          conditions.push(`${quoteIdentifier('organizationId', 'column name')} = ?`);
+          params.push(organizationId);
+        }
+        if (projectId !== undefined) {
+          conditions.push(`${quoteIdentifier('projectId', 'column name')} = ?`);
+          params.push(projectId);
+        }
       }
 
       const whereClause = {
@@ -389,11 +615,33 @@ export class ExperimentsMySQL extends ExperimentsStorage {
     }
   }
 
-  async deleteExperiment(args: { id: string }): Promise<void> {
+  async deleteExperiment(args: { id: string; filters?: ExperimentTenancyFilters }): Promise<void> {
     try {
+      // Atomic gate + cascade under SELECT ... FOR UPDATE. Silent no-op on
+      // tenancy mismatch.
+      const tenancyConditions: string[] = [];
+      const tenancyParams: any[] = [];
+      if (args.filters?.organizationId !== undefined) {
+        tenancyConditions.push(`${quoteIdentifier('organizationId', 'column name')} = ?`);
+        tenancyParams.push(args.filters.organizationId);
+      }
+      if (args.filters?.projectId !== undefined) {
+        tenancyConditions.push(`${quoteIdentifier('projectId', 'column name')} = ?`);
+        tenancyParams.push(args.filters.projectId);
+      }
+      const gateWhere = ['id = ?', ...tenancyConditions].join(' AND ');
+
       const connection = await this.pool.getConnection();
       try {
         await connection.beginTransaction();
+        const [gateRows] = await connection.execute(
+          `SELECT id FROM ${formatTableName(TABLE_EXPERIMENTS)} WHERE ${gateWhere} FOR UPDATE`,
+          [args.id, ...tenancyParams],
+        );
+        if (!Array.isArray(gateRows) || gateRows.length === 0) {
+          await connection.commit();
+          return;
+        }
         await connection.execute(
           `DELETE FROM ${formatTableName(TABLE_EXPERIMENT_RESULTS)} WHERE ${quoteIdentifier('experimentId', 'column name')} = ?`,
           [args.id],
@@ -434,46 +682,95 @@ export class ExperimentsMySQL extends ExperimentsStorage {
   }
 
   async addExperimentResult(input: AddExperimentResultInput): Promise<ExperimentResult> {
+    // Tool mock reports are produced only when an experiment used item-level tool
+    // mocks — which the MySQL adapter rejects on write. Guard here too so a report
+    // is never silently dropped.
+    if (input.toolMockReport) {
+      throw new MastraError({
+        id: 'MYSQL_EXPERIMENT_TOOL_MOCK_REPORT_UNSUPPORTED',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'Tool mock reports are not supported on the MySQL storage adapter. Use a supported adapter (LibSQL, PostgreSQL, MongoDB, or Spanner) to persist experiment tool mock reports.',
+      });
+    }
     try {
       const id = input.id ?? randomUUID();
       const now = new Date();
-
-      await this.operations.insert({
-        tableName: TABLE_EXPERIMENT_RESULTS,
-        record: {
-          id,
-          experimentId: input.experimentId,
-          itemId: input.itemId,
-          itemDatasetVersion: input.itemDatasetVersion ?? null,
-          input: JSON.stringify(input.input),
-          output: input.output ? JSON.stringify(input.output) : null,
-          groundTruth: input.groundTruth ? JSON.stringify(input.groundTruth) : null,
-          error: input.error ? JSON.stringify(input.error) : null,
-          startedAt: input.startedAt,
-          completedAt: input.completedAt,
-          retryCount: input.retryCount,
-          traceId: input.traceId ?? null,
-          status: input.status ?? null,
-          tags: input.tags ? JSON.stringify(input.tags) : null,
-          createdAt: now,
+      const purgeMetadata = await this.#withPurgeBarrier(
+        input.experimentId,
+        input.itemId,
+        async (connection, marker) => {
+          await connection.execute(
+            `INSERT INTO ${formatTableName(TABLE_EXPERIMENT_RESULTS)} (
+            ${[
+              'id',
+              'experimentId',
+              'itemId',
+              'itemDatasetVersion',
+              'organizationId',
+              'projectId',
+              'input',
+              'output',
+              'groundTruth',
+              'metadata',
+              'error',
+              'startedAt',
+              'completedAt',
+              'retryCount',
+              'attempt',
+              'traceId',
+              'status',
+              'tags',
+              'createdAt',
+            ]
+              .map(column => quoteIdentifier(column, 'column name'))
+              .join(', ')}
+          ) VALUES (${Array.from({ length: 19 }, () => '?').join(', ')})`,
+            [
+              id,
+              input.experimentId,
+              input.itemId,
+              input.itemDatasetVersion ?? null,
+              input.organizationId ?? null,
+              input.projectId ?? null,
+              JSON.stringify(marker ? null : input.input),
+              marker || input.output == null ? null : JSON.stringify(input.output),
+              marker || input.groundTruth == null ? null : JSON.stringify(input.groundTruth),
+              JSON.stringify(marker ?? input.metadata ?? null),
+              marker || input.error == null ? null : JSON.stringify(input.error),
+              input.startedAt,
+              input.completedAt,
+              input.retryCount,
+              input.attempt ?? 0,
+              input.traceId ?? null,
+              input.status ?? null,
+              marker || input.tags == null ? null : JSON.stringify(input.tags),
+              now,
+            ],
+          );
+          return marker;
         },
-      });
+      );
 
       return {
         id,
         experimentId: input.experimentId,
         itemId: input.itemId,
         itemDatasetVersion: input.itemDatasetVersion,
-        input: input.input,
-        output: input.output,
-        groundTruth: input.groundTruth,
-        error: input.error,
+        organizationId: input.organizationId ?? null,
+        projectId: input.projectId ?? null,
+        input: purgeMetadata ? null : input.input,
+        output: purgeMetadata ? null : input.output,
+        groundTruth: purgeMetadata ? null : input.groundTruth,
+        metadata: purgeMetadata ?? input.metadata ?? null,
+        error: purgeMetadata ? null : input.error,
         startedAt: input.startedAt,
         completedAt: input.completedAt,
         retryCount: input.retryCount,
+        attempt: input.attempt ?? 0,
         traceId: input.traceId ?? null,
         status: input.status ?? null,
-        tags: input.tags ?? null,
+        tags: purgeMetadata ? null : (input.tags ?? null),
         createdAt: now,
       };
     } catch (error) {
@@ -488,17 +785,117 @@ export class ExperimentsMySQL extends ExperimentsStorage {
     }
   }
 
-  async getExperimentResultById(args: { id: string }): Promise<ExperimentResult | null> {
+  async getExperimentResultById(args: {
+    id: string;
+    filters?: ExperimentTenancyFilters;
+  }): Promise<ExperimentResult | null> {
     try {
+      // prepareWhereClause ignores undefined values, so this scopes the SELECT only
+      // when the caller passed tenancy filters.
       const row = await this.operations.load<ExperimentResultRow>({
         tableName: TABLE_EXPERIMENT_RESULTS,
-        keys: { id: args.id },
+        keys: {
+          id: args.id,
+          organizationId: args.filters?.organizationId,
+          projectId: args.filters?.projectId,
+        },
       });
       return row ? this.mapExperimentResult(row) : null;
     } catch (error) {
       throw new MastraError(
         {
           id: 'MYSQL_GET_EXPERIMENT_RESULT_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
+  async upsertExperimentResult(input: UpsertExperimentResultInput): Promise<ExperimentResult> {
+    // Mirror the addExperimentResult guard: this adapter never persists tool mock reports.
+    if (input.toolMockReport) {
+      throw new MastraError({
+        id: 'MYSQL_EXPERIMENT_TOOL_MOCK_REPORT_UNSUPPORTED',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'Tool mock reports are not supported on the MySQL storage adapter. Use a supported adapter (LibSQL, PostgreSQL, MongoDB, or Spanner) to persist experiment tool mock reports.',
+      });
+    }
+    try {
+      const attempt = input.attempt ?? 0;
+      return await this.#withPurgeBarrier(input.experimentId, input.itemId, async (connection, marker) => {
+        const tableName = formatTableName(TABLE_EXPERIMENT_RESULTS);
+        const updateColumns = [
+          'itemDatasetVersion',
+          'organizationId',
+          'projectId',
+          'input',
+          'output',
+          'groundTruth',
+          'metadata',
+          'error',
+          'startedAt',
+          'completedAt',
+          'retryCount',
+          'attempt',
+          'traceId',
+          'status',
+          'tags',
+        ];
+        const updateValues = [
+          input.itemDatasetVersion ?? null,
+          input.organizationId ?? null,
+          input.projectId ?? null,
+          JSON.stringify(marker ? null : input.input),
+          marker || input.output == null ? null : JSON.stringify(input.output),
+          marker || input.groundTruth == null ? null : JSON.stringify(input.groundTruth),
+          JSON.stringify(marker ?? input.metadata ?? null),
+          marker || input.error == null ? null : JSON.stringify(input.error),
+          input.startedAt,
+          input.completedAt,
+          input.retryCount,
+          attempt,
+          input.traceId ?? null,
+          input.status ?? null,
+          marker || input.tags == null ? null : JSON.stringify(input.tags),
+        ];
+        const columns = ['id', 'experimentId', 'itemId', ...updateColumns, 'createdAt'];
+
+        await connection.execute(
+          `INSERT INTO ${tableName} (${columns.map(column => quoteIdentifier(column, 'column name')).join(', ')})
+           VALUES (${Array.from({ length: columns.length }, () => '?').join(', ')})
+           ON DUPLICATE KEY UPDATE ${updateColumns
+             .map(
+               column =>
+                 `${quoteIdentifier(column, 'column name')} = VALUES(${quoteIdentifier(column, 'column name')})`,
+             )
+             .join(', ')}`,
+          [randomUUID(), input.experimentId, input.itemId, ...updateValues, new Date()],
+        );
+
+        const [rows] = await connection.execute(
+          `SELECT * FROM ${tableName} WHERE ${quoteIdentifier('experimentId', 'column name')} = ? AND ${quoteIdentifier('itemId', 'column name')} = ? AND ${quoteIdentifier('attempt', 'column name')} = ?`,
+          [input.experimentId, input.itemId, attempt],
+        );
+        const row = Array.isArray(rows) ? (rows[0] as ExperimentResultRow | undefined) : undefined;
+        if (!row) {
+          throw new MastraError({
+            id: 'MYSQL_UPSERT_EXPERIMENT_RESULT_NOT_FOUND',
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            text: `Experiment result not found after upsert`,
+            details: { experimentId: input.experimentId, itemId: input.itemId, attempt },
+          });
+        }
+        return this.mapExperimentResult(row);
+      });
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: 'MYSQL_UPSERT_EXPERIMENT_RESULT_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -520,27 +917,33 @@ export class ExperimentsMySQL extends ExperimentsStorage {
         throw new Error(`Experiment result ${input.id} does not belong to experiment ${input.experimentId}`);
       }
 
-      const updateData: Record<string, unknown> = {};
-      if (input.status !== undefined) {
-        updateData.status = input.status;
-      }
-      if (input.tags !== undefined) {
-        updateData.tags = input.tags ? JSON.stringify(input.tags) : null;
-      }
-
-      if (Object.keys(updateData).length > 0) {
-        await this.operations.update({
-          tableName: TABLE_EXPERIMENT_RESULTS,
-          keys: { id: input.id },
-          data: updateData,
-        });
-      }
-
-      const updated = await this.getExperimentResultById({ id: input.id });
-      if (!updated) {
-        throw new Error(`Experiment result ${input.id} not found after update`);
-      }
-      return updated;
+      return await this.#withPurgeBarrier(existing.experimentId, existing.itemId, async (connection, marker) => {
+        await connection.execute(
+          `UPDATE ${formatTableName(TABLE_EXPERIMENT_RESULTS)}
+           SET ${quoteIdentifier('status', 'column name')} = CASE WHEN ? THEN ? ELSE ${quoteIdentifier('status', 'column name')} END,
+               ${quoteIdentifier('tags', 'column name')} = CASE WHEN ? THEN NULL WHEN ? THEN ? ELSE ${quoteIdentifier('tags', 'column name')} END,
+               ${quoteIdentifier('comment', 'column name')} = CASE WHEN ? THEN NULL WHEN ? THEN ? ELSE ${quoteIdentifier('comment', 'column name')} END
+           WHERE ${quoteIdentifier('id', 'column name')} = ?`,
+          [
+            input.status !== undefined,
+            input.status ?? null,
+            Boolean(marker),
+            input.tags !== undefined,
+            input.tags === undefined ? null : JSON.stringify(input.tags),
+            Boolean(marker),
+            input.comment !== undefined,
+            input.comment ?? null,
+            input.id,
+          ],
+        );
+        const [rows] = await connection.execute(
+          `SELECT * FROM ${formatTableName(TABLE_EXPERIMENT_RESULTS)} WHERE ${quoteIdentifier('id', 'column name')} = ?`,
+          [input.id],
+        );
+        const row = Array.isArray(rows) ? (rows[0] as ExperimentResultRow | undefined) : undefined;
+        if (!row) throw new Error(`Experiment result ${input.id} not found after update`);
+        return this.mapExperimentResult(row);
+      });
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
@@ -595,9 +998,36 @@ export class ExperimentsMySQL extends ExperimentsStorage {
     try {
       const { page, perPage: perPageInput } = args.pagination;
 
+      const conditions: string[] = [`${quoteIdentifier('experimentId', 'column name')} = ?`];
+      const params: any[] = [args.experimentId];
+      if (args.traceId) {
+        conditions.push(`${quoteIdentifier('traceId', 'column name')} = ?`);
+        params.push(args.traceId);
+      }
+      if (args.status) {
+        conditions.push(`${quoteIdentifier('status', 'column name')} = ?`);
+        params.push(args.status);
+      }
+      // All requested tags must be present (AND semantics)
+      for (const tag of args.tags ?? []) {
+        conditions.push(`JSON_CONTAINS(${quoteIdentifier('tags', 'column name')}, ?, '$')`);
+        params.push(JSON.stringify(tag));
+      }
+      if (args.filters) {
+        const { organizationId, projectId } = args.filters;
+        if (organizationId !== undefined) {
+          conditions.push(`${quoteIdentifier('organizationId', 'column name')} = ?`);
+          params.push(organizationId);
+        }
+        if (projectId !== undefined) {
+          conditions.push(`${quoteIdentifier('projectId', 'column name')} = ?`);
+          params.push(projectId);
+        }
+      }
+
       const whereClause = {
-        sql: ` WHERE ${quoteIdentifier('experimentId', 'column name')} = ?`,
-        args: [args.experimentId] as any[],
+        sql: ` WHERE ${conditions.join(' AND ')}`,
+        args: params,
       };
 
       const total = await this.operations.loadTotalCount({ tableName: TABLE_EXPERIMENT_RESULTS, whereClause });
@@ -641,8 +1071,28 @@ export class ExperimentsMySQL extends ExperimentsStorage {
     }
   }
 
-  async deleteExperimentResults(args: { experimentId: string }): Promise<void> {
+  async deleteExperimentResults(args: { experimentId: string; filters?: ExperimentTenancyFilters }): Promise<void> {
     try {
+      // Tenancy predicate folded into the DELETE via a scoped parent subquery.
+      // Silent no-op on mismatch.
+      if (args.filters?.organizationId !== undefined || args.filters?.projectId !== undefined) {
+        const tenancyConditions: string[] = [];
+        const tenancyParams: any[] = [];
+        if (args.filters?.organizationId !== undefined) {
+          tenancyConditions.push(`${quoteIdentifier('organizationId', 'column name')} = ?`);
+          tenancyParams.push(args.filters.organizationId);
+        }
+        if (args.filters?.projectId !== undefined) {
+          tenancyConditions.push(`${quoteIdentifier('projectId', 'column name')} = ?`);
+          tenancyParams.push(args.filters.projectId);
+        }
+        const parentWhere = ['id = ?', ...tenancyConditions].join(' AND ');
+        await this.pool.execute(
+          `DELETE FROM ${formatTableName(TABLE_EXPERIMENT_RESULTS)} WHERE ${quoteIdentifier('experimentId', 'column name')} IN (SELECT id FROM ${formatTableName(TABLE_EXPERIMENTS)} WHERE ${parentWhere})`,
+          [args.experimentId, ...tenancyParams],
+        );
+        return;
+      }
       await this.pool.execute(
         `DELETE FROM ${formatTableName(TABLE_EXPERIMENT_RESULTS)} WHERE ${quoteIdentifier('experimentId', 'column name')} = ?`,
         [args.experimentId],

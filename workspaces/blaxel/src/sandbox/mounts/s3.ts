@@ -5,7 +5,7 @@ import type { FilesystemMountConfig } from '@mastra/core/workspace';
 import { shellQuote } from '../../utils/shell-quote';
 import {
   LOG_PREFIX,
-  validateBucketName,
+  validateS3BucketName,
   validateEndpoint,
   validatePrefix,
   runCommand,
@@ -49,7 +49,7 @@ export async function mountS3(mountPath: string, config: BlaxelS3MountConfig, ct
   const { sandbox, logger } = ctx;
 
   // Validate inputs before interpolating into shell commands
-  validateBucketName(config.bucket);
+  validateS3BucketName(config.bucket);
   if (config.endpoint) {
     validateEndpoint(config.endpoint);
   }
@@ -114,8 +114,14 @@ export async function mountS3(mountPath: string, config: BlaxelS3MountConfig, ct
   }
   const [uid, gid] = idResult.stdout.trim().split('\n');
 
-  // Determine if we have credentials or using public bucket mode
-  const hasCredentials = config.accessKeyId && config.secretAccessKey;
+  // Validate credentials before any network calls — this gives the user a clear,
+  // immediate error instead of a confusing connectivity failure.
+  const hasAccessKey = !!config.accessKeyId;
+  const hasSecretKey = !!config.secretAccessKey;
+  if (hasAccessKey !== hasSecretKey) {
+    throw new Error('Both accessKeyId and secretAccessKey must be provided together.');
+  }
+  const hasCredentials = hasAccessKey && hasSecretKey;
 
   // Use a mount-specific credentials path to avoid races with concurrent mounts
   const mountHash = crypto.createHash('md5').update(mountPath).digest('hex').slice(0, 8);

@@ -1,0 +1,552 @@
+# @mastra/livekit
+
+## 0.4.0
+
+### Minor Changes
+
+- Added a per-call `configuration.turnDetection` resolver to `createLiveKitWorker()`. LiveKit's `TurnDetector` classes need the job's inference executor, so they could not be constructed at module scope where worker options live; the resolver runs inside each job with the call context and falls back to the top-level `turnDetection` option. Fixes #22495. ([#22842](https://github.com/mastra-ai/mastra/pull/22842))
+
+### Patch Changes
+
+- Updated dependencies [[`d9ef543`](https://github.com/mastra-ai/mastra/commit/d9ef54303b7f050f4e364701c3821fc61e7002f2), [`b96744d`](https://github.com/mastra-ai/mastra/commit/b96744daad8c6e181f03fdf38c732206ded428a2), [`ad5ac69`](https://github.com/mastra-ai/mastra/commit/ad5ac69bcd037bfb85c3399d8b39d9364931ad1b), [`e86be03`](https://github.com/mastra-ai/mastra/commit/e86be034c017fca7deae7d1ebb34d36413928cb8), [`492c0ae`](https://github.com/mastra-ai/mastra/commit/492c0aedcee3fde9555111a660b6c975c160a0db), [`0f4d9cf`](https://github.com/mastra-ai/mastra/commit/0f4d9cf79b49b6dc6a484a0b2d1cf381eb2343a6), [`50e2658`](https://github.com/mastra-ai/mastra/commit/50e2658cdcdc55a14abde08610a8e2b12fdf67a4), [`a0aa698`](https://github.com/mastra-ai/mastra/commit/a0aa698427db9730e39f0c9956d21b97307ab313), [`8510a6d`](https://github.com/mastra-ai/mastra/commit/8510a6d38b9d211af7d94b7860ab182ce55c39d1), [`ddbd352`](https://github.com/mastra-ai/mastra/commit/ddbd3527654a058ed413ae164a1246003dcc9030), [`5eba942`](https://github.com/mastra-ai/mastra/commit/5eba9420330b3f116810891ae14888f7f256cd4f), [`4112ecd`](https://github.com/mastra-ai/mastra/commit/4112ecdec76827384d3a7ab4e8db3ccf90ae7ed1), [`37065ad`](https://github.com/mastra-ai/mastra/commit/37065ad6cd3f74afd16417e8d4e0839c13beca40), [`648dd4f`](https://github.com/mastra-ai/mastra/commit/648dd4f4c4cd330013c0a98f50ffac77fe2ad632), [`2990bcc`](https://github.com/mastra-ai/mastra/commit/2990bccd1c648c8f8614da97fbb459819871f5bc), [`617c1b3`](https://github.com/mastra-ai/mastra/commit/617c1b30e7e794bbb77feaced1848fde291fc240), [`1ce03b9`](https://github.com/mastra-ai/mastra/commit/1ce03b9c04c633e815bc21cb78c29f7f19851fb2), [`c3d00db`](https://github.com/mastra-ai/mastra/commit/c3d00db279a95c7dcba0f767704a2bb6544b7b29), [`df14b5d`](https://github.com/mastra-ai/mastra/commit/df14b5d12374137db86f92061f8714b28473672e), [`fff3361`](https://github.com/mastra-ai/mastra/commit/fff33614a3376676797cb9b5a5c5b090b026fa0e), [`422e798`](https://github.com/mastra-ai/mastra/commit/422e798ab1a4b14302c5b49fed2f6c818a82706e), [`3fc8c2d`](https://github.com/mastra-ai/mastra/commit/3fc8c2d35f724c3648150b29e50cf61a9360b274), [`ddb3639`](https://github.com/mastra-ai/mastra/commit/ddb3639e3de41f3fe33f68f81c2e5850ff1280b6), [`4b3f587`](https://github.com/mastra-ai/mastra/commit/4b3f587ceabb3f3697c4c1ad4fb154d58002ef7c), [`47868b2`](https://github.com/mastra-ai/mastra/commit/47868b2dde360b038d829c9f88e15061acf3efb5), [`44c20c9`](https://github.com/mastra-ai/mastra/commit/44c20c9a40ba5ef153e1d5d0c413b825e1de42d7), [`502ca89`](https://github.com/mastra-ai/mastra/commit/502ca8904848e77d44622669f2728171d36ad6ca), [`953be88`](https://github.com/mastra-ai/mastra/commit/953be88befd9cdb789b4cfc16680121c663a631b), [`b95aabb`](https://github.com/mastra-ai/mastra/commit/b95aabba261a39b73430d95f3ed051634117d517), [`055057c`](https://github.com/mastra-ai/mastra/commit/055057ca2102e35008fe30871f7c8f422ae25ec2), [`7290151`](https://github.com/mastra-ai/mastra/commit/7290151bdb3bfe518653b0a66a19d6790925e4a0), [`2990bcc`](https://github.com/mastra-ai/mastra/commit/2990bccd1c648c8f8614da97fbb459819871f5bc), [`9bc7895`](https://github.com/mastra-ai/mastra/commit/9bc789591ad683f304c63bd01e554fbba2df9cf6), [`ffe16f1`](https://github.com/mastra-ai/mastra/commit/ffe16f17447449b7155f1f15992e3c9e5f6511ac), [`f466753`](https://github.com/mastra-ai/mastra/commit/f4667539a0c41ae4aa08a4ed380f374687db2592), [`04c11b3`](https://github.com/mastra-ai/mastra/commit/04c11b3cd698fa37af8fad466dc2bf6fa0d5494d), [`967ab17`](https://github.com/mastra-ai/mastra/commit/967ab179c9814e734af9c3395ff8ef795acbe06c), [`ad5ac69`](https://github.com/mastra-ai/mastra/commit/ad5ac69bcd037bfb85c3399d8b39d9364931ad1b), [`6d20620`](https://github.com/mastra-ai/mastra/commit/6d206205f781cfa2598c2a55123a336909e039b4), [`47868b2`](https://github.com/mastra-ai/mastra/commit/47868b2dde360b038d829c9f88e15061acf3efb5), [`fde3ca5`](https://github.com/mastra-ai/mastra/commit/fde3ca590f7d854ff33354eff4261b907bdacde4), [`3a1d253`](https://github.com/mastra-ai/mastra/commit/3a1d2537ad28754a164aedbf0dd94be224ccb0c3), [`0775cde`](https://github.com/mastra-ai/mastra/commit/0775cdee12b6ad2ad6b5c97874e6248db720224c), [`e3c3e5e`](https://github.com/mastra-ai/mastra/commit/e3c3e5e3e354e88207aa9747f9f0cd3352cea972), [`6902f94`](https://github.com/mastra-ai/mastra/commit/6902f940f1879955a90faa0a0ac871667b59d428), [`d55aa61`](https://github.com/mastra-ai/mastra/commit/d55aa616b3e88015c3b74342c75bd510c7e764df), [`7148bf5`](https://github.com/mastra-ai/mastra/commit/7148bf55b147e3fae90b3ba0c9517adb0af5f2a4), [`e83dfad`](https://github.com/mastra-ai/mastra/commit/e83dfade569ee5aea688de9f2bb8bf8db0a653a7), [`44057ea`](https://github.com/mastra-ai/mastra/commit/44057eac6fd048100574bf71c6dc095f769a6d63), [`d581249`](https://github.com/mastra-ai/mastra/commit/d581249a5bf97d32d73e0f1f30cd50ff108e2d67), [`2289456`](https://github.com/mastra-ai/mastra/commit/228945659b2003633e0ebb33e7e34cc2f6efbded), [`6bb122c`](https://github.com/mastra-ai/mastra/commit/6bb122c5147b612c0fe7f173f940933066c4cfcc), [`2c501bc`](https://github.com/mastra-ai/mastra/commit/2c501bc8f661b27a06842f1312221efa6125e580), [`990b47f`](https://github.com/mastra-ai/mastra/commit/990b47fa7370753967ea7ce83100a522f79ab328), [`90846f2`](https://github.com/mastra-ai/mastra/commit/90846f2bfd890de159ab7c3d4fcf8a71c6fb7125), [`6bdb944`](https://github.com/mastra-ai/mastra/commit/6bdb944acb3f39bccad59ee140d7614420948f6b), [`d1b070c`](https://github.com/mastra-ai/mastra/commit/d1b070cd77a944e6bb2e5848052b1e8275be88a2), [`7f6d101`](https://github.com/mastra-ai/mastra/commit/7f6d101044eefc0d776a555b45dbea1c0d5224c4), [`4573c23`](https://github.com/mastra-ai/mastra/commit/4573c231c108e7d796eab12b8e9b2094f8cc4d47), [`a54766a`](https://github.com/mastra-ai/mastra/commit/a54766a10381295583144847b856d18e8f924d30), [`1bd31e7`](https://github.com/mastra-ai/mastra/commit/1bd31e7fd49e6de56e6e9a157a6b452cbbd86983), [`a4381a2`](https://github.com/mastra-ai/mastra/commit/a4381a2b36cdb81c4e33c435cd882921edfc146c), [`ff45065`](https://github.com/mastra-ai/mastra/commit/ff45065d42132075c4efb064d96169c4eadbab58), [`e872dd6`](https://github.com/mastra-ai/mastra/commit/e872dd6619f3a5a46f1158b190b02f607b74d191)]:
+  - @mastra/core@1.67.0
+
+## 0.4.0-alpha.0
+
+### Minor Changes
+
+- Added a per-call `configuration.turnDetection` resolver to `createLiveKitWorker()`. LiveKit's `TurnDetector` classes need the job's inference executor, so they could not be constructed at module scope where worker options live; the resolver runs inside each job with the call context and falls back to the top-level `turnDetection` option. Fixes #22495. ([#22842](https://github.com/mastra-ai/mastra/pull/22842))
+
+### Patch Changes
+
+- Updated dependencies [[`d9ef543`](https://github.com/mastra-ai/mastra/commit/d9ef54303b7f050f4e364701c3821fc61e7002f2), [`b96744d`](https://github.com/mastra-ai/mastra/commit/b96744daad8c6e181f03fdf38c732206ded428a2), [`37065ad`](https://github.com/mastra-ai/mastra/commit/37065ad6cd3f74afd16417e8d4e0839c13beca40), [`2990bcc`](https://github.com/mastra-ai/mastra/commit/2990bccd1c648c8f8614da97fbb459819871f5bc), [`1ce03b9`](https://github.com/mastra-ai/mastra/commit/1ce03b9c04c633e815bc21cb78c29f7f19851fb2), [`2990bcc`](https://github.com/mastra-ai/mastra/commit/2990bccd1c648c8f8614da97fbb459819871f5bc), [`967ab17`](https://github.com/mastra-ai/mastra/commit/967ab179c9814e734af9c3395ff8ef795acbe06c), [`fde3ca5`](https://github.com/mastra-ai/mastra/commit/fde3ca590f7d854ff33354eff4261b907bdacde4), [`0775cde`](https://github.com/mastra-ai/mastra/commit/0775cdee12b6ad2ad6b5c97874e6248db720224c), [`44057ea`](https://github.com/mastra-ai/mastra/commit/44057eac6fd048100574bf71c6dc095f769a6d63), [`2289456`](https://github.com/mastra-ai/mastra/commit/228945659b2003633e0ebb33e7e34cc2f6efbded), [`90846f2`](https://github.com/mastra-ai/mastra/commit/90846f2bfd890de159ab7c3d4fcf8a71c6fb7125), [`d1b070c`](https://github.com/mastra-ai/mastra/commit/d1b070cd77a944e6bb2e5848052b1e8275be88a2), [`1bd31e7`](https://github.com/mastra-ai/mastra/commit/1bd31e7fd49e6de56e6e9a157a6b452cbbd86983)]:
+  - @mastra/core@1.67.0-alpha.1
+
+## 0.3.2
+
+### Patch Changes
+
+- Add `options` to `MastraVoiceAgentMemory` so per-call memory config is forwarded by the in-process agent and remote reply generators. Setting `readOnly` keeps LiveKit's preemptive (speculative) turns from persisting partial user and assistant messages to the thread, so preemptive generation can stay on with memory; committed turns are then persisted by the caller. ([#22928](https://github.com/mastra-ai/mastra/pull/22928))
+
+  ```ts
+  new MastraLLM({
+    agent,
+    memory: { thread: 'thread-id', options: { readOnly: true } },
+  });
+  ```
+
+  Documents the recipe and corrects the worker/plugin notes on what discarded speculations persist.
+
+- Updated dependencies [[`b72c747`](https://github.com/mastra-ai/mastra/commit/b72c747a1a698c829c7c1d42e75f72c6d1808dde), [`89f2486`](https://github.com/mastra-ai/mastra/commit/89f2486028ce25c5db19d1f361d5f65cd3ff93e5), [`d7bd6f7`](https://github.com/mastra-ai/mastra/commit/d7bd6f7a91daf528f34d628faede4a916421b0dd), [`e4852fc`](https://github.com/mastra-ai/mastra/commit/e4852fc42fc9e72559370dfa9b0e3f20ccf9012e), [`917da71`](https://github.com/mastra-ai/mastra/commit/917da711580cdc9e8f7ca474b301f3611a5c46ed), [`51b2b5e`](https://github.com/mastra-ai/mastra/commit/51b2b5e0ca9ba4a23fc6544246ad9822c4dbd92e), [`ae375e6`](https://github.com/mastra-ai/mastra/commit/ae375e6799af20820d90e30f63a084ba1507b771), [`b5a1a42`](https://github.com/mastra-ai/mastra/commit/b5a1a42763b891c54d7027b916622d45f95f86b9), [`1778103`](https://github.com/mastra-ai/mastra/commit/17781034204a151a1ff910e9d11d21effe22a9e0), [`2911c88`](https://github.com/mastra-ai/mastra/commit/2911c88c9226f5ab969abc3a90b161c1c1cbd19e), [`66029df`](https://github.com/mastra-ai/mastra/commit/66029dfccb8f5d69f26d8df920647b34a0a763d1), [`eef3409`](https://github.com/mastra-ai/mastra/commit/eef3409c125dcd9765e4a85d17f10c53892f6f2c), [`0ea8af0`](https://github.com/mastra-ai/mastra/commit/0ea8af012ba2fe1431c93697399d7643f09c073d), [`8ff274c`](https://github.com/mastra-ai/mastra/commit/8ff274c2ffea84a910c5d6ce93dd6d3c048f8082), [`f649ea0`](https://github.com/mastra-ai/mastra/commit/f649ea0f006436e7268c3b0fa45f9865a02130cc), [`54adc91`](https://github.com/mastra-ai/mastra/commit/54adc9164beee68798adff0bfb0ebae4dada1af0), [`6a05d36`](https://github.com/mastra-ai/mastra/commit/6a05d36a0bb28390539cfc5a4f12c847474d28d2), [`2801d26`](https://github.com/mastra-ai/mastra/commit/2801d26b69bbe8929d302abd09619a68b4cc0d98), [`c9b21f3`](https://github.com/mastra-ai/mastra/commit/c9b21f39792f892c91e616a67f9cfb19ddaa8046), [`88abfbf`](https://github.com/mastra-ai/mastra/commit/88abfbf5fb256e0b5602aafa6e733192f9a4236a), [`e243fec`](https://github.com/mastra-ai/mastra/commit/e243feca17207d1545ff9776e8fff635b0ff4189), [`18d99e7`](https://github.com/mastra-ai/mastra/commit/18d99e7b5687ea6a1cdb601fa5c4209a03b97c02), [`b1227c0`](https://github.com/mastra-ai/mastra/commit/b1227c0604be8c33dd02705fe6978df70c32f87d), [`ce2f341`](https://github.com/mastra-ai/mastra/commit/ce2f34171a8e1eee428219670a0a7897083c91e3), [`4337eb6`](https://github.com/mastra-ai/mastra/commit/4337eb6230681b791ec1ad56e58af9fb8329a5ce), [`4362001`](https://github.com/mastra-ai/mastra/commit/436200145bf70d825918e60f6dbdd2389a749e48), [`ffc6440`](https://github.com/mastra-ai/mastra/commit/ffc6440d13b9392b3cf1ff309d3b9cde4a791038), [`a0ad935`](https://github.com/mastra-ai/mastra/commit/a0ad9351eaf8527d1515051ddf3998ee258b9acd), [`cd71bd3`](https://github.com/mastra-ai/mastra/commit/cd71bd3beb8afe08a106d1e29efee387ffb74cd1), [`a5f22f4`](https://github.com/mastra-ai/mastra/commit/a5f22f4ff1763ab9679391a6a9118358c8059e11), [`5901b59`](https://github.com/mastra-ai/mastra/commit/5901b5920a08f1869092e5e4cccf8a0be17781e9), [`8c96b5c`](https://github.com/mastra-ai/mastra/commit/8c96b5c6a3c55d4665ee8dd4f9c55bb14e8e1dd3), [`f31c3fa`](https://github.com/mastra-ai/mastra/commit/f31c3fae16a0710f9e52dba9bccc0018f9da2ac1), [`9d647e2`](https://github.com/mastra-ai/mastra/commit/9d647e25b51cd246ef974d9cad6b05dfdd37126e)]:
+  - @mastra/core@1.65.0
+
+## 0.3.2-alpha.0
+
+### Patch Changes
+
+- Add `options` to `MastraVoiceAgentMemory` so per-call memory config is forwarded by the in-process agent and remote reply generators. Setting `readOnly` keeps LiveKit's preemptive (speculative) turns from persisting partial user and assistant messages to the thread, so preemptive generation can stay on with memory; committed turns are then persisted by the caller. ([#22928](https://github.com/mastra-ai/mastra/pull/22928))
+
+  ```ts
+  new MastraLLM({
+    agent,
+    memory: { thread: 'thread-id', options: { readOnly: true } },
+  });
+  ```
+
+  Documents the recipe and corrects the worker/plugin notes on what discarded speculations persist.
+
+- Updated dependencies [[`f649ea0`](https://github.com/mastra-ai/mastra/commit/f649ea0f006436e7268c3b0fa45f9865a02130cc), [`18d99e7`](https://github.com/mastra-ai/mastra/commit/18d99e7b5687ea6a1cdb601fa5c4209a03b97c02), [`a0ad935`](https://github.com/mastra-ai/mastra/commit/a0ad9351eaf8527d1515051ddf3998ee258b9acd)]:
+  - @mastra/core@1.65.0-alpha.3
+
+## 0.3.1
+
+### Patch Changes
+
+- Update README to include accurate, up-to-date information ([#22858](https://github.com/mastra-ai/mastra/pull/22858))
+
+- `@mastra/livekit/worker` now exports `MastraVoiceAgent` and `createMastraVoiceAgent` (with the `MastraVoiceAgentOptions` and `MastraStreamOptions` types). This is the `voice.Agent` subclass `createLiveKitWorker()` builds per session, so you can construct it yourself when you own the `voice.AgentSession` — for example to test a Mastra-backed agent with `@livekit/agents`' `voice.testing` harness without speech-to-text, text-to-speech, or a running worker. ([#22820](https://github.com/mastra-ai/mastra/pull/22820))
+
+  ```ts
+  import { initializeLogger, voice } from '@livekit/agents';
+  import { createMastraVoiceAgent } from '@mastra/livekit/worker';
+
+  initializeLogger({ level: 'silent', pretty: false }); // required outside a LiveKit worker
+
+  const session = new voice.AgentSession();
+  await session.start({ agent: createMastraVoiceAgent({ agent: supportAgent, memory: false }) });
+
+  const result = session.run({ userInput: 'What are your opening hours?' });
+  await result.wait();
+  result.expect.nextEvent().isMessage({ role: 'assistant' });
+  ```
+
+- Remove `CHANGELOG.md` from distributed npm files resulting in reduced package size ([#22737](https://github.com/mastra-ai/mastra/pull/22737))
+
+- Updated dependencies [[`3910c77`](https://github.com/mastra-ai/mastra/commit/3910c77413a3058ab270c6dbc74a59bc3cdf67ea), [`decd47d`](https://github.com/mastra-ai/mastra/commit/decd47d0db2a891a6832e226557145b6658b0b19), [`c1d3422`](https://github.com/mastra-ai/mastra/commit/c1d3422e8052a4282e8547df914b6231e5345f01), [`285ce1c`](https://github.com/mastra-ai/mastra/commit/285ce1c1399341a37e76233aa94dbf9f1a41bd5d), [`e983f74`](https://github.com/mastra-ai/mastra/commit/e983f749873189f767f509eb33d1a3596c0f1c74), [`4596348`](https://github.com/mastra-ai/mastra/commit/45963483f4cd2810f0646469916f74266a3dd607), [`7686114`](https://github.com/mastra-ai/mastra/commit/7686114e3802f4cea414377eaf10999524d670fa), [`ea56b1f`](https://github.com/mastra-ai/mastra/commit/ea56b1fa6e0f99673d2f8a5b7dacc8d351507ff7), [`50469b2`](https://github.com/mastra-ai/mastra/commit/50469b2d085fc8550579ca4b741eb359d1705abc), [`5b5e3cc`](https://github.com/mastra-ai/mastra/commit/5b5e3cc006950b0ff9720c5be8396d4c95e8a6ac), [`809e882`](https://github.com/mastra-ai/mastra/commit/809e882ee9c154ac642eaed396163df706db6ae4), [`cedc25d`](https://github.com/mastra-ai/mastra/commit/cedc25d8c2dec005d8b10b6ce2d36feef1162ff0), [`1255235`](https://github.com/mastra-ai/mastra/commit/125523539237c39f84d126d16476093336089c0d), [`2e87ffb`](https://github.com/mastra-ai/mastra/commit/2e87ffbb454cc88bd8a8c022d1e46325e7907482), [`a499422`](https://github.com/mastra-ai/mastra/commit/a499422cd7eccca184cac7b7a684a6199784aa82), [`cf58c86`](https://github.com/mastra-ai/mastra/commit/cf58c86cb48ccc72677bdaa422e43f102683184c), [`a3606a0`](https://github.com/mastra-ai/mastra/commit/a3606a09f3deaeef17caf04b9c6a0d7cd6b80fe6), [`4095752`](https://github.com/mastra-ai/mastra/commit/40957529233d202446ebecab1f59c76e99910230), [`74b21fd`](https://github.com/mastra-ai/mastra/commit/74b21fd9bbe88e770d9acf4e00e01c8bbb7c9e61), [`045c3c7`](https://github.com/mastra-ai/mastra/commit/045c3c78f2129fea5d4467bb26cff2b49788b3d0), [`a3606a0`](https://github.com/mastra-ai/mastra/commit/a3606a09f3deaeef17caf04b9c6a0d7cd6b80fe6), [`449d112`](https://github.com/mastra-ai/mastra/commit/449d1120cc1f9c43a71308a9fd8b178cfb11355f), [`e8aca33`](https://github.com/mastra-ai/mastra/commit/e8aca339dc92c0b60baad3d948a7c48ec9ae106f), [`c5c9ffc`](https://github.com/mastra-ai/mastra/commit/c5c9ffc3b36bdc7b17d6f911be81e28ba02acfad), [`9d3073c`](https://github.com/mastra-ai/mastra/commit/9d3073c230dbff45d58c259d676b2b137afd2ff5), [`19b71cf`](https://github.com/mastra-ai/mastra/commit/19b71cf1de8afe6f69a3171d8a5a28086790e49b), [`2a0ca02`](https://github.com/mastra-ai/mastra/commit/2a0ca021d95e23f1d1c0b5fe858b0b56f71fe0ba), [`ff539f6`](https://github.com/mastra-ai/mastra/commit/ff539f6dc21137fbeb3f0867f07069cbce45c15f), [`9fdb3bc`](https://github.com/mastra-ai/mastra/commit/9fdb3bc0f9bfab5269b4f3045595e62323da5d3a), [`d53a056`](https://github.com/mastra-ai/mastra/commit/d53a05614893e8d1bbfdab50b42c19435e6bd065), [`420052f`](https://github.com/mastra-ai/mastra/commit/420052fcac3fc672be17fe655667dfbdbd35a2cc), [`28ce924`](https://github.com/mastra-ai/mastra/commit/28ce924276eeca492e6a360e5482ed20c2785ef6)]:
+  - @mastra/core@1.64.0
+
+## 0.3.1-alpha.2
+
+### Patch Changes
+
+- Update README to include accurate, up-to-date information ([#22858](https://github.com/mastra-ai/mastra/pull/22858))
+
+- Updated dependencies [[`e983f74`](https://github.com/mastra-ai/mastra/commit/e983f749873189f767f509eb33d1a3596c0f1c74), [`cedc25d`](https://github.com/mastra-ai/mastra/commit/cedc25d8c2dec005d8b10b6ce2d36feef1162ff0), [`9fdb3bc`](https://github.com/mastra-ai/mastra/commit/9fdb3bc0f9bfab5269b4f3045595e62323da5d3a)]:
+  - @mastra/core@1.64.0-alpha.7
+
+## 0.3.1-alpha.1
+
+### Patch Changes
+
+- `@mastra/livekit/worker` now exports `MastraVoiceAgent` and `createMastraVoiceAgent` (with the `MastraVoiceAgentOptions` and `MastraStreamOptions` types). This is the `voice.Agent` subclass `createLiveKitWorker()` builds per session, so you can construct it yourself when you own the `voice.AgentSession` — for example to test a Mastra-backed agent with `@livekit/agents`' `voice.testing` harness without speech-to-text, text-to-speech, or a running worker. ([#22820](https://github.com/mastra-ai/mastra/pull/22820))
+
+  ```ts
+  import { initializeLogger, voice } from '@livekit/agents';
+  import { createMastraVoiceAgent } from '@mastra/livekit/worker';
+
+  initializeLogger({ level: 'silent', pretty: false }); // required outside a LiveKit worker
+
+  const session = new voice.AgentSession();
+  await session.start({ agent: createMastraVoiceAgent({ agent: supportAgent, memory: false }) });
+
+  const result = session.run({ userInput: 'What are your opening hours?' });
+  await result.wait();
+  result.expect.nextEvent().isMessage({ role: 'assistant' });
+  ```
+
+- Updated dependencies [[`decd47d`](https://github.com/mastra-ai/mastra/commit/decd47d0db2a891a6832e226557145b6658b0b19), [`285ce1c`](https://github.com/mastra-ai/mastra/commit/285ce1c1399341a37e76233aa94dbf9f1a41bd5d), [`5b5e3cc`](https://github.com/mastra-ai/mastra/commit/5b5e3cc006950b0ff9720c5be8396d4c95e8a6ac), [`045c3c7`](https://github.com/mastra-ai/mastra/commit/045c3c78f2129fea5d4467bb26cff2b49788b3d0), [`d53a056`](https://github.com/mastra-ai/mastra/commit/d53a05614893e8d1bbfdab50b42c19435e6bd065)]:
+  - @mastra/core@1.64.0-alpha.5
+
+## 0.3.1-alpha.0
+
+### Patch Changes
+
+- Remove `CHANGELOG.md` from distributed npm files resulting in reduced package size ([#22737](https://github.com/mastra-ai/mastra/pull/22737))
+
+- Updated dependencies [[`cf58c86`](https://github.com/mastra-ai/mastra/commit/cf58c86cb48ccc72677bdaa422e43f102683184c), [`449d112`](https://github.com/mastra-ai/mastra/commit/449d1120cc1f9c43a71308a9fd8b178cfb11355f), [`2a0ca02`](https://github.com/mastra-ai/mastra/commit/2a0ca021d95e23f1d1c0b5fe858b0b56f71fe0ba), [`ff539f6`](https://github.com/mastra-ai/mastra/commit/ff539f6dc21137fbeb3f0867f07069cbce45c15f), [`420052f`](https://github.com/mastra-ai/mastra/commit/420052fcac3fc672be17fe655667dfbdbd35a2cc), [`28ce924`](https://github.com/mastra-ai/mastra/commit/28ce924276eeca492e6a360e5482ed20c2785ef6)]:
+  - @mastra/core@1.64.0-alpha.2
+
+## 0.3.0
+
+### Minor Changes
+
+- Added per-call speech-to-text and text-to-speech selection to `createLiveKitWorker`. Set the new `configuration.stt` and `configuration.tts` resolvers to pick the transcriber and voice for each call — one voice or language per tenant — keyed off the dispatch metadata and request context. Each resolver runs once per call and falls back to the top-level `stt` / `tts` option when it returns `undefined`. ([#19136](https://github.com/mastra-ai/mastra/pull/19136))
+
+  ```ts
+  export default createLiveKitWorker({
+    mastra,
+    agent: 'support',
+    stt: 'deepgram/nova-3',
+    tts: 'cartesia/sonic-3', // fallback voice
+    configuration: {
+      // Give each tenant its own voice, resolved per call from the dispatch metadata.
+      tts: ({ requestContext }) => tenantVoices[requestContext?.tenant as string],
+    },
+  });
+  ```
+
+  Previously the worker's speech pipeline was fixed at construction, so a multi-tenant worker could not vary voices or transcription per call. Customers who own their LiveKit session (the `MastraLLM` plugin path) already choose STT/TTS per call by construction; this brings the same flexibility to the batteries-included worker.
+
+- Added `MastraLLM`, a standard LiveKit LLM plugin, on the new `@mastra/livekit/plugin` entry point. Build your own `voice.AgentSession` and put a Mastra agent in the `llm` slot — the agent loop, tools, and memory run on a remote Mastra server reached over HTTP, so the worker process needs no Mastra app, database, or model provider keys. ([#19136](https://github.com/mastra-ai/mastra/pull/19136))
+
+  Before, the worker wrapper always owned the LiveKit session:
+
+  ```ts
+  import { createLiveKitWorker } from '@mastra/livekit/worker';
+  import { mastra } from './index';
+
+  export default createLiveKitWorker({
+    mastra,
+    agent: 'support',
+    stt: 'deepgram/nova-3',
+    tts: 'cartesia/sonic-3',
+  });
+  ```
+
+  Now you can own the session and keep Mastra as the LLM component:
+
+  ```ts
+  import { voice } from '@livekit/agents';
+  import { MastraLLM } from '@mastra/livekit/plugin';
+
+  const session = new voice.AgentSession({
+    llm: new MastraLLM({
+      remote: { baseUrl: process.env.MASTRA_URL!, agentId: 'support' },
+      memory: { thread: callId, resource: userId },
+    }),
+    stt: 'deepgram/nova-3',
+    tts: 'cartesia/sonic-3',
+    // Required with `memory`: LiveKit enables preemptive generation by default.
+    turnHandling: { preemptiveGeneration: { enabled: false } },
+  });
+  ```
+
+  `createLiveKitWorker` stays the batteries-included path; the plugin is the composable one. Tools keep running server-side on the Mastra agent, and interrupting the agent aborts the server-side generation.
+
+  **New transport and helpers**
+  - Added `createRemoteAgentReplyGenerator()`: streams replies from a remote Mastra server over HTTP with per-turn abort, LiveKit-typed errors, and a connect + first-token timeout. It also plugs into `createLiveKitWorker`'s `generate` option to run the existing worker against a remote server.
+  - Promoted `speakGreeting()`, `waitForAgentDoneSpeaking()`, and `runEndCall()` to public exports of `@mastra/livekit/worker`, so a worker that owns its session can rebuild the greeting and agent-initiated hang-up patterns in a few lines.
+
+  **Improvements to the existing worker**
+  - Interrupted turns now self-heal: when a caller interrupts a reply, nothing is persisted at that moment, and the part the caller actually heard is backfilled into the memory thread on the next turn — so saved transcripts match the call.
+  - Added an `onToolCall` hook that fires as each tool call starts mid-reply, the building block for tool-driven side effects such as analytics or hang-up.
+  - `onTurnComplete` now receives the turn's token usage as `result.usage`.
+
+- Added a `configuration` option to `createLiveKitWorker` — one grouped home for conversation and compliance controls, so these don't each become a separate top-level worker option. It ships with greeting/AI-disclosure controls, a consent model, and agent-initiated hang-up, and is where further compliance controls will land. ([#19136](https://github.com/mastra-ai/mastra/pull/19136))
+
+  **Greeting and AI disclosure**
+
+  `configuration.greeting` controls the opening line spoken at call start. Set `allowInterruptions: false` so a legally-required AI disclosure plays through and can't be talked over (EU AI Act Art. 50), `awaitPlayout: true` to hold post-greeting work until it finishes, and `repeatEvery` to re-disclose periodically on long calls (spoken at the next turn boundary, never mid-sentence).
+
+  ```ts
+  createLiveKitWorker({
+    mastra,
+    agent: 'support',
+    configuration: {
+      greeting: {
+        text: 'You are speaking with an AI assistant. This call may be recorded. How can I help?',
+        allowInterruptions: false,
+        awaitPlayout: true,
+        repeatEvery: 3 * 60_000, // re-disclose ~every 3 minutes
+      },
+    },
+  });
+  ```
+
+  **Per-tenant greeting**
+
+  `greeting.text` also accepts a resolver, called once per call with the call context, so one multi-tenant agent can open differently per tenant based on the dispatch metadata:
+
+  ```ts
+  greeting: {
+    text: ({ metadata }) => `Thanks for calling ${tenantName(metadata)}. You're speaking with an AI assistant.`,
+    allowInterruptions: false,
+  }
+  ```
+
+  **Consent**
+
+  `configuration.consentPolicy` declares which data-use consents a call needs, as a named, extensible set (starting with `summaryStorage`) rather than one global flag. Declaring the policy enforces nothing by itself: the new `createConsentTool` captures the caller's decision at runtime — add it to your agent and it hands each decision to your own store — and your code enforces the requirement at `onCallEnd` (or before any consent-gated step).
+
+  ```ts
+  import { createConsentTool } from '@mastra/livekit';
+
+  // in your agent's tools:
+  recordConsent: createConsentTool({
+    items: ['summaryStorage'],
+    onGrant: async ({ item, granted, resourceId }) => {
+      if (resourceId) await db.saveConsent(resourceId, item, granted);
+    },
+  }),
+  ```
+
+  **Agent-initiated hang-up**
+
+  `configuration.endCall` lets the agent end the call itself. Add the new `createEndCallTool` to your agent and instruct it to say goodbye and then call the tool; the worker waits for the closing words to finish playing, holds a short audio drain (`drainMs`, default 800ms) so the tail of the goodbye isn't clipped while it's still buffered at the caller, then hangs up — running `onCallEnd` on the way out, exactly as a caller hang-up does. It works on both the agent and workflow reply paths.
+
+  ```ts
+  import { createEndCallTool } from '@mastra/livekit';
+
+  // in your agent's tools:
+  endCall: (createEndCallTool(),
+    // on the worker:
+    createLiveKitWorker({ mastra, agent: 'support', configuration: { endCall: {} } }));
+  ```
+
+  **Backwards compatible**
+
+  The previous top-level `greeting` (string) and `persistGreeting` options still work as deprecated aliases for `configuration.greeting.text` and `configuration.greeting.persist`. When both are set, `configuration.greeting` wins field by field, so existing worker configs keep running unchanged.
+
+### Patch Changes
+
+- Updated dependencies [[`bd6d240`](https://github.com/mastra-ai/mastra/commit/bd6d2402db93dddaef0721667e7e8a030e7c6e16), [`0111486`](https://github.com/mastra-ai/mastra/commit/01114867612593eef5cfa2fda6a1194dfedda841), [`96a3749`](https://github.com/mastra-ai/mastra/commit/96a37492235f5b8076b3e3177d83ed5a5e44a640), [`fe1bda0`](https://github.com/mastra-ai/mastra/commit/fe1bda06f6af92a694a51712db747cda1e7185f0), [`25e7c12`](https://github.com/mastra-ai/mastra/commit/25e7c126a770069ae7fb7ecf1d2adb40e017b009), [`1ce5121`](https://github.com/mastra-ai/mastra/commit/1ce512155d122bb21f47d98383e82ffbf84b39e8), [`fb8aea3`](https://github.com/mastra-ai/mastra/commit/fb8aea384291e77311be3a64ee1717320d5c3c73), [`4adc391`](https://github.com/mastra-ai/mastra/commit/4adc3911075249c352bb4832d2471922826344de), [`a5c6337`](https://github.com/mastra-ai/mastra/commit/a5c6337d23c7686c81a32ce62f550f610543a240), [`3cfc47a`](https://github.com/mastra-ai/mastra/commit/3cfc47a6b89940aadd0f46fb01ae9624a73a865d), [`2bb7817`](https://github.com/mastra-ai/mastra/commit/2bb78176112fde628483de2830528f7eee911e56), [`51d9870`](https://github.com/mastra-ai/mastra/commit/51d987032c689c2855374d0f244f5d654da809d1), [`5cab274`](https://github.com/mastra-ai/mastra/commit/5cab2744250e22d12fefa7b32637dce224233cee), [`7fa27d3`](https://github.com/mastra-ai/mastra/commit/7fa27d3b6f5ed68cd34e454a4d3ad9c482a0cfbc), [`8b97958`](https://github.com/mastra-ai/mastra/commit/8b979589f9aa59ba67cac565949475f2ffeb4ac3), [`8410541`](https://github.com/mastra-ai/mastra/commit/84105412c60ecd3bb33a9838146f59c4b588228f), [`a58dcbb`](https://github.com/mastra-ai/mastra/commit/a58dcbb546d7e1d65ebdc1f39e55f0908fcd9391), [`aa38805`](https://github.com/mastra-ai/mastra/commit/aa38805b878b827403be785eb90688d7172f5a40), [`153bd3b`](https://github.com/mastra-ai/mastra/commit/153bd3b396bdfed6b74cf43de12db8fd2d83c04a), [`45a8e65`](https://github.com/mastra-ai/mastra/commit/45a8e65e1556d1362cb3f25187023c36de26661d), [`e955965`](https://github.com/mastra-ai/mastra/commit/e955965dce575a903e37cf054d28ea99aa48785e), [`2d22570`](https://github.com/mastra-ai/mastra/commit/2d22570c7dfdd02123d0ecc529efb05ccba2d9fc), [`07bb863`](https://github.com/mastra-ai/mastra/commit/07bb8631919c6f7cf377dccd45b096e0f17fbed0), [`c8ed116`](https://github.com/mastra-ai/mastra/commit/c8ed11699f62bcac70102ab4ec84d80d20541da6), [`01b338c`](https://github.com/mastra-ai/mastra/commit/01b338c56271f0219606710e3e8b26dee27ac6c2), [`a99eae8`](https://github.com/mastra-ai/mastra/commit/a99eae8908e500c1b2d12f9d277be616b98617a5), [`860ef7e`](https://github.com/mastra-ai/mastra/commit/860ef7e77d92b63469cbe5857aa1e626197e43e9), [`17e818c`](https://github.com/mastra-ai/mastra/commit/17e818c51a958ba90641b1a959dc38faf8c034e9), [`edce8d2`](https://github.com/mastra-ai/mastra/commit/edce8d2769f19e27a05737c627af2d765472a4f8), [`8a586ec`](https://github.com/mastra-ai/mastra/commit/8a586eca9a4914f31dff6140d0d45ac375b00669), [`4451dfe`](https://github.com/mastra-ai/mastra/commit/4451dfe857428e7abcc0261a507a2e186dae6d47), [`8b7361d`](https://github.com/mastra-ai/mastra/commit/8b7361d35de68b80d05d30a74e0c69e7218fd612), [`1d39058`](https://github.com/mastra-ai/mastra/commit/1d39058e548efd691799985d5c8af2737f1c3bd2), [`3927473`](https://github.com/mastra-ai/mastra/commit/392747323ddb10c643d12be7b9ae913159dfaeed), [`dce50dc`](https://github.com/mastra-ai/mastra/commit/dce50dc9a1c1fcd0f427bb5f6250ec74910cb04b), [`fd13f8e`](https://github.com/mastra-ai/mastra/commit/fd13f8e21990f9904c3eedba3a626bb4a929cdb8), [`634caff`](https://github.com/mastra-ai/mastra/commit/634caff29a9200ad058b67d53f96d9e5832fb8a2), [`f703f87`](https://github.com/mastra-ai/mastra/commit/f703f878de072d51fda557f9c50867d8252bef05), [`3e26c87`](https://github.com/mastra-ai/mastra/commit/3e26c87de0c5bc2583b795ce6ca5889b6b161acb), [`33f2b88`](https://github.com/mastra-ai/mastra/commit/33f2b88842c09a567f906fac4cb61cd5277ced59), [`177010f`](https://github.com/mastra-ai/mastra/commit/177010ff096d2e4b28d89803be5b1a4cad2a0d6b), [`0ad646f`](https://github.com/mastra-ai/mastra/commit/0ad646f71a530f2454664299e5e01bfd13fa12e5), [`b486abf`](https://github.com/mastra-ai/mastra/commit/b486abfa2a7528c6f527e4015c819ea9fa54aaad), [`54a51e0`](https://github.com/mastra-ai/mastra/commit/54a51e0a484fe1ebad3fb1f7ef5282a075709eb7), [`c43f3a9`](https://github.com/mastra-ai/mastra/commit/c43f3a9d1efde99b38789364ba4d0ba670f430e3), [`a5008f2`](https://github.com/mastra-ai/mastra/commit/a5008f22ae710ad9402ea9f2547d8c02f74d384b), [`e2d5f37`](https://github.com/mastra-ai/mastra/commit/e2d5f373bd289be534d5f8694d34465010533df6), [`4ce0163`](https://github.com/mastra-ai/mastra/commit/4ce0163dc86e675a86809685c8ce6c49f1aeb87e), [`4378341`](https://github.com/mastra-ai/mastra/commit/43783412df5ea3dd35f5b1f6e4851e79c346fc89)]:
+  - @mastra/core@1.51.0
+
+## 0.3.0-alpha.0
+
+### Minor Changes
+
+- Added per-call speech-to-text and text-to-speech selection to `createLiveKitWorker`. Set the new `configuration.stt` and `configuration.tts` resolvers to pick the transcriber and voice for each call — one voice or language per tenant — keyed off the dispatch metadata and request context. Each resolver runs once per call and falls back to the top-level `stt` / `tts` option when it returns `undefined`. ([#19136](https://github.com/mastra-ai/mastra/pull/19136))
+
+  ```ts
+  export default createLiveKitWorker({
+    mastra,
+    agent: 'support',
+    stt: 'deepgram/nova-3',
+    tts: 'cartesia/sonic-3', // fallback voice
+    configuration: {
+      // Give each tenant its own voice, resolved per call from the dispatch metadata.
+      tts: ({ requestContext }) => tenantVoices[requestContext?.tenant as string],
+    },
+  });
+  ```
+
+  Previously the worker's speech pipeline was fixed at construction, so a multi-tenant worker could not vary voices or transcription per call. Customers who own their LiveKit session (the `MastraLLM` plugin path) already choose STT/TTS per call by construction; this brings the same flexibility to the batteries-included worker.
+
+- Added `MastraLLM`, a standard LiveKit LLM plugin, on the new `@mastra/livekit/plugin` entry point. Build your own `voice.AgentSession` and put a Mastra agent in the `llm` slot — the agent loop, tools, and memory run on a remote Mastra server reached over HTTP, so the worker process needs no Mastra app, database, or model provider keys. ([#19136](https://github.com/mastra-ai/mastra/pull/19136))
+
+  Before, the worker wrapper always owned the LiveKit session:
+
+  ```ts
+  import { createLiveKitWorker } from '@mastra/livekit/worker';
+  import { mastra } from './index';
+
+  export default createLiveKitWorker({
+    mastra,
+    agent: 'support',
+    stt: 'deepgram/nova-3',
+    tts: 'cartesia/sonic-3',
+  });
+  ```
+
+  Now you can own the session and keep Mastra as the LLM component:
+
+  ```ts
+  import { voice } from '@livekit/agents';
+  import { MastraLLM } from '@mastra/livekit/plugin';
+
+  const session = new voice.AgentSession({
+    llm: new MastraLLM({
+      remote: { baseUrl: process.env.MASTRA_URL!, agentId: 'support' },
+      memory: { thread: callId, resource: userId },
+    }),
+    stt: 'deepgram/nova-3',
+    tts: 'cartesia/sonic-3',
+    // Required with `memory`: LiveKit enables preemptive generation by default.
+    turnHandling: { preemptiveGeneration: { enabled: false } },
+  });
+  ```
+
+  `createLiveKitWorker` stays the batteries-included path; the plugin is the composable one. Tools keep running server-side on the Mastra agent, and interrupting the agent aborts the server-side generation.
+
+  **New transport and helpers**
+  - Added `createRemoteAgentReplyGenerator()`: streams replies from a remote Mastra server over HTTP with per-turn abort, LiveKit-typed errors, and a connect + first-token timeout. It also plugs into `createLiveKitWorker`'s `generate` option to run the existing worker against a remote server.
+  - Promoted `speakGreeting()`, `waitForAgentDoneSpeaking()`, and `runEndCall()` to public exports of `@mastra/livekit/worker`, so a worker that owns its session can rebuild the greeting and agent-initiated hang-up patterns in a few lines.
+
+  **Improvements to the existing worker**
+  - Interrupted turns now self-heal: when a caller interrupts a reply, nothing is persisted at that moment, and the part the caller actually heard is backfilled into the memory thread on the next turn — so saved transcripts match the call.
+  - Added an `onToolCall` hook that fires as each tool call starts mid-reply, the building block for tool-driven side effects such as analytics or hang-up.
+  - `onTurnComplete` now receives the turn's token usage as `result.usage`.
+
+- Added a `configuration` option to `createLiveKitWorker` — one grouped home for conversation and compliance controls, so these don't each become a separate top-level worker option. It ships with greeting/AI-disclosure controls, a consent model, and agent-initiated hang-up, and is where further compliance controls will land. ([#19136](https://github.com/mastra-ai/mastra/pull/19136))
+
+  **Greeting and AI disclosure**
+
+  `configuration.greeting` controls the opening line spoken at call start. Set `allowInterruptions: false` so a legally-required AI disclosure plays through and can't be talked over (EU AI Act Art. 50), `awaitPlayout: true` to hold post-greeting work until it finishes, and `repeatEvery` to re-disclose periodically on long calls (spoken at the next turn boundary, never mid-sentence).
+
+  ```ts
+  createLiveKitWorker({
+    mastra,
+    agent: 'support',
+    configuration: {
+      greeting: {
+        text: 'You are speaking with an AI assistant. This call may be recorded. How can I help?',
+        allowInterruptions: false,
+        awaitPlayout: true,
+        repeatEvery: 3 * 60_000, // re-disclose ~every 3 minutes
+      },
+    },
+  });
+  ```
+
+  **Per-tenant greeting**
+
+  `greeting.text` also accepts a resolver, called once per call with the call context, so one multi-tenant agent can open differently per tenant based on the dispatch metadata:
+
+  ```ts
+  greeting: {
+    text: ({ metadata }) => `Thanks for calling ${tenantName(metadata)}. You're speaking with an AI assistant.`,
+    allowInterruptions: false,
+  }
+  ```
+
+  **Consent**
+
+  `configuration.consentPolicy` declares which data-use consents a call needs, as a named, extensible set (starting with `summaryStorage`) rather than one global flag. Declaring the policy enforces nothing by itself: the new `createConsentTool` captures the caller's decision at runtime — add it to your agent and it hands each decision to your own store — and your code enforces the requirement at `onCallEnd` (or before any consent-gated step).
+
+  ```ts
+  import { createConsentTool } from '@mastra/livekit';
+
+  // in your agent's tools:
+  recordConsent: createConsentTool({
+    items: ['summaryStorage'],
+    onGrant: async ({ item, granted, resourceId }) => {
+      if (resourceId) await db.saveConsent(resourceId, item, granted);
+    },
+  }),
+  ```
+
+  **Agent-initiated hang-up**
+
+  `configuration.endCall` lets the agent end the call itself. Add the new `createEndCallTool` to your agent and instruct it to say goodbye and then call the tool; the worker waits for the closing words to finish playing, holds a short audio drain (`drainMs`, default 800ms) so the tail of the goodbye isn't clipped while it's still buffered at the caller, then hangs up — running `onCallEnd` on the way out, exactly as a caller hang-up does. It works on both the agent and workflow reply paths.
+
+  ```ts
+  import { createEndCallTool } from '@mastra/livekit';
+
+  // in your agent's tools:
+  endCall: (createEndCallTool(),
+    // on the worker:
+    createLiveKitWorker({ mastra, agent: 'support', configuration: { endCall: {} } }));
+  ```
+
+  **Backwards compatible**
+
+  The previous top-level `greeting` (string) and `persistGreeting` options still work as deprecated aliases for `configuration.greeting.text` and `configuration.greeting.persist`. When both are set, `configuration.greeting` wins field by field, so existing worker configs keep running unchanged.
+
+## 0.2.0
+
+### Minor Changes
+
+- Added `@mastra/livekit`, a new package that turns Mastra agents into realtime voice agents using LiveKit. ([#17896](https://github.com/mastra-ai/mastra/pull/17896))
+
+  LiveKit's agents framework runs the audio loop — WebRTC transport, voice activity detection, streaming speech-to-text, semantic turn detection, and barge-in — while your Mastra agent generates every reply with its own model, tools, and memory. When a caller interrupts the agent, LiveKit cancels the in-flight stream and Mastra stops generating.
+
+  **Build a voice worker**
+  - `createLiveKitWorker()` builds a LiveKit worker that answers voice sessions with your Mastra agents; `runLiveKitWorker()` starts its CLI (`dev`/`start`). Both live on the `@mastra/livekit/worker` entry point.
+  - `liveKitConnectionRoute()` is an API route that mints LiveKit tokens and dispatches the voice agent into a room; `dispatchVoiceSession()` does the same programmatically for server-initiated sessions like outbound calls. These live on the `@mastra/livekit` entry point, which is safe to import from Mastra server code — it never loads the LiveKit agents runtime.
+
+  ```ts
+  // src/mastra/voice-worker.ts
+  import { createLiveKitWorker } from '@mastra/livekit/worker';
+  import { mastra } from './index';
+
+  export default createLiveKitWorker({
+    mastra,
+    agent: 'support',
+    stt: 'deepgram/nova-3',
+    tts: 'cartesia/sonic-3',
+    turnDetection: 'multilingual',
+  });
+  ```
+
+  **Drive replies with an agent or a workflow**
+
+  Each turn's reply can come from a Mastra agent (the default) or a Mastra workflow. With a workflow, LiveKit still owns the audio loop and calls into Mastra once per turn, so the workflow runs to completion each turn (no suspend/resume) — pass the transcript in, stream the reply out.
+  - `workflow` / `workflowInput` options on `createLiveKitWorker()` drive replies with a workflow.
+  - `pipeAgentReplyToWriter(agentStream, writer)` streams an agent's reply from inside a workflow step, forwarding both its words and its tool calls (piping only the text would drop the tool calls).
+  - `generate` is an escape hatch to plug in any custom reply generator.
+
+  ```ts
+  export default createLiveKitWorker({
+    mastra,
+    workflow: 'phoneConversation',
+    workflowInput: ({ messages }) => ({ turn: messages }),
+    replyStep: 'generateResponse',
+    stt: 'deepgram/nova-3',
+    tts: 'cartesia/sonic-3',
+  });
+  ```
+
+  **Run work after each turn and at the end of the call**
+  - `onTurnComplete` runs once per turn, right after the reply finishes playing. It runs in the background — the worker never waits for it — so you can save memory, update your CRM, or record analytics without adding any delay for the caller or the next reply. It also runs with `result.interrupted: true` when the caller talks over the agent.
+  - `onCallEnd` runs once when the call ends. Unlike `onTurnComplete`, the worker waits for it to finish before exiting, so it's the place for end-of-call work like summarizing the whole conversation into long-term memory once.
+  - `toolFeedback` speaks a short phrase while a tool runs; `memoryInstance` gives the workflow path a `Memory` instance to open the call's thread and save the greeting, so the saved conversation is complete — greeting included — like the agent path.
+
+  Both hooks work whether you drive replies with an agent or a workflow.
+
+  ```ts
+  createLiveKitWorker({
+    mastra,
+    agent: 'callCenter',
+    onTurnComplete: async ({ result, memory }) => {
+      if (memory) await crm.logContact(memory.resource, result.text);
+    },
+    onCallEnd: async ({ memory }) => {
+      // After the caller hangs up: save a lasting summary of the call.
+    },
+  });
+  ```
+
+  **Built-in observability**
+
+  When the Mastra instance has observability configured, each call opens a `voice call` trace that nests every turn's agent run and adds child spans for LiveKit's speech-to-text, text-to-speech, turn-detection, and LLM latency, closing with a per-model token, character, and audio usage roll-up. On by default; pass `observability: false` to disable.
+
+  **Studio voice mode**
+
+  Studio's agent chat gains a voice call mode: when the Mastra server exposes a LiveKit connection route and a voice worker is running, a phone button in the chat composer starts a realtime voice session with the agent. Live captions, agent state (listening, thinking, speaking), and barge-in all surface in the chat, and the conversation lands in the same memory thread as text chat.
+
+  See the [LiveKit voice guide](https://mastra.ai/docs/voice/livekit) for setup.
+
+### Patch Changes
+
+- Updated dependencies [[`b291760`](https://github.com/mastra-ai/mastra/commit/b291760df9d6c7e4fc72606c8f0a4af2cf6e946c), [`3ffb8b7`](https://github.com/mastra-ai/mastra/commit/3ffb8b720e90f5e6977129ec1f6707d43c2bebe0), [`6ef59fe`](https://github.com/mastra-ai/mastra/commit/6ef59fef1da52ed8da5fbb2a892c71cf4fb6c739), [`4039488`](https://github.com/mastra-ai/mastra/commit/403948898af7293198d9e8b3e7fb47f623c78b94), [`29b7ea6`](https://github.com/mastra-ai/mastra/commit/29b7ea64e72b5523d5bdcbd34ee03d2b854d54e1), [`b2c9d70`](https://github.com/mastra-ai/mastra/commit/b2c9d70757207fb01a9069549e69b6f0d73a6636), [`a51c63d`](https://github.com/mastra-ai/mastra/commit/a51c63d8ee639e4daeba2a0be093efa6a1b5e52f), [`252f63d`](https://github.com/mastra-ai/mastra/commit/252f63d8fec723955adb2202be2f01a75ad0e69c), [`5ea76a7`](https://github.com/mastra-ai/mastra/commit/5ea76a723d966c72da9aa3ab30ae20276e049765), [`6445560`](https://github.com/mastra-ai/mastra/commit/6445560327045d20b239585fc63fed72e9ce36ec), [`e2b9f33`](https://github.com/mastra-ai/mastra/commit/e2b9f33456fd638eca555f9466c6519d8d049666), [`10959d5`](https://github.com/mastra-ai/mastra/commit/10959d509d824f682d40ff96e05ee044aec3b0e5), [`c547a77`](https://github.com/mastra-ai/mastra/commit/c547a7729bdf64dfc2df29c965046c0712a18f10), [`a0085fa`](https://github.com/mastra-ai/mastra/commit/a0085fa0934e52c37c8c8b3d75a6bb5cd199af36), [`a2ba369`](https://github.com/mastra-ai/mastra/commit/a2ba369e796dfab610f41c6875965b488272fa55), [`ffc3c17`](https://github.com/mastra-ai/mastra/commit/ffc3c17274ea17c11aa6f73d3140649cd7fc8abc), [`81542c1`](https://github.com/mastra-ai/mastra/commit/81542c1835c35bc32f2ce4fa9136ee11993cd299), [`3908e53`](https://github.com/mastra-ai/mastra/commit/3908e53ce04bbea04f5e0c097d7aa298c35fabee), [`cb24ce7`](https://github.com/mastra-ai/mastra/commit/cb24ce76bd16ca88eb6a963f6277f8780e703029), [`02705fd`](https://github.com/mastra-ai/mastra/commit/02705fd2f5a9062210d64ea061adeeb10dc9452e), [`ae51e81`](https://github.com/mastra-ai/mastra/commit/ae51e818825582d42500338dfc1929a082eff0ba), [`6f304ef`](https://github.com/mastra-ai/mastra/commit/6f304ef319e99725e884bdb8d3193c001b6e5964), [`5f9858f`](https://github.com/mastra-ai/mastra/commit/5f9858f791f1137ca7d52d23559fb4568f7a9026)]:
+  - @mastra/core@1.50.0
+
+## 0.2.0-alpha.0
+
+### Minor Changes
+
+- Added `@mastra/livekit`, a new package that turns Mastra agents into realtime voice agents using LiveKit. ([#17896](https://github.com/mastra-ai/mastra/pull/17896))
+
+  LiveKit's agents framework runs the audio loop — WebRTC transport, voice activity detection, streaming speech-to-text, semantic turn detection, and barge-in — while your Mastra agent generates every reply with its own model, tools, and memory. When a caller interrupts the agent, LiveKit cancels the in-flight stream and Mastra stops generating.
+
+  **Build a voice worker**
+  - `createLiveKitWorker()` builds a LiveKit worker that answers voice sessions with your Mastra agents; `runLiveKitWorker()` starts its CLI (`dev`/`start`). Both live on the `@mastra/livekit/worker` entry point.
+  - `liveKitConnectionRoute()` is an API route that mints LiveKit tokens and dispatches the voice agent into a room; `dispatchVoiceSession()` does the same programmatically for server-initiated sessions like outbound calls. These live on the `@mastra/livekit` entry point, which is safe to import from Mastra server code — it never loads the LiveKit agents runtime.
+
+  ```ts
+  // src/mastra/voice-worker.ts
+  import { createLiveKitWorker } from '@mastra/livekit/worker';
+  import { mastra } from './index';
+
+  export default createLiveKitWorker({
+    mastra,
+    agent: 'support',
+    stt: 'deepgram/nova-3',
+    tts: 'cartesia/sonic-3',
+    turnDetection: 'multilingual',
+  });
+  ```
+
+  **Drive replies with an agent or a workflow**
+
+  Each turn's reply can come from a Mastra agent (the default) or a Mastra workflow. With a workflow, LiveKit still owns the audio loop and calls into Mastra once per turn, so the workflow runs to completion each turn (no suspend/resume) — pass the transcript in, stream the reply out.
+  - `workflow` / `workflowInput` options on `createLiveKitWorker()` drive replies with a workflow.
+  - `pipeAgentReplyToWriter(agentStream, writer)` streams an agent's reply from inside a workflow step, forwarding both its words and its tool calls (piping only the text would drop the tool calls).
+  - `generate` is an escape hatch to plug in any custom reply generator.
+
+  ```ts
+  export default createLiveKitWorker({
+    mastra,
+    workflow: 'phoneConversation',
+    workflowInput: ({ messages }) => ({ turn: messages }),
+    replyStep: 'generateResponse',
+    stt: 'deepgram/nova-3',
+    tts: 'cartesia/sonic-3',
+  });
+  ```
+
+  **Run work after each turn and at the end of the call**
+  - `onTurnComplete` runs once per turn, right after the reply finishes playing. It runs in the background — the worker never waits for it — so you can save memory, update your CRM, or record analytics without adding any delay for the caller or the next reply. It also runs with `result.interrupted: true` when the caller talks over the agent.
+  - `onCallEnd` runs once when the call ends. Unlike `onTurnComplete`, the worker waits for it to finish before exiting, so it's the place for end-of-call work like summarizing the whole conversation into long-term memory once.
+  - `toolFeedback` speaks a short phrase while a tool runs; `memoryInstance` gives the workflow path a `Memory` instance to open the call's thread and save the greeting, so the saved conversation is complete — greeting included — like the agent path.
+
+  Both hooks work whether you drive replies with an agent or a workflow.
+
+  ```ts
+  createLiveKitWorker({
+    mastra,
+    agent: 'callCenter',
+    onTurnComplete: async ({ result, memory }) => {
+      if (memory) await crm.logContact(memory.resource, result.text);
+    },
+    onCallEnd: async ({ memory }) => {
+      // After the caller hangs up: save a lasting summary of the call.
+    },
+  });
+  ```
+
+  **Built-in observability**
+
+  When the Mastra instance has observability configured, each call opens a `voice call` trace that nests every turn's agent run and adds child spans for LiveKit's speech-to-text, text-to-speech, turn-detection, and LLM latency, closing with a per-model token, character, and audio usage roll-up. On by default; pass `observability: false` to disable.
+
+  **Studio voice mode**
+
+  Studio's agent chat gains a voice call mode: when the Mastra server exposes a LiveKit connection route and a voice worker is running, a phone button in the chat composer starts a realtime voice session with the agent. Live captions, agent state (listening, thinking, speaking), and barge-in all surface in the chat, and the conversation lands in the same memory thread as text chat.
+
+  See the [LiveKit voice guide](https://mastra.ai/docs/voice/livekit) for setup.
+
+### Patch Changes
+
+- Updated dependencies [[`a0085fa`](https://github.com/mastra-ai/mastra/commit/a0085fa0934e52c37c8c8b3d75a6bb5cd199af36)]:
+  - @mastra/core@1.50.0-alpha.5

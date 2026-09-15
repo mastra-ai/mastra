@@ -1,13 +1,13 @@
 ---
 title: "Built-in scorers | Evals"
-description: "Overview of Mastra's ready-to-use scorers for evaluating AI outputs across quality, safety, and performance dimensions."
+description: "Choose built-in Mastra scorers for accuracy, reliability, context quality, output quality, safety, and fast deterministic checks in eval runs."
 packages:
   - "@mastra/evals"
 ---
 
 # Built-in scorers
 
-Mastra provides a comprehensive set of built-in scorers for evaluating AI outputs. These scorers are optimized for common evaluation scenarios and are ready to use in your agents and workflows.
+Mastra provides a complete set of built-in scorers for evaluating AI outputs. These scorers are optimized for common evaluation scenarios and are ready to use in your agents and workflows.
 
 To create your own scorers, see the [Custom Scorers](/docs/evals/custom-scorers) guide.
 
@@ -25,15 +25,16 @@ These scorers evaluate how correct, truthful, and complete your agent's answers 
 - [`content-similarity`](/reference/evals/content-similarity): Measures textual similarity using character-level matching (`0-1`, higher is better)
 - [`textual-difference`](/reference/evals/textual-difference): Measures textual differences between strings (`0-1`, higher means more similar)
 - [`tool-call-accuracy`](/reference/evals/tool-call-accuracy): Evaluates whether the LLM selects the correct tool from available options (`0-1`, higher is better)
-- [`trajectory-accuracy`](/reference/evals/trajectory-accuracy): Evaluates whether an agent follows the expected sequence of actions (tool calls, model generations, workflow steps, and other span types) (`0-1`, higher is better)
+- [`trajectory-accuracy`](/reference/evals/trajectory-accuracy): Evaluates the expected action sequence for all span types. Covered spans include tool and model activity plus workflow steps (`0-1`, higher is better)
 - [`prompt-alignment`](/reference/evals/prompt-alignment): Measures how well agent responses align with user prompt intent, requirements, completeness, and format (`0-1`, higher is better)
+- [`multi-turn-judge`](/reference/evals/multi-turn-judge): Grades every assistant turn of a [multi-turn conversation](/docs/evals/multi-turn) against a plain-English criterion (`0` or `1`)
 
 ### Context quality
 
 These scorers evaluate the quality and relevance of context used in generating responses:
 
-- [`context-precision`](/reference/evals/context-precision): Evaluates context relevance and ranking using Mean Average Precision, rewarding early placement of relevant context (`0-1`, higher is better)
-- [`context-relevance`](/reference/evals/context-relevance): Measures context utility with nuanced relevance levels, usage tracking, and missing context detection (`0-1`, higher is better)
+- [`context-precision`](/reference/evals/context-precision): Uses Mean Average Precision to evaluate context ranking. Relevant context receives a higher score when it occurs early (`0-1`, higher is better)
+- [`context-relevance`](/reference/evals/context-relevance): Measures context utility through relevance levels and usage tracking. It also detects missing context (`0-1`, higher is better)
 
 :::tip[Context Scorer Selection]
 
@@ -55,3 +56,19 @@ These scorers evaluate adherence to format, style, and safety requirements:
 - [`toxicity`](/reference/evals/toxicity): Detects harmful or inappropriate content (`0-1`, lower is better)
 - [`bias`](/reference/evals/bias): Detects potential biases in the output (`0-1`, lower is better)
 - [`keyword-coverage`](/reference/evals/keyword-coverage): Assesses technical terminology usage (`0-1`, higher is better)
+
+### Quick Checks
+
+Zero-LLM micro-scorers for fast, deterministic assertions. See the [Quick Checks](/docs/evals/quick-checks) guide for usage details.
+
+- [`checks.includes`](/reference/evals/checks#checksincludesexpected-options): Scores 1 if output contains a substring (`0` or `1`)
+- [`checks.excludes`](/reference/evals/checks#checksexcludesunwanted-options): Scores 1 if output doesn't contain a substring (`0` or `1`)
+- [`checks.equals`](/reference/evals/checks#checksequalsexpected-options): Scores 1 if output exactly matches a string (`0` or `1`)
+- [`checks.matches`](/reference/evals/checks#checksmatchespattern-options): Scores 1 if output matches a regex (`0` or `1`)
+- [`checks.similarity`](/reference/evals/checks#checkssimilarityexpected-options): String similarity via Dice coefficient (`0-1`, or binary with threshold)
+- [`checks.calledTool`](/reference/evals/checks#checkscalledtooltoolname-options): Scores 1 if a tool was called at least N times (`0` or `1`)
+- [`checks.didNotCall`](/reference/evals/checks#checksdidnotcalltoolname): Scores 1 if a tool wasn't called (`0` or `1`)
+- [`checks.toolOrder`](/reference/evals/checks#checkstoolorderexpectedorder): Scores 1 if tools were called in order (`0` or `1`)
+- [`checks.maxToolCalls`](/reference/evals/checks#checksmaxtoolcallsmax): Scores 1 if tool call count is within limit (`0` or `1`)
+- [`checks.usedNoTools`](/reference/evals/checks#checksusednotools): Scores 1 if no tools were called (`0` or `1`)
+- [`checks.noToolErrors`](/reference/evals/checks#checksnotoolerrors): Scores 1 if no tool calls had errors (`0` or `1`)

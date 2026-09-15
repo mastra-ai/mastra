@@ -22,7 +22,7 @@ export default meta;
 type Story = StoryObj<typeof Tooltip>;
 
 const KbdHint = ({ children }: { children: React.ReactNode }) => (
-  <kbd className="ml-1 inline-flex items-center justify-center rounded-sm bg-surface5 px-1.5 py-0.5 font-mono text-ui-xs leading-ui-xs text-neutral4">
+  <kbd className="bg-surface5 text-ui-xs leading-ui-xs text-neutral4 ml-1 inline-flex items-center justify-center rounded-sm px-1.5 py-0.5 font-mono">
     {children}
   </kbd>
 );
@@ -58,8 +58,8 @@ export const WithIcon: Story = {
   render: () => (
     <Tooltip>
       <TooltipTrigger asChild>
-        <button className="p-1 rounded hover:bg-surface2" aria-label="More information">
-          <Info className="h-4 w-4 text-neutral3" />
+        <button className="hover:bg-surface2 rounded p-1" aria-label="More information">
+          <Info className="text-neutral3 size-4" />
         </button>
       </TooltipTrigger>
       <TooltipContent>More information</TooltipContent>
@@ -145,7 +145,7 @@ export const LongContent: Story = {
       <TooltipTrigger asChild>
         <Button variant="outline">Hover for details</Button>
       </TooltipTrigger>
-      <TooltipContent className="max-w-[200px]">
+      <TooltipContent className="max-w-50">
         This is a longer tooltip that contains more detailed information about the element.
       </TooltipContent>
     </Tooltip>

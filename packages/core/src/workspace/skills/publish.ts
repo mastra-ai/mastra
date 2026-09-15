@@ -127,14 +127,24 @@ async function walkSkillDirectory(
 }
 
 /**
+ * Trim slashes from a segment without regex backtracking (CodeQL js/polynomial-redos).
+ */
+function trimSlashes(segment: string, trimLeading: boolean): string {
+  let start = 0;
+  let end = segment.length;
+  if (trimLeading) {
+    while (start < end && segment[start] === '/') start++;
+  }
+  while (end > start && segment[end - 1] === '/') end--;
+  return segment.slice(start, end);
+}
+
+/**
  * Join path segments using forward slashes.
  */
 function joinPath(...segments: string[]): string {
   return segments
-    .map((seg, i) => {
-      if (i === 0) return seg.replace(/\/+$/, '');
-      return seg.replace(/^\/+|\/+$/g, '');
-    })
+    .map((seg, i) => trimSlashes(seg, i > 0))
     .filter(Boolean)
     .join('/');
 }
@@ -173,7 +183,7 @@ function buildSkillFileNodes(files: WalkedFile[]): StorageSkillFileNode[] {
 
     const fileName = segments[segments.length - 1]!;
     const content = file.isBinary
-      ? (Buffer.isBuffer(file.content) ? file.content : Buffer.from(file.content as string)).toString('base64')
+      ? (Buffer.isBuffer(file.content) ? file.content : Buffer.from(file.content)).toString('base64')
       : (file.content as string);
     cursor.push({ name: fileName, type: 'file', content });
   }
@@ -263,7 +273,7 @@ export async function collectSkillForPublish(source: SkillSource, skillPath: str
 
     if (file.isBinary) {
       // Binary file: store as base64-encoded string
-      const buf = Buffer.isBuffer(file.content) ? file.content : Buffer.from(file.content as string);
+      const buf = Buffer.isBuffer(file.content) ? file.content : Buffer.from(file.content);
       const size = buf.length;
       const base64Content = buf.toString('base64');
 

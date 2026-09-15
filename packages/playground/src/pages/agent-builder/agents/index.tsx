@@ -1,18 +1,15 @@
 import type { ListStoredAgentsParams } from '@mastra/client-js';
-import {
-  AgentIcon,
-  Button,
-  EmptyState,
-  ErrorState,
-  ListSearch,
-  PageHeader,
-  PageLayout,
-  PermissionDenied,
-  SessionExpired,
-  is401UnauthorizedError,
-  is403ForbiddenError,
-} from '@mastra/playground-ui';
-import { PlusIcon } from 'lucide-react';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
+import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
+import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
+import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
+import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
+import { CircleSlashIcon, PlusIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 import {
@@ -76,15 +73,15 @@ export default function AgentBuilderAgentsPage() {
 
     if (agents.length === 0) {
       return (
-        <div className="flex items-center justify-center pt-16">
+        <div className="flex items-center-safe justify-center-safe">
           <EmptyState
-            iconSlot={<AgentIcon className="h-8 w-8 text-neutral3" />}
+            iconSlot={<CircleSlashIcon className="text-neutral3 h-8 w-8" />}
             titleSlot="No agents yet"
             descriptionSlot="Start building your first agent with the Agent Builder."
             actionSlot={
               canWrite ? (
-                <Button as={FrameworkLink} to="/agent-builder/agents/create" variant="primary">
-                  <PlusIcon /> Create an agent
+                <Button as={FrameworkLink} to="/agent-builder/agents/create" variant="primary" icon={<PlusIcon />}>
+                  Create an agent
                 </Button>
               ) : undefined
             }
@@ -97,7 +94,7 @@ export default function AgentBuilderAgentsPage() {
   })();
 
   return (
-    <PageLayout className="px-4 md:px-10">
+    <PageLayout height="full" className="px-4 md:px-10">
       <PageLayout.TopArea>
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between md:gap-4">
           <PageHeader>
@@ -113,8 +110,9 @@ export default function AgentBuilderAgentsPage() {
                 to="/agent-builder/agents/create"
                 variant="primary"
                 className="w-full justify-center md:w-auto"
+                icon={<PlusIcon />}
               >
-                <PlusIcon /> New agent
+                New agent
               </Button>
             </div>
           )}

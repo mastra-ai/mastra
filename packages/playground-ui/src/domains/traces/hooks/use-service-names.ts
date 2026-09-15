@@ -1,5 +1,6 @@
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
+import { DISCOVERY_STALE_TIME } from './discovery-cache';
 
 export const useServiceNames = () => {
   const client = useMastraClient();
@@ -15,5 +16,6 @@ export const useServiceNames = () => {
     },
     select: data => data?.serviceNames ?? [],
     retry: false,
+    staleTime: DISCOVERY_STALE_TIME,
   });
 };

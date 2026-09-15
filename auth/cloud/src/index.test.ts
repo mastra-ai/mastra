@@ -250,6 +250,65 @@ describe('MastraCloudAuthProvider', () => {
     });
   });
 
+  // ---------- getLoginUrl / getLoginCookies ----------
+
+  describe('getLoginUrl and getLoginCookies', () => {
+    let mockGetLoginUrl: ReturnType<typeof vi.fn>;
+
+    beforeEach(() => {
+      mockGetLoginUrl = vi.fn().mockReturnValue({
+        url: 'https://auth.example.com/login',
+        cookies: ['mastra_pkce=123'],
+      });
+      // Override the client method just for these tests
+      provider['client'].getLoginUrl = mockGetLoginUrl;
+    });
+
+    it('returns the URL and stores cookies to be retrieved later', () => {
+      const url = provider.getLoginUrl('http://localhost:3000/callback', 'state-123');
+      expect(url).toBe('https://auth.example.com/login');
+
+      const cookies = provider.getLoginCookies('http://localhost:3000/callback', 'state-123');
+      expect(cookies).toEqual(['mastra_pkce=123']);
+    });
+
+    it('clears cookies after they are retrieved once', () => {
+      provider.getLoginUrl('http://localhost:3000/callback', 'state-123');
+      provider.getLoginCookies('http://localhost:3000/callback', 'state-123');
+
+      const cookiesSecondTime = provider.getLoginCookies('http://localhost:3000/callback', 'state-123');
+      expect(cookiesSecondTime).toBeUndefined();
+    });
+
+    it('handles concurrent requests safely without cross-wiring PKCE verifiers (race condition fix)', () => {
+      mockGetLoginUrl
+        .mockReturnValueOnce({
+          url: 'https://auth.example.com/login?req=A',
+          cookies: ['mastra_pkce=user_A_verifier'],
+        })
+        .mockReturnValueOnce({
+          url: 'https://auth.example.com/login?req=B',
+          cookies: ['mastra_pkce=user_B_verifier'],
+        });
+
+      // User A initiates login
+      const urlA = provider.getLoginUrl('http://localhost:3000/callback', 'state-A');
+      // User B initiates login concurrently, before User A retrieves cookies
+      const urlB = provider.getLoginUrl('http://localhost:3000/callback', 'state-B');
+
+      expect(urlA).toContain('req=A');
+      expect(urlB).toContain('req=B');
+
+      // User A retrieves their cookies
+      const cookiesA = provider.getLoginCookies('http://localhost:3000/callback', 'state-A');
+      // User B retrieves their cookies
+      const cookiesB = provider.getLoginCookies('http://localhost:3000/callback', 'state-B');
+
+      expect(cookiesA).toEqual(['mastra_pkce=user_A_verifier']);
+      expect(cookiesB).toEqual(['mastra_pkce=user_B_verifier']);
+    });
+  });
+
   // ---------- getUser ----------
 
   describe('getUser', () => {

@@ -1,6 +1,6 @@
 ---
 title: "Reference: PrefillErrorHandler | Processors"
-description: "Documentation for the PrefillErrorHandler processor in Mastra, which handles assistant-response prefill errors by appending a continue message and retrying."
+description: "The PrefillErrorHandler is an error processor that handles assistant-response prefill errors."
 packages:
   - "@mastra/core"
 ---
@@ -31,6 +31,7 @@ import { Agent } from '@mastra/core/agent'
 import { PrefillErrorHandler } from '@mastra/core/processors'
 
 export const agent = new Agent({
+  id: 'my-agent',
   name: 'my-agent',
   instructions: 'You are a helpful assistant.',
   model: '__GATEWAY_ANTHROPIC_MODEL_OPUS__',
@@ -52,6 +53,7 @@ const customErrorHandler: Processor = {
 }
 
 export const agent = new Agent({
+  id: 'my-agent',
   name: 'my-agent',
   instructions: 'You are a helpful assistant.',
   model: '__GATEWAY_ANTHROPIC_MODEL_OPUS__',

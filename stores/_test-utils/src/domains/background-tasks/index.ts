@@ -1,5 +1,4 @@
-import type { BackgroundTasksStorage } from '@mastra/core/storage';
-import type { MastraStorage } from '@mastra/core/storage';
+import type { BackgroundTasksStorage, MastraStorage } from '@mastra/core/storage';
 import { beforeAll, beforeEach, describe, it, expect } from 'vitest';
 import { createSampleTask } from './data';
 

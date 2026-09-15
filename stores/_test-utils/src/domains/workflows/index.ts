@@ -237,6 +237,41 @@ export function createWorkflowsTests({ storage }: WorkflowsTestOptions) {
       checkWorkflowSnapshot(found?.snapshot!, stepId, 'success');
     });
 
+    // Regression test for https://github.com/mastra-ai/mastra/issues/18003
+    // The default engine re-persists a run's snapshot on every step without threading the
+    // original createdAt back in. Re-persisting must keep the original createdAt and only
+    // advance updatedAt, otherwise listWorkflowRuns ordering (createdAt DESC) and fromDate/
+    // toDate filters drift to the last activity time instead of the creation time.
+    it('should preserve createdAt and advance updatedAt when re-persisting a run (issue #18003)', async () => {
+      const initial = await workflowsStorage.getWorkflowRunById({ runId, workflowName });
+      expect(initial).not.toBeNull();
+      const createdAtBefore = new Date(initial!.createdAt).getTime();
+      const updatedAtBefore = new Date(initial!.updatedAt).getTime();
+
+      // Wait so a reset createdAt would be visibly different, then re-persist the same run
+      // (new snapshot, no createdAt passed) the way a later step does.
+      await new Promise(resolve => setTimeout(resolve, 50));
+      const rePersist = createSampleWorkflowSnapshot('success');
+      // Re-persist under the original runId, so the snapshot's internal runId matches the
+      // storage key the way the engine does on later steps.
+      rePersist.snapshot.runId = runId;
+      await workflowsStorage.persistWorkflowSnapshot({
+        workflowName,
+        runId,
+        snapshot: rePersist.snapshot,
+      });
+
+      const after = await workflowsStorage.getWorkflowRunById({ runId, workflowName });
+      expect(after).not.toBeNull();
+      const createdAtAfter = new Date(after!.createdAt).getTime();
+      const updatedAtAfter = new Date(after!.updatedAt).getTime();
+
+      // createdAt must not move on re-persist...
+      expect(createdAtAfter).toBe(createdAtBefore);
+      // ...while updatedAt advances to reflect the new activity.
+      expect(updatedAtAfter).toBeGreaterThan(updatedAtBefore);
+    });
+
     it('should delete a workflow run by ID', async () => {
       const found = await workflowsStorage.getWorkflowRunById({
         runId,
@@ -548,6 +583,89 @@ export function createWorkflowsTests({ storage }: WorkflowsTestOptions) {
       expect(run?.snapshot).toEqual(snapshot);
       expect(run?.workflowName).toBe(workflowName);
       expect(run?.runId).toBe(runId);
+    });
+
+    it('should apply an update when the expectedStatus guard matches', async () => {
+      if (!supportsConcurrentUpdates) {
+        console.log('Skipping expectedStatus guard test');
+        return;
+      }
+      const workflowName = 'test-workflow';
+      const runId = `run-${randomUUID()}`;
+
+      await workflowsStorage.persistWorkflowSnapshot({
+        workflowName,
+        runId,
+        snapshot: { status: 'suspended', context: {}, suspendedPaths: { 'step-1': [0] } } as any,
+      });
+
+      const updated = await workflowsStorage.updateWorkflowState({
+        workflowName,
+        runId,
+        opts: { status: 'running', expectedStatus: 'suspended' },
+      });
+
+      expect(updated?.status).toBe('running');
+      // The guard must never leak into the persisted snapshot.
+      expect(updated).not.toHaveProperty('expectedStatus');
+
+      const persisted = await workflowsStorage.loadWorkflowSnapshot({ workflowName, runId });
+      expect(persisted?.status).toBe('running');
+      expect(persisted).not.toHaveProperty('expectedStatus');
+    });
+
+    it('should not apply an update when the expectedStatus guard does not match', async () => {
+      if (!supportsConcurrentUpdates) {
+        console.log('Skipping expectedStatus guard test');
+        return;
+      }
+      const workflowName = 'test-workflow';
+      const runId = `run-${randomUUID()}`;
+
+      await workflowsStorage.persistWorkflowSnapshot({
+        workflowName,
+        runId,
+        snapshot: { status: 'running', context: {} } as any,
+      });
+
+      const updated = await workflowsStorage.updateWorkflowState({
+        workflowName,
+        runId,
+        opts: { status: 'success', expectedStatus: 'suspended' },
+      });
+
+      expect(updated).toBeUndefined();
+
+      const persisted = await workflowsStorage.loadWorkflowSnapshot({ workflowName, runId });
+      expect(persisted?.status).toBe('running');
+    });
+
+    it('should let exactly one of many concurrent expectedStatus updates win', async () => {
+      if (!supportsConcurrentUpdates) {
+        console.log('Skipping expectedStatus guard test');
+        return;
+      }
+      const workflowName = 'test-workflow';
+      const runId = `run-${randomUUID()}`;
+
+      await workflowsStorage.persistWorkflowSnapshot({
+        workflowName,
+        runId,
+        snapshot: { status: 'suspended', context: {}, suspendedPaths: { 'step-1': [0] } } as any,
+      });
+
+      // This is the property the resume claim depends on: N racing claims, exactly one winner.
+      const results = await Promise.all(
+        Array.from({ length: 5 }, () =>
+          workflowsStorage.updateWorkflowState({
+            workflowName,
+            runId,
+            opts: { status: 'running', expectedStatus: 'suspended' },
+          }),
+        ),
+      );
+
+      expect(results.filter(result => result !== undefined)).toHaveLength(1);
     });
 
     it('should update workflow results in snapshot', async () => {

@@ -2,6 +2,7 @@ import type { Database } from '@google-cloud/spanner';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   createStorageErrorId,
+  matchesExpectedWorkflowStatus,
   WorkflowsStorage,
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_SCHEMAS,
@@ -251,7 +252,9 @@ export class WorkflowsSpanner extends WorkflowsStorage {
             });
             await tx.commit();
           } catch (err) {
-            await tx.rollback().catch(() => {});
+            await tx.rollback().catch(rollbackErr => {
+              throw new AggregateError([err, rollbackErr], 'Transaction and rollback both failed');
+            });
             throw err;
           }
         }),
@@ -368,7 +371,9 @@ export class WorkflowsSpanner extends WorkflowsStorage {
             mergedContext = snapshot.context;
             await tx.commit();
           } catch (err) {
-            await tx.rollback().catch(() => {});
+            await tx.rollback().catch(rollbackErr => {
+              throw new AggregateError([err, rollbackErr], 'Transaction and rollback both failed');
+            });
             throw err;
           }
         }),
@@ -427,7 +432,13 @@ export class WorkflowsSpanner extends WorkflowsStorage {
                 new Error(`Snapshot not found for runId ${runId}`),
               );
             }
-            updated = { ...snapshot, ...opts } as WorkflowRunState;
+            const { expectedStatus, ...state } = opts;
+            if (!matchesExpectedWorkflowStatus(snapshot.status, expectedStatus)) {
+              await tx.rollback();
+              return;
+            }
+
+            updated = { ...snapshot, ...state } as WorkflowRunState;
             await this.db.update({
               tableName: TABLE_WORKFLOW_SNAPSHOT,
               keys: { workflow_name: workflowName, run_id: runId },
@@ -436,7 +447,9 @@ export class WorkflowsSpanner extends WorkflowsStorage {
             });
             await tx.commit();
           } catch (err) {
-            await tx.rollback().catch(() => {});
+            await tx.rollback().catch(rollbackErr => {
+              throw new AggregateError([err, rollbackErr], 'Transaction and rollback both failed');
+            });
             throw err;
           }
         }),

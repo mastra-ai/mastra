@@ -1,5 +1,11 @@
 export { createCodeMode, createCodeModeTool, type CodeModeResult } from './code-mode';
-export { createCodeModeInstructions, generateStubs, jsonSchemaToTsString, type CodeModeStub } from './stub-generator';
+export {
+  createCodeModeInstructions,
+  generateStubs,
+  jsonSchemaToTsString,
+  sanitizeToolId,
+  type CodeModeStub,
+} from './stub-generator';
 export { StdioCodeModeTransport } from './transport';
 export { buildRunner, buildProgramModule, FRAME_PREFIX } from './runner';
 export type {

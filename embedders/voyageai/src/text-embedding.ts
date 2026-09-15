@@ -86,7 +86,7 @@ export class VoyageTextEmbeddingModelV2 {
       );
     }
 
-    this.client = new VoyageAIClient({ apiKey });
+    this.client = new VoyageAIClient({ apiKey, ...(config.baseUrl ? { baseUrl: config.baseUrl } : {}) });
   }
 
   /**

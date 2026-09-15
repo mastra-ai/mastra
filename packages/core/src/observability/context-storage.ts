@@ -25,8 +25,8 @@ let initialized = false;
  * utils module. Must be called once at startup (e.g. from the Mastra constructor).
  *
  * This is an explicit initialization function rather than a top-level side-effect
- * because the package declares `"sideEffects": false` and tsup's tree-shaking
- * (`preset: 'smallest'`) strips bare side-effect imports.
+ * because the package declares `"sideEffects": false` and bundler tree-shaking
+ * strips bare side-effect imports.
  */
 export function initContextStorage(): void {
   if (initialized) return;

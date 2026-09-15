@@ -20,6 +20,7 @@ import type {
 } from './discovery';
 import type {
   BatchCreateFeedbackArgs,
+  DeleteFeedbackArgs,
   CreateFeedbackArgs,
   ListFeedbackArgs,
   ListFeedbackResponse,
@@ -31,6 +32,8 @@ import type {
   GetFeedbackTimeSeriesResponse,
   GetFeedbackPercentilesArgs,
   GetFeedbackPercentilesResponse,
+  UpdateFeedbackReviewStatusArgs,
+  FeedbackRecord,
 } from './feedback';
 import type { BatchCreateLogsArgs, ListLogsArgs, ListLogsResponse } from './logs';
 import type {
@@ -48,6 +51,7 @@ import type {
 } from './metrics';
 import type {
   BatchCreateScoresArgs,
+  DeleteScoresArgs,
   CreateScoreArgs,
   ListScoresArgs,
   ListScoresResponse,
@@ -61,6 +65,12 @@ import type {
   GetScorePercentilesArgs,
   GetScorePercentilesResponse,
 } from './scores';
+import type {
+  QueryThreadsResult,
+  TraceQueryResponse,
+  TrustedThreadQueryPlan,
+  TrustedTraceQueryPlan,
+} from './trace-query';
 import type {
   BatchCreateSpansArgs,
   BatchDeleteTracesArgs,
@@ -85,10 +95,10 @@ import type {
   ListTracesResponse,
   UpdateSpanArgs,
 } from './tracing';
-import { extractBranchSpans, getBranchArgsSchema } from './tracing';
+import { extractBranchSpans, getBranchArgsSchema, toLightSpanRecord } from './tracing';
 import type { ObservabilityStorageStrategy, TracingStorageStrategy } from './types';
 
-export type ObservabilityStorageFeature = 'delta-polling';
+export type ObservabilityStorageFeature = 'delta-polling' | 'metrics' | 'logs' | 'trace-query' | 'thread-query';
 
 /**
  * Base storage class for observability data (traces, metrics, logs, scores, feedback).
@@ -148,7 +158,7 @@ export class ObservabilityStorage extends StorageDomain {
 
   /**
    * Optional feature list for observability storage APIs.
-   * Stores that implement delta polling should override this and opt in explicitly.
+   * Stores should override this to opt in to the APIs they support explicitly.
    * Older stores and older package versions will simply omit it, which keeps page mode working.
    */
   public getFeatures(): readonly ObservabilityStorageFeature[] | undefined {
@@ -329,13 +339,39 @@ export class ObservabilityStorage extends StorageDomain {
 
   /**
    * Retrieves a lightweight list of traces with optional filtering.
+   *
+   * Defaults to {@link listTraces} with each row projected down, so every backend
+   * serves the same response shape whether or not it has a dedicated implementation.
+   * Backends that can push the projection into the query should override this --
+   * that is what actually keeps the blob columns off the read path -- but the
+   * fallback stays correct, just not cheaper than `listTraces`.
    */
-  async listTracesLight(_args: ListTracesArgs): Promise<ListTracesLightResponse> {
+  async listTracesLight(args: ListTracesArgs): Promise<ListTracesLightResponse> {
+    const { spans, ...rest } = await this.listTraces(args);
+    return { ...rest, spans: spans.map(toLightSpanRecord) };
+  }
+
+  /**
+   * Executes a validated advanced trace-query plan.
+   */
+  async queryTraces(_plan: TrustedTraceQueryPlan): Promise<TraceQueryResponse> {
     throw new MastraError({
-      id: 'OBSERVABILITY_STORAGE_LIST_TRACES_LIGHT_NOT_IMPLEMENTED',
+      id: 'OBSERVABILITY_STORAGE_QUERY_TRACES_NOT_IMPLEMENTED',
       domain: ErrorDomain.MASTRA_OBSERVABILITY,
       category: ErrorCategory.SYSTEM,
-      text: 'This storage provider does not support listing lightweight traces',
+      text: 'This storage provider does not support advanced trace queries',
+    });
+  }
+
+  /**
+   * Executes a validated thread-query plan.
+   */
+  async queryThreads(_plan: TrustedThreadQueryPlan): Promise<QueryThreadsResult> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_QUERY_THREADS_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support advanced thread queries',
     });
   }
 
@@ -380,7 +416,12 @@ export class ObservabilityStorage extends StorageDomain {
   }
 
   /**
-   * Deletes multiple traces and all their associated spans in a single batch operation.
+   * Deletes multiple traces, all their associated spans, and any trace-linked signal
+   * events (metrics, logs, scores, feedback) in a single batch operation.
+   *
+   * Signal rows without a traceId are never affected. When the optional tenant scope
+   * (`organizationId` / `resourceId`) is provided, only rows matching that scope are
+   * deleted; stores without tenant columns must reject scoped calls.
    */
   async batchDeleteTraces(_args: BatchDeleteTracesArgs): Promise<void> {
     throw new MastraError({
@@ -389,6 +430,21 @@ export class ObservabilityStorage extends StorageDomain {
       category: ErrorCategory.SYSTEM,
       text: 'This storage provider does not support batch deleting traces',
     });
+  }
+
+  /**
+   * Guard for stores without tenant columns: throws when a tenant scope is provided
+   * to batchDeleteTraces, instead of silently performing an unscoped delete.
+   */
+  protected assertUnscopedBatchDeleteTraces(args: BatchDeleteTracesArgs): void {
+    if (args.organizationId !== undefined || args.resourceId !== undefined) {
+      throw new MastraError({
+        id: 'OBSERVABILITY_STORAGE_BATCH_DELETE_TRACES_SCOPE_NOT_SUPPORTED',
+        domain: ErrorDomain.MASTRA_OBSERVABILITY,
+        category: ErrorCategory.USER,
+        text: 'This storage provider does not support tenant-scoped trace deletion (organizationId/resourceId)',
+      });
+    }
   }
 
   // ============================================================================
@@ -644,6 +700,22 @@ export class ObservabilityStorage extends StorageDomain {
     });
   }
 
+  /**
+   * Deletes score records by id. Idempotent: deleting missing ids succeeds; an
+   * empty ids array is a no-op. When `organizationId`/`resourceId` are provided,
+   * only scores matching that tenant scope are deleted.
+   */
+  async deleteScores(args: DeleteScoresArgs): Promise<void> {
+    if (args.scoreIds.length === 0) return;
+
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_DELETE_SCORES_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support deleting scores',
+    });
+  }
+
   // ============================================================================
   // Feedback
   // ============================================================================
@@ -684,6 +756,15 @@ export class ObservabilityStorage extends StorageDomain {
     });
   }
 
+  async updateFeedbackReviewStatus(_args: UpdateFeedbackReviewStatusArgs): Promise<FeedbackRecord> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_UPDATE_FEEDBACK_REVIEW_STATUS_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support updating feedback review status',
+    });
+  }
+
   async getFeedbackAggregate(_args: GetFeedbackAggregateArgs): Promise<GetFeedbackAggregateResponse> {
     throw new MastraError({
       id: 'OBSERVABILITY_STORAGE_GET_FEEDBACK_AGGREGATE_NOT_IMPLEMENTED',
@@ -717,6 +798,22 @@ export class ObservabilityStorage extends StorageDomain {
       domain: ErrorDomain.MASTRA_OBSERVABILITY,
       category: ErrorCategory.SYSTEM,
       text: 'This storage provider does not support feedback percentiles',
+    });
+  }
+
+  /**
+   * Deletes feedback records by id. Idempotent: deleting missing ids succeeds;
+   * an empty ids array is a no-op. When `organizationId`/`resourceId` are
+   * provided, only feedback matching that tenant scope is deleted.
+   */
+  async deleteFeedback(args: DeleteFeedbackArgs): Promise<void> {
+    if (args.feedbackIds.length === 0) return;
+
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_DELETE_FEEDBACK_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support deleting feedback',
     });
   }
 }

@@ -45,18 +45,19 @@
  *
  * @example Custom cache backend (e.g., Redis)
  * ```typescript
- * import { RedisServerCache } from '@mastra/redis'; // hypothetical
+ * import { RedisServerCache } from '@mastra/redis';
+ * import Redis from 'ioredis';
  *
  * const durableAgent = createDurableAgent({
  *   agent,
- *   cache: new RedisServerCache({ url: 'redis://...' }),
+ *   cache: new RedisServerCache({ client: new Redis('redis://...') }),
  * });
  * ```
  *
  * @example Cache inheritance from Mastra
  * ```typescript
  * const mastra = new Mastra({
- *   cache: new RedisServerCache({ url: 'redis://...' }),
+ *   cache: new RedisServerCache({ client: new Redis('redis://...') }),
  *   agents: {
  *     myAgent: createDurableAgent({ agent }), // Inherits Redis cache from Mastra
  *   },
@@ -88,13 +89,21 @@ export { EventedAgent, isEventedAgentClass, type EventedAgentConfig } from './ev
 export { createEventedAgent, isEventedAgent, type CreateEventedAgentOptions } from './create-evented-agent';
 
 // Stream until idle (durable variant)
-export { runDurableStreamUntilIdle, type DurableStreamUntilIdleDeps } from './durable-stream-until-idle';
+export {
+  runDurableStreamUntilIdle,
+  runResumeDurableStreamUntilIdle,
+  type DurableStreamUntilIdleDeps,
+} from './durable-stream-until-idle';
 
 // Preparation utilities
 export { prepareForDurableExecution, type PreparationOptions, type PreparationResult } from './preparation';
 
 // Run registry for non-serializable state
-export { RunRegistry, ExtendedRunRegistry, type ExtendedRunRegistryEntry } from './run-registry';
+export { RunRegistry, ExtendedRunRegistry, globalRunRegistry, type ExtendedRunRegistryEntry } from './run-registry';
+
+// Shared thread-stream runtime, so durable-agent integrations outside core
+// (e.g. @mastra/inngest) can register their runs the same way DurableAgent does.
+export { agentThreadStreamRuntime } from '../thread-stream-runtime';
 
 // Stream adapter for pubsub-based streaming
 export {
@@ -110,7 +119,15 @@ export {
 } from './stream-adapter';
 
 // Constants
-export { AGENT_STREAM_TOPIC, AgentStreamEventTypes, DurableAgentDefaults, DurableStepIds } from './constants';
+export {
+  AGENT_STREAM_TOPIC,
+  AGENT_CONTROL_TOPIC,
+  AgentStreamEventTypes,
+  AgentControlEventTypes,
+  DurableAgentDefaults,
+  DurableStepIds,
+} from './constants';
+export { publishAbortRequest, subscribeToAbortRequests, ensureRemoteAbortListener } from './abort-transport';
 
 // Types
 export type {
@@ -119,6 +136,7 @@ export type {
   SerializableModelConfig,
   SerializableDurableState,
   SerializableDurableOptions,
+  SerializableModelSettings,
   DurableAgenticWorkflowInput,
   // Step I/O types
   DurableLLMStepOutput,
@@ -151,16 +169,24 @@ export {
 // Utility functions for runtime resolution
 export {
   resolveRuntimeDependencies,
+  rebuildRunToolsFromMastra,
   resolveModel,
   resolveInternalState,
   resolveTool,
   toolRequiresApproval,
   type ResolvedRuntimeDependencies,
   type ResolveRuntimeOptions,
+  type RebuiltRunTools,
 } from './utils/resolve-runtime';
 
 // Workflow creation
-export { createDurableAgenticWorkflow, type DurableAgenticWorkflowOptions } from './workflows';
+export {
+  createDurableAgenticWorkflow,
+  runDurableFinishSideEffects,
+  type DurableAgenticWorkflowOptions,
+  type DurableFinishSideEffectsOptions,
+  type DurableFinishSideEffectsResult,
+} from './workflows';
 
 // Workflow steps (for advanced customization)
 export {
@@ -172,6 +198,7 @@ export {
 
 // Shared workflow utilities
 export {
+  executeDurableAgentScorers,
   executeDurableToolCalls,
   modelConfigSchema,
   modelListEntrySchema,
@@ -182,8 +209,10 @@ export {
   calculateAccumulatedUsage,
   buildStepRecord,
   createBaseIterationStateUpdate,
+  resolveDurableToolCallConcurrency,
 } from './workflows/shared';
 export type {
+  ExecuteDurableAgentScorersParams,
   ToolExecutionContext,
   ToolExecutionError,
   BaseIterationState,

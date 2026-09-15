@@ -4,10 +4,23 @@ import { AgentIcon } from '@/ds/icons/AgentIcon';
 import { FolderIcon } from '@/ds/icons/FolderIcon';
 import { McpServerIcon } from '@/ds/icons/McpServerIcon';
 import { MemoryIcon } from '@/ds/icons/MemoryIcon';
+import { SkillIcon } from '@/ds/icons/SkillIcon';
 import { ToolsIcon } from '@/ds/icons/ToolsIcon';
 import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
 
-export const spanTypePrefixes = ['agent', 'workflow', 'model', 'mcp', 'tool', 'memory', 'workspace', 'scorer', 'other'];
+export const spanTypePrefixes = [
+  'agent',
+  'workflow',
+  'model',
+  'mcp',
+  'tool',
+  'provider',
+  'memory',
+  'workspace',
+  'skill',
+  'scorer',
+  'other',
+];
 
 const spanTypeToUiElements: Record<string, UISpanStyle> = {
   agent: {
@@ -40,9 +53,15 @@ const spanTypeToUiElements: Record<string, UISpanStyle> = {
     label: 'Tool',
     typePrefix: 'tool',
   },
+  provider: {
+    icon: <ToolsIcon />,
+    color: 'oklch(0.75 0.15 60)',
+    label: 'Provider Tool',
+    typePrefix: 'provider',
+  },
   memory: {
     icon: <MemoryIcon />,
-    color: 'oklch(0.75 0.15 60)',
+    color: 'oklch(0.75 0.12 50)',
     label: 'Memory',
     typePrefix: 'memory',
   },
@@ -51,6 +70,12 @@ const spanTypeToUiElements: Record<string, UISpanStyle> = {
     color: 'oklch(0.75 0.15 40)',
     label: 'Workspace',
     typePrefix: 'workspace',
+  },
+  skill: {
+    icon: <SkillIcon />,
+    color: 'oklch(0.75 0.15 130)',
+    label: 'Skill',
+    typePrefix: 'skill',
   },
   scorer: {
     icon: <GaugeIcon />,
@@ -67,6 +92,6 @@ const otherSpanType: UISpanStyle = {
 };
 
 export function getSpanTypeUi(type: string) {
-  const typePrefix = type?.toLowerCase().split('_')[0];
+  const typePrefix = type?.toLowerCase().split('_')[0] ?? '';
   return spanTypeToUiElements[typePrefix] ?? otherSpanType;
 }

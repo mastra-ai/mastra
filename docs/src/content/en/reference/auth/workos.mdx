@@ -1,6 +1,6 @@
 ---
 title: "Reference: MastraAuthWorkos class | Auth"
-description: "API reference for the MastraAuthWorkos class, which authenticates Mastra applications using WorkOS authentication."
+description: "Configure MastraAuthWorkos for WorkOS authentication, including access-token validation and authenticated user resolution from requests."
 packages:
   - "@mastra/auth-workos"
   - "@mastra/core"
@@ -28,7 +28,7 @@ export const mastra = new Mastra({
 
 :::note
 
-You can omit the constructor parameters if you have the appropriately named environment variables (`WORKOS_API_KEY` and `WORKOS_CLIENT_ID`) set. In that case, use `new MastraAuthWorkos()` without any arguments.
+You can omit the constructor parameters if the required environment variables (`WORKOS_API_KEY` and `WORKOS_CLIENT_ID`) are set. In that case, use `new MastraAuthWorkos()` without any arguments.
 
 :::
 
@@ -127,7 +127,7 @@ By default, `MastraAuthWorkos` authorizes any authenticated WorkOS user whose re
 1. **User Retrieval**: User information is extracted from the verified token
 1. **Authorization Decision**: Access is granted if the resolved user contains the required identifiers
 
-This means that by default, `MastraAuthWorkos` acts as an authentication provider rather than a role gate.
+`MastraAuthWorkos` acts as an authentication provider rather than a role gate by default.
 
 ## FGA membership loading
 
@@ -154,7 +154,7 @@ const auth = new MastraAuthWorkos({
 })
 ```
 
-When `trustJwtClaims` is enabled, Mastra can authenticate verified bearer tokens for service principals even if `getUser()` is not the right lookup path. This is the preferred way to pass pre-resolved `organizationMembershipId` values into FGA checks for machine-to-machine flows.
+When `trustJwtClaims` is enabled, Mastra can authenticate verified bearer tokens for service principals even if `getUser()` isn't the right lookup path. This is the preferred way to pass pre-resolved `organizationMembershipId` values into FGA checks for machine-to-machine flows.
 
 ## Custom authorization
 
@@ -175,7 +175,7 @@ class AdminOnlyWorkosAuth extends MastraAuthWorkos {
 
 The `WorkOSUser` type available inside `authorizeUser()` and other WorkOS auth hooks includes Mastra's normalized user fields plus WorkOS-specific metadata. WorkOS also allows administrators to set up custom JWT templates, so the exact structure may vary based on your configuration. The following example shows what a WorkOS-backed user object might look like:
 
-```javascript prettier:false
+```javascript oxfmt:false
 {
   'urn:myapp:full_name': 'John Doe',
   'urn:myapp:email': 'john.doe@example.com',
@@ -199,4 +199,4 @@ The properties with `urn:myapp:` prefixes are custom claims configured in your W
 
 ## Related
 
-[MastraAuthWorkos Class](/docs/server/auth/workos)
+[MastraAuthWorkos Class](/integrations/auth/workos)

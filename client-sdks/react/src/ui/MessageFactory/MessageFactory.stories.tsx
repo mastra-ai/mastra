@@ -50,6 +50,9 @@ const renderers: MessageRenderers = {
       📎 file: <code>{part.mimeType}</code>
     </div>
   ),
+  // `step-start` is an internal step-framing marker. Supplying `StepStart` opts
+  // in to rendering a divider; omit it and `step-start` renders nothing (it is
+  // NOT routed to `fallback`).
   StepStart: () => <hr style={{ border: 0, borderTop: '1px dashed #cbd5e1', margin: '8px 0' }} />,
   ToolInvocation: part => (
     <div style={{ ...card, background: '#eff6ff' }}>

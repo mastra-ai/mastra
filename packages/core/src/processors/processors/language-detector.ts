@@ -7,10 +7,13 @@ import type { ProviderOptions } from '../../llm/model/provider-options';
 import type { MastraModelConfig } from '../../llm/model/shared.types';
 import type { ObservabilityContext } from '../../observability';
 import { InternalSpans, resolveObservabilityContext } from '../../observability';
+import type { RequestContext } from '../../request-context';
 import { standardSchemaToJSONSchema } from '../../schema';
 import type { Processor } from '../index';
 import { selectMessagesToCheck } from './message-selection';
 import type { LastMessageOnlyOption } from './message-selection';
+import { handleModelError } from './model-error-strategy';
+import type { ModelErrorStrategy } from './model-error-strategy';
 
 /**
  * Language detection result for a single text
@@ -47,6 +50,9 @@ export interface LanguageDetectionResult {
 export interface LanguageDetectorOptions extends LastMessageOnlyOption {
   /** Model configuration for the detection/translation agent */
   model: MastraModelConfig;
+
+  /** How internal model errors are handled. Defaults to 'warn'. */
+  errorStrategy?: ModelErrorStrategy;
 
   /**
    * Target language(s) for the project.
@@ -94,10 +100,12 @@ export interface LanguageDetectorOptions extends LastMessageOnlyOption {
   includeDetectionDetails?: boolean;
 
   /**
-   * Translation quality preference:
-   * - 'speed': Prioritize fast translation
-   * - 'quality': Prioritize translation accuracy (default)
-   * - 'balanced': Balance between speed and quality
+   * @deprecated Previously selected prompt-level "Quality Level" guidance, but that behavior was
+   * removed when the detection and translation prompts were streamlined. This option now has no
+   * effect, but existing configurations keep type-checking.
+   *
+   * For model-specific speed and quality controls, use `providerOptions` when supported by your
+   * provider, for example `{ openai: { reasoningEffort: 'low' } }`.
    */
   translationQuality?: 'speed' | 'quality' | 'balanced';
 
@@ -133,9 +141,9 @@ export class LanguageDetector implements Processor<'language-detector'> {
   private preserveOriginal: boolean;
   private minTextLength: number;
   private includeDetectionDetails: boolean;
-  private translationQuality: 'speed' | 'quality' | 'balanced';
   private lastMessageOnly: boolean;
   private providerOptions?: ProviderOptions;
+  private errorStrategy: ModelErrorStrategy;
 
   // Default target language
   private static readonly DEFAULT_TARGET_LANGUAGES = ['English', 'en'];
@@ -188,9 +196,9 @@ export class LanguageDetector implements Processor<'language-detector'> {
     this.preserveOriginal = options.preserveOriginal ?? true;
     this.minTextLength = options.minTextLength ?? 10;
     this.includeDetectionDetails = options.includeDetectionDetails ?? false;
-    this.translationQuality = options.translationQuality || 'quality';
     this.lastMessageOnly = options.lastMessageOnly ?? false;
     this.providerOptions = options.providerOptions;
+    this.errorStrategy = options.errorStrategy ?? 'warn';
 
     // Create internal detection and translation agent
     this.detectionAgent = new Agent({
@@ -208,10 +216,11 @@ export class LanguageDetector implements Processor<'language-detector'> {
     args: {
       messages: MastraDBMessage[];
       abort: (reason?: string) => never;
+      requestContext?: RequestContext;
     } & Partial<ObservabilityContext>,
   ): Promise<MastraDBMessage[]> {
     try {
-      const { messages, abort, ...rest } = args;
+      const { messages, abort, requestContext, ...rest } = args;
       const observabilityContext = resolveObservabilityContext(rest);
 
       if (messages.length === 0) {
@@ -235,7 +244,7 @@ export class LanguageDetector implements Processor<'language-detector'> {
           continue;
         }
 
-        const detectionResult = await this.detectLanguage(textContent, observabilityContext);
+        const detectionResult = await this.detectLanguage(textContent, abort, observabilityContext, requestContext);
 
         // Check if confidence meets threshold
         if (detectionResult.confidence && detectionResult.confidence < this.threshold) {
@@ -286,12 +295,14 @@ export class LanguageDetector implements Processor<'language-detector'> {
    */
   private async detectLanguage(
     content: string,
+    abort: (reason?: string) => never,
     observabilityContext?: ObservabilityContext,
+    requestContext?: RequestContext,
   ): Promise<LanguageDetectionResult> {
     const prompt = this.createDetectionPrompt(content);
 
     try {
-      const model = await this.detectionAgent.getModel();
+      const model = await this.detectionAgent.getModel({ requestContext });
 
       const baseSchema = z.object({
         iso_code: z.string().describe('ISO language code').nullable(),
@@ -315,18 +326,26 @@ export class LanguageDetector implements Processor<'language-detector'> {
             temperature: 0,
           },
           providerOptions: this.providerOptions,
+          requestContext,
           ...observabilityContext,
         });
 
-        result = response.object!;
+        if (!response.object) {
+          throw new Error('Structured output returned no object');
+        }
+        result = response.object;
       } else {
         const response = await this.detectionAgent.generateLegacy(prompt, {
           output: standardSchemaToJSONSchema(schema),
           temperature: 0,
           providerOptions: this.providerOptions as SharedV2ProviderOptions,
+          requestContext,
           ...observabilityContext,
         });
 
+        if (!response.object) {
+          throw new Error('Legacy output returned no object');
+        }
         result = response.object as LanguageDetectionResult;
       }
 
@@ -336,7 +355,13 @@ export class LanguageDetector implements Processor<'language-detector'> {
 
       return result;
     } catch (error) {
-      console.warn('[LanguageDetector] Detection agent failed, assuming target language:', error);
+      handleModelError({
+        error,
+        errorStrategy: this.errorStrategy,
+        abort,
+        warningMessage: '[LanguageDetector] Detection agent failed, assuming target language:',
+        abortMessage: 'Language detection failed because the internal model call failed',
+      });
       // Fail open - assume target language if detection fails
       return {
         iso_code: null,

@@ -1,13 +1,14 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 
-import type { AgentSignalInput, Agent } from '@mastra/core/agent';
+import type { AgentSignalInput, Agent, AgentSignalIfIdleOptions } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import type { Mastra } from '@mastra/core/mastra';
 import type { StorageThreadType } from '@mastra/core/memory';
+import type { SendNotificationSignalInput } from '@mastra/core/notifications';
 import type {
   InputProcessorOrWorkflow,
   OutputProcessorOrWorkflow,
@@ -40,23 +41,27 @@ export const GITHUB_SYNC_STATUS_TAG = 'github-sync-status';
 export const GITHUB_SIGNALS_METADATA_KEY = 'githubSignals';
 
 export type GithubPermission = 'admin' | 'maintain' | 'write' | 'triage' | 'read' | 'none';
+export type GithubSubscriptionMode = 'working' | 'review';
 const DEFAULT_AUTHORIZED_PERMISSIONS: GithubPermission[] = ['admin', 'maintain', 'write'];
 const DEFAULT_AUTHORIZED_BOTS = ['coderabbitai[bot]', 'devin-ai-integration[bot]'];
 const PERMISSION_CACHE_TTL_MS = 5 * 60 * 1000;
 
-/** Notification kinds driven by comment/review activity that should be gated by author permission. */
-const AUTHOR_GATED_NOTIFICATION_KINDS = new Set(['pull-request-activity', 'pull-request-review-activity']);
+/** Notification kinds that include comment content and should be gated by author permission. */
+const AUTHOR_GATED_NOTIFICATION_KINDS = new Set(['pull-request-activity']);
 
 export type GithubPRSubscription = {
   owner: string;
   repo: string;
   number: number;
+  mode: GithubSubscriptionMode;
   subscribedAt: string;
   updatedAt: string;
   lastSubscribeSignalId: string;
   lastSyncAt?: string;
   lastSyncStatus?: 'success' | 'error' | 'skipped';
   lastSyncError?: string;
+  /** Error from reading the PR snapshot out of the gitcrawl database after a successful sync. */
+  lastSnapshotError?: string;
   lastObservedGithubUpdatedAt?: string;
   lastObservedContentHash?: string;
   lastObservedThreadContentHash?: string;
@@ -65,10 +70,14 @@ export type GithubPRSubscription = {
   lastObservedMergeableState?: string;
   lastObservedCiState?: string;
   lastObservedReviewStateHash?: string;
+  lastObservedCommentUrl?: string;
+  lastObservedCommentAuthor?: string;
+  lastObservedCommentIsBot?: boolean;
   lastNotificationAt?: string;
   lastNotificationKind?: string;
   lastNotificationPriority?: 'medium' | 'high';
   lastNotificationSummary?: string;
+  lastNotificationDedupeKey?: string;
 };
 
 export type GithubSignalsThreadMetadata = {
@@ -77,7 +86,9 @@ export type GithubSignalsThreadMetadata = {
 };
 
 export type GithubPRSignalInput = number | { owner?: string; repo?: string; number: number };
-export type GithubSubscribePRSignalInput = GithubPRSignalInput;
+export type GithubSubscribePRSignalInput =
+  | number
+  | { owner?: string; repo?: string; number: number; mode?: GithubSubscriptionMode };
 export type GithubUnsubscribePRSignalInput = GithubPRSignalInput;
 
 export type GithubSignalsSyncInput = {
@@ -210,12 +221,13 @@ type GithubPRSignal = {
   owner?: string;
   repo?: string;
   number: number;
+  mode?: GithubSubscriptionMode;
 };
 
 type GithubSignalAgent = {
   sendSignal(signal: AgentSignalInput, target: unknown): { accepted: unknown };
   sendNotificationSignal?(
-    notification: unknown | unknown[],
+    notification: SendNotificationSignalInput | SendNotificationSignalInput[],
     target: unknown,
   ): { accepted?: unknown } | Promise<unknown>;
 };
@@ -226,7 +238,7 @@ type GithubSignalAgentOptions = {
   getNotificationStreamOptions?: (target: {
     resourceId: string;
     threadId: string;
-  }) => GithubNotificationStreamOptions | Promise<GithubNotificationStreamOptions>;
+  }) => GithubNotificationStreamOptions | undefined | Promise<GithubNotificationStreamOptions | undefined>;
 };
 
 type GithubSignalsMastra = {
@@ -242,22 +254,45 @@ type GithubToolExecuteContext = {
   };
 };
 
+type GithubToolPRInput = { owner?: string; repo?: string; number: number };
+
+type GithubSubscribeToolInput = {
+  prs: GithubToolPRInput[];
+  mode?: GithubSubscriptionMode;
+};
+
+type GithubUnsubscribeToolInput = {
+  prs?: GithubToolPRInput[];
+  all?: boolean;
+};
+
 type GithubToolFactory = (definition: {
   id: string;
   description: string;
   inputSchema: z.ZodTypeAny;
   execute: (
-    input: { owner?: string; repo?: string; number: number },
+    input: GithubSubscribeToolInput | GithubUnsubscribeToolInput,
     context?: GithubToolExecuteContext,
   ) => Promise<unknown>;
 }) => unknown;
 
 const createGithubTool = createTool as unknown as GithubToolFactory;
 
+type GithubPRSubscriptionSummary = {
+  owner: string;
+  repo: string;
+  number: number;
+  subscribedAt?: string;
+  updatedAt?: string;
+  lastSyncStatus?: 'success' | 'error' | 'skipped';
+};
+
 type GithubOperationResult = {
   owner: string;
   repo: string;
   number: number;
+  mode?: GithubSubscriptionMode;
+  terminalState?: 'closed' | 'merged';
   subscription?: GithubPRSubscription;
   syncResult?: GithubSignalsSyncResult;
   removed?: boolean;
@@ -269,6 +304,7 @@ type GithubPollingThread = {
   threadId: string;
   resourceId: string;
   agentId?: string;
+  ifIdle?: AgentSignalIfIdleOptions<unknown>;
 };
 
 type GithubPollingState = GithubPollingThread & {
@@ -290,6 +326,14 @@ function readNumber(value: unknown): number | undefined {
   return undefined;
 }
 
+function normalizeGithubSubscriptionMode(value: unknown): GithubSubscriptionMode {
+  return value === 'review' ? 'review' : 'working';
+}
+
+function getGithubTerminalState(snapshot: GithubPullRequestSnapshot | undefined): 'closed' | 'merged' | undefined {
+  return snapshot?.state === 'closed' || snapshot?.state === 'merged' ? snapshot.state : undefined;
+}
+
 function stableJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
   if (isPlainObject(value)) {
@@ -309,23 +353,36 @@ function resolveHomePath(path: string): string {
   return path.startsWith('~/') ? join(homedir(), path.slice(2)) : path;
 }
 
-async function getGitcrawlDbPath(): Promise<string> {
-  if (process.env.GITCRAWL_DB_PATH) return resolveHomePath(process.env.GITCRAWL_DB_PATH);
-  const configPath = process.env.GITCRAWL_CONFIG_PATH ?? join(homedir(), '.config', 'gitcrawl', 'config.toml');
+async function readDbPathFromGitcrawlConfig(configPath: string): Promise<string | undefined> {
   try {
     const config = await readFile(resolveHomePath(configPath), 'utf8');
     const match = /^\s*db_path\s*=\s*['\"]([^'\"]+)['\"]/m.exec(config);
     if (match?.[1]) return resolveHomePath(match[1]);
   } catch {
-    // fall back to gitcrawl's default config location
+    // no readable config at this location
   }
-  return join(homedir(), '.config', 'gitcrawl', 'gitcrawl.db');
+  return undefined;
 }
 
-async function queryGitcrawlDb<T>(sql: string): Promise<T[]> {
-  const dbPath = await getGitcrawlDbPath();
-  const { stdout } = await execFileAsync('sqlite3', ['-json', dbPath, sql], { maxBuffer: 10 * 1024 * 1024 });
-  return JSON.parse(stdout || '[]') as T[];
+async function fileExists(path: string): Promise<boolean> {
+  try {
+    await stat(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Directories gitcrawl uses for its config and database by default. Linux
+ * uses the XDG path, but macOS uses ~/Library/Application Support, so probing
+ * only ~/.config silently misses the database on macOS.
+ */
+function gitcrawlDefaultDirs(): string[] {
+  return [
+    join(homedir(), '.config', 'gitcrawl'),
+    ...(process.platform === 'darwin' ? [join(homedir(), 'Library', 'Application Support', 'gitcrawl')] : []),
+  ];
 }
 
 function sqlString(value: string): string {
@@ -357,6 +414,7 @@ function getGithubMetadata(threadMetadata: Record<string, unknown> | undefined):
       owner,
       repo,
       number,
+      mode: normalizeGithubSubscriptionMode(rawSubscription.mode),
       subscribedAt,
       updatedAt,
       lastSubscribeSignalId,
@@ -368,6 +426,9 @@ function getGithubMetadata(threadMetadata: Record<string, unknown> | undefined):
         : {}),
       ...(readString(rawSubscription.lastSyncError)
         ? { lastSyncError: readString(rawSubscription.lastSyncError)! }
+        : {}),
+      ...(readString(rawSubscription.lastSnapshotError)
+        ? { lastSnapshotError: readString(rawSubscription.lastSnapshotError)! }
         : {}),
       ...(readString(rawSubscription.lastObservedGithubUpdatedAt)
         ? { lastObservedGithubUpdatedAt: readString(rawSubscription.lastObservedGithubUpdatedAt)! }
@@ -393,6 +454,15 @@ function getGithubMetadata(threadMetadata: Record<string, unknown> | undefined):
       ...(readString(rawSubscription.lastObservedReviewStateHash)
         ? { lastObservedReviewStateHash: readString(rawSubscription.lastObservedReviewStateHash)! }
         : {}),
+      ...(readString(rawSubscription.lastObservedCommentUrl)
+        ? { lastObservedCommentUrl: readString(rawSubscription.lastObservedCommentUrl)! }
+        : {}),
+      ...(readString(rawSubscription.lastObservedCommentAuthor)
+        ? { lastObservedCommentAuthor: readString(rawSubscription.lastObservedCommentAuthor)! }
+        : {}),
+      ...(typeof rawSubscription.lastObservedCommentIsBot === 'boolean'
+        ? { lastObservedCommentIsBot: rawSubscription.lastObservedCommentIsBot }
+        : {}),
       ...(readString(rawSubscription.lastNotificationAt)
         ? { lastNotificationAt: readString(rawSubscription.lastNotificationAt)! }
         : {}),
@@ -404,6 +474,9 @@ function getGithubMetadata(threadMetadata: Record<string, unknown> | undefined):
         : {}),
       ...(readString(rawSubscription.lastNotificationSummary)
         ? { lastNotificationSummary: readString(rawSubscription.lastNotificationSummary)! }
+        : {}),
+      ...(readString(rawSubscription.lastNotificationDedupeKey)
+        ? { lastNotificationDedupeKey: readString(rawSubscription.lastNotificationDedupeKey)! }
         : {}),
     });
   }
@@ -449,18 +522,164 @@ function getPrLabel(subscription: GithubPRSubscription, snapshot?: GithubPullReq
   return snapshot?.title ? `${pr}: ${snapshot.title}` : pr;
 }
 
+function getTerminalNotificationSummary(label: string, terminalState: 'closed' | 'merged'): string {
+  return `${label} was ${terminalState}. This thread has been automatically unsubscribed from this PR. Resubscribe if you still need updates.`;
+}
+
 function getMergedNotificationSummary(label: string): string {
-  return `${label} was merged. This thread has been automatically unsubscribed from this PR. Resubscribe if you still need updates.`;
+  return getTerminalNotificationSummary(label, 'merged');
+}
+
+/**
+ * Removes a hidden block (its delimiters *and* its content) starting at every `open` marker.
+ *
+ * For each `open` occurrence the whole region up to and including the matching `close` is dropped.
+ * When `close` is missing the block is treated as unterminated and removed through end-of-string,
+ * so large payloads can't survive by omitting their closing marker. Matching is case-insensitive on
+ * the markers and uses plain `indexOf` scanning, so there is no regex backtracking (ReDoS-safe).
+ */
+function stripBlocks(text: string, open: string, close: string): string {
+  const haystack = text.toLowerCase();
+  const openLower = open.toLowerCase();
+  const closeLower = close.toLowerCase();
+  let result = '';
+  let cursor = 0;
+
+  for (;;) {
+    const start = haystack.indexOf(openLower, cursor);
+    if (start === -1) {
+      result += text.slice(cursor);
+      return result;
+    }
+    result += text.slice(cursor, start);
+    const end = haystack.indexOf(closeLower, start + openLower.length);
+    if (end === -1) return result; // unterminated: drop through EOF
+    cursor = end + closeLower.length;
+  }
+}
+
+/** Sentinel marker wrapping a stashed Markdown code region; `\u0000` cannot appear in GitHub text. */
+const CODE_TOKEN_PREFIX = '\u0000CODE';
+const CODE_TOKEN_SUFFIX = '\u0000';
+
+/**
+ * Temporarily removes Markdown code spans and fenced code blocks so tag stripping can't damage
+ * human-authored code examples.
+ *
+ * GitHub renders Markdown, so legitimate code like `` `<Component>` ``, generic type examples, or
+ * fenced JSX/TSX must survive sanitization. Each code region is replaced with an opaque token and
+ * pushed onto a stash; {@link restore} swaps the tokens back after the surrounding prose has been
+ * stripped of markup. Fenced blocks are matched before inline spans so backtick runs inside a fence
+ * are not mistaken for inline code.
+ */
+function preserveMarkdownCode(text: string): { text: string; restore: (sanitized: string) => string } {
+  const preserved: string[] = [];
+  const stash = (match: string): string => {
+    const token = `${CODE_TOKEN_PREFIX}${preserved.length}${CODE_TOKEN_SUFFIX}`;
+    preserved.push(match);
+    return token;
+  };
+
+  const protectedText = text
+    // Fenced code blocks first so inline-code matching does not touch their contents.
+    .replace(/```[\s\S]*?```/g, stash)
+    // Multi-backtick inline spans (e.g. ``code with ` inside``) before the single-backtick pass.
+    .replace(/(`{2,})(?!`)[\s\S]*?[^`]\1(?!`)/g, stash)
+    // Single-backtick inline code spans.
+    .replace(/`[^`\n]*`/g, stash);
+
+  return {
+    text: protectedText,
+    restore: sanitized =>
+      sanitized.replace(/\u0000CODE(\d+)\u0000/g, (_, index: string) => preserved[Number(index)] ?? ''),
+  };
+}
+
+/**
+ * Removes XML/HTML-like markup — and the content it hides — from a PR comment body, leaving only
+ * human-readable text while preserving Markdown code examples.
+ *
+ * Review bots (e.g. CodeRabbit) embed large machine-only payloads in comments: base64 state blobs
+ * inside `<!-- ... -->` comments (often >100KB) and verbose collapsed `<details>` sections. Rather
+ * than targeting specific bot markers, we strip hidden blocks and tags generically, since none of
+ * that markup is useful to downstream consumers and persisting it balloons notification payloads and
+ * can overflow agent context windows.
+ *
+ * Markdown code spans/fenced blocks are stashed first and restored last, so legitimate code such as
+ * `` `<Component>` `` or fenced JSX is kept intact while bot markup elsewhere is removed. Block
+ * removal (comments, `<details>`) drops the *entire* section including its inner content, and any
+ * unterminated block is removed through end-of-string so a missing closing marker can't smuggle the
+ * payload through. All scanning is `indexOf`-based and the only regex used is a non-backtracking
+ * single-tag matcher, so adversarial input cannot trigger catastrophic backtracking (ReDoS). Any
+ * unterminated markup fragment (e.g. a dangling `<script` with no `>`) is dropped through end-of-
+ * string, and finally every remaining lone `<` is removed so no partial markup survives — while
+ * ordinary prose like `coverage < 80%` keeps its text intact.
+ */
+export function sanitizeCommentText(body: string): string {
+  // Protect Markdown code regions before any stripping touches the text.
+  const { text: protectedBody, restore } = preserveMarkdownCode(body);
+  // Remove whole hidden sections (delimiters + content) before touching individual tags.
+  let text = stripBlocks(protectedBody, '<!--', '-->');
+  text = stripBlocks(text, '<details', '</details>');
+  const stripped = text
+    // Remaining standalone tags, e.g. <summary>, </p>, <br/>. `[^<>]*` cannot backtrack.
+    .replace(/<\/?[a-zA-Z][^<>]*>/g, '')
+    // Drop an unterminated markup fragment (`<!--`, `</`, `<tag`...) from its start through EOF.
+    .replace(/<[!/a-zA-Z][\s\S]*$/g, '')
+    // Strip any lone `<` left over, but keep surrounding prose (e.g. `coverage < 80%`).
+    .replace(/</g, '')
+    // Normalize prose whitespace *before* restoring code, so stashed blocks are never mutated.
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  return restore(stripped);
+}
+
+/** Applies {@link sanitizeCommentText} to an optional comment body, preserving `undefined`. */
+function sanitizeCommentBody(body: string | undefined): string | undefined {
+  if (body === undefined) return undefined;
+  const sanitized = sanitizeCommentText(body);
+  return sanitized.length > 0 ? sanitized : undefined;
 }
 
 function getCommentExcerpt(body: string): string {
-  const excerpt = body.replace(/\s+/g, ' ').trim();
+  const excerpt = sanitizeCommentText(body).replace(/\s+/g, ' ').trim();
   return excerpt.length > 240 ? `${excerpt.slice(0, 237)}...` : excerpt;
 }
 
 function getCommentNotificationSummary(pr: string, snapshot: GithubPullRequestSnapshot): string | undefined {
   if (!snapshot.latestCommentAuthor || !snapshot.latestCommentBody) return undefined;
   return `${snapshot.latestCommentAuthor} commented on ${pr}: ${getCommentExcerpt(snapshot.latestCommentBody)}`;
+}
+
+function isNoisyBotComment(input: { author?: string; body?: string }): boolean {
+  const author = input.author?.toLowerCase();
+  const body = input.body?.toLowerCase().trim();
+  if (!author || !body) return false;
+
+  if (author.includes('coderabbit')) {
+    return (
+      body.includes('## review skipped') ||
+      body.includes('review_stack_entry_start') ||
+      body.includes('review change stack') ||
+      body.includes('storage.googleapis.com/coderabbit_public_assets/review-stack') ||
+      body.includes('no actionable comments were generated') ||
+      (body.includes('actions performed') && body.includes('review triggered'))
+    );
+  }
+
+  if (author === 'vercel[bot]') return body.startsWith('[vc]:');
+  if (author === 'socket-security[bot]') return body.includes('review the following changes in direct dependencies');
+  if (author === 'dane-ai-mastra[bot]') {
+    return (
+      body.includes('mastra-pr-automation') || body.includes('## pr triage') || body.includes('## pr complexity score')
+    );
+  }
+
+  return false;
+}
+
+function hasNoisyLatestBotComment(snapshot: GithubPullRequestSnapshot): boolean {
+  return isNoisyBotComment({ author: snapshot.latestCommentAuthor, body: snapshot.latestCommentBody });
 }
 
 type GithubActivityNotificationPlan = { kind: string; priority: 'medium' | 'high'; summary: string };
@@ -471,7 +690,10 @@ const githubActivityNotificationPriority: Record<GithubActivityNotificationPlan[
 };
 
 function getGithubActivityNotificationRank(notification: GithubActivityNotificationPlan): number {
-  return notification.kind === 'pull-request-activity' ? 0 : 1;
+  if (notification.kind === 'pull-request-activity') return 0;
+  if (notification.kind === 'pull-request-code-activity') return 1;
+  if (notification.kind === 'pull-request-review-activity') return 2;
+  return 3;
 }
 
 function compareGithubActivityNotifications(
@@ -491,11 +713,49 @@ function classifyGithubCommentActivityNotification(input: {
   subscription: GithubPRSubscription;
   snapshot: GithubPullRequestSnapshot;
 }): GithubActivityNotificationPlan | undefined {
-  if (isBotOnlyActivity(input.snapshot)) return undefined;
+  if (isBotOnlyActivity(input.snapshot) || hasNoisyLatestBotComment(input.snapshot)) return undefined;
   const pr = `${input.subscription.owner}/${input.subscription.repo}#${input.subscription.number}`;
   const summary = getCommentNotificationSummary(pr, input.snapshot);
   if (!summary) return undefined;
   return { kind: 'pull-request-activity', priority: 'high', summary };
+}
+
+function classifyGithubTerminalActivityNotification(input: {
+  subscription: GithubPRSubscription;
+  snapshot: GithubPullRequestSnapshot;
+  terminalState: 'closed' | 'merged';
+}): GithubActivityNotificationPlan {
+  return {
+    kind: input.terminalState === 'merged' ? 'pull-request-merged' : 'pull-request-closed',
+    priority: 'high',
+    summary: getTerminalNotificationSummary(getPrLabel(input.subscription, input.snapshot), input.terminalState),
+  };
+}
+
+function classifyGithubHeadActivityNotification(input: {
+  subscription: GithubPRSubscription;
+  snapshot: GithubPullRequestSnapshot;
+}): GithubActivityNotificationPlan {
+  return {
+    kind: 'pull-request-code-activity',
+    priority: 'medium',
+    summary: `New head revision for ${getPrLabel(input.subscription, input.snapshot)}.`,
+  };
+}
+
+function classifyGithubReviewStateActivityNotification(input: {
+  subscription: GithubPRSubscription;
+  snapshot: GithubPullRequestSnapshot;
+}): GithubActivityNotificationPlan {
+  const count = input.snapshot.unresolvedReviewThreads ?? 0;
+  return {
+    kind: 'pull-request-review-activity',
+    priority: 'medium',
+    summary:
+      count === 0
+        ? `All review threads are resolved for ${getPrLabel(input.subscription, input.snapshot)}.`
+        : `${getPrLabel(input.subscription, input.snapshot)} has ${count} unresolved review ${count === 1 ? 'thread' : 'threads'}.`,
+  };
 }
 
 function getCheckUpdatedTime(check: { updatedAt?: string }): number {
@@ -548,6 +808,26 @@ export function normalizeGithubChecksForSnapshot(input: {
 
 function isBotOnlyActivity(snapshot: GithubPullRequestSnapshot): boolean {
   return snapshot.latestCommentIsBot === true && (!snapshot.ciState || snapshot.ciState === 'unknown');
+}
+
+function isKnownMergeableState(state: string | undefined): state is string {
+  return !!state && state.toLowerCase() !== 'unknown';
+}
+
+function hasMeaningfulMergeableStateChange(previous: string | undefined, current: string | undefined): boolean {
+  if (!isKnownMergeableState(current) || current === previous) return false;
+  return current === 'dirty' || previous === 'dirty' || isKnownMergeableState(previous);
+}
+
+function isExistingBotCommentEdit(subscription: GithubPRSubscription, snapshot: GithubPullRequestSnapshot): boolean {
+  return (
+    snapshot.latestCommentIsBot === true &&
+    subscription.lastObservedCommentIsBot === true &&
+    !!snapshot.latestCommentUrl &&
+    snapshot.latestCommentUrl === subscription.lastObservedCommentUrl &&
+    !!snapshot.latestCommentAuthor &&
+    snapshot.latestCommentAuthor === subscription.lastObservedCommentAuthor
+  );
 }
 
 function stringifyEvidence(value: unknown): string {
@@ -623,7 +903,7 @@ function classifyGithubActivityNotification(input: {
     };
   }
   if (
-    input.snapshot.mergeableState &&
+    isKnownMergeableState(input.snapshot.mergeableState) &&
     input.subscription.lastObservedMergeableState === 'dirty' &&
     input.snapshot.mergeableState !== 'dirty'
   ) {
@@ -670,7 +950,7 @@ function classifyGithubActivityNotification(input: {
     };
   }
   if (input.snapshot.ciState === 'pending' && input.subscription.lastObservedCiState === 'pending') return undefined;
-  if (isBotOnlyActivity(input.snapshot)) return undefined;
+  if (isBotOnlyActivity(input.snapshot) || hasNoisyLatestBotComment(input.snapshot)) return undefined;
   const commentSummary = getCommentNotificationSummary(pr, input.snapshot);
   return {
     kind: 'pull-request-activity',
@@ -712,9 +992,12 @@ function applySnapshotCursor(subscription: GithubPRSubscription, snapshot: Githu
   if (snapshot.threadContentHash) subscription.lastObservedThreadContentHash = snapshot.threadContentHash;
   if (snapshot.headSha) subscription.lastObservedHeadSha = snapshot.headSha;
   if (snapshot.state) subscription.lastObservedState = snapshot.state;
-  if (snapshot.mergeableState) subscription.lastObservedMergeableState = snapshot.mergeableState;
+  if (isKnownMergeableState(snapshot.mergeableState)) subscription.lastObservedMergeableState = snapshot.mergeableState;
   if (snapshot.ciState) subscription.lastObservedCiState = snapshot.ciState;
   if (snapshot.reviewStateHash) subscription.lastObservedReviewStateHash = snapshot.reviewStateHash;
+  if (snapshot.latestCommentUrl) subscription.lastObservedCommentUrl = snapshot.latestCommentUrl;
+  if (snapshot.latestCommentAuthor) subscription.lastObservedCommentAuthor = snapshot.latestCommentAuthor;
+  if (snapshot.latestCommentIsBot !== undefined) subscription.lastObservedCommentIsBot = snapshot.latestCommentIsBot;
 }
 
 function parseGitHubRemoteUrl(remoteUrl: string): GithubRepository | undefined {
@@ -742,9 +1025,55 @@ export class GitRemoteRepositoryResolver implements GithubRepositoryResolver {
 
 export class GitcrawlSyncClient implements GithubSignalsSyncClient {
   readonly #command: string;
+  #dbPathPromise?: Promise<string>;
 
   constructor(options: { command?: string } = {}) {
     this.#command = options.command ?? 'gitcrawl';
+  }
+
+  /**
+   * Resolve the gitcrawl SQLite database path. Explicit env overrides win,
+   * then gitcrawl itself is asked (authoritative across platforms and
+   * versions), then known default locations are probed.
+   */
+  async #resolveDbPath(): Promise<string> {
+    if (process.env.GITCRAWL_DB_PATH) return resolveHomePath(process.env.GITCRAWL_DB_PATH);
+    if (process.env.GITCRAWL_CONFIG_PATH) {
+      const fromEnvConfig = await readDbPathFromGitcrawlConfig(process.env.GITCRAWL_CONFIG_PATH);
+      if (fromEnvConfig) return fromEnvConfig;
+    }
+    try {
+      const { stdout } = await execFileAsync(this.#command, ['status', '--json'], { maxBuffer: 10 * 1024 * 1024 });
+      const status = JSON.parse(stdout) as { database_path?: unknown; db_path?: unknown };
+      const reported = readString(status.database_path) ?? readString(status.db_path);
+      if (reported) return resolveHomePath(reported);
+    } catch {
+      // gitcrawl unavailable or output unparsable; probe default locations
+    }
+    const defaultDirs = gitcrawlDefaultDirs();
+    for (const dir of defaultDirs) {
+      const fromConfig = await readDbPathFromGitcrawlConfig(join(dir, 'config.toml'));
+      if (fromConfig) return fromConfig;
+    }
+    for (const dir of defaultDirs) {
+      const candidate = join(dir, 'gitcrawl.db');
+      if (await fileExists(candidate)) return candidate;
+    }
+    return join(defaultDirs[0]!, 'gitcrawl.db');
+  }
+
+  async #queryDb<T>(sql: string): Promise<T[]> {
+    this.#dbPathPromise ??= this.#resolveDbPath();
+    const dbPath = await this.#dbPathPromise;
+    try {
+      const { stdout } = await execFileAsync('sqlite3', ['-json', dbPath, sql], { maxBuffer: 10 * 1024 * 1024 });
+      return JSON.parse(stdout || '[]') as T[];
+    } catch (error) {
+      // Drop the cached path so a fixed or moved database is picked up on the next poll.
+      this.#dbPathPromise = undefined;
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`gitcrawl database query failed (db: ${dbPath}): ${message}`);
+    }
   }
 
   async syncPullRequest(input: GithubSignalsSyncInput): Promise<GithubSignalsSyncResult> {
@@ -771,38 +1100,37 @@ export class GitcrawlSyncClient implements GithubSignalsSyncClient {
   }
 
   async getPullRequestSnapshot(input: GithubSignalsSyncInput): Promise<GithubPullRequestSnapshot | undefined> {
-    try {
-      const { stdout } = await execFileAsync(
-        this.#command,
-        ['threads', `${input.owner}/${input.repo}`, '--numbers', String(input.number), '--json'],
-        {
-          cwd: input.cwd,
-          signal: input.abortSignal,
-          maxBuffer: 10 * 1024 * 1024,
-        },
-      );
-      const parsed = JSON.parse(stdout) as { threads?: Array<Record<string, unknown>> };
-      const thread = parsed.threads?.find(item => readNumber(item.number) === input.number);
-      if (!thread) return undefined;
+    const { stdout } = await execFileAsync(
+      this.#command,
+      ['threads', `${input.owner}/${input.repo}`, '--numbers', String(input.number), '--json'],
+      {
+        cwd: input.cwd,
+        signal: input.abortSignal,
+        maxBuffer: 10 * 1024 * 1024,
+      },
+    );
+    const parsed = JSON.parse(stdout) as { threads?: Array<Record<string, unknown>> };
+    const thread = parsed.threads?.find(item => readNumber(item.number) === input.number);
+    if (!thread) return undefined;
 
-      const owner = sqlString(input.owner);
-      const repo = sqlString(input.repo);
-      const number = input.number;
-      const [threadDetails] = await queryGitcrawlDb<{
-        state?: string;
-        closed_at_gh?: string;
-        merged_at_gh?: string;
-      }>(`select t.state, t.closed_at_gh, t.merged_at_gh
+    const owner = sqlString(input.owner);
+    const repo = sqlString(input.repo);
+    const number = input.number;
+    const [threadDetails] = await this.#queryDb<{
+      state?: string;
+      closed_at_gh?: string;
+      merged_at_gh?: string;
+    }>(`select t.state, t.closed_at_gh, t.merged_at_gh
           from threads t
           join repositories r on r.id=t.repo_id
          where r.owner=${owner} and r.name=${repo} and t.number=${number}
          limit 1`);
-      const [details] = await queryGitcrawlDb<{
-        head_sha?: string;
-        head_ref?: string;
-        mergeable_state?: string;
-        merged_at?: string;
-      }>(`select d.head_sha, d.head_ref, d.mergeable_state,
+    const [details] = await this.#queryDb<{
+      head_sha?: string;
+      head_ref?: string;
+      mergeable_state?: string;
+      merged_at?: string;
+    }>(`select d.head_sha, d.head_ref, d.mergeable_state,
                  json_extract(d.raw_json, '$.merged_at') as merged_at
           from pull_request_details d
           join threads t on t.id=d.thread_id
@@ -810,50 +1138,50 @@ export class GitcrawlSyncClient implements GithubSignalsSyncClient {
          where r.owner=${owner} and r.name=${repo} and t.number=${number}
          limit 1`);
 
-      const headSha = readString(details?.head_sha);
-      const checkRows = await queryGitcrawlDb<{
-        name?: string;
-        status?: string;
-        conclusion?: string;
-        workflow_name?: string;
-        details_url?: string;
-        updated_at?: string;
-      }>(`select c.name, c.status, c.conclusion, c.workflow_name, c.details_url,
+    const headSha = readString(details?.head_sha);
+    const checkRows = await this.#queryDb<{
+      name?: string;
+      status?: string;
+      conclusion?: string;
+      workflow_name?: string;
+      details_url?: string;
+      updated_at?: string;
+    }>(`select c.name, c.status, c.conclusion, c.workflow_name, c.details_url,
                  coalesce(c.completed_at, c.started_at, c.fetched_at) as updated_at
             from pull_request_checks c
             join threads t on t.id=c.thread_id
             join repositories r on r.id=t.repo_id
            where r.owner=${owner} and r.name=${repo} and t.number=${number}${headSha ? ` and json_extract(c.raw_json, '$.head_sha')=${sqlString(headSha)}` : ''}`);
 
-      const workflowRows = details?.head_sha
-        ? await queryGitcrawlDb<{
-            workflow_name?: string;
-            status?: string;
-            conclusion?: string;
-            html_url?: string;
-            updated_at_gh?: string;
-          }>(`select workflow_name, status, conclusion, html_url, updated_at_gh
+    const workflowRows = details?.head_sha
+      ? await this.#queryDb<{
+          workflow_name?: string;
+          status?: string;
+          conclusion?: string;
+          html_url?: string;
+          updated_at_gh?: string;
+        }>(`select workflow_name, status, conclusion, html_url, updated_at_gh
                 from github_workflow_runs w
                 join repositories r on r.id=w.repo_id
                where r.owner=${owner} and r.name=${repo} and w.head_sha=${sqlString(details.head_sha)}`)
-        : [];
-      const [reviewState] = await queryGitcrawlDb<{
-        unresolved_count?: number;
-        latest_review_thread_at?: string;
-      }>(`select count(*) as unresolved_count,
+      : [];
+    const [reviewState] = await this.#queryDb<{
+      unresolved_count?: number;
+      latest_review_thread_at?: string;
+    }>(`select count(*) as unresolved_count,
                  max(coalesce(first_comment_updated_at, first_comment_created_at, fetched_at)) as latest_review_thread_at
             from pull_request_review_threads rt
             join threads t on t.id=rt.thread_id
             join repositories r on r.id=t.repo_id
            where r.owner=${owner} and r.name=${repo} and t.number=${number} and rt.is_resolved=0`);
-      const latestComments = await queryGitcrawlDb<{
-        author_login?: string;
-        author_type?: string;
-        is_bot?: number;
-        body?: string;
-        html_url?: string;
-        updated_at?: string;
-      }>(`select c.author_login, c.author_type, c.is_bot, c.body, json_extract(c.raw_json, '$.html_url') as html_url,
+    const latestComments = await this.#queryDb<{
+      author_login?: string;
+      author_type?: string;
+      is_bot?: number;
+      body?: string;
+      html_url?: string;
+      updated_at?: string;
+    }>(`select c.author_login, c.author_type, c.is_bot, c.body, json_extract(c.raw_json, '$.html_url') as html_url,
                  coalesce(c.updated_at_gh, c.created_at_gh) as updated_at
             from comments c
             join threads t on t.id=c.thread_id
@@ -861,94 +1189,91 @@ export class GitcrawlSyncClient implements GithubSignalsSyncClient {
            where r.owner=${owner} and r.name=${repo} and t.number=${number}
            order by coalesce(c.updated_at_gh, c.created_at_gh) desc
            limit 20`);
-      const latestComment = latestComments[0];
+    const latestComment = latestComments[0];
 
-      const checks = normalizeGithubChecksForSnapshot({
-        checkRows: checkRows.map(row => ({
-          source: 'check',
-          name: readString(row.name) ?? 'check',
-          status: readString(row.status),
-          conclusion: readString(row.conclusion),
-          workflowName: readString(row.workflow_name),
-          detailsUrl: readString(row.details_url),
-          updatedAt: readString(row.updated_at),
-        })),
-        workflowRows: workflowRows.map(row => ({
-          source: 'workflow',
-          name: readString(row.workflow_name) ?? 'workflow',
-          status: readString(row.status),
-          conclusion: readString(row.conclusion),
-          workflowName: readString(row.workflow_name),
-          detailsUrl: readString(row.html_url),
-          updatedAt: readString(row.updated_at_gh),
-        })),
-      });
-      const ciState = checks.some(check => check.conclusion === 'failure' || check.conclusion === 'timed_out')
-        ? 'failure'
-        : checks.some(check => check.status && check.status !== 'completed')
-          ? 'pending'
-          : checks.length > 0
-            ? 'success'
-            : 'unknown';
-      const threadContentHash = readString(thread.content_hash);
-      const unresolvedReviewThreads = Number(reviewState?.unresolved_count ?? 0);
-      const reviewStateHash = snapshotHash({
-        unresolvedReviewThreads,
-        latestReviewThreadAt: reviewState?.latest_review_thread_at,
-      });
-      const contentHash = snapshotHash({
-        threadContentHash,
-        state: thread.state,
-        headSha: details?.head_sha,
-        mergeableState: details?.mergeable_state,
-        ciState,
-        reviewStateHash,
-        checks: checks.map(check => ({
-          name: check.name,
-          status: check.status,
-          conclusion: check.conclusion,
-          detailsUrl: check.detailsUrl,
-          updatedAt: check.updatedAt,
-        })),
-      });
-      return {
-        title: readString(thread.title),
-        state:
-          readString(details?.merged_at) || readString(threadDetails?.merged_at_gh)
-            ? 'merged'
-            : (readString(threadDetails?.state) ?? readString(thread.state)),
-        htmlUrl: readString(thread.html_url),
-        githubUpdatedAt: readString(thread.updated_at_gh),
-        closedAt: readString(threadDetails?.closed_at_gh),
-        mergedAt: readString(details?.merged_at) ?? readString(threadDetails?.merged_at_gh),
-        threadContentHash,
-        contentHash,
-        headSha: readString(details?.head_sha),
-        headRef: readString(details?.head_ref),
-        mergeableState: readString(details?.mergeable_state),
-        checks,
-        ciState,
-        unresolvedReviewThreads,
-        reviewStateHash,
-        latestReviewThreadAt: readString(reviewState?.latest_review_thread_at),
-        latestCommentAuthor: readString(latestComment?.author_login),
-        latestCommentAuthorType: readString(latestComment?.author_type),
-        latestCommentIsBot: latestComment?.is_bot === 1,
-        latestCommentBody: readString(latestComment?.body),
-        latestCommentUrl: readString(latestComment?.html_url),
-        latestCommentUpdatedAt: readString(latestComment?.updated_at),
-        latestComments: latestComments.map(comment => ({
-          author: readString(comment.author_login),
-          authorType: readString(comment.author_type),
-          isBot: comment.is_bot === 1,
-          body: readString(comment.body),
-          url: readString(comment.html_url),
-          updatedAt: readString(comment.updated_at),
-        })),
-      };
-    } catch {
-      return undefined;
-    }
+    const checks = normalizeGithubChecksForSnapshot({
+      checkRows: checkRows.map(row => ({
+        source: 'check',
+        name: readString(row.name) ?? 'check',
+        status: readString(row.status),
+        conclusion: readString(row.conclusion),
+        workflowName: readString(row.workflow_name),
+        detailsUrl: readString(row.details_url),
+        updatedAt: readString(row.updated_at),
+      })),
+      workflowRows: workflowRows.map(row => ({
+        source: 'workflow',
+        name: readString(row.workflow_name) ?? 'workflow',
+        status: readString(row.status),
+        conclusion: readString(row.conclusion),
+        workflowName: readString(row.workflow_name),
+        detailsUrl: readString(row.html_url),
+        updatedAt: readString(row.updated_at_gh),
+      })),
+    });
+    const ciState = checks.some(check => check.conclusion === 'failure' || check.conclusion === 'timed_out')
+      ? 'failure'
+      : checks.some(check => check.status && check.status !== 'completed')
+        ? 'pending'
+        : checks.length > 0
+          ? 'success'
+          : 'unknown';
+    const threadContentHash = readString(thread.content_hash);
+    const unresolvedReviewThreads = Number(reviewState?.unresolved_count ?? 0);
+    const reviewStateHash = snapshotHash({
+      unresolvedReviewThreads,
+      latestReviewThreadAt: reviewState?.latest_review_thread_at,
+    });
+    const contentHash = snapshotHash({
+      threadContentHash,
+      state: thread.state,
+      headSha: details?.head_sha,
+      mergeableState: details?.mergeable_state,
+      ciState,
+      reviewStateHash,
+      checks: checks.map(check => ({
+        name: check.name,
+        status: check.status,
+        conclusion: check.conclusion,
+        detailsUrl: check.detailsUrl,
+        updatedAt: check.updatedAt,
+      })),
+    });
+    return {
+      title: readString(thread.title),
+      state:
+        readString(details?.merged_at) || readString(threadDetails?.merged_at_gh)
+          ? 'merged'
+          : (readString(threadDetails?.state) ?? readString(thread.state)),
+      htmlUrl: readString(thread.html_url),
+      githubUpdatedAt: readString(thread.updated_at_gh),
+      closedAt: readString(threadDetails?.closed_at_gh),
+      mergedAt: readString(details?.merged_at) ?? readString(threadDetails?.merged_at_gh),
+      threadContentHash,
+      contentHash,
+      headSha: readString(details?.head_sha),
+      headRef: readString(details?.head_ref),
+      mergeableState: readString(details?.mergeable_state),
+      checks,
+      ciState,
+      unresolvedReviewThreads,
+      reviewStateHash,
+      latestReviewThreadAt: readString(reviewState?.latest_review_thread_at),
+      latestCommentAuthor: readString(latestComment?.author_login),
+      latestCommentAuthorType: readString(latestComment?.author_type),
+      latestCommentIsBot: latestComment?.is_bot === 1,
+      latestCommentBody: sanitizeCommentBody(readString(latestComment?.body)),
+      latestCommentUrl: readString(latestComment?.html_url),
+      latestCommentUpdatedAt: readString(latestComment?.updated_at),
+      latestComments: latestComments.map(comment => ({
+        author: readString(comment.author_login),
+        authorType: readString(comment.author_type),
+        isBot: comment.is_bot === 1,
+        body: sanitizeCommentBody(readString(comment.body)),
+        url: readString(comment.html_url),
+        updatedAt: readString(comment.updated_at),
+      })),
+    };
   }
 }
 
@@ -960,6 +1285,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
   static signals = {
     subscribeToPR(input: GithubSubscribePRSignalInput): AgentSignalInput {
       const normalized = typeof input === 'number' ? { number: input } : input;
+      const mode = normalizeGithubSubscriptionMode(normalized.mode);
       return {
         type: 'reactive',
         tagName: GITHUB_SUBSCRIBE_PR_TAG,
@@ -968,11 +1294,13 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
           ...(normalized.owner ? { owner: normalized.owner } : {}),
           ...(normalized.repo ? { repo: normalized.repo } : {}),
           number: normalized.number,
+          mode,
         },
         metadata: {
           github: {
             action: 'subscribeToPR',
             ...normalized,
+            mode,
           },
         },
       };
@@ -1002,6 +1330,8 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
   readonly #syncClient: GithubSignalsSyncClient;
   readonly #repositoryResolver: GithubRepositoryResolver;
   readonly #polling = new Map<string, GithubPollingState>();
+  readonly #pollingThreadGenerations = new Map<string, number>();
+  #pollingGeneration = 0;
   readonly #permissionCache = new Map<string, { permission: GithubPermission; expiresAt: number }>();
   #agent?: GithubSignalAgent;
   #agentOptions: GithubSignalAgentOptions = {};
@@ -1061,11 +1391,14 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     return this.#pollThread(input, { includeComments: true });
   }
 
-  async subscribeThreadToPR(input: GithubPollingThread & { pr: GithubPRSignalInput }): Promise<GithubOperationResult> {
+  async subscribeThreadToPR(
+    input: GithubPollingThread & { pr: GithubPRSignalInput; mode?: GithubSubscriptionMode },
+  ): Promise<GithubOperationResult> {
     const pr = typeof input.pr === 'number' ? { number: input.pr } : input.pr;
     return this.#subscribe({
       id: `github-command-subscribe-${randomUUID()}`,
       ...pr,
+      mode: normalizeGithubSubscriptionMode(input.mode),
       threadId: input.threadId,
       resourceId: input.resourceId,
     });
@@ -1094,12 +1427,6 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     }
 
     const key = this.#pollingKey(input);
-    for (const [pollingKey, state] of this.#polling.entries()) {
-      if (pollingKey === key) continue;
-      clearInterval(state.timer);
-      this.#polling.delete(pollingKey);
-    }
-
     if (this.#polling.has(key)) return true;
 
     const runPoll = (pollOptions: { includeComments?: boolean } = {}) => {
@@ -1118,6 +1445,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
 
   stopPollingForThread(input: GithubPollingThread): void {
     const key = this.#pollingKey(input);
+    this.#invalidatePollingThread(key);
     const state = this.#polling.get(key);
     if (!state) return;
     clearInterval(state.timer);
@@ -1137,8 +1465,21 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
   }
 
   stopAllPolling(): void {
+    this.#pollingGeneration++;
+    this.#pollingThreadGenerations.clear();
     for (const state of this.#polling.values()) clearInterval(state.timer);
     this.#polling.clear();
+  }
+
+  /**
+   * Shutdown hook. Per-thread polling lives in this provider's own timer map, not in the base
+   * class's single timer, so the inherited `stop()` would leave those intervals running: a
+   * provider that has been shut down would keep polling GitHub and keep notifying through the
+   * agent it was still connected to.
+   */
+  override stop(): void {
+    super.stop();
+    this.stopAllPolling();
   }
 
   async pollThreadNow(input: GithubPollingThread): Promise<number> {
@@ -1168,27 +1509,35 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
 
     const result = await this.#subscribe({ ...signal, ...threadContext, abortSignal: args.abortSignal });
     if (result.alreadyProcessed) return { tools };
+    const terminalMessage = result.terminalState
+      ? `Not subscribed to ${result.owner}/${result.repo}#${result.number} in review mode because it is already ${result.terminalState}.`
+      : undefined;
     await this.#sendStatus(args, result, {
-      status: result.syncResult?.ok === false ? 'sync_error' : 'subscribed',
+      status: result.terminalState
+        ? 'not_subscribed_terminal'
+        : result.syncResult?.ok === false
+          ? 'sync_error'
+          : 'subscribed',
       action: 'subscribeToPR',
       message:
-        result.syncResult?.ok === false
-          ? `Subscribed to ${result.owner}/${result.repo}#${result.number}, but gitcrawl sync failed: ${result.syncResult.error}`
-          : `Subscribed to ${result.owner}/${result.repo}#${result.number}.`,
+        terminalMessage ??
+        (result.syncResult?.ok === false
+          ? `Subscribed to ${result.owner}/${result.repo}#${result.number} in ${result.mode} mode, but gitcrawl sync failed: ${result.syncResult.error}`
+          : `Subscribed to ${result.owner}/${result.repo}#${result.number} in ${result.mode} mode.`),
     });
     return { tools };
   }
 
-  async processOutputStep(args: ProcessOutputStepArgs): Promise<MastraDBMessage[]> {
+  async processOutputStep(args: ProcessOutputStepArgs): Promise<void> {
     const evidence = detectPrWorkEvidence({ text: args.text, toolCalls: args.toolCalls });
-    if (!evidence) return args.messages;
+    if (!evidence) return;
 
     const threadContext = this.#getThreadContext(args);
-    if (!threadContext.threadId || !threadContext.resourceId) return args.messages;
+    if (!threadContext.threadId || !threadContext.resourceId) return;
 
     const { threadStore, loadedThread } = await this.#loadThread(threadContext);
     const githubMetadata = getGithubMetadata(loadedThread.metadata);
-    if (githubMetadata.subscriptionHintShown || githubMetadata.subscriptions.length > 0) return args.messages;
+    if (githubMetadata.subscriptionHintShown || githubMetadata.subscriptions.length > 0) return;
 
     let repository: GithubRepository;
     try {
@@ -1199,7 +1548,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
         number: evidence.number,
       });
     } catch {
-      return args.messages;
+      return;
     }
 
     await threadStore.saveThread({
@@ -1216,8 +1565,12 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     await args.sendSignal?.({
       type: 'reactive',
       tagName: 'system-reminder',
-      contents: `Looks like you're working with ${repository.owner}/${repository.repo}#${evidence.number}. Use /github subscribe ${evidence.number} or the github_subscribe_pr tool to follow updates.`,
-      attributes: { type: 'github-subscription-hint' },
+      contents: `Choose whether to follow ${repository.owner}/${repository.repo}#${evidence.number}: use /github subscribe ${evidence.number} --mode review for new commits, authorized latest PR comments, review-thread-state changes including all threads resolved, and PR close or merge updates; use --mode working for all actionable PR activity. Do not subscribe for a one-off inspection.`,
+      attributes: {
+        type: 'github-subscription-hint',
+        availableModes: 'review,working',
+        defaultMode: null,
+      },
       metadata: {
         github: {
           action: 'subscriptionHint',
@@ -1227,8 +1580,6 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
         },
       },
     });
-
-    return args.messages;
   }
 
   async #resolveThreadStore(): Promise<GithubSignalsThreadStore | undefined> {
@@ -1250,66 +1601,174 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
 
   #createTools(args: ProcessInputStepArgs): Record<string, unknown> {
     const threadContext = this.#getThreadContext(args);
+    const getExecutionThreadContext = (context?: GithubToolExecuteContext) => ({
+      threadId: context?.agent?.threadId ?? threadContext.threadId,
+      resourceId: context?.agent?.resourceId ?? threadContext.resourceId,
+    });
+    const prSchema = z.object({
+      number: z.number().int().positive(),
+      owner: z.string().optional(),
+      repo: z.string().optional(),
+    });
+    const subscribeSchema = z.object({
+      prs: z.array(prSchema).min(1),
+      mode: z.enum(['working', 'review']).optional(),
+    });
+    const unsubscribeSchema = z
+      .object({
+        prs: z.array(prSchema).min(1).optional(),
+        all: z.boolean().optional(),
+      })
+      .refine(input => [!!input.prs, input.all === true].filter(Boolean).length === 1, {
+        message: 'Provide exactly one of prs or all.',
+      });
+    const dedupePrs = (prs: GithubToolPRInput[]): GithubToolPRInput[] => {
+      const byKey = new Map<string, GithubToolPRInput>();
+      for (const pr of prs) {
+        byKey.set(`${pr.owner ?? ''}/${pr.repo ?? ''}#${pr.number}`, pr);
+      }
+      return [...byKey.values()];
+    };
+    const getSubscribeMessage = (result: GithubOperationResult) =>
+      result.terminalState
+        ? `Not subscribed to ${result.owner}/${result.repo}#${result.number} in review mode because it is already ${result.terminalState}.`
+        : result.syncResult?.ok === false
+          ? `Subscribed to ${result.owner}/${result.repo}#${result.number} in ${result.mode} mode, but gitcrawl sync failed: ${result.syncResult.error}`
+          : `Subscribed to ${result.owner}/${result.repo}#${result.number} in ${result.mode} mode.`;
+    const getUnsubscribeMessage = (result: GithubOperationResult) =>
+      result.removed
+        ? `Unsubscribed from ${result.owner}/${result.repo}#${result.number}.`
+        : `No GitHub subscription found for ${result.owner}/${result.repo}#${result.number}.`;
     return {
       ...args.tools,
       github_subscribe_pr: createGithubTool({
         id: 'github_subscribe_pr',
         description:
-          'Subscribe this thread to a GitHub pull request. Syncs only the requested PR with gitcrawl and stores the subscription on the thread.',
-        inputSchema: z.object({
-          number: z.number().int().positive(),
-          owner: z.string().optional(),
-          repo: z.string().optional(),
-        }),
-        execute: async input => {
-          const result = await this.#subscribe({
-            id: `github-tool-subscribe-${randomUUID()}`,
-            owner: input.owner,
-            repo: input.repo,
-            number: input.number,
-            threadId: threadContext.threadId,
-            resourceId: threadContext.resourceId,
-          });
-          return {
-            subscribed: true,
-            owner: result.owner,
-            repo: result.repo,
-            number: result.number,
-            syncStatus: result.syncResult?.ok === false ? 'error' : result.syncResult ? 'success' : undefined,
-            message:
-              result.syncResult?.ok === false
-                ? `Subscribed to ${result.owner}/${result.repo}#${result.number}, but gitcrawl sync failed: ${result.syncResult.error}`
-                : `Subscribed to ${result.owner}/${result.repo}#${result.number}.`,
+          'Subscribe this thread to one or more GitHub pull requests. Use review mode for new commits, authorized latest PR comments, review-thread-state changes including all threads resolved, and PR close or merge updates. Use working mode for all actionable PR activity. Omitted mode defaults to working. Do not subscribe for a one-off inspection.',
+        inputSchema: subscribeSchema,
+        execute: async (input, context) => {
+          const subscribeInput = input as GithubSubscribeToolInput;
+          const executionThreadContext = getExecutionThreadContext(context);
+          const mode = normalizeGithubSubscriptionMode(subscribeInput.mode);
+          const requestedPrs = dedupePrs(subscribeInput.prs);
+          const results: Array<{
+            subscribed: boolean;
+            mode: GithubSubscriptionMode;
+            owner: string;
+            repo: string;
+            number: number;
+            terminalState?: 'closed' | 'merged';
+            reason?: 'terminal' | 'error';
+            syncStatus?: 'success' | 'error';
+            message: string;
+          }> = [];
+
+          for (const pr of requestedPrs) {
+            try {
+              const result = await this.#subscribe({
+                id: `github-tool-subscribe-${randomUUID()}`,
+                owner: pr.owner,
+                repo: pr.repo,
+                number: pr.number,
+                mode,
+                threadId: executionThreadContext.threadId,
+                resourceId: executionThreadContext.resourceId,
+              });
+              results.push({
+                subscribed: !result.terminalState,
+                mode: result.mode ?? mode,
+                owner: result.owner,
+                repo: result.repo,
+                number: result.number,
+                ...(result.terminalState ? { terminalState: result.terminalState, reason: 'terminal' as const } : {}),
+                syncStatus: result.syncResult?.ok === false ? 'error' : result.syncResult ? 'success' : undefined,
+                message: getSubscribeMessage(result),
+              });
+            } catch (error) {
+              results.push({
+                subscribed: false,
+                mode,
+                owner: pr.owner ?? '',
+                repo: pr.repo ?? '',
+                number: pr.number,
+                reason: 'error',
+                syncStatus: 'error',
+                message: `Could not subscribe to PR #${pr.number}: ${error instanceof Error ? error.message : String(error)}`,
+              });
+            }
+          }
+
+          const subscriptions = await this.#getSubscriptionSummaries(
+            executionThreadContext as GithubPollingThread,
+          ).catch(() => []);
+          const response: Record<string, unknown> = {
+            subscribed: results.some(result => result.subscribed),
+            results,
+            subscriptions,
           };
+          if (results.length === 1) Object.assign(response, results[0]);
+          return response;
         },
       }),
       github_unsubscribe_pr: createGithubTool({
         id: 'github_unsubscribe_pr',
-        description: 'Unsubscribe this thread from a GitHub pull request.',
-        inputSchema: z.object({
-          number: z.number().int().positive(),
-          owner: z.string().optional(),
-          repo: z.string().optional(),
-        }),
-        execute: async input => {
-          const result = await this.#unsubscribe({
-            id: `github-tool-unsubscribe-${randomUUID()}`,
-            owner: input.owner,
-            repo: input.repo,
-            number: input.number,
-            threadId: threadContext.threadId,
-            resourceId: threadContext.resourceId,
-          });
-          return {
-            unsubscribed: result.removed ?? false,
-            owner: result.owner,
-            repo: result.repo,
-            number: result.number,
-            remainingSubscriptions: result.remainingSubscriptions,
-            message: result.removed
-              ? `Unsubscribed from ${result.owner}/${result.repo}#${result.number}.`
-              : `No GitHub subscription found for ${result.owner}/${result.repo}#${result.number}.`,
+        description: 'Unsubscribe this thread from one or more GitHub pull requests, or unsubscribe all current PRs.',
+        inputSchema: unsubscribeSchema,
+        execute: async (input, context) => {
+          const executionThreadContext = getExecutionThreadContext(context);
+          const unsubscribeInput = input as GithubUnsubscribeToolInput;
+          const requestedPrs = unsubscribeInput.all
+            ? await this.#getSubscriptionSummaries(executionThreadContext as GithubPollingThread)
+            : dedupePrs(unsubscribeInput.prs ?? []);
+          const results: Array<{
+            owner: string;
+            repo: string;
+            number: number;
+            unsubscribed: boolean;
+            reason?: 'error';
+            message: string;
+          }> = [];
+
+          for (const pr of requestedPrs) {
+            try {
+              const result = await this.#unsubscribe({
+                id: `github-tool-unsubscribe-${randomUUID()}`,
+                owner: pr.owner,
+                repo: pr.repo,
+                number: pr.number,
+                threadId: executionThreadContext.threadId,
+                resourceId: executionThreadContext.resourceId,
+              });
+              results.push({
+                owner: result.owner,
+                repo: result.repo,
+                number: result.number,
+                unsubscribed: result.removed ?? false,
+                message: getUnsubscribeMessage(result),
+              });
+            } catch (error) {
+              results.push({
+                owner: pr.owner ?? '',
+                repo: pr.repo ?? '',
+                number: pr.number,
+                unsubscribed: false,
+                reason: 'error',
+                message: `Could not unsubscribe from PR #${pr.number}: ${error instanceof Error ? error.message : String(error)}`,
+              });
+            }
+          }
+
+          const subscriptions = await this.#getSubscriptionSummaries(
+            executionThreadContext as GithubPollingThread,
+          ).catch(() => []);
+          const response: Record<string, unknown> = {
+            unsubscribed: results.some(result => result.unsubscribed),
+            results,
+            subscriptions,
+            remainingSubscriptions: subscriptions.length,
           };
+          if (results.length === 1) Object.assign(response, results[0]);
+          return response;
         },
       }),
     };
@@ -1350,6 +1809,20 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     return `${input.resourceId}:${input.threadId}`;
   }
 
+  #invalidatePollingThread(key: string): void {
+    this.#pollingThreadGenerations.set(key, (this.#pollingThreadGenerations.get(key) ?? 0) + 1);
+  }
+
+  #invalidatePollingForThread(input: GithubPollingThread): void {
+    const key = this.#pollingKey(input);
+    this.#invalidatePollingThread(key);
+    const state = this.#polling.get(key);
+    if (!state) return;
+    clearInterval(state.timer);
+    this.#polling.delete(key);
+    this.#notifyPollingChanged({ threadId: input.threadId, resourceId: input.resourceId, running: false });
+  }
+
   #getNotificationAgent(_input?: { agentId?: string }): GithubSignalAgent | undefined {
     if (this.#agent) return this.#agent;
     const agentId = _input?.agentId ?? this.#options.agentId;
@@ -1359,6 +1832,18 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
   async #getThreadSubscriptions(input: GithubPollingThread): Promise<GithubPRSubscription[]> {
     const { loadedThread } = await this.#loadThread(input);
     return getGithubMetadata(loadedThread.metadata).subscriptions;
+  }
+
+  async #getSubscriptionSummaries(input: GithubPollingThread): Promise<GithubPRSubscriptionSummary[]> {
+    const subscriptions = await this.#getThreadSubscriptions(input);
+    return subscriptions.map(subscription => ({
+      owner: subscription.owner,
+      repo: subscription.repo,
+      number: subscription.number,
+      subscribedAt: subscription.subscribedAt,
+      updatedAt: subscription.updatedAt,
+      ...(subscription.lastSyncStatus ? { lastSyncStatus: subscription.lastSyncStatus } : {}),
+    }));
   }
 
   #notifySubscriptionsChanged(input: GithubSubscriptionsChangedEvent): void {
@@ -1375,11 +1860,16 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     if (state?.running) {
       return 0;
     }
+    const generation = this.#pollingGeneration;
+    const threadGeneration = this.#pollingThreadGenerations.get(key) ?? 0;
+    const isCurrentGeneration = () =>
+      this.#pollingGeneration === generation && (this.#pollingThreadGenerations.get(key) ?? 0) === threadGeneration;
     if (state) state.running = true;
     this.#notifyPollingChanged({ threadId: input.threadId, resourceId: input.resourceId, running: true });
 
     try {
       const { threadStore, loadedThread } = await this.#loadThread(input);
+      if (!isCurrentGeneration()) return 0;
       const githubMetadata = getGithubMetadata(loadedThread.metadata);
       if (githubMetadata.subscriptions.length === 0) {
         this.stopPollingForThread(input);
@@ -1397,9 +1887,28 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
           includeComments: options.includeComments,
         };
         const syncResult = await this.#syncClient.syncPullRequest(syncInput);
-        let snapshot = syncResult.ok ? await this.#syncClient.getPullRequestSnapshot?.(syncInput) : undefined;
+        if (!isCurrentGeneration()) return 0;
+        let snapshot: GithubPullRequestSnapshot | undefined;
+        let snapshotError: string | undefined;
+        if (syncResult.ok) {
+          try {
+            snapshot = await this.#syncClient.getPullRequestSnapshot?.(syncInput);
+          } catch (error) {
+            // A sync can succeed while the snapshot read fails (e.g. the
+            // gitcrawl database is missing or unreadable). Surface the error
+            // instead of silently reporting a healthy poll with no data.
+            snapshotError = error instanceof Error ? error.message : String(error);
+          }
+        }
+        if (!isCurrentGeneration()) return 0;
         if (snapshot)
-          snapshot = await this.#filterUnauthorizedLatestComment(subscription.owner, subscription.repo, snapshot);
+          snapshot = await this.#filterUnauthorizedLatestComment(
+            subscription.owner,
+            subscription.repo,
+            snapshot,
+            isCurrentGeneration,
+          );
+        if (!isCurrentGeneration()) return 0;
         const nextSubscription: GithubPRSubscription = {
           ...subscription,
           updatedAt: now,
@@ -1408,19 +1917,30 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
         };
         if (syncResult.error) nextSubscription.lastSyncError = syncResult.error;
         else delete nextSubscription.lastSyncError;
+        if (snapshotError) nextSubscription.lastSnapshotError = snapshotError;
+        else delete nextSubscription.lastSnapshotError;
 
         const previousGithubUpdatedAt = subscription.lastObservedGithubUpdatedAt;
         const previousContentHash = subscription.lastObservedContentHash;
         const previousThreadContentHash = subscription.lastObservedThreadContentHash;
         const previousHeadSha = subscription.lastObservedHeadSha;
-        const latestCommentChanged =
+        const previousReviewStateHash = subscription.lastObservedReviewStateHash;
+        const latestCommentTimestampChanged =
           !!previousGithubUpdatedAt &&
           !!snapshot?.latestCommentUpdatedAt &&
           Date.parse(snapshot.latestCommentUpdatedAt) > Date.parse(previousGithubUpdatedAt);
+        const existingBotCommentEdited =
+          latestCommentTimestampChanged && !!snapshot && isExistingBotCommentEdit(subscription, snapshot);
+        const latestCommentChanged = latestCommentTimestampChanged && !existingBotCommentEdited;
+        const headChanged = !!previousHeadSha && !!snapshot?.headSha && previousHeadSha !== snapshot.headSha;
+        const reviewStateChanged =
+          !!previousReviewStateHash &&
+          !!snapshot?.reviewStateHash &&
+          previousReviewStateHash !== snapshot.reviewStateHash;
         if (snapshot) applySnapshotCursor(nextSubscription, snapshot);
 
-        // First observation (no previous cursor) always counts as changed so we
-        // emit a baseline notification with the PR's current state.
+        // Working subscriptions preserve the existing baseline notification. Review subscriptions
+        // silently checkpoint their first available snapshot and begin notifying on later changes.
         const isFirstObservation = syncResult.ok && snapshot && !previousGithubUpdatedAt && !previousContentHash;
 
         const legacyAggregateChanged =
@@ -1437,20 +1957,23 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
               latestCommentChanged ||
               (previousThreadContentHash &&
                 snapshot.threadContentHash &&
-                previousThreadContentHash !== snapshot.threadContentHash) ||
-              (previousHeadSha && snapshot.headSha && previousHeadSha !== snapshot.headSha) ||
+                previousThreadContentHash !== snapshot.threadContentHash &&
+                !existingBotCommentEdited) ||
+              headChanged ||
               (subscription.lastObservedState && snapshot.state && subscription.lastObservedState !== snapshot.state) ||
-              (subscription.lastObservedMergeableState &&
-                snapshot.mergeableState &&
-                subscription.lastObservedMergeableState !== snapshot.mergeableState) ||
+              hasMeaningfulMergeableStateChange(subscription.lastObservedMergeableState, snapshot.mergeableState) ||
               (subscription.lastObservedCiState &&
                 snapshot.ciState &&
                 subscription.lastObservedCiState !== snapshot.ciState) ||
-              (subscription.lastObservedReviewStateHash &&
-                snapshot.reviewStateHash &&
-                subscription.lastObservedReviewStateHash !== snapshot.reviewStateHash)));
-        let shouldKeepSubscription = true;
-        if (changed && snapshot) {
+              reviewStateChanged));
+        const terminalState = subscription.mode === 'review' ? getGithubTerminalState(snapshot) : undefined;
+        let shouldKeepSubscription = !terminalState;
+        if (
+          (changed || terminalState) &&
+          snapshot &&
+          !(subscription.mode === 'review' && isFirstObservation && !terminalState) &&
+          isCurrentGeneration()
+        ) {
           const notifications = await this.#sendActivityNotifications({
             polling: input,
             subscription,
@@ -1458,20 +1981,29 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
             previousGithubUpdatedAt,
             previousContentHash,
             latestCommentChanged,
+            headChanged,
+            reviewStateChanged,
+            terminalState,
+            isCurrentGeneration,
           });
+          if (!isCurrentGeneration()) return 0;
           const primaryNotification = notifications[0];
           if (primaryNotification) {
             nextSubscription.lastNotificationAt = now;
             nextSubscription.lastNotificationKind = primaryNotification.kind;
             nextSubscription.lastNotificationPriority = primaryNotification.priority;
             nextSubscription.lastNotificationSummary = primaryNotification.summary;
-            shouldKeepSubscription = notifications.every(notification => notification.kind !== 'pull-request-merged');
+            nextSubscription.lastNotificationDedupeKey = primaryNotification.dedupeKey;
+            if (!terminalState) {
+              shouldKeepSubscription = notifications.every(notification => notification.kind !== 'pull-request-merged');
+            }
           }
         }
 
         if (shouldKeepSubscription) subscriptions.push(nextSubscription);
       }
 
+      if (!isCurrentGeneration()) return 0;
       await threadStore.saveThread({
         thread: {
           ...loadedThread,
@@ -1482,15 +2014,16 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
           metadata: setGithubMetadata(loadedThread.metadata, { subscriptions }),
         },
       });
+      if (!isCurrentGeneration()) return 0;
       this.#notifySubscriptionsChanged({ threadId: input.threadId, resourceId: input.resourceId, subscriptions });
       if (subscriptions.length === 0) this.stopPollingForThread(input);
       return subscriptions.length;
-    } catch (error) {
-      throw error;
     } finally {
       const latestState = this.#polling.get(key);
-      if (latestState) latestState.running = false;
-      this.#notifyPollingChanged({ threadId: input.threadId, resourceId: input.resourceId, running: false });
+      if (isCurrentGeneration()) {
+        if (latestState) latestState.running = false;
+        this.#notifyPollingChanged({ threadId: input.threadId, resourceId: input.resourceId, running: false });
+      }
     }
   }
 
@@ -1522,6 +2055,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
         owner: input.subscription.owner,
         repo: input.subscription.repo,
         number: input.subscription.number,
+        mode: input.subscription.mode,
         ...(input.snapshot.title ? { title: input.snapshot.title } : {}),
         ...(input.snapshot.state ? { state: input.snapshot.state } : {}),
         ...(input.snapshot.htmlUrl ? { url: input.snapshot.htmlUrl } : {}),
@@ -1538,40 +2072,37 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
         ...(input.snapshot.latestCommentUpdatedAt
           ? { latestCommentUpdatedAt: input.snapshot.latestCommentUpdatedAt }
           : {}),
-        ...(failingChecks.length > 0 ? { failingChecks: failingChecks.map(check => check.name).join(', ') } : {}),
-        ...(pendingChecks.length > 0 ? { pendingChecks: pendingChecks.map(check => check.name).join(', ') } : {}),
+        ...(failingChecks.length
+          ? {
+              failingChecks: failingChecks.map(check => check.name).join(', '),
+              failingCheckUrls: failingChecks
+                .filter(check => check.detailsUrl)
+                .map(check => `${check.name}: ${check.detailsUrl}`)
+                .join('; '),
+            }
+          : {}),
+        ...(pendingChecks.length ? { pendingChecks: pendingChecks.map(check => check.name).join(', ') } : {}),
       },
       metadata: {
         github: {
-          owner: input.subscription.owner,
-          repo: input.subscription.repo,
-          number: input.subscription.number,
-          title: input.snapshot.title,
-          state: input.snapshot.state,
-          htmlUrl: input.snapshot.htmlUrl,
-          githubUpdatedAt: input.snapshot.githubUpdatedAt,
+          // Agent-facing fields (title, state, URL, CI state, comment fields, PR identity) live in
+          // attributes only — they were previously mirrored here, doubling every record's size.
+          // This object keeps just the internal bookkeeping the sync loop needs for change detection.
           previousGithubUpdatedAt: input.previousGithubUpdatedAt,
-          contentHash: input.snapshot.contentHash,
           previousContentHash: input.previousContentHash,
+          contentHash: input.snapshot.contentHash,
           threadContentHash: input.snapshot.threadContentHash,
           headSha: input.snapshot.headSha,
           headRef: input.snapshot.headRef,
-          mergeableState: input.snapshot.mergeableState,
-          ciState: input.snapshot.ciState,
-          closedAt: input.snapshot.closedAt,
-          mergedAt: input.snapshot.mergedAt,
-          unresolvedReviewThreads: input.snapshot.unresolvedReviewThreads,
           reviewStateHash: input.snapshot.reviewStateHash,
           latestReviewThreadAt: input.snapshot.latestReviewThreadAt,
-          latestCommentAuthor: input.snapshot.latestCommentAuthor,
-          latestCommentAuthorType: input.snapshot.latestCommentAuthorType,
-          latestCommentIsBot: input.snapshot.latestCommentIsBot,
-          latestCommentBody: input.snapshot.latestCommentBody,
-          latestCommentExcerpt,
-          latestCommentUrl: input.snapshot.latestCommentUrl,
-          latestCommentUpdatedAt: input.snapshot.latestCommentUpdatedAt,
-          failingChecks,
-          pendingChecks,
+          closedAt: input.snapshot.closedAt,
+          mergedAt: input.snapshot.mergedAt,
+          // Intentionally omit the full latestCommentBody here: persisting it verbatim bloats
+          // notification payloads (a single CodeRabbit comment can exceed 100KB) and can overflow
+          // agent context windows when listed. The 240-char latestCommentExcerpt is stored instead.
+          // Check names and failing-check URLs live in attributes as flat strings (signal attributes
+          // must be scalars); full check snapshots ballooned every record by several KB.
         },
       },
     };
@@ -1619,6 +2150,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     repo: string,
     user: string | undefined,
     metadata: { authorType?: string; isBot?: boolean } = {},
+    isCurrentGeneration?: () => boolean,
   ): Promise<boolean> {
     if (!user) return false;
     const normalizedUser = user.toLowerCase();
@@ -1630,7 +2162,8 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
       const authorizedBots = this.#options.authorizedBots ?? DEFAULT_AUTHORIZED_BOTS;
       return authorizedBots.some(bot => bot.toLowerCase() === normalizedUser);
     }
-    const permission = await this.#loadAuthorPermission(owner, repo, user);
+    const permission = await this.#loadAuthorPermission(owner, repo, user, isCurrentGeneration);
+    if (isCurrentGeneration && !isCurrentGeneration()) return false;
     const authorizedPermissions = this.#options.authorizedPermissions ?? DEFAULT_AUTHORIZED_PERMISSIONS;
     return !!permission && authorizedPermissions.includes(permission);
   }
@@ -1639,6 +2172,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     owner: string,
     repo: string,
     snapshot: GithubPullRequestSnapshot,
+    isCurrentGeneration?: () => boolean,
   ): Promise<GithubPullRequestSnapshot> {
     const comments = snapshot.latestComments?.length
       ? snapshot.latestComments
@@ -1656,11 +2190,19 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     if (!comments.some(comment => comment.body || comment.url || comment.updatedAt)) return snapshot;
 
     for (const comment of comments) {
+      if (isCurrentGeneration && !isCurrentGeneration()) return snapshot;
+      if (isNoisyBotComment({ author: comment.author, body: comment.body })) continue;
       if (
-        !(await this.#isAuthorizedAuthor(owner, repo, comment.author, {
-          authorType: comment.authorType,
-          isBot: comment.isBot,
-        }))
+        !(await this.#isAuthorizedAuthor(
+          owner,
+          repo,
+          comment.author,
+          {
+            authorType: comment.authorType,
+            isBot: comment.isBot,
+          },
+          isCurrentGeneration,
+        ))
       ) {
         continue;
       }
@@ -1686,7 +2228,12 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     };
   }
 
-  async #loadAuthorPermission(owner: string, repo: string, user: string): Promise<GithubPermission | undefined> {
+  async #loadAuthorPermission(
+    owner: string,
+    repo: string,
+    user: string,
+    isCurrentGeneration?: () => boolean,
+  ): Promise<GithubPermission | undefined> {
     const cacheKey = `${owner}/${repo}:${user.toLowerCase()}`;
     const cached = this.#permissionCache.get(cacheKey);
     if (cached && cached.expiresAt > Date.now()) return cached.permission;
@@ -1710,9 +2257,10 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
           ? (raw as GithubPermission)
           : undefined;
       }
-      if (permission) {
+      if (permission && (!isCurrentGeneration || isCurrentGeneration())) {
         this.#permissionCache.set(cacheKey, { permission, expiresAt: Date.now() + PERMISSION_CACHE_TTL_MS });
       }
+      if (isCurrentGeneration && !isCurrentGeneration()) return undefined;
       return permission;
     } catch {
       this.#permissionCache.delete(cacheKey);
@@ -1727,25 +2275,64 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     previousGithubUpdatedAt?: string;
     previousContentHash?: string;
     latestCommentChanged?: boolean;
-  }): Promise<Array<{ kind: string; priority: 'medium' | 'high'; summary: string }>> {
+    headChanged?: boolean;
+    reviewStateChanged?: boolean;
+    terminalState?: 'closed' | 'merged';
+    isCurrentGeneration: () => boolean;
+  }): Promise<Array<GithubActivityNotificationPlan & { dedupeKey: string }>> {
     const agent = this.#getNotificationAgent(input.polling);
     if (!agent?.sendNotificationSignal) return [];
-    const notifications = [
-      classifyGithubActivityNotification({
-        subscription: input.subscription,
-        snapshot: input.snapshot,
-      }),
-    ];
-    if (input.latestCommentChanged && notifications[0]?.kind !== 'pull-request-activity') {
+    const notifications: Array<GithubActivityNotificationPlan | undefined> = [];
+    if (input.subscription.mode === 'review') {
+      if (input.terminalState) {
+        notifications.push(
+          classifyGithubTerminalActivityNotification({
+            subscription: input.subscription,
+            snapshot: input.snapshot,
+            terminalState: input.terminalState,
+          }),
+        );
+      } else {
+        if (input.latestCommentChanged) {
+          notifications.push(
+            classifyGithubCommentActivityNotification({
+              subscription: input.subscription,
+              snapshot: input.snapshot,
+            }),
+          );
+        }
+        if (input.headChanged) {
+          notifications.push(
+            classifyGithubHeadActivityNotification({ subscription: input.subscription, snapshot: input.snapshot }),
+          );
+        }
+        if (input.reviewStateChanged) {
+          notifications.push(
+            classifyGithubReviewStateActivityNotification({
+              subscription: input.subscription,
+              snapshot: input.snapshot,
+            }),
+          );
+        }
+      }
+    } else {
       notifications.push(
-        classifyGithubCommentActivityNotification({
+        classifyGithubActivityNotification({
           subscription: input.subscription,
           snapshot: input.snapshot,
         }),
       );
+      if (input.latestCommentChanged && notifications[0]?.kind !== 'pull-request-activity') {
+        notifications.push(
+          classifyGithubCommentActivityNotification({
+            subscription: input.subscription,
+            snapshot: input.snapshot,
+          }),
+        );
+      }
     }
 
-    const sent: GithubActivityNotificationPlan[] = [];
+    const sent: Array<GithubActivityNotificationPlan & { dedupeKey: string }> = [];
     const notificationInputs = [];
     for (const notification of notifications.sort(compareGithubActivityNotifications)) {
       if (!notification) continue;
@@ -1758,28 +2345,37 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
             authorType: input.snapshot.latestCommentAuthorType,
             isBot: input.snapshot.latestCommentIsBot,
           },
+          input.isCurrentGeneration,
         );
+        if (!input.isCurrentGeneration()) return [];
         if (!authorized) continue;
       }
-      notificationInputs.push(
-        this.#createGithubNotificationInput({
-          subscription: input.subscription,
-          snapshot: input.snapshot,
-          notification,
-          dedupeSuffix: input.snapshot.contentHash ?? input.snapshot.githubUpdatedAt ?? String(Date.now()),
-          previousGithubUpdatedAt: input.previousGithubUpdatedAt,
-          previousContentHash: input.previousContentHash,
-        }),
-      );
-      sent.push(notification);
+      const notificationInput = this.#createGithubNotificationInput({
+        subscription: input.subscription,
+        snapshot: input.snapshot,
+        notification,
+        dedupeSuffix: input.snapshot.contentHash ?? input.snapshot.githubUpdatedAt ?? String(Date.now()),
+        previousGithubUpdatedAt: input.previousGithubUpdatedAt,
+        previousContentHash: input.previousContentHash,
+      });
+      const alreadySent = input.subscription.lastNotificationDedupeKey
+        ? input.subscription.lastNotificationDedupeKey === notificationInput.dedupeKey
+        : input.subscription.lastNotificationKind === notification.kind &&
+          input.subscription.lastNotificationSummary === notification.summary;
+      if (alreadySent) continue;
+      notificationInputs.push(notificationInput);
+      sent.push({ ...notification, dedupeKey: notificationInput.dedupeKey });
     }
     if (notificationInputs.length > 0) {
       const target = { resourceId: input.polling.resourceId, threadId: input.polling.threadId };
+      if (!input.isCurrentGeneration()) return [];
       const streamOptions = await this.#agentOptions.getNotificationStreamOptions?.(target);
+      if (!input.isCurrentGeneration()) return [];
       await agent.sendNotificationSignal(
         notificationInputs,
         streamOptions ? { ...target, ifIdle: { streamOptions } } : target,
       );
+      if (!input.isCurrentGeneration()) return [];
     }
     return sent;
   }
@@ -1787,6 +2383,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
   async #subscribe(
     input: GithubPRSignal & { threadId?: string; resourceId?: string; abortSignal?: AbortSignal },
   ): Promise<GithubOperationResult> {
+    const mode = normalizeGithubSubscriptionMode(input.mode);
     const { owner, repo } = await this.#resolveRepository(input);
     const { threadStore, loadedThread } = await this.#loadThread(input);
     const githubMetadata = getGithubMetadata(loadedThread.metadata);
@@ -1796,7 +2393,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     );
     const existing = existingIndex >= 0 ? githubMetadata.subscriptions[existingIndex] : undefined;
     if (existing?.lastSubscribeSignalId === input.id) {
-      return { owner, repo, number: input.number, subscription: existing, alreadyProcessed: true };
+      return { owner, repo, number: input.number, mode: existing.mode, subscription: existing, alreadyProcessed: true };
     }
 
     const now = new Date().toISOString();
@@ -1804,6 +2401,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
       owner,
       repo,
       number: input.number,
+      mode,
       subscribedAt: existing?.subscribedAt ?? now,
       updatedAt: now,
       lastSubscribeSignalId: input.id,
@@ -1826,6 +2424,16 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
       ...(existing?.lastObservedReviewStateHash
         ? { lastObservedReviewStateHash: existing.lastObservedReviewStateHash }
         : {}),
+      ...(existing?.lastObservedCommentUrl ? { lastObservedCommentUrl: existing.lastObservedCommentUrl } : {}),
+      ...(existing?.lastObservedCommentAuthor ? { lastObservedCommentAuthor: existing.lastObservedCommentAuthor } : {}),
+      ...(typeof existing?.lastObservedCommentIsBot === 'boolean'
+        ? { lastObservedCommentIsBot: existing.lastObservedCommentIsBot }
+        : {}),
+      ...(existing?.lastNotificationAt ? { lastNotificationAt: existing.lastNotificationAt } : {}),
+      ...(existing?.lastNotificationKind ? { lastNotificationKind: existing.lastNotificationKind } : {}),
+      ...(existing?.lastNotificationPriority ? { lastNotificationPriority: existing.lastNotificationPriority } : {}),
+      ...(existing?.lastNotificationSummary ? { lastNotificationSummary: existing.lastNotificationSummary } : {}),
+      ...(existing?.lastNotificationDedupeKey ? { lastNotificationDedupeKey: existing.lastNotificationDedupeKey } : {}),
     };
 
     let syncResult: GithubSignalsSyncResult | undefined;
@@ -1843,15 +2451,55 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
       subscription.lastSyncStatus = syncResult.ok ? 'success' : 'error';
       if (syncResult.error) subscription.lastSyncError = syncResult.error;
       else delete subscription.lastSyncError;
-      const snapshot = syncResult.ok ? await this.#syncClient.getPullRequestSnapshot?.(syncInput) : undefined;
+      let snapshot: GithubPullRequestSnapshot | undefined;
+      if (syncResult.ok) {
+        try {
+          snapshot = await this.#syncClient.getPullRequestSnapshot?.(syncInput);
+        } catch (error) {
+          // Snapshot read failures must not fail the subscribe itself: keep
+          // the subscription and record the error so polling (and /github
+          // debug) can surface and later clear it.
+          subscription.lastSnapshotError = error instanceof Error ? error.message : String(error);
+        }
+      }
+      if (snapshot) delete subscription.lastSnapshotError;
       baselineSnapshot = snapshot;
       if (snapshot) applySnapshotCursor(subscription, snapshot);
     } else {
       subscription.lastSyncStatus = 'skipped';
     }
 
-    const subscriptions = [subscription];
+    const terminalState = mode === 'review' ? getGithubTerminalState(baselineSnapshot) : undefined;
+    const subscriptions = terminalState
+      ? githubMetadata.subscriptions.filter(
+          candidate => !(candidate.owner === owner && candidate.repo === repo && candidate.number === input.number),
+        )
+      : existingIndex >= 0
+        ? githubMetadata.subscriptions.map((existingSubscription, index) =>
+            index === existingIndex ? subscription : existingSubscription,
+          )
+        : [...githubMetadata.subscriptions, subscription];
 
+    if (terminalState) {
+      this.#invalidatePollingForThread({ threadId: input.threadId!, resourceId: input.resourceId! });
+      await threadStore.saveThread({
+        thread: {
+          ...loadedThread,
+          id: input.threadId!,
+          resourceId: input.resourceId!,
+          createdAt: loadedThread.createdAt ?? new Date(),
+          updatedAt: new Date(),
+          metadata: setGithubMetadata(loadedThread.metadata, { subscriptions }),
+        },
+      });
+      this.#notifySubscriptionsChanged({ threadId: input.threadId!, resourceId: input.resourceId!, subscriptions });
+      if (subscriptions.length === 0)
+        this.stopPollingForThread({ threadId: input.threadId!, resourceId: input.resourceId! });
+      else await this.startPollingForThread({ threadId: input.threadId!, resourceId: input.resourceId! });
+      return { owner, repo, number: input.number, mode, terminalState, syncResult };
+    }
+
+    this.#invalidatePollingForThread({ threadId: input.threadId!, resourceId: input.resourceId! });
     await threadStore.saveThread({
       thread: {
         ...loadedThread,
@@ -1863,7 +2511,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
       },
     });
     this.#notifySubscriptionsChanged({ threadId: input.threadId!, resourceId: input.resourceId!, subscriptions });
-    if (baselineSnapshot) {
+    if (baselineSnapshot && mode === 'working') {
       await this.#sendBaselineNotification({
         threadId: input.threadId!,
         resourceId: input.resourceId!,
@@ -1873,7 +2521,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     }
     await this.startPollingForThread({ threadId: input.threadId!, resourceId: input.resourceId! });
 
-    return { owner, repo, number: input.number, subscription, syncResult };
+    return { owner, repo, number: input.number, mode, subscription, syncResult };
   }
 
   async #unsubscribe(
@@ -1888,6 +2536,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     );
     const removed = subscriptions.length !== githubMetadata.subscriptions.length;
     if (removed) {
+      this.#invalidatePollingForThread({ threadId: input.threadId!, resourceId: input.resourceId! });
       await threadStore.saveThread({
         thread: {
           ...loadedThread,
@@ -1901,6 +2550,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
       this.#notifySubscriptionsChanged({ threadId: input.threadId!, resourceId: input.resourceId!, subscriptions });
       if (subscriptions.length === 0)
         this.stopPollingForThread({ threadId: input.threadId!, resourceId: input.resourceId! });
+      else await this.startPollingForThread({ threadId: input.threadId!, resourceId: input.resourceId! });
     }
     return { owner, repo, number: input.number, removed, remainingSubscriptions: subscriptions.length };
   }
@@ -1926,6 +2576,9 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
       owner: readString(attributes.owner) ?? readString(github.owner),
       repo: readString(attributes.repo) ?? readString(github.repo),
       number,
+      ...(signal.tagName === GITHUB_SUBSCRIBE_PR_TAG
+        ? { mode: normalizeGithubSubscriptionMode(attributes.mode ?? github.mode) }
+        : {}),
     };
   }
 
@@ -1933,7 +2586,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     args: ProcessInputStepArgs,
     signal: GithubOperationResult,
     status: {
-      status: 'subscribed' | 'sync_error' | 'error' | 'unsubscribed' | 'not_subscribed';
+      status: 'subscribed' | 'sync_error' | 'error' | 'unsubscribed' | 'not_subscribed' | 'not_subscribed_terminal';
       action: 'subscribeToPR' | 'unsubscribeFromPR';
       message: string;
     },
@@ -1947,6 +2600,8 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
         owner: signal.owner,
         repo: signal.repo,
         number: signal.number,
+        ...(signal.mode ? { mode: signal.mode } : {}),
+        ...(signal.terminalState ? { terminalState: signal.terminalState } : {}),
       },
       metadata: {
         github: {
@@ -1955,6 +2610,8 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
           owner: signal.owner,
           repo: signal.repo,
           number: signal.number,
+          ...(signal.mode ? { mode: signal.mode } : {}),
+          ...(signal.terminalState ? { terminalState: signal.terminalState } : {}),
         },
       },
     });

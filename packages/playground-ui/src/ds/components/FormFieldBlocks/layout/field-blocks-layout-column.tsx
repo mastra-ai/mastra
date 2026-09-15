@@ -6,5 +6,5 @@ export type FieldBlocksLayoutColumnProps = {
 };
 
 export function FieldBlocksLayoutColumn({ children, className }: FieldBlocksLayoutColumnProps) {
-  return <div className={cn('grid gap-6 content-start', className)}>{children}</div>;
+  return <div className={cn('grid content-start gap-6', className)}>{children}</div>;
 }

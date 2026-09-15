@@ -1,9 +1,10 @@
 ---
 title: "Custom API routes | Server"
-description: "Expose additional HTTP endpoints from your Mastra server."
+description: "Add custom HTTP endpoints to a Mastra server with schema validation, middleware, authentication, OpenAPI documentation, and control over disconnect behavior."
 packages:
   - "@mastra/core"
   - "@mastra/ai-sdk"
+  - "@mastra/server"
 ---
 
 # Custom API routes
@@ -40,6 +41,41 @@ curl http://localhost:4111/my-custom-route
 ```
 
 Each route's handler receives the Hono `Context`. Within the handler you can access the `Mastra` instance to fetch or call agents and workflows.
+
+## Schema validation
+
+Use [`createRoute()`](/reference/server/create-route) in `apiRoutes` to parse and validate path and query parameters, along with request bodies, using Zod. The schemas also infer the handler parameters and generate OpenAPI metadata.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { createRoute } from '@mastra/server/server-adapter'
+import { z } from 'zod'
+
+const createItemRoute = createRoute({
+  method: 'POST',
+  path: '/items',
+  responseType: 'json',
+  bodySchema: z.object({
+    name: z.string().min(1),
+  }),
+  responseSchema: z.object({
+    id: z.string(),
+    name: z.string(),
+  }),
+  handler: async ({ name }) => ({
+    id: crypto.randomUUID(),
+    name,
+  }),
+})
+
+export const mastra = new Mastra({
+  server: {
+    apiRoutes: [createItemRoute],
+  },
+})
+```
+
+By default, Mastra returns a `400` response when validation fails. The `onValidationError` callback can override the status and response body. Validated values and the `Mastra` server context are passed directly to the handler.
 
 ## Middleware
 
@@ -264,13 +300,13 @@ registerApiRoute('/user-profile', {
 })
 ```
 
-For more information about authentication providers, see the [Auth documentation](/docs/server/auth).
+For more information about authentication providers, see the [Auth documentation](/docs/auth/overview).
 
 ## Continue generation after client disconnect
 
 Built-in streaming helpers such as [`chatRoute()`](/reference/ai-sdk/chat-route) forward the incoming request's `AbortSignal` to `agent.stream()`. That's the right default when a browser disconnect should cancel the model call.
 
-For custom streaming routes that should stop when the client disconnects, pass `c.req.raw.signal` to long-running work such as `agent.stream()`. Mastra's Node-based adapters also stop reading streamed `Response` bodies from custom routes when the client connection closes. Streamed response body errors that are not caused by client disconnects still propagate through the adapter's normal error handling. In Hono, disconnect behavior depends on the host runtime forwarding connection closes to `request.signal`.
+For custom streaming routes that should stop when the client disconnects, pass `c.req.raw.signal` to long-running work such as `agent.stream()`. Mastra's Node-based adapters also stop reading streamed `Response` bodies from custom routes when the client connection closes. Streamed response body errors that aren't caused by client disconnects still propagate through the adapter's normal error handling. In Hono, disconnect behavior depends on the host runtime forwarding connection closes to `request.signal`.
 
 ```typescript title="src/mastra/index.ts"
 registerApiRoute('/stream', {
@@ -345,4 +381,4 @@ Use this pattern only when you intentionally want work to continue after the HTT
 
 - [registerApiRoute() Reference](/reference/server/register-api-route): Full API reference
 - [Server Middleware](/docs/server/middleware): Global middleware configuration
-- [Mastra Server](/docs/server/mastra-server): Server configuration options
+- [Mastra Server](/docs/server/overview): Server configuration options

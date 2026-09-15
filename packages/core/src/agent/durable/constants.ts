@@ -16,6 +16,31 @@ export const RUN_REGISTRY_SYMBOL = Symbol('run_registry');
 export const AGENT_STREAM_TOPIC = (runId: string): string => `agent.stream.${runId}`;
 
 /**
+ * Generate the pubsub topic name for agent control messages.
+ *
+ * Separate from {@link AGENT_STREAM_TOPIC} because control messages travel the
+ * opposite direction: stream events flow worker -> consumer, control messages
+ * flow caller -> worker. Keeping them apart means stream consumers never see
+ * control traffic and vice versa.
+ *
+ * @param runId - The unique run identifier
+ * @returns The topic name for publishing/subscribing agent control events
+ */
+export const AGENT_CONTROL_TOPIC = (runId: string): string => `agent.control.${runId}`;
+
+/**
+ * Event type constants for agent control events
+ */
+export const AgentControlEventTypes = {
+  /**
+   * Request that a run abort itself. Published by `abort()` in whichever
+   * process the caller lives in; handled by whichever process is actually
+   * executing the run's steps.
+   */
+  ABORT_REQUEST: 'abort-request',
+} as const;
+
+/**
  * Event type constants for agent stream events
  */
 export const AgentStreamEventTypes = {
@@ -31,6 +56,10 @@ export const AgentStreamEventTypes = {
   ERROR: 'error',
   /** Workflow suspended (e.g., for tool approval) */
   SUSPENDED: 'suspended',
+  /** Execution aborted by abortSignal */
+  ABORT: 'abort',
+  /** Single agentic-loop iteration completed (observability hook) */
+  ITERATION_COMPLETE: 'iteration-complete',
 } as const;
 
 /**
@@ -41,10 +70,9 @@ export const DurableAgentDefaults = {
   MAX_STEPS: 5,
   /**
    * Default tool call concurrency.
-   * NOTE: Currently unused — durable workflows run tool calls sequentially
-   * (concurrency: 1) because tool approval and suspension require sequential
-   * execution. The serialized toolCallConcurrency option is preserved in
-   * workflow input for future use when dynamic foreach concurrency is supported.
+   * Applied by `resolveDurableToolCallConcurrency` when a run doesn't
+   * configure `toolCallConcurrency`. Approval / suspend-capable tool sets
+   * always run sequentially (concurrency: 1) regardless of this value.
    */
   TOOL_CALL_CONCURRENCY: 10,
 } as const;
@@ -65,4 +93,6 @@ export const DurableStepIds = {
   AGENTIC_LOOP: 'durable-agentic-loop',
   /** Scorer execution step */
   SCORER_EXECUTION: 'durable-scorer-execution',
+  /** isTaskComplete evaluation step */
+  IS_TASK_COMPLETE: 'durable-is-task-complete',
 } as const;

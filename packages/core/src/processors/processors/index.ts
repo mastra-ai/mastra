@@ -10,6 +10,7 @@ export {
   type PromptInjectionOptions,
   type PromptInjectionResult,
   type PromptInjectionCategoryScores,
+  type PromptInjectionDetectionEvent,
 } from './prompt-injection-detector';
 export {
   PIIDetector,
@@ -18,6 +19,7 @@ export {
   type PIICategories,
   type PIICategoryScores,
   type PIIDetection,
+  type PIIDetectionEvent,
 } from './pii-detector';
 export {
   LanguageDetector,
@@ -28,6 +30,7 @@ export {
 } from './language-detector';
 export { StructuredOutputProcessor, type StructuredOutputOptions } from './structured-output';
 export { type LastMessageOnlyOption } from './message-selection';
+export { type ModelErrorStrategy } from './model-error-strategy';
 export { BatchPartsProcessor, type BatchPartsOptions, type BatchPartsState } from './batch-parts';
 export {
   TokenLimiterProcessor,
@@ -42,14 +45,22 @@ export {
 } from './system-prompt-scrubber';
 
 export {
+  TokenCostControl,
+  type TokenCostControlOptions,
+  type TokenCostControlUsage,
+  type TokenCostControlBreakdownEntry,
+  type TokenCostControlTripwireMetadata,
+  type TokenCostControlViolationDetail,
+  type CostScope,
+  type CostWindow,
+  // Deprecated alias for the previous API name
   CostGuardProcessor,
   type CostGuardOptions,
   type CostGuardUsage,
+  type CostGuardBreakdownEntry,
   type CostGuardTripwireMetadata,
   type CostGuardViolationDetail,
-  type CostScope,
-  type CostWindow,
-} from './cost-guard';
+} from './token-cost-control';
 
 export {
   RegexFilterProcessor,
@@ -58,10 +69,12 @@ export {
   type RegexMatch,
   type RegexPreset,
   type RegexFilterTripwireMetadata,
+  type RegexRedaction,
+  type RegexRedactionDetail,
 } from './regex-filter';
 export { ToolCallFilter } from './tool-call-filter';
 
-export { AgentsMDInjector, type ToolResultReminderOptions } from '../tool-result-reminder';
+export { AgentsMDInjector, type ToolResultReminderOptions, type ReminderFileReader } from '../tool-result-reminder';
 
 export {
   ToolSearchProcessor,
@@ -69,7 +82,7 @@ export {
   type ToolSearchFilterPhase,
   type ToolSearchProcessorOptions,
 } from './tool-search';
-export { SkillsProcessor, type SkillsProcessorOptions } from './skills';
+export { SkillsProcessor, formatSkillsCatalog, type SkillCatalogEntry, type SkillsProcessorOptions } from './skills';
 export { SkillSearchProcessor, type SkillSearchProcessorOptions } from './skill-search';
 export { WorkspaceInstructionsProcessor, type WorkspaceInstructionsProcessorOptions } from './workspace-instructions';
 export {

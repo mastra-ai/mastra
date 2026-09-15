@@ -20,7 +20,13 @@ export const SlashCommandSchema = z.object({
 // Installation Data (stored in ChannelInstallation.data when status='active')
 // =============================================================================
 
+/** Who owns an installation: a registered Agent (default) or an AgentController. */
+export const OwnerTypeSchema = z.enum(['agent', 'agentController']);
+
+export type SlackOwnerType = z.infer<typeof OwnerTypeSchema>;
+
 export const SlackInstallationDataSchema = z.object({
+  ownerType: OwnerTypeSchema.optional(),
   appId: z.string(),
   clientId: z.string(),
   clientSecret: z.string(), // encrypted
@@ -41,6 +47,7 @@ export type SlackInstallationData = z.infer<typeof SlackInstallationDataSchema>;
 // =============================================================================
 
 export const SlackPendingDataSchema = z.object({
+  ownerType: OwnerTypeSchema.optional(),
   appId: z.string(),
   clientId: z.string(),
   clientSecret: z.string(), // encrypted
@@ -74,7 +81,10 @@ export type StoredSlashCommand = z.infer<typeof SlashCommandSchema>;
 
 export interface SlackInstallation {
   id: string;
+  /** Owner key: an agent id when ownerType is 'agent' (default), or an AgentController id. */
   agentId: string;
+  /** Defaults to 'agent' when absent (pre-existing installations). */
+  ownerType?: SlackOwnerType;
   webhookId: string;
   configHash: string;
   installedAt: Date;
@@ -96,7 +106,10 @@ export interface SlackInstallation {
 
 export interface SlackPendingInstallation {
   id: string;
+  /** Owner key: an agent id when ownerType is 'agent' (default), or an AgentController id. */
   agentId: string;
+  /** Defaults to 'agent' when absent (pre-existing installations). */
+  ownerType?: SlackOwnerType;
   webhookId: string;
   configHash: string;
   createdAt: Date;

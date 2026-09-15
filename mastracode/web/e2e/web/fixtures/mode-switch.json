@@ -1,0 +1,15 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "Outline the plan",
+        "hasToolResult": false
+      },
+      "response": {
+        "content": "Here is the outline. Switch to build mode to implement."
+      }
+    }
+  ]
+}

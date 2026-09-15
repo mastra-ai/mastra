@@ -1,5 +1,5 @@
 import { isValid, parse } from 'date-fns';
-import { CalendarIcon } from 'lucide-react';
+import { CalendarIcon, Check } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/ds/components/Button/Button';
 import type { ButtonProps } from '@/ds/components/Button/Button';
@@ -35,7 +35,7 @@ export interface DateTimeRangePickerProps {
   disabled?: boolean;
   /** Subset of presets to show. If omitted, all presets are shown. */
   presets?: readonly DateRangePreset[];
-  /** Size passed through to the trigger Button. Defaults to 'default'. */
+  /** Size passed through to the trigger Button. Defaults to 'md'. */
   size?: ButtonProps['size'];
 }
 
@@ -47,7 +47,7 @@ export function DateTimeRangePicker({
   onDateChange,
   disabled,
   presets,
-  size = 'default',
+  size = 'md',
 }: DateTimeRangePickerProps) {
   const visiblePresets = presets ? DATE_PRESETS.filter(p => presets.includes(p.value)) : DATE_PRESETS;
   const fallbackPreset: DateRangePreset = visiblePresets.find(p => p.value !== 'custom')?.value ?? 'all';
@@ -97,8 +97,7 @@ export function DateTimeRangePicker({
     return (
       <Popover open={customRangeOpen} onOpenChange={setCustomRangeOpen}>
         <PopoverTrigger asChild>
-          <Button size={size} disabled={disabled}>
-            <CalendarIcon />
+          <Button size={size} disabled={disabled} icon={<CalendarIcon />}>
             {dateFrom ? dateFrom.toLocaleDateString() : 'Start'} {' \u2013 '}
             {dateTo ? dateTo.toLocaleDateString() : 'End'}
           </Button>
@@ -106,7 +105,7 @@ export function DateTimeRangePicker({
         <PopoverContent align="start" className={cn('w-auto p-0')}>
           <div className={cn('flex')}>
             <div className={cn('border-r border-border1')}>
-              <span className={cn('text-ui-sm text-neutral3 font-medium px-4 pt-3 block')}>Start</span>
+              <span className={cn('block px-4 pt-3 text-ui-sm font-medium text-neutral3')}>Start</span>
               <DatePicker
                 mode="single"
                 selected={draftDateFrom}
@@ -124,7 +123,7 @@ export function DateTimeRangePicker({
               />
             </div>
             <div>
-              <span className={cn('text-ui-sm text-neutral3 font-medium px-4 pt-3 block')}>End</span>
+              <span className={cn('block px-4 pt-3 text-ui-sm font-medium text-neutral3')}>End</span>
               <DatePicker
                 mode="single"
                 selected={draftDateTo}
@@ -142,14 +141,14 @@ export function DateTimeRangePicker({
               />
             </div>
           </div>
-          {customRangeError && <p className={cn('text-ui-sm text-red-500 px-4 pb-1')}>{customRangeError}</p>}
-          <div className={cn('flex justify-between items-center px-4 pb-3')}>
+          {customRangeError && <p className={cn('px-4 pb-1 text-ui-sm text-red-500')}>{customRangeError}</p>}
+          <div className={cn('flex items-center justify-between px-4 pb-3')}>
             <button
               type="button"
               disabled={disabled}
               className={cn(
                 'text-ui-sm text-neutral3 hover:text-neutral4',
-                disabled && 'opacity-50 pointer-events-none',
+                disabled && 'pointer-events-none opacity-50',
               )}
               onClick={() => {
                 setCustomRangeError(undefined);
@@ -158,7 +157,7 @@ export function DateTimeRangePicker({
             >
               &larr; Presets
             </button>
-            <Button variant="primary" size="sm" onClick={applyCustomRange} disabled={disabled}>
+            <Button icon={<Check />} variant="primary" size="sm" onClick={applyCustomRange} disabled={disabled}>
               Apply
             </Button>
           </div>
@@ -170,8 +169,7 @@ export function DateTimeRangePicker({
   return (
     <DropdownMenu>
       <DropdownMenu.Trigger asChild>
-        <Button size={size} disabled={disabled}>
-          <CalendarIcon />
+        <Button size={size} disabled={disabled} icon={<CalendarIcon />}>
           {datePresetLabel}
         </Button>
       </DropdownMenu.Trigger>

@@ -1,6 +1,6 @@
 ---
 title: "Reference: Run.resumeStream() | Streaming"
-description: Documentation for the `Run.resumeStream()` method in workflows, which enables real-time resumption and streaming of suspended workflow runs.
+description: "The .resumeStream() method resumes a suspended workflow run with new data, allowing you to continue execution from a specific step and to observe the stream of events."
 packages:
   - "@mastra/core"
 ---
@@ -154,13 +154,13 @@ if (result!.status === 'suspended') {
 
 ## Stream events
 
-The stream emits various event types during workflow execution. Each event has a `type` field and a `payload` containing relevant data:
+The stream emits event types during workflow execution. Each event has a `type` field and a `payload` containing relevant data:
 
 - **`workflow-start`**: Workflow execution begins
 - **`workflow-step-start`**: A step begins execution
 - **`workflow-step-output`**: Custom output from a step
 - **`workflow-step-result`**: A step completes with results
-- **`workflow-finish`**: Workflow execution completes with usage statistics
+- **`workflow-finish`**: Workflow execution completes with usage statistics. For successful runs, `payload.finalWorkflowResult` carries the workflow's final result
 
 ## Related
 

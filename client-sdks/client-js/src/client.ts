@@ -8,6 +8,9 @@ import type {
   GetSpanResponse,
   ListTracesArgs,
   ListTracesResponse,
+  ListTracesLightResponse,
+  TraceQueryRequest,
+  TraceQueryTraceResponse,
   ListBranchesArgs,
   ListBranchesResponse,
   GetBranchArgs,
@@ -20,6 +23,8 @@ import type {
   ListScoresResponse as ListScoresResponseNew,
   CreateScoreBody,
   CreateScoreResponse,
+  DeleteScoresArgs,
+  DeleteScoresResponse,
   GetScoreAggregateArgs,
   GetScoreAggregateResponse,
   GetScoreBreakdownArgs,
@@ -30,9 +35,12 @@ import type {
   GetScorePercentilesResponse,
   // Feedback
   ListFeedbackArgs,
-  ListFeedbackResponse,
   CreateFeedbackBody,
   CreateFeedbackResponse,
+  DeleteFeedbackArgs,
+  DeleteFeedbackResponse,
+  UpdateFeedbackReviewStatusArgs,
+  FeedbackRecord,
   GetFeedbackAggregateArgs,
   GetFeedbackAggregateResponse,
   GetFeedbackBreakdownArgs,
@@ -75,11 +83,13 @@ import {
   Vector,
   BaseResource,
   A2A,
+  A2AV1,
   MCPTool,
   AgentBuilder,
   Conversations,
   Observability,
   StoredAgent,
+  DynamicWorkflow,
   StoredPromptBlock,
   StoredMCPClient,
   StoredScorer,
@@ -89,6 +99,7 @@ import {
   Workspace,
   Responses,
   Channels,
+  AgentController,
 } from './resources';
 import type {
   ListScoresBySpanParams,
@@ -96,6 +107,7 @@ import type {
   LegacyGetTracesResponse,
 } from './resources/observability';
 import type {
+  ListFeedbackResponse,
   ClientOptions,
   CreateMemoryThreadParams,
   CreateMemoryThreadResponse,
@@ -107,6 +119,7 @@ import type {
   GetToolResponse,
   GetProcessorResponse,
   GetWorkflowResponse,
+  ListWorkflowRunCountsResponse,
   SaveMessageToMemoryParams,
   SaveMessageToMemoryResponse,
   McpServerListResponse,
@@ -128,6 +141,11 @@ import type {
   ListStoredAgentsResponse,
   CreateStoredAgentParams,
   StoredAgentResponse,
+  ListDynamicWorkflowsParams,
+  ListDynamicWorkflowsResponse,
+  UpsertDynamicWorkflowParams,
+  UpsertDynamicWorkflowResponse,
+  WorkflowBuilderSettingsResponse,
   ListStoredPromptBlocksParams,
   ListStoredPromptBlocksResponse,
   CreateStoredPromptBlockParams,
@@ -171,6 +189,9 @@ import type {
   DatasetItem,
   DatasetExperiment,
   DatasetExperimentResult,
+  DatasetExperimentResultRow,
+  ListExperimentsParams,
+  ListDatasetsParams,
   ExperimentReviewCounts,
   CreateDatasetParams,
   UpdateDatasetParams,
@@ -181,6 +202,13 @@ import type {
   GenerateDatasetItemsParams,
   GeneratedItem,
   TriggerDatasetExperimentParams,
+  UpdateDatasetExperimentParams,
+  CreateDatasetExperimentParams,
+  CreateDatasetExperimentResponse,
+  RunExperimentItemParams,
+  RunExperimentItemResponse,
+  SubmitExperimentResultParams,
+  FinalizeExperimentParams,
   UpdateExperimentResultParams,
   CompareExperimentsParams,
   CompareExperimentsResponse,
@@ -197,9 +225,33 @@ import type {
   ScheduleResponse,
   ListScheduleTriggersParams,
   ListScheduleTriggersResponse,
+  CreateScheduleInput,
+  UpdateScheduleInput,
+  RunScheduleResponse,
+  AgentControllerInfo,
 } from './types';
-import { base64RequestContext, parseClientRequestContext, requestContextQueryString } from './utils';
+import { base64RequestContext, buildTenancyQuery, parseClientRequestContext, requestContextQueryString } from './utils';
+import { createSseJsonTransform } from './utils/stream-transforms';
 
+/**
+ * Provides typed access to agents, workflows, and other APIs on a running Mastra server.
+ * Point `baseUrl` at your server and configure authentication when required.
+ *
+ * @example
+ * ```typescript
+ * import { MastraClient } from '@mastra/client-js';
+ *
+ * const client = new MastraClient({ baseUrl: 'http://localhost:4111' });
+ * ```
+ *
+ * @see For documentation bundled with your installed package, locate
+ * `@mastra/client-js/package.json` with your project's resolver or package-manager
+ * tooling, then read `dist/docs/SKILL.md` from that package root and follow its
+ * reference links. Use package-manager tools for virtual or archived packages.
+ *
+ * @see [Client documentation](https://mastra.ai/reference/client-js/mastra-client)
+ * if packaged docs are unavailable.
+ */
 export class MastraClient extends BaseResource {
   private observability: Observability;
   public readonly conversations: Conversations;
@@ -248,8 +300,27 @@ export class MastraClient extends BaseResource {
    * @param version - Optional version selector for stored agent overrides
    * @returns Agent instance
    */
-  public getAgent(agentId: string, version?: AgentVersionIdentifier) {
-    return new Agent(this.options, agentId, version);
+  public getAgent(agentId: string, version?: AgentVersionIdentifier, routeOverrides?: { stream?: string }) {
+    return new Agent(this.options, agentId, version, routeOverrides);
+  }
+
+  /**
+   * Lists the agent controllers hosted on the connected Mastra instance.
+   * @returns Promise containing one record per agent controller, carrying its id
+   */
+  public async listAgentControllers(): Promise<AgentControllerInfo[]> {
+    const body = await this.request<{ agentControllers: AgentControllerInfo[] }>('/agent-controller');
+    return body.agentControllers;
+  }
+
+  /**
+   * Scopes to an agent controller hosted on the connected Mastra instance. Use
+   * `getAgentController(id).session(resourceId)` to create/resume a session,
+   * stream its events, and send messages.
+   * @param controllerId - The id the agent controller is registered under on Mastra
+   */
+  public getAgentController(controllerId: string) {
+    return new AgentController(this.options, controllerId);
   }
 
   /**
@@ -547,6 +618,26 @@ export class MastraClient extends BaseResource {
   }
 
   /**
+   * Retrieves per-workflow counts of running and suspended (awaiting resume) runs
+   * @param requestContext - Optional request context to pass as query parameter
+   * @returns Promise containing map of workflow IDs to run counts
+   */
+  public listWorkflowRunCounts(
+    requestContext?: RequestContext | Record<string, any>,
+  ): Promise<ListWorkflowRunCountsResponse> {
+    const requestContextParam = base64RequestContext(parseClientRequestContext(requestContext));
+
+    const searchParams = new URLSearchParams();
+
+    if (requestContextParam) {
+      searchParams.set('requestContext', requestContextParam);
+    }
+
+    const queryString = searchParams.toString();
+    return this.request(`/workflows/run-counts${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
    * Gets a workflow instance by ID
    * @param workflowId - ID of the workflow to retrieve
    * @returns Workflow instance
@@ -602,10 +693,10 @@ export class MastraClient extends BaseResource {
     if (logLevel) {
       searchParams.set('logLevel', logLevel);
     }
-    if (page) {
+    if (page !== undefined) {
       searchParams.set('page', String(page));
     }
-    if (perPage) {
+    if (perPage !== undefined) {
       searchParams.set('perPage', String(perPage));
     }
     if (_filters) {
@@ -650,10 +741,10 @@ export class MastraClient extends BaseResource {
     if (logLevel) {
       searchParams.set('logLevel', logLevel);
     }
-    if (page) {
+    if (page !== undefined) {
       searchParams.set('page', String(page));
     }
-    if (perPage) {
+    if (perPage !== undefined) {
       searchParams.set('perPage', String(perPage));
     }
 
@@ -789,6 +880,14 @@ export class MastraClient extends BaseResource {
    */
   public getA2A(agentId: string) {
     return new A2A(this.options, agentId);
+  }
+
+  /**
+   * Gets an A2A Protocol v1.0 client for an agent.
+   * @param agentId - ID of the agent to interact with
+   */
+  public getA2AV1(agentId: string) {
+    return new A2AV1(this.options, agentId);
   }
 
   /**
@@ -1016,6 +1115,23 @@ export class MastraClient extends BaseResource {
     return this.observability.listTraces(params);
   }
 
+  /** Queries completed logical traces using recursive trace and related-record predicates. */
+  queryTraces(params: Omit<TraceQueryRequest, 'group'>): Promise<TraceQueryTraceResponse> {
+    return this.observability.queryTraces(params);
+  }
+
+  /**
+   * Retrieves paginated list of traces carrying only the fields a trace list renders.
+   * Same contract as {@link listTraces}, but rows omit the `attributes`/`input`/`output`
+   * blobs and carry a short `inputPreview` instead.
+   *
+   * @param params - Parameters for pagination, filtering, and ordering
+   * @returns Promise containing paginated lightweight traces and pagination info
+   */
+  listTracesLight(params: ListTracesArgs = {}): Promise<ListTracesLightResponse> {
+    return this.observability.listTracesLight(params);
+  }
+
   /**
    * Retrieves a paginated list of trace branches with optional filtering and sorting.
    * Each row is a branch-anchor span (AGENT_RUN, WORKFLOW_RUN, TOOL_CALL, etc.) including
@@ -1036,6 +1152,16 @@ export class MastraClient extends BaseResource {
 
   listScoresBySpan(params: ListScoresBySpanParams): Promise<ListScoresResponse> {
     return this.observability.listScoresBySpan(params);
+  }
+
+  /**
+   * Deletes traces by ID, cascading to all associated spans and trace-linked
+   * signal events (scores, feedback, metrics, logs). Signals without a trace ID
+   * are untouched. On ClickHouse-backed stores, reads may briefly return
+   * deleted rows until the delete is fully applied.
+   */
+  deleteTraces(params: { traceIds: string[] }): Promise<{ success: true }> {
+    return this.observability.deleteTraces(params);
   }
 
   /** Scores one or more traces using a specified scorer (fire-and-forget). */
@@ -1067,6 +1193,11 @@ export class MastraClient extends BaseResource {
   /** Creates a single score record in the observability store. */
   createScore(params: CreateScoreBody): Promise<CreateScoreResponse> {
     return this.observability.createScore(params);
+  }
+
+  /** Deletes score records by scoreId, optionally scoped to a tenant. */
+  deleteScores(params: DeleteScoresArgs): Promise<DeleteScoresResponse> {
+    return this.observability.deleteScores(params);
   }
 
   /** Returns an aggregated score value with optional period-over-period comparison. */
@@ -1101,6 +1232,16 @@ export class MastraClient extends BaseResource {
   /** Creates a single feedback record in the observability store. */
   createFeedback(params: CreateFeedbackBody): Promise<CreateFeedbackResponse> {
     return this.observability.createFeedback(params);
+  }
+
+  /** Deletes feedback records by feedbackId, optionally scoped to a tenant. */
+  deleteFeedback(params: DeleteFeedbackArgs): Promise<DeleteFeedbackResponse> {
+    return this.observability.deleteFeedback(params);
+  }
+
+  /** Updates a feedback record's review workflow status. */
+  updateFeedbackReviewStatus(params: UpdateFeedbackReviewStatusArgs): Promise<FeedbackRecord> {
+    return this.observability.updateFeedbackReviewStatus(params);
   }
 
   /** Returns an aggregated feedback value with optional period-over-period comparison. */
@@ -1259,6 +1400,55 @@ export class MastraClient extends BaseResource {
    */
   public getStoredAgent(storedAgentId: string): StoredAgent {
     return new StoredAgent(this.options, storedAgentId);
+  }
+
+  // ============================================================================
+  // Dynamic Workflows
+  // ============================================================================
+
+  /**
+   * Lists dynamic workflow definitions, optionally filtered by status or author
+   * @param params - Optional filters: `status` ('active' | 'archived') and `authorId`
+   * @returns Promise containing the matching definitions and a total count
+   */
+  public listDynamicWorkflows(params?: ListDynamicWorkflowsParams): Promise<ListDynamicWorkflowsResponse> {
+    const searchParams = new URLSearchParams();
+    if (params?.status) searchParams.set('status', params.status);
+    if (params?.authorId) searchParams.set('authorId', params.authorId);
+
+    const queryString = searchParams.toString();
+    return this.request(`/stored/workflows${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Creates or replaces a dynamic workflow definition and live-registers it on the server.
+   * Optional `dependencies` lets helper workflows referenced by the root definition be
+   * saved in the same request; their ids are echoed back as `dependencyIds`.
+   * @param params - The workflow definition (id, schemas, graph) plus optional helper dependencies
+   * @returns Promise containing the persisted definition and any dependency ids
+   */
+  public upsertDynamicWorkflow(params: UpsertDynamicWorkflowParams): Promise<UpsertDynamicWorkflowResponse> {
+    return this.request('/stored/workflows', {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * Gets a dynamic workflow instance by ID for further operations (details, delete).
+   * To execute a dynamic workflow, use `getWorkflow(id).createRun()` like any other workflow.
+   * @param dynamicWorkflowId - ID of the dynamic workflow definition
+   * @returns DynamicWorkflow instance
+   */
+  public getDynamicWorkflow(dynamicWorkflowId: string): DynamicWorkflow {
+    return new DynamicWorkflow(this.options, dynamicWorkflowId);
+  }
+
+  /**
+   * Retrieves workflow builder settings for UI gating.
+   */
+  public getWorkflowBuilderSettings(): Promise<WorkflowBuilderSettingsResponse> {
+    return this.request('/editor/workflow-builder/settings');
   }
 
   // ============================================================================
@@ -1749,22 +1939,27 @@ export class MastraClient extends BaseResource {
   /**
    * Lists all datasets with optional pagination
    */
-  public listDatasets(pagination?: {
-    page?: number;
-    perPage?: number;
-  }): Promise<{ datasets: DatasetRecord[]; pagination: PaginationInfo }> {
+  public listDatasets(params?: ListDatasetsParams): Promise<{ datasets: DatasetRecord[]; pagination: PaginationInfo }> {
     const searchParams = new URLSearchParams();
-    if (pagination?.page !== undefined) searchParams.set('page', String(pagination.page));
-    if (pagination?.perPage !== undefined) searchParams.set('perPage', String(pagination.perPage));
+    if (params?.page !== undefined) searchParams.set('page', String(params.page));
+    if (params?.perPage !== undefined) searchParams.set('perPage', String(params.perPage));
+    if (params?.targetType !== undefined) searchParams.set('targetType', params.targetType);
+    for (const id of params?.targetIds ?? []) searchParams.append('targetIds', id);
     const qs = searchParams.toString();
     return this.request(`/datasets${qs ? `?${qs}` : ''}`);
   }
 
   /**
-   * Gets a single dataset by ID
+   * Gets a single dataset by ID. Optionally scope the lookup to a specific
+   * tenant organization/project — the server returns 404 if the dataset does
+   * not belong to the given tenant.
    */
-  public getDataset(datasetId: string): Promise<DatasetRecord> {
-    return this.request(`/datasets/${encodeURIComponent(datasetId)}`);
+  public getDataset(
+    datasetId: string,
+    tenancy?: { organizationId?: string; projectId?: string },
+  ): Promise<DatasetRecord> {
+    const qs = buildTenancyQuery(tenancy);
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}${qs}`);
   }
 
   /**
@@ -1775,21 +1970,30 @@ export class MastraClient extends BaseResource {
   }
 
   /**
-   * Updates a dataset
+   * Updates a dataset. Tenancy fields, when provided, scope the existence
+   * check on the server side so that a caller can only update datasets that
+   * belong to the given tenant.
    */
   public updateDataset(params: UpdateDatasetParams): Promise<DatasetRecord> {
-    const { datasetId, ...body } = params;
-    return this.request(`/datasets/${encodeURIComponent(datasetId)}`, {
+    const { datasetId, organizationId, projectId, ...body } = params;
+    const qs = buildTenancyQuery({ organizationId, projectId });
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}${qs}`, {
       method: 'PATCH',
       body,
     });
   }
 
   /**
-   * Deletes a dataset
+   * Deletes a dataset. When tenancy fields are supplied, the server only
+   * deletes the dataset if it belongs to the given tenant (silent no-op
+   * otherwise).
    */
-  public deleteDataset(datasetId: string): Promise<{ success: boolean }> {
-    return this.request(`/datasets/${encodeURIComponent(datasetId)}`, {
+  public deleteDataset(
+    datasetId: string,
+    tenancy?: { organizationId?: string; projectId?: string },
+  ): Promise<{ success: boolean }> {
+    const qs = buildTenancyQuery(tenancy);
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}${qs}`, {
       method: 'DELETE',
     });
   }
@@ -1850,6 +2054,20 @@ export class MastraClient extends BaseResource {
    */
   public deleteDatasetItem(datasetId: string, itemId: string): Promise<{ success: boolean }> {
     return this.request(`/datasets/${encodeURIComponent(datasetId)}/items/${encodeURIComponent(itemId)}`, {
+      method: 'DELETE',
+    });
+  }
+
+  /**
+   * Permanently scrubs a dataset item's data from all versions and linked experiment results
+   */
+  public purgeDatasetItem(
+    datasetId: string,
+    itemId: string,
+    tenancy?: { organizationId?: string; projectId?: string },
+  ): Promise<{ success: boolean }> {
+    const qs = buildTenancyQuery(tenancy);
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}/items/${encodeURIComponent(itemId)}/purge${qs}`, {
       method: 'DELETE',
     });
   }
@@ -1965,13 +2183,18 @@ export class MastraClient extends BaseResource {
   /**
    * Lists all experiments across all datasets
    */
-  public listExperiments(pagination?: {
-    page?: number;
-    perPage?: number;
-  }): Promise<{ experiments: DatasetExperiment[]; pagination: PaginationInfo }> {
+  public listExperiments(
+    params?: ListExperimentsParams,
+  ): Promise<{ experiments: DatasetExperiment[]; pagination: PaginationInfo }> {
     const searchParams = new URLSearchParams();
-    if (pagination?.page !== undefined) searchParams.set('page', String(pagination.page));
-    if (pagination?.perPage !== undefined) searchParams.set('perPage', String(pagination.perPage));
+    if (params?.page !== undefined) searchParams.set('page', String(params.page));
+    if (params?.perPage !== undefined) searchParams.set('perPage', String(params.perPage));
+    if (params?.experimentSetId !== undefined) searchParams.set('experimentSetId', params.experimentSetId);
+    if (params?.comparisonId !== undefined) searchParams.set('comparisonId', params.comparisonId);
+    if (params?.variantId !== undefined) searchParams.set('variantId', params.variantId);
+    if (params?.trialIndex !== undefined) searchParams.set('trialIndex', String(params.trialIndex));
+    if (params?.targetType !== undefined) searchParams.set('targetType', params.targetType);
+    if (params?.targetId !== undefined) searchParams.set('targetId', params.targetId);
     const qs = searchParams.toString();
     return this.request(`/experiments${qs ? `?${qs}` : ''}`);
   }
@@ -1988,11 +2211,17 @@ export class MastraClient extends BaseResource {
    */
   public listDatasetExperiments(
     datasetId: string,
-    pagination?: { page?: number; perPage?: number },
+    params?: ListExperimentsParams,
   ): Promise<{ experiments: DatasetExperiment[]; pagination: PaginationInfo }> {
     const searchParams = new URLSearchParams();
-    if (pagination?.page !== undefined) searchParams.set('page', String(pagination.page));
-    if (pagination?.perPage !== undefined) searchParams.set('perPage', String(pagination.perPage));
+    if (params?.page !== undefined) searchParams.set('page', String(params.page));
+    if (params?.perPage !== undefined) searchParams.set('perPage', String(params.perPage));
+    if (params?.experimentSetId !== undefined) searchParams.set('experimentSetId', params.experimentSetId);
+    if (params?.comparisonId !== undefined) searchParams.set('comparisonId', params.comparisonId);
+    if (params?.variantId !== undefined) searchParams.set('variantId', params.variantId);
+    if (params?.trialIndex !== undefined) searchParams.set('trialIndex', String(params.trialIndex));
+    if (params?.targetType !== undefined) searchParams.set('targetType', params.targetType);
+    if (params?.targetId !== undefined) searchParams.set('targetId', params.targetId);
     const qs = searchParams.toString();
     return this.request(`/datasets/${encodeURIComponent(datasetId)}/experiments${qs ? `?${qs}` : ''}`);
   }
@@ -2005,16 +2234,71 @@ export class MastraClient extends BaseResource {
   }
 
   /**
-   * Lists results for a dataset experiment
+   * Deletes a dataset experiment and its results. Tenancy fields, when provided,
+   * scope the dataset lookup on the server side.
+   *
+   * The server also attempts to delete the experiment's observability traces,
+   * cascading to their spans and trace-linked signals. Stores without
+   * observability or trace deletion support leave the traces in place.
+   */
+  public deleteDatasetExperiment(
+    datasetId: string,
+    experimentId: string,
+    tenancy?: { organizationId?: string; projectId?: string },
+  ): Promise<{ success: boolean }> {
+    const qs = buildTenancyQuery(tenancy);
+    return this.request(
+      `/datasets/${encodeURIComponent(datasetId)}/experiments/${encodeURIComponent(experimentId)}${qs}`,
+      {
+        method: 'DELETE',
+      },
+    );
+  }
+
+  /**
+   * Deletes an experiment and its results regardless of dataset association
+   * (including experiments orphaned by dataset deletion). When tenancy fields
+   * are supplied, the server only deletes the experiment if it belongs to the
+   * given tenant (silent no-op otherwise).
+   *
+   * The server also attempts to delete the experiment's observability traces,
+   * cascading to their spans and trace-linked signals. Stores without
+   * observability or trace deletion support leave the traces in place.
+   */
+  public deleteExperiment(
+    experimentId: string,
+    options?: { organizationId?: string; projectId?: string },
+  ): Promise<{ success: boolean }> {
+    const qs = buildTenancyQuery(options);
+    return this.request(`/experiments/${encodeURIComponent(experimentId)}${qs}`, {
+      method: 'DELETE',
+    });
+  }
+
+  /**
+   * Updates a dataset experiment's name, description or metadata
+   */
+  public updateDatasetExperiment(params: UpdateDatasetExperimentParams): Promise<DatasetExperiment> {
+    const { datasetId, experimentId, ...body } = params;
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}/experiments/${encodeURIComponent(experimentId)}`, {
+      method: 'PATCH',
+      body,
+    });
+  }
+
+  /**
+   * Lists results for a dataset experiment.
+   * `tags` restricts the list to results that have all of the given tags.
    */
   public listDatasetExperimentResults(
     datasetId: string,
     experimentId: string,
-    pagination?: { page?: number; perPage?: number },
+    options?: { page?: number; perPage?: number; tags?: string[] },
   ): Promise<{ results: DatasetExperimentResult[]; pagination: PaginationInfo }> {
     const searchParams = new URLSearchParams();
-    if (pagination?.page !== undefined) searchParams.set('page', String(pagination.page));
-    if (pagination?.perPage !== undefined) searchParams.set('perPage', String(pagination.perPage));
+    if (options?.page !== undefined) searchParams.set('page', String(options.page));
+    if (options?.perPage !== undefined) searchParams.set('perPage', String(options.perPage));
+    for (const tag of options?.tags ?? []) searchParams.append('tags', tag);
     const qs = searchParams.toString();
     return this.request(
       `/datasets/${encodeURIComponent(datasetId)}/experiments/${encodeURIComponent(experimentId)}/results${qs ? `?${qs}` : ''}`,
@@ -2022,7 +2306,7 @@ export class MastraClient extends BaseResource {
   }
 
   /**
-   * Updates an experiment result's status and/or tags
+   * Updates an experiment result's status, tags, and/or comment
    */
   public updateDatasetExperimentResult(params: UpdateExperimentResultParams): Promise<DatasetExperimentResult> {
     const { datasetId, experimentId, resultId, ...body } = params;
@@ -2052,6 +2336,7 @@ export class MastraClient extends BaseResource {
       input: unknown;
       output: unknown | null;
       groundTruth: unknown | null;
+      metadata?: Record<string, unknown> | null;
       error: string | null;
       startedAt: string | Date;
       completedAt: string | Date;
@@ -2073,7 +2358,66 @@ export class MastraClient extends BaseResource {
   }
 
   /**
-   * Updates the status and/or tags on an experiment result
+   * Creates an experiment without starting the in-process runner, so the caller
+   * drives the loop (e.g. a Temporal workflow). With a target, execute items
+   * server-side via `runExperimentItem`; without one, ingest results via
+   * `submitExperimentResult`. Idempotent when a caller-supplied `id` is provided.
+   */
+  public createDatasetExperiment(params: CreateDatasetExperimentParams): Promise<CreateDatasetExperimentResponse> {
+    const { datasetId, ...body } = params;
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}/experiments`, {
+      method: 'POST',
+      body: { ...body, start: false },
+    });
+  }
+
+  /**
+   * Executes the experiment's target against one dataset item server-side,
+   * runs the resolved scorers, and upserts the result row keyed by
+   * (experimentId, itemId, attempt) — safe to retry.
+   */
+  public runExperimentItem(params: RunExperimentItemParams): Promise<RunExperimentItemResponse> {
+    const { datasetId, experimentId, itemId, ...body } = params;
+    return this.request(
+      `/datasets/${encodeURIComponent(datasetId)}/experiments/${encodeURIComponent(experimentId)}/items/${encodeURIComponent(itemId)}/run`,
+      {
+        method: 'POST',
+        body,
+      },
+    );
+  }
+
+  /**
+   * Submits (or re-submits) one item result for a target-less (ingestion) experiment.
+   * Upsert semantics on (experimentId, itemId, attempt) — safe to retry.
+   */
+  public submitExperimentResult(params: SubmitExperimentResultParams): Promise<DatasetExperimentResultRow> {
+    const { datasetId, experimentId, ...body } = params;
+    return this.request(
+      `/datasets/${encodeURIComponent(datasetId)}/experiments/${encodeURIComponent(experimentId)}/results`,
+      {
+        method: 'POST',
+        body,
+      },
+    );
+  }
+
+  /**
+   * Finalizes an external experiment. The server computes counts from persisted results. Idempotent.
+   */
+  public finalizeExperiment(params: FinalizeExperimentParams): Promise<DatasetExperiment> {
+    const { datasetId, experimentId } = params;
+    return this.request(
+      `/datasets/${encodeURIComponent(datasetId)}/experiments/${encodeURIComponent(experimentId)}/finalize`,
+      {
+        method: 'POST',
+        body: {},
+      },
+    );
+  }
+
+  /**
+   * Updates the status, tags, and/or comment on an experiment result
    */
   public updateExperimentResult(params: UpdateExperimentResultParams): Promise<DatasetExperimentResult> {
     const { datasetId, experimentId, resultId, ...body } = params;
@@ -2153,48 +2497,22 @@ export class MastraClient extends BaseResource {
       throw new Error('Response body is null');
     }
 
-    //using undefined instead of empty string to avoid parsing errors
-    let failedChunk: string | undefined = undefined;
-
-    return response.body.pipeThrough(
-      new TransformStream({
-        async transform(chunk, controller) {
-          try {
-            // Decode binary data to text
-            const decoded = new TextDecoder().decode(chunk);
-
-            // Split by record separator
-            const chunks = decoded.split('\n\n');
-
-            // Process each chunk
-            for (const chunk of chunks) {
-              if (chunk) {
-                const cleanChunk = chunk.substring('data: '.length);
-                const newChunk: string = failedChunk ? failedChunk + cleanChunk : cleanChunk;
-                try {
-                  const parsedChunk = JSON.parse(newChunk);
-                  controller.enqueue(parsedChunk);
-                  failedChunk = undefined;
-                } catch {
-                  failedChunk = newChunk;
-                }
-              }
-            }
-          } catch {
-            // Silently ignore processing errors
-          }
-        },
-      }),
-    );
+    return response.body.pipeThrough(createSseJsonTransform());
   }
 
   /**
-   * Lists workflow schedules with optional filtering by workflowId or status.
+   * Lists schedules — agent schedules and workflow schedules — with optional
+   * filtering by agentId, workflowId, or status. Agent schedules can
+   * additionally be filtered by threadId, resourceId, or name.
    */
   public listSchedules(params: ListSchedulesParams = {}): Promise<ListSchedulesResponse> {
     const searchParams = new URLSearchParams();
+    if (params.agentId) searchParams.set('agentId', params.agentId);
     if (params.workflowId) searchParams.set('workflowId', params.workflowId);
     if (params.status) searchParams.set('status', params.status);
+    if (params.threadId) searchParams.set('threadId', params.threadId);
+    if (params.resourceId) searchParams.set('resourceId', params.resourceId);
+    if (params.name) searchParams.set('name', params.name);
     const qs = searchParams.toString();
     return this.request(`/schedules${qs ? `?${qs}` : ''}`);
   }
@@ -2204,6 +2522,56 @@ export class MastraClient extends BaseResource {
    */
   public getSchedule(scheduleId: string): Promise<ScheduleResponse> {
     return this.request(`/schedules/${encodeURIComponent(scheduleId)}`);
+  }
+
+  /**
+   * Creates a schedule. Pass `agentId` (plus `prompt`) to schedule an agent,
+   * or `workflowId` (plus optional `inputData`) to schedule a workflow.
+   * By default each call creates a new schedule with a random id
+   * (`agent_<uuid>` for agents, `schedule_<uuid>` for workflows) — pass `id`
+   * to choose a stable id instead; creating one with an id that already
+   * exists throws.
+   *
+   * Trigger (fire) history is read through `listScheduleTriggers(schedule.id)`.
+   */
+  public createSchedule(options: CreateScheduleInput): Promise<ScheduleResponse> {
+    return this.request(`/schedules`, {
+      method: 'POST',
+      body: options,
+    });
+  }
+
+  /**
+   * Patches an existing schedule. Fields apply to the matching target type;
+   * agent-only fields on a workflow schedule are rejected. `threadId` /
+   * `resourceId` are immutable — to retarget, delete and recreate.
+   */
+  public updateSchedule(scheduleId: string, patch: UpdateScheduleInput): Promise<ScheduleResponse> {
+    return this.request(`/schedules/${encodeURIComponent(scheduleId)}`, {
+      method: 'PATCH',
+      body: patch,
+    });
+  }
+
+  /**
+   * Deletes a schedule.
+   */
+  public deleteSchedule(scheduleId: string): Promise<{ message: string }> {
+    return this.request(`/schedules/${encodeURIComponent(scheduleId)}`, {
+      method: 'DELETE',
+    });
+  }
+
+  /**
+   * Fires a schedule manually, out-of-band from the cron schedule. Behaves
+   * like a scheduled fire but does not advance `nextFireAt`. The returned
+   * `claimId` is the trigger row's runId — look it up via
+   * `listScheduleTriggers(scheduleId)`.
+   */
+  public runSchedule(scheduleId: string): Promise<RunScheduleResponse> {
+    return this.request(`/schedules/${encodeURIComponent(scheduleId)}/run`, {
+      method: 'POST',
+    });
   }
 
   /**

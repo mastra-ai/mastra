@@ -1,4 +1,9 @@
-import { DataList as EntityList, DataListSkeleton as EntityListSkeleton, truncateString } from '@mastra/playground-ui';
+import {
+  DataList as EntityList,
+  DataListSkeleton as EntityListSkeleton,
+  useDataListKeyboard,
+} from '@mastra/playground-ui/components/DataList';
+import { truncateString } from '@mastra/playground-ui/utils/truncate-string';
 import { CheckIcon, FileInput, FileOutput } from 'lucide-react';
 import { useMemo } from 'react';
 import type { ProcessorInfo, ProcessorPhase } from '../../hooks/use-processors';
@@ -25,12 +30,14 @@ export function ProcessorsList({ processors, isLoading, search = '' }: Processor
     return processorData.filter(p => p.id.toLowerCase().includes(term) || (p.name || '').toLowerCase().includes(term));
   }, [processorData, search]);
 
+  const { containerRef, getRowProps } = useDataListKeyboard({ count: filteredData.length, global: true });
+
   if (isLoading) {
     return <EntityListSkeleton columns="auto 1fr auto auto auto auto auto auto" />;
   }
 
   return (
-    <EntityList columns="auto 1fr auto auto auto auto auto auto">
+    <EntityList columns="auto 1fr auto auto auto auto auto auto" scrollRef={containerRef}>
       <EntityList.Top>
         <EntityList.TopCell>Name</EntityList.TopCell>
         <EntityList.TopCell>Description</EntityList.TopCell>
@@ -80,7 +87,7 @@ export function ProcessorsList({ processors, isLoading, search = '' }: Processor
 
       {filteredData.length === 0 && search ? <EntityList.NoMatch message="No Processors match your search" /> : null}
 
-      {filteredData.map(processor => {
+      {filteredData.map((processor, index) => {
         const name = truncateString(processor.name || processor.id, 50);
         const description = truncateString(processor.description ?? '', 200);
         const agentsCount = processor.agentIds?.length ?? 0;
@@ -91,12 +98,12 @@ export function ProcessorsList({ processors, isLoading, search = '' }: Processor
           : paths.processorLink(processor.id);
 
         return (
-          <EntityList.RowLink key={processor.id} to={linkTo} LinkComponent={Link}>
+          <EntityList.RowLink key={processor.id} to={linkTo} LinkComponent={Link} {...getRowProps(index)}>
             <EntityList.NameCell>{name}</EntityList.NameCell>
             <EntityList.DescriptionCell>{description}</EntityList.DescriptionCell>
             {phaseKeys.map(key => (
               <EntityList.TextCell key={key} className="text-center">
-                {phaseSet.has(key) && <CheckIcon className="size-4 mx-auto" />}
+                {phaseSet.has(key) && <CheckIcon className="mx-auto size-4" />}
               </EntityList.TextCell>
             ))}
             <EntityList.TextCell className="text-center">{agentsCount || ''}</EntityList.TextCell>

@@ -1,13 +1,18 @@
 import type { DatasetItem } from '@mastra/client-js';
-import { Button, ButtonsGroup, DataList, EmptyState } from '@mastra/playground-ui';
+import { Button, CreateButton } from '@mastra/playground-ui/components/Button';
+import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
+import { DataList, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { format, isThisYear, isToday } from 'date-fns';
-import { Plus, Upload, FileJson } from 'lucide-react';
+import { CircleSlashIcon, ExternalLinkIcon, FileJson, Upload } from 'lucide-react';
 
 export interface DatasetItemsListProps {
   items: DatasetItem[];
   isLoading: boolean;
   onItemClick?: (itemId: string) => void;
   featuredItemId?: string | null;
+  /** When false, arrow/page keyboard navigation only moves focus without opening the item. Defaults to true. */
+  selectOnNavigate?: boolean;
   setEndOfListElement?: (element: HTMLDivElement | null) => void;
   isFetchingNextPage?: boolean;
   hasNextPage?: boolean;
@@ -19,7 +24,6 @@ export interface DatasetItemsListProps {
   onToggleSelection: (id: string, shiftKey: boolean, allIds: string[]) => void;
   onSelectAll: (ids: string[]) => void;
   onClearSelection: () => void;
-  maxSelection?: number;
   // Empty state props
   onAddClick: () => void;
   onImportClick?: () => void;
@@ -48,6 +52,7 @@ export function DatasetItemsList({
   isLoading,
   onItemClick,
   featuredItemId,
+  selectOnNavigate = true,
   setEndOfListElement,
   isFetchingNextPage,
   hasNextPage,
@@ -58,11 +63,22 @@ export function DatasetItemsList({
   onToggleSelection,
   onSelectAll,
   onClearSelection,
-  maxSelection,
   onAddClick,
   onImportClick,
   onImportJsonClick,
 }: DatasetItemsListProps) {
+  const { containerRef, getRowProps } = useDataListKeyboard({
+    count: items.length,
+    // Arrow/page navigation opens the focused item, keeping the side panel in sync.
+    // Guard against the clamped boundary case (same id would toggle the panel closed).
+    onNavigate: selectOnNavigate
+      ? index => {
+          const item = items[index];
+          if (item && item.id !== featuredItemId) onItemClick?.(item.id);
+        }
+      : undefined,
+  });
+
   // Only show empty state if there are no items AND no search is active AND not loading
 
   if (items.length === 0 && !searchQuery && !isLoading) {
@@ -91,28 +107,21 @@ export function DatasetItemsList({
   };
 
   const handleToggleSelection = (id: string, shiftKey: boolean, allIds: string[]) => {
-    if (maxSelection && !selectedIds.has(id) && selectedIds.size >= maxSelection) {
-      // Drop most recent selection, keep oldest + add new one
-      const [first] = Array.from(selectedIds);
-      onSelectAll([first, id]);
-      return;
-    }
     onToggleSelection(id, shiftKey, allIds);
   };
 
   const gridColumns = [isSelectionActive ? 'auto' : '', ...columns.map(c => c.size)].filter(Boolean).join(' ');
 
   return (
-    <DataList columns={gridColumns}>
+    <DataList columns={gridColumns} scrollRef={containerRef} fit="container">
       <DataList.Top hasLeadingCell={isSelectionActive}>
-        {isSelectionActive && !maxSelection && (
+        {isSelectionActive && (
           <DataList.TopSelectCell
             checked={isIndeterminate ? 'indeterminate' : isAllSelected}
             onToggle={handleSelectAllToggle}
             aria-label="Select all items"
           />
         )}
-        {isSelectionActive && maxSelection && <DataList.TopCell>&nbsp;</DataList.TopCell>}
         {isSelectionActive ? (
           <DataList.TopCells colStart={2}>
             {columns.map(col => (
@@ -128,16 +137,18 @@ export function DatasetItemsList({
         <DataList.NoMatch message="No items match your search" />
       ) : (
         <>
-          {items.map(item => {
+          {items.map((item, index) => {
             const createdAtDate = new Date(item.createdAt);
             const isFeatured = featuredItemId === item.id;
 
             const rowCells = (
               <>
                 <DataList.IdCell id={item.id} />
-                <DataList.MonoCell>{truncateValue(item.input, 150)}</DataList.MonoCell>
-                <DataList.MonoCell>{item.groundTruth ? truncateValue(item.groundTruth, 150) : '-'}</DataList.MonoCell>
-                <DataList.Cell height="compact" className="min-w-0">
+                <DataList.TextCell font="mono">{truncateValue(item.input, 150)}</DataList.TextCell>
+                <DataList.TextCell font="mono">
+                  {item.groundTruth ? truncateValue(item.groundTruth, 150) : '-'}
+                </DataList.TextCell>
+                <DataList.Cell className="min-w-0">
                   {item.expectedTrajectory ? (
                     <span className="text-ui-smd text-neutral3">
                       {Array.isArray((item.expectedTrajectory as Record<string, unknown>)?.steps)
@@ -148,15 +159,21 @@ export function DatasetItemsList({
                     <span className="text-neutral4">—</span>
                   )}
                 </DataList.Cell>
-                <DataList.Cell height="compact" className="min-w-0">
-                  <span className="block text-ui-smd text-neutral2 truncate">{formatDate(createdAtDate)}</span>
+                <DataList.Cell className="min-w-0">
+                  <span className="text-ui-smd text-neutral2 block truncate">{formatDate(createdAtDate)}</span>
                 </DataList.Cell>
               </>
             );
 
             if (!isSelectionActive) {
               return (
-                <DataList.RowButton key={item.id} featured={isFeatured} onClick={() => onItemClick?.(item.id)}>
+                <DataList.RowButton
+                  key={item.id}
+                  featured={isFeatured}
+                  data-selected={isFeatured || undefined}
+                  onClick={() => onItemClick?.(item.id)}
+                  {...getRowProps(index)}
+                >
                   {rowCells}
                 </DataList.RowButton>
               );
@@ -169,7 +186,13 @@ export function DatasetItemsList({
                   onToggle={shiftKey => handleToggleSelection(item.id, shiftKey, allIds)}
                   aria-label={`Select item ${item.id}`}
                 />
-                <DataList.RowButton flushLeft colStart={2} featured={isFeatured} onClick={() => onItemClick?.(item.id)}>
+                <DataList.RowButton
+                  colStart={2}
+                  featured={isFeatured}
+                  data-selected={isFeatured || undefined}
+                  onClick={() => onItemClick?.(item.id)}
+                  {...getRowProps(index)}
+                >
                   {rowCells}
                 </DataList.RowButton>
               </DataList.RowWrapper>
@@ -194,30 +217,44 @@ interface EmptyDatasetItemListProps {
 
 function EmptyDatasetItemList({ onAddClick, onImportClick, onImportJsonClick }: EmptyDatasetItemListProps) {
   return (
-    <div className="flex h-full items-center justify-center py-12">
+    <div className="flex flex-1 items-center justify-center">
       <EmptyState
-        iconSlot={<Plus className="w-8 h-8 text-neutral3" />}
+        iconSlot={<CircleSlashIcon />}
         titleSlot="No items yet"
-        descriptionSlot="Add items to this dataset to use them in experiment runs."
+        descriptionSlot={
+          <>
+            Add items to this dataset to use them <br />
+            in experiment runs.
+          </>
+        }
         actionSlot={
-          <ButtonsGroup>
-            <Button onClick={onAddClick} size="md">
-              <Plus />
-              Add Single Item
+          <div className="flex flex-col items-center gap-2">
+            <ButtonsGroup>
+              <CreateButton variant="primary" onClick={onAddClick} tooltip="Add an item">
+                New item
+              </CreateButton>
+              {onImportClick && (
+                <Button onClick={onImportClick} icon={<Upload />}>
+                  Import CSV
+                </Button>
+              )}
+              {onImportJsonClick && (
+                <Button onClick={onImportJsonClick} icon={<FileJson />}>
+                  Import JSON
+                </Button>
+              )}
+            </ButtonsGroup>
+            <Button
+              variant="ghost"
+              as="a"
+              href="https://mastra.ai/docs/evals/datasets"
+              target="_blank"
+              rel="noopener noreferrer"
+              icon={<ExternalLinkIcon />}
+            >
+              Datasets Documentation
             </Button>
-            {onImportClick && (
-              <Button onClick={onImportClick} size="md">
-                <Upload />
-                Import CSV
-              </Button>
-            )}
-            {onImportJsonClick && (
-              <Button onClick={onImportJsonClick} size="md">
-                <FileJson />
-                Import JSON
-              </Button>
-            )}
-          </ButtonsGroup>
+          </div>
         }
       />
     </div>

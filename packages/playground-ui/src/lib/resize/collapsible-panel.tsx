@@ -1,54 +1,147 @@
-import { ArrowLeft, ArrowRight } from 'lucide-react';
-import { useState } from 'react';
+import type { CSSProperties, Ref } from 'react';
+import { useImperativeHandle, useRef, useState } from 'react';
 import type { PanelProps } from 'react-resizable-panels';
 import { Panel, usePanelRef } from 'react-resizable-panels';
-import { Button } from '@/ds/components/Button/Button';
+import { PanelEdgeIcon } from './panel-edge-icon';
+import { panelIconButtonClass } from './panel-icon-button';
+import { Kbd } from '@/ds/components/Kbd';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { Icon } from '@/ds/icons';
+import { cn } from '@/lib/utils';
+
+/** Programmatic control over a CollapsiblePanel (distinct from the library's panel handle). */
+export interface CollapsiblePanelHandle {
+  collapse: () => void;
+  /** Reopens at the width the panel had when `collapse()` was called, else at `defaultSize`. */
+  expand: () => void;
+  /** Collapses when open, expands when collapsed (based on the panel's reported size). */
+  toggle: () => void;
+}
 
 export interface CollapsiblePanelProps extends PanelProps {
   direction: 'left' | 'right';
+  /** Key shown in the expand button tooltip when the caller binds a shortcut to `toggle()`. */
+  expandShortcut?: string;
+  /** Skip the floating "Expand panel" button when the caller provides its own expand control. */
+  hideExpandButton?: boolean;
+  ref?: Ref<CollapsiblePanelHandle>;
 }
 
-export const CollapsiblePanel = ({ collapsedSize, children, direction, ...props }: CollapsiblePanelProps) => {
-  const [collapsed, setCollapsed] = useState(false);
-  const panelRef = usePanelRef();
+export const CollapsiblePanel = ({
+  collapsedSize,
+  children,
+  direction,
+  expandShortcut,
+  hideExpandButton = false,
+  className,
+  onResize,
+  style,
+  minSize,
+  defaultSize,
+  panelRef: externalPanelRef,
+  ref,
+  ...props
+}: CollapsiblePanelProps) => {
+  // Physical state of the panel, as reported by onResize. It drives what is rendered.
+  const [isCollapsed, setIsCollapsed] = useState(false);
+  // Width the panel had right before we collapsed it. The library's `expand()`
+  // relies on its own "most recent size", which is unreliable when the panel
+  // mounts already collapsed from a persisted layout (it opens at `minSize`).
+  const sizeBeforeCollapseRef = useRef<number | null>(null);
+  const internalPanelRef = usePanelRef();
+  const panelRef = externalPanelRef ?? internalPanelRef;
+
+  const collapsedThreshold = typeof collapsedSize === 'number' ? collapsedSize : 0;
+  // Read the live size: `isCollapsed` only updates after the library's first `onResize`,
+  // so a toggle fired right after mount would otherwise act on stale state.
+  const isPanelCollapsed = (panel: NonNullable<typeof panelRef.current>) =>
+    panel.getSize().inPixels <= collapsedThreshold;
+
+  const collapse = () => {
+    const panel = panelRef.current;
+    if (!panel) return;
+    // Never remember a collapsed width as the restore target.
+    if (!isPanelCollapsed(panel)) sizeBeforeCollapseRef.current = panel.getSize().inPixels;
+    panel.collapse();
+  };
 
   const expand = () => {
-    if (!panelRef.current) return;
-    panelRef.current.expand();
+    const panel = panelRef.current;
+    if (!panel) return;
+    const target = sizeBeforeCollapseRef.current ?? defaultSize;
+    if (target === undefined) {
+      panel.expand();
+      return;
+    }
+    panel.resize(target);
   };
+
+  const toggle = () => {
+    const panel = panelRef.current;
+    if (!panel) return;
+    return isPanelCollapsed(panel) ? expand() : collapse();
+  };
+
+  useImperativeHandle(ref, () => ({ collapse, expand, toggle }));
+
+  const numericMinSize = typeof minSize === 'number' ? minSize : null;
 
   return (
     <Panel
       panelRef={panelRef}
       collapsedSize={collapsedSize}
+      minSize={minSize}
+      defaultSize={defaultSize}
+      className={cn('relative', className)}
+      style={
+        {
+          // The expand button must remain visible once the panel is at zero width.
+          overflow: isCollapsed ? 'visible' : 'hidden',
+          '--panel-min-w': numericMinSize ? `${numericMinSize}px` : undefined,
+          ...style,
+        } as CSSProperties
+      }
       {...props}
-      onResize={size => {
-        if (!collapsedSize) return;
+      onResize={(size, id, previousSize) => {
+        onResize?.(size, id, previousSize);
         if (typeof collapsedSize !== 'number') return;
-
-        if (size.inPixels <= collapsedSize) {
-          setCollapsed(true);
-        } else if (collapsed) {
-          setCollapsed(false);
-        }
+        setIsCollapsed(size.inPixels <= collapsedSize);
       }}
     >
-      {collapsed ? (
-        <Tooltip>
-          <div className="flex items-center justify-center h-full">
-            <TooltipTrigger asChild>
-              <Button onClick={expand} className="h-48! border-none">
-                <Icon>{direction === 'left' ? <ArrowRight /> : <ArrowLeft />}</Icon>
-              </Button>
-            </TooltipTrigger>
-          </div>
+      <div
+        hidden={isCollapsed}
+        style={{ minWidth: 'var(--panel-min-w)' }}
+        className={cn('absolute inset-y-0 w-full overflow-hidden', direction === 'left' ? 'left-0' : 'right-0')}
+      >
+        {children}
+      </div>
 
-          <TooltipContent>Expand</TooltipContent>
+      {isCollapsed && !hideExpandButton && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              aria-label="Expand panel"
+              onClick={expand}
+              className={cn(
+                panelIconButtonClass,
+                'absolute top-2 z-10',
+                'transition-[color,background-color,opacity] duration-300 starting:opacity-0',
+                direction === 'left' ? 'left-2' : 'right-2',
+              )}
+            >
+              <Icon>
+                <PanelEdgeIcon side={direction} />
+              </Icon>
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side={direction === 'left' ? 'right' : 'left'}>
+            <span className="inline-flex items-center gap-1.5">
+              Expand panel
+              {expandShortcut && <Kbd size="xs">{expandShortcut}</Kbd>}
+            </span>
+          </TooltipContent>
         </Tooltip>
-      ) : (
-        children
       )}
     </Panel>
   );

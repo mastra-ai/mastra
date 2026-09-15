@@ -1,8 +1,34 @@
 {
-  "attachment": [
-    "qwen/qwen2.5-vl-72b-instruct",
+  "attachment": ["google/gemma-3-27b-it"],
+  "temperature": [
+    "MiniMaxAI/MiniMax-M3",
+    "NousResearch/Hermes-4-405B",
+    "Qwen/Qwen3-235B-A22B-Instruct-2507",
+    "Qwen/Qwen3-30B-A3B-Instruct-2507",
+    "Qwen/Qwen3.5-397B-A17B",
+    "deepseek-ai/DeepSeek-V4-Flash-0731",
+    "deepseek-ai/DeepSeek-V4-Pro",
     "google/gemma-3-27b-it",
-    "moonshotai/kimi-k2.5",
-    "moonshotai/kimi-k2.5-fast"
+    "nvidia/Nemotron-3-Ultra-550b-a55b",
+    "nvidia/Nemotron-3_5-Lightning",
+    "nvidia/nemotron-3-super-120b-a12b",
+    "openai/gpt-oss-120b",
+    "zai-org/GLM-5.2",
+    "zai-org/GLM-5.3-Flash"
+  ],
+  "structuredOutput": [
+    "NousResearch/Hermes-4-405B",
+    "Qwen/Qwen3-30B-A3B-Instruct-2507",
+    "Qwen/Qwen3.5-397B-A17B",
+    "deepseek-ai/DeepSeek-V4-Flash-0731",
+    "deepseek-ai/DeepSeek-V4-Pro",
+    "google/gemma-3-27b-it",
+    "moonshotai/Kimi-K2.7-Code",
+    "moonshotai/Kimi-K3",
+    "nvidia/Nemotron-3_5-Lightning",
+    "nvidia/nemotron-3-super-120b-a12b",
+    "openai/gpt-oss-120b",
+    "zai-org/GLM-5.2",
+    "zai-org/GLM-5.3-Flash"
   ]
 }

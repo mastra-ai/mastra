@@ -27,13 +27,28 @@ import type {
   GetTraceLightResponse,
   LightSpanRecord,
   CreateIndexOptions,
+  PruneOptions,
+  PruneResult,
+  RetentionTablesDescriptor,
+  TableRetentionPolicy,
+  TABLE_NAMES,
 } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL, generateTimestampTriggerSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
+import { runPrune, resolveTargets } from '../../retention';
 import { transformFromSqlRow, getTableName, getSchemaName } from '../utils';
 
 export class ObservabilityPG extends ObservabilityStorage {
+  /**
+   * Retention-eligible tables. The observability domain has a single physical
+   * table (`mastra_ai_spans`); spans anchor on the timezone-aware `startedAtZ`
+   * mirror column and are indexed for fast batched deletes.
+   */
+  static override readonly retentionTables: RetentionTablesDescriptor = {
+    spans: { table: TABLE_SPANS, column: 'startedAtZ', indexed: true },
+  };
+
   #db: PgDB;
   #schema: string;
   #skipDefaultIndexes?: boolean;
@@ -44,8 +59,8 @@ export class ObservabilityPG extends ObservabilityStorage {
 
   constructor(config: PgDomainConfig) {
     super();
-    const { client, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
-    this.#db = new PgDB({ client, schemaName, skipDefaultIndexes });
+    const { client, readClient, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
+    this.#db = new PgDB({ client, readClient, schemaName, skipDefaultIndexes });
     this.#schema = schemaName || 'public';
     this.#skipDefaultIndexes = skipDefaultIndexes;
     // Filter indexes to only those for tables managed by this domain
@@ -62,6 +77,31 @@ export class ObservabilityPG extends ObservabilityStorage {
     });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
+  }
+
+  /**
+   * Lazily ensures a btree index exists on each configured policy's retention
+   * anchor column so age-based `prune()` deletes stay fast on large span tables.
+   * Called from the prune path (not init) so only deployments that configure
+   * retention pay the index's write/disk overhead. Best-effort: failures are
+   * logged and pruning proceeds (correct, just slower).
+   * Created even with `skipDefaultIndexes` — retention is an explicit opt-in,
+   * so its supporting index is not part of the default index set.
+   */
+  private async ensureRetentionIndexes(policies: Record<string, TableRetentionPolicy>): Promise<void> {
+    const prefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
+    for (const [key, entry] of Object.entries(ObservabilityPG.retentionTables)) {
+      if (!entry.indexed || !policies[key]) continue;
+      try {
+        await this.#db.ensureIndex({
+          indexName: `${prefix}mastra_${key}_retention_idx`,
+          tableName: entry.table as TABLE_NAMES,
+          column: entry.column,
+        });
+      } catch (error) {
+        this.logger?.warn?.(`Failed to create retention index for ${entry.table}:`, error);
+      }
+    }
   }
 
   /**
@@ -238,6 +278,20 @@ export class ObservabilityPG extends ObservabilityStorage {
     await this.#db.clearTable({ tableName: TABLE_SPANS });
   }
 
+  /**
+   * Deletes spans older than the configured `maxAge`, in bounded, batched,
+   * cancellable chunks. Unset = keep forever.
+   */
+  async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
+    await this.ensureRetentionIndexes(policies);
+    const targets = resolveTargets({
+      policies,
+      descriptor: ObservabilityPG.retentionTables,
+      order: ['spans'],
+    });
+    return runPrune({ db: this.#db, domain: 'observability', targets, options });
+  }
+
   public override get tracingStrategy(): {
     preferred: TracingStorageStrategy;
     supported: TracingStorageStrategy[];
@@ -289,7 +343,7 @@ export class ObservabilityPG extends ObservabilityStorage {
         schemaName: getSchemaName(this.#schema),
       });
 
-      const row = await this.#db.client.oneOrNone<SpanRecord>(
+      const row = await this.#db.readClient.oneOrNone<SpanRecord>(
         `SELECT
           "traceId", "spanId", "parentSpanId", "name",
           "entityType", "entityId", "entityName",
@@ -336,7 +390,7 @@ export class ObservabilityPG extends ObservabilityStorage {
         schemaName: getSchemaName(this.#schema),
       });
 
-      const row = await this.#db.client.oneOrNone<SpanRecord>(
+      const row = await this.#db.readClient.oneOrNone<SpanRecord>(
         `SELECT
           "traceId", "spanId", "parentSpanId", "name",
           "entityType", "entityId", "entityName",
@@ -383,7 +437,7 @@ export class ObservabilityPG extends ObservabilityStorage {
         schemaName: getSchemaName(this.#schema),
       });
 
-      const spans = await this.#db.client.manyOrNone<SpanRecord>(
+      const spans = await this.#db.readClient.manyOrNone<SpanRecord>(
         `SELECT
           "traceId", "spanId", "parentSpanId", "name",
           "entityType", "entityId", "entityName",
@@ -436,7 +490,7 @@ export class ObservabilityPG extends ObservabilityStorage {
         schemaName: getSchemaName(this.#schema),
       });
 
-      const spans = await this.#db.client.manyOrNone<LightSpanRecord>(
+      const spans = await this.#db.readClient.manyOrNone<LightSpanRecord>(
         `SELECT
           "traceId", "spanId", "parentSpanId", "name",
           "entityType", "entityId", "entityName",
@@ -682,7 +736,7 @@ export class ObservabilityPG extends ObservabilityStorage {
       }
 
       // Get total count
-      const countResult = await this.#db.client.oneOrNone<{ count: string }>(
+      const countResult = await this.#db.readClient.oneOrNone<{ count: string }>(
         `SELECT COUNT(*) FROM ${tableName} r ${whereClause}`,
         params,
       );
@@ -701,7 +755,7 @@ export class ObservabilityPG extends ObservabilityStorage {
       }
 
       // Get paginated spans
-      const spans = await this.#db.client.manyOrNone<SpanRecord>(
+      const spans = await this.#db.readClient.manyOrNone<SpanRecord>(
         `SELECT
           r."traceId", r."spanId", r."parentSpanId", r."name",
           r."entityType", r."entityId", r."entityName",
@@ -814,6 +868,7 @@ export class ObservabilityPG extends ObservabilityStorage {
   }
 
   async batchDeleteTraces(args: BatchDeleteTracesArgs): Promise<void> {
+    this.assertUnscopedBatchDeleteTraces(args);
     try {
       const tableName = getTableName({
         indexName: TABLE_SPANS,

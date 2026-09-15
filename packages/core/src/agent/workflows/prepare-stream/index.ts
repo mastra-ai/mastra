@@ -2,6 +2,8 @@ import { z } from 'zod/v4';
 import type { BackgroundTaskManager } from '../../../background-tasks';
 import type { AgentBackgroundConfig } from '../../../background-tasks/types';
 import type { SystemMessage } from '../../../llm';
+import type { ToolCallConcurrency } from '../../../loop/types';
+import { createRunScope } from '../../../mastra/run-scope';
 import type { MastraMemory } from '../../../memory/memory';
 import type { MemoryConfigInternal, StorageThreadType } from '../../../memory/types';
 import type { Span, SpanType } from '../../../observability';
@@ -9,7 +11,7 @@ import { InternalSpans } from '../../../observability';
 import type { RequestContext } from '../../../request-context';
 import { MastraModelOutput } from '../../../stream';
 import type { RequireToolApproval, ToolPayloadTransformPolicy } from '../../../tools';
-import { createEventedWorkflow as createWorkflow } from '../../../workflows/create';
+import { createWorkflow } from '../../../workflows/create';
 import type { Workspace } from '../../../workspace/workspace';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import type { SaveQueueManager } from '../../save-queue';
@@ -18,7 +20,6 @@ import type { AgentMethodType } from '../../types';
 import { createMapResultsStep } from './map-results-step';
 import { createPrepareMemoryStep } from './prepare-memory-step';
 import { createPrepareToolsStep } from './prepare-tools-step';
-import type { PrepareStreamRunScope } from './run-scope';
 import type { AgentCapabilities } from './schema';
 import { createStreamStep } from './stream-step';
 
@@ -39,12 +40,13 @@ interface CreatePrepareStreamWorkflowOptions<OUTPUT = undefined> {
   returnScorerData?: boolean;
   saveQueueManager?: SaveQueueManager;
   requireToolApproval?: RequireToolApproval;
-  toolCallConcurrency?: number;
+  toolCallConcurrency?: ToolCallConcurrency;
   resumeContext?: {
     resumeData: any;
     snapshot: any;
   };
   agentId: string;
+  agentVersionId?: string;
   agentName?: string;
   toolCallId?: string;
   workspace?: Workspace;
@@ -79,6 +81,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
   toolCallConcurrency,
   resumeContext,
   agentId,
+  agentVersionId,
   agentName,
   toolCallId,
   workspace,
@@ -88,9 +91,19 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
   skipBgTaskWait,
   drainPendingSignals,
 }: CreatePrepareStreamWorkflowOptions<OUTPUT>) {
-  // Per-run scope shared between steps. Class instances (MessageList, Tools),
-  // Maps, and closures live here instead of step outputs — see ./run-scope.ts.
-  const runScope: PrepareStreamRunScope<OUTPUT> = {};
+  // Per-run scope shared between prepare-stream steps. Class instances
+  // (MessageList, Tools), Maps, and closures live here instead of step
+  // outputs — see ./run-scope.ts.
+  //
+  // This scope is a closure local to this workflow factory and is NOT
+  // registered with `Mastra.__createRunScope`. The agentic-loop workflow uses
+  // a separate runId-keyed scope on the Mastra instance (created via
+  // `__registerInternalWorkflow`); the bridge between them is
+  // `hydrateRunScopeFromInternal` in `loop/workflows/stream.ts`, which copies
+  // bootstrap state from `_internal` into the Mastra scope after the loop
+  // workflow registers. Prepare-stream and the agentic loop deliberately do
+  // not share runtime state — each owns its own per-run scratch space.
+  const runScope = createRunScope();
 
   const prepareToolsStep = createPrepareToolsStep({
     capabilities,
@@ -130,6 +143,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     toolCallConcurrency,
     resumeContext,
     agentId,
+    agentVersionId,
     agentName,
     toolCallId,
     methodType,
@@ -158,6 +172,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     memoryConfig,
     agentSpan,
     agentId,
+    agentVersionId,
     methodType,
     saveQueueManager,
     runScope,

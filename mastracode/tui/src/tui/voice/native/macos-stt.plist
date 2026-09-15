@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleIdentifier</key>
+  <string>ai.mastra.mastracode.voice</string>
+  <key>CFBundleName</key>
+  <string>MastraCode Voice</string>
+  <key>CFBundleDisplayName</key>
+  <string>MastraCode Voice</string>
+  <key>NSMicrophoneUsageDescription</key>
+  <string>MastraCode uses the microphone for push-to-talk voice input.</string>
+  <key>NSSpeechRecognitionUsageDescription</key>
+  <string>MastraCode uses on-device speech recognition to transcribe your voice input.</string>
+</dict>
+</plist>

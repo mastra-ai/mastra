@@ -88,12 +88,12 @@ export function MultiColumn({ children, numOfColumns = 1, minColumnWidth }: Mult
   };
 
   return (
-    <div className={cn('MULTI_COLUMN relative w-full h-full overflow-hidden')}>
+    <div className={cn('MULTI_COLUMN relative size-full overflow-hidden')}>
       {canScrollLeft && <ScrollArrow direction="left" onClick={() => scrollToColumn('left')} />}
       {canScrollRight && <ScrollArrow direction="right" onClick={() => scrollToColumn('right')} />}
       <div
         ref={scrollRef}
-        className="grid overflow-x-auto w-full overflow-y-auto h-full"
+        className="grid size-full overflow-auto"
         style={{
           gridTemplateColumns: `repeat(${numOfColumns}, minmax(${minColumnWidth ?? '0'}, 1fr))`,
         }}
@@ -111,11 +111,11 @@ function ScrollArrow({ direction, onClick }: { direction: 'left' | 'right'; onCl
   return (
     <div
       className={cn(
-        'absolute top-0 bottom-0 z-20 w-20 flex items-center justify-center px-5 bg-surface2',
+        'absolute inset-y-0 z-20 flex w-20 items-center justify-center bg-surface2 px-5',
         isLeft ? 'left-0' : 'right-0',
       )}
     >
-      <Button onClick={onClick} className="w-full h-full px-0" aria-label={`Scroll ${direction}`}>
+      <Button onClick={onClick} className="size-full px-0" aria-label={`Scroll ${direction}`}>
         <Icon />
       </Button>
     </div>

@@ -1,11 +1,11 @@
 import { parsePartialJson } from '@internal/ai-sdk-v5';
 import { z } from 'zod/v4';
 import type { Mastra } from '../..';
-import type { AgentExecutionOptions } from '../../agent';
 import type { MultiPrimitiveExecutionOptions, NetworkOptions } from '../../agent/agent.types';
 import { Agent, tryGenerateWithJsonFallback } from '../../agent/index';
 import { MessageList } from '../../agent/message-list';
 import type { MastraDBMessage, MessageListInput } from '../../agent/message-list';
+import { DEFAULT_TOOL_DECLINE_REASON, resolveDeclineReason } from '../../agent/tool-approval';
 import type { StructuredOutputOptions } from '../../agent/types';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { MastraLLMVNext } from '../../llm/model/model.loop';
@@ -26,6 +26,7 @@ import { createWorkflow } from '../../workflows/create';
 import type { Step, SuspendOptions } from '../../workflows/step';
 import { createStep } from '../../workflows/workflow';
 import { PRIMITIVE_TYPES } from '../types';
+import { pruneAgentLoopSnapshot } from '../workflows/prune-snapshot';
 
 /**
  * Convert a schema (PublicSchema) to JSON Schema.
@@ -170,6 +171,7 @@ export async function getRoutingAgent({
   agent,
   routingConfig,
   memoryConfig,
+  model,
 }: {
   agent: Agent;
   requestContext: RequestContext;
@@ -177,12 +179,13 @@ export async function getRoutingAgent({
     additionalInstructions?: string;
   };
   memoryConfig?: any;
+  model?: MultiPrimitiveExecutionOptions['model'];
 }) {
   const instructionsToUse = await agent.getInstructions({ requestContext: requestContext });
   const agentsToUse = await agent.listAgents({ requestContext: requestContext });
   const workflowsToUse = await agent.listWorkflows({ requestContext: requestContext });
   const toolsToUse = await agent.listTools({ requestContext: requestContext });
-  const model = await agent.getModel({ requestContext: requestContext });
+  const resolvedModel = await agent.getModel({ requestContext, modelConfig: model });
   const memoryToUse = await agent.getMemory({ requestContext: requestContext });
   assertNetworkSupportsMemory(memoryToUse, memoryConfig);
   const clientToolsToUse = (await agent.getDefaultOptions({ requestContext: requestContext }))?.clientTools;
@@ -213,7 +216,8 @@ export async function getRoutingAgent({
     .map(([name, tool]) => {
       // Use 'in' check for type narrowing, then nullish coalescing for undefined values
       const inputSchema = 'inputSchema' in tool ? (tool.inputSchema ?? z.object({})) : z.object({});
-      return ` - **${name}**: ${tool.description}, input schema: ${JSON.stringify(schemaToJsonSchema(inputSchema))}`;
+      const description = 'description' in tool ? (tool.description ?? '') : '';
+      return ` - **${name}**: ${description}, input schema: ${JSON.stringify(schemaToJsonSchema(inputSchema))}`;
     })
     .join('\n');
 
@@ -249,7 +253,7 @@ export async function getRoutingAgent({
     id: 'routing-agent',
     name: 'Routing Agent',
     instructions,
-    model: model,
+    model: resolvedModel,
     memory: memoryToUse,
     inputProcessors: configuredInputProcessors,
     outputProcessors: configuredOutputProcessors,
@@ -532,7 +536,7 @@ export async function createNetworkLoop({
   requestContext: RequestContext;
   runId: string;
   agent: Agent;
-  routingAgentOptions?: Pick<MultiPrimitiveExecutionOptions, 'modelSettings'>;
+  routingAgentOptions?: Pick<MultiPrimitiveExecutionOptions, 'model' | 'modelSettings'>;
   routingAgentMemoryConfig?: any;
   generateId: NetworkIdGenerator;
   routing?: {
@@ -648,6 +652,7 @@ export async function createNetworkLoop({
         agent,
         routingConfig: routing,
         memoryConfig: routingAgentMemoryConfig,
+        model: routingAgentOptions?.model,
       });
 
       // Increment iteration counter. Must use nullish coalescing (??) not ternary (?)
@@ -957,6 +962,7 @@ export async function createNetworkLoop({
       let suspendedTools: Record<string, any> | undefined;
 
       let toolCallDeclined = false;
+      let declineReason = DEFAULT_TOOL_DECLINE_REASON;
 
       let agentCallAborted = false;
 
@@ -1002,8 +1008,20 @@ export async function createNetworkLoop({
           };
         }
 
+        // Detect a declined tool call structurally via the approval decision. The legacy
+        // string comparison is kept as a fallback for older persisted results, but it can
+        // no longer be the only signal now that the decline reason is caller-configurable.
+        if (chunk.type === 'tool-output-denied') {
+          toolCallDeclined = true;
+          declineReason = chunk.payload.approval?.reason ?? declineReason;
+        }
+
         if (chunk.type === 'tool-result') {
-          if (chunk.payload.result === 'Tool call was not approved by the user') {
+          const approval = (chunk.payload as { approval?: { approved?: boolean; reason?: string } }).approval;
+          if (approval?.approved === false) {
+            toolCallDeclined = true;
+            declineReason = approval.reason ?? declineReason;
+          } else if (chunk.payload.result === DEFAULT_TOOL_DECLINE_REASON) {
             toolCallDeclined = true;
           }
         }
@@ -1019,7 +1037,7 @@ export async function createNetworkLoop({
 
       let finalText = await result.text;
       if (toolCallDeclined) {
-        finalText = finalText + '\n\nTool call was not approved by the user';
+        finalText = finalText + `\n\n${declineReason}`;
       }
 
       // When the sub-agent was aborted, skip saving partial results to memory
@@ -1455,6 +1473,16 @@ export async function createNetworkLoop({
     },
   });
 
+  const toolApprovalSchema = z.object({
+    approved: z
+      .boolean()
+      .describe('Controls if the tool call is approved or not, should be true when approved and false when declined'),
+    reason: z
+      .string()
+      .optional()
+      .describe('Optional explanation for the decision, surfaced when the tool call is declined'),
+  });
+
   const toolStep = createStep({
     id: 'tool-execution-step',
     inputSchema: z.object({
@@ -1476,11 +1504,7 @@ export async function createNetworkLoop({
       isComplete: z.boolean().optional(),
       iteration: z.number(),
     }),
-    resumeSchema: z.object({
-      approved: z
-        .boolean()
-        .describe('Controls if the tool call is approved or not, should be true when approved and false when declined'),
-    }),
+    resumeSchema: toolApprovalSchema,
     execute: async ({ inputData, getInitData, writer, resumeData, mastra, suspend }) => {
       const initData = await getInitData<{ threadId: string; threadResourceId: string }>();
       const logger = mastra?.getLogger();
@@ -1519,7 +1543,7 @@ export async function createNetworkLoop({
         throw mastraError;
       }
 
-      if (!tool.execute) {
+      if (!('execute' in tool) || typeof tool.execute !== 'function') {
         const mastraError = new MastraError({
           id: 'AGENT_NETWORK_TOOL_EXECUTION_STEP_INVALID_TASK_INPUT',
           domain: ErrorDomain.AGENT_NETWORK,
@@ -1529,6 +1553,7 @@ export async function createNetworkLoop({
         throw mastraError;
       }
 
+      const executeTool = tool.execute;
       const toolId = 'id' in tool && typeof tool.id === 'string' ? tool.id : inputData.primitiveId;
       // Use safeParseLLMJson to handle malformed JSON from LLM (truncated, unescaped chars, etc.)
       const inputDataToUse = await safeParseLLMJson(inputData.prompt);
@@ -1578,13 +1603,15 @@ export async function createNetworkLoop({
       // requireApproval can be:
       // - boolean (from Mastra createTool or mapped from AI SDK needsApproval: true)
       // - undefined (no approval needed)
-      // If needsApprovalFn exists, evaluate it with the tool args
+      // If needsApprovalFn exists, evaluate it with the tool args and the same
+      // request-context view the agentic loop provides.
       let toolRequiresApproval = (tool as any).requireApproval;
       const needsApprovalFn = getNeedsApprovalFn(tool);
       if (needsApprovalFn) {
-        // Evaluate the function with the parsed args
         try {
-          const needsApprovalResult = await needsApprovalFn(inputDataToUse);
+          const needsApprovalResult = await needsApprovalFn(inputDataToUse, {
+            requestContext: Object.fromEntries(requestContext.entries()),
+          });
           toolRequiresApproval = needsApprovalResult;
         } catch (error) {
           // Log error to help developers debug faulty needsApprovalFn implementations
@@ -1607,15 +1634,8 @@ export async function createNetworkLoop({
           });
         }
         if (!resumeData) {
-          const approvalSchema = z.object({
-            approved: z
-              .boolean()
-              .describe(
-                'Controls if the tool call is approved or not, should be true when approved and false when declined',
-              ),
-          });
           const requireApprovalResumeSchema = JSON.stringify(
-            standardSchemaToJSONSchema(toStandardSchema(approvalSchema)),
+            standardSchemaToJSONSchema(toStandardSchema(toolApprovalSchema)),
           );
           await saveMessagesWithProcessors(
             memory,
@@ -1684,7 +1704,7 @@ export async function createNetworkLoop({
           });
         } else {
           if (!resumeData.approved) {
-            const rejectionResult = 'Tool call was not approved by the user';
+            const rejectionResult = resolveDeclineReason(resumeData);
             await saveMessagesWithProcessors(
               memory,
               [
@@ -1757,7 +1777,7 @@ export async function createNetworkLoop({
 
       let toolSuspendPayload: any;
 
-      const finalResult = await tool.execute(
+      const finalResult = await executeTool(
         inputDataToUse,
         {
           abortSignal,
@@ -2004,6 +2024,12 @@ export async function createNetworkLoop({
     }),
     options: {
       shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'suspended',
+      // Excluding `running` means resume claims cannot persist; suppress the
+      // per-resume warning for this internal workflow.
+      allowUnclaimedResumes: true,
+      // Agent-loop snapshots are pure resume artifacts — strip everything a
+      // resume never reads before persisting.
+      pruneSnapshot: pruneAgentLoopSnapshot,
       validateInputs: false,
       // Internal agent.network() plumbing — the workflow exists to coordinate
       // routing and primitive execution, but only the user-facing
@@ -2096,7 +2122,8 @@ export async function networkLoop<OUTPUT = undefined>({
   requestContext: RequestContext;
   runId: string;
   routingAgent: Agent<any, any, any, any>;
-  routingAgentOptions?: AgentExecutionOptions<OUTPUT>;
+  routingAgentOptions?: Pick<NetworkOptions<OUTPUT>, 'memory' | 'model' | 'modelSettings'> &
+    Partial<ObservabilityContext>;
   generateId: NetworkIdGenerator;
   maxIterations: number;
   threadId?: string;
@@ -2191,7 +2218,10 @@ export async function networkLoop<OUTPUT = undefined>({
           const firstSuspendedTool = suspendedToolsArr[0]; //only one primitive/tool gets suspended at a time, so there'll only be one item
           if (firstSuspendedTool.resumeSchema) {
             try {
-              const llm = (await routingAgent.getLLM({ requestContext })) as MastraLLMVNext;
+              const llm = (await routingAgent.getLLM({
+                requestContext,
+                model: routingAgentOptions?.model,
+              })) as MastraLLMVNext;
               const systemInstructions = `
             You are an assistant used to resume a suspended tool call.
             Your job is to construct the resumeData for the tool call using the messages available to you and the schema passed.
@@ -2342,6 +2372,7 @@ export async function networkLoop<OUTPUT = undefined>({
             agent: routingAgent,
             routingConfig: routing,
             memoryConfig: routingAgentMemoryOptions?.options,
+            model: routingAgentOptions?.model,
           });
 
           // Use structured output generation if schema is provided
@@ -2391,6 +2422,7 @@ export async function networkLoop<OUTPUT = undefined>({
           agent: routingAgent,
           routingConfig: routing,
           memoryConfig: routingAgentMemoryOptions?.options,
+          model: routingAgentOptions?.model,
         });
         // Use the default LLM completion check
         const defaultResult = await runDefaultCompletionCheck(
@@ -2598,6 +2630,10 @@ export async function networkLoop<OUTPUT = undefined>({
     outputSchema: validationStep.outputSchema,
     options: {
       shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'suspended',
+      // Excluding `running` means resume claims cannot persist; suppress the
+      // per-resume warning for this internal workflow.
+      allowUnclaimedResumes: true,
+      pruneSnapshot: pruneAgentLoopSnapshot,
       validateInputs: false,
       // Internal agent.network() plumbing — see networkWorkflow above.
       tracingPolicy: {
@@ -2635,6 +2671,10 @@ export async function networkLoop<OUTPUT = undefined>({
     }),
     options: {
       shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'suspended',
+      // Excluding `running` means resume claims cannot persist; suppress the
+      // per-resume warning for this internal workflow.
+      allowUnclaimedResumes: true,
+      pruneSnapshot: pruneAgentLoopSnapshot,
       validateInputs: false,
       // Internal agent.network() plumbing — see networkWorkflow above.
       tracingPolicy: {

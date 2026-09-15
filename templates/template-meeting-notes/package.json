@@ -1,0 +1,35 @@
+{
+  "name": "template-meeting-notes",
+  "version": "1.0.0",
+  "description": "A meeting-notes agent that ingests Zoom cloud recordings, summarizes them into structured notes (decisions, action items, attendees), and optionally pushes results to Linear or Notion. Uses Mastra's Gateway and Turso (libSQL).",
+  "main": "index.js",
+  "scripts": {
+    "dev": "mastra dev",
+    "build": "mastra build",
+    "start": "mastra start"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "Apache-2.0",
+  "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "dependencies": {
+    "@mastra/core": "latest",
+    "@mastra/editor": "latest",
+    "@mastra/libsql": "latest",
+    "@mastra/loggers": "latest",
+    "@mastra/mcp": "latest",
+    "@mastra/memory": "latest",
+    "@mastra/observability": "latest",
+    "@notionhq/notion-mcp-server": "^2.2.1",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.9",
+    "dotenv": "^17.3.1",
+    "mastra": "latest",
+    "typescript": "^5.9.3"
+  }
+}

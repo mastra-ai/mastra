@@ -10,16 +10,55 @@ import { MainSidebarNavSeparator } from './main-sidebar-nav-separator';
 export type MainSidebarSectionsProps = {
   sections: NavSection[];
   /**
-   * Called per link to decide the active state. Receives sibling links so
-   * callers can use `getIsLinkActive` (or any sibling-aware logic) without
-   * re-scanning `sections` from the outside. Default: each link's `isActive`.
+   * Called per link to decide the active state. Receives the section's links so
+   * callers can use section-aware active logic without re-scanning `sections`
+   * from the outside. Default: each link's `isActive`.
    */
-  isActive?: (link: NavLink, siblings: NavLink[]) => boolean;
+  isActive?: (link: NavLink, activeCandidates: NavLink[]) => boolean;
   className?: string;
 };
 
+type MainSidebarSectionLinkProps = {
+  link: NavLink;
+  activeCandidates: NavLink[];
+  level?: number;
+  isActive?: MainSidebarSectionsProps['isActive'];
+};
+
+function getLinkKey(link: NavLink) {
+  return `${link.url}:${link.name}`;
+}
+
+function MainSidebarSectionLink({ link, activeCandidates, level = 0, isActive }: MainSidebarSectionLinkProps) {
+  const childLinks = link.children ?? [];
+
+  return (
+    <MainSidebarNavLink
+      link={link}
+      isActive={isActive?.(link, activeCandidates) ?? link.isActive}
+      level={level}
+      subItems={
+        childLinks.length > 0 ? (
+          <MainSidebarNavList className="mt-0.5">
+            {childLinks.map(child => (
+              <MainSidebarSectionLink
+                key={getLinkKey(child)}
+                link={child}
+                activeCandidates={activeCandidates}
+                level={level + 1}
+                isActive={isActive}
+              />
+            ))}
+          </MainSidebarNavList>
+        ) : null
+      }
+    />
+  );
+}
+
 export function MainSidebarSections({ sections, isActive, className }: MainSidebarSectionsProps) {
   const baseId = useId();
+
   return (
     <>
       {sections.map(section => {
@@ -42,10 +81,11 @@ export function MainSidebarSections({ sections, isActive, className }: MainSideb
             ) : null}
             <MainSidebarNavList>
               {section.links.map(link => (
-                <MainSidebarNavLink
-                  key={link.name}
+                <MainSidebarSectionLink
+                  key={getLinkKey(link)}
                   link={link}
-                  isActive={isActive?.(link, section.links) ?? link.isActive}
+                  activeCandidates={section.links}
+                  isActive={isActive}
                 />
               ))}
             </MainSidebarNavList>
@@ -54,15 +94,4 @@ export function MainSidebarSections({ sections, isActive, className }: MainSideb
       })}
     </>
   );
-}
-
-/**
- * Strict active-path match with sibling-exclusion.
- * - `pathname === link.url` or starts with `link.url + '/'`
- * - Not active if any sibling link has a longer matching url (prevents `/a` lighting while `/a/b` matches).
- */
-export function getIsLinkActive(link: NavLink, pathname: string, siblings: NavLink[] = []): boolean {
-  const matches = (url: string) => pathname === url || pathname.startsWith(url + '/');
-  if (!matches(link.url)) return false;
-  return !siblings.some(other => other.url !== link.url && other.url.length > link.url.length && matches(other.url));
 }

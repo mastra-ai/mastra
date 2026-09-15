@@ -64,3 +64,27 @@ export const transformRow = ({ row, tableName }: { row: Record<string, any>; tab
 
   return result;
 };
+
+/**
+ * Tenancy scope shape shared by domains that carry `organizationId` / `projectId`
+ * columns (datasets, experiments, etc.). Structurally compatible with
+ * `DatasetTenancyFilters` and `ExperimentTenancyFilters` in `@mastra/core/storage`.
+ */
+export type TenancyScope = {
+  organizationId?: string;
+  projectId?: string;
+};
+
+/**
+ * Merge tenancy read-scope conditions into a MongoDB filter document. Fields
+ * with `undefined` filter values are omitted (no predicate). Defined values
+ * become equality matches.
+ *
+ * Shared across domains (datasets, experiments, ...) so tenancy predicates stay
+ * consistent and cross-tenant reads/deletes do not leak.
+ */
+export function applyTenancyFilter(filter: Record<string, any>, filters: TenancyScope | undefined): void {
+  if (!filters) return;
+  if (filters.organizationId !== undefined) filter.organizationId = filters.organizationId;
+  if (filters.projectId !== undefined) filter.projectId = filters.projectId;
+}

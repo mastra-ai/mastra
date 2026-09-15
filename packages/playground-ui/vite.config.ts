@@ -1,67 +1,130 @@
-import { resolve } from 'node:path';
+import { existsSync, readdirSync } from 'node:fs';
+import { relative, resolve } from 'node:path';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import nodeExternals from 'rollup-plugin-node-externals';
-import type { PluginOption, UserConfig } from 'vite';
+import type { UserConfig } from 'vite';
 import { defineConfig } from 'vite';
 import dts from 'vite-plugin-dts';
 import { libInjectCss } from 'vite-plugin-lib-inject-css';
 
+const srcDir = resolve(__dirname, 'src');
+
+const isEntrySource = (fileName: string) => /\.(ts|tsx)$/.test(fileName) && !/\.(test|stories)\.tsx?$/.test(fileName);
+
+const forEachSourceFile = (directory: string, visit: (file: string) => void) => {
+  readdirSync(directory, { withFileTypes: true }).forEach(dirent => {
+    if (dirent.name === '__tests__') return;
+
+    const path = resolve(directory, dirent.name);
+    if (dirent.isDirectory()) forEachSourceFile(path, visit);
+    else if (dirent.isFile() && isEntrySource(dirent.name)) visit(path);
+  });
+};
+
+const fileEntries = (directory: string, prefix: string) => {
+  const sourceDir = resolve(__dirname, directory);
+  const entries: Array<[string, string]> = [];
+
+  forEachSourceFile(sourceDir, file => {
+    const entryName = relative(sourceDir, file)
+      .replace(/\\/g, '/')
+      .replace(/\.(ts|tsx)$/, '')
+      .replace(/(?:^|\/)index$/, '');
+
+    if (entryName) entries.push([`${prefix}/${entryName}`, file]);
+  });
+
+  return Object.fromEntries(entries);
+};
+
+const componentEntries = (directory: string, prefix: string) => {
+  const sourceDir = resolve(__dirname, directory);
+  const entries: Array<[string, string]> = [];
+
+  const walk = (currentDir: string) => {
+    readdirSync(currentDir, { withFileTypes: true }).forEach(dirent => {
+      if (!dirent.isDirectory() || dirent.name === '__tests__') return;
+
+      const folder = resolve(currentDir, dirent.name);
+      const indexFile = resolve(folder, 'index.ts');
+
+      if (!existsSync(indexFile)) {
+        walk(folder);
+        return;
+      }
+
+      entries.push([`${prefix}/${relative(sourceDir, folder).replace(/\\/g, '/')}`, indexFile]);
+    });
+  };
+
+  walk(sourceDir);
+
+  return Object.fromEntries(entries);
+};
+
+// vite-plugin-dts logs diagnostics unless afterDiagnostic fails the build.
+const typeDeclarations = () =>
+  dts({
+    insertTypesEntry: true,
+    exclude: ['vite.config.ts', 'src/**/*.test.ts', 'src/**/*.test.tsx', 'src/**/__tests__/**'],
+    afterDiagnostic: diagnostics => {
+      if (diagnostics.length > 0) {
+        throw new Error(`vite-plugin-dts found ${diagnostics.length} type error(s); see log above.`);
+      }
+    },
+  });
+
+const appPlugins = [react(), tailwindcss()];
+
 const baseConfig: UserConfig = {
-  plugins: [react(), tailwindcss()],
+  plugins: appPlugins,
   resolve: {
     alias: {
-      '@': resolve(__dirname, './src'),
+      '@': srcDir,
     },
   },
 };
 
-const libConfig: UserConfig = {
+// Watch builds reuse the previous full build declarations.
+const createLibConfig = (isProduction: boolean): UserConfig => ({
   ...baseConfig,
-  plugins: [
-    ...(baseConfig.plugins ?? []),
-    dts({
-      insertTypesEntry: true,
-      exclude: ['vite.config.ts', 'src/**/*.test.ts', 'src/**/*.test.tsx', 'src/**/__tests__/**'],
-      // vite-plugin-dts logs type errors but does not fail the build on its own.
-      // Since this is now the single TypeScript pass (the standalone `tsc` step
-      // was removed from `build`), fail the build when diagnostics are emitted so
-      // type errors still gate the bundle.
-      afterDiagnostic: diagnostics => {
-        if (diagnostics.length > 0) {
-          throw new Error(`vite-plugin-dts found ${diagnostics.length} type error(s); see log above.`);
-        }
-      },
-    }),
-    libInjectCss(),
-    nodeExternals() as PluginOption,
-  ],
+  plugins: [...appPlugins, isProduction && typeDeclarations(), libInjectCss(), nodeExternals()],
   build: {
+    emptyOutDir: isProduction,
     lib: {
       entry: {
-        index: resolve(__dirname, 'src/index.ts'),
-        utils: resolve(__dirname, 'src/utils.ts'),
-        tokens: resolve(__dirname, 'src/ds/tokens/index.ts'),
+        style: resolve(srcDir, 'style.ts'),
+        tokens: resolve(srcDir, 'ds/tokens/index.ts'),
+        ...fileEntries('src/utils', 'utils'),
+        ...fileEntries('src/domains', 'domains'),
+        ...fileEntries('src/ee', 'ee'),
+        ...fileEntries('src/ds/primitives', 'primitives'),
+        ...fileEntries('src/lib/resize', 'resize'),
+        ...fileEntries('src/lib/keyboard', 'keyboard'),
+        ...fileEntries('src/store', 'store'),
+        ...fileEntries('src/ds/icons', 'icons'),
+        ...fileEntries('src/hooks', 'hooks'),
+        ...componentEntries('src/ds/components', 'components'),
+        ...componentEntries('src/ds/layout', 'layout'),
+        ...componentEntries('src/ds/new', 'new'),
       },
       formats: ['es', 'cjs'],
-      fileName: (format, entryName) => {
-        return `${entryName}.${format}.js`;
-      },
+      fileName: (format, entryName) => `${entryName}.${format}.js`,
     },
     sourcemap: true,
-    // Reduce bloat from legacy polyfills.
     target: 'esnext',
-    // Leave minification up to applications.
     minify: false,
     rollupOptions: {
       external: ['motion/react'],
+      output: {
+        hoistTransitiveImports: false,
+      },
     },
   },
-};
+});
 
-// Storybook sets STORYBOOK=true and bundles this package as an app.
-// Library-mode plugins (dts, libInjectCss, nodeExternals) would externalize
-// deps and break the static build, so we skip them when Storybook is running.
+// Library plugins externalize dependencies and break Storybook.
 const isStorybook = process.env.STORYBOOK === 'true';
 
-export default defineConfig(isStorybook ? baseConfig : libConfig);
+export default defineConfig(({ mode }) => (isStorybook ? baseConfig : createLibConfig(mode === 'production')));

@@ -1,8 +1,7 @@
 import { Agent, createMessageSignal, createSignal } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core';
-import { Mock, vi } from 'vitest';
-import { Workflow } from '@mastra/core/workflows';
-import { normalizeRoutePath } from './route-test-utils';
+import { expect, Mock, vi } from 'vitest';
+import { Workflow, createWorkflow, createStep } from '@mastra/core/workflows';
 import { createScorer } from '@mastra/core/evals';
 import { SpanType } from '@mastra/core/observability';
 import { CompositeVoice } from '@mastra/core/voice';
@@ -11,18 +10,18 @@ import { MastraVector } from '@mastra/core/vector';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
 import { UnknownToolProviderError } from '@mastra/core/tool-provider';
-import { createWorkflow, createStep } from '@mastra/core/workflows';
 import type { ZodTypeAny } from 'zod';
 import { ServerRoute, WorkflowRegistry } from '@mastra/server/server-adapter';
 import { BaseLogMessage, IMastraLogger, LogLevel } from '@mastra/core/logger';
-import { generateValidDataFromSchema, getDefaultValidPathParams } from './route-test-utils';
+import { generateValidDataFromSchema, getDefaultValidPathParams, normalizeRoutePath } from './route-test-utils';
 import { MCPServer } from '@mastra/mcp';
 import type { Tool } from '@mastra/core/tools';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
-import * as fs from 'fs';
-import * as path from 'path';
-import * as os from 'os';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import * as os from 'node:os';
+import { randomUUID } from 'node:crypto';
 import type { Processor, ProcessInputArgs, ProcessInputResult } from '@mastra/core/processors';
 import { getZodDef, getZodTypeName } from '@mastra/core/utils';
 vi.mock('@mastra/core/vector');
@@ -87,6 +86,12 @@ export interface AdapterSetupOptions {
 export interface AdapterTestSuiteConfig {
   /** Name for the test suite */
   suiteName?: string;
+
+  /** Values produced by the configured framework parser for an omitted body. */
+  emptyBodyNormalization?: {
+    withoutContentType: 'undefined' | 'empty-object' | 'empty-string';
+    withJsonContentType: 'undefined' | 'empty-object' | 'empty-string';
+  };
 
   /**
    * Setup adapter and app for testing
@@ -240,27 +245,27 @@ export function mockAgentMethods(agent: Agent) {
 
   vi.spyOn(agent, 'sendSignal').mockImplementation((signal: any, target: any) => {
     const createdSignal = createSignal(signal);
+    const runId = target?.runId ?? 'test-run';
     return {
-      accepted: true,
-      runId: target?.runId ?? 'test-run',
+      accepted: Promise.resolve({ action: 'deliver', runId }),
       signal: createdSignal,
     } as any;
   });
 
   vi.spyOn(agent, 'sendMessage').mockImplementation((message: any, target: any) => {
     const createdSignal = createMessageSignal(message);
+    const runId = target?.runId ?? 'test-run';
     return {
-      accepted: true,
-      runId: target?.runId ?? 'test-run',
+      accepted: Promise.resolve({ action: 'deliver', runId }),
       signal: createdSignal,
     } as any;
   });
 
   vi.spyOn(agent, 'queueMessage').mockImplementation((message: any, target: any) => {
     const createdSignal = createMessageSignal(message);
+    const runId = target?.runId ?? 'test-run';
     return {
-      accepted: true,
-      runId: target?.runId ?? 'test-run',
+      accepted: Promise.resolve({ action: 'deliver', runId }),
       signal: createdSignal,
     } as any;
   });
@@ -566,6 +571,12 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
       getConfiguration: () => undefined,
       getModelPolicyWarnings: () => [],
     }),
+    hasEnabledWorkflowBuilderConfig: () => true,
+    resolveWorkflowBuilder: async () => ({
+      enabled: true,
+      getAgent: () => agent,
+      getModelPolicy: () => undefined,
+    }),
     prompt: {
       preview: vi.fn().mockResolvedValue('resolved instructions preview'),
       clearCache: vi.fn(),
@@ -623,6 +634,8 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
   if (storage) {
     const observability = await storage.getStore('observability');
     if (observability) {
+      vi.spyOn(observability, 'getFeatures').mockReturnValue([...observability.getFeatures(), 'trace-query']);
+      vi.spyOn(observability, 'queryTraces').mockResolvedValue({ traces: [], page: { next: null } });
       await observability.createSpan({
         span: {
           spanId: 'test-span',
@@ -632,6 +645,20 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
           startedAt: new Date(),
           endedAt: new Date(),
           isEvent: false,
+        },
+      });
+
+      // Add test feedback for the review-status route
+      await observability.createFeedback({
+        feedback: {
+          feedbackId: 'test-feedback',
+          timestamp: new Date(),
+          traceId: 'test-trace',
+          spanId: 'test-span',
+          feedbackSource: 'user',
+          feedbackType: 'comment',
+          value: 'test feedback',
+          reviewStatus: 'needs-review',
         },
       });
     }
@@ -763,6 +790,25 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
       });
     }
 
+    // Add test dynamic workflow definition so GET /stored/workflows/:dynamicWorkflowId
+    // finds a row matching getDefaultValidPathParams' 'test-dynamic-workflow'
+    const workflowDefinitions = await storage.getStore('workflowDefinitions');
+    if (workflowDefinitions) {
+      await workflowDefinitions.upsert({
+        id: 'test-dynamic-workflow',
+        description: 'Test dynamic workflow',
+        inputSchema: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] },
+        outputSchema: { type: 'object', properties: { message: { type: 'string' } } },
+        graph: [
+          {
+            type: 'mapping',
+            id: 'greet',
+            mapConfig: JSON.stringify({ message: { template: 'Hello, ${initData.name}!' } }),
+          },
+        ],
+      });
+    }
+
     const backgroundTasks = await storage.getStore('backgroundTasks');
     if (backgroundTasks) {
       await backgroundTasks.createTask({
@@ -791,6 +837,15 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
       await schedules.createSchedule({
         id: 'test-schedule',
         target: { type: 'workflow', workflowId: 'test-workflow' },
+        cron: '* * * * *',
+        status: 'active',
+        nextFireAt: now + 60_000,
+        createdAt: now,
+        updatedAt: now,
+      });
+      await schedules.createSchedule({
+        id: 'agent_test-agent-schedule',
+        target: { type: 'agent', agentId: 'test-agent', prompt: 'ping' },
         cron: '* * * * *',
         status: 'active',
         nextFireAt: now + 60_000,
@@ -873,26 +928,32 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
 async function mockWorkflowRun(workflow: Workflow) {
   // Mock getWorkflowRunById to return a mock WorkflowState object
   // This is the unified format that includes both metadata and processed execution state
-  vi.spyOn(workflow, 'getWorkflowRunById').mockResolvedValue({
-    runId: 'test-run',
-    workflowName: 'test-workflow',
-    resourceId: 'test-resource',
-    createdAt: new Date(),
-    updatedAt: new Date(),
-    status: 'success',
-    result: { output: 'test-output' },
-    payload: {},
-    steps: {
-      step1: {
-        status: 'success',
-        output: { result: 'test-output' },
-        startedAt: Date.now() - 1000,
-        endedAt: Date.now(),
-      },
-    },
-    activeStepsPath: {},
-    serializedStepGraph: [{ type: 'step', step: { id: 'step1' } }],
-  } as any);
+  // Only 'test-run' exists; unknown runIds resolve to null so stream routes can
+  // start fresh runs without tripping the terminal-run 409 guard.
+  vi.spyOn(workflow, 'getWorkflowRunById').mockImplementation(async (runId: string) =>
+    runId !== 'test-run'
+      ? (null as any)
+      : ({
+          runId: 'test-run',
+          workflowName: 'test-workflow',
+          resourceId: 'test-resource',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          status: 'success',
+          result: { output: 'test-output' },
+          payload: {},
+          steps: {
+            step1: {
+              status: 'success',
+              output: { result: 'test-output' },
+              startedAt: Date.now() - 1000,
+              endedAt: Date.now(),
+            },
+          },
+          activeStepsPath: {},
+          serializedStepGraph: [{ type: 'step', step: { id: 'step1' } }],
+        } as any),
+  );
 
   // Mock createRun to return a mocked run object with all required methods
   const originalCreateRun = workflow.createRun.bind(workflow);
@@ -1314,6 +1375,12 @@ function getRouteSpecificPathDefaults(route: ServerRoute): {
     return { query: { path: 'test-file.txt' }, body: { path: 'test-file.txt' } };
   }
 
+  // Workflow stream routes reject runIds whose run already finished (409),
+  // so each request needs a fresh runId instead of the shared 'test-run'.
+  if (routePath === '/workflows/:workflowId/stream' || routePath === '/agent-builder/:actionId/stream') {
+    return { query: { runId: `test-run-${randomUUID()}` } };
+  }
+
   return {};
 }
 
@@ -1475,6 +1542,49 @@ export function createStreamWithSensitiveData(format: 'v1' | 'v2' = 'v2'): Reada
       controller.close();
     },
   });
+}
+
+/**
+ * Creates a ReadableStream for testing per-chunk serialization error handling
+ * (https://github.com/mastra-ai/mastra/issues/17821).
+ *
+ * Emits three chunks:
+ * 1. a chunk whose payload contains a BigInt (not JSON-serializable natively — must be coerced to a string)
+ * 2. a chunk that cannot be serialized at all (throwing toJSON — must be skipped without killing the stream)
+ * 3. a final chunk that must still be delivered after the unserializable one
+ *
+ * Use {@link expectSerializedStreamChunks} to assert on the consumed result.
+ */
+export function createStreamWithUnserializableChunk(): ReadableStream {
+  return new ReadableStream({
+    start(controller) {
+      controller.enqueue({ type: 'workflow-step-result', payload: { output: { count: 42n } } });
+      controller.enqueue({
+        type: 'poison',
+        toJSON() {
+          throw new Error('cannot serialize');
+        },
+      });
+      controller.enqueue({ type: 'workflow-finish', payload: { workflowStatus: 'success' } });
+      controller.close();
+    },
+  });
+}
+
+/**
+ * Asserts the chunks consumed from {@link createStreamWithUnserializableChunk}:
+ * BigInt coerced to a string, the poison chunk skipped, and the final chunk delivered.
+ */
+export function expectSerializedStreamChunks(chunks: any[]): void {
+  const stepResult = chunks.find(c => c.type === 'workflow-step-result');
+  expect(stepResult).toBeDefined();
+  expect(stepResult.payload.output).toEqual({ count: '42' });
+
+  expect(chunks.find(c => c.type === 'poison')).toBeUndefined();
+
+  const finish = chunks.find(c => c.type === 'workflow-finish');
+  expect(finish, 'chunks after an unserializable chunk must still be delivered').toBeDefined();
+  expect(finish.payload.workflowStatus).toBe('success');
 }
 
 /**

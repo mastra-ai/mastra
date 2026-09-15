@@ -1,5 +1,8 @@
 import { Tabs as BaseTabs } from '@base-ui/react/tabs';
-import { X } from 'lucide-react';
+import { useContext, useEffect, useRef } from 'react';
+import { buttonVariants } from '../Button/Button';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../Tooltip/tooltip';
+import { TabListContext } from './tabs-context';
 import { transitions, focusRing } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
@@ -9,50 +12,102 @@ export type TabProps = {
   onClick?: () => void;
   onClose?: () => void;
   disabled?: boolean;
+  attention?: boolean;
+  disabledTooltip?: React.ReactNode;
   className?: string;
 };
 
-export const Tab = ({ children, value, onClick, onClose, disabled, className }: TabProps) => {
-  return (
+export const Tab = ({
+  children,
+  value,
+  onClick,
+  onClose,
+  disabled,
+  disabledTooltip,
+  attention = false,
+  className,
+}: TabProps) => {
+  const list = useContext(TabListContext);
+  const ref = useRef<HTMLDivElement>(null);
+  const register = list?.register;
+  const unregister = list?.unregister;
+  const overflowed = list?.hiddenValues.has(value) ?? false;
+  useEffect(() => {
+    const element = ref.current;
+    if (!element || !register) return;
+    const measure = () =>
+      register({
+        value,
+        label: children,
+        disabled: disabled ?? false,
+        width: element.getBoundingClientRect().width,
+        element,
+        onClick,
+        onClose,
+      });
+    measure();
+    if (!('ResizeObserver' in globalThis)) return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [register, value, children, disabled, onClick, onClose]);
+  useEffect(() => () => unregister?.(value), [unregister, value]);
+  // The tab renders as a <div>, so the recipe's `disabled:` pseudo never matches; mirror it on the
+  // aria/data attributes Base UI sets.
+  const tabClassName =
+    list?.variant === 'pill-ghost'
+      ? cn(
+          buttonVariants({ variant: 'ghost', size: 'md' }),
+          'relative z-10 whitespace-nowrap',
+          'data-[active]:text-neutral6',
+          'aria-disabled:cursor-not-allowed aria-disabled:opacity-50',
+          'data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50',
+          className,
+        )
+      : cn(
+          'text-ui-smd font-normal text-neutral3',
+          attention && 'relative',
+          'flex cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap outline-none',
+          transitions.colors,
+          focusRing.visible,
+          'hover:text-neutral4',
+          'data-[active]:text-neutral5',
+          'disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:text-neutral3',
+          'aria-disabled:cursor-not-allowed aria-disabled:opacity-50 aria-disabled:hover:text-neutral3',
+          'data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50 data-[disabled]:hover:text-neutral3',
+          className,
+        );
+  const tab = (
     <BaseTabs.Tab
+      ref={ref}
+      render={<div />}
+      nativeButton={false}
+      data-overflowed={overflowed || undefined}
+      aria-hidden={overflowed || undefined}
       value={value}
-      disabled={disabled}
-      className={cn(
-        'text-ui-md font-normal text-neutral3',
-        'whitespace-nowrap shrink-0 flex items-center justify-center gap-1.5 outline-none cursor-pointer',
-        transitions.colors,
-        focusRing.visible,
-        'hover:text-neutral4',
-        'data-[active]:text-neutral5',
-        'data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50 data-[disabled]:hover:text-neutral3',
-        // Line variant (default) — active state drawn by <Tabs.Indicator> in TabList
-        'group-data-[variant=line]/tabs-list:py-2 group-data-[variant=line]/tabs-list:px-5',
-        'group-data-[variant=line]/tabs-list:border-b-2 group-data-[variant=line]/tabs-list:border-transparent',
-        // Pill variant
-        'group-data-[variant=pill]/tabs-list:relative group-data-[variant=pill]/tabs-list:z-10',
-        'group-data-[variant=pill]/tabs-list:py-1 group-data-[variant=pill]/tabs-list:px-3',
-        'group-data-[variant=pill]/tabs-list:rounded-full',
-        // Pill-ghost variant (pill without list background)
-        'group-data-[variant=pill-ghost]/tabs-list:relative group-data-[variant=pill-ghost]/tabs-list:z-10',
-        'group-data-[variant=pill-ghost]/tabs-list:py-1 group-data-[variant=pill-ghost]/tabs-list:px-3',
-        'group-data-[variant=pill-ghost]/tabs-list:rounded-full',
-        className,
-      )}
+      disabled={disabled || overflowed}
+      data-slot="tab"
+      data-closable={onClose ? '' : undefined}
+      className={tabClassName}
       onClick={onClick}
     >
       {children}
-      {onClose && (
-        <button
-          onClick={e => {
-            e.stopPropagation();
-            onClose();
-          }}
-          className={cn('p-0.5 hover:bg-surface4 rounded', transitions.colors, 'hover:text-neutral5')}
-          aria-label="Close tab"
-        >
-          <X className="w-3 h-3" />
-        </button>
+      {attention && (
+        <>
+          <span aria-hidden="true" data-slot="tab-attention" />
+          <span className="sr-only"> Needs attention</span>
+        </>
       )}
     </BaseTabs.Tab>
   );
+  if (disabled && disabledTooltip) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>{tab}</TooltipTrigger>
+        <TooltipContent>{disabledTooltip}</TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  return tab;
 };

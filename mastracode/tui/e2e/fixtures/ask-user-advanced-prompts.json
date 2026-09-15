@@ -1,0 +1,82 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "Exercise advanced ask_user prompts in the TUI.",
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_ask_multiline",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Write a two-line e2e answer?"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "toolCallId": "call_ask_multiline",
+        "hasToolResult": true
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_ask_custom",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Choose a deployment target or provide a custom one?",
+              "options": [
+                { "label": "Staging", "description": "Use the staging environment" },
+                { "label": "Production", "description": "Use the production environment" }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "toolCallId": "call_ask_custom",
+        "hasToolResult": true
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_ask_multi_select",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Which release tasks should run?",
+              "selectionMode": "multi_select",
+              "options": [
+                { "label": "Docs", "description": "Update documentation" },
+                { "label": "Tests", "description": "Run focused tests" },
+                { "label": "Release notes", "description": "Prepare notes" }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "toolCallId": "call_ask_multi_select",
+        "hasToolResult": true
+      },
+      "response": {
+        "content": "Ask user advanced prompt e2e complete."
+      }
+    }
+  ]
+}

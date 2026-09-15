@@ -25,7 +25,7 @@ async function promptForVersionBumps({
     {
       packages: () => {
         return p.autocompleteMultiselect({
-          message: `Which packages would you like to include? ${color.dim('(use arrow keys / space bar)')}`,
+          message: `Which packages would you like to include?`,
           options: [
             ...changedPackages.map(pkg => ({ value: pkg, label: pkg, hint: 'changed' })),
             ...unchangedPackages.map(pkg => ({ value: pkg.packageJson.name, label: pkg.packageJson.name })),
@@ -39,10 +39,11 @@ async function promptForVersionBumps({
       major: ({ results }): Promise<string[]> => {
         const packages = (results.packages ?? []) as string[];
         return p.multiselect({
-          message: `Which packages should have a ${color.red('major')} bump? ${color.dim('(use arrow keys / space bar)')}`,
+          message: `Which packages should have a ${color.red('major')} bump?`,
           options: packages.map((value: string) => ({ value })),
           initialValues: preSelectedPackages.major.filter(pkg => packages.includes(pkg)),
           required: false,
+          showInstructions: true,
         }) as Promise<string[]>;
       },
       minor: ({ results }): Promise<string[]> => {
@@ -54,10 +55,11 @@ async function promptForVersionBumps({
         }
 
         return p.multiselect({
-          message: `Which packages should have a ${color.yellow('minor')} bump? ${color.dim('(use arrow keys / space bar)')}`,
+          message: `Which packages should have a ${color.yellow('minor')} bump?`,
           options: possiblePackages.map(value => ({ value })),
           initialValues: preSelectedPackages.minor.filter(pkg => packages.includes(pkg)),
           required: false,
+          showInstructions: true,
         }) as Promise<string[]>;
       },
       patch: async ({ results }): Promise<string[]> => {

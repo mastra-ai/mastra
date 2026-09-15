@@ -1,11 +1,31 @@
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
-import type { MastraStorage, DatasetsStorage, DatasetRecord, DatasetItem } from '@mastra/core/storage';
+import type {
+  MastraStorage,
+  DatasetsStorage,
+  ExperimentsStorage,
+  DatasetRecord,
+  DatasetItem,
+} from '@mastra/core/storage';
+import type { TestCapabilities } from '../../factory';
 
-export function createDatasetsTests({ storage }: { storage: MastraStorage }) {
+export function createDatasetsTests({
+  storage,
+  capabilities = {},
+}: {
+  storage: MastraStorage;
+  capabilities?: TestCapabilities;
+}) {
   // Skip tests if storage doesn't have datasets domain
   const describeDatasets = storage.stores?.datasets ? describe : describe.skip;
+  const supportsToolMocks = capabilities.toolMocks !== false;
+  const supportsItemIdentity = capabilities.datasetItemIdentity !== false;
+  const supportsItemPurge = capabilities.datasetItemPurge !== false;
+  const itItemIdentity = supportsItemIdentity ? it : it.skip;
+  const itPurge = supportsItemPurge ? it : it.skip;
+  const itPurgeExperiments = supportsItemPurge && storage.stores?.experiments ? it : it.skip;
 
   let datasetsStorage: DatasetsStorage;
+  let experimentsStorage: ExperimentsStorage | undefined;
 
   describeDatasets('Datasets Storage', () => {
     beforeAll(async () => {
@@ -14,6 +34,7 @@ export function createDatasetsTests({ storage }: { storage: MastraStorage }) {
         throw new Error('Datasets storage not found');
       }
       datasetsStorage = store;
+      experimentsStorage = (await storage.getStore('experiments')) ?? undefined;
     });
 
     // ---------------------------------------------------------------------------
@@ -32,6 +53,85 @@ export function createDatasetsTests({ storage }: { storage: MastraStorage }) {
         expect(ds.name).toBe('test-ds');
         expect(ds.version).toBe(0);
         expect(ds.createdAt).toBeInstanceOf(Date);
+      });
+
+      it('createDataset atomically resolves compatible caller-defined IDs', async () => {
+        const input = {
+          id: 'caller-defined-dataset',
+          name: 'first-write-wins',
+          organizationId: 'org_1',
+          projectId: null,
+        };
+        const results = await Promise.all(Array.from({ length: 20 }, () => datasetsStorage.createDataset(input)));
+        const listed = await datasetsStorage.listDatasets({ pagination: { page: 0, perPage: 100 } });
+
+        expect(results.every(dataset => dataset.id === input.id)).toBe(true);
+        expect(results.every(dataset => dataset.createdAt.getTime() === results[0]!.createdAt.getTime())).toBe(true);
+        expect(listed.datasets.filter(dataset => dataset.id === input.id)).toHaveLength(1);
+      });
+
+      it('createDataset returns the current record for a compatible retry without mutation', async () => {
+        await datasetsStorage.createDataset({
+          id: 'retry-dataset',
+          name: 'original',
+          organizationId: 'org_1',
+        });
+        const updated = await datasetsStorage.updateDataset({ id: 'retry-dataset', name: 'updated' });
+        const retried = await datasetsStorage.createDataset({
+          id: 'retry-dataset',
+          name: 'ignored',
+          organizationId: 'org_1',
+          projectId: null,
+        });
+
+        expect(retried.name).toBe('updated');
+        expect(retried.updatedAt.getTime()).toBe(updated.updatedAt.getTime());
+        expect(retried.version).toBe(0);
+      });
+
+      it('createDataset treats omitted and null immutable fields as compatible', async () => {
+        const created = await datasetsStorage.createDataset({
+          id: 'normalized-dataset',
+          name: 'original',
+          organizationId: undefined,
+          projectId: null,
+        });
+        const retried = await datasetsStorage.createDataset({
+          id: 'normalized-dataset',
+          name: 'ignored',
+          organizationId: null,
+          projectId: undefined,
+        });
+
+        expect(retried.createdAt.getTime()).toBe(created.createdAt.getTime());
+        expect(retried.name).toBe('original');
+      });
+
+      it('createDataset rejects incompatible caller-defined ID reuse', async () => {
+        await datasetsStorage.createDataset({
+          id: 'conflicting-dataset',
+          name: 'original',
+          organizationId: 'org_1',
+          candidateId: 'candidate_1',
+        });
+
+        await expect(
+          datasetsStorage.createDataset({
+            id: 'conflicting-dataset',
+            name: 'retry',
+            organizationId: 'org_2',
+            candidateId: 'candidate_1',
+          }),
+        ).rejects.toMatchObject({ id: 'DATASET_ID_CONFLICT' });
+      });
+
+      it('createDataset releases a caller-defined ID after deletion', async () => {
+        const first = await datasetsStorage.createDataset({ id: 'reusable-dataset', name: 'first' });
+        await datasetsStorage.deleteDataset({ id: first.id });
+        const second = await datasetsStorage.createDataset({ id: first.id, name: 'second' });
+
+        expect(second.name).toBe('second');
+        expect(second.version).toBe(0);
       });
 
       it('getDatasetById returns record or null', async () => {
@@ -69,6 +169,235 @@ export function createDatasetsTests({ storage }: { storage: MastraStorage }) {
         expect(await datasetsStorage.getDatasetById({ id: ds.id })).toBeNull();
       });
 
+      // -----------------------------------------------------------------------
+      // Tenancy scoping — getDatasetById + deleteDataset MUST push tenancy
+      // predicates into the query.
+      // -----------------------------------------------------------------------
+      describe('tenancy scoping', () => {
+        it('getDatasetById returns null when organizationId does not match', async () => {
+          const ds = await datasetsStorage.createDataset({
+            name: 'org-scoped',
+            organizationId: 'org_a',
+            projectId: 'proj_1',
+          });
+
+          const wrongOrg = await datasetsStorage.getDatasetById({
+            id: ds.id,
+            filters: { organizationId: 'org_b' },
+          });
+          expect(wrongOrg).toBeNull();
+
+          const rightOrg = await datasetsStorage.getDatasetById({
+            id: ds.id,
+            filters: { organizationId: 'org_a' },
+          });
+          expect(rightOrg).not.toBeNull();
+          expect(rightOrg!.id).toBe(ds.id);
+        });
+
+        it('getDatasetById returns null when projectId does not match', async () => {
+          const ds = await datasetsStorage.createDataset({
+            name: 'proj-scoped',
+            organizationId: 'org_a',
+            projectId: 'proj_1',
+          });
+
+          const wrongProject = await datasetsStorage.getDatasetById({
+            id: ds.id,
+            filters: { organizationId: 'org_a', projectId: 'proj_2' },
+          });
+          expect(wrongProject).toBeNull();
+
+          const rightProject = await datasetsStorage.getDatasetById({
+            id: ds.id,
+            filters: { organizationId: 'org_a', projectId: 'proj_1' },
+          });
+          expect(rightProject).not.toBeNull();
+          expect(rightProject!.id).toBe(ds.id);
+        });
+
+        it('getDatasetById does not throw on tenancy mismatch (no info leak via error)', async () => {
+          const ds = await datasetsStorage.createDataset({
+            name: 'silent-scope',
+            organizationId: 'org_a',
+          });
+
+          // Should return null, not throw. If it threw, the error timing/text
+          // could be used to distinguish "exists but not yours" from "does not
+          // exist at all" — leaking existence across tenants.
+          await expect(
+            datasetsStorage.getDatasetById({ id: ds.id, filters: { organizationId: 'org_b' } }),
+          ).resolves.toBeNull();
+        });
+
+        it('deleteDataset is a silent no-op when organizationId does not match', async () => {
+          const ds = await datasetsStorage.createDataset({
+            name: 'delete-scoped',
+            organizationId: 'org_a',
+          });
+
+          await expect(
+            datasetsStorage.deleteDataset({ id: ds.id, filters: { organizationId: 'org_b' } }),
+          ).resolves.toBeUndefined();
+
+          // Dataset must still exist.
+          const stillThere = await datasetsStorage.getDatasetById({ id: ds.id });
+          expect(stillThere).not.toBeNull();
+          expect(stillThere!.id).toBe(ds.id);
+        });
+
+        it('deleteDataset is a silent no-op when projectId does not match', async () => {
+          const ds = await datasetsStorage.createDataset({
+            name: 'delete-proj-scoped',
+            organizationId: 'org_a',
+            projectId: 'proj_1',
+          });
+
+          await datasetsStorage.deleteDataset({
+            id: ds.id,
+            filters: { organizationId: 'org_a', projectId: 'proj_2' },
+          });
+
+          expect(await datasetsStorage.getDatasetById({ id: ds.id })).not.toBeNull();
+        });
+
+        it('deleteDataset with matching tenancy removes the dataset', async () => {
+          const ds = await datasetsStorage.createDataset({
+            name: 'delete-match',
+            organizationId: 'org_a',
+            projectId: 'proj_1',
+          });
+          await datasetsStorage.addItem({ datasetId: ds.id, input: { q: 'hi' } });
+
+          await datasetsStorage.deleteDataset({
+            id: ds.id,
+            filters: { organizationId: 'org_a', projectId: 'proj_1' },
+          });
+
+          expect(await datasetsStorage.getDatasetById({ id: ds.id })).toBeNull();
+        });
+
+        it('mixed-tenancy: deleting scoped to org A does not touch org B rows', async () => {
+          const dsA = await datasetsStorage.createDataset({
+            name: 'ds-a',
+            organizationId: 'org_a',
+          });
+          const dsB = await datasetsStorage.createDataset({
+            name: 'ds-b',
+            organizationId: 'org_b',
+          });
+          await datasetsStorage.addItem({ datasetId: dsA.id, input: { v: 'a' } });
+          await datasetsStorage.addItem({ datasetId: dsB.id, input: { v: 'b' } });
+
+          // Attempt to delete dsB using org A tenancy — must no-op.
+          await datasetsStorage.deleteDataset({
+            id: dsB.id,
+            filters: { organizationId: 'org_a' },
+          });
+
+          // dsB must be intact.
+          const foundB = await datasetsStorage.getDatasetById({ id: dsB.id });
+          expect(foundB).not.toBeNull();
+          const itemsB = await datasetsStorage.listItems({
+            datasetId: dsB.id,
+            pagination: { page: 0, perPage: 10 },
+          });
+          expect(itemsB.items).toHaveLength(1);
+
+          // Now delete dsA with correct tenancy — must succeed.
+          await datasetsStorage.deleteDataset({
+            id: dsA.id,
+            filters: { organizationId: 'org_a' },
+          });
+          expect(await datasetsStorage.getDatasetById({ id: dsA.id })).toBeNull();
+
+          // dsB is still untouched.
+          expect(await datasetsStorage.getDatasetById({ id: dsB.id })).not.toBeNull();
+        });
+
+        it('getDatasetById with undefined filters returns the record regardless of tenancy (legacy behavior)', async () => {
+          const ds = await datasetsStorage.createDataset({
+            name: 'unscoped-lookup',
+            organizationId: 'org_a',
+          });
+
+          // No filters => no predicate => legacy OSS behavior preserved.
+          const found = await datasetsStorage.getDatasetById({ id: ds.id });
+          expect(found).not.toBeNull();
+          expect(found!.id).toBe(ds.id);
+        });
+
+        it('updateDataset throws NOT_FOUND when tenancy does not match (does not mutate row)', async () => {
+          const ds = await datasetsStorage.createDataset({
+            name: 'update-scoped',
+            organizationId: 'org_a',
+            projectId: 'proj_1',
+          });
+
+          // Wrong org — must NOT_FOUND and must NOT mutate.
+          await expect(
+            datasetsStorage.updateDataset({
+              id: ds.id,
+              name: 'renamed-by-attacker',
+              filters: { organizationId: 'org_b' },
+            }),
+          ).rejects.toThrow();
+
+          const after = await datasetsStorage.getDatasetById({ id: ds.id });
+          expect(after).not.toBeNull();
+          expect(after!.name).toBe('update-scoped');
+          expect(after!.organizationId).toBe('org_a');
+        });
+
+        it('updateDataset with matching tenancy applies the update', async () => {
+          const ds = await datasetsStorage.createDataset({
+            name: 'update-scoped-ok',
+            organizationId: 'org_a',
+            projectId: 'proj_1',
+          });
+
+          const updated = await datasetsStorage.updateDataset({
+            id: ds.id,
+            name: 'renamed',
+            filters: { organizationId: 'org_a', projectId: 'proj_1' },
+          });
+
+          expect(updated.name).toBe('renamed');
+          expect(updated.organizationId).toBe('org_a');
+        });
+
+        it('mixed-tenancy: updating scoped to org A does not touch org B rows', async () => {
+          const dsA = await datasetsStorage.createDataset({
+            name: 'A-original',
+            organizationId: 'org_a',
+          });
+          const dsB = await datasetsStorage.createDataset({
+            name: 'B-original',
+            organizationId: 'org_b',
+          });
+
+          // Cross-tenant attempt on dsB using org A tenancy — must NOT_FOUND.
+          await expect(
+            datasetsStorage.updateDataset({
+              id: dsB.id,
+              name: 'B-hijacked',
+              filters: { organizationId: 'org_a' },
+            }),
+          ).rejects.toThrow();
+
+          const afterB = await datasetsStorage.getDatasetById({ id: dsB.id });
+          expect(afterB!.name).toBe('B-original');
+
+          // Legitimate scoped update on dsA — must succeed.
+          const updatedA = await datasetsStorage.updateDataset({
+            id: dsA.id,
+            name: 'A-renamed',
+            filters: { organizationId: 'org_a' },
+          });
+          expect(updatedA.name).toBe('A-renamed');
+        });
+      });
+
       it('listDatasets with pagination', async () => {
         await datasetsStorage.createDataset({ name: 'ds-1' });
         await datasetsStorage.createDataset({ name: 'ds-2' });
@@ -82,6 +411,102 @@ export function createDatasetsTests({ storage }: { storage: MastraStorage }) {
         const page1 = await datasetsStorage.listDatasets({ pagination: { page: 1, perPage: 2 } });
         expect(page1.datasets).toHaveLength(1);
         expect(page1.pagination.hasMore).toBe(false);
+      });
+
+      it('listDatasets filters by targetType', async () => {
+        await datasetsStorage.createDataset({ name: 'agent-ds', targetType: 'agent' });
+        await datasetsStorage.createDataset({ name: 'workflow-ds', targetType: 'workflow' });
+        await datasetsStorage.createDataset({ name: 'untyped-ds' });
+
+        const agentOnly = await datasetsStorage.listDatasets({
+          filters: { targetType: 'agent' },
+          pagination: { page: 0, perPage: 10 },
+        });
+        expect(agentOnly.datasets).toHaveLength(1);
+        expect(agentOnly.datasets[0]!.name).toBe('agent-ds');
+
+        const workflowOnly = await datasetsStorage.listDatasets({
+          filters: { targetType: 'workflow' },
+          pagination: { page: 0, perPage: 10 },
+        });
+        expect(workflowOnly.datasets).toHaveLength(1);
+        expect(workflowOnly.datasets[0]!.name).toBe('workflow-ds');
+      });
+
+      it('listDatasets filters by targetIds with overlap semantics', async () => {
+        await datasetsStorage.createDataset({ name: 'ds-a', targetType: 'agent', targetIds: ['a1', 'a2'] });
+        await datasetsStorage.createDataset({ name: 'ds-b', targetType: 'agent', targetIds: ['a2', 'a3'] });
+        await datasetsStorage.createDataset({ name: 'ds-c', targetType: 'agent', targetIds: ['a4'] });
+        await datasetsStorage.createDataset({ name: 'ds-d' });
+
+        // Single id matches any dataset whose targetIds contain it
+        const matchA2 = await datasetsStorage.listDatasets({
+          filters: { targetIds: ['a2'] },
+          pagination: { page: 0, perPage: 10 },
+        });
+        expect(matchA2.datasets.map(d => d.name).sort()).toEqual(['ds-a', 'ds-b']);
+
+        // Multiple ids match any dataset whose targetIds overlap with the filter (union)
+        const matchA1OrA4 = await datasetsStorage.listDatasets({
+          filters: { targetIds: ['a1', 'a4'] },
+          pagination: { page: 0, perPage: 10 },
+        });
+        expect(matchA1OrA4.datasets.map(d => d.name).sort()).toEqual(['ds-a', 'ds-c']);
+
+        // No overlap returns empty
+        const noMatch = await datasetsStorage.listDatasets({
+          filters: { targetIds: ['zzz'] },
+          pagination: { page: 0, perPage: 10 },
+        });
+        expect(noMatch.datasets).toHaveLength(0);
+      });
+
+      it('listDatasets filters by name substring case-insensitively', async () => {
+        await datasetsStorage.createDataset({ name: 'Production Tickets' });
+        await datasetsStorage.createDataset({ name: 'production-logs' });
+        await datasetsStorage.createDataset({ name: 'staging-tickets' });
+
+        const prod = await datasetsStorage.listDatasets({
+          filters: { name: 'PROD' },
+          pagination: { page: 0, perPage: 10 },
+        });
+        expect(prod.datasets.map(d => d.name).sort()).toEqual(['Production Tickets', 'production-logs']);
+
+        const tickets = await datasetsStorage.listDatasets({
+          filters: { name: 'tickets' },
+          pagination: { page: 0, perPage: 10 },
+        });
+        expect(tickets.datasets.map(d => d.name).sort()).toEqual(['Production Tickets', 'staging-tickets']);
+      });
+
+      it('listDatasets combines targetType, targetIds, and name filters', async () => {
+        await datasetsStorage.createDataset({
+          name: 'agent-prod-alpha',
+          targetType: 'agent',
+          targetIds: ['a1'],
+        });
+        await datasetsStorage.createDataset({
+          name: 'agent-prod-beta',
+          targetType: 'agent',
+          targetIds: ['a2'],
+        });
+        await datasetsStorage.createDataset({
+          name: 'workflow-prod-alpha',
+          targetType: 'workflow',
+          targetIds: ['a1'],
+        });
+        await datasetsStorage.createDataset({
+          name: 'agent-staging-alpha',
+          targetType: 'agent',
+          targetIds: ['a1'],
+        });
+
+        const result = await datasetsStorage.listDatasets({
+          filters: { targetType: 'agent', targetIds: ['a1'], name: 'prod' },
+          pagination: { page: 0, perPage: 10 },
+        });
+        expect(result.datasets).toHaveLength(1);
+        expect(result.datasets[0]!.name).toBe('agent-prod-alpha');
       });
     });
 
@@ -116,6 +541,182 @@ export function createDatasetsTests({ storage }: { storage: MastraStorage }) {
 
         const notFound = await datasetsStorage.getItemById({ id: 'nonexistent' });
         expect(notFound).toBeNull();
+      });
+
+      it('getItemById returns the item row visible in the requested dataset snapshot', async () => {
+        const ds = await datasetsStorage.createDataset({ name: 'item-get-at-version' });
+        const itemA = await datasetsStorage.addItem({ datasetId: ds.id, input: { q: 'original' } });
+
+        await expect(datasetsStorage.getItemById({ id: itemA.id, datasetVersion: 0 })).resolves.toBeNull();
+
+        const itemB = await datasetsStorage.addItem({ datasetId: ds.id, input: { q: 'second item' } });
+        await expect(
+          datasetsStorage.getItemById({ id: itemA.id, datasetVersion: itemB.datasetVersion }),
+        ).resolves.toMatchObject({
+          id: itemA.id,
+          datasetVersion: itemA.datasetVersion,
+          input: { q: 'original' },
+        });
+
+        const updated = await datasetsStorage.updateItem({
+          id: itemA.id,
+          datasetId: ds.id,
+          input: { q: 'updated' },
+        });
+        await expect(
+          datasetsStorage.getItemById({ id: itemA.id, datasetVersion: itemB.datasetVersion }),
+        ).resolves.toMatchObject({ datasetVersion: itemA.datasetVersion, input: { q: 'original' } });
+        await expect(
+          datasetsStorage.getItemById({ id: itemA.id, datasetVersion: updated.datasetVersion }),
+        ).resolves.toMatchObject({ datasetVersion: updated.datasetVersion, input: { q: 'updated' } });
+
+        await datasetsStorage.deleteItem({ id: itemA.id, datasetId: ds.id });
+        await expect(
+          datasetsStorage.getItemById({ id: itemA.id, datasetVersion: updated.datasetVersion }),
+        ).resolves.toMatchObject({ datasetVersion: updated.datasetVersion, input: { q: 'updated' } });
+        await expect(
+          datasetsStorage.getItemById({ id: itemA.id, datasetVersion: updated.datasetVersion + 1 }),
+        ).resolves.toBeNull();
+      });
+
+      const toolMocksFixture = [
+        { toolName: 'getWeather', args: { city: 'Seattle' }, output: { temp: 52 } },
+        { toolName: 'getWeather', args: { city: 'Seattle' }, output: { temp: 48 } },
+        {
+          toolName: 'agent-balanceAgent',
+          args: { prompt: 'lookup YJ' },
+          output: { text: 'YJ: $100' },
+          matchArgs: 'ignore' as const,
+        },
+      ];
+
+      (supportsToolMocks ? it : it.skip)('toolMocks round-trip through add, get, and SCD-2 update', async () => {
+        const ds = await datasetsStorage.createDataset({ name: 'item-tool-mocks' });
+        const toolMocks = toolMocksFixture;
+
+        const item = await datasetsStorage.addItem({ datasetId: ds.id, input: { q: 'hi' }, toolMocks });
+        expect(item.toolMocks).toEqual(toolMocks);
+
+        const fetched = await datasetsStorage.getItemById({ id: item.id });
+        expect(fetched!.toolMocks).toEqual(toolMocks);
+
+        // Updating an unrelated field must preserve toolMocks through versioning.
+        const updated = await datasetsStorage.updateItem({ id: item.id, datasetId: ds.id, input: { q: 'hi2' } });
+        expect(updated.datasetVersion).toBe(2);
+        expect(updated.toolMocks).toEqual(toolMocks);
+
+        // Explicitly replacing toolMocks updates them.
+        const replaced = await datasetsStorage.updateItem({
+          id: item.id,
+          datasetId: ds.id,
+          toolMocks: [{ toolName: 'other', args: {}, output: 1 }],
+        });
+        expect(replaced.toolMocks).toEqual([{ toolName: 'other', args: {}, output: 1 }]);
+      });
+
+      (supportsToolMocks ? it.skip : it)('rejects toolMocks when the adapter does not support them', async () => {
+        const ds = await datasetsStorage.createDataset({ name: 'item-tool-mocks-reject' });
+        await expect(
+          datasetsStorage.addItem({ datasetId: ds.id, input: { q: 'hi' }, toolMocks: toolMocksFixture }),
+        ).rejects.toThrow();
+      });
+
+      it('unmockedToolPolicy round-trips through add, get, and SCD-2 update', async () => {
+        const ds = await datasetsStorage.createDataset({ name: 'item-unmocked-tool-policy' });
+
+        const item = await datasetsStorage.addItem({
+          datasetId: ds.id,
+          input: { q: 'hi' },
+          unmockedToolPolicy: 'deny',
+        });
+        expect(item.unmockedToolPolicy).toBe('deny');
+
+        const fetched = await datasetsStorage.getItemById({ id: item.id });
+        expect(fetched!.unmockedToolPolicy).toBe('deny');
+
+        const updated = await datasetsStorage.updateItem({ id: item.id, datasetId: ds.id, input: { q: 'hi2' } });
+        expect(updated.unmockedToolPolicy).toBe('deny');
+
+        const replaced = await datasetsStorage.updateItem({
+          id: item.id,
+          datasetId: ds.id,
+          unmockedToolPolicy: 'allow',
+        });
+        expect(replaced.unmockedToolPolicy).toBe('allow');
+      });
+
+      it('scorerIds round-trip through item reads and SCD-2 updates', async () => {
+        const ds = await datasetsStorage.createDataset({ name: 'item-scorer-ids' });
+        const item = await datasetsStorage.addItem({
+          datasetId: ds.id,
+          input: { q: 'hi' },
+          scorerIds: ['quality', 'safety'],
+        });
+        expect(item.scorerIds).toEqual(['quality', 'safety']);
+
+        const fetched = await datasetsStorage.getItemById({ id: item.id });
+        expect(fetched?.scorerIds).toEqual(['quality', 'safety']);
+        const listed = await datasetsStorage.listItems({
+          datasetId: ds.id,
+          pagination: { page: 0, perPage: 10 },
+        });
+        expect(listed.items[0]?.scorerIds).toEqual(['quality', 'safety']);
+
+        const preserved = await datasetsStorage.updateItem({
+          id: item.id,
+          datasetId: ds.id,
+          input: { q: 'updated' },
+        });
+        expect(preserved.scorerIds).toEqual(['quality', 'safety']);
+
+        const replaced = await datasetsStorage.updateItem({
+          id: item.id,
+          datasetId: ds.id,
+          scorerIds: ['relevance'],
+        });
+        expect(replaced.scorerIds).toEqual(['relevance']);
+
+        const disabled = await datasetsStorage.updateItem({
+          id: item.id,
+          datasetId: ds.id,
+          scorerIds: [],
+        });
+        expect(disabled.scorerIds).toEqual([]);
+
+        const cleared = await datasetsStorage.updateItem({
+          id: item.id,
+          datasetId: ds.id,
+          scorerIds: null,
+        });
+        expect(cleared.scorerIds).toBeUndefined();
+
+        const history = await datasetsStorage.getItemHistory(item.id);
+        expect(history.find(row => row.datasetVersion === 1)?.scorerIds).toEqual(['quality', 'safety']);
+        expect(history.find(row => row.datasetVersion === 2)?.scorerIds).toEqual(['quality', 'safety']);
+        expect(history.find(row => row.datasetVersion === 3)?.scorerIds).toEqual(['relevance']);
+        expect(history.find(row => row.datasetVersion === 4)?.scorerIds).toEqual([]);
+        expect(history.find(row => row.datasetVersion === 5)?.scorerIds).toBeUndefined();
+
+        await expect(datasetsStorage.getItemsByVersion({ datasetId: ds.id, version: 1 })).resolves.toEqual([
+          expect.objectContaining({ id: item.id, scorerIds: ['quality', 'safety'] }),
+        ]);
+        await expect(datasetsStorage.getItemsByVersion({ datasetId: ds.id, version: 4 })).resolves.toEqual([
+          expect.objectContaining({ id: item.id, scorerIds: [] }),
+        ]);
+        await expect(datasetsStorage.getItemsByVersion({ datasetId: ds.id, version: 5 })).resolves.toEqual([
+          expect.objectContaining({ id: item.id, scorerIds: undefined }),
+        ]);
+      });
+
+      it('rejects non-serializable scorerIds', async () => {
+        const ds = await datasetsStorage.createDataset({ name: 'item-scorer-ids-serialization' });
+        await expect(
+          datasetsStorage.addItem({
+            datasetId: ds.id,
+            input: { q: 'hi' },
+            scorerIds: ['quality', undefined] as unknown as string[],
+          }),
+        ).rejects.toThrow();
       });
 
       it('updateItem creates new version row', async () => {
@@ -231,21 +832,537 @@ export function createDatasetsTests({ storage }: { storage: MastraStorage }) {
         expect(newRow!.isDeleted).toBe(false);
       });
 
-      it('deleteItem closes old row and inserts tombstone', async () => {
+      it('deleteItem closes old rows and preserves scorer IDs on tombstones', async () => {
         const ds = await datasetsStorage.createDataset({ name: 'scd2-delete' });
+        const items = [
+          await datasetsStorage.addItem({
+            datasetId: ds.id,
+            input: { q: 'selected' },
+            scorerIds: ['quality'],
+          }),
+          await datasetsStorage.addItem({
+            datasetId: ds.id,
+            input: { q: 'disabled' },
+            scorerIds: [],
+          }),
+        ];
+
+        for (const item of items) {
+          await datasetsStorage.deleteItem({ id: item.id, datasetId: ds.id });
+
+          const current = await datasetsStorage.getItemById({ id: item.id });
+          expect(current).toBeNull();
+
+          const history = await datasetsStorage.getItemHistory(item.id);
+          expect(history).toHaveLength(2);
+
+          const tombstone = history.find(h => h.isDeleted);
+          expect(tombstone).toBeDefined();
+          expect(tombstone!.validTo).toBeNull(); // tombstone is the "current" version
+          expect(tombstone!.scorerIds).toEqual(item.scorerIds);
+        }
+      });
+
+      itPurge('purgeItem scrubs every historical row and preserves the SCD-2 skeleton', async () => {
+        const ds = await datasetsStorage.createDataset({ name: 'scd2-purge' });
+        const item = await datasetsStorage.addItem({
+          datasetId: ds.id,
+          externalId: supportsItemIdentity ? 'durable-identity' : undefined,
+          input: { patient: 'Alice' },
+          groundTruth: { diagnosis: 'secret' },
+          expectedTrajectory: [{ role: 'assistant', content: 'private response' }],
+          toolMocks: supportsToolMocks
+            ? [{ toolName: 'lookup', args: { id: 'patient-1' }, output: 'private' }]
+            : undefined,
+          unmockedToolPolicy: 'deny',
+          scorerIds: ['quality'],
+          requestContext: { patientId: 'patient-1' },
+          metadata: { note: 'private metadata' },
+          source: { type: 'trace', referenceId: 'private-trace' },
+        });
+        const updated = await datasetsStorage.updateItem({
+          id: item.id,
+          datasetId: ds.id,
+          input: { patient: 'Bob' },
+          groundTruth: { diagnosis: 'another secret' },
+        });
+        await datasetsStorage.deleteItem({ id: item.id, datasetId: ds.id });
+        const otherItem = await datasetsStorage.addItem({ datasetId: ds.id, input: { patient: 'Carol' } });
+
+        await datasetsStorage.purgeItem({ id: item.id, datasetId: ds.id });
+        await datasetsStorage.purgeItem({ id: item.id, datasetId: ds.id });
+
+        const history = await datasetsStorage.getItemHistory(item.id);
+        const historyByVersion = history.toSorted((a, b) => a.datasetVersion - b.datasetVersion);
+        expect(historyByVersion).toHaveLength(3);
+        expect(historyByVersion.map(row => row.datasetVersion)).toEqual([1, 2, 3]);
+        expect(historyByVersion.map(row => row.validTo)).toEqual([2, 3, null]);
+        expect(historyByVersion.map(row => row.isDeleted)).toEqual([false, false, true]);
+
+        for (const row of historyByVersion) {
+          if (supportsItemIdentity) {
+            expect(row.externalId).toBe('durable-identity');
+          }
+          expect(row.input).toBeNull();
+          expect(row.groundTruth).toBeNull();
+          expect(row.expectedTrajectory).toBeNull();
+          expect(row.toolMocks).toBeNull();
+          expect(row.unmockedToolPolicy).toBeNull();
+          expect(row.scorerIds).toBeNull();
+          expect(row.requestContext).toBeNull();
+          expect(row.source).toBeNull();
+          expect(row.metadata).toMatchObject({ __purged: true });
+          expect(typeof row.metadata?.purgedAt).toBe('string');
+        }
+
+        await expect(
+          datasetsStorage.getItemById({ id: item.id, datasetVersion: item.datasetVersion }),
+        ).resolves.toMatchObject({ input: null, metadata: { __purged: true } });
+        await expect(
+          datasetsStorage.getItemById({ id: item.id, datasetVersion: updated.datasetVersion }),
+        ).resolves.toMatchObject({ input: null, metadata: { __purged: true } });
+        await expect(datasetsStorage.getItemById({ id: item.id })).resolves.toBeNull();
+        await expect(datasetsStorage.getItemById({ id: otherItem.id })).resolves.toMatchObject({
+          input: { patient: 'Carol' },
+        });
+      });
+
+      itPurge('purgeItem is idempotent for an unknown item id', async () => {
+        const ds = await datasetsStorage.createDataset({ name: 'purge-missing-item' });
+
+        await expect(datasetsStorage.purgeItem({ id: 'missing-item', datasetId: ds.id })).resolves.toBeUndefined();
+      });
+
+      itPurge('purgeItem is a silent no-op when the item belongs to another dataset', async () => {
+        const sourceDataset = await datasetsStorage.createDataset({ name: 'purge-source-dataset' });
+        const otherDataset = await datasetsStorage.createDataset({ name: 'purge-other-dataset' });
+        const item = await datasetsStorage.addItem({
+          datasetId: sourceDataset.id,
+          input: { patient: 'Alice' },
+          metadata: { note: 'private' },
+        });
+
+        await datasetsStorage.purgeItem({ id: item.id, datasetId: otherDataset.id });
+
+        const history = await datasetsStorage.getItemHistory(item.id);
+        expect(history).toHaveLength(1);
+        expect(history[0]).toMatchObject({ input: { patient: 'Alice' }, metadata: { note: 'private' } });
+      });
+
+      itPurge('purgeItem is a silent no-op when tenancy filters do not match', async () => {
+        const ds = await datasetsStorage.createDataset({
+          name: 'purge-tenancy',
+          organizationId: 'org_a',
+          projectId: 'proj_a',
+        });
+        const item = await datasetsStorage.addItem({ datasetId: ds.id, input: { patient: 'Alice' } });
+
+        await datasetsStorage.purgeItem({
+          id: item.id,
+          datasetId: ds.id,
+          filters: { organizationId: 'org_b' },
+        });
+
+        const history = await datasetsStorage.getItemHistory(item.id);
+        expect(history).toHaveLength(1);
+        expect(history[0]!.input).toEqual({ patient: 'Alice' });
+        expect(history[0]!.metadata).toBeUndefined();
+      });
+
+      itPurgeExperiments('purgeItem scrubs linked experiment result payloads', async () => {
+        await experimentsStorage!.dangerouslyClearAll();
+        const ds = await datasetsStorage.createDataset({ name: 'purge-experiment-results' });
+        const item = await datasetsStorage.addItem({ datasetId: ds.id, input: { patient: 'Alice' } });
+        const experiment = await experimentsStorage!.createExperiment({
+          name: 'purge-results',
+          datasetId: ds.id,
+          datasetVersion: item.datasetVersion,
+          targetType: 'agent',
+          targetId: 'agent-1',
+          totalItems: 1,
+        });
+        const toolMockReport = {
+          served: [{ mockIndex: 0, toolName: 'lookup', args: { patientId: 'patient-1' } }],
+          unconsumed: [],
+          liveCalls: [],
+        };
+        const result = await experimentsStorage!.addExperimentResult({
+          experimentId: experiment.id,
+          itemId: item.id,
+          itemDatasetVersion: item.datasetVersion,
+          input: { patient: 'Alice' },
+          output: { diagnosis: 'secret' },
+          groundTruth: { expected: 'private' },
+          metadata: { note: 'private metadata' },
+          toolMockReport: supportsToolMocks ? toolMockReport : undefined,
+          error: { message: 'Failed for patient Alice', stack: 'Patient Alice input caused the failure' },
+          startedAt: new Date(),
+          completedAt: new Date(),
+          retryCount: 0,
+        });
+        await experimentsStorage!.updateExperimentResult({
+          id: result.id,
+          experimentId: experiment.id,
+          status: 'needs-review',
+          tags: ['contains-patient-name'],
+          comment: 'Patient Alice requires review',
+        });
+        const otherDataset = await datasetsStorage.createDataset({ name: 'other-purge-experiment-results' });
+        const otherExperiment = await experimentsStorage!.createExperiment({
+          name: 'other-purge-results',
+          datasetId: otherDataset.id,
+          datasetVersion: 0,
+          targetType: 'agent',
+          targetId: 'agent-2',
+          totalItems: 1,
+        });
+        await experimentsStorage!.addExperimentResult({
+          experimentId: otherExperiment.id,
+          itemId: item.id,
+          itemDatasetVersion: item.datasetVersion,
+          input: { patient: 'Bob' },
+          output: { diagnosis: 'retain' },
+          groundTruth: { expected: 'retain' },
+          metadata: { note: 'retain metadata' },
+          toolMockReport: supportsToolMocks ? toolMockReport : undefined,
+          error: { message: 'Retain failure for patient Bob', stack: 'Patient Bob input caused the failure' },
+          startedAt: new Date(),
+          completedAt: new Date(),
+          retryCount: 0,
+        });
+
+        await datasetsStorage.purgeItem({ id: item.id, datasetId: ds.id });
+
+        const listed = await experimentsStorage!.listExperimentResults({
+          experimentId: experiment.id,
+          pagination: { page: 0, perPage: 10 },
+        });
+        expect(listed.results).toHaveLength(1);
+        expect(listed.results[0]).toMatchObject({
+          itemId: item.id,
+          itemDatasetVersion: item.datasetVersion,
+          input: null,
+          output: null,
+          groundTruth: null,
+          error: null,
+          metadata: { __purged: true },
+          status: 'needs-review',
+          tags: null,
+          comment: null,
+        });
+        if (supportsToolMocks) {
+          expect(listed.results[0]!.toolMockReport).toBeNull();
+        }
+        expect(typeof listed.results[0]!.metadata?.purgedAt).toBe('string');
+        const itemHistory = await datasetsStorage.getItemHistory(item.id);
+        expect(itemHistory[0]?.metadata?.purgedAt).toBe(listed.results[0]!.metadata?.purgedAt);
+        await expect(experimentsStorage!.getExperimentById({ id: experiment.id })).resolves.toMatchObject({
+          totalItems: 1,
+        });
+
+        const otherListed = await experimentsStorage!.listExperimentResults({
+          experimentId: otherExperiment.id,
+          pagination: { page: 0, perPage: 10 },
+        });
+        expect(otherListed.results).toHaveLength(1);
+        expect(otherListed.results[0]).toMatchObject({
+          input: { patient: 'Bob' },
+          output: { diagnosis: 'retain' },
+          groundTruth: { expected: 'retain' },
+          error: { message: 'Retain failure for patient Bob', stack: 'Patient Bob input caused the failure' },
+          metadata: { note: 'retain metadata' },
+        });
+        if (supportsToolMocks) {
+          expect(otherListed.results[0]!.toolMockReport).toEqual(toolMockReport);
+        }
+      });
+
+      itPurgeExperiments('redacts experiment result writes submitted after item purge', async () => {
+        await experimentsStorage!.dangerouslyClearAll();
+        const ds = await datasetsStorage.createDataset({ name: 'purge-late-experiment-results' });
+        const item = await datasetsStorage.addItem({ datasetId: ds.id, input: { patient: 'Alice' } });
+        const experiment = await experimentsStorage!.createExperiment({
+          name: 'late-purge-results',
+          datasetId: ds.id,
+          datasetVersion: item.datasetVersion,
+          targetType: 'agent',
+          targetId: 'agent-1',
+          totalItems: 1,
+        });
+        const resultInput = {
+          experimentId: experiment.id,
+          itemId: item.id,
+          itemDatasetVersion: item.datasetVersion,
+          input: { patient: 'Alice' },
+          output: { diagnosis: 'secret' },
+          groundTruth: { expected: 'private' },
+          metadata: { note: 'private metadata' },
+          toolMockReport: supportsToolMocks
+            ? { served: [], unconsumed: [], liveCalls: [{ toolName: 'lookup', args: { patient: 'Alice' } }] }
+            : undefined,
+          error: { message: 'Patient Alice failed' },
+          startedAt: new Date(),
+          completedAt: new Date(),
+          retryCount: 0,
+          attempt: 0,
+        };
+
+        await datasetsStorage.purgeItem({ id: item.id, datasetId: ds.id });
+        const added = await experimentsStorage!.addExperimentResult(resultInput);
+        const updated = await experimentsStorage!.updateExperimentResult({
+          id: added.id,
+          experimentId: experiment.id,
+          status: 'needs-review',
+          tags: ['patient-alice'],
+          comment: 'Patient Alice requires review',
+        });
+        expect(updated).toMatchObject({ status: 'needs-review', tags: null, comment: null });
+
+        const upserted = await experimentsStorage!.upsertExperimentResult({
+          ...resultInput,
+          output: { diagnosis: 'restored secret' },
+        });
+
+        expect(upserted).toMatchObject({
+          id: added.id,
+          input: null,
+          output: null,
+          groundTruth: null,
+          metadata: { __purged: true },
+          error: null,
+          status: null,
+          tags: null,
+          comment: null,
+        });
+        if (supportsToolMocks) {
+          expect(upserted.toolMockReport).toBeNull();
+        }
+        expect(typeof upserted.metadata?.purgedAt).toBe('string');
+      });
+
+      itPurgeExperiments('keeps result payloads redacted when purge races with result submissions', async () => {
+        await experimentsStorage!.dangerouslyClearAll();
+        const ds = await datasetsStorage.createDataset({ name: 'purge-racing-experiment-results' });
+        const item = await datasetsStorage.addItem({ datasetId: ds.id, input: { patient: 'Alice' } });
+        const experiment = await experimentsStorage!.createExperiment({
+          name: 'racing-purge-results',
+          datasetId: ds.id,
+          datasetVersion: item.datasetVersion,
+          targetType: 'agent',
+          targetId: 'agent-1',
+          totalItems: 1,
+        });
+        const submission = {
+          experimentId: experiment.id,
+          itemId: item.id,
+          itemDatasetVersion: item.datasetVersion,
+          input: { patient: 'Alice' },
+          output: { diagnosis: 'secret' },
+          groundTruth: { expected: 'private' },
+          metadata: { note: 'private' },
+          error: { message: 'Patient Alice failed' },
+          startedAt: new Date(),
+          completedAt: new Date(),
+          retryCount: 0,
+          attempt: 0,
+        };
+        await experimentsStorage!.upsertExperimentResult(submission);
+
+        await Promise.all([
+          datasetsStorage.purgeItem({ id: item.id, datasetId: ds.id }),
+          ...Array.from({ length: 10 }, () =>
+            experimentsStorage!.upsertExperimentResult({ ...submission, completedAt: new Date() }),
+          ),
+        ]);
+
+        const listed = await experimentsStorage!.listExperimentResults({
+          experimentId: experiment.id,
+          pagination: { page: 0, perPage: 10 },
+        });
+        expect(listed.results).toHaveLength(1);
+        expect(listed.results[0]).toMatchObject({
+          input: null,
+          output: null,
+          groundTruth: null,
+          metadata: { __purged: true },
+          error: null,
+          tags: null,
+          comment: null,
+        });
+      });
+
+      itPurge('keeps item payloads redacted when purge races with updates', async () => {
+        const ds = await datasetsStorage.createDataset({ name: 'purge-racing-item-updates' });
+        const item = await datasetsStorage.addItem({
+          datasetId: ds.id,
+          input: { patient: 'Alice' },
+          groundTruth: { diagnosis: 'secret' },
+          expectedTrajectory: [{ role: 'assistant', content: 'private response' }],
+          toolMocks: supportsToolMocks
+            ? [{ toolName: 'lookup', args: { id: 'patient-1' }, output: 'private' }]
+            : undefined,
+          unmockedToolPolicy: 'deny',
+          scorerIds: ['quality'],
+          requestContext: { patientId: 'patient-1' },
+          metadata: { note: 'private' },
+          source: { type: 'trace', referenceId: 'private-trace' },
+        });
+
+        const results = await Promise.allSettled([
+          ...Array.from({ length: 10 }, (_, index) =>
+            datasetsStorage.updateItem({
+              id: item.id,
+              datasetId: ds.id,
+              metadata: { update: index },
+            }),
+          ),
+          datasetsStorage.purgeItem({ id: item.id, datasetId: ds.id }),
+        ]);
+        expect(results.at(-1)?.status).toBe('fulfilled');
+
+        const history = await datasetsStorage.getItemHistory(item.id);
+        expect(history.length).toBeGreaterThan(0);
+        for (const version of history) {
+          expect(version.input).toBeNull();
+          expect(version.groundTruth).toBeNull();
+          expect(version.expectedTrajectory).toBeNull();
+          expect(version.toolMocks).toBeNull();
+          expect(version.unmockedToolPolicy).toBeNull();
+          expect(version.scorerIds).toBeNull();
+          expect(version.requestContext).toBeNull();
+          expect(version.source).toBeNull();
+          expect(version.metadata).toMatchObject({ __purged: true });
+        }
+      });
+
+      itPurge('keeps tombstone payloads redacted when purge races with delete', async () => {
+        const ds = await datasetsStorage.createDataset({ name: 'purge-racing-item-delete' });
+        const item = await datasetsStorage.addItem({
+          datasetId: ds.id,
+          input: { patient: 'Alice' },
+          groundTruth: { diagnosis: 'secret' },
+          expectedTrajectory: [{ role: 'assistant', content: 'private response' }],
+          toolMocks: supportsToolMocks
+            ? [{ toolName: 'lookup', args: { id: 'patient-1' }, output: 'private' }]
+            : undefined,
+          unmockedToolPolicy: 'deny',
+          scorerIds: ['quality'],
+          requestContext: { patientId: 'patient-1' },
+          metadata: { note: 'private' },
+          source: { type: 'trace', referenceId: 'private-trace' },
+        });
+
+        await Promise.all([
+          datasetsStorage.purgeItem({ id: item.id, datasetId: ds.id }),
+          datasetsStorage.deleteItem({ id: item.id, datasetId: ds.id }),
+        ]);
+
+        const history = await datasetsStorage.getItemHistory(item.id);
+        expect(history.length).toBeGreaterThan(0);
+        for (const version of history) {
+          expect(version.input).toBeNull();
+          expect(version.groundTruth).toBeNull();
+          expect(version.expectedTrajectory).toBeNull();
+          expect(version.toolMocks).toBeNull();
+          expect(version.unmockedToolPolicy).toBeNull();
+          expect(version.scorerIds).toBeNull();
+          expect(version.requestContext).toBeNull();
+          expect(version.source).toBeNull();
+          expect(version.metadata).toMatchObject({ __purged: true });
+        }
+      });
+
+      it('deleteItem tombstone inherits tenancy from parent dataset', async () => {
+        const ds = await datasetsStorage.createDataset({
+          name: 'scd2-delete-tenancy',
+          organizationId: 'org_delete',
+          projectId: 'proj_delete',
+        });
         const item = await datasetsStorage.addItem({ datasetId: ds.id, input: { q: 'bye' } });
 
         await datasetsStorage.deleteItem({ id: item.id, datasetId: ds.id });
 
-        const current = await datasetsStorage.getItemById({ id: item.id });
-        expect(current).toBeNull();
-
         const history = await datasetsStorage.getItemHistory(item.id);
-        expect(history).toHaveLength(2);
-
         const tombstone = history.find(h => h.isDeleted);
         expect(tombstone).toBeDefined();
-        expect(tombstone!.validTo).toBeNull(); // tombstone is the "current" version
+        expect(tombstone!.organizationId).toBe('org_delete');
+        expect(tombstone!.projectId).toBe('proj_delete');
+      });
+
+      it('batchDeleteItems tombstones inherit tenancy from parent dataset', async () => {
+        const ds = await datasetsStorage.createDataset({
+          name: 'scd2-batch-delete-tenancy',
+          organizationId: 'org_batch',
+          projectId: 'proj_batch',
+        });
+        const items = await datasetsStorage.batchInsertItems({
+          datasetId: ds.id,
+          items: [
+            { input: { q: 'selected' }, scorerIds: ['quality'] },
+            { input: { q: 'disabled' }, scorerIds: [] },
+          ],
+        });
+
+        await datasetsStorage.batchDeleteItems({
+          datasetId: ds.id,
+          itemIds: items.map(i => i.id),
+        });
+
+        for (const item of items) {
+          const history = await datasetsStorage.getItemHistory(item.id);
+          const tombstone = history.find(h => h.isDeleted);
+          expect(tombstone).toBeDefined();
+          expect(tombstone!.organizationId).toBe('org_batch');
+          expect(tombstone!.projectId).toBe('proj_batch');
+          expect(tombstone!.scorerIds).toEqual(item.scorerIds);
+        }
+      });
+
+      it('addItem inherits tenancy from parent dataset onto the live row', async () => {
+        const ds = await datasetsStorage.createDataset({
+          name: 'scd2-add-tenancy',
+          organizationId: 'org_add',
+          projectId: 'proj_add',
+        });
+        const item = await datasetsStorage.addItem({ datasetId: ds.id, input: { q: 'hello' } });
+
+        expect(item.organizationId).toBe('org_add');
+        expect(item.projectId).toBe('proj_add');
+
+        // Also assert via listItems so we exercise the persisted row mapper, not just the returned value
+        const listed = await datasetsStorage.listItems({
+          datasetId: ds.id,
+          pagination: { page: 0, perPage: 10 },
+        });
+        const persisted = listed.items.find(i => i.id === item.id);
+        expect(persisted).toBeDefined();
+        expect(persisted!.organizationId).toBe('org_add');
+        expect(persisted!.projectId).toBe('proj_add');
+      });
+
+      it('updateItem re-inherits tenancy from parent dataset onto the new live row', async () => {
+        const ds = await datasetsStorage.createDataset({
+          name: 'scd2-update-tenancy',
+          organizationId: 'org_update',
+          projectId: 'proj_update',
+        });
+        const item = await datasetsStorage.addItem({ datasetId: ds.id, input: { q: 'v1' } });
+
+        const updated = await datasetsStorage.updateItem({
+          id: item.id,
+          datasetId: ds.id,
+          input: { q: 'v2' },
+        });
+
+        expect(updated.organizationId).toBe('org_update');
+        expect(updated.projectId).toBe('proj_update');
+
+        // History should include the new live row carrying tenancy
+        const history = await datasetsStorage.getItemHistory(item.id);
+        const live = history.find(h => h.validTo === null && !h.isDeleted);
+        expect(live).toBeDefined();
+        expect(live!.organizationId).toBe('org_update');
+        expect(live!.projectId).toBe('proj_update');
       });
     });
 
@@ -270,7 +1387,7 @@ export function createDatasetsTests({ storage }: { storage: MastraStorage }) {
         expect(current!.input).toEqual({ q: 'updated' });
       });
 
-      it('getItemById with version returns that exact version', async () => {
+      it('getItemById with version returns the row visible in that snapshot', async () => {
         const v1 = await datasetsStorage.getItemById({ id: item1.id, datasetVersion: 1 });
         expect(v1!.input).toEqual({ q: 'original' });
 
@@ -317,6 +1434,58 @@ export function createDatasetsTests({ storage }: { storage: MastraStorage }) {
         });
         expect(v3.items).toHaveLength(2);
       });
+
+      it('listItems applies search alongside version', async () => {
+        // Use a fresh dataset with string-valued inputs because some adapters
+        // (mongodb) only run search against string-valued input fields.
+        const searchDs = await datasetsStorage.createDataset({ name: 'version-search' });
+        const a = await datasetsStorage.addItem({ datasetId: searchDs.id, input: 'alpha-original' });
+        await datasetsStorage.addItem({ datasetId: searchDs.id, input: 'beta-original' });
+        // v2 now. Updating a -> v3
+        await datasetsStorage.updateItem({ id: a.id, datasetId: searchDs.id, input: 'alpha-updated' });
+
+        const searchUpdated = await datasetsStorage.listItems({
+          datasetId: searchDs.id,
+          version: 3,
+          search: 'updated',
+          pagination: { page: 0, perPage: 10 },
+        });
+        expect(searchUpdated.items).toHaveLength(1);
+        expect(searchUpdated.items[0]!.input).toBe('alpha-updated');
+
+        // Search at an older version reaches into historical input values
+        const searchOriginalAtV2 = await datasetsStorage.listItems({
+          datasetId: searchDs.id,
+          version: 2,
+          search: 'alpha-original',
+          pagination: { page: 0, perPage: 10 },
+        });
+        expect(searchOriginalAtV2.items).toHaveLength(1);
+        expect(searchOriginalAtV2.items[0]!.input).toBe('alpha-original');
+      });
+
+      it('listItems applies pagination alongside version', async () => {
+        // Add two more items so v4 has 3 items: item1 'updated', second, third
+        await datasetsStorage.addItem({ datasetId: ds.id, input: { q: 'second' } });
+        await datasetsStorage.addItem({ datasetId: ds.id, input: { q: 'third' } });
+
+        const page0 = await datasetsStorage.listItems({
+          datasetId: ds.id,
+          version: 4,
+          pagination: { page: 0, perPage: 2 },
+        });
+        expect(page0.items).toHaveLength(2);
+        expect(page0.pagination.total).toBe(3);
+        expect(page0.pagination.hasMore).toBe(true);
+
+        const page1 = await datasetsStorage.listItems({
+          datasetId: ds.id,
+          version: 4,
+          pagination: { page: 1, perPage: 2 },
+        });
+        expect(page1.items).toHaveLength(1);
+        expect(page1.pagination.hasMore).toBe(false);
+      });
     });
 
     // ---------------------------------------------------------------------------
@@ -350,6 +1519,190 @@ export function createDatasetsTests({ storage }: { storage: MastraStorage }) {
           pagination: { page: 0, perPage: 10 },
         });
         expect(dv.versions).toHaveLength(1);
+      });
+
+      it('batchInsertItems preserves scorerIds inheritance and empty overrides', async () => {
+        const ds = await datasetsStorage.createDataset({ name: 'bulk-scorer-ids' });
+        const items = await datasetsStorage.batchInsertItems({
+          datasetId: ds.id,
+          items: [
+            { input: { q: 'selected' }, scorerIds: ['quality'] },
+            { input: { q: 'disabled' }, scorerIds: [] },
+            { input: { q: 'inherited' } },
+          ],
+        });
+
+        const byInput = new Map(items.map(item => [(item.input as { q: string }).q, item]));
+        expect(byInput.get('selected')?.scorerIds).toEqual(['quality']);
+        expect(byInput.get('disabled')?.scorerIds).toEqual([]);
+        expect(byInput.get('inherited')?.scorerIds).toBeUndefined();
+
+        const listed = await datasetsStorage.listItems({
+          datasetId: ds.id,
+          pagination: { page: 0, perPage: 10 },
+        });
+        const listedByInput = new Map(listed.items.map(item => [(item.input as { q: string }).q, item]));
+        expect(listedByInput.get('selected')?.scorerIds).toEqual(['quality']);
+        expect(listedByInput.get('disabled')?.scorerIds).toEqual([]);
+        expect(listedByInput.get('inherited')?.scorerIds).toBeUndefined();
+      });
+
+      itItemIdentity('batchInsertItems treats scorerIds as part of the externalId payload', async () => {
+        const ds = await datasetsStorage.createDataset({ name: 'identity-scorer-ids' });
+        const payload = { externalId: 'item-1', input: { q: 'same' }, scorerIds: ['quality'] };
+
+        const [first] = await datasetsStorage.batchInsertItems({ datasetId: ds.id, items: [payload] });
+        const [retry] = await datasetsStorage.batchInsertItems({ datasetId: ds.id, items: [payload] });
+        expect(retry).toEqual(expect.objectContaining({ id: first!.id, scorerIds: ['quality'] }));
+
+        await expect(
+          datasetsStorage.batchInsertItems({
+            datasetId: ds.id,
+            items: [{ ...payload, scorerIds: ['safety'] }],
+          }),
+        ).rejects.toMatchObject({ id: 'DATASET_ITEM_IDENTITY_CONFLICT' });
+      });
+
+      itItemIdentity('batchInsertItems treats exact externalId retries as no-ops', async () => {
+        const ds = await datasetsStorage.createDataset({ name: 'identity-retry' });
+        const payload = { externalId: 'item-1', input: { q: 'same' }, metadata: { source: 'test' } };
+
+        const [first] = await datasetsStorage.batchInsertItems({ datasetId: ds.id, items: [payload] });
+        const [retry] = await datasetsStorage.batchInsertItems({ datasetId: ds.id, items: [payload] });
+
+        expect(retry!.id).toBe(first!.id);
+        expect(retry!.externalId).toBe('item-1');
+        expect(first).not.toHaveProperty('validTo');
+        expect(first).not.toHaveProperty('isDeleted');
+        expect(retry).not.toHaveProperty('validTo');
+        expect(retry).not.toHaveProperty('isDeleted');
+
+        const history = await datasetsStorage.getItemHistory(first!.id);
+        expect(history).toHaveLength(1);
+        expect(history[0]!.validTo).toBeNull();
+        expect(history[0]!.isDeleted).toBe(false);
+        expect((await datasetsStorage.getDatasetById({ id: ds.id }))!.version).toBe(1);
+      });
+
+      itItemIdentity('batchInsertItems converges concurrent exact externalId retries', async () => {
+        const ds = await datasetsStorage.createDataset({ name: 'identity-concurrent' });
+        const payload = { externalId: 'item-1', input: { q: 'same' } };
+
+        const [[first], [second]] = await Promise.all([
+          datasetsStorage.batchInsertItems({ datasetId: ds.id, items: [payload] }),
+          datasetsStorage.batchInsertItems({ datasetId: ds.id, items: [payload] }),
+        ]);
+
+        expect(second!.id).toBe(first!.id);
+        expect(
+          (await datasetsStorage.listItems({ datasetId: ds.id, pagination: { page: 0, perPage: 10 } })).items,
+        ).toHaveLength(1);
+        expect((await datasetsStorage.getDatasetById({ id: ds.id }))!.version).toBe(1);
+      });
+
+      itItemIdentity('batchInsertItems rejects incompatible externalId reuse without mutation', async () => {
+        const ds = await datasetsStorage.createDataset({ name: 'identity-conflict' });
+        const [first] = await datasetsStorage.batchInsertItems({
+          datasetId: ds.id,
+          items: [{ externalId: 'item-1', input: { q: 'first' } }],
+        });
+
+        await expect(
+          datasetsStorage.batchInsertItems({
+            datasetId: ds.id,
+            items: [
+              { externalId: 'item-2', input: { q: 'new' } },
+              { externalId: 'item-1', input: { q: 'different' } },
+            ],
+          }),
+        ).rejects.toMatchObject({ id: 'DATASET_ITEM_IDENTITY_CONFLICT' });
+
+        expect((await datasetsStorage.getDatasetById({ id: ds.id }))!.version).toBe(1);
+        expect(
+          (await datasetsStorage.listItems({ datasetId: ds.id, pagination: { page: 0, perPage: 10 } })).items,
+        ).toEqual([expect.objectContaining({ id: first!.id })]);
+      });
+
+      itItemIdentity('batchInsertItems resolves equivalent request-local identities to one item', async () => {
+        const ds = await datasetsStorage.createDataset({ name: 'identity-local-duplicate' });
+        const items = await datasetsStorage.batchInsertItems({
+          datasetId: ds.id,
+          items: [
+            { externalId: 'item-1', input: { q: 'same' } },
+            { externalId: 'item-1', input: { q: 'same' } },
+            { input: { q: 'append' } },
+          ],
+        });
+
+        expect(items).toHaveLength(3);
+        expect(items[0]!.id).toBe(items[1]!.id);
+        expect(items[2]!.id).not.toBe(items[0]!.id);
+        expect(
+          (await datasetsStorage.listItems({ datasetId: ds.id, pagination: { page: 0, perPage: 10 } })).items,
+        ).toHaveLength(2);
+      });
+
+      itItemIdentity('batchInsertItems rejects incompatible request-local identities', async () => {
+        const ds = await datasetsStorage.createDataset({ name: 'identity-local-conflict' });
+
+        await expect(
+          datasetsStorage.batchInsertItems({
+            datasetId: ds.id,
+            items: [
+              { externalId: 'item-1', input: { q: 'first' } },
+              { externalId: 'item-1', input: { q: 'different' } },
+            ],
+          }),
+        ).rejects.toMatchObject({ id: 'DATASET_ITEM_IDENTITY_CONFLICT' });
+
+        expect((await datasetsStorage.getDatasetById({ id: ds.id }))!.version).toBe(0);
+      });
+
+      itItemIdentity('preserves externalId through updates and compares retries against the first row', async () => {
+        const ds = await datasetsStorage.createDataset({ name: 'identity-update' });
+        const original = { externalId: 'item-1', input: { q: 'original' } };
+        const [created] = await datasetsStorage.batchInsertItems({ datasetId: ds.id, items: [original] });
+        const updated = await datasetsStorage.updateItem({
+          id: created!.id,
+          datasetId: ds.id,
+          input: { q: 'updated' },
+        });
+
+        expect(updated.externalId).toBe('item-1');
+        const [retry] = await datasetsStorage.batchInsertItems({ datasetId: ds.id, items: [original] });
+        expect(retry!.id).toBe(created!.id);
+        expect(retry!.input).toEqual({ q: 'updated' });
+        expect((await datasetsStorage.getDatasetById({ id: ds.id }))!.version).toBe(2);
+      });
+
+      itItemIdentity('keeps deleted externalIds reserved', async () => {
+        const ds = await datasetsStorage.createDataset({ name: 'identity-delete' });
+        const original = { externalId: 'item-1', input: { q: 'original' } };
+        const [created] = await datasetsStorage.batchInsertItems({ datasetId: ds.id, items: [original] });
+        await datasetsStorage.deleteItem({ id: created!.id, datasetId: ds.id });
+
+        await expect(datasetsStorage.batchInsertItems({ datasetId: ds.id, items: [original] })).rejects.toMatchObject({
+          id: 'DATASET_ITEM_IDENTITY_CONFLICT',
+          conflicts: [expect.objectContaining({ reason: 'deleted' })],
+        });
+        expect((await datasetsStorage.getDatasetById({ id: ds.id }))!.version).toBe(2);
+      });
+
+      itItemIdentity('scopes externalId identity to the dataset', async () => {
+        const firstDataset = await datasetsStorage.createDataset({ name: 'identity-scope-1' });
+        const secondDataset = await datasetsStorage.createDataset({ name: 'identity-scope-2' });
+        const payload = { externalId: 'shared', input: { q: 'same' } };
+
+        const [first] = await datasetsStorage.batchInsertItems({ datasetId: firstDataset.id, items: [payload] });
+        const [second] = await datasetsStorage.batchInsertItems({ datasetId: secondDataset.id, items: [payload] });
+
+        expect(first!.id).not.toBe(second!.id);
+      });
+
+      it('treats empty batches as true no-ops', async () => {
+        const ds = await datasetsStorage.createDataset({ name: 'empty-batch' });
+        await expect(datasetsStorage.batchInsertItems({ datasetId: ds.id, items: [] })).resolves.toEqual([]);
+        expect((await datasetsStorage.getDatasetById({ id: ds.id }))!.version).toBe(0);
       });
 
       it('batchInsertItems validates against inputSchema', async () => {

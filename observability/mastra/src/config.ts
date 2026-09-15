@@ -291,7 +291,7 @@ const sensitiveDataFilterOptionsSchema = z
   .object({
     sensitiveFields: z.array(z.string()).optional(),
     redactionToken: z.string().optional(),
-    redactionStyle: z.enum(['full', 'partial']).optional(),
+    redactionStyle: z.enum(['full', 'partial', 'indexed']).optional(),
   })
   .strict();
 

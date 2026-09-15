@@ -352,6 +352,40 @@ describe('Observability Registry', () => {
       expect(customTracing?.getConfig().serviceName).toBe('custom-service');
     });
 
+    it('should flush all registered instances without shutting down', async () => {
+      let flushCalled = false;
+
+      class TestInstance extends BaseObservabilityInstance {
+        protected createSpan<TType extends SpanType>(_options: CreateSpanOptions<TType>): Span<TType> {
+          return {} as Span<TType>;
+        }
+
+        async flush(): Promise<void> {
+          flushCalled = true;
+          await super.flush();
+        }
+      }
+
+      const testInstance = new TestInstance({
+        serviceName: 'test-service',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [new TestExporter()],
+      });
+
+      observability = new Observability({
+        configs: {
+          test: testInstance,
+        },
+      });
+
+      await observability.flush();
+
+      expect(flushCalled).toBe(true);
+      // Instances should still be registered after flush (unlike shutdown)
+      expect(observability.getInstance('test')).toBe(testInstance);
+    });
+
     it('should handle registry shutdown during Mastra shutdown', async () => {
       let shutdownCalled = false;
 
@@ -451,6 +485,38 @@ describe('Observability Registry', () => {
       observability.registerInstance('late', instance, true);
 
       expect(instance.getMastraEnvironment()).toBe('production');
+    });
+
+    it('logs asynchronous exporter initialization failures', async () => {
+      class RejectingInitExporter extends TestExporter {
+        override name = 'rejecting-init-exporter';
+        init = vi.fn(() => Promise.reject(new Error('storage unavailable')));
+      }
+
+      const exporter = new RejectingInitExporter();
+      const logger = new ConsoleLogger({ name: 'test' });
+      vi.spyOn(logger, 'child').mockReturnValue(logger);
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+      observability = new Observability({
+        configs: {
+          failing: {
+            serviceName: 'failing-service',
+            exporters: [exporter],
+          },
+        },
+      });
+      observability.setLogger({ logger });
+
+      observability.setMastraContext({ mastra: { getEnvironment: () => undefined } as any });
+
+      expect(exporter.init).toHaveBeenCalledTimes(1);
+      await vi.waitFor(() => {
+        expect(warn).toHaveBeenCalledWith('Failed to initialize observability exporter', {
+          exporterName: 'rejecting-init-exporter',
+          error: 'storage unavailable',
+        });
+      });
+      expect(warn).toHaveBeenCalledTimes(1);
     });
   });
 

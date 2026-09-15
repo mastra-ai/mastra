@@ -1,6 +1,6 @@
 import type { Mastra } from '@mastra/core';
 import { coreFeatures } from '@mastra/core/features';
-import type { MastraCompositeStore, ObservabilityStorage } from '@mastra/core/storage';
+import type { MastraCompositeStore, ObservabilityStorage, ScoresStorage } from '@mastra/core/storage';
 import { z } from 'zod/v4';
 import { HTTPException } from '../http-exception';
 import type { ServerRoute } from '../server-adapter/routes';
@@ -15,6 +15,7 @@ import {
 export const OBSERVABILITY_DELTA_POLLING_FEATURE = 'observability-delta-polling';
 export const OBSERVABILITY_DELTA_POLLING_UPGRADE_MESSAGE =
   'Delta polling requires a newer @mastra/core with observability delta polling support. Please upgrade.';
+const OBSERVABILITY_TRACE_QUERY_STORAGE_FEATURE = 'trace-query';
 
 export const OBSERVABILITY_LIST_ENDPOINTS = {
   traces: 'traces',
@@ -45,14 +46,35 @@ export function getStorage(mastra: Mastra): MastraCompositeStore {
   return storage;
 }
 
-/** Retrieves the observability storage domain or throws 500 if unavailable. */
+/** Retrieves the observability storage domain or throws 501 if unavailable. */
 export async function getObservabilityStore(mastra: Mastra): Promise<ObservabilityStorage> {
   const storage = getStorage(mastra);
   const observability = await storage.getStore('observability');
   if (!observability) {
-    throw new HTTPException(500, { message: 'Observability storage domain is not available' });
+    // 501, not 500: a missing or explicitly disabled observability domain
+    // (e.g. `domains: { observability: false }`) is a capability gap, not a
+    // server failure — matching the other 501s in this file.
+    throw new HTTPException(501, { message: 'Observability storage domain is not available' });
   }
   return observability;
+}
+
+/** Retrieves the scores storage domain or throws 501 if unavailable. */
+export async function getScoresStore(mastra: Mastra): Promise<ScoresStorage> {
+  const storage = getStorage(mastra);
+  const scores = await storage.getStore('scores');
+  if (!scores) {
+    throw new HTTPException(501, { message: 'Scores storage domain is not available' });
+  }
+  return scores;
+}
+
+export function assertObservabilityTraceQuerySupported(observabilityStore: ObservabilityStorage) {
+  if (getFeatures(observabilityStore)?.includes(OBSERVABILITY_TRACE_QUERY_STORAGE_FEATURE)) return;
+
+  throw new HTTPException(501, {
+    message: 'Advanced trace queries are not supported by the configured observability store',
+  });
 }
 
 export function assertObservabilityDeltaSupported(
@@ -83,6 +105,14 @@ export interface RouteDetails {
 }
 
 export const NEW_ROUTE_DEFS = {
+  QUERY_TRACES: {
+    method: 'POST',
+    path: '/observability/traces/query',
+    summary: 'Query traces',
+    description: 'Returns completed logical traces or distinct thread groups matching an advanced trace query',
+    requiresPermission: 'observability:read',
+  },
+
   LIST_METRICS: {
     method: 'GET',
     path: '/observability/metrics',
@@ -109,6 +139,14 @@ export const NEW_ROUTE_DEFS = {
     path: '/observability/scores',
     summary: 'Create a score',
     description: 'Creates a single score record in the observability store',
+  },
+
+  DELETE_SCORES: {
+    method: 'DELETE',
+    path: '/observability/scores',
+    summary: 'Delete scores',
+    description: 'Deletes score records by scoreId, optionally scoped to a tenant',
+    requiresPermission: 'observability:delete',
   },
 
   GET_SCORE: {
@@ -162,6 +200,22 @@ export const NEW_ROUTE_DEFS = {
     path: '/observability/feedback',
     summary: 'Create feedback',
     description: 'Creates a single feedback record in the observability store',
+  },
+
+  DELETE_FEEDBACK: {
+    method: 'DELETE',
+    path: '/observability/feedback',
+    summary: 'Delete feedback',
+    description: 'Deletes feedback records by feedbackId, optionally scoped to a tenant',
+    requiresPermission: 'observability:delete',
+  },
+
+  UPDATE_FEEDBACK_REVIEW_STATUS: {
+    method: 'PATCH',
+    path: '/observability/feedback/:feedbackId/review-status',
+    summary: 'Update feedback review status',
+    description: "Updates a feedback record's review workflow status",
+    requiresPermission: 'observability:write',
   },
 
   GET_FEEDBACK_AGGREGATE: {

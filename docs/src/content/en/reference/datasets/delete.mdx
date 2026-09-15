@@ -1,6 +1,6 @@
 ---
 title: "Reference: DatasetsManager.delete() | Datasets"
-description: "Documentation for the `DatasetsManager.delete()` method, which deletes a dataset by ID."
+description: "Use DatasetsManager.delete() to remove a dataset by ID together with its items, versions, experiments, and associated stored records."
 packages:
   - "@mastra/core"
 ---
@@ -16,9 +16,7 @@ Deletes a dataset by ID, including all items, versions, and experiments.
 ```typescript
 import { Mastra } from '@mastra/core'
 
-const mastra = new Mastra({
-  /* storage config */
-})
+const mastra = new Mastra({/* storage config */})
 
 await mastra.datasets.delete({ id: 'dataset-id' })
 ```

@@ -1,7 +1,7 @@
 import type { MastraFGAPermissionInput } from '@mastra/core/auth/ee';
 import type { RequestContext } from '@mastra/core/di';
 import { MastraMemory } from '@mastra/core/memory';
-import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../constants';
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, isReservedRequestContextKey } from '../constants';
 import { MastraFGAPermissions } from '../fga-permissions';
 import { HTTPException } from '../http-exception';
 
@@ -62,6 +62,24 @@ export function parseFilters(filters: string | string[] | undefined): Record<str
   );
 }
 
+/**
+ * Merges a body-supplied requestContext into the trusted server RequestContext.
+ * The server context is authoritative: reserved keys are skipped and body values
+ * only fill keys the server context has not already set.
+ */
+export function mergeBodyRequestContext(serverRequestContext: RequestContext, bodyRequestContext: unknown): void {
+  if (!bodyRequestContext || typeof bodyRequestContext !== 'object') {
+    return;
+  }
+
+  for (const [key, value] of Object.entries(bodyRequestContext)) {
+    if (isReservedRequestContextKey(key)) continue;
+    if (serverRequestContext.get(key) === undefined) {
+      serverRequestContext.set(key, value);
+    }
+  }
+}
+
 // ============================================================================
 // Authorization Utilities
 // ============================================================================
@@ -76,6 +94,34 @@ export function getEffectiveResourceId(
 ): string | undefined {
   const contextResourceId = requestContext?.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
   return contextResourceId || clientResourceId;
+}
+
+/**
+ * Returns the resource id resolved from the request context alone (set via
+ * `mapUserToResourceId` or the `x-resource-id` header), ignoring any
+ * client-provided value. Its presence indicates a resource-scoped caller;
+ * its absence indicates a privileged/service context.
+ */
+export function getContextResourceId(requestContext: RequestContext | undefined): string | undefined {
+  return requestContext?.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
+}
+
+/**
+ * Ensures a memory request has a resolvable resource ID. The body's
+ * `memory.resource` is optional so authenticated setups can rely on the
+ * server-derived resource ID (MASTRA_RESOURCE_ID_KEY set via mapUserToResourceId).
+ * When neither the body nor the request context provides one, reject with a
+ * clear 400 instead of failing deep inside agent execution.
+ */
+export function requireEffectiveResourceId(
+  effectiveResourceId: string | undefined,
+): asserts effectiveResourceId is string {
+  if (!effectiveResourceId) {
+    throw new HTTPException(400, {
+      message:
+        'A resource ID is required when using memory. Provide memory.resource in the request body, or configure server auth with mapUserToResourceId to derive it from the authenticated user.',
+    });
+  }
 }
 
 /**

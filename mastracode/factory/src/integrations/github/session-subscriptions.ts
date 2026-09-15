@@ -1,0 +1,279 @@
+import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
+import type { RequestContext } from '@mastra/core/request-context';
+import { createTool } from '@mastra/core/tools';
+import { z } from 'zod';
+import { getFactoryAuthOrgId, getFactoryAuthUserFromContext, getFactoryAuthUserId } from '../../auth.js';
+import { runsPullRequestCreate } from '../../session/shell-commands.js';
+import type {
+  ProjectRepository,
+  ProjectSourceControlConnection,
+  SourceControlInstallation,
+  SourceControlRepository,
+} from '../../storage/domains/source-control/base.js';
+import type { GithubIntegration } from './integration.js';
+import { getGithubPat } from './pat.js';
+import { subscribeToPullRequest, unsubscribeFromPullRequest } from './subscriptions.js';
+import { getRegisteredGithubPatKind, injectGithubToken } from './token-refresh.js';
+
+type RepositorySessionState = { factoryProjectId?: string; projectRepositoryId?: string };
+
+/**
+ * The host-authenticated user placed on the request context under the `user`
+ * key, read through the host's own normalizer. A local mirror of that shape
+ * used to live here; it silently missed the provider shapes the normalizer
+ * knows about, which turned every subscription tool into a no-op for those
+ * users instead of an error anybody could see.
+ */
+function sessionUserId(requestContext: RequestContext): string | undefined {
+  return getFactoryAuthUserId(getFactoryAuthUserFromContext(requestContext));
+}
+
+function sessionOrgId(requestContext: RequestContext): string | undefined {
+  return getFactoryAuthOrgId(getFactoryAuthUserFromContext(requestContext));
+}
+
+const pullRequestInputSchema = z.object({
+  pullRequest: z.union([z.number().int().positive(), z.string().min(1)]),
+});
+
+const TRIAGE_COMMENT_MARKER = '<!-- mastra-factory-triage -->';
+const triageCommentInputSchema = z.object({
+  issueNumber: z.number().int().positive(),
+  body: z.string().startsWith(TRIAGE_COMMENT_MARKER),
+});
+
+const triageCommentLocks = new Map<string, Promise<void>>();
+
+async function serializeTriageComment<T>(key: string, operation: () => Promise<T>): Promise<T> {
+  const previous = triageCommentLocks.get(key) ?? Promise.resolve();
+  let release: (() => void) | undefined;
+  const current = new Promise<void>(resolve => {
+    release = resolve;
+  });
+  const queued = previous.then(() => current);
+  triageCommentLocks.set(key, queued);
+  await previous;
+  try {
+    return await operation();
+  } finally {
+    release!();
+    if (triageCommentLocks.get(key) === queued) triageCommentLocks.delete(key);
+  }
+}
+
+interface SessionTarget {
+  context: AgentControllerRequestContext<RepositorySessionState>;
+  projectRepository: ProjectRepository;
+  connection: ProjectSourceControlConnection;
+  installation: SourceControlInstallation;
+  repository: SourceControlRepository;
+  orgId: string;
+  userId: string;
+}
+
+function parsePullRequest(value: number | string, expectedRepo: string): number {
+  if (typeof value === 'number') return value;
+  if (/^\d+$/.test(value)) return Number(value);
+  const match = value.match(/^https:\/\/github\.com\/([^/]+\/[^/]+)\/pull\/(\d+)\/?$/i);
+  if (!match || match[1]!.toLowerCase() !== expectedRepo.toLowerCase()) {
+    throw new Error(`Pull request must belong to ${expectedRepo}.`);
+  }
+  return Number(match[2]);
+}
+
+/**
+ * Whether the current request comes from a session that GitHub subscriptions
+ * can ever apply to: an authenticated org user on a GitHub-project session
+ * with an active thread. Mirrors the gate in `resolveSessionTarget` without
+ * throwing, for passive callers that should no-op instead of erroring.
+ */
+function isGithubProjectSession(requestContext: RequestContext): boolean {
+  const context = requestContext.get('controller') as AgentControllerRequestContext<RepositorySessionState> | undefined;
+  return Boolean(
+    context?.threadId &&
+    context.getState().projectRepositoryId &&
+    sessionOrgId(requestContext) &&
+    sessionUserId(requestContext),
+  );
+}
+
+async function resolveSessionTarget(requestContext: RequestContext, github: GithubIntegration): Promise<SessionTarget> {
+  const context = requestContext.get('controller') as AgentControllerRequestContext<RepositorySessionState> | undefined;
+  const orgId = sessionOrgId(requestContext);
+  const userId = sessionUserId(requestContext);
+  const projectRepositoryId = context?.getState().projectRepositoryId;
+  if (!context || !context.threadId || !projectRepositoryId || !orgId || !userId) {
+    throw new Error('GitHub subscriptions require an authenticated repository session with an active thread.');
+  }
+
+  const projectRepository = await github.sourceControlStorage.projectRepositories.get({
+    orgId,
+    id: projectRepositoryId,
+  });
+  if (!projectRepository) throw new Error('Project repository not found for this organization.');
+  const connection = await github.sourceControlStorage.connections.get({ orgId, id: projectRepository.connectionId });
+  if (!connection) throw new Error('Source-control connection not found for this organization.');
+  const repository = await github.sourceControlStorage.repositories.get({ orgId, id: projectRepository.repositoryId });
+  if (!repository) throw new Error('Repository not found for this organization.');
+  const installation = await github.sourceControlStorage.installations.get({ orgId, id: connection.installationId });
+  if (!installation) throw new Error('Source-control installation not found for this organization.');
+  return { context, projectRepository, connection, installation, repository, orgId, userId };
+}
+
+async function verifyPullRequest(target: SessionTarget, pullRequest: number, github: GithubIntegration) {
+  const [owner, repo] = target.repository.slug.split('/');
+  if (!owner || !repo) throw new Error('GitHub repository is invalid.');
+  const octokit = github.getInstallationOctokit(Number(target.installation.externalId));
+  const { data } = await octokit.pulls.get({ owner, repo, pull_number: pullRequest });
+  if (String(data.base.repo.id) !== target.repository.externalId)
+    throw new Error('Pull request repository does not match the active project repository.');
+}
+
+async function subscriptionInput(target: SessionTarget, pullRequestNumber: number) {
+  return {
+    orgId: target.orgId,
+    installationExternalId: target.installation.externalId,
+    projectRepositoryId: target.projectRepository.id,
+    repositoryExternalId: target.repository.externalId,
+    repositorySlug: target.repository.slug,
+    changeRequestId: String(pullRequestNumber),
+    sessionId: target.context.session.id,
+    ownerId: target.context.session.ownerId,
+    resourceId: target.connection.factoryProjectId,
+    threadId: target.context.threadId!,
+    sessionScope: target.context.scope,
+    source: 'explicit-tool' as const,
+    subscribedByUserId: target.userId,
+  };
+}
+
+export async function subscribeCurrentSessionToPullRequest(
+  requestContext: RequestContext,
+  pullRequest: number | string,
+  source: 'auto-gh-pr-create' | 'explicit-tool',
+  github: GithubIntegration,
+) {
+  // The auto path observes every successful `gh pr create` in every session,
+  // including local and non-GitHub-project sessions where subscriptions can
+  // never apply. Skip silently there; only the explicit tool should surface
+  // "this session cannot subscribe" as an error.
+  if (source === 'auto-gh-pr-create' && !isGithubProjectSession(requestContext)) return undefined;
+  const target = await resolveSessionTarget(requestContext, github);
+  const number = parsePullRequest(pullRequest, target.repository.slug);
+  await verifyPullRequest(target, number, github);
+  await subscribeToPullRequest({ ...(await subscriptionInput(target, number)), source }, github.integrationStorage);
+  return number;
+}
+
+export async function unsubscribeCurrentSessionFromPullRequest(
+  requestContext: RequestContext,
+  pullRequest: number | string,
+  github: GithubIntegration,
+) {
+  const target = await resolveSessionTarget(requestContext, github);
+  const number = parsePullRequest(pullRequest, target.repository.slug);
+  await unsubscribeFromPullRequest(await subscriptionInput(target, number), github.integrationStorage);
+  return number;
+}
+
+export async function upsertFactoryTriageComment(
+  requestContext: RequestContext,
+  input: { issueNumber: number; body: string },
+  github: GithubIntegration,
+) {
+  const target = await resolveSessionTarget(requestContext, github);
+  const installationId = Number(target.installation.externalId);
+  if (!Number.isSafeInteger(installationId) || installationId <= 0) throw new Error('GitHub installation is invalid.');
+  return serializeTriageComment(`${installationId}:${target.repository.externalId}:${input.issueNumber}`, () =>
+    github.upsertFactoryTriageComment({
+      installationId,
+      repository: target.repository.slug,
+      issueNumber: input.issueNumber,
+      body: input.body,
+    }),
+  );
+}
+
+export async function refreshGithubToken(requestContext: RequestContext, github: GithubIntegration): Promise<void> {
+  const target = await resolveSessionTarget(requestContext, github);
+  // `GH_TOKEN` feeds the `gh` CLI, so a configured org PAT wins over a minted
+  // installation token (which 403s on integration-restricted endpoints). The
+  // workspace records which PAT kind the sandbox was provisioned with, so a
+  // review-board sandbox keeps its reviewer token on refresh.
+  const pat = await getGithubPat(
+    () => github.integrationStorage,
+    target.orgId,
+    getRegisteredGithubPatKind(requestContext),
+  );
+  if (pat) {
+    injectGithubToken(requestContext, pat);
+    return;
+  }
+  const access = await github.versionControl.getRepositoryAccess({
+    orgId: target.orgId,
+    repositoryId: target.repository.id,
+  });
+  const token = access.authorization?.token;
+  if (!token) throw new Error('Repository access did not include a bearer token for the Factory session.');
+  injectGithubToken(requestContext, token);
+}
+
+export function createGithubSubscriptionTools(requestContext: RequestContext, github: GithubIntegration) {
+  if (!isGithubProjectSession(requestContext)) return {};
+
+  return {
+    github_refresh_token: createTool({
+      id: 'github_refresh_token',
+      description:
+        'Refresh GitHub CLI authentication in the active Factory sandbox. Use this after a gh command fails because authentication is expired, invalid, or missing. It installs a fresh GH_TOKEN for subsequent sandbox commands. After this tool succeeds, retry the failed gh command. Takes no arguments and never returns the token.',
+      inputSchema: z.object({}),
+      execute: async () => {
+        await refreshGithubToken(requestContext, github);
+        return { refreshed: true };
+      },
+    }),
+    github_upsert_factory_triage_comment: createTool({
+      id: 'github_upsert_factory_triage_comment',
+      description:
+        'Create or update this Factory App’s canonical triage handoff comment on an issue in the active repository. Use this for every marked pending or final Factory triage handoff; never use gh to create or edit that handoff.',
+      inputSchema: triageCommentInputSchema,
+      execute: async input => upsertFactoryTriageComment(requestContext, input, github),
+    }),
+    github_subscribe_pr: createTool({
+      id: 'github_subscribe_pr',
+      description:
+        'Subscribe this thread to GitHub pull request activity. You usually do not need this tool: successful gh pr create commands subscribe automatically. Use it for an existing PR or to recover when automatic subscription did not occur. Closed or merged PRs are unsubscribed automatically. Accepts a PR number or canonical URL for the active project.',
+      inputSchema: pullRequestInputSchema,
+      execute: async ({ pullRequest }) => {
+        const number = await subscribeCurrentSessionToPullRequest(requestContext, pullRequest, 'explicit-tool', github);
+        return { subscribed: true, pullRequestNumber: number };
+      },
+    }),
+    github_unsubscribe_pr: createTool({
+      id: 'github_unsubscribe_pr',
+      description:
+        'Manually unsubscribe this thread from GitHub pull request activity. You usually do not need this tool because closed or merged PRs are unsubscribed automatically. Use it to stop notifications before then. Accepts a PR number or canonical URL for the active project.',
+      inputSchema: pullRequestInputSchema,
+      execute: async ({ pullRequest }) => {
+        const number = await unsubscribeCurrentSessionFromPullRequest(requestContext, pullRequest, github);
+        return { subscribed: false, pullRequestNumber: number };
+      },
+    }),
+  };
+}
+
+export function parseCreatedPullRequest(context: {
+  toolName: string;
+  input: unknown;
+  output?: unknown;
+  error?: unknown;
+}) {
+  if (context.toolName !== 'execute_command' || context.error) return undefined;
+  const command = (context.input as { command?: unknown } | undefined)?.command;
+  if (typeof command !== 'string' || !runsPullRequestCreate(command)) return undefined;
+  const output = context.output as { stdout?: unknown; result?: unknown } | undefined;
+  const stdout = typeof context.output === 'string' ? context.output : (output?.stdout ?? output?.result);
+  if (typeof stdout !== 'string') return undefined;
+  const urls = stdout.match(/https:\/\/github\.com\/[^\s/]+\/[^\s/]+\/pull\/\d+/g) ?? [];
+  return urls.length === 1 ? urls[0] : undefined;
+}

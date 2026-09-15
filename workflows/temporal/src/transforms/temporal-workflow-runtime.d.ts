@@ -19,7 +19,10 @@ export type WorkflowRuntime = ((startArgs?: {
   branch(pairs: [string, string][]): WorkflowRuntime;
   dowhile(stepId: string, condId: string): WorkflowRuntime;
   dountil(stepId: string, condId: string): WorkflowRuntime;
-  foreach(stepId: string, opts?: { concurrency?: number }): WorkflowRuntime;
+  foreach(
+    stepId: string,
+    opts?: { concurrency?: number | ((ctx: { inputData: unknown; getInitData: () => unknown }) => number) },
+  ): WorkflowRuntime;
   commit(): WorkflowRuntime;
 };
 
@@ -35,4 +38,4 @@ export class TemporalExecutionEngine {
   }): Promise<WorkflowExecutionResult>;
 }
 
-export function createWorkflow(workflowId: string): WorkflowRuntime;
+export function createWorkflow(workflowId: string, options?: { startToCloseTimeout?: string }): WorkflowRuntime;

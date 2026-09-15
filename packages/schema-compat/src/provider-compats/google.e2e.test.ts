@@ -165,7 +165,7 @@ describe('Google e2e test', () => {
   beforeAll(() => mock.start());
   afterAll(() => mock.saveAndStop());
 
-  it('should be succesful with structured_output', { timeout: 60000 }, async () => {
+  it('should be successful with structured_output', { timeout: 60000 }, async () => {
     const schema = z.object(allSchemas);
 
     const model = google('gemini-3.1-pro-preview');

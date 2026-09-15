@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { ListScoresResponse, SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
 import { saveScorePayloadSchema } from '@mastra/core/evals';
-import type { StoragePagination, CreateIndexOptions } from '@mastra/core/storage';
+import type { StoragePagination, CreateIndexOptions, ScoreTenancyFilters } from '@mastra/core/storage';
 import {
   createStorageErrorId,
   ScoresStorage,
@@ -25,6 +25,27 @@ function transformScoreRow(row: Record<string, any>): ScoreRowData {
   return coreTransformScoreRow(row, {
     convertTimestamps: true,
   });
+}
+
+/**
+ * Builds multi-tenant scope conditions and their named parameters.
+ * Uses distinct named params (@org, @proj) so it composes with fixed @pN clauses.
+ */
+function buildTenancyConditions(filters?: ScoreTenancyFilters): {
+  conditions: string[];
+  params: Record<string, any>;
+} {
+  const conditions: string[] = [];
+  const params: Record<string, any> = {};
+  if (filters?.organizationId !== undefined) {
+    conditions.push('[organizationId] = @org');
+    params.org = filters.organizationId;
+  }
+  if (filters?.projectId !== undefined) {
+    conditions.push('[projectId] = @proj');
+    params.proj = filters.projectId;
+  }
+  return { conditions, params };
 }
 
 export class ScoresMSSQL extends ScoresStorage {
@@ -219,12 +240,14 @@ export class ScoresMSSQL extends ScoresStorage {
     entityId,
     entityType,
     source,
+    filters,
   }: {
     scorerId: string;
     pagination: StoragePagination;
     entityId?: string;
     entityType?: string;
     source?: ScoringSource;
+    filters?: ScoreTenancyFilters;
   }): Promise<ListScoresResponse> {
     try {
       // Build dynamic WHERE clause
@@ -249,6 +272,10 @@ export class ScoresMSSQL extends ScoresStorage {
         params[`p${paramIndex}`] = source;
         paramIndex++;
       }
+
+      const tenancy = buildTenancyConditions(filters);
+      conditions.push(...tenancy.conditions);
+      Object.assign(params, tenancy.params);
 
       const whereClause = conditions.join(' AND ');
       const tableName = getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.schema) });
@@ -287,7 +314,7 @@ export class ScoresMSSQL extends ScoresStorage {
       dataRequest.input('perPage', limitValue);
       dataRequest.input('offset', start);
 
-      const dataQuery = `SELECT * FROM ${tableName} WHERE ${whereClause} ORDER BY [createdAt] DESC OFFSET @offset ROWS FETCH NEXT @perPage ROWS ONLY`;
+      const dataQuery = `SELECT * FROM ${tableName} WHERE ${whereClause} ORDER BY [seq_id] DESC OFFSET @offset ROWS FETCH NEXT @perPage ROWS ONLY`;
 
       const result = await dataRequest.query(dataQuery);
 
@@ -316,16 +343,22 @@ export class ScoresMSSQL extends ScoresStorage {
   async listScoresByRunId({
     runId,
     pagination,
+    filters,
   }: {
     runId: string;
     pagination: StoragePagination;
+    filters?: ScoreTenancyFilters;
   }): Promise<ListScoresResponse> {
     try {
+      const tenancy = buildTenancyConditions(filters);
+      const tenancySql = tenancy.conditions.length > 0 ? ` AND ${tenancy.conditions.join(' AND ')}` : '';
+
       const request = this.pool.request();
       request.input('p1', runId);
+      Object.entries(tenancy.params).forEach(([key, value]) => request.input(key, value));
 
       const totalResult = await request.query(
-        `SELECT COUNT(*) as count FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.schema) })} WHERE [runId] = @p1`,
+        `SELECT COUNT(*) as count FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.schema) })} WHERE [runId] = @p1${tenancySql}`,
       );
 
       const total = totalResult.recordset[0]?.count || 0;
@@ -352,9 +385,10 @@ export class ScoresMSSQL extends ScoresStorage {
       dataRequest.input('p1', runId);
       dataRequest.input('p2', limitValue);
       dataRequest.input('p3', start);
+      Object.entries(tenancy.params).forEach(([key, value]) => dataRequest.input(key, value));
 
       const result = await dataRequest.query(
-        `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.schema) })} WHERE [runId] = @p1 ORDER BY [createdAt] DESC OFFSET @p3 ROWS FETCH NEXT @p2 ROWS ONLY`,
+        `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.schema) })} WHERE [runId] = @p1${tenancySql} ORDER BY [seq_id] DESC OFFSET @p3 ROWS FETCH NEXT @p2 ROWS ONLY`,
       );
 
       return {
@@ -378,23 +412,28 @@ export class ScoresMSSQL extends ScoresStorage {
       );
     }
   }
-
   async listScoresByEntityId({
     entityId,
     entityType,
     pagination,
+    filters,
   }: {
     pagination: StoragePagination;
     entityId: string;
     entityType: string;
+    filters?: ScoreTenancyFilters;
   }): Promise<ListScoresResponse> {
     try {
+      const tenancy = buildTenancyConditions(filters);
+      const tenancySql = tenancy.conditions.length > 0 ? ` AND ${tenancy.conditions.join(' AND ')}` : '';
+
       const request = this.pool.request();
       request.input('p1', entityId);
       request.input('p2', entityType);
+      Object.entries(tenancy.params).forEach(([key, value]) => request.input(key, value));
 
       const totalResult = await request.query(
-        `SELECT COUNT(*) as count FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.schema) })} WHERE [entityId] = @p1 AND [entityType] = @p2`,
+        `SELECT COUNT(*) as count FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.schema) })} WHERE [entityId] = @p1 AND [entityType] = @p2${tenancySql}`,
       );
 
       const total = totalResult.recordset[0]?.count || 0;
@@ -421,9 +460,10 @@ export class ScoresMSSQL extends ScoresStorage {
       dataRequest.input('p2', entityType);
       dataRequest.input('p3', limitValue);
       dataRequest.input('p4', start);
+      Object.entries(tenancy.params).forEach(([key, value]) => dataRequest.input(key, value));
 
       const result = await dataRequest.query(
-        `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.schema) })} WHERE [entityId] = @p1 AND [entityType] = @p2 ORDER BY [createdAt] DESC OFFSET @p4 ROWS FETCH NEXT @p3 ROWS ONLY`,
+        `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.schema) })} WHERE [entityId] = @p1 AND [entityType] = @p2${tenancySql} ORDER BY [seq_id] DESC OFFSET @p4 ROWS FETCH NEXT @p3 ROWS ONLY`,
       );
 
       return {
@@ -452,18 +492,24 @@ export class ScoresMSSQL extends ScoresStorage {
     traceId,
     spanId,
     pagination,
+    filters,
   }: {
     traceId: string;
     spanId: string;
     pagination: StoragePagination;
+    filters?: ScoreTenancyFilters;
   }): Promise<ListScoresResponse> {
     try {
+      const tenancy = buildTenancyConditions(filters);
+      const tenancySql = tenancy.conditions.length > 0 ? ` AND ${tenancy.conditions.join(' AND ')}` : '';
+
       const request = this.pool.request();
       request.input('p1', traceId);
       request.input('p2', spanId);
+      Object.entries(tenancy.params).forEach(([key, value]) => request.input(key, value));
 
       const totalResult = await request.query(
-        `SELECT COUNT(*) as count FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.schema) })} WHERE [traceId] = @p1 AND [spanId] = @p2`,
+        `SELECT COUNT(*) as count FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.schema) })} WHERE [traceId] = @p1 AND [spanId] = @p2${tenancySql}`,
       );
 
       const total = totalResult.recordset[0]?.count || 0;
@@ -491,9 +537,10 @@ export class ScoresMSSQL extends ScoresStorage {
       dataRequest.input('p2', spanId);
       dataRequest.input('p3', limitValue);
       dataRequest.input('p4', start);
+      Object.entries(tenancy.params).forEach(([key, value]) => dataRequest.input(key, value));
 
       const result = await dataRequest.query(
-        `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.schema) })} WHERE [traceId] = @p1 AND [spanId] = @p2 ORDER BY [createdAt] DESC OFFSET @p4 ROWS FETCH NEXT @p3 ROWS ONLY`,
+        `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.schema) })} WHERE [traceId] = @p1 AND [spanId] = @p2${tenancySql} ORDER BY [seq_id] DESC OFFSET @p4 ROWS FETCH NEXT @p3 ROWS ONLY`,
       );
 
       return {

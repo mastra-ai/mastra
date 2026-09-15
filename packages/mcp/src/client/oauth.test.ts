@@ -15,8 +15,7 @@
 import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import type { Server as HttpServer, IncomingMessage, ServerResponse } from 'node:http';
-
-import { exchangeAuthorization, refreshAuthorization } from '@modelcontextprotocol/sdk/client/auth.js';
+import { exchangeAuthorization, refreshAuthorization } from '@modelcontextprotocol/client';
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest';
 
 import type { OAuthMiddlewareResult } from '../server/oauth-middleware.js';
@@ -268,7 +267,7 @@ describe('MCPOAuthClientProvider', () => {
   });
 
   // Regression for https://github.com/mastra-ai/mastra/issues/16854.
-  // The MCP SDK only attaches client_id/client_secret to token requests when
+  // The MCP client only attaches client_id/client_secret to token requests when
   // the provider does NOT implement addClientAuthentication. A previous empty
   // stub on this provider was truthy and short-circuited that default,
   // dropping credentials and breaking confidential-client OAuth.
@@ -285,7 +284,7 @@ describe('MCPOAuthClientProvider', () => {
     expect((provider as unknown as Record<string, unknown>)['addClientAuthentication']).toBeUndefined();
   });
 
-  // End-to-end checks that drive the real MCP SDK token-exchange path with a
+  // End-to-end checks that drive the real MCP client token-exchange path with a
   // mocked fetch. These prove the bug fix from the consumer's perspective:
   // when our provider's (undefined) addClientAuthentication is forwarded to
   // the SDK, client_id and client_secret end up on the wire.
@@ -683,7 +682,7 @@ describe('OAuth Middleware Integration', () => {
 describe('MCPClient authProvider passthrough', () => {
   /**
    * This test demonstrates that Mastra's MCPClient currently supports
-   * passing an authProvider to the underlying MCP SDK transports.
+   * passing an authProvider to the underlying MCP client transports.
    *
    * Users can implement the full OAuthClientProvider interface to handle:
    * - Token storage and retrieval

@@ -168,7 +168,7 @@ function convertContentPart(part: AISDKContentPart | null | undefined): string |
 /**
  * Serializes tool result data to a string for OpenAI format.
  */
-function serializeToolResult(resultData: unknown): string {
+export function serializeToolResult(resultData: unknown): string {
   if (typeof resultData === 'string') {
     return resultData;
   }

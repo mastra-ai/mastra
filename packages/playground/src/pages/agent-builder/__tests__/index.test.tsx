@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
@@ -10,7 +9,7 @@ import { AgentBuilderRoot } from '../index';
 import { emptyStoredAgents, oneDraftAgent, onePublishedAgent } from './fixtures/stored-agents';
 import { server } from '@/test/msw-server';
 
-vi.mock('@mastra/playground-ui', () => ({
+vi.mock('@mastra/playground-ui/components/Spinner', () => ({
   Spinner: () => <div data-testid="spinner" />,
 }));
 

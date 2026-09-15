@@ -12,25 +12,26 @@ export function ProcessStepProgressBar({ steps }: ProcessStepProgressBarProps) {
   const completedSteps = steps.filter(step => step.status === 'success').length;
 
   return (
-    <div className="flex justify-center flex-col gap-4 content-center w-full">
-      <div className="grid grid-cols-[0_repeat(9,1fr)] w-full">
+    <div className="flex w-full flex-col content-center justify-center gap-4">
+      <div className="grid w-full grid-cols-[0_repeat(9,1fr)]">
         {steps.map((step: ProcessStep, idx: number) => {
           return (
             <div
               key={step.id}
-              className={cn('flex justify-end items-center relative h-[2rem]', transitions.colors, {
+              className={cn('relative flex h-8 items-center justify-end', transitions.colors, {
                 'bg-accent1Dark': step.status === 'success' && steps?.[idx - 1]?.status === 'success',
               })}
             >
               <div
                 className={cn(
-                  'w-[2rem] h-[2rem] rounded-full flex items-center justify-center self-center absolute right-0 translate-x-[50%] bg-surface3 z-10 text-neutral3 font-bold text-ui-sm',
-                  transitions.all,
+                  'absolute right-0 z-10 flex size-8 translate-x-1/2 items-center justify-center self-center rounded-full bg-surface3 text-ui-sm font-bold text-neutral3 motion-reduce:transition-none',
+                  transitions.colors,
+                  transitions.transform,
+                  transitions.shadow,
                   {
-                    'border border-neutral2 border-dashed': step.status === 'pending',
-                    '[&>svg]:text-surface1 [&>svg]:w-[1.1rem] [&>svg]:h-[1.1rem]': step.status !== 'running',
-                    'bg-accent1Dark text-white shadow-glow-accent1 scale-110': step.status === 'success',
-                    'bg-accent2Dark text-white shadow-glow-accent2 scale-110': step.status === 'failed',
+                    'border border-dashed border-neutral2': step.status === 'pending',
+                    'bg-accent1Dark text-notice-success-fg shadow-glow-accent1 scale-110': step.status === 'success',
+                    'bg-accent2Dark text-notice-destructive-fg shadow-glow-accent2 scale-110': step.status === 'failed',
                   },
                 )}
               >
@@ -40,7 +41,7 @@ export function ProcessStepProgressBar({ steps }: ProcessStepProgressBarProps) {
           );
         })}
       </div>
-      <div className={cn('text-xs text-neutral3 text-center', transitions.colors)}>
+      <div className={cn('text-center text-ui-sm text-neutral3', transitions.colors)}>
         {completedSteps} of {totalSteps} steps completed
       </div>
     </div>

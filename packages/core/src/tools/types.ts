@@ -7,11 +7,10 @@ import type {
   ToolExecutionOptions,
   Schema,
 } from '@internal/external-types';
-import type { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
-import type { ElicitRequest, ElicitResult } from '@modelcontextprotocol/sdk/types.js';
-
+import type { ElicitRequest, ElicitResult, ServerContext } from '@modelcontextprotocol/server';
 import type { MastraPrimitives, MastraUnion } from '../action';
 export type { MastraPrimitives, MastraUnion };
+import type { ActorSignal } from '../auth/ee';
 import type { ToolBackgroundConfig } from '../background-tasks';
 import type { MastraBrowser } from '../browser/browser';
 import type { Mastra } from '../mastra';
@@ -227,6 +226,13 @@ export interface AgentToolExecutionContext<TSuspend, TResume> {
    * See `MastraToolInvocationOptions.flushMessages` for details.
    */
   flushMessages?: () => Promise<void>;
+
+  /**
+   * True when the tool is running as a dispatched background task rather than
+   * inline in the agent loop. The parent model has already received a
+   * placeholder result by the time the tool executes.
+   */
+  isBackgroundTask?: boolean;
 }
 
 // Workflow tool execution context - properties specific when tools are executed in workflows
@@ -241,14 +247,36 @@ export interface WorkflowToolExecutionContext<TSuspend, TResume> {
   resumeData?: TResume;
 }
 
+/** Log levels for MCP `notifications/message`, ordered per RFC 5424. */
+export type MCPLoggingLevel = 'debug' | 'info' | 'notice' | 'warning' | 'error' | 'critical' | 'alert' | 'emergency';
+
+export type MCPServerContext = ServerContext & {
+  signal: ServerContext['mcpReq']['signal'];
+  requestId: ServerContext['mcpReq']['id'];
+  authInfo?: NonNullable<ServerContext['http']>['authInfo'];
+  sendNotification: ServerContext['mcpReq']['notify'];
+  sendRequest: ServerContext['mcpReq']['send'];
+  _meta?: ServerContext['mcpReq']['_meta'];
+};
+
 // MCP tool execution context - properties specific when tools are executed via Model Context Protocol
 export interface MCPToolExecutionContext {
   /** MCP protocol context passed by the server */
-  extra: RequestHandlerExtra<any, any>;
+  extra: MCPServerContext;
   /** Elicitation handler for interactive user input during tool execution */
   elicitation: {
     sendRequest: (request: ElicitRequest['params']) => Promise<ElicitResult>;
   };
+  /**
+   * Sends a `notifications/message` log notification to the calling client.
+   * Messages below the client's minimum level (set via `logging/setLevel`) are dropped.
+   */
+  log?: (level: MCPLoggingLevel, message: string, data?: Record<string, unknown>) => Promise<void>;
+  /**
+   * Sends a `notifications/progress` notification to the calling client.
+   * No-op if the caller did not request progress tracking (no progressToken in `_meta`).
+   */
+  progress?: (params: { progress: number; total?: number; message?: string }) => Promise<void>;
 }
 
 /**
@@ -285,6 +313,8 @@ export type MastraToolInvocationOptions = ToolInvocationOptions &
      * their requestContext (e.g., authenticated API clients, feature flags) to tools.
      */
     requestContext?: RequestContext;
+    /** Trusted server-side signal for this tool FGA check. */
+    actor?: ActorSignal;
     /**
      * Flushes the parent stream's pending messages to persistent storage.
      *
@@ -300,6 +330,8 @@ export type MastraToolInvocationOptions = ToolInvocationOptions &
     flushMessages?: () => Promise<void>;
     /** Observability helper to expose on the final tool execution context. */
     observe?: ToolObserve;
+    /** Set by the agent tool-call step when the tool runs as a background task. */
+    isBackgroundTask?: boolean;
   };
 
 /**
@@ -521,6 +553,8 @@ export interface ToolExecutionContext<
   mastra?: MastraUnion;
   requestContext?: RequestContext<TRequestContext>;
   abortSignal?: AbortSignal;
+  /** Trusted server-side signal forwarded for nested FGA checks. */
+  actor?: ActorSignal;
 
   /**
    * Workspace available for tool execution. When provided, tools can access:
@@ -569,6 +603,29 @@ export interface ToolExecutionContext<
    */
   observe: ToolObserve;
 }
+
+/**
+ * Context received by a tool's `execute` callback. The runtime always provides
+ * `requestContext` (an empty one is created if the caller passed none), so it
+ * is non-optional here — like `observe`. No null-checking needed.
+ */
+export type ToolExecuteContext<TContext, TRequestContext extends Record<string, any> | unknown = unknown> = Omit<
+  TContext,
+  'requestContext'
+> & {
+  requestContext: RequestContext<TRequestContext>;
+};
+
+/** The `execute` callback signature used by `createTool` and `new Tool(...)`. */
+export type ToolExecuteFunction<
+  TSchemaIn,
+  TSchemaOut,
+  TContext,
+  TRequestContext extends Record<string, any> | unknown = unknown,
+> = (
+  inputData: TSchemaIn,
+  context: ToolExecuteContext<TContext, TRequestContext>,
+) => Promise<TSchemaOut | ValidationError | void>;
 
 export interface ToolAction<
   TSchemaIn,

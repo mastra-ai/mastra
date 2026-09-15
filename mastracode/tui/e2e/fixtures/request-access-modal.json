@@ -1,0 +1,55 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "Request access to the external e2e fixture and read it.",
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_request_access_e2e",
+            "name": "request_access",
+            "arguments": {
+              "path": "/tmp/mastracode-request-access-e2e",
+              "reason": "Read deterministic request_access e2e fixture outside the project root."
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "toolCallId": "call_request_access_e2e",
+        "hasToolResult": true
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_request_access_view",
+            "name": "view",
+            "arguments": {
+              "path": "/tmp/mastracode-request-access-e2e/allowed.txt",
+              "showLineNumbers": true
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "toolCallId": "call_request_access_view",
+        "hasToolResult": true
+      },
+      "response": {
+        "content": "Request access e2e complete."
+      }
+    }
+  ]
+}

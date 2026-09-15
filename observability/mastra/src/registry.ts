@@ -87,6 +87,14 @@ export class ObservabilityRegistry {
   }
 
   /**
+   * Flush all registered instances without shutting down.
+   */
+  async flush(): Promise<void> {
+    const flushPromises = Array.from(this.#instances.values()).map(instance => instance.flush());
+    await Promise.allSettled(flushPromises);
+  }
+
+  /**
    * Shutdown all instances and clear the registry
    */
   async shutdown(): Promise<void> {

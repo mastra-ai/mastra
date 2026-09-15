@@ -12,6 +12,10 @@ const meta: Meta<typeof Kbd> = {
       control: { type: 'select' },
       options: ['light', 'dark'],
     },
+    size: {
+      control: { type: 'select' },
+      options: ['default', 'sm', 'xs'],
+    },
   },
 };
 

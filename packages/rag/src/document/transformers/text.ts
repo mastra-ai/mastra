@@ -20,8 +20,8 @@ export abstract class TextTransformer implements Transformer {
     addStartIndex = false,
     stripWhitespace = true,
   }: BaseChunkOptions) {
-    if (overlap > maxSize) {
-      throw new Error(`Got a larger chunk overlap (${overlap}) than chunk size ` + `(${maxSize}), should be smaller.`);
+    if (overlap >= maxSize) {
+      throw new Error(`Chunk overlap (${overlap}) must be smaller than chunk size (${maxSize}).`);
     }
     this.maxSize = maxSize;
     this.overlap = overlap;

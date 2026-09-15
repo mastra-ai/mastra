@@ -1,6 +1,6 @@
 ---
 title: "Reference: Agent.generateLegacy() (Legacy) | Agents"
-description: "Documentation for the legacy `Agent.generateLegacy()` method in Mastra agents. This method is deprecated and will be removed in a future version."
+description: "The .generateLegacy() method is the legacy version of the agent generation API, used with legacy model adapters to produce text or structured responses."
 packages:
   - "@mastra/core"
 ---
@@ -9,17 +9,23 @@ packages:
 
 :::warning
 
-**Deprecated**: This method is deprecated and only works with V1 models. For V2 models, use the new [`.generate()`](./generate) method instead.
+**Deprecated**: This method is deprecated and only works with legacy model adapters. For current model adapters, use [`.generate()`](./generate) instead.
 
 :::
 
-The `.generateLegacy()` method is the legacy version of the agent generation API, used to interact with V1 model agents to produce text or structured responses. This method accepts messages and optional generation options.
+The `.generateLegacy()` method is the legacy version of the agent generation API, used with legacy model adapters to produce text or structured responses. This method accepts messages and optional generation options.
 
 ## Usage example
 
 ```typescript
 await agent.generateLegacy('message for agent')
 ```
+
+## Processor retry support
+
+`generateLegacy()` doesn't run error processors or `maxProcessorRetries`. It uses the legacy AI SDK generation path instead.
+
+Scorer judges with legacy model adapters call `generateLegacy()`. They don't receive the coordinated `StreamErrorRetryProcessor` budget available to scorer judges that use Mastra’s current generation API. Use a current model adapter when you need error-processor retries. The legacy `maxRetries` option remains separate and defaults to `2`.
 
 ## Parameters
 
@@ -333,6 +339,13 @@ await agent.generateLegacy('message for agent')
               "Tools that are executed on the 'client' side of the request. These tools do not have execute functions in the definition.",
           },
           {
+            name: 'hooks',
+            type: 'ToolHooks',
+            isOptional: true,
+            description:
+              'Per-execution hooks that run before and after tool calls. Overrides matching agent-level hooks for this execution. `beforeToolCall` can return `{ proceed: false, output }` to skip the tool call.',
+          },
+          {
             name: 'savePerStep',
             type: 'boolean',
             isOptional: true,
@@ -509,9 +522,9 @@ await agent.generateLegacy('message for agent')
 
 ## Migration to new API
 
-:::info
+:::note
 
-The new `.generate()` method offers enhanced capabilities including AI SDK v5+ compatibility, better structured output handling, and improved streaming support. See the [migration guide](/guides/migrations/vnext-to-standard-apis) for detailed migration instructions.
+The new `.generate()` method offers enhanced capabilities including compatibility with AI SDK v5 and later, better structured output handling, and improved streaming support. See the [migration guide](/reference/migrations/vnext-to-standard-apis) for detailed migration instructions.
 
 :::
 
@@ -594,7 +607,7 @@ await agent.generateLegacy(
 
 ## Related
 
-- [Migration Guide](/guides/migrations/vnext-to-standard-apis)
+- [Migration Guide](/reference/migrations/vnext-to-standard-apis)
 - [New .generate() method](./generate)
 - [Generating responses](/docs/agents/overview#use-your-agent)
 - [Streaming responses](/docs/agents/overview#use-your-agent)

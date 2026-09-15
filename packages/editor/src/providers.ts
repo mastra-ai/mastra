@@ -5,8 +5,7 @@
  * External providers (S3, GCS, E2B) are supplied via MastraEditorConfig.
  */
 import type { FilesystemProvider, SandboxProvider } from '@mastra/core/editor';
-import { LocalFilesystem } from '@mastra/core/workspace';
-import { LocalSandbox } from '@mastra/core/workspace';
+import { LocalFilesystem, LocalSandbox } from '@mastra/core/workspace';
 
 export const localFilesystemProvider: FilesystemProvider<{
   basePath: string;

@@ -1,4 +1,5 @@
-import { Combobox, Label } from '@mastra/playground-ui';
+import { Combobox } from '@mastra/playground-ui/components/Combobox';
+import { Label } from '@mastra/playground-ui/components/Label';
 import { useAgents } from '@/domains/agents/hooks/use-agents';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
 import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
@@ -57,7 +58,7 @@ export function TargetSelector({ targetType, setTargetType, targetId, setTargetI
   const targetLabel = targetType === 'agent' ? 'Agent' : targetType === 'workflow' ? 'Workflow' : 'Scorer';
 
   return (
-    <div className="grid gap-6">
+    <div className="grid grid-cols-2 gap-3">
       <div className="grid gap-2">
         <Label>Target Type</Label>
         <Combobox

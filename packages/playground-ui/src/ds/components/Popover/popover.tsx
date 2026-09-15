@@ -1,58 +1,94 @@
 import { Popover as PopoverPrimitive } from '@base-ui/react/popover';
+import type { PopoverPopupProps, PopoverPositionerProps } from '@base-ui/react/popover';
 import * as React from 'react';
 
+import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
-import { asChildRenderProps } from '@/lib/as-child';
+import { resolveTriggerRender } from '@/ds/primitives/trigger-button';
+import type { TriggerButtonProps } from '@/ds/primitives/trigger-button';
 import { cn } from '@/lib/utils';
 
 const Popover = PopoverPrimitive.Root;
 
-type PopoverTriggerProps = PopoverPrimitive.Trigger.Props & {
-  /** @deprecated Use Base UI's `render` prop instead, e.g. `render={<Button />}`. */
-  asChild?: boolean;
-};
+export type PopoverTriggerProps = Omit<PopoverPrimitive.Trigger.Props, 'className'> & TriggerButtonProps;
 
+/**
+ * The button that opens the popover. Renders a design-system `<Button>` by
+ * default, so it takes Button's `variant` / `size` / `tooltip`. Pass `render`
+ * to project the behavior onto your own element (then the look is yours).
+ */
 const PopoverTrigger = React.forwardRef<HTMLButtonElement, PopoverTriggerProps>(
-  ({ asChild, children, ...props }, ref) => {
+  ({ className, asChild, render, children, variant, size, tooltip, ...props }, ref) => {
+    const resolved = resolveTriggerRender({ render, asChild, children, variant, size, tooltip, className });
+
     return (
-      <PopoverPrimitive.Trigger ref={ref} {...asChildRenderProps(asChild, children)} {...props}>
-        {asChild ? undefined : children}
+      <PopoverPrimitive.Trigger ref={ref} className={resolved.className} render={resolved.render} {...props}>
+        {resolved.children}
       </PopoverPrimitive.Trigger>
     );
   },
 );
 PopoverTrigger.displayName = 'PopoverTrigger';
 
-type PopoverContentProps = PopoverPrimitive.Popup.Props &
-  Pick<PopoverPrimitive.Positioner.Props, 'align' | 'alignOffset' | 'side' | 'sideOffset'> & {
+type PopoverContentPositionerProps = Omit<PopoverPositionerProps, keyof PopoverPopupProps>;
+
+type PopoverContentProps = PopoverPopupProps &
+  PopoverContentPositionerProps & {
     /** Optional portal container, forwarded to `Popover.Portal`. */
     container?: HTMLElement | null;
   };
 
 const PopoverContent = React.forwardRef<HTMLDivElement, PopoverContentProps>(
-  ({ className, container, align = 'center', alignOffset = 0, side = 'bottom', sideOffset = 4, ...props }, ref) => {
+  (
+    {
+      className,
+      container,
+      align = 'center',
+      alignOffset = 0,
+      side = 'bottom',
+      sideOffset = 4,
+      anchor,
+      positionMethod = FLOATING_POSITION_METHOD,
+      collisionBoundary,
+      collisionPadding,
+      sticky,
+      arrowPadding,
+      disableAnchorTracking,
+      collisionAvoidance,
+      ...props
+    },
+    ref,
+  ) => {
     const classNameString = typeof className === 'string' ? className : undefined;
     // Default to the nearest SideDialog/Drawer popup so the content stays
     // interactive inside a modal drawer; an explicit `container` still wins.
     const resolvedContainer = usePortalContainer(container);
+    const positionerProps: PopoverContentPositionerProps = {
+      align,
+      alignOffset,
+      side,
+      sideOffset,
+      anchor,
+      positionMethod,
+      collisionBoundary,
+      collisionPadding,
+      sticky,
+      arrowPadding,
+      disableAnchorTracking,
+      collisionAvoidance,
+    };
 
     return (
       <PopoverPrimitive.Portal container={resolvedContainer}>
-        <PopoverPrimitive.Positioner
-          align={align}
-          alignOffset={alignOffset}
-          side={side}
-          sideOffset={sideOffset}
-          className="z-50 outline-none"
-        >
+        <PopoverPrimitive.Positioner className="z-50 outline-none" {...positionerProps}>
           <PopoverPrimitive.Popup
             ref={ref}
             data-slot="popover-content"
             className={cn(
-              'z-50 w-72 rounded-xl border border-border1 bg-surface3 text-neutral5 shadow-dialog focus-visible:outline-hidden origin-[var(--transform-origin)]',
-              'data-[open]:animate-in data-[closed]:animate-out data-[closed]:fade-out-0 data-[open]:fade-in-0 data-[closed]:zoom-out-95 data-[open]:zoom-in-95',
+              'z-50 w-72 origin-[var(--transform-origin)] rounded-xl border border-border1 bg-surface3 text-neutral5 shadow-dialog focus-visible:outline-hidden',
+              'data-[closed]:animate-out data-[closed]:fade-out-0 data-[closed]:zoom-out-95 data-[open]:animate-in data-[open]:fade-in-0 data-[open]:zoom-in-95',
               'data-[side=bottom]:slide-in-from-top-1 data-[side=left]:slide-in-from-right-1 data-[side=right]:slide-in-from-left-1 data-[side=top]:slide-in-from-bottom-1',
-              classNameString && /\bp[trblxy]?-\S+/.test(classNameString) ? false : `py-3.5 px-3`,
+              classNameString && /\bp[trblxy]?-\S+/.test(classNameString) ? false : `px-3 py-3.5`,
               className,
             )}
             {...props}

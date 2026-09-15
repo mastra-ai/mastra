@@ -1,6 +1,8 @@
 'use client';
 
-import { CodeEditor, Switch, cn } from '@mastra/playground-ui';
+import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
+import { Switch } from '@mastra/playground-ui/components/Switch';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import type { JSONSchema7 } from 'json-schema';
 import { useState, useEffect, useRef } from 'react';
 
@@ -92,7 +94,7 @@ export function SchemaField({
     <div className="space-y-3">
       <div className="flex items-center gap-2">
         <Switch checked={isEnabled} onCheckedChange={handleToggle} id={`${schemaType}-schema-toggle`} />
-        <label htmlFor={`${schemaType}-schema-toggle`} className="text-sm font-medium">
+        <label htmlFor={`${schemaType}-schema-toggle`} className="text-ui-md font-medium">
           {label}
         </label>
       </div>
@@ -105,8 +107,8 @@ export function SchemaField({
             showCopyButton={false}
             className={cn('h-48 border rounded-md', (parseError || error) && 'border-destructive')}
           />
-          {parseError && <p className="text-xs text-destructive">{parseError}</p>}
-          {error && !parseError && <p className="text-xs text-destructive">{error}</p>}
+          {parseError && <p className="text-destructive text-ui-sm">{parseError}</p>}
+          {error && !parseError && <p className="text-destructive text-ui-sm">{error}</p>}
         </div>
       )}
     </div>

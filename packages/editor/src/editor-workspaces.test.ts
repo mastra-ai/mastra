@@ -8,8 +8,8 @@ import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import { LibSQLStore } from '@mastra/libsql';
 import { createTool } from '@mastra/core/tools';
-import { Workspace } from '@mastra/core/workspace';
-import type { FilesystemProvider, SandboxProvider } from '@mastra/core/editor';
+import { LocalFilesystem, resolveToolConfig, Workspace } from '@mastra/core/workspace';
+import type { FilesystemProvider, SandboxProvider, WorkspaceProvider } from '@mastra/core/editor';
 import { MastraModelGateway, ProviderConfig } from '@mastra/core/llm';
 import { convertArrayToReadableStream, LanguageModelV2, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { MastraEditor } from './index';
@@ -402,6 +402,77 @@ describe('editor.workspace — hydrateSnapshotToWorkspace', () => {
     });
 
     expect(workspace).toBeInstanceOf(Workspace);
+    expect(workspace.getToolsConfig()).toEqual({
+      enabled: true,
+      requireApproval: true,
+      mastra_workspace_read_file: { enabled: true },
+      mastra_workspace_write_file: { enabled: false },
+    });
+  });
+
+  it('round trips stored tool controls and applies per-tool overrides before and after snapshotting', async () => {
+    const { editor } = await createSetup();
+    const tools = {
+      enabled: true,
+      requireApproval: true,
+      tools: {
+        mastra_workspace_write_file: { enabled: false, requireApproval: false, requireReadBeforeWrite: true },
+        mastra_workspace_read_file: { enabled: true, requireApproval: true, requireReadBeforeWrite: false },
+      },
+    };
+    const workspace = await editor.workspace.hydrateSnapshotToWorkspace('ws-tool-controls', {
+      name: 'Tool controls',
+      filesystem: { provider: 'local', config: { basePath: '/tmp/tool-controls' } },
+      tools,
+    });
+    const snapshot = await editor.workspace.snapshotFromWorkspace(workspace);
+    expect(snapshot.tools).toEqual(tools);
+    const restored = await editor.workspace.hydrateSnapshotToWorkspace('ws-restored-controls', snapshot);
+    for (const instance of [workspace, restored]) {
+      expect(await resolveToolConfig(instance.getToolsConfig(), 'mastra_workspace_write_file')).toMatchObject({
+        enabled: false,
+        requireApproval: false,
+        requireReadBeforeWrite: true,
+      });
+      expect(await resolveToolConfig(instance.getToolsConfig(), 'mastra_workspace_read_file')).toMatchObject({
+        enabled: true,
+        requireApproval: true,
+        requireReadBeforeWrite: false,
+      });
+      expect(await resolveToolConfig(instance.getToolsConfig(), 'mastra_workspace_list_files')).toMatchObject({
+        enabled: true,
+        requireApproval: true,
+      });
+    }
+  });
+
+  it('round trips per-tool-only runtime controls without persisting or invoking dynamic settings', async () => {
+    const { editor } = await createSetup();
+    const dynamic = vi.fn(() => true);
+    const workspace = new Workspace({
+      id: 'ws-runtime-controls',
+      filesystem: new LocalFilesystem({ basePath: '/tmp/runtime-controls' }),
+      tools: {
+        enabled: dynamic,
+        mastra_workspace_write_file: { enabled: false, requireApproval: true, requireReadBeforeWrite: true },
+        mastra_workspace_read_file: { enabled: true, requireApproval: dynamic, maxOutputTokens: 100 },
+      },
+    });
+    const snapshot = await editor.workspace.snapshotFromWorkspace(workspace);
+    expect(snapshot.tools).toEqual({
+      tools: {
+        mastra_workspace_write_file: { enabled: false, requireApproval: true, requireReadBeforeWrite: true },
+        mastra_workspace_read_file: { enabled: true },
+      },
+    });
+    const restored = await editor.workspace.hydrateSnapshotToWorkspace('ws-runtime-restored', snapshot);
+    expect(await resolveToolConfig(restored.getToolsConfig(), 'mastra_workspace_write_file')).toMatchObject({
+      enabled: false,
+      requireApproval: true,
+      requireReadBeforeWrite: true,
+    });
+    expect(await editor.workspace.snapshotFromWorkspace(restored)).toEqual(snapshot);
+    expect(dynamic).not.toHaveBeenCalled();
   });
 });
 
@@ -489,6 +560,68 @@ describe('editor — provider registry', () => {
     });
 
     expect(workspace).toBeInstanceOf(Workspace);
+  });
+});
+
+// =============================================================================
+// Workspace Provider Tests
+// =============================================================================
+
+describe('editor.workspace — workspace provider registry', () => {
+  it('should resolve a workspace via a registered workspace provider', async () => {
+    const mockWorkspace = new Workspace({
+      id: 'provider-ws',
+      name: 'Provider WS',
+      skills: ['placeholder'],
+    });
+
+    const myProvider: WorkspaceProvider<{ region: string }> = {
+      id: 'my-cloud',
+      name: 'My Cloud',
+      createWorkspace: config => {
+        expect(config.region).toBe('us-east-1');
+        return mockWorkspace;
+      },
+    };
+
+    const { editor } = await createSetup({
+      workspaces: { 'my-cloud': myProvider },
+    });
+
+    const resolved = await editor.workspace.resolveWorkspaceProvider('my-cloud', { region: 'us-east-1' });
+    expect(resolved).toBe(mockWorkspace);
+  });
+
+  it('should throw for an unregistered workspace provider', async () => {
+    const { editor } = await createSetup();
+
+    await expect(editor.workspace.resolveWorkspaceProvider('nonexistent', {})).rejects.toThrow(
+      /Workspace provider "nonexistent" is not registered/,
+    );
+  });
+
+  it('should support async createWorkspace', async () => {
+    const mockWorkspace = new Workspace({
+      id: 'async-ws',
+      name: 'Async WS',
+      skills: ['placeholder'],
+    });
+
+    const asyncProvider: WorkspaceProvider = {
+      id: 'async-cloud',
+      name: 'Async Cloud',
+      createWorkspace: async config => {
+        await new Promise(r => setTimeout(r, 1));
+        return mockWorkspace;
+      },
+    };
+
+    const { editor } = await createSetup({
+      workspaces: { 'async-cloud': asyncProvider },
+    });
+
+    const resolved = await editor.workspace.resolveWorkspaceProvider('async-cloud', {});
+    expect(resolved).toBe(mockWorkspace);
   });
 });
 

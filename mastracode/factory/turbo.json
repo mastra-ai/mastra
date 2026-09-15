@@ -1,0 +1,30 @@
+{
+  "$schema": "https://v2-9-16.turborepo.dev/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "generate:api-cli-route-metadata": {
+      "cache": false,
+      "dependsOn": ["^build"],
+      "inputs": ["src/routes/contracts.ts", "scripts/generate-api-cli-route-metadata.ts", "package.json"],
+      "outputs": ["../../packages/cli/src/commands/api/factory-route-metadata.generated.ts"]
+    },
+    "build:lib": {
+      "dependsOn": ["^build"],
+      "inputs": [
+        "src/**",
+        "tsup.config.ts",
+        "tsconfig.json",
+        "package.json",
+        "!**/*.md",
+        "!**/*.test.ts",
+        "!**/*.spec.ts",
+        "!**/__tests__/**"
+      ],
+      "outputs": ["dist/**"]
+    },
+    "build": {
+      "dependsOn": ["build:lib"],
+      "inputs": ["package.json"]
+    }
+  }
+}

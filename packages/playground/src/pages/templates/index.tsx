@@ -1,4 +1,6 @@
-import { Header, HeaderTitle, Icon, MainContentLayout } from '@mastra/playground-ui';
+import { Header, HeaderTitle } from '@mastra/playground-ui/components/Header';
+import { MainContentLayout } from '@mastra/playground-ui/components/MainContent';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { PackageIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
@@ -71,7 +73,7 @@ export default function Templates() {
         </HeaderTitle>
       </Header>
 
-      <div className={cn('overflow-y-auto w-full h-full px-8 pb-12 z-10')}>
+      <div className={cn('overflow-y-auto w-full h-full px-5 pb-12 z-10')}>
         <TemplatesTools
           selectedTag={selectedTag}
           onTagChange={value => handleFilterChange(value, 'tag')}
@@ -88,7 +90,7 @@ export default function Templates() {
         <TemplatesList
           templates={filteredTemplates}
           linkComponent={Link}
-          className="max-w-[80rem] mx-auto"
+          className="mx-auto max-w-[80rem]"
           isLoading={isLoading}
         />
       </div>

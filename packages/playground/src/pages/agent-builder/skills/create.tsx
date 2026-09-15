@@ -1,4 +1,4 @@
-import { Button } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { ArrowLeftIcon } from 'lucide-react';
 import { Navigate, useNavigate } from 'react-router';
 import { SkillBuilderStarter } from '@/domains/agent-builder/components/skill-starter/skill-builder-starter';
@@ -21,7 +21,7 @@ export default function AgentBuilderSkillsCreate() {
   }
   return (
     <>
-      <div className="absolute top-3 left-3 md:top-6 md:left-6 z-10">
+      <div className="absolute top-3 left-3 z-10 md:top-6 md:left-6">
         <Button
           size="icon-sm"
           variant="ghost"

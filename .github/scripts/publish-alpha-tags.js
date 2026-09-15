@@ -1,5 +1,5 @@
 // scripts/add-dist-tag.js
-import { spawn, execSync } from 'child_process';
+import { spawn, execSync } from 'node:child_process';
 
 const tagName = process.argv[2] || 'alpha';
 

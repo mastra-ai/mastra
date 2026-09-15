@@ -63,9 +63,10 @@ All three agent types inherit `cache` and `pubsub` from the Mastra instance:
 ```typescript
 import { EventEmitterPubSub } from '@mastra/core/events';
 import { RedisServerCache } from '@mastra/redis';
+import Redis from 'ioredis';
 
 // Redis cache for resumable streams - events persist across reconnections
-const cache = new RedisServerCache({ url: 'redis://localhost:6379' });
+const cache = new RedisServerCache({ client: new Redis('redis://localhost:6379') });
 
 // EventEmitter pubsub for real-time delivery (process-local)
 const pubsub = new EventEmitterPubSub();

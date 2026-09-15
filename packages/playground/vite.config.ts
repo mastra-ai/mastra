@@ -13,6 +13,7 @@ const studioStandalonePlugin = (targetPort: string, targetHost: string): PluginO
     return html
       .replace(/%%MASTRA_SERVER_HOST%%/g, targetHost)
       .replace(/%%MASTRA_SERVER_PORT%%/g, targetPort)
+      .replace(/%%MASTRA_DEV_SERVER_INSTANCE_ID%%/g, '')
       .replace(/%%MASTRA_API_PREFIX%%/g, '/api')
       .replace(/%%MASTRA_HIDE_CLOUD_CTA%%/g, 'true')
       .replace(/%%MASTRA_STUDIO_BASE_PATH%%/g, '')
@@ -21,7 +22,11 @@ const studioStandalonePlugin = (targetPort: string, targetHost: string): PluginO
       .replace(/%%MASTRA_AUTO_DETECT_URL%%/g, 'true')
       .replace(/%%MASTRA_EXPERIMENTAL_FEATURES%%/g, process.env.EXPERIMENTAL_FEATURES || 'false')
       .replace(/%%MASTRA_EXPERIMENTAL_UI%%/g, process.env.MASTRA_EXPERIMENTAL_UI || 'false')
-      .replace(/%%MASTRA_AGENT_SIGNALS%%/g, process.env.MASTRA_AGENT_SIGNALS ?? 'true');
+      .replace(/%%MASTRA_AGENT_SIGNALS%%/g, process.env.MASTRA_AGENT_SIGNALS ?? 'true')
+      .replace(/%%MASTRA_SIGNALS_UI%%/g, process.env.MASTRA_SIGNALS_UI || 'false')
+      .replace(/%%MASTRA_ORGANIZATION_ID%%/g, process.env.MASTRA_ORGANIZATION_ID || '')
+      .replace(/%%MASTRA_PLATFORM_PROJECT_ID%%/g, process.env.MASTRA_PLATFORM_PROJECT_ID || '')
+      .replace(/%%MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT%%/g, process.env.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT || '');
   },
 });
 
@@ -252,6 +257,20 @@ export default defineConfig(({ mode }) => {
         ...commonConfig.server,
         proxy: {
           '/api': {
+            target: `http://${targetHost}:${targetPort}`,
+            changeOrigin: true,
+          },
+          // Custom server routes (e.g. @mastra/livekit's connection-details endpoint)
+          // mount at the server root, outside the /api prefix, so forward them too.
+          '/voice': {
+            target: `http://${targetHost}:${targetPort}`,
+            changeOrigin: true,
+          },
+          // The Studio shell (index.html) opens an SSE connection to the dev
+          // server's refresh notifications at the root, outside /api. Without
+          // this entry the dev playground 404s the SSE and hot-reload
+          // refreshes never reach it.
+          '/refresh-events': {
             target: `http://${targetHost}:${targetPort}`,
             changeOrigin: true,
           },

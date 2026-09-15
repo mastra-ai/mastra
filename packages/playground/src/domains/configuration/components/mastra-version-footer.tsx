@@ -1,12 +1,7 @@
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { CodeBlock } from '@mastra/playground-ui/components/CodeBlock';
+import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import {
-  CodeBlock,
-  CopyButton,
-  Spinner,
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-  Txt,
-  cn,
   Dialog,
   DialogContent,
   DialogHeader,
@@ -14,7 +9,11 @@ import {
   DialogTrigger,
   DialogDescription,
   DialogBody,
-} from '@mastra/playground-ui';
+} from '@mastra/playground-ui/components/Dialog';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { MoveRight, ExternalLink, Info } from 'lucide-react';
 import { useState } from 'react';
 import { useMastraPackages } from '../hooks/use-mastra-packages';
@@ -54,20 +53,18 @@ export const MastraVersionFooter = ({ collapsed }: MastraVersionFooterProps) => 
 
   const [packageManager, setPackageManager] = useState<PackageManager>('pnpm');
 
-  // Don't render anything when the sidebar is collapsed
   if (collapsed) {
     return null;
   }
 
-  // Only show version footer in dev mode
   if (!data?.isDev) {
     return null;
   }
 
   if (isLoadingPackages) {
     return (
-      <div className="flex items-center justify-end gap-2 px-3 h-9">
-        <div className="animate-pulse h-[1.125rem] w-20 bg-surface4 rounded-full" />
+      <div className="flex h-9 items-center justify-end gap-2 px-3">
+        <div className="bg-surface4 h-[1.125rem] w-20 animate-pulse rounded-full" />
       </div>
     );
   }
@@ -88,12 +85,34 @@ export const MastraVersionFooter = ({ collapsed }: MastraVersionFooterProps) => 
         <DialogTrigger asChild>
           <button
             type="button"
-            className="flex flex-col items-end gap-1 rounded-lg p-1 hover:bg-sidebar-nav-hover transition-colors focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-accent1 focus-visible:shadow-focus-ring"
+            className="hover:bg-sidebar-nav-hover focus-visible:ring-accent1 focus-visible:shadow-focus-ring flex rounded-lg p-1 transition-colors focus-visible:ring-1 focus-visible:outline-hidden"
           >
-            {isLoadingUpdates && <Spinner className="size-3 text-neutral3" />}
-            {outdatedCount > 0 && <CountBadge count={outdatedCount} variant="warning" />}
-            {deprecatedCount > 0 && <CountBadge count={deprecatedCount} variant="error" />}
-            <span className={versionBadgeClassName}>v{mainVersion}</span>
+            <span className="relative inline-flex">
+              {(isLoadingUpdates || outdatedCount > 0 || deprecatedCount > 0) && (
+                <span className="absolute -top-1.5 -right-1.5 flex items-center gap-1">
+                  {isLoadingUpdates && <Spinner className="text-neutral3 size-3" />}
+                  {outdatedCount > 0 && (
+                    <Badge
+                      variant="yellow"
+                      size="xs"
+                      aria-label={`${outdatedCount} outdated package${outdatedCount === 1 ? '' : 's'}`}
+                    >
+                      {outdatedCount}
+                    </Badge>
+                  )}
+                  {deprecatedCount > 0 && (
+                    <Badge
+                      variant="red"
+                      size="xs"
+                      aria-label={`${deprecatedCount} deprecated package${deprecatedCount === 1 ? '' : 's'}`}
+                    >
+                      {deprecatedCount}
+                    </Badge>
+                  )}
+                </span>
+              )}
+              <span className={versionBadgeClassName}>v{mainVersion}</span>
+            </span>
           </button>
         </DialogTrigger>
       </div>
@@ -119,32 +138,6 @@ function generateUpdateCommand(packages: PackageUpdateInfo[], packageManager: Pa
   const packageArgs = outdatedPackages.map(p => `${p.name}@${p.targetPrereleaseTag ?? 'latest'}`).join(' ');
 
   return `${command} ${packageArgs}`;
-}
-
-function CountBadge({ count, variant }: { count: number; variant: 'warning' | 'error' }) {
-  return (
-    <span
-      className={cn(
-        'inline-flex items-center justify-center min-w-[1.125rem] h-[1.125rem] px-1 rounded-full text-ui-xs font-bold text-black',
-        variant === 'error' ? 'bg-red-700' : 'bg-yellow-700',
-      )}
-    >
-      {count}
-    </span>
-  );
-}
-
-function StatusBadge({ value, variant }: { value: string | number; variant: 'warning' | 'error' }) {
-  return (
-    <span
-      className={cn(
-        'inline-flex font-bold rounded-md px-1.5 py-0.5 items-center justify-center text-black text-xs min-w-5',
-        variant === 'error' ? 'bg-red-700' : 'bg-yellow-700',
-      )}
-    >
-      {value}
-    </span>
-  );
 }
 
 export interface PackagesModalContentProps {
@@ -178,8 +171,7 @@ const PackagesModalContent = ({
       </DialogHeader>
 
       <DialogBody>
-        {/* Status summary */}
-        <div className="flex items-center justify-between gap-3 text-sm text-neutral3 py-2">
+        <div className="text-neutral3 text-ui-md flex items-center justify-between gap-3 py-2">
           {isLoadingUpdates ? (
             <span className="text-neutral3">Checking for updates...</span>
           ) : !hasUpdates ? (
@@ -188,13 +180,17 @@ const PackagesModalContent = ({
             <div className="flex items-center gap-3">
               {outdatedCount > 0 && (
                 <span className="flex items-center gap-1.5">
-                  <StatusBadge value={outdatedCount} variant="warning" />
+                  <Badge variant="yellow" size="sm">
+                    {outdatedCount}
+                  </Badge>
                   <span>package{outdatedCount !== 1 ? 's' : ''} outdated</span>
                 </span>
               )}
               {deprecatedCount > 0 && (
                 <span className="flex items-center gap-1.5">
-                  <StatusBadge value={deprecatedCount} variant="error" />
+                  <Badge variant="red" size="sm">
+                    {deprecatedCount}
+                  </Badge>
                   <span>package{deprecatedCount !== 1 ? 's' : ''} deprecated</span>
                 </span>
               )}
@@ -208,23 +204,22 @@ const PackagesModalContent = ({
           />
         </div>
 
-        {/* Package list */}
-        <div className="max-h-64 overflow-y-auto border border-border1 rounded-md">
-          <div className="grid grid-cols-[1fr_auto_auto] text-sm">
+        <div className="border-border1 max-h-64 overflow-y-auto rounded-md border">
+          <div className="text-ui-md grid grid-cols-[1fr_auto_auto]">
             {packages.map((pkg, index) => (
               <div key={pkg.name} className={cn('contents', index > 0 && '[&>div]:border-t [&>div]:border-border1')}>
-                <div className="py-2 px-3 font-mono text-text1 truncate min-w-0">
+                <div className="text-text1 min-w-0 truncate px-3 py-2 font-mono">
                   <a
                     href={`https://www.npmjs.com/package/${pkg.name}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="hover:text-accent1 hover:underline inline-flex items-center gap-1 group"
+                    className="hover:text-accent1 group inline-flex items-center gap-1 hover:underline"
                   >
                     {pkg.name}
-                    <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <ExternalLink className="h-3 w-3 opacity-0 transition-opacity group-hover:opacity-100" />
                   </a>
                 </div>
-                <div className="py-2 px-3 font-mono text-neutral3 flex items-center gap-1.5">
+                <div className="text-neutral3 flex items-center gap-1.5 px-3 py-2 font-mono">
                   {pkg.isOutdated || pkg.isDeprecated ? (
                     <Tooltip>
                       <TooltipTrigger asChild>
@@ -247,10 +242,10 @@ const PackagesModalContent = ({
                     <span>{pkg.version}</span>
                   )}
                 </div>
-                <div className="py-2 px-3 font-mono text-neutral3 flex items-center">
+                <div className="text-neutral3 flex items-center px-3 py-2 font-mono">
                   {(pkg.isOutdated || pkg.isDeprecated) && pkg.latestVersion && (
                     <>
-                      <MoveRight className="w-4 h-4 mx-2 text-neutral3" />
+                      <MoveRight className="text-neutral3 mx-2 h-4 w-4" />
                       <span className="text-accent1">{pkg.latestVersion}</span>
                     </>
                   )}
@@ -260,11 +255,10 @@ const PackagesModalContent = ({
           </div>
         </div>
 
-        {/* Update command section */}
         {hasUpdates && updateCommand && (
-          <div className="space-y-2 pt-2 border-t border-border1">
+          <div className="border-border1 space-y-2 border-t pt-2">
             <div className="flex items-center gap-2 pt-3">
-              <Info className="w-4 h-4 text-neutral3" />
+              <Info className="text-neutral3 h-4 w-4" />
               <Txt as="span" variant="ui-sm" className="text-neutral3">
                 Use the command below to update your packages
               </Txt>
@@ -291,5 +285,5 @@ const PackagesModalContent = ({
   );
 };
 
-// Keep the old export for backwards compatibility
+// Kept for backwards compatibility with the old export name.
 export const MastraPackagesInfo = MastraVersionFooter;

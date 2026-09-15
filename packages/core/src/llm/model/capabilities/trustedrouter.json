@@ -1,0 +1,29 @@
+{
+  "attachment": [
+    "trustedrouter/auto",
+    "trustedrouter/cheap",
+    "trustedrouter/e2e",
+    "trustedrouter/fast",
+    "trustedrouter/synth",
+    "trustedrouter/synth-code",
+    "trustedrouter/zdr"
+  ],
+  "temperature": [
+    "trustedrouter/auto",
+    "trustedrouter/cheap",
+    "trustedrouter/e2e",
+    "trustedrouter/fast",
+    "trustedrouter/synth",
+    "trustedrouter/synth-code",
+    "trustedrouter/zdr"
+  ],
+  "structuredOutput": [
+    "trustedrouter/auto",
+    "trustedrouter/cheap",
+    "trustedrouter/e2e",
+    "trustedrouter/fast",
+    "trustedrouter/synth",
+    "trustedrouter/synth-code",
+    "trustedrouter/zdr"
+  ]
+}

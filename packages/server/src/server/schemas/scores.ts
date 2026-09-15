@@ -1,5 +1,5 @@
 import { z } from 'zod/v4';
-import { paginationInfoSchema } from './common';
+import { paginationInfoSchema, createPagePaginationSchema } from './common';
 
 /**
  * Schema for sampling configuration
@@ -36,7 +36,7 @@ export const scorerEntrySchema = z.object({
   agentNames: z.array(z.string()),
   workflowIds: z.array(z.string()),
   isRegistered: z.boolean(),
-  source: z.enum(['code', 'stored']),
+  source: z.enum(['code', 'stored', 'fs']),
 });
 
 /**
@@ -59,22 +59,14 @@ export const entityPathParams = z.object({
 // HTTP query params must be flat (e.g., ?page=0&perPage=10)
 // Adapters should transform these into nested pagination objects for handlers if needed
 
-export const listScoresByRunIdQuerySchema = z.object({
-  page: z.coerce.number().optional().default(0),
-  perPage: z.coerce.number().optional().default(10),
-});
+export const listScoresByRunIdQuerySchema = createPagePaginationSchema(10);
 
-export const listScoresByScorerIdQuerySchema = z.object({
-  page: z.coerce.number().optional().default(0),
-  perPage: z.coerce.number().optional().default(10),
+export const listScoresByScorerIdQuerySchema = createPagePaginationSchema(10).extend({
   entityId: z.string().optional(),
   entityType: z.string().optional(),
 });
 
-export const listScoresByEntityIdQuerySchema = z.object({
-  page: z.coerce.number().optional().default(0),
-  perPage: z.coerce.number().optional().default(10),
-});
+export const listScoresByEntityIdQuerySchema = createPagePaginationSchema(10);
 
 // Body schema for saving scores
 export const saveScoreBodySchema = z.object({

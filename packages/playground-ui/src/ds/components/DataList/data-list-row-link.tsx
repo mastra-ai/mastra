@@ -1,4 +1,5 @@
-import type { CSSProperties, ReactNode } from 'react';
+import { forwardRef } from 'react';
+import type { CSSProperties, ComponentPropsWithoutRef, ReactNode } from 'react';
 import { useDataListRowWrapperContext } from './data-list-row-wrapper-context';
 import { dataListRowInteractiveStyles, dataListRowStyles } from './shared';
 import type { DataListRowSharedProps } from './shared';
@@ -10,37 +11,31 @@ export type DataListRowLinkProps = DataListRowSharedProps & {
   to: string;
   className?: string;
   style?: CSSProperties;
-  LinkComponent: LinkComponent;
-};
+  LinkComponent?: LinkComponent;
+} & Omit<ComponentPropsWithoutRef<'a'>, 'href' | 'children' | 'className' | 'style'>;
 
-export function DataListRowLink({
-  children,
-  to,
-  className,
-  style,
-  LinkComponent: Link,
-  flushLeft,
-  flushRight,
-  colStart,
-  colEnd,
-  featured,
-}: DataListRowLinkProps) {
-  const isWrapped = useDataListRowWrapperContext();
-  const hasColumnOverride = colStart !== undefined || colEnd !== undefined;
-  const resolvedStyle = hasColumnOverride ? { ...style, gridColumn: `${colStart ?? 1} / ${colEnd ?? -1}` } : style;
-  return (
-    <Link
-      href={to}
-      className={cn(
-        ...(isWrapped ? dataListRowInteractiveStyles : dataListRowStyles),
-        !isWrapped && flushLeft && 'ml-0!',
-        !isWrapped && flushRight && 'mr-0!',
-        featured && 'bg-surface4',
-        className,
-      )}
-      style={resolvedStyle}
-    >
-      {children}
-    </Link>
-  );
-}
+export const DataListRowLink = forwardRef<HTMLAnchorElement, DataListRowLinkProps>(
+  (
+    { children, to, className, style, LinkComponent: Link = 'a', colStart, colEnd, featured, variant, ...rest },
+    ref,
+  ) => {
+    const isWrapped = useDataListRowWrapperContext();
+    const hasColumnOverride = colStart !== undefined || colEnd !== undefined;
+    const resolvedStyle = hasColumnOverride ? { ...style, gridColumn: `${colStart ?? 1} / ${colEnd ?? -1}` } : style;
+    return (
+      <Link
+        ref={ref}
+        href={to}
+        className={cn(...(isWrapped ? dataListRowInteractiveStyles : dataListRowStyles), className)}
+        style={resolvedStyle}
+        data-featured={featured || undefined}
+        data-variant={variant ?? 'default'}
+        {...rest}
+      >
+        {children}
+      </Link>
+    );
+  },
+);
+
+DataListRowLink.displayName = 'DataListRowLink';

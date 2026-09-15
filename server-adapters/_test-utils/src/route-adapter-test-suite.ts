@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { SERVER_ROUTES, type ServerRoute } from '@mastra/server/server-adapter';
+import { createRoute, HTTPException, SERVER_ROUTES, type ServerRoute } from '@mastra/server/server-adapter';
+import { z } from 'zod';
+import { z as z3 } from 'zod/v3';
 
 import {
   AdapterTestContext,
@@ -36,6 +38,7 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
   describe(suiteName, () => {
     let context: AdapterTestContext;
     let app: any;
+    let setup: Awaited<ReturnType<typeof setupAdapter>>;
 
     beforeEach(async () => {
       // Create test context - use provided or default
@@ -47,8 +50,246 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
       }
 
       // Setup adapter and app
-      const setup = await setupAdapter(context);
+      setup = await setupAdapter(context);
       app = setup.app;
+    });
+
+    describe.each([
+      {
+        version: 'v3',
+        recordSchema: z3.record(z3.string(), z3.string()),
+        objectSchema: z3.object({ limit: z3.number().default(10) }),
+      },
+      {
+        version: 'v4',
+        recordSchema: z.record(z.string(), z.string()),
+        objectSchema: z.object({ limit: z.number().default(10) }),
+      },
+    ])('Zod $version record body validation', ({ recordSchema, objectSchema }) => {
+      beforeEach(async () => {
+        await setup.adapter.registerRoute(app, {
+          method: 'DELETE',
+          path: '/test/record-body',
+          responseType: 'json',
+          bodySchema: recordSchema,
+          handler: async () => ({ success: true }),
+        });
+        await setup.adapter.registerRoute(app, {
+          method: 'DELETE',
+          path: '/test/object-body',
+          responseType: 'json',
+          bodySchema: objectSchema,
+          handler: async ({ limit }: { limit: number }) => ({ limit }),
+        });
+      });
+
+      it('does not convert missing record bodies to empty objects', async () => {
+        const response = await executeHttpRequest(app, { method: 'DELETE', path: '/api/test/record-body' });
+        // Some framework parsers already supply {} before adapter validation runs.
+        const alreadyNormalized = config.emptyBodyNormalization?.withoutContentType === 'empty-object';
+        expect(response.status).toBe(alreadyNormalized ? 200 : 400);
+        if (!alreadyNormalized) {
+          expect(response.data).toMatchObject({ error: 'Invalid request body', issues: [{ field: 'root' }] });
+        }
+      });
+
+      it('accepts explicitly empty record bodies', async () => {
+        const response = await executeHttpRequest(app, { method: 'DELETE', path: '/api/test/record-body', body: {} });
+        expect(response.status).toBe(200);
+        expect(response.data).toEqual({ success: true });
+      });
+
+      it('keeps bodyless object field defaults', async () => {
+        const response = await executeHttpRequest(app, { method: 'DELETE', path: '/api/test/object-body' });
+        expect(response.status).toBe(200);
+        expect(response.data).toEqual({ limit: 10 });
+      });
+    });
+
+    describe('Whole-body defaults over HTTP', () => {
+      const normalization = config.emptyBodyNormalization ?? {
+        withoutContentType: 'undefined',
+        withJsonContentType: 'undefined',
+      };
+
+      beforeEach(async () => {
+        await setup.adapter.registerRoute(
+          app,
+          createRoute({
+            method: 'POST',
+            path: '/test/root-default',
+            responseType: 'json',
+            bodySchema: z.object({ marker: z.string().optional() }).default({ marker: 'root-default' }),
+            handler: async ({ marker }) => ({ marker }),
+          }),
+        );
+      });
+
+      it.each([
+        {
+          label: 'omitted body without Content-Type',
+          body: undefined,
+          headers: undefined,
+          normalized: normalization.withoutContentType,
+        },
+        {
+          label: 'zero-byte JSON body',
+          body: undefined,
+          headers: { 'Content-Type': 'application/json' },
+          normalized: normalization.withJsonContentType,
+        },
+        {
+          label: 'explicit empty JSON object',
+          body: {},
+          headers: { 'Content-Type': 'application/json' },
+          normalized: 'empty-object',
+        },
+      ])('$label respects framework normalization', async ({ body, headers, normalized }) => {
+        const response = await executeHttpRequest(app, {
+          method: 'POST',
+          path: '/api/test/root-default',
+          body,
+          headers,
+        });
+        if (normalized === 'empty-string') {
+          expect(response.status).toBe(400);
+          expect(response.data).toEqual({
+            error: 'Invalid request body',
+            issues: [{ field: 'root', message: expect.stringContaining('string') }],
+          });
+        } else {
+          expect(response.status).toBe(200);
+          expect(response.data).toEqual(normalized === 'undefined' ? { marker: 'root-default' } : {});
+        }
+      });
+    });
+
+    describe('Scalar JSON body validation', () => {
+      beforeEach(async () => {
+        const route = createRoute({
+          method: 'DELETE',
+          path: '/test/scalar-body',
+          responseType: 'json',
+          bodySchema: z
+            .union([z.null(), z.literal(false), z.literal(0), z.literal('')])
+            .transform(value => ({ value })),
+          handler: async ({ value }) => ({ value }),
+          onValidationError: () => ({ status: 400, body: { error: 'Scalar schema rejected body' } }),
+        });
+        await setup.adapter.registerRoute(app, route);
+      });
+      it.each([null, false, 0, ''])('validates scalar JSON through the route schema: %j', async body => {
+        const accepted = await executeHttpRequest(app, {
+          method: 'DELETE',
+          path: '/api/test/scalar-body',
+          body,
+        });
+        expect(accepted.status).toBe(200);
+        expect(accepted.data).toEqual({ value: body });
+      });
+      it('returns the route validation response for an invalid scalar', async () => {
+        const rejected = await executeHttpRequest(app, {
+          method: 'DELETE',
+          path: '/api/test/scalar-body',
+          body: true,
+        });
+        expect(rejected.status).toBe(400);
+        expect(rejected.data).toEqual({ error: 'Scalar schema rejected body' });
+      });
+    });
+
+    describe.each(['POST', 'PUT', 'PATCH', 'DELETE'] as const)('%s required body validation', method => {
+      beforeEach(async () => {
+        await setup.adapter.registerRoute(
+          app,
+          createRoute({
+            method,
+            path: '/test/required-body',
+            responseType: 'json',
+            bodySchema: z.object({ itemIds: z.array(z.string().min(1)).min(1) }),
+            handler: async ({ itemIds }) => ({ itemIds }),
+            onValidationError: () => ({ status: 400, body: { error: 'Required schema rejected body' } }),
+          }),
+        );
+        await setup.adapter.registerRoute(
+          app,
+          createRoute({
+            method,
+            path: '/test/optional-body',
+            responseType: 'json',
+            bodySchema: z.object({ name: z.string().optional(), limit: z.number().default(10) }),
+            handler: async ({ limit }) => ({ limit }),
+          }),
+        );
+      });
+
+      it.each([undefined, null, false, 0, '', {}, { itemIds: [] }, { itemIds: [''] }])(
+        'rejects missing or invalid required input %#',
+        async body => {
+          const response = await executeHttpRequest(app, {
+            method,
+            path: '/api/test/required-body',
+            body,
+          });
+          expect(response.status).toBe(400);
+          expect(response.data).toEqual({ error: 'Required schema rejected body' });
+        },
+      );
+
+      it('passes valid required input to the handler', async () => {
+        const body = { itemIds: ['item-1'] };
+        const response = await executeHttpRequest(app, {
+          method,
+          path: '/api/test/required-body',
+          body,
+        });
+        expect(response.status).toBe(200);
+        expect(response.data).toEqual(body);
+      });
+
+      it('applies field defaults when the body is omitted', async () => {
+        const response = await executeHttpRequest(app, {
+          method,
+          path: '/api/test/optional-body',
+        });
+        expect(response.status).toBe(200);
+        expect(response.data).toEqual({ limit: 10 });
+      });
+    });
+
+    it.each([
+      { body: {}, field: 'itemIds' },
+      { body: { itemIds: [''] }, field: 'itemIds.0' },
+    ])('returns standard validation issues for $field', async ({ body, field }) => {
+      await setup.adapter.registerRoute(
+        app,
+        createRoute({
+          method: 'DELETE',
+          path: '/test/default-validation-error',
+          responseType: 'json',
+          bodySchema: z.object({ itemIds: z.array(z.string().min(1)).min(1) }),
+          handler: async ({ itemIds }) => ({ itemIds }),
+        }),
+      );
+      const response = await executeHttpRequest(app, {
+        method: 'DELETE',
+        path: '/api/test/default-validation-error',
+        body,
+      });
+      expect(response.status).toBe(400);
+      expect(response.data).toEqual({
+        error: 'Invalid request body',
+        issues: [{ field, message: expect.any(String) }],
+      });
+    });
+
+    it('preserves bodyless create-run requests with optional fields', async () => {
+      const response = await executeHttpRequest(app, {
+        method: 'POST',
+        path: '/api/workflows/test-workflow/create-run',
+      });
+      expect(response.status).toBe(200);
+      expect(response.data).toMatchObject({ runId: expect.any(String) });
     });
 
     // Test deprecated routes separately - just verify they're marked correctly
@@ -112,16 +353,19 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
       // skill publish requires blob storage not available in InMemoryStore
       '/stored/skills/:storedSkillId/publish',
       // POST /stored/agents requires a builder-resolved model policy and a
-      // model-allowlist-compatible payload; the generic harness produces a
+      // model-allowlist-compatible payload; the generic test suite produces a
       // payload that fails allowlist enforcement. Behavior is covered by
       // packages/server/src/server/handlers/stored-agents.test.ts.
       '/stored/agents',
       // Favorites toggles require an existing stored entity AND an
       // authenticated caller (callerId is read from the auth-middleware
       // request context). Behavior is covered by stored-{agent,skill}-favorites
-      // unit tests; the generic harness can't satisfy both prereqs.
+      // unit tests; the generic test suite can't satisfy both prereqs.
       '/stored/agents/:storedAgentId/favorite',
       '/stored/skills/:storedSkillId/favorite',
+      // Change request creation requires a source-control provider that can open
+      // PRs; the generic test sutie has no provider. Covered by stored-agents tests.
+      '/stored/agents/:storedAgentId/change-request',
       // Builder registry routes that require external API calls + builder config
       '/editor/builder/registries',
       '/editor/builder/registries/:registryId/search',
@@ -129,19 +373,26 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
       '/editor/builder/registries/:registryId/preview',
       '/editor/builder/registries/:registryId/install',
       // Long-lived SSE streams: stay open until the client disconnects, so the
-      // test harness's real-HTTP-server cleanup (server.close awaiting drain)
+      // test test suite's real-HTTP-server cleanup (server.close awaiting drain)
       // hangs. These routes' behavior is exercised in unit tests.
       '/background-tasks/stream',
       '/agents/:agentId/observe',
+      // Recover requires both a durable agent and a persisted workflow run.
+      // Its stateful behavior is covered by packages/server/src/server/handlers/agents.test.ts.
+      '/agents/:agentId/recover',
+      // Reading a submitted plan requires an agent exposing the core submit_plan tool
+      // and a workspace filesystem containing the plan. The generic agent has neither;
+      // capability, path, and filesystem behavior are covered by plans.test.ts.
+      '/agents/:agentId/plans/file',
       // Tool-provider connection routes that require a persisted connection
-      // row matching the supplied connectionId. The harness uses a generic
+      // row matching the supplied connectionId. The test suite uses a generic
       // 'test-connection-id' that isn't seeded, so the fail-closed ownership
       // guard returns 403. Behavior is covered by
       // packages/server/src/server/handlers/tool-providers.test.ts.
       '/tool-providers/:providerId/connections/:connectionId',
       '/tool-providers/:providerId/connections/:connectionId/usage',
       // Tool-provider authorize + connection-status routes require a real
-      // OAuth provider config; the generic harness produces a payload the
+      // OAuth provider config; the generic test suite produces a payload the
       // mock provider can't authorize. Covered by tool-providers.test.ts.
       '/tool-providers/:providerId/authorize',
       '/tool-providers/:providerId/connection-status',
@@ -151,9 +402,21 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
       // Tool-provider connections list relies on storage rows being seeded
       // for the test author. Covered by tool-providers.test.ts.
       '/tool-providers/:providerId/connections',
+      // Experiment deletion requires a persisted experiment matching the generated
+      // experimentId. The generic test context does not seed dataset storage;
+      // deletion behavior is covered by datasets.test.ts.
+      '/experiments/:experimentId',
     ];
     // Routes under these prefixes are excluded (e.g. /datasets needs a datasets storage domain)
-    const excludedPrefixes = ['/datasets'];
+    const excludedPrefixes = [
+      '/datasets',
+      // Agent-controller routes resolve a registered AgentController via
+      // mastra.getAgentController(id) and operate on a live session keyed by
+      // resourceId. The generic test context registers no controller, so every
+      // route fails closed with 404. Behavior is covered by
+      // packages/server/src/server/handlers/agent-controller.test.ts.
+      '/agent-controller',
+    ];
     const isExcluded = (r: ServerRoute) =>
       r.deprecated ||
       r.responseType === 'mcp-http' ||
@@ -417,12 +680,11 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
 
                 const response = await executeHttpRequest(app, httpRequest);
 
-                // Expect 400 Bad Request for schema validation failure
-                // Some routes may still succeed if they ignore unknown fields
-                // So we check for either 400 or success
-                expect([200, 201, 400]).toContain(response.status);
+                // Routes may use the shared 400 response or a route-specific 422 response.
+                // Lenient schemas may still succeed if they ignore unknown fields.
+                expect([200, 201, 400, 422]).toContain(response.status);
 
-                if (response.status === 400) {
+                if (response.status === 400 || response.status === 422) {
                   expect(response.type).toBe('json');
 
                   // Verify error response has helpful structure
@@ -464,21 +726,28 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
                 const testField = 'testBodyField';
                 const testValue = 'testValue123';
 
+                const body = {
+                  ...(typeof request.body === 'object' && request.body !== null ? request.body : {}),
+                  [testField]: testValue,
+                };
+                const strictBody = !route.bodySchema.safeParse(body).success;
+
                 const httpRequest: HttpRequest = {
                   method: request.method,
                   path: request.path,
                   query: request.query,
-                  body: {
-                    ...(typeof request.body === 'object' && request.body !== null ? request.body : {}),
-                    [testField]: testValue,
-                  },
+                  body,
                 };
 
                 const response = await executeHttpRequest(app, httpRequest);
 
-                // Should succeed - body fields should be spread correctly
-                // Handler receives both `body: {...}` AND individual fields
-                expect(response.status).toBeLessThan(400);
+                if (strictBody) {
+                  // Strict schemas must surface either the shared or route-specific validation rejection.
+                  expect([400, 422]).toContain(response.status);
+                } else {
+                  // lenient schema: unknown field must be ignored, request must succeed
+                  expect(response.status).toBeLessThan(400);
+                }
               });
             }
           });
@@ -563,11 +832,11 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
 
           const response = await executeHttpRequest(app, httpRequest);
 
-          // Should return 400 Bad Request for missing required fields
-          // (or 200/201 if all fields are optional)
-          expect([200, 201, 400]).toContain(response.status);
+          // Should return the shared or route-specific validation response for missing fields
+          // (or 200/201 if all fields are optional).
+          expect([200, 201, 400, 422]).toContain(response.status);
 
-          if (response.status === 400) {
+          if (response.status === 400 || response.status === 422) {
             expect(response.type).toBe('json');
             const errorData = response.data as any;
             expect(errorData).toBeDefined();
@@ -577,6 +846,105 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
             }
           }
         });
+      });
+    });
+
+    describe('Custom HTTPException responses', () => {
+      async function setupCustomErrorRoutes() {
+        let handlerCalls = 0;
+        const routes: ServerRoute<any, any, any>[] = [
+          {
+            method: 'GET',
+            path: '/custom/http-error-json',
+            responseType: 'json',
+            handler: async () => {
+              handlerCalls++;
+              throw new HTTPException(409, {
+                res: Response.json(
+                  { code: 'TRACE_QUERY_CURSOR_CONFLICT', message: 'The cursor does not match the query' },
+                  { headers: { 'X-Trace-Error': 'cursor' } },
+                ),
+              });
+            },
+          },
+          {
+            method: 'GET',
+            path: '/custom/http-error-text',
+            responseType: 'json',
+            handler: async () => {
+              handlerCalls++;
+              throw new HTTPException(418, {
+                res: new Response('custom text', {
+                  headers: { 'Content-Type': 'text/custom', 'X-Custom-Error': 'true' },
+                }),
+              });
+            },
+          },
+          {
+            method: 'GET',
+            path: '/custom/http-error-fallback',
+            responseType: 'json',
+            handler: async () => {
+              handlerCalls++;
+              throw new HTTPException(404, { message: 'Legacy fallback' });
+            },
+          },
+        ];
+        const mutableServerRoutes = SERVER_ROUTES as ServerRoute[];
+        const originalLength = mutableServerRoutes.length;
+        mutableServerRoutes.push(...routes);
+        try {
+          const setup = await setupAdapter(await createDefaultTestContext());
+          return { app: setup.app, getHandlerCalls: () => handlerCalls };
+        } finally {
+          mutableServerRoutes.splice(originalLength);
+        }
+      }
+
+      it('preserves an attached JSON response and headers', async () => {
+        const custom = await setupCustomErrorRoutes();
+
+        const response = await executeHttpRequest(custom.app, {
+          method: 'GET',
+          path: '/api/custom/http-error-json',
+        });
+
+        expect(response.status).toBe(409);
+        expect(response.headers['content-type']).toContain('application/json');
+        expect(response.headers['x-trace-error']).toBe('cursor');
+        expect(response.data).toEqual({
+          code: 'TRACE_QUERY_CURSOR_CONFLICT',
+          message: 'The cursor does not match the query',
+        });
+        expect(custom.getHandlerCalls()).toBe(1);
+      });
+
+      it('preserves an attached text response without JSON wrapping', async () => {
+        const custom = await setupCustomErrorRoutes();
+
+        const response = await executeHttpRequest(custom.app, {
+          method: 'GET',
+          path: '/api/custom/http-error-text',
+        });
+
+        expect(response.status).toBe(418);
+        expect(response.headers['content-type']).toContain('text/custom');
+        expect(response.headers['x-custom-error']).toBe('true');
+        expect(response.data).toBe('custom text');
+        expect(custom.getHandlerCalls()).toBe(1);
+      });
+
+      it('retains the JSON fallback for message-only HTTP exceptions', async () => {
+        const custom = await setupCustomErrorRoutes();
+
+        const response = await executeHttpRequest(custom.app, {
+          method: 'GET',
+          path: '/api/custom/http-error-fallback',
+        });
+
+        expect(response.status).toBe(404);
+        expect(response.data).toEqual({ error: 'Legacy fallback' });
+        expect(custom.getHandlerCalls()).toBe(1);
       });
     });
 

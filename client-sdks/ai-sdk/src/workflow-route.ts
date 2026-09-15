@@ -6,8 +6,13 @@ import {
   createUIMessageStream as createUIMessageStreamV6,
   createUIMessageStreamResponse as createUIMessageStreamResponseV6,
 } from '@internal/ai-v6';
+import {
+  createUIMessageStream as createUIMessageStreamV7,
+  createUIMessageStreamResponse as createUIMessageStreamResponseV7,
+} from '@internal/ai-v7';
 import type { Mastra } from '@mastra/core/mastra';
 import type { TracingOptions } from '@mastra/core/observability';
+import { MASTRA_RESOURCE_ID_KEY } from '@mastra/core/request-context';
 import type { RequestContext } from '@mastra/core/request-context';
 import { registerApiRoute } from '@mastra/core/server';
 import { toAISdkStream } from './convert-streams';
@@ -17,6 +22,8 @@ import type {
   V5UIMessageStream,
   V6UIMessage,
   V6UIMessageStream,
+  V7UIMessage,
+  V7UIMessageStream,
 } from './public-types';
 
 export type WorkflowStreamHandlerParams = {
@@ -34,7 +41,7 @@ export type WorkflowStreamHandlerOptions = {
   mastra: Mastra;
   workflowId: string;
   params: WorkflowStreamHandlerParams;
-  version?: 'v5' | 'v6';
+  version?: 'v5' | 'v6' | 'v7';
   includeTextStreamParts?: boolean;
   sendReasoning?: boolean;
   sendSources?: boolean;
@@ -46,6 +53,10 @@ type WorkflowStreamHandlerOptionsV5 = Omit<WorkflowStreamHandlerOptions, 'versio
 
 type WorkflowStreamHandlerOptionsV6 = Omit<WorkflowStreamHandlerOptions, 'version'> & {
   version: 'v6';
+};
+
+type WorkflowStreamHandlerOptionsV7 = Omit<WorkflowStreamHandlerOptions, 'version'> & {
+  version: 'v7';
 };
 
 /**
@@ -76,6 +87,9 @@ export function handleWorkflowStream<UI_MESSAGE extends V5UIMessage = V5UIMessag
 export function handleWorkflowStream<UI_MESSAGE extends V6UIMessage = V6UIMessage>(
   options: WorkflowStreamHandlerOptionsV6,
 ): Promise<V6UIMessageStream<UI_MESSAGE>>;
+export function handleWorkflowStream<UI_MESSAGE extends V7UIMessage = V7UIMessage>(
+  options: WorkflowStreamHandlerOptionsV7,
+): Promise<V7UIMessageStream<UI_MESSAGE>>;
 export async function handleWorkflowStream({
   mastra,
   workflowId,
@@ -85,7 +99,17 @@ export async function handleWorkflowStream({
   sendReasoning = false,
   sendSources = false,
 }: WorkflowStreamHandlerOptions): Promise<SupportedUIMessageStream> {
-  const { runId, resourceId, inputData, initialState, resumeData, requestContext, ...rest } = params;
+  const {
+    runId,
+    resourceId: resourceIdFromParams,
+    inputData,
+    initialState,
+    resumeData,
+    requestContext,
+    ...rest
+  } = params;
+  const resourceIdFromContext = requestContext?.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
+  const resourceId = resourceIdFromContext ?? resourceIdFromParams;
 
   const workflowObj = mastra.getWorkflowById(workflowId);
   if (!workflowObj) {
@@ -97,6 +121,22 @@ export async function handleWorkflowStream({
   const stream = resumeData
     ? run.resumeStream({ resumeData, ...rest, requestContext })
     : run.stream({ inputData, initialState, ...rest, requestContext });
+
+  if (version === 'v7') {
+    return createUIMessageStreamV7<V7UIMessage>({
+      execute: async ({ writer }) => {
+        for await (const part of toAISdkStream(stream, {
+          from: 'workflow',
+          version: 'v7',
+          includeTextStreamParts,
+          sendReasoning,
+          sendSources,
+        })) {
+          writer.write(part);
+        }
+      },
+    }) as SupportedUIMessageStream;
+  }
 
   if (version === 'v6') {
     return createUIMessageStreamV6<V6UIMessage>({
@@ -129,7 +169,7 @@ export async function handleWorkflowStream({
 }
 
 export type WorkflowRouteOptions = {
-  version?: 'v5' | 'v6';
+  version?: 'v5' | 'v6' | 'v7';
   sendReasoning?: boolean;
   sendSources?: boolean;
 } & (
@@ -239,14 +279,6 @@ export function workflowRoute({
         throw new Error('Workflow ID is required');
       }
 
-      if (contextRequestContext && params.requestContext) {
-        mastra
-          .getLogger()
-          ?.warn(
-            `"requestContext" from the request body will be ignored because "requestContext" is already set in the route options.`,
-          );
-      }
-
       const handlerOptions = {
         mastra,
         workflowId: workflowToUse,
@@ -258,6 +290,15 @@ export function workflowRoute({
         sendReasoning,
         sendSources,
       };
+
+      if (version === 'v7') {
+        const uiMessageStream = await handleWorkflowStream({
+          ...handlerOptions,
+          version: 'v7',
+        });
+
+        return createUIMessageStreamResponseV7({ stream: uiMessageStream });
+      }
 
       if (version === 'v6') {
         const uiMessageStream = await handleWorkflowStream({

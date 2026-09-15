@@ -14,12 +14,28 @@ export function parseModelRouterId(routerId: string, gatewayPrefix?: string): { 
 
   // Azure OpenAI uses 2-part format (azure-openai/deployment), others use 3-part (gateway/provider/model)
   if (gatewayPrefix === 'azure-openai') {
-    if (idParts.length < 2) {
+    const modelId = idParts.slice(1).join('/');
+    if (!modelId) {
       throw new Error(`Expected format azure-openai/deployment-name, but got ${routerId}`);
     }
     return {
       providerId: 'azure-openai',
-      modelId: idParts.slice(1).join('/'), // Deployment name
+      modelId, // Deployment name
+    };
+  }
+
+  // Provider-equals-gateway: a gateway whose provider id is the same as its
+  // gateway id (e.g. amazon-bedrock) uses a 2-part router id (gateway/model),
+  // because there is no separate provider segment to namespace. Catalog ids
+  // for such gateways are always two parts (model ids contain no slashes).
+  if (gatewayPrefix && idParts.length === 2 && idParts[0] === gatewayPrefix) {
+    const modelId = idParts[1];
+    if (!modelId) {
+      throw new Error(`Expected format ${gatewayPrefix}/model, but got ${routerId}`);
+    }
+    return {
+      providerId: gatewayPrefix,
+      modelId,
     };
   }
 

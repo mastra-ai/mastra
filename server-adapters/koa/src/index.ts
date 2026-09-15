@@ -9,9 +9,11 @@ import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-ada
 import {
   MastraServer as MastraServerBase,
   checkRouteFGA,
+  getCustomHTTPExceptionResponse,
   isZodError,
   normalizeQueryParams,
   redactStreamChunk,
+  serializeStreamChunk,
 } from '@mastra/server/server-adapter';
 import type Koa from 'koa';
 import type { Context, Middleware, Next } from 'koa';
@@ -406,7 +408,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
       }
     }
 
-    if (params.body) {
+    if (params.body !== undefined || route.bodySchema) {
       try {
         params.body = await this.parseBody(route, params.body);
       } catch (error) {
@@ -461,17 +463,20 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
       taskStore: ctx.state.taskStore,
       abortSignal: ctx.state.abortSignal,
       routePrefix: prefix,
+      request: toWebRequest(ctx),
     };
 
     // Check route permission requirement (EE feature)
     // Uses convention-based permission derivation: permissions are auto-derived
     // from route path/method unless explicitly set or route is public
-    const authConfig = this.mastra.getServer()?.auth;
-    if (authConfig) {
+    const requestContext = ctx.state.requestContext;
+    // Check if any auth is configured (studio or server) for RBAC
+    const hasAuth = this.mastra.getStudio?.()?.auth || this.mastra.getServer()?.auth;
+    if (hasAuth) {
       const hasPermission = await loadHasPermission();
       if (hasPermission) {
-        const userPermissions = ctx.state.requestContext.get('mastra__userPermissions') as string[] | undefined;
-        const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission);
+        const userPermissions = requestContext.get('mastra__userPermissions') as string[] | undefined;
+        const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission, requestContext);
 
         if (permissionError) {
           ctx.status = permissionError.status;
@@ -485,7 +490,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
     }
 
     // Check FGA authorization (EE feature)
-    const fgaError = await checkRouteFGA(this.mastra, route, ctx.state.requestContext, {
+    const fgaError = await checkRouteFGA(this.mastra, route, requestContext, {
       ...params.urlParams,
       ...params.queryParams,
       ...(typeof params.body === 'object' ? params.body : {}),
@@ -500,11 +505,23 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
       const result = await route.handler(handlerParams);
       await this.sendResponse(route, ctx, result, prefix);
     } catch (error) {
-      this.mastra.getLogger()?.error('Error calling handler', {
-        error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
-        path: route.path,
-        method: route.method,
-      });
+      const httpStatus = error && typeof error === 'object' && 'status' in error ? (error as any).status : undefined;
+      const isClientError = typeof httpStatus === 'number' && httpStatus >= 400 && httpStatus < 500;
+      if (!isClientError) {
+        this.mastra.getLogger()?.error('Error calling handler', {
+          error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+          path: route.path,
+          method: route.method,
+        });
+      }
+      const customResponse = getCustomHTTPExceptionResponse(error);
+      if (customResponse) {
+        ctx.status = customResponse.status;
+        customResponse.headers.forEach((value, name) => ctx.set(name, value));
+        ctx.body = Buffer.from(await customResponse.arrayBuffer());
+        return;
+      }
+
       // Attach status code to the error for upstream middleware
       if (error && typeof error === 'object') {
         if (!('status' in error)) {
@@ -557,7 +574,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
     const reader = readableStream.getReader();
 
     ctx.res.on('close', () => {
-      void reader.cancel('request aborted');
+      void reader.cancel('request aborted').catch(() => {});
     });
 
     try {
@@ -574,10 +591,20 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
           // Optionally redact sensitive data (system prompts, tool definitions, API keys) before sending to the client
           const shouldRedact = this.streamOptions?.redact ?? true;
           const outputValue = shouldRedact ? redactStreamChunk(value) : value;
+          // A chunk that can't be serialized must not kill the stream — skip it and keep streaming
+          const serialized = serializeStreamChunk(outputValue);
+          if (!serialized.ok) {
+            this.mastra.getLogger()?.error('Failed to serialize stream chunk, skipping', {
+              path: route.path,
+              chunkType: (outputValue as { type?: string })?.type,
+              error: serialized.error.message,
+            });
+            continue;
+          }
           if (streamFormat === 'sse') {
-            ctx.res.write(`data: ${JSON.stringify(outputValue)}\n\n`);
+            ctx.res.write(`data: ${serialized.json}\n\n`);
           } else {
-            ctx.res.write(JSON.stringify(outputValue) + '\x1E');
+            ctx.res.write(serialized.json + '\x1E');
           }
         }
       }
@@ -722,7 +749,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
           this.mastra.getLogger()?.error('Error writing datastream response', {
             error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
           });
-          void reader.cancel('response write error');
+          void reader.cancel('response write error').catch(() => {});
         };
         ctx.res.once('error', onResError);
 
@@ -858,10 +885,10 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
   }
 
   async registerCustomApiRoutes(): Promise<void> {
-    if (!(await this.buildCustomRouteHandler())) return;
+    const routes = await this.registerSchemaApiRoutes();
+    if (!(await this.buildCustomRouteHandler(routes))) return;
 
     const server = this;
-
     this.app.use(async function mastraCustomRouteDispatcher(ctx: Context, next: Next) {
       // Check if this request matches a protected custom route and run auth
       const path = String(ctx.path || '/');
@@ -916,27 +943,35 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
                   ctx.set(key, value);
                 }
               }
+
               if (authError.error) {
                 ctx.status = authError.status;
                 ctx.body = { error: authError.error };
                 return;
               }
             }
+          }
 
-            const authConfig = server.mastra.getServer()?.auth;
-            if (authConfig) {
-              const hasPermission = await loadHasPermission();
-              if (hasPermission) {
-                const userPermissions = ctx.state.requestContext.get('mastra__userPermissions') as string[] | undefined;
-                const permissionError = server.checkRoutePermission(serverRoute, userPermissions, hasPermission);
-                if (permissionError) {
-                  ctx.status = permissionError.status;
-                  ctx.body = {
-                    error: permissionError.error,
-                    message: permissionError.message,
-                  };
-                  return;
-                }
+          const requestContext = ctx.state.requestContext;
+          // Check if any auth is configured (studio or server) for RBAC
+          const hasAuth = server.mastra.getStudio?.()?.auth || server.mastra.getServer()?.auth;
+          if (hasAuth) {
+            const hasPermission = await loadHasPermission();
+            if (hasPermission) {
+              const userPermissions = requestContext.get('mastra__userPermissions') as string[] | undefined;
+              const permissionError = server.checkRoutePermission(
+                serverRoute,
+                userPermissions,
+                hasPermission,
+                requestContext,
+              );
+              if (permissionError) {
+                ctx.status = permissionError.status;
+                ctx.body = {
+                  error: permissionError.error,
+                  message: permissionError.message,
+                };
+                return;
               }
             }
           }
@@ -976,6 +1011,14 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
 
   registerContextMiddleware(): void {
     this.app.use(this.createContextMiddleware());
+    this.app.use(async (ctx: Context, next: Next) => {
+      const path = String(ctx.path || '/');
+      const method = String(ctx.method || 'GET');
+      ctx.res.once('finish', () => {
+        this.warnIfUnregisteredChannelWebhook(path, method, ctx.res.statusCode);
+      });
+      await next();
+    });
   }
 
   registerAuthMiddleware(): void {

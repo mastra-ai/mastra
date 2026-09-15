@@ -1,3 +1,5 @@
+import type { IncomingMessage } from 'node:http';
+import type { MastraAuthConfig as InternalMastraAuthConfig } from '@internal/auth/types';
 import type { Handler, MiddlewareHandler, Context } from 'hono';
 import type { cors } from 'hono/cors';
 import type { DescribeRouteOptions } from 'hono-openapi';
@@ -7,40 +9,94 @@ import type { MastraFGAPermissionInput } from '../auth/ee/interfaces/permissions
 import type { IRBACProvider } from '../auth/ee/interfaces/rbac';
 import type { Mastra } from '../mastra';
 import type { RequestContext } from '../request-context';
-import type { MastraAuthProvider } from './auth';
-import type { AuthenticateTokenFn } from './request-types';
+import type { IMastraAuthProvider } from './auth';
 
 type RouteFGAConfig = FGARouteConfig;
 
 export type Methods = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'ALL';
 
-export type ApiRoute =
-  | {
-      path: string;
-      method: Methods;
-      handler: Handler;
-      middleware?: MiddlewareHandler | MiddlewareHandler[];
-      openapi?: DescribeRouteOptions;
-      cors?: CorsOptions;
-      requiresAuth?: boolean;
-      requiresPermission?: MastraFGAPermissionInput | MastraFGAPermissionInput[];
-      fga?: RouteFGAConfig;
-      /** Framework-generated route. Bypasses the apiPrefix collision check. Mastra-internal — do not use. */
-      _mastraInternal?: true;
-    }
-  | {
-      path: string;
-      method: Methods;
-      createHandler: ({ mastra }: { mastra: Mastra }) => Promise<Handler>;
-      middleware?: MiddlewareHandler | MiddlewareHandler[];
-      openapi?: DescribeRouteOptions;
-      cors?: CorsOptions;
-      requiresAuth?: boolean;
-      requiresPermission?: MastraFGAPermissionInput | MastraFGAPermissionInput[];
-      fga?: RouteFGAConfig;
-      /** Framework-generated route. Bypasses the apiPrefix collision check. Mastra-internal — do not use. */
-      _mastraInternal?: true;
+export type ApiRouteHandler = (c: any) => Response | Promise<Response>;
+
+type ApiRouteBase = {
+  path: string;
+  method: Methods;
+  requiresAuth?: boolean;
+  requiresPermission?: MastraFGAPermissionInput | MastraFGAPermissionInput[];
+  fga?: RouteFGAConfig;
+  /** Framework-generated route. Bypasses the apiPrefix collision check. Mastra-internal — do not use. */
+  _mastraInternal?: true;
+};
+
+type HonoApiRoute = ApiRouteBase & {
+  middleware?: MiddlewareHandler | MiddlewareHandler[];
+  openapi?: DescribeRouteOptions;
+  cors?: CorsOptions;
+} & ({ handler: Handler } | { createHandler: ({ mastra }: { mastra: Mastra }) => Promise<ApiRouteHandler> });
+
+/**
+ * Structural mirror of the generated OpenAPI metadata attached to a
+ * `ServerRoute` by `createRoute()` in `@mastra/server/server-adapter`.
+ * Core cannot import from `@mastra/server`, so keep this in sync with
+ * `generateRouteOpenAPI()` in `packages/server/src/server/server-adapter/routes/route-builder.ts`.
+ */
+type SchemaApiRouteOpenAPI = {
+  hide?: boolean;
+  summary?: string;
+  description?: string;
+  tags?: string[];
+  deprecated?: boolean;
+  requestParams?: {
+    path?: unknown;
+    query?: unknown;
+  };
+  requestBody?: {
+    content: {
+      'application/json': {
+        schema: unknown;
+      };
     };
+  };
+  responses: Record<
+    string,
+    {
+      description: string;
+      content?: {
+        'application/json': {
+          schema: unknown;
+        };
+      };
+    }
+  >;
+};
+
+/**
+ * A schema-aware route created by `createRoute()` from a server adapter.
+ * The adapter registers these through its native route pipeline so parsing,
+ * validation, response handling, and generated OpenAPI metadata are preserved.
+ *
+ * Structural mirror of `ServerRoute` in
+ * `packages/server/src/server/server-adapter/routes/index.ts` (core cannot
+ * import from `@mastra/server`). Keep the two in sync. Unlike Hono-style
+ * routes, schema routes do not support `middleware` or `cors`.
+ */
+type SchemaApiRoute = ApiRouteBase & {
+  /** Runtime discriminator attached by `createRoute()`. */
+  readonly _mastraSchemaRoute: true;
+  responseType: 'stream' | 'json' | 'datastream-response' | 'mcp-http' | 'mcp-sse';
+  handler(params: any): Promise<unknown>;
+  streamFormat?: 'sse' | 'stream';
+  sseFlushOnConnect?: boolean;
+  pathParamSchema?: unknown;
+  queryParamSchema?: unknown;
+  bodySchema?: unknown;
+  responseSchema?: unknown;
+  openapi?: SchemaApiRouteOpenAPI;
+  maxBodySize?: number;
+  deprecated?: boolean;
+  onValidationError?: ValidationErrorHook;
+};
+
+export type ApiRoute = HonoApiRoute | SchemaApiRoute;
 
 export type Middleware = MiddlewareHandler | { path: string; handler: MiddlewareHandler };
 
@@ -54,56 +110,7 @@ export type ContextWithMastra = Context<{
   };
 }>;
 
-export type MastraAuthConfig<TUser = unknown> = {
-  /**
-   * Protected paths for the server
-   */
-  protected?: (RegExp | string | [string, Methods | Methods[]])[];
-
-  /**
-   * Public paths for the server
-   */
-  public?: (RegExp | string | [string, Methods | Methods[]])[];
-
-  /**
-   * Public paths for the server
-   */
-  authenticateToken?: AuthenticateTokenFn<TUser, Promise<TUser>>;
-
-  /**
-   * Maps the authenticated user to a resource ID for memory/thread scoping.
-   * When provided, the returned value is set as `MASTRA_RESOURCE_ID_KEY` on the request context
-   * after successful authentication, enabling per-user memory isolation.
-   */
-  mapUserToResourceId?(user: TUser): string | undefined | null;
-
-  /**
-   * Authorization function for the server
-   */
-  authorize?: (path: string, method: string, user: TUser, context: ContextWithMastra) => Promise<boolean>;
-
-  /**
-   * Rules for the server
-   */
-  rules?: {
-    /**
-     * Path for the rule
-     */
-    path?: RegExp | string | string[];
-    /**
-     * Method for the rule
-     */
-    methods?: Methods | Methods[];
-    /**
-     * Condition for the rule
-     */
-    condition?: (user: TUser) => Promise<boolean> | boolean;
-    /**
-     * Allow the rule
-     */
-    allow?: boolean;
-  }[];
-};
+export type MastraAuthConfig<TUser = unknown> = InternalMastraAuthConfig<TUser, ContextWithMastra>;
 
 export type HttpLoggingConfig = {
   /**
@@ -257,16 +264,46 @@ export type ServerConfig = {
    */
   timeout?: number;
   /**
+   * Max time (ms) to drain in-flight requests after SIGINT/SIGTERM. Must be a
+   * finite number from 0 through 2_147_483_647. When the window passes,
+   * remaining HTTP connections are force-closed. Mastra shutdown then runs
+   * either way before the process exits, giving in-flight evented workflow
+   * runs the same window to finish before pubsub is torn down. Set 0 to skip
+   * both drains.
+   * @default 5000
+   */
+  drainTimeout?: number;
+  /**
+   * Whether the generated server installs its own SIGINT/SIGTERM handlers
+   * (drain in-flight requests + `mastra.shutdown()` + `process.exit`). Set
+   * false to manage signals yourself (e.g. a handler registered in your
+   * Mastra config module that calls `mastra.shutdown()`). Note: user code
+   * has no access to the HTTP server handle in the generated entry, so HTTP
+   * drain is unavailable with false — prefer `drainTimeout`, or a server
+   * adapter for full custom lifecycle. With false and no user handler,
+   * Node's default signal behavior applies (immediate termination, no drain).
+   * @default true
+   */
+  handleShutdownSignals?: boolean;
+  /**
    * Custom API routes for the server
    */
   apiRoutes?: ApiRoute[];
   /**
-   * Middleware for the server
+   * Middleware for the server. Handlers use Hono's `(c, next)` signature and
+   * run on Hono-based serving paths: `mastra dev` / `mastra build`,
+   * `@mastra/hono`, and adapters built on it such as `@mastra/next` and
+   * `@mastra/tanstack-start`. Handlers are skipped for routes declared public
+   * with `requiresAuth: false` (see `skipIfFrameworkPublic` in `@mastra/hono`),
+   * so they cannot block endpoints such as the Studio sign-in routes.
+   * Non-Hono adapters (Express, Fastify, Koa) cannot run Hono handlers and log
+   * a warning when this is set. Register middleware through the framework's
+   * own API there instead.
    */
   middleware?: Middleware | Middleware[];
   /**
    * CORS configuration for the server.
-   * @default { origin: '*', allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'], allowHeaders: ['Content-Type', 'Authorization', 'x-mastra-client-type', 'x-mastra-dev-playground'], exposeHeaders: ['Content-Length', 'X-Requested-With'], credentials: false }
+   * @default { origin: '*', allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'], allowHeaders: ['Content-Type', 'Authorization', 'A2A-Version', 'x-mastra-client-type', 'x-mastra-dev-playground'], exposeHeaders: ['Content-Length', 'X-Requested-With'], credentials: false }
    */
   cors?: CorsOptions | false;
   /**
@@ -323,6 +360,15 @@ export type ServerConfig = {
      * Custom session ID generator function
      */
     sessionIdGenerator?: () => string;
+    /**
+     * Sets `req.auth` on the request handed to the MCP transport, which is what
+     * surfaces as `extra.authInfo` inside tool and agent execution.
+     *
+     * When omitted, the principal resolved by `server.auth` is bridged
+     * automatically. Provide this hook when your own middleware performs the
+     * verification and you want full control over the resulting `AuthInfo`.
+     */
+    setRequestAuth?: (req: IncomingMessage, requestContext: RequestContext) => void | Promise<void>;
   };
 
   /**
@@ -336,7 +382,7 @@ export type ServerConfig = {
    * Handles WHO the user is (authentication only).
    * For authorization (WHAT the user can do), use the `rbac` option.
    */
-  auth?: MastraAuthConfig<any> | MastraAuthProvider<any>;
+  auth?: MastraAuthConfig<any> | IMastraAuthProvider<any>;
 
   /**
    * Role-based access control (RBAC) provider for EE (Enterprise Edition).
@@ -467,4 +513,65 @@ export type ServerConfig = {
    * ```
    */
   onValidationError?: ValidationErrorHook;
+};
+
+/**
+ * Configuration for Mastra Studio authentication and authorization.
+ *
+ * Studio authentication is independent from server (API) authentication,
+ * allowing you to use different providers for internal team members (Studio)
+ * vs external customers (API).
+ *
+ * @example Using separate providers for Studio and API
+ * ```typescript
+ * const mastra = new Mastra({
+ *   server: {
+ *     // API authentication for external customers
+ *     auth: new MastraAuthWorkos({ ... }),
+ *     rbac: new MastraRBACWorkos({ ... }),
+ *   },
+ *   studio: {
+ *     // Studio authentication for internal team
+ *     auth: new MastraAuthOkta({ ... }),
+ *     rbac: new StaticRBACProvider({
+ *       roles: DEFAULT_ROLES,
+ *       getUserRoles: (user) => [user.role],
+ *     }),
+ *   },
+ * });
+ * ```
+ */
+export type StudioConfig = {
+  /**
+   * Authentication provider for Studio UI.
+   *
+   * Handles WHO can access Studio (authentication only).
+   * For authorization (WHAT users can do in Studio), use the `rbac` option.
+   *
+   * When not configured, Studio operates without authentication (development mode).
+   */
+  auth?: MastraAuthConfig<any> | IMastraAuthProvider<any>;
+
+  /**
+   * Role-based access control (RBAC) provider for Studio.
+   *
+   * Handles WHAT authenticated Studio users can do.
+   * Controls access to Studio features like team management, user listing, etc.
+   *
+   * @example
+   * ```typescript
+   * rbac: new StaticRBACProvider({
+   *   roles: DEFAULT_ROLES,
+   *   getUserRoles: (user) => [user.role],
+   * }),
+   * ```
+   */
+  rbac?: IRBACProvider<any>;
+
+  /**
+   * FGA provider for fine-grained authorization in Studio.
+   *
+   * Enables relationship-based access control for Studio resources.
+   */
+  fga?: IFGAProvider<any>;
 };

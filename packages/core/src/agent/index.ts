@@ -5,8 +5,34 @@ export * from './types';
 export * from './signals';
 export * from '../signals/signal-provider';
 export * from '../signals/webhook-signal-provider';
+export {
+  AGENT_SCHEDULE_PREFIX,
+  WORKFLOW_SCHEDULE_PREFIX,
+  ScheduleInputSchema,
+  ScheduleOutputSchema,
+  Schedules,
+  toAgentSchedule,
+  toWorkflowSchedule,
+  toScheduleView,
+  type ScheduleInput,
+  type ScheduleOutput,
+  type ScheduleRunStatus,
+  type AgentSchedule,
+  type WorkflowSchedule,
+  type AnySchedule,
+  type CreateScheduleInput,
+  type CreateAgentScheduleInput,
+  type CreateWorkflowScheduleInput,
+  type UpdateScheduleInput,
+  type UpdateAgentScheduleInput,
+  type UpdateWorkflowScheduleInput,
+  type ListSchedulesFilter,
+} from '../schedules';
 export * from './agent';
+export { getGoalActivityDurationMs } from './goal';
+export { DEFAULT_TOOL_DECLINE_REASON, resolveDeclineReason } from './tool-approval';
 export * from './utils';
+export * from './fs-routing';
 
 // Note: DurableAgent is NOT re-exported here to avoid circular dependencies.
 // Import from '@mastra/core/agent/durable' instead:
@@ -24,6 +50,7 @@ export type {
   DelegationCompleteContext,
   DelegationCompleteResult,
   OnDelegationCompleteHandler,
+  DelegationHookError,
   DelegationConfig,
   MessageFilterContext,
   /** @deprecated Use MessageFilterContext instead */

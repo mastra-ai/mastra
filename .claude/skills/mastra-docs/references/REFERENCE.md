@@ -1,145 +1,122 @@
 # Reference page styleguide
 
-Read STYLEGUIDE.md first.
+Use this file for API, configuration, CLI, type, and lookup pages under `docs/src/content/en/reference`.
 
-Use this file for reference/API pages.
+## Goal
 
-Goal:
+- Make exact behavior and configuration easy to find.
+- Document the public contract completely enough for implementation work.
+- Link to docs pages for conceptual explanation and task guidance.
 
-- document one class or function completely
-- optimize for lookup, not concept teaching
-- link to doc pages when a concept needs explanation
+## Reference page types
 
-Use this shape:
+Choose the structure that matches the subject:
 
-````mdx
+- class or factory;
+- standalone function or method;
+- options or configuration object;
+- return value, event, stream, or result type;
+- CLI command;
+- package or subsystem overview;
+- migration reference.
+
+A reference page may document one primitive or a tightly related API surface. Do not split related information when readers need it together for lookup.
+
+## Frontmatter and title
+
+The common title pattern is `Reference: $NAME | $CATEGORY`.
+
+```mdx
 ---
 title: 'Reference: $NAME | $CATEGORY'
-description: 'API reference for $NAME, $BRIEF_DESCRIPTION.'
+description: 'API reference for $NAME and its supported configuration.'
 packages:
   - '@mastra/core'
-  - '@mastra/<module>'
 ---
 
 # $NAME
+```
 
-**Added in:** `@mastra/$PACKAGE@$VERSION`
+For functions, include parentheses in the title when that is the established pattern. Use the class, command, type, or subsystem name directly in the H1.
 
-One or two sentences on what the class or function does and when to use it.
+Add `**Added in:**` immediately after the H1 only when the minimum package version matters. Omit it for long-standing APIs and new packages whose initial version is already implied.
 
-Link to alternatives when they exist.
+## Opening and usage
 
-## Usage example
+Start with a short description of what the API does and when readers use it. Link to an alternative API when choosing between them matters.
 
-Brief sentence on the scenario.
+Include a minimal usage example near the beginning when it helps readers orient themselves. A signature-only or lookup page may start with parameters, syntax, or command usage instead.
 
 ```typescript title="src/mastra/index.ts"
-import { $Name } from '@mastra/<package>';
+import { Name } from '@mastra/package';
 
-// Minimal working example
+// Minimal supported usage
 ```
 
-If the API has multiple calling patterns, show each one here with a brief explanation.
+Do not force an example that adds no information beyond the signature.
 
-## Constructor parameters / Parameters
+## Parameters, properties, and options
 
-<PropertiesTable
-  content={[
-    {
-      name: '$PARAM',
-      type: '$TYPE',
-      description: 'What this parameter does.',
-      isOptional: true,
-      defaultValue: '$DEFAULT',
-    },
-  ]}
-/>
+Use `PropertiesTable` for structured parameters, properties, and configuration. See `COMPONENTS.md` for its supported shape.
 
-## Properties
+Each entry should include `name`, `type`, and `description`. Add optional, default, and nested fields when supported by source.
 
-<PropertiesTable
-  content={[
-    {
-      name: '$PROPERTY',
-      type: '$TYPE',
-      description: 'What this property represents.',
-    },
-  ]}
-/>
+## Methods and functions
 
-## Methods
+Use backticked signatures in headings:
 
-### $METHOD_CATEGORY
-
-#### `$methodName($PARAM, options?)`
-
-One sentence on what the method does.
-
-```typescript
-const result = await instance.$methodName('value', {
-  option: true,
-});
+```md
+### `methodName(value, options?)`
 ```
 
-## $DOMAIN_SPECIFIC_SECTION
+For each method or function, document the information readers need:
 
-Add sections for API-specific concerns such as tool configuration or agent tools. Use tables for capability lists and `<PropertiesTable>` for nested config.
+- purpose;
+- parameters not already covered by a shared table;
+- return value;
+- thrown errors or important failure behavior;
+- side effects, lifecycle, or persistence behavior;
+- an example when usage is not obvious.
 
-## Additional configuration
+Group methods when categories improve lookup. Use the heading depth that fits the page; do not add an empty category level.
 
-Add advanced usage patterns that go beyond the basic parameters.
-````
+State `Returns: $TYPE` when the return type is not evident. Document custom return objects with an interface, table, or linked type reference.
 
-Rules:
+## CLI reference
 
-- frontmatter title must be `Reference: $NAME | $CATEGORY`
-- for functions, include parentheses in `$NAME` in frontmatter and H1
-- for classes, use the class name in frontmatter and H1
-- include `**Added in:**` only when the API was introduced in a specific release and the minimum version matters. Do not add it if the package is a net-new package
-- place `**Added in:**` immediately after the H1
-- omit `**Added in:**` for long-standing APIs
-- link to alternative APIs right after the description when they exist
-- put a minimal working usage example immediately after the description
-- if the API has multiple calling patterns, show them in the Usage example section
-- use `<PropertiesTable>` for constructor parameters, function parameters, and properties
-- each `<PropertiesTable>` entry should include `name`, `type`, and `description`, and may include `isOptional`, `properties`, and `defaultValue`
-- for nested types, use `properties: [{ type: '$TYPE', parameters: [...] }]`; do not put nested parameter objects directly inside `properties`
-- check existing reference pages for `<PropertiesTable>` patterns and consistency
-- group methods by category with H3 headings
-- use H4 headings with backticked method signatures
-- include parameter names in method headings
-- every method must have at least one real code example
-- add `Returns: $Type` after the code example when the return type is not obvious
-- include an interface definition when the return type is a custom object
-- add domain-specific H2 sections after the standard sections when needed
-- use tables for capability lists
-- link to doc pages instead of duplicating long conceptual explanations
+For a CLI command, include:
 
-Tips:
+- syntax;
+- arguments and options;
+- defaults;
+- required build or initialization state;
+- environment variables;
+- important side effects;
+- short examples for common invocations.
 
-- For nested objects, put `parameters` inside a typed entry in `properties`:
+Keep task walkthroughs in `/docs` or `/integrations` and link to them.
 
-  ```mdx
-  <PropertiesTable
-    content={[
-      {
-        name: 'options',
-        type: 'RunOptions',
-        description: 'Options for the run.',
-        properties: [
-          {
-            type: 'RunOptions',
-            parameters: [
-              {
-                name: 'timeout',
-                type: 'number',
-                description: 'Timeout in milliseconds.',
-                isOptional: true,
-              },
-            ],
-          },
-        ],
-      },
-    ]}
-  />
-  ```
+## Events, streams, and result objects
+
+Document:
+
+- the object or event shape;
+- discriminating fields;
+- when each variant occurs;
+- ordering or lifecycle guarantees;
+- completion and error behavior;
+- links to guides that show consumption patterns.
+
+Use tables for capability matrices and stable enumerations. Use code blocks for exact object shapes.
+
+## Ordering
+
+A common order is usage, parameters, properties, methods, return values, and domain-specific details. Change the order when readers need domain context or a different lookup path first.
+
+Large class references may interleave usage and domain-specific sections with formal tables. Keep headings predictable and avoid repeating the same option in several places.
+
+## Reference-specific rules
+
+- Document only public exports and supported contracts.
+- Keep migration and compatibility notes close to the affected API.
+- Update related reference pages when a shared type or behavior changes.

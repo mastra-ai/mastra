@@ -8,6 +8,7 @@ import type {
 
 import type { FilesystemDB } from './filesystem-db';
 import { GitHistory } from './git-history';
+import { getSourceControlEntityFilePath } from './source-control';
 import type { StorageOrderBy } from './types';
 
 /**
@@ -160,7 +161,7 @@ export class FilesystemVersionedHelpers<
     if (!this.perEntityFilesDir) {
       throw new Error(`${this.name}: per-entity files directory is not configured`);
     }
-    return `${this.perEntityFilesDir}/${encodeURIComponent(entityId)}.json`;
+    return getSourceControlEntityFilePath(this.perEntityFilesDir, entityId);
   }
 
   private entityIdFromPerEntityFilename(filename: string): string {

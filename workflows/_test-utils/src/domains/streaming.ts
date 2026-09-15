@@ -8,7 +8,7 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
-import { randomUUID } from 'crypto';
+import { randomUUID } from 'node:crypto';
 import { simulateReadableStream } from '@internal/ai-sdk-v4';
 // @ts-ignore - module resolution for test utilities
 import { MockLanguageModelV1, MockLanguageModelV2 } from '@internal/ai-sdk-v4/test';
@@ -963,7 +963,6 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
               endedAt: expect.any(Number),
               resumePayload: { stepId: 'promptAgent', context: { userInput: 'test input for resumption' } },
               resumedAt: expect.any(Number),
-              suspendedAt: expect.any(Number),
             },
             evaluateToneConsistency: {
               status: 'success',
@@ -972,6 +971,7 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
               endedAt: expect.any(Number),
             },
           });
+          expect(resumeResult.steps.promptAgent).not.toHaveProperty('suspendedAt');
         },
       );
 

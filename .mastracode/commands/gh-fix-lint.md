@@ -43,7 +43,7 @@ RUN git pull origin <branch-name-from-step-1> --ff-only
 
 Run the formatting and linting commands to auto-fix issues:
 
-RUN pnpm prettier:format
+RUN pnpm oxfmt:format
 RUN pnpm format
 
 ## Step 5: Check for Changes

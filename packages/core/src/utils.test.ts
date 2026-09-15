@@ -8,14 +8,16 @@ import { RequestContext } from './request-context';
 import { toStandardSchema } from './schema';
 import { createTool, isVercelTool } from './tools';
 import {
-  deepEqual,
+  boundedStringify,
   deepMerge,
   ensureSerializable,
+  isBoundedSerializable,
   fetchWithRetry,
   generateEmptyFromSchema,
   makeCoreTool,
   maskStreamTags,
   omitKeys,
+  readPositiveIntEnv,
   removeUndefinedValues,
   resolveSerializedZodOutput,
   safeStringify,
@@ -762,6 +764,12 @@ describe('safeStringify', () => {
     const result = safeStringify(obj);
     expect(JSON.parse(result)).toEqual({ count: '42', name: 'test' });
   });
+
+  it('should normalize unsupported top-level values to "null"', () => {
+    expect(safeStringify(undefined)).toBe('null');
+    expect(safeStringify(() => {})).toBe('null');
+    expect(safeStringify(Symbol('test'))).toBe('null');
+  });
 });
 
 describe('ensureSerializable', () => {
@@ -801,6 +809,124 @@ describe('ensureSerializable', () => {
     expect(result.screen.properties.color).toBe('red');
     expect(result.screen.properties.variantScreenInstance).toBe('[Circular]');
     expect(() => JSON.stringify(result)).not.toThrow();
+  });
+
+  it('should return a serializable shared-reference value unchanged (under budget)', () => {
+    // Shared but acyclic and small — must NOT be collapsed; the fast path
+    // returns the original reference.
+    const shared = { x: 1 };
+    const obj = { a: shared, b: shared };
+    expect(ensureSerializable(obj)).toBe(obj);
+  });
+
+  it('should collapse an over-budget shared-reference graph in bounded time instead of hanging', () => {
+    // 31 heap objects, but JSON.stringify would expand them to 2^30 nodes —
+    // the unbounded version hangs for minutes before throwing.
+    let node: any = { leaf: true };
+    for (let i = 0; i < 30; i++) node = { a: node, b: node };
+    const obj = { dag: node, keep: 'value' };
+
+    const start = Date.now();
+    const result = ensureSerializable(obj) as any;
+    const elapsed = Date.now() - start;
+
+    // Loose threshold: assert "bounded", not "fast".
+    expect(elapsed).toBeLessThan(2000);
+    expect(result).not.toBe(obj);
+    expect(result.keep).toBe('value');
+    expect(() => JSON.stringify(result)).not.toThrow();
+  });
+
+  it('should stringify BigInt values through the fallback', () => {
+    const result = ensureSerializable({ big: 10n }) as any;
+    expect(result.big).toBe('10');
+  });
+});
+
+describe('isBoundedSerializable', () => {
+  it('returns true for JSON-safe values', () => {
+    expect(isBoundedSerializable({ a: 1, b: [2, 3], c: { d: 'x' } })).toBe(true);
+    expect(isBoundedSerializable('hello')).toBe(true);
+    expect(isBoundedSerializable(null)).toBe(true);
+  });
+
+  it('returns true for large-but-acyclic shared references under budget', () => {
+    let node: any = { leaf: true };
+    for (let i = 0; i < 10; i++) node = { a: node, b: node }; // 2^10 nodes, well under budget
+    expect(isBoundedSerializable(node)).toBe(true);
+  });
+
+  it('returns false for circular references', () => {
+    const obj: any = {};
+    obj.self = obj;
+    expect(isBoundedSerializable(obj)).toBe(false);
+  });
+
+  it('returns false for BigInt', () => {
+    expect(isBoundedSerializable({ n: 1n })).toBe(false);
+  });
+
+  it('returns false in bounded time for an over-budget shared-reference graph', () => {
+    let node: any = { leaf: true };
+    for (let i = 0; i < 30; i++) node = { a: node, b: node };
+
+    const start = Date.now();
+    const result = isBoundedSerializable(node);
+    const elapsed = Date.now() - start;
+
+    expect(result).toBe(false);
+    expect(elapsed).toBeLessThan(2000);
+  });
+
+  it('returns false for values that produce no JSON output', () => {
+    // JSON.stringify returns undefined (without throwing) for these — a bare
+    // "did it throw?" probe would wrongly call them serializable.
+    expect(isBoundedSerializable(undefined)).toBe(false);
+    expect(isBoundedSerializable(() => {})).toBe(false);
+    expect(isBoundedSerializable(Symbol('x'))).toBe(false);
+    expect(isBoundedSerializable({ toJSON: () => undefined })).toBe(false);
+  });
+});
+
+describe('boundedStringify', () => {
+  it('returns the JSON string for serializable values', () => {
+    expect(boundedStringify({ a: 1 })).toBe('{"a":1}');
+    expect(boundedStringify('hi')).toBe('"hi"');
+    expect(boundedStringify(null)).toBe('null');
+  });
+
+  it('returns undefined for values that produce no JSON', () => {
+    expect(boundedStringify(undefined)).toBeUndefined();
+    expect(boundedStringify(() => {})).toBeUndefined();
+    expect(boundedStringify(Symbol('x'))).toBeUndefined();
+    expect(boundedStringify({ toJSON: () => undefined })).toBeUndefined();
+  });
+
+  it('returns undefined for cycles and over-budget graphs in bounded time', () => {
+    const cyclic: any = {};
+    cyclic.self = cyclic;
+    expect(boundedStringify(cyclic)).toBeUndefined();
+
+    let node: any = { leaf: true };
+    for (let i = 0; i < 30; i++) node = { a: node, b: node };
+    const start = Date.now();
+    expect(boundedStringify(node)).toBeUndefined();
+    expect(Date.now() - start).toBeLessThan(2000);
+  });
+
+  it('reads the value exactly once (no probe/clone TOCTOU)', () => {
+    let reads = 0;
+    const value = {
+      get payload() {
+        reads++;
+        return { n: reads };
+      },
+    };
+
+    const json = boundedStringify(value);
+
+    expect(reads).toBe(1);
+    expect(JSON.parse(json!)).toEqual({ payload: { n: 1 } });
   });
 });
 
@@ -907,77 +1033,6 @@ describe('deepMerge', () => {
   });
 });
 
-describe('deepEqual', () => {
-  it('returns true for identical primitives', () => {
-    expect(deepEqual(1, 1)).toBe(true);
-    expect(deepEqual('hello', 'hello')).toBe(true);
-    expect(deepEqual(true, true)).toBe(true);
-  });
-
-  it('returns false for different primitives', () => {
-    expect(deepEqual(1, 2)).toBe(false);
-    expect(deepEqual('a', 'b')).toBe(false);
-  });
-
-  it('returns true for the same object reference', () => {
-    const obj = { a: 1 };
-    expect(deepEqual(obj, obj)).toBe(true);
-  });
-
-  it('returns true for deeply equal plain objects', () => {
-    expect(deepEqual({ a: 1, b: { c: 2 } }, { a: 1, b: { c: 2 } })).toBe(true);
-  });
-
-  it('returns false when object keys differ', () => {
-    expect(deepEqual({ a: 1 }, { b: 1 })).toBe(false);
-  });
-
-  it('returns false when object values differ', () => {
-    expect(deepEqual({ a: 1 }, { a: 2 })).toBe(false);
-  });
-
-  it('returns false when objects have different key counts', () => {
-    expect(deepEqual({ a: 1, b: 2 }, { a: 1 })).toBe(false);
-  });
-
-  it('returns true for equal arrays', () => {
-    expect(deepEqual([1, 2, 3], [1, 2, 3])).toBe(true);
-  });
-
-  it('returns false for arrays of different length', () => {
-    expect(deepEqual([1, 2], [1, 2, 3])).toBe(false);
-  });
-
-  it('returns false for arrays with different elements', () => {
-    expect(deepEqual([1, 2, 3], [1, 2, 4])).toBe(false);
-  });
-
-  it('returns true for equal Date instances', () => {
-    const d1 = new Date('2024-01-01');
-    const d2 = new Date('2024-01-01');
-    expect(deepEqual(d1, d2)).toBe(true);
-  });
-
-  it('returns false for different Date instances', () => {
-    const d1 = new Date('2024-01-01');
-    const d2 = new Date('2025-06-01');
-    expect(deepEqual(d1, d2)).toBe(false);
-  });
-
-  it('returns true for both null values', () => {
-    expect(deepEqual(null, null)).toBe(true);
-  });
-
-  it('returns false when only one side is null', () => {
-    expect(deepEqual(null, {})).toBe(false);
-    expect(deepEqual({}, null)).toBe(false);
-  });
-
-  it('returns false for values of different types', () => {
-    expect(deepEqual(1, '1')).toBe(false);
-  });
-});
-
 describe('omitKeys', () => {
   it('removes specified keys from an object', () => {
     const obj = { a: 1, b: 2, c: 3 };
@@ -1030,5 +1085,47 @@ describe('removeUndefinedValues', () => {
   it('returns the same entries when no values are undefined', () => {
     const obj = { a: 1, b: 'x', c: true };
     expect(removeUndefinedValues(obj)).toEqual({ a: 1, b: 'x', c: true });
+  });
+});
+
+describe('readPositiveIntEnv', () => {
+  const ENV_NAME = 'MASTRA_TEST_POSITIVE_INT';
+  const FALLBACK = 30_000;
+
+  afterEach(() => {
+    delete process.env[ENV_NAME];
+  });
+
+  it('reads a positive integer', () => {
+    process.env[ENV_NAME] = '5000';
+    expect(readPositiveIntEnv(ENV_NAME, FALLBACK)).toBe(5000);
+  });
+
+  it('reads exponent notation that lands on an integer', () => {
+    process.env[ENV_NAME] = '6e4';
+    expect(readPositiveIntEnv(ENV_NAME, FALLBACK)).toBe(60_000);
+  });
+
+  it('falls back when unset or empty', () => {
+    expect(readPositiveIntEnv(ENV_NAME, FALLBACK)).toBe(FALLBACK);
+    process.env[ENV_NAME] = '';
+    expect(readPositiveIntEnv(ENV_NAME, FALLBACK)).toBe(FALLBACK);
+  });
+
+  it.each(['abc', '10s', '30 minutes', 'Infinity', 'NaN'])('falls back on non-numeric %s', raw => {
+    process.env[ENV_NAME] = raw;
+    expect(readPositiveIntEnv(ENV_NAME, FALLBACK)).toBe(FALLBACK);
+  });
+
+  it.each(['0', '-1', '-5000'])('falls back on non-positive %s', raw => {
+    process.env[ENV_NAME] = raw;
+    expect(readPositiveIntEnv(ENV_NAME, FALLBACK)).toBe(FALLBACK);
+  });
+
+  it.each(['1.5', '0.5'])('falls back on fractional %s, since callers use these as ms counts', raw => {
+    // A fractional TTL would be compared against integer `Date.now()` deltas and
+    // would land in a setInterval period, so it is rejected rather than rounded.
+    process.env[ENV_NAME] = raw;
+    expect(readPositiveIntEnv(ENV_NAME, FALLBACK)).toBe(FALLBACK);
   });
 });

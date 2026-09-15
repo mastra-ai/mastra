@@ -1,0 +1,354 @@
+import type { BoardRegistry } from '../boards/registry.js';
+import type {
+  FactoryCommitDecision,
+  FactoryRuleDecision,
+  FactoryRuleJsonValue,
+  FactoryRuleRejectionCode,
+  WorkItemSource,
+} from './types.js';
+
+export const MAX_FACTORY_RULE_CAUSAL_DEPTH = 8;
+
+const MAX_VERSION_LENGTH = 128;
+const MAX_IDEMPOTENCY_KEY_LENGTH = 256;
+const MAX_REASON_LENGTH = 512;
+const MAX_TITLE_LENGTH = 512;
+const MAX_MESSAGE_LENGTH = 8_192;
+const MAX_ARGUMENTS_LENGTH = 4_096;
+export const MAX_ROLE_LENGTH = 32;
+export const MAX_TOOL_NAME_LENGTH = 128;
+const MAX_SKILL_NAME_LENGTH = 128;
+const MAX_SOURCE_KEY_LENGTH = 256;
+const MAX_URL_LENGTH = 2_048;
+const MAX_METADATA_JSON_LENGTH = 16_384;
+const MAX_JSON_DEPTH = 8;
+const MAX_JSON_COLLECTION_SIZE = 100;
+
+export const MAX_BOARD_IDENTIFIER_LENGTH = 128;
+export const IDENTIFIER_RE = /^[a-z0-9][a-z0-9_-]*$/i;
+export const BOARD_IDENTIFIER_RE = IDENTIFIER_RE;
+const SKILL_NAME_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const SENSITIVE_KEY_RE = /(?:authorization|cookie|credential|password|secret|token)/i;
+const WORK_ITEM_SOURCES: readonly WorkItemSource[] = ['github-issue', 'github-pr', 'linear-issue', 'manual'];
+const REJECTION_CODES: readonly FactoryRuleRejectionCode[] = [
+  'forbidden',
+  'invalid_transition',
+  'missing_binding',
+  'stale',
+  'timeout',
+  'rule_error',
+  'causal_depth_exceeded',
+  'repeated_transition',
+];
+
+export class FactoryRuleValidationError extends Error {
+  readonly code = 'invalid_factory_rule';
+
+  constructor(message: string) {
+    super(message);
+    this.name = 'FactoryRuleValidationError';
+  }
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+function assertExactKeys(value: Record<string, unknown>, keys: readonly string[], label: string): void {
+  const allowed = new Set(keys);
+  if (Object.keys(value).some(key => !allowed.has(key))) {
+    throw new FactoryRuleValidationError(`${label} contains an unsupported field.`);
+  }
+}
+
+function boundedString(value: unknown, label: string, max: number, pattern?: RegExp): string {
+  if (typeof value !== 'string') throw new FactoryRuleValidationError(`${label} must be a string.`);
+  const normalized = value.trim();
+  if (normalized.length === 0 || normalized.length > max || (pattern && !pattern.test(normalized))) {
+    throw new FactoryRuleValidationError(`${label} is invalid.`);
+  }
+  return normalized;
+}
+
+export function isBoardIdentifier(value: unknown): value is string {
+  return typeof value === 'string' && value.length <= MAX_BOARD_IDENTIFIER_LENGTH && BOARD_IDENTIFIER_RE.test(value);
+}
+
+function boardIdentifier(value: unknown, label: string): string {
+  if (!isBoardIdentifier(value)) {
+    throw new FactoryRuleValidationError(`${label} is invalid.`);
+  }
+  return value;
+}
+
+export function assertFactoryDecisionTarget(
+  decision: FactoryRuleDecision,
+  boards: BoardRegistry,
+  itemBoard?: string | null,
+): void {
+  if (decision.type !== 'transition' && decision.type !== 'upsertLinkedWorkItem') return;
+  const board = boards.get(decision.board);
+  if (!board) throw new FactoryRuleValidationError('Factory decision target board is not installed.');
+  if (!Object.hasOwn(board.phases, decision.stage)) {
+    throw new FactoryRuleValidationError('Factory decision target phase is not defined on its board.');
+  }
+  if (decision.type === 'transition' && itemBoard !== undefined && itemBoard !== decision.board) {
+    throw new FactoryRuleValidationError('Factory transition cannot change the item board.');
+  }
+}
+
+function optionalBoundedString(value: unknown, label: string, max: number): string | undefined {
+  if (value === undefined) return undefined;
+  return boundedString(value, label, max);
+}
+
+function enumValue<T extends string>(value: unknown, allowed: readonly T[], label: string): T {
+  if (typeof value !== 'string' || !allowed.includes(value as T)) {
+    throw new FactoryRuleValidationError(`${label} is invalid.`);
+  }
+  return value as T;
+}
+
+export function normalizeFactoryRuleJsonValue(
+  value: unknown,
+  depth = 0,
+  seen = new Set<object>(),
+): FactoryRuleJsonValue {
+  if (value === null || typeof value === 'boolean' || typeof value === 'string') return value;
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) throw new FactoryRuleValidationError('Rule metadata must contain finite numbers.');
+    return value;
+  }
+  if (depth >= MAX_JSON_DEPTH || (typeof value !== 'object' && !Array.isArray(value))) {
+    throw new FactoryRuleValidationError('Rule metadata is not bounded JSON.');
+  }
+  if (seen.has(value as object)) throw new FactoryRuleValidationError('Rule metadata must not contain cycles.');
+  seen.add(value as object);
+  try {
+    if (Array.isArray(value)) {
+      if (value.length > MAX_JSON_COLLECTION_SIZE) {
+        throw new FactoryRuleValidationError('Rule metadata contains too many entries.');
+      }
+      return value.map(entry => normalizeFactoryRuleJsonValue(entry, depth + 1, seen));
+    }
+    if (!isPlainObject(value)) throw new FactoryRuleValidationError('Rule metadata must use plain objects.');
+    const entries = Object.entries(value);
+    if (entries.length > MAX_JSON_COLLECTION_SIZE) {
+      throw new FactoryRuleValidationError('Rule metadata contains too many fields.');
+    }
+    const sanitized: Record<string, FactoryRuleJsonValue> = {};
+    for (const [key, entry] of entries) {
+      const normalizedKey = boundedString(key, 'Rule metadata key', 128, IDENTIFIER_RE);
+      sanitized[normalizedKey] = SENSITIVE_KEY_RE.test(normalizedKey)
+        ? '[REDACTED]'
+        : normalizeFactoryRuleJsonValue(entry, depth + 1, seen);
+    }
+    return sanitized;
+  } finally {
+    seen.delete(value as object);
+  }
+}
+
+function sanitizeMetadata(value: unknown): Record<string, FactoryRuleJsonValue> | undefined {
+  if (value === undefined) return undefined;
+  const sanitized = normalizeFactoryRuleJsonValue(value);
+  if (!isPlainObject(sanitized)) throw new FactoryRuleValidationError('Rule metadata must be an object.');
+  if (JSON.stringify(sanitized).length > MAX_METADATA_JSON_LENGTH) {
+    throw new FactoryRuleValidationError('Rule metadata is too large.');
+  }
+  return sanitized;
+}
+
+export const DEFAULT_FACTORY_CONFIG_VERSION = 'factory-config-v1';
+
+/** Operator-maintained provenance label stamped on transition audit and deferred-decision rows. */
+export function assertFactoryConfigVersion(value: unknown): string {
+  return boundedString(value, 'Factory configVersion', MAX_VERSION_LENGTH);
+}
+
+function commonCommitFields(value: Record<string, unknown>): { idempotencyKey: string } {
+  return {
+    idempotencyKey: boundedString(value.idempotencyKey, 'Factory decision idempotencyKey', MAX_IDEMPOTENCY_KEY_LENGTH),
+  };
+}
+
+export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): FactoryRuleDecision {
+  if (causalDepth > MAX_FACTORY_RULE_CAUSAL_DEPTH) {
+    throw new FactoryRuleValidationError('Factory rule causal depth exceeded.');
+  }
+  if (!isPlainObject(value)) throw new FactoryRuleValidationError('Factory rule decision must be an object.');
+  const type = value.type;
+  if (typeof type !== 'string') throw new FactoryRuleValidationError('Factory rule decision type is required.');
+
+  switch (type) {
+    case 'reject': {
+      assertExactKeys(value, ['type', 'code', 'reason'], 'Factory reject decision');
+      return {
+        type,
+        code: enumValue(value.code, REJECTION_CODES, 'Factory rejection code'),
+        reason: boundedString(value.reason, 'Factory rejection reason', MAX_REASON_LENGTH),
+      };
+    }
+    case 'transition': {
+      assertExactKeys(
+        value,
+        ['type', 'idempotencyKey', 'board', 'stage', 'message', 'reenter'],
+        'Factory transition decision',
+      );
+      if (value.reenter !== undefined && typeof value.reenter !== 'boolean') {
+        throw new FactoryRuleValidationError('Factory transition reenter must be a boolean.');
+      }
+      let message: { text: string; role?: string } | undefined;
+      if (value.message !== undefined) {
+        if (!isPlainObject(value.message)) {
+          throw new FactoryRuleValidationError('Factory transition message must be an object.');
+        }
+        assertExactKeys(value.message, ['text', 'role'], 'Factory transition message');
+        const role =
+          value.message.role === undefined
+            ? undefined
+            : boundedString(value.message.role, 'Factory transition message role', MAX_ROLE_LENGTH, IDENTIFIER_RE);
+        message = {
+          text: boundedString(value.message.text, 'Factory transition message text', MAX_MESSAGE_LENGTH),
+          ...(role ? { role } : {}),
+        };
+      }
+      return {
+        type,
+        ...commonCommitFields(value),
+        board: boardIdentifier(value.board, 'Factory transition board'),
+        stage: boardIdentifier(value.stage, 'Factory transition stage'),
+        ...(message ? { message } : {}),
+        ...(value.reenter === true ? { reenter: true } : {}),
+      };
+    }
+    case 'upsertLinkedWorkItem': {
+      assertExactKeys(
+        value,
+        ['type', 'idempotencyKey', 'board', 'source', 'sourceKey', 'title', 'url', 'stage', 'metadata'],
+        'Factory linked work item decision',
+      );
+      const url = value.url;
+      if (url !== null && (typeof url !== 'string' || url.length > MAX_URL_LENGTH || !/^https?:\/\//.test(url))) {
+        throw new FactoryRuleValidationError('Factory linked work item URL is invalid.');
+      }
+      const metadata = sanitizeMetadata(value.metadata);
+      return {
+        type,
+        ...commonCommitFields(value),
+        board: boardIdentifier(value.board, 'Factory linked work item board'),
+        source: enumValue(value.source, WORK_ITEM_SOURCES, 'Factory linked work item source'),
+        sourceKey: boundedString(value.sourceKey, 'Factory linked work item sourceKey', MAX_SOURCE_KEY_LENGTH),
+        title: boundedString(value.title, 'Factory linked work item title', MAX_TITLE_LENGTH),
+        url,
+        stage: boardIdentifier(value.stage, 'Factory linked work item stage'),
+        ...(metadata ? { metadata } : {}),
+      };
+    }
+    case 'invokeSkill': {
+      assertExactKeys(
+        value,
+        ['type', 'idempotencyKey', 'role', 'skillName', 'prompt', 'arguments', 'precedingMessage', 'cancelInFlight'],
+        'Factory invoke skill decision',
+      );
+      // A run activates a skill or carries a prompt, never both: they are two
+      // ways to author the same kickoff message, so accepting both would leave
+      // the dispatcher picking a winner.
+      if ((value.skillName === undefined) === (value.prompt === undefined)) {
+        throw new FactoryRuleValidationError('Factory skill invocation needs exactly one of skillName or prompt.');
+      }
+      const args = optionalBoundedString(value.arguments, 'Factory skill arguments', MAX_ARGUMENTS_LENGTH);
+      const precedingMessage = optionalBoundedString(
+        value.precedingMessage,
+        'Factory skill preceding message',
+        MAX_MESSAGE_LENGTH,
+      );
+      if (value.cancelInFlight !== undefined && typeof value.cancelInFlight !== 'boolean') {
+        throw new FactoryRuleValidationError('Factory skill cancelInFlight must be a boolean.');
+      }
+      return {
+        type,
+        ...commonCommitFields(value),
+        role: boundedString(value.role, 'Factory skill role', MAX_ROLE_LENGTH, IDENTIFIER_RE),
+        ...(value.skillName === undefined
+          ? { prompt: boundedString(value.prompt, 'Factory skill prompt', MAX_MESSAGE_LENGTH) }
+          : { skillName: boundedString(value.skillName, 'Factory skill name', MAX_SKILL_NAME_LENGTH, SKILL_NAME_RE) }),
+        ...(args ? { arguments: args } : {}),
+        ...(precedingMessage ? { precedingMessage } : {}),
+        ...(value.cancelInFlight === true ? { cancelInFlight: true } : {}),
+      };
+    }
+    case 'sendMessage': {
+      assertExactKeys(
+        value,
+        ['type', 'idempotencyKey', 'role', 'message', 'priority', 'idleBehavior', 'prepareBinding'],
+        'Factory send message decision',
+      );
+      const priority =
+        value.priority === undefined
+          ? undefined
+          : enumValue(value.priority, ['medium', 'high', 'urgent'] as const, 'Factory message priority');
+      const idleBehavior =
+        value.idleBehavior === undefined
+          ? undefined
+          : enumValue(value.idleBehavior, ['persist', 'wake'] as const, 'Factory message idle behavior');
+      if (value.prepareBinding !== undefined && typeof value.prepareBinding !== 'boolean') {
+        throw new FactoryRuleValidationError('Factory message prepareBinding must be a boolean.');
+      }
+      if (value.prepareBinding === true && value.role === undefined) {
+        throw new FactoryRuleValidationError('Factory message prepareBinding requires a role.');
+      }
+      const role =
+        value.role === undefined
+          ? undefined
+          : boundedString(value.role, 'Factory message role', MAX_ROLE_LENGTH, IDENTIFIER_RE);
+      return {
+        type,
+        ...commonCommitFields(value),
+        ...(role ? { role } : {}),
+        message: boundedString(value.message, 'Factory message', MAX_MESSAGE_LENGTH),
+        ...(priority ? { priority } : {}),
+        ...(idleBehavior ? { idleBehavior } : {}),
+        ...(value.prepareBinding === true ? { prepareBinding: true } : {}),
+      };
+    }
+    case 'notify': {
+      assertExactKeys(value, ['type', 'idempotencyKey', 'title', 'body', 'level'], 'Factory notify decision');
+      const body = optionalBoundedString(value.body, 'Factory notification body', MAX_MESSAGE_LENGTH);
+      const level =
+        value.level === undefined
+          ? undefined
+          : enumValue(value.level, ['info', 'warning', 'error'] as const, 'Factory notification level');
+      return {
+        type,
+        ...commonCommitFields(value),
+        title: boundedString(value.title, 'Factory notification title', MAX_TITLE_LENGTH),
+        ...(body ? { body } : {}),
+        ...(level ? { level } : {}),
+      };
+    }
+    default:
+      throw new FactoryRuleValidationError('Factory rule decision type is unsupported.');
+  }
+}
+
+export function validateFactoryRuleDecisions(values: readonly unknown[], causalDepth = 0): FactoryCommitDecision[] {
+  if (values.length > MAX_JSON_COLLECTION_SIZE) {
+    throw new FactoryRuleValidationError('Factory rule produced too many decisions.');
+  }
+  const decisions: FactoryCommitDecision[] = [];
+  for (const value of values) {
+    const decision = validateFactoryRuleDecision(value, causalDepth);
+    if (decision.type === 'reject') {
+      throw new FactoryRuleValidationError('A rejection cannot be persisted with commit decisions.');
+    }
+    decisions.push(decision);
+  }
+  const keys = decisions.map(decision => decision.idempotencyKey);
+  if (new Set(keys).size !== keys.length) {
+    throw new FactoryRuleValidationError('Factory decisions require unique idempotency keys.');
+  }
+  return decisions;
+}

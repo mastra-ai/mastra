@@ -22,11 +22,17 @@ import type {
   HarnessStorage,
   ToolProviderConnectionsStorage,
   NotificationsStorage,
+  ThreadStateStorage,
+  WorkflowDefinitionsStorage,
+  KnowledgeStorage,
 } from './domains';
+import { InMemoryThreadStateStorage } from './domains/thread-state/inmemory';
+import type { PruneOptions, PruneResult, RetentionConfig, TableRetentionPolicy } from './retention';
 
 /** Map of all storage domain interfaces available in a composite store. */
 export type StorageDomains = {
   workflows?: WorkflowsStorage;
+  workflowDefinitions?: WorkflowDefinitionsStorage;
   scores?: ScoresStorage;
   memory?: MemoryStorage;
   channels?: ChannelsStorage;
@@ -47,6 +53,8 @@ export type StorageDomains = {
   schedules?: SchedulesStorage;
   harness?: HarnessStorage;
   toolProviderConnections?: ToolProviderConnectionsStorage;
+  threadState?: ThreadStateStorage;
+  knowledge?: KnowledgeStorage;
 };
 
 /**
@@ -67,22 +75,65 @@ export const EDITOR_DOMAINS = [
 ] as const satisfies ReadonlyArray<keyof StorageDomains>;
 
 /**
+ * Every domain key of {@link StorageDomains}. Drives the composite store's
+ * constructor resolution so no domain can be silently skipped by a
+ * hand-maintained list. The exhaustiveness guard below turns a missing key
+ * into a compile error.
+ */
+export const DOMAIN_KEYS = [
+  'memory',
+  'workflows',
+  'workflowDefinitions',
+  'scores',
+  'observability',
+  'agents',
+  'datasets',
+  'experiments',
+  'promptBlocks',
+  'scorerDefinitions',
+  'mcpClients',
+  'mcpServers',
+  'workspaces',
+  'skills',
+  'favorites',
+  'blobs',
+  'backgroundTasks',
+  'schedules',
+  'channels',
+  'harness',
+  'toolProviderConnections',
+  'notifications',
+  'threadState',
+  'knowledge',
+] as const satisfies ReadonlyArray<keyof StorageDomains>;
+
+/**
+ * Compile-time exhaustiveness guard: if a key is added to `StorageDomains`
+ * without being added to `DOMAIN_KEYS`, `MissingDomainKeys` stops being
+ * `never` and the `true` assignment below becomes a type error.
+ */
+type MissingDomainKeys = Exclude<keyof StorageDomains, (typeof DOMAIN_KEYS)[number]>;
+const _domainKeysExhaustive: MissingDomainKeys extends never ? true : never = true;
+void _domainKeysExhaustive;
+
+/**
  * Normalizes perPage input for pagination queries.
  *
  * @param perPageInput - The raw perPage value from the user
  * @param defaultValue - The default perPage value to use when undefined (typically 40 for messages, 100 for threads)
  * @returns A numeric perPage value suitable for queries (false becomes MAX_SAFE_INTEGER)
- * @throws Error if perPage is a negative number
+ * @throws Error if numeric perPage is not a finite, nonnegative integer
  */
 export function normalizePerPage(perPageInput: number | false | undefined, defaultValue: number): number {
   if (perPageInput === false) {
     return Number.MAX_SAFE_INTEGER; // Get all results
   } else if (perPageInput === 0) {
     return 0; // Return zero results
-  } else if (typeof perPageInput === 'number' && perPageInput > 0) {
-    return perPageInput; // Valid positive number
-  } else if (typeof perPageInput === 'number' && perPageInput < 0) {
-    throw new Error('perPage must be >= 0');
+  } else if (typeof perPageInput === 'number') {
+    if (!Number.isInteger(perPageInput) || perPageInput < 0) {
+      throw new Error('perPage must be >= 0');
+    }
+    return perPageInput;
   }
   // For undefined, use default
   return defaultValue;
@@ -102,6 +153,9 @@ export function calculatePagination(
   perPageInput: number | false | undefined,
   normalizedPerPage: number,
 ): { offset: number; perPage: number | false } {
+  if (!Number.isInteger(page) || page < 0) {
+    throw new Error('page must be >= 0');
+  }
   return {
     offset: perPageInput === false ? 0 : page * normalizedPerPage,
     perPage: perPageInput === false ? false : normalizedPerPage,
@@ -111,8 +165,14 @@ export function calculatePagination(
 /**
  * Configuration for individual domain overrides.
  * Each domain can be sourced from a different storage adapter.
+ *
+ * Set a domain to `false` to disable it entirely: the domain resolves to
+ * `undefined` instead of falling back to the `editor`/`default` stores, so
+ * nothing can read from or write to it through this composite.
  */
-export type MastraStorageDomains = Partial<StorageDomains>;
+export type MastraStorageDomains = {
+  [K in keyof StorageDomains]?: StorageDomains[K] | false;
+};
 
 /**
  * Configuration options for MastraCompositeStore.
@@ -194,6 +254,28 @@ export interface MastraCompositeStoreConfig {
    * // No auto-init, tables must already exist
    */
   disableInit?: boolean;
+
+  /**
+   * Opt-in, table-granular, age-based retention policies.
+   *
+   * Declare per-domain, per-table `maxAge` policies; call `storage.prune()`
+   * to delete rows older than their configured age. Anything left unset is
+   * kept forever (no behavior change by default).
+   *
+   * @example
+   * ```typescript
+   * retention: {
+   *   memory: {
+   *     messages: { maxAge: '30d' },
+   *     threads: { maxAge: '90d' },
+   *   },
+   *   observability: {
+   *     spans: { maxAge: '7d' },
+   *   },
+   * }
+   * ```
+   */
+  retention?: RetentionConfig;
 }
 
 /**
@@ -239,7 +321,26 @@ export interface MastraCompositeStoreConfig {
  */
 export interface StorageMastraRef {
   getAgentById?: (id: string) => { source?: string; __getEditorConfig?: () => unknown } | undefined;
+  listAgents?: () => Record<string, { id: string; source?: string; __getEditorConfig?: () => unknown }> | undefined;
   getEditor?: () => { getSource?: () => 'code' | 'db' | undefined } | undefined;
+}
+
+/** A domain that implements the age-based retention `prune()` contract. */
+interface PruneCapable {
+  prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]>;
+}
+
+function isPruneCapable(value: unknown): value is PruneCapable {
+  return typeof value === 'object' && value !== null && typeof (value as PruneCapable).prune === 'function';
+}
+
+/** A store or domain that owns a client/connection handle it can release. */
+interface Closable {
+  close(): Promise<void>;
+}
+
+function isClosable(value: unknown): value is Closable {
+  return typeof value === 'object' && value !== null && typeof (value as Closable).close === 'function';
 }
 
 export class MastraCompositeStore extends MastraBase {
@@ -254,6 +355,12 @@ export class MastraCompositeStore extends MastraBase {
    * When true, automatic initialization (table creation/migrations) is disabled.
    */
   disableInit: boolean = false;
+
+  /**
+   * Opt-in, table-granular, age-based retention policies. Consumed by
+   * `prune()`. Undefined means nothing is pruned (keep forever).
+   */
+  protected retention?: RetentionConfig;
 
   /**
    * Retained references to the parent stores supplied via composition. `init()`
@@ -279,6 +386,7 @@ export class MastraCompositeStore extends MastraBase {
 
     this.id = config.id;
     this.disableInit = config.disableInit ?? false;
+    this.retention = config.retention;
 
     // If composition config is provided (default, editor, or domains), compose the stores
     if (config.default || config.editor || config.domains) {
@@ -291,10 +399,11 @@ export class MastraCompositeStore extends MastraBase {
       this.parentDefault = config.default;
       this.parentEditor = config.editor;
 
-      // Validate that at least one storage source is provided
+      // Validate that at least one storage source is provided (a `false`
+      // override disables a domain, so it doesn't count as a source)
       const hasDefaultDomains = defaultStores && Object.values(defaultStores).some(v => v !== undefined);
       const hasEditorDomains = editorStores && Object.values(editorStores).some(v => v !== undefined);
-      const hasOverrideDomains = Object.values(domainOverrides).some(v => v !== undefined);
+      const hasOverrideDomains = Object.values(domainOverrides).some(v => v !== undefined && v !== false);
 
       if (!hasDefaultDomains && !hasEditorDomains && !hasOverrideDomains) {
         throw new Error(
@@ -304,37 +413,38 @@ export class MastraCompositeStore extends MastraBase {
 
       const editorDomainSet = new Set<string>(EDITOR_DOMAINS);
 
-      // Helper: resolve a domain with priority: domains > editor (for editor domains) > default
+      // Helper: resolve a domain with priority: domains > editor (for editor domains) > default.
+      // A `false` override disables the domain — it resolves to undefined
+      // instead of falling through to the editor/default stores.
       const resolve = <K extends keyof StorageDomains>(key: K): StorageDomains[K] | undefined => {
-        if (domainOverrides[key] !== undefined) return domainOverrides[key];
+        const override: StorageDomains[K] | false | undefined = domainOverrides[key];
+        if (override === false) return undefined;
+        if (override !== undefined) return override;
         if (editorDomainSet.has(key) && editorStores?.[key] !== undefined) return editorStores[key];
         return defaultStores?.[key];
       };
 
-      // Build the composed stores object
-      this.stores = {
-        memory: resolve('memory'),
-        workflows: resolve('workflows'),
-        scores: resolve('scores'),
-        observability: resolve('observability'),
-        agents: resolve('agents'),
-        datasets: resolve('datasets'),
-        experiments: resolve('experiments'),
-        promptBlocks: resolve('promptBlocks'),
-        scorerDefinitions: resolve('scorerDefinitions'),
-        mcpClients: resolve('mcpClients'),
-        mcpServers: resolve('mcpServers'),
-        workspaces: resolve('workspaces'),
-        skills: resolve('skills'),
-        favorites: resolve('favorites'),
-        blobs: resolve('blobs'),
-        backgroundTasks: resolve('backgroundTasks'),
-        schedules: resolve('schedules'),
-        channels: resolve('channels'),
-        harness: resolve('harness'),
-        toolProviderConnections: resolve('toolProviderConnections'),
-        notifications: resolve('notifications'),
-      } as StorageDomains;
+      // Build the composed stores object by iterating the typed key list so
+      // no domain can be dropped from a hand-maintained assignment block.
+      const composed: Partial<StorageDomains> = {};
+      const assign = <K extends keyof StorageDomains>(key: K): void => {
+        composed[key] = resolve(key);
+      };
+      for (const key of DOMAIN_KEYS) {
+        assign(key);
+      }
+      // Special case: the thread-state domain always has an in-memory store
+      // wired by default so the built-in task tools work out of the box
+      // without a configured backend. Configure a durable backend for state
+      // that must survive a process restart. An explicit `false` override
+      // still disables the domain entirely — the in-memory fallback only
+      // applies when the domain is left unset (resolve already returned
+      // undefined for a `false` override, so the guard below keeps disable
+      // semantics intact).
+      if (domainOverrides.threadState !== false) {
+        composed.threadState = composed.threadState ?? new InMemoryThreadStateStorage();
+      }
+      this.stores = composed as StorageDomains;
     }
     // Otherwise, subclasses set stores themselves
   }
@@ -385,6 +495,56 @@ export class MastraCompositeStore extends MastraBase {
   }
 
   /**
+   * Delete rows older than their configured `maxAge` across all domains that
+   * have a policy declared in `retention`.
+   *
+   * Prune is safe at scale: each domain deletes in bounded, batched, resumable,
+   * cancellable chunks (see {@link PruneOptions}). It only deletes rows. On
+   * SQLite/LibSQL freed pages are reused by future writes so the file stops
+   * growing; handing disk back to the OS is left to the underlying database and
+   * the operator to manage.
+   *
+   * Returns one {@link PruneResult} per table touched. A result with
+   * `done: false` means eligible rows remain — call `prune()` again (e.g. on
+   * the next cron tick) to continue.
+   *
+   * Prune is meant to run unattended (a cron tick), so a failure in one
+   * domain is logged and skipped rather than rejecting the whole call — the
+   * results already gathered for other domains are still returned, and the
+   * failed domain is retried naturally on the next tick.
+   *
+   * With no `retention` configured this is a no-op returning `[]`.
+   *
+   * Pass `options.retention` to replace the configured retention policies for
+   * this call only — e.g. to skip a domain (keep chat history) or prune more
+   * aggressively than the standing config without reconstructing the store.
+   */
+  async prune(options?: PruneOptions): Promise<PruneResult[]> {
+    const retention = options?.retention ?? this.retention;
+    if (!retention) return [];
+
+    const results: PruneResult[] = [];
+    for (const [domainKey, tablePolicies] of Object.entries(retention) as [
+      keyof StorageDomains,
+      Record<string, TableRetentionPolicy> | undefined,
+    ][]) {
+      if (options?.signal?.aborted) break;
+      if (!tablePolicies || Object.keys(tablePolicies).length === 0) continue;
+
+      const domain = this.stores?.[domainKey];
+      if (!isPruneCapable(domain)) continue; // domain not configured / doesn't support retention
+
+      try {
+        const domainResults = await domain.prune(tablePolicies, options);
+        results.push(...domainResults);
+      } catch (error) {
+        this.logger?.error(`prune() failed for domain "${domainKey}"`, { error });
+      }
+    }
+    return results;
+  }
+
+  /**
    * Initialize all domain stores.
    *
    * When a parent store was supplied via `default` or `editor`, delegate to
@@ -401,13 +561,24 @@ export class MastraCompositeStore extends MastraBase {
    * cover, so we never double-init the same domain instance.
    */
   async init(): Promise<void> {
-    // to prevent race conditions, await any current init
-    if (this.shouldCacheInit && (await this.hasInitialized)) {
+    if (!this.shouldCacheInit) {
+      await this.#runInit();
       return;
     }
 
-    this.hasInitialized = this.#runInit();
-    await this.hasInitialized;
+    if (this.hasInitialized) {
+      await this.hasInitialized;
+      return;
+    }
+
+    const initPromise = this.#runInit().catch(error => {
+      if (this.hasInitialized === initPromise) {
+        this.hasInitialized = null;
+      }
+      throw error;
+    });
+    this.hasInitialized = initPromise;
+    await initPromise;
   }
 
   async #runInit(): Promise<boolean> {
@@ -442,39 +613,68 @@ export class MastraCompositeStore extends MastraBase {
     };
 
     if (this.stores) {
-      maybeInit(this.stores.memory);
-      maybeInit(this.stores.workflows);
-      maybeInit(this.stores.scores);
-      maybeInit(this.stores.observability);
-      maybeInit(this.stores.agents);
-      maybeInit(this.stores.datasets);
-      maybeInit(this.stores.experiments);
-      maybeInit(this.stores.promptBlocks);
-      maybeInit(this.stores.scorerDefinitions);
-      maybeInit(this.stores.mcpClients);
-      maybeInit(this.stores.mcpServers);
-      maybeInit(this.stores.workspaces);
-      maybeInit(this.stores.skills);
-      maybeInit(this.stores.favorites);
-      maybeInit(this.stores.blobs);
-      maybeInit(this.stores.backgroundTasks);
-      maybeInit(this.stores.schedules);
-      maybeInit(this.stores.channels);
-      maybeInit(this.stores.harness);
-      maybeInit(this.stores.toolProviderConnections);
-      maybeInit(this.stores.notifications);
+      // Iterate every registered domain instead of naming them one by one, so
+      // a domain added to the stores map can never silently dodge init. The
+      // typeof guard skips subclass-set entries that don't expose an init
+      // method.
+      for (const domain of Object.values(this.stores)) {
+        if (typeof domain?.init === 'function') maybeInit(domain);
+      }
     }
 
     await Promise.all(initTasks);
     return true;
   }
   /**
-   * Optional lifecycle hook: release underlying client/connection handles.
-   * Implementations (e.g. LibSQLStore) override this to checkpoint WAL files
-   * and close the database client so OS handles are freed synchronously.
+   * Lifecycle hook: release underlying client/connection handles.
+   * Adapters (e.g. LibSQLStore) override this to checkpoint WAL files and close
+   * the database client so OS handles are freed synchronously.
    * Called automatically by Mastra.shutdown().
+   *
+   * When used for composition this forwards to whatever it was built from: the
+   * `default` and `editor` parents, plus any domain that owns a handle of its
+   * own. Each target is closed once even when the same store backs several
+   * domains, and a failure in one is logged and skipped so the remaining
+   * handles are still released.
    */
-  close?(): Promise<void>;
+  async close(): Promise<void> {
+    const targets = new Map<Closable, string>();
+    const collect = (candidate: unknown, label: string) => {
+      if (!isClosable(candidate) || targets.has(candidate)) return;
+      targets.set(candidate, label);
+    };
+
+    collect(this.parentDefault, 'default');
+    collect(this.parentEditor, 'editor');
+
+    // Domains that came from a parent are the parent's to close — closing
+    // them here too could double-close a shared client. Mirrors the
+    // already-initialized bookkeeping in #runInit().
+    const parentOwned = new Set<unknown>();
+    const addParentDomains = (parent?: MastraCompositeStore) => {
+      if (!parent?.stores) return;
+      for (const domain of Object.values(parent.stores)) {
+        if (domain) parentOwned.add(domain);
+      }
+    };
+    addParentDomains(this.parentDefault);
+    addParentDomains(this.parentEditor);
+
+    for (const [domainKey, domain] of Object.entries(this.stores ?? {})) {
+      if (parentOwned.has(domain)) continue;
+      collect(domain, `domain "${domainKey}"`);
+    }
+
+    await Promise.all(
+      Array.from(targets, async ([target, label]) => {
+        try {
+          await target.close();
+        } catch (error) {
+          this.logger?.error(`close() failed for ${label} storage`, { error });
+        }
+      }),
+    );
+  }
 }
 
 /**

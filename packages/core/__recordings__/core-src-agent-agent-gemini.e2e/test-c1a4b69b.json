@@ -3,14 +3,13 @@
     "name": "test-c1a4b69b",
     "testFile": "src/agent/agent-gemini.e2e.test.ts",
     "testName": "Gemini Model Compatibility Tests > Agent network() method > should handle conversation ending with tool result in network (with follow-up user message)",
-    "createdAt": "2026-05-18T10:51:11.563Z",
-    "updatedAt": "2026-05-28T17:34:13.304Z"
+    "createdAt": "2026-07-14T17:15:51.801Z"
   },
   "recordings": [
     {
-      "hash": "a7769985b8ee4335",
+      "hash": "c1765f0f2516c938",
       "request": {
-        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
         "method": "POST",
         "body": {
           "generationConfig": {
@@ -53,6 +52,7 @@
               "parts": [
                 {
                   "functionCall": {
+                    "id": "call_1",
                     "name": "weather-tool",
                     "args": {
                       "location": "San Francisco"
@@ -66,6 +66,7 @@
               "parts": [
                 {
                   "functionResponse": {
+                    "id": "call_1",
                     "name": "weather-tool",
                     "response": {
                       "name": "weather-tool",
@@ -100,7 +101,7 @@
             ]
           }
         },
-        "timestamp": 1779989652108
+        "timestamp": 1784049333601
       },
       "response": {
         "status": 200,
@@ -108,9 +109,9 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
           "content-type": "application/json; charset=UTF-8",
-          "date": "Thu, 28 May 2026 17:34:13 GMT",
+          "date": "Tue, 14 Jul 2026 17:15:34 GMT",
           "server": "scaffolding on HTTPServer2",
-          "server-timing": "gfet4t7; dur=1072",
+          "server-timing": "gfet4t7; dur=929",
           "vary": "Origin, X-Origin, Referer",
           "x-content-type-options": "nosniff",
           "x-frame-options": "SAMEORIGIN",
@@ -123,37 +124,325 @@
               "content": {
                 "parts": [
                   {
-                    "text": "{\n  \"primitiveId\": \"none\",\n  \"primitiveType\": \"agent\",\n  \"prompt\": \"Given the weather is Sunny and 72°F in San Francisco, is this good weather for a picnic?\",\n  \"selectionReason\": \"The user is asking whether the weather is good for a picnic. Since I already have the weather, I can use an agent to answer this question.\"\n}"
+                    "text": "{\"primitiveId\":\"none\",\"primitiveType\":\"none\",\"prompt\":\"The weather is Sunny and 72°F. This is good weather for a picnic.\",\"selectionReason\":\"The previous tool call successfully retrieved the weather information, and I can now directly answer the user's question based on the provided weather details. No further tools or agents are needed as the information is sufficient to determine if it's good for a picnic. Therefore, I will respond directly to the user with a summary.\"}"
                   }
                 ],
                 "role": "model"
               },
               "finishReason": "STOP",
-              "avgLogprobs": -0.24367816968895922
+              "index": 0
             }
           ],
           "usageMetadata": {
-            "promptTokenCount": 924,
-            "candidatesTokenCount": 87,
-            "totalTokenCount": 1011,
+            "promptTokenCount": 894,
+            "candidatesTokenCount": 101,
+            "totalTokenCount": 995,
             "promptTokensDetails": [
               {
                 "modality": "TEXT",
-                "tokenCount": 924
-              }
-            ],
-            "candidatesTokensDetails": [
-              {
-                "modality": "TEXT",
-                "tokenCount": 87
+                "tokenCount": 894
               }
             ],
             "serviceTier": "standard"
           },
-          "modelVersion": "gemini-2.0-flash",
-          "responseId": "lHwYaoWBGvyc_uMP5a7lyQI"
+          "modelVersion": "gemini-2.5-flash",
+          "responseId": "tW5Watn9J9mtkdUP1piwqQg"
         },
         "isStreaming": false
+      }
+    },
+    {
+      "hash": "93eb7d301baec5ce",
+      "request": {
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse",
+        "method": "POST",
+        "body": {
+          "generationConfig": {
+            "responseMimeType": "application/json",
+            "responseSchema": {
+              "required": ["isComplete", "completionReason"],
+              "type": "object",
+              "properties": {
+                "isComplete": {
+                  "description": "Whether the task is complete",
+                  "type": "boolean"
+                },
+                "completionReason": {
+                  "description": "Explanation of why the task is or is not complete",
+                  "type": "string"
+                },
+                "finalResult": {
+                  "description": "The final result text to return to the user. omit if primitive result is sufficient",
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "contents": [
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "text": "\n    The none none has contributed to the task.\n    This is the result: \"The previous tool call successfully retrieved the weather information, and I can now directly answer the user's question based on the provided weather details. No further tools or agents are needed as the information is sufficient to determine if it's good for a picnic. Therefore, I will respond directly to the user with a summary.\"\n    \n    \n\n    You need to evaluate if the task is complete. Pay very close attention to the SYSTEM INSTRUCTIONS for when the task is considered complete. \n    Only return true if the task is complete according to the system instructions.\n    Original task: Is that good weather for a picnic?\n\n    If no primitive (type = 'none'), the task is complete because we can't run any primitive to further task completion.\n\n    Also, if the none none has declined the tool call in its response, then the task is complete as the primitive tool-call was declined by the user.\n\n    IMPORTANT: If the above result is from an AGENT PRIMITIVE and it is a suitable final result itself considering the original task, then finalResult should be an empty string or undefined.\n    \n    If the task is complete and the result is not from an AGENT PRIMITIVE, always generate a finalResult.\n    IF the task is complete and the result is from an AGENT PRIMITIVE, but the AGENT PRIMITIVE response is not comprehensive enough to accomplish the user's original task, then generate a finalResult.\n\n    IMPORTANT: The generated finalResult should not be the exact primitive result. You should craft a comprehensive response based on the message history.\n    The finalResult field should be written in natural language.\n\n    You must return this JSON shape:\n    {\n      \"isComplete\": boolean,\n      \"completionReason\": string,\n      \"finalResult\": string,\n    }\n  "
+                }
+              ]
+            }
+          ],
+          "systemInstruction": {
+            "parts": [
+              {
+                "text": "\n          You are a router in a network of specialized AI agents.\n          Your job is to decide which agent should handle each step of a task.\n          If asking for completion of a task, make sure to follow system instructions closely.\n\n          Every step will result in a prompt message. It will be a JSON object with a \"selectionReason\" and \"finalResult\" property. Make your decision based on previous decision history, as well as the overall task criteria. If you already called a primitive, you shouldn't need to call it again, unless you strongly believe it adds something to the task completion criteria. Make sure to call enough primitives to complete the task.\n\n          ## System Instructions\n          You help with weather queries. Summarize weather results when asked.\n          You can only pick agents and workflows that are available in the lists below. Never call any agents or workflows that are not available in the lists below.\n          ## Available Agents in Network\n          \n          ## Available Workflows in Network (make sure to use inputs corresponding to the input schema when calling a workflow)\n          \n          ## Available Tools in Network (make sure to use inputs corresponding to the input schema when calling a tool)\n           - **testTool**: Gets weather information, input schema: {\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"location\":{\"type\":\"string\"}},\"required\":[\"location\"],\"additionalProperties\":false}\n          If you have multiple entries that need to be called with a workflow or agent, call them separately with each input.\n          When calling a workflow, the prompt should be a JSON value that corresponds to the input schema of the workflow. The JSON value is stringified.\n          When calling a tool, the prompt should be a JSON value that corresponds to the input schema of the tool. The JSON value is stringified.\n          When calling an agent, the prompt should be a text value, like you would call an LLM in a chat interface.\n          Keep in mind that the user only sees the final result of the task. When reviewing completion, you should know that the user will not see the intermediate results.\n          \n        "
+              }
+            ]
+          }
+        },
+        "timestamp": 1784049334552
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+          "content-disposition": "attachment",
+          "content-type": "text/event-stream",
+          "date": "Tue, 14 Jul 2026 17:15:48 GMT",
+          "server": "scaffolding on HTTPServer2",
+          "server-timing": "gfet4t7; dur=13822",
+          "vary": "Origin, X-Origin, Referer",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "SAMEORIGIN",
+          "x-xss-protection": "0"
+        },
+        "chunks": [
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"{\\n  \\\"isComplete\\\": false\"}],\"role\": \"model\"},\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 857,\"candidatesTokenCount\": 8,\"totalTokenCount\": 3524,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 857}],\"thoughtsTokenCount\": 2659,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"tm5WasH7JKS2nsEP_aCTqAk\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \",\\n  \\\"completionReason\\\": \\\"The weather information has been retrieved, and the system is ready to generate a summary for the user regarding whether it's good for a picnic. However, the final summary itself has not yet been provided.\\\",\"}],\"role\": \"model\"},\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 857,\"candidatesTokenCount\": 57,\"totalTokenCount\": 3573,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 857}],\"thoughtsTokenCount\": 2659,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"tm5WasH7JKS2nsEP_aCTqAk\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"\\n  \\\"finalResult\\\": \\\"\\\"\\n}\"}],\"role\": \"model\"},\"finishReason\": \"STOP\",\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 857,\"candidatesTokenCount\": 64,\"totalTokenCount\": 3580,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 857}],\"thoughtsTokenCount\": 2659,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"tm5WasH7JKS2nsEP_aCTqAk\"}\r\n\r\n"
+        ],
+        "chunkTimings": [0, 180, 58],
+        "isStreaming": true
+      }
+    },
+    {
+      "hash": "ac92511a7f427ea2",
+      "request": {
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+        "method": "POST",
+        "body": {
+          "generationConfig": {
+            "responseMimeType": "application/json",
+            "responseSchema": {
+              "required": ["primitiveId", "primitiveType", "prompt", "selectionReason"],
+              "type": "object",
+              "properties": {
+                "primitiveId": {
+                  "description": "The id of the primitive to be called",
+                  "type": "string"
+                },
+                "primitiveType": {
+                  "description": "The type of the primitive to be called",
+                  "type": "string",
+                  "enum": ["agent", "workflow", "none", "tool"]
+                },
+                "prompt": {
+                  "description": "The json string or text value to be sent to the primitive",
+                  "type": "string"
+                },
+                "selectionReason": {
+                  "description": "The reason you picked the primitive",
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "contents": [
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "text": "What is the weather?"
+                }
+              ]
+            },
+            {
+              "role": "model",
+              "parts": [
+                {
+                  "functionCall": {
+                    "id": "call_1",
+                    "name": "weather-tool",
+                    "args": {
+                      "location": "San Francisco"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "functionResponse": {
+                    "id": "call_1",
+                    "name": "weather-tool",
+                    "response": {
+                      "name": "weather-tool",
+                      "content": "Sunny, 72°F"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "text": "Is that good weather for a picnic?"
+                }
+              ]
+            },
+            {
+              "role": "model",
+              "parts": [
+                {
+                  "text": "#### Completion Check Results\n\nOverall: ❌ NOT COMPLETE\nDuration: 14325ms\n\n###### Default LLM Completion (default-completion)\nScore: 0 ❌\nReason: The weather information has been retrieved, and the system is ready to generate a summary for the user regarding whether it's good for a picnic. However, the final summary itself has not yet been provided.\n\n\n\n🔄 Will continue working on the task."
+                }
+              ]
+            },
+            {
+              "role": "model",
+              "parts": [
+                {
+                  "text": "You will be calling just *one* primitive at a time to accomplish the user task, every call to you is one decision in the process of accomplishing the user task. Make sure to pick primitives that are the best suited to accomplish the whole task. Completeness is the highest priority.\n\n                    The user has given you the following task:\n                    Is that good weather for a picnic?\n\n                    # Rules:\n\n                    ## Agent:\n                    - prompt should be a text value, like you would call an LLM in a chat interface.\n                    - If you are calling the same agent again, make sure to adjust the prompt to be more specific.\n\n                    ## Workflow/Tool:\n                    - prompt should be a JSON value that corresponds to the input schema of the workflow or tool. The JSON value is stringified.\n                    - Make sure to use inputs corresponding to the input schema when calling a workflow or tool.\n\n                    DO NOT CALL THE PRIMITIVE YOURSELF. Make sure to not call the same primitive twice, unless you call it with different arguments and believe it adds something to the task completion criteria. Take into account previous decision making history and results in your decision making and final result. These are messages whose text is a JSON structure with \"isNetwork\" true.\n\n                    Please select the most appropriate primitive to handle this task and the prompt to be sent to the primitive. If no primitive is appropriate, return \"none\" for the primitiveId and \"none\" for the primitiveType.\n\n                    {\n                        \"primitiveId\": string,\n                        \"primitiveType\": \"agent\" | \"workflow\" | \"tool\",\n                        \"prompt\": string,\n                        \"selectionReason\": string\n                    }\n\n                    The 'selectionReason' property should explain why you picked the primitive."
+                }
+              ]
+            }
+          ],
+          "systemInstruction": {
+            "parts": [
+              {
+                "text": "\n          You are a router in a network of specialized AI agents.\n          Your job is to decide which agent should handle each step of a task.\n          If asking for completion of a task, make sure to follow system instructions closely.\n\n          Every step will result in a prompt message. It will be a JSON object with a \"selectionReason\" and \"finalResult\" property. Make your decision based on previous decision history, as well as the overall task criteria. If you already called a primitive, you shouldn't need to call it again, unless you strongly believe it adds something to the task completion criteria. Make sure to call enough primitives to complete the task.\n\n          ## System Instructions\n          You help with weather queries. Summarize weather results when asked.\n          You can only pick agents and workflows that are available in the lists below. Never call any agents or workflows that are not available in the lists below.\n          ## Available Agents in Network\n          \n          ## Available Workflows in Network (make sure to use inputs corresponding to the input schema when calling a workflow)\n          \n          ## Available Tools in Network (make sure to use inputs corresponding to the input schema when calling a tool)\n           - **testTool**: Gets weather information, input schema: {\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"location\":{\"type\":\"string\"}},\"required\":[\"location\"],\"additionalProperties\":false}\n          If you have multiple entries that need to be called with a workflow or agent, call them separately with each input.\n          When calling a workflow, the prompt should be a JSON value that corresponds to the input schema of the workflow. The JSON value is stringified.\n          When calling a tool, the prompt should be a JSON value that corresponds to the input schema of the tool. The JSON value is stringified.\n          When calling an agent, the prompt should be a text value, like you would call an LLM in a chat interface.\n          Keep in mind that the user only sees the final result of the task. When reviewing completion, you should know that the user will not see the intermediate results.\n          \n        "
+              }
+            ]
+          }
+        },
+        "timestamp": 1784049348888
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+          "content-type": "application/json; charset=UTF-8",
+          "date": "Tue, 14 Jul 2026 17:15:49 GMT",
+          "server": "scaffolding on HTTPServer2",
+          "server-timing": "gfet4t7; dur=1054",
+          "vary": "Origin, X-Origin, Referer",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "SAMEORIGIN",
+          "x-gemini-service-tier": "standard",
+          "x-xss-protection": "0"
+        },
+        "body": {
+          "candidates": [
+            {
+              "content": {
+                "parts": [
+                  {
+                    "text": "{\n\"primitiveId\": \"none\",\n\"primitiveType\": \"none\",\n\"prompt\": \"The weather in San Francisco is Sunny and 72°F. This is excellent weather for a picnic.\",\n\"selectionReason\": \"I have already retrieved the weather information and the user's question has been answered. I can now provide the final answer to the user, summarizing the weather and confirming it's good for a picnic.\"\n}"
+                  }
+                ],
+                "role": "model"
+              },
+              "finishReason": "STOP",
+              "index": 0
+            }
+          ],
+          "usageMetadata": {
+            "promptTokenCount": 976,
+            "candidatesTokenCount": 93,
+            "totalTokenCount": 1069,
+            "promptTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 976
+              }
+            ],
+            "serviceTier": "standard"
+          },
+          "modelVersion": "gemini-2.5-flash",
+          "responseId": "xG5Was6QOZG4nsEP_f7S0Q0"
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "f8582e10c9b6e98d",
+      "request": {
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse",
+        "method": "POST",
+        "body": {
+          "generationConfig": {
+            "responseMimeType": "application/json",
+            "responseSchema": {
+              "required": ["isComplete", "completionReason"],
+              "type": "object",
+              "properties": {
+                "isComplete": {
+                  "description": "Whether the task is complete",
+                  "type": "boolean"
+                },
+                "completionReason": {
+                  "description": "Explanation of why the task is or is not complete",
+                  "type": "string"
+                },
+                "finalResult": {
+                  "description": "The final result text to return to the user. omit if primitive result is sufficient",
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "contents": [
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "text": "\n    The none none has contributed to the task.\n    This is the result: \"I have already retrieved the weather information and the user's question has been answered. I can now provide the final answer to the user, summarizing the weather and confirming it's good for a picnic.\"\n    \n    \n\n    You need to evaluate if the task is complete. Pay very close attention to the SYSTEM INSTRUCTIONS for when the task is considered complete. \n    Only return true if the task is complete according to the system instructions.\n    Original task: Is that good weather for a picnic?\n\n    If no primitive (type = 'none'), the task is complete because we can't run any primitive to further task completion.\n\n    Also, if the none none has declined the tool call in its response, then the task is complete as the primitive tool-call was declined by the user.\n\n    IMPORTANT: If the above result is from an AGENT PRIMITIVE and it is a suitable final result itself considering the original task, then finalResult should be an empty string or undefined.\n    \n    If the task is complete and the result is not from an AGENT PRIMITIVE, always generate a finalResult.\n    IF the task is complete and the result is from an AGENT PRIMITIVE, but the AGENT PRIMITIVE response is not comprehensive enough to accomplish the user's original task, then generate a finalResult.\n\n    IMPORTANT: The generated finalResult should not be the exact primitive result. You should craft a comprehensive response based on the message history.\n    The finalResult field should be written in natural language.\n\n    You must return this JSON shape:\n    {\n      \"isComplete\": boolean,\n      \"completionReason\": string,\n      \"finalResult\": string,\n    }\n  "
+                }
+              ]
+            }
+          ],
+          "systemInstruction": {
+            "parts": [
+              {
+                "text": "\n          You are a router in a network of specialized AI agents.\n          Your job is to decide which agent should handle each step of a task.\n          If asking for completion of a task, make sure to follow system instructions closely.\n\n          Every step will result in a prompt message. It will be a JSON object with a \"selectionReason\" and \"finalResult\" property. Make your decision based on previous decision history, as well as the overall task criteria. If you already called a primitive, you shouldn't need to call it again, unless you strongly believe it adds something to the task completion criteria. Make sure to call enough primitives to complete the task.\n\n          ## System Instructions\n          You help with weather queries. Summarize weather results when asked.\n          You can only pick agents and workflows that are available in the lists below. Never call any agents or workflows that are not available in the lists below.\n          ## Available Agents in Network\n          \n          ## Available Workflows in Network (make sure to use inputs corresponding to the input schema when calling a workflow)\n          \n          ## Available Tools in Network (make sure to use inputs corresponding to the input schema when calling a tool)\n           - **testTool**: Gets weather information, input schema: {\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"location\":{\"type\":\"string\"}},\"required\":[\"location\"],\"additionalProperties\":false}\n          If you have multiple entries that need to be called with a workflow or agent, call them separately with each input.\n          When calling a workflow, the prompt should be a JSON value that corresponds to the input schema of the workflow. The JSON value is stringified.\n          When calling a tool, the prompt should be a JSON value that corresponds to the input schema of the tool. The JSON value is stringified.\n          When calling an agent, the prompt should be a text value, like you would call an LLM in a chat interface.\n          Keep in mind that the user only sees the final result of the task. When reviewing completion, you should know that the user will not see the intermediate results.\n          \n        "
+              }
+            ]
+          }
+        },
+        "timestamp": 1784049349965
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+          "content-disposition": "attachment",
+          "content-type": "text/event-stream",
+          "date": "Tue, 14 Jul 2026 17:15:51 GMT",
+          "server": "scaffolding on HTTPServer2",
+          "server-timing": "gfet4t7; dur=1691",
+          "vary": "Origin, X-Origin, Referer",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "SAMEORIGIN",
+          "x-xss-protection": "0"
+        },
+        "chunks": [
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"{\\\"isComplete\\\":true,\\\"completionReason\\\":\\\"The previous step indicates that weather information has been retrieved and the question regarding picnic suitability has\"}],\"role\": \"model\"},\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 834,\"candidatesTokenCount\": 26,\"totalTokenCount\": 1081,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 834}],\"thoughtsTokenCount\": 221,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"xm5WasiIAYPl7M8P5_qRqA0\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" been answered. The agent is ready to provide the final answer.\\\",\\\"finalResult\\\":\\\"The weather is perfect for a picnic today! Enjoy your outing.\\\"}\"}],\"role\": \"model\"},\"finishReason\": \"STOP\",\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 834,\"candidatesTokenCount\": 57,\"totalTokenCount\": 1112,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 834}],\"thoughtsTokenCount\": 221,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"xm5WasiIAYPl7M8P5_qRqA0\"}\r\n\r\n"
+        ],
+        "chunkTimings": [0, 57],
+        "isStreaming": true
       }
     }
   ]

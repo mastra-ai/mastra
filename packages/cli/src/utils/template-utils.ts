@@ -31,7 +31,10 @@ function pluralize(count: number, singular: string, plural?: string): string {
   return count === 1 ? singular : plural || `${singular}s`;
 }
 
-export async function selectTemplate(templates: Template[]): Promise<Template | null> {
+export async function selectTemplate(
+  templates: Template[],
+  options: { signal?: AbortSignal } = {},
+): Promise<Template | null> {
   const choices = templates.map(template => {
     const parts = [];
     if (template.agents?.length) {
@@ -60,6 +63,7 @@ export async function selectTemplate(templates: Template[]): Promise<Template | 
   const selected = await p.select({
     message: 'Select a template:',
     options: choices,
+    ...(options.signal ? { signal: options.signal } : {}),
   });
 
   if (p.isCancel(selected)) {

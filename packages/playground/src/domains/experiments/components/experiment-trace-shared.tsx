@@ -1,4 +1,8 @@
-import { AgentIcon, FolderIcon, McpServerIcon, ToolsIcon, WorkflowIcon } from '@mastra/playground-ui';
+import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
+import { FolderIcon } from '@mastra/playground-ui/icons/FolderIcon';
+import { McpServerIcon } from '@mastra/playground-ui/icons/McpServerIcon';
+import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
+import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 import { BrainIcon } from 'lucide-react';
 import type { ExperimentUISpanStyle } from '../types';
 

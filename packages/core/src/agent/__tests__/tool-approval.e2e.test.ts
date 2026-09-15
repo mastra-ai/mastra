@@ -114,8 +114,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
         const toolResults = await resumeStream.toolResults;
 
         expect((await resumeStream.toolCalls).length).toBe(1);
-        expect(toolResults.length).toBe(1);
-        expect(toolResults[0].payload?.result).toBe('Tool call was not approved by the user');
+        expect(toolResults.length).toBe(0); // output-denied calls emit no tool-result chunk
         expect(mockFindUser).toHaveBeenCalledTimes(0);
       }, 500000);
 
@@ -481,8 +480,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
 
         const toolResults = resumeOutput.toolResults;
 
-        expect(toolResults.length).toBe(1);
-        expect(toolResults[0].payload?.result).toBe('Tool call was not approved by the user');
+        expect(toolResults.length).toBe(0); // output-denied calls emit no tool-result chunk
         expect(mockFindUser).toHaveBeenCalledTimes(0);
       }, 500000);
     });

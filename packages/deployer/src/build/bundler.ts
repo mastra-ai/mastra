@@ -1,13 +1,13 @@
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { optimizeLodashImports } from '@optimize-lodash/rollup-plugin';
-import alias from '@rollup/plugin-alias';
 import commonjs from '@rollup/plugin-commonjs';
 import json from '@rollup/plugin-json';
 import nodeResolve from '@rollup/plugin-node-resolve';
 import { rollup } from 'rollup';
 import type { InputOptions, OutputOptions, Plugin } from 'rollup';
-import type { analyzeBundle } from './analyze';
+import { minify as esbuildMinify } from 'rollup-plugin-esbuild';
+import type { WorkspacePackageInfo } from '../bundler/workspaceDependencies';
 import { esbuild } from './plugins/esbuild';
 import { esmShim } from './plugins/esm-shim';
 import { localStorageDetector } from './plugins/local-storage-detector';
@@ -16,16 +16,61 @@ import { protocolExternalResolver } from './plugins/protocol-external-resolver';
 import { removeDeployer } from './plugins/remove-deployer';
 import { subpathExternalsResolver } from './plugins/subpath-externals-resolver';
 import { tsConfigPaths } from './plugins/tsconfig-paths';
+import type { ExternalDependencyInfo } from './types';
 import { getNodeResolveOptions, slash } from './utils';
 import type { BundlerPlatform } from './utils';
 
+export function mastraInternalAliasPlugin(entryFile: string): Plugin {
+  const normalizedEntryFile = slash(entryFile);
+
+  return {
+    name: 'mastra-internal-alias',
+    resolveId: {
+      order: 'pre',
+      handler(id) {
+        if (id === '#server') {
+          return slash(fileURLToPath(import.meta.resolve('@mastra/deployer/server')));
+        }
+
+        if (id.startsWith('@mastra/server/')) {
+          return fileURLToPath(import.meta.resolve(id));
+        }
+
+        if (id === '#mastra') {
+          return normalizedEntryFile;
+        }
+      },
+    },
+  } satisfies Plugin;
+}
+
+export function mastraToolsAliasPlugin(): Plugin {
+  return {
+    name: 'tools-rewriter',
+    resolveId(id: string) {
+      if (id === '#tools') {
+        return {
+          id: './tools.mjs',
+          external: true,
+        };
+      }
+    },
+  };
+}
+
 export async function getInputOptions(
   entryFile: string,
-  analyzedBundleInfo: Awaited<ReturnType<typeof analyzeBundle>>,
+  analyzedBundleInfo: {
+    dependencies: Map<string, string>;
+    externalDependencies: Map<string, ExternalDependencyInfo>;
+    workspaceMap: Map<string, WorkspacePackageInfo>;
+    projectType?: string;
+  },
   platform: BundlerPlatform,
   env: Record<string, string> = { 'process.env.NODE_ENV': JSON.stringify('production') },
   {
     sourcemap = false,
+    minify = false,
     isDev = false,
     projectRoot,
     workspaceRoot = undefined,
@@ -33,6 +78,7 @@ export async function getInputOptions(
     externalsPreset = false,
   }: {
     sourcemap?: boolean;
+    minify?: boolean;
     isDev?: boolean;
     workspaceRoot?: string;
     projectRoot: string;
@@ -45,7 +91,6 @@ export async function getInputOptions(
   const externalsCopy = new Set<string>(analyzedBundleInfo.externalDependencies.keys());
   const externals = externalsPreset ? [] : Array.from(externalsCopy);
 
-  const normalizedEntryFile = slash(entryFile);
   return {
     logLevel: process.env.MASTRA_BUNDLER_DEBUG === 'true' ? 'debug' : 'silent',
     treeshake: 'smallest',
@@ -79,38 +124,9 @@ export async function getInputOptions(
           };
         },
       } satisfies Plugin,
-      alias({
-        entries: [
-          {
-            find: /^\#server$/,
-            replacement: slash(fileURLToPath(import.meta.resolve('@mastra/deployer/server'))),
-          },
-          {
-            find: /^\@mastra\/server\/(.*)/,
-            replacement: `@mastra/server/$1`,
-            customResolver: id => {
-              if (id.startsWith('@mastra/server')) {
-                return {
-                  id: fileURLToPath(import.meta.resolve(id)),
-                };
-              }
-            },
-          },
-          { find: /^\#mastra$/, replacement: normalizedEntryFile },
-        ],
-      }),
+      mastraInternalAliasPlugin(entryFile),
       tsConfigPaths(),
-      {
-        name: 'tools-rewriter',
-        resolveId(id: string) {
-          if (id === '#tools') {
-            return {
-              id: './tools.mjs',
-              external: true,
-            };
-          }
-        },
-      } satisfies Plugin,
+      mastraToolsAliasPlugin(),
       esbuild({
         platform,
         define: env,
@@ -144,13 +160,18 @@ export async function getInputOptions(
       // },
       // },
       json(),
-      localStorageDetector(),
+      localStorageDetector(workspaceRoot || projectRoot),
       removeDeployer(entryFile, { sourcemap }),
       // treeshake unused imports
       esbuild({
         include: entryFile,
         platform,
       }),
+      // Runs at renderChunk, so the emitted chunks are minified as a whole rather
+      // than module by module. Last in the list so nothing transforms after it.
+      // `sourceMap` follows the build's own setting: the plugin defaults it to true,
+      // which would build a map Rollup then discards on a non-sourcemap build.
+      minify ? esbuildMinify({ target: 'node20', sourceMap: sourcemap }) : null,
     ].filter(Boolean),
   } satisfies InputOptions;
 }

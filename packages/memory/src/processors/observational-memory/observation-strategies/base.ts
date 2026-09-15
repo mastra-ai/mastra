@@ -3,11 +3,15 @@ import type { MessageHistory } from '@mastra/core/processors';
 import type { MemoryStorage } from '@mastra/core/storage';
 import xxhash from 'xxhash-wasm';
 
+import type { Memory } from '../../..';
 import { omDebug, omError } from '../debug';
-import { stripThreadTags } from '../message-utils';
+import { formatOmError } from '../error';
+import { getObservableMessages, stripThreadTags } from '../message-utils';
 import { parseObservationGroups, wrapInObservationGroup } from '../observation-groups';
 import type { ObserverRunner } from '../observer-runner';
 import type { ReflectorRunner } from '../reflector-runner';
+import { withRetry } from '../retry';
+import { stripSubconsciousSignals } from '../subconscious/origin';
 import { getMaxThreshold } from '../thresholds';
 import type { TokenCounter } from '../token-counter';
 import type {
@@ -28,6 +32,7 @@ const hasherPromise = xxhash();
  */
 export interface StrategyDeps {
   storage: MemoryStorage;
+  memory?: Memory;
   messageHistory: MessageHistory;
   tokenCounter: TokenCounter;
   observationConfig: ResolvedObservationConfig;
@@ -99,8 +104,9 @@ export abstract class ObservationStrategy {
       }
 
       const { messages, existingObservations } = await this.prepare();
+      const observationMessages = stripSubconsciousSignals(messages);
       await this.emitStartMarkers(cycleId);
-      const output = await this.observe(existingObservations, messages);
+      const output = await this.observe(existingObservations, observationMessages);
       const processed = await this.process(output, existingObservations);
       await this.persist(processed);
       await this.emitEndMarkers(cycleId, processed);
@@ -112,13 +118,17 @@ export abstract class ObservationStrategy {
           threadId,
           writer,
           abortSignal,
+          mainAgent: this.opts.agent,
+          sendSignal: this.opts.sendSignal,
+          sendStateSignal: this.opts.sendStateSignal,
           reflectionHooks,
+          trigger: this.opts.trigger,
           requestContext,
           observabilityContext: this.opts.observabilityContext,
         });
       }
 
-      return { observed: true, usage: output.usage };
+      return { observed: true, usage: output.usage, providerMetadata: output.providerMetadata };
     } catch (error) {
       await this.emitFailedMarkers(cycleId, error);
 
@@ -129,7 +139,7 @@ export abstract class ObservationStrategy {
             cycleId,
             operationType: 'observation',
             startedAt: new Date().toISOString(),
-            error: error instanceof Error ? error.message : String(error),
+            error: formatOmError(error),
             recordId: record.id,
             threadId,
           },
@@ -137,7 +147,7 @@ export abstract class ObservationStrategy {
         await this.persistMarkerToStorage(failedMarkerForStorage, threadId, this.opts.resourceId).catch(() => {});
         if (abortSignal?.aborted) throw error;
         omError('[OM] Observation failed', error);
-        return { observed: false };
+        return { observed: false, error: error instanceof Error ? error : new Error(String(error)) };
       }
 
       // Sync + resource-scoped: same contract as pre-#14453 — rethrow after failed markers.
@@ -159,7 +169,18 @@ export abstract class ObservationStrategy {
     }
 
     const markerThreadId = (marker.data as { threadId?: string } | undefined)?.threadId ?? this.opts.threadId;
-    await this.persistMarkerToStorage(marker, markerThreadId, this.opts.resourceId);
+    // Prefer the live MessageList (markers land on the pending assistant message
+    // before it reaches storage); fall back to the storage scan when no list was
+    // provided or the list contains no assistant message yet.
+    const persisted = await this.persistMarkerToMessage(
+      marker,
+      this.opts.messageList,
+      markerThreadId,
+      this.opts.resourceId,
+    );
+    if (!persisted) {
+      await this.persistMarkerToStorage(marker, markerThreadId, this.opts.resourceId);
+    }
   }
 
   protected getObservationMarkerConfig(): ObservationMarkerConfig {
@@ -311,14 +332,18 @@ export abstract class ObservationStrategy {
 
     await Promise.all(
       groups.map(group =>
-        this.deps.onIndexObservations!({
-          text: group.content,
-          groupId: group.id,
-          range: group.range,
-          threadId,
-          resourceId,
-          observedAt,
-        }),
+        withRetry(
+          () =>
+            this.deps.onIndexObservations!({
+              text: group.content,
+              groupId: group.id,
+              range: group.range,
+              threadId,
+              resourceId,
+              observedAt,
+            }),
+          { label: 'index-observations', abortSignal: this.opts.abortSignal },
+        ),
       ),
     );
   }
@@ -367,15 +392,19 @@ export abstract class ObservationStrategy {
   /**
    * Persist a marker part on the last assistant message in a MessageList
    * AND save the updated message to the DB.
+   *
+   * @returns true when a marker was placed on an assistant message, false when
+   *   no list was provided or the list contains no assistant message (caller
+   *   should fall back to `persistMarkerToStorage`).
    */
   protected async persistMarkerToMessage(
     marker: { type: string; data: unknown },
     messageList: MessageList | undefined,
     threadId: string,
     resourceId?: string,
-  ): Promise<void> {
-    if (!messageList) return;
-    const allMsgs = messageList.get.all.db();
+  ): Promise<boolean> {
+    if (!messageList) return false;
+    const allMsgs = getObservableMessages(messageList);
     for (let i = allMsgs.length - 1; i >= 0; i--) {
       const msg = allMsgs[i];
       if (msg?.role === 'assistant' && msg.content?.parts && Array.isArray(msg.content.parts)) {
@@ -395,9 +424,10 @@ export abstract class ObservationStrategy {
         } catch (e) {
           omDebug(`[OM:persistMarker] failed to save marker to DB: ${e}`);
         }
-        return;
+        return true;
       }
     }
+    return false;
   }
 
   // ── Abstract phase methods ──────────────────────────────────

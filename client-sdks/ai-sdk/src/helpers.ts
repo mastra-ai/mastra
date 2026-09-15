@@ -46,6 +46,14 @@ export type OutputChunkType<OUTPUT = undefined> =
   | DataChunkType
   | undefined;
 
+type AISDKToolOutputDenied = {
+  type: 'tool-output-denied';
+  toolCallId: string;
+  toolName: string;
+  providerExecuted?: boolean;
+  dynamic?: boolean;
+};
+
 export type ToolAgentChunkType = { type: 'tool-agent'; toolCallId: string; payload: any };
 export type ToolWorkflowChunkType = { type: 'tool-workflow'; toolCallId: string; payload: any };
 export type ToolNetworkChunkType = { type: 'tool-network'; toolCallId: string; payload: any };
@@ -110,6 +118,31 @@ function hasTransformedToolPayload(
   return Boolean(transform && Object.prototype.hasOwnProperty.call(transform, 'transformed'));
 }
 
+function convertBackgroundTaskChunkToDataChunk(chunk: ChunkType): DataChunkType | undefined {
+  if (!chunk.type?.startsWith('background-task-') || !('payload' in chunk)) {
+    return undefined;
+  }
+
+  const payload = chunk.payload as Record<string, unknown>;
+  const type = `data-${chunk.type}` as const;
+  const id =
+    typeof payload.taskId === 'string'
+      ? payload.taskId
+      : typeof payload.toolCallId === 'string'
+        ? payload.toolCallId
+        : undefined;
+
+  return {
+    type,
+    ...(id !== undefined ? { id } : {}),
+    data: {
+      ...payload,
+      state: type,
+      runId: typeof chunk.runId === 'string' ? chunk.runId : payload.runId,
+    },
+  } satisfies DataChunkType;
+}
+
 export function convertMastraChunkToAISDKBase<OUTPUT = undefined>({
   chunk,
   mode = 'stream',
@@ -132,13 +165,14 @@ export function convertMastraChunkToAISDKBase<OUTPUT = undefined>({
         // Preserve messageId from the payload so it can be sent to useChat
         ...(chunk.payload?.messageId ? { messageId: chunk.payload.messageId } : {}),
       };
-    case 'step-start':
-      const { messageId: _messageId, ...rest } = chunk.payload;
+    case 'step-start': {
+      const { messageId: _messageId, ...rest } = chunk.payload ?? {};
       return {
         type: 'start-step',
         request: rest.request,
         warnings: normalizeWarnings(rest.warnings),
       };
+    }
     case 'raw':
       return {
         type: 'raw',
@@ -150,7 +184,7 @@ export function convertMastraChunkToAISDKBase<OUTPUT = undefined>({
         type: 'finish',
         finishReason: normalizeFinishReason(chunk.payload.stepResult.reason) as FinishReason,
         ...(includeRawFinishReason ? { rawFinishReason: chunk.payload.stepResult.reason } : {}),
-        totalUsage: normalizeUsage(chunk.payload.output.usage),
+        totalUsage: normalizeUsage(chunk.payload.output?.usage ?? (chunk.payload as any).usage),
       };
     }
     case 'reasoning-start':
@@ -340,7 +374,9 @@ export function convertMastraChunkToAISDKBase<OUTPUT = undefined>({
         output: hasTransformedToolPayload(displayOutputTransform)
           ? displayOutputTransform.transformed
           : chunk.payload.result,
-        // providerMetadata: chunk.payload.providerMetadata, // AI v5 types don't show this?
+        // Carries the `toModelOutput` projection as `mastra.modelOutput`; dropping it sent
+        // the raw tool output back into the prompt on a `useChat` round trip (issue #22012).
+        ...(chunk.payload.providerMetadata != null ? { providerMetadata: chunk.payload.providerMetadata } : {}),
       };
     case 'tool-error':
       return {
@@ -384,6 +420,9 @@ export function convertMastraChunkToAISDKBase<OUTPUT = undefined>({
         },
       };
     default:
+      if (chunk.type?.startsWith('background-task-')) {
+        return convertBackgroundTaskChunkToDataChunk(chunk as ChunkType);
+      }
       if (chunk.type && 'payload' in chunk && chunk.payload) {
         return {
           type: chunk.type as string,
@@ -481,7 +520,15 @@ export function convertMastraChunkToAISDKv6<OUTPUT = undefined>({
 }: {
   chunk: ChunkType<OUTPUT>;
   mode?: 'generate' | 'stream';
-}): OutputChunkType<OUTPUT> | OutputChunkType<OUTPUT>[] {
+}): OutputChunkType<OUTPUT> | AISDKToolOutputDenied | OutputChunkType<OUTPUT>[] {
+  if (chunk.type === 'tool-output-denied') {
+    return {
+      type: 'tool-output-denied',
+      toolCallId: chunk.payload.toolCallId,
+      toolName: chunk.payload.toolName,
+    };
+  }
+
   if (chunk.type === 'tool-call-approval') {
     const displayTransform = getTransformedToolPayload(chunk.metadata, 'display', 'approval');
     // Emit both the native v6 tool-approval-request AND the legacy data-tool-call-approval
@@ -530,6 +577,7 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
   // tool-output is a custom mastra chunk type used in ToolStream
   part:
     | TextStreamPart<ToolSet>
+    | AISDKToolOutputDenied
     | DataChunkType
     | ToolApprovalRequest
     | { type: 'tool-output'; toolCallId: string; output: any };
@@ -548,6 +596,16 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
   | ToolNetworkChunkType
   | undefined {
   const partType = part?.type;
+
+  if (
+    !sendReasoning &&
+    (partType === 'text-start' || partType === 'text-delta' || partType === 'text-end') &&
+    part.providerMetadata?.openai?.itemId != null
+  ) {
+    // Replaying a stored OpenAI text item requires its reasoning item, which is hidden here.
+    const { itemId, ...openai } = { ...part.providerMetadata.openai };
+    part = { ...part, providerMetadata: { ...part.providerMetadata, openai } };
+  }
 
   switch (partType) {
     case 'text-start': {
@@ -693,7 +751,17 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
         toolCallId: part.toolCallId,
         output: part.output,
         ...(part.providerExecuted != null ? { providerExecuted: part.providerExecuted } : {}),
+        // Mirrors `tool-call` above. The AI SDK stores this as the UI part's
+        // `resultProviderMetadata`, so `mastra.modelOutput` survives the trip (issue #22012).
+        ...(part.providerMetadata != null ? { providerMetadata: part.providerMetadata } : {}),
         ...(part.dynamic != null ? { dynamic: part.dynamic } : {}),
+      };
+    }
+
+    case 'tool-output-denied': {
+      return {
+        type: 'tool-output-denied',
+        toolCallId: part.toolCallId,
       };
     }
 
@@ -773,6 +841,8 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
       if (sendFinish) {
         return {
           type: 'finish' as const,
+          // Matches the AI SDK UI converter, which keeps the finish reason on the terminal chunk.
+          ...(part.finishReason != null ? { finishReason: part.finishReason } : {}),
           ...(messageMetadataValue != null ? { messageMetadata: messageMetadataValue } : {}),
         } as InferUIMessageChunk<UI_MESSAGE>;
       }
@@ -794,6 +864,13 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
     }
 
     default: {
+      if (typeof partType === 'string' && partType.startsWith('background-task-')) {
+        const backgroundTaskChunk = convertBackgroundTaskChunkToDataChunk(part as unknown as ChunkType);
+        if (!backgroundTaskChunk) return;
+        const { type, data, id } = backgroundTaskChunk;
+        return { type, data, ...(id !== undefined && { id }) } as InferUIMessageChunk<UI_MESSAGE>;
+      }
+
       // return the chunk as is if it's not a known type
       if (isDataChunkType(part)) {
         if (!('data' in part)) {

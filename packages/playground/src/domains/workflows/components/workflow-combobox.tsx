@@ -1,5 +1,6 @@
-import { Combobox, toast } from '@mastra/playground-ui';
-import type { ComboboxProps } from '@mastra/playground-ui';
+import { Combobox } from '@mastra/playground-ui/components/Combobox';
+import type { ComboboxProps } from '@mastra/playground-ui/components/Combobox';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { useEffect } from 'react';
 import { useWorkflows } from '../hooks/use-workflows';
 import { useLinkComponent } from '@/lib/framework';
@@ -13,6 +14,9 @@ export interface WorkflowComboboxProps {
   className?: string;
   disabled?: boolean;
   variant?: ComboboxProps['variant'];
+  size?: ComboboxProps['size'];
+  'aria-label'?: string;
+  align?: ComboboxProps['align'];
 }
 
 export function WorkflowCombobox({
@@ -24,6 +28,9 @@ export function WorkflowCombobox({
   className,
   disabled = false,
   variant,
+  size,
+  'aria-label': ariaLabel,
+  align,
 }: WorkflowComboboxProps) {
   const { data: workflows = {}, isLoading, isError, error } = useWorkflows();
   const { navigate, paths } = useLinkComponent();
@@ -59,6 +66,9 @@ export function WorkflowCombobox({
       className={className}
       disabled={disabled || isLoading || isError}
       variant={variant}
+      size={size}
+      aria-label={ariaLabel}
+      align={align}
     />
   );
 }

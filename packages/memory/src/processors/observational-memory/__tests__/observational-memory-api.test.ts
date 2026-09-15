@@ -12,12 +12,17 @@
 
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
+import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
+import { createObservabilityContext } from '@mastra/core/observability';
 import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { BufferingCoordinator } from '../buffering-coordinator';
+import { Extractor } from '../extractor';
 import { ModelByInputTokens } from '../model-by-input-tokens';
 import { ObservationalMemory } from '../observational-memory';
+import { ObserverRunner } from '../observer-runner';
+import type { ContinuationHintsConfig, ObserveHooks } from '../types';
 
 // =============================================================================
 // Helpers
@@ -42,6 +47,34 @@ function createTestMessage(
   };
 }
 
+function createWorkingMemoryStateSignal(id: string, createdAt = new Date()): MastraDBMessage {
+  return {
+    id,
+    role: 'signal',
+    type: 'working-memory',
+    createdAt,
+    content: {
+      format: 2,
+      parts: [{ type: 'text', text: '# User\n- responseFormat: format-a; format-b' }],
+      metadata: {
+        signal: {
+          id,
+          type: 'state',
+          tagName: 'working-memory',
+          createdAt: createdAt.toISOString(),
+          metadata: {
+            state: {
+              id: 'working-memory',
+              cacheKey: 'working-memory-cache-key',
+              mode: 'snapshot',
+            },
+          },
+        },
+      },
+    },
+  };
+}
+
 /** Generate N messages with padding to exceed token thresholds. */
 function createBulkMessages(count: number, threadId: string, startTime?: number): MastraDBMessage[] {
   const base = startTime ?? Date.now() - count * 1000;
@@ -56,7 +89,10 @@ function createBulkMessages(count: number, threadId: string, startTime?: number)
   }));
 }
 
-function createMockObserverModel(observationOverride?: string) {
+function createMockObserverModel(
+  observationOverride?: string,
+  providerMetadata?: Record<string, Record<string, unknown>>,
+) {
   const observationText =
     observationOverride ??
     `<observations>
@@ -77,6 +113,7 @@ Continue helping the user
       usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
       warnings: [],
       content: [{ type: 'text', text: observationText }],
+      ...(providerMetadata ? { providerMetadata } : {}),
     }),
     doStream: async () => ({
       stream: convertArrayToReadableStream([
@@ -85,7 +122,12 @@ Continue helping the user
         { type: 'text-start', id: 'text-1' },
         { type: 'text-delta', id: 'text-1', delta: observationText },
         { type: 'text-end', id: 'text-1' },
-        { type: 'finish', finishReason: 'stop', usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 } },
+        {
+          type: 'finish',
+          finishReason: 'stop',
+          usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+          ...(providerMetadata ? { providerMetadata } : {}),
+        },
       ]),
       rawCall: { rawPrompt: null, rawSettings: {} },
       warnings: [],
@@ -93,7 +135,10 @@ Continue helping the user
   } as any);
 }
 
-function createMockReflectorModel(reflectedObservations?: string) {
+function createMockReflectorModel(
+  reflectedObservations?: string,
+  providerMetadata?: Record<string, Record<string, unknown>>,
+) {
   const text =
     reflectedObservations ??
     `<observations>
@@ -107,6 +152,7 @@ function createMockReflectorModel(reflectedObservations?: string) {
       usage: { inputTokens: 50, outputTokens: 30, totalTokens: 80 },
       warnings: [],
       content: [{ type: 'text', text }],
+      ...(providerMetadata ? { providerMetadata } : {}),
     }),
     doStream: async () => ({
       stream: convertArrayToReadableStream([
@@ -115,7 +161,12 @@ function createMockReflectorModel(reflectedObservations?: string) {
         { type: 'text-start', id: 'text-1' },
         { type: 'text-delta', id: 'text-1', delta: text },
         { type: 'text-end', id: 'text-1' },
-        { type: 'finish', finishReason: 'stop', usage: { inputTokens: 50, outputTokens: 30, totalTokens: 80 } },
+        {
+          type: 'finish',
+          finishReason: 'stop',
+          usage: { inputTokens: 50, outputTokens: 30, totalTokens: 80 },
+          ...(providerMetadata ? { providerMetadata } : {}),
+        },
       ]),
       rawCall: { rawPrompt: null, rawSettings: {} },
       warnings: [],
@@ -132,21 +183,33 @@ function createOM(
     scope?: 'thread' | 'resource';
     observerModel?: any;
     reflectorModel?: any;
+    observationExtract?: Extractor<any>[];
+    reflectionExtract?: Extractor<any>[];
+    observationContinuationHints?: ContinuationHintsConfig;
+    reflectionContinuationHints?: ContinuationHintsConfig;
     activateAfterIdle?: number | string;
+    hooks?: ObserveHooks;
+    hookExecution?: 'non-blocking' | 'await';
   },
 ) {
   return new ObservationalMemory({
     storage,
     scope: opts?.scope ?? 'thread',
     activateAfterIdle: opts?.activateAfterIdle,
+    hooks: opts?.hooks,
+    hookExecution: opts?.hookExecution,
     observation: {
       model: opts?.observerModel ?? createMockObserverModel(),
       messageTokens: opts?.messageTokens ?? 100,
       bufferTokens: opts?.bufferTokens ?? false,
+      extract: opts?.observationExtract,
+      continuationHints: opts?.observationContinuationHints,
     },
     reflection: {
       model: opts?.reflectorModel ?? createMockReflectorModel(),
       observationTokens: opts?.observationTokens ?? 50_000,
+      extract: opts?.reflectionExtract,
+      continuationHints: opts?.reflectionContinuationHints,
     },
   });
 }
@@ -273,6 +336,52 @@ describe('observe()', () => {
       expect(result.record.lastObservedAt).toBeDefined();
     });
 
+    it('should persist schema-less inline extracted values and call hooks', async () => {
+      const onExtracted = vi.fn(({ current }) => current);
+      const userInfo = new Extractor({
+        name: 'User info',
+        instructions: 'Information about the user: name/location/work/etc',
+        includePreviousExtraction: false,
+        onExtracted,
+      });
+      const extractOm = createOM(storage, {
+        observationExtract: [userInfo],
+        observerModel: createMockObserverModel(
+          `<observations>
+* 🔴 User said their name is Tyler.
+</observations>
+<user-info>
+name: Tyler
+</user-info>`,
+        ),
+      });
+
+      await storage.saveThread({
+        thread: {
+          id: threadId,
+          resourceId: 'observe-resource',
+          title: 'Observe thread',
+          metadata: {},
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+      const messages = createBulkMessages(10, threadId);
+      await storage.saveMessages({ messages });
+      const result = await extractOm.observe({ threadId });
+
+      expect(result.observed).toBe(true);
+      expect(onExtracted).toHaveBeenCalledWith(
+        expect.objectContaining({
+          source: 'observer',
+          threadId,
+          current: 'name: Tyler',
+        }),
+      );
+      const thread = await storage.getThreadById({ threadId });
+      expect(getThreadOMMetadata(thread?.metadata)?.extracted).toMatchObject({ 'user-info': 'name: Tyler' });
+    });
+
     it('should skip when messages are below threshold', async () => {
       const messages = [createTestMessage('short')];
       const result = await om.observe({ threadId, messages });
@@ -374,6 +483,88 @@ describe('observe()', () => {
       });
     });
 
+    it('awaits config hooks and gates the observer when hookExecution is await', async () => {
+      const observerModel = createMockObserverModel();
+      const doGenerate = vi.spyOn(observerModel, 'doGenerate');
+      const doStream = vi.spyOn(observerModel, 'doStream');
+      const hookError = new Error('start hook failed');
+      const onObservationEnd = vi.fn();
+      const awaitedOm = createOM(storage, {
+        observerModel,
+        hookExecution: 'await',
+        hooks: {
+          onObservationStart: async () => {
+            await Promise.resolve();
+            throw hookError;
+          },
+          onObservationEnd,
+        },
+      });
+
+      await expect(awaitedOm.observe({ threadId, messages: createBulkMessages(10, threadId) })).rejects.toBe(hookError);
+
+      expect(doGenerate).not.toHaveBeenCalled();
+      expect(doStream).not.toHaveBeenCalled();
+      expect(onObservationEnd).toHaveBeenCalledOnce();
+      expect(onObservationEnd).toHaveBeenCalledWith(
+        expect.objectContaining({ usage: undefined, error: hookError, threadId, trigger: 'manual' }),
+      );
+    });
+
+    it('rejects an awaited end-hook failure after the observation completes', async () => {
+      const hookError = new Error('end hook failed');
+      const awaitedOm = createOM(storage, {
+        hookExecution: 'await',
+        hooks: {
+          onObservationEnd: async () => {
+            await Promise.resolve();
+            throw hookError;
+          },
+        },
+      });
+
+      await expect(awaitedOm.observe({ threadId, messages: createBulkMessages(10, threadId) })).rejects.toBe(hookError);
+
+      const record = await awaitedOm.getObservations(threadId);
+      expect(record).toContain('User discussed various topics');
+    });
+
+    it('releases the observation lock before invoking an awaited end hook', async () => {
+      const messages = createBulkMessages(10, threadId);
+      let awaitedOm: ObservationalMemory;
+      const reentrantObserve = vi.fn(async () => {
+        await awaitedOm.observe({ threadId, messages });
+      });
+      awaitedOm = createOM(storage, {
+        hookExecution: 'await',
+        hooks: { onObservationEnd: reentrantObserve },
+      });
+
+      await awaitedOm.observe({ threadId, messages });
+
+      expect(reentrantObserve).toHaveBeenCalledOnce();
+    });
+
+    it('keeps config hook promises non-blocking by default', async () => {
+      const onObservationEnd = vi.fn();
+      const nonBlockingOm = createOM(storage, {
+        hooks: {
+          onObservationStart: async () => {
+            await Promise.resolve();
+            throw new Error('ignored hook failure');
+          },
+          onObservationEnd,
+        },
+      });
+
+      await expect(
+        nonBlockingOm.observe({ threadId, messages: createBulkMessages(10, threadId) }),
+      ).resolves.toMatchObject({
+        observed: true,
+      });
+      expect(onObservationEnd).toHaveBeenCalledOnce();
+    });
+
     it('should not call hooks when below threshold', async () => {
       const hooks = {
         onObservationStart: vi.fn(),
@@ -418,6 +609,56 @@ describe('observe()', () => {
       expect(hooks.onObservationEnd.mock.calls[0]![0].error.message).toMatch(/Observer failed/);
     });
 
+    it('gates reflection and pairs the end hook when an awaited reflection start hook fails', async () => {
+      const reflectorModel = createMockReflectorModel();
+      const doGenerate = vi.spyOn(reflectorModel, 'doGenerate');
+      const doStream = vi.spyOn(reflectorModel, 'doStream');
+      const hookError = new Error('reflection start hook failed');
+      const onReflectionEnd = vi.fn();
+      const omReflect = createOM(storage, {
+        observationTokens: 5,
+        reflectorModel,
+        hookExecution: 'await',
+        hooks: {
+          onReflectionStart: async () => {
+            await Promise.resolve();
+            throw hookError;
+          },
+          onReflectionEnd,
+        },
+      });
+
+      await expect(omReflect.observe({ threadId, messages: createBulkMessages(10, threadId) })).rejects.toBe(hookError);
+
+      expect(doGenerate).not.toHaveBeenCalled();
+      expect(doStream).not.toHaveBeenCalled();
+      expect(onReflectionEnd).toHaveBeenCalledOnce();
+      expect(onReflectionEnd).toHaveBeenCalledWith(
+        expect.objectContaining({ usage: undefined, error: hookError, threadId, trigger: 'manual' }),
+      );
+    });
+
+    it('cleans up reflection state before invoking an awaited end hook', async () => {
+      let omReflect: ObservationalMemory;
+      let nestedResult: Awaited<ReturnType<ObservationalMemory['reflect']>> | undefined;
+      let reentered = false;
+      const onReflectionEnd = vi.fn(async () => {
+        if (reentered) return;
+        reentered = true;
+        nestedResult = await omReflect.reflect(threadId);
+      });
+      omReflect = createOM(storage, {
+        observationTokens: 5,
+        hookExecution: 'await',
+        hooks: { onReflectionEnd },
+      });
+
+      await omReflect.observe({ threadId, messages: createBulkMessages(10, threadId) });
+
+      expect(nestedResult?.reflected).toBe(true);
+      expect(onReflectionEnd).toHaveBeenCalledTimes(2);
+    });
+
     it('should call reflection hooks when reflection triggers', async () => {
       // Very low reflection threshold
       const omReflect = createOM(storage, { observationTokens: 5 });
@@ -441,6 +682,310 @@ describe('observe()', () => {
           usage: expect.objectContaining({ inputTokens: expect.any(Number), outputTokens: expect.any(Number) }),
         });
       }
+    });
+
+    it('should pass providerMetadata from the observer model result to onObservationEnd', async () => {
+      // The AI Gateway exposes per-call economics under providerMetadata.gateway
+      // (cost, generationId). Stub it on the observer model's finish/getFullOutput
+      // path — the exact path `usage` travels — and assert it reaches the hook.
+      const gatewayMetadata = { gateway: { cost: 0.0123, generationId: 'gen-obs-xyz' } };
+      const omWithMetadata = createOM(storage, {
+        observerModel: createMockObserverModel(undefined, gatewayMetadata),
+      });
+      const messages = createBulkMessages(10, threadId);
+      const hooks = {
+        onObservationStart: vi.fn(),
+        onObservationEnd: vi.fn(),
+      };
+
+      await omWithMetadata.observe({ threadId, messages, hooks });
+
+      expect(hooks.onObservationEnd).toHaveBeenCalledOnce();
+      expect(hooks.onObservationEnd).toHaveBeenCalledWith(
+        expect.objectContaining({
+          usage: expect.objectContaining({ inputTokens: expect.any(Number), outputTokens: expect.any(Number) }),
+          providerMetadata: gatewayMetadata,
+        }),
+      );
+    });
+
+    it('should leave providerMetadata absent when the observer model does not emit it', async () => {
+      // Provider-agnostic + zero breaking change: when the model omits providerMetadata,
+      // the hook result must not invent one.
+      const messages = createBulkMessages(10, threadId);
+      const hooks = {
+        onObservationStart: vi.fn(),
+        onObservationEnd: vi.fn(),
+      };
+
+      await om.observe({ threadId, messages, hooks });
+
+      expect(hooks.onObservationEnd).toHaveBeenCalledOnce();
+      // Absent, not present-with-undefined: the live hook-fire sites conditionally
+      // spread providerMetadata, so the key is omitted entirely when none is emitted.
+      expect(hooks.onObservationEnd.mock.calls[0]![0]).not.toHaveProperty('providerMetadata');
+    });
+
+    it('should pass providerMetadata from the reflector model result to onReflectionEnd', async () => {
+      // Very low reflection threshold so reflection fires; stub gateway economics on
+      // the reflector model so we can assert it reaches onReflectionEnd.
+      const gatewayMetadata = { gateway: { cost: 0.0456, generationId: 'gen-ref-xyz' } };
+      const omReflect = createOM(storage, {
+        observationTokens: 5,
+        reflectorModel: createMockReflectorModel(undefined, gatewayMetadata),
+      });
+      const messages = createBulkMessages(10, threadId);
+      const hooks = {
+        onObservationStart: vi.fn(),
+        onObservationEnd: vi.fn(),
+        onReflectionStart: vi.fn(),
+        onReflectionEnd: vi.fn(),
+      };
+
+      const result = await omReflect.observe({ threadId, messages, hooks });
+
+      expect(result.observed).toBe(true);
+      expect(result.reflected).toBe(true);
+      expect(hooks.onReflectionEnd).toHaveBeenCalled();
+      expect(hooks.onReflectionEnd).toHaveBeenCalledWith(
+        expect.objectContaining({
+          usage: expect.objectContaining({ inputTokens: expect.any(Number), outputTokens: expect.any(Number) }),
+          providerMetadata: gatewayMetadata,
+        }),
+      );
+    });
+
+    it('should pass providerMetadata to onObservationEnd through the batched resource-scoped path', async () => {
+      // Resource scope routes through callMultiThread() + the lastBatchProviderMetadata
+      // accumulator — a different code path from the single-thread observer above.
+      const gatewayMetadata = { gateway: { cost: 0.0321, generationId: 'gen-res-xyz' } };
+      const resourceId = 'res-pm';
+      await storage.saveThread({
+        thread: { id: threadId, resourceId, title: 'pm', metadata: {}, createdAt: new Date(), updatedAt: new Date() },
+      });
+      const omResource = createOM(storage, {
+        scope: 'resource',
+        observerModel: createMockObserverModel(undefined, gatewayMetadata),
+      });
+      const messages = createBulkMessages(10, threadId);
+      const hooks = {
+        onObservationStart: vi.fn(),
+        onObservationEnd: vi.fn(),
+      };
+
+      await omResource.observe({ threadId, resourceId, messages, hooks });
+
+      expect(hooks.onObservationEnd).toHaveBeenCalledOnce();
+      expect(hooks.onObservationEnd).toHaveBeenCalledWith(
+        expect.objectContaining({ providerMetadata: gatewayMetadata }),
+      );
+    });
+  });
+
+  describe('transform hooks', () => {
+    /** Serialize every prompt the mock model received so we can assert on its contents. */
+    function capturePrompts(model: MockLanguageModelV2) {
+      const doGenerate = vi.spyOn(model, 'doGenerate');
+      const doStream = vi.spyOn(model, 'doStream');
+      return () => JSON.stringify([...doGenerate.mock.calls, ...doStream.mock.calls].map(call => call[0]?.prompt));
+    }
+
+    it('beforeObservation receives the unobserved messages with context and can filter them', async () => {
+      const observerModel = createMockObserverModel();
+      const prompts = capturePrompts(observerModel);
+      const beforeObservation = vi.fn(({ messages }: { messages: MastraDBMessage[] }) => ({
+        messages: messages.filter(m => !JSON.stringify(m.content).includes('SECRET')),
+      }));
+      const transformOm = createOM(storage, { observerModel, hooks: { beforeObservation } });
+      const messages = createBulkMessages(10, threadId);
+      messages.push({ ...createTestMessage('my password is SECRET-TOKEN', 'user', `${threadId}-secret`), threadId });
+
+      await transformOm.observe({ threadId, resourceId: 'res-1', messages });
+
+      expect(beforeObservation).toHaveBeenCalledOnce();
+      expect(beforeObservation).toHaveBeenCalledWith(
+        expect.objectContaining({ threadId, resourceId: 'res-1', trigger: 'manual', messages }),
+      );
+      expect(prompts()).toContain('Message 0');
+      expect(prompts()).not.toContain('SECRET-TOKEN');
+      // Filtered messages are still marked as observed.
+      const record = await transformOm.getRecord(threadId);
+      expect(record?.observedMessageIds).toContain(`${threadId}-secret`);
+    });
+
+    it('beforeObservation returning nothing passes messages through unchanged', async () => {
+      const observerModel = createMockObserverModel();
+      const prompts = capturePrompts(observerModel);
+      const transformOm = createOM(storage, { observerModel, hooks: { beforeObservation: vi.fn() } });
+
+      const result = await transformOm.observe({ threadId, messages: createBulkMessages(10, threadId) });
+
+      expect(result.observed).toBe(true);
+      expect(prompts()).toContain('Message 9');
+    });
+
+    it('beforeObservation returning no messages skips the observer model call', async () => {
+      const observerModel = createMockObserverModel();
+      const prompts = capturePrompts(observerModel);
+      const onObservationEnd = vi.fn();
+      const transformOm = createOM(storage, {
+        observerModel,
+        hooks: { beforeObservation: () => ({ messages: [] }), onObservationEnd },
+      });
+      const messages = createBulkMessages(10, threadId);
+
+      const result = await transformOm.observe({ threadId, messages });
+
+      expect(result.observed).toBe(true);
+      expect(prompts()).toBe('[]');
+      expect(onObservationEnd).toHaveBeenCalledOnce();
+      const record = await transformOm.getRecord(threadId);
+      expect(record?.observedMessageIds).toContain(messages[0]!.id);
+    });
+
+    it('afterObservation can replace the observation text before it is persisted', async () => {
+      const afterObservation = vi.fn(async ({ observations }: { observations: string }) => ({
+        observations: observations.replace('User discussed various topics', 'REWRITTEN BY HOOK'),
+      }));
+      const transformOm = createOM(storage, { hooks: { afterObservation } });
+
+      await transformOm.observe({ threadId, messages: createBulkMessages(10, threadId) });
+
+      expect(afterObservation).toHaveBeenCalledOnce();
+      expect(afterObservation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          threadId,
+          trigger: 'manual',
+          observations: expect.stringContaining('User discussed various topics'),
+        }),
+      );
+      const stored = await transformOm.getObservations(threadId);
+      expect(stored).toContain('REWRITTEN BY HOOK');
+      expect(stored).not.toContain('User discussed various topics');
+    });
+
+    it('a throwing transform hook fails the cycle without persisting observations', async () => {
+      const hookError = new Error('redaction failed');
+      const onObservationEnd = vi.fn();
+      const transformOm = createOM(storage, {
+        hooks: {
+          afterObservation: async () => {
+            throw hookError;
+          },
+          onObservationEnd,
+        },
+      });
+
+      await expect(transformOm.observe({ threadId, messages: createBulkMessages(10, threadId) })).rejects.toBe(
+        hookError,
+      );
+
+      expect(onObservationEnd).toHaveBeenCalledWith(expect.objectContaining({ error: hookError }));
+      expect(await transformOm.getObservations(threadId)).toBeFalsy();
+    });
+
+    it('fires transform hooks on the async-buffer path with trigger async-buffer', async () => {
+      const beforeObservation = vi.fn();
+      const afterObservation = vi.fn(() => ({ observations: '* buffered and rewritten' }));
+      const transformOm = createOM(storage, {
+        messageTokens: 500,
+        bufferTokens: 0.2,
+        hooks: { beforeObservation, afterObservation },
+      });
+      await storage.saveMessages({ messages: createBulkMessages(5, threadId) });
+
+      const result = await transformOm.buffer({ threadId });
+      expect(result.buffered).toBe(true);
+      await transformOm.waitForBuffering(threadId, undefined, 5000);
+
+      expect(beforeObservation).toHaveBeenCalledWith(expect.objectContaining({ threadId, trigger: 'async-buffer' }));
+      expect(afterObservation).toHaveBeenCalledWith(expect.objectContaining({ threadId, trigger: 'async-buffer' }));
+      const status = await transformOm.getStatus({ threadId });
+      expect(status.record?.bufferedObservationChunks?.[0]?.observations).toContain('buffered and rewritten');
+    });
+
+    it('advances resource-scoped cursors when every thread is filtered to an empty replacement array', async () => {
+      const resourceId = 'filtered-resource';
+      const ids = [threadId, `${threadId}-filtered`];
+      const messages = ids.flatMap(id => createBulkMessages(10, id).map(message => ({ ...message, resourceId })));
+      for (const id of ids) {
+        await storage.saveThread({
+          thread: { id, resourceId, title: id, metadata: {}, createdAt: new Date(), updatedAt: new Date() },
+        });
+      }
+      await storage.saveMessages({ messages });
+      const beforeObservation = vi.fn(() => ({ messages: [] }));
+      const observerModel = createMockObserverModel();
+      const prompts = capturePrompts(observerModel);
+      const resourceOm = createOM(storage, {
+        scope: 'resource',
+        messageTokens: 600,
+        observerModel,
+        hooks: { beforeObservation },
+      });
+      const record = await resourceOm.getOrCreateRecord(threadId, resourceId);
+      await storage.setPendingMessageTokens(record.id, 600);
+      const result = await resourceOm.observe({
+        threadId,
+        resourceId,
+        messages: messages.filter(m => m.threadId === threadId),
+      });
+      expect(result.observed).toBe(true);
+      expect(beforeObservation).toHaveBeenCalledTimes(2);
+      expect(prompts()).toBe('[]');
+      expect(result.record.observedMessageIds).toEqual(expect.arrayContaining(messages.map(message => message.id)));
+      for (const id of ids) {
+        const thread = await storage.getThreadById({ threadId: id });
+        const lastMessage = messages.filter(message => message.threadId === id).at(-1)!;
+        expect(getThreadOMMetadata(thread?.metadata)?.lastObservedAt).toBe(lastMessage.createdAt.toISOString());
+      }
+      beforeObservation.mockClear();
+      const next = await resourceOm.observe({ threadId, resourceId });
+      expect(next.observed).toBe(false);
+      expect(beforeObservation).not.toHaveBeenCalled();
+    });
+
+    it('fires transform hooks per thread on the resource-scoped multi-thread path', async () => {
+      const resourceId = 'res-transform';
+      const otherThreadId = `${threadId}-other`;
+      for (const id of [threadId, otherThreadId]) {
+        await storage.saveThread({
+          thread: { id, resourceId, title: id, metadata: {}, createdAt: new Date(), updatedAt: new Date() },
+        });
+      }
+      const beforeObservation = vi.fn();
+      const afterObservation = vi.fn(({ threadId: id }: { threadId?: string }) => ({
+        observations: `* rewritten for ${id}`,
+      }));
+      const observerModel = createMockObserverModel(
+        `<observations>\n<thread id="${threadId}">\n* First thread\n</thread>\n<thread id="${otherThreadId}">\n* Second thread\n</thread>\n</observations>`,
+      );
+      // Each thread alone (~430 tokens) is below the threshold, so the
+      // strategy batches both into a single multi-thread observer call.
+      // Pending tokens on the record make observe()'s pre-check pass.
+      const resourceOm = createOM(storage, {
+        scope: 'resource',
+        messageTokens: 600,
+        observerModel,
+        hooks: { beforeObservation, afterObservation },
+      });
+      const currentThreadMessages = createBulkMessages(10, threadId).map(m => ({ ...m, resourceId }));
+      await storage.saveMessages({
+        messages: [...currentThreadMessages, ...createBulkMessages(10, otherThreadId).map(m => ({ ...m, resourceId }))],
+      });
+      const record = await resourceOm.getOrCreateRecord(threadId, resourceId);
+      await resourceOm.getStorage().setPendingMessageTokens(record.id, 600);
+
+      const result = await resourceOm.observe({ threadId, resourceId, messages: currentThreadMessages });
+
+      expect(result.observed).toBe(true);
+      const beforeThreadIds = beforeObservation.mock.calls.map(call => (call[0] as { threadId?: string }).threadId);
+      expect(beforeThreadIds.sort()).toEqual([threadId, otherThreadId].sort());
+      expect(beforeObservation).toHaveBeenCalledWith(expect.objectContaining({ resourceId, trigger: 'manual' }));
+      const afterThreadIds = afterObservation.mock.calls.map(call => (call[0] as { threadId?: string }).threadId);
+      expect(afterThreadIds.sort()).toEqual([threadId, otherThreadId].sort());
+      expect(result.record.activeObservations).toContain(`rewritten for ${threadId}`);
+      expect(result.record.activeObservations).toContain(`rewritten for ${otherThreadId}`);
     });
   });
 
@@ -540,12 +1085,99 @@ describe('buffer()', () => {
     expect(result.record).toBeTruthy();
   });
 
+  it('preserves extraction fields on buffered chunks', async () => {
+    const extractor = new Extractor({
+      name: 'Priority',
+      instructions: 'Extract the priority.',
+    });
+    const om = createOM(storage, {
+      messageTokens: 500,
+      bufferTokens: 0.2,
+      observerModel: createMockObserverModel(`<observations>
+* User asked for urgent help
+</observations>
+<priority>high</priority>`),
+      observationExtract: [extractor],
+    });
+    await storage.saveMessages({ messages: createBulkMessages(5, threadId) });
+
+    const result = await om.buffer({ threadId });
+    expect(result.buffered).toBe(true);
+    await om.waitForBuffering(threadId, undefined, 5000);
+
+    const status = await om.getStatus({ threadId });
+    const chunk = status.record?.bufferedObservationChunks?.[0];
+    expect(chunk?.extractedValues).toEqual({ priority: 'high' });
+  });
+
   it('should use provided messages instead of loading from storage', async () => {
     const om = createOM(storage, { messageTokens: 500, bufferTokens: 0.2 });
     const messages = createBulkMessages(5, threadId);
 
     const result = await om.buffer({ threadId, messages });
     expect(result.buffered).toBe(true);
+  });
+
+  it('retries a transient database connection timeout while persisting buffered observations', async () => {
+    const om = createOM(storage, { messageTokens: 500, bufferTokens: 0.2 });
+    const messages = createBulkMessages(5, threadId);
+    const updateBufferedObservations = storage.updateBufferedObservations.bind(storage);
+    const updateSpy = vi.spyOn(storage, 'updateBufferedObservations').mockImplementationOnce(async input => {
+      await updateBufferedObservations(input);
+      throw new Error('Connection terminated due to connection timeout');
+    });
+
+    const result = await om.buffer({ threadId, messages });
+    expect(result.buffered).toBe(true);
+    await om.waitForBuffering(threadId, undefined, 5000);
+
+    expect(updateSpy).toHaveBeenCalledTimes(2);
+    const status = await om.getStatus({ threadId });
+    expect(status.bufferedChunkCount).toBe(1);
+  });
+
+  it.each([true, false])('handles transient=%s indexing errors without regenerating observations', async transient => {
+    const resourceId = 'indexing-resource';
+    const error = new Error(transient ? 'Connection terminated due to connection timeout' : 'Invalid vector dimension');
+    const onIndexObservations = vi.fn().mockRejectedValueOnce(error).mockResolvedValue(undefined);
+    const model = createMockObserverModel();
+    const observe = vi.spyOn(model, 'doStream');
+    const persist = vi.spyOn(storage, 'updateBufferedObservations');
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      retrieval: { vector: true },
+      onIndexObservations,
+      observation: { model, messageTokens: 500, bufferTokens: 0.2 },
+      reflection: { model: createMockReflectorModel(), observationTokens: 10000 },
+    });
+    await storage.saveThread({
+      thread: {
+        id: threadId,
+        resourceId,
+        title: 'Indexing',
+        metadata: {},
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+    await storage.saveMessages({
+      messages: createBulkMessages(5, threadId).map(message => ({ ...message, resourceId })),
+    });
+
+    await om.buffer({ threadId, resourceId });
+    await om.waitForBuffering(threadId, resourceId, 5000);
+
+    expect(onIndexObservations).toHaveBeenCalledTimes(transient ? 2 : 1);
+    expect(observe).toHaveBeenCalledTimes(1);
+    expect(persist).toHaveBeenCalledTimes(1);
+    const status = await om.getStatus({ threadId, resourceId });
+    expect(status.bufferedChunkCount).toBe(1);
+    expect(status.record?.isBufferingObservation).toBe(false);
+    const stored = await storage.listMessages({ threadId, perPage: false });
+    const markerTypes = stored.messages.flatMap(message => message.content.parts.map(part => part.type));
+    expect(markerTypes.includes('data-om-buffering-failed')).toBe(!transient);
+    expect(markerTypes.includes('data-om-buffering-end')).toBe(transient);
   });
 
   it('should not buffer when no unobserved messages exist', async () => {
@@ -573,6 +1205,43 @@ describe('buffer()', () => {
       const status = await om.getStatus({ threadId });
       expect(status.bufferedChunkCount).toBeGreaterThanOrEqual(2);
     }
+  });
+
+  it('preserves existing OM thread title when buffering only persists extracted values', async () => {
+    const userInfo = new Extractor({ name: 'User info', instructions: 'Extract user info.' });
+    const om = createOM(storage, {
+      messageTokens: 500,
+      bufferTokens: 0.2,
+      observationExtract: [userInfo],
+      observerModel: createMockObserverModel(
+        `<observations>
+* User said their name is Tyler.
+</observations>
+<user-info>
+name: Tyler
+</user-info>`,
+      ),
+    });
+    await storage.saveThread({
+      thread: {
+        id: threadId,
+        resourceId: 'buffer-resource',
+        title: 'Existing thread title',
+        metadata: setThreadOMMetadata({}, { threadTitle: 'Existing OM title' }),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+    await storage.saveMessages({ messages: createBulkMessages(5, threadId) });
+
+    const result = await om.buffer({ threadId });
+
+    expect(result.buffered).toBe(true);
+    const thread = await storage.getThreadById({ threadId });
+    expect(getThreadOMMetadata(thread?.metadata)).toMatchObject({
+      threadTitle: 'Existing OM title',
+      extracted: { 'user-info': 'name: Tyler' },
+    });
   });
 
   it('should call beforeBuffer callback with candidate messages', async () => {
@@ -1334,6 +2003,132 @@ describe('reflect()', () => {
     );
   });
 
+  describe('transform hooks', () => {
+    it('preserves thread context in thread-scoped buffered reflection transforms', async () => {
+      const resourceId = 'buffered-reflection-resource';
+      await storage.saveThread({
+        thread: {
+          id: threadId,
+          resourceId,
+          title: threadId,
+          metadata: {},
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+      const beforeReflection = vi.fn();
+      const afterReflection = vi.fn(() => ({ observations: '* transformed buffered reflection' }));
+      const transformOm = new ObservationalMemory({
+        storage,
+        scope: 'thread',
+        hooks: { beforeReflection, afterReflection },
+        observation: { model: createMockObserverModel(), messageTokens: 100 },
+        reflection: { model: createMockReflectorModel(), observationTokens: 1000, bufferActivation: 0.01 },
+      });
+      const messages = createBulkMessages(10, threadId).map(message => ({ ...message, resourceId }));
+      await storage.saveMessages({ messages });
+      const result = await transformOm.observe({ threadId, resourceId, messages });
+      expect(result.observed).toBe(true);
+      await transformOm.waitForBuffering(threadId, resourceId, 5000);
+
+      expect(beforeReflection).toHaveBeenCalledWith(
+        expect.objectContaining({ threadId, resourceId, trigger: 'manual' }),
+      );
+      expect(afterReflection).toHaveBeenCalledWith(
+        expect.objectContaining({ threadId, resourceId, trigger: 'manual' }),
+      );
+      const record = await transformOm.getRecord(threadId, resourceId);
+      expect(record?.bufferedReflection).toContain('transformed buffered reflection');
+    });
+
+    it('rejects resource-scoped async reflection before transform hooks can run', () => {
+      const beforeReflection = vi.fn();
+      expect(
+        () =>
+          new ObservationalMemory({
+            storage,
+            scope: 'resource',
+            hooks: { beforeReflection },
+            observation: { model: createMockObserverModel(), messageTokens: 100 },
+            reflection: { model: createMockReflectorModel(), observationTokens: 1000, bufferActivation: 0.5 },
+          }),
+      ).toThrow("Async buffering is not yet supported with scope: 'resource'");
+      expect(beforeReflection).not.toHaveBeenCalled();
+    });
+
+    it('beforeReflection rewrites what the reflector sees and afterReflection rewrites what is persisted', async () => {
+      const reflectorModel = createMockReflectorModel();
+      const doGenerate = vi.spyOn(reflectorModel, 'doGenerate');
+      const doStream = vi.spyOn(reflectorModel, 'doStream');
+      const beforeReflection = vi.fn(() => ({ observations: '* REPLACED INPUT FOR REFLECTOR' }));
+      const afterReflection = vi.fn(() => ({ observations: '* REPLACED REFLECTION OUTPUT' }));
+      const transformOm = createOM(storage, {
+        observationTokens: 50_000,
+        reflectorModel,
+        hooks: { beforeReflection, afterReflection },
+      });
+      await storage.saveMessages({ messages: createBulkMessages(10, threadId) });
+      await transformOm.observe({ threadId });
+      const original = await transformOm.getObservations(threadId);
+
+      const result = await transformOm.reflect(threadId);
+
+      expect(result.reflected).toBe(true);
+      expect(beforeReflection).toHaveBeenCalledWith(
+        expect.objectContaining({ threadId, trigger: 'manual', observations: original }),
+      );
+      const prompts = JSON.stringify([...doGenerate.mock.calls, ...doStream.mock.calls].map(call => call[0]?.prompt));
+      expect(prompts).toContain('REPLACED INPUT FOR REFLECTOR');
+      expect(prompts).not.toContain('User discussed various topics');
+      expect(afterReflection).toHaveBeenCalledWith(
+        expect.objectContaining({ threadId, trigger: 'manual', observations: expect.stringContaining('Condensed') }),
+      );
+      expect(result.record.activeObservations).toContain('REPLACED REFLECTION OUTPUT');
+      expect(result.record.activeObservations).not.toContain('Condensed');
+    });
+
+    it('a throwing afterReflection aborts reflect() without creating a generation', async () => {
+      const hookError = new Error('reflection transform failed');
+      const onReflectionEnd = vi.fn();
+      const transformOm = createOM(storage, {
+        observationTokens: 50_000,
+        hooks: {
+          afterReflection: async () => {
+            throw hookError;
+          },
+          onReflectionEnd,
+        },
+      });
+      await storage.saveMessages({ messages: createBulkMessages(10, threadId) });
+      await transformOm.observe({ threadId });
+      const before = await transformOm.getRecord(threadId);
+
+      // reflect() reports model/transform failures via the result + end hook
+      // rather than throwing (only lifecycle hook failures propagate).
+      const result = await transformOm.reflect(threadId);
+
+      expect(result.reflected).toBe(false);
+      expect(onReflectionEnd).toHaveBeenCalledWith(expect.objectContaining({ error: hookError }));
+      const after = await transformOm.getRecord(threadId);
+      expect(after!.generationCount).toBe(before!.generationCount);
+      expect(after!.activeObservations).toBe(before!.activeObservations);
+    });
+
+    it('fires reflection transforms for threshold-triggered reflection during observe()', async () => {
+      const beforeReflection = vi.fn();
+      const afterReflection = vi.fn(() => ({ observations: '* rewritten sync reflection' }));
+      const transformOm = createOM(storage, { observationTokens: 5, hooks: { beforeReflection, afterReflection } });
+
+      const result = await transformOm.observe({ threadId, messages: createBulkMessages(10, threadId) });
+
+      expect(result.reflected).toBe(true);
+      expect(beforeReflection).toHaveBeenCalledOnce();
+      expect(beforeReflection).toHaveBeenCalledWith(expect.objectContaining({ threadId, trigger: 'manual' }));
+      expect(afterReflection).toHaveBeenCalledOnce();
+      expect(result.record.activeObservations).toContain('rewritten sync reflection');
+    });
+  });
+
   it('should create a new generation on reflect', async () => {
     await storage.saveMessages({ messages: createBulkMessages(10, threadId) });
     await om.observe({ threadId });
@@ -1354,6 +2149,43 @@ describe('reflect()', () => {
     // This shouldn't throw — the prompt is passed to the reflector
     const result = await om.reflect(threadId, undefined, 'Focus on action items');
     expect(result.reflected).toBe(true);
+  });
+
+  it('persists extracted values produced by manual reflection', async () => {
+    await storage.saveThread({
+      thread: {
+        id: threadId,
+        resourceId: 'reflect-resource',
+        title: 'Reflect thread',
+        metadata: {},
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+    const priority = new Extractor({
+      name: 'Priority',
+      instructions: 'Extract the current priority.',
+    });
+    const reflectOm = createOM(storage, {
+      reflectionExtract: [priority],
+      reflectorModel: createMockReflectorModel(
+        `<observations>
+* Condensed: User discussed priority.
+</observations>
+<extracted-values>
+{"priority":"high"}
+</extracted-values>`,
+      ),
+    });
+
+    await storage.saveMessages({ messages: createBulkMessages(10, threadId) });
+    await reflectOm.observe({ threadId });
+
+    const result = await reflectOm.reflect(threadId);
+
+    expect(result.reflected).toBe(true);
+    const thread = await storage.getThreadById({ threadId });
+    expect(getThreadOMMetadata(thread?.metadata)?.extracted).toMatchObject({ priority: 'high' });
   });
 
   it('should preserve history across multiple reflections', async () => {
@@ -1462,6 +2294,61 @@ describe('buildContextSystemMessage()', () => {
 
     expect(result).toBeTruthy();
   });
+
+  describe('continuation hints injection', () => {
+    // Observe to create the record, then overwrite thread metadata to simulate hints
+    // persisted by an earlier configuration — the injection decision must depend only
+    // on the current config, not on what some previous config stored.
+    const seedPersistedHints = async () => {
+      await storage.saveMessages({ messages: createBulkMessages(10, threadId) });
+      await om.observe({ threadId });
+      await storage.saveThread({
+        thread: {
+          id: threadId,
+          resourceId: 'ctx-resource',
+          title: 'Context thread',
+          metadata: setThreadOMMetadata(
+            {},
+            { currentTask: 'Ship the report', suggestedResponse: 'Ask about the deadline' },
+          ),
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+    };
+
+    it('injects persisted hints by default', async () => {
+      await seedPersistedHints();
+
+      const result = await om.buildContextSystemMessage({ threadId });
+
+      expect(result).toContain('<current-task>\nShip the report\n</current-task>');
+      expect(result).toContain('<suggested-response>\nAsk about the deadline\n</suggested-response>');
+    });
+
+    it('does not inject persisted hints once both pipelines disable them', async () => {
+      om = createOM(storage, { observationContinuationHints: false, reflectionContinuationHints: false });
+      await seedPersistedHints();
+
+      const result = await om.buildContextSystemMessage({ threadId });
+
+      expect(result).toBeTruthy();
+      expect(result).not.toContain('<current-task>');
+      expect(result).not.toContain('<suggested-response>');
+    });
+
+    it('keeps injecting a hint while the other pipeline still produces it', async () => {
+      om = createOM(storage, { observationContinuationHints: { suggestedResponse: false } });
+      await seedPersistedHints();
+
+      const result = await om.buildContextSystemMessage({ threadId });
+
+      // Reflection still registers the suggested-response extractor, so the persisted
+      // value keeps flowing until reflection disables it too.
+      expect(result).toContain('<suggested-response>\nAsk about the deadline\n</suggested-response>');
+      expect(result).toContain('<current-task>\nShip the report\n</current-task>');
+    });
+  });
 });
 
 // =============================================================================
@@ -1493,6 +2380,90 @@ describe('record management', () => {
     const first = await om.getOrCreateRecord(threadId);
     const second = await om.getOrCreateRecord(threadId);
     expect(first.id).toBe(second.id);
+  });
+
+  it('getOrCreateRecord should deduplicate concurrent initialization', async () => {
+    const [first, second] = await Promise.all([om.getOrCreateRecord(threadId), om.getOrCreateRecord(threadId)]);
+
+    expect(first.id).toBe(second.id);
+    await expect(storage.getObservationalMemoryHistory(threadId, threadId)).resolves.toHaveLength(1);
+  });
+
+  it('getOrCreateRecord should include the storage read in concurrent initialization', async () => {
+    const getRecord = storage.getObservationalMemory.bind(storage);
+    let readCount = 0;
+    let releaseSecondRead!: () => void;
+    const secondReadBarrier = new Promise<void>(resolve => {
+      releaseSecondRead = resolve;
+    });
+    const getRecordSpy = vi
+      .spyOn(storage, 'getObservationalMemory')
+      .mockImplementation((requestedThreadId, requestedResourceId) => {
+        // Capture the value at read start. Before the fix, both callers started
+        // a read before either registered its initialization. Holding the second
+        // null until the first insert completed reproduced the stale-read race.
+        const snapshot = getRecord(requestedThreadId, requestedResourceId);
+        readCount += 1;
+        return readCount === 2 ? secondReadBarrier.then(() => snapshot) : snapshot;
+      });
+    const initializeSpy = vi.spyOn(storage, 'initializeObservationalMemory');
+
+    const firstPromise = om.getOrCreateRecord(threadId);
+    const secondPromise = om.getOrCreateRecord(threadId);
+    const first = await firstPromise;
+    releaseSecondRead();
+    const second = await secondPromise;
+
+    expect(first.id).toBe(second.id);
+    expect(getRecordSpy).toHaveBeenCalledTimes(1);
+    expect(initializeSpy).toHaveBeenCalledTimes(1);
+    await expect(storage.getObservationalMemoryHistory(threadId, threadId)).resolves.toHaveLength(1);
+  });
+
+  it('getOrCreateRecord should use one thread identity when a caller omits resourceId', async () => {
+    const resourceId = 'record-resource';
+    const initializeSpy = vi.spyOn(storage, 'initializeObservationalMemory');
+    const [withResource, withoutResource] = await Promise.all([
+      om.getOrCreateRecord(threadId, resourceId),
+      om.getOrCreateRecord(threadId),
+    ]);
+
+    expect(withResource.id).toBe(withoutResource.id);
+    expect(withResource.resourceId).toBe(resourceId);
+    expect(initializeSpy).toHaveBeenCalledTimes(1);
+    await expect(storage.getObservationalMemoryHistory(threadId, resourceId)).resolves.toHaveLength(1);
+  });
+
+  it('getOrCreateRecord should deduplicate resource initialization across threads', async () => {
+    const resourceId = 'shared-resource';
+    const resourceOm = createOM(storage, { scope: 'resource' });
+    const [first, second] = await Promise.all([
+      resourceOm.getOrCreateRecord('thread-a', resourceId),
+      resourceOm.getOrCreateRecord('thread-b', resourceId),
+    ]);
+
+    expect(first.id).toBe(second.id);
+    await expect(storage.getObservationalMemoryHistory(null, resourceId)).resolves.toHaveLength(1);
+  });
+
+  it('getOrCreateRecord should clear failed concurrent initialization before retrying', async () => {
+    const initializeRecord = storage.initializeObservationalMemory.bind(storage);
+    const initializeSpy = vi
+      .spyOn(storage, 'initializeObservationalMemory')
+      .mockRejectedValueOnce(new Error('transient initialization failure'))
+      .mockImplementation(initializeRecord);
+
+    const attempts = await Promise.allSettled([om.getOrCreateRecord(threadId), om.getOrCreateRecord(threadId)]);
+
+    expect(attempts).toEqual([
+      expect.objectContaining({ status: 'rejected', reason: expect.any(Error) }),
+      expect.objectContaining({ status: 'rejected', reason: expect.any(Error) }),
+    ]);
+    expect(initializeSpy).toHaveBeenCalledTimes(1);
+
+    await expect(om.getOrCreateRecord(threadId)).resolves.toBeDefined();
+    expect(initializeSpy).toHaveBeenCalledTimes(2);
+    await expect(storage.getObservationalMemoryHistory(threadId, threadId)).resolves.toHaveLength(1);
   });
 
   it('getObservations should return undefined for fresh thread', async () => {
@@ -2041,6 +3012,22 @@ describe('getOtherThreadsContext()', () => {
     }
   });
 
+  it('should exclude working memory state signals from other-thread context', async () => {
+    const om = createOM(storage, { scope: 'resource' });
+    const userMessage = { ...createTestMessage('Sibling user message', 'user', 'thread-b-user'), threadId: threadB };
+    const workingMemorySignal = {
+      ...createWorkingMemoryStateSignal('thread-b-working-memory'),
+      threadId: threadB,
+    };
+
+    await storage.saveMessages({ messages: [userMessage, workingMemorySignal] });
+
+    const result = await om.getOtherThreadsContext(resourceId, threadA);
+
+    expect(result).toContain('Sibling user message');
+    expect(result).not.toContain('responseFormat: format-a; format-b');
+  });
+
   it('falls back to the OM record lastObservedAt when sibling thread metadata is missing', async () => {
     const om = createOM(storage, { scope: 'resource' });
     const record = await om.getOrCreateRecord(threadA, resourceId);
@@ -2445,6 +3432,40 @@ describe('getUnobservedMessages filtering', () => {
 
     const unobserved = om.getUnobservedMessages(messages, record);
     expect(unobserved.length).toBe(5);
+  });
+
+  it('should exclude working memory state signals while preserving ordinary messages and signals', async () => {
+    const om = createOM(storage);
+    const record = await om.getOrCreateRecord(threadId);
+    const workingMemorySignal = createWorkingMemoryStateSignal('working-memory-signal');
+    const notificationSignal = createWorkingMemoryStateSignal('notification-signal');
+    notificationSignal.type = 'notification';
+    notificationSignal.content.metadata!.signal = {
+      id: 'notification-signal',
+      type: 'notification',
+      tagName: 'notification',
+      createdAt: new Date().toISOString(),
+    };
+    const messages = [createTestMessage('User message', 'user', 'user-1'), workingMemorySignal, notificationSignal];
+
+    const unobserved = om.getUnobservedMessages(messages, record);
+
+    expect(unobserved.map(message => message.id)).toEqual(['user-1', 'notification-signal']);
+  });
+
+  it('should exclude working memory state signals when loading messages from storage', async () => {
+    const om = createOM(storage);
+    const base = Date.now() - 10_000;
+    await storage.saveMessages({
+      messages: [
+        { ...createTestMessage('User message', 'user', 'stored-user-1', new Date(base)), threadId },
+        { ...createWorkingMemoryStateSignal('stored-working-memory-signal', new Date(base + 1000)), threadId },
+      ],
+    });
+
+    const loaded = await (om as any).loadMessagesFromStorage(threadId, undefined);
+
+    expect(loaded.map((message: MastraDBMessage) => message.id)).toEqual(['stored-user-1']);
   });
 
   it('should filter messages whose IDs are in observedMessageIds', async () => {
@@ -2974,5 +3995,309 @@ describe('updateRecordConfig()', () => {
     await expect(
       om.updateRecordConfig('nonexistent-thread', undefined, { observation: { messageTokens: 100 } }),
     ).rejects.toThrow(/No observational memory record found/);
+  });
+});
+
+// =============================================================================
+// config-level hooks
+// =============================================================================
+
+describe('config-level hooks', () => {
+  let storage: InMemoryMemory;
+  const threadId = 'config-hooks-thread';
+
+  beforeEach(() => {
+    storage = createInMemoryStorage();
+  });
+
+  it('fires config-level hooks with call context on observe()', async () => {
+    const hooks = {
+      onObservationStart: vi.fn(),
+      onObservationEnd: vi.fn(),
+    };
+    const om = createOM(storage, { hooks });
+    const messages = createBulkMessages(10, threadId);
+
+    await om.observe({ threadId, messages });
+
+    expect(hooks.onObservationStart).toHaveBeenCalledOnce();
+    expect(hooks.onObservationStart).toHaveBeenCalledWith(expect.objectContaining({ threadId, trigger: 'manual' }));
+    expect(hooks.onObservationEnd).toHaveBeenCalledOnce();
+    expect(hooks.onObservationEnd).toHaveBeenCalledWith(
+      expect.objectContaining({
+        threadId,
+        trigger: 'manual',
+        usage: expect.objectContaining({ inputTokens: expect.any(Number), outputTokens: expect.any(Number) }),
+      }),
+    );
+  });
+
+  it('threads the caller-provided trigger through to config-level hooks', async () => {
+    const hooks = { onObservationEnd: vi.fn() };
+    const om = createOM(storage, { hooks });
+    const messages = createBulkMessages(10, threadId);
+
+    await om.observe({ threadId, messages, trigger: 'turn-sync' });
+
+    expect(hooks.onObservationEnd).toHaveBeenCalledWith(expect.objectContaining({ trigger: 'turn-sync' }));
+  });
+
+  it('fires config-level and per-call hooks together, keeping per-call payloads context-free', async () => {
+    const configHooks = { onObservationEnd: vi.fn() };
+    const callHooks = { onObservationEnd: vi.fn() };
+    const om = createOM(storage, { hooks: configHooks });
+    const messages = createBulkMessages(10, threadId);
+
+    await om.observe({ threadId, messages, hooks: callHooks });
+
+    expect(configHooks.onObservationEnd).toHaveBeenCalledOnce();
+    expect(configHooks.onObservationEnd).toHaveBeenCalledWith(expect.objectContaining({ threadId, trigger: 'manual' }));
+    // Per-call hooks keep their existing payload shape — no context fields.
+    expect(callHooks.onObservationEnd).toHaveBeenCalledOnce();
+    expect(callHooks.onObservationEnd.mock.calls[0]![0]).not.toHaveProperty('trigger');
+    expect(callHooks.onObservationEnd.mock.calls[0]![0]).not.toHaveProperty('threadId');
+    expect(callHooks.onObservationEnd).toHaveBeenCalledWith({
+      usage: expect.objectContaining({ inputTokens: expect.any(Number), outputTokens: expect.any(Number) }),
+    });
+  });
+
+  it('never fails the cycle when a config-level hook throws', async () => {
+    const hooks = {
+      onObservationStart: vi.fn(() => {
+        throw new Error('consumer hook exploded');
+      }),
+      onObservationEnd: vi.fn(() => {
+        throw new Error('consumer hook exploded');
+      }),
+    };
+    const om = createOM(storage, { hooks });
+    const messages = createBulkMessages(10, threadId);
+
+    const result = await om.observe({ threadId, messages });
+
+    expect(result.observed).toBe(true);
+    expect(hooks.onObservationStart).toHaveBeenCalledOnce();
+    expect(hooks.onObservationEnd).toHaveBeenCalledOnce();
+  });
+
+  it('fires config-level reflection hooks when reflection triggers', async () => {
+    const hooks = {
+      onReflectionStart: vi.fn(),
+      onReflectionEnd: vi.fn(),
+    };
+    // Very low reflection threshold so observation triggers reflection.
+    const om = createOM(storage, { observationTokens: 5, hooks });
+    const messages = createBulkMessages(10, threadId);
+
+    const result = await om.observe({ threadId, messages });
+
+    expect(result.observed).toBe(true);
+    expect(result.reflected).toBe(true);
+    expect(hooks.onReflectionStart).toHaveBeenCalled();
+    expect(hooks.onReflectionEnd).toHaveBeenCalledWith(
+      expect.objectContaining({
+        threadId,
+        trigger: 'manual',
+        usage: expect.objectContaining({ inputTokens: expect.any(Number), outputTokens: expect.any(Number) }),
+      }),
+    );
+  });
+
+  it('fires config-level reflection hooks from manual reflect()', async () => {
+    const hooks = {
+      onReflectionStart: vi.fn(),
+      onReflectionEnd: vi.fn(),
+    };
+    const om = createOM(storage, { hooks });
+    // Seed active observations so reflect() has something to compress.
+    await om.observe({ threadId, messages: createBulkMessages(10, threadId) });
+    hooks.onReflectionStart.mockClear();
+    hooks.onReflectionEnd.mockClear();
+
+    const result = await om.reflect(threadId);
+
+    expect(result.reflected).toBe(true);
+    expect(hooks.onReflectionStart).toHaveBeenCalledOnce();
+    expect(hooks.onReflectionStart).toHaveBeenCalledWith(expect.objectContaining({ threadId, trigger: 'manual' }));
+    expect(hooks.onReflectionEnd).toHaveBeenCalledOnce();
+    expect(hooks.onReflectionEnd).toHaveBeenCalledWith(
+      expect.objectContaining({
+        threadId,
+        trigger: 'manual',
+        usage: expect.objectContaining({ inputTokens: expect.any(Number), outputTokens: expect.any(Number) }),
+      }),
+    );
+  });
+
+  it('never fails the cycle when a config-level hook returns a rejected promise', async () => {
+    const hooks = {
+      onObservationStart: vi.fn(async () => {
+        throw new Error('async consumer hook exploded');
+      }),
+      onObservationEnd: vi.fn(async () => {
+        throw new Error('async consumer hook exploded');
+      }),
+    };
+    const om = createOM(storage, { hooks });
+
+    const result = await om.observe({ threadId, messages: createBulkMessages(10, threadId) });
+
+    expect(result.observed).toBe(true);
+    expect(hooks.onObservationStart).toHaveBeenCalledOnce();
+    expect(hooks.onObservationEnd).toHaveBeenCalledOnce();
+    // Let the rejected hook promises settle; an unhandled rejection here would
+    // fail the test run.
+    await new Promise(resolve => setTimeout(resolve, 0));
+  });
+
+  it('fires config-level hooks for async-buffered cycles with usage and providerMetadata', async () => {
+    const gatewayMetadata = { gateway: { cost: 0.0042, generationId: 'gen-buffer-abc' } };
+    const hooks = {
+      onObservationStart: vi.fn(),
+      onObservationEnd: vi.fn(),
+    };
+    const om = createOM(storage, {
+      messageTokens: 500,
+      bufferTokens: 0.2,
+      observerModel: createMockObserverModel(undefined, gatewayMetadata),
+      hooks,
+    });
+    await storage.saveMessages({ messages: createBulkMessages(5, threadId) });
+
+    // buffer() runs the cycle inline when awaited; the fire-and-forget lane is
+    // covered by the triggerAsyncBuffering test below.
+    const result = await om.buffer({ threadId });
+    expect(result.buffered).toBe(true);
+
+    expect(hooks.onObservationStart).toHaveBeenCalledWith(
+      expect.objectContaining({ threadId, trigger: 'async-buffer' }),
+    );
+    expect(hooks.onObservationEnd).toHaveBeenCalledWith(
+      expect.objectContaining({
+        threadId,
+        trigger: 'async-buffer',
+        usage: expect.objectContaining({ inputTokens: expect.any(Number), outputTokens: expect.any(Number) }),
+        providerMetadata: gatewayMetadata,
+      }),
+    );
+  });
+
+  it('keeps async-buffer hooks fire-and-forget when hookExecution is await', async () => {
+    const observerModel = createMockObserverModel();
+    const doStream = vi.spyOn(observerModel, 'doStream');
+    const hooks = {
+      onObservationStart: vi.fn(async () => {
+        await Promise.resolve();
+        throw new Error('ignored async-buffer hook failure');
+      }),
+      onObservationEnd: vi.fn(),
+    };
+    const om = createOM(storage, {
+      messageTokens: 500,
+      bufferTokens: 0.2,
+      observerModel,
+      hooks,
+      hookExecution: 'await',
+    });
+    await storage.saveMessages({ messages: createBulkMessages(5, threadId) });
+
+    await expect(om.buffer({ threadId })).resolves.toMatchObject({ buffered: true });
+
+    expect(doStream).toHaveBeenCalledOnce();
+    expect(hooks.onObservationEnd).toHaveBeenCalledOnce();
+    await new Promise(resolve => setTimeout(resolve, 0));
+  });
+
+  it('reports failed async-buffered cycles through onObservationEnd.error instead of swallowing them', async () => {
+    const failingModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        throw new Error('Observer failed');
+      },
+      doStream: async () => {
+        throw new Error('Observer failed');
+      },
+    });
+    const hooks = {
+      onObservationStart: vi.fn(),
+      onObservationEnd: vi.fn(),
+    };
+    const om = createOM(storage, { messageTokens: 500, bufferTokens: 0.2, observerModel: failingModel, hooks });
+    await storage.saveMessages({ messages: createBulkMessages(5, threadId) });
+
+    // The async-buffer strategy swallows failures (fire-and-forget contract),
+    // so buffer() resolves — the failure must surface on the end hook.
+    await om.buffer({ threadId });
+
+    expect(hooks.onObservationStart).toHaveBeenCalledOnce();
+    expect(hooks.onObservationEnd).toHaveBeenCalledOnce();
+    expect(hooks.onObservationEnd).toHaveBeenCalledWith(
+      expect.objectContaining({
+        threadId,
+        trigger: 'async-buffer',
+        usage: undefined,
+        error: expect.any(Error),
+      }),
+    );
+    expect(hooks.onObservationEnd.mock.calls[0]![0].error.message).toMatch(/Observer failed/);
+  });
+
+  it('forwards the caller observability context through triggerAsyncBuffering to the observer', async () => {
+    const observabilityContext = createObservabilityContext({});
+    const observerCall = vi.spyOn(ObserverRunner.prototype, 'call');
+    try {
+      const om = createOM(storage, { messageTokens: 500, bufferTokens: 0.2 });
+      const messages = createBulkMessages(5, threadId);
+      await storage.saveMessages({ messages });
+      const status = await om.getStatus({ threadId, messages });
+
+      expect(
+        await om.triggerAsyncBuffering({
+          threadId,
+          record: status.record,
+          pendingTokens: status.pendingTokens,
+          unbufferedPendingTokens: status.pendingTokens,
+          unobservedMessages: messages,
+          threshold: status.threshold,
+          observabilityContext,
+        }),
+      ).toBe(true);
+      await om.waitForBuffering(threadId, undefined, 5000);
+
+      expect(observerCall).toHaveBeenCalledOnce();
+      expect(observerCall.mock.calls[0]?.[3]?.observabilityContext).toBe(observabilityContext);
+    } finally {
+      observerCall.mockRestore();
+    }
+  });
+
+  it('fires config-level hooks on the fire-and-forget triggerAsyncBuffering lane', async () => {
+    const hooks = {
+      onObservationStart: vi.fn(),
+      onObservationEnd: vi.fn(),
+    };
+    const om = createOM(storage, { messageTokens: 500, bufferTokens: 0.2, hooks });
+    const messages = createBulkMessages(5, threadId);
+    await storage.saveMessages({ messages });
+
+    const status = await om.getStatus({ threadId, messages });
+    const triggered = await om.triggerAsyncBuffering({
+      threadId,
+      record: status.record,
+      pendingTokens: status.pendingTokens,
+      unbufferedPendingTokens: status.pendingTokens,
+      unobservedMessages: messages,
+      threshold: status.threshold,
+    });
+    expect(triggered).toBe(true);
+    await om.waitForBuffering(threadId, undefined, 5000);
+
+    expect(hooks.onObservationEnd).toHaveBeenCalledOnce();
+    expect(hooks.onObservationEnd).toHaveBeenCalledWith(
+      expect.objectContaining({
+        threadId,
+        trigger: 'async-buffer',
+        usage: expect.objectContaining({ inputTokens: expect.any(Number), outputTokens: expect.any(Number) }),
+      }),
+    );
   });
 });

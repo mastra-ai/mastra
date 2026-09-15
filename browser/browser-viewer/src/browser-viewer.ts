@@ -2,7 +2,7 @@
  * BrowserViewer - Playwright-managed Chrome for CLI providers
  *
  * Launches Chrome via Playwright and exposes the CDP URL for CLI tools
- * (agent-browser, browser-use, browse-cli) to connect as secondary clients.
+ * (agent-browser, browser-use, and browse) to connect as secondary clients.
  *
  * This gives us:
  * - Direct page-level CDP sessions (fixes screencast sessionId issues)
@@ -251,6 +251,25 @@ export class BrowserViewer extends MastraBrowser {
       tabs,
       activeTabIndex: activeIndex,
     };
+  }
+
+  /**
+   * Get the current page URL without launching the browser.
+   * @param threadId - Optional thread ID for thread-isolated browsers
+   * @returns The current URL string, or null if browser is not running
+   */
+  override async getCurrentUrl(threadId?: string): Promise<string | null> {
+    const state = this.getBrowserStateForThread(threadId);
+    return state?.tabs[state.activeTabIndex]?.url ?? null;
+  }
+
+  /**
+   * Get the current browser state (all tabs and active tab index).
+   * @param threadId - Optional thread ID for thread-isolated sessions
+   * @returns The browser state, or null if browser is not running
+   */
+  override async getBrowserState(threadId?: string): Promise<BrowserState | null> {
+    return this.getBrowserStateForThread(threadId);
   }
 
   // ---------------------------------------------------------------------------

@@ -10,10 +10,21 @@ import {
   normalizePerPage,
   transformScoreRow as coreTransformScoreRow,
 } from '@mastra/core/storage';
-import type { StoragePagination } from '@mastra/core/storage';
+import type { ScoreTenancyFilters, StoragePagination } from '@mastra/core/storage';
 import { D1DB, resolveD1Config } from '../../db';
 import type { D1DomainConfig } from '../../db';
 import { createSqlBuilder } from '../../sql-builder';
+import type { SqlBuilder } from '../../sql-builder';
+
+/** Applies multi-tenant scope conditions to a query builder. */
+function applyTenancyFilters(query: SqlBuilder, filters?: ScoreTenancyFilters): void {
+  if (filters?.organizationId !== undefined) {
+    query.andWhere('organizationId = ?', filters.organizationId);
+  }
+  if (filters?.projectId !== undefined) {
+    query.andWhere('projectId = ?', filters.projectId);
+  }
+}
 
 /**
  * Cloudflare D1-specific score row transformation.
@@ -38,6 +49,11 @@ export class ScoresStorageD1 extends ScoresStorage {
 
   async init(): Promise<void> {
     await this.#db.createTable({ tableName: TABLE_SCORERS, schema: TABLE_SCHEMAS[TABLE_SCORERS] });
+    await this.#db.alterTable({
+      tableName: TABLE_SCORERS,
+      schema: TABLE_SCHEMAS[TABLE_SCORERS],
+      ifNotExists: ['organizationId', 'projectId', 'batchId', 'datasetId', 'datasetItemId'],
+    });
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -143,12 +159,14 @@ export class ScoresStorageD1 extends ScoresStorage {
     entityType,
     source,
     pagination,
+    filters,
   }: {
     scorerId: string;
     entityId?: string;
     entityType?: string;
     source?: ScoringSource;
     pagination: StoragePagination;
+    filters?: ScoreTenancyFilters;
   }): Promise<ListScoresResponse> {
     try {
       const { page, perPage: perPageInput } = pagination;
@@ -168,6 +186,7 @@ export class ScoresStorageD1 extends ScoresStorage {
       if (source) {
         countQuery.andWhere('source = ?', source);
       }
+      applyTenancyFilters(countQuery, filters);
       const countResult = await this.#db.executeQuery(countQuery.build());
       const total = Array.isArray(countResult) ? Number(countResult?.[0]?.count ?? 0) : Number(countResult?.count ?? 0);
 
@@ -198,7 +217,8 @@ export class ScoresStorageD1 extends ScoresStorage {
       if (source) {
         selectQuery.andWhere('source = ?', source);
       }
-      selectQuery.limit(limitValue).offset(start);
+      applyTenancyFilters(selectQuery, filters);
+      selectQuery.orderBy('createdAt', 'DESC').limit(limitValue).offset(start);
 
       const { sql, params } = selectQuery.build();
       const results = await this.#db.executeQuery({ sql, params });
@@ -229,9 +249,11 @@ export class ScoresStorageD1 extends ScoresStorage {
   async listScoresByRunId({
     runId,
     pagination,
+    filters,
   }: {
     runId: string;
     pagination: StoragePagination;
+    filters?: ScoreTenancyFilters;
   }): Promise<ListScoresResponse> {
     try {
       const { page, perPage: perPageInput } = pagination;
@@ -242,6 +264,7 @@ export class ScoresStorageD1 extends ScoresStorage {
 
       // Get total count
       const countQuery = createSqlBuilder().count().from(fullTableName).where('runId = ?', runId);
+      applyTenancyFilters(countQuery, filters);
       const countResult = await this.#db.executeQuery(countQuery.build());
       const total = Array.isArray(countResult) ? Number(countResult?.[0]?.count ?? 0) : Number(countResult?.count ?? 0);
 
@@ -261,12 +284,9 @@ export class ScoresStorageD1 extends ScoresStorage {
       const limitValue = perPageInput === false ? total : perPage;
 
       // Get paginated results
-      const selectQuery = createSqlBuilder()
-        .select('*')
-        .from(fullTableName)
-        .where('runId = ?', runId)
-        .limit(limitValue)
-        .offset(start);
+      const selectQuery = createSqlBuilder().select('*').from(fullTableName).where('runId = ?', runId);
+      applyTenancyFilters(selectQuery, filters);
+      selectQuery.orderBy('createdAt', 'DESC').limit(limitValue).offset(start);
 
       const { sql, params } = selectQuery.build();
       const results = await this.#db.executeQuery({ sql, params });
@@ -293,15 +313,16 @@ export class ScoresStorageD1 extends ScoresStorage {
       );
     }
   }
-
   async listScoresByEntityId({
     entityId,
     entityType,
     pagination,
+    filters,
   }: {
     pagination: StoragePagination;
     entityId: string;
     entityType: string;
+    filters?: ScoreTenancyFilters;
   }): Promise<ListScoresResponse> {
     try {
       const { page, perPage: perPageInput } = pagination;
@@ -316,6 +337,7 @@ export class ScoresStorageD1 extends ScoresStorage {
         .from(fullTableName)
         .where('entityId = ?', entityId)
         .andWhere('entityType = ?', entityType);
+      applyTenancyFilters(countQuery, filters);
       const countResult = await this.#db.executeQuery(countQuery.build());
       const total = Array.isArray(countResult) ? Number(countResult?.[0]?.count ?? 0) : Number(countResult?.count ?? 0);
 
@@ -339,9 +361,9 @@ export class ScoresStorageD1 extends ScoresStorage {
         .select('*')
         .from(fullTableName)
         .where('entityId = ?', entityId)
-        .andWhere('entityType = ?', entityType)
-        .limit(limitValue)
-        .offset(start);
+        .andWhere('entityType = ?', entityType);
+      applyTenancyFilters(selectQuery, filters);
+      selectQuery.orderBy('createdAt', 'DESC').limit(limitValue).offset(start);
 
       const { sql, params } = selectQuery.build();
       const results = await this.#db.executeQuery({ sql, params });
@@ -373,10 +395,12 @@ export class ScoresStorageD1 extends ScoresStorage {
     traceId,
     spanId,
     pagination,
+    filters,
   }: {
     traceId: string;
     spanId: string;
     pagination: StoragePagination;
+    filters?: ScoreTenancyFilters;
   }): Promise<ListScoresResponse> {
     try {
       const { page, perPage: perPageInput } = pagination;
@@ -391,6 +415,7 @@ export class ScoresStorageD1 extends ScoresStorage {
         .from(fullTableName)
         .where('traceId = ?', traceId)
         .andWhere('spanId = ?', spanId);
+      applyTenancyFilters(countQuery, filters);
       const countResult = await this.#db.executeQuery(countQuery.build());
       const total = Array.isArray(countResult) ? Number(countResult?.[0]?.count ?? 0) : Number(countResult?.count ?? 0);
 
@@ -414,10 +439,9 @@ export class ScoresStorageD1 extends ScoresStorage {
         .select('*')
         .from(fullTableName)
         .where('traceId = ?', traceId)
-        .andWhere('spanId = ?', spanId)
-        .orderBy('createdAt', 'DESC')
-        .limit(limitValue)
-        .offset(start);
+        .andWhere('spanId = ?', spanId);
+      applyTenancyFilters(selectQuery, filters);
+      selectQuery.orderBy('createdAt', 'DESC').limit(limitValue).offset(start);
 
       const { sql, params } = selectQuery.build();
       const results = await this.#db.executeQuery({ sql, params });

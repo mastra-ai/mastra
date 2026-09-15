@@ -3,24 +3,32 @@ import { MastraError } from '@mastra/core/error';
 import { coreFeatures } from '@mastra/core/features';
 import { resolveModelConfig } from '@mastra/core/llm';
 import { RequestContext } from '@mastra/core/request-context';
-import type { DatasetItemSource, TargetType } from '@mastra/core/storage';
+import type { DatasetItemSource, DatasetItemToolMock, TargetType } from '@mastra/core/storage';
 import { z } from 'zod';
+import { isReservedRequestContextKey } from '../constants';
 import { HTTPException } from '../http-exception';
 import type { StatusCode } from '../http-exception';
 import { successResponseSchema } from '../schemas/common';
 import {
   datasetIdPathParams,
   datasetAndExperimentIdPathParams,
+  experimentIdPathParams,
+  datasetExperimentAndItemIdPathParams,
   experimentResultIdPathParams,
   datasetAndItemIdPathParams,
   datasetItemVersionPathParams,
   paginationQuerySchema,
+  listDatasetsQuerySchema,
+  tenancyQuerySchema,
   listItemsQuerySchema,
+  listExperimentResultsQuerySchema,
+  listExperimentsQuerySchema,
   createDatasetBodySchema,
   updateDatasetBodySchema,
   addItemBodySchema,
   updateItemBodySchema,
   triggerExperimentBodySchema,
+  updateExperimentBodySchema,
   compareExperimentsBodySchema,
   batchInsertItemsBodySchema,
   batchDeleteItemsBodySchema,
@@ -44,6 +52,9 @@ import {
   batchDeleteItemsResponseSchema,
   updateExperimentResultBodySchema,
   reviewSummaryResponseSchema,
+  runExperimentItemBodySchema,
+  runExperimentItemResponseSchema,
+  submitExperimentResultBodySchema,
 } from '../schemas/datasets';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
@@ -56,6 +67,39 @@ function assertDatasetsAvailable(): void {
   if (!coreFeatures.has('datasets')) {
     throw new HTTPException(501, { message: 'Datasets require @mastra/core >= 1.4.0' });
   }
+}
+
+/**
+ * Experiment deletion reaches core through `mastra.datasets.deleteExperiment`,
+ * which is newer than the `datasets` feature itself. A core that predates it
+ * satisfies `assertDatasetsAvailable` and would then fail at call time with
+ * "deleteExperiment is not a function", so gate the newer capability separately
+ * and report the version skew as a 501 rather than a 500.
+ */
+function assertExperimentDeletionAvailable(): void {
+  if (!coreFeatures.has('experiment-deletion')) {
+    throw new HTTPException(501, {
+      message: 'Experiment deletion requires a newer @mastra/core with experiment deletion support.',
+    });
+  }
+}
+
+/**
+ * Recovers the caller-provided request context for a dataset item.
+ *
+ * Server adapters overwrite the body's `requestContext` field with the live
+ * server `RequestContext` instance (so bodies cannot spoof auth context), after
+ * merging the body's entries into it. Persisting that live instance as item
+ * data stores internal server state and fails JSON/BSON serialization, so
+ * convert it back to the plain caller-provided entries (reserved `mastra__*`
+ * keys excluded) before it reaches storage.
+ */
+function toItemRequestContext(
+  requestContext: Record<string, unknown> | RequestContext | undefined,
+): Record<string, unknown> | undefined {
+  if (!(requestContext instanceof RequestContext)) return requestContext;
+  const entries = Object.entries(requestContext.toJSON()).filter(([key]) => !isReservedRequestContextKey(key));
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
 }
 
 interface SchemaValidationLike extends Error {
@@ -90,7 +134,21 @@ function getHttpStatusForMastraError(errorId: string): number {
     case 'EXPERIMENT_NOT_FOUND':
       return 404;
     case 'EXPERIMENT_NO_ITEMS':
+    case 'DATASET_ITEM_EXTERNAL_ID_INVALID':
+    case 'DATASET_ITEM_PAYLOAD_NOT_SERIALIZABLE':
       return 400;
+    case 'DATASET_ITEM_NOT_FOUND':
+      return 404;
+    case 'EXPERIMENT_HAS_TARGET':
+    case 'EXPERIMENT_HAS_NO_TARGET':
+    case 'EXPERIMENT_INVALID_TARGET':
+      return 400;
+    case 'EXPERIMENT_TARGET_NOT_FOUND':
+      return 404;
+    case 'DATASET_ITEM_IDENTITY_CONFLICT':
+    case 'EXPERIMENT_ID_CONFLICT':
+    case 'EXPERIMENT_ALREADY_FINALIZED':
+      return 409;
     default:
       return 500;
   }
@@ -104,17 +162,19 @@ export const LIST_DATASETS_ROUTE = createRoute({
   method: 'GET',
   path: '/datasets',
   responseType: 'json',
-  queryParamSchema: paginationQuerySchema,
+  queryParamSchema: listDatasetsQuerySchema,
   responseSchema: listDatasetsResponseSchema,
   summary: 'List all datasets',
-  description: 'Returns a paginated list of all datasets',
+  description:
+    'Returns a paginated list of all datasets. Optionally filter by target type and/or the target IDs the dataset is attached to',
   tags: ['Datasets'],
   requiresAuth: true,
   handler: async ({ mastra, ...params }) => {
     assertDatasetsAvailable();
     try {
-      const { page, perPage } = params;
-      const result = await mastra.datasets.list({ page: page ?? 0, perPage: perPage ?? 10 });
+      const { page, perPage, targetType, targetIds } = params;
+      const filters = targetType || targetIds ? { targetType, targetIds } : undefined;
+      const result = await mastra.datasets.list({ page: page ?? 0, perPage: perPage ?? 10, filters });
       return {
         datasets: result.datasets as any,
         pagination: result.pagination,
@@ -189,15 +249,17 @@ export const GET_DATASET_ROUTE = createRoute({
   path: '/datasets/:datasetId',
   responseType: 'json',
   pathParamSchema: datasetIdPathParams,
+  queryParamSchema: tenancyQuerySchema,
   responseSchema: datasetResponseSchema.nullable(),
   summary: 'Get dataset by ID',
   description: 'Returns details for a specific dataset',
   tags: ['Datasets'],
   requiresAuth: true,
-  handler: async ({ mastra, datasetId }) => {
+  handler: async ({ mastra, datasetId, ...params }) => {
     assertDatasetsAvailable();
     try {
-      const ds = await mastra.datasets.get({ id: datasetId });
+      const { organizationId, projectId } = params as { organizationId?: string; projectId?: string };
+      const ds = await mastra.datasets.get({ id: datasetId, organizationId, projectId });
       return (await ds.getDetails()) as any;
     } catch (error) {
       if (error instanceof MastraError) {
@@ -213,6 +275,7 @@ export const UPDATE_DATASET_ROUTE = createRoute({
   path: '/datasets/:datasetId',
   responseType: 'json',
   pathParamSchema: datasetIdPathParams,
+  queryParamSchema: tenancyQuerySchema,
   bodySchema: updateDatasetBodySchema,
   responseSchema: datasetResponseSchema,
   summary: 'Update dataset',
@@ -233,6 +296,8 @@ export const UPDATE_DATASET_ROUTE = createRoute({
         targetType,
         targetIds,
         scorerIds,
+        organizationId,
+        projectId,
       } = params as {
         name?: string;
         description?: string;
@@ -244,8 +309,10 @@ export const UPDATE_DATASET_ROUTE = createRoute({
         targetType?: TargetType;
         targetIds?: string[];
         scorerIds?: string[] | null;
+        organizationId?: string;
+        projectId?: string;
       };
-      const ds = await mastra.datasets.get({ id: datasetId });
+      const ds = await mastra.datasets.get({ id: datasetId, organizationId, projectId });
       const result = await ds.update({
         name,
         description,
@@ -285,16 +352,24 @@ export const DELETE_DATASET_ROUTE = createRoute({
   path: '/datasets/:datasetId',
   responseType: 'json',
   pathParamSchema: datasetIdPathParams,
+  queryParamSchema: tenancyQuerySchema,
   responseSchema: successResponseSchema,
   summary: 'Delete dataset',
   description: 'Deletes a dataset and all its items',
   tags: ['Datasets'],
   requiresAuth: true,
-  handler: async ({ mastra, datasetId }) => {
+  handler: async ({ mastra, datasetId, ...params }) => {
     assertDatasetsAvailable();
     try {
-      await mastra.datasets.get({ id: datasetId }); // validates existence
-      await mastra.datasets.delete({ id: datasetId });
+      const { organizationId, projectId } = params as { organizationId?: string; projectId?: string };
+      // For unscoped deletes, preserve the legacy 404-on-missing behavior via a
+      // preflight get(). For scoped deletes, skip the preflight: a tenancy
+      // mismatch must be a silent no-op (matches "delete non-existent id is a
+      // no-op") so cross-tenant existence is not leaked via error timing/status.
+      if (organizationId === undefined && projectId === undefined) {
+        await mastra.datasets.get({ id: datasetId });
+      }
+      await mastra.datasets.delete({ id: datasetId, organizationId, projectId });
       return { success: true };
     } catch (error) {
       if (error instanceof MastraError) {
@@ -331,7 +406,8 @@ export const LIST_ITEMS_ROUTE = createRoute({
         version,
         search,
       });
-      // When version is specified, result is DatasetItem[] (flat). Otherwise paginated.
+      // Handler always passes `page` and `perPage`, so `listItems` always
+      // returns the paginated shape; the guard is defensive.
       if (Array.isArray(result)) {
         return { items: result, pagination: { total: result.length, page: 0, perPage: result.length, hasMore: false } };
       }
@@ -359,16 +435,42 @@ export const ADD_ITEM_ROUTE = createRoute({
   handler: async ({ mastra, datasetId, ...params }) => {
     assertDatasetsAvailable();
     try {
-      const { input, groundTruth, requestContext, metadata, source, expectedTrajectory } = params as {
+      const {
+        externalId,
+        input,
+        groundTruth,
+        requestContext,
+        metadata,
+        source,
+        expectedTrajectory,
+        toolMocks,
+        unmockedToolPolicy,
+        scorerIds,
+      } = params as {
+        externalId?: string | null;
         input: unknown;
         groundTruth?: unknown;
-        requestContext?: Record<string, unknown>;
+        requestContext?: Record<string, unknown> | RequestContext;
         metadata?: Record<string, unknown>;
         source?: DatasetItemSource;
         expectedTrajectory?: unknown;
+        toolMocks?: DatasetItemToolMock[];
+        unmockedToolPolicy?: 'allow' | 'deny';
+        scorerIds?: string[];
       };
       const ds = await mastra.datasets.get({ id: datasetId });
-      return await ds.addItem({ input, groundTruth, requestContext, metadata, source, expectedTrajectory });
+      return await ds.addItem({
+        externalId: externalId ?? undefined,
+        input,
+        groundTruth,
+        requestContext: toItemRequestContext(requestContext),
+        metadata,
+        source,
+        expectedTrajectory,
+        toolMocks,
+        unmockedToolPolicy,
+        scorerIds,
+      });
     } catch (error) {
       if (isSchemaValidationError(error)) {
         throw new HTTPException(400, {
@@ -377,6 +479,15 @@ export const ADD_ITEM_ROUTE = createRoute({
         });
       }
       if (error instanceof MastraError) {
+        if (error.id === 'DATASET_ITEM_IDENTITY_CONFLICT') {
+          throw new HTTPException(409, {
+            message: error.message,
+            cause: { conflicts: 'conflicts' in error ? error.conflicts : [] },
+          });
+        }
+        if (error.id === 'DATASET_ITEM_EXTERNAL_ID_INVALID') {
+          throw new HTTPException(400, { message: error.message, cause: { field: 'externalId' } });
+        }
         throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
       }
       return handleError(error, 'Error adding item to dataset');
@@ -426,12 +537,24 @@ export const UPDATE_ITEM_ROUTE = createRoute({
   handler: async ({ mastra, datasetId, itemId, ...params }) => {
     assertDatasetsAvailable();
     try {
-      const { input, groundTruth, requestContext, metadata, expectedTrajectory } = params as {
+      const {
+        input,
+        groundTruth,
+        requestContext,
+        metadata,
+        expectedTrajectory,
+        toolMocks,
+        unmockedToolPolicy,
+        scorerIds,
+      } = params as {
         input?: unknown;
         groundTruth?: unknown;
-        requestContext?: Record<string, unknown>;
+        requestContext?: Record<string, unknown> | RequestContext;
         metadata?: Record<string, unknown>;
         expectedTrajectory?: unknown;
+        toolMocks?: DatasetItemToolMock[];
+        unmockedToolPolicy?: 'allow' | 'deny';
+        scorerIds?: string[] | null;
       };
       const ds = await mastra.datasets.get({ id: datasetId });
       // Check if item exists and belongs to dataset
@@ -439,7 +562,17 @@ export const UPDATE_ITEM_ROUTE = createRoute({
       if (!existing || (existing as any).datasetId !== datasetId) {
         throw new HTTPException(404, { message: `Item not found: ${itemId}` });
       }
-      return await ds.updateItem({ itemId, input, groundTruth, requestContext, metadata, expectedTrajectory });
+      return await ds.updateItem({
+        itemId,
+        input,
+        groundTruth,
+        requestContext: toItemRequestContext(requestContext),
+        metadata,
+        expectedTrajectory,
+        toolMocks,
+        unmockedToolPolicy,
+        scorerIds,
+      });
     } catch (error) {
       if (isSchemaValidationError(error)) {
         throw new HTTPException(400, {
@@ -451,6 +584,42 @@ export const UPDATE_ITEM_ROUTE = createRoute({
         throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
       }
       return handleError(error, 'Error updating dataset item');
+    }
+  },
+});
+
+export const PURGE_ITEM_ROUTE = createRoute({
+  method: 'DELETE',
+  path: '/datasets/:datasetId/items/:itemId/purge',
+  responseType: 'json',
+  pathParamSchema: datasetAndItemIdPathParams,
+  queryParamSchema: tenancyQuerySchema,
+  responseSchema: successResponseSchema,
+  summary: 'Purge dataset item data',
+  description: 'Permanently scrubs item data from all dataset versions and linked experiment results',
+  tags: ['Datasets'],
+  requiresAuth: true,
+  handler: async ({ mastra, datasetId, itemId, ...params }) => {
+    assertDatasetsAvailable();
+    if (!coreFeatures.has('dataset-item-purge')) {
+      throw new HTTPException(501, {
+        message: 'Dataset item purge requires a newer @mastra/core with dataset purge support.',
+      });
+    }
+    try {
+      const { organizationId, projectId } = params as { organizationId?: string; projectId?: string };
+      const ds = await mastra.datasets.get({ id: datasetId, organizationId, projectId });
+      const history = await ds.getItemHistory({ itemId });
+      if (history.length === 0) {
+        throw new HTTPException(404, { message: `Item not found: ${itemId}` });
+      }
+      await ds.purgeItem({ itemId });
+      return { success: true };
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+      }
+      return handleError(error, 'Error purging dataset item data');
     }
   },
 });
@@ -492,7 +661,7 @@ export const LIST_ALL_EXPERIMENTS_ROUTE = createRoute({
   method: 'GET',
   path: '/experiments',
   responseType: 'json',
-  queryParamSchema: paginationQuerySchema,
+  queryParamSchema: listExperimentsQuerySchema,
   responseSchema: listExperimentsResponseSchema,
   summary: 'List all experiments',
   description: 'Returns a paginated list of all experiments across all datasets',
@@ -501,7 +670,7 @@ export const LIST_ALL_EXPERIMENTS_ROUTE = createRoute({
   handler: async ({ mastra, ...params }) => {
     assertDatasetsAvailable();
     try {
-      const { page, perPage } = params;
+      const { page, perPage, experimentSetId, comparisonId, variantId, trialIndex, targetType, targetId } = params;
       const storage = mastra.getStorage();
       if (!storage) {
         throw new HTTPException(500, { message: 'Storage not configured' });
@@ -511,6 +680,12 @@ export const LIST_ALL_EXPERIMENTS_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Experiments storage not available' });
       }
       const result = await experimentsStore.listExperiments({
+        experimentSetId,
+        comparisonId,
+        variantId,
+        trialIndex,
+        targetType,
+        targetId,
         pagination: { page: page ?? 0, perPage: perPage ?? 20 },
       });
       return { experiments: result.experiments, pagination: result.pagination };
@@ -554,12 +729,55 @@ export const EXPERIMENT_REVIEW_SUMMARY_ROUTE = createRoute({
   },
 });
 
+export const DELETE_ANY_EXPERIMENT_ROUTE = createRoute({
+  method: 'DELETE',
+  path: '/experiments/:experimentId',
+  responseType: 'json',
+  pathParamSchema: experimentIdPathParams,
+  queryParamSchema: tenancyQuerySchema,
+  responseSchema: successResponseSchema,
+  summary: 'Delete experiment',
+  description:
+    'Deletes an experiment and its results regardless of dataset association (including experiments orphaned by dataset deletion). Also deletes the traces the experiment produced, cascading to their spans and trace-linked scores, feedback, metrics and logs.',
+  tags: ['Experiments'],
+  requiresAuth: true,
+  handler: async ({ mastra, experimentId, ...params }) => {
+    assertDatasetsAvailable();
+    assertExperimentDeletionAvailable();
+    try {
+      const { organizationId, projectId } = params as { organizationId?: string; projectId?: string };
+      const scoped = organizationId !== undefined || projectId !== undefined;
+      // For unscoped deletes, 404 on missing experiments. For scoped deletes,
+      // skip the preflight: a tenancy mismatch must be a silent no-op so
+      // cross-tenant existence is not leaked (mirrors DELETE_DATASET_ROUTE).
+      if (!scoped) {
+        const existing = await mastra.datasets.getExperiment({ experimentId });
+        if (!existing) {
+          throw new HTTPException(404, { message: `Experiment not found: ${experimentId}` });
+        }
+      }
+      // Note: experiment-linked score_events are not cascaded here (tracked separately).
+      await mastra.datasets.deleteExperiment({
+        experimentId,
+        ...(organizationId !== undefined ? { organizationId } : {}),
+        ...(projectId !== undefined ? { projectId } : {}),
+      });
+      return { success: true };
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+      }
+      return handleError(error, 'Error deleting experiment');
+    }
+  },
+});
+
 export const LIST_EXPERIMENTS_ROUTE = createRoute({
   method: 'GET',
   path: '/datasets/:datasetId/experiments',
   responseType: 'json',
   pathParamSchema: datasetIdPathParams,
-  queryParamSchema: paginationQuerySchema,
+  queryParamSchema: listExperimentsQuerySchema,
   responseSchema: listExperimentsResponseSchema,
   summary: 'List experiments for dataset',
   description: 'Returns a paginated list of experiments for the dataset',
@@ -568,9 +786,18 @@ export const LIST_EXPERIMENTS_ROUTE = createRoute({
   handler: async ({ mastra, datasetId, ...params }) => {
     assertDatasetsAvailable();
     try {
-      const { page, perPage } = params;
+      const { page, perPage, experimentSetId, comparisonId, variantId, trialIndex, targetType, targetId } = params;
       const ds = await mastra.datasets.get({ id: datasetId });
-      const result = await ds.listExperiments({ page: page ?? 0, perPage: perPage ?? 10 });
+      const result = await ds.listExperiments({
+        page: page ?? 0,
+        perPage: perPage ?? 10,
+        experimentSetId,
+        comparisonId,
+        variantId,
+        trialIndex,
+        targetType,
+        targetId,
+      });
       return { experiments: result.experiments, pagination: result.pagination };
     } catch (error) {
       if (error instanceof MastraError) {
@@ -588,30 +815,54 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
   pathParamSchema: datasetIdPathParams,
   bodySchema: triggerExperimentBodySchema,
   responseSchema: experimentSummaryResponseSchema,
-  summary: 'Trigger a new experiment',
+  summary: 'Trigger or create an experiment',
   description:
-    'Triggers a new experiment on the dataset against the specified target. Returns immediately with pending status; execution happens in background.',
+    'By default triggers a new experiment on the dataset against the specified target: returns immediately with pending status and execution happens in background. With start: false, creates the experiment without running it so the caller can drive the loop (run-item for targeted experiments, result submission for target-less ones). Create-only requests are idempotent on a caller-supplied id.',
   tags: ['Datasets'],
   requiresAuth: true,
   handler: async ({ mastra, datasetId, ...params }) => {
     assertDatasetsAvailable();
     try {
       const {
+        start,
+        id,
         targetType,
         targetId,
+        name,
+        description,
+        metadata,
         scorerIds,
         version,
         agentVersion,
         maxConcurrency,
+        provenance,
+        grouping,
         requestContext: rawRequestContext,
         versions,
       } = params as {
-        targetType: 'agent' | 'workflow' | 'scorer';
-        targetId: string;
+        start?: boolean;
+        id?: string;
+        targetType?: TargetType;
+        targetId?: string;
+        name?: string;
+        description?: string;
+        metadata?: Record<string, unknown>;
         scorerIds?: string[];
         version?: number;
         agentVersion?: string;
         maxConcurrency?: number;
+        provenance?: {
+          source?: string;
+          sourceId?: string;
+          sourceVersion?: string;
+          metadata?: Record<string, unknown>;
+        };
+        grouping?: {
+          experimentSetId?: string;
+          comparisonId?: string;
+          variantId?: string;
+          trialIndex?: number;
+        };
         requestContext?: Record<string, unknown> | RequestContext;
         versions?: { agents?: Record<string, { versionId: string } | { status: 'draft' | 'published' }> };
       };
@@ -619,13 +870,46 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
       // startExperimentAsync expects a plain Record, so convert it.
       const requestContext = rawRequestContext instanceof RequestContext ? rawRequestContext.all : rawRequestContext;
       const ds = await mastra.datasets.get({ id: datasetId });
+      if (start === false) {
+        const created = await ds.createExperiment({
+          id,
+          targetType,
+          targetId,
+          scorers: scorerIds,
+          name,
+          description,
+          metadata,
+          version,
+          provenance,
+          grouping,
+        });
+        return {
+          experimentId: created.experimentId,
+          status: created.status,
+          totalItems: created.totalItems,
+          datasetVersion: created.datasetVersion,
+          succeededCount: 0,
+          failedCount: 0,
+          startedAt: created.startedAt,
+          completedAt: null,
+          results: [],
+        };
+      }
+      if (!targetType || !targetId) {
+        throw new HTTPException(400, { message: 'targetType and targetId are required to start an experiment' });
+      }
       const result = await ds.startExperimentAsync({
         targetType,
         targetId,
+        name,
+        description,
+        metadata,
         scorers: scorerIds,
         version,
         agentVersion,
         maxConcurrency,
+        provenance,
+        grouping,
         requestContext,
         versions,
       });
@@ -645,6 +929,119 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
         throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
       }
       return handleError(error, 'Error triggering experiment');
+    }
+  },
+});
+
+export const RUN_EXPERIMENT_ITEM_ROUTE = createRoute({
+  method: 'POST',
+  path: '/datasets/:datasetId/experiments/:experimentId/items/:itemId/run',
+  responseType: 'json',
+  pathParamSchema: datasetExperimentAndItemIdPathParams,
+  bodySchema: runExperimentItemBodySchema,
+  responseSchema: runExperimentItemResponseSchema,
+  summary: 'Run one experiment item',
+  description:
+    "Executes the experiment's target against one dataset item server-side, runs the resolved scorers, and upserts the result row keyed by (experimentId, itemId, attempt). Built for caller-driven loops: a retried call converges on the same row. Requires an experiment created with a target.",
+  tags: ['Datasets'],
+  requiresAuth: true,
+  handler: async ({ mastra, datasetId, experimentId, itemId, ...params }) => {
+    assertDatasetsAvailable();
+    try {
+      const { attempt, requestContext: rawRequestContext } = params as {
+        attempt?: number;
+        requestContext?: Record<string, unknown> | RequestContext;
+      };
+      const requestContext = rawRequestContext instanceof RequestContext ? rawRequestContext.all : rawRequestContext;
+      const ds = await mastra.datasets.get({ id: datasetId });
+      return await ds.runExperimentItem({ experimentId, itemId, attempt, requestContext });
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+      }
+      return handleError(error, 'Error running experiment item');
+    }
+  },
+});
+
+export const SUBMIT_EXPERIMENT_RESULT_ROUTE = createRoute({
+  method: 'POST',
+  path: '/datasets/:datasetId/experiments/:experimentId/results',
+  responseType: 'json',
+  pathParamSchema: datasetAndExperimentIdPathParams,
+  bodySchema: submitExperimentResultBodySchema,
+  responseSchema: experimentResultResponseSchema,
+  summary: 'Submit an external experiment result',
+  description:
+    'Submits (or re-submits) one item result for an external experiment. Upsert semantics on (experimentId, itemId, attempt): a retried submission converges on a single row.',
+  tags: ['Datasets'],
+  requiresAuth: true,
+  handler: async ({ mastra, datasetId, experimentId, ...params }) => {
+    assertDatasetsAvailable();
+    try {
+      const { itemId, attempt, input, output, groundTruth, error, startedAt, completedAt, traceId, scores } =
+        params as {
+          itemId: string;
+          attempt?: number;
+          input?: unknown;
+          output?: unknown;
+          groundTruth?: unknown;
+          error?: { message: string; stack?: string; code?: string } | null;
+          startedAt?: Date;
+          completedAt?: Date;
+          traceId?: string;
+          scores?: {
+            scorerId: string;
+            scorerName?: string;
+            score: number;
+            reason?: string;
+            metadata?: Record<string, unknown>;
+          }[];
+        };
+      const ds = await mastra.datasets.get({ id: datasetId });
+      return await ds.submitExperimentResult({
+        experimentId,
+        itemId,
+        attempt,
+        input,
+        output,
+        groundTruth,
+        error,
+        startedAt,
+        completedAt,
+        traceId,
+        scores,
+      });
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+      }
+      return handleError(error, 'Error submitting experiment result');
+    }
+  },
+});
+
+export const FINALIZE_EXPERIMENT_ROUTE = createRoute({
+  method: 'POST',
+  path: '/datasets/:datasetId/experiments/:experimentId/finalize',
+  responseType: 'json',
+  pathParamSchema: datasetAndExperimentIdPathParams,
+  responseSchema: experimentResponseSchema,
+  summary: 'Finalize an external experiment',
+  description:
+    'Marks an external experiment completed. The server computes succeeded/failed/skipped counts from the persisted result rows. Idempotent: finalizing an already-completed experiment returns the stored record.',
+  tags: ['Datasets'],
+  requiresAuth: true,
+  handler: async ({ mastra, datasetId, experimentId }) => {
+    assertDatasetsAvailable();
+    try {
+      const ds = await mastra.datasets.get({ id: datasetId });
+      return await ds.finalizeExperiment({ experimentId });
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+      }
+      return handleError(error, 'Error finalizing experiment');
     }
   },
 });
@@ -677,12 +1074,71 @@ export const GET_EXPERIMENT_ROUTE = createRoute({
   },
 });
 
+export const DELETE_EXPERIMENT_ROUTE = createRoute({
+  method: 'DELETE',
+  path: '/datasets/:datasetId/experiments/:experimentId',
+  responseType: 'json',
+  pathParamSchema: datasetAndExperimentIdPathParams,
+  queryParamSchema: tenancyQuerySchema,
+  responseSchema: successResponseSchema,
+  summary: 'Delete experiment',
+  description:
+    'Deletes an experiment and its results. Also deletes the traces the experiment produced, cascading to their spans and trace-linked scores, feedback, metrics and logs.',
+  tags: ['Datasets'],
+  requiresAuth: true,
+  handler: async ({ mastra, datasetId, experimentId, ...params }) => {
+    assertDatasetsAvailable();
+    // An older core still exposes Dataset.deleteExperiment, but it predates the
+    // trace cascade and would report success while leaving the traces behind.
+    // Fail loudly instead.
+    assertExperimentDeletionAvailable();
+    try {
+      const { organizationId, projectId } = params as { organizationId?: string; projectId?: string };
+      const ds = await mastra.datasets.get({ id: datasetId, organizationId, projectId });
+      // deleteExperiment asserts the experiment belongs to this dataset and
+      // throws EXPERIMENT_NOT_FOUND (mapped to 404) otherwise.
+      await ds.deleteExperiment({ experimentId });
+      return { success: true };
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+      }
+      return handleError(error, 'Error deleting experiment');
+    }
+  },
+});
+
+export const UPDATE_EXPERIMENT_ROUTE = createRoute({
+  method: 'PATCH',
+  path: '/datasets/:datasetId/experiments/:experimentId',
+  responseType: 'json',
+  pathParamSchema: datasetAndExperimentIdPathParams,
+  bodySchema: updateExperimentBodySchema,
+  responseSchema: experimentResponseSchema,
+  summary: 'Update an experiment',
+  description: "Updates an experiment's name, description or metadata. Status and counts are managed by the server.",
+  tags: ['Datasets'],
+  requiresAuth: true,
+  handler: async ({ mastra, datasetId, experimentId, name, description, metadata }) => {
+    assertDatasetsAvailable();
+    try {
+      const ds = await mastra.datasets.get({ id: datasetId });
+      return await ds.updateExperiment({ experimentId, name, description, metadata });
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+      }
+      return handleError(error, 'Error updating experiment');
+    }
+  },
+});
+
 export const LIST_EXPERIMENT_RESULTS_ROUTE = createRoute({
   method: 'GET',
   path: '/datasets/:datasetId/experiments/:experimentId/results',
   responseType: 'json',
   pathParamSchema: datasetAndExperimentIdPathParams,
-  queryParamSchema: paginationQuerySchema,
+  queryParamSchema: listExperimentResultsQuerySchema,
   responseSchema: listExperimentResultsResponseSchema,
   summary: 'List experiment results',
   description: 'Returns a paginated list of results for the experiment',
@@ -691,14 +1147,19 @@ export const LIST_EXPERIMENT_RESULTS_ROUTE = createRoute({
   handler: async ({ mastra, datasetId, experimentId, ...params }) => {
     assertDatasetsAvailable();
     try {
-      const { page, perPage } = params;
+      const { page, perPage, tags } = params;
       const ds = await mastra.datasets.get({ id: datasetId });
       // Validate experiment belongs to dataset
       const run = await ds.getExperiment({ experimentId });
       if (!run || run.datasetId !== datasetId) {
         throw new HTTPException(404, { message: `Experiment not found: ${experimentId}` });
       }
-      const result = await ds.listExperimentResults({ experimentId, page: page ?? 0, perPage: perPage ?? 10 });
+      const result = await ds.listExperimentResults({
+        experimentId,
+        page: page ?? 0,
+        perPage: perPage ?? 10,
+        ...(tags !== undefined ? { tags } : {}),
+      });
       return {
         results: result.results.map(({ experimentId: _eid, ...rest }) => ({ experimentId, ...rest })),
         pagination: result.pagination,
@@ -720,7 +1181,7 @@ export const UPDATE_EXPERIMENT_RESULT_ROUTE = createRoute({
   bodySchema: updateExperimentResultBodySchema,
   responseSchema: experimentResultResponseSchema,
   summary: 'Update an experiment result',
-  description: 'Updates the status and/or tags on an experiment result',
+  description: 'Updates the status, tags, and/or comment on an experiment result',
   tags: ['Datasets'],
   requiresAuth: true,
   handler: async ({ mastra, resultId, experimentId, ...params }) => {
@@ -740,6 +1201,7 @@ export const UPDATE_EXPERIMENT_RESULT_ROUTE = createRoute({
         experimentId,
         status: params.status,
         tags: params.tags,
+        comment: params.comment,
       });
 
       return result;
@@ -901,15 +1363,21 @@ export const BATCH_INSERT_ITEMS_ROUTE = createRoute({
     try {
       const { items } = params as {
         items: Array<{
+          externalId?: string | null;
           input: unknown;
           groundTruth?: unknown;
           expectedTrajectory?: unknown;
+          toolMocks?: DatasetItemToolMock[];
+          unmockedToolPolicy?: 'allow' | 'deny';
+          scorerIds?: string[];
           metadata?: Record<string, unknown>;
           source?: DatasetItemSource;
         }>;
       };
       const ds = await mastra.datasets.get({ id: datasetId });
-      const addedItems = await ds.addItems({ items });
+      const addedItems = await ds.addItems({
+        items: items.map(item => ({ ...item, externalId: item.externalId ?? undefined })),
+      });
       return { items: addedItems, count: addedItems.length };
     } catch (error) {
       if (isSchemaValidationError(error)) {
@@ -919,6 +1387,15 @@ export const BATCH_INSERT_ITEMS_ROUTE = createRoute({
         });
       }
       if (error instanceof MastraError) {
+        if (error.id === 'DATASET_ITEM_IDENTITY_CONFLICT') {
+          throw new HTTPException(409, {
+            message: error.message,
+            cause: { conflicts: 'conflicts' in error ? error.conflicts : [] },
+          });
+        }
+        if (error.id === 'DATASET_ITEM_EXTERNAL_ID_INVALID') {
+          throw new HTTPException(400, { message: error.message, cause: { field: 'externalId' } });
+        }
         throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
       }
       return handleError(error, 'Error batch inserting items');

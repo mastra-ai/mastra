@@ -1,17 +1,13 @@
 'use client';
 
 import type { DatasetItem } from '@mastra/client-js';
-import {
-  Button,
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogBody,
-  Input,
-  Label,
-  toast,
-} from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@mastra/playground-ui/components/Dialog';
+import { Input } from '@mastra/playground-ui/components/Input';
+import { Label } from '@mastra/playground-ui/components/Label';
+import { DatasetsIcon } from '@mastra/playground-ui/icons/DatasetsIcon';
+import { toast } from '@mastra/playground-ui/utils/toast';
+import { X } from 'lucide-react';
 import { useState } from 'react';
 import { useDatasetMutations } from '../hooks/use-dataset-mutations';
 
@@ -46,19 +42,20 @@ export function CreateDatasetFromItemsDialog({
     setProgress(0);
 
     try {
-      // Create the dataset
-      const dataset = (await createDataset.mutateAsync({
+      const dataset = await createDataset.mutateAsync({
         name: name.trim(),
         description: description.trim() || undefined,
-      })) as { id: string };
+      });
 
-      // Copy items to new dataset
       for (let i = 0; i < items.length; i++) {
         const item = items[i];
         await addItem.mutateAsync({
           datasetId: dataset.id,
           input: item.input,
           groundTruth: item.groundTruth,
+          expectedTrajectory: item.expectedTrajectory,
+          toolMocks: item.toolMocks,
+          requestContext: item.requestContext,
           metadata: item.metadata as Record<string, unknown> | undefined,
         });
         setProgress(i + 1);
@@ -66,14 +63,12 @@ export function CreateDatasetFromItemsDialog({
 
       toast.success(`Dataset created with ${items.length} items`);
 
-      // Reset form
       setName('');
       setDescription('');
       setIsCreating(false);
       setProgress(0);
       onOpenChange(false);
 
-      // Navigate to new dataset
       onSuccess?.(dataset.id);
     } catch (error) {
       toast.error(`Failed to create dataset: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -83,7 +78,7 @@ export function CreateDatasetFromItemsDialog({
   };
 
   const handleCancel = () => {
-    if (isCreating) return; // Prevent cancel during creation
+    if (isCreating) return;
     setName('');
     setDescription('');
     onOpenChange(false);
@@ -122,29 +117,29 @@ export function CreateDatasetFromItemsDialog({
               />
             </div>
 
-            <p className="text-sm text-muted-foreground">
+            <p className="text-muted-foreground text-ui-md">
               {items.length} item{items.length !== 1 ? 's' : ''} will be copied to the new dataset
             </p>
 
             {isCreating && (
               <div className="space-y-2">
-                <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+                <div className="bg-muted h-2 w-full overflow-hidden rounded-full">
                   <div
-                    className="h-full bg-primary transition-all duration-200"
+                    className="bg-primary h-full transition-all duration-200"
                     style={{ width: `${progressPercent}%` }}
                   />
                 </div>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-muted-foreground text-ui-md">
                   Copying items: {progress} / {items.length}
                 </p>
               </div>
             )}
 
             <div className="flex justify-end gap-2 pt-4">
-              <Button type="button" onClick={handleCancel} disabled={isCreating}>
+              <Button icon={<X />} type="button" onClick={handleCancel} disabled={isCreating}>
                 Cancel
               </Button>
-              <Button type="submit" variant="primary" disabled={isCreating || !name.trim()}>
+              <Button icon={<DatasetsIcon />} type="submit" variant="primary" disabled={isCreating || !name.trim()}>
                 {isCreating ? `Creating... (${progress}/${items.length})` : 'Create Dataset'}
               </Button>
             </div>

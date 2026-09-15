@@ -14,128 +14,128 @@ test.afterEach(async () => {
  * BEHAVIOR UNDER TEST: Items list displays data, supports selection, and enables bulk operations.
  */
 
-test.describe('Dataset Items List - Behavior Tests', () => {
-  test('clicking an item row opens the detail panel showing item metadata', async ({ page }) => {
-    const { id: datasetId } = await seedDatasetWithItems(3);
+test.describe('Dataset items list', () => {
+  test.describe('when an item row is clicked', () => {
+    test('opens the detail panel showing item metadata', async ({ page }) => {
+      const { id: datasetId } = await seedDatasetWithItems(3);
 
-    await page.goto(`/datasets/${datasetId}`);
-    await expect(page.getByText('Test input 1')).toBeVisible();
+      await page.goto(`/datasets/${datasetId}`);
+      await expect(page.getByText('Test input 1')).toBeVisible();
 
-    await page.getByRole('button', { name: /Test input 1/ }).click();
+      await page.getByRole('button', { name: /Test input 1/ }).click();
 
-    // Scope to the detail panel's metadata list (a <dl> uniquely identified by its
-    // "Dataset Id" field, which the list rows don't render), so the timestamp regex
-    // can't accidentally match a datetime elsewhere on the page.
-    const itemMetadata = page.locator('dl').filter({ hasText: 'Dataset Id' });
-    await expect(itemMetadata).toBeVisible({ timeout: 5000 });
-    // The "Created" timestamp renders as "MMM d, yyyy h:mm aaa", e.g. "May 29, 2026 1:08 pm".
-    await expect(itemMetadata.getByText(/[A-Z][a-z]{2} \d{1,2}, \d{4} \d{1,2}:\d{2} (am|pm)/).first()).toBeVisible();
-  });
-
-  test('selecting Delete Items from menu enables selection mode with checkboxes', async ({ page }) => {
-    const { id: datasetId } = await seedDatasetWithItems(3);
-
-    await page.goto(`/datasets/${datasetId}`);
-    await expect(page.getByText('Test input 1')).toBeVisible();
-
-    await page.getByRole('button', { name: 'Actions menu', exact: true }).click();
-    await page.getByRole('menuitem', { name: /Delete Items/i }).click();
-
-    await expect(page.getByRole('checkbox').first()).toBeVisible();
-
-    const checkbox1 = page.getByRole('checkbox').first();
-    await checkbox1.click();
-
-    await expect(page.getByText(/selected/i)).toBeVisible();
-    await expect(page.getByRole('button', { name: /Delete Items/i })).toBeEnabled();
-  });
-
-  test('bulk delete removes selected items from the list', async ({ page }) => {
-    const { id: datasetId } = await seedDatasetWithItems(3);
-
-    await page.goto(`/datasets/${datasetId}`);
-
-    await expect(page.getByText('Test input 1')).toBeVisible();
-    await expect(page.getByText('Test input 2')).toBeVisible();
-    await expect(page.getByText('Test input 3')).toBeVisible();
-
-    await page.getByRole('button', { name: 'Actions menu', exact: true }).click();
-    await page.getByRole('menuitem', { name: /Delete Items/i }).click();
-
-    const selectAllCheckbox = page.getByRole('checkbox', { name: /Select all/i });
-    await selectAllCheckbox.click();
-
-    await page.getByRole('button', { name: /Delete Items/i }).click();
-
-    const confirmButton = page.getByRole('button', { name: /^Delete$/i });
-    await confirmButton.click();
-
-    await expect(page.getByText('No items yet')).toBeVisible({ timeout: 10000 });
-  });
-
-  test('search filters items by input content', async ({ page }) => {
-    const { id: datasetId } = await seedDatasetWithItems(5);
-
-    await page.goto(`/datasets/${datasetId}`);
-    await expect(page.getByText('Test input 1')).toBeVisible();
-    await expect(page.getByText('Test input 5')).toBeVisible();
-
-    await page.getByPlaceholder(/Search/i).fill('input 3');
-
-    await expect(page.getByText('Test input 3')).toBeVisible();
-    await expect(page.getByText('Test input 1')).not.toBeVisible();
-    await expect(page.getByText('Test input 5')).not.toBeVisible();
-  });
-
-  test('empty dataset shows empty state with add item actions', async ({ page }) => {
-    const datasetRes = await fetch(`${BASE_URL}/api/datasets`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ name: 'Empty E2E Dataset' }),
+      // Scope to the detail panel's metadata list (a <dl> uniquely identified by its
+      // "Dataset Id" field, which the list rows don't render), so the timestamp regex
+      // can't accidentally match a datetime elsewhere on the page.
+      const itemMetadata = page.locator('dl').filter({ hasText: 'Dataset Id' });
+      await expect(itemMetadata).toBeVisible({ timeout: 5000 });
+      // The "Created" timestamp renders as "MMM d, yyyy h:mm aaa", e.g. "May 29, 2026 1:08 pm".
+      await expect(itemMetadata.getByText(/[A-Z][a-z]{2} \d{1,2}, \d{4} \d{1,2}:\d{2} (am|pm)/).first()).toBeVisible();
     });
-    if (!datasetRes.ok) {
-      throw new Error(`Failed to create empty dataset: ${datasetRes.status} ${datasetRes.statusText}`);
-    }
-    const dataset = (await datasetRes.json()) as { id: string };
-
-    await page.goto(`/datasets/${dataset.id}`);
-
-    await expect(page.getByText('No items yet')).toBeVisible();
-    await expect(page.getByRole('button', { name: /Add Single Item/i })).toBeVisible();
-    await expect(page.getByRole('button', { name: /Import CSV/i })).toBeVisible();
   });
 
-  test('select all checkbox selects all visible items in selection mode', async ({ page }) => {
-    const { id: datasetId } = await seedDatasetWithItems(3);
+  test.describe('when an item checkbox is checked', () => {
+    test('shows the contextual selection menu with a Delete Items entry', async ({ page }) => {
+      const { id: datasetId } = await seedDatasetWithItems(3);
 
-    await page.goto(`/datasets/${datasetId}`);
-    await expect(page.getByText('Test input 1')).toBeVisible();
+      await page.goto(`/datasets/${datasetId}`);
+      await expect(page.getByText('Test input 1')).toBeVisible();
 
-    await page.getByRole('button', { name: 'Actions menu', exact: true }).click();
-    await page.getByRole('menuitem', { name: /Delete Items/i }).click();
+      // Checkboxes are always visible on the current version — no selection mode.
+      const checkbox1 = page.getByRole('checkbox', { name: /Select item/i }).first();
+      await expect(checkbox1).toBeVisible();
+      await checkbox1.click();
 
-    const selectAllCheckbox = page.getByRole('checkbox', { name: /Select all/i });
-    await selectAllCheckbox.click();
-
-    await expect(page.getByText('items selected')).toBeVisible();
+      await page.getByRole('button', { name: /1 selected/i }).click();
+      await expect(page.getByRole('menuitem', { name: /Delete Items/i })).toBeVisible();
+    });
   });
 
-  test('cancel button clears selection and exits selection mode', async ({ page }) => {
-    const { id: datasetId } = await seedDatasetWithItems(3);
+  test.describe('when all items are bulk deleted', () => {
+    test('removes the selected items from the list', async ({ page }) => {
+      const { id: datasetId } = await seedDatasetWithItems(3);
 
-    await page.goto(`/datasets/${datasetId}`);
-    await expect(page.getByText('Test input 1')).toBeVisible();
+      await page.goto(`/datasets/${datasetId}`);
 
-    await page.getByRole('button', { name: 'Actions menu', exact: true }).click();
-    await page.getByRole('menuitem', { name: /Delete Items/i }).click();
+      await expect(page.getByText('Test input 1')).toBeVisible();
+      await expect(page.getByText('Test input 2')).toBeVisible();
+      await expect(page.getByText('Test input 3')).toBeVisible();
 
-    const checkbox = page.getByRole('checkbox').nth(1);
-    await checkbox.click();
-    await expect(page.getByText(/selected/i)).toBeVisible();
+      await page.getByRole('checkbox', { name: /Select all items/i }).click();
 
-    await page.getByRole('button', { name: /Cancel/i }).click();
+      await page.getByRole('button', { name: /3 selected/i }).click();
+      await page.getByRole('menuitem', { name: /Delete Items/i }).click();
 
-    await expect(page.getByText(/selected/i)).not.toBeVisible();
-    await expect(page.getByRole('checkbox')).toHaveCount(0);
+      const confirmButton = page.getByRole('button', { name: /^Delete$/i });
+      await confirmButton.click();
+
+      await expect(page.getByText('No items yet')).toBeVisible({ timeout: 10000 });
+    });
+  });
+
+  test.describe('when a search term is entered', () => {
+    test('filters items by input content', async ({ page }) => {
+      const { id: datasetId } = await seedDatasetWithItems(5);
+
+      await page.goto(`/datasets/${datasetId}`);
+      await expect(page.getByText('Test input 1')).toBeVisible();
+      await expect(page.getByText('Test input 5')).toBeVisible();
+
+      await page.getByPlaceholder(/Search/i).fill('input 3');
+
+      await expect(page.getByText('Test input 3')).toBeVisible();
+      await expect(page.getByText('Test input 1')).not.toBeVisible();
+      await expect(page.getByText('Test input 5')).not.toBeVisible();
+    });
+  });
+
+  test.describe('when the dataset is empty', () => {
+    test('shows the empty state with add item actions', async ({ page }) => {
+      const datasetRes = await fetch(`${BASE_URL}/api/datasets`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ name: 'Empty E2E Dataset' }),
+      });
+      if (!datasetRes.ok) {
+        throw new Error(`Failed to create empty dataset: ${datasetRes.status} ${datasetRes.statusText}`);
+      }
+      const dataset = (await datasetRes.json()) as { id: string };
+
+      await page.goto(`/datasets/${dataset.id}`);
+
+      await expect(page.getByText('No items yet')).toBeVisible();
+      await expect(page.getByRole('button', { name: /New item/i })).toBeVisible();
+      await expect(page.getByRole('button', { name: /Import CSV/i })).toBeVisible();
+    });
+  });
+
+  test.describe('when the select-all checkbox is clicked', () => {
+    test('selects all visible items', async ({ page }) => {
+      const { id: datasetId } = await seedDatasetWithItems(3);
+
+      await page.goto(`/datasets/${datasetId}`);
+      await expect(page.getByText('Test input 1')).toBeVisible();
+
+      await page.getByRole('checkbox', { name: /Select all items/i }).click();
+
+      await expect(page.getByRole('button', { name: /3 selected/i })).toBeVisible();
+    });
+  });
+
+  test.describe('when a selected item is unchecked', () => {
+    test('clears the selection', async ({ page }) => {
+      const { id: datasetId } = await seedDatasetWithItems(3);
+
+      await page.goto(`/datasets/${datasetId}`);
+      await expect(page.getByText('Test input 1')).toBeVisible();
+
+      const checkbox = page.getByRole('checkbox', { name: /Select item/i }).first();
+      await checkbox.click();
+      await expect(page.getByRole('button', { name: /1 selected/i })).toBeVisible();
+
+      await checkbox.click();
+
+      await expect(page.getByRole('button', { name: /selected/i })).not.toBeVisible();
+    });
   });
 });

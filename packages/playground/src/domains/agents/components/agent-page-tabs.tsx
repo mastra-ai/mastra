@@ -1,16 +1,21 @@
-import { Tab, TabList, Tabs, Tooltip, TooltipContent, TooltipTrigger, Txt, Icon } from '@mastra/playground-ui';
-import { ExternalLink, EyeIcon, FlaskConical, MessageSquare, ClipboardCheck, GitBranch, Radio } from 'lucide-react';
+import { Tab, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
+import { ExternalLink, FlaskConical, ClipboardCheck, GitBranch, MessageSquare } from 'lucide-react';
 
 import { useLinkComponent } from '@/lib/framework';
 
-export type AgentPageTab = 'chat' | 'versions' | 'evaluate' | 'review' | 'traces' | 'channels';
+/** Tabs that render a pill in the bar. Routes without a pill pass `'none'`. */
+export type AgentPageTab = 'chat' | 'versions' | 'evaluate' | 'review' | 'traces';
 
 interface AgentPageTabsProps {
   agentId: string;
-  activeTab: AgentPageTab;
+  /** `'none'` (or any non-tab value) leaves the bar unhighlighted. */
+  activeTab: AgentPageTab | 'none';
   showPlayground?: boolean;
   showObservability?: boolean;
-  showChannels?: boolean;
   reviewBadge?: number;
   rightSlot?: React.ReactNode;
 }
@@ -21,7 +26,7 @@ function DocsLink({ href, children }: { href: string; children: React.ReactNode 
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className="inline-flex items-center gap-1 underline text-inherit hover:text-white"
+      className="inline-flex items-center gap-1 text-inherit underline hover:text-white"
     >
       {children}
       <ExternalLink className="size-3" />
@@ -51,7 +56,7 @@ function AgentTab({
         {label}
       </Txt>
       {badge !== undefined && badge > 0 && (
-        <span className="ml-1 bg-accent1 text-white text-xs font-medium rounded-full px-1.5 py-0 min-w-[18px] text-center leading-[18px]">
+        <span className="bg-accent1 text-ui-sm ml-1 min-w-[18px] rounded-full px-1.5 py-0 text-center leading-[18px] font-medium text-white">
           {badge}
         </span>
       )}
@@ -63,7 +68,7 @@ function AgentTab({
       <Tooltip>
         <TooltipTrigger asChild>
           <span tabIndex={0} className="inline-flex">
-            <Tab value={value} disabled className="px-3 py-2.5">
+            <Tab value={value} disabled>
               {tabContent}
             </Tab>
           </span>
@@ -73,11 +78,7 @@ function AgentTab({
     );
   }
 
-  return (
-    <Tab value={value} className="px-3 py-2.5">
-      {tabContent}
-    </Tab>
-  );
+  return <Tab value={value}>{tabContent}</Tab>;
 }
 
 export function AgentPageTabs({
@@ -85,7 +86,6 @@ export function AgentPageTabs({
   activeTab,
   showPlayground = false,
   showObservability = false,
-  showChannels = false,
   reviewBadge,
   rightSlot,
 }: AgentPageTabsProps) {
@@ -105,21 +105,28 @@ export function AgentPageTabs({
   ) : undefined;
 
   const hrefMap: Record<AgentPageTab, string> = {
-    chat: `/agents/${agentId}/chat/new`,
+    chat: `/agents/${agentId}/threads/new`,
     versions: `/agents/${agentId}/editor`,
     evaluate: `/agents/${agentId}/evaluate`,
     review: `/agents/${agentId}/review`,
     traces: `/agents/${agentId}/traces`,
-    channels: `/agents/${agentId}/channels`,
   };
 
-  const handleTabChange = (value: AgentPageTab) => {
+  const handleTabChange = (value: AgentPageTab | 'none') => {
+    if (value === 'none') return;
     navigate(hrefMap[value]);
   };
 
   return (
-    <div className="flex items-center gap-2 p-1.5">
-      <Tabs value={activeTab} defaultTab={activeTab} onValueChange={handleTabChange} className="flex-1 min-w-0">
+    // Below lg the rightSlot buttons wrap onto their own line (right-aligned)
+    // when the full tab list no longer fits, so the tabs keep the full row width.
+    <div className="flex min-w-0 items-center gap-2 p-1.5 max-lg:flex-wrap">
+      <Tabs
+        value={activeTab}
+        defaultTab={activeTab}
+        onValueChange={handleTabChange}
+        className="min-w-0 flex-1 max-lg:flex-auto"
+      >
         <TabList variant="pill-ghost">
           <AgentTab value="chat" icon={<MessageSquare />} label="Chat" />
           <AgentTab
@@ -146,15 +153,14 @@ export function AgentPageTabs({
           />
           <AgentTab
             value="traces"
-            icon={<EyeIcon />}
-            label="Traces"
+            icon={<TraceIcon />}
+            label="Agent traces"
             disabled={!showObservability}
             disabledReason={observabilityDisabledReason}
           />
-          {showChannels && <AgentTab value="channels" icon={<Radio />} label="Channels" />}
         </TabList>
       </Tabs>
-      {rightSlot && <div className="flex items-center gap-2">{rightSlot}</div>}
+      {rightSlot && <div className="ml-auto flex items-center gap-2">{rightSlot}</div>}
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import type { InferUIMessageChunk, TextStreamPart, ToolSet, UIMessage, IdGenerator } from '@internal/ai-sdk-v5';
+import { isUrlString } from './content';
 
 export function getResponseUIMessageId({
   originalMessages,
@@ -99,10 +100,13 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
     }
 
     case 'file': {
+      // URL-backed generated files store the URL string where base64 normally
+      // lives; emit it as the url directly instead of a broken data URI.
+      const base64 = part.file.base64;
       return {
         type: 'file',
         mediaType: part.file.mediaType,
-        url: `data:${part.file.mediaType};base64,${part.file.base64}`,
+        url: isUrlString(base64) ? base64 : `data:${part.file.mediaType};base64,${base64}`,
       };
     }
 
@@ -216,6 +220,8 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
       if (sendFinish) {
         return {
           type: 'finish' as const,
+          // Matches the AI SDK UI converter, which keeps the finish reason on the terminal chunk.
+          ...(part.finishReason != null ? { finishReason: part.finishReason } : {}),
           ...(messageMetadataValue != null ? { messageMetadata: messageMetadataValue } : {}),
         } as InferUIMessageChunk<UI_MESSAGE>;
       }

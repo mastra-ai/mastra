@@ -1,5 +1,5 @@
 import { z } from 'zod/v4';
-import { paginationInfoSchema } from './common';
+import { paginationInfoSchema, createPagePaginationSchema } from './common';
 
 // ============================================================================
 // JSON Schema Types (for inputSchema/groundTruthSchema fields)
@@ -12,15 +12,15 @@ const jsonSchemaObject: z.ZodType<Record<string, unknown>> = z.lazy(() => z.reco
 const jsonSchemaField = z.union([jsonSchemaObject, z.null()]).optional();
 
 // ============================================================================
-// Trajectory Expectation Schema (2 levels deep, children at level 2 use z.any())
+// Trajectory Expectation Schema (2 levels deep, children at level 2 use z.unknown())
 // ============================================================================
 
-// Shared base fields for expected steps (level 2 — children typed as z.any())
+// Shared base fields for expected steps (level 2 — children typed as z.unknown())
 const expectedStepBase = {
   name: z.string().describe('Step name to match'),
   durationMs: z.number().optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
-  children: z.any().optional().describe('Nested trajectory expectation (untyped at this depth)'),
+  children: z.unknown().optional().describe('Nested trajectory expectation (untyped at this depth)'),
 };
 
 // Typed step variants keyed by stepType
@@ -174,11 +174,51 @@ const trajectoryExpectationSchema = z
 // Dataset item source tracking
 const datasetItemSourceSchema = z
   .object({
-    type: z.enum(['csv', 'json', 'trace', 'llm', 'experiment-result']).describe('How this item was created'),
+    type: z
+      .enum(['csv', 'json', 'trace', 'llm', 'experiment-result', 'candidate-screener'])
+      .describe('How this item was created'),
     referenceId: z.string().optional().describe('Reference identifier (e.g., trace id, csv filename)'),
   })
   .optional()
   .describe('Source/provenance of this dataset item');
+
+// Item-level static tool mocks (agent targets only).
+const itemToolMockSchema = z.object({
+  toolName: z.string().describe('Name of the tool this mock applies to'),
+  args: z.record(z.string(), z.unknown()).describe('Arguments to match against the tool call'),
+  output: z.unknown().describe('Output served to the agent when matched'),
+  matchArgs: z
+    .enum(['strict', 'ignore'])
+    .optional()
+    .describe("Argument matching mode. 'strict' (default) deep-equals args; 'ignore' matches on toolName only"),
+});
+
+const toolMocksSchema = z
+  .array(itemToolMockSchema)
+  .optional()
+  .describe('Ordered item-level static tool mocks served in place of executing the real tool');
+
+const unmockedToolPolicySchema = z
+  .enum(['allow', 'deny'])
+  .optional()
+  .describe("Policy for undeclared tool calls. 'allow' runs them live; 'deny' fails the experiment item");
+
+// Diagnostic receipt for item-level tool mocks, persisted on experiment results.
+const toolMockReportSchema = z
+  .object({
+    served: z.array(z.object({ mockIndex: z.number().int(), toolName: z.string(), args: z.unknown() })),
+    unconsumed: z.array(z.object({ mockIndex: z.number().int(), toolName: z.string(), args: z.unknown() })),
+    liveCalls: z.array(z.object({ toolName: z.string(), args: z.unknown() })),
+    failure: z
+      .object({
+        code: z.enum(['TOOL_MOCK_MISMATCH', 'TOOL_MOCK_EXHAUSTED', 'TOOL_MOCK_NOT_DECLARED']),
+        toolName: z.string(),
+        args: z.unknown(),
+      })
+      .optional(),
+  })
+  .optional()
+  .describe('Diagnostic receipt for item-level tool mocks');
 
 // ============================================================================
 // Path Parameter Schemas
@@ -207,6 +247,12 @@ export const experimentResultIdPathParams = z.object({
   resultId: z.string().describe('Unique identifier for the experiment result'),
 });
 
+export const datasetExperimentAndItemIdPathParams = z.object({
+  datasetId: z.string().describe('Unique identifier for the dataset'),
+  experimentId: z.string().describe('Unique identifier for the experiment'),
+  itemId: z.string().describe('Unique identifier for the dataset item'),
+});
+
 export const datasetAndItemIdPathParams = z.object({
   datasetId: z.string().describe('Unique identifier for the dataset'),
   itemId: z.string().describe('Unique identifier for the dataset item'),
@@ -216,14 +262,54 @@ export const datasetAndItemIdPathParams = z.object({
 // Query Parameter Schemas
 // ============================================================================
 
-export const paginationQuerySchema = z.object({
-  page: z.coerce.number().optional().default(0),
-  perPage: z.coerce.number().optional().default(10),
+export const paginationQuerySchema = createPagePaginationSchema(10);
+
+export const listExperimentResultsQuerySchema = paginationQuerySchema.extend({
+  tags: z
+    .preprocess(v => {
+      // Repeated query params arrive as arrays; a single param arrives as a string.
+      // Blank values (`?tags=`) mean "no filter", not "match the empty tag".
+      const list = typeof v === 'string' ? [v] : v;
+      if (!Array.isArray(list)) return list;
+      const nonBlank = list.filter(tag => tag !== '');
+      return nonBlank.length > 0 ? nonBlank : undefined;
+    }, z.array(z.string()).optional())
+    .describe('Only return results that have all of these tags'),
 });
 
-export const listItemsQuerySchema = z.object({
-  page: z.coerce.number().optional().default(0),
-  perPage: z.coerce.number().optional().default(10),
+const targetTypeQuerySchema = z
+  .enum(['agent', 'workflow', 'scorer', 'processor'])
+  .optional()
+  .describe('Only return records attached to targets of this type');
+
+export const listDatasetsQuerySchema = paginationQuerySchema.extend({
+  targetType: targetTypeQuerySchema,
+  targetIds: z
+    .preprocess(v => {
+      // Repeated query params arrive as arrays; a single param arrives as a string.
+      const list = typeof v === 'string' ? [v] : v;
+      if (!Array.isArray(list)) return list;
+      const nonBlank = list.filter(id => id !== '');
+      return nonBlank.length > 0 ? nonBlank : undefined;
+    }, z.array(z.string()).optional())
+    .describe('Only return datasets attached to at least one of these target IDs'),
+});
+
+export const listExperimentsQuerySchema = paginationQuerySchema.extend({
+  experimentSetId: z.string().optional(),
+  comparisonId: z.string().optional(),
+  variantId: z.string().optional(),
+  trialIndex: z.coerce.number().int().min(0).optional(),
+  targetType: targetTypeQuerySchema,
+  targetId: z.string().optional().describe('Only return experiments run against this target ID'),
+});
+
+export const tenancyQuerySchema = z.object({
+  organizationId: z.string().optional().describe('Restrict lookup to the given organization'),
+  projectId: z.string().optional().describe('Restrict lookup to the given project'),
+});
+
+export const listItemsQuerySchema = createPagePaginationSchema(10).extend({
   version: z.coerce.number().int().optional(), // Optional version filter for snapshot semantics
   search: z.string().optional(),
 });
@@ -258,9 +344,13 @@ export const updateDatasetBodySchema = z.object({
 });
 
 export const addItemBodySchema = z.object({
+  externalId: z.string().optional().nullable().describe('Caller-defined, dataset-local item identity'),
   input: z.unknown().describe('Input data for the dataset item'),
   groundTruth: z.unknown().optional().describe('Expected output for comparison'),
   expectedTrajectory: trajectoryExpectationSchema,
+  toolMocks: toolMocksSchema,
+  unmockedToolPolicy: unmockedToolPolicySchema,
+  scorerIds: z.array(z.string()).optional().describe('IDs of scorers selected for this item'),
   requestContext: z.record(z.string(), z.unknown()).optional().describe('Request context preset for this item'),
   metadata: z.record(z.string(), z.unknown()).optional().describe('Additional metadata'),
   source: datasetItemSourceSchema,
@@ -270,18 +360,65 @@ export const updateItemBodySchema = z.object({
   input: z.unknown().optional().describe('Input data for the dataset item'),
   groundTruth: z.unknown().optional().describe('Expected output for comparison'),
   expectedTrajectory: trajectoryExpectationSchema,
+  toolMocks: toolMocksSchema,
+  unmockedToolPolicy: unmockedToolPolicySchema,
+  scorerIds: z.array(z.string()).optional().nullable().describe('IDs of scorers selected for this item'),
   requestContext: z.record(z.string(), z.unknown()).optional().describe('Request context preset for this item'),
   metadata: z.record(z.string(), z.unknown()).optional().describe('Additional metadata'),
   source: datasetItemSourceSchema,
 });
 
+export const updateExperimentBodySchema = z
+  .object({
+    name: z.string().optional().describe('New name of the experiment'),
+    description: z.string().optional().describe('New description of the experiment'),
+    metadata: z.record(z.string(), z.unknown()).optional().describe('Replacement metadata for the experiment'),
+  })
+  .strict();
+
 export const triggerExperimentBodySchema = z.object({
-  targetType: z.enum(['agent', 'workflow', 'scorer']).describe('Type of target to run against'),
-  targetId: z.string().describe('ID of the target'),
+  start: z
+    .boolean()
+    .optional()
+    .describe(
+      'When true (default), spawns the in-process runner. When false, creates the experiment without running it: the caller drives the loop via run-item (targeted) or result submission (target-less).',
+    ),
+  targetType: z
+    .enum(['agent', 'workflow', 'scorer'])
+    .optional()
+    .describe('Type of target to run against. Required when start is true. Optional for create-only experiments.'),
+  targetId: z.string().optional().describe('ID of the target. Required when targetType is set.'),
+  id: z
+    .string()
+    .optional()
+    .describe(
+      'Caller-supplied experiment id (e.g. a workflow run id) for idempotent create-only requests. Ignored when start is true.',
+    ),
+  name: z.string().optional().describe('Name of the experiment'),
+  description: z.string().optional().describe('Description of the experiment'),
+  metadata: z.record(z.string(), z.unknown()).optional().describe('Additional metadata'),
   scorerIds: z.array(z.string()).optional().describe('IDs of scorers to apply'),
   version: z.coerce.number().int().optional().describe('Pin to specific dataset version'),
   agentVersion: z.string().optional().describe('Agent version ID to use for experiment'),
   maxConcurrency: z.number().optional().describe('Maximum concurrent executions'),
+  provenance: z
+    .object({
+      source: z.string().optional(),
+      sourceId: z.string().optional(),
+      sourceVersion: z.string().optional(),
+      metadata: z.record(z.string(), z.unknown()).optional(),
+    })
+    .optional()
+    .describe('Caller-provided provenance claims for the experiment execution'),
+  grouping: z
+    .object({
+      experimentSetId: z.string().optional(),
+      comparisonId: z.string().optional(),
+      variantId: z.string().optional(),
+      trialIndex: z.number().int().min(0).optional(),
+    })
+    .optional()
+    .describe('Stable grouping dimensions for comparisons and repeated trials'),
   requestContext: z.record(z.string(), z.unknown()).optional().describe('Global request context passed to the target'),
   versions: z
     .object({
@@ -295,6 +432,46 @@ export const triggerExperimentBodySchema = z.object({
     })
     .optional()
     .describe('Version overrides for sub-agent delegation during experiment execution'),
+});
+
+export const runExperimentItemBodySchema = z.object({
+  attempt: z.number().int().min(0).optional().describe('Zero-based repetition index. Defaults to 0.'),
+  requestContext: z
+    .record(z.string(), z.unknown())
+    .optional()
+    .describe("Request context merged with the item's own request context (item wins)"),
+});
+
+export const submitExperimentResultBodySchema = z.object({
+  itemId: z.string().describe('Dataset item this result belongs to'),
+  attempt: z.number().int().min(0).optional().describe('Zero-based repetition index. Defaults to 0.'),
+  input: z.unknown().optional().describe('Input replayed by the external runner. Defaults to the dataset item input.'),
+  output: z.unknown().optional().describe('Output produced by the external runner'),
+  groundTruth: z.unknown().optional().describe('Ground truth. Defaults to the dataset item groundTruth.'),
+  error: z
+    .object({
+      message: z.string(),
+      stack: z.string().optional(),
+      code: z.string().optional(),
+    })
+    .nullable()
+    .optional()
+    .describe('Failure info when the item run failed'),
+  startedAt: z.coerce.date().optional(),
+  completedAt: z.coerce.date().optional(),
+  traceId: z.string().optional(),
+  scores: z
+    .array(
+      z.object({
+        scorerId: z.string(),
+        scorerName: z.string().optional(),
+        score: z.number(),
+        reason: z.string().optional(),
+        metadata: z.record(z.string(), z.unknown()).optional(),
+      }),
+    )
+    .optional()
+    .describe('Externally computed scores, persisted keyed by runId = experimentId'),
 });
 
 export const compareExperimentsBodySchema = z.object({
@@ -329,12 +506,16 @@ export const datasetItemResponseSchema = z.object({
   id: z.string(),
   datasetId: z.string(),
   datasetVersion: z.number().int(),
+  externalId: z.string().optional().nullable(),
   input: z.unknown(),
   groundTruth: z.unknown().optional(),
   expectedTrajectory: z.unknown().optional(),
-  requestContext: z.record(z.string(), z.unknown()).optional(),
-  metadata: z.record(z.string(), z.unknown()).optional(),
-  source: datasetItemSourceSchema,
+  toolMocks: toolMocksSchema.nullable(),
+  unmockedToolPolicy: unmockedToolPolicySchema.nullable(),
+  scorerIds: z.array(z.string()).optional().nullable(),
+  requestContext: z.record(z.string(), z.unknown()).optional().nullable(),
+  metadata: z.record(z.string(), z.unknown()).optional().nullable(),
+  source: datasetItemSourceSchema.nullable(),
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
 });
@@ -345,11 +526,33 @@ export const experimentResponseSchema = z.object({
   datasetId: z.string().nullable(),
   datasetVersion: z.number().int().nullable(),
   agentVersion: z.string().nullable().optional(),
-  targetType: z.enum(['agent', 'workflow', 'scorer', 'processor']),
-  targetId: z.string(),
+  targetType: z.enum(['agent', 'workflow', 'scorer', 'processor']).nullable(),
+  targetId: z.string().nullable(),
+  scorerIds: z.array(z.string()).nullable().optional(),
   name: z.string().optional(),
   description: z.string().optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
+  provenance: z
+    .object({
+      source: z.string().optional(),
+      sourceId: z.string().optional(),
+      sourceVersion: z.string().optional(),
+      metadata: z.record(z.string(), z.unknown()).optional(),
+    })
+    .nullable()
+    .optional(),
+  runnerAttestation: z
+    .object({
+      runnerId: z.string(),
+      invocationId: z.string(),
+      runnerVersion: z.string().optional(),
+    })
+    .nullable()
+    .optional(),
+  experimentSetId: z.string().nullable().optional(),
+  comparisonId: z.string().nullable().optional(),
+  variantId: z.string().nullable().optional(),
+  trialIndex: z.number().int().nullable().optional(),
   status: z.enum(['pending', 'running', 'completed', 'failed']),
   totalItems: z.number(),
   succeededCount: z.number(),
@@ -379,6 +582,7 @@ export const experimentResultResponseSchema = z.object({
   input: z.unknown(),
   output: z.unknown().nullable(),
   groundTruth: z.unknown().nullable(),
+  metadata: z.record(z.string(), z.unknown()).optional().nullable(),
   expectedTrajectory: z.unknown().optional(),
   error: z
     .object({
@@ -390,15 +594,37 @@ export const experimentResultResponseSchema = z.object({
   startedAt: z.coerce.date(),
   completedAt: z.coerce.date(),
   retryCount: z.number(),
+  attempt: z.number().int().optional(),
   traceId: z.string().nullable(),
   status: z.enum(['needs-review', 'reviewed', 'complete']).nullable().optional(),
   tags: z.array(z.string()).nullable().optional(),
+  comment: z.string().nullable().optional(),
+  toolMockReport: toolMockReportSchema.nullable(),
   createdAt: z.coerce.date(),
+});
+
+// Returned by the run-item route: the upserted result row plus the scorer runs.
+export const runExperimentItemResponseSchema = z.object({
+  result: experimentResultResponseSchema,
+  scores: z.array(
+    z.object({
+      scorerId: z.string(),
+      scorerName: z.string(),
+      score: z.number().nullable(),
+      reason: z.string().nullable(),
+      error: z.string().nullable(),
+      failedStep: z.string().optional(),
+      completedSteps: z.array(z.string()).optional(),
+      targetScope: z.enum(['span', 'trajectory']).optional(),
+      stepId: z.string().optional(),
+    }),
+  ),
 });
 
 export const updateExperimentResultBodySchema = z.object({
   status: z.enum(['needs-review', 'reviewed', 'complete']).nullable().optional(),
   tags: z.array(z.string()).optional(),
+  comment: z.string().nullable().optional(),
 });
 
 // Comparison item schema (MVP shape)
@@ -431,7 +657,10 @@ export const experimentSummaryResponseSchema = z.object({
   totalItems: z.number(),
   succeededCount: z.number(),
   failedCount: z.number(),
-  startedAt: z.coerce.date(),
+  datasetVersion: z.number().int().optional().describe('Dataset version pinned on the experiment (create-only)'),
+  // Nullable: a create-only request returns the persisted startedAt, which is
+  // null until the experiment transitions to running.
+  startedAt: z.coerce.date().nullable(),
   completedAt: z.coerce.date().nullable(),
   results: z.array(
     z.object({
@@ -440,10 +669,12 @@ export const experimentSummaryResponseSchema = z.object({
       input: z.unknown(),
       output: z.unknown().nullable(),
       groundTruth: z.unknown().nullable(),
+      metadata: z.record(z.string(), z.unknown()).optional().nullable(),
       error: z.string().nullable(),
       startedAt: z.coerce.date(),
       completedAt: z.coerce.date(),
       retryCount: z.number(),
+      toolMockReport: toolMockReportSchema.nullable(),
       scores: z.array(
         z.object({
           scorerId: z.string(),
@@ -512,7 +743,11 @@ export const itemVersionResponseSchema = z.object({
   input: z.unknown(),
   groundTruth: z.unknown().optional(),
   expectedTrajectory: z.unknown().optional(),
-  metadata: z.record(z.string(), z.unknown()).optional(),
+  toolMocks: toolMocksSchema.nullable(),
+  unmockedToolPolicy: unmockedToolPolicySchema.nullable(),
+  scorerIds: z.array(z.string()).optional().nullable(),
+  requestContext: z.record(z.string(), z.unknown()).optional().nullable(),
+  metadata: z.record(z.string(), z.unknown()).optional().nullable(),
   validTo: z.number().int().nullable(),
   isDeleted: z.boolean(),
   createdAt: z.coerce.date(),
@@ -543,9 +778,13 @@ export const listDatasetVersionsResponseSchema = z.object({
 export const batchInsertItemsBodySchema = z.object({
   items: z.array(
     z.object({
+      externalId: z.string().optional().nullable(),
       input: z.unknown(),
       groundTruth: z.unknown().optional(),
       expectedTrajectory: trajectoryExpectationSchema,
+      toolMocks: toolMocksSchema,
+      unmockedToolPolicy: unmockedToolPolicySchema,
+      scorerIds: z.array(z.string()).optional(),
       requestContext: z.record(z.string(), z.unknown()).optional(),
       metadata: z.record(z.string(), z.unknown()).optional(),
       source: datasetItemSourceSchema,

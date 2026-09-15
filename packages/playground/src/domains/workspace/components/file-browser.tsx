@@ -1,15 +1,11 @@
-import {
-  AlertDialog,
-  Button,
-  CopyButton,
-  Tooltip,
-  TooltipTrigger,
-  TooltipContent,
-  TooltipProvider,
-  AmazonIcon,
-  AzureIcon,
-  GoogleIcon,
-} from '@mastra/playground-ui';
+import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
+import { useTheme } from '@mastra/playground-ui/components/ThemeProvider';
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
+import { AmazonIcon } from '@mastra/playground-ui/icons/AmazonIcon';
+import { AzureIcon } from '@mastra/playground-ui/icons/AzureIcon';
+import { GoogleIcon } from '@mastra/playground-ui/icons/GoogleIcon';
 import {
   File,
   Folder,
@@ -28,10 +24,12 @@ import {
   Cloud,
   Database,
   HardDrive,
+  X,
 } from 'lucide-react';
 import { useState } from 'react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { coldarkDark } from 'react-syntax-highlighter/dist/cjs/styles/prism';
+import { coldarkCold, coldarkDark } from 'react-syntax-highlighter/dist/cjs/styles/prism';
+import { isImageFile, isVideoFile, videoMimeType } from '../file-type-utils';
 import type { FileEntry } from '../types';
 
 // =============================================================================
@@ -98,7 +96,7 @@ function getMountIcon(mount: FileEntry['mount']) {
       return <Cloud className="h-4 w-4 text-sky-400" />;
     default:
       // Default to cloud icon for unknown providers
-      return <Cloud className="h-4 w-4 text-neutral4" />;
+      return <Cloud className="text-neutral4 h-4 w-4" />;
   }
 }
 
@@ -124,7 +122,7 @@ function getFileIcon(entry: FileEntry, isOpen = false) {
       return <FileJson className="h-4 w-4 text-yellow-400" />;
     case 'md':
     case 'mdx':
-      return <FileText className="h-4 w-4 text-neutral4" />;
+      return <FileText className="text-neutral4 h-4 w-4" />;
     case 'png':
     case 'jpg':
     case 'jpeg':
@@ -133,7 +131,7 @@ function getFileIcon(entry: FileEntry, isOpen = false) {
     case 'webp':
       return <Image className="h-4 w-4 text-purple-400" />;
     default:
-      return <File className="h-4 w-4 text-neutral4" />;
+      return <File className="text-neutral4 h-4 w-4" />;
   }
 }
 
@@ -202,10 +200,10 @@ function Breadcrumb({ path, onNavigate }: BreadcrumbProps) {
   const parts = isRoot ? [] : path.split('/').filter(Boolean);
 
   return (
-    <div className="flex items-center gap-1 text-sm overflow-x-auto">
+    <div className="text-ui-md flex items-center gap-1 overflow-x-auto">
       <button
         onClick={() => onNavigate('.')}
-        className="p-1 rounded hover:bg-surface4 text-neutral5 hover:text-neutral6 transition-colors"
+        className="hover:bg-surface4 text-neutral5 hover:text-neutral6 rounded p-1 transition-colors"
         aria-label="Workspace root"
       >
         <FolderOpen className="h-4 w-4" />
@@ -214,10 +212,10 @@ function Breadcrumb({ path, onNavigate }: BreadcrumbProps) {
         const partPath = parts.slice(0, index + 1).join('/');
         return (
           <div key={partPath} className="flex items-center">
-            <ChevronRight className="h-4 w-4 text-neutral3" />
+            <ChevronRight className="text-neutral3 h-4 w-4" />
             <button
               onClick={() => onNavigate(partPath)}
-              className="px-2 py-1 rounded hover:bg-surface4 text-neutral5 hover:text-neutral6 transition-colors truncate max-w-[150px]"
+              className="hover:bg-surface4 text-neutral5 hover:text-neutral6 max-w-[150px] truncate rounded px-2 py-1 transition-colors"
               title={part}
             >
               {part}
@@ -273,9 +271,9 @@ export function FileBrowser({
   };
 
   return (
-    <div className="rounded-lg border border-border1 overflow-hidden">
+    <div className="border-border1 overflow-hidden rounded-lg border">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-2 bg-surface3 border-b border-border1">
+      <div className="bg-surface3 border-border1 flex items-center justify-between border-b px-4 py-2">
         <Breadcrumb path={currentPath} onNavigate={onNavigate} />
         <div className="flex items-center gap-1">
           {onRefresh && (
@@ -311,19 +309,19 @@ export function FileBrowser({
       {/* File List */}
       <div className="max-h-[400px] overflow-auto">
         {isLoading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-6 w-6 animate-spin text-neutral3" />
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="text-neutral3 h-6 w-6 animate-spin" />
           </div>
         ) : error ? (
-          <div className="py-12 px-4 text-center">
-            <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-red-500/10 mb-4">
+          <div className="px-4 py-8 text-center">
+            <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-full bg-red-500/10">
               <AlertCircle className="h-6 w-6 text-red-400" />
             </div>
-            <p className="text-sm text-neutral6 font-medium mb-1">Failed to load directory</p>
-            <p className="text-xs text-neutral4 max-w-sm mx-auto">{getErrorMessage(error)}</p>
+            <p className="text-neutral6 text-ui-md mb-1 font-medium">Failed to load directory</p>
+            <p className="text-neutral4 text-ui-sm mx-auto max-w-sm">{getErrorMessage(error)}</p>
           </div>
         ) : sortedEntries.length === 0 ? (
-          <div className="py-12 text-center text-neutral4 text-sm">
+          <div className="text-neutral4 text-ui-md py-8 text-center">
             {isRoot ? 'Workspace is empty' : 'Directory is empty'}
           </div>
         ) : (
@@ -337,10 +335,10 @@ export function FileBrowser({
                       const parentPath = currentPath.split('/').slice(0, -1).join('/') || '.';
                       onNavigate(parentPath);
                     }}
-                    className="w-full flex items-center gap-3 px-4 py-2 hover:bg-surface4 transition-colors text-left"
+                    className="hover:bg-surface4 flex w-full items-center gap-3 px-4 py-2 text-left transition-colors"
                   >
                     <FolderOpen className="h-4 w-4 text-amber-400" />
-                    <span className="text-sm text-neutral5">..</span>
+                    <span className="text-neutral5 text-ui-md">..</span>
                   </button>
                 </li>
               )}
@@ -350,13 +348,13 @@ export function FileBrowser({
 
                 return (
                   <li key={entry.name} className="group">
-                    <div className="flex items-center hover:bg-surface4 transition-colors">
+                    <div className="hover:bg-surface4 flex items-center transition-colors">
                       <button
                         onClick={() => handleEntryClick(entry)}
-                        className="flex-1 flex items-center gap-3 px-4 py-2 text-left"
+                        className="flex flex-1 items-center gap-3 px-4 py-2 text-left"
                       >
                         {getFileIcon(entry)}
-                        <span className="text-sm text-neutral6 flex-1 truncate">{entry.name}</span>
+                        <span className="text-neutral6 text-ui-md flex-1 truncate">{entry.name}</span>
                         {/* Mount error indicator */}
                         {entry.mount && isError && (
                           <Tooltip>
@@ -378,7 +376,7 @@ export function FileBrowser({
                               <TooltipTrigger asChild>
                                 <span
                                   tabIndex={0}
-                                  className={`text-xs px-1.5 py-0.5 rounded ${isError ? 'text-red-400 bg-red-400/10' : 'text-neutral3 bg-surface4'}`}
+                                  className={`text-ui-sm rounded px-1.5 py-0.5 ${isError ? 'bg-red-400/10 text-red-400' : 'text-neutral3 bg-surface4'}`}
                                 >
                                   {mountLabel}
                                 </span>
@@ -387,20 +385,20 @@ export function FileBrowser({
                             </Tooltip>
                           ) : (
                             <span
-                              className={`text-xs px-1.5 py-0.5 rounded ${isError ? 'text-red-400 bg-red-400/10' : 'text-neutral3 bg-surface4'}`}
+                              className={`text-ui-sm rounded px-1.5 py-0.5 ${isError ? 'bg-red-400/10 text-red-400' : 'text-neutral3 bg-surface4'}`}
                             >
                               {mountLabel}
                             </span>
                           ))}
                         {entry.type === 'file' && entry.size !== undefined && (
-                          <span className="text-xs text-neutral3 tabular-nums">{formatBytes(entry.size)}</span>
+                          <span className="text-neutral3 text-ui-sm tabular-nums">{formatBytes(entry.size)}</span>
                         )}
                       </button>
                       {onDelete && !entry.mount && (
                         <button
                           onClick={() => handleDelete(entry)}
                           aria-label={`Delete ${entry.name}`}
-                          className="p-2 opacity-0 group-hover:opacity-100 hover:text-red-400 text-neutral3 transition-all"
+                          className="text-neutral3 p-2 opacity-0 transition-all group-hover:opacity-100 hover:text-red-400"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
@@ -437,7 +435,7 @@ export function FileBrowser({
                 }
               }}
             >
-              {isDeleting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               Delete
             </AlertDialog.Action>
           </AlertDialog.Footer>
@@ -499,15 +497,17 @@ function getLanguageFromExtension(ext?: string): string | null {
  * Highlighted code display component using Prism.
  */
 function HighlightedCode({ content, language }: { content: string; language: string }) {
+  const isDark = useTheme().resolvedTheme === 'dark';
+
   return (
     <SyntaxHighlighter
       language={language}
-      style={coldarkDark}
+      style={isDark ? coldarkDark : coldarkCold}
       customStyle={{
         margin: 0,
         padding: '1rem',
         backgroundColor: 'transparent',
-        fontSize: '0.875rem',
+        fontSize: 'var(--text-ui-md)',
       }}
       codeTagProps={{
         style: {
@@ -531,21 +531,22 @@ export interface FileViewerProps {
 export function FileViewer({ path, content, isLoading, mimeType, onClose }: FileViewerProps) {
   const fileName = path.split('/').pop() || path;
   const ext = fileName.split('.').pop()?.toLowerCase();
-  const isImage = mimeType?.startsWith('image/') || ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'].includes(ext || '');
+  const isImage = isImageFile(path, mimeType);
+  const isVideo = isVideoFile(path, mimeType);
   const language = getLanguageFromExtension(ext);
 
   return (
-    <div className="rounded-lg border border-border1 overflow-hidden">
+    <div className="border-border1 overflow-hidden rounded-lg border">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-2 bg-surface3 border-b border-border1">
+      <div className="bg-surface3 border-border1 flex items-center justify-between border-b px-4 py-2">
         <div className="flex items-center gap-2">
           {getFileIcon({ name: fileName, type: 'file' })}
-          <span className="text-sm font-medium text-neutral6">{fileName}</span>
+          <span className="text-neutral6 text-ui-md font-medium">{fileName}</span>
         </div>
         <div className="flex items-center gap-2">
           <CopyButton content={content} copyMessage="Copied file content" />
           {onClose && (
-            <Button variant="ghost" size="md" onClick={onClose}>
+            <Button icon={<X />} variant="ghost" size="md" onClick={onClose}>
               Close
             </Button>
           )}
@@ -553,23 +554,38 @@ export function FileViewer({ path, content, isLoading, mimeType, onClose }: File
       </div>
 
       {/* Content */}
-      <div className="max-h-[500px] overflow-auto h-full" style={{ backgroundColor: 'black' }}>
+      <div className="bg-surface2 h-full max-h-[500px] overflow-auto">
         {isLoading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-6 w-6 animate-spin text-neutral3" />
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="text-neutral3 h-6 w-6 animate-spin" />
           </div>
         ) : isImage ? (
-          <div className="p-4 flex items-center justify-center">
+          <div className="flex items-center justify-center p-4">
+            {/* content is already base64 here (the caller requests encoding: 'base64'
+                for image files) — re-encoding it through btoa() would both be wrong
+                (btoa expects raw Latin1 bytes, not an already-base64 string) and
+                throw outright once the caller stops mis-reading images as text. */}
             <img
-              src={`data:${mimeType || 'image/png'};base64,${btoa(content)}`}
+              src={`data:${mimeType || 'image/png'};base64,${content}`}
               alt={fileName}
-              className="max-w-full max-h-[400px] object-contain"
+              className="max-h-[400px] max-w-full object-contain"
             />
+          </div>
+        ) : isVideo ? (
+          <div className="flex items-center justify-center p-4">
+            {/* Same base64-content contract as the image branch above — the
+                caller requests encoding: 'base64' for video files too. */}
+            <video controls className="max-h-[400px] max-w-full">
+              <source
+                src={`data:${videoMimeType(path, mimeType)};base64,${content}`}
+                type={videoMimeType(path, mimeType)}
+              />
+            </video>
           </div>
         ) : language ? (
           <HighlightedCode content={content} language={language} />
         ) : (
-          <pre className="p-4 text-sm text-neutral5 whitespace-pre-wrap font-mono overflow-x-auto">{content}</pre>
+          <pre className="text-neutral5 text-ui-md overflow-x-auto p-4 font-mono whitespace-pre-wrap">{content}</pre>
         )}
       </div>
     </div>

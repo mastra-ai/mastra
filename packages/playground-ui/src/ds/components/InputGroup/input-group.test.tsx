@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
+
 import { cleanup, render } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, assert, describe, expect, it } from 'vitest';
 
 import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from './input-group';
 
@@ -8,8 +9,17 @@ afterEach(() => {
   cleanup();
 });
 
-const getWrapper = () => document.querySelector<HTMLDivElement>('[data-slot="input-group"]')!;
-const getInput = () => document.querySelector<HTMLInputElement>('[data-slot="input-group-control"]')!;
+const getWrapper = () => {
+  const wrapper = document.querySelector<HTMLDivElement>('[data-slot="input-group"]');
+  assert(wrapper, 'Expected input group wrapper');
+  return wrapper;
+};
+
+const getInput = () => {
+  const input = document.querySelector<HTMLInputElement>('[data-slot="input-group-control"]');
+  assert(input, 'Expected input group control');
+  return input;
+};
 
 const inputGroupVariants = ['default', 'filled', 'outline'] as const;
 
@@ -48,16 +58,19 @@ describe('InputGroup', () => {
     );
     // Root height for the size...
     expect(getWrapper().className).toContain('h-form-lg');
-    // ...and the control mirrors it via the parent's data-size (no React context), which
-    // keeps it from shrinking to the line-height when the group goes vertical.
-    expect(getInput().className).toContain('group-data-[size=lg]/input-group:h-form-lg');
+    // ...and the control is sized to the root's content box (token minus the 1px borders)
+    // via the parent's data-size (no React context). This keeps it from shrinking to the
+    // line-height when the group goes vertical, and from overflowing the root inline —
+    // which would let a flex-column parent grow the group 2px past a sibling control.
+    expect(getInput().className).toContain('group-data-[size=lg]/input-group:h-[calc(var(--spacing-form-lg)-2px)]');
+    expect(getInput().className).not.toContain('h-form-lg');
   });
 
   it('block-start mode: control keeps a form height (no collapse) and the root height goes auto', () => {
     // Regression for the "Block Start Addon" story: with the label stacked above the
     // input (flex-col + flex-none), the control must keep an explicit height or it shrinks
-    // to the text line-height. The control carries `group-data-[size]:h-form-*` for that,
-    // and the root releases its fixed height to auto so addon + control both fit.
+    // to the text line-height. The control carries a `group-data-[size]:h-[calc(...)]`
+    // height for that, and the root releases its fixed height to auto so addon + control both fit.
     render(
       <InputGroup>
         <InputGroupAddon align="block-start">
@@ -66,7 +79,7 @@ describe('InputGroup', () => {
         <InputGroupInput placeholder="name@example.com" />
       </InputGroup>,
     );
-    expect(getInput().className).toContain('group-data-[size=md]/input-group:h-form-md');
+    expect(getInput().className).toContain('group-data-[size=md]/input-group:h-[calc(var(--spacing-form-md)-2px)]');
     expect(getWrapper().className).toContain('has-[>[data-align=block-start]]:h-auto');
   });
 

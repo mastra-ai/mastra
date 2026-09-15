@@ -144,7 +144,7 @@ describe('OpenAI reasoning e2e test', () => {
   beforeAll(() => mock.start());
   afterAll(() => mock.saveAndStop());
 
-  it('should be succesful with structured_output', { timeout: 60_000 }, async () => {
+  it('should be successful with structured_output', { timeout: 60_000 }, async () => {
     const schema = z.object(allSchemas);
 
     const model = openai('o4-mini');

@@ -1,7 +1,9 @@
+import { createHash } from 'node:crypto';
+
 import type { FilesystemMountConfig } from '@mastra/core/workspace';
 
 import { shellQuote } from '../../utils/shell-quote';
-import { LOG_PREFIX, validateBucketName, validatePrefix } from './types';
+import { LOG_PREFIX, validateGCSBucketName, validatePrefix } from './types';
 import type { MountContext } from './types';
 
 /**
@@ -35,7 +37,7 @@ export async function mountGCS(mountPath: string, config: E2BGCSMountConfig, ctx
   const { sandbox, logger } = ctx;
 
   // Validate inputs before interpolating into shell commands
-  validateBucketName(config.bucket);
+  validateGCSBucketName(config.bucket);
 
   // Install gcsfuse if not present
   const checkResult = await sandbox.commands.run('which gcsfuse || echo "not found"');
@@ -69,8 +71,11 @@ export async function mountGCS(mountPath: string, config: E2BGCSMountConfig, ctx
   let mountCmd: string;
 
   if (hasCredentials) {
-    // Write service account key with root ownership so sudo gcsfuse can read it
-    const keyPath = '/tmp/gcs-key.json';
+    // Write service account key with root ownership so sudo gcsfuse can read it.
+    // Per-mount path (hashed mountPath) so concurrent mounts don't race on a single
+    // shared rm -> write -> chmod sequence (same approach as azure.ts).
+    const mountHash = createHash('md5').update(mountPath).digest('hex').slice(0, 8);
+    const keyPath = `/tmp/gcs-key-${mountHash}.json`;
     await sandbox.commands.run(`sudo rm -f ${keyPath}`);
     await sandbox.files.write(keyPath, config.serviceAccountKey!);
     // Make readable by root (sudo gcsfuse runs as root)

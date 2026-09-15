@@ -1,7 +1,9 @@
 import type { DropResult, DroppableProvided } from '@hello-pangea/dnd';
 import { DragDropContext, Draggable, Droppable } from '@hello-pangea/dnd';
 import type { GetAgentResponse, ReorderModelListParams, UpdateModelInModelListParams } from '@mastra/client-js';
-import { Switch, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger, Icon } from '@mastra/playground-ui';
+import { Switch } from '@mastra/playground-ui/components/Switch';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { GripVertical } from 'lucide-react';
 import { useState } from 'react';
 import { AgentMetadataModelSwitcher } from './agent-metadata-model-switcher';
@@ -102,16 +104,16 @@ const AgentMetadataModelListItem = ({
   const [enabled, setEnabled] = useState(() => modelConfig.enabled);
 
   return (
-    <div className="rounded-lg bg-surface1 hover:bg-surface4/50 transition-colors">
+    <div className="bg-surface1 hover:bg-surface4/50 rounded-lg transition-colors">
       <div className="flex items-center gap-2 p-2">
         {showDragHandle && (
-          <div {...dragHandleProps} className="text-neutral3 cursor-grab active:cursor-grabbing shrink-0">
+          <div {...dragHandleProps} className="text-neutral3 shrink-0 cursor-grab active:cursor-grabbing">
             <Icon>
               <GripVertical />
             </Icon>
           </div>
         )}
-        <div className="flex-1 min-w-0">
+        <div className="min-w-0 flex-1">
           <AgentMetadataModelSwitcher
             defaultProvider={modelConfig.model.provider}
             defaultModel={modelConfig.model.modelId}

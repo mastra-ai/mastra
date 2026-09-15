@@ -246,7 +246,9 @@ export class MCPServersSpanner extends MCPServersStorage {
             // the transaction (and its row locks) stay pending on the server
             // until explicitly released. Without this rollback, a failed
             // create() blocks subsequent reads/writes against the same rows.
-            await tx.rollback().catch(() => {});
+            await tx.rollback().catch(rollbackErr => {
+              throw new AggregateError([err, rollbackErr], 'Transaction and rollback both failed');
+            });
             throw err;
           }
         }),
@@ -341,7 +343,9 @@ export class MCPServersSpanner extends MCPServersStorage {
             });
             await tx.commit();
           } catch (err) {
-            await tx.rollback().catch(() => {});
+            await tx.rollback().catch(rollbackErr => {
+              throw new AggregateError([err, rollbackErr], 'Transaction and rollback both failed');
+            });
             throw err;
           }
         }),

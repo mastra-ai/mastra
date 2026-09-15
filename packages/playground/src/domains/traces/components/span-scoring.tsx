@@ -1,5 +1,10 @@
 import type { GetScorerResponse } from '@mastra/client-js';
-import { Button, Notice, SelectFieldBlock, TextAndIcon, toast } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { SelectFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
+import { Notice } from '@mastra/playground-ui/components/Notice';
+import { TextAndIcon } from '@mastra/playground-ui/components/Text';
+import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { InfoIcon } from 'lucide-react';
 import { useState } from 'react';
 import { useTriggerScorer } from '../hooks/use-trigger-scorer';
@@ -66,7 +71,7 @@ export function SpanScoring({
   }
 
   return (
-    <div className="grid grid-cols-[3fr_1fr] gap-4 items-start">
+    <div className="grid grid-cols-[3fr_1fr] items-start gap-4">
       <div className="grid gap-2">
         <SelectFieldBlock
           name="select-scorer"
@@ -89,7 +94,7 @@ export function SpanScoring({
         )}
       </div>
 
-      <Button disabled={!selectedScorer || isWaiting} onClick={handleStartScoring}>
+      <Button icon={<ScorersIcon />} disabled={!selectedScorer || isWaiting} onClick={handleStartScoring}>
         {isPending ? 'Starting...' : 'Start Scoring'}
       </Button>
     </div>

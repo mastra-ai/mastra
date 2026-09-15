@@ -6,10 +6,17 @@ import type { ProviderConfig } from './gateways/base.js';
 import { MastraGateway } from './gateways/mastra.js';
 import { ModelsDevGateway } from './gateways/models-dev.js';
 import { NetlifyGateway } from './gateways/netlify.js';
-import { GatewayRegistry, modelSupportsAttachments } from './provider-registry.js';
+import {
+  GatewayRegistry,
+  modelSupportsAttachments,
+  modelSupportsStructuredOutput,
+  modelSupportsTemperature,
+  _resetCapabilityCaches,
+} from './provider-registry.js';
 
 describe('modelSupportsAttachments', () => {
   afterEach(() => {
+    _resetCapabilityCaches();
     vi.restoreAllMocks();
   });
 
@@ -27,11 +34,101 @@ describe('modelSupportsAttachments', () => {
       return originalExistsSync(filePath);
     });
 
-    expect(modelSupportsAttachments('openrouter/deepseek-v4-flash')).toBe(false);
-    expect(modelSupportsAttachments('openrouter/deepseek/deepseek-v4-flash')).toBe(false);
-    expect(modelSupportsAttachments('mastra/openrouter/deepseek/deepseek-v4-flash')).toBe(false);
+    // gpt-oss-120b is open-weight and text-only in both the OpenRouter and
+    // OpenAI capability lists, so it stays false through the nested-provider fallback.
+    expect(modelSupportsAttachments('openrouter/gpt-oss-120b')).toBe(false);
+    expect(modelSupportsAttachments('openrouter/openai/gpt-oss-120b')).toBe(false);
+    expect(modelSupportsAttachments('mastra/openrouter/openai/gpt-oss-120b')).toBe(false);
     expect(modelSupportsAttachments('openrouter/openai/gpt-4o')).toBe(true);
     expect(modelSupportsAttachments('mastra/openrouter/openai/gpt-4o')).toBe(true);
+  });
+});
+
+describe('modelSupportsTemperature', () => {
+  beforeEach(() => {
+    _resetCapabilityCaches();
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('returns true for models listed in the temperature capability', () => {
+    expect(modelSupportsTemperature('openai/gpt-4o')).toBe(true);
+    expect(modelSupportsTemperature('anthropic/claude-sonnet-4-6')).toBe(true);
+  });
+
+  it('returns false for models whose provider is known but model is not in temperature list', () => {
+    // gpt-5-pro is in the openai attachment list but NOT in the temperature list
+    expect(modelSupportsTemperature('openai/gpt-5-pro')).toBe(false);
+  });
+
+  it('returns undefined for unknown providers', () => {
+    expect(modelSupportsTemperature('unknown-provider/some-model')).toBeUndefined();
+  });
+
+  it('resolves nested provider model IDs through the fallback path', () => {
+    // openrouter/anthropic/claude-sonnet-4-6 should resolve via the nested provider fallback
+    expect(modelSupportsTemperature('openrouter/anthropic/claude-sonnet-4-6')).toBe(true);
+    expect(modelSupportsTemperature('openrouter/openai/gpt-5-pro')).toBe(false);
+  });
+});
+
+describe('modelSupportsTemperature — Bedrock resolution (issue #23319)', () => {
+  beforeEach(() => {
+    _resetCapabilityCaches();
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('falls back to the underlying vendor for Bedrock router ids', () => {
+    // aws-bedrock has no capability file; claude-sonnet-5 must inherit anthropic's
+    // (unsupported) temperature fact, while claude-sonnet-4-6 stays supported.
+    expect(modelSupportsTemperature('aws-bedrock/claude-sonnet-5')).toBe(false);
+    expect(modelSupportsTemperature('aws-bedrock/claude-sonnet-4-6')).toBe(true);
+  });
+
+  it('normalizes provider-instance ids (region + vendor prefixes)', () => {
+    // @ai-sdk/amazon-bedrock exposes provider `amazon-bedrock` and region/vendor-qualified ids.
+    expect(modelSupportsTemperature('amazon-bedrock/us.anthropic.claude-sonnet-5')).toBe(false);
+    expect(modelSupportsTemperature('amazon-bedrock/eu.anthropic.claude-sonnet-4-6')).toBe(true);
+    // Global and geographic (JP/AU) inference-profile prefixes resolve the same way.
+    expect(modelSupportsTemperature('amazon-bedrock/global.anthropic.claude-sonnet-5')).toBe(false);
+    expect(modelSupportsTemperature('amazon-bedrock/jp.anthropic.claude-sonnet-4-6')).toBe(true);
+    expect(modelSupportsTemperature('amazon-bedrock/au.anthropic.claude-sonnet-4-6')).toBe(true);
+  });
+
+  it('applies the Bedrock grok temperature override without affecting direct xai', () => {
+    // Bedrock-hosted grok-4.6 rejects temperature even though direct xai accepts it.
+    expect(modelSupportsTemperature('aws-bedrock/grok-4.6')).toBe(false);
+    expect(modelSupportsTemperature('amazon-bedrock/us.xai.grok-4.6')).toBe(false);
+    expect(modelSupportsTemperature('xai/grok-4.6')).toBe(true);
+  });
+});
+
+describe('modelSupportsStructuredOutput', () => {
+  afterEach(() => {
+    _resetCapabilityCaches();
+  });
+
+  it('returns true for a model with known native support', () => {
+    expect(modelSupportsStructuredOutput('openai/gpt-4o')).toBe(true);
+  });
+
+  it('returns false for a known unsupported route override', () => {
+    expect(modelSupportsStructuredOutput('deepseek/deepseek-v4-pro')).toBe(false);
+  });
+
+  it('returns false for an unlisted model from a provider with capability data', () => {
+    expect(modelSupportsStructuredOutput('openai/not-a-real-model')).toBe(false);
+  });
+
+  it('returns undefined when the provider has no capability data', () => {
+    expect(modelSupportsStructuredOutput('unknown-provider/some-model')).toBeUndefined();
+  });
+
+  it('uses underlying provider data for nested gateway routes without a route override', () => {
+    expect(modelSupportsStructuredOutput('openrouter/openai/gpt-4o')).toBe(true);
   });
 });
 
@@ -620,7 +717,7 @@ describe('GatewayRegistry Auto-Refresh', () => {
     vi.spyOn(NetlifyGateway.prototype, 'fetchProviders').mockResolvedValue({});
     const mastraFetchProvidersSpy = vi.spyOn(MastraGateway.prototype, 'fetchProviders').mockResolvedValue({
       mastra: {
-        name: 'Mastra Gateway',
+        name: 'Gateway',
         models: ['anthropic/claude-sonnet-4.5'],
         apiKeyEnvVar: 'MASTRA_GATEWAY_API_KEY',
         gateway: 'mastra',
@@ -912,6 +1009,92 @@ describe('Corrupted JSON recovery', () => {
     expect(validationRegex.test(corruptedDtsContent)).toBe(true);
     expect(validationRegex.test(validDtsContent)).toBe(false);
     expect(validationRegex.test(nothingToQuote)).toBe(false);
+  });
+});
+
+describe('Partial gateway sync should not corrupt registry', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    // @ts-expect-error - accessing private property for testing
+    GatewayRegistry['instance'] = undefined;
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('should not write partial results to disk when a gateway fetch fails', async () => {
+    const registry = GatewayRegistry.getInstance({ useDynamicLoading: true });
+
+    // Mock ModelsDevGateway.fetchProviders to fail (simulating models.dev API being down)
+    vi.spyOn(ModelsDevGateway.prototype, 'fetchProviders').mockRejectedValue(
+      new Error('Failed to fetch from models.dev: Service Unavailable'),
+    );
+
+    // Mock NetlifyGateway.fetchProviders to succeed (only Netlify returns data)
+    vi.spyOn(NetlifyGateway.prototype, 'fetchProviders').mockResolvedValue({
+      netlify: {
+        name: 'Netlify',
+        url: 'https://netlify.example.com',
+        apiKeyEnvVar: 'NETLIFY_API_KEY',
+        models: ['netlify-model-1'],
+        gateway: 'netlify',
+      },
+    } as Record<string, ProviderConfig>);
+
+    // Track files that would be written via atomic rename
+    const renamedFiles: { src: string; dest: string }[] = [];
+    vi.spyOn(fs.promises, 'writeFile').mockResolvedValue();
+    vi.spyOn(fs.promises, 'rename').mockImplementation(async (src: any, dest: any) => {
+      renamedFiles.push({ src: src.toString(), dest: dest.toString() });
+    });
+
+    await registry.syncGateways(true);
+
+    // No registry files should have been written since models.dev failed
+    const registryWrites = renamedFiles.filter(
+      f => f.dest.includes('provider-registry.json') || f.dest.includes('provider-types.generated'),
+    );
+    expect(registryWrites).toHaveLength(0);
+  });
+
+  it('should write results when all gateways succeed', async () => {
+    const registry = GatewayRegistry.getInstance({ useDynamicLoading: true });
+
+    // Mock both gateways to succeed
+    vi.spyOn(ModelsDevGateway.prototype, 'fetchProviders').mockResolvedValue({
+      openai: {
+        name: 'OpenAI',
+        url: 'https://api.openai.com/v1',
+        apiKeyEnvVar: 'OPENAI_API_KEY',
+        models: ['gpt-4o'],
+        gateway: 'models.dev',
+      },
+    } as Record<string, ProviderConfig>);
+
+    vi.spyOn(NetlifyGateway.prototype, 'fetchProviders').mockResolvedValue({
+      netlify: {
+        name: 'Netlify',
+        url: 'https://netlify.example.com',
+        apiKeyEnvVar: 'NETLIFY_API_KEY',
+        models: ['netlify-model-1'],
+        gateway: 'netlify',
+      },
+    } as Record<string, ProviderConfig>);
+
+    const renamedFiles: { src: string; dest: string }[] = [];
+    vi.spyOn(fs.promises, 'writeFile').mockResolvedValue();
+    vi.spyOn(fs.promises, 'rename').mockImplementation(async (src: any, dest: any) => {
+      renamedFiles.push({ src: src.toString(), dest: dest.toString() });
+    });
+
+    await registry.syncGateways(true);
+
+    // Registry files SHOULD be written since all gateways succeeded
+    const registryWrites = renamedFiles.filter(
+      f => f.dest.includes('provider-registry.json') || f.dest.includes('provider-types.generated'),
+    );
+    expect(registryWrites.length).toBeGreaterThan(0);
   });
 });
 

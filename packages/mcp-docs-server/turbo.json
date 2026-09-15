@@ -10,7 +10,7 @@
     "build:cli": {
       "inputs": [
         "src/**",
-        "tsup.config.ts",
+        "tsdown.config.ts",
         "tsconfig.json",
         "package.json",
         "!**/*.md",

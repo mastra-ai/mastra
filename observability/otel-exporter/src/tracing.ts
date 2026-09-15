@@ -377,7 +377,8 @@ export class OtelExporter extends BaseExporter {
       this.loggerProvider = new LoggerProvider({
         resource,
         processors: [
-          new BatchLogRecordProcessor(exporterForProcessor, {
+          new BatchLogRecordProcessor({
+            exporter: exporterForProcessor,
             maxExportBatchSize: this.config.batchSize || 512,
             maxQueueSize: 2048,
             scheduledDelayMillis: 5000,

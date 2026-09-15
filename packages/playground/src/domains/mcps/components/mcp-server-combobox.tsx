@@ -1,5 +1,6 @@
-import { Combobox, toast } from '@mastra/playground-ui';
-import type { ComboboxProps } from '@mastra/playground-ui';
+import { Combobox } from '@mastra/playground-ui/components/Combobox';
+import type { ComboboxProps } from '@mastra/playground-ui/components/Combobox';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { useEffect } from 'react';
 import { useMCPServers } from '../hooks/use-mcp-servers';
 import { useLinkComponent } from '@/lib/framework';
@@ -13,6 +14,9 @@ export interface MCPServerComboboxProps {
   className?: string;
   disabled?: boolean;
   variant?: ComboboxProps['variant'];
+  size?: ComboboxProps['size'];
+  'aria-label'?: string;
+  align?: ComboboxProps['align'];
   container?: HTMLElement | ShadowRoot | null | React.RefObject<HTMLElement | ShadowRoot | null>;
 }
 
@@ -25,6 +29,9 @@ export function MCPServerCombobox({
   className,
   disabled = false,
   variant,
+  size,
+  'aria-label': ariaLabel,
+  align,
   container,
 }: MCPServerComboboxProps) {
   const { data: mcpServers = [], isLoading, isError, error } = useMCPServers();
@@ -61,6 +68,9 @@ export function MCPServerCombobox({
       className={className}
       disabled={disabled || isLoading || isError}
       variant={variant}
+      size={size}
+      aria-label={ariaLabel}
+      align={align}
       container={container}
     />
   );

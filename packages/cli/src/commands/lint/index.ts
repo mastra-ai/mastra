@@ -9,13 +9,14 @@ import { runBuild } from '../../utils/run-build.js';
 import { BuildBundler } from '../build/BuildBundler.js';
 import { preflightBuildOutput } from '../deploy-preflight.js';
 import type { PreflightIssue } from '../deploy-preflight.js';
-import { readEnvVars } from '../studio/deploy.js';
+import { getDeployEnvFiles, readEnvVars } from '../studio/deploy.js';
 import { rules } from './rules/index.js';
 import type { LintContext, LintIssue, LintIssueCode } from './rules/types.js';
 
 interface PackageJson {
   dependencies?: Record<string, string>;
   devDependencies?: Record<string, string>;
+  optionalDependencies?: Record<string, string>;
 }
 
 interface MastraPackage {
@@ -61,6 +62,7 @@ function getMastraPackages(packageJson: PackageJson): MastraPackage[] {
   const allDependencies = {
     ...packageJson.dependencies,
     ...packageJson.devDependencies,
+    ...packageJson.optionalDependencies,
   };
 
   const mastraPackages = Object.entries(allDependencies).filter(
@@ -140,11 +142,17 @@ export async function lint(options: LintOptions): Promise<LintResult> {
         await runBuild(rootDir, { debug: options.debug });
       }
 
-      const envVars = await readEnvVars(rootDir, {
-        envFile: options.envFile,
-        autoAccept: options.json ?? false,
-      });
-      const preflightIssues = await preflightBuildOutput(rootDir, envVars);
+      // Only claim the full env picture when there's an explicit --env-file or
+      // an ambient .env* file. Without one (e.g. CI), env vars may live on the
+      // platform, so env-guarded issues should warn instead of error.
+      const hasEnvFile = Boolean(options.envFile) || (await getDeployEnvFiles(rootDir)).length > 0;
+      const envVars = hasEnvFile
+        ? await readEnvVars(rootDir, {
+            envFile: options.envFile,
+            autoAccept: options.json ?? false,
+          })
+        : {};
+      const preflightIssues = await preflightBuildOutput(rootDir, envVars, { hasEnvFile });
       issues.push(...preflightIssues.map(toLintIssue));
     }
 
@@ -172,7 +180,12 @@ export function printLintReport(result: LintResult, options: { strict?: boolean 
   for (const issue of result.issues) {
     const prefix =
       issue.severity === 'error' || warningsAreErrors ? pc.red(`[${issue.code}]`) : pc.yellow(`[${issue.code}]`);
-    const message = `${prefix} ${issue.message}\n  ${pc.dim('scope:')} ${issue.scope}\n  ${pc.dim('→')} ${issue.fix}`;
+    // fix can be a string (one line) or string[] (one arrow line per step,
+    // used by preflight-sourced issues so the DB provisioning options don't
+    // squash into one wall of text).
+    const fixLines = Array.isArray(issue.fix) ? issue.fix : [issue.fix];
+    const fixBlock = fixLines.map(line => `  ${pc.dim('→')} ${line}`).join('\n');
+    const message = `${prefix} ${issue.message}\n  ${pc.dim('scope:')} ${issue.scope}\n${fixBlock}`;
 
     if (issue.severity === 'error' || warningsAreErrors) {
       p.log.error(message);

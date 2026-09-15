@@ -1,10 +1,16 @@
-import type { BrowserConfig as BaseBrowserConfig } from '@mastra/core/browser';
+import type { BrowserConfig as BaseBrowserConfig, BrowserRecordingOptions } from '@mastra/core/browser';
 import type { BrowserToolName } from './tools/constants';
 
 /**
  * AgentBrowser-specific configuration extensions.
  */
 export interface AgentBrowserConfigExtensions {
+  /**
+   * Headers passed to chromium.connectOverCDP when using `cdpUrl`.
+   * Required for providers like Cloudflare Browser Rendering (Authorization bearer token).
+   * Distinct from page `extraHTTPHeaders` / navigation headers.
+   */
+  cdpHeaders?: Record<string, string>;
   /**
    * Path to a Playwright storage state file (JSON) containing cookies and localStorage.
    * This is a lighter-weight alternative to `profile` — it only persists
@@ -18,6 +24,14 @@ export interface AgentBrowserConfigExtensions {
    * ```
    */
   storageState?: string;
+
+  /**
+   * Alpha: opt into browser recording tools.
+   *
+   * Recording tools are disabled by default. Provide an output directory to add
+   * `browser_record` and `browser_record_caption` to this browser's toolset.
+   */
+  recording?: BrowserRecordingOptions;
 
   /**
    * Tool names to exclude from the browser toolset.

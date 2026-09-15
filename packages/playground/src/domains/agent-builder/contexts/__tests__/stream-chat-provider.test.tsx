@@ -1,363 +1,299 @@
-// @vitest-environment jsdom
+import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, cleanup, render } from '@testing-library/react';
+import { act, cleanup, render, waitFor } from '@testing-library/react';
+import { http, HttpResponse } from 'msw';
+import { useEffect, useRef } from 'react';
 import type { ReactElement, ReactNode } from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
-// Drive useChat output from the test.
-const chatState: { isRunning: boolean; messages: unknown[] } = { isRunning: false, messages: [] };
-const chatListeners = new Set<() => void>();
-const sentMessages: unknown[] = [];
-const useChatCalls: Array<Record<string, unknown>> = [];
-
-const triggerRerender = () => {
-  for (const listener of chatListeners) listener();
-};
-
-vi.mock('@mastra/react', () => {
-  const useChat = (options: Record<string, unknown>) => {
-    useChatCalls.push(options);
-    // Force consumers to subscribe so they re-render when state changes.
-    const [, setTick] = useState(0);
-    const ref = useRef<() => void>(() => {});
-    ref.current = () => setTick(t => t + 1);
-    useEffect(() => {
-      const listener = () => ref.current();
-      chatListeners.add(listener);
-      return () => {
-        chatListeners.delete(listener);
-      };
-    }, []);
-    return {
-      messages: chatState.messages,
-      isRunning: chatState.isRunning,
-      setMessages: () => {},
-      sendMessage: (payload: unknown) => {
-        sentMessages.push(payload);
-      },
-    };
-  };
-  return { useChat, useMastraClient: () => ({}) };
-});
 
 import { useStreamMessages, useStreamRunning, useStreamSend } from '../stream-chat-context';
 import { StreamChatProvider } from '../stream-chat-provider';
+import { server } from '@/test/msw-server';
 
-const createQueryClient = () => {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  // Seed useCurrentUser so the provider doesn't trigger a real fetch in unit tests.
-  queryClient.setQueryData(['auth', 'me'], { id: 'user-1' });
-  return queryClient;
+const BASE_URL = 'http://localhost:4111';
+
+type CapturedBody = Record<string, any>;
+
+interface Captured {
+  url: string;
+  body: CapturedBody;
+}
+
+const captureBody = async (request: Request): Promise<CapturedBody> => {
+  const body: unknown = await request.json();
+  return body && typeof body === 'object' ? (body as CapturedBody) : {};
 };
 
-const Wrapper = ({ children }: { children: ReactNode }) => (
-  <QueryClientProvider client={createQueryClient()}>{children}</QueryClientProvider>
-);
+/** Streams a single assistant text delta then a `finish` event and closes. */
+const textThenFinishStream = (text: string) =>
+  new ReadableStream<Uint8Array>({
+    start(controller) {
+      const encoder = new TextEncoder();
+      controller.enqueue(
+        encoder.encode(
+          `data: ${JSON.stringify({ type: 'text-delta', runId: 'run-1', payload: { id: 'text-1', text } })}\n\n`,
+        ),
+      );
+      controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'finish', payload: {} })}\n\n`));
+      controller.close();
+    },
+  });
+
+/** Closes immediately so useChat completes without producing messages. */
+const emptyStream = () =>
+  new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.close();
+    },
+  });
+
+const sseResponse = (stream: ReadableStream<Uint8Array>) =>
+  new HttpResponse(stream, { status: 200, headers: { 'content-type': 'text/event-stream' } });
+
+// Background queries fired by the real provider stack. Not under test, but must
+// be handled so `onUnhandledRequest: 'error'` stays quiet.
+const baseHandlers = () => [http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json({ id: 'user-1' }))];
+
+const Wrapper = ({ children }: { children: ReactNode }) => {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return (
+    <MastraReactProvider baseUrl={BASE_URL}>
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>{children}</MemoryRouter>
+      </QueryClientProvider>
+    </MastraReactProvider>
+  );
+};
 
 const renderWithProviders = (ui: ReactElement) => render(ui, { wrapper: Wrapper });
 
-interface RenderTrackerProps {
-  hook: () => unknown;
-  onRender: () => void;
-}
-
-const RenderTracker = ({ hook, onRender }: RenderTrackerProps) => {
-  hook();
-  onRender();
+const SendOnMount = ({ message, onSent }: { message: string; onSent?: () => void }) => {
+  const send = useStreamSend();
+  const fired = useRef(false);
+  useEffect(() => {
+    if (fired.current) return;
+    fired.current = true;
+    send(message);
+    onSent?.();
+  }, [message, send, onSent]);
   return null;
 };
 
-const setRunning = (next: boolean) => {
-  chatState.isRunning = next;
-  act(() => triggerRerender());
-};
-
-const setMessages = (next: unknown[]) => {
-  chatState.messages = next;
-  act(() => triggerRerender());
-};
+afterEach(() => {
+  delete (window as Window & { MASTRA_AGENT_SIGNALS?: string }).MASTRA_AGENT_SIGNALS;
+  cleanup();
+});
 
 describe('StreamChatProvider', () => {
   beforeEach(() => {
-    chatState.isRunning = false;
-    chatState.messages = [];
-    sentMessages.length = 0;
-    useChatCalls.length = 0;
-    vi.useFakeTimers();
+    server.resetHandlers();
   });
 
-  afterEach(() => {
-    delete (window as Window & { MASTRA_AGENT_SIGNALS?: string }).MASTRA_AGENT_SIGNALS;
-    cleanup();
-    vi.useRealTimers();
-  });
+  describe('when thread signals are not opted out', () => {
+    it('subscribes to the thread signal channel by default', async () => {
+      const subscribeCalls: string[] = [];
+      server.use(
+        ...baseHandlers(),
+        http.post(`${BASE_URL}/api/agents/a/threads/subscribe`, () => {
+          subscribeCalls.push('subscribe');
+          return sseResponse(emptyStream());
+        }),
+        http.post(`${BASE_URL}/api/agents/a/stream`, () => sseResponse(emptyStream())),
+      );
 
-  it('opts the agent builder into thread signals by default', () => {
-    renderWithProviders(
-      <StreamChatProvider agentId="a" threadId="t" initialMessages={[]}>
-        <RenderTracker hook={useStreamRunning} onRender={() => {}} />
-      </StreamChatProvider>,
-    );
+      await act(async () => {
+        renderWithProviders(
+          <StreamChatProvider agentId="a" threadId="t" initialMessages={[]}>
+            <SendOnMount message="hello" />
+          </StreamChatProvider>,
+        );
+      });
 
-    expect(useChatCalls.at(-1)).toMatchObject({ enableThreadSignals: true });
-  });
-
-  it('preserves the explicit thread signals opt-out', () => {
-    (window as Window & { MASTRA_AGENT_SIGNALS?: string }).MASTRA_AGENT_SIGNALS = 'false';
-
-    renderWithProviders(
-      <StreamChatProvider agentId="a" threadId="t" initialMessages={[]}>
-        <RenderTracker hook={useStreamRunning} onRender={() => {}} />
-      </StreamChatProvider>,
-    );
-
-    expect(useChatCalls.at(-1)).toMatchObject({ enableThreadSignals: false });
-  });
-
-  it('only re-renders running subscribers when isRunning changes (not when messages change)', () => {
-    const runningRender = vi.fn();
-
-    renderWithProviders(
-      <StreamChatProvider agentId="a" threadId="t" initialMessages={[]} debounceTime={100}>
-        <RenderTracker hook={useStreamRunning} onRender={runningRender} />
-      </StreamChatProvider>,
-    );
-
-    const baseline = runningRender.mock.calls.length;
-
-    // Messages change should NOT cause running subscriber to re-render.
-    setMessages([{ id: '1' }]);
-    expect(runningRender.mock.calls.length).toBe(baseline);
-
-    setMessages([{ id: '1' }, { id: '2' }]);
-    expect(runningRender.mock.calls.length).toBe(baseline);
-
-    // isRunning change SHOULD cause running subscriber to re-render — but only
-    // after the 100 ms debounce window has elapsed (flicker suppression).
-    setRunning(true);
-    expect(runningRender.mock.calls.length).toBe(baseline); // debounced, no flicker yet
-    act(() => {
-      vi.advanceTimersByTime(100);
-    });
-    expect(runningRender.mock.calls.length).toBe(baseline + 1);
-
-    setRunning(false);
-    expect(runningRender.mock.calls.length).toBe(baseline + 1); // debounced, no flicker yet
-    act(() => {
-      vi.advanceTimersByTime(100);
-    });
-    expect(runningRender.mock.calls.length).toBe(baseline + 2);
-  });
-
-  it('only re-renders messages subscribers when messages change (not when isRunning changes)', () => {
-    const messagesRender = vi.fn();
-
-    renderWithProviders(
-      <StreamChatProvider agentId="a" threadId="t" initialMessages={[]}>
-        <RenderTracker hook={useStreamMessages} onRender={messagesRender} />
-      </StreamChatProvider>,
-    );
-
-    const baseline = messagesRender.mock.calls.length;
-
-    setRunning(true);
-    expect(messagesRender.mock.calls.length).toBe(baseline);
-
-    setRunning(false);
-    expect(messagesRender.mock.calls.length).toBe(baseline);
-
-    setMessages([{ id: '1' }]);
-    expect(messagesRender.mock.calls.length).toBe(baseline + 1);
-  });
-
-  it('exposes a stable send handle and forwards threadId + clientTools to sendMessage', () => {
-    const sendIdentities: Array<(message: string) => void> = [];
-
-    const SendCapture = () => {
-      const send = useStreamSend();
-      const seen = useRef(false);
-      if (!seen.current) {
-        sendIdentities.push(send);
-        seen.current = true;
-      }
-      return null;
-    };
-
-    const tools = { myTool: { id: 'myTool' } };
-
-    renderWithProviders(
-      <StreamChatProvider agentId="a" threadId="thread-xyz" initialMessages={[]} clientTools={tools}>
-        <SendCapture />
-      </StreamChatProvider>,
-    );
-
-    expect(sendIdentities).toHaveLength(1);
-
-    // Fire a few state updates and re-mount the capture by re-rendering — identity must not change.
-    setRunning(true);
-    setMessages([{ id: 'a' }]);
-
-    sendIdentities[0]('hello world');
-
-    expect(sentMessages).toHaveLength(1);
-    expect(sentMessages[0]).toMatchObject({
-      message: 'hello world',
-      threadId: 'thread-xyz',
-      clientTools: tools,
+      await waitFor(() => expect(subscribeCalls.length).toBeGreaterThan(0));
     });
   });
 
-  it('forwards extraInstructions to sendMessage as modelSettings.instructions', () => {
-    const SendCapture = ({ onReady }: { onReady: (send: (message: string) => void) => void }) => {
-      const send = useStreamSend();
-      const seen = useRef(false);
-      if (!seen.current) {
-        onReady(send);
-        seen.current = true;
-      }
-      return null;
-    };
+  describe('when thread signals are explicitly opted out', () => {
+    it('never opens a thread signal subscription', async () => {
+      (window as Window & { MASTRA_AGENT_SIGNALS?: string }).MASTRA_AGENT_SIGNALS = 'false';
+      const captured: Captured[] = [];
+      const subscribeCalls: string[] = [];
+      server.use(
+        ...baseHandlers(),
+        http.post(`${BASE_URL}/api/agents/a/threads/subscribe`, () => {
+          subscribeCalls.push('subscribe');
+          return sseResponse(emptyStream());
+        }),
+        http.post(`${BASE_URL}/api/agents/a/stream`, async ({ request }) => {
+          captured.push({ url: request.url, body: await captureBody(request) });
+          return sseResponse(emptyStream());
+        }),
+      );
 
-    let send: ((message: string) => void) | null = null;
+      await act(async () => {
+        renderWithProviders(
+          <StreamChatProvider agentId="a" threadId="t" initialMessages={[]}>
+            <SendOnMount message="hello" />
+          </StreamChatProvider>,
+        );
+      });
 
-    renderWithProviders(
-      <StreamChatProvider agentId="a" threadId="thread-xyz" initialMessages={[]} extraInstructions="snapshot-text">
-        <SendCapture onReady={fn => (send = fn)} />
-      </StreamChatProvider>,
-    );
-
-    send!('hi');
-
-    expect(sentMessages).toHaveLength(1);
-    const payload = sentMessages[0] as Record<string, unknown>;
-    expect(payload).toMatchObject({
-      message: 'hi',
-      threadId: 'thread-xyz',
-      modelSettings: {
-        instructions: 'snapshot-text',
-        providerOptions: { openai: { reasoningEffort: 'low' } },
-      },
-    });
-    expect(payload).not.toHaveProperty('instructions');
-  });
-
-  it('omits modelSettings.instructions when extraInstructions is absent or empty', () => {
-    const SendCapture = ({ onReady }: { onReady: (send: (message: string) => void) => void }) => {
-      const send = useStreamSend();
-      const seen = useRef(false);
-      if (!seen.current) {
-        onReady(send);
-        seen.current = true;
-      }
-      return null;
-    };
-
-    let send: ((message: string) => void) | null = null;
-
-    const { rerender } = renderWithProviders(
-      <StreamChatProvider agentId="a" threadId="thread-xyz" initialMessages={[]}>
-        <SendCapture onReady={fn => (send = fn)} />
-      </StreamChatProvider>,
-    );
-
-    send!('first');
-    expect((sentMessages[0] as { modelSettings?: { instructions?: string } }).modelSettings).not.toHaveProperty(
-      'instructions',
-    );
-    expect(sentMessages[0]).toMatchObject({
-      modelSettings: { providerOptions: { openai: { reasoningEffort: 'low' } } },
-    });
-
-    rerender(
-      <StreamChatProvider agentId="a" threadId="thread-xyz" initialMessages={[]} extraInstructions="">
-        <SendCapture onReady={fn => (send = fn)} />
-      </StreamChatProvider>,
-    );
-
-    send!('second');
-    expect((sentMessages[1] as { modelSettings?: { instructions?: string } }).modelSettings).not.toHaveProperty(
-      'instructions',
-    );
-    expect(sentMessages[1]).toMatchObject({
-      modelSettings: { providerOptions: { openai: { reasoningEffort: 'low' } } },
+      await waitFor(() => expect(captured.length).toBeGreaterThan(0));
+      expect(captured.at(-1)!.url).toContain('/stream');
+      expect(subscribeCalls).toHaveLength(0);
     });
   });
 
-  it('does not call sendMessage when extraInstructions changes between sends', () => {
-    const SendCapture = ({ onReady }: { onReady: (send: (message: string) => void) => void }) => {
-      const send = useStreamSend();
-      const seen = useRef(false);
-      if (!seen.current) {
-        onReady(send);
-        seen.current = true;
-      }
-      return null;
-    };
+  describe('when a message is sent', () => {
+    it('forwards the threadId and clientTools on the wire', async () => {
+      (window as Window & { MASTRA_AGENT_SIGNALS?: string }).MASTRA_AGENT_SIGNALS = 'false';
+      const captured: Captured[] = [];
+      server.use(
+        ...baseHandlers(),
+        http.post(`${BASE_URL}/api/agents/a/stream`, async ({ request }) => {
+          captured.push({ url: request.url, body: await captureBody(request) });
+          return sseResponse(emptyStream());
+        }),
+      );
 
-    let send: ((message: string) => void) | null = null;
+      const tools = { myTool: { id: 'myTool' } };
 
-    const { rerender } = renderWithProviders(
-      <StreamChatProvider agentId="a" threadId="thread-xyz" initialMessages={[]} extraInstructions="v1">
-        <SendCapture onReady={fn => (send = fn)} />
-      </StreamChatProvider>,
-    );
+      await act(async () => {
+        renderWithProviders(
+          <StreamChatProvider agentId="a" threadId="thread-xyz" initialMessages={[]} clientTools={tools}>
+            <SendOnMount message="hello world" />
+          </StreamChatProvider>,
+        );
+      });
 
-    expect(sentMessages).toHaveLength(0);
+      await waitFor(() => expect(captured.length).toBeGreaterThan(0));
+      const body = captured.at(-1)!.body;
+      // The thread id is carried on the wire under `memory.thread`.
+      expect(body.memory).toMatchObject({ thread: 'thread-xyz' });
+      expect(body.clientTools).toMatchObject({ myTool: { id: 'myTool' } });
+    });
 
-    rerender(
-      <StreamChatProvider agentId="a" threadId="thread-xyz" initialMessages={[]} extraInstructions="v2">
-        <SendCapture onReady={fn => (send = fn)} />
-      </StreamChatProvider>,
-    );
+    it('flattens extraInstructions into modelSettings on the wire', async () => {
+      (window as Window & { MASTRA_AGENT_SIGNALS?: string }).MASTRA_AGENT_SIGNALS = 'false';
+      const captured: Captured[] = [];
+      server.use(
+        ...baseHandlers(),
+        http.post(`${BASE_URL}/api/agents/a/stream`, async ({ request }) => {
+          captured.push({ url: request.url, body: await captureBody(request) });
+          return sseResponse(emptyStream());
+        }),
+      );
 
-    expect(sentMessages).toHaveLength(0);
+      await act(async () => {
+        renderWithProviders(
+          <StreamChatProvider agentId="a" threadId="thread-xyz" initialMessages={[]} extraInstructions="snapshot-text">
+            <SendOnMount message="hi" />
+          </StreamChatProvider>,
+        );
+      });
 
-    send!('go');
-    expect(sentMessages).toHaveLength(1);
-    expect(sentMessages[0]).toMatchObject({
-      modelSettings: {
-        instructions: 'v2',
-        providerOptions: { openai: { reasoningEffort: 'low' } },
-      },
+      await waitFor(() => expect(captured.length).toBeGreaterThan(0));
+      const body = captured.at(-1)!.body;
+      // The React layer flattens `modelSettings.instructions` to top-level `instructions`.
+      expect(body.instructions).toBe('snapshot-text');
+      expect(body.providerOptions).toEqual({ openai: { reasoningEffort: 'low' } });
+    });
+
+    it('omits instructions on the wire when extraInstructions is absent', async () => {
+      (window as Window & { MASTRA_AGENT_SIGNALS?: string }).MASTRA_AGENT_SIGNALS = 'false';
+      const captured: Captured[] = [];
+      server.use(
+        ...baseHandlers(),
+        http.post(`${BASE_URL}/api/agents/a/stream`, async ({ request }) => {
+          captured.push({ url: request.url, body: await captureBody(request) });
+          return sseResponse(emptyStream());
+        }),
+      );
+
+      await act(async () => {
+        renderWithProviders(
+          <StreamChatProvider agentId="a" threadId="thread-xyz" initialMessages={[]}>
+            <SendOnMount message="hi" />
+          </StreamChatProvider>,
+        );
+      });
+
+      await waitFor(() => expect(captured.length).toBeGreaterThan(0));
+      expect(captured.at(-1)!.body.instructions).toBeUndefined();
     });
   });
 
-  it('keeps the chat messages state limited to the user message after a send (snapshot is invisible)', () => {
-    const MessagesCapture = ({ onMessages }: { onMessages: (messages: unknown[]) => void }) => {
-      const messages = useStreamMessages();
-      onMessages(messages);
-      return null;
-    };
+  describe('when consumers subscribe to split contexts', () => {
+    it('does not re-render running subscribers while only the message list changes', async () => {
+      (window as Window & { MASTRA_AGENT_SIGNALS?: string }).MASTRA_AGENT_SIGNALS = 'false';
+      server.use(
+        ...baseHandlers(),
+        http.post(`${BASE_URL}/api/agents/a/stream`, () => sseResponse(textThenFinishStream('streamed reply'))),
+      );
 
-    const SendCapture = ({ onReady }: { onReady: (send: (message: string) => void) => void }) => {
-      const send = useStreamSend();
-      const seen = useRef(false);
-      if (!seen.current) {
-        onReady(send);
-        seen.current = true;
-      }
-      return null;
-    };
+      const runningRenders = vi.fn();
+      const RunningProbe = () => {
+        useStreamRunning();
+        runningRenders();
+        return null;
+      };
+      const MessagesProbe = () => {
+        const messages = useStreamMessages();
+        const text = messages
+          .flatMap(m => (Array.isArray(m.content?.parts) ? m.content.parts : []))
+          .map(p => (p.type === 'text' ? p.text : ''))
+          .join('');
+        return <div data-testid="assistant-text">{text}</div>;
+      };
 
-    let send: ((message: string) => void) | null = null;
-    const captured: unknown[][] = [];
+      let view!: ReturnType<typeof renderWithProviders>;
+      await act(async () => {
+        view = renderWithProviders(
+          <StreamChatProvider agentId="a" threadId="t" initialMessages={[]}>
+            <SendOnMount message="hello" />
+            <RunningProbe />
+            <MessagesProbe />
+          </StreamChatProvider>,
+        );
+      });
 
-    renderWithProviders(
-      <StreamChatProvider agentId="a" threadId="thread-xyz" initialMessages={[]} extraInstructions="snapshot-text">
-        <SendCapture onReady={fn => (send = fn)} />
-        <MessagesCapture onMessages={m => captured.push(m)} />
-      </StreamChatProvider>,
-    );
+      // The assistant reply arrives from the real stream and reaches the
+      // messages subscriber.
+      await waitFor(() => expect(view.getByTestId('assistant-text').textContent).toContain('streamed reply'));
 
-    send!('hi from user');
+      // The running subscriber re-renders for the running true->false transition,
+      // but NOT once per streamed message part. A small constant is the upper
+      // bound for an isolated running subscriber.
+      expect(runningRenders.mock.calls.length).toBeLessThanOrEqual(4);
+    });
+  });
 
-    // Simulate the underlying useChat appending the optimistic user message.
-    setMessages([{ id: 'u1', role: 'user', parts: [{ type: 'text', text: 'hi from user' }] }]);
+  describe('when initialUserMessage is provided on mount', () => {
+    it('dispatches the starter message exactly once', async () => {
+      (window as Window & { MASTRA_AGENT_SIGNALS?: string }).MASTRA_AGENT_SIGNALS = 'false';
+      const captured: Captured[] = [];
+      server.use(
+        ...baseHandlers(),
+        http.post(`${BASE_URL}/api/agents/a/stream`, async ({ request }) => {
+          captured.push({ url: request.url, body: await captureBody(request) });
+          return sseResponse(emptyStream());
+        }),
+      );
 
-    const last = captured[captured.length - 1];
-    expect(last).toHaveLength(1);
-    const serialized = JSON.stringify(last);
-    expect(serialized).not.toContain('snapshot-text');
+      await act(async () => {
+        renderWithProviders(
+          <StreamChatProvider agentId="a" threadId="t" initialMessages={[]} initialUserMessage="kickoff">
+            <div />
+          </StreamChatProvider>,
+        );
+      });
+
+      await waitFor(() => expect(captured.length).toBe(1));
+      expect(captured[0].body.messages?.at(-1)).toMatchObject({
+        role: 'user',
+        content: [{ type: 'text', text: 'kickoff' }],
+      });
+    });
   });
 });

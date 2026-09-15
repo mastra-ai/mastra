@@ -4,6 +4,16 @@ import { join } from 'node:path';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 
 let closeHandler: (() => void) | undefined;
+let archiveInstance:
+  | {
+      glob: ReturnType<typeof vi.fn>;
+      append: ReturnType<typeof vi.fn>;
+    }
+  | undefined;
+
+vi.mock('../../utils/detect-project-type.js', () => ({
+  detectProjectType: vi.fn().mockResolvedValue(undefined),
+}));
 
 vi.mock('node:fs', async importOriginal => {
   const actual = await importOriginal<Record<string, unknown>>();
@@ -101,14 +111,19 @@ vi.mock('@clack/prompts', () => ({
 }));
 
 vi.mock('archiver', () => ({
-  default: vi.fn(() => ({
-    on: vi.fn(),
-    pipe: vi.fn(),
-    glob: vi.fn(),
-    finalize: vi.fn(async () => {
-      closeHandler?.();
-    }),
-  })),
+  ZipArchive: vi.fn(function () {
+    const archive = {
+      on: vi.fn(),
+      pipe: vi.fn(),
+      glob: vi.fn(),
+      append: vi.fn(),
+      finalize: vi.fn(async () => {
+        closeHandler?.();
+      }),
+    };
+    archiveInstance = archive;
+    return archive;
+  }),
 }));
 
 vi.mock('node:fs/promises', async importOriginal => {
@@ -477,6 +492,32 @@ describe('readEnvVars', () => {
   });
 });
 
+describe('getDeployEnvFiles', () => {
+  it('returns an empty list when no .env* files exist (unified deploy uses this to fall back to environment-stored env vars)', async () => {
+    const { readdir } = await import('node:fs/promises');
+    vi.mocked(readdir).mockResolvedValue([] as Awaited<ReturnType<typeof readdir>>);
+
+    const { getDeployEnvFiles } = await import('./deploy.js');
+
+    await expect(getDeployEnvFiles('/project')).resolves.toEqual([]);
+  });
+
+  it('returns sorted deploy env files, excluding .example and .env.schema files', async () => {
+    const { readdir } = await import('node:fs/promises');
+    vi.mocked(readdir).mockResolvedValue([
+      { name: '.env.production', isFile: () => true, isSymbolicLink: () => false },
+      { name: '.env.example', isFile: () => true, isSymbolicLink: () => false },
+      { name: '.env.schema', isFile: () => true, isSymbolicLink: () => false },
+      { name: '.env', isFile: () => true, isSymbolicLink: () => false },
+      { name: 'package.json', isFile: () => true, isSymbolicLink: () => false },
+    ] as unknown as Awaited<ReturnType<typeof readdir>>);
+
+    const { getDeployEnvFiles } = await import('./deploy.js');
+
+    await expect(getDeployEnvFiles('/project')).resolves.toEqual(['.env', '.env.production']);
+  });
+});
+
 describe('deployAction', () => {
   it('passes disablePlatformObservability to uploadDeploy and preserves it when saving config', async () => {
     const { access, readdir, readFile, stat } = await import('node:fs/promises');
@@ -613,6 +654,63 @@ describe('deployAction', () => {
         projectName: 'my-app',
         envVars: { API_KEY: 'test' },
         disablePlatformObservability: false,
+      }),
+    );
+  });
+
+  it('deploys without a local env file and sends no envVars payload (platform-stored vars win)', async () => {
+    const { access, readdir, readFile, stat } = await import('node:fs/promises');
+    const { fetchOrgs } = await import('../auth/api.js');
+    const { getCurrentOrgId, getToken } = await import('../auth/credentials.js');
+    const { fetchProjects, uploadDeploy, pollDeploy } = await import('./platform-api.js');
+    const { loadProjectConfig } = await import('./project-config.js');
+
+    vi.mocked(getToken).mockResolvedValue('test-token');
+    vi.mocked(getCurrentOrgId).mockResolvedValue('org-1');
+    vi.mocked(access).mockResolvedValue(undefined);
+    vi.mocked(stat).mockResolvedValue({ size: 1024 } as Awaited<ReturnType<typeof stat>>);
+    vi.mocked(fetchOrgs).mockResolvedValue([{ id: 'org-1', name: 'Test Org', role: 'admin', isCurrent: true }]);
+    vi.mocked(fetchProjects).mockResolvedValue([
+      {
+        id: 'proj-1',
+        name: 'my-app',
+        slug: 'my-app',
+        organizationId: 'org-1',
+        latestDeployId: null,
+        latestDeployStatus: null,
+        instanceUrl: null,
+        createdAt: null,
+        updatedAt: null,
+      },
+    ]);
+    vi.mocked(uploadDeploy).mockResolvedValue({ id: 'deploy-1', status: 'starting' });
+    vi.mocked(pollDeploy).mockResolvedValue({
+      id: 'deploy-1',
+      status: 'running',
+      instanceUrl: 'https://example.com',
+      error: null,
+    });
+    vi.mocked(loadProjectConfig).mockResolvedValue({
+      organizationId: 'org-1',
+      projectId: 'proj-1',
+      projectName: 'my-app',
+      projectSlug: 'my-app',
+    });
+    // No .env* files in the project dir.
+    vi.mocked(readdir).mockResolvedValue([] as Awaited<ReturnType<typeof readdir>>);
+    vi.mocked(readFile).mockResolvedValue(Buffer.from('zip-data'));
+
+    const { deployAction } = await import('./deploy.js');
+
+    await expect(deployAction(undefined, { yes: true, skipBuild: true })).resolves.toBeUndefined();
+
+    expect(uploadDeploy).toHaveBeenCalledWith(
+      'test-token',
+      'org-1',
+      'proj-1',
+      expect.any(Buffer),
+      expect.objectContaining({
+        envVars: undefined,
       }),
     );
   });
@@ -772,5 +870,37 @@ describe('resolveProject (studio)', () => {
     await expect(deployAction(undefined, { yes: true })).rejects.not.toThrow(/Pass --project/);
 
     expect(prompts.select).not.toHaveBeenCalled();
+  });
+});
+
+// ─── legacy workers-manifest strip ──────────────────────────────────────
+// Studio deploys must never ship a worker manifest — only the unified
+// `mastra deploy` flow may trigger worker-service provisioning. The strip
+// decision lives in `utils/workers-manifest-guard.ts` (tested there); these
+// tests cover the archive-side override mechanics.
+
+describe('worker manifest archive override', () => {
+  it('replaces workers.json only inside the uploaded archive', async () => {
+    const { zipOutput } = await import('./deploy.js');
+
+    await zipOutput('/project', 'null');
+
+    expect(archiveInstance?.glob).toHaveBeenCalledWith(
+      '**',
+      expect.objectContaining({ ignore: ['node_modules/**', 'workers.json'] }),
+      { prefix: 'output' },
+    );
+    expect(archiveInstance?.append).toHaveBeenCalledWith('null', { name: 'output/workers.json' });
+  });
+
+  it('leaves the archive untouched when no override is given', async () => {
+    const { zipOutput } = await import('./deploy.js');
+
+    await zipOutput('/project');
+
+    expect(archiveInstance?.glob).toHaveBeenCalledWith('**', expect.objectContaining({ ignore: ['node_modules/**'] }), {
+      prefix: 'output',
+    });
+    expect(archiveInstance?.append).not.toHaveBeenCalled();
   });
 });

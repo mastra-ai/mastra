@@ -2,7 +2,6 @@ import { readFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import { basename } from 'node:path/posix';
 import { ErrorCategory, ErrorDomain, MastraBaseError } from '@mastra/core/error';
-import type { Config } from '@mastra/core/mastra';
 import { optimizeLodashImports } from '@optimize-lodash/rollup-plugin';
 import commonjs from '@rollup/plugin-commonjs';
 import json from '@rollup/plugin-json';
@@ -31,7 +30,8 @@ import {
   slash,
 } from '../utils';
 import type { BundlerPlatform } from '../utils';
-import { DEPS_TO_IGNORE, GLOBAL_EXTERNALS, DEPRECATED_EXTERNALS } from './constants';
+import { DEPS_TO_IGNORE } from './constants';
+import type { NormalizedExternals } from './externals';
 
 type VirtualDependency = {
   name: string;
@@ -414,10 +414,20 @@ async function buildExternalDependencies(
  * Recursively searches through Rollup output chunks to find which module imports a specific external dependency.
  * Used to build the module resolution map for proper external dependency tracking.
  */
-function findExternalImporter(module: OutputChunk, external: string, allOutputs: OutputChunk[]): OutputChunk | null {
-  const capturedFiles = new Set();
+function findExternalImporter(
+  module: OutputChunk,
+  external: string,
+  allOutputs: OutputChunk[],
+  visited = new Set<string>(),
+): OutputChunk | null {
+  if (visited.has(module.fileName)) {
+    return null;
+  }
 
-  for (const id of module.imports) {
+  visited.add(module.fileName);
+  const capturedFiles = new Set<string>();
+
+  for (const id of [...module.imports, ...module.dynamicImports]) {
     if (isDependencyPartOfPackage(id, external)) {
       return module;
     } else {
@@ -430,7 +440,7 @@ function findExternalImporter(module: OutputChunk, external: string, allOutputs:
   for (const file of capturedFiles) {
     const nextModule = allOutputs.find(o => o.fileName === file);
     if (nextModule) {
-      const importer = findExternalImporter(nextModule, external, allOutputs);
+      const importer = findExternalImporter(nextModule, external, allOutputs, visited);
 
       if (importer) {
         return importer;
@@ -454,11 +464,10 @@ export async function bundleExternals(
   depsToOptimize: Map<string, DependencyMetadata>,
   outputDir: string,
   options: {
-    bundlerOptions?:
-      | ({
-          isDev?: boolean;
-        } & Config['bundler'])
-      | null;
+    bundlerOptions: NormalizedExternals & {
+      isDev?: boolean;
+      transpilePackages?: string[];
+    };
     projectRoot?: string;
     workspaceRoot?: string;
     workspaceMap?: Map<string, WorkspacePackageInfo>;
@@ -469,22 +478,10 @@ export async function bundleExternals(
     workspaceRoot = null,
     workspaceMap = new Map(),
     projectRoot = outputDir,
-    bundlerOptions = {},
+    bundlerOptions,
     platform = 'node',
   } = options;
-  const { externals: customExternals = [], transpilePackages = [], isDev = false } = bundlerOptions || {};
-  /**
-   * A user can set `externals: true` to indicate they want to externalize all dependencies. In this case, we set `externalsPreset` to true to skip bundling any externals.
-   */
-  let externalsPreset = false;
-
-  if (customExternals === true) {
-    externalsPreset = true;
-  }
-
-  // If `externals` is an array (and not `true`), we proceed as normal
-  const externalsList = Array.isArray(customExternals) ? customExternals : [];
-  const allExternals = [...GLOBAL_EXTERNALS, ...DEPRECATED_EXTERNALS, ...externalsList];
+  const { externalsPreset, mergedExternals, transpilePackages = [], isDev = false } = bundlerOptions;
 
   const workspacePackagesNames = Array.from(workspaceMap.keys());
   const packagesToTranspile = new Set([...transpilePackages, ...workspacePackagesNames]);
@@ -516,7 +513,7 @@ export async function bundleExternals(
   });
 
   const output = await buildExternalDependencies(optimizedDependencyEntries, {
-    externals: allExternals,
+    externals: mergedExternals,
     packagesToTranspile,
     workspaceMap,
     rootDir: workspaceRoot || projectRoot,
@@ -532,7 +529,7 @@ export async function bundleExternals(
   const filteredChunks = output.filter(o => o.type === 'chunk');
 
   for (const o of filteredChunks.filter(o => o.isEntry || o.isDynamicEntry)) {
-    for (const external of allExternals) {
+    for (const external of mergedExternals) {
       if (DEPS_TO_IGNORE.includes(external)) {
         continue;
       }

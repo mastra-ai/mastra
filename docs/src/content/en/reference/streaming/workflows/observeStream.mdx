@@ -1,6 +1,6 @@
 ---
 title: "Reference: Run.observeStream() | Streaming"
-description: Documentation for the `Run.observeStream()` method in workflows, which enables reopening the stream of an already active workflow run.
+description: "Use Run.observeStream() to reopen a ReadableStream for an active workflow run and continue observing events after the original stream is unavailable."
 packages:
   - "@mastra/core"
 ---
@@ -33,13 +33,13 @@ for await (const chunk of stream) {
 
 ## Stream events
 
-The stream emits various event types during workflow execution. Each event has a `type` field and a `payload` containing relevant data:
+The stream emits event types during workflow execution. Each event has a `type` field and a `payload` containing relevant data:
 
 - **`workflow-start`**: Workflow execution begins
 - **`workflow-step-start`**: A step begins execution
 - **`workflow-step-output`**: Custom output from a step
 - **`workflow-step-result`**: A step completes with results
-- **`workflow-finish`**: Workflow execution completes with usage statistics
+- **`workflow-finish`**: Workflow execution completes with usage statistics. For successful runs, `payload.finalWorkflowResult` carries the workflow's final result
 
 ## Related
 

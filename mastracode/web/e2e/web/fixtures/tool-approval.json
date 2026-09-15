@@ -1,0 +1,32 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "Write notes.txt with the text draft",
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_write_notes",
+            "name": "mastra_workspace_write_file",
+            "arguments": { "path": "notes.txt", "content": "draft" }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "toolCallId": "call_write_notes",
+        "hasToolResult": true
+      },
+      "response": {
+        "content": "Wrote notes.txt."
+      }
+    }
+  ]
+}

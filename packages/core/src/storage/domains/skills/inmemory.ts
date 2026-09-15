@@ -20,6 +20,7 @@ import type {
   SkillVersionSortDirection,
 } from './base';
 import { SkillsStorage } from './base';
+import { skillSnapshotFieldValuesEqual } from './skill-snapshot-field-equal';
 
 export class InMemorySkillsStorage extends SkillsStorage {
   private db: InMemoryDB;
@@ -172,8 +173,10 @@ export class InMemorySkillsStorage extends SkillsStorage {
       const changedFields = configFieldNames.filter(
         field =>
           field in configFields &&
-          JSON.stringify(configFields[field as keyof typeof configFields]) !==
-            JSON.stringify(latestConfig[field as keyof typeof latestConfig]),
+          !skillSnapshotFieldValuesEqual(
+            configFields[field as keyof typeof configFields],
+            latestConfig[field as keyof typeof latestConfig],
+          ),
       );
 
       // Only create a new version if something actually changed
@@ -221,6 +224,7 @@ export class InMemorySkillsStorage extends SkillsStorage {
 
     // Normalize perPage for query (false → MAX_SAFE_INTEGER, 0 → 0, undefined → 100)
     const perPage = normalizePerPage(perPageInput, 100);
+    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
     if (page < 0) {
       throw new Error('page must be >= 0');
@@ -290,8 +294,6 @@ export class InMemorySkillsStorage extends SkillsStorage {
 
     // Deep clone to avoid mutation
     const clonedConfigs = sortedConfigs.map(config => this.deepCopyConfig(config));
-
-    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
     return {
       skills: clonedConfigs.slice(offset, offset + perPage),

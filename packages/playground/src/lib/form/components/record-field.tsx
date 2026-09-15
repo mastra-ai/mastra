@@ -1,6 +1,7 @@
 import type { AutoFormFieldProps } from '@autoform/react';
 import { v4 as uuid } from '@lukeed/uuid';
-import { Button, Input } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Input } from '@mastra/playground-ui/components/Input';
 import { Plus, TrashIcon } from 'lucide-react';
 import * as React from 'react';
 
@@ -72,11 +73,11 @@ export const RecordField: React.FC<AutoFormFieldProps> = ({ inputProps, field })
     <div className="space-y-3">
       {pairs.map(pair => (
         <div key={pair.id} className="relative space-y-2 rounded-lg border p-4">
-          <Button type="button" className="absolute right-2 top-2" onClick={() => removePair(pair.id)}>
+          <Button type="button" className="absolute top-2 right-2" onClick={() => removePair(pair.id)}>
             <TrashIcon className="h-4 w-4" />
           </Button>
 
-          <div className="space-y-2 pt-6">
+          <div className="space-y-2 pt-4">
             <Input
               placeholder="Key"
               value={pair.key}
@@ -92,8 +93,7 @@ export const RecordField: React.FC<AutoFormFieldProps> = ({ inputProps, field })
           </div>
         </div>
       ))}
-      <Button type="button" className="w-full" onClick={addPair}>
-        <Plus className="mr-2 h-4 w-4" />
+      <Button type="button" className="w-full" onClick={addPair} icon={<Plus />}>
         Add Key-Value Pair
       </Button>
     </div>

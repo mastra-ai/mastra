@@ -16,8 +16,10 @@ import {
   GET_PROVIDERS_ROUTE,
   APPROVE_TOOL_CALL_ROUTE,
   SEND_TOOL_APPROVAL_ROUTE,
+  LIST_SUSPENDED_RUNS_ROUTE,
   DECLINE_TOOL_CALL_ROUTE,
   RESUME_STREAM_ROUTE,
+  RECOVER_ROUTE,
   APPROVE_TOOL_CALL_GENERATE_ROUTE,
   DECLINE_TOOL_CALL_GENERATE_ROUTE,
   STREAM_NETWORK_ROUTE,
@@ -35,6 +37,7 @@ import {
   STREAM_UNTIL_IDLE_GENERATE_ROUTE,
   RESUME_STREAM_UNTIL_IDLE_ROUTE,
 } from '../../handlers/agents';
+import { READ_AGENT_PLAN_ROUTE } from '../../handlers/plans';
 import { GET_AGENT_TOOL_ROUTE, EXECUTE_AGENT_TOOL_ROUTE } from '../../handlers/tools';
 import {
   GET_SPEAKERS_ROUTE,
@@ -87,8 +90,10 @@ export const AGENTS_ROUTES: readonly ServerRoute[] = [
   EXECUTE_AGENT_TOOL_ROUTE,
   APPROVE_TOOL_CALL_ROUTE,
   SEND_TOOL_APPROVAL_ROUTE,
+  LIST_SUSPENDED_RUNS_ROUTE,
   DECLINE_TOOL_CALL_ROUTE,
   RESUME_STREAM_ROUTE,
+  RECOVER_ROUTE,
   APPROVE_TOOL_CALL_GENERATE_ROUTE,
   DECLINE_TOOL_CALL_GENERATE_ROUTE,
   APPROVE_NETWORK_TOOL_CALL_ROUTE,
@@ -117,6 +122,7 @@ export const AGENTS_ROUTES: readonly ServerRoute[] = [
   // Agent Tool Routes
   // ============================================================================
   GET_AGENT_TOOL_ROUTE,
+  READ_AGENT_PLAN_ROUTE,
 
   // ============================================================================
   // Agent Skill Routes
@@ -164,8 +170,10 @@ export type AgentRoutes = readonly [
   typeof EXECUTE_AGENT_TOOL_ROUTE,
   typeof APPROVE_TOOL_CALL_ROUTE,
   typeof SEND_TOOL_APPROVAL_ROUTE,
+  typeof LIST_SUSPENDED_RUNS_ROUTE,
   typeof DECLINE_TOOL_CALL_ROUTE,
   typeof RESUME_STREAM_ROUTE,
+  typeof RECOVER_ROUTE,
   typeof RESUME_STREAM_UNTIL_IDLE_ROUTE,
   typeof APPROVE_TOOL_CALL_GENERATE_ROUTE,
   typeof DECLINE_TOOL_CALL_GENERATE_ROUTE,
@@ -178,6 +186,7 @@ export type AgentRoutes = readonly [
   typeof UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE,
   typeof ENHANCE_INSTRUCTIONS_ROUTE,
   typeof GET_AGENT_TOOL_ROUTE,
+  typeof READ_AGENT_PLAN_ROUTE,
   typeof GET_AGENT_SKILL_ROUTE,
   typeof GENERATE_SPEECH_ROUTE,
   typeof GENERATE_SPEECH_DEPRECATED_ROUTE,

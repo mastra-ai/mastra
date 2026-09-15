@@ -2,7 +2,7 @@ import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import type { LanguageModelV1Prompt, CoreMessage as CoreMessageV4 } from '@internal/ai-sdk-v4';
 
 import { convertDataContentToBase64String } from '../prompt/data-content';
-import { categorizeFileData, createDataUri } from '../prompt/image-utils';
+import { categorizeFileData } from '../prompt/image-utils';
 import type { AIV5Type } from '../types';
 import { sanitizeToolName } from '../utils/tool-name';
 
@@ -98,15 +98,27 @@ export function aiV4CoreMessageToV1PromptMessage(coreMessage: CoreMessageV4): La
         } else if (Buffer.isBuffer(part.image) || part.image instanceof ArrayBuffer) {
           processedImage = new Uint8Array(part.image);
         } else {
-          // part.image is a string - could be a URL, data URI, or raw base64
+          // part.image is a string - could be a URL, data URI, raw base64, or a
+          // provider file ID (e.g. OpenAI "file-...")
           const categorized = categorizeFileData(part.image, part.mimeType);
 
           if (categorized.type === 'raw') {
-            // Raw base64 - convert to data URI before creating URL
-            const dataUri = createDataUri(part.image, part.mimeType || 'image/png');
-            processedImage = new URL(dataUri);
+            // Raw base64 — keep as Uint8Array so providers receive raw bytes
+            // and don't double-wrap in a data URI (e.g. Gemini inline_data.data)
+            processedImage = new Uint8Array(Buffer.from(part.image, 'base64'));
+          } else if (categorized.type === 'providerFileId') {
+            // Provider file IDs (e.g. OpenAI "file-...") are not parseable URLs and
+            // can't be expressed as a V1 image part. Emit a file part instead so the
+            // ID survives untouched and providers can forward it by reference.
+            const { image: _image, type: _type, ...rest } = part;
+            roleContent[role].push({
+              ...rest,
+              type: 'file',
+              data: part.image,
+              mimeType: categorized.mimeType || 'application/octet-stream',
+            });
+            break;
           } else {
-            // It's already a URL or data URI
             processedImage = new URL(part.image);
           }
         }
@@ -195,7 +207,12 @@ export function aiV5ModelMessageToV2PromptMessage(modelMessage: AIV5Type.ModelMe
 
   const role = modelMessage.role;
 
-  for (const part of modelMessage.content) {
+  for (const part of modelMessage.content ?? []) {
+    // Defensive: upstream rewrites (e.g. observational memory) have produced sparse
+    // content arrays in production. A hole here would crash the provider converter
+    // with an unattributable "Cannot read properties of undefined (reading 'type')".
+    if (!part || typeof part !== 'object') continue;
+
     const incompatibleMessage = `Saw incompatible message content part type ${part.type} for message role ${role}`;
 
     switch (part.type) {
@@ -233,6 +250,10 @@ export function aiV5ModelMessageToV2PromptMessage(modelMessage: AIV5Type.ModelMe
         roleContent[role].push({
           ...part,
           toolName: sanitizeToolName(part.toolName),
+          // Providers read `output.type` unguarded (e.g. @ai-sdk/openai-compatible).
+          // An output-less tool result (lost result chunk, OM rewrite) must still
+          // present a valid LanguageModelV2ToolResultOutput shape.
+          output: part.output ?? { type: 'json', value: null },
         });
         break;
       }
@@ -285,4 +306,68 @@ export function aiV5ModelMessageToV2PromptMessage(modelMessage: AIV5Type.ModelMe
   throw new Error(
     `Encountered unknown role ${role} when converting V5 ModelMessage -> V5 LanguageModelV2Message, input message: ${JSON.stringify(modelMessage, null, 2)}`,
   );
+}
+
+/**
+ * Convert tool-result `media` parts in a V2 (AI SDK v5 / spec `v2`) prompt
+ * using a caller-provided target content-part shape.
+ *
+ * Mastra's `toModelOutput` and the vendored AI SDK v5 use `{ type: 'media' }`
+ * as the authored multimodal tool-result content type. Newer AI SDK provider
+ * specs use different content-part shapes, so callers provide the target
+ * conversion for their provider spec.
+ */
+function convertToolResultContent(
+  prompt: LanguageModelV2Prompt,
+  convertMediaPart: (contentPart: Record<string, unknown>, mediaType: string) => unknown,
+): LanguageModelV2Prompt {
+  return prompt.map(message => {
+    if (message.role !== `tool`) return message;
+
+    let messageModified = false;
+    const content = message.content.map(part => {
+      if (part.type !== `tool-result`) return part;
+      const output = part.output as { type?: unknown; value?: unknown } | undefined;
+      if (!output || output.type !== `content` || !Array.isArray(output.value)) return part;
+
+      let outputModified = false;
+      const value = (output.value as unknown[]).map(item => {
+        if (item == null || typeof item !== `object`) return item;
+        const contentPart = item as Record<string, unknown>;
+        if (contentPart.type !== `media` || typeof contentPart.data !== `string`) return item;
+        outputModified = true;
+        const mediaType = typeof contentPart.mediaType === `string` ? contentPart.mediaType : ``;
+        return convertMediaPart(contentPart, mediaType);
+      });
+
+      if (!outputModified) return part;
+      messageModified = true;
+      return { ...part, output: { ...output, value } };
+    });
+
+    return messageModified ? { ...message, content } : message;
+  }) as LanguageModelV2Prompt;
+}
+
+/**
+ * Convert v5-authored media tool results to the `image-data`/`file-data` shape
+ * expected only by AI SDK v6 (`v3`) providers. V5 providers accept `media`, and
+ * V7 providers expect `file` parts with tagged data instead.
+ *
+ * See: https://github.com/mastra-ai/mastra/issues/17876
+ */
+export function aiV5PromptToAIV6Prompt(prompt: LanguageModelV2Prompt): LanguageModelV2Prompt {
+  return convertToolResultContent(prompt, (contentPart, mediaType) =>
+    mediaType.startsWith(`image/`)
+      ? { type: `image-data`, data: contentPart.data, mediaType }
+      : { type: `file-data`, data: contentPart.data, mediaType },
+  );
+}
+
+export function aiV5PromptToAIV7Prompt(prompt: LanguageModelV2Prompt): LanguageModelV2Prompt {
+  return convertToolResultContent(prompt, (contentPart, mediaType) => ({
+    type: `file`,
+    data: { type: `data`, data: contentPart.data },
+    mediaType,
+  }));
 }

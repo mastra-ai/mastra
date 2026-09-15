@@ -9,6 +9,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { openai as openai_v5 } from '@ai-sdk/openai-v5';
 import { openai as openai_v6 } from '@ai-sdk/openai-v6';
+import { openai as openai_v7 } from '@ai-sdk/openai-v7';
 import { getLLMTestMode } from '@internal/llm-recorder';
 import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
 import { describe, expect, it, beforeAll, afterAll, vi } from 'vitest';
@@ -110,6 +111,7 @@ describe('Workspace tools with OpenAI strict mode', { timeout: 300_000 }, () => 
     { name: 'gpt-5.2 (v5)', model: openai_v5('gpt-5.2'), sdk: openai_v5 },
     { name: 'gpt-4o (v5)', model: openai_v5('gpt-4o'), sdk: openai_v5 },
     { name: 'gpt-4o (v6)', model: openai_v6('gpt-4o'), sdk: openai_v6 },
+    { name: 'gpt-4o (v7)', model: openai_v7('gpt-4o'), sdk: openai_v7 },
   ];
 
   for (const { name, model, sdk } of models) {

@@ -10,13 +10,15 @@ import {
   isConnectionStringConfig,
   isHostConfig,
   isPoolConfig,
+  isWritePoolConfig,
 } from '../shared/config';
 import type { PostgresStoreConfig } from '../shared/config';
 import { buildConnectionStringPoolConfig } from '../shared/pool-config';
-import { PoolAdapter } from './client';
-import type { DbClient } from './client';
+import { PinnedClientAdapter, PoolAdapter, RoutingDbClient } from './client';
+import type { DbClient, PoolClient } from './client';
 import type { PgDomainClientConfig } from './db';
 import { getSchemaName } from './db';
+import { loadSchemaSnapshot } from './db/schema-snapshot';
 import { AgentsPG } from './domains/agents';
 import { BackgroundTasksPG } from './domains/background-tasks';
 import { BlobsPG } from './domains/blobs';
@@ -24,6 +26,7 @@ import { ChannelsPG } from './domains/channels';
 import { DatasetsPG } from './domains/datasets';
 import { ExperimentsPG } from './domains/experiments';
 import { FavoritesPG } from './domains/favorites';
+import { KnowledgePG } from './domains/knowledge';
 import { MCPClientsPG } from './domains/mcp-clients';
 import { MCPServersPG } from './domains/mcp-servers';
 import { MemoryPG } from './domains/memory';
@@ -36,7 +39,9 @@ import { SchedulesPG } from './domains/schedules';
 import { ScorerDefinitionsPG } from './domains/scorer-definitions';
 import { ScoresPG } from './domains/scores';
 import { SkillsPG } from './domains/skills';
+import { ThreadStatePG } from './domains/thread-state';
 import { ToolProviderConnectionsPG } from './domains/tool-provider-connections';
+import { WorkflowDefinitionsPG } from './domains/workflow-definitions';
 import { WorkflowsPG } from './domains/workflows';
 import { WorkspacesPG } from './domains/workspaces';
 
@@ -91,6 +96,7 @@ function createHostPool(config: HostPoolConfig): Pool {
  */
 const ALL_DOMAINS = [
   MemoryPG,
+  KnowledgePG,
   NotificationsPG,
   ObservabilityPG,
   ScoresPG,
@@ -104,12 +110,14 @@ const ALL_DOMAINS = [
   BlobsPG,
   ToolProviderConnectionsPG,
   WorkflowsPG,
+  WorkflowDefinitionsPG,
   DatasetsPG,
   ExperimentsPG,
   BackgroundTasksPG,
   FavoritesPG,
   ChannelsPG,
   SchedulesPG,
+  ThreadStatePG,
 ] as const;
 
 /**
@@ -140,6 +148,7 @@ export {
   ChannelsPG,
   DatasetsPG,
   ExperimentsPG,
+  KnowledgePG,
   MCPClientsPG,
   MCPServersPG,
   MemoryPG,
@@ -152,14 +161,17 @@ export {
   SchedulesPG,
   SkillsPG,
   FavoritesPG,
+  ThreadStatePG,
   ToolProviderConnectionsPG,
   WorkflowsPG,
+  WorkflowDefinitionsPG,
   WorkspacesPG,
 };
 export type { VNextPostgresObservabilityConfig };
 export { PoolAdapter } from './client';
 export type { DbClient, TxClient, QueryValues, Pool, PoolClient, QueryResult } from './client';
 export type { PgDomainConfig, PgDomainClientConfig, PgDomainPoolConfig, PgDomainRestConfig } from './db';
+export { PgFactoryStorage, type PgFactoryStorageConfig } from './factory-storage';
 
 /**
  * PostgreSQL storage adapter for Mastra.
@@ -185,34 +197,49 @@ export type { PgDomainConfig, PgDomainClientConfig, PgDomainPoolConfig, PgDomain
  * ```
  */
 export class PostgresStore extends MastraCompositeStore {
-  #pool: Pool;
-  #db: DbClient;
-  #ownsPool: boolean;
-  #poolClosed: boolean = false;
+  #writePool: Pool;
+  #readPool: Pool;
+  // Narrowed to RoutingDbClient so init()'s pin/unpin path is type-checked.
+  // The public `db` getter still exposes it as DbClient.
+  #db: RoutingDbClient;
+  #readDb: DbClient;
+  #ownsWritePool: boolean;
+  #writePoolClosed: boolean = false;
   private schema: string;
   private isInitialized: boolean = false;
+  // Caches the in-flight init() so concurrent callers share one initialization
+  // instead of each acquiring + pinning a client. See init() / issue #18282.
+  #initPromise: Promise<void> | null = null;
 
   stores: StorageDomains;
 
   constructor(config: PostgresStoreConfig) {
     try {
       validateConfig('PostgresStore', config);
-      super({ id: config.id, name: 'PostgresStore', disableInit: config.disableInit });
+      super({ id: config.id, name: 'PostgresStore', disableInit: config.disableInit, retention: config.retention });
       // Validate schema name to prevent SQL injection
       this.schema = parseSqlIdentifier(config.schemaName || 'public', 'schema name');
 
       if (isPoolConfig(config)) {
-        this.#pool = config.pool;
-        this.#ownsPool = false;
+        this.#writePool = config.pool;
+        this.#ownsWritePool = false;
+      } else if (isWritePoolConfig(config)) {
+        this.#writePool = config.writePool;
+        this.#ownsWritePool = false;
       } else {
-        this.#pool = this.createPool(config);
-        this.#ownsPool = true;
+        this.#writePool = this.createPool(config);
+        this.#ownsWritePool = true;
       }
+      this.#readPool = config.readPool ?? this.#writePool;
 
-      this.#db = new PoolAdapter(this.#pool);
+      // Wrap the writer adapter in a routing client so init() can temporarily
+      // pin all DDL traffic to a single PoolClient. See PostgresStore.init().
+      this.#db = new RoutingDbClient(new PoolAdapter(this.#writePool));
+      this.#readDb = this.#readPool === this.#writePool ? this.#db : new PoolAdapter(this.#readPool);
 
       const domainConfig: PgDomainClientConfig = {
         client: this.#db,
+        readClient: this.#readDb,
         schemaName: this.schema,
         skipDefaultIndexes: config.skipDefaultIndexes,
         indexes: config.indexes,
@@ -221,7 +248,9 @@ export class PostgresStore extends MastraCompositeStore {
       this.stores = {
         scores: new ScoresPG(domainConfig),
         workflows: new WorkflowsPG(domainConfig),
+        workflowDefinitions: new WorkflowDefinitionsPG(domainConfig),
         memory: new MemoryPG(domainConfig),
+        knowledge: new KnowledgePG(domainConfig),
         notifications: new NotificationsPG(domainConfig),
         observability: new ObservabilityPG(domainConfig),
         agents: new AgentsPG(domainConfig),
@@ -239,6 +268,7 @@ export class PostgresStore extends MastraCompositeStore {
         backgroundTasks: new BackgroundTasksPG(domainConfig),
         channels: new ChannelsPG(domainConfig),
         schedules: new SchedulesPG(domainConfig),
+        threadState: new ThreadStatePG(domainConfig),
       };
     } catch (e) {
       throw new MastraError(
@@ -253,6 +283,27 @@ export class PostgresStore extends MastraCompositeStore {
   }
 
   private createPool(config: PostgresStoreConfig): Pool {
+    const pool = this.#buildPool(config);
+
+    // pg emits 'error' on the pool when an idle client's connection drops
+    // (backend restart, network partition, cloud proxies reaping idle
+    // sockets). Without a listener Node escalates the event to an
+    // uncaughtException and crashes the process. Only pools this store
+    // creates get the listener — a user-provided pool keeps the user's own
+    // listeners, mirroring close().
+    pool.on('error', err => {
+      this.logger?.warn?.(
+        'PostgresStore: idle pool client error (pool discards the client and reconnects on next checkout)',
+        {
+          err: err instanceof Error ? err.message : err,
+        },
+      );
+    });
+
+    return pool;
+  }
+
+  #buildPool(config: PostgresStoreConfig): Pool {
     if (isConnectionStringConfig(config)) {
       return createConnectionStringPool(config);
     }
@@ -269,15 +320,59 @@ export class PostgresStore extends MastraCompositeStore {
   }
 
   async init(): Promise<void> {
+    // Skip the pinned-init path entirely when initialization is disabled. The
+    // caller manages schema/migrations externally, so init() must not connect,
+    // pin, or run DDL. This also keeps the call-site contract in @mastra/core
+    // (which calls storage.init() directly and assumes it is "a no-op when
+    // disabled") true for Postgres. See issue #18282.
+    if (this.disableInit || process.env.MASTRA_DISABLE_STORAGE_INIT === 'true') {
+      return;
+    }
+
     if (this.isInitialized) {
       return;
     }
 
+    // Coalesce concurrent init() calls into a single in-flight promise. A
+    // PostgresStore shared across request-scoped Mastra instances can have
+    // init() invoked from several callers at once; without this guard both
+    // race past the `isInitialized` check and pin the RoutingDbClient twice,
+    // throwing "RoutingDbClient already has a pinned client" (issue #18282).
+    this.#initPromise ??= this.#runPinnedInit();
+    await this.#initPromise;
+  }
+
+  async #runPinnedInit(): Promise<void> {
+    // Acquire a single backend connection and pin every domain's DDL to it
+    // for the duration of init(). This avoids:
+    //   - per-statement pool.connect() RTT on remote/managed Postgres
+    //   - transaction-pooler budget exhaustion under concurrent DDL fan-out
+    //   - inter-statement lock contention across domains (issue #17679)
+    // Runtime queries continue to use the pool normally once init completes.
+    // connect() runs inside the try so a failing connection (e.g. a network
+    // blip during boot) is caught below and resets #initPromise, keeping
+    // init() retryable instead of permanently rejecting.
+    let pinnedClient: PoolClient | undefined;
+
     try {
-      this.isInitialized = true;
+      pinnedClient = await this.#writePool.connect();
+      const pinned = new PinnedClientAdapter(this.#writePool, pinnedClient);
+      this.#db.pin(pinned);
+      // Read the schema's catalog once, up front, so the domains below can
+      // answer "does this table/column/index already exist?" locally instead of
+      // asking the server ~350 times over this one serialized connection.
+      // Cleared in the finally: the snapshot never outlives init().
+      this.#db.setSchemaSnapshot(await loadSchemaSnapshot(pinned, this.schema));
       await super.init();
+      // Only mark initialized after schema creation actually finishes so a
+      // racing second init() caller can't return early and issue runtime
+      // queries against tables that aren't yet created.
+      this.isInitialized = true;
     } catch (error) {
-      this.isInitialized = false;
+      // Drop the cached promise so a transient failure (e.g. a network blip
+      // during boot) can be retried by a later init() call instead of
+      // permanently rejecting. Mirrors storageWithInit's cacheInit behavior.
+      this.#initPromise = null;
       // Rethrow MastraError directly to preserve structured error IDs (e.g., MIGRATION_REQUIRED::DUPLICATE_SPANS)
       if (error instanceof MastraError) {
         throw error;
@@ -290,6 +385,17 @@ export class PostgresStore extends MastraCompositeStore {
         },
         error,
       );
+    } finally {
+      // Drop the snapshot unconditionally — including when loading it or
+      // super.init() threw — so no code path can read a stale catalog picture
+      // after init returns.
+      this.#db.setSchemaSnapshot(null);
+      // Only unpin/release when connect() actually handed us a client; on a
+      // failed connect() pinnedClient is undefined and pin() never ran.
+      if (pinnedClient) {
+        this.#db.unpin();
+        pinnedClient.release();
+      }
     }
   }
 
@@ -306,22 +412,30 @@ export class PostgresStore extends MastraCompositeStore {
     return this.#db;
   }
 
-  /**
-   * The underlying pg.Pool for direct database access or ORM integration.
-   */
+  /** Database client for queries that may run against the configured read replica. */
+  public get readDb(): DbClient {
+    return this.#readDb;
+  }
+
+  /** The underlying writer pg.Pool for direct database access or ORM integration. */
   public get pool(): Pool {
-    return this.#pool;
+    return this.#writePool;
+  }
+
+  /** The underlying reader pg.Pool, falling back to the writer pool when unset. */
+  public get readPool(): Pool {
+    return this.#readPool;
   }
 
   /**
-   * Closes the connection pool if it was created by this store.
-   * If a pool was passed in via config, it will not be closed.
+   * Closes the writer connection pool if it was created by this store.
+   * Caller-provided writer and reader pools are not closed.
    * Safe to call multiple times — subsequent calls are no-ops.
    */
   async close(): Promise<void> {
-    if (this.#ownsPool && !this.#poolClosed) {
-      this.#poolClosed = true;
-      await this.#pool.end();
+    if (this.#ownsWritePool && !this.#writePoolClosed) {
+      this.#writePoolClosed = true;
+      await this.#writePool.end();
     }
   }
 }
@@ -359,6 +473,7 @@ export type PostgresStoreVNextObservabilityConfig = (
   schemaName?: string;
   partitioning?: VNextPostgresObservabilityConfig['partitioning'];
   discovery?: VNextPostgresObservabilityConfig['discovery'];
+  traceQueryTimeoutMs?: VNextPostgresObservabilityConfig['traceQueryTimeoutMs'];
 };
 
 /**
@@ -457,6 +572,20 @@ export class PostgresStoreVNext extends PostgresStore {
     this.#observabilityPool = built.pool;
     this.#ownsObservabilityPool = built.owned;
 
+    // Same crash-prevention as the primary pool in createPool(): without an
+    // 'error' listener, an idle client dropped by the backend escalates to an
+    // uncaughtException. Only for pools this store created.
+    if (built.owned) {
+      built.pool.on('error', err => {
+        this.logger?.warn?.(
+          'PostgresStoreVNext: idle observability pool client error (pool discards the client and reconnects on next checkout)',
+          {
+            err: err instanceof Error ? err.message : err,
+          },
+        );
+      });
+    }
+
     // NOTE: `skipDefaultIndexes` / `indexes` from the primary config are
     // intentionally NOT forwarded. The vNext observability domain manages
     // its own index set (see `allIndexDDL` in `ddl.ts`) — pretending to
@@ -468,6 +597,7 @@ export class PostgresStoreVNext extends PostgresStore {
       schemaName: obsConfig.schemaName ?? config.schemaName,
       partitioning: obsConfig.partitioning,
       discovery: obsConfig.discovery,
+      traceQueryTimeoutMs: obsConfig.traceQueryTimeoutMs,
     });
 
     this.stores = {

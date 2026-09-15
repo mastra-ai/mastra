@@ -1,4 +1,4 @@
-import { Button } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { ArrowUpIcon, Loader2 } from 'lucide-react';
 import type { CSSProperties } from 'react';
 import { useEffect, useMemo, useRef } from 'react';
@@ -51,7 +51,7 @@ export const ChatComposer = ({
   return (
     <form onSubmit={onSubmit} className="shrink-0">
       <div
-        className="rounded-3xl border border-border1 bg-surface2 px-3 pt-2.5 transition-colors focus-within:border-[var(--agent-color-bg)]"
+        className="border-border1 bg-surface2 rounded-3xl border px-3 pt-2.5 transition-colors focus-within:border-[var(--agent-color-bg)]"
         style={containerStyle}
         data-testid={containerTestId}
       >

@@ -37,7 +37,9 @@ async function writeDtsFiles() {
           const dir = dirname(file);
           const distRoot = join(rootPath, 'dist');
           const subPath = slash(relative(distRoot, dir));
-          const filename = key.replace('*', subPath);
+          // split/join replaces every '*' and doesn't interpret '$' patterns
+          // in the replacement (CodeQL js/incomplete-sanitization)
+          const filename = key.split('*').join(subPath);
 
           const targetPath = join(rootPath, filename) + '.d.ts';
           await mkdir(dirname(targetPath), { recursive: true });

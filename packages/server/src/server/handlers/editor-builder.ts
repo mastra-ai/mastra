@@ -179,14 +179,18 @@ export const GET_EDITOR_BUILDER_SETTINGS_ROUTE = createRoute({
 /**
  * GET /editor/builder/models/available
  *
- * Returns the configured AI providers/models filtered by the active builder
- * model policy. The server is the single authority for the allowlist: it
- * applies `isModelAllowed` here so the Studio model picker can render the
- * response verbatim without importing any EE matcher into the browser.
+ * Returns the configured AI providers/models the agent builder may use. The
+ * server is the single authority: it scopes the list to providers with a
+ * configured API key (`connected`) and applies the active builder model
+ * policy via `isModelAllowed`, so the Studio surfaces can render the response
+ * verbatim without importing any EE matcher into the browser.
  *
- * - Policy inactive (or no allowlist) ⇒ the full provider list is returned.
- * - Policy active with an allowlist ⇒ each provider's models are filtered,
- *   and providers left with no allowed models are omitted entirely.
+ * - Providers without a configured API key are always omitted — the builder
+ *   decides the agent's model from this list, so an unconnected provider would
+ *   produce an agent that can never run.
+ * - Policy inactive (or no allowlist) ⇒ all connected providers are returned.
+ * - Policy active with an allowlist ⇒ each connected provider's models are
+ *   filtered, and providers left with no allowed models are omitted entirely.
  */
 export const GET_EDITOR_BUILDER_AVAILABLE_MODELS_ROUTE = createRoute({
   method: 'GET',
@@ -200,10 +204,14 @@ export const GET_EDITOR_BUILDER_AVAILABLE_MODELS_ROUTE = createRoute({
   requiresPermission: 'stored-agents:read',
   handler: async ({ mastra }) => {
     try {
-      const providers = await buildProvidersList(mastra);
+      // Only surface providers whose API key is configured (`connected`). The
+      // agent builder decides the agent's model from this list, so including
+      // providers without a key lets it pick a model that can never run. We
+      // scope to connected providers so every choice is actually usable.
+      const providers = (await buildProvidersList(mastra)).filter(provider => provider.connected);
       const policy = await resolveBuilderModelPolicy(mastra.getEditor());
 
-      // Inactive policy (or no allowlist) ⇒ nothing to filter.
+      // Inactive policy (or no allowlist) ⇒ no allowlist filtering to apply.
       if (!policy.active || !policy.allowed || policy.allowed.length === 0) {
         return { providers };
       }

@@ -11,6 +11,20 @@ interface StartWorkerOptions {
   env?: string;
 }
 
+// Cap the retained stderr buffer at 1MB. The buffer is only inspected for
+// crash diagnostics (the ERR_MODULE_NOT_FOUND marker and the "Cannot find
+// package" match), which live at the tail of a failing process's output, so
+// keeping only the most recent bytes is sufficient. Without a bound, a
+// long-running worker that streams a lot of stderr grows the buffer until it
+// exceeds V8's max string length and throws `RangeError: Invalid string length`.
+export const MAX_STDERR_BUFFER = 1_000_000;
+
+// Append a stderr chunk while keeping only the last `max` characters, so the
+// retained buffer can never grow without bound.
+export function boundStderr(buffer: string, chunk: string, max: number = MAX_STDERR_BUFFER): string {
+  return (buffer + chunk).slice(-max);
+}
+
 export async function startWorker(options: StartWorkerOptions = {}) {
   if (!shouldSkipDotenvLoading()) {
     config({ path: [options.env || '.env.production', '.env'], quiet: true });
@@ -37,7 +51,7 @@ export async function startWorker(options: StartWorkerOptions = {}) {
 
   let stderrBuffer = '';
   child.stderr?.on('data', data => {
-    stderrBuffer += data.toString();
+    stderrBuffer = boundStderr(stderrBuffer, data.toString());
     process.stderr.write(data);
   });
 

@@ -1,5 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import { SchedulesStorage, TABLE_SCHEDULES, TABLE_SCHEDULE_TRIGGERS, TABLE_SCHEMAS } from '@mastra/core/storage';
+import {
+  normalizeScheduleTarget,
+  SchedulesStorage,
+  TABLE_SCHEDULES,
+  TABLE_SCHEDULE_TRIGGERS,
+  TABLE_SCHEMAS,
+} from '@mastra/core/storage';
 import type {
   Schedule,
   ScheduleFilter,
@@ -40,7 +46,7 @@ function rowToSchedule(row: Record<string, any>): Schedule {
   }
   const schedule: Schedule = {
     id: String(row.id),
-    target,
+    target: normalizeScheduleTarget(target),
     cron: String(row.cron),
     status: String(row.status) as ScheduleStatus,
     nextFireAt: toNumber(row.next_fire_at),

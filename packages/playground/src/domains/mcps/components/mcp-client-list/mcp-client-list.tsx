@@ -1,18 +1,12 @@
 import type { StoredMCPServerConfig } from '@mastra/client-js';
-import {
-  Button,
-  EmptyState,
-  Entity,
-  EntityContent,
-  EntityDescription,
-  EntityName,
-  Section,
-  SubSectionRoot,
-  SideDialog,
-  Icon,
-  McpServerIcon,
-  stringToColor,
-} from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { Entity, EntityContent, EntityDescription, EntityName } from '@mastra/playground-ui/components/Entity';
+import { Section, SubSectionRoot } from '@mastra/playground-ui/components/Section';
+import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { McpServerIcon } from '@mastra/playground-ui/icons/McpServerIcon';
+import { stringToColor } from '@mastra/playground-ui/utils/colors';
 import { LaptopMinimal, PlusIcon, XIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useWatch } from 'react-hook-form';
@@ -141,31 +135,25 @@ export function MCPClientList() {
           <SubSectionHeader title="MCP Clients" icon={<LaptopMinimal />} />
 
           {!readOnly && (
-            <Button variant="ghost" size="sm" onClick={() => setIsCreateOpen(true)}>
-              <Icon size="sm">
-                <PlusIcon />
-              </Icon>
+            <Button variant="ghost" size="sm" onClick={() => setIsCreateOpen(true)} icon={<PlusIcon />}>
               Add MCP Client
             </Button>
           )}
         </Section.Header>
 
         {mcpClients.length === 0 && (
-          <div className="rounded-xl border border-border2 border-dashed py-8 text-center">
+          <div className="border-border2 rounded-xl border border-dashed py-5 text-center">
             <EmptyState
               className="py-4!"
               iconSlot={
-                <div className="size-6 text-neutral3 rounded-full bg-surface3 p-2 flex items-center justify-center">
+                <div className="text-neutral3 bg-surface3 flex size-6 items-center justify-center rounded-full p-2">
                   <LaptopMinimal className="size-6" />
                 </div>
               }
               titleSlot="No MCP clients configured yet."
               descriptionSlot="Add one to get started."
               actionSlot={
-                <Button variant="outline" size="sm" onClick={() => setIsCreateOpen(true)}>
-                  <Icon size="sm">
-                    <PlusIcon />
-                  </Icon>
+                <Button variant="outline" size="sm" onClick={() => setIsCreateOpen(true)} icon={<PlusIcon />}>
                   Add MCP Client
                 </Button>
               }
@@ -183,11 +171,11 @@ export function MCPClientList() {
               return (
                 <Entity
                   key={mcpClient.id ?? `pending-${index}`}
-                  className="items-center bg-surface2"
+                  className="bg-surface2 items-center"
                   onClick={() => setViewIndex(index)}
                 >
                   <div
-                    className="size-11 rounded-lg flex items-center justify-center uppercase shrink-0"
+                    className="flex size-11 shrink-0 items-center justify-center rounded-lg uppercase"
                     style={{ backgroundColor: bg, color: text }}
                   >
                     <Icon>
@@ -210,10 +198,8 @@ export function MCPClientList() {
                         e.stopPropagation();
                         handleRemove(index);
                       }}
+                      icon={<XIcon />}
                     >
-                      <Icon>
-                        <XIcon />
-                      </Icon>
                       Remove
                     </Button>
                   )}

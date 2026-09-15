@@ -150,14 +150,12 @@ export async function resolveStateSignalHistory({
   messageList,
   memory,
   threadId,
-  resourceId,
   stateId,
   tracking,
 }: {
   messageList: MessageList;
   memory: MastraMemory;
   threadId: string;
-  resourceId: string;
   stateId: string;
   tracking?: StateSignalTracking;
 }): Promise<StateSignalHistory> {
@@ -172,12 +170,17 @@ export async function resolveStateSignalHistory({
   const memoryStore = await memory.storage.getStore('memory');
   if (!memoryStore) return { ...localHistory, contextWindow };
 
-  const storedMessages = await memoryStore.listMessages({
-    threadId,
-    resourceId,
-    perPage: false,
-    orderBy: { field: 'createdAt', direction: 'ASC' },
-  });
+  const trackedSignalIds = new Set<string>();
+  for (const activeCopy of tracking.activeCopies ?? []) {
+    trackedSignalIds.add(activeCopy.id);
+  }
+  trackedSignalIds.add(tracking.lastSnapshotSignalId);
+
+  if (trackedSignalIds.size === 0 || typeof memoryStore.listMessagesById !== 'function') {
+    return { ...localHistory, contextWindow };
+  }
+
+  const storedMessages = await memoryStore.listMessagesById({ messageIds: [...trackedSignalIds] });
   const storedStateSignals = dbMessagesToStateSignals(storedMessages.messages, stateId, threadId);
   const resolvedStateSignals = mergeStateSignals(storedStateSignals, localStateSignals);
 
@@ -190,7 +193,12 @@ export async function resolveStateSignalHistory({
 export function createStateSignalInput(
   input: AgentStateSignalInput | (Omit<AgentStateSignalInput, 'id'> & { id?: string }),
   options?: { defaultId?: string; acceptedAt?: Date },
-): { stateId: string; signal: CreatedAgentSignal; mode: 'snapshot' | 'delta'; cacheKey: string } {
+): {
+  stateId: string;
+  signal: Extract<CreatedAgentSignal, { type: 'state' }>;
+  mode: 'snapshot' | 'delta';
+  cacheKey: string;
+} {
   const stateId = input.id ?? options?.defaultId;
   if (!stateId) {
     throw new Error('state signal id is required');
@@ -233,6 +241,7 @@ export async function applyStateSignal({
   activeStateSignals,
   defaultId,
   acceptedAt,
+  beforeAddSignal,
   writeSignal,
 }: {
   input: AgentStateSignalInput | (Omit<AgentStateSignalInput, 'id'> & { id?: string });
@@ -245,6 +254,7 @@ export async function applyStateSignal({
   activeStateSignals?: ActiveStateSignal[];
   defaultId?: string;
   acceptedAt?: Date;
+  beforeAddSignal?: () => void;
   writeSignal?: (signal: CreatedAgentSignal) => Promise<void> | void;
 }): Promise<ApplyStateSignalResult> {
   const { stateId, signal, cacheKey, mode } = createStateSignalInput(input, { defaultId, acceptedAt });
@@ -280,6 +290,7 @@ export async function applyStateSignal({
     },
   });
 
+  beforeAddSignal?.();
   if (messageList) {
     messageList.addSignal(updatedSignal);
   }

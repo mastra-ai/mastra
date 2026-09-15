@@ -2,6 +2,7 @@ import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 
 import { useMetricsFilters } from './use-metrics-filters';
+import { getOrCreate } from '@/lib/map';
 
 export interface ActiveThreadRow {
   threadId: string;
@@ -62,10 +63,8 @@ export function useTopActiveThreadsMetrics() {
       type Entry = { tokens: number; cost: number | null; costUnit: string | null };
       const byThread = new Map<string, Entry>();
 
-      const ensure = (threadId: string): Entry => {
-        if (!byThread.has(threadId)) byThread.set(threadId, { tokens: 0, cost: null, costUnit: null });
-        return byThread.get(threadId)!;
-      };
+      const ensure = (threadId: string): Entry =>
+        getOrCreate(byThread, threadId, () => ({ tokens: 0, cost: null, costUnit: null }));
 
       const foldTokens = (groups: typeof inputRes.groups) => {
         for (const group of groups) {

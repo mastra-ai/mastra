@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MastraError, ErrorDomain, ErrorCategory } from './index';
+import { MastraError, MastraNonRetryableError, ErrorDomain, ErrorCategory } from './index';
 import type { IErrorDefinition } from './index';
 
 // Define a default context type for tests where specific fields aren't needed by the error definition itself.
@@ -103,5 +103,17 @@ describe('MastraError (Base Class)', () => {
       expect(jsonError.details).toEqual(sampleContext);
       expect(jsonError.cause).toBeUndefined();
     });
+  });
+});
+
+describe('MastraNonRetryableError', () => {
+  it('marks permanent workflow step failures as non-retryable', () => {
+    const error = new MastraNonRetryableError('Invalid template ID');
+
+    expect(error).toBeInstanceOf(Error);
+    expect(error).toBeInstanceOf(MastraNonRetryableError);
+    expect(error.name).toBe('MastraNonRetryableError');
+    expect(error.isNonRetryable).toBe(true);
+    expect(error.message).toBe('Invalid template ID');
   });
 });

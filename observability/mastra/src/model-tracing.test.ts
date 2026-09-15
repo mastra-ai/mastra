@@ -1,6 +1,6 @@
 import { ReadableStream } from 'node:stream/web';
 import { coreFeatures } from '@mastra/core/features';
-import type { ObservabilityExporter, TracingEvent, ExportedSpan } from '@mastra/core/observability';
+import type { ObservabilityExporter, TracingEvent, ExportedSpan, MetricEvent } from '@mastra/core/observability';
 import { SpanType, SamplingStrategyType, TracingEventType } from '@mastra/core/observability';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -13,13 +13,23 @@ import { ModelSpanTracker } from './model-tracing';
 class TestExporter implements ObservabilityExporter {
   name = 'test-exporter';
   events: TracingEvent[] = [];
+  metricEvents: MetricEvent[] = [];
 
   async exportTracingEvent(event: TracingEvent): Promise<void> {
     this.events.push(event);
   }
 
+  async onMetricEvent(event: MetricEvent): Promise<void> {
+    this.metricEvents.push(event);
+  }
+
   async shutdown(): Promise<void> {
     this.events = [];
+    this.metricEvents = [];
+  }
+
+  getMetricsByName(name: string) {
+    return this.metricEvents.filter(event => event.metric.name === name).map(event => event.metric);
   }
 
   getSpansByName(name: string): ExportedSpan[] {
@@ -444,6 +454,47 @@ describe('ModelSpanTracker', () => {
       expect(span.metadata).not.toHaveProperty('args');
       expect(span.metadata).toMatchObject({ toolCallId, toolName, providerExecuted: true });
       expect(span.output).toEqual(result);
+    });
+
+    it('should use toModelOutput value for locally executed tools when available', async () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+      });
+
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      const toolCallId = 'call_model_output123';
+      const toolName = 'fileTool';
+      const modelOutput = 'Summarized file content (base64 stripped)';
+      const chunks = [
+        { type: 'step-start', payload: { messageId: 'msg-1' } },
+        {
+          type: 'tool-result',
+          payload: {
+            toolCallId,
+            toolName,
+            result: { rawBase64: 'very-large-base64-string...' },
+            providerMetadata: {
+              mastra: { modelOutput },
+            },
+          },
+        },
+        { type: 'step-finish', payload: { output: {}, stepResult: { reason: 'stop' }, metadata: {} } },
+      ];
+
+      const stream = createMockStream(chunks);
+      const wrappedStream = tracker.wrapStream(stream);
+      await consumeStream(wrappedStream);
+
+      modelSpan.end();
+
+      const toolResultSpans = testExporter.getSpansByName("chunk: 'tool-result'");
+      expect(toolResultSpans).toHaveLength(1);
+
+      const span = toolResultSpans[0]!;
+      expect(span.metadata).toMatchObject({ toolCallId, toolName });
+      expect(span.output).toBe(modelOutput);
     });
   });
 
@@ -1362,6 +1413,280 @@ describe('ModelSpanTracker', () => {
     });
   });
 
+  describe('tool-result preview in step input', () => {
+    it('should show transformed tool-result providerOptions from final inputMessages', async () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+      });
+
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      const chunks = [
+        { type: 'step-start', payload: { messageId: 'msg-1', request: {} } },
+        {
+          type: 'step-start',
+          payload: {
+            messageId: 'msg-1',
+            request: {},
+            inputMessages: [
+              {
+                role: 'tool',
+                content: [
+                  {
+                    type: 'tool-result',
+                    toolCallId: 'call_123',
+                    toolName: 'readFile',
+                    output: { type: 'text', value: 'Summarized file content' },
+                    providerOptions: {
+                      mastra: { modelOutput: { type: 'text', value: 'Summarized file content' } },
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        },
+        { type: 'step-finish', payload: { output: {}, stepResult: { reason: 'stop' }, metadata: {} } },
+      ];
+
+      const stream = createMockStream(chunks);
+      const wrappedStream = tracker.wrapStream(stream);
+      await consumeStream(wrappedStream);
+      modelSpan.end();
+
+      const stepSpans = testExporter.getSpansByType(SpanType.MODEL_STEP);
+      expect(stepSpans).toHaveLength(1);
+      expect(stepSpans[0]!.input).toEqual([{ role: 'tool', content: 'Summarized file content' }]);
+    });
+
+    it('should show modelOutput content when available', async () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+      });
+
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      const chunks = [
+        {
+          type: 'step-start',
+          payload: {
+            messageId: 'msg-1',
+            request: {
+              body: JSON.stringify({
+                messages: [
+                  {
+                    role: 'tool',
+                    content: [
+                      {
+                        type: 'tool-result',
+                        toolCallId: 'call_123',
+                        toolName: 'readFile',
+                        result: { rawBase64: 'very-large-base64-string...' },
+                        providerMetadata: {
+                          mastra: { modelOutput: 'Summarized file content' },
+                        },
+                      },
+                    ],
+                  },
+                ],
+              }),
+            },
+          },
+        },
+        { type: 'text-delta', payload: { text: 'Got it.' } },
+        { type: 'step-finish', payload: { output: {}, stepResult: { reason: 'stop' }, metadata: {} } },
+      ];
+
+      const stream = createMockStream(chunks);
+      const wrappedStream = tracker.wrapStream(stream);
+      await consumeStream(wrappedStream);
+      modelSpan.end();
+
+      const stepSpans = testExporter.getSpansByType(SpanType.MODEL_STEP);
+      expect(stepSpans).toHaveLength(1);
+      expect(stepSpans[0]!.input).toEqual([{ role: 'tool', content: 'Summarized file content' }]);
+    });
+
+    it('should not expose raw result when modelOutput is absent', async () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+      });
+
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      const chunks = [
+        {
+          type: 'step-start',
+          payload: {
+            messageId: 'msg-1',
+            request: {
+              body: JSON.stringify({
+                messages: [
+                  {
+                    role: 'tool',
+                    content: [
+                      {
+                        type: 'tool-result',
+                        toolCallId: 'call_789',
+                        toolName: 'readFile',
+                        result: { rawBase64: 'sensitive-data-here' },
+                      },
+                    ],
+                  },
+                ],
+              }),
+            },
+          },
+        },
+        { type: 'text-delta', payload: { text: 'Done.' } },
+        { type: 'step-finish', payload: { output: {}, stepResult: { reason: 'stop' }, metadata: {} } },
+      ];
+
+      const stream = createMockStream(chunks);
+      const wrappedStream = tracker.wrapStream(stream);
+      await consumeStream(wrappedStream);
+      modelSpan.end();
+
+      const stepSpans = testExporter.getSpansByType(SpanType.MODEL_STEP);
+      expect(stepSpans).toHaveLength(1);
+      expect(stepSpans[0]!.input).toEqual([{ role: 'tool', content: '[tool-result: readFile]' }]);
+    });
+
+    it('should not expose raw result from final inputMessages when transformed output is absent', async () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+      });
+
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      const chunks = [
+        { type: 'step-start', payload: { messageId: 'msg-1', request: {} } },
+        {
+          type: 'step-start',
+          payload: {
+            messageId: 'msg-1',
+            request: {},
+            inputMessages: [
+              {
+                role: 'tool',
+                content: [
+                  {
+                    type: 'tool-result',
+                    toolCallId: 'call_789',
+                    toolName: 'readFile',
+                    result: { rawBase64: 'sensitive-data-here' },
+                  },
+                ],
+              },
+            ],
+          },
+        },
+        { type: 'step-finish', payload: { output: {}, stepResult: { reason: 'stop' }, metadata: {} } },
+      ];
+
+      const stream = createMockStream(chunks);
+      const wrappedStream = tracker.wrapStream(stream);
+      await consumeStream(wrappedStream);
+      modelSpan.end();
+
+      const stepSpans = testExporter.getSpansByType(SpanType.MODEL_STEP);
+      expect(stepSpans).toHaveLength(1);
+      expect(stepSpans[0]!.input).toEqual([{ role: 'tool', content: '[tool-result: readFile]' }]);
+    });
+
+    it('should not expose unmarked output from final inputMessages', async () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+      });
+
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      const chunks = [
+        { type: 'step-start', payload: { messageId: 'msg-1', request: {} } },
+        {
+          type: 'step-start',
+          payload: {
+            messageId: 'msg-1',
+            request: {},
+            inputMessages: [
+              {
+                role: 'tool',
+                content: [
+                  {
+                    type: 'tool-result',
+                    toolCallId: 'call_789',
+                    toolName: 'readFile',
+                    output: { type: 'json', value: { rawBase64: 'sensitive-data-here' } },
+                  },
+                ],
+              },
+            ],
+          },
+        },
+        { type: 'step-finish', payload: { output: {}, stepResult: { reason: 'stop' }, metadata: {} } },
+      ];
+
+      const stream = createMockStream(chunks);
+      const wrappedStream = tracker.wrapStream(stream);
+      await consumeStream(wrappedStream);
+      modelSpan.end();
+
+      const stepSpans = testExporter.getSpansByType(SpanType.MODEL_STEP);
+      expect(stepSpans).toHaveLength(1);
+      expect(stepSpans[0]!.input).toEqual([{ role: 'tool', content: '[tool-result: readFile]' }]);
+    });
+
+    it('should fall back to [tool-result: toolName] when result is absent', async () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+      });
+
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      const chunks = [
+        {
+          type: 'step-start',
+          payload: {
+            messageId: 'msg-1',
+            request: {
+              body: JSON.stringify({
+                messages: [
+                  {
+                    role: 'tool',
+                    content: [
+                      {
+                        type: 'tool-result',
+                        toolCallId: 'call_456',
+                        toolName: 'someTool',
+                      },
+                    ],
+                  },
+                ],
+              }),
+            },
+          },
+        },
+        { type: 'text-delta', payload: { text: 'Ok.' } },
+        { type: 'step-finish', payload: { output: {}, stepResult: { reason: 'stop' }, metadata: {} } },
+      ];
+
+      const stream = createMockStream(chunks);
+      const wrappedStream = tracker.wrapStream(stream);
+      await consumeStream(wrappedStream);
+      modelSpan.end();
+
+      const stepSpans = testExporter.getSpansByType(SpanType.MODEL_STEP);
+      expect(stepSpans).toHaveLength(1);
+      expect(stepSpans[0]!.input).toEqual([{ role: 'tool', content: '[tool-result: someTool]' }]);
+    });
+  });
+
   describe('MODEL_INFERENCE span', () => {
     beforeEach(() => {
       // Guarantee the feature is enabled regardless of nested-describe ordering
@@ -1447,6 +1772,81 @@ describe('ModelSpanTracker', () => {
       expect(stepSpan!.attributes.usage).toBeDefined();
       expect(inferenceSpan!.attributes).toMatchObject({ finishReason: 'stop' });
       expect(inferenceSpan!.attributes.usage).toBeDefined();
+    });
+
+    it('strips step-finish step history from MODEL_STEP and MODEL_INFERENCE outputs', async () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+        attributes: { model: 'gpt-test', provider: 'test', streaming: true },
+      });
+
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      const chunks = [
+        { type: 'step-start', payload: { messageId: 'msg-1' } },
+        { type: 'text-delta', payload: { text: 'hi' } },
+        {
+          type: 'step-finish',
+          payload: {
+            output: {
+              text: 'hi',
+              usage: { promptTokens: 4, completionTokens: 6, totalTokens: 10 },
+              steps: [{ request: { body: 'large request' } }],
+              object: { steps: ['domain step'] },
+            },
+            stepResult: { reason: 'stop', warnings: [], isContinued: false },
+            metadata: {
+              providerMetadata: { provider: { noisy: true } },
+              experimental_providerMetadata: { provider: { legacy: true } },
+              keep: 'metadata',
+            },
+          },
+        },
+      ];
+
+      await consumeStream(tracker.wrapStream(createMockStream(chunks)));
+      modelSpan.end();
+
+      const [stepSpan] = testExporter.getSpansByType(SpanType.MODEL_STEP);
+      const [inferenceSpan] = testExporter.getSpansByType(SpanType.MODEL_INFERENCE);
+
+      expect(stepSpan!.output).toEqual({ text: 'hi', object: { steps: ['domain step'] } });
+      expect(inferenceSpan!.output).toEqual({ text: 'hi', object: { steps: ['domain step'] } });
+      expect(stepSpan!.metadata).toEqual({ keep: 'metadata' });
+    });
+
+    it('preserves the provider response model on MODEL_INFERENCE', async () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+        attributes: { model: 'requested-model', provider: 'test', streaming: true },
+      });
+
+      const tracker = new ModelSpanTracker(modelSpan);
+      tracker.setDeferStepClose(true);
+
+      const chunks = [
+        { type: 'step-start', payload: { messageId: 'msg-1' } },
+        { type: 'text-delta', payload: { text: 'hi' } },
+        {
+          type: 'step-finish',
+          payload: {
+            output: { usage: { totalTokens: 5 } },
+            stepResult: { reason: 'tool-calls', warnings: [], isContinued: true },
+            metadata: { modelId: 'provider/selected-model' },
+          },
+        },
+      ];
+
+      await consumeStream(tracker.wrapStream(createMockStream(chunks)));
+
+      const [inferenceSpan] = testExporter.getSpansByType(SpanType.MODEL_INFERENCE);
+      expect(inferenceSpan).toBeDefined();
+      expect(inferenceSpan!.attributes.model).toBe('requested-model');
+      expect(inferenceSpan!.attributes.responseModel).toBe('provider/selected-model');
+
+      modelSpan.end();
     });
 
     it('applies inference context (parameters / providerOptions / availableTools / toolChoice / responseFormat) set via setInferenceContext', async () => {
@@ -1698,6 +2098,123 @@ describe('ModelSpanTracker', () => {
       expect(stepSpansBefore).toHaveLength(0);
 
       modelSpan.end();
+    });
+
+    describe('Gateway provider costs', () => {
+      function endGeneration(options: Parameters<ModelSpanTracker['endGeneration']>[0]) {
+        const modelSpan = tracing.startSpan({
+          type: SpanType.MODEL_GENERATION,
+          name: 'test-generation',
+        });
+
+        new ModelSpanTracker(modelSpan).endGeneration(options);
+        return testExporter.getSpansByType(SpanType.MODEL_GENERATION)[0]!;
+      }
+
+      it('aggregates numeric and numeric-string Gateway costs from every completed step', () => {
+        const span = endGeneration({
+          attributes: { model: 'anthropic/claude-haiku-4.5', provider: 'gateway' },
+          usage: { inputTokens: 100, outputTokens: 50 },
+          stepProviderMetadata: [{ gateway: { cost: '0.0012' } }, { gateway: { cost: 0.0008 } }],
+        });
+
+        expect(span.attributes.costContext).toEqual({
+          estimatedCost: 0.002,
+          costUnit: 'USD',
+          costMetadata: {
+            source: 'provider_reported',
+            sdkProvider: 'vercel_ai_gateway',
+            sdkCostField: 'gateway.cost',
+            scope: 'query_total',
+            reportedStepCount: 2,
+          },
+        });
+      });
+
+      it('preserves an explicit zero cost reported by the Gateway', () => {
+        const span = endGeneration({
+          attributes: { model: 'anthropic/claude-haiku-4.5', provider: 'gateway' },
+          usage: { inputTokens: 100, outputTokens: 50 },
+          stepProviderMetadata: [{ gateway: { cost: 0 } }],
+        });
+
+        expect(span.attributes.costContext?.estimatedCost).toBe(0);
+      });
+
+      it('falls back to pricing estimates when the aggregate Gateway cost is non-finite', () => {
+        const span = endGeneration({
+          attributes: { model: 'anthropic/claude-haiku-4.5', provider: 'gateway' },
+          usage: { inputTokens: 100, outputTokens: 50 },
+          stepProviderMetadata: [{ gateway: { cost: Number.MAX_VALUE } }, { gateway: { cost: Number.MAX_VALUE } }],
+        });
+
+        expect(span.attributes.costContext).toBeUndefined();
+        expect(testExporter.getMetricsByName('mastra_model_total_input_tokens')[0]?.costContext).toMatchObject({
+          provider: 'vercel',
+          model: 'claude-haiku-4-5',
+          estimatedCost: expect.any(Number),
+          costMetadata: { pricing_id: expect.any(String) },
+        });
+      });
+
+      it.each([-0.0008, 'invalid-cost', NaN, Infinity])(
+        'falls back to pricing estimates when any Gateway step has invalid reported cost %p',
+        cost => {
+          const span = endGeneration({
+            attributes: { model: 'anthropic/claude-haiku-4.5', provider: 'gateway' },
+            usage: { inputTokens: 100, outputTokens: 50 },
+            stepProviderMetadata: [{ gateway: { cost: '0.0012' } }, { gateway: { cost } }],
+          });
+
+          expect(span.attributes.costContext).toBeUndefined();
+        },
+      );
+
+      it('does not report a partial Gateway cost when a completed step has no metadata', () => {
+        const span = endGeneration({
+          attributes: { model: 'anthropic/claude-haiku-4.5', provider: 'gateway' },
+          usage: { inputTokens: 100, outputTokens: 50 },
+          stepProviderMetadata: [{ gateway: { cost: '0.0012' } }, undefined],
+        });
+
+        expect(span.attributes.costContext).toBeUndefined();
+      });
+
+      it('does not use final-step provider metadata without per-step metadata', () => {
+        const span = endGeneration({
+          attributes: { model: 'anthropic/claude-haiku-4.5', provider: 'gateway' },
+          usage: { inputTokens: 100, outputTokens: 50 },
+          providerMetadata: { gateway: { cost: '0.0012' } },
+        });
+
+        expect(span.attributes.costContext).toBeUndefined();
+      });
+
+      it('does not overwrite caller-supplied cost context', () => {
+        const span = endGeneration({
+          attributes: {
+            model: 'claude-sonnet-4-6',
+            provider: '@anthropic-ai/claude-agent-sdk',
+            costContext: {
+              provider: 'anthropic',
+              model: 'claude-sonnet-4-6',
+              estimatedCost: 0.0123,
+              costUnit: 'USD',
+              costMetadata: { source: 'sdk_estimate' },
+            },
+          },
+          usage: { inputTokens: 15, outputTokens: 4 },
+          stepProviderMetadata: [{ gateway: { cost: '0.9999' } }],
+        });
+
+        expect(span.attributes.costContext).toEqual({
+          provider: 'anthropic',
+          model: 'claude-sonnet-4-6',
+          estimatedCost: 0.0123,
+          costUnit: 'USD',
+          costMetadata: { source: 'sdk_estimate' },
+        });
+      });
     });
   });
 });

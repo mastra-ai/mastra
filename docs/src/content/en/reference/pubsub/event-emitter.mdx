@@ -1,8 +1,8 @@
 ---
-title: "Reference: EventEmitterPubSub | PubSub"
-description: API reference for EventEmitterPubSub, the default in-process pub/sub implementation in Mastra.
+title: 'Reference: EventEmitterPubSub | PubSub'
+description: "EventEmitterPubSub is the default PubSub implementation. It delivers events in-process using a Node.js EventEmitter, so it works without any external service."
 packages:
-  - "@mastra/core"
+  - '@mastra/core'
 ---
 
 # EventEmitterPubSub
@@ -11,11 +11,11 @@ packages:
 
 Use it for single-process applications. For delivery across processes on one host, see [`UnixSocketPubSub`](/reference/pubsub/unix-socket-pubsub). For distributed delivery, see [`RedisStreamsPubSub`](/reference/pubsub/redis-streams) or [`GoogleCloudPubSub`](/reference/pubsub/google-cloud-pubsub).
 
-Because it is in-process, events are not persisted and are not shared with other processes. Wrap it in [`CachingPubSub`](/reference/pubsub/caching-pubsub) when you need replay for resumable streams.
+Because it's in-process, events aren't persisted and aren't shared with other processes. Wrap it in [`CachingPubSub`](/reference/pubsub/caching-pubsub) when you need replay for resumable streams.
 
 ## Usage example
 
-`EventEmitterPubSub` is used automatically when you do not configure a `pubsub` option, so most applications never construct it directly. Create one explicitly only when you want to configure or share it.
+`EventEmitterPubSub` is used automatically when you don't configure a `pubsub` option, so most applications never construct it directly. Create one explicitly only when you want to configure or share it.
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
@@ -87,6 +87,11 @@ const pubsub = new EventEmitterPubSub(undefined, { logger })
     type: 'boolean',
     description: 'Returns `true`. Subscribers can opt in to batched delivery with `options.batch`.',
   },
+  {
+    name: 'supportsOffsets',
+    type: 'boolean',
+    description: 'Returns `false`. The in-memory emitter does not retain indexed event history.',
+  },
 ]}
 />
 
@@ -145,4 +150,4 @@ await pubsub.subscribe(
 )
 ```
 
-The buffer is in-memory and per-process, so batched state is not persisted and does not survive a restart. A flush triggered by `maxWaitMs` is best-effort: if a step such as a throwing `coalesce` fails, the error is surfaced through the configured `logger` rather than thrown. `flush()` drains every batched subscriber buffer before resolving.
+The buffer is in-memory and per-process, so batched state isn't persisted and doesn't survive a restart. A flush triggered by `maxWaitMs` is best-effort: if a step such as a throwing `coalesce` fails, the error is surfaced through the configured `logger` rather than thrown. `flush()` drains every batched subscriber buffer before resolving.

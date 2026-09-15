@@ -5,11 +5,8 @@ import Content from '@theme/DocSidebar/Desktop/Content'
 import Logo from '@theme/Logo'
 import clsx from 'clsx'
 import React from 'react'
-
-import { ThemeSwitcher } from '@site/src/components/theme-switcher'
-
 import styles from './styles.module.css'
-import VersionControl from '@site/src/components/version-control'
+import { InverseCorner } from './InverseCorner'
 
 function DocSidebarDesktop({ path, sidebar, onCollapse, isHidden }: Props) {
   const {
@@ -26,14 +23,22 @@ function DocSidebarDesktop({ path, sidebar, onCollapse, isHidden }: Props) {
         isHidden && styles.sidebarHidden,
       )}
     >
-      <div className="my-4 mr-[7px] mb-2">
-        <VersionControl />
-      </div>
+      <InverseCorner
+        size="24px"
+        fill="var(--ifm-navbar-background-color)"
+        borderColor="var(--border)"
+        borderWidth={1}
+        style={{
+          position: 'fixed',
+          bottom: 'auto',
+          right: 'auto',
+          top: 'var(--ifm-navbar-height)',
+          left: 'var(--doc-sidebar-width)',
+          transform: 'translate(-0.5px, -0.5px)',
+        }}
+      />
       {hideOnScroll && <Logo tabIndex={-1} className={styles.sidebarLogo} />}
       <Content path={path} sidebar={sidebar} />
-      <footer className="mr-4 flex justify-end border-t-[0.5px] border-(--border) py-2 pr-0.5">
-        <ThemeSwitcher />
-      </footer>
       {hideable && <CollapseButton onClick={onCollapse} />}
     </div>
   )

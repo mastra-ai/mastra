@@ -2,7 +2,9 @@ import { Agent } from '@mastra/core/agent';
 import { lessComplexWorkflow, myWorkflow } from '../workflows';
 import { Memory } from '@mastra/memory';
 import { ModerationProcessor } from '@mastra/core/processors';
+import { submitPlanTool } from '@mastra/core/tools';
 import { cookingTool } from '../tools';
+import { TaskSignalProvider } from '@mastra/core/signals';
 import {
   advancedModerationWorkflow,
   branchingModerationWorkflow,
@@ -11,6 +13,7 @@ import {
 import { stepLoggerProcessor, responseQualityProcessor } from '../processors';
 import { findUserWorkflow } from '../workflows/other';
 import { createScorer } from '@mastra/core/evals';
+import { alternatingScorer, alwaysPassScorer } from '../scorers/chef-model-v2-scorers';
 import { cryptoResearchTool, cryptoPriceTool } from '../tools';
 import { weatherTool as weatherInfo } from '../tools/weather-tool';
 import {
@@ -22,6 +25,7 @@ import {
 } from '../tools';
 
 import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
+import { createDurableAgent } from '@mastra/core/agent/durable';
 
 const workspace = new Workspace({
   filesystem: new LocalFilesystem({
@@ -32,8 +36,24 @@ const workspace = new Workspace({
 
 const memory = new Memory({
   options: {
-    workingMemory: {
-      enabled: true,
+    observationalMemory: {
+      model: 'openai/gpt-5.4-mini',
+      observation: {
+        messageTokens: 3000,
+        // Buffer every 5k tokens (runs in background)
+        bufferTokens: 1000,
+        // Activate to retain 30% of threshold
+        bufferActivation: 0.7,
+        // Force synchronous observation at 1.5x threshold
+        blockAfter: 1.5,
+      },
+      reflection: {
+        observationTokens: 6000,
+        // Start background reflection at 50% of threshold
+        bufferActivation: 0.5,
+        // Force synchronous reflection at 1.2x threshold
+        blockAfter: 1.2,
+      },
     },
   },
 });
@@ -72,6 +92,8 @@ export const chefModelV2Agent = new Agent({
       You are Michel, a practical and experienced home chef who helps people cook great meals with whatever
       ingredients they have available. Your first priority is understanding what ingredients and equipment the user has access to, then suggesting achievable recipes.
       You explain cooking steps clearly and offer substitutions when needed, maintaining a friendly and encouraging tone throughout.
+      For complex multi-step requests, use the task list tools to plan and track your progress.
+      When asked to submit a plan, write its Markdown under .mastracode/plans/ in the workspace, then call submit_plan with that path.
       `,
     role: 'system',
   },
@@ -79,24 +101,19 @@ export const chefModelV2Agent = new Agent({
   tools: {
     weatherInfo,
     cookingTool,
+    submit_plan: submitPlanTool,
   },
   workflows: {
     myWorkflow,
     lessComplexWorkflow,
     findUserWorkflow,
   },
-  // scorers: ({ mastra }) => {
-  //   if (!mastra) {
-  //     throw new Error('Mastra not found');
-  //   }
-
-  //   const scorer1 = mastra.getScorerById('scorer1');
-
-  //   return {
-  //     scorer1: { scorer: scorer1, sampling: { rate: 1, type: 'ratio' } },
-  //   };
-  // },
+  scorers: {
+    alwaysPass: { scorer: alwaysPassScorer, sampling: { rate: 1, type: 'ratio' } },
+    alternating: { scorer: alternatingScorer, sampling: { rate: 1, type: 'ratio' } },
+  },
   memory,
+  signals: [new TaskSignalProvider()],
   inputProcessors: [moderationProcessor],
   defaultOptions: {
     autoResumeSuspendedTools: true,
@@ -476,6 +493,12 @@ export const supervisorAgent = new Agent({
   },
 });
 
+export const durableSupervisorAgent = createDurableAgent({
+  agent: supervisorAgent,
+  id: 'durable-supervisor-agent',
+  name: 'Durable Research Supervisor',
+});
+
 // =============================================================================
 // Subscription Management Sub-Agent Example
 // Tests sub-agent context persistence across multiple delegations
@@ -571,6 +594,12 @@ You can handle both at the same time — start a background research while answe
   defaultOptions: {
     autoResumeSuspendedTools: true,
   },
+});
+
+export const durableCryptoResearchAgent = createDurableAgent({
+  agent: cryptoResearchAgent,
+  id: 'durable-crypto-research-agent',
+  name: 'Durable Crypto Research Agent',
 });
 
 export const subscriptionOrchestratorAgent = new Agent({

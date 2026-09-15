@@ -21,9 +21,7 @@ export const clinicLookupTool = createTool({
     const clinicId = requestContext?.get('clinicId') as string | undefined;
 
     if (!clinicId) {
-      throw new Error(
-        'clinicId is missing from requestContext. The tool cannot execute without tenant isolation.',
-      );
+      throw new Error('clinicId is missing from requestContext. The tool cannot execute without tenant isolation.');
     }
 
     return {

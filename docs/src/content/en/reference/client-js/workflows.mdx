@@ -1,6 +1,6 @@
 ---
 title: "Reference: Workflows API | Client SDK"
-description: Learn how to interact with and execute automated workflows in Mastra using the client-js SDK.
+description: "The Workflows API provides methods to interact with and execute automated workflows in Mastra."
 packages:
   - "@mastra/client-js"
 ---
@@ -16,6 +16,19 @@ Retrieve a list of all available workflows:
 ```typescript
 const workflows = await mastraClient.listWorkflows()
 ```
+
+## Getting workflow run counts
+
+Retrieve per-workflow counts of `running` and [`suspended`](/docs/workflows/suspend-and-resume) runs in a single request. The counts are computed on the server and keyed by the workflow's registry key, the key used when registering the workflow in the Mastra config, which can differ from the workflow's own `id`:
+
+```typescript
+const runCounts = await mastraClient.listWorkflowRunCounts()
+// { "cityWorkflow": { running: 2, suspended: 1 }, ... }
+```
+
+Returns: `Record<string, { running: number; suspended: number }>`
+
+The server may cache the counts for a few seconds between requests. Servers that predate this endpoint respond with `404 Not Found`. Handle the error when the client can talk to older deployments.
 
 ## Working with a specific workflow
 
@@ -147,7 +160,7 @@ await run.resume({
 })
 ```
 
-When a [`.foreach()`](/reference/workflows/workflow-methods/foreach) step suspends across multiple iterations, pass `forEachIndex` (zero-based; `0` targets the first iteration) to resume one iteration at a time. Iterations you don't target remain suspended.
+When a [`.foreach()`](/reference/workflows/workflow-methods/foreach) step suspends across multiple iterations, pass `forEachIndex` (zero-based. `0` targets the first iteration) to resume one iteration at a time. Iterations you don't target remain suspended.
 
 ```typescript
 await run.resume({
@@ -231,13 +244,121 @@ A workflow run result yields the following:
 ]}
 />
 
+## Dynamic workflows
+
+:::beta
+
+Breaking changes may occur without a major version bump until the API is stable.
+
+:::
+
+Dynamic workflows are workflow definitions expressed as JSON. The server persists each definition and registers it as a runnable workflow. See [Dynamic workflows](/docs/workflows/dynamic-workflows) for the definition format.
+
+### `listDynamicWorkflows()`
+
+List dynamic workflow definitions, optionally filtered by `status` (`'active' | 'archived'`) and `authorId`:
+
+```typescript
+const { definitions, total } = await mastraClient.listDynamicWorkflows({
+  status: 'active',
+})
+```
+
+### `upsertDynamicWorkflow()`
+
+Create or replace a dynamic workflow definition. The server validates the definition, persists it, and live-registers it for execution:
+
+```typescript
+const stored = await mastraClient.upsertDynamicWorkflow({
+  id: 'greeting-workflow',
+  description: 'Returns a greeting for the supplied name',
+  inputSchema: {
+    type: 'object',
+    properties: { name: { type: 'string' } },
+    required: ['name'],
+  },
+  outputSchema: {
+    type: 'object',
+    properties: { message: { type: 'string' } },
+    required: ['message'],
+  },
+  graph: [
+    {
+      type: 'mapping',
+      id: 'create-greeting',
+      mapConfig: JSON.stringify({
+        message: { template: 'Hello, ${initData.name}!' },
+      }),
+    },
+  ],
+})
+```
+
+When the root definition nests helper workflows that don't exist yet, pass them in the same request through `dependencies`. The server validates and registers the bundle as a unit and echoes the helper ids back as `dependencyIds`:
+
+```typescript
+const stored = await mastraClient.upsertDynamicWorkflow({
+  id: 'root-workflow',
+  // ...schemas and graph referencing 'helper-workflow'...
+  dependencies: [helperDefinition],
+})
+
+console.log(stored.dependencyIds) // ['helper-workflow']
+```
+
+### `getDynamicWorkflow()`
+
+Get a dynamic workflow instance for definition management. To execute a dynamic workflow, use `getWorkflow(id).createRun()` like any other workflow:
+
+```typescript
+const dynamicWorkflow = mastraClient.getDynamicWorkflow('greeting-workflow')
+```
+
+### `dynamicWorkflow.details()`
+
+Retrieve the persisted definition, including schemas, graph, status, and timestamps:
+
+```typescript
+const definition = await dynamicWorkflow.details()
+```
+
+### `dynamicWorkflow.delete()`
+
+Delete the stored definition and unregister the live workflow:
+
+```typescript
+await dynamicWorkflow.delete()
+```
+
+### Executing a dynamic workflow
+
+Once registered, a dynamic workflow runs through the ordinary workflow API:
+
+```typescript
+const workflow = mastraClient.getWorkflow('greeting-workflow')
+const run = await workflow.createRun()
+const result = await run.startAsync({ inputData: { name: 'Ada' } })
+```
+
 ## Schedules
 
-Schedules are declared in code via the `schedule` field on `createWorkflow`. The client SDK exposes read and operational methods for managing them at runtime. See [Scheduled workflows](/docs/workflows/scheduled-workflows).
+Schedules are declared in code via the `schedule` field on `createWorkflow`. The client SDK exposes read and operational methods for managing workflow schedules at runtime. See [Scheduled workflows](/docs/workflows/scheduled-workflows).
+
+### `createSchedule()`
+
+Create a workflow schedule by passing `workflowId`.
+
+```typescript
+const schedule = await mastraClient.createSchedule({
+  workflowId: 'daily-report',
+  cron: '0 9 * * *',
+  inputData: { reportType: 'summary' },
+})
+```
 
 ### `listSchedules()`
 
-List all schedules, optionally filtered by workflow id or status.
+List workflow schedules, optionally filtered by workflow ID or status.
 
 ```typescript
 const schedules = await mastraClient.listSchedules({
@@ -248,15 +369,42 @@ const schedules = await mastraClient.listSchedules({
 
 ### `getSchedule()`
 
-Fetch a single schedule by id.
+Fetch a single workflow schedule by ID.
 
 ```typescript
 const schedule = await mastraClient.getSchedule('daily-report')
 ```
 
+### `updateSchedule()`
+
+Update a workflow schedule.
+
+```typescript
+const updated = await mastraClient.updateSchedule('daily-report', {
+  cron: '0 10 * * *',
+  inputData: { reportType: 'summary' },
+})
+```
+
+### `deleteSchedule()`
+
+Delete a workflow schedule.
+
+```typescript
+await mastraClient.deleteSchedule('daily-report')
+```
+
+### `runSchedule()`
+
+Fire a workflow schedule once immediately without changing its cron cadence.
+
+```typescript
+const run = await mastraClient.runSchedule('daily-report')
+```
+
 ### `pauseSchedule()`
 
-Pause a schedule so the scheduler stops firing it. Returns the updated schedule. Idempotent.
+Pause a schedule so the scheduler stops firing it. Returns the updated schedule.
 
 ```typescript
 await mastraClient.pauseSchedule('daily-report')
@@ -264,7 +412,7 @@ await mastraClient.pauseSchedule('daily-report')
 
 ### `resumeSchedule()`
 
-Resume a paused schedule. The next fire time is recomputed from now, so a long-paused schedule does not fire a backlog. Returns the updated schedule. Idempotent.
+Resume a paused schedule. The next fire time is recomputed from now, so a long-paused schedule doesn't fire a backlog. Returns the updated schedule.
 
 ```typescript
 await mastraClient.resumeSchedule('daily-report')
@@ -272,7 +420,7 @@ await mastraClient.resumeSchedule('daily-report')
 
 ### `listScheduleTriggers()`
 
-List the trigger history for a schedule, including the joined run summary for each fire.
+List the trigger history for a workflow schedule, including the joined run summary for each fire.
 
 ```typescript
 const { triggers } = await mastraClient.listScheduleTriggers('daily-report', {

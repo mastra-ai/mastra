@@ -1,6 +1,6 @@
 ---
 title: "Reference: handleWorkflowStream() | AI SDK"
-description: API reference for handleWorkflowStream(), a framework-agnostic handler for streaming workflow execution in AI SDK-compatible format.
+description: "Framework-agnostic handler for streaming workflow execution in AI SDK-compatible format."
 packages:
   - "@mastra/ai-sdk"
 ---
@@ -21,7 +21,7 @@ Use [`workflowRoute()`](/reference/ai-sdk/workflow-route) if you want to create 
 
 When a workflow step pipes an agent's stream to the workflow writer (e.g., `await response.fullStream.pipeTo(writer)`), the agent's text chunks and tool calls are forwarded to the UI stream in real time, even when the agent runs inside workflow steps.
 
-See [Workflow Streaming](/docs/streaming/workflow-streaming) for more details.
+See [Workflow Streaming](/docs/workflows/overview#inspecting-workflow-stream-payloads) for more details.
 
 :::
 
@@ -51,9 +51,9 @@ export async function POST(req: Request) {
   content={[
   {
     name: 'version',
-    type: "'v5' | 'v6'",
+    type: "'v5' | 'v6' | 'v7'",
     description:
-      "Selects the AI SDK stream contract to emit. Omit it or pass `'v5'` for the existing default behavior. Pass `'v6'` when your app is typed against AI SDK v6 response helpers.",
+      "Selects the AI SDK stream contract to emit. Omit it or pass `'v5'` for the existing default behavior. Pass `'v6'` when your app is typed against AI SDK v6 response helpers. Pass `'v7'` when your app is typed against AI SDK v7.",
     isOptional: true,
     defaultValue: "'v5'",
   },

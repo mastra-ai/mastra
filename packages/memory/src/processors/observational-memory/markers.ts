@@ -1,3 +1,4 @@
+import { formatOmError } from './error';
 import type {
   DataOmActivationPart,
   DataOmBufferingEndPart,
@@ -50,6 +51,8 @@ export function createObservationEndMarker(params: {
   observations?: string;
   currentTask?: string;
   suggestedResponse?: string;
+  extractedValues?: Record<string, unknown>;
+  extractionFailures?: Array<{ slug: string; error: string }>;
   recordId: string;
   threadId: string;
 }): DataOmObservationEndPart {
@@ -68,6 +71,8 @@ export function createObservationEndMarker(params: {
       observations: params.observations,
       currentTask: params.currentTask,
       suggestedResponse: params.suggestedResponse,
+      extractedValues: params.extractedValues,
+      extractionFailures: params.extractionFailures,
       recordId: params.recordId,
       threadId: params.threadId,
     },
@@ -82,7 +87,7 @@ export function createObservationFailedMarker(params: {
   operationType: 'observation' | 'reflection';
   startedAt: string;
   tokensAttempted: number;
-  error: string;
+  error: unknown;
   recordId: string;
   threadId: string;
 }): DataOmObservationFailedPart {
@@ -97,7 +102,7 @@ export function createObservationFailedMarker(params: {
       failedAt,
       durationMs,
       tokensAttempted: params.tokensAttempted,
-      error: params.error,
+      error: formatOmError(params.error),
       recordId: params.recordId,
       threadId: params.threadId,
     },
@@ -143,6 +148,8 @@ export function createBufferingEndMarker(params: {
   recordId: string;
   threadId: string;
   observations?: string;
+  extractedValues?: Record<string, unknown>;
+  extractionFailures?: Array<{ slug: string; error: string }>;
 }): DataOmBufferingEndPart {
   const completedAt = new Date().toISOString();
   const durationMs = new Date(completedAt).getTime() - new Date(params.startedAt).getTime();
@@ -159,6 +166,8 @@ export function createBufferingEndMarker(params: {
       recordId: params.recordId,
       threadId: params.threadId,
       observations: params.observations,
+      extractedValues: params.extractedValues,
+      extractionFailures: params.extractionFailures,
     },
   };
 }
@@ -171,7 +180,7 @@ export function createBufferingFailedMarker(params: {
   operationType: OmOperationType;
   startedAt: string;
   tokensAttempted: number;
-  error: string;
+  error: unknown;
   recordId: string;
   threadId: string;
 }): DataOmBufferingFailedPart {
@@ -186,7 +195,7 @@ export function createBufferingFailedMarker(params: {
       failedAt,
       durationMs,
       tokensAttempted: params.tokensAttempted,
-      error: params.error,
+      error: formatOmError(params.error),
       recordId: params.recordId,
       threadId: params.threadId,
     },

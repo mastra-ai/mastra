@@ -1,5 +1,6 @@
 import type { StandardSchemaV1, StandardJSONSchemaV1 } from '@standard-schema/spec';
 import { toJSONSchema } from 'zod/v4';
+import { patchRecordSchemas } from '../../zod-to-json';
 import type { StandardSchemaWithJSON, StandardSchemaWithJSONProps } from '../standard-schema.types';
 
 /**
@@ -38,6 +39,13 @@ function convertToJsonSchema(
   options: StandardJSONSchemaV1.Options,
   adapterOptions: ZodV4AdapterOptions,
 ): Record<string, unknown> {
+  // Work around a Zod v4 bug where `z.record(valueSchema)` puts the value
+  // in `def.keyType` instead of `def.valueType`, which crashes
+  // `toJSONSchema`'s `recordProcessor`. The legacy `zodToJsonSchema` entry
+  // applies the same patch; this keeps the `applyCompatLayer` path in sync.
+  // Idempotent — safe to call repeatedly.
+  patchRecordSchemas(zodSchema);
+
   const target = SUPPORTED_TARGETS.has(options.target) ? options.target : 'draft-07';
 
   const jsonSchemaOptions: Record<string, unknown> = {

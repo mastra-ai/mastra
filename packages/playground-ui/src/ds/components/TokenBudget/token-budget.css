@@ -1,0 +1,51 @@
+/* Hatching reads as provisional: the slice of the fill a pending pass will free. */
+.token-budget-hatch {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    currentcolor 0 1.5px,
+    color-mix(in oklab, currentcolor 25%, transparent) 1.5px 4px
+  );
+}
+
+.token-budget-dial {
+  display: block;
+  flex: none;
+  inline-size: 0.875rem;
+  block-size: 0.875rem;
+}
+
+.token-budget-dial circle {
+  fill: none;
+  stroke-linecap: round;
+}
+
+.token-budget-track {
+  stroke: color-mix(in oklab, currentcolor 22%, transparent);
+}
+
+/* The wedge starts at noon rather than at three o'clock. */
+.token-budget-arc {
+  transform: rotate(-90deg);
+  transform-origin: 10px 10px;
+}
+
+/* While work runs, the wedge is painted by a light travelling along the stroke —
+ * `shimmer-text` transposed to an arc, so nothing moves beside the dial. */
+.token-budget-sheen {
+  transform-origin: 10px 10px;
+  animation: token-budget-sweep 1.6s linear infinite;
+}
+
+@keyframes token-budget-sweep {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Without motion the light still has to separate work from rest, so it parks on the wedge. */
+@media (prefers-reduced-motion: reduce) {
+  .token-budget-sheen {
+    animation: none;
+    transform: rotate(120deg);
+  }
+}

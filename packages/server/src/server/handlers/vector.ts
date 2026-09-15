@@ -1,5 +1,5 @@
 import { EMBEDDING_MODELS } from '@mastra/core/llm';
-import type { MastraVector, QueryResult, IndexStats } from '@mastra/core/vector';
+import type { MastraVector, QueryResult, IndexStats, VectorFilter } from '@mastra/core/vector';
 import { HTTPException } from '../http-exception';
 import {
   vectorNamePathParams,
@@ -296,7 +296,14 @@ export const QUERY_VECTORS_ROUTE = createRoute({
       }
 
       const vector = getVector(mastra, vectorName);
-      const results: QueryResult[] = await vector.query({ indexName, queryVector, topK, filter, includeVector });
+      const results: QueryResult[] = await vector.query({
+        indexName,
+        queryVector,
+        topK,
+        // Body schema is intentionally permissive; the store validates the filter shape.
+        filter: filter as VectorFilter,
+        includeVector,
+      });
       return results;
     } catch (error) {
       return handleError(error, 'Error querying vectors');

@@ -1,4 +1,6 @@
-import { Button, TextFieldBlock, Txt } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { TextFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Plus, Trash } from 'lucide-react';
 import { useId } from 'react';
 
@@ -9,18 +11,21 @@ export type HeaderListFormItem = {
 
 export interface HeaderListFormProps {
   headers: Array<HeaderListFormItem>;
+  showHeading?: boolean;
   onAddHeader: (header: HeaderListFormItem) => void;
   onRemoveHeader: (index: number) => void;
 }
 
-export const HeaderListForm = ({ headers, onAddHeader, onRemoveHeader }: HeaderListFormProps) => {
+export const HeaderListForm = ({ headers, onAddHeader, onRemoveHeader, showHeading = true }: HeaderListFormProps) => {
   return (
     <div className="space-y-4">
-      <Txt as="h2" variant="header-xs" className="text-neutral6">
-        Headers
-      </Txt>
+      {showHeading && (
+        <Txt as="h2" variant="header-xs" className="text-neutral6">
+          Headers
+        </Txt>
+      )}
 
-      <div className=" space-y-6">
+      <div className="space-y-6">
         {headers.length > 0 && (
           <ul className="space-y-4">
             {headers.map((header, index) => (
@@ -31,15 +36,14 @@ export const HeaderListForm = ({ headers, onAddHeader, onRemoveHeader }: HeaderL
           </ul>
         )}
 
-        <div className="flex items-center gap-2 justify-between">
+        <div className="flex items-center justify-between gap-2">
           {headers.length === 0 && <Txt className="text-neutral3">No header yet</Txt>}
           <Button
             type="button"
             onClick={() => onAddHeader({ name: '', value: '' })}
             size={headers.length === 0 ? 'md' : 'sm'}
-            className=""
+            icon={<Plus />}
           >
-            <Plus />
             {headers.length === 0 ? 'Add Header' : 'Add Another Header'}
           </Button>
         </div>
@@ -59,7 +63,7 @@ const HeaderListFormItem = ({ index, header, onRemove }: HeaderListFormItemProps
   const valueId = useId();
 
   return (
-    <div className="grid grid-cols-[1fr_1fr_auto] gap-4 items-end">
+    <div className="grid grid-cols-[1fr_1fr_auto] items-end gap-4">
       <TextFieldBlock
         id={nameId}
         name={`headers.${index}.name`}

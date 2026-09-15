@@ -475,10 +475,12 @@ OAuth tokens cached for 50 minutes to avoid expensive requests.
 
 ### Audio Input (Client → Server)
 
+The MIME type includes the configured `audioConfig.inputSampleRate` (16000 Hz by default).
+
 ```json
 {
   "realtime_input": {
-    "media_chunks": [{ "mime_type": "audio/pcm", "data": "base64..." }]
+    "audio": { "mime_type": "audio/pcm;rate=16000", "data": "base64..." }
   }
 }
 ```

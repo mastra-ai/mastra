@@ -1,0 +1,19 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "Run a slow work idle status check.",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat"
+      },
+      "chunkSize": 4,
+      "streamingProfile": {
+        "ttft": 500,
+        "tps": 4
+      },
+      "response": {
+        "content": "Work idle status response complete."
+      }
+    }
+  ]
+}

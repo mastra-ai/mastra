@@ -1,4 +1,4 @@
-import { MainContentLayout } from '@mastra/playground-ui';
+import { MainContentLayout } from '@mastra/playground-ui/components/MainContent';
 import { ScorerCreateContent } from '@/domains/scores/components/scorer-create-content';
 import { useLinkComponent } from '@/lib/framework';
 

@@ -51,12 +51,12 @@
 
 .dialog-overlay-anim[data-state='open'],
 .dialog-overlay-anim[data-open] {
-  animation: dialog-overlay-in 320ms cubic-bezier(0.22, 1, 0.36, 1);
+  animation: dialog-overlay-in 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .dialog-overlay-anim[data-state='closed'],
 .dialog-overlay-anim[data-closed] {
-  animation: dialog-overlay-out 240ms cubic-bezier(0.32, 0, 0.67, 0);
+  animation: dialog-overlay-out 240ms cubic-bezier(0.32, 0, 0.67, 0) both;
 }
 
 .dialog-content-anim[data-state='open'],

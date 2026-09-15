@@ -1,6 +1,6 @@
 ---
 title: "Reference: Workflow class | Workflows"
-description: Documentation for the `Workflow` class in Mastra, which enables you to create state machines for complex sequences of operations with conditional branching and data validation.
+description: "The Workflow class enables you to create state machines for complex sequences of operations with conditional branching and data validation."
 packages:
   - "@mastra/core"
 ---
@@ -35,7 +35,7 @@ You can define the workflow's `inputSchema` and `outputSchema` with any library 
 
 <Tabs>
   <TabItem value="zod" label="Zod">
-    ```typescript {9,12,15,16} title="src/mastra/workflows/test-workflow.ts" prettier:false
+    ```typescript {9,12,15,16} title="src/mastra/workflows/test-workflow.ts" oxfmt:false
     import { createWorkflow, createStep } from "@mastra/core/workflows";
     import { z } from "zod";
 
@@ -56,7 +56,7 @@ You can define the workflow's `inputSchema` and `outputSchema` with any library 
   </TabItem>
 
   <TabItem value="valibot" label="Valibot">
-    ```typescript {10,13,16,17} title="src/mastra/workflows/test-workflow.ts" prettier:false
+    ```typescript {10,13,16,17} title="src/mastra/workflows/test-workflow.ts" oxfmt:false
     import { createWorkflow, createStep } from "@mastra/core/workflows";
     import * as v from "valibot";
     import { toStandardJsonSchema } from "@valibot/to-json-schema";
@@ -78,7 +78,7 @@ You can define the workflow's `inputSchema` and `outputSchema` with any library 
   </TabItem>
 
   <TabItem value="arktype" label="ArkType">
-    ```typescript {9,12,15,16} title="src/mastra/workflows/test-workflow.ts" prettier:false
+    ```typescript {9,12,15,16} title="src/mastra/workflows/test-workflow.ts" oxfmt:false
     import { createWorkflow, createStep } from "@mastra/core/workflows";
     import { type } from "arktype";
 
@@ -213,11 +213,82 @@ You can define the workflow's `inputSchema` and `outputSchema` with any library 
             defaultValue: 'true',
           },
           {
+            name: 'autoRestartActiveRuns',
+            type: 'boolean',
+            description:
+              "Whether boot-time generic recovery (Mastra.restartAllActiveWorkflowRuns()) automatically restarts this workflow's active runs. Set to false for workflows whose side effects must not be re-driven by a blanket restart, or whose recovery is owned by another mechanism. Durable agent workflows set this to false because their recovery is owned by the opt-in recovery.durableAgents: 'auto' path.",
+            isOptional: true,
+            defaultValue: 'true',
+          },
+          {
             name: 'shouldPersistSnapshot',
             type: '(params: { stepResults: Record<string, StepResult<any, any, any, any>>; workflowStatus: WorkflowRunStatus }) => boolean',
             description: 'Optional flag to determine whether to persist the workflow snapshot',
             isOptional: true,
             defaultValue: '() => true',
+          },
+          {
+            name: 'pruneSnapshot',
+            type: '(params: { snapshot: WorkflowRunState; workflowStatus: WorkflowRunStatus }) => WorkflowRunState',
+            description:
+              'Optional hook to transform the workflow snapshot immediately before it is persisted. Must return JSON-serializable data and preserve everything the workflow needs to resume (suspended step suspendPayloads, suspendedPaths, executionPath, etc.). Used internally by agent runs to keep snapshots minimal; user workflows persist full snapshots by default.',
+            isOptional: true,
+          },
+          {
+            name: 'onStart',
+            type: '(info: WorkflowStartCallbackInfo) => void | Promise<void>',
+            description:
+              'Callback awaited before a run starts executing, and before any step runs. Fires only on initial start, not on resume, restart, or time travel. Unlike onFinish and onError, errors thrown here are propagated: they reject the start() or stream() call and the run never executes, so this can be used as a pre-flight gate such as a quota check. The run record created by createRun() stays at status pending.',
+            isOptional: true,
+            properties: [
+              {
+                type: 'WorkflowStartCallbackInfo',
+                parameters: [
+                  {
+                    name: 'runId',
+                    type: 'string',
+                    description: 'The workflow run ID',
+                  },
+                  {
+                    name: 'workflowId',
+                    type: 'string',
+                    description: 'The workflow identifier',
+                  },
+                  {
+                    name: 'resourceId',
+                    type: 'string',
+                    description: 'Resource or user identifier for multi-tenant scenarios',
+                    isOptional: true,
+                  },
+                  {
+                    name: 'getInitData',
+                    type: '() => any',
+                    description: 'Returns the initial workflow input data',
+                  },
+                  {
+                    name: 'state',
+                    type: 'Record<string, any>',
+                    description: 'The initial workflow state',
+                  },
+                  {
+                    name: 'requestContext',
+                    type: 'RequestContext',
+                    description: 'The request context for the run',
+                  },
+                  {
+                    name: 'mastra',
+                    type: 'Mastra',
+                    description: 'The Mastra instance, when the workflow is registered',
+                    isOptional: true,
+                  },
+                  {
+                    name: 'logger',
+                    type: 'IMastraLogger',
+                    description: 'The Mastra logger',
+                  },
+                ],
+              },
+            ],
           },
           {
             name: 'onFinish',

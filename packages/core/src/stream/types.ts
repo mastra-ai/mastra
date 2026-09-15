@@ -1,3 +1,4 @@
+import type { TransformStream } from 'node:stream/web';
 import type {
   LanguageModelV2FinishReason,
   LanguageModelV2Usage,
@@ -15,8 +16,11 @@ import type {
 import type { CallSettings, ModelMessage, StepResult, ToolSet, TypedToolCall, UIMessage } from '@internal/ai-sdk-v5';
 import type { AIV5ResponseMessage } from '../agent/message-list';
 import type { AIV5Type, MastraDBMessage } from '../agent/message-list/types';
+import type { AgentSignalType } from '../agent/signals';
 import type { StructuredOutputOptions } from '../agent/types';
+import type { ModelConfigModelSettings } from '../llm/model/model-settings';
 import type { MastraLanguageModel, SharedProviderOptions } from '../llm/model/shared.types';
+import type { IMastraLogger } from '../logger';
 import type { ScorerResult } from '../loop';
 import type { ClientObservabilityCarrier, ObservabilityContext } from '../observability';
 import type { OutputProcessorOrWorkflow } from '../processors';
@@ -143,6 +147,20 @@ export interface FilePayload {
   data: string | Uint8Array;
   base64?: string;
   mimeType: string;
+  filename?: string;
+  providerMetadata?: ProviderMetadata;
+}
+
+export interface ReasoningFilePayload {
+  data: string | Uint8Array;
+  base64?: string;
+  mimeType: string;
+  providerMetadata?: ProviderMetadata;
+}
+
+export interface CustomPayload {
+  /** The kind of custom content, in the format `{provider}.{provider-type}`. */
+  kind: string;
   providerMetadata?: ProviderMetadata;
 }
 
@@ -236,6 +254,8 @@ interface FinishPayload<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSc
   stepResult: {
     /** Includes 'tripwire' and 'retry' for processor scenarios */
     reason: LanguageModelV2FinishReason | 'tripwire' | 'retry';
+    /** Provider's own finish reason (e.g. 'MALFORMED_FUNCTION_CALL'), when the provider reports one */
+    rawReason?: string;
     warnings?: LanguageModelV2CallWarning[];
     isContinued?: boolean;
     logprobs?: LanguageModelV1LogProbs;
@@ -275,6 +295,8 @@ interface StartPayload {
 
 export interface StepStartPayload {
   messageId?: string;
+  /** Epoch milliseconds sampled immediately before the model provider call. Absent when no provider call occurred. */
+  startedAt?: number;
   request: {
     body?: string;
     [key: string]: unknown;
@@ -295,6 +317,8 @@ export interface StepFinishPayload<Tools extends ToolSet = ToolSet, OUTPUT = und
     isContinued?: boolean;
     warnings?: LanguageModelV2CallWarning[];
     reason: LanguageModelV2FinishReason;
+    /** Provider's own finish reason (e.g. 'MALFORMED_FUNCTION_CALL'), when the provider reports one */
+    rawReason?: string;
   };
   output: {
     text?: string;
@@ -317,7 +341,7 @@ export interface StepFinishPayload<Tools extends ToolSet = ToolSet, OUTPUT = und
   [key: string]: unknown;
 }
 
-interface ToolErrorPayload {
+export interface ToolErrorPayload {
   id?: string;
   providerMetadata?: ProviderMetadata;
   toolCallId: string;
@@ -325,6 +349,18 @@ interface ToolErrorPayload {
   args?: Record<string, unknown>;
   error: unknown;
   providerExecuted?: boolean;
+}
+
+/** Terminal stream payload when a requireApproval tool call is declined. */
+export interface ToolOutputDeniedPayload {
+  toolCallId: string;
+  toolName: string;
+  args?: Record<string, unknown>;
+  approval: {
+    id: string;
+    approved: false;
+    reason?: string;
+  };
 }
 
 interface AbortPayload {
@@ -404,6 +440,73 @@ export interface IsTaskCompletePayload {
   maxIterationReached: boolean;
   /** Whether to suppress the completion feedback message */
   suppressFeedback: boolean;
+}
+
+/**
+ * Payload for `goal` events emitted by the in-loop goal scorer. Consumers (TUIs,
+ * `@mastra/client-js`) use this to render judge progress and the result.
+ */
+export interface GoalEvaluationActivity {
+  type: 'tool-call' | 'tool-result' | 'reason';
+  name?: string;
+  message: string;
+}
+
+export interface GoalEvaluationPayload {
+  /** The objective being judged. */
+  objective: string;
+  /** Goal evaluations consumed so far (runsUsed after this evaluation). */
+  iteration: number;
+  /** Max evaluations before the goal stops. */
+  maxRuns: number;
+  /** Whether the goal is judged complete. */
+  passed: boolean;
+  /** The objective status after this evaluation. */
+  status: 'active' | 'paused' | 'done';
+  /** Individual scorer results. */
+  results: ScorerResult[];
+  /** Judge feedback / stop reason. Falls back to the pause reason when parked. */
+  reason?: string;
+  /**
+   * Why the objective is parked (`status === 'paused'`). Set for judge failure
+   * or budget exhaustion. Cleared when `status` is `'active'` or `'done'`.
+   */
+  pausedReason?: string;
+  /**
+   * True when the judge decided the goal is not finished but explicitly wants
+   * the user to provide input before continuing. The record stays `active` (so
+   * the next agent turn is still judged), but `isContinued` is `false` (the
+   * auto-loop stops). Display layers use this to show a "waiting" indicator.
+   */
+  waitingForUser?: boolean;
+  /** True when the scorer/judge itself errored (as opposed to scoring 0). */
+  judgeFailed?: boolean;
+  /** Total duration of the goal scoring check. */
+  duration: number;
+  /** Whether scoring timed out. */
+  timedOut: boolean;
+  /** Whether the run budget (`maxRuns`) was reached. */
+  maxRunsReached: boolean;
+  /** Whether the goal feedback message is suppressed from memory. */
+  suppressFeedback: boolean;
+  /**
+   * The goal gate's continuation decision: `true` when the run loops into
+   * another judged iteration, `false` on a terminal evaluation (completion,
+   * waiting for user, judge failure, or budget exhaustion). Only set on final
+   * (non-pending) evaluation chunks. A `true` value marks an iteration
+   * boundary — the turn's messages are persisted and the stream may safely
+   * truncate its run-lifetime buffers.
+   */
+  shouldContinue?: boolean;
+  /**
+   * True on the "pre-evaluation" chunk emitted before scoring starts. Display
+   * layers use this to show a loading/evaluating indicator while the scorer
+   * runs. A second chunk with `pending: false` (or absent) follows once the
+   * evaluation is complete.
+   */
+  pending?: boolean;
+  /** Judge activity emitted while the evaluation is still running. */
+  activity?: GoalEvaluationActivity[];
 }
 
 export interface BackgroundTaskStartedPayload {
@@ -769,6 +872,8 @@ export type AgentChunkType<OUTPUT = undefined> =
   | (BaseChunkType & { type: 'redacted-reasoning'; payload: RedactedReasoningPayload })
   | (BaseChunkType & { type: 'source'; payload: SourcePayload })
   | (BaseChunkType & { type: 'file'; payload: FilePayload })
+  | (BaseChunkType & { type: 'reasoning-file'; payload: ReasoningFilePayload })
+  | (BaseChunkType & { type: 'custom'; payload: CustomPayload })
   | (BaseChunkType & { type: 'tool-call'; payload: ToolCallPayload })
   | (BaseChunkType & { type: 'tool-call-approval'; payload: ToolCallApprovalPayload })
   | (BaseChunkType & { type: 'tool-call-suspended'; payload: ToolCallSuspendedPayload })
@@ -783,6 +888,7 @@ export type AgentChunkType<OUTPUT = undefined> =
   | (BaseChunkType & { type: 'step-start'; payload: StepStartPayload })
   | (BaseChunkType & { type: 'step-finish'; payload: StepFinishPayload<ToolSet, OUTPUT> })
   | (BaseChunkType & { type: 'tool-error'; payload: ToolErrorPayload })
+  | (BaseChunkType & { type: 'tool-output-denied'; payload: ToolOutputDeniedPayload })
   | (BaseChunkType & { type: 'abort'; payload: AbortPayload })
   | (BaseChunkType & {
       type: 'object';
@@ -800,6 +906,7 @@ export type AgentChunkType<OUTPUT = undefined> =
   | (BaseChunkType & { type: 'watch'; payload: WatchPayload })
   | (BaseChunkType & { type: 'tripwire'; payload: TripwirePayload })
   | (BaseChunkType & { type: 'is-task-complete'; payload: IsTaskCompletePayload })
+  | (BaseChunkType & { type: 'goal'; payload: GoalEvaluationPayload })
   | (BaseChunkType & {
       type: 'background-task-started';
       payload: BackgroundTaskStartedPayload;
@@ -848,6 +955,7 @@ export type WorkflowStreamEvent =
       type: 'workflow-finish';
       payload: {
         workflowStatus: WorkflowRunStatus;
+        finalWorkflowResult?: unknown;
         output: {
           usage: {
             inputTokens: number;
@@ -962,8 +1070,11 @@ export type CreateStream = () => Promise<LanguageModelV2StreamResult>;
 
 export type SourceChunk = BaseChunkType & { type: 'source'; payload: SourcePayload };
 export type FileChunk = BaseChunkType & { type: 'file'; payload: FilePayload };
+export type ReasoningFileChunk = BaseChunkType & { type: 'reasoning-file'; payload: ReasoningFilePayload };
+export type CustomChunk = BaseChunkType & { type: 'custom'; payload: CustomPayload };
 export type ToolCallChunk = BaseChunkType & { type: 'tool-call'; payload: ToolCallPayload };
 export type ToolResultChunk = BaseChunkType & { type: 'tool-result'; payload: ToolResultPayload };
+export type ToolOutputDeniedChunk = BaseChunkType & { type: 'tool-output-denied'; payload: ToolOutputDeniedPayload };
 export type ReasoningChunk = BaseChunkType & { type: 'reasoning'; payload: ReasoningDeltaPayload };
 
 export type PendingToolCall = {
@@ -983,9 +1094,10 @@ export type ExecuteStreamModelManager<T> = (
 export type ModelManagerModelConfig = {
   model: MastraLanguageModel;
   maxRetries: number;
+  maxRetriesConfigured?: boolean;
   id: string;
   headers?: Record<string, string>;
-  modelSettings?: Omit<CallSettings, 'abortSignal' | 'maxRetries' | 'headers'>;
+  modelSettings?: ModelConfigModelSettings;
   providerOptions?: SharedProviderOptions;
 };
 
@@ -997,6 +1109,8 @@ export type LanguageModelUsage = LanguageModelV2Usage & {
   reasoningTokens?: number;
   cachedInputTokens?: number;
   cacheCreationInputTokens?: number;
+  cacheCreationInputTokens5m?: number;
+  cacheCreationInputTokens1h?: number;
   /**
    * Raw usage data from the provider, preserved for advanced use cases.
    * For V3 models, contains the full nested structure:
@@ -1028,8 +1142,21 @@ export type MastraOnFinishCallback<OUTPUT = undefined> = (
   event: MastraOnFinishCallbackArgs<OUTPUT>,
 ) => Promise<void> | void;
 
+/**
+ * Creates a fresh transform for a Mastra model output stream.
+ *
+ * @experimental This API may change in a future release.
+ */
+export type MastraStreamTransform<OUTPUT = undefined> = () => TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>;
+
+/** @experimental This API may change in a future release. */
+export type MastraStreamTransformOptions<OUTPUT = undefined> =
+  | MastraStreamTransform<OUTPUT>
+  | readonly MastraStreamTransform<OUTPUT>[];
+
 export type MastraModelOutputOptions<OUTPUT = undefined> = {
   runId: string;
+  logger?: IMastraLogger;
   toolCallStreaming?: boolean;
   onFinish?: MastraOnFinishCallback<OUTPUT>;
   onStepFinish?: MastraOnStepFinishCallback<OUTPUT>;
@@ -1037,10 +1164,29 @@ export type MastraModelOutputOptions<OUTPUT = undefined> = {
   structuredOutput?: StructuredOutputOptions<OUTPUT>;
   outputProcessors?: OutputProcessorOrWorkflow[];
   isLLMExecutionStep?: boolean;
+  /**
+   * When true, force text/finishReason promise resolution at step-finish even
+   * when `isLLMExecutionStep` is set.  Durable agents have a single
+   * MastraModelOutput for the entire run that needs both per-chunk output
+   * processor processing (isLLMExecutionStep) AND final promise resolution.
+   */
+  resolveFinalPromises?: boolean;
+  /**
+   * When true, `error` chunks and `finish` chunks with stepResult.reason
+   * 'error' bypass the per-chunk output processor pass. These chunks describe a
+   * single model call that the caller may still recover from via an error
+   * processor retry or a fallback model, so the caller becomes responsible for
+   * running output processors on the error once recovery has been ruled out.
+   */
+  deferErrorChunks?: boolean;
   returnScorerData?: boolean;
   processorStates?: Map<string, any>;
   requestContext?: RequestContext;
   transportRef?: StreamTransportRef;
+  /** Experimental transforms applied whenever `fullStream` is consumed. */
+  experimentalTransform?: MastraStreamTransformOptions<OUTPUT>;
+  /** @internal Signal exclusions for caller-facing streams, not internal fanout. */
+  hideSignals?: boolean | AgentSignalType[];
 } & Partial<ObservabilityContext>;
 
 /**

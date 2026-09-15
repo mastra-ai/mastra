@@ -11,12 +11,18 @@
   "license": "Apache-2.0",
   "description": "",
   "dependencies": {
-    "@mastra/client-js": "^1.13.3",
-    "@mastra/mcp": "^1.4.2",
-    "hono": "^4.12.14",
+    "@mastra/client-js": "^1.35.0",
+    "@mastra/mcp": "^1.15.0",
+    "hono": "^4.12.34",
     "octokit": "^5.0.5"
   },
+  "overrides": {
+    "@hono/node-server": "1.19.15",
+    "ip-address": "10.3.1",
+    "js-yaml": "3.15.1",
+    "nanoid": "3.3.18"
+  },
   "devDependencies": {
-    "dotenv": "^17.3.1"
+    "dotenv": "^17.4.2"
   }
 }

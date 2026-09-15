@@ -1,8 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Mastra } from '@mastra/core';
 import { LibSQLStore } from '@mastra/libsql';
-import { Workspace } from '@mastra/core/workspace';
-import { LocalFilesystem } from '@mastra/core/workspace';
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
 import { MastraEditor } from './index';
 import { snapshotsMatch } from './snapshots-match';
 

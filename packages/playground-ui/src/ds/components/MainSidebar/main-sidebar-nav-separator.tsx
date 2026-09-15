@@ -9,8 +9,8 @@ export function MainSidebarNavSeparator({ className, ...props }: MainSidebarNavS
       role="separator"
       aria-orientation="horizontal"
       className={cn(
-        'min-h-5 relative',
-        '[&:after]:content-[""] [&:after]:block [&:after]:absolute [&:after]:h-0 [&:after]:border-border1 [&:after]:border-t [&:after]:top-1/2 [&:after]:left-3 [&:after]:right-3',
+        'relative min-h-5',
+        '[&:after]:absolute [&:after]:inset-x-3 [&:after]:top-1/2 [&:after]:block [&:after]:h-0 [&:after]:border-t [&:after]:border-border1 [&:after]:content-[""]',
         className,
       )}
       {...props}

@@ -1,9 +1,9 @@
 import type { StorybookConfig } from '@storybook/react-vite';
-import { createRequire } from 'module';
+import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 
-import { join, dirname } from 'path';
+import { join, dirname } from 'node:path';
 
 /**
  * This function is used to resolve the absolute path of a package.

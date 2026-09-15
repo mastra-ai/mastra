@@ -8,6 +8,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { z } from 'zod/v3';
 
 import { MCPServer } from '../server';
+import { makeMockExtra } from './mock-extra';
 
 /**
  * Tests for FGA authorization in MCP server tool execution.
@@ -188,6 +189,25 @@ describe('MCP Server FGA checks', () => {
     expect(mockFGAProvider.require).toHaveBeenCalledTimes(2);
   });
 
+  it('should use an empty object input schema for schema-less tools without FGA', async () => {
+    const schemaLessTool = createTool({
+      id: 'schema-less-tool',
+      description: 'A schema-less tool',
+      execute: vi.fn(),
+    });
+    mcpServer = new MCPServer({
+      name: 'test-server',
+      version: '1.0.0',
+      tools: { 'schema-less-tool': schemaLessTool },
+    });
+    (mcpServer as any).convertedTools['schema-less-tool'].parameters = undefined;
+
+    const result = await mcpServer.getToolListInfo();
+
+    expect(result.tools[0]?.inputSchema).toEqual({ type: 'object', properties: {} });
+    expect(mcpServer.getToolInfo('schema-less-tool')?.inputSchema).toEqual({ type: 'object', properties: {} });
+  });
+
   it('should expose outputSchema separately from inputSchema after FGA filtering', async () => {
     mcpServer = new MCPServer({
       name: 'test-server',
@@ -209,6 +229,30 @@ describe('MCP Server FGA checks', () => {
     expect(result.tools[0]?.outputSchema).toMatchObject({
       properties: { output: expect.any(Object) },
     });
+  });
+
+  it('should use an empty object input schema for schema-less tools after FGA filtering', async () => {
+    const schemaLessTool = createTool({
+      id: 'schema-less-tool',
+      description: 'A schema-less tool',
+      execute: vi.fn(),
+    });
+    mcpServer = new MCPServer({
+      name: 'test-server',
+      version: '1.0.0',
+      tools: { 'schema-less-tool': schemaLessTool },
+    });
+    const mockFGAProvider = {
+      check: vi.fn(),
+      require: vi.fn(),
+      filterAccessible: vi.fn(),
+    };
+    mcpServer.__registerMastra(createMockMastra(mockFGAProvider) as any);
+    (mcpServer as any).convertedTools['schema-less-tool'].parameters = undefined;
+
+    const result = await mcpServer.getToolListInfo(createRequestContext({ id: 'user-1' }) as any);
+
+    expect(result.tools[0]?.inputSchema).toEqual({ type: 'object', properties: {} });
   });
 
   it('should return no tools when FGA is configured and list context has no user', async () => {
@@ -274,12 +318,7 @@ describe('MCP Server FGA checks', () => {
         id: 'test-list',
         method: 'tools/list',
       },
-      {
-        authInfo,
-        signal: new AbortController().signal,
-        sendNotification: vi.fn(),
-        sendRequest: vi.fn(),
-      },
+      makeMockExtra({ authInfo }),
     );
 
     expect(result.tools.map((tool: { name: string }) => tool.name)).toEqual(['test-tool']);
@@ -344,12 +383,7 @@ describe('MCP Server FGA checks', () => {
           arguments: { input: 'hello' },
         },
       },
-      {
-        authInfo,
-        signal: new AbortController().signal,
-        sendNotification: vi.fn(),
-        sendRequest: vi.fn(),
-      },
+      makeMockExtra({ authInfo }),
     );
 
     expect(result.isError).toBe(false);
@@ -360,6 +394,108 @@ describe('MCP Server FGA checks', () => {
       expect.objectContaining({
         resource: { type: 'tool', id: JSON.stringify([mcpServer.getServerInfo().id, 'test-tool']) },
         permission: MastraFGAPermissions.TOOLS_EXECUTE,
+      }),
+    );
+  });
+
+  it('should use server FGA mapping overrides when filtering tools/list', async () => {
+    const deriveId = vi.fn(({ user }) => user.id);
+    mcpServer = new MCPServer({
+      name: 'test-server',
+      version: '1.0.0',
+      tools: {
+        'test-tool': createTool({
+          id: 'test-tool',
+          description: 'A test tool',
+          inputSchema: z.object({}),
+          execute: vi.fn(),
+        }),
+      },
+      fga: {
+        resourceMapping: {
+          tool: {
+            fgaResourceType: 'mcp-user',
+            deriveId,
+          },
+        },
+        permissionMapping: {
+          [MastraFGAPermissions.TOOLS_EXECUTE]: 'read',
+        },
+      },
+    });
+    const mockFGAProvider = {
+      check: vi.fn(),
+      require: vi.fn(),
+      filterAccessible: vi.fn(),
+    };
+    mcpServer.__registerMastra(createMockMastra(mockFGAProvider) as any);
+
+    const requestContext = createRequestContext({ id: 'user-1' });
+    const result = await mcpServer.getToolListInfo(requestContext as any);
+
+    expect(result.tools.map(tool => tool.name)).toEqual(['test-tool']);
+    expect(deriveId).toHaveBeenCalledWith({
+      user: { id: 'user-1' },
+      resourceId: JSON.stringify([mcpServer.getServerInfo().id, 'test-tool']),
+      requestContext,
+    });
+    expect(mockFGAProvider.require).toHaveBeenCalledWith(
+      { id: 'user-1' },
+      expect.objectContaining({
+        resource: { type: 'mcp-user', id: 'user-1' },
+        permission: 'read',
+      }),
+    );
+  });
+
+  it('should use server FGA mapping overrides when enforcing tools/call', async () => {
+    const execute = vi.fn().mockResolvedValue({ output: 'success' });
+    const deriveId = vi.fn(({ user }) => user.id);
+    mcpServer = new MCPServer({
+      name: 'test-server',
+      version: '1.0.0',
+      tools: {
+        'test-tool': createTool({
+          id: 'test-tool',
+          description: 'A test tool',
+          inputSchema: z.object({ input: z.string() }),
+          execute,
+        }),
+      },
+      fga: {
+        resourceMapping: {
+          tool: {
+            fgaResourceType: 'mcp-user',
+            deriveId,
+          },
+        },
+        permissionMapping: {
+          [MastraFGAPermissions.TOOLS_EXECUTE]: 'read',
+        },
+      },
+    });
+    const mockFGAProvider = {
+      check: vi.fn(),
+      require: vi.fn(),
+      filterAccessible: vi.fn(),
+    };
+    mcpServer.__registerMastra(createMockMastra(mockFGAProvider) as any);
+
+    const requestContext = createRequestContext({ id: 'user-1' });
+
+    await mcpServer.executeTool('test-tool', { input: 'hello' }, { requestContext: requestContext as any });
+
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(deriveId).toHaveBeenCalledWith({
+      user: { id: 'user-1' },
+      resourceId: JSON.stringify([mcpServer.getServerInfo().id, 'test-tool']),
+      requestContext,
+    });
+    expect(mockFGAProvider.require).toHaveBeenCalledWith(
+      { id: 'user-1' },
+      expect.objectContaining({
+        resource: { type: 'mcp-user', id: 'user-1' },
+        permission: 'read',
       }),
     );
   });

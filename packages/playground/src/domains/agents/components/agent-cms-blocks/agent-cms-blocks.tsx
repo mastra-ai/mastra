@@ -1,5 +1,8 @@
-import { ContentBlocks, DropdownMenu, Icon, cn } from '@mastra/playground-ui';
-import type { JsonSchema } from '@mastra/playground-ui';
+import { ContentBlocks } from '@mastra/playground-ui/components/ContentBlocks';
+import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { cn } from '@mastra/playground-ui/utils/cn';
+import type { JsonSchema } from '@mastra/playground-ui/utils/json-schema';
 import { FileText, PenLine, PlusIcon } from 'lucide-react';
 import { useState } from 'react';
 import type { InstructionBlock } from '../agent-edit-page/utils/form-validation';
@@ -25,12 +28,12 @@ interface AddBlockButtonProps {
 const AddBlockButton = ({ onAddInline, onPickRef, className }: AddBlockButtonProps) => {
   return (
     <div className={cn('group/add flex items-center gap-2 py-0.5', className)}>
-      <div className="flex-1 h-px bg-border1 opacity-0 group-hover/add:opacity-100 transition-opacity duration-150" />
+      <div className="bg-border1 h-px flex-1 opacity-0 transition-opacity duration-150 group-hover/add:opacity-100" />
       <DropdownMenu>
         <DropdownMenu.Trigger asChild>
           <button
             type="button"
-            className="flex items-center justify-center h-6 w-6 rounded-full text-neutral3 hover:text-neutral6 hover:bg-surface4 opacity-0 group-hover/add:opacity-100 transition-all duration-150 focus-visible:opacity-100 focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-accent1"
+            className="text-neutral3 hover:text-neutral6 hover:bg-surface4 focus-visible:ring-accent1 flex h-6 w-6 items-center justify-center rounded-full opacity-0 transition-all duration-150 group-hover/add:opacity-100 focus-visible:opacity-100 focus-visible:ring-1 focus-visible:outline-hidden"
           >
             <Icon>
               <PlusIcon />
@@ -52,7 +55,7 @@ const AddBlockButton = ({ onAddInline, onPickRef, className }: AddBlockButtonPro
           </DropdownMenu.Item>
         </DropdownMenu.Content>
       </DropdownMenu>
-      <div className="flex-1 h-px bg-border1 opacity-0 group-hover/add:opacity-100 transition-opacity duration-150" />
+      <div className="bg-border1 h-px flex-1 opacity-0 transition-opacity duration-150 group-hover/add:opacity-100" />
     </div>
   );
 };
@@ -116,8 +119,8 @@ export const AgentCMSBlocks = ({
   return (
     <div className={cn('flex flex-col w-full h-full overflow-y-auto', className)}>
       {items.length > 0 && (
-        <div className="overflow-y-auto h-full pl-10 pr-2">
-          <ContentBlocks items={items} onChange={onChange} className="flex flex-col w-full">
+        <div className="h-full overflow-y-auto pr-2 pl-10">
+          <ContentBlocks items={items} onChange={onChange} className="flex w-full flex-col">
             {items.map((block, index) => (
               <div key={block.id}>
                 {/* Add-block handle between blocks */}
@@ -145,7 +148,7 @@ export const AgentCMSBlocks = ({
       )}
 
       {!readOnly && (
-        <div className="pl-10 pr-2">
+        <div className="pr-2 pl-10">
           <AddBlockButton
             onAddInline={() => handleAddInlineAt(items.length)}
             onPickRef={() => handlePickRefAt(items.length)}

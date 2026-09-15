@@ -1,6 +1,6 @@
 import type { IAgentBuilder } from '@mastra/core/agent-builder/ee';
 import type { IMastraEditor } from '@mastra/core/editor';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 import {
   GET_EDITOR_BUILDER_AVAILABLE_MODELS_ROUTE,
@@ -613,16 +613,45 @@ describe('GET /editor/builder/infrastructure route metadata', () => {
 describe('GET /editor/builder/models/available', () => {
   const runAvailable = (editor?: Partial<IMastraEditor>) =>
     GET_EDITOR_BUILDER_AVAILABLE_MODELS_ROUTE.handler({ mastra: createMockMastra(editor) } as any) as Promise<{
-      providers: Array<{ id: string; models: string[] }>;
+      providers: Array<{ id: string; models: string[]; connected: boolean }>;
     }>;
 
-  it('returns the full provider list when no editor / policy is configured', async () => {
+  const originalOpenAIKey = process.env.OPENAI_API_KEY;
+  const originalAnthropicKey = process.env.ANTHROPIC_API_KEY;
+
+  beforeEach(() => {
+    // The endpoint only surfaces providers with a configured API key, so make
+    // exactly one provider "connected" and ensure another is not.
+    process.env.OPENAI_API_KEY = 'test-key';
+    delete process.env.ANTHROPIC_API_KEY;
+  });
+
+  afterEach(() => {
+    if (originalOpenAIKey === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = originalOpenAIKey;
+    if (originalAnthropicKey === undefined) delete process.env.ANTHROPIC_API_KEY;
+    else process.env.ANTHROPIC_API_KEY = originalAnthropicKey;
+  });
+
+  it('returns only providers with a configured API key when no policy is configured', async () => {
     const { providers } = await runAvailable();
 
     expect(providers.length).toBeGreaterThan(0);
+    // Every returned provider is connected (has its API key configured).
+    expect(providers.every(p => p.connected)).toBe(true);
+
     const openai = providers.find(p => p.id === 'openai');
     expect(openai).toBeDefined();
     expect(openai!.models.length).toBeGreaterThan(0);
+  });
+
+  it('omits providers whose API key is not configured', async () => {
+    const { providers } = await runAvailable();
+
+    // anthropic has no API key set in this test, so it must be filtered out
+    // even though it exists in the provider registry.
+    expect(providers.find(p => p.id === 'anthropic')).toBeUndefined();
+    expect(providers.find(p => p.id === 'openai')).toBeDefined();
   });
 
   it('filters models down to the active policy allowlist (provider wildcard)', async () => {

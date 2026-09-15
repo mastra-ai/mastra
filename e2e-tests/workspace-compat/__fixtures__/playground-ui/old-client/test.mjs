@@ -1,4 +1,4 @@
-import { isWorkspaceV1Supported } from '@mastra/playground-ui/utils';
+import { isWorkspaceV1Supported } from '@mastra/playground-ui/utils/workspace-compat';
 import { MastraClient } from '@mastra/client-js';
 import { coreFeatures } from '@mastra/core/features';
 import { createRequire } from 'module';

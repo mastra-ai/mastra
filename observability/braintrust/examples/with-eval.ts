@@ -1,8 +1,7 @@
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
 import { BraintrustExporter } from '../src/tracing';
-import { Eval } from 'braintrust';
-import { initLogger } from 'braintrust';
+import { Eval, initLogger } from 'braintrust';
 import { Observability } from '@mastra/observability';
 
 /**

@@ -2,7 +2,14 @@ import * as AIV5 from '@internal/ai-sdk-v5';
 
 import { MastraError, ErrorDomain, ErrorCategory } from '../../../error';
 import { getTransformedToolPayload, hasTransformedToolPayload } from '../../../tools/payload-transform';
-import { categorizeFileData, createDataUri, parseDataUri } from '../prompt/image-utils';
+import type { ImageContent } from '../prompt/image-utils';
+import {
+  categorizeFileData,
+  createDataUri,
+  imageContentToString,
+  parseDataUri,
+  resolveFilePartMediaTypeAndData,
+} from '../prompt/image-utils';
 import type {
   MastraDBMessage,
   MastraMessageContentV2,
@@ -11,19 +18,26 @@ import type {
   MessageSource,
 } from '../state/types';
 import type { AIV5Type } from '../types';
+import { findToolCallArgs } from '../utils/provider-compat';
 import { sanitizeToolName } from '../utils/tool-name';
 
 /**
- * Filter out empty text parts from message parts array.
+ * Compact malformed entries and filter out empty text parts from message parts arrays.
  * Empty text blocks are not allowed by Anthropic's API and cause request failures.
  * This can happen during streaming when text-start/text-end events occur without actual content.
  * However, if the only part is an empty text part, it is preserved as a legitimate placeholder
  * (e.g. empty assistant messages between tool results and user messages).
  */
-function filterEmptyTextParts(parts: MastraMessagePart[]): MastraMessagePart[] {
-  const hasNonEmptyParts = parts.some(part => !(part.type === 'text' && part.text === ''));
-  if (!hasNonEmptyParts) return parts;
-  return parts.filter(part => {
+function compactMessageParts(parts: unknown): MastraMessagePart[] {
+  if (!Array.isArray(parts)) return [];
+  return parts.filter((part): part is MastraMessagePart => part !== null && typeof part === 'object');
+}
+
+function filterEmptyTextParts(parts: unknown): MastraMessagePart[] {
+  const compactedParts = compactMessageParts(parts);
+  const hasNonEmptyParts = compactedParts.some(part => !(part.type === 'text' && part.text === ''));
+  if (!hasNonEmptyParts) return compactedParts;
+  return compactedParts.filter(part => {
     if (part.type === 'text') {
       return part.text !== '';
     }
@@ -61,7 +75,7 @@ function isUserSignalType(type: string | undefined): boolean {
 function getTextContent(message: MastraDBMessage): string {
   return typeof message.content.content === 'string'
     ? message.content.content
-    : (message.content.parts.find(part => part.type === 'text')?.text ?? '');
+    : (compactMessageParts(message.content.parts).find(part => part.type === 'text')?.text ?? '');
 }
 
 function toSignalDataPart(message: MastraDBMessage): AIV5Type.DataUIPart<AIV5.UIDataTypes> {
@@ -244,8 +258,10 @@ export class AIV5Adapter {
       };
     }
 
+    const contentParts = compactMessageParts(dbMsg.content.parts);
+
     // 1. Handle tool invocations (only if not already in parts array)
-    const hasToolInvocationParts = dbMsg.content.parts?.some(p => p.type === 'tool-invocation');
+    const hasToolInvocationParts = contentParts.some(p => p.type === 'tool-invocation');
     if (dbMsg.content.toolInvocations && !hasToolInvocationParts) {
       for (const invocation of dbMsg.content.toolInvocations) {
         if (invocation.state === 'result') {
@@ -268,8 +284,8 @@ export class AIV5Adapter {
     }
 
     // 2. Check if we have parts with providerMetadata first
-    const hasReasoningInParts = dbMsg.content.parts?.some(p => p.type === 'reasoning');
-    const hasFileInParts = dbMsg.content.parts?.some(p => p.type === 'file');
+    const hasReasoningInParts = contentParts.some(p => p.type === 'reasoning');
+    const hasFileInParts = contentParts.some(p => p.type === 'file');
 
     // 3. Handle reasoning (AIV4 reasoning is a string) - only if not in parts
     if (dbMsg.content.reasoning && !hasReasoningInParts) {
@@ -294,8 +310,8 @@ export class AIV5Adapter {
 
     // 5. Handle parts directly (if present in V2)
     let hasNonToolReasoningParts = false;
-    if (dbMsg.content.parts) {
-      for (const part of dbMsg.content.parts) {
+    if (contentParts.length > 0) {
+      for (const part of contentParts) {
         // Handle tool-invocation parts
         if (part.type === 'tool-invocation' && part.toolInvocation) {
           const inv = part.toolInvocation;
@@ -327,6 +343,19 @@ export class AIV5Adapter {
                 transformToolPayloads,
               ) as string,
               state: 'output-error',
+              callProviderMetadata: mergeMastraCreatedAt(part.providerMetadata, part.createdAt),
+              providerExecuted: (part as { providerExecuted?: boolean }).providerExecuted,
+            } satisfies AIV5Type.ToolUIPart);
+          } else if (inv.state === 'output-denied') {
+            // v5 has no denied state. Downgrade to a single output-available part whose output is
+            // the denial reason, so v5 UI consumers — and the next LLM turn's prompt, which is
+            // built through this adapter — see a tool result instead of a dangling tool call.
+            parts.push({
+              type: `tool-${inv.toolName}`,
+              toolCallId: inv.toolCallId,
+              input: getDisplayTransform(part.providerMetadata, 'input-available', inv.args, transformToolPayloads),
+              output: inv.approval?.reason ?? 'Tool call was not approved by the user',
+              state: 'output-available',
               callProviderMetadata: mergeMastraCreatedAt(part.providerMetadata, part.createdAt),
               providerExecuted: (part as { providerExecuted?: boolean }).providerExecuted,
             } satisfies AIV5Type.ToolUIPart);
@@ -371,30 +400,39 @@ export class AIV5Adapter {
 
         // Convert file parts from V2 format (data) to AIV5 format (url)
         if (part.type === 'file') {
+          // v5-shaped file parts (`mediaType`/`url`) can reach this v2→v5 path; resolve both
+          // shapes so the media type survives (instead of the image/png default) and the
+          // payload is read from `url` when v5-shaped. Mirrors #17366.
+          const { mediaType: fileMimeType, data: fileData } = resolveFilePartMediaTypeAndData(part);
+          const filename = (part as { filename?: string }).filename;
+
           // Skip file parts that came from experimental_attachments to avoid duplicates
-          if (typeof part.data === 'string' && attachmentUrls.has(part.data)) {
+          if (typeof fileData === 'string' && attachmentUrls.has(fileData)) {
             continue;
           }
 
           const categorized =
-            typeof part.data === 'string'
-              ? categorizeFileData(part.data, part.mimeType)
-              : { type: 'raw' as const, mimeType: part.mimeType, data: part.data };
+            typeof fileData === 'string'
+              ? categorizeFileData(fileData, fileMimeType)
+              : { type: 'raw' as const, mimeType: fileMimeType, data: fileData };
 
-          if (categorized.type === 'url' && typeof part.data === 'string') {
+          // Provider file IDs (e.g. OpenAI "file-...") ride the url branch untouched so
+          // @ai-sdk/openai can forward them as { file_id: "file-..." } to the API.
+          if ((categorized.type === 'url' || categorized.type === 'providerFileId') && typeof fileData === 'string') {
             const v5UIPart: AIV5Type.FileUIPart = {
               type: 'file' as const,
-              url: part.data,
+              url: fileData,
               mediaType: categorized.mimeType || 'image/png',
+              ...(filename ? { filename } : {}),
             };
             v5UIPart.providerMetadata = mergeMastraCreatedAt(part.providerMetadata, part.createdAt);
             parts.push(v5UIPart);
           } else {
             let filePartData: string;
-            let extractedMimeType = part.mimeType;
+            let extractedMimeType = fileMimeType;
 
-            if (typeof part.data === 'string') {
-              const parsed = parseDataUri(part.data);
+            if (typeof fileData === 'string') {
+              const parsed = parseDataUri(fileData);
 
               if (parsed.isDataUri) {
                 filePartData = parsed.base64Content;
@@ -402,10 +440,12 @@ export class AIV5Adapter {
                   extractedMimeType = extractedMimeType || parsed.mimeType;
                 }
               } else {
-                filePartData = part.data;
+                filePartData = fileData;
               }
             } else {
-              filePartData = part.data;
+              // Non-string payload (defensive: stored file parts carry string data/url):
+              // coerce so `filePartData` stays typed `string`.
+              filePartData = imageContentToString(fileData as ImageContent, extractedMimeType);
             }
 
             const finalMimeType = extractedMimeType || 'image/png';
@@ -421,6 +461,7 @@ export class AIV5Adapter {
               type: 'file' as const,
               url: dataUri,
               mediaType: finalMimeType,
+              ...(filename ? { filename } : {}),
             };
             v5UIPart.providerMetadata = mergeMastraCreatedAt(part.providerMetadata, part.createdAt);
             parts.push(v5UIPart);
@@ -454,6 +495,11 @@ export class AIV5Adapter {
               transformToolPayloads,
             ),
           });
+        } else if (part.type === 'error') {
+          // Mastra-only record of a terminal failure. Preserved for DB/UI history
+          // (see sanitizeV5UIMessages, which strips it from provider prompts).
+          parts.push(part as unknown as AIV5Type.UIMessage['parts'][number]);
+          hasNonToolReasoningParts = true;
         } else {
           // Other parts (step-start, etc.) can be pushed as-is
           parts.push(part);
@@ -658,7 +704,7 @@ export class AIV5Adapter {
         if (p.type === 'reasoning') {
           return {
             type: 'reasoning' as const,
-            reasoning: '',
+            reasoning: p.text,
             details: [
               {
                 type: 'text' as const,
@@ -712,6 +758,14 @@ export class AIV5Adapter {
 
         if (p.type === 'step-start') {
           return p;
+        }
+
+        // Mastra-only record of a terminal failure. Round-trips through UI
+        // history unchanged; sanitizeV5UIMessages strips it from provider
+        // prompts. AIV6Adapter.fromUIMessage pairs its output with the incoming
+        // parts by index, so dropping it here would misalign every later part.
+        if ((p as { type: string }).type === 'error') {
+          return p as unknown as MastraMessagePart;
         }
 
         // Handle data-* parts (custom parts emitted by tools via writer.custom())
@@ -780,7 +834,11 @@ export class AIV5Adapter {
         const base64 = data.toString('base64');
         return `data:${mimeType};base64,${base64}`;
       } else if (typeof data === 'string') {
-        return data.startsWith('data:') || data.startsWith('http') ? data : `data:${mimeType};base64,${data}`;
+        // OpenAI Files API file IDs (e.g. "file-abc123") must pass through as-is so
+        // @ai-sdk/openai can forward them as { file_id: "file-..." } to the API.
+        return data.startsWith('data:') || data.startsWith('http') || data.startsWith('file-')
+          ? data
+          : `data:${mimeType};base64,${data}`;
       } else if (data instanceof Uint8Array) {
         const base64 = Buffer.from(data).toString('base64');
         return `data:${mimeType};base64,${base64}`;
@@ -796,10 +854,16 @@ export class AIV5Adapter {
   /**
    * Direct conversion from AIV5 ModelMessage to MastraDBMessage
    */
-  static fromModelMessage(modelMsg: AIV5Type.ModelMessage, _messageSource?: MessageSource): MastraDBMessage {
+  static fromModelMessage(
+    modelMsg: AIV5Type.ModelMessage,
+    _messageSource?: MessageSource,
+    context: { dbMessages?: MastraDBMessage[] } = {},
+  ): MastraDBMessage {
     const content = Array.isArray(modelMsg.content)
-      ? modelMsg.content
-      : [{ type: 'text', text: modelMsg.content } satisfies AIV5.TextPart];
+      ? modelMsg.content.filter(part => part !== null && typeof part === 'object')
+      : typeof modelMsg.content === 'string'
+        ? [{ type: 'text', text: modelMsg.content } satisfies AIV5.TextPart]
+        : [];
 
     const mastraDBParts: MastraMessageContentV2['parts'] = [];
     const toolInvocations: NonNullable<MastraDBMessage['content']['toolInvocations']> = [];
@@ -858,6 +922,19 @@ export class AIV5Adapter {
               : toolResultPart.output;
         };
 
+        // When the matching tool-call isn't in this same model message (e.g. the
+        // server resume path or an AG-UI host replaying a tool-result on its own),
+        // recover the original args from prior persisted messages before falling
+        // back to the tool-result's own `input` field, then finally to `{}`.
+        // Persisting `args: {}` poisons the LLM via in-context learning (issue #16017).
+        const recoveredArgs = context.dbMessages
+          ? findToolCallArgs(context.dbMessages, toolResultPart.toolCallId)
+          : undefined;
+        const fallbackArgs =
+          recoveredArgs && Object.keys(recoveredArgs).length > 0
+            ? recoveredArgs
+            : ((toolResultPart as AIV5Type.ToolResultPart & { input?: Record<string, unknown> }).input ?? {});
+
         if (matchingCall) {
           updateMatchingCallInvocationResult(toolResultPart, matchingCall);
         } else {
@@ -865,7 +942,7 @@ export class AIV5Adapter {
             state: 'call',
             toolCallId: toolResultPart.toolCallId,
             toolName: sanitizeToolName(toolResultPart.toolName),
-            args: {},
+            args: fallbackArgs,
           };
           updateMatchingCallInvocationResult(toolResultPart, call);
           toolInvocations.push(call);
@@ -883,7 +960,7 @@ export class AIV5Adapter {
             toolInvocation: {
               toolCallId: toolResultPart.toolCallId,
               toolName: sanitizeToolName(toolResultPart.toolName),
-              args: {},
+              args: fallbackArgs,
               state: 'call',
             },
           };
@@ -897,7 +974,7 @@ export class AIV5Adapter {
       } else if (part.type === 'reasoning') {
         const v2ReasoningPart: MastraDBMessage['content']['parts'][number] = {
           type: 'reasoning',
-          reasoning: '',
+          reasoning: part.text,
           details: [{ type: 'text', text: part.text }],
         };
         if (part.providerOptions) {

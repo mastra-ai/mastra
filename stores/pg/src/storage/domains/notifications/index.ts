@@ -11,11 +11,17 @@ import type {
   NotificationSignalAttributes,
   NotificationStatus,
   UpdateNotificationInput,
+  TABLE_NAMES,
+  PruneOptions,
+  PruneResult,
+  RetentionTablesDescriptor,
+  TableRetentionPolicy,
 } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
-import type { PgDomainConfig } from '../../db';
+import type { DbClient, PgDomainConfig } from '../../db';
+import { runPrune, resolveTargets } from '../../retention';
 import { getSchemaName, getTableName, parseJsonResilient } from '../utils';
 
 const statusTimestamp = (status: NotificationStatus, now: Date) => {
@@ -113,10 +119,18 @@ export class NotificationsPG extends NotificationsStorage {
 
   static readonly MANAGED_TABLES = [TABLE_NOTIFICATIONS] as const;
 
+  /**
+   * Notifications are an append-only event feed that grows unbounded. Single
+   * table, anchored on the timezone-aware `createdAtZ` mirror column.
+   */
+  static override readonly retentionTables: RetentionTablesDescriptor = {
+    notifications: { table: TABLE_NOTIFICATIONS, column: 'createdAtZ', indexed: true },
+  };
+
   constructor(config: PgDomainConfig) {
     super();
-    const { client, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
-    this.#db = new PgDB({ client, schemaName, skipDefaultIndexes });
+    const { client, readClient, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
+    this.#db = new PgDB({ client, readClient, schemaName, skipDefaultIndexes });
     this.#schema = schemaName || 'public';
     this.#skipDefaultIndexes = skipDefaultIndexes;
     this.#indexes = indexes?.filter(idx => (NotificationsPG.MANAGED_TABLES as readonly string[]).includes(idx.table));
@@ -129,6 +143,42 @@ export class NotificationsPG extends NotificationsStorage {
     });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
+  }
+
+  /**
+   * Lazily ensures a btree index exists on each configured policy's retention
+   * anchor column so age-based `prune()` deletes stay fast on large tables.
+   * Called from the prune path (not init) so only deployments that configure
+   * retention pay the index's write/disk overhead. Best-effort: failures are
+   * logged and pruning proceeds (correct, just slower).
+   * Created even with `skipDefaultIndexes` — retention is an explicit opt-in,
+   * so its supporting index is not part of the default index set.
+   */
+  private async ensureRetentionIndexes(policies: Record<string, TableRetentionPolicy>): Promise<void> {
+    const prefix = this.#schema && this.#schema !== 'public' ? `${this.#schema}_` : '';
+    for (const [key, entry] of Object.entries(NotificationsPG.retentionTables)) {
+      if (!entry.indexed || !policies[key]) continue;
+      try {
+        await this.#db.ensureIndex({
+          indexName: `${prefix}mastra_${key}_retention_idx`,
+          tableName: entry.table as TABLE_NAMES,
+          column: entry.column,
+        });
+      } catch (error) {
+        this.logger?.warn?.(`Failed to create retention index for ${entry.table}:`, error);
+      }
+    }
+  }
+
+  /** Delete notifications older than the `notifications` policy's `maxAge`, batched. */
+  async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
+    await this.ensureRetentionIndexes(policies);
+    const targets = resolveTargets({
+      policies,
+      descriptor: NotificationsPG.retentionTables,
+      order: ['notifications'],
+    });
+    return runPrune({ db: this.#db, domain: 'notifications', targets, options });
   }
 
   static getDefaultIndexDefs(schemaPrefix: string): CreateIndexOptions[] {
@@ -244,7 +294,7 @@ export class NotificationsPG extends NotificationsStorage {
         coalescedCount: (existing.coalescedCount ?? 1) + 1,
         metadata: metadata ?? null,
       });
-      const updated = await this.getNotification({ threadId: existing.threadId, id: existing.id });
+      const updated = await this.#getNotification(this.#db.client, { threadId: existing.threadId, id: existing.id });
       if (!updated) throw new Error(`Notification ${existing.id} was not found for thread ${existing.threadId}`);
       return updated;
     }
@@ -309,7 +359,7 @@ export class NotificationsPG extends NotificationsStorage {
 
     const schemaName = getSchemaName(this.#schema);
     const tableName = getTableName({ indexName: TABLE_NOTIFICATIONS, schemaName });
-    const rows = await this.#db.client.manyOrNone(
+    const rows = await this.#db.readClient.manyOrNone(
       `SELECT * FROM ${tableName} WHERE ${conditions.join(' AND ')} ORDER BY "updatedAt" DESC${limit}`,
       args,
     );
@@ -338,7 +388,7 @@ export class NotificationsPG extends NotificationsStorage {
 
     const schemaName = getSchemaName(this.#schema);
     const tableName = getTableName({ indexName: TABLE_NOTIFICATIONS, schemaName });
-    const rows = await this.#db.client.manyOrNone(
+    const rows = await this.#db.readClient.manyOrNone(
       `SELECT * FROM ${tableName} WHERE ${conditions.join(' AND ')} ORDER BY CASE WHEN "deliverAt" IS NULL THEN "summaryAt" WHEN "summaryAt" IS NULL THEN "deliverAt" WHEN "deliverAt" <= "summaryAt" THEN "deliverAt" ELSE "summaryAt" END ASC, "updatedAt" ASC${limit}`,
       args,
     );
@@ -347,17 +397,28 @@ export class NotificationsPG extends NotificationsStorage {
   }
 
   async getNotification(input: { threadId: string; id: string }): Promise<NotificationRecord | null> {
+    return this.#getNotification(this.#db.readClient, input);
+  }
+
+  /**
+   * Same lookup against an explicit client. Mutation paths pass the writer so a
+   * lagging read replica cannot yield stale or missing rows mid-update.
+   */
+  async #getNotification(
+    client: DbClient,
+    input: { threadId: string; id: string },
+  ): Promise<NotificationRecord | null> {
     const schemaName = getSchemaName(this.#schema);
     const tableName = getTableName({ indexName: TABLE_NOTIFICATIONS, schemaName });
-    const row = await this.#db.client.oneOrNone(
-      `SELECT * FROM ${tableName} WHERE "threadId" = $1 AND "id" = $2 LIMIT 1`,
-      [input.threadId, input.id],
-    );
+    const row = await client.oneOrNone(`SELECT * FROM ${tableName} WHERE "threadId" = $1 AND "id" = $2 LIMIT 1`, [
+      input.threadId,
+      input.id,
+    ]);
     return row ? rowToNotification(row) : null;
   }
 
   async updateNotification(input: UpdateNotificationInput): Promise<NotificationRecord> {
-    const existing = await this.getNotification({ threadId: input.threadId, id: input.id });
+    const existing = await this.#getNotification(this.#db.client, { threadId: input.threadId, id: input.id });
     if (!existing) {
       throw new Error(`Notification ${input.id} was not found for thread ${input.threadId}`);
     }
@@ -380,9 +441,41 @@ export class NotificationsPG extends NotificationsStorage {
       updatedAt: now,
     });
 
-    const updated = await this.getNotification({ threadId: input.threadId, id: input.id });
+    const updated = await this.#getNotification(this.#db.client, { threadId: input.threadId, id: input.id });
     if (!updated) throw new Error(`Notification ${input.id} was not found for thread ${input.threadId}`);
     return updated;
+  }
+
+  // Inlined instead of importing `UpdateNotificationsStatusInput` so this adapter's `.d.ts` stays valid
+  // against older @mastra/core versions that predate the bulk method.
+  override async updateNotificationsStatus(input: {
+    threadId: string;
+    ids: string[];
+    status: NotificationStatus;
+  }): Promise<NotificationRecord[]> {
+    const ids = Array.from(new Set(input.ids));
+    if (ids.length === 0) return [];
+
+    const now = new Date();
+    const assignments: Record<string, unknown> = {
+      status: input.status,
+      ...statusTimestamp(input.status, now),
+      updatedAt: now,
+    };
+    const columns = Object.keys(assignments);
+    const setClause = columns
+      .map((column, index) => `"${parseSqlIdentifier(column, 'column name')}" = $${index + 1}`)
+      .join(', ');
+
+    const schemaName = getSchemaName(this.#schema);
+    const tableName = getTableName({ indexName: TABLE_NOTIFICATIONS, schemaName });
+    // Bind the id list as one array parameter so the statement's parameter count is
+    // independent of how many ids are passed.
+    const rows = await this.#db.client.manyOrNone(
+      `UPDATE ${tableName} SET ${setClause} WHERE "threadId" = $${columns.length + 1} AND "id" = ANY($${columns.length + 2}::text[]) RETURNING *`,
+      [...Object.values(assignments), input.threadId, ids],
+    );
+    return rows.map(rowToNotification);
   }
 
   private async findCoalescable(input: CreateNotificationInput): Promise<NotificationRecord | undefined> {
@@ -390,6 +483,7 @@ export class NotificationsPG extends NotificationsStorage {
 
     const schemaName = getSchemaName(this.#schema);
     const tableName = getTableName({ indexName: TABLE_NOTIFICATIONS, schemaName });
+    // Runs immediately before an insert/update, so it must observe the latest writes.
     const row = await this.#db.client.oneOrNone(
       `SELECT * FROM ${tableName} WHERE "threadId" = $1 AND "source" = $2 AND "kind" = $3 AND "status" = $4 AND (("agentId" = $5::text) OR ("agentId" IS NULL AND $5::text IS NULL)) AND (("resourceId" = $6::text) OR ("resourceId" IS NULL AND $6::text IS NULL)) AND (($7::text IS NOT NULL AND "dedupeKey" = $7::text) OR ($8::text IS NOT NULL AND "coalesceKey" = $8::text)) ORDER BY "updatedAt" DESC LIMIT 1`,
       [

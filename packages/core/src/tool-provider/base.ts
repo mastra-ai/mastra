@@ -1,3 +1,4 @@
+import { RequestContext } from '../request-context';
 import type { StorageToolConfig } from '../storage/types';
 import type { ToolAction } from '../tools/types';
 import type {
@@ -9,9 +10,11 @@ import type {
   ListToolkitsResult,
   ListToolsOpts,
   ListToolsResult,
+  ResolveToolProviderToolsOptions,
   ResolveToolsOpts,
   ToolProvider,
   ToolProviderCapabilities,
+  ToolProviderConnectionScope,
   ToolProviderHealth,
   ToolProviderInfo,
   ToolProviderListResult,
@@ -42,6 +45,13 @@ export interface BaseToolProviderOptions {
    * leaves its tools unfiltered.
    */
   allowedTools?: Readonly<Record<string, readonly string[]>>;
+  /**
+   * Default identity-bucketing scope for connections authorized against this
+   * provider. This is the app author's tenancy decision (e.g.
+   * `'caller-supplied'` for per-tenant OAuth). The authorize flow applies it
+   * whenever a request doesn't override `scope`. Defaults to `'per-author'`.
+   */
+  defaultScope?: ToolProviderConnectionScope;
 }
 
 /**
@@ -58,10 +68,12 @@ export abstract class BaseToolProvider implements ToolProvider {
 
   protected readonly allowedToolkits: readonly string[];
   protected readonly allowedTools: Readonly<Record<string, readonly string[]>>;
+  readonly defaultScope?: ToolProviderConnectionScope;
 
   constructor(options: BaseToolProviderOptions = {}) {
     this.allowedToolkits = options.allowedToolkits ?? [];
     this.allowedTools = options.allowedTools ?? {};
+    this.defaultScope = options.defaultScope;
   }
 
   // ── VNext catalog (filtered) ──────────────────────────────────────────
@@ -119,7 +131,7 @@ export abstract class BaseToolProvider implements ToolProvider {
   async resolveTools(
     toolSlugs: string[],
     toolConfigs?: Record<string, StorageToolConfig>,
-    options?: { userId?: string; requestContext?: Record<string, unknown>; [key: string]: unknown },
+    options?: ResolveToolProviderToolsOptions,
   ): Promise<Record<string, ToolAction<any, any, any>>> {
     return this.resolveToolsVNext({
       toolSlugs,
@@ -128,7 +140,7 @@ export abstract class BaseToolProvider implements ToolProvider {
       ),
       connectionId: '',
       authorId: options?.userId,
-      requestContext: options?.requestContext,
+      requestContext: options?.requestContext ? new RequestContext(Object.entries(options.requestContext)) : undefined,
     });
   }
 

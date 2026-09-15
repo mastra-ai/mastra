@@ -1,6 +1,6 @@
 ---
-title: "Deploy in a monorepo | Deployment"
-description: Learn how to deploy Mastra applications that are part of a monorepo setup
+title: "Monorepo | Deploy"
+description: "Deploy Mastra applications from pnpm, npm, Yarn, or Bun monorepos by configuring workspace packages, build commands, dependencies, and environment variables."
 packages:
   - "@mastra/deployer"
 ---
@@ -8,7 +8,7 @@ packages:
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
 
-# Deploy in a monorepo
+# Monorepo
 
 Deploying Mastra in a monorepo follows the same process as a standalone application. This guide covers monorepo-specific considerations. For the core build and deployment steps, see [Deploy a Mastra Server](/docs/deployment/mastra-server).
 
@@ -107,6 +107,8 @@ export const mastra = new Mastra({
 })
 ```
 
+Keep `bundler` as a direct property in the object passed to `new Mastra()`. See [build-time configuration](/docs/deployment/mastra-server#build-time-configuration) for the supported entry-file shape.
+
 ## Environment variables
 
 Store `.env` files in the Mastra application directory (e.g., `apps/api/.env`), not the monorepo root.
@@ -123,6 +125,18 @@ Keep dependencies consistent to avoid version conflicts and build errors:
 
 - Use a **single lockfile** at the monorepo root so all packages resolve the same versions
 - Align versions of **shared libraries** (like Mastra or frameworks) to prevent duplicates
+
+### Skipping dependency installation
+
+By default `mastra build` installs dependencies into the `.mastra/output` directory and generates a `package-lock.json` for the deploy target. Hermetic build systems (such as Bazel) supply `node_modules` externally and run in a network-less sandbox, where this install is both redundant and fatal.
+
+Set `MASTRA_BUILD_SKIP_INSTALL` to `true` or `1` to skip the output install and lockfile generation:
+
+```bash
+MASTRA_BUILD_SKIP_INSTALL=1 mastra build
+```
+
+When enabled, you are responsible for providing `node_modules` in the output directory yourself.
 
 ## Troubleshooting
 

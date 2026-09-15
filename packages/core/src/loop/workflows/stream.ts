@@ -1,5 +1,6 @@
 import { ReadableStream } from 'node:stream/web';
 import type { ToolSet } from '@internal/ai-sdk-v5';
+import { beginGoalActivity, stopGoalActivity } from '../../agent/goal';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { getErrorFromUnknown } from '../../error';
 import { ConsoleLogger } from '../../logger';
@@ -10,7 +11,10 @@ import { RequestContext } from '../../request-context';
 import { safeClose, safeEnqueue } from '../../stream/base';
 import type { ChunkType } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
+import { hydrateRunScopeFromInternal } from '../hydrate-run-scope';
+import { createTimeoutAbortSignal, isMastraTimeoutError } from '../timeout';
 import type { LoopRun } from '../types';
+import { AGENTIC_EXECUTION_WORKFLOW_ID } from './agentic-execution';
 import { createAgenticLoopWorkflow } from './agentic-loop';
 
 export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
@@ -53,14 +57,43 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
           })
         : undefined;
 
-      // Create a ProcessorStreamWriter so output processors can emit custom chunks back to the stream
-      const dataChunkStreamWriter = {
-        custom: async (data: { type: string }) => {
-          safeEnqueue(controller, data as ChunkType<OUTPUT>);
-        },
-      };
-
       const outputWriter = async (chunk: ChunkType<OUTPUT>, options?: { messageId?: string }) => {
+        const responseMessageId = options?.messageId ?? messageId;
+        const dataChunkStreamWriter = {
+          custom: async (
+            data: { type: string; data?: unknown; transient?: boolean },
+            writerOptions?: { messageId?: string },
+          ) => {
+            const emittedMessageId = writerOptions?.messageId ?? responseMessageId;
+            if (data.type.startsWith('data-') && emittedMessageId && !data.transient) {
+              // Persistence failures must not drop the frame from the stream —
+              // delivery to the client takes priority over saving to memory.
+              try {
+                messageList.add(
+                  {
+                    id: emittedMessageId,
+                    role: 'assistant',
+                    content: {
+                      format: 2,
+                      parts: [{ type: data.type as `data-${string}`, data: data.data }],
+                    },
+                    createdAt: new Date(),
+                    threadId: _internal?.threadId,
+                    resourceId: _internal?.resourceId,
+                  },
+                  'response',
+                );
+              } catch (persistError) {
+                rest.logger?.warn('Failed to persist data chunk to message list; streaming it anyway', {
+                  chunkType: data.type,
+                  error: persistError,
+                });
+              }
+            }
+            safeEnqueue(controller, data as ChunkType<OUTPUT>);
+          },
+        };
+
         // Handle data-* chunks (custom data chunks from writer.custom())
         // These need to be persisted to storage, not just streamed
         // Transient chunks are streamed to the client but not saved to the DB
@@ -107,7 +140,6 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
           }
 
           // If a processor rewrote the chunk to a non-data type, skip persistence
-          const responseMessageId = options?.messageId ?? messageId;
           if (
             typeof processedChunk.type === 'string' &&
             processedChunk.type.startsWith('data-') &&
@@ -129,7 +161,16 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
               threadId: _internal?.threadId,
               resourceId: _internal?.resourceId,
             };
-            messageList.add(message, 'response');
+            // Persistence failures must not drop the frame from the stream —
+            // delivery to the client takes priority over saving to memory.
+            try {
+              messageList.add(message, 'response');
+            } catch (persistError) {
+              rest.logger?.warn('Failed to persist data chunk to message list; streaming it anyway', {
+                chunkType: processedChunk.type,
+                error: persistError,
+              });
+            }
           }
 
           safeEnqueue(controller, processedChunk);
@@ -181,9 +222,26 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
         safeEnqueue(controller, chunk);
       };
 
+      // Bound the whole run (every loop iteration, tool call and retry) by composing the
+      // caller's abort signal with modelSettings.timeout.totalMs. Everything downstream
+      // reads `options.abortSignal`, so injecting here covers the entire agentic loop.
+      const {
+        signal: totalTimeoutSignal,
+        timeoutPromise: totalTimeoutPromise,
+        cleanup: cleanupTotalTimeout,
+      } = createTimeoutAbortSignal({
+        parentSignal: rest.options?.abortSignal,
+        timeoutMs: modelSettings?.timeout?.totalMs,
+        timeoutType: 'total',
+      });
+
+      const restWithTimeoutSignal = totalTimeoutPromise
+        ? { ...rest, options: { ...rest.options, abortSignal: totalTimeoutSignal } }
+        : rest;
+
       const agenticLoopWorkflow = createAgenticLoopWorkflow<Tools, OUTPUT>({
         resumeContext,
-        messageId: messageId!,
+        messageId: messageId,
         models,
         _internal,
         modelSettings,
@@ -197,7 +255,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
         agentId,
         requireToolApproval,
         toolCallConcurrency,
-        ...rest,
+        ...restWithTimeoutSignal,
       });
 
       if (rest.mastra) {
@@ -208,7 +266,30 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
         // agentId closures) don't clobber each other in the global id-keyed registry.
         // __registerInternalWorkflow also calls __registerMastra under the hood.
         rest.mastra.__registerInternalWorkflow(agenticLoopWorkflow, runId);
+        // Hydrate the RunScope from the bootstrap `_internal` bag. Done right
+        // after registration so the scope is the single source of truth for
+        // non-serializable state by the time any step runs. The scope's
+        // refcount is owned by the internal-workflow registration above —
+        // no separate release needed here.
+        hydrateRunScopeFromInternal(rest.mastra, runId, _internal);
       }
+
+      // Once the run reaches a terminal state its snapshot rows are no longer
+      // needed for resume. Delete both the agentic-loop row and the nested
+      // execution workflow's row (persisted under the same runId) — otherwise
+      // the nested row leaks as a stale "pending"/"suspended" record in
+      // workflow snapshot storage for every completed agent run.
+      // Best-effort: a cleanup failure must never turn a finished run into a
+      // stream error (a stale row is preferable to a broken stream).
+      const deleteRunSnapshots = async () => {
+        try {
+          await agenticLoopWorkflow.deleteWorkflowRunById(runId);
+          const workflowsStore = await rest.mastra?.getStorage()?.getStore('workflows');
+          await workflowsStore?.deleteWorkflowRunById({ runId, workflowName: AGENTIC_EXECUTION_WORKFLOW_ID });
+        } catch (error) {
+          rest.logger?.warn('Failed to delete agentic-loop snapshot rows after terminal state', { runId, error });
+        }
+      };
 
       // Keep the run-scoped registration alive only when the run suspends — a
       // later resume on the same runId must still resolve this instance. Every
@@ -218,7 +299,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
       let keepRegisteredForResume = false;
       try {
         const initialData = {
-          messageId: messageId!,
+          messageId: messageId,
           messages: {
             all: messageList.get.all.aiV5.model(),
             user: messageList.get.input.aiV5.model(),
@@ -267,18 +348,61 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
           requestContext.delete('__mastra_requireToolApproval');
         }
 
-        const executionResult = resumeContext
-          ? await run.resume({
+        if (rest.goal) {
+          await beginGoalActivity({
+            mastra: rest.mastra,
+            agentId,
+            threadId: _internal?.threadId,
+            runId,
+            requestContext,
+            now: _internal?.now,
+          });
+        }
+
+        const executionPromise = resumeContext
+          ? run.resume({
               resumeData: resumeContext.resumeData,
               ...createObservabilityContext(rest.modelSpanTracker?.getTracingContext()),
               requestContext,
+              actor: rest.actor,
               label: toolCallId,
             })
-          : await run.start({
+          : run.start({
               inputData: initialData,
               ...createObservabilityContext(rest.modelSpanTracker?.getTracingContext()),
               requestContext,
+              actor: rest.actor,
             });
+
+        let executionResult: Awaited<typeof executionPromise>;
+        try {
+          if (totalTimeoutPromise) {
+            // The abort signal alone can't guarantee the run settles, so race the budget
+            // and let the timeout win. The losing branch is never observed by callers.
+            executionPromise.catch(() => {});
+            executionResult = await Promise.race([executionPromise, totalTimeoutPromise]);
+          } else {
+            executionResult = await executionPromise;
+          }
+        } catch (err) {
+          if (!isMastraTimeoutError(err)) throw err;
+
+          const error = getErrorFromUnknown(err, {
+            fallbackMessage: 'Agent execution timed out',
+          });
+
+          safeEnqueue(controller, {
+            type: 'error',
+            runId,
+            from: ChunkFrom.AGENT,
+            payload: { error },
+          });
+
+          await rest.options?.onError?.({ error });
+          await deleteRunSnapshots();
+          safeClose(controller);
+          return;
+        }
 
         if (executionResult.status !== 'success') {
           if (executionResult.status === 'failed') {
@@ -299,7 +423,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
           }
 
           if (executionResult.status !== 'suspended') {
-            await agenticLoopWorkflow.deleteWorkflowRunById(runId);
+            await deleteRunSnapshots();
           } else {
             keepRegisteredForResume = true;
           }
@@ -308,7 +432,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
           return;
         }
 
-        await agenticLoopWorkflow.deleteWorkflowRunById(runId);
+        await deleteRunSnapshots();
 
         // Always emit finish chunk, even for abort (tripwire) cases
         // This ensures the stream properly completes and all promises are resolved
@@ -329,6 +453,8 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
 
         safeClose(controller);
       } finally {
+        cleanupTotalTimeout();
+        await stopGoalActivity({ agentId, runId, now: _internal?.now });
         if (!keepRegisteredForResume) {
           rest.mastra?.__unregisterInternalWorkflow(agenticLoopWorkflow.id, runId);
         }

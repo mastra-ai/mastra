@@ -1,6 +1,7 @@
-import { KeyboardIcon, PanelRightIcon } from 'lucide-react';
+import { PanelRightIcon } from 'lucide-react';
 import type { ComponentPropsWithoutRef } from 'react';
 import { useMainSidebar } from './main-sidebar-context';
+import { Kbd } from '@/ds/components/Kbd';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { cn } from '@/lib/utils';
 
@@ -26,13 +27,13 @@ export function MainSidebarTrigger({ className, onClick, ...props }: MainSidebar
               if (!event.defaultPrevented) toggleSidebar();
             }}
             className={cn(
-              'flex items-center justify-center text-neutral3 rounded-md',
-              'size-9',
+              'flex items-center justify-center rounded-md text-neutral3',
+              'size-7',
               isCollapsed ? 'mx-auto' : 'ml-auto',
               'hover:bg-sidebar-nav-hover hover:text-neutral6',
               'transition-all duration-normal ease-out-custom',
-              'focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-accent1 focus-visible:shadow-focus-ring',
-              '[&_svg]:w-4 [&_svg]:h-4 [&_svg]:text-neutral3 [&:hover_svg]:text-neutral5 [&_svg]:transition-transform [&_svg]:duration-normal',
+              'focus-visible:shadow-focus-ring focus-visible:ring-1 focus-visible:ring-accent1 focus-visible:outline-hidden',
+              '[&_svg]:size-4 [&_svg]:text-neutral3 [&_svg]:transition-transform [&_svg]:duration-normal [&:hover_svg]:text-neutral5',
               className,
             )}
           >
@@ -46,10 +47,10 @@ export function MainSidebarTrigger({ className, onClick, ...props }: MainSidebar
       />
 
       <TooltipContent>
-        Toggle Sidebar
-        <div className="flex items-center gap-1 [&>svg]:w-[1em] [&>svg]:h-[1em]">
-          <KeyboardIcon /> Ctrl+B
-        </div>
+        <span className="inline-flex items-center gap-1.5">
+          Toggle Sidebar
+          <Kbd size="xs">[</Kbd>
+        </span>
       </TooltipContent>
     </Tooltip>
   );

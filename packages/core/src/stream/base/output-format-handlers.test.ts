@@ -1,12 +1,18 @@
-import { convertArrayToReadableStream, convertAsyncIterableToArray } from '@ai-sdk/provider-utils-v5/test';
+import { ReadableStream } from 'node:stream/web';
 import { asSchema } from '@internal/ai-sdk-v5';
 import type { JSONSchema7 } from '@internal/ai-sdk-v5';
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod/v4';
+import { ConsoleLogger } from '../../logger';
+import { convertArrayToReadableStream, convertAsyncIterableToArray } from '../../loop/test-utils/stream-helpers';
 import type { PublicSchema } from '../../schema';
 import type { ChunkType } from '../types';
 import { ChunkFrom } from '../types';
-import { createObjectStreamTransformer, escapeUnescapedControlCharsInJsonStrings } from './output-format-handlers';
+import {
+  createJsonTextStreamTransformer,
+  createObjectStreamTransformer,
+  escapeUnescapedControlCharsInJsonStrings,
+} from './output-format-handlers';
 
 describe('escapeUnescapedControlCharsInJsonStrings', () => {
   it('should escape newlines inside JSON strings', () => {
@@ -92,6 +98,63 @@ continued", "item2"]}`;
 });
 
 describe('output-format-handlers', () => {
+  describe.each([true, false])('recovery with text-end: %s', includeTextEnd => {
+    it.each(['warn', 'fallback'] as const)(
+      'handles %s validation once through the configured logger',
+      async errorStrategy => {
+        const schema = z.object({ name: z.string() });
+        const fallbackValue = { name: 'Default' };
+        const logger = new ConsoleLogger({ level: 'debug' });
+        const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+        const error = vi.spyOn(logger, 'error').mockImplementation(() => {});
+        const transformer = createObjectStreamTransformer({
+          structuredOutput: { schema, errorStrategy, fallbackValue },
+          logger,
+        });
+        const stream = new ReadableStream<ChunkType<z.infer<typeof schema>>>({
+          start(controller) {
+            controller.enqueue({
+              type: 'text-delta',
+              runId: 'recovery-run',
+              from: ChunkFrom.AGENT,
+              payload: { id: 'text-1', text: '[1,2,3]' },
+            });
+            if (includeTextEnd) {
+              controller.enqueue({
+                type: 'text-end',
+                runId: 'recovery-run',
+                from: ChunkFrom.AGENT,
+                payload: { id: 'text-1' },
+              });
+            }
+            controller.close();
+          },
+        }).pipeThrough(transformer);
+        const chunks: ChunkType<z.infer<typeof schema>>[] = [];
+        for await (const chunk of stream) chunks.push(chunk);
+
+        expect(chunks.filter(chunk => chunk.type === 'error')).toEqual([]);
+        expect(error).not.toHaveBeenCalled();
+        const results = chunks.filter(chunk => chunk.type === 'object-result');
+        if (errorStrategy === 'warn') {
+          expect(warn).toHaveBeenCalledExactlyOnceWith(expect.stringContaining('Structured output validation failed'));
+          expect(results).toEqual([]);
+        } else {
+          expect(warn).not.toHaveBeenCalled();
+          expect(results).toEqual([
+            {
+              type: 'object-result',
+              runId: 'recovery-run',
+              from: ChunkFrom.AGENT,
+              object: fallbackValue,
+              metadata: { fallback: true },
+            },
+          ]);
+        }
+      },
+    );
+  });
+
   describe('schema validation', () => {
     it('should validate against zod schema and provide detailed error messages', async () => {
       const schema = z.object({
@@ -208,6 +271,51 @@ describe('output-format-handlers', () => {
       const objectResultChunk = chunks.find(c => c?.type === 'object-result');
       expect(objectResultChunk).toBeDefined();
       expect(objectResultChunk?.object).toEqual({ name: 'John', age: 30 });
+    });
+
+    it('should extract final JSON object from mixed prompt-injection text', async () => {
+      const schema = z.object({
+        decision: z.enum(['done', 'continue', 'waiting']),
+        reason: z.string(),
+      });
+
+      const transformer = createObjectStreamTransformer({
+        structuredOutput: { schema, jsonPromptInjection: true },
+      });
+
+      const streamParts: ChunkType<typeof schema>[] = [
+        {
+          type: 'text-delta',
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          payload: { id: 'text-1', text: 'I will inspect the files first.\n' },
+        },
+        {
+          type: 'text-delta',
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          payload: { id: 'text-1', text: '{"decision":"done","reason":"verified with tools"}' },
+        },
+        {
+          type: 'finish',
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          payload: {
+            stepResult: { reason: 'stop' },
+            output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+            metadata: {},
+            messages: { all: [], user: [], nonUser: [] },
+          },
+        },
+      ];
+
+      // @ts-expect-error - web/stream readable stream type error
+      const stream = convertArrayToReadableStream(streamParts).pipeThrough(transformer);
+      const chunks = await convertAsyncIterableToArray(stream);
+
+      const objectResultChunk = chunks.find(c => c?.type === 'object-result');
+      expect(objectResultChunk).toBeDefined();
+      expect(objectResultChunk?.object).toEqual({ decision: 'done', reason: 'verified with tools' });
     });
 
     it('should validate on text-end chunk', async () => {
@@ -1190,6 +1298,66 @@ Want to work on challenging problems"}`;
       const objectResultChunk = chunks.find(c => c?.type === 'object-result');
       expect(objectResultChunk).toBeDefined();
       expect(objectResultChunk?.object).toEqual(fallbackValue);
+    });
+  });
+
+  describe('createJsonTextStreamTransformer', () => {
+    const objectChunk = (object: unknown): ChunkType<unknown> => ({
+      type: 'object',
+      runId: 'test-run',
+      from: ChunkFrom.AGENT,
+      object: object as any,
+    });
+
+    const arraySchema = z.array(z.object({ a: z.number() }));
+
+    it('keeps array textStream valid when the first object chunk already has elements', async () => {
+      // Regression test for #18758: coarse/batched provider deltas deliver the
+      // array-so-far as the first object chunk, so the transformer must not
+      // close the array until it knows the stream has actually ended.
+      const transformer = createJsonTextStreamTransformer(arraySchema);
+      // @ts-expect-error - web/stream readable stream type error
+      const stream = convertArrayToReadableStream([
+        objectChunk([{ a: 1 }]),
+        objectChunk([{ a: 1 }, { a: 2 }]),
+        objectChunk([{ a: 1 }, { a: 2 }, { a: 3 }]),
+      ]).pipeThrough(transformer);
+      const chunks = await convertAsyncIterableToArray(stream);
+
+      const text = chunks.join('');
+      expect(text).toBe('[{"a":1},{"a":2},{"a":3}]');
+      expect(JSON.parse(text)).toEqual([{ a: 1 }, { a: 2 }, { a: 3 }]);
+    });
+
+    it('emits a complete single-chunk array as one closed JSON string', async () => {
+      const transformer = createJsonTextStreamTransformer(arraySchema);
+      // @ts-expect-error - web/stream readable stream type error
+      const stream = convertArrayToReadableStream([objectChunk([{ a: 1 }, { a: 2 }])]).pipeThrough(transformer);
+      const chunks = await convertAsyncIterableToArray(stream);
+
+      expect(chunks).toEqual(['[{"a":1},{"a":2}]']);
+    });
+
+    it('emits a well-formed empty array for a single empty chunk', async () => {
+      const transformer = createJsonTextStreamTransformer(arraySchema);
+      // @ts-expect-error - web/stream readable stream type error
+      const stream = convertArrayToReadableStream([objectChunk([])]).pipeThrough(transformer);
+      const chunks = await convertAsyncIterableToArray(stream);
+
+      expect(chunks).toEqual(['[]']);
+    });
+
+    it('streams fine-grained array chunks incrementally', async () => {
+      const transformer = createJsonTextStreamTransformer(arraySchema);
+      // @ts-expect-error - web/stream readable stream type error
+      const stream = convertArrayToReadableStream([
+        objectChunk([]),
+        objectChunk([{ a: 1 }]),
+        objectChunk([{ a: 1 }, { a: 2 }]),
+      ]).pipeThrough(transformer);
+      const chunks = await convertAsyncIterableToArray(stream);
+
+      expect(chunks).toEqual(['[', '{"a":1}', ',{"a":2}', ']']);
     });
   });
 });

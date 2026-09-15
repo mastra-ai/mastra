@@ -1,60 +1,85 @@
 import type { StorageThreadType } from '@mastra/core/memory';
-import { AlertDialog, Icon, Skeleton } from '@mastra/playground-ui';
-import { Plus } from 'lucide-react';
-import { useState } from 'react';
+import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
+import { Kbd } from '@mastra/playground-ui/components/Kbd';
 import {
   ThreadList,
   ThreadListEmpty,
   ThreadListItem,
   ThreadListItems,
   ThreadListNewItem,
-  ThreadListSeparator,
-} from '@/components/thread-list';
+} from '@mastra/playground-ui/components/ThreadList';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { PanelEdgeIcon } from '@mastra/playground-ui/resize/panel-edge-icon';
+import { panelIconButtonClass } from '@mastra/playground-ui/resize/panel-icon-button';
+import { cn } from '@mastra/playground-ui/utils/cn';
+import { Plus } from 'lucide-react';
+import { useState } from 'react';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useLinkComponent } from '@/lib/framework';
 
 export interface ChatThreadsProps {
   threads: StorageThreadType[];
-  isLoading: boolean;
   threadId: string;
   onDelete: (threadId: string) => void;
   resourceId: string;
   resourceType: 'agent' | 'network';
   embedded?: boolean;
+  /** When provided, renders a "Hide threads panel" control next to "New Chat". */
+  onHidePanel?: () => void;
 }
 
 export const ChatThreads = ({
   threads,
-  isLoading,
   threadId,
   onDelete,
   resourceId,
   resourceType,
   embedded = false,
+  onHidePanel,
 }: ChatThreadsProps) => {
   const { Link, paths } = useLinkComponent();
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const { canDelete } = usePermissions();
 
   const canDeleteThread = canDelete('memory');
-
-  if (isLoading) {
-    return <ChatThreadSkeleton />;
-  }
-
   const newThreadLink =
     resourceType === 'agent' ? paths.agentNewThreadLink(resourceId) : paths.networkNewThreadLink(resourceId);
 
   return (
     <>
       <ThreadList embedded={embedded}>
-        <ThreadListNewItem as={Link} to={newThreadLink}>
-          <Icon>
-            <Plus />
-          </Icon>
-          New Chat
-        </ThreadListNewItem>
-        <ThreadListSeparator />
+        {/* pt-[3px] lines the hide button up with the collapsed panel's expand button (top-2 vs border+p-1) */}
+        <div className="flex items-center gap-1 pt-[3px]">
+          <ThreadListNewItem as={Link} to={newThreadLink}>
+            <Icon>
+              <Plus />
+            </Icon>
+            New Chat
+          </ThreadListNewItem>
+          {onHidePanel && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="Hide threads panel"
+                  className={cn(panelIconButtonClass, 'shrink-0')}
+                  onClick={onHidePanel}
+                >
+                  <Icon>
+                    <PanelEdgeIcon side="left" />
+                  </Icon>
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="right">
+                <span className="inline-flex items-center gap-1.5">
+                  Hide threads panel
+                  <Kbd size="xs">{'{'}</Kbd>
+                </span>
+              </TooltipContent>
+            </Tooltip>
+          )}
+        </div>
 
         {threads.length === 0 ? (
           <ThreadListEmpty>Your conversations will appear here once you start chatting!</ThreadListEmpty>
@@ -121,19 +146,6 @@ const DeleteThreadDialog = ({ open, onOpenChange, onDelete }: DeleteThreadDialog
     </AlertDialog>
   );
 };
-
-const ChatThreadSkeleton = () => (
-  <div className="p-4 w-full h-full space-y-2">
-    <div className="flex justify-end">
-      <Skeleton className="h-9 w-9" />
-    </div>
-    <Skeleton className="h-4" />
-    <Skeleton className="h-4" />
-    <Skeleton className="h-4" />
-    <Skeleton className="h-4" />
-    <Skeleton className="h-4" />
-  </div>
-);
 
 function isDefaultThreadName(name: string): boolean {
   const defaultPattern = /^New Thread \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/;

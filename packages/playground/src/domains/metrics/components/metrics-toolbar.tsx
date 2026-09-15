@@ -1,5 +1,6 @@
-import type { PropertyFilterField, PropertyFilterToken } from '@mastra/playground-ui';
-import { PropertyFilterActions, PropertyFilterApplied, cn } from '@mastra/playground-ui';
+import type { PropertyFilterField, PropertyFilterToken } from '@mastra/playground-ui/components/PropertyFilter';
+import { PropertyFilterActions, PropertyFilterApplied } from '@mastra/playground-ui/components/PropertyFilter';
+import { cn } from '@mastra/playground-ui/utils/cn';
 
 type MetricsToolbarProps = {
   /** Keep all filter pills but reset each value to its neutral state
@@ -31,8 +32,11 @@ export function MetricsToolbar({
   const hasActiveFilters = filterTokens.length > 0;
   const hasNonDefaultFilter = filterTokens.some(token => isNonDefaultFilter(token, filterFields));
 
+  // Match TracesToolbar: no filters → no empty grid row (and its gap) in `PageLayout.TopArea`.
+  if (!hasActiveFilters) return null;
+
   return (
-    <div className={cn('grid grid-cols-[1fr_auto] gap-3 items-start')}>
+    <div className={cn('grid grid-cols-[1fr_auto] items-start gap-3')}>
       <PropertyFilterApplied
         fields={filterFields}
         tokens={filterTokens}

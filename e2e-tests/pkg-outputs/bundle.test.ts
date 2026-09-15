@@ -1,5 +1,5 @@
 import { glob as globby } from 'tinyglobby';
-import { it, describe, expect } from 'vitest';
+import { it, describe, expect, beforeAll } from 'vitest';
 import * as customResolve from 'resolve.exports';
 import { resolve } from 'node:path';
 import { join, relative, dirname, extname } from 'node:path/posix';
@@ -15,6 +15,8 @@ const globalIgnore = [
   '@mastra/mcp-registry-registry',
   'mastra-docs',
 ];
+
+const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 describe.for(
   allPackages
@@ -57,30 +59,33 @@ describe.for(
         }
       });
 
-      it.skipIf(pkgName === '@mastra/playground-ui' || pkgName === 'mastra' || pkgName.startsWith('@internal/'))(
-        'should use .cjs and .d.ts extensions when using require',
-        async () => {
-          if (importPath === './package.json') {
-            return;
-          }
+      it.skipIf(
+        pkgName === '@mastra/playground-ui' ||
+          pkgName === '@mastra/code-sdk' ||
+          pkgName === '@mastra/factory' ||
+          pkgName === 'mastra' ||
+          pkgName.startsWith('@internal/'),
+      )('should use .cjs and .d.ts extensions when using require', async () => {
+        if (importPath === './package.json') {
+          return;
+        }
 
-          const exportConfig = pkgJson.exports[importPath] as any;
-          expect(exportConfig.require).toBeDefined();
-          expect(exportConfig.require).not.toBe(expect.any(String));
-          expect(extname(exportConfig.require.default)).toMatch(/\.cjs$/);
-          expect(exportConfig.require.types).toMatch(/\.d\.ts$/);
+        const exportConfig = pkgJson.exports[importPath] as any;
+        expect(exportConfig.require).toBeDefined();
+        expect(exportConfig.require).not.toBe(expect.any(String));
+        expect(extname(exportConfig.require.default)).toMatch(/\.cjs$/);
+        expect(exportConfig.require.types).toMatch(/\.d\.ts$/);
 
-          const fileOutput = customResolve.exports(pkgJson, importPath, {
-            require: true,
-          });
-          expect(fileOutput).toBeDefined();
+        const fileOutput = customResolve.exports(pkgJson, importPath, {
+          require: true,
+        });
+        expect(fileOutput).toBeDefined();
 
-          const pathsOnDisk = await globby(join(__dirname, '..', pkgName, fileOutput[0]));
-          for (const pathOnDisk of pathsOnDisk) {
-            await expect(stat(pathOnDisk), `${pathOnDisk} does not exist`).resolves.toBeDefined();
-          }
-        },
-      );
+        const pathsOnDisk = await globby(join(__dirname, '..', pkgName, fileOutput[0]));
+        for (const pathOnDisk of pathsOnDisk) {
+          await expect(stat(pathOnDisk), `${pathOnDisk} does not exist`).resolves.toBeDefined();
+        }
+      });
     },
   );
 
@@ -89,7 +94,8 @@ describe.for(
       pkgJson.name === 'create-mastra' ||
       pkgJson.name === '@mastra/client-js' ||
       pkgJson.name === '@mastra/opencode' ||
-      pkgJson.name === 'mastracode' ||
+      pkgJson.name === '@mastra/code-sdk' ||
+      pkgJson.name === '@mastra/factory' ||
       !pkgJson.name.startsWith('@mastra/'),
   )('should have @mastra/core as a peer dependency if used', async () => {
     const hasMastraCoreAsDependency = pkgJson?.dependencies?.['@mastra/core'];
@@ -106,11 +112,9 @@ describe('@mastra/core native optional deps', () => {
   if (!corePkg) throw new Error('@mastra/core not found in workspace packages');
   const coreDistDir = join(corePkg.dir, 'dist');
 
-  const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
   // Optional peer dependencies with native binaries must not be statically
   // imported in the bundle. They should only appear as string literals inside
-  // dynamic import() or createRequire().resolve() calls. If esbuild/tsup
+  // dynamic import() or createRequire().resolve() calls. If the bundler
   // ever resolves them statically (e.g. someone removes the string-concat
   // trick), the bundle would embed the wrong platform binary.
   const nativeOptionalDeps = ['@ast-grep/napi'];
@@ -138,6 +142,224 @@ describe('@mastra/core native optional deps', () => {
   it('should not contain native binary files (.node) in dist', async () => {
     const nativeFiles = await globby(join(coreDistDir, '**/*.node'));
     expect(nativeFiles).toHaveLength(0);
+  });
+});
+
+describe('@mastra/core runtime-only dependencies', () => {
+  const corePkg = allPackages.find(pkg => pkg.packageJson.name === '@mastra/core');
+  if (!corePkg) throw new Error('@mastra/core not found in workspace packages');
+  const coreDistDir = join(corePkg.dir, 'dist');
+
+  const runtimeOnlyDeps = ['execa', '@ast-grep/napi'];
+
+  // Read dist once, shared by the per-dependency test cases below.
+  let distFiles: { file: string; content: string }[] = [];
+
+  beforeAll(async () => {
+    const jsFiles = await globby(join(coreDistDir, '**/*.{js,cjs}'));
+    distFiles = await Promise.all(jsFiles.map(async file => ({ file, content: await readFile(file, 'utf-8') })));
+  });
+
+  it.for(runtimeOnlyDeps.map(dep => [dep]))('%s should stay behind a non-literal dynamic import', async ([dep]) => {
+    const escapedDependency = escapeRegExp(dep);
+    // Covers default/named/namespace imports, side-effect imports (import "dep"),
+    // and re-exports (export ... from "dep"), with or without whitespace.
+    const staticEsmImport = new RegExp(
+      `^(?:import|export)\\s*(?:[\\w*{}$,\\s]*?from\\s*)?(["'])${escapedDependency}\\1`,
+      'm',
+    );
+    const staticRequire = new RegExp(`(?<!\\.)require\\s*\\(\\s*(["'\`])${escapedDependency}\\1\\s*\\)`);
+    const literalDynamicImport = new RegExp(
+      `import\\s*\\(\\s*(?:\\/\\*[\\s\\S]*?\\*\\/\\s*)*(["'\`])${escapedDependency}\\1\\s*\\)`,
+    );
+    // The compiled loader must survive as the specifier passed to a call (e.g.
+    // importModule("execa")) in a file that also dynamically imports a variable.
+    // Mentions of the bare dependency name in comments or error messages alone
+    // must not satisfy this test.
+    const specifierPassedToLoader = new RegExp(`[A-Za-z_$][\\w$]*\\(\\s*(["'\`])${escapedDependency}\\1\\s*\\)`);
+    const nonLiteralDynamicImport = /import\(\s*(?:\/\*[\s\S]*?\*\/\s*)*[A-Za-z_$]/;
+
+    const filesWithRuntimeLoader: string[] = [];
+
+    for (const { file, content } of distFiles) {
+      if (!content.includes(dep)) continue;
+
+      expect(content, `${file} has a static ESM import of ${dep}`).not.toMatch(staticEsmImport);
+      expect(content, `${file} has a static require() of ${dep}`).not.toMatch(staticRequire);
+      expect(content, `${file} has a statically analyzable dynamic import of ${dep}`).not.toMatch(literalDynamicImport);
+
+      if (specifierPassedToLoader.test(content) && nonLiteralDynamicImport.test(content)) {
+        filesWithRuntimeLoader.push(file);
+      }
+    }
+
+    expect(
+      filesWithRuntimeLoader.length,
+      `no dist file passes '${dep}' to a runtime loader alongside a non-literal dynamic import`,
+    ).toBeGreaterThan(0);
+  });
+});
+
+describe('package devDependency bundling validation', () => {
+  const packageAllowlist: Record<string, string[]> = {
+    '@internal/ai-sdk-v5': ['msw'],
+    '@internal/llm-recorder': ['vitest'],
+    '@internal/test-utils': ['vitest'],
+    '@mastra/core': ['vitest'],
+  };
+
+  const getPackageName = (specifier: string) => {
+    if (specifier.startsWith('@')) {
+      return specifier.split('/').slice(0, 2).join('/');
+    }
+
+    return specifier.split('/')[0];
+  };
+
+  const isTestSourcePath = (path: string) =>
+    path.includes('/__tests__/') || /\.(test|spec|e2e|scenario)\.[cm]?[tj]sx?$/.test(path);
+
+  const getAlwaysBundleConfig = async (pkgDir: string) => {
+    const config = await readFile(join(pkgDir, 'tsdown.config.ts'), 'utf-8').catch(() => null);
+    if (config === null) return null;
+
+    const match = config.match(/alwaysBundle:\s*\[([^\]]*)\]/s);
+    return new Set(match?.[1]?.match(/['\"]([^'\"]+)['\"]/g)?.map(value => value.slice(1, -1)) ?? []);
+  };
+
+  const findStaticBareSpecifiers = (
+    content: string,
+    options: { stopAtRegion?: boolean; topLevelOnly?: boolean } = {},
+  ) => {
+    const imports = new Set<string>();
+    let inTemplate = false;
+
+    for (const line of content.split('\n')) {
+      if (options.stopAtRegion && line.startsWith('//#region')) break;
+      if (
+        options.topLevelOnly !== false &&
+        line.trim() &&
+        !line.startsWith('import ') &&
+        !line.startsWith('export ') &&
+        !line.startsWith('const ') &&
+        !line.startsWith('var ') &&
+        !line.startsWith('let ')
+      )
+        break;
+
+      const wasInTemplate = inTemplate;
+      let escaped = false;
+      for (const char of line) {
+        if (char === '`' && !escaped) inTemplate = !inTemplate;
+        escaped = char === '\\' && !escaped;
+      }
+
+      if (wasInTemplate || /^\s*(?:import|export)\s+type\b/.test(line)) continue;
+
+      const importMatch = line.match(
+        /^\s*(?:import\s+(?:[^'\"]*?\s+from\s+)?|export\s+[^'\"]*?\s+from\s+)['\"]([^.'\"/][^'\"]*)['\"]/,
+      );
+      if (importMatch?.[1]) imports.add(importMatch[1]);
+
+      const requireMatches = line.matchAll(/(?<![.\w])require\(['\"]([^.'\"/][^'\"]*)['\"]\)/g);
+      for (const match of requireMatches) {
+        imports.add(match[1]);
+      }
+    }
+
+    return imports;
+  };
+
+  it('should bundle devDependencies imported by source unless allowlisted', async () => {
+    const violations: string[] = [];
+
+    for (const pkg of allPackages.filter(pkg => !globalIgnore.includes(pkg.packageJson.name))) {
+      const pkgName = pkg.packageJson.name;
+      const packageJson = pkg.packageJson;
+      const devDependencies = new Set(Object.keys(packageJson.devDependencies ?? {}));
+      if (devDependencies.size === 0) continue;
+
+      const runtimeDependencies = new Set([
+        ...Object.keys(packageJson.dependencies ?? {}),
+        ...Object.keys(packageJson.peerDependencies ?? {}),
+        ...Object.keys(packageJson.optionalDependencies ?? {}),
+      ]);
+      const allowlist = new Set(packageAllowlist[pkgName] ?? []);
+      const jsFiles = await globby(join(pkg.dir, 'dist/**/*.{js,cjs,mjs}'));
+
+      for (const file of jsFiles) {
+        if (relative(pkg.dir, file).startsWith('dist/studio/')) continue;
+
+        const content = await readFile(file, 'utf-8');
+        for (const specifier of findStaticBareSpecifiers(content, { stopAtRegion: true })) {
+          const dependency = getPackageName(specifier);
+          if (!devDependencies.has(dependency) || runtimeDependencies.has(dependency) || allowlist.has(dependency)) {
+            continue;
+          }
+
+          violations.push(`${pkgName}: ${dependency} is external in ${relative(pkg.dir, file)}`);
+        }
+      }
+    }
+
+    if (violations.length > 0) {
+      throw new Error(
+        `Found externalized devDependencies in package dist output:\n` +
+          violations.map(violation => `  ${violation}`).join('\n') +
+          '\n\nBundle devDependencies imported by source, move intentional runtime externals to dependencies/peerDependencies, or add a narrow allowlist entry.',
+      );
+    }
+  });
+
+  it('should explicitly alwaysBundle internal workspace devDependencies imported by source', async () => {
+    const workspacePackages = new Set(allPackages.map(pkg => pkg.packageJson.name));
+    const violations: string[] = [];
+
+    for (const pkg of allPackages.filter(pkg => !globalIgnore.includes(pkg.packageJson.name))) {
+      const alwaysBundle = await getAlwaysBundleConfig(pkg.dir);
+      if (alwaysBundle === null) continue;
+
+      const packageJson = pkg.packageJson;
+      const devDependencies = new Set(Object.keys(packageJson.devDependencies ?? {}));
+      if (devDependencies.size === 0) continue;
+
+      const runtimeDependencies = new Set([
+        ...Object.keys(packageJson.dependencies ?? {}),
+        ...Object.keys(packageJson.peerDependencies ?? {}),
+        ...Object.keys(packageJson.optionalDependencies ?? {}),
+      ]);
+      const internalDevDependencies = new Set(
+        [...devDependencies].filter(
+          dependency =>
+            workspacePackages.has(dependency) &&
+            !runtimeDependencies.has(dependency) &&
+            dependency !== '@internal/types-builder',
+        ),
+      );
+      if (internalDevDependencies.size === 0) continue;
+
+      const sourceFiles = await globby(join(pkg.dir, 'src/**/*.{ts,tsx,js,jsx,mts,cts}'));
+
+      for (const file of sourceFiles) {
+        if (isTestSourcePath(relative(pkg.dir, file))) continue;
+
+        const content = await readFile(file, 'utf-8');
+        for (const specifier of findStaticBareSpecifiers(content, { topLevelOnly: false })) {
+          const dependency = getPackageName(specifier);
+          if (!internalDevDependencies.has(dependency) || alwaysBundle.has(dependency)) continue;
+
+          violations.push(`${packageJson.name}: ${dependency} imported by ${relative(pkg.dir, file)}`);
+        }
+      }
+    }
+
+    if (violations.length > 0) {
+      throw new Error(
+        `Found internal workspace devDependencies imported by source without deps.alwaysBundle:\n` +
+          violations.map(violation => `  ${violation}`).join('\n') +
+          '\n\nAdd a narrow deps.alwaysBundle entry so tsdown preserves tsup devDependency bundling semantics.',
+      );
+    }
   });
 });
 

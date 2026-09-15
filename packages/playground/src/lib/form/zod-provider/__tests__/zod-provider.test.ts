@@ -1,6 +1,24 @@
 import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
-import { parseSchema } from '../index';
+import { parseSchema, CustomZodProvider } from '../index';
+
+describe('CustomZodProvider.validateSchema', () => {
+  it('preserves Date values while stripping empty strings', () => {
+    const provider = new CustomZodProvider(
+      z.object({
+        startDate: z.date(),
+        name: z.string().optional(),
+      }),
+    );
+    const startDate = new Date('2024-01-01T00:00:00Z');
+
+    const result = provider.validateSchema({ startDate, name: '' });
+
+    expect(result.success).toBe(true);
+    expect(result.data).toEqual({ startDate });
+    expect(result.data!.startDate).toBeInstanceOf(Date);
+  });
+});
 
 describe('parseSchema v4Type fallback — array fields', () => {
   it('should detect z.array(z.string()) as type "array" with element subSchema', () => {

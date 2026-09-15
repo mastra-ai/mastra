@@ -3,6 +3,17 @@ import type { MastraLanguageModel, MastraLegacyLanguageModel } from '@mastra/cor
 import { createSimilarityPrompt } from '@mastra/core/relevance';
 import type { RelevanceScoreProvider } from '@mastra/core/relevance';
 
+function parseRelevanceScore(responseText: string): number {
+  const trimmed = responseText.trim();
+  const score = Number(trimmed);
+
+  if (!trimmed || !Number.isFinite(score) || score < 0 || score > 1) {
+    throw new Error(`Invalid relevance score returned by model: ${responseText}`);
+  }
+
+  return score;
+}
+
 // Mastra Agent implementation
 export class MastraAgentRelevanceScorer implements RelevanceScoreProvider {
   private agent: Agent;
@@ -37,6 +48,6 @@ Always return just the number, no explanation.`,
       response = await this.agent.generateLegacy(prompt);
     }
 
-    return parseFloat(response.text);
+    return parseRelevanceScore(response.text);
   }
 }

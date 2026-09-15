@@ -1,5 +1,4 @@
-// @vitest-environment jsdom
-import { TooltipProvider } from '@mastra/playground-ui';
+import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -34,7 +33,7 @@ const installRadixDomShims = () => {
       unobserve() {}
       disconnect() {}
     }
-    (globalThis as unknown as { ResizeObserver: typeof StubResizeObserver }).ResizeObserver = StubResizeObserver;
+    Object.defineProperty(globalThis, 'ResizeObserver', { configurable: true, value: StubResizeObserver });
   }
 };
 
@@ -68,7 +67,7 @@ describe('ConnectChannelMessage', () => {
     expect(container.querySelector('[data-testid="agent-builder-chat-connect-channel-slack"]')).toBeNull();
   });
 
-  it('renders nothing when the platform is not in the platforms list', async () => {
+  it('renders nothing after the platform query resolves without a matching platform', async () => {
     server.use(platformsHandler([]), installationsHandler({}));
 
     const { container } = render(
@@ -77,7 +76,6 @@ describe('ConnectChannelMessage', () => {
       </Wrapper>,
     );
 
-    // Let the platforms query resolve
     await new Promise(r => setTimeout(r, 0));
     expect(container.querySelector('[data-testid="agent-builder-chat-connect-channel-slack"]')).toBeNull();
   });
@@ -93,7 +91,10 @@ describe('ConnectChannelMessage', () => {
 
     const button = await screen.findByTestId('agent-builder-chat-connect-channel-slack-button');
     expect(button.textContent).toContain('Not configured');
-    expect((button as HTMLButtonElement).disabled).toBe(true);
+    expect(button).toHaveProperty('disabled', true);
+    const badge = screen.getAllByText('Not configured').find(element => element.tagName === 'SPAN');
+    expect(badge).toBeDefined();
+    expect(badge?.querySelector('[aria-hidden="true"]')).not.toBeNull();
   });
 
   it('shows "Continue with Slack" and triggers the OAuth redirect when configured but not yet connected', async () => {
@@ -168,12 +169,13 @@ describe('ConnectChannelMessage', () => {
 
     const widget = await screen.findByTestId('agent-builder-chat-connect-channel-slack');
     expect(widget.textContent).toContain('Connected');
+    expect((await screen.findByText('Connected')).querySelector('[aria-hidden="true"]')).not.toBeNull();
 
     const button = await screen.findByTestId('agent-builder-chat-connect-channel-slack-button');
     expect(button.textContent).toContain('Manage');
   });
 
-  it('does not navigate when the connect mutation errors', async () => {
+  it('does not navigate after the connect mutation settles with an error', async () => {
     const originalLocation = window.location;
     const locationStub = { href: 'http://localhost/start' };
     Object.defineProperty(window, 'location', {
@@ -197,8 +199,8 @@ describe('ConnectChannelMessage', () => {
     const button = await screen.findByTestId('agent-builder-chat-connect-channel-slack-button');
     fireEvent.click(button);
 
-    // Give the failed mutation a chance to resolve
-    await new Promise(r => setTimeout(r, 50));
+    // Waiting on the label revert, not a sleep, keeps the failed-mutation state update inside act.
+    await waitFor(() => expect(button.textContent).toBe('Continue with Slack'));
     expect(locationStub.href).toBe('http://localhost/start');
 
     Object.defineProperty(window, 'location', {

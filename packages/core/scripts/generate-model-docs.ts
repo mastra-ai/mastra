@@ -5,6 +5,8 @@ import { z } from 'zod/v4';
 import type { ProviderConfig } from '../src/llm';
 import { EXCLUDED_PROVIDERS, PROVIDERS_WITH_INSTALLED_PACKAGES } from '../src/llm/model/gateways/constants';
 import { generateProviderOptionsSection } from './generate-provider-options-docs';
+import { getGatewayPageMetadata, getModelsDevAttribution, getProviderPageMetadata } from './model-doc-metadata';
+import type { ModelPageData } from './model-doc-metadata';
 
 /**
  * Generate a comment indicating the file was auto-generated
@@ -30,6 +32,7 @@ function formatProviderName(name: string): string {
     'github-models': 'GitHub Models',
     deepinfra: 'Deep Infra',
     fastrouter: 'FastRouter',
+    'merge-gateway': 'Merge Gateway',
     baseten: 'Baseten',
     lmstudio: 'LMStudio',
     modelscope: 'ModelScope',
@@ -98,6 +101,7 @@ function getRequiredEnvVars(provider: ProviderInfo): string[] {
 }
 
 function getEnvVarPlaceholder(envVar: string): string {
+  if (/_URL$/.test(envVar)) return 'https://your-base-url';
   if (/_API_TOKEN$|_TOKEN$/.test(envVar)) return 'your-api-token';
   if (/_API_KEY$|_KEY$|_PAT$/.test(envVar)) return 'your-api-key';
   if (/_ACCOUNT_ID$|_PROJECT_ID$|_SITE_ID$|_WORKSPACE_ID$|_ORG_ID$|_ORGANIZATION_ID$/.test(envVar)) {
@@ -113,10 +117,20 @@ const __dirname = path.dirname(__filename);
 const POPULAR_PROVIDERS = ['openai', 'anthropic', 'google', 'deepseek', 'groq', 'mistral', 'xai'];
 
 // Providers that are actually gateways (aggregate multiple model providers)
-const GATEWAY_PROVIDERS = ['netlify', 'openrouter', 'vercel', 'azure-openai'];
+const GATEWAY_PROVIDERS = ['netlify', 'neon', 'openrouter', 'vercel', 'azure-openai', 'merge-gateway'];
 
 const MANUALLY_DOCUMENTED_PROVIDERS = ['azure-openai'];
 const MANUALLY_DOCUMENTED_GATEWAYS = ['azure-openai', 'mastra'];
+const MANUAL_ENV_VARS: Record<string, string[]> = {
+  'azure-openai': [
+    'AZURE_API_KEY',
+    'AZURE_TENANT_ID',
+    'AZURE_CLIENT_ID',
+    'AZURE_CLIENT_SECRET',
+    'AZURE_SUBSCRIPTION_ID',
+  ],
+  mastra: ['MASTRA_GATEWAY_API_KEY'],
+};
 
 interface ProviderInfo {
   id: string;
@@ -231,7 +245,7 @@ async function parseProviders(): Promise<GroupedProviders> {
   return { gateways, popular, other };
 }
 
-async function fetchProviderInfo(providerId: string): Promise<{ models: any[]; packageName?: string }> {
+async function fetchProviderInfo(providerId: string): Promise<{ models: ModelPageData[]; packageName?: string }> {
   try {
     const response = await fetch('https://models.dev/api.json');
     const data = await response.json();
@@ -299,16 +313,15 @@ Learn more in the [${provider.name} documentation](${docUrl}).`
   // Fetch model capabilities from models.dev
   const { models: modelsWithCapabilities, packageName } = await fetchProviderInfo(provider.id);
   provider.packageName = packageName;
-
-  // Check for AI SDK docs link if package is available
-  const aiSdkDocsLink = packageName ? await checkAiSdkDocsLink(provider.id) : null;
+  const metadata = getProviderPageMetadata(provider.name, modelsWithCapabilities);
 
   // Generate static model data as JSON for the component (show all models)
   const modelDataJson = JSON.stringify(modelsWithCapabilities, null, 2);
+  const modelsDevAttribution = getModelsDevAttribution(modelsWithCapabilities);
 
   return `---
-title: "${provider.name} | Models"
-description: "Use ${provider.name} models with Mastra. ${modelCount} model${modelCount !== 1 ? 's' : ''} available."
+title: "${metadata.title}"
+description: "${metadata.description}"
 ---
 
 ${getGeneratedComment()}
@@ -344,7 +357,7 @@ ${
   !PROVIDERS_WITH_INSTALLED_PACKAGES.includes(provider.id)
     ? // if it's not a directly supported provider then it's openai compatible, so warn about it
       `
-:::info
+:::note
 
 Mastra uses the OpenAI-compatible \`/chat/completions\` endpoint. Some provider-specific features may not be available. Check the [${provider.name} documentation](${docUrl || '#'}) for details.
 
@@ -357,7 +370,7 @@ Mastra uses the OpenAI-compatible \`/chat/completions\` endpoint. Some provider-
 <ProviderModelsTable
   models={${modelDataJson}}
 />
-
+${modelsDevAttribution}
 ## Advanced configuration
 
 ### Custom headers
@@ -396,26 +409,7 @@ const agent = new Agent({
 });
 \`\`\`
 
-${generateProviderOptionsSection(provider.id)}
-${
-  provider.packageName && provider.packageName !== '@ai-sdk/openai-compatible'
-    ? `
-## Direct provider installation
-
-This provider can also be installed directly as a standalone package, which can be used instead of the Mastra model router string. View the [package documentation](https://www.npmjs.com/package/${provider.packageName}) for more details.
-
-\`\`\`bash npm2yarn
-npm install ${provider.packageName}
-\`\`\`
-${
-  aiSdkDocsLink
-    ? `
-For detailed provider-specific documentation, see the [AI SDK ${provider.name} provider docs](${aiSdkDocsLink}).`
-    : ''
-}
-`
-    : ''
-}`;
+${generateProviderOptionsSection(provider.id)}`;
 }
 
 async function checkAiSdkDocsLink(providerId: string): Promise<string | null> {
@@ -486,6 +480,7 @@ function generateGatewayPage(
 ): string {
   const displayName = formatProviderName(gatewayName);
   const totalModels = providers.reduce((sum, p) => sum + p.models.length, 0);
+  const metadata = getGatewayPageMetadata(displayName, totalModels);
   // Get documentation URL if available
   // Special override for Vercel to use the AI SDK documentation
   let rawDocUrl: string | undefined;
@@ -537,8 +532,8 @@ ${allModels.map(m => `| \`${m}\` |`).join('\n')}
     : `<img src="${getLogoUrl(gatewayName)}" alt="${displayName} logo" className="${getLogoClass(gatewayName)}" />`;
 
   return `---
-title: "${displayName} | Models"
-description: "Use AI models through ${displayName}."
+title: "${metadata.title}"
+description: "${metadata.description}"
 ---
 
 ${getGeneratedComment()}
@@ -562,7 +557,7 @@ const agent = new Agent({
 });
 \`\`\`
 
-:::info
+:::note
 
 Mastra uses the OpenAI-compatible \`/chat/completions\` endpoint. Some provider-specific features may not be available. ${docUrl ? `Check the [${displayName} documentation](${docUrl}) for details.` : `Check the ${displayName} documentation for details.`}
 
@@ -571,21 +566,91 @@ Mastra uses the OpenAI-compatible \`/chat/completions\` endpoint. Some provider-
 ## Configuration
 
 \`\`\`bash
-# Use gateway API key
 ${(() => {
   const envVar = providers[0]?.apiKeyEnvVar;
-  if (Array.isArray(envVar)) {
-    return envVar.map(v => `${v}=your-${v.toLowerCase().replace(/_/g, '-')}`).join('\n');
+  const authEnvVars = Array.isArray(envVar) ? envVar : [envVar || `${gatewayName.toUpperCase()}_API_KEY`];
+  const authLines = Array.isArray(envVar)
+    ? envVar.map(v => `${v}=your-${v.toLowerCase().replace(/_/g, '-')}`)
+    : [`${authEnvVars[0]}=your-gateway-key`];
+
+  // A gateway whose base URL is a template needs those env vars too, otherwise
+  // the config shown here cannot build a URL at all.
+  const urlLines = extractEnvVarsFromUrl(providers[0]?.url)
+    .filter(v => !authEnvVars.includes(v))
+    .map(v => `${v}=${getEnvVarPlaceholder(v)}`);
+
+  // Keep the API-key wording when the key is all there is; a gateway that also
+  // needs URL vars gets a heading that covers both.
+  const heading = urlLines.length > 0 ? '# Gateway configuration' : '# Use gateway API key';
+  const gatewayKeySection = [heading, ...urlLines, ...authLines].join('\n');
+
+  // Only gateways that expose the upstream provider in their model ids (e.g.
+  // `openai/gpt-4o`) can be called with that provider's own key. Gateways with
+  // bare model ids authenticate with the gateway credential alone.
+  const exposesUpstreamProviders = allModels.some(m => m.includes('/'));
+  if (!exposesUpstreamProviders) {
+    return gatewayKeySection;
   }
-  return `${envVar || `${gatewayName.toUpperCase()}_API_KEY`}=your-gateway-key`;
-})()}
+
+  return `${gatewayKeySection}
 
 # Or use provider API keys directly
 OPENAI_API_KEY=sk-...
-ANTHROPIC_API_KEY=ant-...
+ANTHROPIC_API_KEY=ant-...`;
+})()}
 \`\`\`
 
 ${modelTable}
+`;
+}
+
+function formatEnvVarsForTable(envVars: string[]): string {
+  if (envVars.length === 0) return 'Configured in code';
+  return envVars.map(envVar => `\`${envVar}\``).join(', ');
+}
+
+function generateEnvListPage(grouped: GroupedProviders): string {
+  const providerRows = [...grouped.popular, ...grouped.other]
+    .map(provider => ({
+      type: 'Provider',
+      name: provider.name,
+      href: `/models/providers/${provider.id}`,
+      prefix: `${provider.id}/*`,
+      envVars: MANUAL_ENV_VARS[provider.id] ?? getRequiredEnvVars(provider),
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  const gatewayRows = Array.from(grouped.gateways.entries())
+    .map(([gatewayId, providers]) => ({
+      type: 'Gateway',
+      name: formatProviderName(gatewayId),
+      href: `/models/gateways/${gatewayId}`,
+      prefix: `${gatewayId}/*`,
+      envVars: MANUAL_ENV_VARS[gatewayId] ?? (providers[0] ? getRequiredEnvVars(providers[0]) : []),
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  const rows = [...providerRows, ...gatewayRows];
+
+  return `---
+title: "Environment variables | Models"
+description: "A list of environment variables used by Mastra for each model provider and gateway."
+---
+
+${getGeneratedComment()}
+
+# Environment variables
+
+List of required environment variables for each model provider and gateway supported by Mastra's [model router](/models).
+
+| Name | Model prefix | Environment variables |
+| ---- | ------------ | --------------------- |
+${rows
+  .map(
+    row =>
+      `| [${row.name}](${row.href}) ${row.type === 'Gateway' ? '(Gateway)' : ''} | \`${row.prefix}\` | ${formatEnvVarsForTable(row.envVars)} |`,
+  )
+  .join('\n')}
 `;
 }
 
@@ -639,7 +704,7 @@ Mastra reads the relevant environment variable (e.g. \`ANTHROPIC_API_KEY\`) and 
       id: "my-agent",
       name: "My Agent",
       instructions: "You are a helpful assistant",
-      model: "openai/gpt-5.5"
+      model: "__GATEWAY_OPENAI_MODEL__"
     })
     \`\`\`
 
@@ -653,7 +718,7 @@ Mastra reads the relevant environment variable (e.g. \`ANTHROPIC_API_KEY\`) and 
       id: "my-agent",
       name: "My Agent",
       instructions: "You are a helpful assistant",
-      model: "anthropic/claude-sonnet-4-6"
+      model: "__GATEWAY_ANTHROPIC_MODEL_SONNET__"
     })
     \`\`\`
 
@@ -667,7 +732,7 @@ Mastra reads the relevant environment variable (e.g. \`ANTHROPIC_API_KEY\`) and 
       id: "my-agent",
       name: "My Agent",
       instructions: "You are a helpful assistant",
-      model: "google/gemini-2.5-flash"
+      model: "__GATEWAY_GOOGLE_MODEL_FLASH__"
     })
     \`\`\`
 
@@ -681,7 +746,7 @@ Mastra reads the relevant environment variable (e.g. \`ANTHROPIC_API_KEY\`) and 
       id: "my-agent",
       name: "My Agent",
       instructions: "You are a helpful assistant",
-      model: "xai/grok-4"
+      model: "xai/grok-4.3"
     })
     \`\`\`
 
@@ -775,7 +840,7 @@ You can also discover models directly in your editor. Mastra provides full autoc
 
 Alternatively, browse and test models in [Studio](/docs/studio/overview) UI.
 
-:::info
+:::note
 
 In development, we auto-refresh your local model list every hour, ensuring your TypeScript autocomplete and Studio stay up-to-date with the latest models. To disable, set \`MASTRA_AUTO_REFRESH_PROVIDERS=false\`. Auto-refresh is disabled by default in production.
 
@@ -793,7 +858,7 @@ const documentProcessor = new Agent({
   id: "document-processor",
   name: "Document Processor",
   instructions: "Extract and summarize key information from documents",
-  model: "openai/gpt-4o-mini"
+  model: "__GATEWAY_OPENAI_MODEL__"
 })
 
 // Use a powerful reasoning model for complex analysis
@@ -801,7 +866,7 @@ const reasoningAgent = new Agent({
   id: "reasoning-agent",
   name: "Reasoning Agent",
   instructions: "Analyze data and provide strategic recommendations",
-  model: "anthropic/claude-opus-4-1"
+  model: "__GATEWAY_ANTHROPIC_MODEL_OPUS__"
 })
 \`\`\`
 
@@ -843,7 +908,7 @@ const planner = new Agent({
       openai: { reasoningEffort: "low" }
     }
   },
-  model: "openai/o3-pro",
+  model: "__GATEWAY_OPENAI_MODEL__",
 });
 
 const lowEffort =
@@ -870,7 +935,7 @@ const agent = new Agent({
   id: "custom-agent",
   name: "Custom Agent",
   model: {
-    id: "openai/gpt-4-turbo",
+    id: "__GATEWAY_OPENAI_MODEL__",
     apiKey: process.env.OPENAI_API_KEY,
     headers: {
       "OpenAI-Organization": "org-abc123"
@@ -879,7 +944,7 @@ const agent = new Agent({
 });
 \`\`\`
 
-:::info
+:::note
 
 Configuration differs by provider. See the provider pages in the left navigation for details on custom headers.
 
@@ -898,15 +963,15 @@ const agent = new Agent({
   instructions: 'You are a helpful assistant.',
   model: [
     {
-      model: "openai/gpt-5",
+      model: "__GATEWAY_OPENAI_MODEL__",
       maxRetries: 3,
     },
     {
-      model: "anthropic/claude-4-5-sonnet",
+      model: "__GATEWAY_ANTHROPIC_MODEL_SONNET__",
       maxRetries: 2,
     },
     {
-      model: "google/gemini-2.5-pro",
+      model: "__GATEWAY_GOOGLE_MODEL__",
       maxRetries: 2,
     },
   ],
@@ -930,13 +995,13 @@ const agent = new Agent({
   instructions: 'You are a helpful assistant.',
   model: [
     {
-      model: 'google/gemini-2.5-flash',
+      model: '__GATEWAY_GOOGLE_MODEL_FLASH__',
       maxRetries: 2,
       modelSettings: { temperature: 0.3 },
       providerOptions: { google: { thinkingConfig: { thinkingBudget: 0 } } },
     },
     {
-      model: 'openai/gpt-5-mini',
+      model: '__GATEWAY_OPENAI_MODEL_MINI__',
       maxRetries: 2,
       modelSettings: { temperature: 0.7 },
       providerOptions: { openai: { reasoningEffort: 'low' } },
@@ -1074,7 +1139,7 @@ ${gatewaysList
       title="Mastra"
       description="Built-in Observational Memory"
       href="/models/gateways/${g}"
-      logo="https://mastra.ai/brand/logo.svg"
+      logo="/img/integrations/mastra.svg"
     />`;
       }
     }
@@ -1162,7 +1227,7 @@ function generateProvidersSidebarItems(grouped: GroupedProviders, aiSdkProviders
     }),
   ].sort((a, b) => a.label.localeCompare(b.label));
 
-  return [{ type: 'doc', id: 'providers/index', label: 'Providers' }, ...popularProviders, ...otherProviders];
+  return [...popularProviders, ...otherProviders];
 }
 
 async function generateAiSdkProviderPage(provider: any, aiSdkDocsUrl: string | null): Promise<string> {
@@ -1201,10 +1266,7 @@ function generateGatewaysSidebarItems(grouped: GroupedProviders): any[] {
   // Sort gateways alphabetically
   const gatewaysList = Array.from(grouped.gateways.keys()).sort((a, b) => a.localeCompare(b));
 
-  const items = [
-    { type: 'doc', id: 'gateways/index', label: 'Gateways' },
-    { type: 'doc', id: 'gateways/custom-gateways', label: 'Custom Gateways' },
-  ];
+  const items = [{ type: 'doc', id: 'gateways/custom-gateways', label: 'Custom Gateways' }];
 
   for (const gatewayId of gatewaysList) {
     const providers = grouped.gateways.get(gatewayId);
@@ -1239,15 +1301,28 @@ const sidebars = {
     "index",
     "embeddings",
     {
+      type: 'doc',
+      id: 'environment-variables',
+      label: 'Environment Variables',
+    },
+    {
       type: "category",
       label: "Gateways",
       collapsed: false,
+      link: {
+        type: "doc",
+        id: "gateways/index",
+      },
       items: ${JSON.stringify(gatewaysItems, null, 6).replace(/^/gm, '      ').trim()},
     },
     {
       type: "category",
       label: "Providers",
       collapsed: false,
+      link: {
+        type: "doc",
+        id: "providers/index",
+      },
       items: ${JSON.stringify(providersItems, null, 6).replace(/^/gm, '      ').trim()},
     },
   ],
@@ -1286,6 +1361,11 @@ async function generateDocs() {
   const indexContent = generateIndexPage(grouped);
   await fs.writeFile(path.join(docsDir, 'index.mdx'), indexContent);
   console.info('✅ Generated models/index.mdx');
+
+  // Generate environment variables page
+  const envListContent = generateEnvListPage(grouped);
+  await fs.writeFile(path.join(docsDir, 'environment-variables.mdx'), envListContent);
+  console.info('✅ Generated models/environment-variables.mdx');
 
   // Generate gateways overview page
   const gatewaysIndexContent = generateGatewaysIndexPage(grouped);
@@ -1390,6 +1470,10 @@ export {
   parseProviders,
   generateProviderPage,
   generateGatewayPage,
+  getProviderPageMetadata,
+  getGatewayPageMetadata,
+  getModelsDevAttribution,
+  generateEnvListPage,
   generateIndexPage,
   generateSidebarsFile,
 };

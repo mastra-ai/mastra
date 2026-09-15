@@ -9,6 +9,8 @@
 
 import type { ClickHouseClient } from '@clickhouse/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import type { IMastraLogger } from '@mastra/core/logger';
+import * as coreStorage from '@mastra/core/storage';
 import { createStorageErrorId, ObservabilityStorage } from '@mastra/core/storage';
 import type {
   ObservabilityStorageStrategy,
@@ -50,6 +52,7 @@ import type {
   GetMetricLabelValuesArgs,
   GetMetricLabelValuesResponse,
   CreateScoreArgs,
+  DeleteScoresArgs,
   BatchCreateScoresArgs,
   ListScoresArgs,
   ListScoresResponse,
@@ -63,9 +66,12 @@ import type {
   GetScorePercentilesArgs,
   GetScorePercentilesResponse,
   CreateFeedbackArgs,
+  DeleteFeedbackArgs,
   BatchCreateFeedbackArgs,
   ListFeedbackArgs,
   ListFeedbackResponse,
+  FeedbackRecord,
+  UpdateFeedbackReviewStatusArgs,
   GetFeedbackAggregateArgs,
   GetFeedbackAggregateResponse,
   GetFeedbackBreakdownArgs,
@@ -84,10 +90,21 @@ import type {
   GetEnvironmentsResponse,
   GetTagsArgs,
   GetTagsResponse,
+  QueryThreadsResult,
+  TraceQueryResponse,
+  TrustedThreadQueryPlan,
+  TrustedTraceQueryPlan,
 } from '@mastra/core/storage';
 
 import { resolveClickhouseConfig } from '../../../db';
 import type { ClickhouseDomainConfig } from '../../../db';
+import {
+  addOnClusterToDDL,
+  applyReplicationToDDL,
+  isReplicationConfigured,
+  isReplicatedOrSharedEngine,
+} from '../../../db/replication';
+import type { ClickhouseReplicationConfig } from '../../../db/replication';
 
 import {
   BASE_MV_DDL,
@@ -107,11 +124,16 @@ import {
   parseTtlExpression,
 } from './ddl';
 import type { MigrationEntry, RetentionEntry, RetentionConfig } from './ddl';
+export { TABLE_DELETION_REQUESTS } from './ddl';
+export { recordDeletionRequest } from './deletion-requests';
+export type { DeletionRequestRow, RecordDeletionRequestArgs } from './deletion-requests';
 export type { RetentionConfig } from './ddl';
 
 /** Extended config for v-next observability, adding per-signal retention. */
 export type VNextObservabilityConfig = ClickhouseDomainConfig & {
   retention?: RetentionConfig;
+  /** Maximum execution time for one advanced trace query. Default 15 seconds. */
+  traceQueryTimeoutMs?: number;
   /** @internal Test-only override for the ClickHouse delta cursor strategy. */
   deltaCursorStrategy?: ClickHouseDeltaCursorStrategy;
 };
@@ -119,10 +141,17 @@ import * as discoveryOps from './discovery';
 import * as feedbackOps from './feedback';
 import * as logsOps from './logs';
 import * as metricsOps from './metrics';
-import { checkSignalTablesMigrationStatus, isReplacingMergeTreeEngine, migrateSignalTables } from './migration';
+import {
+  checkLegacySpanMigrationStatus,
+  checkSignalTablesMigrationStatus,
+  isReplacingMergeTreeEngine,
+  migrateLegacySpans,
+  migrateSignalTables,
+} from './migration';
 import type { ClickHouseDeltaCursorStrategy } from './polling';
 import { deltaPollingSupported } from './polling';
 import * as scoresOps from './scores';
+import * as traceQueryOps from './trace-query';
 import * as traceRootsOps from './trace-roots';
 import * as tracingOps from './tracing';
 
@@ -244,19 +273,55 @@ async function filterAppliedRetention(
  * Init's subsequent `CREATE TABLE IF NOT EXISTS` and discovery MV bootstrap
  * recreate both with the current definitions.
  *
+ * Separately, a refreshable MV whose stored definition lacks the `APPEND`
+ * modifier (created by older releases) is dropped — keeping its target
+ * table — so the MV bootstrap recreates it with the current APPEND
+ * definition. Non-APPEND refreshes swap the target table atomically, which
+ * fails when the target is Replicated inside a non-Replicated database.
+ *
  * Silently returns if `system.tables` can't be queried — the rest of init
  * will still run and leave any existing tables untouched.
  */
-async function reconcileDiscoveryTables(client: ClickHouseClient): Promise<void> {
+async function assertExistingTablesCompatibleWithReplication(
+  client: ClickHouseClient,
+  replication: ClickhouseReplicationConfig | undefined,
+  logger: IMastraLogger,
+): Promise<void> {
+  if (!isReplicationConfigured(replication)) return;
+
+  const result = await client.query({
+    query: `SELECT name, engine FROM system.tables WHERE database = currentDatabase() AND name IN ({tables:Array(String)})`,
+    query_params: { tables: [...ALL_TABLE_NAMES] },
+    format: 'JSONEachRow',
+  });
+  const rows = (await result.json()) as Array<{ name: string; engine: string }>;
+  const localTable = rows.find(row => !isReplicatedOrSharedEngine(row.engine));
+
+  if (localTable) {
+    logger.warn(
+      `ClickHouse replication is enabled, but pre-existing observability table '${localTable.name}' uses local engine '${localTable.engine}'. ` +
+        `CREATE TABLE IF NOT EXISTS will leave existing tables untouched.`,
+    );
+  }
+}
+
+async function reconcileDiscoveryTables(
+  client: ClickHouseClient,
+  replication?: ClickhouseReplicationConfig,
+): Promise<void> {
   let engines: Map<string, string>;
+  let mvCreateQueries: Map<string, string>;
   try {
     const result = await client.query({
-      query: `SELECT name, engine FROM system.tables WHERE database = currentDatabase() AND name IN ({tables:Array(String)})`,
-      query_params: { tables: [TABLE_DISCOVERY_VALUES, TABLE_DISCOVERY_PAIRS] },
+      query: `SELECT name, engine, create_table_query FROM system.tables WHERE database = currentDatabase() AND name IN ({tables:Array(String)})`,
+      query_params: {
+        tables: [TABLE_DISCOVERY_VALUES, TABLE_DISCOVERY_PAIRS, MV_DISCOVERY_VALUES, MV_DISCOVERY_PAIRS],
+      },
       format: 'JSONEachRow',
     });
-    const rows = (await result.json()) as Array<{ name: string; engine: string }>;
+    const rows = (await result.json()) as Array<{ name: string; engine: string; create_table_query: string }>;
     engines = new Map(rows.map(r => [r.name, r.engine]));
+    mvCreateQueries = new Map(rows.map(r => [r.name, r.create_table_query]));
   } catch {
     return;
   }
@@ -272,9 +337,22 @@ async function reconcileDiscoveryTables(client: ClickHouseClient): Promise<void>
   // tables on every init for those deployments.
   for (const { table, mv } of targets) {
     const engine = engines.get(table);
-    if (!engine || isReplacingMergeTreeEngine(engine)) continue;
-    await client.command({ query: `DROP VIEW IF EXISTS ${mv}` });
-    await client.command({ query: `DROP TABLE IF EXISTS ${table}` });
+    if (engine && !isReplacingMergeTreeEngine(engine)) {
+      await client.command({ query: addOnClusterToDDL(`DROP VIEW IF EXISTS ${mv}`, replication) });
+      await client.command({ query: addOnClusterToDDL(`DROP TABLE IF EXISTS ${table}`, replication) });
+      continue;
+    }
+
+    // Older deployments created the refreshable MVs without APPEND, which
+    // makes refreshes perform an atomic table swap — that fails (error 36)
+    // when the target table is Replicated inside a non-Replicated database.
+    // Drop only the stale view (keeping its target table and data); init()'s
+    // subsequent `CREATE MATERIALIZED VIEW IF NOT EXISTS` recreates it with
+    // the current APPEND definition.
+    const createQuery = mvCreateQueries.get(mv);
+    if (createQuery && /REFRESH EVERY/i.test(createQuery) && !/\bAPPEND\b/i.test(createQuery)) {
+      await client.command({ query: addOnClusterToDDL(`DROP VIEW IF EXISTS ${mv}`, replication) });
+    }
   }
 }
 
@@ -379,15 +457,19 @@ async function detectExistingDeltaCursorStrategy(
 export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
   readonly #client: ClickHouseClient;
   readonly #retention?: RetentionConfig;
+  readonly #replication?: ClickhouseReplicationConfig;
   readonly #deltaCursorStrategyOverride?: ClickHouseDeltaCursorStrategy;
+  readonly #traceQueryTimeoutMs: number;
   #deltaCursorStrategy: ClickHouseDeltaCursorStrategy | null = 'fallback';
 
   constructor(config: VNextObservabilityConfig) {
     super();
-    const { client } = resolveClickhouseConfig(config);
+    const { client, replication } = resolveClickhouseConfig(config);
     this.#client = client;
+    this.#replication = replication;
     this.#retention = config.retention;
     this.#deltaCursorStrategyOverride = config.deltaCursorStrategy;
+    this.#traceQueryTimeoutMs = coreStorage.resolveTraceQueryTimeoutMs(config.traceQueryTimeoutMs);
   }
 
   // -------------------------------------------------------------------------
@@ -408,7 +490,21 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       });
     }
 
+    // Non-blocking: detect legacy span table and suggest migration
     try {
+      const legacyStatus = await checkLegacySpanMigrationStatus(this.#client);
+      if (legacyStatus.needsMigration) {
+        this.logger?.warn?.(
+          `Legacy span table 'mastra_ai_spans' detected. ` +
+            `Run 'npx mastra migrate' to migrate historical spans to the v-next schema.`,
+        );
+      }
+    } catch {
+      // Ignore — non-critical detection
+    }
+
+    try {
+      await assertExistingTablesCompatibleWithReplication(this.#client, this.#replication, this.logger);
       const existingStrategy = await detectExistingDeltaCursorStrategy(this.#client);
       if (existingStrategy === 'mixed') {
         this.#deltaCursorStrategy = null;
@@ -427,7 +523,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       // tables are fully derived from the base signal tables and get
       // repopulated by the refreshable MV at the end of init(), so it is safe
       // to recreate them in place when the engine doesn't match.
-      await reconcileDiscoveryTables(this.#client);
+      await reconcileDiscoveryTables(this.#client, this.#replication);
 
       // Core tables + incremental MVs (must succeed)
       const coreDdl =
@@ -435,7 +531,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
           ? [...BASE_TABLE_DDL, ...BASE_MV_DDL]
           : [...buildAllTableDDL(), ...buildAllMvDDL(this.#deltaCursorStrategy)];
       for (const ddl of coreDdl) {
-        await this.#client.command({ query: ddl });
+        await this.#client.command({ query: applyReplicationToDDL(ddl, this.#replication) });
       }
 
       // Additive migrations for existing databases (add new columns/indexes).
@@ -445,7 +541,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       // errors on every boot when multiple replicas/pods race.
       const pendingMigrations = await filterAppliedMigrations(this.#client, ALL_MIGRATIONS);
       for (const migration of pendingMigrations) {
-        await this.#client.command({ query: migration.sql });
+        await this.#client.command({ query: addOnClusterToDDL(migration.sql, this.#replication) });
       }
 
       // Apply retention TTL if configured (per design doc: per-signal, day increments).
@@ -455,7 +551,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       if (this.#retention) {
         const pendingRetention = await filterAppliedRetention(this.#client, buildRetentionEntries(this.#retention));
         for (const entry of pendingRetention) {
-          await this.#client.command({ query: entry.sql });
+          await this.#client.command({ query: addOnClusterToDDL(entry.sql, this.#replication) });
         }
       }
 
@@ -499,16 +595,26 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
     // discovery methods should continue returning empty results until a later refresh succeeds."
     try {
       for (const ddl of DISCOVERY_MV_DDL) {
-        await this.#client.command({ query: ddl });
+        await this.#client.command({ query: addOnClusterToDDL(ddl, this.#replication) });
       }
       // Trigger an immediate refresh so discovery data is available right away
       // instead of waiting for the first scheduled refresh cycle.
       // SYSTEM REFRESH VIEW kicks off the refresh; SYSTEM WAIT VIEW blocks
-      // until it finishes (or re-throws if the refresh failed).
-      await this.#client.command({ query: `SYSTEM REFRESH VIEW ${MV_DISCOVERY_VALUES}` });
-      await this.#client.command({ query: `SYSTEM WAIT VIEW ${MV_DISCOVERY_VALUES}` });
-      await this.#client.command({ query: `SYSTEM REFRESH VIEW ${MV_DISCOVERY_PAIRS}` });
-      await this.#client.command({ query: `SYSTEM WAIT VIEW ${MV_DISCOVERY_PAIRS}` });
+      // until it finishes (or re-throws if the refresh failed). Under
+      // replication these run ON CLUSTER so every replica's refreshable MV
+      // schedule is kicked, not just the coordinator's.
+      await this.#client.command({
+        query: addOnClusterToDDL(`SYSTEM REFRESH VIEW ${MV_DISCOVERY_VALUES}`, this.#replication),
+      });
+      await this.#client.command({
+        query: addOnClusterToDDL(`SYSTEM WAIT VIEW ${MV_DISCOVERY_VALUES}`, this.#replication),
+      });
+      await this.#client.command({
+        query: addOnClusterToDDL(`SYSTEM REFRESH VIEW ${MV_DISCOVERY_PAIRS}`, this.#replication),
+      });
+      await this.#client.command({
+        query: addOnClusterToDDL(`SYSTEM WAIT VIEW ${MV_DISCOVERY_PAIRS}`, this.#replication),
+      });
     } catch {
       // Discovery MVs may fail on ClickHouse versions without refreshable MV support.
       // Discovery methods will return empty results until the MVs are created and refreshed.
@@ -516,9 +622,9 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
   }
 
   /**
-   * Manually migrate legacy signal tables to the signal-ID ReplacingMergeTree schema.
-   * The public method name is historical; the CLI still calls `migrateSpans()`
-   * for observability migrations even though this now also migrates signal tables.
+   * Manually migrate legacy tables to the v-next schema.
+   * Handles both signal table migrations (MergeTree → ReplacingMergeTree)
+   * and legacy span migration (mastra_ai_spans → mastra_span_events).
    */
   async migrateSpans(): Promise<{
     success: boolean;
@@ -526,24 +632,47 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
     duplicatesRemoved: number;
     message: string;
   }> {
-    const migrationStatus = await checkSignalTablesMigrationStatus(this.#client);
+    const messages: string[] = [];
 
-    if (!migrationStatus.needsMigration) {
-      return {
-        success: true,
-        alreadyMigrated: true,
-        duplicatesRemoved: 0,
-        message: 'Migration already complete. Signal tables already use signal-ID dedupe keys.',
-      };
+    // Signal table migration
+    const signalStatus = await checkSignalTablesMigrationStatus(this.#client);
+    if (signalStatus.needsMigration) {
+      if (isReplicationConfigured(this.#replication)) {
+        throw new MastraError({
+          id: createStorageErrorId('CLICKHOUSE', 'REPLICATION', 'SIGNAL_TABLES_MIGRATION_UNSUPPORTED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          text:
+            'ClickHouse replication is enabled, so Mastra will not run copy-and-swap signal table migrations automatically. ' +
+            'Migrate existing local signal tables manually before enabling replication.',
+        });
+      }
+      await migrateSignalTables(this.#client, this.logger);
+      messages.push(`Migrated signal tables: ${signalStatus.tables.map(t => t.table).join(', ')}.`);
     }
 
-    await migrateSignalTables(this.#client, this.logger);
+    // Legacy span migration
+    const legacyStatus = await checkLegacySpanMigrationStatus(this.#client);
+    if (legacyStatus.needsMigration) {
+      if (isReplicationConfigured(this.#replication)) {
+        throw new MastraError({
+          id: createStorageErrorId('CLICKHOUSE', 'REPLICATION', 'LEGACY_SPAN_MIGRATION_UNSUPPORTED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          text: 'ClickHouse replication is enabled. Migrate legacy mastra_ai_spans manually before enabling replication.',
+        });
+      }
+      const result = await migrateLegacySpans(this.#client, this.logger);
+      messages.push(`Migrated ${result.migratedRows} legacy spans in ${result.batches} batches.`);
+    }
+
+    const alreadyMigrated = !signalStatus.needsMigration && !legacyStatus.needsMigration;
 
     return {
       success: true,
-      alreadyMigrated: false,
+      alreadyMigrated,
       duplicatesRemoved: 0,
-      message: `Migration complete. Migrated signal tables: ${migrationStatus.tables.map(t => t.table).join(', ')}.`,
+      message: alreadyMigrated ? 'Migration already complete.' : `Migration complete. ${messages.join(' ')}`,
     };
   }
 
@@ -563,10 +692,10 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
 
   override getFeatures() {
     if (!deltaPollingSupported(this.#deltaCursorStrategy)) {
-      return undefined;
+      return ['metrics', 'logs', 'trace-query', 'thread-query'] as const;
     }
 
-    return ['delta-polling'] as const;
+    return ['metrics', 'logs', 'delta-polling', 'trace-query', 'thread-query'] as const;
   }
 
   // -------------------------------------------------------------------------
@@ -712,9 +841,41 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
     }
   }
 
+  override async queryTraces(plan: TrustedTraceQueryPlan): Promise<TraceQueryResponse> {
+    try {
+      return await traceQueryOps.queryTraces(this.#client, plan, this.#traceQueryTimeoutMs);
+    } catch (error) {
+      if (error instanceof MastraError || error instanceof coreStorage.TraceQueryExecutionError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'QUERY_TRACES', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
+  override async queryThreads(plan: TrustedThreadQueryPlan): Promise<QueryThreadsResult> {
+    try {
+      return await traceQueryOps.queryThreads(this.#client, plan, this.#traceQueryTimeoutMs);
+    } catch (error) {
+      if (error instanceof MastraError || error instanceof coreStorage.TraceQueryExecutionError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'QUERY_THREADS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
   override async listTracesLight(args: ListTracesArgs): Promise<ListTracesLightResponse> {
     try {
-      return await traceRootsOps.listTracesLight(this.#client, args);
+      return await traceRootsOps.listTracesLight(this.#client, args, this.#deltaCursorStrategy);
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
@@ -859,6 +1020,23 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
     }
   }
 
+  override async deleteScores(args: DeleteScoresArgs): Promise<void> {
+    try {
+      await scoresOps.deleteScores(this.#client, args, this.#replication);
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'DELETE_SCORES', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { count: args.scoreIds.length },
+        },
+        error,
+      );
+    }
+  }
+
   override async getScoreById(scoreId: string): Promise<ScoreRecord | null> {
     try {
       return await scoresOps.getScoreById(this.#client, scoreId);
@@ -903,6 +1081,40 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { count: args.feedbacks.length },
+        },
+        error,
+      );
+    }
+  }
+
+  override async deleteFeedback(args: DeleteFeedbackArgs): Promise<void> {
+    try {
+      await feedbackOps.deleteFeedback(this.#client, args, this.#replication);
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'DELETE_FEEDBACK', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { count: args.feedbackIds.length },
+        },
+        error,
+      );
+    }
+  }
+
+  override async updateFeedbackReviewStatus(args: UpdateFeedbackReviewStatusArgs): Promise<FeedbackRecord> {
+    try {
+      return await feedbackOps.updateFeedbackReviewStatus(this.#client, args, this.#replication);
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'UPDATE_FEEDBACK_REVIEW_STATUS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { feedbackId: args.feedbackId },
         },
         error,
       );
@@ -1271,7 +1483,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
 
   override async batchDeleteTraces(args: BatchDeleteTracesArgs): Promise<void> {
     try {
-      await tracingOps.batchDeleteTraces(this.#client, args);
+      await tracingOps.batchDeleteTraces(this.#client, args, this.#replication);
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
@@ -1292,9 +1504,14 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
 
   override async dangerouslyClearAll(): Promise<void> {
     try {
-      // Truncate all signal tables
+      // Truncate all signal tables. Under replication we fan out via ON CLUSTER
+      // so every replica is cleared rather than only the receiving node.
       await Promise.all(
-        ALL_TABLE_NAMES.map(table => this.#client.command({ query: `TRUNCATE TABLE IF EXISTS ${table}` })),
+        ALL_TABLE_NAMES.map(table =>
+          this.#client.command({
+            query: addOnClusterToDDL(`TRUNCATE TABLE IF EXISTS ${table}`, this.#replication),
+          }),
+        ),
       );
     } catch (error) {
       if (error instanceof MastraError) throw error;

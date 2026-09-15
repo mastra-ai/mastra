@@ -1,4 +1,5 @@
 export * from './model';
+export type { ModelTimeoutSettings, MastraModelSettings, ModelConfigModelSettings } from './model-settings';
 export { ModelRouterLanguageModel } from './router';
 export {
   type ModelRouterModelId,
@@ -6,6 +7,8 @@ export {
   type ModelForProvider,
   type AttachmentCapabilities,
   modelSupportsAttachments,
+  modelSupportsStructuredOutput,
+  modelSupportsTemperature,
 } from './provider-registry.js';
 export { resolveModelConfig, isOpenAICompatibleObjectConfig } from './resolve-model';
 export { resolveModelAuth, type ResolveModelAuthArgs } from './model-auth-resolver';

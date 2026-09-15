@@ -1,16 +1,11 @@
-import {
-  Button,
-  Column,
-  Columns,
-  MainContentContent,
-  MainContentLayout,
-  MainHeader,
-  PermissionDenied,
-  SessionExpired,
-  TextAndIcon,
-  is401UnauthorizedError,
-  is403ForbiddenError,
-} from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Column, Columns } from '@mastra/playground-ui/components/Columns';
+import { MainContentContent, MainContentLayout } from '@mastra/playground-ui/components/MainContent';
+import { MainHeader } from '@mastra/playground-ui/components/MainHeader';
+import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
+import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { TextAndIcon } from '@mastra/playground-ui/components/Text';
+import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { ArrowLeft, ScaleIcon, HistoryIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { useParams, useSearchParams, useNavigate, Link } from 'react-router';
@@ -75,19 +70,13 @@ function DatasetCompareVersionsPage() {
     return (
       <MainContentLayout>
         <MainContentContent>
-          <div className="text-neutral4 text-center py-8">
+          <div className="text-neutral4 py-5 text-center">
             <p>Select at least two versions to compare.</p>
           </div>
         </MainContentContent>
       </MainContentLayout>
     );
   }
-
-  const handleItemClick = (itemId: string, itemA?: { datasetVersion: number }, itemB?: { datasetVersion: number }) => {
-    void navigate(
-      `/datasets/${datasetId}/items/${itemId}/versions?ids=${itemA?.datasetVersion ?? ''},${itemB?.datasetVersion ?? ''}`,
-    );
-  };
 
   const handleVersionChange = (newA: string, newB: string) => {
     void navigate(`/datasets/${datasetId}/versions?ids=${newA},${newB}`, {
@@ -98,7 +87,7 @@ function DatasetCompareVersionsPage() {
   return (
     <MainContentLayout>
       <div className="h-full overflow-hidden px-[3vw] pb-4">
-        <div className="grid gap-6 max-w-[140rem] mx-auto grid-rows-[auto_1fr] h-full">
+        <div className="mx-auto grid h-full max-w-[140rem] grid-rows-[auto_1fr] gap-4">
           <MainHeader>
             <MainHeader.Column>
               <MainHeader.Title>
@@ -112,8 +101,7 @@ function DatasetCompareVersionsPage() {
               </MainHeader.Description>
             </MainHeader.Column>
             <MainHeader.Column>
-              <Button as={Link} to={`/datasets/${datasetId}`}>
-                <ArrowLeft />
+              <Button as={Link} to={`/datasets/${datasetId}`} icon={<ArrowLeft />}>
                 Back to Dataset
               </Button>
             </MainHeader.Column>
@@ -134,7 +122,6 @@ function DatasetCompareVersionsPage() {
                 allItems={allItems}
                 itemsAMap={itemsAMap}
                 itemsBMap={itemsBMap}
-                onItemClick={handleItemClick}
               />
             </Column>
           </Columns>

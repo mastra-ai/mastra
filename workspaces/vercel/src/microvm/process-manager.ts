@@ -9,10 +9,10 @@
  * so `sendStdin()` throws a clear "not supported" error.
  */
 
-import { ProcessHandle, SandboxProcessManager } from '@mastra/core/workspace';
+import { ProcessHandle, UnsupportedStdinCloseError, SandboxProcessManager } from '@mastra/core/workspace';
 import type { CommandResult, ProcessInfo, SpawnProcessOptions } from '@mastra/core/workspace';
 import type { Command } from '@vercel/sandbox';
-import type { VercelMicroVMSandbox } from './index';
+import type { VercelSandbox } from './index';
 
 // =============================================================================
 // Process Handle
@@ -22,7 +22,7 @@ import type { VercelMicroVMSandbox } from './index';
  * Wraps a detached Vercel Sandbox {@link Command} to conform to Mastra's
  * ProcessHandle. Not exported — internal to this module.
  */
-class VercelMicroVMProcessHandle extends ProcessHandle {
+class VercelSandboxProcessHandle extends ProcessHandle {
   readonly pid: string;
 
   private readonly _command: Command;
@@ -132,7 +132,11 @@ class VercelMicroVMProcessHandle extends ProcessHandle {
   }
 
   async sendStdin(_data: string): Promise<void> {
-    throw new Error('VercelMicroVMSandbox does not support sending stdin to running processes.');
+    throw new Error('VercelSandbox does not support sending stdin to running processes.');
+  }
+
+  async closeStdin(): Promise<void> {
+    throw new UnsupportedStdinCloseError('VercelSandbox does not support closing stdin for running processes.');
   }
 }
 
@@ -140,32 +144,30 @@ class VercelMicroVMProcessHandle extends ProcessHandle {
 // Process Manager
 // =============================================================================
 
-export interface VercelMicroVMProcessManagerOptions {
-  env?: Record<string, string | undefined>;
-}
-
 /**
  * Vercel Sandbox implementation of SandboxProcessManager. Uses one detached
  * `runCommand` per spawned process.
  */
-export class VercelMicroVMProcessManager extends SandboxProcessManager<VercelMicroVMSandbox> {
+export class VercelSandboxProcessManager extends SandboxProcessManager<VercelSandbox> {
   async spawn(command: string, options: SpawnProcessOptions = {}): Promise<ProcessHandle> {
-    const mergedEnv = { ...this.env, ...options.env };
+    // The base spawn wrapper already merged the sandbox env into options.env
+    const mergedEnv = { ...options.env };
     const env = Object.fromEntries(
       Object.entries(mergedEnv).filter((entry): entry is [string, string] => entry[1] !== undefined),
     );
 
     // The workspace passes a full command string; run it through a shell so
     // pipes, redirects, and builtins behave as expected.
+    const cwd = options.cwd ?? this.sandbox.workingDirectory;
     const cmd = await this.sandbox.sandbox.runCommand({
       cmd: 'sh',
       args: ['-c', command],
-      ...(options.cwd ? { cwd: options.cwd } : {}),
+      ...(cwd ? { cwd } : {}),
       ...(Object.keys(env).length ? { env } : {}),
       detached: true,
     });
 
-    const handle = new VercelMicroVMProcessHandle(cmd, Date.now(), options);
+    const handle = new VercelSandboxProcessHandle(cmd, Date.now(), options);
 
     const streamingPromise = (async () => {
       for await (const log of cmd.logs()) {

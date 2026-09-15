@@ -1,13 +1,7 @@
-import {
-  Badge,
-  Entity,
-  EntityContent,
-  EntityName,
-  EntityDescription,
-  Section,
-  SubSectionRoot,
-  stringToColor,
-} from '@mastra/playground-ui';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Entity, EntityContent, EntityName, EntityDescription } from '@mastra/playground-ui/components/Entity';
+import { Section, SubSectionRoot } from '@mastra/playground-ui/components/Section';
+import { stringToColor } from '@mastra/playground-ui/utils/colors';
 import { Plug } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
@@ -63,7 +57,7 @@ export function IntegrationToolsSection({ selectedToolIds, onSubmitTools }: Inte
             return (
               <Entity key={provider.id} onClick={() => setSelectedProvider(provider)} className="bg-surface2">
                 <div
-                  className="size-11 rounded-lg flex items-center justify-center uppercase shrink-0"
+                  className="flex size-11 shrink-0 items-center justify-center rounded-lg uppercase"
                   style={{ backgroundColor: bg, color: text }}
                 >
                   {provider.name[0]}
@@ -76,11 +70,11 @@ export function IntegrationToolsSection({ selectedToolIds, onSubmitTools }: Inte
 
                 <div className="flex items-center gap-2">
                   {count > 0 && (
-                    <Badge variant="default">
+                    <Badge>
                       {count} {count === 1 ? 'tool' : 'tools'}
                     </Badge>
                   )}
-                  <Badge variant="success">Available</Badge>
+                  <Badge variant="green">Available</Badge>
                 </div>
               </Entity>
             );

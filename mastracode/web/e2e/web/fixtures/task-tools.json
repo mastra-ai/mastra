@@ -1,0 +1,47 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "Create a task list for setting up the project",
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_task_write",
+            "name": "task_write",
+            "arguments": {
+              "tasks": [
+                {
+                  "id": "setup_deps",
+                  "content": "Install dependencies",
+                  "status": "pending",
+                  "activeForm": "Installing dependencies"
+                },
+                {
+                  "id": "setup_config",
+                  "content": "Configure the project",
+                  "status": "pending",
+                  "activeForm": "Configuring the project"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "toolCallId": "call_task_write",
+        "hasToolResult": true
+      },
+      "response": {
+        "content": "I've created a task list with 2 items: Install dependencies and Configure the project."
+      }
+    }
+  ]
+}

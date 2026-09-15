@@ -3,6 +3,62 @@ import { describe, expect, it, vi } from 'vitest';
 import { DuckDBConnection } from './index';
 
 describe('DuckDBConnection', () => {
+  describe('executeTransaction', () => {
+    it('commits parameterized statements using one DuckDB connection', async () => {
+      const db = new DuckDBConnection({ path: ':memory:' });
+      const getConnectionSpy = vi.spyOn(db, 'getConnection');
+
+      try {
+        await db.execute('CREATE TABLE transaction_rows (id INTEGER)');
+        getConnectionSpy.mockClear();
+
+        await db.executeTransaction([
+          { sql: 'INSERT INTO transaction_rows VALUES (?)', params: [1] },
+          { sql: 'INSERT INTO transaction_rows VALUES (?)', params: [2] },
+        ]);
+
+        expect(getConnectionSpy).toHaveBeenCalledTimes(1);
+        await expect(db.query<{ id: number }>('SELECT id FROM transaction_rows ORDER BY id')).resolves.toEqual([
+          { id: 1 },
+          { id: 2 },
+        ]);
+      } finally {
+        await db.close();
+      }
+    });
+
+    it('rolls back every statement when one fails', async () => {
+      const db = new DuckDBConnection({ path: ':memory:' });
+
+      try {
+        await db.execute('CREATE TABLE transaction_rollback (id INTEGER PRIMARY KEY)');
+
+        await expect(
+          db.executeTransaction([
+            { sql: 'INSERT INTO transaction_rollback VALUES (?)', params: [1] },
+            { sql: 'INSERT INTO transaction_rollback VALUES (?)', params: [1] },
+          ]),
+        ).rejects.toThrow();
+
+        await expect(db.query('SELECT * FROM transaction_rollback')).resolves.toEqual([]);
+      } finally {
+        await db.close();
+      }
+    });
+
+    it('skips an empty transaction without opening a connection', async () => {
+      const db = new DuckDBConnection({ path: ':memory:' });
+      const getConnectionSpy = vi.spyOn(db, 'getConnection');
+
+      try {
+        await db.executeTransaction([]);
+        expect(getConnectionSpy).not.toHaveBeenCalled();
+      } finally {
+        await db.close();
+      }
+    });
+  });
+
   describe('executeBatch', () => {
     it('executes multiple statements with one DuckDB connection', async () => {
       const db = new DuckDBConnection({ path: ':memory:' });
@@ -103,6 +159,35 @@ describe('DuckDBConnection', () => {
         await db.executeBatch(['', '   ']);
 
         expect(getConnectionSpy).not.toHaveBeenCalled();
+      } finally {
+        await db.close();
+      }
+    });
+  });
+
+  describe('resource limits', () => {
+    it('applies the 2GB default memory limit', async () => {
+      const db = new DuckDBConnection({ path: ':memory:' });
+
+      try {
+        const rows = await db.query<{ value: string }>(`SELECT current_setting('memory_limit') AS value`);
+        expect(rows[0]?.value).toMatch(/^(1\.8|1\.9|2\.0) GiB$/);
+      } finally {
+        await db.close();
+      }
+    });
+
+    it('applies configured memoryLimit and threads', async () => {
+      const db = new DuckDBConnection({ path: ':memory:', memoryLimit: '512MB', threads: 2 });
+
+      try {
+        const rows = await db.query<{ memoryLimit: string; threads: number }>(`
+          SELECT
+            current_setting('memory_limit') AS memoryLimit,
+            current_setting('threads') AS threads
+        `);
+        expect(rows[0]?.memoryLimit).toMatch(/^(476\.\d+|488\.\d+|512\.0) MiB$/);
+        expect(Number(rows[0]?.threads)).toBe(2);
       } finally {
         await db.close();
       }

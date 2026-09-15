@@ -1,6 +1,6 @@
 ---
 title: "Reference: dataset.getDetails() | Datasets"
-description: "Documentation for the `dataset.getDetails()` method, which retrieves the full dataset record from storage."
+description: "Retrieves the full dataset record from storage, including metadata, schemas, and version information."
 packages:
   - "@mastra/core"
 ---
@@ -16,9 +16,7 @@ Retrieves the full dataset record from storage, including metadata, schemas, and
 ```typescript
 import { Mastra } from '@mastra/core'
 
-const mastra = new Mastra({
-  /* storage config */
-})
+const mastra = new Mastra({/* storage config */})
 
 const dataset = await mastra.datasets.get({ id: 'dataset-id' })
 

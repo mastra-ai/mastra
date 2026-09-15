@@ -1,4 +1,5 @@
 import { getSchemaValidator, SchemaUpdateValidationError } from '../../../datasets/validation';
+import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
 import type {
   DatasetRecord,
   DatasetItem,
@@ -8,6 +9,8 @@ import type {
   UpdateDatasetInput,
   AddDatasetItemInput,
   UpdateDatasetItemInput,
+  DeleteDatasetItemInput,
+  PurgeDatasetItemInput,
   ListDatasetsInput,
   ListDatasetsOutput,
   ListDatasetItemsInput,
@@ -16,8 +19,14 @@ import type {
   ListDatasetVersionsOutput,
   BatchInsertItemsInput,
   BatchDeleteItemsInput,
+  DatasetTenancyFilters,
 } from '../../types';
 import { StorageDomain } from '../base';
+import { planDatasetItemBatch as createDatasetItemBatchPlan, validateDatasetItemExternalId } from './identity';
+import type { DatasetItemBatchPlan } from './identity';
+import { validateDatasetItemPayloadSerialization } from './serialization';
+
+const DATASET_IMMUTABLE_FIELDS = ['organizationId', 'projectId', 'candidateKey', 'candidateId'] as const;
 
 /**
  * Abstract base class for datasets storage domain.
@@ -35,22 +44,88 @@ export abstract class DatasetsStorage extends StorageDomain {
     });
   }
 
+  protected validateCallerDefinedDatasetId(id: string): void {
+    if (id.length === 0) {
+      throw new MastraError({
+        id: 'DATASET_INVALID_ID',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { id },
+        text: 'Caller-defined dataset ID must not be empty',
+      });
+    }
+  }
+
+  /**
+   * Returns an existing dataset when a caller-defined ID is reused compatibly.
+   * Optional immutable fields normalize omitted and null values to the same value.
+   */
+  protected resolveExistingDataset(existing: DatasetRecord, input: CreateDatasetInput & { id: string }): DatasetRecord {
+    const hasConflict = DATASET_IMMUTABLE_FIELDS.some(field => (existing[field] ?? null) !== (input[field] ?? null));
+
+    if (hasConflict) {
+      throw new MastraError({
+        id: 'DATASET_ID_CONFLICT',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: {
+          id: input.id,
+          reason: 'IMMUTABLE_FIELDS_MISMATCH',
+        },
+        text: `Dataset ID "${input.id}" is already in use with incompatible immutable fields`,
+      });
+    }
+
+    return existing;
+  }
+
   async dangerouslyClearAll(): Promise<void> {
     // Default no-op - subclasses override
   }
 
   // Dataset CRUD
   abstract createDataset(input: CreateDatasetInput): Promise<DatasetRecord>;
-  abstract getDatasetById(args: { id: string }): Promise<DatasetRecord | null>;
-  abstract deleteDataset(args: { id: string }): Promise<void>;
+  /**
+   * Fetch a dataset by ID. When `filters` is provided, the row is only returned
+   * if it also matches the tenancy filters — returns `null` on mismatch (never
+   * throws, to avoid leaking existence across tenants via error timing/text).
+   */
+  abstract getDatasetById(args: { id: string; filters?: DatasetTenancyFilters }): Promise<DatasetRecord | null>;
+  /**
+   * Delete a dataset. When `filters` is provided, the delete is a silent no-op
+   * if the row does not match the tenancy filters. Never throws on mismatch.
+   */
+  abstract deleteDataset(args: { id: string; filters?: DatasetTenancyFilters }): Promise<void>;
   abstract listDatasets(args: ListDatasetsInput): Promise<ListDatasetsOutput>;
+
+  /**
+   * Dataset lookup used by the base mutation flows (`updateDataset`, `updateItem`,
+   * `deleteItem`, `batchInsertItems`, `batchDeleteItems`) before they write.
+   * Defaults to `getDatasetById`; adapters that split reads across a replica
+   * override this so the check runs against the writer.
+   */
+  protected getDatasetForMutation(args: {
+    id: string;
+    filters?: DatasetTenancyFilters;
+  }): Promise<DatasetRecord | null> {
+    return this.getDatasetById(args);
+  }
+
+  /**
+   * Item listing used by `updateDataset` to validate existing items against a
+   * changed schema. Defaults to `listItems`; replica-aware adapters override it
+   * so freshly inserted items are not missed.
+   */
+  protected listItemsForMutation(args: ListDatasetItemsInput): Promise<ListDatasetItemsOutput> {
+    return this.listItems(args);
+  }
 
   /**
    * Update a dataset. Validates existing items against new schemas if schemas are changing.
    * Subclasses implement _doUpdateDataset for actual storage operation.
    */
   async updateDataset(args: UpdateDatasetInput): Promise<DatasetRecord> {
-    const existing = await this.getDatasetById({ id: args.id });
+    const existing = await this.getDatasetForMutation({ id: args.id, filters: args.filters });
     if (!existing) {
       throw new Error(`Dataset not found: ${args.id}`);
     }
@@ -64,7 +139,7 @@ export abstract class DatasetsStorage extends StorageDomain {
 
     // If schemas changing, validate all existing items against new schemas
     if (inputSchemaChanging || groundTruthSchemaChanging) {
-      const itemsResult = await this.listItems({
+      const itemsResult = await this.listItemsForMutation({
         datasetId: args.id,
         pagination: { page: 0, perPage: false }, // Get all items
       });
@@ -105,24 +180,9 @@ export abstract class DatasetsStorage extends StorageDomain {
    * Subclasses implement _doAddItem which handles SCD-2 versioning internally.
    */
   async addItem(args: AddDatasetItemInput): Promise<DatasetItem> {
-    const dataset = await this.getDatasetById({ id: args.datasetId });
-    if (!dataset) {
-      throw new Error(`Dataset not found: ${args.datasetId}`);
-    }
-
-    // Validate against schemas if enabled
-    const validator = getSchemaValidator();
-    const cacheKey = `dataset:${args.datasetId}`;
-
-    if (dataset.inputSchema) {
-      validator.validate(args.input, dataset.inputSchema, 'input', `${cacheKey}:input`);
-    }
-
-    if (dataset.groundTruthSchema && args.groundTruth !== undefined) {
-      validator.validate(args.groundTruth, dataset.groundTruthSchema, 'groundTruth', `${cacheKey}:output`);
-    }
-
-    return this._doAddItem(args);
+    const { datasetId, filters, ...item } = args;
+    const [result] = await this.batchInsertItems({ datasetId, filters, items: [item] });
+    return result!;
   }
 
   /** Subclasses implement actual storage add logic with SCD-2 versioning */
@@ -133,10 +193,24 @@ export abstract class DatasetsStorage extends StorageDomain {
    * Subclasses implement _doUpdateItem which handles SCD-2 versioning internally.
    */
   async updateItem(args: UpdateDatasetItemInput): Promise<DatasetItem> {
-    const dataset = await this.getDatasetById({ id: args.datasetId });
+    const dataset = await this.getDatasetForMutation({ id: args.datasetId, filters: args.filters });
     if (!dataset) {
       throw new Error(`Dataset not found: ${args.datasetId}`);
     }
+
+    const existing = await this.getItemById({ id: args.id });
+    if (existing?.datasetId === args.datasetId && existing.metadata?.__purged === true) {
+      throw new MastraError({
+        id: 'DATASET_ITEM_PURGED',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { datasetId: args.datasetId, itemId: args.id },
+        text: `Purged dataset item cannot be updated: ${args.id}`,
+      });
+    }
+
+    const { id: _id, datasetId: _datasetId, filters: _filters, ...payload } = args;
+    validateDatasetItemPayloadSerialization(payload, 'item');
 
     // Validate new values against schemas if enabled
     const validator = getSchemaValidator();
@@ -159,13 +233,37 @@ export abstract class DatasetsStorage extends StorageDomain {
   /**
    * Delete an item from a dataset. Creates a tombstone row via SCD-2.
    * Subclasses implement _doDeleteItem which handles SCD-2 versioning internally.
+   *
+   * When `args.filters` is set, the delete is a silent no-op if the parent
+   * dataset row does not match the tenancy filters — prevents deleting items
+   * from a dataset in another tenant via a leaked datasetId.
    */
-  async deleteItem(args: { id: string; datasetId: string }): Promise<void> {
+  async deleteItem(args: DeleteDatasetItemInput): Promise<void> {
+    if (args.filters) {
+      const dataset = await this.getDatasetForMutation({ id: args.datasetId, filters: args.filters });
+      if (!dataset) return;
+    }
     return this._doDeleteItem(args);
   }
 
   /** Subclasses implement actual storage delete logic with SCD-2 versioning */
-  protected abstract _doDeleteItem(args: { id: string; datasetId: string }): Promise<void>;
+  protected abstract _doDeleteItem(args: DeleteDatasetItemInput): Promise<void>;
+
+  /**
+   * Permanently scrub user-supplied content from every SCD-2 row for an item
+   * and from experiment results that reference it. The item's identity and
+   * versioning skeleton are retained.
+   */
+  async purgeItem(args: PurgeDatasetItemInput): Promise<void> {
+    if (args.filters) {
+      const dataset = await this.getDatasetForMutation({ id: args.datasetId, filters: args.filters });
+      if (!dataset) return;
+    }
+    return this._doPurgeItem(args);
+  }
+
+  /** Subclasses implement the atomic item-history and experiment-result scrub. */
+  protected abstract _doPurgeItem(args: PurgeDatasetItemInput): Promise<void>;
 
   abstract listItems(args: ListDatasetItemsInput): Promise<ListDatasetItemsOutput>;
   abstract getItemById(args: { id: string; datasetVersion?: number }): Promise<DatasetItem | null>;
@@ -183,7 +281,7 @@ export abstract class DatasetsStorage extends StorageDomain {
    * then delegates to subclass which handles SCD-2 versioning internally.
    */
   async batchInsertItems(input: BatchInsertItemsInput): Promise<DatasetItem[]> {
-    const dataset = await this.getDatasetById({ id: input.datasetId });
+    const dataset = await this.getDatasetForMutation({ id: input.datasetId, filters: input.filters });
     if (!dataset) {
       throw new Error(`Dataset not found: ${input.datasetId}`);
     }
@@ -192,7 +290,9 @@ export abstract class DatasetsStorage extends StorageDomain {
     const validator = getSchemaValidator();
     const cacheKey = `dataset:${input.datasetId}`;
 
-    for (const itemData of input.items) {
+    for (const [index, itemData] of input.items.entries()) {
+      validateDatasetItemExternalId(itemData.externalId);
+      validateDatasetItemPayloadSerialization(itemData, `items[${index}]`);
       if (dataset.inputSchema) {
         validator.validate(itemData.input, dataset.inputSchema, 'input', `${cacheKey}:input`);
       }
@@ -204,6 +304,19 @@ export abstract class DatasetsStorage extends StorageDomain {
     return this._doBatchInsertItems(input);
   }
 
+  protected planDatasetItemBatch(
+    items: BatchInsertItemsInput['items'],
+    historyRows: DatasetItemRow[],
+    createId: () => string,
+  ): DatasetItemBatchPlan {
+    return createDatasetItemBatchPlan(items, historyRows, createId);
+  }
+
+  protected datasetItemFromRow(row: DatasetItemRow): DatasetItem {
+    const { validTo: _validTo, isDeleted: _isDeleted, ...item } = row;
+    return item;
+  }
+
   /** Subclasses implement batch insert with SCD-2 versioning */
   protected abstract _doBatchInsertItems(input: BatchInsertItemsInput): Promise<DatasetItem[]>;
 
@@ -212,7 +325,7 @@ export abstract class DatasetsStorage extends StorageDomain {
    * Subclasses implement _doBatchDeleteItems which handles SCD-2 versioning internally.
    */
   async batchDeleteItems(input: BatchDeleteItemsInput): Promise<void> {
-    const dataset = await this.getDatasetById({ id: input.datasetId });
+    const dataset = await this.getDatasetForMutation({ id: input.datasetId, filters: input.filters });
     if (!dataset) {
       throw new Error(`Dataset not found: ${input.datasetId}`);
     }

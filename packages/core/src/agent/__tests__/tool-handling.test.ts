@@ -4,16 +4,160 @@ import {
   convertArrayToReadableStream as convertArrayToReadableStreamV3,
   MockLanguageModelV3,
 } from '@internal/ai-v6/test';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
+import { MastraError } from '../../error';
 import { RequestContext } from '../../request-context';
+import { createTool, webSearchTool } from '../../tools';
 import { Agent } from '../agent';
 import { getSingleDummyResponseModel } from './mock-model';
 
-function toolhandlingTests(version: 'v1' | 'v2' | 'v3') {
+function toolhandlingTests(version: 'v1' | 'v2' | 'v3' | 'v4') {
   const dummyModel = getSingleDummyResponseModel(version);
 
   describe(`${version} - agent tool handling`, () => {
+    describe('dynamic model resolution', () => {
+      it('resolves the model once for all assigned tools', async () => {
+        const resolveModel = vi.fn(() => dummyModel);
+        const agent = new Agent({
+          id: 'dynamic-model-agent',
+          name: 'dynamic-model-agent',
+          instructions: 'Use the assigned tools.',
+          model: resolveModel,
+          tools: {
+            firstTool: createTool({
+              id: 'first-tool',
+              description: 'First test tool.',
+              inputSchema: z.object({}),
+              execute: async () => 'first',
+            }),
+            secondTool: createTool({
+              id: 'second-tool',
+              description: 'Second test tool.',
+              inputSchema: z.object({}),
+              execute: async () => 'second',
+            }),
+          },
+        });
+
+        await agent.getToolsForExecution({ requestContext: new RequestContext() });
+
+        expect(resolveModel).toHaveBeenCalledTimes(1);
+      });
+
+      it('does not resolve the model when there are no assigned tools', async () => {
+        const resolveModel = vi.fn(() => dummyModel);
+        const agent = new Agent({
+          id: 'dynamic-model-agent-without-tools',
+          name: 'dynamic-model-agent-without-tools',
+          instructions: 'No tools are assigned.',
+          model: resolveModel,
+        });
+
+        await agent.getToolsForExecution({ requestContext: new RequestContext() });
+
+        expect(resolveModel).not.toHaveBeenCalled();
+      });
+
+      function createNamedTool(name: string) {
+        return createTool({
+          id: name,
+          description: `${name} test tool.`,
+          inputSchema: z.object({}),
+          execute: async () => name,
+        });
+      }
+
+      it('resolves the model once for all tools in a toolset', async () => {
+        const resolveModel = vi.fn(() => dummyModel);
+        const agent = new Agent({
+          id: 'dynamic-model-toolset-agent',
+          name: 'dynamic-model-toolset-agent',
+          instructions: 'Use the toolset tools.',
+          model: resolveModel,
+        });
+
+        await agent.getToolsForExecution({
+          requestContext: new RequestContext(),
+          toolsets: {
+            testToolset: {
+              firstTool: createNamedTool('first-tool'),
+              secondTool: createNamedTool('second-tool'),
+              thirdTool: createNamedTool('third-tool'),
+            },
+          },
+        });
+
+        expect(resolveModel).toHaveBeenCalledTimes(1);
+      });
+
+      it('resolves the model once for all client tools', async () => {
+        const resolveModel = vi.fn(() => dummyModel);
+        const agent = new Agent({
+          id: 'dynamic-model-client-agent',
+          name: 'dynamic-model-client-agent',
+          instructions: 'Use the client tools.',
+          model: resolveModel,
+        });
+
+        await agent.getToolsForExecution({
+          requestContext: new RequestContext(),
+          clientTools: {
+            firstTool: createNamedTool('first-tool'),
+            secondTool: createNamedTool('second-tool'),
+            thirdTool: createNamedTool('third-tool'),
+          },
+        });
+
+        expect(resolveModel).toHaveBeenCalledTimes(1);
+      });
+
+      it('resolves the model once across tool sources', async () => {
+        const resolveModel = vi.fn(() => dummyModel);
+        const agent = new Agent({
+          id: 'dynamic-model-multi-source-agent',
+          name: 'dynamic-model-multi-source-agent',
+          instructions: 'Use the tools.',
+          model: resolveModel,
+          tools: {
+            assignedTool: createNamedTool('assigned-tool'),
+          },
+        });
+
+        await agent.getToolsForExecution({
+          requestContext: new RequestContext(),
+          toolsets: {
+            testToolset: {
+              toolsetTool: createNamedTool('toolset-tool'),
+            },
+          },
+          clientTools: {
+            clientTool: createNamedTool('client-tool'),
+          },
+        });
+
+        expect(resolveModel).toHaveBeenCalledTimes(1);
+      });
+
+      it('does not resolve the model when a tool source is empty', async () => {
+        const resolveModel = vi.fn(() => dummyModel);
+        const agent = new Agent({
+          id: 'dynamic-model-empty-toolset-agent',
+          name: 'dynamic-model-empty-toolset-agent',
+          instructions: 'No tools are available.',
+          model: resolveModel,
+        });
+
+        await agent.getToolsForExecution({
+          requestContext: new RequestContext(),
+          toolsets: {},
+          clientTools: {},
+        });
+
+        expect(resolveModel).not.toHaveBeenCalled();
+      });
+    });
+
     it('should handle tool name collisions caused by formatting', async () => {
       // Create two tool names that will collide after truncation to 63 chars
       const base = 'a'.repeat(63);
@@ -445,6 +589,41 @@ function toolhandlingTests(version: 'v1' | 'v2' | 'v3') {
   });
 
   describe('agents as tools', () => {
+    it('should disable deeper delegated-agent background dispatch without mutating shared agent configuration', async () => {
+      const grandchild = new Agent({
+        id: 'grandchild',
+        name: 'grandchild',
+        instructions: 'You are a grandchild agent.',
+        model: dummyModel,
+        backgroundTasks: { tools: 'all' },
+      });
+      const child = new Agent({
+        id: 'child',
+        name: 'child',
+        instructions: 'You are a child agent.',
+        model: dummyModel,
+        agents: { grandchild },
+      });
+
+      const nestedTools = await child['convertTools']({
+        requestContext: new RequestContext(),
+        methodType: 'stream',
+        backgroundTaskEnabled: true,
+        backgroundTaskPolicy: {
+          allowToolDispatch: true,
+          allowDelegationDispatch: false,
+        },
+      });
+      expect((nestedTools['agent-grandchild'] as any).backgroundConfig).toBeUndefined();
+
+      const rootTools = await child['convertTools']({
+        requestContext: new RequestContext(),
+        methodType: 'stream',
+        backgroundTaskEnabled: true,
+      });
+      expect((rootTools['agent-grandchild'] as any).backgroundConfig).toEqual({ enabled: true });
+    });
+
     it('should pass requestContext to sub-agent getModel when determining model version', async () => {
       let receivedRequestContext: RequestContext | undefined;
 
@@ -606,6 +785,240 @@ function toolhandlingTests(version: 'v1' | 'v2' | 'v3') {
   });
 }
 
+describe('webSearchTool agent resolution', () => {
+  it('resolves the sentinel by value and preserves the user tool key', async () => {
+    const agent = new Agent({
+      id: 'web-search-agent',
+      name: 'web-search-agent',
+      instructions: 'Search the web.',
+      model: 'openai/gpt-5-mini',
+      tools: {
+        searchTheWeb: webSearchTool,
+      },
+    });
+
+    const tools = await agent.getToolsForExecution({ requestContext: new RequestContext() });
+
+    expect(tools.searchTheWeb).toMatchObject({
+      type: 'provider-defined',
+      id: 'openai.web_search',
+      name: 'web_search',
+    });
+    expect(tools.searchTheWeb.execute).toBeUndefined();
+  });
+
+  it('resolves the sentinel when listing tools for serialization', async () => {
+    const agent = new Agent({
+      id: 'web-search-agent',
+      name: 'web-search-agent',
+      instructions: 'Search the web.',
+      model: 'google/gemini-3.5-flash',
+      tools: {
+        searchTheWeb: webSearchTool,
+      },
+    });
+
+    const tools = await agent.listTools({ requestContext: new RequestContext() });
+
+    expect(tools.searchTheWeb).toMatchObject({
+      type: 'provider-defined',
+      id: 'google.google_search',
+      name: 'google_search',
+    });
+  });
+
+  it('resolves router-string providers from the configured model', async () => {
+    const agent = new Agent({
+      id: 'web-search-agent',
+      name: 'web-search-agent',
+      instructions: 'Search the web.',
+      model: 'anthropic/claude-sonnet-4-20250514',
+      tools: {
+        searchTheWeb: webSearchTool,
+      },
+    });
+
+    const tools = await agent.getToolsForExecution({ requestContext: new RequestContext() });
+
+    expect(tools.searchTheWeb).toMatchObject({
+      type: 'provider-defined',
+      id: 'anthropic.web_search_20250305',
+      name: 'web_search',
+    });
+  });
+
+  it('uses the per-call model override once when resolving web search during generation', async () => {
+    let capturedTools: Record<string, any> | undefined;
+    const configuredModel = vi.fn(() => 'openai/gpt-5-mini' as const);
+    const overrideModel = new MockLanguageModelV2({
+      provider: 'anthropic',
+      modelId: 'claude-sonnet-4-20250514',
+      doGenerate: async ({ tools }) => {
+        capturedTools = tools;
+        return {
+          content: [{ type: 'text', text: 'ok' }],
+          finishReason: 'stop',
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          warnings: [],
+        };
+      },
+    });
+    const agent = new Agent({
+      id: 'web-search-agent',
+      name: 'web-search-agent',
+      instructions: 'Search the web.',
+      model: configuredModel,
+      tools: {
+        searchTheWeb: webSearchTool,
+      },
+    });
+
+    await agent.generate('search', { model: overrideModel });
+
+    const capturedWebSearchTool = Array.isArray(capturedTools)
+      ? capturedTools.find(tool => tool.name === 'web_search')
+      : capturedTools?.searchTheWeb;
+
+    expect(configuredModel).not.toHaveBeenCalled();
+    expect(capturedWebSearchTool).toMatchObject({
+      type: 'provider-defined',
+      id: 'anthropic.web_search_20250305',
+      name: 'web_search',
+    });
+  });
+
+  it('uses the per-call model override once when resolving web search during streaming', async () => {
+    let capturedTools: Record<string, any> | undefined;
+    const configuredModel = vi.fn(() => 'openai/gpt-5-mini' as const);
+    const overrideModel = new MockLanguageModelV2({
+      provider: 'anthropic',
+      modelId: 'claude-sonnet-4-20250514',
+      doStream: async ({ tools }) => {
+        capturedTools = tools;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-0' },
+            { type: 'text-delta', id: 'text-0', delta: 'ok' },
+            { type: 'text-end', id: 'text-0' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+            },
+          ]),
+        };
+      },
+    });
+    const agent = new Agent({
+      id: 'web-search-agent',
+      name: 'web-search-agent',
+      instructions: 'Search the web.',
+      model: configuredModel,
+      tools: {
+        searchTheWeb: webSearchTool,
+      },
+    });
+
+    await (
+      await agent.stream('search', { model: overrideModel })
+    ).text;
+
+    const capturedWebSearchTool = Array.isArray(capturedTools)
+      ? capturedTools.find(tool => tool.name === 'web_search')
+      : capturedTools?.searchTheWeb;
+
+    expect(configuredModel).not.toHaveBeenCalled();
+    expect(capturedWebSearchTool).toMatchObject({
+      type: 'provider-defined',
+      id: 'anthropic.web_search_20250305',
+      name: 'web_search',
+    });
+  });
+
+  it('does not resolve web search during MCP guidance before applying a supported per-call model override', async () => {
+    let capturedTools: Record<string, any> | undefined;
+    const overrideModel = new MockLanguageModelV2({
+      provider: 'anthropic',
+      modelId: 'claude-sonnet-4-20250514',
+      doGenerate: async ({ tools }) => {
+        capturedTools = tools;
+        return {
+          content: [{ type: 'text', text: 'ok' }],
+          finishReason: 'stop',
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          warnings: [],
+        };
+      },
+    });
+    const agent = new Agent({
+      id: 'web-search-agent',
+      name: 'web-search-agent',
+      instructions: 'Search the web.',
+      model: 'unsupported/model',
+      tools: {
+        searchTheWeb: webSearchTool,
+      },
+    });
+
+    await agent.generate('search', { model: overrideModel });
+
+    const capturedWebSearchTool = Array.isArray(capturedTools)
+      ? capturedTools.find(tool => tool.name === 'web_search')
+      : capturedTools?.searchTheWeb;
+
+    expect(capturedWebSearchTool).toMatchObject({
+      type: 'provider-defined',
+      id: 'anthropic.web_search_20250305',
+      name: 'web_search',
+    });
+  });
+
+  it('throws for unsupported providers', async () => {
+    const agent = new Agent({
+      id: 'web-search-agent',
+      name: 'web-search-agent',
+      instructions: 'Search the web.',
+      model: 'unsupported/model',
+      tools: {
+        searchTheWeb: webSearchTool,
+      },
+    });
+
+    await expect(agent.getToolsForExecution({ requestContext: new RequestContext() })).rejects.toThrow(MastraError);
+  });
+
+  it('does not replace custom tools with web search-like names', async () => {
+    const customTool = createTool({
+      id: 'web_search',
+      description: 'Custom web search.',
+      inputSchema: z.object({}),
+      execute: async () => 'custom',
+    });
+    const agent = new Agent({
+      id: 'custom-web-search-agent',
+      name: 'custom-web-search-agent',
+      instructions: 'Search the web.',
+      model: 'openai/gpt-5-mini',
+      tools: {
+        webSearch: customTool,
+        web_search: customTool,
+      },
+    });
+
+    const tools = await agent.getToolsForExecution({ requestContext: new RequestContext() });
+
+    expect(tools.webSearch.id).toBe('web_search');
+    expect(tools.webSearch.execute).toBeTypeOf('function');
+    expect(tools.web_search.id).toBe('web_search');
+    expect(tools.web_search.execute).toBeTypeOf('function');
+  });
+});
+
 toolhandlingTests('v1');
 toolhandlingTests('v2');
 toolhandlingTests('v3');
+toolhandlingTests('v4');

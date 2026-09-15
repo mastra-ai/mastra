@@ -1,30 +1,292 @@
 import { execSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { rm, stat, writeFile } from 'node:fs/promises';
-import { dirname, join, posix } from 'node:path';
+import { readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { dirname, join, posix, relative } from 'node:path';
 import { MastraBundler } from '@mastra/core/bundler';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import type { Config } from '@mastra/core/mastra';
 import virtual from '@rollup/plugin-virtual';
 import * as pkg from 'empathic/package';
-import fsExtra, { copy, ensureDir, readJSON, emptyDir } from 'fs-extra/esm';
+import fsExtra, { copy, ensureDir, emptyDir, readJSON } from 'fs-extra/esm';
 import type { InputOptions, OutputOptions } from 'rollup';
 import { glob } from 'tinyglobby';
 import { analyzeBundle } from '../build/analyze';
 import { createBundler as createBundlerUtil, getInputOptions } from '../build/bundler';
 import { getBundlerOptions } from '../build/bundlerOptions';
-import { getPackageRootPath } from '../build/package-info';
-import type { BundlerOptions } from '../build/types';
+import type { BundlerOptions, ExternalDependencyInfo } from '../build/types';
 import type { BundlerPlatform } from '../build/utils';
-import { isBareModuleSpecifier, slash } from '../build/utils';
+import { getPackageName, isBareModuleSpecifier, shouldSkipInstall, slash } from '../build/utils';
 import { DepsService } from '../services/deps';
 import { FileService } from '../services/fs';
-import { getWorkspaceInformation } from './workspaceDependencies';
+import {
+  collectTransitiveWorkspaceDependencies,
+  getWorkspaceInformation,
+  packWorkspaceDependencies,
+} from './workspaceDependencies';
 
-export type { BundlerOptions } from '../build/types';
+export type { BundlerOptions, ExternalDependencyInfo } from '../build/types';
 export type { BundlerPlatform } from '../build/utils';
 
 export const IS_DEFAULT = Symbol('IS_DEFAULT');
+
+const NPM_ALIAS_PREFIX = 'npm:';
+/** Characters a registry range or dist tag can contain. Protocols need `:`, git shorthand needs `/` or `#`. */
+const REGISTRY_SPEC_PATTERN = /^[A-Za-z0-9.+_^~><=*|!\s-]+$/;
+const PACKAGE_NAME_PATTERN = /^(?:@[A-Za-z0-9._-]+\/)?[A-Za-z0-9._-]+$/;
+const TARBALL_SUFFIX_PATTERN = /\.(?:tgz|tar\.gz|tar)$/i;
+/** npm reads a value starting like this as a path, whatever follows. A bare `~` is a semver range. */
+const FILE_SPEC_PREFIX_PATTERN = /^(?:\.|~[/\\]|[/\\]|[A-Za-z]:[/\\])/;
+/** A range admitting any published version: `*`, `x`, `>=0`, and any union containing one. */
+const UNBOUNDED_RANGE_PATTERN = /(?:^|\|\||\s)\s*(?:[*xX]|>=?\s*0(?:\.0)*(?:\.0)*)\s*(?:$|\|\|)/;
+
+/**
+ * Constraints declared by the source app, plus the packages some resolution field pins.
+ *
+ * Only `dependencies` values are read. Override fields contribute names, never values: which of
+ * `overrides`, `resolutions`, `pnpm.overrides` or `pnpm-workspace.yaml` a given install honoured
+ * depends on the package manager and its version, so reproducing that precedence would mean
+ * emulating three package managers. A name appearing in any of them is enough to know the resolved
+ * version was chosen deliberately, which is all this needs.
+ */
+export type SourceDependencyConstraints = {
+  dependencies: Record<string, string>;
+  pinnedByResolutionField: Set<string>;
+};
+
+const toStringRecord = (value: unknown): Record<string, string> => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(value).filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
+  );
+};
+
+/**
+ * True when a specifier is something the isolated install in `.mastra/output` can resolve from the
+ * registry: a semver range, a dist tag, a wildcard, or an npm alias whose target is a registry
+ * package and range.
+ *
+ * This is an allowlist rather than a denylist of known protocols, so an unfamiliar protocol is
+ * rejected without this code having to know it exists. The output directory is not a workspace, has
+ * no catalog definitions and has a different relative-path base, so `catalog:`, `workspace:`,
+ * `file:`, `link:` and git specifiers are all either uninstallable there or point somewhere else.
+ */
+export const isRegistryVersionSpec = (spec: string): boolean => {
+  if (FILE_SPEC_PREFIX_PATTERN.test(spec) || TARBALL_SUFFIX_PATTERN.test(spec)) {
+    return false;
+  }
+
+  if (spec.startsWith(NPM_ALIAS_PREFIX)) {
+    const alias = spec.slice(NPM_ALIAS_PREFIX.length);
+    // Skip index 0 so `npm:@scope/pkg` reads as an alias with no range rather than an empty name.
+    const rangeSeparator = alias.lastIndexOf('@');
+    const name = rangeSeparator > 0 ? alias.slice(0, rangeSeparator) : alias;
+    const range = rangeSeparator > 0 ? alias.slice(rangeSeparator + 1) : '*';
+
+    return PACKAGE_NAME_PATTERN.test(name) && isRegistryVersionSpec(range);
+  }
+
+  return REGISTRY_SPEC_PATTERN.test(spec);
+};
+
+/**
+ * True when a specifier names a version the output install can be held to.
+ *
+ * A range admitting anything (`*`, `latest`, `>=0`, an alias with no range) is looser than the
+ * version already resolved, so writing it would let a later install pull something the bundle was
+ * never analyzed against.
+ */
+const isBoundedVersionSpec = (spec: string): boolean => {
+  const range = spec.startsWith(NPM_ALIAS_PREFIX)
+    ? (() => {
+        const alias = spec.slice(NPM_ALIAS_PREFIX.length);
+        const rangeSeparator = alias.lastIndexOf('@');
+        return rangeSeparator > 0 ? alias.slice(rangeSeparator + 1) : '';
+      })()
+    : spec;
+
+  return /\d/.test(range) && !UNBOUNDED_RANGE_PATTERN.test(range);
+};
+
+const readManifest = async (manifestPath: string | undefined): Promise<Record<string, unknown> | undefined> => {
+  if (!manifestPath) {
+    return undefined;
+  }
+
+  try {
+    const manifest = await readJSON(manifestPath);
+    return manifest && typeof manifest === 'object' ? manifest : undefined;
+  } catch {
+    // A manifest that cannot be read tells us nothing about intent.
+    return undefined;
+  }
+};
+
+/** Collect the package names a manifest's resolution fields pin, ignoring their values. */
+const collectManifestPinnedNames = (manifest: Record<string, unknown> | undefined, pinned: Set<string>) => {
+  const pnpmSection = manifest?.pnpm;
+  const records = [
+    manifest?.overrides,
+    manifest?.resolutions,
+    pnpmSection && typeof pnpmSection === 'object' ? (pnpmSection as { overrides?: unknown }).overrides : undefined,
+  ];
+
+  for (const record of records) {
+    if (record && typeof record === 'object' && !Array.isArray(record)) {
+      for (const key of Object.keys(record)) {
+        pinned.add(key);
+      }
+    }
+  }
+};
+
+/**
+ * Collect the names under a top-level `overrides:` block in `pnpm-workspace.yaml`.
+ *
+ * pnpm moved overrides out of `package.json` into this file, so a workspace on a current pnpm keeps
+ * them only here. Reading names off the indented block avoids a YAML dependency, the same tradeoff
+ * `copyPnpmWorkspaceSettings` already makes for the top-level keys it copies.
+ */
+const collectPnpmWorkspacePinnedNames = (source: string, pinned: Set<string>) => {
+  const lines = source.split(/\r?\n/);
+  let insideOverrides = false;
+
+  for (const line of lines) {
+    if (/^\S/.test(line)) {
+      insideOverrides = /^overrides:\s*$/.test(line);
+      continue;
+    }
+
+    if (!insideOverrides) {
+      continue;
+    }
+
+    const key = /^\s+(?:'([^']+)'|"([^"]+)"|([^'"\s:][^:]*?))\s*:/.exec(line);
+    if (key) {
+      pinned.add((key[1] ?? key[2] ?? key[3] ?? '').trim());
+    }
+  }
+};
+
+/**
+ * Read the constraints the source app declared.
+ *
+ * `dependencies` come from the manifest at `projectRoot`, the package the build was invoked for and
+ * whose directory receives the output, falling back to the manifest above the entry file. Anchoring
+ * on `projectRoot` rather than the entry file keeps the answer deterministic when the entry handed
+ * to the bundler is a generated wrapper rather than the app's own source file.
+ *
+ * Resolution-field names are collected from both that manifest and the workspace root, including the
+ * root `pnpm-workspace.yaml`, because a name pinned anywhere means the resolved version may have been
+ * chosen deliberately rather than hoisted by accident.
+ */
+export const getSourceDependencyConstraints = async ({
+  projectRoot,
+  mastraEntryFile,
+  workspaceRoot,
+}: {
+  projectRoot: string;
+  mastraEntryFile: string;
+  workspaceRoot?: string;
+}): Promise<SourceDependencyConstraints> => {
+  const manifestPaths = [pkg.up({ cwd: projectRoot }), pkg.up({ cwd: dirname(mastraEntryFile) })].filter(
+    (entry, index, entries): entry is string => !!entry && entries.indexOf(entry) === index,
+  );
+
+  if (workspaceRoot) {
+    manifestPaths.push(join(workspaceRoot, 'package.json'));
+  }
+
+  const pinnedByResolutionField = new Set<string>();
+  let dependencies: Record<string, string> | undefined;
+
+  for (const manifestPath of manifestPaths) {
+    const manifest = await readManifest(manifestPath);
+    if (!manifest) {
+      continue;
+    }
+
+    // Nearest manifest wins, and an empty `dependencies` record is still that package's answer.
+    dependencies ??= toStringRecord(manifest.dependencies);
+    collectManifestPinnedNames(manifest, pinnedByResolutionField);
+  }
+
+  if (workspaceRoot) {
+    try {
+      collectPnpmWorkspacePinnedNames(
+        await readFile(join(workspaceRoot, 'pnpm-workspace.yaml'), 'utf-8'),
+        pinnedByResolutionField,
+      );
+    } catch {
+      // No pnpm workspace config, or unreadable: nothing to learn from it.
+    }
+  }
+
+  return { dependencies: dependencies ?? {}, pinnedByResolutionField };
+};
+
+const findDeclaredConstraint = (
+  constraints: SourceDependencyConstraints,
+  dependencyName: string,
+): string | undefined => {
+  const names = [dependencyName, getPackageName(dependencyName)].filter(
+    (name, index, all): name is string => !!name && all.indexOf(name) === index,
+  );
+
+  for (const name of names) {
+    // A pinned package's resolved version is the deliberate answer, so leave it as `main` wrote it.
+    if (constraints.pinnedByResolutionField.has(name)) {
+      return undefined;
+    }
+  }
+
+  for (const name of names) {
+    const declared = (constraints.dependencies[name] ?? '').trim();
+    if (declared && isBoundedVersionSpec(declared) && isRegistryVersionSpec(declared)) {
+      return declared;
+    }
+  }
+
+  return undefined;
+};
+
+/**
+ * Prefer the constraint the app declared over the version resolved from `node_modules`.
+ *
+ * The resolved version is whatever the install happened to hoist, so an app declaring `zod: ^4.3.6`
+ * next to a hoisted `zod@3.25.76` gets the hoisted version written into the output manifest and the
+ * isolated install then locks it in.
+ */
+export const applySourceDependencyRange = (
+  dependencyName: string,
+  dependencyInfo: ExternalDependencyInfo,
+  constraints: SourceDependencyConstraints,
+): ExternalDependencyInfo => {
+  const declared = findDeclaredConstraint(constraints, dependencyName);
+  if (!declared) {
+    return dependencyInfo;
+  }
+
+  if (declared.startsWith(NPM_ALIAS_PREFIX)) {
+    return { ...dependencyInfo, packageSpec: declared };
+  }
+
+  // `packageSpec` is set only when the resolved package's own name differs from the requested one, so
+  // a bare range under this key describes a different package and the resolved alias is the answer.
+  if (dependencyInfo.packageSpec) {
+    return dependencyInfo;
+  }
+
+  return { ...dependencyInfo, version: declared };
+};
+
+function toolIdForEntry(relativeEntryFile: string): string {
+  const digest = createHash('sha256').update(relativeEntryFile).digest('hex');
+  return `${digest.slice(0, 8)}-${digest.slice(8, 12)}-${digest.slice(12, 16)}-${digest.slice(16, 20)}-${digest.slice(20, 32)}`;
+}
 
 export abstract class Bundler extends MastraBundler {
   protected analyzeOutputDir = '.build';
@@ -45,7 +307,7 @@ export abstract class Bundler extends MastraBundler {
 
   async writePackageJson(
     outputDirectory: string,
-    dependencies: Map<string, string>,
+    dependencies: Map<string, string | ExternalDependencyInfo>,
     resolutions?: Record<string, string>,
   ) {
     this.logger.debug("Writing project's package.json");
@@ -55,14 +317,15 @@ export abstract class Bundler extends MastraBundler {
 
     const dependenciesMap = new Map();
     for (const [key, value] of dependencies.entries()) {
+      const dependencyValue = typeof value === 'string' ? value : (value.packageSpec ?? value.version ?? 'latest');
       if (key.startsWith('@')) {
         // Handle scoped packages (e.g. @org/package)
         const pkgChunks = key.split('/');
-        dependenciesMap.set(`${pkgChunks[0]}/${pkgChunks[1]}`, value);
+        dependenciesMap.set(`${pkgChunks[0]}/${pkgChunks[1]}`, dependencyValue);
       } else {
         // For non-scoped packages, take only the first part before any slash
         const pkgName = key.split('/')[0] || key;
-        dependenciesMap.set(pkgName, value);
+        dependenciesMap.set(pkgName, dependencyValue);
       }
     }
 
@@ -84,12 +347,6 @@ export abstract class Bundler extends MastraBundler {
         null,
         2,
       ),
-    );
-
-    // pnpm v11 requires build policy via pnpm-workspace.yaml in the output directory
-    await writeFile(
-      join(outputDirectory, 'pnpm-workspace.yaml'),
-      "packages:\n  - '.'\nallowBuilds:\n  bcrypt: true\n  esbuild: true\n  sharp: true\n  protobufjs: true\n  workerd: true\n  bufferutil: true\n  utf-8-validate: true\n",
     );
   }
 
@@ -132,11 +389,25 @@ export abstract class Bundler extends MastraBundler {
     );
   }
 
-  protected async installDependencies(outputDirectory: string, rootDir = process.cwd()) {
+  protected pnpmNodeLinker?: 'hoisted';
+
+  protected getAdditionalEntries(): Record<string, string> {
+    return {};
+  }
+
+  protected async installDependencies(
+    outputDirectory: string,
+    rootDir = process.cwd(),
+    pnpmOverrides?: Record<string, string>,
+  ) {
     const deps = new DepsService(rootDir);
     deps.__setLogger(this.logger);
 
-    await deps.install({ dir: join(outputDirectory, this.outputDir) });
+    await deps.install({
+      dir: join(outputDirectory, this.outputDir),
+      pnpmOverrides,
+      pnpmNodeLinker: this.pnpmNodeLinker,
+    });
   }
 
   /**
@@ -204,12 +475,37 @@ export abstract class Bundler extends MastraBundler {
     }
   }
 
+  /**
+   * Writes the `mastra-project.json` deployment marker for Software Factory
+   * projects after public assets have been copied. Verifies that the Factory
+   * SPA (`factory/index.html`) exists in the output before emitting the marker.
+   */
+  protected async writeFactoryMarker(outputDirectory: string): Promise<void> {
+    const outputDir = join(outputDirectory, this.outputDir);
+    const factoryIndex = join(outputDir, 'factory', 'index.html');
+    if (!existsSync(factoryIndex)) {
+      throw new MastraError({
+        id: 'DEPLOYER_BUNDLER_FACTORY_UI_MISSING',
+        text: 'Software Factory project detected but factory/index.html was not found after copying the prebuilt Factory UI.',
+        domain: ErrorDomain.DEPLOYER,
+        category: ErrorCategory.SYSTEM,
+      });
+    }
+    await writeFile(
+      join(outputDir, 'mastra-project.json'),
+      JSON.stringify({ schemaVersion: 1, projectType: 'factory', assets: { ui: 'factory' } }, null, 2),
+    );
+    this.logger.info('Wrote mastra-project.json for Software Factory project');
+  }
+
   protected async getBundlerOptions(
     serverFile: string,
     mastraEntryFile: string,
     analyzedBundleInfo: Awaited<ReturnType<typeof analyzeBundle>>,
     toolsPaths: (string | string[])[],
-    { enableSourcemap, enableEsmShim, externals }: BundlerOptions,
+    { enableSourcemap, enableMinify, enableEsmShim, externals }: BundlerOptions,
+    additionalEntries: Record<string, string>,
+    toolProjectRoot: string,
   ) {
     const { workspaceRoot } = await getWorkspaceInformation({ mastraEntryFile });
     const closestPkgJson = pkg.up({ cwd: dirname(mastraEntryFile) });
@@ -222,21 +518,38 @@ export abstract class Bundler extends MastraBundler {
       {
         'process.env.NODE_ENV': JSON.stringify('production'),
       },
-      { sourcemap: enableSourcemap, workspaceRoot, projectRoot, enableEsmShim, externalsPreset: externals === true },
+      {
+        sourcemap: enableSourcemap,
+        minify: enableMinify,
+        workspaceRoot,
+        projectRoot,
+        enableEsmShim,
+        externalsPreset: externals === true,
+      },
     );
-    const isVirtual = serverFile.includes('\n') || !existsSync(serverFile);
-    const toolsInputOptions = await this.listToolsInputOptions(toolsPaths);
+    const toolsInputOptions = await this.listToolsInputOptions(toolsPaths, toolProjectRoot);
+    const entryInputs: Record<string, string> = {};
+    const virtualEntries: Record<string, string> = {};
+    const entries = { index: serverFile, ...additionalEntries };
 
-    if (isVirtual) {
-      inputOptions.input = { index: '#entry', ...toolsInputOptions };
-
-      if (Array.isArray(inputOptions.plugins)) {
-        inputOptions.plugins.unshift(virtual({ '#entry': serverFile }));
+    for (const [name, entry] of Object.entries(entries)) {
+      if (entry.includes('\n') || !existsSync(entry)) {
+        const virtualId = name === 'index' ? '#entry' : `#entry-${name}`;
+        entryInputs[name] = virtualId;
+        virtualEntries[virtualId] = entry;
       } else {
-        inputOptions.plugins = [virtual({ '#entry': serverFile })];
+        entryInputs[name] = entry;
       }
-    } else {
-      inputOptions.input = { index: serverFile, ...toolsInputOptions };
+    }
+
+    inputOptions.input = { ...entryInputs, ...toolsInputOptions };
+
+    if (Object.keys(virtualEntries).length > 0) {
+      if (Array.isArray(inputOptions.plugins)) {
+        inputOptions.plugins.unshift(virtual(virtualEntries));
+      } else {
+        inputOptions.plugins = [virtual(virtualEntries)];
+      }
     }
 
     return inputOptions;
@@ -265,8 +578,8 @@ export abstract class Bundler extends MastraBundler {
     return [...toolsPaths, defaultPaths];
   }
 
-  async listToolsInputOptions(toolsPaths: (string | string[])[]) {
-    const inputs: Record<string, string> = {};
+  async listToolsInputOptions(toolsPaths: (string | string[])[], projectRoot: string = process.cwd()) {
+    const entries = new Map<string, string>();
 
     for (const toolPath of toolsPaths) {
       const expandedPaths = await glob(toolPath, {
@@ -289,17 +602,20 @@ export abstract class Bundler extends MastraBundler {
             continue;
           }
 
-          const uniqueToolID = crypto.randomUUID();
-          // Normalize Windows paths to forward slashes for consistent handling
           const normalizedEntryFile = entryFile.replaceAll('\\', '/');
-          inputs[`tools/${uniqueToolID}`] = normalizedEntryFile;
+          const relativeEntryFile = relative(projectRoot, entryFile).replaceAll('\\', '/');
+          entries.set(relativeEntryFile, normalizedEntryFile);
         } else {
           this.logger.warn('Tool path does not exist, skipping', { path });
         }
       }
     }
 
-    return inputs;
+    return Object.fromEntries(
+      [...entries.entries()]
+        .sort(([first], [second]) => (first < second ? -1 : first > second ? 1 : 0))
+        .map(([relativeEntryFile, entryFile]) => [`tools/${toolIdForEntry(relativeEntryFile)}`, entryFile]),
+    );
   }
 
   protected async _bundle(
@@ -318,10 +634,12 @@ export abstract class Bundler extends MastraBundler {
     bundleLocation: string = join(outputDirectory, this.outputDir),
   ): Promise<void> {
     const analyzeDir = join(outputDirectory, this.analyzeOutputDir);
+    const additionalEntries = this.getAdditionalEntries();
 
     const bundlerOptions = await this.getUserBundlerOptions(mastraEntryFile, outputDirectory);
     const internalBundlerOptions: BundlerOptions = {
       enableSourcemap: !!bundlerOptions.sourcemap,
+      enableMinify: !!bundlerOptions.minify,
       externals: bundlerOptions.externals ?? [],
       enableEsmShim,
       dynamicPackages: bundlerOptions.dynamicPackages,
@@ -329,9 +647,9 @@ export abstract class Bundler extends MastraBundler {
 
     let analyzedBundleInfo;
     try {
-      const resolvedToolsPaths = await this.listToolsInputOptions(toolsPaths);
+      const resolvedToolsPaths = await this.listToolsInputOptions(toolsPaths, projectRoot);
       analyzedBundleInfo = await analyzeBundle(
-        [serverFile, ...Object.values(resolvedToolsPaths)],
+        [serverFile, ...Object.values(additionalEntries), ...Object.values(resolvedToolsPaths)],
         mastraEntryFile,
         {
           outputDir: analyzeDir,
@@ -359,56 +677,56 @@ export abstract class Bundler extends MastraBundler {
       );
     }
 
-    const dependenciesToInstall = new Map<string, string>();
+    const { workspaceRoot } = await getWorkspaceInformation({ dir: projectRoot, mastraEntryFile });
+    const sourceDependencyConstraints = await getSourceDependencyConstraints({
+      projectRoot,
+      mastraEntryFile,
+      workspaceRoot,
+    });
+    const dependenciesToInstall = new Map<string, ExternalDependencyInfo>();
     for (const [dep, depInfo] of analyzedBundleInfo.externalDependencies) {
       if (analyzedBundleInfo.workspaceMap.has(dep) || !isBareModuleSpecifier(dep)) {
         continue;
       }
 
-      let version = depInfo.version;
-      let actualPackageName: string | undefined;
+      dependenciesToInstall.set(dep, applySourceDependencyRange(dep, depInfo, sourceDependencyConstraints));
+    }
 
-      // Read package.json to get actual package name (for alias detection) and version if not pre-resolved
-      try {
-        // First try to resolve from the project root (provides correct context for monorepos)
-        let rootPath = await getPackageRootPath(dep, projectRoot);
-
-        // If not found in user's project, try resolving from deployer's location
-        // This handles packages like hono that are provided by @mastra/deployer
-        if (!rootPath) {
-          rootPath = await getPackageRootPath(dep, import.meta.dirname);
-        }
-
-        if (rootPath) {
-          const pkg = await readJSON(`${rootPath}/package.json`);
-          actualPackageName = pkg.name;
-          // Use pre-resolved version if available, otherwise use from package.json
-          if (!version) {
-            version = pkg.version;
-          }
-        }
-      } catch {
-        // Resolution failed, will use 'latest' for version
-      }
-
-      // Default to 'latest' if still no version
-      version = version || 'latest';
-
-      // Check if this is an npm alias (import name differs from actual package name)
-      // e.g., importing "ai-v5" which resolves to package "ai"
-      // or importing "@ai-sdk/openai-v5" which resolves to "@ai-sdk/openai"
-      // In this case, write npm alias syntax: "ai-v5": "npm:ai@5.0.93"
-      const isAlias = actualPackageName && dep !== actualPackageName;
-
-      if (isAlias) {
-        dependenciesToInstall.set(dep, `npm:${actualPackageName}@${version}`);
-      } else {
-        dependenciesToInstall.set(dep, version);
+    const initialWorkspaceDependencies = new Set<string>();
+    for (const dep of analyzedBundleInfo.dependencies.keys()) {
+      const pkgName = getPackageName(dep);
+      if (pkgName && analyzedBundleInfo.workspaceMap.has(pkgName)) {
+        initialWorkspaceDependencies.add(pkgName);
       }
     }
 
+    const transitiveWorkspaceDependencies = collectTransitiveWorkspaceDependencies({
+      workspaceMap: analyzedBundleInfo.workspaceMap,
+      initialDependencies: initialWorkspaceDependencies,
+      logger: this.logger,
+    });
+
+    for (const [dep, packageSpec] of Object.entries(transitiveWorkspaceDependencies.resolutions)) {
+      dependenciesToInstall.set(dep, {
+        version: analyzedBundleInfo.workspaceMap.get(dep)?.version,
+        packageSpec,
+      });
+    }
+
     try {
-      await this.writePackageJson(join(outputDirectory, this.outputDir), dependenciesToInstall);
+      await this.writePackageJson(
+        join(outputDirectory, this.outputDir),
+        dependenciesToInstall,
+        transitiveWorkspaceDependencies.resolutions,
+      );
+      if (transitiveWorkspaceDependencies.usedWorkspacePackages.size > 0) {
+        await packWorkspaceDependencies({
+          workspaceMap: analyzedBundleInfo.workspaceMap,
+          usedWorkspacePackages: transitiveWorkspaceDependencies.usedWorkspacePackages,
+          bundleOutputDir: join(outputDirectory, this.outputDir),
+          logger: this.logger,
+        });
+      }
 
       this.logger.info('Bundling Mastra application');
 
@@ -418,6 +736,8 @@ export abstract class Bundler extends MastraBundler {
         analyzedBundleInfo,
         toolsPaths,
         internalBundlerOptions,
+        additionalEntries,
+        projectRoot,
       );
 
       const bundler = await this.createBundler(
@@ -468,19 +788,42 @@ export const tools = [${toolsExports.join(', ')}]`,
       await this.copyPublic(dirname(mastraEntryFile), outputDirectory);
       this.logger.info('Done copying public files');
 
+      // For Software Factory projects, write a deterministic deployment marker
+      // after public assets (including the SPA) have been copied.
+      if (analyzedBundleInfo.projectType === 'factory') {
+        await this.writeFactoryMarker(outputDirectory);
+      }
+
       this.logger.info('Copying .npmrc file');
       await this.copyDOTNPMRC({ outputDirectory, rootDir: projectRoot });
 
       this.logger.info('Done copying .npmrc file');
 
-      this.logger.info('Installing dependencies');
-      await this.installDependencies(outputDirectory, projectRoot);
-      this.logger.info('Done installing dependencies');
+      if (shouldSkipInstall()) {
+        this.logger.info('Skipping dependency installation (MASTRA_BUILD_SKIP_INSTALL set)');
+      } else {
+        this.logger.info('Installing dependencies');
+        await this.installDependencies(outputDirectory, projectRoot, transitiveWorkspaceDependencies.resolutions);
+        this.logger.info('Done installing dependencies');
 
-      this.logger.info('Generating package-lock.json for deploy');
-      await this.generateNpmLockfile(join(outputDirectory, this.outputDir));
-      this.logger.info('Done generating package-lock.json');
+        if (Object.keys(transitiveWorkspaceDependencies.resolutions).length === 0) {
+          this.logger.info('Generating package-lock.json for deploy');
+          await this.generateNpmLockfile(join(outputDirectory, this.outputDir));
+          this.logger.info('Done generating package-lock.json');
+        } else {
+          this.logger.warn(
+            'Skipping package-lock.json generation because the output contains packed workspace dependencies',
+          );
+        }
+      }
     } catch (error) {
+      if (
+        error instanceof MastraError &&
+        (error.id === 'DEPLOYER_BUNDLER_FACTORY_UI_MISSING' || error.id === 'DEPLOYER_PNPM_IGNORED_BUILDS')
+      ) {
+        throw error;
+      }
+
       const message = error instanceof Error ? error.message : String(error);
       throw new MastraError(
         {
@@ -494,8 +837,8 @@ export const tools = [${toolsExports.join(', ')}]`,
     }
   }
 
-  async lint(_entryFile: string, _outputDirectory: string, toolsPaths: (string | string[])[]): Promise<void> {
-    const toolsInputOptions = await this.listToolsInputOptions(toolsPaths);
+  async lint(_entryFile: string, outputDirectory: string, toolsPaths: (string | string[])[]): Promise<void> {
+    const toolsInputOptions = await this.listToolsInputOptions(toolsPaths, dirname(outputDirectory));
     const toolsLength = Object.keys(toolsInputOptions).length;
     if (toolsLength > 0) {
       this.logger.info('Found tools', { count: toolsLength });

@@ -1,0 +1,120 @@
+---
+extends: existence
+message: "AI closing: '%s'. Delete it and end with your actual content."
+level: error
+ignorecase: true
+tokens:
+  # "I hope this helps" variants
+  - I hope this helps
+  - I hope this was helpful
+  - I hope this is helpful
+  - I hope this proves helpful
+  - I hope this will be helpful
+  - Hope this helps
+  - Hope this was helpful
+  - I hope this clears things up
+  - I hope this cleared things up
+  - I hope this answers your question
+  - I hope that answers your question
+  - I hope this helps clarify
+  - I hope this gives you a better understanding
+  - I hope you find this helpful
+  - I hope you found this helpful
+  - I hope you find this useful
+  - I hope you found this useful
+  - I hope this is what you were looking for
+  - I hope this pointed you in the right direction
+  - I hope this sheds some light
+  - I hope this makes things clearer
+  - Hopefully this helps
+  - Hopefully this is helpful
+
+  # "Feel free to" variants
+  - Feel free to ask
+  - Feel free to reach out
+  - Feel free to let me know
+  - Feel free to contact
+  - Feel free to ask questions
+  - Feel free to ask if you
+  - Feel free to ask if there
+  - Feel free to drop
+  - Please feel free to ask
+  - Please feel free to reach out
+
+  # "Don't hesitate" variants
+  - Don't hesitate to ask
+  - Don't hesitate to reach out
+  - Don't hesitate to contact
+  - Don't hesitate to get in touch
+  - Don't hesitate to drop
+  - Please don't hesitate to ask
+  - Please don't hesitate to reach out
+  - Please don't hesitate to contact
+
+  # "Let me know if" variants
+  - Let me know if you have any questions
+  - Let me know if you have further questions
+  - Let me know if you have any other questions
+  - Let me know if you have additional questions
+  - Let me know if you need anything else
+  - Let me know if you need further clarification
+  - Let me know if you need any clarification
+  - Let me know if you'd like more information
+  - Let me know if you'd like me to elaborate
+  - Let me know if you'd like me to clarify
+  - Let me know if you'd like me to expand
+  - Let me know if there's anything else
+  - Let me know if there's anything I can help with
+  - Let me know if anything is unclear
+  - Let me know if that makes sense
+  - Let me know if you want me to
+
+  # "If you have any questions" standalone variants
+  - If you have any questions, feel free
+  - If you have any further questions
+  - If you have any additional questions
+  - If you have any more questions
+  - If you need any clarification
+  - If you need more information
+  - If anything is unclear
+  - If you'd like more details
+  - If you'd like me to elaborate
+  - If you want me to expand
+
+  # "Happy to" variants
+  - Happy to help
+  - Happy to answer
+  - Happy to clarify
+  - Happy to elaborate
+  - Happy to explain
+  - Happy to assist
+  - Happy to walk you through
+  - I'm happy to help
+  - I'd be happy to help
+  - I'm happy to clarify
+  - I'd be happy to clarify
+  - I'm happy to elaborate
+  - I'd be happy to elaborate
+  - I'm happy to answer
+  - I'd be happy to answer
+  - I'm happy to walk you through
+  - I'd be happy to walk you through
+
+  # "I'm here to help" variants
+  - I'm here to help
+  - I'm here if you need
+  - I'm here if you have
+  - I'm always here to help
+  - We're here to help
+  - We're always happy to help
+
+  # Encouragement/well-wishing closers
+  - Best of luck
+  - Good luck with your
+  - Good luck on your
+  - You've got this
+  - Happy coding
+  - Happy learning
+  - Happy building
+  - Happy exploring
+  - Enjoy the journey

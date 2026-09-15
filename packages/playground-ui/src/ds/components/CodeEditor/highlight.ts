@@ -1,10 +1,12 @@
 import type { HighlighterCore, ThemedToken } from 'shiki/core';
 
 /**
- * Languages we support for syntax highlighting in code blocks. Kept in sync
- * with the CodeMirror `codeLanguages` set. Using fine-grained Shiki imports
- * (rather than the full `shiki` bundle) means only these grammars are bundled,
- * instead of a chunk for every language Shiki knows about.
+ * Languages we support for syntax highlighting in code blocks. A superset of
+ * the editable CodeMirror `codeLanguages` set: read-only blocks (markdown
+ * fences, chat output) also carry yaml, diff, css, html, xml and sql. Using
+ * fine-grained Shiki imports (rather than the full `shiki` bundle) means only
+ * these grammars are bundled, instead of a chunk for every language Shiki
+ * knows about.
  */
 const langAliases: Record<string, string> = {
   js: 'javascript',
@@ -22,10 +24,23 @@ const langAliases: Record<string, string> = {
   json5: 'json',
   md: 'markdown',
   markdown: 'markdown',
+  py: 'python',
+  python: 'python',
   sh: 'bash',
   bash: 'bash',
   shell: 'bash',
   zsh: 'bash',
+  yml: 'yaml',
+  yaml: 'yaml',
+  diff: 'diff',
+  patch: 'diff',
+  css: 'css',
+  scss: 'css',
+  html: 'html',
+  htm: 'html',
+  xml: 'xml',
+  svg: 'xml',
+  sql: 'sql',
 };
 
 let highlighterPromise: Promise<HighlighterCore> | null = null;
@@ -48,6 +63,13 @@ function getHighlighter(): Promise<HighlighterCore> {
           import('shiki/langs/json.mjs'),
           import('shiki/langs/bash.mjs'),
           import('shiki/langs/markdown.mjs'),
+          import('shiki/langs/python.mjs'),
+          import('shiki/langs/yaml.mjs'),
+          import('shiki/langs/diff.mjs'),
+          import('shiki/langs/css.mjs'),
+          import('shiki/langs/html.mjs'),
+          import('shiki/langs/xml.mjs'),
+          import('shiki/langs/sql.mjs'),
         ],
         engine: createJavaScriptRegexEngine(),
       });
@@ -73,4 +95,9 @@ export async function highlight(code: string, language: string): Promise<ThemedT
   });
 
   return tokens;
+}
+
+export function languageForPath(path: string | undefined): string | undefined {
+  const extension = path?.split('.').pop()?.toLowerCase();
+  return extension ? langAliases[extension] : undefined;
 }

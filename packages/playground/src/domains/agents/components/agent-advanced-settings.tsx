@@ -1,17 +1,11 @@
 import { jsonLanguage } from '@codemirror/lang-json';
-import {
-  useCodemirrorTheme,
-  Input,
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-  Txt,
-  Icon,
-  useCopyToClipboard,
-  formatJSON,
-  isValidJson,
-} from '@mastra/playground-ui';
+import { useCodemirrorTheme } from '@mastra/playground-ui/components/CodeEditor';
+import { Input } from '@mastra/playground-ui/components/Input';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { formatJSON, isValidJson } from '@mastra/playground-ui/utils/formatting';
 import CodeMirror from '@uiw/react-codemirror';
 import { Braces, CopyIcon, SaveIcon, CheckIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -240,7 +234,7 @@ export const AgentAdvancedSettingsBody = ({ canEdit = true }: AgentAdvancedSetti
         </div>
 
         <div className="space-y-1">
-          <div className="flex justify-between items-center">
+          <div className="flex items-center justify-between">
             <Txt as="label" className="text-neutral3" variant="ui-sm" htmlFor="provider-options">
               Provider Options
             </Txt>
@@ -296,7 +290,7 @@ export const AgentAdvancedSettingsBody = ({ canEdit = true }: AgentAdvancedSetti
             theme={theme}
             extensions={[jsonLanguage]}
             readOnly={!canEdit}
-            className="h-dropdown-max-height overflow-scroll rounded-lg border bg-transparent shadow-sm transition-colors p-2"
+            className="h-dropdown-max-height overflow-scroll rounded-lg border bg-transparent p-2 shadow-sm transition-colors"
           />
           {error && (
             <Txt variant="ui-md" className="text-accent2">

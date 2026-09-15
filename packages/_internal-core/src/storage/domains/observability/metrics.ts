@@ -156,6 +156,7 @@ export type MetricsAggregation = z.infer<typeof metricsAggregationSchema>;
 export const metricsFilterSchema = z
   .object({
     ...commonFilterFields,
+    traceIds: z.array(traceIdField).nonempty().max(1000).optional().describe('Filter by one or more trace IDs'),
 
     // Metric identification
     name: z.array(z.string()).nonempty().optional().describe('Filter by metric name(s)'),

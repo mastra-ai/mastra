@@ -27,6 +27,12 @@ interface UseAgentBuilderToolArgs {
   availableWorkspaces?: AvailableWorkspace[];
   availableSkills?: StoredSkillResponse[];
   availableModels?: ModelInfo[];
+  /**
+   * When `true`, the `set-agent-tools` tool is omitted from the returned
+   * record so the LLM cannot fire it against a stale enum that is missing
+   * integration ids still fanning in from `useAllProviderTools`.
+   */
+  integrationToolsLoading?: boolean;
 }
 
 type ClientTool = ReturnType<typeof createTool>;
@@ -37,6 +43,7 @@ export function useAgentBuilderTool({
   availableWorkspaces = [],
   availableSkills = [],
   availableModels = [],
+  integrationToolsLoading = false,
 }: UseAgentBuilderToolArgs): Record<string, ClientTool> {
   // Always call every atomic hook unconditionally to satisfy the rules of hooks.
   // Feature/availability gating is applied to the assembled record below.
@@ -62,7 +69,7 @@ export function useAgentBuilderTool({
       [SET_AGENT_WORKSPACE_ID_TOOL_NAME]: workspaceTool,
     };
 
-    if (toolsEnabled) {
+    if (toolsEnabled && !integrationToolsLoading) {
       record[SET_AGENT_TOOLS_TOOL_NAME] = toolsTool;
     }
     if (skillsEnabled && skillsCount > 0) {
@@ -91,5 +98,6 @@ export function useAgentBuilderTool({
     browserEnabled,
     skillsCount,
     modelsCount,
+    integrationToolsLoading,
   ]);
 }

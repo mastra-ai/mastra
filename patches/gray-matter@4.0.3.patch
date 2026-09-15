@@ -1,0 +1,19 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+deleted file mode 100644
+index eebdf42eb721b756d4f554b09b943774faa659b0..0000000000000000000000000000000000000000
+diff --git a/lib/engines.js b/lib/engines.js
+index 38f993db06cf364191ac635a6590c2d29303297d..bc95719c5cc4f417d35380b855858086fd56e80c 100644
+--- a/lib/engines.js
++++ b/lib/engines.js
+@@ -13,8 +13,9 @@ const engines = exports = module.exports;
+  */
+ 
+ engines.yaml = {
+-  parse: yaml.safeLoad.bind(yaml),
+-  stringify: yaml.safeDump.bind(yaml)
++  // js-yaml >= 4 removed safeLoad/safeDump; load/dump are safe by default there.
++  parse: (yaml.safeLoad || yaml.load).bind(yaml),
++  stringify: (yaml.safeDump || yaml.dump).bind(yaml)
+ };
+ 
+ /**

@@ -4,16 +4,29 @@ import { mkdir, rm, stat, access, readFile, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import * as p from '@clack/prompts';
-import archiver from 'archiver';
+import { ZipArchive } from 'archiver';
 import { config } from 'dotenv';
+
+import { bucketApiHost, getAnalytics } from '../../analytics/index.js';
+import type { CLI_ORIGIN } from '../../analytics/index.js';
+import { deployDashboardUrl, printDeployFailure } from '../../utils/deploy-failure-output.js';
+import { createLogCollector } from '../../utils/deploy-log-format.js';
+import { detectProjectType } from '../../utils/detect-project-type.js';
 import { runBuild } from '../../utils/run-build.js';
 import { checkBuildStaleness } from '../../utils/source-hash.js';
+import { resolveLegacyWorkersManifestOverride } from '../../utils/workers-manifest-guard.js';
 import { fetchOrgs } from '../auth/api.js';
-import { MASTRA_STUDIO_URL } from '../auth/client.js';
+import { MASTRA_STUDIO_URL, MASTRA_PLATFORM_API_URL } from '../auth/client.js';
 import { getToken, getCurrentOrgId } from '../auth/credentials.js';
-import { preflightBuildOutput, printPreflightIssues } from '../deploy-preflight.js';
+import { mergePreflightEnvVars, preflightBuildOutput, printPreflightIssues } from '../deploy-preflight.js';
 import { getProjectConfigToSave, loadProjectConfig, saveProjectConfig } from '../studio/project-config.js';
-import { fetchServerProjects, createServerProject, uploadServerDeploy, pollServerDeploy } from './platform-api.js';
+import {
+  fetchServerProjects,
+  createServerProject,
+  uploadServerDeploy,
+  pollServerDeploy,
+  getServerProjectEnv,
+} from './platform-api.js';
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                           */
@@ -32,7 +45,7 @@ function getPackageName(projectDir: string): string | null {
   }
 }
 
-async function zipOutput(projectDir: string): Promise<string> {
+export async function zipOutput(projectDir: string, workersManifestOverride?: string): Promise<string> {
   const outputDir = join(projectDir, '.mastra', 'output');
   const tmpDir = join(tmpdir(), 'mastra-deploy');
   await mkdir(tmpDir, { recursive: true });
@@ -40,14 +53,21 @@ async function zipOutput(projectDir: string): Promise<string> {
 
   return new Promise((resolvePromise, reject) => {
     const output = createWriteStream(zipPath);
-    const archive = archiver('zip', { zlib: { level: 6 } });
+    const archive = new ZipArchive({ zlib: { level: 6 } });
 
     output.on('close', () => resolvePromise(zipPath));
     archive.on('error', reject);
 
     archive.pipe(output);
-    // Ship only the pre-built .mastra/output + package.json for dependency metadata
-    archive.glob('**', { cwd: outputDir, ignore: ['node_modules/**'] }, { prefix: '.mastra/output' });
+    // Ship only the pre-built .mastra/output + package.json for dependency metadata.
+    // `dot` keeps the .npmrc that the build copies into the output so
+    // private-registry installs work remotely (`**` skips dotfiles by default).
+    const ignore = ['node_modules/**'];
+    if (workersManifestOverride !== undefined) ignore.push('workers.json');
+    archive.glob('**', { cwd: outputDir, ignore, dot: true }, { prefix: '.mastra/output' });
+    if (workersManifestOverride !== undefined) {
+      archive.append(workersManifestOverride, { name: '.mastra/output/workers.json' });
+    }
     archive.file(join(projectDir, 'package.json'), { name: 'package.json' });
     void archive.finalize();
   });
@@ -226,7 +246,18 @@ async function resolveProject(
   flagProject?: string,
   defaultName?: string | null,
   autoAccept?: boolean,
+  /** Create new projects as Factory projects (the flag cannot be set later on the unified path). */
+  isFactoryProject = false,
 ): Promise<{ projectId: string; projectName: string; projectSlug: string }> {
+  // Keep the plain call shape for non-factory projects; only Factory builds
+  // pass creation options.
+  const createProjectNamed = async (name: string) => {
+    const created = isFactoryProject
+      ? await createServerProject(token, orgId, name, { factoryEnabled: true })
+      : await createServerProject(token, orgId, name);
+    p.log.success(`Created ${isFactoryProject ? 'Factory project' : 'project'} "${created.name}"`);
+    return { projectId: created.id, projectName: created.name, projectSlug: created.slug ?? created.name };
+  };
   const envProjectId = process.env.MASTRA_PROJECT_ID;
   if (envProjectId) {
     return { projectId: envProjectId, projectName: envProjectId, projectSlug: envProjectId };
@@ -259,9 +290,7 @@ async function resolveProject(
       }
     }
 
-    const created = await createServerProject(token, orgId, flagProject);
-    p.log.success(`Created project "${created.name}"`);
-    return { projectId: created.id, projectName: created.name, projectSlug: created.slug ?? created.name };
+    return createProjectNamed(flagProject);
   }
 
   if (projectConfig?.projectId && projectConfig.organizationId === orgId) {
@@ -314,27 +343,49 @@ async function resolveProject(
     }
   }
 
-  const project = await createServerProject(token, orgId, name);
-  return { projectId: project.id, projectName: project.name, projectSlug: project.slug ?? project.name };
+  return createProjectNamed(name);
 }
 
 /* ------------------------------------------------------------------ */
 /*  Main deploy action                                                */
 /* ------------------------------------------------------------------ */
 
-export async function serverDeployAction(
-  dir: string | undefined,
-  opts: {
-    org?: string;
-    project?: string;
-    yes?: boolean;
-    config?: string;
-    skipBuild?: boolean;
-    skipPreflight?: boolean;
-    debug?: boolean;
-    envFile?: string;
-  },
-) {
+type ServerDeployOptions = {
+  org?: string;
+  project?: string;
+  yes?: boolean;
+  config?: string;
+  skipBuild?: boolean;
+  skipPreflight?: boolean;
+  debug?: boolean;
+  envFile?: string;
+};
+
+export async function serverDeployAction(dir: string | undefined, opts: ServerDeployOptions) {
+  const analytics = getAnalytics();
+  if (!analytics) {
+    return runServerDeploy(dir, opts);
+  }
+  return analytics.trackCommandExecution({
+    command: 'mastra server deploy',
+    args: {
+      yes: Boolean(opts.yes),
+      skipBuild: Boolean(opts.skipBuild),
+      skipPreflight: Boolean(opts.skipPreflight),
+      hasOrg: Boolean(opts.org),
+      hasProject: Boolean(opts.project),
+      hasEnvFile: Boolean(opts.envFile),
+      hasConfig: Boolean(opts.config),
+      debug: Boolean(opts.debug),
+      headless: Boolean(process.env.MASTRA_API_TOKEN),
+      targetApi: bucketApiHost(MASTRA_PLATFORM_API_URL),
+    },
+    execution: () => runServerDeploy(dir, opts),
+    origin: process.env.MASTRA_ANALYTICS_ORIGIN as CLI_ORIGIN | undefined,
+  });
+}
+
+async function runServerDeploy(dir: string | undefined, opts: ServerDeployOptions) {
   const targetDir = resolve(dir || process.cwd());
   // Seed MASTRA_PROJECT_ID / MASTRA_ORG_ID from the project's .env so deploys
   // auto-link to the project that `mastra init --observability` provisioned.
@@ -346,6 +397,10 @@ export async function serverDeployAction(
   p.intro('mastra server deploy');
 
   const packageName = getPackageName(targetDir);
+  // A Factory build needs the project flagged on the platform; new projects
+  // are created with it and the deploy request carries it for existing ones.
+  const projectType = await detectProjectType(targetDir);
+  const isFactoryProject = projectType === 'factory';
 
   // Step 1: Auth
   let token: string;
@@ -378,6 +433,7 @@ export async function serverDeployAction(
     opts.project,
     packageName,
     autoAccept,
+    isFactoryProject,
   );
 
   // Step 5: Confirmation
@@ -448,17 +504,45 @@ export async function serverDeployAction(
     throw new Error('.mastra/output/index.mjs not found — did the build succeed?');
   }
 
-  const envVars = await readEnvVars(targetDir, { autoAccept, envFile: opts.envFile });
+  // If the user didn't pass --env-file and no ambient .env* file exists,
+  // skip the local env-var upload entirely and let the platform use the
+  // env vars stored on the project. The server-side deploy handler merges
+  // request envVars over the stored vars, so an empty (absent) envVars
+  // payload cleanly falls back to what's already stored.
+  let envVars: Record<string, string> = {};
+  const hasEnvFile = opts.envFile ? true : (await getDeployEnvFiles(targetDir)).length > 0;
+  if (hasEnvFile) {
+    envVars = await readEnvVars(targetDir, { autoAccept, envFile: opts.envFile });
+  }
   const envCount = Object.keys(envVars).length;
   if (envCount > 0) {
     p.log.step(`Found ${envCount} env var(s)`);
-  } else {
+  } else if (hasEnvFile) {
     p.log.step('No env vars found in selected env file');
+  } else {
+    p.log.step('No local env file — using env vars stored on the project');
   }
 
   // Pre-upload validation — catch USER-attributable errors before zipping/shipping.
+  // Preflight sees the same env picture the platform applies at deploy time:
+  // uploaded env vars merged over the project's stored vars (upload wins), so
+  // vars stored only on the platform don't false-alarm.
   if (!skipPreflight) {
-    const issues = await preflightBuildOutput(targetDir, envVars);
+    let storedEnvVars: Record<string, string> | undefined;
+    try {
+      storedEnvVars = await getServerProjectEnv(token, orgId, projectId);
+    } catch {
+      // Stored env unavailable (older platform, network hiccup) — preflight
+      // proceeds with the local env picture only.
+    }
+    // `managedEnvVarNames: null` — the server-project env endpoint doesn't
+    // expose managed-database var names yet, so the env picture is incomplete
+    // and guarded local paths soften to warnings instead of hard errors.
+    // TODO(managed-env-names): pass real names once the endpoint exposes them.
+    const issues = await preflightBuildOutput(targetDir, mergePreflightEnvVars(storedEnvVars, envVars), {
+      hasEnvFile,
+      managedEnvVarNames: null,
+    });
     const outcome = await printPreflightIssues(issues, { autoAccept });
     if (outcome === 'blocked') {
       p.cancel('Deploy blocked by preflight errors.');
@@ -470,8 +554,18 @@ export async function serverDeployAction(
     }
   }
 
+  // Legacy pipeline: never ship a worker manifest. Only the unified
+  // `mastra deploy` flow may trigger worker-service provisioning, so
+  // overwrite `.mastra/output/workers.json` with `null` inside the archive.
+  const workersGuard = await resolveLegacyWorkersManifestOverride(join(targetDir, '.mastra', 'output'));
+  if (workersGuard.status === 'stripped') {
+    p.log.info(
+      'Background workers run in-process on server deploys — use `mastra deploy` for a dedicated worker service.',
+    );
+  }
+
   s.start('Zipping build artifact...');
-  const zipPath = await zipOutput(targetDir);
+  const zipPath = await zipOutput(targetDir, workersGuard.manifestOverride);
   const zipStat = await stat(zipPath);
   const sizeKB = zipStat.size / 1024;
   const sizeLabel = sizeKB > 1024 ? `${(sizeKB / 1024).toFixed(1)}MB` : `${sizeKB.toFixed(1)}KB`;
@@ -483,21 +577,32 @@ export async function serverDeployAction(
     projectName,
     envVars: envCount > 0 ? envVars : undefined,
     disablePlatformObservability: projectConfig?.disablePlatformObservability === true,
+    ...(isFactoryProject ? { factoryEnabled: true } : {}),
   });
   s.stop(`Deploy accepted: ${deployResult.id}`);
 
   await rm(zipPath, { force: true });
 
   p.log.step('Streaming deploy logs...');
-  const finalStatus = await pollServerDeploy(deployResult.id, token, orgId);
+  // With --debug every line is already on screen, so no excerpt is needed.
+  const collectedLogs = opts.debug ? undefined : createLogCollector();
+  const finalStatus = await pollServerDeploy(deployResult.id, token, orgId, undefined, {
+    showAllLogs: opts.debug,
+    collectLogs: collectedLogs,
+  });
 
   if (finalStatus.status === 'running') {
     p.outro(`Deploy succeeded! ${finalStatus.instanceUrl}`);
-  } else if (finalStatus.status === 'failed') {
-    p.log.error(`Deploy failed: ${finalStatus.error}`);
-    process.exit(1);
   } else {
-    p.log.warning(`Deploy ended with status: ${finalStatus.status}`);
+    printDeployFailure({
+      message:
+        finalStatus.status === 'failed'
+          ? `Deploy failed: ${finalStatus.error}`
+          : `Deploy ended with status: ${finalStatus.status}`,
+      collectedLogs: collectedLogs?.entries() ?? [],
+      dashboardUrl: deployDashboardUrl('server', { orgId, projectId, deployId: deployResult.id }),
+      showAllLogs: opts.debug,
+    });
     process.exit(1);
   }
 }

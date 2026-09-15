@@ -84,7 +84,7 @@ function CopyButton({ url }: { url: string }) {
       onClick={onClick}
     >
       <CopyPageIcon className="size-3" />
-      <span>{checked ? 'Copied' : 'Copy markdown'}</span>
+      <span>{checked ? 'Copied' : 'Copy page'}</span>
     </Button>
   )
 }
@@ -144,6 +144,21 @@ function ViewOptions({ url }: { url: string }) {
           align="end"
         >
           {[
+            {
+              title: 'View as markdown',
+              href: url,
+              icon: (
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 16 16"
+                  fill="currentColor"
+                  aria-hidden="true"
+                  focusable="false"
+                >
+                  <path d="M7.25 3.688a8.035 8.035 0 0 0-4.872-.523A.48.48 0 0 0 2 3.64v7.994c0 .345.342.588.679.512a6.02 6.02 0 0 1 4.571.81V3.688ZM8.75 12.956a6.02 6.02 0 0 1 4.571-.81c.337.075.679-.167.679-.512V3.64a.48.48 0 0 0-.378-.475 8.034 8.034 0 0 0-4.872.523v9.268Z" />
+                </svg>
+              ),
+            },
             {
               title: 'Open in GitHub',
               href: metadata.editUrl,
@@ -251,7 +266,7 @@ function ViewOptions({ url }: { url: string }) {
 export const CopyOpenInButton = () => {
   const url =
     typeof window !== 'undefined'
-      ? `${window.location.origin}${window.location.pathname.replace(/\/$/, '')}/llms.txt`
+      ? `${window.location.origin}${window.location.pathname.replace(/\/$/, '')}.md`
       : '/llms.txt'
 
   return (

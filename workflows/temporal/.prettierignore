@@ -1,0 +1,3 @@
+# Generated transform fixtures are compared byte-for-byte against raw
+# transform output in workflows.test.ts — formatting them breaks the test.
+src/transforms/__fixtures__/**/*.js

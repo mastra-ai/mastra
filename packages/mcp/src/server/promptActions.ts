@@ -1,11 +1,16 @@
-import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { IMastraLogger } from '@mastra/core/logger';
-import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import type { Server, ServerNotifier } from '@modelcontextprotocol/server';
+import { broadcastNotification } from './notificationBroadcast';
 
 interface ServerPromptActionsDependencies {
   getLogger: () => IMastraLogger;
-  getSdkServer: () => Server;
-  clearDefinedPrompts: () => void;
+  getSdkServers: () => Server[];
+  /**
+   * Publish-side facade of the 2026-07-28 handler's subscription bus, when the
+   * server is pinned to that revision and the handler exists. Modern clients
+   * receive change events via `subscriptions/listen` instead of server push.
+   */
+  getModernEraNotifier?: () => ServerNotifier | undefined;
 }
 
 /**
@@ -13,28 +18,33 @@ interface ServerPromptActionsDependencies {
  *
  * This class provides methods for MCP servers to notify connected clients when
  * the list of available prompts changes.
+ *
+ * Notifications are broadcast to every active server instance (the main
+ * stdio/SSE instance plus each streamable HTTP session). Clients connected in
+ * stateless/serverless mode cannot receive notifications because each request
+ * uses a transient server instance.
  */
 export class ServerPromptActions {
   private readonly getLogger: () => IMastraLogger;
-  private readonly getSdkServer: () => Server;
-  private readonly clearDefinedPrompts: () => void;
+  private readonly getSdkServers: () => Server[];
+  private readonly getModernEraNotifier?: () => ServerNotifier | undefined;
 
   /**
    * @internal
    */
   constructor(dependencies: ServerPromptActionsDependencies) {
     this.getLogger = dependencies.getLogger;
-    this.getSdkServer = dependencies.getSdkServer;
-    this.clearDefinedPrompts = dependencies.clearDefinedPrompts;
+    this.getSdkServers = dependencies.getSdkServers;
+    this.getModernEraNotifier = dependencies.getModernEraNotifier;
   }
 
   /**
    * Notifies clients that the overall list of available prompts has changed.
    *
-   * This clears the internal prompt cache and sends a `notifications/prompts/list_changed`
-   * message to all clients, prompting them to re-fetch the prompt list.
+   * This sends a `notifications/prompts/list_changed` message to all clients,
+   * prompting them to re-fetch the prompt list.
    *
-   * @throws {MastraError} If sending the notification fails
+   * @throws {MastraError} If sending the notification fails on all server instances
    *
    * @example
    * ```typescript
@@ -43,25 +53,15 @@ export class ServerPromptActions {
    * ```
    */
   public async notifyListChanged(): Promise<void> {
-    this.getLogger().info('Prompt list change externally notified. Clearing definedPrompts and sending notification.');
-    this.clearDefinedPrompts();
-    try {
-      await this.getSdkServer().sendPromptListChanged();
-    } catch (error) {
-      const mastraError = new MastraError(
-        {
-          id: 'MCP_SERVER_PROMPT_LIST_CHANGED_NOTIFICATION_FAILED',
-          domain: ErrorDomain.MCP,
-          category: ErrorCategory.THIRD_PARTY,
-          text: 'Failed to send prompt list changed notification',
-        },
-        error,
-      );
-      this.getLogger().error('Failed to send prompt list changed notification:', {
-        error: mastraError.toString(),
-      });
-      this.getLogger().trackException(mastraError);
-      throw mastraError;
-    }
+    this.getLogger().info('Prompt list change externally notified. Sending notification.');
+    // Modern (2026-07-28) clients subscribe via subscriptions/listen; no-op when unset.
+    this.getModernEraNotifier?.()?.promptsChanged();
+    await broadcastNotification({
+      servers: this.getSdkServers(),
+      send: server => server.sendPromptListChanged(),
+      logger: this.getLogger(),
+      errorId: 'MCP_SERVER_PROMPT_LIST_CHANGED_NOTIFICATION_FAILED',
+      errorText: 'Failed to send prompt list changed notification',
+    });
   }
 }

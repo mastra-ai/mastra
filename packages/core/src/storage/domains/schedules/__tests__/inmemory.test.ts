@@ -84,6 +84,27 @@ describe('InMemorySchedulesStorage', () => {
     });
   });
 
+  describe('legacy heartbeat target read-shim', () => {
+    it('normalizes persisted `type: "heartbeat"` targets to `type: "agent"` on read', async () => {
+      const legacy = makeSchedule({
+        id: 'hb_legacy',
+        nextFireAt: 1_000,
+        target: { type: 'heartbeat', agentId: 'my-agent', prompt: 'check in' } as any,
+      });
+      await storage.createSchedule(legacy);
+
+      const fetched = await storage.getSchedule('hb_legacy');
+      expect(fetched!.target).toEqual({ type: 'agent', agentId: 'my-agent', prompt: 'check in' });
+
+      const listed = await storage.listSchedules();
+      expect(listed.map(s => s.target.type)).toEqual(['agent']);
+
+      const due = await storage.listDueSchedules(10_000);
+      expect(due).toHaveLength(1);
+      expect(due[0]!.target.type).toBe('agent');
+    });
+  });
+
   describe('listSchedules', () => {
     it('returns all schedules when no filter is provided', async () => {
       await storage.createSchedule(makeSchedule({ id: 's1' }));

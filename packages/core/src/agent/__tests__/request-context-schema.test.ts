@@ -2,6 +2,7 @@ import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-
 import { describe, expect, it, beforeEach } from 'vitest';
 import { z } from 'zod/v4';
 import { RequestContext } from '../../request-context';
+import { createTool } from '../../tools';
 import { Agent } from '../agent';
 
 describe('Agent requestContextSchema', () => {
@@ -46,6 +47,38 @@ describe('Agent requestContextSchema', () => {
   });
 
   describe('generate validation', () => {
+    it('should validate input-form values forwarded by a transformed tool context', async () => {
+      const dateCodec = z.codec(z.string(), z.date(), {
+        decode: value => new Date(value),
+        encode: value => value.toISOString(),
+      });
+      let capturedDate: unknown;
+      const agent = new Agent({
+        id: 'nested-context-agent',
+        name: 'Nested Context Agent',
+        instructions: ({ requestContext }) => {
+          capturedDate = requestContext.get('date');
+          return 'You are a helpful assistant';
+        },
+        model: mockModel,
+        requestContextSchema: z.object({ date: dateCodec }),
+      });
+      const outerTool = createTool({
+        id: 'agent-forwarding-tool',
+        description: 'Forwards context to an agent',
+        requestContextSchema: z.object({ date: dateCodec }),
+        execute: async (_, { requestContext }) => agent.generate('Hello', { requestContext }),
+      });
+      const requestContext = new RequestContext();
+      requestContext.set('date', '2026-08-17T00:00:00.000Z');
+
+      const result = await outerTool.execute!({}, { requestContext });
+
+      expect(result.text).toContain('Hello');
+      expect(capturedDate).toBeInstanceOf(Date);
+      expect(requestContext.getRaw('date')).toBe('2026-08-17T00:00:00.000Z');
+    });
+
     it('should pass validation when requestContext matches schema', async () => {
       const agent = new Agent({
         id: 'test-agent',

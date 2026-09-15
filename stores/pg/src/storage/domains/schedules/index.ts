@@ -7,12 +7,24 @@ import type {
   ScheduleTriggerListOptions,
   ScheduleUpdate,
   CreateIndexOptions,
+  TABLE_NAMES,
+  PruneOptions,
+  PruneResult,
+  RetentionTablesDescriptor,
+  TableRetentionPolicy,
 } from '@mastra/core/storage';
-import { SchedulesStorage, TABLE_SCHEDULES, TABLE_SCHEDULE_TRIGGERS, TABLE_SCHEMAS } from '@mastra/core/storage';
+import {
+  normalizeScheduleTarget,
+  SchedulesStorage,
+  TABLE_SCHEDULES,
+  TABLE_SCHEDULE_TRIGGERS,
+  TABLE_SCHEMAS,
+} from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import type { DbClient } from '../../client';
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
+import { resolveTargets, runPrune } from '../../retention';
 
 function getSchemaName(schema?: string) {
   return schema ? `"${schema}"` : '"public"';
@@ -47,7 +59,7 @@ function rowToSchedule(row: Record<string, any>): Schedule {
   }
   const schedule: Schedule = {
     id: String(row.id),
-    target,
+    target: normalizeScheduleTarget(target),
     cron: String(row.cron),
     status: String(row.status) as ScheduleStatus,
     nextFireAt: toNumber(row.next_fire_at),
@@ -85,6 +97,7 @@ function rowToTrigger(row: Record<string, any>): ScheduleTrigger {
 export class SchedulesPG extends SchedulesStorage {
   #db: PgDB;
   #client: DbClient;
+  #readClient: DbClient;
   #schema: string;
   #skipDefaultIndexes?: boolean;
   #indexes?: CreateIndexOptions[];
@@ -92,11 +105,22 @@ export class SchedulesPG extends SchedulesStorage {
   /** Tables managed by this domain */
   static readonly MANAGED_TABLES = [TABLE_SCHEDULES, TABLE_SCHEDULE_TRIGGERS] as const;
 
+  /**
+   * The fire/run history (`schedule_triggers`, one row per fire) is the growth
+   * table; schedule definitions are config and excluded. Anchored on
+   * `actual_fire_at`, a bigint epoch-ms column (numeric comparison, not
+   * timestamptz).
+   */
+  static override readonly retentionTables: RetentionTablesDescriptor = {
+    triggers: { table: TABLE_SCHEDULE_TRIGGERS, column: 'actual_fire_at', indexed: true, anchorType: 'epoch-ms' },
+  };
+
   constructor(config: PgDomainConfig) {
     super();
-    const { client, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
+    const { client, readClient, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
     this.#client = client;
-    this.#db = new PgDB({ client, schemaName, skipDefaultIndexes });
+    this.#readClient = readClient;
+    this.#db = new PgDB({ client, readClient, schemaName, skipDefaultIndexes });
     this.#schema = schemaName || 'public';
     this.#skipDefaultIndexes = skipDefaultIndexes;
     this.#indexes = indexes?.filter(idx => (SchedulesPG.MANAGED_TABLES as readonly string[]).includes(idx.table));
@@ -113,6 +137,45 @@ export class SchedulesPG extends SchedulesStorage {
     });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
+  }
+
+  /**
+   * Lazily ensures a btree index exists on each configured policy's retention
+   * anchor column so age-based `prune()` deletes stay fast. The default
+   * composite index leads with `schedule_id`, so a bare `actual_fire_at` range
+   * scan can't use it. Called from the prune path (not init) so only
+   * deployments that configure retention pay the index's write/disk overhead.
+   * Created even with `skipDefaultIndexes` — retention is an explicit opt-in,
+   * so its supporting index is not part of the default index set.
+   */
+  private async ensureRetentionIndexes(policies: Record<string, TableRetentionPolicy>): Promise<void> {
+    const prefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
+    for (const [key, entry] of Object.entries(SchedulesPG.retentionTables)) {
+      if (!entry.indexed || !policies[key]) continue;
+      try {
+        await this.#db.ensureIndex({
+          indexName: `${prefix}mastra_${key}_retention_idx`,
+          tableName: entry.table as TABLE_NAMES,
+          column: entry.column,
+        });
+      } catch (error) {
+        this.logger?.warn?.(`Failed to create retention index for ${entry.table}:`, error);
+      }
+    }
+  }
+
+  /**
+   * Delete trigger (fire history) rows whose `actual_fire_at` is older than the
+   * `triggers` policy's `maxAge`, batched. Schedule definitions are never pruned.
+   */
+  async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
+    await this.ensureRetentionIndexes(policies);
+    const targets = resolveTargets({
+      policies,
+      descriptor: SchedulesPG.retentionTables,
+      order: ['triggers'],
+    });
+    return runPrune({ db: this.#db, domain: 'schedules', targets, options });
   }
 
   /**
@@ -205,7 +268,7 @@ export class SchedulesPG extends SchedulesStorage {
   }
 
   async createSchedule(schedule: Schedule): Promise<Schedule> {
-    const existing = await this.getSchedule(schedule.id);
+    const existing = await this.#getSchedule(this.#client, schedule.id);
     if (existing) {
       throw new Error(`Schedule with id "${schedule.id}" already exists`);
     }
@@ -231,7 +294,15 @@ export class SchedulesPG extends SchedulesStorage {
   }
 
   async getSchedule(id: string): Promise<Schedule | null> {
-    const row = await this.#client.oneOrNone<Record<string, any>>(
+    return this.#getSchedule(this.#readClient, id);
+  }
+
+  /**
+   * Same lookup against an explicit client. Mutation paths pass the writer so a
+   * lagging read replica cannot yield stale or missing rows mid-update.
+   */
+  async #getSchedule(client: DbClient, id: string): Promise<Schedule | null> {
+    const row = await client.oneOrNone<Record<string, any>>(
       `SELECT * FROM ${this.#table(TABLE_SCHEDULES)} WHERE id = $1`,
       [id],
     );
@@ -269,7 +340,7 @@ export class SchedulesPG extends SchedulesStorage {
     }
 
     const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-    const rows = await this.#client.manyOrNone<Record<string, any>>(
+    const rows = await this.#readClient.manyOrNone<Record<string, any>>(
       `SELECT * FROM ${this.#table(TABLE_SCHEDULES)} ${where} ORDER BY created_at ASC`,
       params,
     );
@@ -314,7 +385,7 @@ export class SchedulesPG extends SchedulesStorage {
 
     if (setClauses.length === 1) {
       // Only updated_at — nothing meaningful to patch
-      const existing = await this.getSchedule(id);
+      const existing = await this.#getSchedule(this.#client, id);
       if (!existing) throw new Error(`Schedule ${id} not found`);
       return existing;
     }
@@ -325,7 +396,7 @@ export class SchedulesPG extends SchedulesStorage {
       params,
     );
 
-    const updated = await this.getSchedule(id);
+    const updated = await this.#getSchedule(this.#client, id);
     if (!updated) throw new Error(`Schedule ${id} not found`);
     return updated;
   }
@@ -392,7 +463,7 @@ export class SchedulesPG extends SchedulesStorage {
       limitClause = `LIMIT $${params.length}`;
     }
 
-    const rows = await this.#client.manyOrNone<Record<string, any>>(
+    const rows = await this.#readClient.manyOrNone<Record<string, any>>(
       `SELECT * FROM ${this.#table(TABLE_SCHEDULE_TRIGGERS)}
        WHERE ${conditions.join(' AND ')}
        ORDER BY actual_fire_at DESC

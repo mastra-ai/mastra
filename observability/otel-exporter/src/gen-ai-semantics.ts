@@ -15,8 +15,17 @@ import type {
   AnyExportedSpan,
   MCPToolCallAttributes,
   ModelGenerationAttributes,
+  RagEmbeddingAttributes,
   ToolCallAttributes,
   UsageStats,
+  WorkflowConditionalAttributes,
+  WorkflowConditionalEvalAttributes,
+  WorkflowLoopAttributes,
+  WorkflowParallelAttributes,
+  WorkflowRunAttributes,
+  WorkflowSleepAttributes,
+  WorkflowStepAttributes,
+  WorkflowWaitEventAttributes,
 } from '@mastra/core/observability';
 import type { Attributes } from '@opentelemetry/api';
 import {
@@ -62,6 +71,8 @@ export interface OtelUsageMetrics {
   [ATTR_GEN_AI_USAGE_OUTPUT_TOKENS]?: number;
   [ATTR_GEN_AI_USAGE_CACHE_READ_INPUT_TOKENS]?: number;
   [ATTR_GEN_AI_USAGE_CACHE_CREATION_INPUT_TOKENS]?: number;
+  'gen_ai.usage.cache_creation.5m_input_tokens'?: number;
+  'gen_ai.usage.cache_creation.1h_input_tokens'?: number;
   'gen_ai.usage.reasoning_tokens'?: number;
   'gen_ai.usage.audio_input_tokens'?: number;
   'gen_ai.usage.audio_output_tokens'?: number;
@@ -97,6 +108,12 @@ export function formatUsageMetrics(usage?: UsageStats): OtelUsageMetrics {
   if (usage.inputDetails?.cacheWrite !== undefined) {
     metrics[ATTR_GEN_AI_USAGE_CACHE_CREATION_INPUT_TOKENS] = usage.inputDetails.cacheWrite;
   }
+  if (usage.inputDetails?.cacheWrite5m !== undefined) {
+    metrics['gen_ai.usage.cache_creation.5m_input_tokens'] = usage.inputDetails.cacheWrite5m;
+  }
+  if (usage.inputDetails?.cacheWrite1h !== undefined) {
+    metrics['gen_ai.usage.cache_creation.1h_input_tokens'] = usage.inputDetails.cacheWrite1h;
+  }
 
   // Audio tokens from inputDetails/outputDetails
   if (usage.inputDetails?.audio !== undefined) {
@@ -109,6 +126,21 @@ export function formatUsageMetrics(usage?: UsageStats): OtelUsageMetrics {
   return metrics;
 }
 
+function addModelRequestAttributes(
+  attributes: Attributes,
+  attrs: Pick<ModelGenerationAttributes | RagEmbeddingAttributes, 'model' | 'provider' | 'usage'>,
+): void {
+  if (attrs.model) {
+    attributes[ATTR_GEN_AI_REQUEST_MODEL] = attrs.model;
+  }
+
+  if (attrs.provider) {
+    attributes[ATTR_GEN_AI_PROVIDER_NAME] = normalizeProvider(attrs.provider);
+  }
+
+  Object.assign(attributes, formatUsageMetrics(attrs.usage));
+}
+
 /**
  * Get the operation name based on span type for gen_ai.operation.name
  */
@@ -116,8 +148,11 @@ function getOperationName(span: AnyExportedSpan): string {
   switch (span.type) {
     case SpanType.MODEL_GENERATION:
       return 'chat';
+    case SpanType.RAG_EMBEDDING:
+      return 'embeddings';
     case SpanType.TOOL_CALL:
     case SpanType.MCP_TOOL_CALL:
+    case SpanType.PROVIDER_TOOL_CALL:
       return 'execute_tool';
     case SpanType.AGENT_RUN:
       return 'invoke_agent';
@@ -140,6 +175,27 @@ function getSpanIdentifier(span: AnyExportedSpan): string | undefined {
       const attrs = span.attributes as ModelGenerationAttributes;
       return attrs?.model;
     }
+    case SpanType.RAG_EMBEDDING: {
+      const attrs = span.attributes as RagEmbeddingAttributes;
+      return attrs?.model;
+    }
+
+    // Workflow step spans set their own entityId (the step id) but inherit
+    // entityName from the enclosing workflow, so identify them by entityId.
+    case SpanType.WORKFLOW_STEP:
+      return span.entityId;
+
+    // Control-flow spans set no entity of their own and would otherwise inherit
+    // the enclosing workflow's entityName, collapsing siblings onto one name.
+    // Fall through to the authored span name, which already carries the
+    // condition index / branch descriptor.
+    case SpanType.WORKFLOW_CONDITIONAL:
+    case SpanType.WORKFLOW_CONDITIONAL_EVAL:
+    case SpanType.WORKFLOW_PARALLEL:
+    case SpanType.WORKFLOW_LOOP:
+    case SpanType.WORKFLOW_SLEEP:
+    case SpanType.WORKFLOW_WAIT_EVENT:
+      return undefined;
 
     default:
       return span.entityName ?? span.entityId;
@@ -182,7 +238,11 @@ export function getAttributes(span: AnyExportedSpan): Attributes {
     // Add specific attributes based on span type
     if (span.type === SpanType.MODEL_GENERATION) {
       attributes[ATTR_GEN_AI_INPUT_MESSAGES] = convertMastraMessagesToGenAIMessages(inputStr);
-    } else if (span.type === SpanType.TOOL_CALL || span.type === SpanType.MCP_TOOL_CALL) {
+    } else if (
+      span.type === SpanType.TOOL_CALL ||
+      span.type === SpanType.MCP_TOOL_CALL ||
+      span.type === SpanType.PROVIDER_TOOL_CALL
+    ) {
       attributes['gen_ai.tool.call.arguments'] = inputStr;
     } else {
       attributes[`mastra.${spanType}.input`] = inputStr;
@@ -196,7 +256,11 @@ export function getAttributes(span: AnyExportedSpan): Attributes {
       attributes[ATTR_GEN_AI_OUTPUT_MESSAGES] = convertMastraMessagesToGenAIMessages(outputStr);
       // TODO
       // attributes['gen_ai.output.type'] = image/json/speech/text/<other>
-    } else if (span.type === SpanType.TOOL_CALL || span.type === SpanType.MCP_TOOL_CALL) {
+    } else if (
+      span.type === SpanType.TOOL_CALL ||
+      span.type === SpanType.MCP_TOOL_CALL ||
+      span.type === SpanType.PROVIDER_TOOL_CALL
+    ) {
       attributes['gen_ai.tool.call.result'] = outputStr;
     } else {
       attributes[`mastra.${spanType}.output`] = outputStr;
@@ -207,14 +271,7 @@ export function getAttributes(span: AnyExportedSpan): Attributes {
   if (span.type === SpanType.MODEL_GENERATION && span.attributes) {
     const modelAttrs = span.attributes as ModelGenerationAttributes;
 
-    // Model and provider
-    if (modelAttrs.model) {
-      attributes[ATTR_GEN_AI_REQUEST_MODEL] = modelAttrs.model;
-    }
-
-    if (modelAttrs.provider) {
-      attributes[ATTR_GEN_AI_PROVIDER_NAME] = normalizeProvider(modelAttrs.provider);
-    }
+    addModelRequestAttributes(attributes, modelAttrs);
 
     // Agent context - allows correlating model generation with the agent that invoked it
     if (span.entityId) {
@@ -224,9 +281,6 @@ export function getAttributes(span: AnyExportedSpan): Attributes {
     if (span.entityName) {
       attributes[ATTR_GEN_AI_AGENT_NAME] = span.entityName;
     }
-
-    // Token usage - use OTEL standard naming + OpenInference conventions
-    Object.assign(attributes, formatUsageMetrics(modelAttrs.usage));
 
     // Parameters using OTEL conventions
     if (modelAttrs.parameters) {
@@ -281,27 +335,56 @@ export function getAttributes(span: AnyExportedSpan): Attributes {
     }
   }
 
+  if (span.type === SpanType.RAG_EMBEDDING && span.attributes) {
+    const embeddingAttrs = span.attributes as RagEmbeddingAttributes;
+
+    addModelRequestAttributes(attributes, embeddingAttrs);
+
+    if (embeddingAttrs.mode) {
+      attributes[`mastra.${spanType}.mode`] = embeddingAttrs.mode;
+    }
+    if (embeddingAttrs.dimensions !== undefined) {
+      attributes['gen_ai.embeddings.dimension.count'] = embeddingAttrs.dimensions;
+      attributes[`mastra.${spanType}.dimensions`] = embeddingAttrs.dimensions;
+    }
+    if (embeddingAttrs.inputCount !== undefined) {
+      attributes[`mastra.${spanType}.input_count`] = embeddingAttrs.inputCount;
+    }
+  }
+
   // Add tool-specific attributes using OTEL conventions
-  if ((span.type === SpanType.TOOL_CALL || span.type === SpanType.MCP_TOOL_CALL) && span.attributes) {
-    // Tool identification
+  if (
+    span.type === SpanType.TOOL_CALL ||
+    span.type === SpanType.MCP_TOOL_CALL ||
+    span.type === SpanType.PROVIDER_TOOL_CALL
+  ) {
+    // Tool identification (entityName/entityId are always set by producers)
     attributes[ATTR_GEN_AI_TOOL_NAME] = span.entityName ?? span.entityId;
 
-    //TODO:
-    // attributes['gen_ai.tool.call.id'] = call_mszuSIzqtI65i1wAUOE8w5H4
+    const toolCallId =
+      (span.attributes as { toolCallId?: string } | undefined)?.toolCallId ?? span.metadata?.toolCallId;
+    if (toolCallId) {
+      attributes['gen_ai.tool.call.id'] = toolCallId;
+    }
 
-    // MCP-specific attributes
-    if (span.type === SpanType.MCP_TOOL_CALL) {
-      const mcpAttrs = span.attributes as MCPToolCallAttributes;
-      if (mcpAttrs.mcpServer) {
-        attributes[ATTR_SERVER_ADDRESS] = mcpAttrs.mcpServer;
-      }
-    } else {
+    // Attribute-dependent fields (description, type, MCP server)
+    if (span.attributes) {
       const toolAttrs = span.attributes as ToolCallAttributes;
       if (toolAttrs.toolDescription) {
         attributes[ATTR_GEN_AI_TOOL_DESCRIPTION] = toolAttrs.toolDescription;
       }
       if (toolAttrs.toolType) {
         attributes['gen_ai.tool.type'] = toolAttrs.toolType;
+      }
+      if (span.type === SpanType.MCP_TOOL_CALL) {
+        const mcpAttrs = span.attributes as MCPToolCallAttributes;
+        if (mcpAttrs.mcpServer) {
+          attributes[ATTR_SERVER_ADDRESS] = mcpAttrs.mcpServer;
+          attributes[`mastra.${spanType}.server_name`] = mcpAttrs.mcpServer;
+        }
+        if (mcpAttrs.serverVersion) {
+          attributes[`mastra.${spanType}.server_version`] = mcpAttrs.serverVersion;
+        }
       }
     }
   }
@@ -332,6 +415,107 @@ export function getAttributes(span: AnyExportedSpan): Attributes {
     attributes[ATTR_GEN_AI_SYSTEM_INSTRUCTIONS] = agentAttrs.instructions;
   }
 
+  // Add workflow-specific attributes. Control-flow spans carry native branch,
+  // loop, sleep and wait metadata that is otherwise dropped on export. Values
+  // are emitted under the existing `mastra.<span_type>.<snake_case>` convention;
+  // arrays/dates are serialized and false/0 are preserved (guard on !== undefined).
+  if (span.type === SpanType.WORKFLOW_RUN && span.attributes) {
+    const runAttrs = span.attributes as WorkflowRunAttributes;
+    if (runAttrs.status !== undefined) {
+      attributes[`mastra.${spanType}.status`] = runAttrs.status;
+    }
+  }
+
+  if (span.type === SpanType.WORKFLOW_STEP) {
+    if (span.entityId) {
+      attributes[`mastra.${spanType}.step_id`] = span.entityId;
+    }
+    if (span.attributes) {
+      const stepAttrs = span.attributes as WorkflowStepAttributes;
+      if (stepAttrs.status !== undefined) {
+        attributes[`mastra.${spanType}.status`] = stepAttrs.status;
+      }
+    }
+  }
+
+  if (span.type === SpanType.WORKFLOW_CONDITIONAL && span.attributes) {
+    const condAttrs = span.attributes as WorkflowConditionalAttributes;
+    if (condAttrs.conditionCount !== undefined) {
+      attributes[`mastra.${spanType}.condition_count`] = condAttrs.conditionCount;
+    }
+    if (condAttrs.truthyIndexes !== undefined) {
+      attributes[`mastra.${spanType}.truthy_indexes`] = JSON.stringify(condAttrs.truthyIndexes);
+    }
+    if (condAttrs.selectedSteps !== undefined) {
+      attributes[`mastra.${spanType}.selected_steps`] = JSON.stringify(condAttrs.selectedSteps);
+    }
+  }
+
+  if (span.type === SpanType.WORKFLOW_CONDITIONAL_EVAL && span.attributes) {
+    const evalAttrs = span.attributes as WorkflowConditionalEvalAttributes;
+    if (evalAttrs.conditionIndex !== undefined) {
+      attributes[`mastra.${spanType}.condition_index`] = evalAttrs.conditionIndex;
+    }
+    if (evalAttrs.result !== undefined) {
+      attributes[`mastra.${spanType}.result`] = evalAttrs.result;
+    }
+  }
+
+  if (span.type === SpanType.WORKFLOW_PARALLEL && span.attributes) {
+    const parallelAttrs = span.attributes as WorkflowParallelAttributes;
+    if (parallelAttrs.branchCount !== undefined) {
+      attributes[`mastra.${spanType}.branch_count`] = parallelAttrs.branchCount;
+    }
+    if (parallelAttrs.parallelSteps !== undefined) {
+      attributes[`mastra.${spanType}.parallel_steps`] = JSON.stringify(parallelAttrs.parallelSteps);
+    }
+  }
+
+  if (span.type === SpanType.WORKFLOW_LOOP && span.attributes) {
+    const loopAttrs = span.attributes as WorkflowLoopAttributes;
+    if (loopAttrs.loopType !== undefined) {
+      attributes[`mastra.${spanType}.loop_type`] = loopAttrs.loopType;
+    }
+    if (loopAttrs.iteration !== undefined) {
+      attributes[`mastra.${spanType}.iteration`] = loopAttrs.iteration;
+    }
+    if (loopAttrs.totalIterations !== undefined) {
+      attributes[`mastra.${spanType}.total_iterations`] = loopAttrs.totalIterations;
+    }
+    if (loopAttrs.concurrency !== undefined) {
+      attributes[`mastra.${spanType}.concurrency`] = loopAttrs.concurrency;
+    }
+  }
+
+  if (span.type === SpanType.WORKFLOW_SLEEP && span.attributes) {
+    const sleepAttrs = span.attributes as WorkflowSleepAttributes;
+    if (sleepAttrs.durationMs !== undefined) {
+      attributes[`mastra.${spanType}.duration_ms`] = sleepAttrs.durationMs;
+    }
+    if (sleepAttrs.untilDate !== undefined) {
+      attributes[`mastra.${spanType}.until_date`] = sleepAttrs.untilDate.toISOString();
+    }
+    if (sleepAttrs.sleepType !== undefined) {
+      attributes[`mastra.${spanType}.sleep_type`] = sleepAttrs.sleepType;
+    }
+  }
+
+  if (span.type === SpanType.WORKFLOW_WAIT_EVENT && span.attributes) {
+    const waitAttrs = span.attributes as WorkflowWaitEventAttributes;
+    if (waitAttrs.eventName !== undefined) {
+      attributes[`mastra.${spanType}.event_name`] = waitAttrs.eventName;
+    }
+    if (waitAttrs.timeoutMs !== undefined) {
+      attributes[`mastra.${spanType}.timeout_ms`] = waitAttrs.timeoutMs;
+    }
+    if (waitAttrs.eventReceived !== undefined) {
+      attributes[`mastra.${spanType}.event_received`] = waitAttrs.eventReceived;
+    }
+    if (waitAttrs.waitDurationMs !== undefined) {
+      attributes[`mastra.${spanType}.wait_duration_ms`] = waitAttrs.waitDurationMs;
+    }
+  }
+
   // Add error information if present
   if (span.errorInfo) {
     attributes[ATTR_ERROR_TYPE] = span.errorInfo.id || 'unknown';
@@ -342,6 +526,11 @@ export function getAttributes(span: AnyExportedSpan): Attributes {
     if (span.errorInfo.category) {
       attributes['error.category'] = span.errorInfo.category;
     }
+  }
+
+  const threadId = span.metadata?.threadId;
+  if (typeof threadId === 'string' && threadId.length > 0) {
+    attributes[ATTR_GEN_AI_CONVERSATION_ID] = threadId;
   }
 
   return attributes;

@@ -10,7 +10,7 @@ const mock = createGatewayMock();
 beforeAll(() => mock.start());
 afterAll(() => mock.saveAndStop());
 
-function toolhandlingE2ETests(version: 'v1' | 'v2' | 'v3') {
+function toolhandlingE2ETests(version: 'v1' | 'v2' | 'v3' | 'v4') {
   const dummyModel = getSingleDummyResponseModel(version);
   const openaiModel = getOpenAIModel(version);
 
@@ -76,3 +76,4 @@ function toolhandlingE2ETests(version: 'v1' | 'v2' | 'v3') {
 toolhandlingE2ETests('v1');
 toolhandlingE2ETests('v2');
 toolhandlingE2ETests('v3');
+toolhandlingE2ETests('v4');

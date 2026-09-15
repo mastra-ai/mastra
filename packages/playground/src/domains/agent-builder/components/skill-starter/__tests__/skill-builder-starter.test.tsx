@@ -1,6 +1,5 @@
-// @vitest-environment jsdom
-import type * as PlaygroundUi from '@mastra/playground-ui';
-import { TooltipProvider } from '@mastra/playground-ui';
+import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
+import { usePlaygroundStore } from '@mastra/playground-ui/store/playground-store';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react';
@@ -20,18 +19,8 @@ vi.mock('react-router', async () => {
     useNavigate: () => navigateMock,
   };
 });
-
-vi.mock('@mastra/playground-ui', async () => {
-  const actual = await vi.importActual<typeof PlaygroundUi>('@mastra/playground-ui');
-  return {
-    ...actual,
-    toast: { success: vi.fn(), error: vi.fn() },
-    usePlaygroundStore: () => ({ requestContext: undefined }),
-  };
-});
-
-vi.mock('@/domains/auth/hooks/use-default-visibility', () => ({
-  useDefaultVisibility: () => 'private',
+vi.mock('@mastra/playground-ui/utils/toast', () => ({
+  toast: { success: vi.fn(), error: vi.fn() },
 }));
 
 const BASE_URL = 'http://localhost:4111';
@@ -55,6 +44,7 @@ const renderStarter = () => {
 
 describe('SkillBuilderStarter', () => {
   beforeEach(() => {
+    usePlaygroundStore.setState({ requestContext: {} });
     // The starter pulls builder settings + stored workspaces so it can choose a
     // default workspace. Stub both: builder enabled with no agent-workspace
     // pin, and an empty workspace list so workspaceId stays undefined.
@@ -63,6 +53,8 @@ describe('SkillBuilderStarter', () => {
         HttpResponse.json({ enabled: true, modelPolicy: { active: false } }),
       ),
       http.get(`${BASE_URL}/api/stored/workspaces`, () => HttpResponse.json({ workspaces: [] })),
+      // useDefaultVisibility resolves to 'private' when auth is enabled.
+      http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({ enabled: true, login: null })),
     );
   });
 
@@ -85,7 +77,12 @@ describe('SkillBuilderStarter', () => {
 
   it('creates the skill with a client-side id and navigates to /agent-builder/skills/:id/edit with the prompt as userMessage', async () => {
     let capturedBody: any = null;
+    let capabilitiesLoaded = false;
     server.use(
+      http.get(`${BASE_URL}/api/auth/capabilities`, () => {
+        capabilitiesLoaded = true;
+        return HttpResponse.json({ enabled: true, login: null });
+      }),
       http.post(`${BASE_URL}/api/stored/skills`, async ({ request }) => {
         capturedBody = await request.json();
         return HttpResponse.json({ id: capturedBody.id });
@@ -97,6 +94,8 @@ describe('SkillBuilderStarter', () => {
     const submit = getByTestId('skill-builder-starter-submit');
 
     fireEvent.change(input, { target: { value: 'code reviewer' } });
+    // Default visibility ('private') depends on auth capabilities resolving.
+    await waitFor(() => expect(capabilitiesLoaded).toBe(true));
 
     await act(async () => {
       fireEvent.click(submit);

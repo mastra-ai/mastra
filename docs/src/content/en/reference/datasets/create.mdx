@@ -1,6 +1,6 @@
 ---
 title: "Reference: DatasetsManager.create() | Datasets"
-description: "Documentation for the `DatasetsManager.create()` method, which creates a new dataset."
+description: "Creates a new dataset. Use Standard JSON Schema (Zod, Valibot, ArkType, etc.) for defining schemas."
 packages:
   - "@mastra/core"
 ---
@@ -17,9 +17,7 @@ Creates a new dataset. Use Standard JSON Schema (Zod, Valibot, ArkType, etc.) fo
 import { Mastra } from '@mastra/core'
 import { z } from 'zod'
 
-const mastra = new Mastra({
-  /* storage config */
-})
+const mastra = new Mastra({/* storage config */})
 
 // Create with metadata
 const dataset = await mastra.datasets.create({

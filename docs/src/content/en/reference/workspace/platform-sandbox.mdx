@@ -1,0 +1,524 @@
+---
+title: 'Reference: PlatformSandbox | Workspace'
+description: "Use PlatformSandbox to provision, inspect, execute commands in, and delete isolated sandboxes within a Mastra Platform environment."
+packages:
+  - '@mastra/platform-workspace'
+---
+
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# PlatformSandbox
+
+Client for provisioning sandboxes in a Mastra Platform environment. Each `PlatformSandbox` instance owns one remote sandbox: `start()` provisions it, `executeCommand()` runs against it, and `destroy()` tears it down. Construct additional instances to own additional remote sandboxes. Use `clone()` to derive them from a configured template (see [Cloning](#cloning-for-a-fleet-of-sandboxes)).
+
+Sandboxes boot from a pre-built provider template with Python 3, Node 22, TypeScript, tsx, and common build tooling already installed. You can also build a [reusable template](#reusable-templates) with the portable `Template()` builder. Pass a stable `id` to opt into [checkpoint recovery](#checkpoint-recovery) so a new sandbox boots from the previous one's filesystem.
+
+Related providers: [`RailwaySandbox`](/integrations/sandboxes/railway) for self-hosted Railway sandboxes, [`LocalSandbox`](/reference/workspace/local-sandbox) for local sandboxes.
+
+:::note
+
+For interface details, see [WorkspaceSandbox interface](/reference/workspace/sandbox).
+
+:::
+
+## Installation
+
+```bash npm2yarn
+npm install @mastra/platform-workspace
+```
+
+Configure the platform credentials. The access token, project ID, and environment ID fall back to environment variables, so a Mastra Platform deployment can pass zero constructor options.
+
+<Tabs>
+  <TabItem value="env-file" label=".env file">
+    ```bash
+    MASTRA_PLATFORM_ACCESS_TOKEN=your-platform-access-token
+    MASTRA_PROJECT_ID=your-project-id
+    MASTRA_ENVIRONMENT_ID=your-environment-id
+    SANDBOX_PROVIDER=railway
+    ```
+  </TabItem>
+
+  <TabItem value="constructor" label="Constructor">
+    ```typescript
+    new PlatformSandbox({
+      accessToken: 'your-platform-access-token',
+      projectId: 'your-project-id',
+      environmentId: 'your-environment-id',
+    })
+    ```
+  </TabItem>
+</Tabs>
+
+On a Mastra Platform deployment, `MASTRA_PLATFORM_ACCESS_TOKEN`, `MASTRA_PROJECT_ID`, and `MASTRA_ENVIRONMENT_ID` are injected automatically, so the constructor can be called with no options. For local development, `MASTRA_PLATFORM_ACCESS_TOKEN` can contain an `sk_` API token from your organization's settings page under **API Tokens**.
+
+The sandbox provider resolves from the constructor's `sandboxProvider` option, then `SANDBOX_PROVIDER`, then defaults to `railway`.
+
+## Usage
+
+Add a `PlatformSandbox` to a workspace and assign it to an agent:
+
+```typescript
+import { Agent } from '@mastra/core/agent'
+import { Workspace } from '@mastra/core/workspace'
+import { PlatformSandbox } from '@mastra/platform-workspace'
+
+const workspace = new Workspace({
+  sandbox: new PlatformSandbox({
+    // accessToken, projectId, environmentId all fall back to env vars
+    idleTimeoutMinutes: 30,
+  }),
+})
+
+const agent = new Agent({
+  id: 'code-agent',
+  name: 'Code Agent',
+  instructions: 'You are a coding assistant working in this workspace.',
+  model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+  workspace,
+})
+
+const response = await agent.generate(
+  'Print "Hello, world!" and show the current working directory.',
+)
+
+console.log(response.text)
+```
+
+### Private networking
+
+Set `networkIsolation` to `PRIVATE` to join the environment's private network and reach other services running in the same Mastra Platform environment:
+
+```typescript
+const workspace = new Workspace({
+  sandbox: new PlatformSandbox({
+    networkIsolation: 'PRIVATE',
+  }),
+})
+```
+
+The default `ISOLATED` mode allows outbound internet access only, with no private network connectivity.
+
+### Reattaching to a running sandbox
+
+Pass an existing `sandboxId` to reattach to a live sandbox instead of creating a new one:
+
+```typescript
+const sandbox = new PlatformSandbox({
+  sandboxId: 'sbx_abc123',
+})
+await sandbox.start()
+
+const result = await sandbox.executeCommand('cat', ['/workspace/state.json'])
+```
+
+When `sandboxId` is set, `environmentId` isn't required because the sandbox already exists.
+
+`start()` reports `{ outcome: 'connected' }` on reattach and `{ outcome: 'created' }` on a fresh provision (including a checkpoint-recovered boot, which is a new VM even when its filesystem was restored). See [`start()`](/reference/workspace/sandbox#start) for the shared contract.
+
+### Reusable templates
+
+Pass a reusable template builder to `PlatformSandbox`. A fresh sandbox start sends the serialized definition to Platform, which content-addresses it and starts or reuses the provider build. Sandbox creation never blocks on a build. When the exact template isn't built yet, Platform boots the sandbox on the best available fallback and rebuilds the requested template in the background. The fallback is a same-lineage stale template with matching resources when one exists, otherwise the provider base template:
+
+```typescript
+import { PlatformSandbox, Template } from '@mastra/platform-workspace'
+
+const commitSha = process.env.REPOSITORY_COMMIT_SHA!
+const template = Template()
+  .cpuCount(4)
+  .memoryMB(8_192)
+  .setWorkdir('/workspace/repo')
+  .setEnvs({ BUILD_CONFIG_MARKER: 'template-v1' })
+  .aptInstall(['git', 'jq'])
+  .runCmd('git clone https://github.com/mastra-ai/mastra.git /workspace/repo')
+  .runCmd(`git checkout ${commitSha}`)
+  .runCmd('pnpm install --frozen-lockfile')
+
+const sandbox = new PlatformSandbox({
+  environmentId: 'env_abc',
+  sandboxProvider: 'e2b',
+  template,
+})
+await sandbox.start()
+```
+
+`Template()` supports `cpuCount`, `memoryMB`, `runCmd`, `setWorkdir`, `setEnvs`, `aptInstall`, `pipInstall`, and `npmInstall`. Platform serializes the builder internally and computes the content hash. Call `await template.build(options)` to start or reuse that provider build without provisioning a sandbox. It returns `ready`, `pending`, or `failed`, with the template ID and an optional retry hint or error.
+
+For E2B, `cpuCount()` and `memoryMB()` set the template build resources inherited by sandboxes created from the exact template or a resource-matched stale template. Both methods accept a positive safe integer. They default to 2 CPUs and 1,024 MB. Resource setters use last-value-wins semantics, and their effective values are part of the content identity. Omitting both setters is equivalent to explicitly selecting the defaults. If a pending build falls back to the provider base, that sandbox may use the provider's default resources. Check `templatePending` to detect this case.
+
+Railway converts the command, working directory, environment, and package operations to Railway template instructions. Railway currently ignores `cpuCount()` and `memoryMB()` because its sandbox template API doesn't expose matching resource settings.
+
+For public GitHub repositories, `createRepoTemplate()` can resolve and build the commit-pinned definition lazily when `start()` needs a fresh sandbox:
+
+```typescript
+import { createRepoTemplate, PlatformSandbox } from '@mastra/platform-workspace'
+
+const sandbox = new PlatformSandbox({
+  environmentId: 'env_abc',
+  template: createRepoTemplate({
+    getRepositoryAccess: async () => ({ cloneUrl: 'https://github.com/mastra-ai/mastra.git' }),
+    setupCommand: 'pnpm install --frozen-lockfile',
+    memoryMB: 2048,
+  }),
+})
+await sandbox.start()
+```
+
+`createRepoTemplate()` accepts the same `cpuCount` and `memoryMB` sizing as the `Template()` builder methods, as plain options. They carry the identity and stale-fallback semantics described above. Omit them for the provider defaults.
+
+`setupCommand` also accepts an array. Each entry runs as its own cached build step. `workingDirectory` sets the cwd for the build and the sandbox, and the repository is cloned to `<workingDirectory>/<repo>`. `buildEnv` passes environment variables to the build steps only. They never enter the serialized definition.
+
+`getRepositoryAccess` mirrors the resolver a Factory sandbox context carries, so a host can pass its context straight through; when it's absent, `createRepoTemplate()` returns `undefined` and the sandbox boots the provider default. The resolver skips reattachment to an existing `sandboxId`; on a fresh start, it resolves the repository's default-branch head before Platform starts or reuses the corresponding template build. If the repository head can't be resolved or the provider build fails, sandbox creation continues with the provider's default template so runtime setup can perform a cold checkout. For private repositories, the short-lived authorization token is sent as an ephemeral build environment value that stays out of the serialized definition and the persisted template record. It has no effect on content identity.
+
+`createRepoTemplate()` also attaches a commit-independent `family` key (`repo:<cloneUrl>:<workingDirectory>/<repo>`) to the definition. `family` groups successive builds of the "same thing", so every commit of the same repository belongs to the same family. Platform uses it to find a prior ready build in the same family and boot the new commit on that warm filesystem while the exact commit template builds in the background. For E2B, stale lookup is also partitioned by the effective CPU and memory settings so a fallback can't silently change the requested machine size. Callers using the raw `Template()` builder can attach their own family key with `.withFamily(key)` (any non-empty string up to 200 characters). Omit it to opt out of family fallback. The family key never influences the content-addressed template identity: two definitions that differ only in `family` share the same cache slot.
+
+Platform stores build state under the definition's server-derived content hash within the selected environment and provider.
+
+#### Observing a pending template build
+
+When a sandbox boots on a fallback template (either a resource-matched prior member of the same family or the provider base), the platform response includes a `templatePending` field that `PlatformSandbox` surfaces for observability:
+
+```typescript
+await sandbox.start()
+if (sandbox.templatePending) {
+  // The sandbox is running on a fallback template.
+  // A later start() of a sandbox with the same template definition
+  // will pick up the exact template once the background build finishes.
+  console.log('exact template still baking:', sandbox.templatePending.templateId)
+}
+```
+
+`templatePending` is undefined when the sandbox booted on the exact template. `PlatformSandbox` never re-executes template operations inside a running sandbox. Reconcile any commit-specific filesystem state in your own runtime setup (for example, an `onStart` hook that runs `git fetch && git checkout <sha>`) exactly as you would with a fresh template. Reprovision on a later `start()` to pick up the ready exact template.
+
+:::warning
+
+By default, every template operation is serialized and sent to Platform, which interprets it according to the selected provider's capabilities. Use `setEnvs(values, { ephemeral: true })` for short-lived build credentials: these values are sent separately and excluded from both content identity and persistence. They're unavailable at runtime and take precedence over serialized environment values with the same key. Supply them again on every build or fresh provision that may need to build. On Railway, the provider cache includes the transient build variables. Rotating a value can therefore trigger another provider build even though the Platform template ID stays stable.
+
+:::
+
+### Checkpoint recovery
+
+The constructor `id` (explicit or auto-generated) is sent to the platform on `POST /sandbox` as an advisory recovery key:
+
+- If the platform recognises the `id` from a previous session, the new sandbox boots from the most recent checkpoint of that earlier sandbox's filesystem instead of the base recipe.
+- If the `id` isn't recognised, the platform starts a fresh sandbox from the base recipe. Auto-generated ids never match, so omitting `id` disables checkpoint recovery.
+
+Pass a stable `id` to preserve a sandbox's filesystem across sessions or across a `destroy()`/`start()` cycle:
+
+```typescript
+const sandbox = new PlatformSandbox({
+  id: `project-${projectId}`,
+})
+await sandbox.start() // Boots from the most recent checkpoint for this id, or fresh if unknown
+```
+
+Checkpoint recovery is coarser than `sandboxId` reattachment. Reattaching (via `sandboxId`) rejoins the exact live sandbox and its running processes. Checkpoint recovery constructs a brand new sandbox and restores its filesystem from the latest checkpoint the platform captured for the previous sandbox with that `id`. Running processes and any filesystem writes made after the last checkpoint aren't restored.
+
+Call `snapshot()` after a filesystem update to capture the configured recovery checkpoint immediately. It resolves without capturing when the sandbox has no caller-provided `id` or isn't running.
+
+```typescript
+await sandbox.snapshot()
+```
+
+Each `id` maps to one independent filesystem. Reusing the same `id` across unrelated sandboxes causes the platform to boot them from each other's checkpoint.
+
+Set `seedCheckpointName` to provide a boot-only fallback when the checkpoint for `id` doesn't exist yet. The platform restores the checkpoint for `id` first when both exist. Later snapshots continue writing to the checkpoint for `id`, so the seed remains unchanged.
+
+```typescript
+const sandbox = new PlatformSandbox({
+  id: `project-session-${sessionId}`,
+  seedCheckpointName: 'project-base',
+})
+```
+
+### Cloning for a fleet of sandboxes
+
+`clone()` returns an independent sibling `PlatformSandbox` that inherits credentials and defaults (access token, project, environment, provider, template, network isolation, timeout, instructions, env, idle timeout) with per-instance overrides. The returned sandbox is unstarted and provisions on its own `start()`, so `clone()` performs no I/O:
+
+```typescript
+const template = new PlatformSandbox({
+  networkIsolation: 'PRIVATE',
+  idleTimeoutMinutes: 30,
+})
+
+const perProject = template.clone({ id: `project-${projectId}` })
+await perProject.start()
+```
+
+Combine `clone()` with a stable `id` per clone to opt each clone into [checkpoint recovery](#checkpoint-recovery) independently.
+
+### Executing commands
+
+`executeCommand` runs a command on the remote sandbox and returns its output. Pass `args` to have arguments safely shell-quoted:
+
+```typescript
+const result = await sandbox.executeCommand('python', ['analyze.py'], {
+  timeout: 30_000,
+  cwd: '/workspace',
+  env: { INPUT: 'repo' },
+})
+
+console.log(result.stdout)
+console.log(result.exitCode)
+```
+
+:::warning
+
+The `command` argument is a shell string and is concatenated verbatim into the remote shell. This lets you use pipes, redirects, and chaining (`ls -la | grep foo`) but means untrusted input must be passed through `args` (safely quoted) or shell-quoted by the caller. Untrusted `command` values allow arbitrary shell execution on the sandbox.
+
+:::
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'accessToken',
+    type: 'string',
+    description: 'Platform access token. Falls back to the MASTRA_PLATFORM_ACCESS_TOKEN environment variable.',
+    isOptional: true,
+  },
+  {
+    name: 'projectId',
+    type: 'string',
+    description: 'Platform project ID. Falls back to the MASTRA_PROJECT_ID environment variable.',
+    isOptional: true,
+  },
+  {
+    name: 'sandboxProvider',
+    type: "'railway' | 'e2b'",
+    description: 'Provider used for sandbox and template routes. Falls back to SANDBOX_PROVIDER, then railway.',
+    isOptional: true,
+  },
+  {
+    name: 'environmentId',
+    type: 'string',
+    description:
+      'Platform environment ID the sandbox belongs to. Falls back to the MASTRA_ENVIRONMENT_ID environment variable. Required unless sandboxId is passed.',
+    isOptional: true,
+  },
+  {
+    name: 'sandboxId',
+    type: 'string',
+    description:
+      'Existing sandbox ID to reattach to instead of creating a new sandbox. When set, environmentId is not required.',
+    isOptional: true,
+  },
+  {
+    name: 'seedCheckpointName',
+    type: 'string',
+    description:
+      'Boot-only fallback checkpoint used when the primary recovery checkpoint for id has no stored state. Later snapshots continue writing to the checkpoint for id.',
+    isOptional: true,
+  },
+  {
+    name: 'template',
+    type: 'SandboxTemplateBuilder | (() => SandboxTemplateBuilder | undefined | Promise<SandboxTemplateBuilder | undefined>)',
+    description:
+      'Reusable template builder or lazy resolver used during a fresh sandbox provision. Resolver and provider build failures fall back to the selected provider default.',
+    isOptional: true,
+  },
+  {
+    name: 'idleTimeoutMinutes',
+    type: 'number',
+    description: 'How long the sandbox stays alive with no activity before the platform destroys it.',
+    isOptional: true,
+  },
+  {
+    name: 'networkIsolation',
+    type: "'ISOLATED' | 'PRIVATE'",
+    description:
+      "Network mode. 'ISOLATED' (default) allows outbound internet only. 'PRIVATE' joins the platform environment's private network.",
+    isOptional: true,
+  },
+  {
+    name: 'env',
+    type: 'Record<string, string>',
+    description:
+      'Environment variables baked into the sandbox at creation time. Per-command environment variables can also be passed to executeCommand.',
+    isOptional: true,
+  },
+  {
+    name: 'workingDirectory',
+    type: 'string',
+    description:
+      'Default directory for command execution when no per-command `cwd` is given. A per-command `cwd` always wins. Use an absolute path.',
+    isOptional: true,
+  },
+  {
+    name: 'timeout',
+    type: 'number',
+    description:
+      'Default command execution timeout in milliseconds. Overridable per call via ExecuteCommandOptions.timeout.',
+    isOptional: true,
+  },
+  {
+    name: 'instructions',
+    type: 'string | ((opts: { defaultInstructions: string; requestContext?: RequestContext }) => string)',
+    description:
+      'Custom instructions returned by getInstructions(). A string fully replaces the defaults; a function receives the defaults and can extend or customize them per-request.',
+    isOptional: true,
+  },
+  {
+    name: 'id',
+    type: 'string',
+    description:
+      "Unique identifier for this sandbox instance. Sent to the platform as an advisory recovery key: if the platform recognizes the id from a previous sandbox, the new sandbox boots from that sandbox's most recent checkpoint instead of the base recipe. Unknown ids fall through to a fresh sandbox. Auto-generated when omitted, which disables checkpoint recovery.",
+    isOptional: true,
+    defaultValue: 'Auto-generated',
+  },
+  {
+    name: 'fetch',
+    type: 'typeof fetch',
+    description: 'Custom fetch implementation, mainly for testing.',
+    isOptional: true,
+  },
+]}
+/>
+
+## Properties
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Sandbox instance identifier.',
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description: "Provider name ('PlatformSandbox').",
+  },
+  {
+    name: 'provider',
+    type: 'string',
+    description: "Provider identifier ('platform').",
+  },
+  {
+    name: 'status',
+    type: 'ProviderStatus',
+    description:
+      "'pending' | 'initializing' | 'ready' | 'starting' | 'running' | 'stopping' | 'stopped' | 'destroying' | 'destroyed' | 'error'.",
+  },
+  {
+    name: 'processes',
+    type: 'PlatformProcessManager',
+    description:
+      'Background process manager. See [SandboxProcessManager reference](/reference/workspace/process-manager).',
+  },
+  {
+    name: 'templatePending',
+    type: '{ templateId: string; retryAfterMs: number } | undefined',
+    description:
+      'Set when the running sandbox booted from a fallback template (same-lineage stale or provider base) while the exact template continues to build in the background. Undefined when the sandbox booted from the exact template. Observability only — PlatformSandbox does not re-execute template operations; reconcile filesystem state in your own runtime setup.',
+  },
+]}
+/>
+
+## Methods
+
+<PropertiesTable
+  content={[
+  {
+    name: 'start',
+    type: '() => Promise<SandboxStartResult>',
+    description:
+      'Provision the remote sandbox, or reattach when sandboxId was passed to the constructor. Idempotent once the sandbox is running. A destroyed reattach target falls through to a fresh provision.',
+  },
+  {
+    name: 'destroy',
+    type: '() => Promise<void>',
+    description:
+      'Tear down the remote sandbox and clear the cached exec lease. A subsequent start() provisions a fresh sandbox (or restores from checkpoint when a stable id is set).',
+  },
+  {
+    name: 'stop',
+    type: '() => Promise<void>',
+    description: 'Alias for destroy().',
+  },
+  {
+    name: 'executeCommand',
+    type: '(command: string, args?: string[], options?: ExecuteCommandOptions) => Promise<CommandResult>',
+    description:
+      'Run a command on the remote sandbox and return its stdout, stderr, exitCode, and executionTimeMs. command is a shell string, args are safely shell-quoted.',
+  },
+  {
+    name: 'clone',
+    type: '(options?: SandboxCloneOptions) => PlatformSandbox',
+    description:
+      'Construct an unstarted sibling PlatformSandbox that inherits credentials, provider, template, and defaults with per-instance overrides (id, sandboxId, env, idleTimeoutMinutes). Performs no I/O. Use to build a fleet of independent sandboxes from one configured template.',
+  },
+  {
+    name: 'snapshot',
+    type: '() => Promise<void>',
+    description:
+      'Capture the configured recovery checkpoint immediately. Resolves without work when no caller-provided id exists or the sandbox is not running.',
+  },
+  {
+    name: 'getInfo',
+    type: '() => Promise<SandboxInfo>',
+    description:
+      "Return the sandbox's platform id, provider, status, createdAt, and metadata (sandboxId, providerResourceId, platformStatus).",
+  },
+  {
+    name: 'getInstructions',
+    type: '(opts?: { requestContext?: RequestContext }) => string',
+    description:
+      'Return the sandbox instructions the workspace surfaces in tool descriptions. Honors the instructions constructor option; otherwise returns platform-default instructions that include the current remote sandbox id when running.',
+  },
+]}
+/>
+
+## Errors
+
+Platform API failures raise `PlatformApiError`. Structured `{ error: { message, type } }` responses are parsed into `.code` (machine-readable kind) and `.proxyMessage` (human string); the raw response body stays available on `.body`:
+
+```typescript
+import { PlatformApiError } from '@mastra/platform-workspace'
+
+try {
+  await sandbox.executeCommand('cat', ['/missing.txt'])
+} catch (err) {
+  if (err instanceof PlatformApiError) {
+    if (err.code === 'not_found') {
+      // handle missing resource
+    } else if (err.code === 'authentication_error') {
+      // refresh token
+    }
+    console.error(err.status, err.code, err.proxyMessage)
+  }
+}
+```
+
+`code` and `proxyMessage` are `undefined` when the response body isn't JSON, for example an HTML 502 from a load balancer.
+
+`executeCommand` runs over the direct-exec data plane (a WebSocket to the Railway tcp-proxy) and can also throw two typed sandbox errors on unrecoverable failure:
+
+```typescript
+import { SandboxDestroyedError, SandboxExecTransportError } from '@mastra/platform-workspace'
+
+try {
+  await sandbox.executeCommand('pytest')
+} catch (err) {
+  if (err instanceof SandboxDestroyedError) {
+    // /exec-lease returned 410; the sandbox has been destroyed.
+    // The cached sandbox id and lease have already been cleared,
+    // so reusing the instance will reprovision on the next call.
+  } else if (err instanceof SandboxExecTransportError) {
+    // Both the initial WebSocket attempt and the built-in retry
+    // closed without an exit frame against a live sandbox.
+    console.error(err.closeCode, err.closeReason, err.wsEndpoint)
+  }
+}
+```
+
+`SandboxExecTransportError` carries diagnostic fields (`opened`, `closeCode`, `closeReason`, `wsEndpoint`, plus `sandboxId`, `command`, and `attempts`) so operators can distinguish a broken Railway data plane from a failed command.
+
+## Related
+
+- [PlatformFilesystem reference](/reference/workspace/platform-filesystem)
+- [RailwaySandbox reference](/integrations/sandboxes/railway)
+- [WorkspaceSandbox interface](/reference/workspace/sandbox)
+- [SandboxProcessManager reference](/reference/workspace/process-manager)

@@ -16,6 +16,7 @@ export {
   mastraChannelInstallationsTable,
   mastraChannelConfigTable,
   mastraBackgroundTasksTable,
+  mastraObservationalMemoryTable,
   mastraVectorIndexesTable,
   mastraVectorsTable,
   defineMastraNativeVectorTable,
@@ -34,4 +35,5 @@ export {
   TABLE_CHANNEL_INSTALLATIONS,
   TABLE_CHANNEL_CONFIG,
   TABLE_BACKGROUND_TASKS,
+  TABLE_OBSERVATIONAL_MEMORY,
 } from '../schema';

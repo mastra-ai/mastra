@@ -16,6 +16,7 @@ import OperatorsTable from '@site/src/components/OperatorsTable'
 import PropertiesTable from '@site/src/components/PropertiesTable'
 import ProviderModelsTable from '@site/src/components/ProviderModelsTable'
 import YouTube from '@site/src/components/YouTube-player'
+import { Inject } from '@site/src/components/inject'
 import type { MDXComponentsObject } from '@theme/MDXComponents'
 
 const MDXComponents: MDXComponentsObject = {
@@ -43,6 +44,7 @@ const MDXComponents: MDXComponentsObject = {
   ProviderModelsTable,
   PropertiesTable,
   YouTube,
+  Inject,
 }
 
 export default MDXComponents

@@ -238,5 +238,64 @@ describe('tsconfig-paths plugin', () => {
       expect(result.output[0].code).not.toContain(`'~/utils/build-flags.js'`);
       expect(result.output[0].code).toContain('Mastra');
     });
+
+    it('should not externalize @mastra/server imports from aliased modules', async () => {
+      const tsConfigPath = join(tempDir, 'tsconfig.json');
+      fs.writeFileSync(
+        tsConfigPath,
+        JSON.stringify({
+          compilerOptions: {
+            baseUrl: '.',
+            paths: {
+              '@/*': ['src/*'],
+            },
+          },
+        }),
+      );
+
+      const srcDir = join(tempDir, 'src');
+      fs.mkdirSync(srcDir, { recursive: true });
+      const indexFile = join(srcDir, 'index.ts');
+      const routeFile = join(srcDir, 'route.ts');
+      const internalFile = join(srcDir, 'internal.ts');
+      const serverAdapterFile = join(tempDir, 'server-adapter.ts');
+
+      fs.writeFileSync(
+        indexFile,
+        `import { route } from '@/route';\nimport { internal } from './internal.ts';\nconsole.log(route, internal);`,
+      );
+      fs.writeFileSync(
+        routeFile,
+        `import { createRoute } from '@mastra/server/server-adapter';\nexport const route = createRoute('route');`,
+      );
+      fs.writeFileSync(
+        internalFile,
+        `import { createRoute } from '@mastra/server/server-adapter';\nexport const internal = createRoute('internal');`,
+      );
+      fs.writeFileSync(serverAdapterFile, `export const createRoute = value => 'created:' + value;`);
+
+      const bundle = await rollup({
+        logLevel: 'silent',
+        input: indexFile,
+        plugins: [
+          {
+            name: 'server-adapter-resolver',
+            resolveId: {
+              order: 'pre',
+              handler(id) {
+                if (id === '@mastra/server/server-adapter') {
+                  return serverAdapterFile;
+                }
+              },
+            },
+          },
+          tsConfigPaths({ tsConfigPath, localResolve: true }),
+        ],
+      });
+
+      const result = await bundle.generate({ format: 'esm' });
+      expect(result.output[0].code).toContain('created:');
+      expect(result.output[0].imports).not.toContain(serverAdapterFile);
+    });
   });
 });

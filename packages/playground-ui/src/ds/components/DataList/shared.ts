@@ -3,43 +3,68 @@
  * chain — applied to `DataList.RowButton` / `DataList.RowLink` when used
  * standalone, and to `DataList.RowWrapper` when used as a shell around them.
  *
- * Contains the `.data-list-row` marker class (used by the sibling-aware
- * separator rules), the full-width separator treatment, and rounded corners.
+ * Carries the `.data-list-row` marker class the root styles target.
  */
 export const dataListRowOuterStyles = [
-  'data-list-row col-span-full relative mt-[3px] mb-1',
-  'after:absolute after:inset-x-[-0.25rem] after:bottom-[-0.25rem] after:h-px after:bg-border1 after:content-[""] after:pointer-events-none',
-  '[&:has(+.data-list-subheader)]:after:hidden [&:not(:has(~.data-list-row))]:after:hidden',
-  'transition-colors duration-200 rounded-lg',
+  'group/data-list-row data-list-row col-span-full relative min-h-9 bg-surface2',
+  'transition-colors duration-200',
 ] as const;
 
+/**
+ * Interactive state fills for the outer row element. Applied to standalone
+ * `RowButton` / `RowLink` and to `RowWrapper`. The `has-*` forms let a wrapper
+ * mirror the tone of the interactive row nested inside it.
+ */
+export const dataListRowStateStyles = [
+  'hover:bg-surface3 active:bg-surface4',
+  'focus-visible:bg-surface3 has-focus-visible:bg-surface3',
+  'data-featured:bg-surface3 has-data-featured:bg-surface3 has-data-selected:bg-surface3',
+  'data-featured:hover:bg-surface4 has-data-featured:hover:bg-surface4 has-data-selected:hover:bg-surface4',
+  'data-[variant=error]:bg-notice-destructive/10 has-data-[variant=error]:bg-notice-destructive/10',
+] as const;
+
+/**
+ * Layout and focus for the interactive element. The background lives on the
+ * outer row element so it sits inside the root surface.
+ */
 export const dataListRowInteractiveStyles = [
-  'grid grid-cols-subgrid gap-8 px-5 outline-none cursor-pointer',
-  'hover:bg-surface4 focus-visible:bg-surface4 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-accent1',
-  'transition-colors duration-200 rounded-lg',
+  'grid grid-cols-subgrid gap-4 px-3 cursor-pointer',
+  'outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-accent1',
 ] as const;
 
-export const dataListRowStyles = ['mx-1', ...dataListRowInteractiveStyles, ...dataListRowOuterStyles] as const;
+export const dataListRowStyles = [
+  ...dataListRowInteractiveStyles,
+  ...dataListRowOuterStyles,
+  ...dataListRowStateStyles,
+] as const;
 
-export const dataListRowStaticStyles = ['mx-1 grid grid-cols-subgrid gap-8 px-5', ...dataListRowOuterStyles] as const;
+export const dataListRowStaticStyles = ['grid grid-cols-subgrid gap-4 px-3', ...dataListRowOuterStyles] as const;
+
+/**
+ * Row actions that stay out of the way until the row is hovered or focused.
+ * Opacity, not display, so the column keeps its width and nothing shifts. A
+ * coarse pointer never hovers, so there they stay visible — hidden controls
+ * that still take taps would be worse than no reveal at all.
+ */
+export const dataListRowActionRevealStyles =
+  'opacity-0 pointer-coarse:opacity-100 group-focus-within/data-list-row:opacity-100 group-hover/data-list-row:opacity-100';
+
+export type DataListSticky = 'start';
+
+export const dataListStickyStartStyles = [
+  'data-list-sticky-start sticky left-0 z-10 isolate self-stretch overflow-visible',
+] as const;
+
+/** Tone for a single row. Exposed as `data-variant`; `error` tints the row. */
+export type DataListRowVariant = 'default' | 'error';
 
 /**
  * Layout/state modifiers shared by interactive row primitives
  * (`DataList.RowButton`, `DataList.RowLink`).
  */
 export type DataListRowSharedProps = {
-  /**
-   * Drop the row's default left margin. Use when the row is wrapped in a
-   * `DataList.RowWrapper` that owns the leading inset (e.g. for selection rows where
-   * the checkbox cell sits on the left).
-   */
-  flushLeft?: boolean;
-  /**
-   * Drop the row's default right margin. Use when the row is wrapped in a
-   * `DataList.RowWrapper` that owns the trailing inset (e.g. for rows with a
-   * trailing actions cell on the right).
-   */
-  flushRight?: boolean;
+  /** Row tone — exposed on the element as `data-variant`. */
+  variant?: DataListRowVariant;
   /**
    * Place the row starting at this column line. Defaults to column 1. Use
    * when the row sits beside a leading cell that owns column 1.
@@ -52,8 +77,27 @@ export type DataListRowSharedProps = {
    */
   colEnd?: number;
   /**
-   * Apply the highlighted background. Use to mark the row that is currently
-   * featured (e.g. the row whose detail is open in a side panel).
+   * Mark the row as featured (e.g. the row whose detail is open in a side
+   * panel). Exposed on the element as `data-featured` and tints the row.
    */
   featured?: boolean;
 };
+
+/** Split a grid-template-columns string on top-level whitespace only, so `minmax(0, 10rem)` stays one track. */
+export function splitColumns(columns: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let current = '';
+  for (const char of columns) {
+    if (char === '(') depth++;
+    if (char === ')') depth--;
+    if (/\s/.test(char) && depth === 0) {
+      if (current) parts.push(current);
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  if (current) parts.push(current);
+  return parts;
+}

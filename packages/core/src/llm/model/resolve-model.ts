@@ -1,11 +1,12 @@
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import type { LanguageModelV3 } from '@ai-sdk/provider-v6';
-import type { LanguageModelV1 } from '@internal/ai-sdk-v4';
+import type { LanguageModelV4 } from '@ai-sdk/provider-v7';
 import type { Mastra } from '../../mastra';
 import { RequestContext } from '../../request-context';
 import { AISDKV4LegacyLanguageModel } from './aisdk/v4/model';
 import { AISDKV5LanguageModel } from './aisdk/v5/model';
 import { AISDKV6LanguageModel } from './aisdk/v6/model';
+import { AISDKV7LanguageModel } from './aisdk/v7/model';
 import { ModelRouterLanguageModel } from './router';
 import type {
   MastraModelConfig,
@@ -29,13 +30,16 @@ export function isOpenAICompatibleObjectConfig(
         mastra?: Mastra;
       }) => MastraModelConfig | Promise<MastraModelConfig>),
 ): modelConfig is OpenAICompatibleConfig {
-  if (typeof modelConfig === 'object' && 'specificationVersion' in modelConfig) return false;
+  if (modelConfig === null || typeof modelConfig !== 'object') return false;
+  if ('specificationVersion' in modelConfig) return false;
   // Check for OpenAICompatibleConfig - it should have either:
   // 1. 'id' field (but NOT 'model' - that's ModelWithRetries)
   // 2. Both 'providerId' and 'modelId' fields
-  if (typeof modelConfig === 'object' && !('model' in modelConfig)) {
-    if ('id' in modelConfig) return true;
-    if ('providerId' in modelConfig && 'modelId' in modelConfig) return true;
+  if (!('model' in modelConfig)) {
+    if ('providerId' in modelConfig && 'modelId' in modelConfig) {
+      return typeof modelConfig.providerId === 'string' && typeof modelConfig.modelId === 'string';
+    }
+    if ('id' in modelConfig) return typeof modelConfig.id === 'string';
   }
   return false;
 }
@@ -94,31 +98,35 @@ export async function resolveModelConfig(
     modelConfig instanceof ModelRouterLanguageModel ||
     modelConfig instanceof AISDKV4LegacyLanguageModel ||
     modelConfig instanceof AISDKV5LanguageModel ||
-    modelConfig instanceof AISDKV6LanguageModel
+    modelConfig instanceof AISDKV6LanguageModel ||
+    modelConfig instanceof AISDKV7LanguageModel
   ) {
     return modelConfig;
   }
 
   // If it's already a LanguageModel, wrap it with the appropriate wrapper
-  if (typeof modelConfig === 'object' && 'specificationVersion' in modelConfig) {
+  if (modelConfig !== null && typeof modelConfig === 'object' && 'specificationVersion' in modelConfig) {
     if (modelConfig.specificationVersion === 'v2') {
       return new AISDKV5LanguageModel(modelConfig as LanguageModelV2);
     }
     if (modelConfig.specificationVersion === 'v3') {
       return new AISDKV6LanguageModel(modelConfig as LanguageModelV3);
     }
+    if (modelConfig.specificationVersion === 'v4') {
+      return new AISDKV7LanguageModel(modelConfig as LanguageModelV4);
+    }
     if (modelConfig.specificationVersion === 'v1') {
       // Wrap legacy v1 models so the underlying SDK client (and any
       // enumerable config) does not leak into observability spans.
-      return new AISDKV4LegacyLanguageModel(modelConfig as LanguageModelV1);
+      return new AISDKV4LegacyLanguageModel(modelConfig);
     }
     // Unknown specificationVersion from a third-party provider (e.g. ollama-ai-provider-v2).
     // If the model has doStream/doGenerate methods, wrap it as a modern model
     // to prevent the stream()/streamLegacy() catch-22 where neither method accepts the model.
     if (typeof (modelConfig as any).doStream === 'function' && typeof (modelConfig as any).doGenerate === 'function') {
-      return new AISDKV5LanguageModel(modelConfig as LanguageModelV2);
+      return new AISDKV5LanguageModel(modelConfig as unknown as LanguageModelV2);
     }
-    return modelConfig;
+    return modelConfig as MastraLanguageModel;
   }
 
   const gatewayRecord = mastra?.listGateways();

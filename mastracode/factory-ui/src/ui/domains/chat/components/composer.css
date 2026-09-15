@@ -1,0 +1,147 @@
+@reference '../../../tailwind.css';
+
+/* Session modes share one color token between labels and the composer glow.
+ * Mode values stay in CSS so components only select a semantic mode class. */
+.chat-mode-build {
+  --chat-mode-color: #087a32;
+}
+
+.chat-mode-plan {
+  --chat-mode-color: #6d28d9;
+}
+
+.chat-mode-fast {
+  --chat-mode-color: #8a4400;
+}
+
+@variant dark {
+  .chat-mode-build {
+    --chat-mode-color: #4ade80;
+  }
+
+  .chat-mode-plan {
+    --chat-mode-color: #c4b5fd;
+  }
+
+  .chat-mode-fast {
+    --chat-mode-color: #fdba74;
+  }
+}
+
+.chat-mode-text {
+  color: var(--chat-mode-color, var(--neutral4));
+}
+
+/* The composer sits one step off the page in the dark theme, and stays the plain
+ * white card in the light one, where a raised surface reads as dirty. The 1px
+ * inner shade along its top edge is what makes it sit in the page. */
+:root {
+  --composer-surface: var(--surface4);
+  --composer-edge: oklch(0% 0 0deg / 18%);
+  --composer-ring-edge: color-mix(in oklab, var(--neutral1) 40%, transparent);
+}
+
+html.light {
+  --composer-surface: var(--surface3);
+  --composer-edge: transparent;
+  /* Light keeps the design system's own edge. */
+  --composer-ring-edge: initial;
+}
+
+.composer-spotlight {
+  --composer-spotlight: var(--chat-mode-color, var(--accent1));
+  --composer-spotlight-x: 50%;
+  --composer-spotlight-y: 50%;
+  --composer-spotlight-strength: 0;
+}
+
+/* The ring owns the edge and the mode colour; the box keeps only its glow. */
+.composer-ring {
+  --composer-ring-color: var(--chat-mode-color, var(--accent1));
+}
+
+/* Spotlight owns idle, spinning ring owns the run — never both at once. */
+.composer-ring[data-busy='true'] .composer-spotlight {
+  --composer-spotlight-strength: 0;
+}
+
+/* A directional inset shadow paints nothing where the edge runs vertical, so the
+ * lip dies before the corners. A full inner ring traces the whole curve; the mask
+ * keeps only its lit half. */
+.composer-spotlight-surface::after {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px var(--composer-edge);
+  mask-image: linear-gradient(to bottom, #000, transparent 45%);
+  content: '';
+}
+
+.composer-spotlight::before,
+.composer-spotlight-surface::before {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    200px circle at var(--composer-spotlight-x) var(--composer-spotlight-y),
+    color-mix(in srgb, var(--composer-spotlight) 80%, transparent),
+    transparent 75%
+  );
+  filter: blur(12px);
+  opacity: var(--composer-spotlight-strength);
+  transition: opacity 200ms;
+  content: '';
+}
+
+.composer-spotlight::before {
+  z-index: 0;
+  border-radius: inherit;
+}
+
+/* A directional inset shadow paints nothing where the edge runs vertical, so the
+ * lip dies before the corners. A full inner ring traces the whole curve; the mask
+ * keeps only its lit half. */
+.composer-spotlight-surface::after {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px var(--composer-edge);
+  mask-image: linear-gradient(to bottom, #000, transparent 45%);
+  content: '';
+}
+
+.composer-spotlight-surface::before {
+  background: radial-gradient(
+    200px circle at var(--composer-spotlight-x) var(--composer-spotlight-y),
+    color-mix(in srgb, var(--composer-spotlight) 5%, transparent),
+    transparent 75%
+  );
+}
+
+@media (hover: hover) {
+  .composer-spotlight:hover {
+    --composer-spotlight-strength: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .composer-spotlight::before,
+  /* A directional inset shadow paints nothing where the edge runs vertical, so the
+ * lip dies before the corners. A full inner ring traces the whole curve; the mask
+ * keeps only its lit half. */
+.composer-spotlight-surface::after {
+    pointer-events: none;
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    box-shadow: inset 0 0 0 1px var(--composer-edge);
+    mask-image: linear-gradient(to bottom, #000, transparent 45%);
+    content: '';
+  }
+
+  .composer-spotlight-surface::before {
+    transition: none;
+  }
+}

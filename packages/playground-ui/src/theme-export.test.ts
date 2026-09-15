@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 // Guards the @mastra/playground-ui/theme.css contract: it must ship as RAW,
 // uncompiled CSS (with the `@theme {}` directive intact) so a consumer's own
 // Tailwind v4 compiler can read the tokens and generate the design-system
-// utilities. If it were compiled (e.g. pointed at dist/index.css), the @theme
+// utilities. If it were compiled (e.g. pointed at dist/style.css), the @theme
 // directive would be stripped and consumers could no longer generate utilities.
 const pkgRoot = resolve(__dirname, '..');
 const pkg = JSON.parse(readFileSync(resolve(pkgRoot, 'package.json'), 'utf8'));

@@ -34,7 +34,8 @@ jobs:
     outputs:
       stores: ${{ steps.set-stores.outputs.stores }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 20
         with:
           ref: ${{ inputs.head_sha }}
           persist-credentials: false
@@ -85,7 +86,8 @@ jobs:
       TURBO_CACHE: remote:r
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 20
         with:
           ref: ${{ inputs.head_sha }}
           persist-credentials: false

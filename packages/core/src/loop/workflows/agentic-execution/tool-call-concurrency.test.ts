@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   effectiveToolSetRequiresSequentialExecution,
+  normalizeToolCallConcurrency,
   resolveConfiguredToolCallConcurrency,
   resolveToolCallConcurrency,
 } from './tool-call-concurrency';
@@ -72,6 +73,20 @@ describe('tool call concurrency resolution', () => {
     ).toBe(false);
   });
 
+  it('keeps parallel tool calls concurrent when unrelated available tools can suspend', () => {
+    expect(
+      resolveToolCallConcurrency({
+        tools: {
+          subagent: safeTool,
+          ask_user: suspendTool,
+          submit_plan: suspendTool,
+        },
+        activeTools: ['subagent'],
+        configuredConcurrency: 4,
+      }),
+    ).toBe(4);
+  });
+
   it('ignores unknown active tool names', () => {
     expect(
       effectiveToolSetRequiresSequentialExecution({
@@ -113,5 +128,88 @@ describe('tool call concurrency resolution', () => {
     expect(resolveConfiguredToolCallConcurrency(0)).toBe(10);
     expect(resolveConfiguredToolCallConcurrency(-1)).toBe(10);
     expect(resolveConfiguredToolCallConcurrency(3)).toBe(3);
+  });
+
+  it('normalizes the object form and defaults the strategy to available', () => {
+    expect(normalizeToolCallConcurrency(5)).toEqual({ limit: 5, strategy: 'available' });
+    expect(normalizeToolCallConcurrency(undefined)).toEqual({ limit: 10, strategy: 'available' });
+    expect(normalizeToolCallConcurrency({ limit: 8 })).toEqual({ limit: 8, strategy: 'available' });
+    expect(normalizeToolCallConcurrency({ limit: 8, strategy: 'called' })).toEqual({ limit: 8, strategy: 'called' });
+    expect(normalizeToolCallConcurrency({ limit: 0, strategy: 'called' })).toEqual({ limit: 10, strategy: 'called' });
+  });
+
+  describe("strategy: 'called'", () => {
+    it('parallelizes a pure-safe batch even when an approval tool is available', () => {
+      expect(
+        resolveToolCallConcurrency({
+          tools: {
+            safe: safeTool,
+            approval: approvalTool,
+          },
+          activeTools: ['safe', 'approval'],
+          configuredConcurrency: 4,
+          strategy: 'called',
+          calledToolNames: ['safe'],
+        }),
+      ).toBe(4);
+    });
+
+    it('serializes a batch that actually called a suspend tool', () => {
+      expect(
+        resolveToolCallConcurrency({
+          tools: {
+            safe: safeTool,
+            suspend: suspendTool,
+          },
+          activeTools: ['safe', 'suspend'],
+          configuredConcurrency: 4,
+          strategy: 'called',
+          calledToolNames: ['safe', 'suspend'],
+        }),
+      ).toBe(1);
+    });
+
+    it('serializes a batch that actually called an approval tool', () => {
+      expect(
+        resolveToolCallConcurrency({
+          tools: {
+            safe: safeTool,
+            approval: approvalTool,
+          },
+          activeTools: ['safe', 'approval'],
+          configuredConcurrency: 4,
+          strategy: 'called',
+          calledToolNames: ['approval'],
+        }),
+      ).toBe(1);
+    });
+
+    it('still forces sequential when run-wide requireToolApproval is set', () => {
+      expect(
+        resolveToolCallConcurrency({
+          requireToolApproval: true,
+          tools: {
+            safe: safeTool,
+          },
+          activeTools: ['safe'],
+          configuredConcurrency: 4,
+          strategy: 'called',
+          calledToolNames: ['safe'],
+        }),
+      ).toBe(1);
+    });
+
+    it('does not force sequential when no called tool names are provided', () => {
+      expect(
+        effectiveToolSetRequiresSequentialExecution({
+          tools: {
+            safe: safeTool,
+            approval: approvalTool,
+          },
+          activeTools: ['safe', 'approval'],
+          strategy: 'called',
+        }),
+      ).toBe(false);
+    });
   });
 });

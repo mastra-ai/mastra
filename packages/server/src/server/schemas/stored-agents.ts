@@ -132,10 +132,15 @@ const skillConfigSchema = z.object({
 /** Skills config: skill IDs mapped to per-skill config */
 const skillsConfigSchema = z.record(z.string(), skillConfigSchema);
 
-/** Workspace reference: either a stored workspace ID or an inline config */
+/** Workspace reference: a stored workspace ID, inline config, or a registered workspace provider */
 const workspaceRefSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('id'), workspaceId: z.string() }),
   z.object({ type: z.literal('inline'), config: workspaceSnapshotConfigSchema }),
+  z.object({
+    type: z.literal('provider'),
+    provider: z.string().describe('Workspace provider identifier'),
+    config: z.record(z.string(), z.unknown()).describe('Provider-specific configuration'),
+  }),
 ]);
 
 /** Screencast options for streaming browser frames */
@@ -177,6 +182,7 @@ const processorPhaseSchema = z.enum([
   'processOutputStream',
   'processOutputResult',
   'processOutputStep',
+  'processToolResult',
 ]);
 
 /**
@@ -246,6 +252,20 @@ const storedProcessorGraphSchema = z.object({
  * Fields that support conditional variants (StorageConditionalField) can be either
  * a static value OR an array of { value, rules? } variants evaluated at request time.
  */
+/**
+ * Serializable durable-execution opt-in. Mirrors `StorageDurableConfig`:
+ * `cache`/`pubsub` are live runtime objects and cannot be persisted, so they are
+ * not accepted here. Intentionally not a conditional field — durability is
+ * decided when the agent is registered, not per request.
+ */
+const durableConfigSchema = z.union([
+  z.boolean(),
+  z.object({
+    maxSteps: z.number().int().positive().optional(),
+    cleanupTimeoutMs: z.number().int().nonnegative().optional(),
+  }),
+]);
+
 const snapshotConfigSchema = z.object({
   name: z.string().describe('Name of the agent'),
   description: z.string().optional().describe('Description of the agent'),
@@ -302,6 +322,11 @@ const snapshotConfigSchema = z.object({
     .record(z.string(), z.unknown())
     .optional()
     .describe('JSON Schema defining valid request context variables for conditional rule evaluation'),
+  durable: durableConfigSchema
+    .optional()
+    .describe(
+      'Opt this agent into durable execution when it is hydrated. Cache and pubsub are inherited from the Mastra instance; without distributed backends durability is process-local. Does not enable automatic recovery — that stays `recovery.durableAgents`.',
+    ),
 });
 
 /**
@@ -343,6 +368,14 @@ export const createStoredAgentBodySchema = z
       .enum(['private', 'public'])
       .optional()
       .describe('Agent visibility: private (owner/admin only) or public (any reader)'),
+    autoPublish: z
+      .boolean()
+      .optional()
+      .describe(
+        'Publish the initial version so the agent resolves at status="published". Defaults to true when omitted. ' +
+          'Pass false to stage the agent as an unpublished draft — useful when overriding a code-defined agent, ' +
+          'whose code definition keeps serving traffic until the override is published.',
+      ),
   })
   .merge(snapshotConfigCreateSchema);
 
@@ -370,9 +403,19 @@ export const updateStoredAgentBodySchema = agentMetadataSchema
       .max(500)
       .optional()
       .describe('Optional message describing the changes for the auto-created version'),
+    autoPublish: z
+      .boolean()
+      .optional()
+      .describe('Immediately activate the auto-created version. Defaults to false when omitted.'),
   });
 
 export const exportStoredAgentBodySchema = snapshotConfigUpdateSchema.partial();
+
+export const openStoredAgentChangeRequestBodySchema = exportStoredAgentBodySchema.extend({
+  changeMessage: z.string().trim().max(500).optional(),
+  userName: z.string().trim().min(1).max(120).optional(),
+  inspectOnly: z.boolean().optional(),
+});
 
 // ============================================================================
 // Response Schemas
@@ -464,6 +507,7 @@ export const storedAgentSchema = z.object({
     .record(z.string(), z.unknown())
     .optional()
     .describe('JSON Schema defining valid request context variables'),
+  durable: durableConfigSchema.optional().describe('Whether this agent is hydrated with durable execution enabled'),
 });
 
 /**
@@ -541,6 +585,12 @@ export const exportStoredAgentResponseSchema = z.object({
   fileName: z.string(),
   content: z.string(),
   config: z.record(z.string(), z.unknown()),
+});
+
+export const openStoredAgentChangeRequestResponseSchema = z.object({
+  id: z.union([z.string(), z.number()]).optional(),
+  url: z.string(),
+  ref: z.string().optional(),
 });
 
 // ============================================================================

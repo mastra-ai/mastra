@@ -18,7 +18,7 @@ Here's a quick start to run the docs locally
   pnpm run dev
   ```
 
-## Optional: Linting
+## Linting
 
 ### Remark
 
@@ -36,12 +36,6 @@ Vale is a syntax-aware linter for prose that can help enforce style and grammar 
 
    ```bash
    pnpm run vale:download
-   ```
-
-1. Install `mdx2vast` globally, which is a dependency for Vale to lint MDX files:
-
-   ```bash
-   npm install -g mdx2vast
    ```
 
 1. Then you can run the Vale linter:

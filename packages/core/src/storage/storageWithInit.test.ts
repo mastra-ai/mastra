@@ -1,5 +1,8 @@
 import { it, expect, vi, describe } from 'vitest';
+import { MastraCompositeStore } from './base';
 import type { MastraStorage } from './base';
+import { InMemoryDB } from './domains/inmemory-db';
+import { InMemoryKnowledgeStorage } from './domains/knowledge';
 import { augmentWithInit } from './storageWithInit';
 
 describe('augmentWithInit', () => {
@@ -14,6 +17,17 @@ describe('augmentWithInit', () => {
     await augmentedStorage.listMessages({ threadId: '1' });
 
     expect(mockStorage.init).toHaveBeenCalled();
+  });
+
+  it('initializes a knowledge domain before returning it on first use', async () => {
+    const knowledge = new InMemoryKnowledgeStorage({ db: new InMemoryDB() });
+    const knowledgeInitSpy = vi.spyOn(knowledge, 'init');
+    const composite = augmentWithInit(new MastraCompositeStore({ id: 'knowledge-composite', domains: { knowledge } }));
+
+    const initializedKnowledge = await composite.getStore('knowledge');
+
+    expect(initializedKnowledge).toBe(knowledge);
+    expect(knowledgeInitSpy).toHaveBeenCalledOnce();
   });
 
   it("shouln't double augment the storage", async () => {
@@ -161,21 +175,35 @@ describe('augmentWithInit', () => {
     }
   });
 
-  it('supports sync init implementations when auto-init runs before sync methods', async () => {
-    const init = vi.fn();
+  it('keeps internal housekeeping methods synchronous without initializing storage', () => {
+    const init = vi.fn().mockRejectedValue(new Error('database unavailable'));
+    const registerMastra = vi.fn();
     const setLogger = vi.fn();
+    const setRawConfig = vi.fn();
     const mockStorage = {
       init,
+      __registerMastra: registerMastra,
       __setLogger: setLogger,
+      __setRawConfig: setRawConfig,
       disableInit: false,
     } as unknown as MastraStorage;
 
     const augmentedStorage = augmentWithInit(mockStorage);
+    const mastra = {};
+    const logger = { child: vi.fn() };
+    const rawConfig = {};
 
-    await augmentedStorage.__setLogger({ child: vi.fn() } as any);
+    const registerResult = augmentedStorage.__registerMastra(mastra);
+    const setLoggerResult = augmentedStorage.__setLogger(logger as any);
+    const setRawConfigResult = augmentedStorage.__setRawConfig(rawConfig);
 
-    expect(init).toHaveBeenCalledTimes(1);
-    expect(setLogger).toHaveBeenCalledTimes(1);
+    expect(registerResult).toBeUndefined();
+    expect(setLoggerResult).toBeUndefined();
+    expect(setRawConfigResult).toBeUndefined();
+    expect(registerMastra).toHaveBeenCalledWith(mastra);
+    expect(setLogger).toHaveBeenCalledWith(logger);
+    expect(setRawConfig).toHaveBeenCalledWith(rawConfig);
+    expect(init).not.toHaveBeenCalled();
   });
 
   it('supports explicit init() calls when init is synchronous', async () => {

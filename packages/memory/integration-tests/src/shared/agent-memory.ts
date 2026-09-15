@@ -544,7 +544,7 @@ export async function getAgentMemoryTests({
           ('specificationVersion' in model && ['v2'].includes(model.specificationVersion))
         ) {
           return requestContext.get('model');
-        } else if ('specificationVersion' in model && ['v3'].includes(model.specificationVersion)) {
+        } else if ('specificationVersion' in model && ['v3', 'v4'].includes(model.specificationVersion)) {
           return openaiV6(requestContext.get('model') as string);
         } else {
           return openai(requestContext.get('model') as string);

@@ -1,6 +1,8 @@
-import type { IMastraLogger } from '../../logger';
-import { WorkflowScheduler } from '../../workflows/scheduler/scheduler';
-import type { WorkflowSchedulerConfig } from '../../workflows/scheduler/types';
+import { resolveAgentById } from '../../mastra/resolve-agent';
+import type { ScheduleTarget } from '../../storage/domains/schedules/base';
+import { computeScheduleDefinitionHash } from '../../workflows/scheduler/definition-hash';
+import { Scheduler } from '../../workflows/scheduler/scheduler';
+import type { SchedulerConfig } from '../../workflows/scheduler/types';
 import { MastraWorker } from '../worker';
 import type { WorkerDeps } from '../worker';
 
@@ -9,18 +11,17 @@ import type { WorkerDeps } from '../worker';
  * for due schedules, computes next fire times, and publishes
  * workflow.start events. Does not consume events — only produces them.
  *
- * This is the **single** scheduler code path. The Mastra constructor
- * adds the worker to the default workers list (guarded by
- * `#shouldEnableScheduler()`), and `startWorkers()` initializes it.
+ * This is the **single** scheduler code path. `Mastra.startWorkers()` adds it
+ * when scheduling work exists or the scheduler is explicitly enabled.
  */
 export class SchedulerWorker extends MastraWorker {
   readonly name = 'scheduler';
 
-  #scheduler?: WorkflowScheduler;
-  #config: WorkflowSchedulerConfig;
+  #scheduler?: Scheduler;
+  #config: SchedulerConfig;
   #running = false;
 
-  constructor(config: WorkflowSchedulerConfig = {}) {
+  constructor(config: SchedulerConfig = {}) {
     super();
     this.#config = config;
   }
@@ -39,28 +40,72 @@ export class SchedulerWorker extends MastraWorker {
       return;
     }
 
-    // Bind a workflow-existence predicate so the scheduler can reclaim
-    // schedule rows whose target workflow is no longer registered with
-    // Mastra (e.g. workflow renamed or deleted in code). `getWorkflowById`
-    // throws on miss; we adapt that into a boolean.
+    // Bind a target-existence predicate so the scheduler can reclaim
+    // schedule rows whose target (workflow id or agent id) is no longer
+    // registered with Mastra. `getWorkflowById` / `getAgentById` throw on
+    // miss; we adapt that into a boolean.
     const mastra = this.mastra;
-    const isWorkflowRegistered = mastra
-      ? (workflowId: string) => {
+    const isTargetReady = mastra
+      ? async (target: ScheduleTarget) => {
+          if (target.type === 'workflow') {
+            try {
+              mastra.getWorkflowById(target.workflowId);
+              return true;
+            } catch {
+              return false;
+            }
+          }
+          if (target.type === 'agent') {
+            // Only a *confirmed* miss (registry AND editor agree the agent is
+            // gone) counts toward deletion. A transient editor/storage failure
+            // is treated as ready: the schedule fires, and the execute path
+            // retries resolution and records a failed trigger row without
+            // deleting the schedule. Trade-off: during a sustained editor
+            // outage each due tick publishes a fire that fails at execute
+            // time — noisy, but never destroys a schedule on ambiguity.
+            const resolved = await resolveAgentById(mastra, target.agentId);
+            return resolved.status !== 'missing';
+          }
+          return false;
+        }
+      : undefined;
+
+    // Bind a stale-build fence (#19169): scheduled runs execute `localOnly`
+    // in the claiming process against its own workflow registry, so an
+    // instance whose local step graph differs from the hash recorded on the
+    // schedule row (a straggler from a previous deploy) must not claim the
+    // fire. Fails open for rows without a hash (legacy/imperative
+    // schedules) and for agent targets, which have no step graph.
+    const isTargetCurrent = mastra
+      ? (target: ScheduleTarget) => {
+          if (target.type !== 'workflow' || !target.definitionHash) return true;
           try {
-            mastra.getWorkflowById(workflowId);
-            return true;
+            const workflow = mastra.getWorkflowById(target.workflowId);
+            const localHash = computeScheduleDefinitionHash(workflow.serializedStepGraph);
+            // Unhashable local graph → can't compare, fail open.
+            if (!localHash) return true;
+            return localHash === target.definitionHash;
           } catch {
-            return false;
+            // Missing workflow is the readiness predicate's concern.
+            return true;
           }
         }
       : undefined;
 
-    this.#scheduler = new WorkflowScheduler({
+    // Claim/execute affinity (#19169). Workers receive the *raw* pubsub, not
+    // the `Mastra.pubsub` proxy that tags run-scoped workflow events
+    // `localOnly`, so without this the scheduler's fire always fans out to
+    // every instance on the shared topic. Evaluated per fire rather than
+    // captured here because execution workers can start lazily
+    // (`__ensureExecutionWorkersStarted`) after the scheduler is already up.
+    const canExecuteLocally = mastra ? () => mastra.__hasLocalWorkflowExecution() : undefined;
+
+    this.#scheduler = new Scheduler({
       schedulesStore,
       pubsub: deps.pubsub,
-      config: { ...this.#config, isWorkflowRegistered },
+      config: { ...this.#config, isTargetReady, isTargetCurrent, canExecuteLocally },
     });
-    this.#scheduler.__setLogger(deps.logger as IMastraLogger);
+    this.#scheduler.__setLogger(deps.logger);
 
     // Register declarative schedules from workflow configs before starting
     // the tick loop. This syncs code-declared schedules to the DB.
@@ -94,7 +139,7 @@ export class SchedulerWorker extends MastraWorker {
   }
 
   /** Expose the underlying scheduler for direct API access (e.g., schedule management). */
-  get scheduler(): WorkflowScheduler | undefined {
+  get scheduler(): Scheduler | undefined {
     return this.#scheduler;
   }
 }

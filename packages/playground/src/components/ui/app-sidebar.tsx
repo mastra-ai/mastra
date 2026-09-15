@@ -1,6 +1,10 @@
-import { LogoWithoutText, MainSidebar, cn, useMainSidebar } from '@mastra/playground-ui';
-import type { NavLink } from '@mastra/playground-ui';
-import { Wrench } from 'lucide-react';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
+import { MainSidebar, useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
+import type { NavLink } from '@mastra/playground-ui/components/MainSidebar';
+import { useKeyboardShortcutLabel } from '@mastra/playground-ui/hooks/use-keyboard-shortcut-label';
+import { cn } from '@mastra/playground-ui/utils/cn';
+import { Search, Wrench } from 'lucide-react';
 import { useLocation } from 'react-router';
 import { useAgentBuilderSidebarVisibility } from '@/domains/agent-builder/hooks/use-agent-builder-sidebar-visibility';
 import { AuthStatus } from '@/domains/auth/components/auth-status';
@@ -11,8 +15,12 @@ import { getPermissionForRoute, hasRoutePermission } from '@/domains/auth/route-
 import { isAuthenticated } from '@/domains/auth/types';
 import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
 import { MastraVersionFooter } from '@/domains/configuration/components/mastra-version-footer';
+import { useFeedbackInboxCount } from '@/domains/feedback/hooks/use-feedback';
+import { useInboxDatasetReviewCount } from '@/domains/review/hooks/use-inbox-review-items';
+import { useNavigationCommand } from '@/lib/command';
 import { useLinkComponent } from '@/lib/framework';
 import { useMastraPlatform } from '@/lib/mastra-platform/hooks/use-mastra-platform';
+import { getIsLinkActive } from '@/lib/nav/get-is-link-active';
 import { bottomNav, mainNav } from '@/lib/nav/nav-items';
 import type { NavItem } from '@/lib/nav/nav-items';
 
@@ -28,16 +36,11 @@ function toSidebarLink(item: NavItem): NavLink {
   return { name: item.name, url: item.url, icon: <Icon /> };
 }
 
-function getIsLinkActive(item: NavItem, pathname: string): boolean {
-  // Exact match or sub-path match (with / boundary so sibling routes don't match by prefix)
-  const matches = (url: string) => pathname === url || pathname.startsWith(url + '/');
-  if (matches(item.url)) return true;
-  return item.activePaths?.some(matches) ?? false;
-}
-
 export function AppSidebar() {
   const { Link } = useLinkComponent();
-  const { state, isMobile } = useMainSidebar();
+  const { state, isMobile, setOpenMobile } = useMainSidebar();
+  const { setOpen: setNavigationCommandOpen } = useNavigationCommand({ enableShortcut: false });
+  const commandShortcutLabel = useKeyboardShortcutLabel('K');
 
   const location = useLocation();
   const pathname = location.pathname;
@@ -46,13 +49,25 @@ export function AppSidebar() {
   const { data: authCapabilities } = useAuthCapabilities();
   const { isCmsAvailable, isLoading: isCmsLoading } = useIsCmsAvailable();
   const { hasPermission, hasAnyPermission, isLoading: isPermissionsLoading } = usePermissions();
+  const canReadInbox =
+    !isPermissionsLoading && hasRoutePermission(getPermissionForRoute('/inbox'), hasPermission, hasAnyPermission);
+  const feedbackInboxCountQuery = useFeedbackInboxCount({ enabled: canReadInbox });
+  const datasetReviewCountQuery = useInboxDatasetReviewCount({ enabled: canReadInbox });
+  const hasInboxItems =
+    (feedbackInboxCountQuery.data?.pagination?.total ?? 0) > 0 || (datasetReviewCountQuery.data ?? 0) > 0;
 
   const isUserAuthenticated = authCapabilities && isAuthenticated(authCapabilities);
   const cmsOnlyLinks = new Set(['/prompts']);
   const { isVisible: isAgentBuilderVisible } = useAgentBuilderSidebarVisibility();
   const isAgentBuilderActive = pathname === '/agent-builder' || pathname.startsWith('/agent-builder/');
 
+  const openNavigationCommand = () => {
+    if (isMobile) setOpenMobile(false);
+    setNavigationCommandOpen(true);
+  };
+
   const filterItem = (item: NavItem) => {
+    if (item.hidden) return false;
     if (cmsOnlyLinks.has(item.url) && !isCmsAvailable && !isCmsLoading) return false;
     if (isMastraPlatform && !item.isOnMastraPlatform) return false;
     // While the user's permissions are still loading, hide permission-gated
@@ -78,10 +93,10 @@ export function AppSidebar() {
 
   return (
     <MainSidebar>
-      <div className="pt-3 mb-4">
+      <div className="mb-1.5 pt-2.5">
         {state === 'collapsed' ? (
-          <div className="flex flex-col gap-3 items-center">
-            <div className="relative grid place-items-center size-9">
+          <div className="flex flex-col items-center gap-2">
+            <div className="relative grid size-9 place-items-center">
               <LogoWithoutText
                 className={cn(
                   'h-[1.5rem] w-[1.5rem] shrink-0 transition-opacity duration-150',
@@ -97,10 +112,10 @@ export function AppSidebar() {
             {isUserAuthenticated && <AuthStatus />}
           </div>
         ) : isUserAuthenticated ? (
-          <span className="flex items-center justify-between pl-3 pr-2">
-            <span className="flex items-center gap-2 flex-1 min-w-0">
+          <span className="flex h-7 items-center justify-between pr-2 pl-3">
+            <span className="flex min-w-0 flex-1 items-center gap-2">
               <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
-              <span className="font-display text-sm font-semibold tracking-tight whitespace-nowrap truncate">
+              <span className="font-display text-ui-md truncate font-semibold tracking-tight whitespace-nowrap">
                 Mastra Studio
               </span>
               {!isMobile && <MainSidebar.Trigger />}
@@ -108,9 +123,9 @@ export function AppSidebar() {
             <AuthStatus />
           </span>
         ) : (
-          <span className="flex items-center gap-2 pl-3 pr-2">
+          <span className="flex h-7 items-center gap-2 pr-2 pl-3">
             <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
-            <span className="font-display text-sm font-semibold tracking-tight whitespace-nowrap truncate">
+            <span className="font-display text-ui-md truncate font-semibold tracking-tight whitespace-nowrap">
               Mastra Studio
             </span>
             {!isMobile && <MainSidebar.Trigger />}
@@ -118,8 +133,42 @@ export function AppSidebar() {
         )}
       </div>
 
-      {isAgentBuilderVisible && (
+      {!isMobile && (
         <div className="mb-2">
+          <MainSidebar.NavList>
+            <MainSidebar.NavLink
+              asChild
+              state={state}
+              link={{
+                name: 'Search',
+                url: '#',
+                icon: <Search />,
+              }}
+            >
+              <button
+                type="button"
+                onClick={openNavigationCommand}
+                aria-label="Search and navigate"
+                className="border-border1 bg-surface3 text-neutral5 hover:bg-surface4 hover:text-neutral6 active:bg-surface5 [&_svg]:text-neutral4 [&:hover_svg]:text-neutral5 border"
+              >
+                <Search />
+                <MainSidebar.NavLabel state={state}>Search</MainSidebar.NavLabel>
+                {state !== 'collapsed' && (
+                  <kbd
+                    aria-hidden="true"
+                    className="border-border1 bg-surface4 text-neutral3 text-ui-xs ml-auto rounded border px-1.5 py-0.5 font-mono leading-none"
+                  >
+                    {commandShortcutLabel}
+                  </kbd>
+                )}
+              </button>
+            </MainSidebar.NavLink>
+          </MainSidebar.NavList>
+        </div>
+      )}
+
+      {isAgentBuilderVisible && (
+        <div className="mb-1">
           <MainSidebar.NavList>
             <MainSidebar.NavLink
               LinkComponent={Link}
@@ -157,8 +206,18 @@ export function AppSidebar() {
                     LinkComponent={Link}
                     state={state}
                     link={toSidebarLink(item)}
-                    isActive={getIsLinkActive(item, pathname)}
-                  />
+                    isActive={getIsLinkActive(item, pathname, filtered)}
+                  >
+                    {item.url === '/inbox' && hasInboxItems && state !== 'collapsed' ? (
+                      <Badge
+                        variant="yellow"
+                        size="sm"
+                        indicator="dot"
+                        className="ml-auto"
+                        aria-label="Items need review"
+                      />
+                    ) : null}
+                  </MainSidebar.NavLink>
                 ))}
               </MainSidebar.NavList>
             </MainSidebar.NavSection>
@@ -182,7 +241,7 @@ export function AppSidebar() {
         )}
         {state !== 'collapsed' && (
           <>
-            <div role="separator" aria-orientation="horizontal" className="mx-6 my-2 h-px bg-border1" />
+            <hr className="bg-border1 mx-3 my-2 h-px border-0" />
             <MastraVersionFooter collapsed={false} />
           </>
         )}

@@ -1,4 +1,5 @@
 import type {
+  Client,
   InitializeRequest,
   ModelId,
   NewSessionRequest,
@@ -33,6 +34,12 @@ export type CreateACPToolOptions = {
    * Defaults to auto-selecting the first permission option.
    */
   onPermissionRequest?: (request: RequestPermissionRequest) => Promise<RequestPermissionResponse>;
+  /**
+   * Customize the ACP client used to answer agent requests. Receives the default
+   * client so it can be wrapped or extended, for example with `extMethod` and
+   * `extNotification` handlers for agents that use extension methods.
+   */
+  createClient?: (defaultClient: Client) => Client;
   /** Workspace for the ACP agent process and ACP session. */
   workspace?: Workspace;
   /** Model ID to select after session creation via the ACP `session/set_model` method. */

@@ -1,5 +1,5 @@
 import type { ConnectionOptions } from 'node:tls';
-import type { CreateIndexOptions } from '@mastra/core/storage';
+import type { CreateIndexOptions, RetentionConfig } from '@mastra/core/storage';
 import type { ClientConfig, Pool, PoolConfig } from 'pg';
 
 /**
@@ -8,6 +8,8 @@ import type { ClientConfig, Pool, PoolConfig } from 'pg';
 export interface PostgresBaseConfig {
   id: string;
   schemaName?: string;
+  /** Optional read-replica pool. Falls back to the writer pool when omitted. */
+  readPool?: Pool;
   /**
    * When true, automatic initialization (table creation/migrations) is disabled.
    * This is useful for CI/CD pipelines where you want to:
@@ -57,6 +59,13 @@ export interface PostgresBaseConfig {
    * ```
    */
   indexes?: CreateIndexOptions[];
+  /**
+   * Opt-in, table-granular, age-based retention policies. Declare per-table
+   * `maxAge` per domain (e.g. `{ memory: { messages: { maxAge: '30d' } } }`);
+   * unset tables are kept forever. Wire `storage.prune()` to your own cron to
+   * apply them. See {@link RetentionConfig}.
+   */
+  retention?: RetentionConfig;
 }
 
 /**
@@ -88,7 +97,7 @@ export interface HostConfig extends PostgresBaseConfig {
  */
 export interface PoolInstanceConfig extends PostgresBaseConfig {
   /**
-   * Pre-configured pg.Pool instance.
+   * Pre-configured writer pg.Pool instance.
    * Use this for direct control over the connection pool, or for
    * integration with libraries that expect a pg.Pool.
    *
@@ -103,6 +112,13 @@ export interface PoolInstanceConfig extends PostgresBaseConfig {
    * ```
    */
   pool: Pool;
+  writePool?: never;
+}
+
+/** Pre-configured writer pool using the explicit read/write naming. */
+export interface WritePoolInstanceConfig extends PostgresBaseConfig {
+  writePool: Pool;
+  pool?: never;
 }
 
 /**
@@ -116,6 +132,7 @@ export interface PoolInstanceConfig extends PostgresBaseConfig {
  */
 export type PostgresStoreConfig =
   | PoolInstanceConfig
+  | WritePoolInstanceConfig
   | ConnectionStringConfig
   | HostConfig
   | (PostgresBaseConfig & ClientConfig);
@@ -131,7 +148,12 @@ export type PgVectorConfig = (ConnectionStringConfig | HostConfig | (PostgresBas
  * Type guard for pre-configured pg.Pool config
  */
 export const isPoolConfig = (cfg: PostgresStoreConfig): cfg is PoolInstanceConfig => {
-  return 'pool' in cfg;
+  return 'pool' in cfg && cfg.pool !== undefined;
+};
+
+/** Type guard for an explicitly named pre-configured writer pool. */
+export const isWritePoolConfig = (cfg: PostgresStoreConfig): cfg is WritePoolInstanceConfig => {
+  return 'writePool' in cfg && cfg.writePool !== undefined;
 };
 
 /**
@@ -163,12 +185,13 @@ export const validateConfig = (name: string, config: PostgresStoreConfig) => {
     throw new Error(`${name}: id must be provided and cannot be empty.`);
   }
 
-  // Pool config: user provides pre-configured pg.Pool
-  if (isPoolConfig(config)) {
-    if (!config.pool) {
-      throw new Error(`${name}: pool must be provided when using pool config.`);
-    }
-    return; // Valid pool config
+  if ('pool' in config && 'writePool' in config) {
+    throw new Error(`${name}: provide either pool or writePool, not both.`);
+  }
+
+  // Pool config: user provides a pre-configured writer pg.Pool.
+  if (isPoolConfig(config) || isWritePoolConfig(config)) {
+    return;
   }
 
   if (isConnectionStringConfig(config)) {

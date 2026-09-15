@@ -1,7 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { EventEmitterPubSub } from '../events/event-emitter';
 import { MockStore } from '../storage/mock';
 import { Mastra } from './index';
 
+const SCHEDULER_WAKE_TOPIC = 'scheduler';
+const SCHEDULER_WAKE_EVENT = 'scheduler.wake';
 const ORIGINAL_ENV = process.env.MASTRA_WORKERS;
 
 describe('Mastra workers filter (MASTRA_WORKERS env)', () => {
@@ -28,27 +31,58 @@ describe('Mastra workers filter (MASTRA_WORKERS env)', () => {
       logger: false,
     });
 
-    // Spy on workers known at construction time.
-    const preStarts = mastra.workers.map(w => ({
-      name: w.name,
-      spy: vi.spyOn(w, 'start').mockResolvedValue(undefined),
-      initSpy: vi.spyOn(w, 'init').mockResolvedValue(undefined),
-    }));
+    // Mock start()/init() on construction-time workers so we can record which
+    // were started without running real worker side effects. The scheduler +
+    // agent-schedule workers are injected lazily inside startWorkers() — they
+    // aren't visible here, so their real start() runs and isRunning reflects
+    // whether they passed the MASTRA_WORKERS filter.
+    const knownStarted: string[] = [];
+    const knownWorkers = mastra.workers.map(w => w.name);
+    for (const w of mastra.workers) {
+      vi.spyOn(w, 'start').mockImplementation(async () => {
+        knownStarted.push(w.name);
+      });
+      vi.spyOn(w, 'init').mockResolvedValue(undefined);
+    }
 
-    await mastra.startWorkers();
+    try {
+      await mastra.startWorkers();
 
-    // SchedulerWorker is injected lazily in startWorkers(), so we must
-    // also spy-check workers that appeared after the call.
-    const allStarts = mastra.workers.map(w => {
-      const pre = preStarts.find(p => p.name === w.name);
-      return { name: w.name, started: pre ? pre.spy.mock.calls.length > 0 : true };
+      // Lazily-injected workers (not in knownWorkers) report via isRunning.
+      const lazyStarted = mastra.workers.filter(w => !knownWorkers.includes(w.name) && w.isRunning).map(w => w.name);
+      const started = [...knownStarted, ...lazyStarted];
+      expect(started.sort()).toEqual(['backgroundTasks', 'scheduler']);
+      expect(started).not.toContain('orchestration');
+    } finally {
+      await mastra.stopWorkers();
+    }
+  });
+
+  it('does not start scheduling workers after startup when their roles are filtered out', async () => {
+    process.env.MASTRA_WORKERS = 'orchestration';
+
+    const pubsub = new EventEmitterPubSub();
+    const subscribe = vi.spyOn(pubsub, 'subscribe');
+    const mastra = new Mastra({
+      storage: new MockStore(),
+      pubsub,
+      logger: false,
     });
-    const started = allStarts.filter(s => s.started).map(s => s.name);
-    expect(started.sort()).toEqual(['backgroundTasks', 'scheduler']);
 
-    // orchestration was not started
-    const orchestration = preStarts.find(s => s.name === 'orchestration');
-    expect(orchestration?.spy).not.toHaveBeenCalled();
+    try {
+      await mastra.startWorkers();
+      // A process that can never run the scheduler has no reason to listen
+      // for wake events from other processes either.
+      expect(subscribe.mock.calls.some(([topic]) => topic === SCHEDULER_WAKE_TOPIC)).toBe(false);
+
+      await mastra.__ensureScheduleRuntimeReady();
+      await pubsub.publish(SCHEDULER_WAKE_TOPIC, { type: SCHEDULER_WAKE_EVENT, runId: 'remote', data: {} });
+
+      expect(mastra.workers.some(worker => worker.name === 'scheduler')).toBe(false);
+      expect(mastra.workers.some(worker => worker.name === 'agent-schedule')).toBe(false);
+    } finally {
+      await mastra.stopWorkers();
+    }
   });
 
   it('starts all workers when MASTRA_WORKERS is unset', async () => {

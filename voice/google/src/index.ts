@@ -1,6 +1,6 @@
 import { PassThrough } from 'node:stream';
 
-import { SpeechClient } from '@google-cloud/speech';
+import { SpeechClient, v2 } from '@google-cloud/speech';
 import type { google as SpeechTypes } from '@google-cloud/speech/build/protos/protos';
 import { TextToSpeechClient } from '@google-cloud/text-to-speech';
 import type { google as TextToSpeechTypes } from '@google-cloud/text-to-speech/build/protos/protos';
@@ -120,6 +120,32 @@ const buildAuthOptions = (
   return options;
 };
 
+type V2RecognitionConfig = SpeechTypes.cloud.speech.v2.IRecognitionConfig;
+
+export interface GoogleListenOptionsV1 {
+  stream?: boolean;
+  config?: SpeechTypes.cloud.speech.v1.IRecognitionConfig;
+}
+
+export interface GoogleListenOptionsV2 {
+  stream?: boolean;
+  v2: true;
+  config?: V2RecognitionConfig;
+  recognizer?: string;
+}
+
+export type GoogleListenOptions = GoogleListenOptionsV1 | GoogleListenOptionsV2;
+
+type ISynthesizeSpeechRequest = TextToSpeechTypes.cloud.texttospeech.v1.ISynthesizeSpeechRequest;
+
+export interface GoogleSpeakOptions {
+  speaker?: string;
+  languageCode?: string;
+  input?: ISynthesizeSpeechRequest['input'];
+  voice?: ISynthesizeSpeechRequest['voice'];
+  audioConfig?: ISynthesizeSpeechRequest['audioConfig'];
+}
+
 const DEFAULT_VOICE = 'en-US-Casual-K';
 
 /**
@@ -161,6 +187,8 @@ const DEFAULT_VOICE = 'en-US-Casual-K';
 export class GoogleVoice extends MastraVoice {
   private ttsClient: TextToSpeechClient;
   private speechClient: SpeechClient;
+  private speechClientV2?: v2.SpeechClient;
+  private readonly speechOptionsV2: GoogleClientOptions;
   private readonly vertexAI: boolean;
   private readonly project?: string;
   private readonly location: string;
@@ -225,6 +253,14 @@ export class GoogleVoice extends MastraVoice {
 
     this.ttsClient = new TextToSpeechClient(ttsOptions);
     this.speechClient = new SpeechClient(speechOptions);
+    this.speechOptionsV2 = speechOptions;
+  }
+
+  private getV2SpeechClient(): v2.SpeechClient {
+    if (!this.speechClientV2) {
+      this.speechClientV2 = new v2.SpeechClient(this.speechOptionsV2);
+    }
+    return this.speechClientV2;
   }
 
   /**
@@ -278,29 +314,43 @@ export class GoogleVoice extends MastraVoice {
   }
 
   /**
-   * Converts text to speech
+   * Converts text to speech.
+   *
+   * When `input` is a string or stream, builds a text-only request (existing behaviour).
+   * Pass `options.input` to send richer proto fields (ssml, markup, prompt,
+   * customPronunciations, multiSpeakerMarkup) and `options.voice` for fields
+   * like modelName or multiSpeakerVoiceConfig.
+   *
    * @param {string | NodeJS.ReadableStream} input - Text or stream to convert to speech
-   * @param {Object} [options] - Speech synthesis options
-   * @param {string} [options.speaker] - Voice ID to use
-   * @param {string} [options.languageCode] - Language code for the voice
-   * @param {TextToSpeechTypes.cloud.texttospeech.v1.ISynthesizeSpeechRequest['audioConfig']} [options.audioConfig] - Audio configuration options
-   * @returns {Promise<NodeJS.ReadableStream>} Stream of synthesized audio. Default encoding is LINEAR16.
+   * @param {GoogleSpeakOptions} [options] - Speech synthesis options
+   * @returns {Promise<NodeJS.ReadableStream>} Stream of synthesised audio. Default encoding is LINEAR16.
    */
-  async speak(
-    input: string | NodeJS.ReadableStream,
-    options?: {
-      speaker?: string;
-      languageCode?: string;
-      audioConfig?: TextToSpeechTypes.cloud.texttospeech.v1.ISynthesizeSpeechRequest['audioConfig'];
-    },
-  ): Promise<NodeJS.ReadableStream> {
-    const text = typeof input === 'string' ? input : await this.streamToString(input);
+  async speak(input: string | NodeJS.ReadableStream, options?: GoogleSpeakOptions): Promise<NodeJS.ReadableStream> {
+    const defaultVoiceName = options?.speaker || this.speaker;
+    const defaultLanguageCode = options?.languageCode || defaultVoiceName?.split('-').slice(0, 2).join('-') || 'en-US';
 
-    const request: TextToSpeechTypes.cloud.texttospeech.v1.ISynthesizeSpeechRequest = {
-      input: { text },
+    const requestInput: ISynthesizeSpeechRequest['input'] = options?.input
+      ? { ...options.input }
+      : { text: typeof input === 'string' ? input : await this.streamToString(input) };
+
+    // When the caller provides a rich input object but no explicit text field,
+    // populate it from the positional `input` argument for convenience.
+    if (
+      options?.input &&
+      !options.input.text &&
+      !options.input.ssml &&
+      !options.input.markup &&
+      !options.input.multiSpeakerMarkup
+    ) {
+      requestInput!.text = typeof input === 'string' ? input : await this.streamToString(input);
+    }
+
+    const request: ISynthesizeSpeechRequest = {
+      input: requestInput,
       voice: {
-        name: options?.speaker || this.speaker,
-        languageCode: options?.languageCode || options?.speaker?.split('-').slice(0, 2).join('-') || 'en-US',
+        name: defaultVoiceName,
+        languageCode: defaultLanguageCode,
+        ...options?.voice,
       },
       audioConfig: options?.audioConfig || { audioEncoding: 'LINEAR16' },
     };
@@ -330,16 +380,17 @@ export class GoogleVoice extends MastraVoice {
   }
 
   /**
-   * Converts speech to text
+   * Converts speech to text using Cloud Speech-to-Text v1 or v2.
+   *
+   * Pass `{ v2: true }` in options to use the v2 API, which supports additional
+   * audio formats like AAC-in-MP4 (iOS Safari) via `autoDecodingConfig` or
+   * `explicitDecodingConfig`. The v1 path remains the default.
+   *
    * @param {NodeJS.ReadableStream} audioStream - Audio stream to transcribe. Default encoding is LINEAR16.
-   * @param {Object} [options] - Recognition options
-   * @param {SpeechTypes.cloud.speech.v1.IRecognitionConfig} [options.config] - Recognition configuration
+   * @param {GoogleListenOptions} [options] - Recognition options
    * @returns {Promise<string>} Transcribed text
    */
-  async listen(
-    audioStream: NodeJS.ReadableStream,
-    options?: { stream?: boolean; config?: SpeechTypes.cloud.speech.v1.IRecognitionConfig },
-  ): Promise<string> {
+  async listen(audioStream: NodeJS.ReadableStream, options?: GoogleListenOptions): Promise<string> {
     const chunks: Buffer[] = [];
     for await (const chunk of audioStream) {
       if (typeof chunk === 'string') {
@@ -350,7 +401,15 @@ export class GoogleVoice extends MastraVoice {
     }
     const buffer = Buffer.concat(chunks);
 
-    let request = {
+    if (options && 'v2' in options && options.v2) {
+      return this.recognizeV2(buffer, options);
+    }
+
+    return this.recognizeV1(buffer, options as GoogleListenOptionsV1 | undefined);
+  }
+
+  private async recognizeV1(buffer: Buffer, options?: GoogleListenOptionsV1): Promise<string> {
+    const request = {
       config: {
         encoding: 'LINEAR16',
         languageCode: 'en-US',
@@ -361,12 +420,51 @@ export class GoogleVoice extends MastraVoice {
       },
     };
     const [response] = await this.speechClient.recognize(request as SpeechTypes.cloud.speech.v1.IRecognizeRequest);
+    return this.extractTranscription(response?.results);
+  }
 
-    if (!response.results || response.results.length === 0) {
+  private async recognizeV2(buffer: Buffer, options: GoogleListenOptionsV2): Promise<string> {
+    const config: V2RecognitionConfig = { ...options.config };
+    // Default to auto-decoding if neither decoding config is specified
+    if (!config.autoDecodingConfig && !config.explicitDecodingConfig) {
+      config.autoDecodingConfig = {};
+    }
+    if (!config.languageCodes || config.languageCodes.length === 0) {
+      config.languageCodes = ['en-US'];
+    }
+    if (!config.model) {
+      config.model = 'long';
+    }
+
+    let recognizer = options.recognizer;
+    if (!recognizer) {
+      const project = this.project || (await this.getV2SpeechClient().getProjectId());
+      recognizer = `projects/${project}/locations/global/recognizers/_`;
+    }
+
+    const request: SpeechTypes.cloud.speech.v2.IRecognizeRequest = {
+      recognizer,
+      config,
+      content: buffer,
+    };
+
+    const client = this.getV2SpeechClient();
+    const [response] = await client.recognize(request);
+    return this.extractTranscription(response?.results);
+  }
+
+  private extractTranscription(
+    results:
+      | SpeechTypes.cloud.speech.v1.ISpeechRecognitionResult[]
+      | SpeechTypes.cloud.speech.v2.ISpeechRecognitionResult[]
+      | null
+      | undefined,
+  ): string {
+    if (!results || results.length === 0) {
       throw new Error('No transcription results returned');
     }
 
-    const transcription = response.results
+    const transcription = results
       .map((result: any) => {
         if (!result.alternatives || result.alternatives.length === 0) {
           return '';

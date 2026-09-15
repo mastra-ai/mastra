@@ -1,0 +1,20 @@
+---
+extends: existence
+message: "AI mic-drop: '%s'. Use a descriptive heading instead."
+level: error
+nonword: true
+scope: heading
+tokens:
+  # "X, not Y" / "X, never Y"
+  - "\\b[A-Z][a-z]+, not [a-z]+"
+  - "\\b[A-Z][a-z]+, never [a-z]+"
+
+  # "X, then Y"
+  - "\\b[A-Z][a-z]+, then [a-z]+"
+
+  # "X over Y"
+  - "\\b[A-Z][a-z]+ over [a-z]+"
+
+  # "X first, Y second"
+  - "\\b[A-Z][a-z]+ first, [a-z]+ second\\b"
+  - "\\b[A-Z][a-z]+ first, [a-z]+ never\\b"

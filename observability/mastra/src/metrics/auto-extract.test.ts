@@ -107,6 +107,58 @@ describe('AutoExtractedMetrics', () => {
     });
   });
 
+  // Processor duration is keyed off the entity type rather than PROCESSOR_RUN
+  // alone, because a processor may declare a domain span type. These pin the
+  // boundary of that rule.
+  describe('processor duration', () => {
+    it('emits for a plain PROCESSOR_RUN span', () => {
+      setup();
+      const span = createMockSpan({
+        type: SpanType.PROCESSOR_RUN,
+        entityType: EntityType.INPUT_STEP_PROCESSOR,
+        entityName: 'moderation',
+        attributes: { processorExecutor: 'legacy', processorIndex: 0 },
+        endTime: new Date('2026-01-01T00:00:00.020Z'),
+      } as Partial<AnySpan>);
+
+      emitAutoExtractedMetrics(span, createMetricsContext(span));
+
+      expect(emittedMetrics.map(m => m.metric.name)).toContain('mastra_processor_duration_ms');
+    });
+
+    it('emits for a processor that declared a domain span type', () => {
+      setup();
+      const span = createMockSpan({
+        type: SpanType.SKILL_ACTION,
+        entityType: EntityType.INPUT_STEP_PROCESSOR,
+        entityName: 'Skills Processor',
+        attributes: { operation: 'inject', processorExecutor: 'legacy', processorIndex: 2 },
+        endTime: new Date('2026-01-01T00:00:00.020Z'),
+      } as Partial<AnySpan>);
+
+      emitAutoExtractedMetrics(span, createMetricsContext(span));
+
+      expect(emittedMetrics.map(m => m.metric.name)).toContain('mastra_processor_duration_ms');
+    });
+
+    it('does not emit for a span that only borrows a processor entity type', () => {
+      // Observational memory used to wrap its model passes in a GENERIC span
+      // tagged OUTPUT_STEP_PROCESSOR. Counting those model-call durations as
+      // processor overhead would swamp the metric.
+      setup();
+      const span = createMockSpan({
+        type: SpanType.GENERIC,
+        entityType: EntityType.OUTPUT_STEP_PROCESSOR,
+        entityName: 'Observer',
+        endTime: new Date('2026-01-01T00:00:04Z'),
+      } as Partial<AnySpan>);
+
+      emitAutoExtractedMetrics(span, createMetricsContext(span));
+
+      expect(emittedMetrics.map(m => m.metric.name)).not.toContain('mastra_processor_duration_ms');
+    });
+  });
+
   it('should emit duration metric for tool spans', () => {
     setup();
     const span = createMockSpan({
@@ -154,13 +206,14 @@ describe('AutoExtractedMetrics', () => {
     expect(emittedMetrics[0]!.metric.labels.status).toBe('error');
   });
 
-  it('should extract token usage metrics for model generation', () => {
+  it('should use the configured model when the response model is blank', () => {
     setup();
     const span = createMockSpan({
       type: SpanType.MODEL_GENERATION,
       endTime: new Date('2026-01-01T00:00:02Z'),
       attributes: {
         model: 'gpt-4',
+        responseModel: '   ',
         provider: 'openai',
         usage: {
           inputTokens: 100,
@@ -618,5 +671,93 @@ describe('AutoExtractedMetrics', () => {
     emitAutoExtractedMetrics(span, createMetricsContext(span));
 
     expect(emittedMetrics[0]!.metric.labels).toEqual({ status: 'ok' });
+  });
+
+  it('should fall back to the configured model when responseModel has no pricing match', () => {
+    setup();
+    const span = createMockSpan({
+      type: SpanType.MODEL_GENERATION,
+      endTime: new Date('2026-01-01T00:00:01Z'),
+      attributes: {
+        provider: 'openrouter',
+        model: 'anthropic/claude-sonnet-4-6',
+        responseModel: 'anthropic/claude-4.6-sonnet-20260217',
+        usage: { inputTokens: 100, outputTokens: 50 },
+      },
+    });
+
+    vi.spyOn(PricingRegistry, 'getGlobal').mockReturnValue(pricingRegistry);
+
+    emitAutoExtractedMetrics(span, createMetricsContext(span));
+
+    const inputTokens = emittedMetrics.find(m => m.metric.name === 'mastra_model_total_input_tokens');
+    expect(inputTokens!.metric.costContext?.costMetadata).not.toHaveProperty('error', 'no_matching_model');
+    expect(inputTokens!.metric.costContext?.costMetadata).toHaveProperty(
+      'pricing_id',
+      'openrouter-anthropic-claude-sonnet-4-6',
+    );
+  });
+
+  it('should estimate costs for Vercel AI Gateway model ids', () => {
+    setup();
+    const span = createMockSpan({
+      type: SpanType.MODEL_GENERATION,
+      endTime: new Date('2026-01-01T00:00:01Z'),
+      attributes: {
+        provider: 'gateway',
+        model: 'anthropic/claude-haiku-4.5',
+        usage: { inputTokens: 100, outputTokens: 50 },
+      },
+    });
+
+    vi.spyOn(PricingRegistry, 'getGlobal').mockReturnValue(pricingRegistry);
+
+    emitAutoExtractedMetrics(span, createMetricsContext(span));
+
+    const inputTokens = emittedMetrics.find(m => m.metric.name === 'mastra_model_total_input_tokens');
+    expect(inputTokens!.metric.costContext).toMatchObject({
+      provider: 'vercel',
+      model: 'claude-haiku-4-5',
+      costMetadata: { pricing_id: 'vercel-claude-haiku-4-5' },
+    });
+    expect(inputTokens!.metric.costContext?.estimatedCost).toBeCloseTo(0.0001);
+  });
+
+  it('should estimate costs for Bedrock inference-profile model ids', () => {
+    setup();
+    const span = createMockSpan({
+      type: SpanType.MODEL_GENERATION,
+      endTime: new Date('2026-01-01T00:00:01Z'),
+      attributes: {
+        provider: 'amazon-bedrock',
+        model: 'us.anthropic.claude-sonnet-4-6',
+        responseModel: 'us.anthropic.claude-sonnet-4-6',
+        usage: {
+          inputTokens: 1_150,
+          outputTokens: 100,
+          inputDetails: { text: 1_000, cacheRead: 100, cacheWrite: 50 },
+          outputDetails: { text: 100 },
+        },
+      },
+    });
+
+    vi.spyOn(PricingRegistry, 'getGlobal').mockReturnValue(pricingRegistry);
+
+    emitAutoExtractedMetrics(span, createMetricsContext(span));
+
+    const costContexts = emittedMetrics.flatMap(event => (event.metric.costContext ? [event.metric.costContext] : []));
+    expect(costContexts).toHaveLength(6);
+    expect(costContexts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          costMetadata: expect.objectContaining({ pricing_id: 'amazon-bedrock-claude-sonnet-4-6' }),
+        }),
+      ]),
+    );
+    expect(costContexts).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ costMetadata: expect.objectContaining({ error: 'no_matching_model' }) }),
+      ]),
+    );
   });
 });

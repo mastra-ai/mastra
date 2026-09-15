@@ -19,7 +19,7 @@ const meta: Meta<typeof DataKeysAndValues> = {
   },
   decorators: [
     Story => (
-      <div className="w-[480px]">
+      <div className="w-120">
         <Story />
       </div>
     ),
@@ -105,7 +105,7 @@ export const WithHeaderTwoColumns: Story = {
 export const TruncatedValues: Story = {
   decorators: [
     Story => (
-      <div className="w-[200px]">
+      <div className="w-50">
         <Story />
       </div>
     ),

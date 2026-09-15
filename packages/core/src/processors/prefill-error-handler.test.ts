@@ -159,6 +159,20 @@ describe('PrefillErrorHandler', () => {
     expect(result).toBeUndefined();
   });
 
+  it('should return { retry: true } for plain Error objects containing a prefill message', async () => {
+    const handler = new PrefillErrorHandler();
+
+    const args = makeArgs({
+      error: new Error(
+        'This model does not support assistant message prefill. The conversation must end with a user message.',
+      ),
+    });
+
+    const result = await handler.processAPIError(args);
+
+    expect(result).toEqual({ retry: true });
+  });
+
   it('should return undefined when retryCount > 0', async () => {
     const handler = new PrefillErrorHandler();
     const args = makeArgs({ retryCount: 1 });

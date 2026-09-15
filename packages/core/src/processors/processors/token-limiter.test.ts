@@ -1,4 +1,5 @@
 import type { TextPart } from '@internal/ai-sdk-v4';
+import { estimateTokenCount } from 'tokenx';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import type { MastraDBMessage } from '../../agent/message-list';
@@ -96,6 +97,113 @@ describe('TokenLimiterProcessor', () => {
         abort: mockAbort,
       });
       expect(result2).toBeNull();
+    });
+
+    it('should not count lifecycle or reasoning chunks against the limit', async () => {
+      processor = new TokenLimiterProcessor({ limit: 180 });
+      const state: Record<string, any> = {};
+
+      const stepStart: ChunkType = {
+        type: 'step-start',
+        runId: 'test-run-id',
+        from: ChunkFrom.AGENT,
+        payload: {
+          request: {
+            body: JSON.stringify({ messages: Array(30).fill({ role: 'user', content: 'x'.repeat(200) }) }),
+          },
+        },
+      } as any;
+      expect(
+        await processor.processOutputStream({ part: stepStart, streamParts: [], state, abort: mockAbort }),
+      ).toEqual(stepStart);
+
+      const reasoning: ChunkType = {
+        type: 'reasoning-delta',
+        runId: 'test-run-id',
+        from: ChunkFrom.AGENT,
+        payload: { id: 'r1', text: 'thinking about the layout and metrics '.repeat(12) },
+      } as any;
+      expect(
+        await processor.processOutputStream({ part: reasoning, streamParts: [], state, abort: mockAbort }),
+      ).toEqual(reasoning);
+
+      expect(state.currentTokens ?? 0).toBe(0);
+
+      // The full answer still fits within the limit
+      let emitted = 0;
+      for (let i = 0; i < 12; i++) {
+        const part: ChunkType = {
+          type: 'text-delta',
+          payload: { text: 'Yesterday: 3 posts, 1.2K views. ', id: 'test-id' },
+          runId: 'test-run-id',
+          from: ChunkFrom.AGENT,
+        };
+        if (await processor.processOutputStream({ part, streamParts: [], state, abort: mockAbort })) emitted++;
+      }
+      expect(emitted).toBe(12);
+    });
+
+    it('should never withhold tool-call or tool-result chunks once the limit is reached', async () => {
+      processor = new TokenLimiterProcessor({ limit: 5 });
+      const state: Record<string, any> = {};
+
+      const text: ChunkType = {
+        type: 'text-delta',
+        payload: { text: 'a very long answer that blows right past the configured token limit', id: 'test-id' },
+        runId: 'test-run-id',
+        from: ChunkFrom.AGENT,
+      };
+      expect(await processor.processOutputStream({ part: text, streamParts: [], state, abort: mockAbort })).toBeNull();
+
+      const toolCall: ChunkType = {
+        type: 'tool-call',
+        payload: { toolCallId: 'call_1', toolName: 'getStats', args: { range: 'yesterday' } },
+        runId: 'test-run-id',
+        from: ChunkFrom.AGENT,
+      } as any;
+      expect(await processor.processOutputStream({ part: toolCall, streamParts: [], state, abort: mockAbort })).toEqual(
+        toolCall,
+      );
+
+      const toolResult: ChunkType = {
+        type: 'tool-result',
+        payload: { toolCallId: 'call_1', toolName: 'getStats', result: { posts: 3, views: 1200 } },
+        runId: 'test-run-id',
+        from: ChunkFrom.AGENT,
+      } as any;
+      expect(
+        await processor.processOutputStream({ part: toolResult, streamParts: [], state, abort: mockAbort }),
+      ).toEqual(toolResult);
+    });
+
+    it('should emit a single data-token-limit-reached chunk when output is withheld', async () => {
+      processor = new TokenLimiterProcessor({ limit: 5 });
+      const state: Record<string, any> = {};
+      const custom = vi.fn(async () => {});
+
+      for (let i = 0; i < 3; i++) {
+        const part: ChunkType = {
+          type: 'text-delta',
+          payload: { text: 'a very long answer that blows past the configured token limit', id: 'test-id' },
+          runId: 'test-run-id',
+          from: ChunkFrom.AGENT,
+        };
+        await processor.processOutputStream({
+          part,
+          streamParts: [],
+          state,
+          abort: mockAbort,
+          writer: { custom },
+        });
+      }
+
+      expect(custom).toHaveBeenCalledTimes(1);
+      expect(custom.mock.calls[0]![0]).toMatchObject({
+        type: 'data-token-limit-reached',
+        data: { processorId: 'token-limiter', limit: 5 },
+        // transient keeps the notification off the persisted message history
+        transient: true,
+      });
     });
 
     it('should accept simple number constructor', async () => {
@@ -707,6 +815,183 @@ describe('TokenLimiterProcessor', () => {
           abort: mockAbort,
         }),
       ).resolves.toBeUndefined();
+    });
+
+    describe('media token estimation', () => {
+      const BASE64_IMAGE = 'iVBORw0KGgoAAAANSUhEUg'.repeat(2000).slice(0, 40000);
+
+      const runStep = (processor: TokenLimiterProcessor, messageList: MessageList) =>
+        processor.processInputStep({
+          messageList,
+          stepNumber: 1,
+          model: createMockModel(),
+          steps: [],
+          systemMessages: [],
+          state: {},
+          retryCount: 0,
+          abort: mockAbort,
+        });
+
+      const countTokens = async (processor: TokenLimiterProcessor, messageList: MessageList) =>
+        (processor as any).countInputMessageTokens(messageList.get.all.db()[0]);
+
+      const addFileMessage = (messageList: MessageList, data: string, mimeType: string) =>
+        messageList.add(
+          {
+            id: 'user-image',
+            role: 'user',
+            content: {
+              format: 2,
+              parts: [
+                { type: 'text', text: 'what is in this image?' },
+                { type: 'file', data, mimeType },
+              ],
+            },
+            createdAt: new Date('2023-01-01T00:00:00Z'),
+          } as any,
+          'input',
+        );
+
+      it('should keep a message with a base64 image file part within a modest limit', async () => {
+        const processor = new TokenLimiterProcessor({ limit: 2000 });
+        const messageList = new MessageList();
+        addFileMessage(messageList, BASE64_IMAGE, 'image/png');
+
+        await expect(runStep(processor, messageList)).resolves.toBeUndefined();
+        expect(messageList.get.all.db().map(m => m.id)).toContain('user-image');
+      });
+
+      it('should estimate an image file part instead of tokenizing its base64 payload', async () => {
+        const processor = new TokenLimiterProcessor({ limit: 100_000 });
+        const messageList = new MessageList();
+        addFileMessage(messageList, BASE64_IMAGE, 'image/png');
+
+        const total = await countTokens(processor, messageList);
+        const stringifiedCost = estimateTokenCount(
+          JSON.stringify({ type: 'file', data: BASE64_IMAGE, mimeType: 'image/png' }),
+        );
+
+        expect(total).toBeLessThan(1000);
+        expect(total).toBeLessThan(stringifiedCost / 5);
+      });
+
+      it('should count a v5 image file part the same as the equivalent v4 part', async () => {
+        const processor = new TokenLimiterProcessor({ limit: 100_000 });
+
+        const v4List = new MessageList();
+        addFileMessage(v4List, BASE64_IMAGE, 'image/png');
+
+        const v5List = new MessageList();
+        v5List.add(
+          {
+            id: 'user-image',
+            role: 'user',
+            content: {
+              format: 2,
+              parts: [
+                { type: 'text', text: 'what is in this image?' },
+                { type: 'file', url: BASE64_IMAGE, mediaType: 'image/png' },
+              ],
+            },
+            createdAt: new Date('2023-01-01T00:00:00Z'),
+          } as any,
+          'input',
+        );
+
+        expect(await countTokens(processor, v5List)).toBe(await countTokens(processor, v4List));
+      });
+
+      it('should count a data URI image the same as the equivalent raw base64', async () => {
+        const processor = new TokenLimiterProcessor({ limit: 100_000 });
+
+        const rawList = new MessageList();
+        addFileMessage(rawList, BASE64_IMAGE, 'image/png');
+
+        const dataUriList = new MessageList();
+        addFileMessage(dataUriList, `data:image/png;base64,${BASE64_IMAGE}`, 'image/png');
+
+        expect(await countTokens(processor, dataUriList)).toBe(await countTokens(processor, rawList));
+      });
+
+      it('should use a flat estimate for a file part whose data is a remote URL', async () => {
+        const processor = new TokenLimiterProcessor({ limit: 100_000 });
+        const messageList = new MessageList();
+        addFileMessage(messageList, 'https://example.com/report.pdf', 'application/pdf');
+
+        const total = await countTokens(processor, messageList);
+
+        // ~258 flat fallback plus the text part and message overhead, not the URL length.
+        expect(total).toBeGreaterThan(250);
+        expect(total).toBeLessThan(300);
+      });
+
+      const addToolResultMessage = (messageList: MessageList, result: unknown) =>
+        messageList.add(
+          {
+            id: 'tool-image',
+            role: 'assistant',
+            content: {
+              format: 2,
+              content: '',
+              parts: [
+                {
+                  type: 'tool-invocation',
+                  toolInvocation: {
+                    state: 'result',
+                    toolCallId: 'call_1',
+                    toolName: 'screenshotTool',
+                    args: {},
+                    result,
+                  },
+                },
+              ],
+            },
+            createdAt: new Date('2023-01-01T00:00:00Z'),
+          } as any,
+          'response',
+        );
+
+      it('should estimate a media-shaped tool result instead of tokenizing it', async () => {
+        const processor = new TokenLimiterProcessor({ limit: 2000 });
+        const messageList = new MessageList();
+        addToolResultMessage(messageList, { data: BASE64_IMAGE, mediaType: 'image/png' });
+
+        await expect(runStep(processor, messageList)).resolves.toBeUndefined();
+        expect(await countTokens(processor, messageList)).toBeLessThan(1000);
+      });
+
+      it('should estimate every entry of an array of media-shaped tool results', async () => {
+        const processor = new TokenLimiterProcessor({ limit: 100_000 });
+
+        const singleList = new MessageList();
+        addToolResultMessage(singleList, [{ data: BASE64_IMAGE, mediaType: 'image/png' }]);
+
+        const doubleList = new MessageList();
+        addToolResultMessage(doubleList, [
+          { data: BASE64_IMAGE, mediaType: 'image/png' },
+          { data: BASE64_IMAGE, mediaType: 'image/png' },
+        ]);
+
+        const single = await countTokens(processor, singleList);
+        const double = await countTokens(processor, doubleList);
+
+        expect(double - single).toBeGreaterThan(700);
+        expect(double).toBeLessThan(2000);
+      });
+
+      it('should leave non-media object tool results on the existing counting path', async () => {
+        const processor = new TokenLimiterProcessor({ limit: 100_000 });
+        const messageList = new MessageList();
+        const result = { temperature: 72, conditions: 'sunny', city: 'San Francisco' };
+        addToolResultMessage(messageList, result);
+
+        const total = await countTokens(processor, messageList);
+
+        // Unchanged stringify path: role + serialized result, minus the structural
+        // discount, plus overhead for the message and the extra tool message.
+        const expected = estimateTokenCount('assistant' + JSON.stringify(result)) - 12 + 3.8 + 3.8;
+        expect(total).toBeCloseTo(expected, 5);
+      });
     });
 
     it('should prune old messages at each step to stay within token limit', async () => {

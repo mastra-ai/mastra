@@ -12,6 +12,7 @@ import type { MastraCompositeStore } from '../storage';
 import type { DynamicArgument } from '../types';
 import type { MastraEmbeddingModel, MastraEmbeddingOptions, MastraVector } from '../vector';
 import type { VectorFilter } from '../vector/filter/base';
+import type { MemoryRunStateAccessor } from './run-state';
 import type { MemoryProcessor } from '.';
 
 export type { Message as AiMessageType } from '@internal/ai-sdk-v4';
@@ -57,6 +58,8 @@ export type ThreadOMMetadata = {
   suggestedResponse?: string;
   /** Observer-generated thread title */
   threadTitle?: string;
+  /** Extracted Observational Memory values keyed by extractor slug */
+  extracted?: Record<string, unknown>;
   /** Timestamp of the last observed message in this thread (ISO string for JSON serialization) */
   lastObservedAt?: string;
   /** Cursor pointing at the last observed message (for replay pruning fallback) */
@@ -123,6 +126,8 @@ export type MemoryRequestContext = {
   thread?: Partial<StorageThreadType> & { id: string };
   resourceId?: string;
   memoryConfig?: MemoryConfigInternal;
+  /** Internal accessor for non-serializable state shared within one agent run. */
+  runState?: MemoryRunStateAccessor;
 };
 
 /**
@@ -194,6 +199,14 @@ type BaseWorkingMemory = {
    * @see docs/src/content/en/docs/agents/signals.mdx
    */
   useStateSignals?: boolean;
+  /**
+   * Whether the main agent manages working memory directly through tool/instruction injection.
+   * Set to false when another path, such as Observational Memory extractors,
+   * owns working memory updates.
+   *
+   * @default true
+   */
+  agentManaged?: boolean;
   /** @deprecated The `use` option has been removed. Working memory always uses tool-call mode. */
   use?: never;
 };
@@ -435,6 +448,16 @@ export interface ObservationalMemoryObservationConfig {
   model?: AgentConfig['model'];
 
   /**
+   * Manage working memory through Observational Memory extraction.
+   * When enabled alongside `workingMemory.enabled`, Memory supplies defaults that
+   * disable main-agent working memory management and add the WorkingMemoryExtractor.
+   * Set `workingMemory.agentManaged: true` to keep main-agent tools/instructions enabled.
+   *
+   * @default false
+   */
+  manageWorkingMemory?: boolean;
+
+  /**
    * Token count of unobserved messages that triggers observation.
    * When unobserved message tokens exceed this, the Observer is called.
    *
@@ -543,17 +566,23 @@ export interface ObservationalMemoryObservationConfig {
   activateOnProviderChange?: boolean;
 
   /**
-   * Token threshold above which synchronous (blocking) observation is forced.
-   * When set, the system will never block for observation between `messageTokens`
-   * and `blockAfter` — only async buffering and activation are used in that range.
-   * Once unobserved tokens exceed `blockAfter`, a synchronous observation runs as a
-   * last resort to prevent context window overflow.
+   * Token threshold above which buffered activation is allowed to overshoot the
+   * retention target. Above `blockAfter`, activation uses the smallest set of buffered
+   * chunks that reaches the retention target, even when that overshoots the target by
+   * more than the usual safeguard allows. It never activates more chunks than are needed
+   * to reach the retention target, and it changes the result only when the retention
+   * floor is above roughly 20,000 tokens — with the default settings it has no
+   * observable effect.
+   *
+   * Crossing `blockAfter` does not trigger a blocking observation. A synchronous
+   * (blocking) observation runs when the `messageTokens` threshold is reached and
+   * buffered activation did not happen.
    *
    * Accepts either:
-   * - A **multiplier** (1 < value < 2): multiplied by `messageTokens`.
-   *   e.g. `blockAfter: 1.5` with `messageTokens: 20_000` → blocks at 30,000 tokens.
-   * - An **absolute token count** (≥ 2): must be greater than `messageTokens`.
-   *   e.g. `blockAfter: 80_000` → blocks at 80,000 tokens.
+   * - A **multiplier** (1 ≤ value < 100): multiplied by `messageTokens`.
+   *   e.g. `blockAfter: 1.5` with `messageTokens: 20_000` → resolves to 30,000 tokens.
+   * - An **absolute token count** (≥ 100): must be greater than `messageTokens`.
+   *   e.g. `blockAfter: 80_000` → resolves to 80,000 tokens.
    *
    * Only relevant when `bufferTokens` is set. When `bufferTokens` is not set,
    * synchronous observation is used directly at `messageTokens` and this setting has no effect.
@@ -852,7 +881,7 @@ export interface ObservationalMemoryOptions {
   temporalMarkers?: boolean;
 
   /**
-   * **Experimental.** Enable retrieval-mode observation groups as durable pointers
+   * Enable retrieval-mode observation groups as durable pointers
    * to raw message history. When enabled, observation groups keep `_range`
    * metadata visible in context and a `recall` tool is registered so the actor
    * can inspect raw messages behind a stored observation summary.
@@ -861,14 +890,15 @@ export interface ObservationalMemoryOptions {
    * - `{ vector: true }` — also enables semantic search using Memory-level vector/embedder
    * - `{ scope: 'thread' }` — restricts the recall tool to the current thread only
    * - `{ vector: true, scope: 'thread' }` — current-thread browsing + semantic search
+   * - `{ instructions: '...' }` — appends application-specific recall guidance after
+   *   Mastra's built-in retrieval instructions (never replaces them)
    *
    * `scope` defaults to `'resource'` (cross-thread browsing, thread listing, and search).
    * Set to `'thread'` to restrict to the current thread only.
    *
-   * @experimental
    * @default false
    */
-  retrieval?: boolean | { vector?: boolean; scope?: 'thread' | 'resource' };
+  retrieval?: boolean | { vector?: boolean; scope?: 'thread' | 'resource'; instructions?: string };
 }
 
 /**
@@ -1034,8 +1064,8 @@ type BaseMemoryConfig = {
    * Set to false to allow the agent to see suspended tool calls in context.
    * This is useful for suspend/resume patterns where the agent should be aware of pending interactions.
    *
-   * Note: Some providers (e.g. OpenAI) may return errors when incomplete tool calls are included.
-   * Anthropic handles incomplete tool calls without issues.
+   * Note: providers reject a tool call that has no matching tool result, so a suspended call kept
+   * in context is paired with a `{ status: 'pending' }` placeholder result before the prompt is sent.
    *
    * @default true
    * @example
@@ -1305,10 +1335,9 @@ export type SerializedObservationalMemoryConfig = {
   temporalMarkers?: boolean;
 
   /**
-   * **Experimental.** Enable retrieval-mode observation groups as durable pointers to raw message history.
-   * @experimental
+   * Enable retrieval-mode observation groups as durable pointers to raw message history.
    */
-  retrieval?: boolean | { vector?: boolean; scope?: 'thread' | 'resource' };
+  retrieval?: boolean | { vector?: boolean; scope?: 'thread' | 'resource'; instructions?: string };
 
   /** Observation step configuration */
   observation?: SerializedObservationalMemoryObservationConfig;
@@ -1321,6 +1350,9 @@ export type SerializedObservationalMemoryConfig = {
 export type SerializedObservationalMemoryObservationConfig = {
   /** Observer model ID */
   model?: string;
+  /** Manage working memory through Observational Memory extraction. */
+  manageWorkingMemory?: boolean;
+
   /** Token count threshold that triggers observation */
   messageTokens?: number;
   /** Model settings (temperature, maxOutputTokens, etc.) */

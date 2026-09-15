@@ -1,27 +1,22 @@
-// @vitest-environment jsdom
-import type * as PlaygroundUi from '@mastra/playground-ui';
-import { TooltipProvider } from '@mastra/playground-ui';
+import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import React from 'react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { AgentLayout } from '../../agent-layout';
-import { emptyPlatforms, slackPlatform, systemPackages } from './fixtures/channels';
+import { systemPackages } from './fixtures/channels';
 import { v2Agent } from './fixtures/composer-model-settings';
 import { LinkComponentProvider } from '@/lib/framework';
+import { RouteHeaderActionsProvider, RouteHeaderActionsSlot } from '@/lib/route-header/route-header-actions';
 import { server } from '@/test/msw-server';
 
-vi.mock('@mastra/playground-ui', async () => {
-  const actual = await vi.importActual<typeof PlaygroundUi>('@mastra/playground-ui');
-  return {
-    ...actual,
-    toast: { success: vi.fn(), error: vi.fn() },
-  };
-});
+vi.mock('@mastra/playground-ui/utils/toast', () => ({
+  toast: { success: vi.fn(), error: vi.fn() },
+}));
 
 const BASE_URL = 'http://localhost:4111';
 
@@ -30,6 +25,7 @@ const StubLink = ({ children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorE
 );
 
 const navigateSpy = vi.fn();
+const enabledPackages = { ...systemPackages, cmsEnabled: true, observabilityEnabled: true };
 
 const noopPaths = {
   agentLink: () => '',
@@ -50,11 +46,11 @@ const noopPaths = {
   workflowRunLink: () => '',
   datasetLink: () => '',
   datasetItemLink: () => '',
-  datasetExperimentLink: () => '',
   experimentLink: () => '',
+  cmsAgentEditLink: () => '',
 } as never;
 
-function renderLayout() {
+function renderLayout(initialEntry = '/agents/agent-1/chat/new') {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
@@ -64,18 +60,21 @@ function renderLayout() {
       <QueryClientProvider client={queryClient}>
         <LinkComponentProvider Link={StubLink as never} navigate={navigateSpy} paths={noopPaths}>
           <TooltipProvider>
-            <MemoryRouter initialEntries={['/agents/agent-1/chat/new']}>
-              <Routes>
-                <Route
-                  path="/agents/:agentId/*"
-                  element={
-                    <AgentLayout>
-                      <div data-testid="agent-child" />
-                    </AgentLayout>
-                  }
-                />
-              </Routes>
-            </MemoryRouter>
+            <RouteHeaderActionsProvider>
+              <RouteHeaderActionsSlot />
+              <MemoryRouter initialEntries={[initialEntry]}>
+                <Routes>
+                  <Route
+                    path="/agents/:agentId/*"
+                    element={
+                      <AgentLayout>
+                        <div data-testid="agent-child" />
+                      </AgentLayout>
+                    }
+                  />
+                </Routes>
+              </MemoryRouter>
+            </RouteHeaderActionsProvider>
           </TooltipProvider>
         </LinkComponentProvider>
       </QueryClientProvider>
@@ -83,10 +82,12 @@ function renderLayout() {
   );
 }
 
-function commonHandlers() {
+function commonHandlers(packagesResponse = systemPackages) {
   return [
     http.get(`${BASE_URL}/api/agents/agent-1`, () => HttpResponse.json(v2Agent)),
-    http.get(`${BASE_URL}/api/system/packages`, () => HttpResponse.json(systemPackages)),
+    http.get(`${BASE_URL}/api/system/packages`, () => HttpResponse.json(packagesResponse)),
+    http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({ enabled: false })),
+    http.get(`${BASE_URL}/api/editor/builder/settings`, () => HttpResponse.json({})),
   ];
 }
 
@@ -95,42 +96,76 @@ afterEach(() => {
   navigateSpy.mockReset();
 });
 
-describe('AgentLayout channels tab', () => {
-  it('shows the Channels tab when channel platforms exist', async () => {
+describe('AgentLayout tool tabs', () => {
+  it('renders the tool tabs without a Channels tab (channels moved to settings)', async () => {
+    const onPlatforms = vi.fn();
     server.use(
       ...commonHandlers(),
-      http.get(`${BASE_URL}/api/channels/platforms`, () => HttpResponse.json(slackPlatform)),
+      http.get(`${BASE_URL}/api/channels/platforms`, () => {
+        onPlatforms();
+        return HttpResponse.json([]);
+      }),
     );
 
     renderLayout();
 
-    expect(await screen.findByText('Channels')).not.toBeNull();
-  });
+    expect(await screen.findByText('Agent traces')).not.toBeNull();
+    expect(screen.getByRole('tab', { name: 'Chat' })).not.toBeNull();
+    // Overview is now a side panel toggled from the header, not a tab.
+    expect(screen.queryByRole('tab', { name: 'Overview' })).toBeNull();
+    expect(screen.getByTestId('agent-overview-panel-toggle')).not.toBeNull();
 
-  it('hides the Channels tab when no channel platforms exist', async () => {
-    server.use(
-      ...commonHandlers(),
-      http.get(`${BASE_URL}/api/channels/platforms`, () => HttpResponse.json(emptyPlatforms)),
-    );
-
-    renderLayout();
-
-    // Chat tab always renders; wait for it to confirm the layout mounted.
-    expect(await screen.findByText('Chat')).not.toBeNull();
+    // Channels is configuration, not a tool: no tab and no platforms fetch from the tab bar.
     await waitFor(() => expect(screen.queryByText('Channels')).toBeNull());
+    expect(onPlatforms).not.toHaveBeenCalled();
   });
 
-  it('navigates to the channels route when the Channels tab is clicked', async () => {
-    server.use(
-      ...commonHandlers(),
-      http.get(`${BASE_URL}/api/channels/platforms`, () => HttpResponse.json(slackPlatform)),
-    );
+  it('highlights the Chat tab on the thread routes', async () => {
+    server.use(...commonHandlers());
 
-    renderLayout();
+    renderLayout('/agents/agent-1/threads/new');
 
-    const channelsTab = await screen.findByText('Channels');
-    fireEvent.click(channelsTab);
+    const chatTab = await screen.findByRole('tab', { name: 'Chat' });
+    expect(chatTab.getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByRole('tab', { name: 'Agent traces' }).getAttribute('aria-selected')).toBe('false');
+  });
 
-    expect(navigateSpy).toHaveBeenCalledWith('/agents/agent-1/channels');
+  it('lets the tab list keep the full row width on mobile by wrapping the right-slot controls', async () => {
+    server.use(...commonHandlers(enabledPackages));
+
+    renderLayout('/agents/agent-1/evaluate');
+
+    // Below lg the right-slot buttons wrap onto their own line, right-aligned,
+    // instead of stealing width from the (scrollable) tab list.
+    const runOptionsTrigger = await screen.findByTestId('agent-top-bar-run-options-trigger');
+    const rightSlot = runOptionsTrigger.parentElement!;
+    expect(rightSlot.className).toContain('ml-auto');
+
+    const tabsRow = rightSlot.parentElement!;
+    expect(tabsRow.className).toContain('max-lg:flex-wrap');
+
+    // flex-1 (basis 0) never wraps; on mobile the tabs need their content-sized
+    // basis back (flex-auto) so the row can decide to wrap the right slot.
+    const tabsRoot = screen.getByRole('tablist').parentElement!.parentElement!;
+    expect(tabsRoot.className).toContain('min-w-0');
+    expect(tabsRoot.className).toContain('max-lg:flex-auto');
+  });
+
+  it('keeps run options out of the Editor tab bar because the editor chat composer owns them', async () => {
+    server.use(...commonHandlers(enabledPackages));
+
+    renderLayout('/agents/agent-1/editor');
+
+    expect(await screen.findByRole('tab', { name: /editor/i })).not.toBeNull();
+    expect(screen.queryByTestId('agent-top-bar-run-options-trigger')).toBeNull();
+    expect(screen.queryByTestId('agent-tracing-controls-trigger')).toBeNull();
+  });
+
+  it('keeps the top-bar run options control on Evaluate because there is no composer', async () => {
+    server.use(...commonHandlers(enabledPackages));
+
+    renderLayout('/agents/agent-1/evaluate');
+
+    expect(await screen.findByTestId('agent-top-bar-run-options-trigger')).not.toBeNull();
   });
 });

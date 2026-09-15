@@ -1,0 +1,45 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "Render workspace shell and lsp outputs."
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_workspace_shell",
+            "name": "execute_command",
+            "arguments": {
+              "command": "printf 'WORKSPACE_E2E_SHELL_OUTPUT\\n'",
+              "timeout": 5,
+              "cwd": null,
+              "tail": 20,
+              "background": false
+            }
+          },
+          {
+            "id": "call_workspace_lsp",
+            "name": "lsp_inspect",
+            "arguments": {
+              "path": "src/workspace-output-e2e.ts",
+              "line": 1,
+              "match": "export const <<<WORKSPACE_E2E_SYMBOL = 42;"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "hasToolResult": true
+      },
+      "response": {
+        "content": "Workspace tool output rendering complete."
+      }
+    }
+  ]
+}

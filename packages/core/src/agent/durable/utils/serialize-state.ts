@@ -1,5 +1,7 @@
 import type { JSONSchema7 } from 'json-schema';
+import type { ScoringFilter } from '../../../evals/predicate';
 import type { MastraLanguageModel } from '../../../llm/model/shared.types';
+import type { ToolCallConcurrency } from '../../../loop/types';
 import type { MemoryConfig } from '../../../memory/types';
 import type { CoreTool } from '../../../tools/types';
 import type { MessageList } from '../../message-list';
@@ -10,6 +12,7 @@ import type {
   SerializableModelListEntry,
   SerializableDurableState,
   SerializableDurableOptions,
+  SerializableModelSettings,
   SerializableScorersConfig,
   SerializableScorerEntry,
   DurableAgenticWorkflowInput,
@@ -110,7 +113,11 @@ export function serializeModelList(models: AgentModelManagerConfig[]): Serializa
 export function serializeScorersConfig(
   scorers: Record<
     string,
-    { scorer: { name: string } | string; sampling?: { type: 'none' } | { type: 'ratio'; rate: number } }
+    {
+      scorer: { name: string } | string;
+      sampling?: { type: 'none' } | { type: 'ratio'; rate: number };
+      filter?: ScoringFilter;
+    }
   >,
 ): SerializableScorersConfig {
   const result: SerializableScorersConfig = {};
@@ -126,6 +133,12 @@ export function serializeScorersConfig(
     // Include sampling if provided
     if (entry.sampling) {
       scorerEntry.sampling = entry.sampling;
+    }
+
+    // Filters are plain JSON (declarative predicates), so they survive the
+    // snapshot round-trip by value with no name-based re-resolution.
+    if (entry.filter) {
+      scorerEntry.filter = entry.filter;
     }
 
     result[key] = scorerEntry;
@@ -156,15 +169,59 @@ export function serializeDurableState(params: {
 }
 
 /**
+ * Pick the JSON-safe call settings out of an arbitrary `modelSettings` input.
+ * Drops any field that is not a primitive value of the expected type so that
+ * non-serializable fields (functions, AbortSignal, etc.) never reach the
+ * workflow input.
+ */
+export function serializeModelSettings(
+  settings: SerializableModelSettings | Record<string, unknown> | undefined,
+): SerializableModelSettings | undefined {
+  if (!settings || typeof settings !== 'object') return undefined;
+
+  const source = settings as Record<string, unknown>;
+  const out: SerializableModelSettings = {};
+  const pickNumber = (key: keyof SerializableModelSettings) => {
+    const value = source[key];
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      (out as Record<string, unknown>)[key] = value;
+    }
+  };
+
+  pickNumber('maxOutputTokens');
+  pickNumber('temperature');
+  pickNumber('topP');
+  pickNumber('topK');
+  pickNumber('presencePenalty');
+  pickNumber('frequencyPenalty');
+  pickNumber('seed');
+  pickNumber('maxRetries');
+
+  if (Array.isArray(source.stopSequences) && source.stopSequences.every(v => typeof v === 'string')) {
+    out.stopSequences = source.stopSequences;
+  }
+
+  // Headers are never serialized into the workflow input. They are stored
+  // exclusively on the in-process RunRegistryEntry so they never reach
+  // durable storage. The durable llm-execution step merges them back from
+  // the registry at call time.
+  // (Previously we had a denylist of "sensitive" header names, but any
+  // header could carry credentials — the safest approach is to keep them
+  // all off the wire.)
+
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/**
  * Extract serializable options from agent execution options
  */
 export function serializeDurableOptions(options: {
   maxSteps?: number;
   toolChoice?: any;
   activeTools?: string[];
-  temperature?: number;
+  modelSettings?: SerializableModelSettings | Record<string, unknown>;
   requireToolApproval?: boolean;
-  toolCallConcurrency?: number;
+  toolCallConcurrency?: ToolCallConcurrency;
   autoResumeSuspendedTools?: boolean;
   maxProcessorRetries?: number;
   includeRawChunks?: boolean;
@@ -173,6 +230,14 @@ export function serializeDurableOptions(options: {
   providerOptions?: SerializableDurableOptions['providerOptions'];
   structuredOutput?: SerializableDurableOptions['structuredOutput'];
   skipBgTaskWait?: boolean;
+  disableBackgroundTasks?: boolean;
+  backgroundTaskPolicy?: SerializableDurableOptions['backgroundTaskPolicy'];
+  tracingOptions?: SerializableDurableOptions['tracingOptions'];
+  actor?: SerializableDurableOptions['actor'];
+  instructionsOverride?: SerializableDurableOptions['instructionsOverride'];
+  systemMessage?: SerializableDurableOptions['systemMessage'];
+  transform?: SerializableDurableOptions['transform'];
+  isTaskComplete?: SerializableDurableOptions['isTaskComplete'];
 }): SerializableDurableOptions {
   // Normalize toolChoice to serializable form
   let serializedToolChoice: SerializableDurableOptions['toolChoice'];
@@ -193,7 +258,7 @@ export function serializeDurableOptions(options: {
     maxSteps: options.maxSteps,
     toolChoice: serializedToolChoice,
     activeTools: options.activeTools,
-    temperature: options.temperature,
+    modelSettings: serializeModelSettings(options.modelSettings),
     requireToolApproval: options.requireToolApproval,
     toolCallConcurrency: options.toolCallConcurrency,
     autoResumeSuspendedTools: options.autoResumeSuspendedTools,
@@ -204,6 +269,14 @@ export function serializeDurableOptions(options: {
     providerOptions: options.providerOptions,
     structuredOutput: options.structuredOutput,
     skipBgTaskWait: options.skipBgTaskWait,
+    disableBackgroundTasks: options.disableBackgroundTasks,
+    backgroundTaskPolicy: options.backgroundTaskPolicy,
+    tracingOptions: options.tracingOptions,
+    actor: options.actor,
+    instructionsOverride: options.instructionsOverride,
+    systemMessage: options.systemMessage,
+    transform: options.transform,
+    isTaskComplete: options.isTaskComplete,
   };
 }
 
@@ -222,6 +295,9 @@ export function createWorkflowInput(params: {
   options: Parameters<typeof serializeDurableOptions>[0];
   state: Parameters<typeof serializeDurableState>[0];
   messageId: string;
+  agentSpanData?: unknown;
+  modelSpanData?: unknown;
+  requestContextEntries?: Record<string, unknown>;
 }): DurableAgenticWorkflowInput {
   return {
     __workflowKind: 'durable-agent',
@@ -236,6 +312,9 @@ export function createWorkflowInput(params: {
     options: serializeDurableOptions(params.options),
     state: serializeDurableState(params.state),
     messageId: params.messageId,
+    agentSpanData: params.agentSpanData,
+    modelSpanData: params.modelSpanData,
+    requestContextEntries: params.requestContextEntries,
   };
 }
 

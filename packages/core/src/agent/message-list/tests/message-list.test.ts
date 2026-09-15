@@ -931,7 +931,7 @@ describe('MessageList', () => {
               expect.objectContaining({
                 type: 'reasoning',
                 createdAt: expect.any(Number),
-                reasoning: '',
+                reasoning: 'Step 1: Analyze',
                 details: [{ type: 'text', text: 'Step 1: Analyze', signature: 'sig-a' }],
               }),
               expect.objectContaining({
@@ -1011,7 +1011,7 @@ describe('MessageList', () => {
               expect.objectContaining({
                 type: 'reasoning',
                 createdAt: expect.any(Number),
-                reasoning: '',
+                reasoning: 'Analyzing data...',
                 details: [{ type: 'text', text: 'Analyzing data...', signature: 'sig-b' }],
               }),
               expect.objectContaining({
@@ -1225,7 +1225,7 @@ describe('MessageList', () => {
               expect.objectContaining({
                 type: 'reasoning',
                 createdAt: expect.any(Number),
-                reasoning: '',
+                reasoning: 'First, I need to gather some data.',
                 details: [{ type: 'text', text: 'First, I need to gather some data.', signature: 'sig-gather' }],
               }),
               expect.objectContaining({ type: 'text', text: 'Calling data tool...', createdAt: expect.any(Number) }),
@@ -1244,7 +1244,7 @@ describe('MessageList', () => {
               expect.objectContaining({
                 type: 'reasoning',
                 createdAt: expect.any(Number),
-                reasoning: '',
+                reasoning: 'Data gathered, now processing.',
                 details: [{ type: 'text', text: 'Data gathered, now processing.', signature: 'sig-process' }],
               }),
               expect.objectContaining({
@@ -1269,6 +1269,24 @@ describe('MessageList', () => {
         } satisfies MastraDBMessage,
       ]);
     });
+
+    it.each(['https://example.com/leads.csv', 'data:text/csv;base64,bmFtZQpBY21l', 'bmFtZQpBY21l'])(
+      'preserves attachment filenames in UI messages after storage round-trip: %s',
+      data => {
+        const list = new MessageList({ threadId, resourceId }).add(
+          {
+            role: 'user',
+            content: [{ type: 'file', mimeType: 'text/csv', data, filename: 'leads.csv' }],
+          } satisfies VercelCoreMessage,
+          'input',
+        );
+        const restored = new MessageList({ threadId, resourceId }).add(list.get.all.db(), 'memory');
+
+        expect(restored.get.all.aiV5.ui()[0]?.parts).toEqual([
+          expect.objectContaining({ type: 'file', filename: 'leads.csv', mediaType: 'text/csv' }),
+        ]);
+      },
+    );
 
     it('should correctly convert a Mastra V1 MessageType with a file part containing a non-data URL', () => {
       const inputV1Message = {
@@ -1716,7 +1734,7 @@ describe('MessageList', () => {
             parts: [
               {
                 type: 'reasoning',
-                reasoning: '',
+                reasoning: 'First, I need to gather some data.',
                 details: [{ type: 'text', text: 'First, I need to gather some data.', signature: 'sig-gather' }],
               },
               { type: 'text', text: 'Gathering data...' },
@@ -1731,7 +1749,7 @@ describe('MessageList', () => {
               },
               {
                 type: 'reasoning',
-                reasoning: '',
+                reasoning: 'Data gathered, now I will process it.',
                 details: [{ type: 'text', text: 'Data gathered, now I will process it.', signature: 'sig-process' }],
               },
             ],
@@ -1893,13 +1911,13 @@ describe('MessageList', () => {
             parts: [
               {
                 type: 'reasoning',
-                reasoning: '',
+                reasoning: 'Thinking step 1...',
                 details: [{ type: 'text', text: 'Thinking step 1...', signature: 'sig-1' }],
               },
               { type: 'reasoning', reasoning: '', details: [{ type: 'redacted', data: 'some hidden data' }] },
               {
                 type: 'reasoning',
-                reasoning: '',
+                reasoning: 'Final thought.',
                 details: [{ type: 'text', text: 'Final thought.', signature: 'sig-2' }],
               },
             ],

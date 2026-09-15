@@ -2,6 +2,81 @@ import { FileService } from '@mastra/deployer/build';
 import { Bundler } from '@mastra/deployer/bundler';
 import { shouldSkipDotenvLoading } from '../utils.js';
 
+export function getWorkerEntry(): string {
+  return `
+    import { timingSafeEqual } from 'node:crypto';
+    import { createServer } from 'node:http';
+    import { mastra } from '#mastra';
+
+    const workerConfigToken = process.env.MASTRA_WORKER_CONFIG_TOKEN;
+    let workersReady = false;
+    let shuttingDown = false;
+
+    const isWorkerConfigRequestAuthorized = request => {
+      const authorization = request.headers.authorization;
+      if (!workerConfigToken || !authorization?.startsWith('Bearer ')) return false;
+      const providedToken = Buffer.from(authorization.slice('Bearer '.length));
+      const expectedToken = Buffer.from(workerConfigToken);
+      return providedToken.length === expectedToken.length && timingSafeEqual(providedToken, expectedToken);
+    };
+
+    const healthServer = createServer((request, response) => {
+      response.setHeader('content-type', 'application/json');
+
+      if (request.url === '/config') {
+        if (!isWorkerConfigRequestAuthorized(request)) {
+          response.statusCode = 401;
+          response.end(JSON.stringify({ status: 'unauthorized' }));
+          return;
+        }
+        response.statusCode = 200;
+        response.end(JSON.stringify(mastra.getWorkerConfig()));
+        return;
+      }
+
+      if (request.url !== '/health') {
+        response.statusCode = 404;
+        response.end(JSON.stringify({ status: 'not_found' }));
+        return;
+      }
+
+      response.statusCode = workersReady ? 200 : 503;
+      response.end(JSON.stringify({ status: workersReady ? 'ready' : 'starting' }));
+    });
+
+    const port = Number.parseInt(process.env.PORT ?? '4111', 10);
+    await new Promise((resolve, reject) => {
+      const onError = error => reject(error);
+      healthServer.once('error', onError);
+      healthServer.listen(port, '0.0.0.0', () => {
+        healthServer.off('error', onError);
+        resolve();
+      });
+    });
+
+    try {
+      await mastra.startWorkers();
+      workersReady = true;
+      console.log('[mastra] Workers started');
+    } catch (error) {
+      healthServer.close();
+      throw error;
+    }
+
+    const shutdown = async () => {
+      if (shuttingDown) return;
+      shuttingDown = true;
+      workersReady = false;
+      console.log('[mastra] Shutting down workers...');
+      healthServer.close();
+      await mastra.stopWorkers();
+      process.exit(0);
+    };
+    process.on('SIGINT', shutdown);
+    process.on('SIGTERM', shutdown);
+    `;
+}
+
 export class WorkerBundler extends Bundler {
   constructor({ outputDir }: { outputDir?: string } = {}) {
     super('Worker');
@@ -16,17 +91,7 @@ export class WorkerBundler extends Bundler {
       return Promise.resolve([]);
     }
 
-    const possibleFiles = ['.env.production', '.env.local', '.env'];
-
-    try {
-      const fileService = new FileService();
-      const envFile = fileService.getFirstExistingFile(possibleFiles);
-      return Promise.resolve([envFile]);
-    } catch {
-      // ignore
-    }
-
-    return Promise.resolve([]);
+    return Promise.resolve(new FileService().getExistingFiles(['.env', '.env.local', '.env.production']));
   }
 
   async bundle(
@@ -38,20 +103,6 @@ export class WorkerBundler extends Bundler {
   }
 
   protected getEntry(): string {
-    return `
-    import { mastra } from '#mastra';
-
-    await mastra.startWorkers();
-
-    console.log('[mastra] Workers started');
-
-    const shutdown = async () => {
-      console.log('[mastra] Shutting down workers...');
-      await mastra.stopWorkers();
-      process.exit(0);
-    };
-    process.on('SIGINT', shutdown);
-    process.on('SIGTERM', shutdown);
-    `;
+    return getWorkerEntry();
   }
 }

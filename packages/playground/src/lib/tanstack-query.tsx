@@ -1,4 +1,4 @@
-import { shouldRetryQuery } from '@mastra/playground-ui';
+import { shouldRetryQuery } from '@mastra/playground-ui/utils/query-utils';
 import type { QueryClientConfig } from '@tanstack/react-query';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 

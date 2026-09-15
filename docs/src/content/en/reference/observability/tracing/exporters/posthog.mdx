@@ -1,6 +1,6 @@
 ---
 title: "Reference: PosthogExporter | Observability"
-description: PostHog exporter for Tracing
+description: "Configure PosthogExporter to send Mastra tracing data to PostHog for AI observability, analytics, user attribution, and session analysis."
 packages:
   - "@mastra/posthog"
 ---
@@ -13,7 +13,7 @@ Sends Tracing data to PostHog for AI observability and analytics.
 
 ## Constructor
 
-```typescript prettier:false
+```typescript oxfmt:false
 new PosthogExporter(config: PosthogExporterConfig)
 ```
 
@@ -93,15 +93,23 @@ Extends `BaseExporterConfig`, which includes:
 
 ### `exportTracingEvent`
 
-```typescript prettier:false
+```typescript oxfmt:false
 async exportTracingEvent(event: TracingEvent): Promise<void>
 ```
 
 Exports a tracing event to PostHog.
 
+### `onFeedbackEvent`
+
+```typescript oxfmt:false
+async onFeedbackEvent(event: FeedbackEvent): Promise<void>
+```
+
+Exports a feedback event to PostHog. See [Feedback export](#feedback-export).
+
 ### flush
 
-```typescript prettier:false
+```typescript oxfmt:false
 async flush(): Promise<void>
 ```
 
@@ -109,7 +117,7 @@ Force flushes any buffered events to PostHog without shutting down the exporter.
 
 ### shutdown
 
-```typescript prettier:false
+```typescript oxfmt:false
 async shutdown(): Promise<void>
 ```
 
@@ -147,8 +155,39 @@ const exporter = new PosthogExporter({
 | `MODEL_CHUNK` | `$ai_span` |
 | `TOOL_CALL` | `$ai_span` |
 | `MCP_TOOL_CALL` | `$ai_span` |
+| `PROVIDER_TOOL_CALL` | `$ai_span` |
 | `PROCESSOR_RUN` | `$ai_span` |
 | `AGENT_RUN` | `$ai_span` |
 | `WORKFLOW_RUN` | `$ai_span` |
 | All other workflows | `$ai_span` |
 | `GENERIC` | `$ai_span` |
+
+## Feedback export
+
+Feedback recorded with [`addFeedback()`](/docs/observability/feedback) is exported to PostHog as a native `$ai_feedback` event. PostHog shows it as **User feedback** on the linked trace. No extra configuration is needed.
+
+```typescript
+const trace = await mastra.observability.getRecordedTrace({ traceId })
+await trace.addFeedback({
+  feedbackType: 'thumbs',
+  value: 'down',
+  comment: 'Wrong answer',
+})
+```
+
+Feedback events map to these PostHog properties:
+
+| Mastra feedback field | PostHog property |
+| - | - |
+| `traceId` | `$ai_trace_id` |
+| `comment` (or `value` when no comment) | `$ai_feedback_text` |
+| `feedbackId` | `feedback_id` |
+| `feedbackType` | `feedback_type` |
+| `value` | `feedback_value` |
+| `feedbackSource` | `feedback_source` |
+| `spanId` | `span_id` |
+| `sourceId` | `source_id` |
+| `metadata.sessionId` | `$ai_session_id` |
+| `metadata` (other keys) | custom properties |
+
+Feedback without a `traceId` is dropped because PostHog anchors feedback to a trace through `$ai_trace_id`. The event's distinct ID resolves from `feedbackUserId`, then `metadata.userId`, then `defaultDistinctId`, then `anonymous`.

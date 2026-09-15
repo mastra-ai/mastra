@@ -1,0 +1,9 @@
+packages:
+  - '.'
+
+# Security floors for Dependabot alerts on transitive deps.
+overrides:
+  brace-expansion@>=2.0.0 <2.1.4: 2.1.4
+  js-yaml@>=4.0.0 <4.3.1: 4.3.1
+  qs@>=6.11.1 <6.15.2: 6.15.2
+  uuid@<11.1.1: 11.1.1

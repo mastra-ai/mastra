@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { VercelMicroVMSandbox } from './index';
+import { VercelSandbox } from './index';
 
 // The @vercel/sandbox SDK authenticates via VERCEL_OIDC_TOKEN or the full
 // VERCEL_TOKEN/VERCEL_TEAM_ID/VERCEL_PROJECT_ID triple. Only run when one of
@@ -11,11 +11,11 @@ const HAS_TOKEN_TRIPLE = Boolean(
 );
 const HAS_CREDS = HAS_OIDC || HAS_TOKEN_TRIPLE;
 
-describe.skipIf(!HAS_CREDS)('VercelMicroVMSandbox Integration', () => {
-  let sandbox: VercelMicroVMSandbox | undefined;
+describe.skipIf(!HAS_CREDS)('VercelSandbox Integration', () => {
+  let sandbox: VercelSandbox | undefined;
 
   beforeAll(async () => {
-    sandbox = new VercelMicroVMSandbox({
+    sandbox = new VercelSandbox({
       ...(HAS_TOKEN_TRIPLE
         ? {
             token: process.env.VERCEL_TOKEN,

@@ -50,6 +50,43 @@ describe('activity transform', () => {
     ]);
   });
 
+  it('collects activity bindings for steps initialized from factory functions', () => {
+    const bindings = collectTemporalActivityBindings(
+      `
+        import { createStep, createWorkflow } from '@mastra/core/workflows';
+
+        function createPlanActivities() {
+          return createStep({ id: 'plan-activities', execute: async () => ({}) });
+        }
+
+        const planActivities = createPlanActivities();
+        export const weatherWorkflow = createWorkflow({ id: 'weather-workflow' }).then(planActivities);
+      `,
+      '/virtual/weather-workflow.mjs',
+    );
+
+    expect(bindings).toEqual([{ exportName: 'planActivities', stepId: 'plan-activities' }]);
+  });
+
+  it('preserves factory functions when extracting their initialized steps', async () => {
+    const output = await transform(`
+      import { createStep, createWorkflow } from '@mastra/core/workflows';
+
+      export function createPlanActivities() {
+        return createStep({ id: 'plan-activities', execute: async () => ({ ok: true }) });
+      }
+
+      const planActivities = createPlanActivities();
+      export const weatherWorkflow = createWorkflow({ id: 'weather-workflow' }).then(planActivities);
+    `);
+
+    expect(output).toContain('function createPlanActivities()');
+    expect(output).toContain('return createStep({');
+    expect(output).toContain('const planActivities = createPlanActivities();');
+    expect(output).not.toContain('const createPlanActivities = createStep({');
+    expect(output).not.toContain('createWorkflow');
+  });
+
   it('uses a local mastra binding in the injected helper', async () => {
     const output = await transform(`
       import { createStep } from '@mastra/core/workflows';

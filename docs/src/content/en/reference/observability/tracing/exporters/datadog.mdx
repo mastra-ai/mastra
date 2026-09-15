@@ -1,6 +1,6 @@
 ---
 title: "Reference: DatadogExporter | Observability"
-description: Datadog LLM Observability exporter for Tracing
+description: "Configure DatadogExporter to send Mastra traces into Datadog LLM Observability, supporting application monitoring and analysis of spans and AI performance."
 packages:
   - "@mastra/core"
   - "@mastra/observability"
@@ -12,13 +12,13 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 
 Sends Tracing data to Datadog's LLM Observability product for monitoring and analytics.
 
-:::info
+:::note
 If you also use `dd-trace` APM auto-instrumentation and need it correctly parented under Mastra spans, use the [DatadogBridge](/reference/observability/tracing/bridges/datadog) instead. The exporter sends LLM Observability data after execution completes, so it doesn't participate in `dd-trace`'s live scope.
 :::
 
 ## Constructor
 
-```typescript prettier:false
+```typescript oxfmt:false
 new DatadogExporter(config: DatadogExporterConfig)
 ```
 
@@ -93,7 +93,7 @@ Extends `BaseExporterConfig`, which includes:
 
 ### `exportTracingEvent`
 
-```typescript prettier:false
+```typescript oxfmt:false
 async exportTracingEvent(event: TracingEvent): Promise<void>
 ```
 
@@ -101,7 +101,7 @@ Exports a tracing event to Datadog LLM Observability.
 
 ### flush
 
-```typescript prettier:false
+```typescript oxfmt:false
 async flush(): Promise<void>
 ```
 
@@ -109,7 +109,7 @@ Force flushes any buffered spans to Datadog without shutting down the exporter. 
 
 ### shutdown
 
-```typescript prettier:false
+```typescript oxfmt:false
 async shutdown(): Promise<void>
 ```
 
@@ -160,6 +160,7 @@ Mastra span types are mapped to Datadog LLM Observability span kinds:
 | `MODEL_STEP` | `llm` |
 | `TOOL_CALL` | `tool` |
 | `MCP_TOOL_CALL` | `tool` |
+| `PROVIDER_TOOL_CALL` | `tool` |
 | `WORKFLOW_RUN` | `workflow` |
 | All other types | `task` |
 

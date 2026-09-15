@@ -149,6 +149,24 @@ export interface CleanupConfig {
 export interface BackgroundTaskManagerConfig {
   /** Whether background tasks are enabled. Default: false */
   enabled: boolean;
+  /**
+   * Controls which PubSub subscriptions the manager creates during `init()`.
+   *
+   * - `'full'` (default): Subscribes to both the dispatch topic (worker group,
+   *   exactly-once) and the result topic (fan-out). The manager can enqueue,
+   *   execute, **and** receive completion notifications. Suitable for monolithic
+   *   deployments where the producer and worker live in the same process.
+   *
+   * - `'producer'`: Subscribes **only** to the result topic (fan-out) so it
+   *   receives completion/failure notifications. Does **not** join the worker
+   *   consumer group and does **not** register the `__background-task` internal
+   *   workflow. Use this on the API tier in Option E (fully split) so the API
+   *   can dispatch tasks without competing with the dedicated worker process.
+   *
+   * - `'worker'`: Subscribes to both topics, identical to `'full'`. Exists for
+   *   symmetry and documentation clarity on dedicated worker processes.
+   */
+  mode?: 'full' | 'producer' | 'worker';
   /** Global concurrency limit across all agents. Default: 10 */
   globalConcurrency?: number;
   /** Per-agent concurrency limit. Default: 5 */
@@ -167,6 +185,12 @@ export interface BackgroundTaskManagerConfig {
   /** Cleanup configuration for old task records */
   cleanup?: CleanupConfig;
   /**
+   * Whether to recover running and pending tasks during manager startup.
+   * Disable this when multiple live managers share storage until recovery can
+   * be fenced by persisted worker ownership and leases. Default: true.
+   */
+  recoverStaleTasksOnStart?: boolean;
+  /**
    * Minimum delay between chunk-based progress output events for each task, in ms.
    * Default: undefined (publish every progress chunk).
    */
@@ -182,13 +206,24 @@ export interface BackgroundTaskManagerConfig {
   onTaskComplete?: (task: BackgroundTask) => void | Promise<void>;
   /** Optional callback invoked when a task fails (in addition to stream + message list injection) */
   onTaskFailed?: (task: BackgroundTask) => void | Promise<void>;
+  /** Optional callback invoked when a task is cancelled */
+  onTaskCancelled?: (task: BackgroundTask) => void | Promise<void>;
 }
 
 // --- Tool-level and agent-level config ---
 
+export type BackgroundExecutionDisposition = 'foreground' | 'deferred' | 'awaited';
+
 export interface ToolBackgroundConfig {
   /** Whether this tool is eligible for background execution. Default: false */
   enabled?: boolean;
+  /**
+   * How an eligible tool runs when the call carries no `_background` override.
+   * - `'deferred'` (default): eligible calls run in the background.
+   * - `'foreground'`: eligible calls run inline unless the model explicitly
+   *   opts in via `_background` — eligibility only grants the *option*.
+   */
+  defaultDisposition?: 'foreground' | 'deferred';
   /** Override the manager's default timeout for this tool */
   timeoutMs?: number;
   /** Override retry config for this tool */
@@ -201,7 +236,9 @@ export interface ToolBackgroundConfig {
   onFailed?: (task: BackgroundTask) => void | Promise<void>;
 }
 
-export type AgentBackgroundToolConfig = boolean | { enabled: boolean; timeoutMs?: number };
+export type AgentBackgroundToolConfig =
+  | boolean
+  | { enabled: boolean; timeoutMs?: number; defaultDisposition?: 'foreground' | 'deferred' };
 
 export interface AgentBackgroundConfig {
   /**
@@ -213,11 +250,13 @@ export interface AgentBackgroundConfig {
    */
   disabled?: boolean;
   /**
-   * Which tools should run in the background.
-   * - `true`: use the tool's own background config
-   * - `false`: always foreground, even if tool says background
-   * - `{ enabled, timeoutMs }`: override specific settings
-   * - `'all'`: run all background-eligible tools in background
+   * Which tools are eligible for background execution. Eligible tools run
+   * deferred by default; set `defaultDisposition: 'foreground'` to make a
+   * tool run inline unless the call opts in via `_background`.
+   * - `true`: allow the tool's own background config
+   * - `false`: always foreground, even if the tool is eligible
+   * - `{ enabled, timeoutMs, defaultDisposition }`: override specific settings
+   * - `'all'`: make all tools eligible for background execution
    */
   tools?: Record<string, AgentBackgroundToolConfig> | 'all';
   /** Per-agent concurrency override */
@@ -235,8 +274,10 @@ export interface AgentBackgroundConfig {
  * to override background behavior per-call.
  */
 export interface LLMBackgroundOverride {
-  /** Force background (true) or foreground (false). Undefined = use default config. */
+  /** Force deferred (true) or foreground (false). Undefined uses the configured default disposition. */
   enabled?: boolean;
+  /** Choose foreground, deferred, or awaited execution for this call. */
+  disposition?: BackgroundExecutionDisposition;
   /** Override timeout for this specific call */
   timeoutMs?: number;
   /** Override max retries for this specific call */
@@ -398,6 +439,8 @@ export interface CheckIfSuspendedPayload {
   toolName: string;
 }
 
+export type CheckIfRunningPayload = CheckIfSuspendedPayload;
+
 /**
  * A handle returned by `createBackgroundTask()`.
  * Encapsulates a single background task with its per-stream hooks.
@@ -409,13 +452,18 @@ export interface BackgroundTaskHandle {
   dispatch(): Promise<EnqueueResult>;
   /** Check if the task is suspended */
   checkIfSuspended(args: CheckIfSuspendedPayload): Promise<boolean>;
+  /** Check if the task is running */
+  checkIfRunning(args: CheckIfRunningPayload): Promise<boolean>;
   /** Resume the task */
   resume(resumeData?: unknown): Promise<BackgroundTask>;
+  /** Restarts a task */
+  restart(): Promise<BackgroundTask>;
   /** Cancel this task */
   cancel(): Promise<void>;
   /** Wait for this task to complete */
   waitForCompletion(options?: {
     timeoutMs?: number;
     onProgress?: (elapsedMs: number) => void;
+    abortSignal?: AbortSignal;
   }): Promise<BackgroundTask>;
 }

@@ -1,16 +1,13 @@
-import {
-  ErrorState,
-  NoDataPageLayout,
-  PageLayout,
-  PermissionDenied,
-  SessionExpired,
-  is401UnauthorizedError,
-  is403ForbiddenError,
-} from '@mastra/playground-ui';
+import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
+import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
+import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useState } from 'react';
 import { ScorersToolbar, useScorers } from '@/domains/scores';
 import { NoScorersInfo } from '@/domains/scores/components/scorers-list/no-scorers-info';
 import { ScorersList } from '@/domains/scores/components/scorers-list/scorers-list';
+import { ScorersHeaderCreateAction } from '@/domains/scores/scorers-header-actions';
 
 export default function Scorers() {
   const { data: scorers = {}, isLoading, error } = useScorers();
@@ -44,6 +41,7 @@ export default function Scorers() {
   if (Object.keys(scorers).length === 0 && !isLoading) {
     return (
       <NoDataPageLayout>
+        <ScorersHeaderCreateAction />
         <NoScorersInfo />
       </NoDataPageLayout>
     );
@@ -57,7 +55,8 @@ export default function Scorers() {
   };
 
   return (
-    <PageLayout>
+    <PageLayout height="full">
+      <ScorersHeaderCreateAction />
       <PageLayout.TopArea>
         <ScorersToolbar
           search={search}

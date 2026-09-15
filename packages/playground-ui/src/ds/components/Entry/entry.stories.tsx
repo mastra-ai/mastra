@@ -35,7 +35,7 @@ export const WithText: Story = {
 export const WithBadge: Story = {
   args: {
     label: 'Status',
-    children: <Badge variant="success">Active</Badge>,
+    children: <Badge variant="green">Active</Badge>,
   },
 };
 
@@ -53,14 +53,14 @@ export const WithLongContent: Story = {
 
 export const MultipleEntries: Story = {
   render: () => (
-    <div className="flex flex-col gap-4 w-dropdown-max-height">
+    <div className="w-dropdown-max-height flex flex-col gap-4">
       <Entry label="Name">
         <Txt variant="ui-md" className="text-neutral6">
           My Agent
         </Txt>
       </Entry>
       <Entry label="Status">
-        <Badge variant="success">Running</Badge>
+        <Badge variant="green">Running</Badge>
       </Entry>
       <Entry label="Created">
         <Txt variant="ui-md" className="text-neutral6">

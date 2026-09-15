@@ -8,6 +8,7 @@
  */
 
 import { z } from 'zod/v4';
+import { RequestContext } from '../../request-context';
 import type { WorkspaceSandbox } from '../../workspace/sandbox/sandbox';
 import { createTool } from '../tool';
 import type { Tool } from '../tool';
@@ -82,14 +83,20 @@ export function createCodeModeTool(
       // Resolve sandbox: explicit config -> workspace from context. There is no
       // implicit fallback: Code Mode runs model-authored code, so the execution
       // boundary must be chosen deliberately. To run locally (host privileges),
-      // pass `sandbox: new LocalSandbox()` explicitly.
-      const sandbox: WorkspaceSandbox | undefined = config.sandbox ?? ctx?.workspace?.sandbox;
-      if (!sandbox) {
-        throw new Error(
-          'Code Mode requires a sandbox to run model-authored code, but none was configured. ' +
-            'Pass one to createCodeMode({ tools, sandbox }), or run the agent in a workspace that provides a sandbox. ' +
-            'To execute on the host (host privileges — only for trusted/local use), pass `sandbox: new LocalSandbox()`.',
-        );
+      // pass `sandbox: new LocalSandbox()` explicitly. Transports that provide
+      // their own execution boundary (e.g. in-process V8 isolates) declare
+      // `requiresSandbox: false` and run without one.
+      let sandbox: WorkspaceSandbox | undefined = config.sandbox;
+      if (!sandbox && transport.requiresSandbox !== false) {
+        const requestContext = ctx?.requestContext ?? new RequestContext();
+        sandbox = await ctx?.workspace?.resolveSandbox({ requestContext });
+        if (!sandbox) {
+          throw new Error(
+            'Code Mode requires a sandbox to run model-authored code, but none was configured. ' +
+              'Pass one to createCodeMode({ tools, sandbox }), or run the agent in a workspace that provides a sandbox. ' +
+              'To execute on the host (host privileges — only for trusted/local use), pass `sandbox: new LocalSandbox()`.',
+          );
+        }
       }
 
       // Each external_* call re-enters the real Mastra tool pipeline (validation,

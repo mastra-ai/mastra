@@ -1,145 +1,151 @@
-# DOC styleguide
+# Docs page styleguide
 
-Read STYLEGUIDE.md first.
+Use this file for product documentation under `docs/src/content/en/docs`.
 
-Use this file for general docs pages. There are two page types.
+## Page types
+
+Most docs pages fit one of these patterns:
+
+- **Overview:** Defines a category, explains important choices, and routes readers to focused material.
+- **Focused concept:** Explains one coherent capability, behavior, or mental model.
+- **Setup or configuration:** Helps readers enable and configure a Mastra-owned feature.
+- **Task-oriented:** Takes readers from a known starting point to a verifiable result.
+
+These are authoring patterns, not mandatory templates. A page may combine them when the result remains coherent.
 
 ## Overview pages
 
-Use for category landing pages like agents/overview.mdx or memory/overview.mdx.
+Use an overview for a category landing page such as agents, memory, authentication, deployment, or storage.
 
-What to do:
+An overview should:
 
-- introduce the category
-- list the main sub-topics
-- link to the standard pages in the category
-- help the reader decide where to start
-- keep it broad, not deep
+- define what the category includes and excludes;
+- explain the main choices or subtopics;
+- help readers choose where to start;
+- link to the most useful focused pages and reference material;
+- include category-wide constraints or prerequisites;
+- provide a short working path when immediate setup helps readers understand the category.
 
-Use this shape:
+Useful structures include:
+
+- a short list of capabilities;
+- a decision table;
+- `CardGrid` for curated destinations;
+- `IntegrationGrid` for provider choices;
+- a diagram or architecture explanation;
+- a quickstart;
+- short category-wide sections.
+
+Do not turn the overview into a copy of every child page. It does not need to link every page if the sidebar or a focused index already provides exhaustive navigation.
+
+### Suggested shape
 
 ```mdx
 ---
-title: '$CATEGORY overview'
-description: 'One to two sentences describing what this topic covers.'
+title: '$CATEGORY'
+description: 'What the category helps readers understand or accomplish.'
 packages:
   - '@mastra/core'
-  - '@mastra/<module>'
 ---
 
-# $CATEGORY overview
+# $CATEGORY
 
-One to two sentence intro. Say what the category does and why it matters.
+State what the category does and the main decision the page helps readers make.
 
-Optional image or diagram.
+## Choose an approach
 
-- [Sub-topic A](/docs/$CATEGORY/sub-topic-a): one sentence on what it does
-- [Sub-topic B](/docs/$CATEGORY/sub-topic-b): one sentence on what it does
+Explain the important options with a table, list, cards, or integration grid.
 
-## When to use $CATEGORY
+## Quickstart
 
-Short paragraph or short list of use cases.
+Include this only when a short working example clarifies the category.
 
-## Get started
+## Category-wide topic
 
-Point to the best starting page.
-
-## Optional sections
-
-Add short H2 sections only for category-wide topics like storage, debugging, or shared config.
+Add sections for behavior shared across the category.
 
 ## Next steps
 
-- [Sub-topic A](/docs/$CATEGORY/sub-topic-a)
-- [Sub-topic B](/docs/$CATEGORY/sub-topic-b)
-- [API reference](/reference/$CATEGORY/$CLASS)
+Add selected follow-up links when they improve navigation.
 ```
 
-Rules:
+Use the category name for the title when it is clear and established. Do not add a suffix only to satisfy a formula.
 
-- title must be $CATEGORY overview
-- opening paragraph must be one or two sentences
-- every standard page in the category should be linked from the page
-- if one sub-topic needs more than two paragraphs, move it to its own standard page
-- end with Next steps, not Related
+## Focused concept pages
 
-## Standard pages
+Use a focused page when readers need one coherent explanation or capability.
 
-Use for every non-overview page in the category.
+A focused page should:
 
-What to do:
+- state what the concept is and why it matters;
+- explain when to use it if readers face a real choice;
+- show usage when code or configuration is part of the concept;
+- cover relevant behavior, constraints, and tradeoffs;
+- link to exact API reference pages for exhaustive options.
 
-- teach one concept
-- give enough context to use it
-- show working code
-- link to the API reference
+Keep related sections together even when the page has more than three H2 sections. Split it when sections have independent audiences, tasks, or canonical ownership.
 
-Use this shape:
+### Suggested shape
 
 ````mdx
 ---
 title: '$FEATURE | $CATEGORY'
-description: 'One sentence describing what the reader will learn.'
+description: 'What the reader will understand or accomplish.'
 packages:
   - '@mastra/core'
-  - '@mastra/<module>'
 ---
 
 # $FEATURE
 
-One to two sentence intro. Say what the feature is and why to use it.
+Define the feature and its role in Mastra.
 
 ## When to use $FEATURE
 
-Include this when the reader may need help choosing this feature.
+Add this section only when readers need help choosing it.
 
-## Quickstart
+## Configure $FEATURE
 
-Show the shortest working example.
-
-```typescript title="src/mastra/<path>.ts"
-import { Thing } from '@mastra/core/<module>';
-
-const thing = new Thing({
-  id: 'my-thing',
-  // minimal config
-});
-```
-
-## Core sections
-
-Use one or more H2 sections. Each section should have:
-
-1. one or two short paragraphs
-2. a TypeScript example
-3. a note linking to the API reference when needed
+Introduce the example and show the supported setup.
 
 ```typescript title="src/mastra/<path>.ts"
-// Code showing this concept
+// Complete code for the documented behavior
 ```
 
-:::note
-Visit [ClassName reference](/reference/$CATEGORY/<class>) for the full config.
-:::
+## Behavior or constraint
+
+Explain the important runtime behavior, decision, or limitation.
 
 ## Related
 
-- [Related page 1](/docs/$CATEGORY/page-1)
-- [Related page 2](/docs/$CATEGORY/page-2)
-- [API reference](/reference/$CATEGORY/<class>)
+Add selected links when they help readers continue.
 ````
 
-Rules:
+The title commonly follows `$FEATURE | $CATEGORY`, but use the established title pattern for the section. The H1 should name the subject directly.
 
-- title must be $FEATURE | $CATEGORY
-- opening paragraph must be one or two sentences
-- quickstart should be the shortest copy-pasteable working example
-- use line highlighting when it helps point out important lines
-- use TypeScript fenced code blocks with a title for file paths
-- use npm2yarn on bash install blocks
-- use Tabs only for mutually exclusive choices
-- use Steps and StepItem when order matters
-- use note for API reference links
-- use tip and warning sparingly
-- end with Related
-- keep one concept per page; split the page if it grows past three H2 subsections
+## Conceptual pages
+
+Conceptual pages may compare patterns, explain architecture, or establish terminology without giving a quickstart.
+
+- Organize around reader questions and decisions.
+- Use examples to clarify a concept, not to force the page into a tutorial.
+- State tradeoffs directly.
+- Use tables when readers need to compare options.
+- Link to implementation pages and references after explaining the model.
+
+## Setup and configuration pages
+
+- Start with the supported setup.
+- Explain defaults and persistence boundaries when they affect behavior.
+- Separate local development assumptions from production requirements.
+
+## Task-oriented docs pages
+
+Use a task-oriented page when the main purpose is to create, configure, run, or troubleshoot a Mastra-owned capability. Apply the task sequence in `STYLEGUIDE.md` and use only the sections the task needs.
+
+### Quickstarts
+
+A quickstart is a short task-oriented page or section focused on the fastest supported path to a working result.
+
+- Prefer repository defaults over explaining every choice.
+- State what generated commands or files create.
+- Keep conceptual explanation brief and link to deeper docs.

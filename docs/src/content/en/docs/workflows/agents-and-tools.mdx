@@ -1,13 +1,13 @@
 ---
 title: "Agents and tools | Workflows"
-description: "Learn how to call agents and tools from workflow steps and choose between execute functions and step composition."
+description: "Call Mastra agents and tools from workflow steps, compose them directly with createStep, and choose between execute functions and typed step composition."
 packages:
   - "@mastra/core"
 ---
 
 # Agents and tools
 
-Workflow steps can call agents to leverage LLM reasoning or call tools for type-safe logic. You can either invoke them from within a step's `execute()` function or compose them directly as steps using `createStep()`.
+Workflow steps can call agents to use LLM reasoning or call tools for type-safe logic. You can either invoke them from within a step's `execute()` function or compose them directly as steps using `createStep()`.
 
 ## Using agents in workflows
 
@@ -44,7 +44,21 @@ const step1 = createStep({
 
 Compose an agent as a step using `createStep()` when you don't need to modify the agent call. Use `.map()` to transform the previous step's output into a `prompt` the agent can use.
 
-![Agent as step](/img/workflows/workflows-agent-tools-agent-step.jpg)
+```mermaid
+flowchart LR
+  accTitle: Composing an agent as a workflow step
+  accDescr: The workflow starts, runs step1 as an agent, passes its output to step2, which calls a tool, and then ends when the workflow is committed.
+
+  subgraph step1["step1"]
+    direction TB
+    agent([agent])
+  end
+
+  start(( start )) -- ".then(step1)<br/>in" --> step1
+  step1 -- ".then(step2)<br/>out" --> step2([step2])
+  step2 -- ".commit()<br/>out" --> stop(( end ))
+  step2 <--> tool([tool])
+```
 
 ```typescript {1,2,5-10} title="src/mastra/workflows/test-workflow.ts"
 import { testAgent } from '../agents/test-agent'
@@ -62,15 +76,11 @@ export const testWorkflow = createWorkflow({})
   .commit()
 ```
 
-:::info
-
 Visit [Input Data Mapping](/docs/workflows/control-flow#input-data-mapping) for more information.
-
-:::
 
 When no `structuredOutput` option is provided, Mastra agents use a default schema that expects a `prompt` string as input and returns a `text` string as output:
 
-```typescript prettier:false
+```typescript oxfmt:false
 {
   inputSchema: {
     prompt: string
@@ -115,21 +125,32 @@ export const testWorkflow = createWorkflow({})
   .commit()
 ```
 
-The `structuredOutput.schema` option accepts any Standard JSON Schema. The agent will generate output conforming to this schema, and the step's `outputSchema` will be automatically set to match.
+The `structuredOutput.schema` option accepts any Standard JSON Schema. The agent will generate output conforming to this schema, and the step's `outputSchema` will be automatically set to match. Visit [Structured Output](/docs/agents/structured-output) for more options like error handling strategies and streaming with structured output.
 
-:::info
+### The `.agent()` shorthand
 
-Visit [Structured Output](/docs/agents/structured-output) for more options like error handling strategies and streaming with structured output.
+Add an agent directly with `.agent()` instead of wrapping it in `createStep()`. It accepts the same options as `createStep(agent, options)`, plus an agent ID string in place of the instance:
 
-:::
+```typescript {8} title="src/mastra/workflows/test-workflow.ts"
+import { testAgent } from '../agents/test-agent'
+
+export const testWorkflow = createWorkflow({})
+  .map(async ({ inputData }) => ({
+    prompt: `Generate an article about: ${inputData.topic}`,
+  }))
+  .agent(testAgent, { structuredOutput: { schema: articleSchema } })
+  .commit()
+```
+
+`.agent()` records a declarative entry in the workflow graph rather than an opaque step, so workflows built this way can be persisted as [dynamic workflows](/docs/workflows/dynamic-workflows). Visit [Workflow.agent()](/reference/workflows/workflow-methods/agent) for all parameters.
 
 ## Using tools in workflows
 
-Use tools in workflow steps to leverage existing tool logic. Call from a step's `.execute()` function when you need to prepare context or process responses. Compose tools as steps when you don't need to modify how the tool is used.
+Use tools in workflow steps to use existing tool logic. Call from a step's `.execute()` function when you need to prepare context or process responses. Compose tools as steps when you don't need to modify how the tool is used.
 
 ### Calling tools
 
-Call tools inside a step's `.execute()` function. This gives you more control over the tool's input context, or process its response before passing it to the next step.
+Call tools inside a step's `.execute()` function. You get more control over the tool's input context, or process its response before passing it to the next step.
 
 ```typescript title="src/mastra/workflows/test-workflow.ts"
 import { testTool } from '../tools/test-tool'
@@ -151,7 +172,21 @@ const step2 = createStep({
 
 Compose a tool as a step using `createStep()` when the previous step's output matches the tool's input context. You can use `.map()` to transform the previous step's output if they don't.
 
-![Tool as step](/img/workflows/workflows-agent-tools-tool-step.jpg)
+```mermaid
+flowchart LR
+  accTitle: Composing a tool as a workflow step
+  accDescr: The workflow starts with step1, which calls an agent, then passes its output to step2 as a tool before ending when the workflow is committed.
+
+  subgraph step2["step2"]
+    direction TB
+    tool([tool])
+  end
+
+  start(( start )) -- ".then(step1)<br/>in" --> step1([step1])
+  step1 -- ".then(step2)<br/>out" --> step2
+  step2 -- ".commit()<br/>out" --> stop(( end ))
+  step1 <--> agent([agent])
+```
 
 ```typescript {1,3,7-12} title="src/mastra/workflows/test-workflow.ts"
 import { testTool } from '../tools/test-tool'
@@ -170,13 +205,21 @@ export const testWorkflow = createWorkflow({})
   .commit()
 ```
 
-:::info
-
 Visit [Input Data Mapping](/docs/workflows/control-flow#input-data-mapping) for more information.
 
-:::
+### The `.tool()` shorthand
+
+Add a tool directly with `.tool()` instead of wrapping it in `createStep()`. It accepts a tool instance or a registered tool ID string, plus step-level `retries` and `metadata`:
+
+```typescript {5} title="src/mastra/workflows/test-workflow.ts"
+import { testTool } from '../tools/test-tool'
+
+export const testWorkflow = createWorkflow({}).then(step1).tool(testTool).commit()
+```
+
+Like `.agent()`, `.tool()` records a declarative entry, so the workflow can be persisted as a [dynamic workflow](/docs/workflows/dynamic-workflows). Visit [Workflow.tool()](/reference/workflows/workflow-methods/tool) for all parameters.
 
 ## Related
 
 - [Using Agents](/docs/agents/overview)
-- [MCP Overview](/docs/mcp/overview)
+- [MCP Overview](/docs/connections/mcp)

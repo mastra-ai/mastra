@@ -454,6 +454,11 @@ function extractModelInfo(model: unknown): {
 function stripMastraInternalMetadata(value: unknown): unknown {
   if (!value || typeof value !== 'object') return value;
   if (Array.isArray(value)) return value.map(stripMastraInternalMetadata);
+  // Class instances (URL, Uint8Array, Date, ...) carry no `providerOptions`,
+  // and rebuilding them from their own enumerable keys would destroy them —
+  // a URL has none, so it would collapse to `{}`. Hand them to
+  // normalizeForHash unchanged.
+  if (!isPlainObject(value)) return value;
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
     if (k === 'providerOptions' && v && typeof v === 'object' && !Array.isArray(v)) {
@@ -484,9 +489,22 @@ function normalizeForHash(value: unknown): unknown {
   if (value === null) return null;
   if (typeof value === 'function') return '[function]';
   if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return value;
+  if (typeof value === 'bigint') return `bigint:${value.toString()}`;
   if (value instanceof Date) return value.toISOString();
+  // `LanguageModelV2DataContent` is `string | Uint8Array | URL`, so file and
+  // image parts routinely carry both of the shapes below.
+  if (value instanceof URL) return `url:${value.href}`;
+  if (isBinary(value)) return `binary:${hashBinary(value)}`;
   if (Array.isArray(value)) return value.map(normalizeForHash);
   if (typeof value === 'object') {
+    // A class instance with no enumerable own keys would otherwise serialize
+    // as `{}`, silently erasing whatever it identified. `LanguageModelV2Prompt`
+    // doesn't permit instances beyond the ones handled above, so this is a
+    // last-resort tag: it keeps such a value from colliding with an empty
+    // object, but two distinct instances of the same class still collide.
+    if (!isPlainObject(value) && Object.keys(value).length === 0) {
+      return `${value.constructor?.name ?? 'object'}:${String(value)}`;
+    }
     const out: Record<string, unknown> = {};
     for (const k of Object.keys(value as Record<string, unknown>)) {
       const v = (value as Record<string, unknown>)[k];
@@ -496,6 +514,44 @@ function normalizeForHash(value: unknown): unknown {
     return out;
   }
   return String(value);
+}
+
+/**
+ * True for objects whose prototype is `Object.prototype` or `null` — i.e. the
+ * ones we can safely rebuild key-by-key.
+ *
+ * @internal
+ */
+function isPlainObject(value: object): boolean {
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
+}
+
+/**
+ * Takes `unknown` rather than `object`: both checks are runtime-safe on any
+ * value, so callers don't need to prove it's an object first.
+ *
+ * @internal
+ */
+function isBinary(value: unknown): value is ArrayBufferView | ArrayBuffer {
+  return ArrayBuffer.isView(value) || value instanceof ArrayBuffer;
+}
+
+/**
+ * Digest binary payloads instead of walking them.
+ *
+ * `Object.keys(new Uint8Array(n))` is `['0', ..., 'n-1']`, so the generic
+ * object walk turns every byte into its own property. A 1 MiB image serializes
+ * to ~11 MiB of JSON that way, and the whole walk + stringify + hash runs
+ * synchronously on the request path before the model is called.
+ *
+ * @internal
+ */
+function hashBinary(value: ArrayBufferView | ArrayBuffer): string {
+  const bytes = ArrayBuffer.isView(value)
+    ? new Uint8Array(value.buffer, value.byteOffset, value.byteLength)
+    : new Uint8Array(value);
+  return `${bytes.byteLength}:${createHash('sha256').update(bytes).digest('hex')}`;
 }
 
 /**

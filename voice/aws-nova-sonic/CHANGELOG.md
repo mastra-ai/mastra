@@ -1,5 +1,77 @@
 # @mastra/voice-aws-nova-sonic
 
+## 0.2.2
+
+### Patch Changes
+
+- Update README to include accurate, up-to-date information ([#22858](https://github.com/mastra-ai/mastra/pull/22858))
+
+- Remove `CHANGELOG.md` from distributed npm files resulting in reduced package size ([#22737](https://github.com/mastra-ai/mastra/pull/22737))
+
+## 0.2.2-alpha.1
+
+### Patch Changes
+
+- Update README to include accurate, up-to-date information ([#22858](https://github.com/mastra-ai/mastra/pull/22858))
+
+## 0.2.2-alpha.0
+
+### Patch Changes
+
+- Remove `CHANGELOG.md` from distributed npm files resulting in reduced package size ([#22737](https://github.com/mastra-ai/mastra/pull/22737))
+
+## 0.2.1
+
+### Patch Changes
+
+- dependencies updates: ([#20406](https://github.com/mastra-ai/mastra/pull/20406))
+  - Updated dependency [`@aws-sdk/client-bedrock-runtime@^3.1095.0` ↗︎](https://www.npmjs.com/package/@aws-sdk/client-bedrock-runtime/v/3.1095.0) (from `^3.1058.0`, in `dependencies`)
+  - Updated dependency [`@aws-sdk/credential-provider-node@^3.972.72` ↗︎](https://www.npmjs.com/package/@aws-sdk/credential-provider-node/v/3.972.72) (from `^3.972.48`, in `dependencies`)
+
+## 0.2.1-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#20406](https://github.com/mastra-ai/mastra/pull/20406))
+  - Updated dependency [`@aws-sdk/client-bedrock-runtime@^3.1095.0` ↗︎](https://www.npmjs.com/package/@aws-sdk/client-bedrock-runtime/v/3.1095.0) (from `^3.1058.0`, in `dependencies`)
+  - Updated dependency [`@aws-sdk/credential-provider-node@^3.972.72` ↗︎](https://www.npmjs.com/package/@aws-sdk/credential-provider-node/v/3.972.72) (from `^3.972.48`, in `dependencies`)
+
+## 0.2.0
+
+### Minor Changes
+
+- Random bump ([#18178](https://github.com/mastra-ai/mastra/pull/18178))
+
+## 0.2.0-alpha.0
+
+### Minor Changes
+
+- Random bump ([#18178](https://github.com/mastra-ai/mastra/pull/18178))
+
+## 0.1.4
+
+### Patch Changes
+
+- Security remediation for the 2026-06-17 "easy-day-js" supply-chain incident. Patch bump to publish clean versions and move the `latest` dist-tag forward, superseding the compromised versions that declared the malicious `easy-day-js` dependency. ([#18056](https://github.com/mastra-ai/mastra/pull/18056))
+
+## 0.1.4-alpha.0
+
+### Patch Changes
+
+- Security remediation for the 2026-06-17 "easy-day-js" supply-chain incident. Patch bump to publish clean versions and move the `latest` dist-tag forward, superseding the compromised versions that declared the malicious `easy-day-js` dependency. ([#18056](https://github.com/mastra-ai/mastra/pull/18056))
+
+## 0.1.3
+
+### Patch Changes
+
+- dependencies updates: ([#17521](https://github.com/mastra-ai/mastra/pull/17521))
+  - Updated dependency [`@aws-sdk/client-bedrock-runtime@^3.1057.0` ↗︎](https://www.npmjs.com/package/@aws-sdk/client-bedrock-runtime/v/3.1057.0) (from `^3.1040.0`, in `dependencies`)
+  - Updated dependency [`@aws-sdk/credential-provider-node@^3.972.47` ↗︎](https://www.npmjs.com/package/@aws-sdk/credential-provider-node/v/3.972.47) (from `^3.972.38`, in `dependencies`)
+
+- dependencies updates: ([#17600](https://github.com/mastra-ai/mastra/pull/17600))
+  - Updated dependency [`@aws-sdk/client-bedrock-runtime@^3.1058.0` ↗︎](https://www.npmjs.com/package/@aws-sdk/client-bedrock-runtime/v/3.1058.0) (from `^3.1057.0`, in `dependencies`)
+  - Updated dependency [`@aws-sdk/credential-provider-node@^3.972.48` ↗︎](https://www.npmjs.com/package/@aws-sdk/credential-provider-node/v/3.972.48) (from `^3.972.47`, in `dependencies`)
+
 ## 0.1.3-alpha.0
 
 ### Patch Changes

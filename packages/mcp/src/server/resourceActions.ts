@@ -1,11 +1,17 @@
-import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { IMastraLogger } from '@mastra/core/logger';
-import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import type { Server, ServerNotifier } from '@modelcontextprotocol/server';
+import { broadcastNotification } from './notificationBroadcast';
 
 interface ServerResourceActionsDependencies {
-  getSubscriptions: () => Set<string>;
+  getSubscribedServers: (uri: string) => Server[];
   getLogger: () => IMastraLogger;
-  getSdkServer: () => Server;
+  getSdkServers: () => Server[];
+  /**
+   * Publish-side facade of the 2026-07-28 handler's subscription bus, when the
+   * server is pinned to that revision and the handler exists. Modern clients
+   * receive change events via `subscriptions/listen` instead of server push.
+   */
+  getModernEraNotifier?: () => ServerNotifier | undefined;
 }
 
 /**
@@ -13,30 +19,38 @@ interface ServerResourceActionsDependencies {
  *
  * This class provides methods for MCP servers to notify connected clients when
  * resources are updated or when the resource list changes.
+ *
+ * Notifications are broadcast to every active server instance (the main
+ * stdio/SSE instance plus each streamable HTTP session). Clients connected in
+ * stateless/serverless mode cannot receive notifications because each request
+ * uses a transient server instance.
  */
 export class ServerResourceActions {
-  private readonly getSubscriptions: () => Set<string>;
+  private readonly getSubscribedServers: (uri: string) => Server[];
   private readonly getLogger: () => IMastraLogger;
-  private readonly getSdkServer: () => Server;
+  private readonly getSdkServers: () => Server[];
+  private readonly getModernEraNotifier?: () => ServerNotifier | undefined;
 
   /**
    * @internal
    */
   constructor(dependencies: ServerResourceActionsDependencies) {
-    this.getSubscriptions = dependencies.getSubscriptions;
+    this.getSubscribedServers = dependencies.getSubscribedServers;
     this.getLogger = dependencies.getLogger;
-    this.getSdkServer = dependencies.getSdkServer;
+    this.getSdkServers = dependencies.getSdkServers;
+    this.getModernEraNotifier = dependencies.getModernEraNotifier;
   }
 
   /**
    * Notifies subscribed clients that a specific resource has been updated.
    *
-   * If clients are subscribed to the resource URI, they will receive a
-   * `notifications/resources/updated` message to re-fetch the resource content.
+   * Only clients that subscribed to the resource URI (via `resources/subscribe`)
+   * receive a `notifications/resources/updated` message prompting them to
+   * re-fetch the resource content.
    *
    * @param params - Notification parameters
    * @param params.uri - URI of the resource that was updated
-   * @throws {MastraError} If sending the notification fails
+   * @throws {MastraError} If sending the notification fails on all subscribed server instances
    *
    * @example
    * ```typescript
@@ -45,32 +59,23 @@ export class ServerResourceActions {
    * ```
    */
   public async notifyUpdated({ uri }: { uri: string }): Promise<void> {
-    if (this.getSubscriptions().has(uri)) {
-      this.getLogger().info(`Sending notifications/resources/updated for externally notified resource: ${uri}`);
-      try {
-        await this.getSdkServer().sendResourceUpdated({ uri });
-      } catch (error) {
-        const mastraError = new MastraError(
-          {
-            id: 'MCP_SERVER_RESOURCE_UPDATED_NOTIFICATION_FAILED',
-            domain: ErrorDomain.MCP,
-            category: ErrorCategory.THIRD_PARTY,
-            text: 'Failed to send resource updated notification',
-            details: {
-              uri,
-            },
-          },
-          error,
-        );
-        this.getLogger().trackException(mastraError);
-        this.getLogger().error('Failed to send resource updated notification:', {
-          error: mastraError.toString(),
-        });
-        throw mastraError;
-      }
-    } else {
+    // Modern (2026-07-28) clients subscribe via subscriptions/listen; the bus routes
+    // the event only to subscriptions that opted in to this URI. No-op when unset.
+    this.getModernEraNotifier?.()?.resourceUpdated(uri);
+    const subscribedServers = this.getSubscribedServers(uri);
+    if (subscribedServers.length === 0) {
       this.getLogger().debug(`Resource ${uri} was updated, but no active subscriptions for it.`);
+      return;
     }
+    this.getLogger().info(`Sending notifications/resources/updated for externally notified resource: ${uri}`);
+    await broadcastNotification({
+      servers: subscribedServers,
+      send: server => server.sendResourceUpdated({ uri }),
+      logger: this.getLogger(),
+      errorId: 'MCP_SERVER_RESOURCE_UPDATED_NOTIFICATION_FAILED',
+      errorText: 'Failed to send resource updated notification',
+      errorDetails: { uri },
+    });
   }
 
   /**
@@ -80,7 +85,7 @@ export class ServerResourceActions {
    * them to re-fetch the resource list. Resource lists and templates are always evaluated
    * per request, so there is no server-side cache to clear.
    *
-   * @throws {MastraError} If sending the notification fails
+   * @throws {MastraError} If sending the notification fails on all server instances
    *
    * @example
    * ```typescript
@@ -90,23 +95,14 @@ export class ServerResourceActions {
    */
   public async notifyListChanged(): Promise<void> {
     this.getLogger().info('Resource list change externally notified. Sending notification.');
-    try {
-      await this.getSdkServer().sendResourceListChanged();
-    } catch (error) {
-      const mastraError = new MastraError(
-        {
-          id: 'MCP_SERVER_RESOURCE_LIST_CHANGED_NOTIFICATION_FAILED',
-          domain: ErrorDomain.MCP,
-          category: ErrorCategory.THIRD_PARTY,
-          text: 'Failed to send resource list changed notification',
-        },
-        error,
-      );
-      this.getLogger().trackException(mastraError);
-      this.getLogger().error('Failed to send resource list changed notification:', {
-        error: mastraError.toString(),
-      });
-      throw mastraError;
-    }
+    // Modern (2026-07-28) clients subscribe via subscriptions/listen; no-op when unset.
+    this.getModernEraNotifier?.()?.resourcesChanged();
+    await broadcastNotification({
+      servers: this.getSdkServers(),
+      send: server => server.sendResourceListChanged(),
+      logger: this.getLogger(),
+      errorId: 'MCP_SERVER_RESOURCE_LIST_CHANGED_NOTIFICATION_FAILED',
+      errorText: 'Failed to send resource list changed notification',
+    });
   }
 }

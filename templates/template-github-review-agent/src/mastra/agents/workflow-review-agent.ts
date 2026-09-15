@@ -29,7 +29,4 @@ Apply ALL of the following review lenses to every file:
 - Acknowledge good patterns when you see them (use the "positive" severity).
 - Be concise — the workflow aggregates your output across multiple batches.
 - When the review depth says "HIGH-LEVEL", skip minor style issues entirely.`,
-  defaultOptions: {
-    maxSteps: 50,
-  },
 });

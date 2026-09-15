@@ -1,3 +1,4 @@
+import type { DatasetItemToolMock } from '@mastra/client-js';
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 
@@ -8,6 +9,8 @@ export interface DatasetItemVersion {
   input: unknown;
   groundTruth?: unknown;
   expectedTrajectory?: unknown;
+  toolMocks?: DatasetItemToolMock[];
+  scorerIds?: string[];
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   validTo: number | null;
@@ -36,6 +39,9 @@ export const useDatasetItemVersions = (datasetId: string, itemId: string) => {
           input: version.input,
           groundTruth: version.groundTruth,
           expectedTrajectory: version.expectedTrajectory,
+          toolMocks: version.toolMocks,
+          scorerIds: version.scorerIds,
+          requestContext: version.requestContext,
           metadata: version.metadata,
           validTo: version.validTo,
           isDeleted: version.isDeleted,
@@ -72,6 +78,9 @@ export const useDatasetItemVersion = (
         input: v.input,
         groundTruth: v.groundTruth,
         expectedTrajectory: v.expectedTrajectory,
+        toolMocks: v.toolMocks,
+        scorerIds: v.scorerIds,
+        requestContext: v.requestContext,
         metadata: v.metadata,
         validTo: v.validTo ?? null,
         isDeleted: v.isDeleted ?? false,

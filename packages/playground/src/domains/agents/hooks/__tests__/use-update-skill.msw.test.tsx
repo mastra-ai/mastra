@@ -1,10 +1,9 @@
-// @vitest-environment jsdom
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { useUpdateSkill } from '../use-update-skill';
 import { server } from '@/test/msw-server';
@@ -22,6 +21,12 @@ const makeWrapper = () => {
 };
 
 describe('useUpdateSkill', () => {
+  beforeEach(() => {
+    // The update mutation reads auth capabilities to gate workspace writes;
+    // default to auth-disabled so permission checks pass without network noise.
+    server.use(http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({ enabled: false, login: null })));
+  });
+
   afterEach(() => {
     cleanup();
   });

@@ -1,20 +1,22 @@
-import type { InfrastructureStatusResponse } from '@mastra/client-js';
-import { PageHeader, PageLayout, SectionCard, Txt } from '@mastra/playground-ui';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { SectionCard } from '@mastra/playground-ui/components/SectionCard';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 
 import { useInfrastructureStatus } from '@/domains/agent-builder/hooks/use-infrastructure-status';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 
-const StatusBadge = ({ ok, label }: { ok: boolean; label: string }) => (
-  <span
-    className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs ${
-      ok ? 'bg-accent3/10 text-accent3' : 'bg-surface2 text-neutral3'
-    }`}
+const InfrastructureStatus = ({ ok, label }: { ok: boolean; label: string }) => (
+  <Badge
+    variant={ok ? 'green' : 'neutral'}
+    size="sm"
+    indicator="dot"
     data-slot="infrastructure-status-badge"
     data-ok={ok ? 'true' : 'false'}
   >
-    <span className={`h-1.5 w-1.5 rounded-full ${ok ? 'bg-accent3' : 'bg-neutral3'}`} aria-hidden="true" />
     {label}
-  </span>
+  </Badge>
 );
 
 const EmptyRow = ({ message }: { message: string }) => (
@@ -46,7 +48,7 @@ const ConfigDetails = ({ entries }: { entries: Array<{ key: string; value: strin
   if (entries.length === 0) return null;
 
   return (
-    <div className="grid grid-cols-1 gap-3 border-t border-border1 pt-3 sm:grid-cols-2">
+    <div className="border-border1 grid grid-cols-1 gap-3 border-t pt-3 sm:grid-cols-2">
       {entries.map(entry => (
         <Detail key={entry.key} label={`Config: ${entry.key}`} value={titleCase(entry.value)} />
       ))}
@@ -57,8 +59,7 @@ const ConfigDetails = ({ entries }: { entries: Array<{ key: string; value: strin
 export const AgentBuilderInfrastructure = () => {
   const { hasPermission } = usePermissions();
   const canViewInfrastructure = hasPermission('infrastructure:read');
-  const { data: infrastructureData, isLoading, error } = useInfrastructureStatus({ enabled: canViewInfrastructure });
-  const data = infrastructureData as InfrastructureStatusResponse | undefined;
+  const { data, isLoading, error } = useInfrastructureStatus({ enabled: canViewInfrastructure });
 
   return (
     <PageLayout width="narrow">
@@ -68,7 +69,7 @@ export const AgentBuilderInfrastructure = () => {
         </PageHeader>
       </PageLayout.TopArea>
 
-      <PageLayout.MainArea className="flex flex-col gap-5 mt-6">
+      <PageLayout.MainArea className="mt-6 flex flex-col gap-5">
         <SectionCard
           title="Agent Builder Infrastructure"
           description="Deployment-level defaults Agent Builder applies when users create or run builder agents."
@@ -86,7 +87,7 @@ export const AgentBuilderInfrastructure = () => {
               Infrastructure configuration unavailable.
             </Txt>
           ) : (
-            <div className="flex flex-col gap-6">
+            <div className="flex flex-col gap-4">
               <div className="flex flex-col gap-2">
                 <div className="flex flex-col gap-1">
                   <Txt variant="ui-md" className="font-medium">
@@ -102,7 +103,7 @@ export const AgentBuilderInfrastructure = () => {
                 ) : (
                   <ul className="flex flex-col gap-2">
                     {data.channels.providers.map(provider => (
-                      <li key={provider.id} className="rounded-md border border-border1 px-3 py-3">
+                      <li key={provider.id} className="border-border1 rounded-md border px-3 py-3">
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex flex-col gap-1">
                             <Txt variant="ui-sm" className="font-medium">
@@ -112,12 +113,12 @@ export const AgentBuilderInfrastructure = () => {
                               Provider ID: {provider.id}
                             </Txt>
                           </div>
-                          <StatusBadge
+                          <InfrastructureStatus
                             ok={provider.isConfigured}
                             label={provider.isConfigured ? 'Configured' : 'Not configured'}
                           />
                         </div>
-                        <div className="mt-3 grid grid-cols-1 gap-3 border-t border-border1 pt-3 sm:grid-cols-2">
+                        <div className="border-border1 mt-3 grid grid-cols-1 gap-3 border-t pt-3 sm:grid-cols-2">
                           <Detail label="Registered by" value={`${titleCase(provider.name)} provider`} />
                           <Detail label="Provider routes" value={provider.routeCount} />
                         </div>
@@ -140,20 +141,20 @@ export const AgentBuilderInfrastructure = () => {
                 {!data.browser.provider ? (
                   <EmptyRow message="No browser configured." />
                 ) : (
-                  <div className="rounded-md border border-border1 px-3 py-3">
+                  <div className="border-border1 rounded-md border px-3 py-3">
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex flex-col gap-1">
                         <Txt variant="ui-sm" className="font-medium">
                           {titleCase(data.browser.provider)}
                         </Txt>
                       </div>
-                      <StatusBadge
+                      <InfrastructureStatus
                         ok={data.browser.registered}
                         label={data.browser.registered ? 'Provider available' : 'Provider missing'}
                       />
                     </div>
                     {data.browser.env ? (
-                      <div className="mt-3 grid grid-cols-1 gap-3 border-t border-border1 pt-3 sm:grid-cols-2">
+                      <div className="border-border1 mt-3 grid grid-cols-1 gap-3 border-t pt-3 sm:grid-cols-2">
                         <Detail label="Environment" value={titleCase(data.browser.env)} />
                       </div>
                     ) : null}
@@ -171,7 +172,7 @@ export const AgentBuilderInfrastructure = () => {
                     External skill registries available to import skills into the workspace.
                   </Txt>
                 </div>
-                <div className="rounded-md border border-border1 px-3 py-3">
+                <div className="border-border1 rounded-md border px-3 py-3">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex flex-col gap-1">
                       <Txt variant="ui-sm" className="font-medium">
@@ -181,7 +182,7 @@ export const AgentBuilderInfrastructure = () => {
                         GitHub-backed public skills registry.
                       </Txt>
                     </div>
-                    <StatusBadge
+                    <InfrastructureStatus
                       ok={data.registries?.skillsSh?.enabled ?? false}
                       label={data.registries?.skillsSh?.enabled ? 'Enabled' : 'Disabled'}
                     />
@@ -202,17 +203,17 @@ export const AgentBuilderInfrastructure = () => {
                 {!data.workspace.type ? (
                   <EmptyRow message="No workspace configured." />
                 ) : (
-                  <div className="rounded-md border border-border1 px-3 py-3">
+                  <div className="border-border1 rounded-md border px-3 py-3">
                     <div className="flex items-start justify-between gap-3">
                       <Txt variant="ui-sm" className="font-medium">
                         {data.workspace.workspaceId ?? data.workspace.name ?? 'Inline workspace'}
                       </Txt>
                       <div className="flex gap-2">
-                        <StatusBadge ok={data.workspace.hasFilesystem} label="Filesystem" />
-                        <StatusBadge ok={data.workspace.hasSandbox} label="Sandbox" />
+                        <InfrastructureStatus ok={data.workspace.hasFilesystem} label="Filesystem" />
+                        <InfrastructureStatus ok={data.workspace.hasSandbox} label="Sandbox" />
                       </div>
                     </div>
-                    <div className="mt-3 grid grid-cols-1 gap-3 border-t border-border1 pt-3 sm:grid-cols-2">
+                    <div className="border-border1 mt-3 grid grid-cols-1 gap-3 border-t pt-3 sm:grid-cols-2">
                       <Detail
                         label="Config type"
                         value={data.workspace.type === 'id' ? 'Registered workspace' : 'Inline config'}

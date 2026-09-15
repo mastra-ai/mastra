@@ -1,5 +1,694 @@
 # create-mastra
 
+## 1.30.0
+
+## 1.30.0-alpha.7
+
+## 1.30.0-alpha.6
+
+## 1.30.0-alpha.5
+
+## 1.30.0-alpha.4
+
+## 1.29.1-alpha.3
+
+## 1.29.1-alpha.2
+
+## 1.29.1-alpha.1
+
+## 1.29.1-alpha.0
+
+## 1.29.0
+
+### Patch Changes
+
+- Updated the README's pnpm command to explicitly run the latest create-mastra release. ([#23488](https://github.com/mastra-ai/mastra/pull/23488))
+
+## 1.29.0-alpha.4
+
+## 1.28.1-alpha.3
+
+### Patch Changes
+
+- Updated the README's pnpm command to explicitly run the latest create-mastra release. ([#23488](https://github.com/mastra-ai/mastra/pull/23488))
+
+## 1.28.1-alpha.2
+
+## 1.28.1-alpha.1
+
+## 1.28.1-alpha.0
+
+## 1.28.0
+
+## 1.28.0-alpha.14
+
+## 1.28.0-alpha.13
+
+## 1.28.0-alpha.12
+
+## 1.28.0-alpha.11
+
+## 1.28.0-alpha.10
+
+## 1.28.0-alpha.9
+
+## 1.28.0-alpha.8
+
+## 1.28.0-alpha.7
+
+## 1.28.0-alpha.6
+
+## 1.28.0-alpha.5
+
+## 1.28.0-alpha.4
+
+## 1.28.0-alpha.3
+
+## 1.28.0-alpha.2
+
+## 1.28.0-alpha.1
+
+## 1.27.4-alpha.0
+
+## 1.27.3
+
+### Patch Changes
+
+- Update README to include accurate, up-to-date information ([#22858](https://github.com/mastra-ai/mastra/pull/22858))
+
+- Remove `CHANGELOG.md` from distributed npm files resulting in reduced package size ([#22737](https://github.com/mastra-ai/mastra/pull/22737))
+
+## 1.27.3-alpha.10
+
+## 1.27.3-alpha.9
+
+## 1.27.3-alpha.8
+
+### Patch Changes
+
+- Update README to include accurate, up-to-date information ([#22858](https://github.com/mastra-ai/mastra/pull/22858))
+
+## 1.27.3-alpha.7
+
+## 1.27.3-alpha.6
+
+## 1.27.3-alpha.5
+
+## 1.27.3-alpha.4
+
+## 1.27.3-alpha.3
+
+## 1.27.3-alpha.2
+
+### Patch Changes
+
+- Remove `CHANGELOG.md` from distributed npm files resulting in reduced package size ([#22737](https://github.com/mastra-ai/mastra/pull/22737))
+
+## 1.27.3-alpha.1
+
+## 1.27.3-alpha.0
+
+## 1.27.2
+
+## 1.27.2-alpha.0
+
+## 1.27.1
+
+## 1.27.1-alpha.3
+
+## 1.27.1-alpha.2
+
+## 1.27.1-alpha.1
+
+## 1.27.1-alpha.0
+
+## 1.27.0
+
+## 1.27.0-alpha.1
+
+## 1.26.2-alpha.0
+
+## 1.26.1
+
+## 1.26.1-alpha.13
+
+## 1.26.1-alpha.12
+
+## 1.26.1-alpha.11
+
+## 1.26.1-alpha.10
+
+## 1.26.1-alpha.9
+
+## 1.26.1-alpha.8
+
+## 1.26.1-alpha.7
+
+## 1.26.1-alpha.6
+
+## 1.26.1-alpha.5
+
+## 1.26.1-alpha.4
+
+## 1.26.1-alpha.3
+
+## 1.26.1-alpha.2
+
+## 1.26.1-alpha.1
+
+## 1.26.1-alpha.0
+
+## 1.26.0
+
+## 1.26.0-alpha.5
+
+## 1.26.0-alpha.4
+
+## 1.26.0-alpha.3
+
+## 1.25.2-alpha.2
+
+## 1.25.2-alpha.1
+
+## 1.25.2-alpha.0
+
+## 1.25.1
+
+### Patch Changes
+
+- Reduced create-mastra's runtime dependencies while preserving project creation behavior. ([#21649](https://github.com/mastra-ai/mastra/pull/21649))
+
+- Removed unused starter files and templates from the `create-mastra` package. The command-line tool still clones the starter repository. ([#21644](https://github.com/mastra-ai/mastra/pull/21644))
+
+## 1.25.1-alpha.15
+
+## 1.25.1-alpha.14
+
+## 1.25.1-alpha.13
+
+## 1.25.1-alpha.12
+
+## 1.25.1-alpha.11
+
+## 1.25.1-alpha.10
+
+## 1.25.1-alpha.9
+
+## 1.25.1-alpha.8
+
+### Patch Changes
+
+- Reduced create-mastra's runtime dependencies while preserving project creation behavior. ([#21649](https://github.com/mastra-ai/mastra/pull/21649))
+
+- Removed unused starter files and templates from the `create-mastra` package. The command-line tool still clones the starter repository. ([#21644](https://github.com/mastra-ai/mastra/pull/21644))
+
+## 1.25.1-alpha.7
+
+## 1.25.1-alpha.6
+
+## 1.25.1-alpha.5
+
+## 1.25.1-alpha.4
+
+## 1.25.1-alpha.3
+
+## 1.25.1-alpha.2
+
+## 1.25.1-alpha.1
+
+## 1.25.1-alpha.0
+
+## 1.25.0
+
+## 1.25.0-alpha.5
+
+## 1.25.0-alpha.4
+
+## 1.25.0-alpha.3
+
+## 1.25.0-alpha.2
+
+## 1.25.0-alpha.1
+
+## 1.24.1-alpha.0
+
+## 1.24.0
+
+### Patch Changes
+
+- Fixed generated projects to approve required pnpm native builds and externalize DuckDB bindings for experiment workers. ([#21301](https://github.com/mastra-ai/mastra/pull/21301))
+
+- dependencies updates: ([#19783](https://github.com/mastra-ai/mastra/pull/19783))
+  - Updated dependency [`posthog-node@^5.46.1` ↗︎](https://www.npmjs.com/package/posthog-node/v/5.46.1) (from `^5.37.0`, in `dependencies`)
+
+## 1.24.0-alpha.18
+
+### Patch Changes
+
+- Fixed generated projects to approve required pnpm native builds and externalize DuckDB bindings for experiment workers. ([#21301](https://github.com/mastra-ai/mastra/pull/21301))
+
+## 1.24.0-alpha.17
+
+## 1.24.0-alpha.16
+
+## 1.24.0-alpha.15
+
+## 1.24.0-alpha.14
+
+## 1.24.0-alpha.13
+
+## 1.24.0-alpha.12
+
+## 1.24.0-alpha.11
+
+## 1.24.0-alpha.10
+
+## 1.24.0-alpha.9
+
+## 1.24.0-alpha.8
+
+## 1.24.0-alpha.7
+
+## 1.24.0-alpha.6
+
+## 1.24.0-alpha.5
+
+## 1.24.0-alpha.4
+
+## 1.24.0-alpha.3
+
+## 1.23.1-alpha.2
+
+## 1.23.1-alpha.1
+
+### Patch Changes
+
+- dependencies updates: ([#19783](https://github.com/mastra-ai/mastra/pull/19783))
+  - Updated dependency [`posthog-node@^5.46.1` ↗︎](https://www.npmjs.com/package/posthog-node/v/5.46.1) (from `^5.37.0`, in `dependencies`)
+
+## 1.23.1-alpha.0
+
+## 1.23.0
+
+### Patch Changes
+
+- Fixed prerelease project creation to keep using the running create-mastra release channel when npm dist-tags have not finished updating. ([#20723](https://github.com/mastra-ai/mastra/pull/20723))
+
+## 1.23.0-alpha.2
+
+## 1.23.0-alpha.1
+
+### Patch Changes
+
+- Fixed prerelease project creation to keep using the running create-mastra release channel when npm dist-tags have not finished updating. ([#20723](https://github.com/mastra-ai/mastra/pull/20723))
+
+## 1.22.1-alpha.0
+
+## 1.22.0
+
+### Patch Changes
+
+- Add `--no-install` flag to create command. It allows you to skip dependency installation. ([#20619](https://github.com/mastra-ai/mastra/pull/20619))
+
+- Generated projects now pin every Mastra dependency to the exact version published on the invoked release channel instead of writing the channel tag (for example `alpha`) verbatim. If the CLI cannot resolve exact versions, it warns and falls back to the channel tag. ([#20448](https://github.com/mastra-ai/mastra/pull/20448))
+
+## 1.22.0-alpha.8
+
+## 1.22.0-alpha.7
+
+## 1.22.0-alpha.6
+
+### Patch Changes
+
+- Add `--no-install` flag to create command. It allows you to skip dependency installation. ([#20619](https://github.com/mastra-ai/mastra/pull/20619))
+
+## 1.22.0-alpha.5
+
+## 1.22.0-alpha.4
+
+## 1.22.0-alpha.3
+
+## 1.22.0-alpha.2
+
+## 1.21.1-alpha.1
+
+## 1.21.1-alpha.0
+
+### Patch Changes
+
+- Generated projects now pin every Mastra dependency to the exact version published on the invoked release channel instead of writing the channel tag (for example `alpha`) verbatim. If the CLI cannot resolve exact versions, it warns and falls back to the channel tag. ([#20448](https://github.com/mastra-ai/mastra/pull/20448))
+
+## 1.21.0
+
+## 1.21.0-alpha.3
+
+## 1.21.0-alpha.2
+
+## 1.21.0-alpha.1
+
+## 1.21.0-alpha.0
+
+## 1.20.3
+
+## 1.20.3-alpha.4
+
+## 1.20.3-alpha.3
+
+## 1.20.3-alpha.2
+
+## 1.20.3-alpha.1
+
+## 1.20.3-alpha.0
+
+## 1.20.2
+
+## 1.20.2-alpha.5
+
+## 1.20.2-alpha.4
+
+## 1.20.2-alpha.3
+
+## 1.20.2-alpha.2
+
+## 1.20.2-alpha.1
+
+## 1.20.2-alpha.0
+
+## 1.20.1
+
+## 1.20.1-alpha.0
+
+## 1.20.0
+
+### Minor Changes
+
+- Improved project creation with a new default template, provider-native OpenAI, Anthropic, Google Gemini, and xAI setup, an empty scaffold mode, automatic skills, automatic git initialization, and interactive Mastra platform setup. ([#19825](https://github.com/mastra-ai/mastra/pull/19825))
+
+  **Breaking change**
+
+  The following `create-mastra`/`mastra create` flags and aliases were removed:
+
+  - `-p, --project-name`
+  - `--default`
+  - `-d, --dir`
+  - `-c, --components`
+  - `-e, --example` and `--no-example`
+  - `-m, --mcp`
+  - `--skills`
+  - `--observe`, `--no-observe`, `--observability`, `--no-observability`, and `--observability-project`
+
+  This removes the classic component and example scaffold controls, custom source-directory selection, MCP editor setup, interactive skills selection, and observability CLI flags from `create-mastra`/`mastra create`. Project names are now positional, managed projects use a new default template, skills are installed automatically for detected coding assistants, and git is initialized automatically. Interactive managed creation offers Mastra platform setup through a browser authentication prompt, creates a platform project with the local project name, and writes its credentials to `.env`. Prompt-free creation can add platform afterward with `mastra init`. Use `--empty` for a minimal project, `--no-skills` to skip skills installation, or `--no-git` to skip git initialization. The separate `mastra init` command retains its existing MCP, skills, and observability setup.
+
+  **Migration examples**
+
+  Create the default managed project:
+
+  ```bash
+  # Before
+  npx create-mastra@latest --project-name my-app --default
+
+  # After
+  npx create-mastra@latest my-app --llm openai
+  ```
+
+  Create a minimal project instead of configuring components or examples:
+
+  ```bash
+  # Before
+  npx create-mastra@latest --project-name my-app --components agents,tools --no-example
+
+  # After
+  npx create-mastra@latest my-app --empty
+  ```
+
+  Skip the new automatic post-create setup when needed:
+
+  ```bash
+  npx create-mastra@latest my-app --llm openai --no-skills --no-git
+  ```
+
+## 1.20.0-alpha.18
+
+## 1.20.0-alpha.17
+
+## 1.20.0-alpha.16
+
+## 1.20.0-alpha.15
+
+## 1.20.0-alpha.14
+
+## 1.20.0-alpha.13
+
+## 1.20.0-alpha.12
+
+## 1.20.0-alpha.11
+
+### Minor Changes
+
+- Improved project creation with a new default template, provider-native OpenAI, Anthropic, Google Gemini, and xAI setup, an empty scaffold mode, automatic skills, automatic git initialization, and interactive Mastra platform setup. ([#19825](https://github.com/mastra-ai/mastra/pull/19825))
+
+  **Breaking change**
+
+  The following `create-mastra`/`mastra create` flags and aliases were removed:
+
+  - `-p, --project-name`
+  - `--default`
+  - `-d, --dir`
+  - `-c, --components`
+  - `-e, --example` and `--no-example`
+  - `-m, --mcp`
+  - `--skills`
+  - `--observe`, `--no-observe`, `--observability`, `--no-observability`, and `--observability-project`
+
+  This removes the classic component and example scaffold controls, custom source-directory selection, MCP editor setup, interactive skills selection, and observability CLI flags from `create-mastra`/`mastra create`. Project names are now positional, managed projects use a new default template, skills are installed automatically for detected coding assistants, and git is initialized automatically. Interactive managed creation offers Mastra platform setup through a browser authentication prompt, creates a platform project with the local project name, and writes its credentials to `.env`. Prompt-free creation can add platform afterward with `mastra init`. Use `--empty` for a minimal project, `--no-skills` to skip skills installation, or `--no-git` to skip git initialization. The separate `mastra init` command retains its existing MCP, skills, and observability setup.
+
+  **Migration examples**
+
+  Create the default managed project:
+
+  ```bash
+  # Before
+  npx create-mastra@latest --project-name my-app --default
+
+  # After
+  npx create-mastra@latest my-app --llm openai
+  ```
+
+  Create a minimal project instead of configuring components or examples:
+
+  ```bash
+  # Before
+  npx create-mastra@latest --project-name my-app --components agents,tools --no-example
+
+  # After
+  npx create-mastra@latest my-app --empty
+  ```
+
+  Skip the new automatic post-create setup when needed:
+
+  ```bash
+  npx create-mastra@latest my-app --llm openai --no-skills --no-git
+  ```
+
+## 1.20.0-alpha.10
+
+## 1.20.0-alpha.9
+
+## 1.20.0-alpha.8
+
+## 1.20.0-alpha.7
+
+## 1.20.0-alpha.6
+
+## 1.20.0-alpha.5
+
+## 1.19.1-alpha.4
+
+## 1.19.1-alpha.3
+
+## 1.19.1-alpha.2
+
+## 1.19.1-alpha.1
+
+## 1.19.1-alpha.0
+
+## 1.19.0
+
+## 1.19.0-alpha.14
+
+## 1.19.0-alpha.13
+
+## 1.19.0-alpha.12
+
+## 1.19.0-alpha.11
+
+## 1.19.0-alpha.10
+
+## 1.19.0-alpha.9
+
+## 1.19.0-alpha.8
+
+## 1.19.0-alpha.7
+
+## 1.19.0-alpha.6
+
+## 1.19.0-alpha.5
+
+## 1.19.0-alpha.4
+
+## 1.18.3-alpha.3
+
+## 1.18.3-alpha.2
+
+## 1.18.3-alpha.1
+
+## 1.18.3-alpha.0
+
+## 1.18.2
+
+## 1.18.2-alpha.2
+
+## 1.18.2-alpha.1
+
+## 1.18.2-alpha.0
+
+## 1.18.1
+
+## 1.18.1-alpha.5
+
+## 1.18.1-alpha.4
+
+## 1.18.1-alpha.3
+
+## 1.18.1-alpha.2
+
+## 1.18.1-alpha.1
+
+## 1.18.1-alpha.0
+
+## 1.18.0
+
+## 1.18.0-alpha.5
+
+## 1.18.0-alpha.4
+
+## 1.18.0-alpha.3
+
+## 1.17.1-alpha.2
+
+## 1.17.1-alpha.1
+
+## 1.17.1-alpha.0
+
+## 1.17.0
+
+## 1.17.0-alpha.10
+
+## 1.17.0-alpha.9
+
+## 1.17.0-alpha.8
+
+## 1.17.0-alpha.7
+
+## 1.16.1-alpha.6
+
+## 1.16.1-alpha.5
+
+## 1.16.1-alpha.4
+
+## 1.16.1-alpha.3
+
+## 1.16.1-alpha.2
+
+## 1.16.1-alpha.1
+
+## 1.16.1-alpha.0
+
+## 1.16.0
+
+## 1.16.0-alpha.7
+
+## 1.16.0-alpha.6
+
+## 1.16.0-alpha.5
+
+## 1.16.0-alpha.4
+
+## 1.16.0-alpha.3
+
+## 1.15.2-alpha.2
+
+## 1.15.2-alpha.1
+
+## 1.15.2-alpha.0
+
+## 1.15.1
+
+## 1.15.1-alpha.5
+
+## 1.15.1-alpha.4
+
+## 1.15.1-alpha.3
+
+## 1.15.1-alpha.2
+
+## 1.15.1-alpha.1
+
+## 1.15.1-alpha.0
+
+## 1.15.0
+
+### Minor Changes
+
+- Random bump ([#18178](https://github.com/mastra-ai/mastra/pull/18178))
+
+## 1.15.0-alpha.0
+
+### Minor Changes
+
+- Random bump ([#18178](https://github.com/mastra-ai/mastra/pull/18178))
+
+## 1.14.1
+
+### Patch Changes
+
+- Security remediation for the 2026-06-17 "easy-day-js" supply-chain incident. Patch bump to publish clean versions and move the `latest` dist-tag forward, superseding the compromised versions that declared the malicious `easy-day-js` dependency. ([#18056](https://github.com/mastra-ai/mastra/pull/18056))
+
+## 1.14.1-alpha.2
+
+## 1.14.1-alpha.1
+
+## 1.14.1-alpha.0
+
+### Patch Changes
+
+- Security remediation for the 2026-06-17 "easy-day-js" supply-chain incident. Patch bump to publish clean versions and move the `latest` dist-tag forward, superseding the compromised versions that declared the malicious `easy-day-js` dependency. ([#18056](https://github.com/mastra-ai/mastra/pull/18056))
+
+## 1.14.0
+
+### Minor Changes
+
+- Added five Gateway-first templates for documentation search, browser automation, meeting notes, company knowledge, and Claw workspace assistance. ([#17425](https://github.com/mastra-ai/mastra/pull/17425))
+
+  Example:
+
+  ```sh
+  npx create-mastra@latest --template template-docs-expert
+  ```
+
+### Patch Changes
+
+- dependencies updates: ([#17846](https://github.com/mastra-ai/mastra/pull/17846))
+  - Updated dependency [`posthog-node@^5.37.0` ↗︎](https://www.npmjs.com/package/posthog-node/v/5.37.0) (from `^5.30.6`, in `dependencies`)
+
+- Republished clean patch versions after compromised npm releases were published outside of the trusted release workflow. ([#18049](https://github.com/mastra-ai/mastra/pull/18049))
+
+  These packages must be released as clean versions higher than the compromised versions currently present on npm so semver ranges resolve to trusted tarballs.
+
+## 1.13.0
+
+## 1.13.0-alpha.4
+
 ## 1.12.3-alpha.3
 
 ## 1.12.3-alpha.2

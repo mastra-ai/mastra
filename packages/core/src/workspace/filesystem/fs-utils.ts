@@ -116,6 +116,22 @@ const MIME_TYPES: Record<string, string> = {
   gql: 'application/graphql',
   // Frameworks
   vue: 'text/x-vue',
+  svelte: 'text/x-svelte',
+  // Web styles
+  scss: 'text/x-scss',
+  sass: 'text/x-sass',
+  less: 'text/x-less',
+  // Additional languages
+  php: 'application/x-php',
+  swift: 'text/x-swift',
+  kt: 'text/x-kotlin',
+  kts: 'text/x-kotlin',
+  dart: 'application/dart',
+  lua: 'text/x-lua',
+  r: 'text/x-r',
+  tf: 'text/x-terraform',
+  tfvars: 'text/x-terraform',
+  mdx: 'text/markdown',
   // Images
   png: 'image/png',
   jpg: 'image/jpeg',
@@ -188,7 +204,10 @@ const MIME_TYPES: Record<string, string> = {
  */
 export function getMimeType(filename: string): string {
   const ext = path.extname(filename).slice(1).toLowerCase();
-  return MIME_TYPES[ext] ?? 'application/octet-stream';
+  // Read via a local so inherited Object.prototype members (e.g. an extension of
+  // `constructor` or `__proto__`) never leak a non-string; only own string values map.
+  const mimeType = Object.hasOwn(MIME_TYPES, ext) ? MIME_TYPES[ext] : undefined;
+  return typeof mimeType === 'string' ? mimeType : 'application/octet-stream';
 }
 
 /**
@@ -230,6 +249,20 @@ const TEXT_EXTENSIONS = new Set([
   '.gql',
   '.vue',
   '.svg',
+  '.mdx',
+  '.scss',
+  '.sass',
+  '.less',
+  '.svelte',
+  '.php',
+  '.swift',
+  '.kt',
+  '.kts',
+  '.dart',
+  '.lua',
+  '.r',
+  '.tf',
+  '.tfvars',
 ]);
 
 /**

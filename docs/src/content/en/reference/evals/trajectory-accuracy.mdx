@@ -1,6 +1,6 @@
 ---
 title: "Reference: Trajectory accuracy scorers | Evals"
-description: Documentation for the Trajectory Accuracy Scorers in Mastra, which evaluate whether an agent or workflow follows the expected sequence of actions.
+description: "Use trajectory accuracy scorers to compare an agent or workflow's tool and step sequence with an expected execution path or ordered trajectory."
 packages:
   - "@mastra/evals"
   - "@mastra/core"
@@ -21,7 +21,7 @@ The `runEvals` pipeline uses two extraction strategies, depending on whether obs
 
 ### Trace-based extraction (preferred)
 
-When the target's `Mastra` instance has storage configured, the pipeline fetches the full execution trace from the observability store and calls `extractTrajectoryFromTrace()`. This produces a hierarchical trajectory with nested `children`, capturing the complete execution tree — including nested agent runs, tool calls within workflow steps, and model generations.
+When the target's `Mastra` instance has storage configured, the pipeline fetches the full execution trace from the observability store and calls `extractTrajectoryFromTrace()`. This produces a hierarchical trajectory with nested `children` that captures the complete execution tree. The tree includes nested agent runs and tool calls within workflow steps. It also includes model generations.
 
 For example, a workflow that calls an agent, which in turn calls tools, produces:
 
@@ -39,10 +39,10 @@ workflow_run
 
 ### Fallback extraction
 
-When storage is not available, the pipeline falls back to:
+When storage isn't available, the pipeline falls back to:
 
-- **Agents:** `extractTrajectory()` — Extracts `ToolCallStep` entries from `toolInvocations` in the agent's message output. Produces a flat list of tool calls.
-- **Workflows:** `extractWorkflowTrajectory()` — Extracts `WorkflowStepStep` entries from `stepResults`. Produces a flat list of workflow steps.
+- **Agents:** `extractTrajectory()`, Extracts `ToolCallStep` entries from `toolInvocations` in the agent's message output. Produces a flat list of tool calls.
+- **Workflows:** `extractWorkflowTrajectory()`, Extracts `WorkflowStepStep` entries from `stepResults`. Produces a flat list of workflow steps.
 
 These fallbacks don't capture nested execution or non-tool-call spans.
 
@@ -120,7 +120,7 @@ All step types share the base properties `name`, `durationMs`, `metadata`, and `
 
 ## Expected steps
 
-When defining expected trajectories, use `ExpectedStep` instead of the full `TrajectoryStep` discriminated union. `ExpectedStep` is a discriminated union that mirrors `TrajectoryStep` — when you specify a `stepType`, you get autocomplete for that variant's fields (e.g., `toolArgs` for `tool_call`, `modelId` for `model_generation`). All variant-specific fields are optional, so you only assert against what you care about.
+When defining expected trajectories, use `ExpectedStep` instead of the full `TrajectoryStep` discriminated union. `ExpectedStep` is a discriminated union that mirrors `TrajectoryStep`: when you specify a `stepType`, you get autocomplete for that variant's fields (e.g., `toolArgs` for `tool_call`, `modelId` for `model_generation`). All variant-specific fields are optional, so you only assert against what you care about.
 
 Omit `stepType` entirely to match any step by name only.
 
@@ -217,7 +217,7 @@ In this example, the parent workflow requires strict ordering of its steps, but 
 ### Use the LLM-based scorer when:
 
 - You need **semantic understanding** of whether steps were appropriate
-- The optimal trajectory is **not predetermined** (evaluate based on task requirements)
+- The optimal trajectory **isn't predetermined** (evaluate based on task requirements)
 - You want to detect **unnecessary, redundant, or missing** steps
 - You need **explanations** for scoring decisions
 - You are evaluating **production agent behavior**
@@ -269,8 +269,8 @@ This function returns an instance of the MastraScorer class. See the [MastraScor
 
 The code-based scorer resolves `expectedTrajectory` from two sources, in order of priority:
 
-1. **Constructor option** — A static trajectory passed when creating the scorer. Used for all dataset items.
-1. **Dataset item** — An `expectedTrajectory` field on the dataset item, passed through the `runEvals` pipeline. Allows different expected trajectories per item.
+1. **Constructor option**: A static trajectory passed when creating the scorer. Used for all dataset items.
+1. **Dataset item**: An `expectedTrajectory` field on the dataset item, passed through the `runEvals` pipeline. Allows different expected trajectories per item.
 
 ```typescript title="src/static-expected.ts"
 // Static: same expected trajectory for all items
@@ -331,7 +331,7 @@ Allows extra steps. Expected steps must appear in the correct relative order. Th
 
 ### Code-based scorer results
 
-```typescript prettier:false
+```typescript oxfmt:false
 {
   runId: string,
   preprocessStepResult: {
@@ -432,7 +432,7 @@ console.log(result.scores.trajectory['trajectory-accuracy'])
 
 ### Comparing step data
 
-Validates not just the step names but also step-specific data. For tool calls, this compares `toolArgs` and `toolResult`. For workflow steps, this compares `output`.
+Validates the step names and step-specific data. For tool calls, this compares `toolArgs` and `toolResult`. For workflow steps, this compares `output`.
 
 ```typescript title="src/example-trajectory-with-data.ts"
 const scorer = createTrajectoryAccuracyScorerCode({
@@ -519,7 +519,7 @@ const guidedScorer = createTrajectoryAccuracyScorerLLM({
 
 ### LLM-based scorer results
 
-```typescript prettier:false
+```typescript oxfmt:false
 {
   runId: string,
   preprocessStepResult: {
@@ -670,16 +670,16 @@ The `createTrajectoryScorerCode()` function from `@mastra/evals/scorers/prebuilt
 
 The unified scorer evaluates four dimensions:
 
-1. **Accuracy** — Matches actual steps against expected steps (if `steps` is configured). Uses the `ordering` mode.
-1. **Efficiency** — Checks step budgets (`maxSteps`, `maxTotalTokens`, `maxTotalDurationMs`) and redundant calls (`noRedundantCalls`).
-1. **Blacklist** — Checks for forbidden tools or sequences. Any violation immediately results in a score of **0.0** regardless of other dimensions.
-1. **Tool failures** — Detects retry patterns, fallback patterns, and argument correction patterns.
+1. **Accuracy**: Matches actual steps against expected steps (if `steps` is configured). Uses the `ordering` mode.
+1. **Efficiency**: Checks step budgets (`maxSteps`, `maxTotalTokens`, `maxTotalDurationMs`) and redundant calls (`noRedundantCalls`).
+1. **Blacklist**: Checks for forbidden tools or sequences. Any violation immediately results in a score of **0.0** regardless of other dimensions.
+1. **Tool failures**: Detects retry and fallback patterns. It also detects argument correction patterns.
 
 The final score is a weighted combination of active dimensions, normalized by which dimensions are active. Default weights are accuracy 0.4, efficiency 0.3, tool failures 0.2, blacklist 0.1, but you can customize them via the `weights` option. Blacklist violations override everything to 0. When nested evaluations are present, the score is 70% top-level and 30% nested average.
 
 ### Unified scorer results
 
-```typescript prettier:false
+```typescript oxfmt:false
 {
   runId: string,
   preprocessStepResult: {

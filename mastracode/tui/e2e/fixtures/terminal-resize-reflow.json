@@ -1,0 +1,44 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "hasToolResult": true
+      },
+      "response": {
+        "content": "Terminal resize fixture complete."
+      }
+    },
+    {
+      "match": {
+        "userMessage": "Create the terminal resize regression task.",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_terminal_resize_task_write",
+            "name": "task_write",
+            "arguments": {
+              "tasks": [
+                {
+                  "id": "terminal-resize-task",
+                  "content": "Terminal resize historical content alpha beta gamma delta epsilon unique-restored-tail",
+                  "status": "in_progress",
+                  "activeForm": "Rendering terminal resize historical content alpha beta gamma delta epsilon unique-restored-tail"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "streamingProfile": {
+        "ttft": 50,
+        "tps": 100
+      }
+    }
+  ]
+}

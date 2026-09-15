@@ -1,4 +1,5 @@
 import type { RequestContext } from '../request-context';
+import { getRequestContextInputValues } from '../request-context/input-source';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../schema';
 import type { PublicSchema, StandardSchemaWithJSON, StandardSchemaIssue } from '../schema';
 import { getZodTypeName, isZodArray, isZodObject, unwrapZodType } from '../utils/zod-utils';
@@ -19,6 +20,10 @@ function safeValidate<T>(
     const result = schema['~standard'].validate(data);
     if (result instanceof Promise) {
       throw new Error('Your schema is async, which is not supported. Please use a sync schema.');
+    }
+    // Prioritise issues over value: Valibot returns both on failure (typed: false).
+    if ('issues' in result && Array.isArray(result.issues) && result.issues.length > 0) {
+      return { issues: result.issues as readonly StandardSchemaIssue[] };
     }
     return result as { value: T } | { issues: readonly StandardSchemaIssue[] };
   } catch (err) {
@@ -159,7 +164,9 @@ export function validateToolSuspendData<T = unknown>(
   }
 
   // Validation failed, return error
-  const errorMessages = validation.issues.map(e => `- ${e.path?.join('.') || 'root'}: ${e.message}`).join('\n');
+  const errorMessages = validation.issues
+    .map(e => `- ${e.path?.map(p => getPathKey(p)).join('.') || 'root'}: ${e.message}`)
+    .join('\n');
 
   const error: ValidationError<T> = {
     error: true,
@@ -452,6 +459,9 @@ export function validateToolInput<T = unknown>(
     return { data: input as T };
   }
 
+  // Temporary fix: should be validated higher up the chain that it's a complete standard schema
+  schema = toStandardSchema(schema);
+
   // Validation pipeline:
   //
   // 1. normalizeNullishInput: Convert top-level null/undefined to {} or [] based on schema type.
@@ -557,7 +567,9 @@ export function validateToolInput<T = unknown>(
 
   // All attempts failed - return the original (non-stripped) error since it's
   // more informative about what the schema actually expects
-  const errorMessages = validation.issues.map(e => `- ${e.path?.join('.') || 'root'}: ${e.message}`).join('\n');
+  const errorMessages = validation.issues
+    .map(e => `- ${e.path?.map(p => getPathKey(p)).join('.') || 'root'}: ${e.message}`)
+    .join('\n');
 
   const error: ValidationError<T> = {
     error: true,
@@ -595,7 +607,9 @@ export function validateToolOutput<T = unknown>(
   }
 
   // Validation failed, return error
-  const errorMessages = validation.issues.map(e => `- ${e.path?.join('.') || 'root'}: ${e.message}`).join('\n');
+  const errorMessages = validation.issues
+    .map(e => `- ${e.path?.map(p => getPathKey(p)).join('.') || 'root'}: ${e.message}`)
+    .join('\n');
 
   const error: ValidationError<T> = {
     error: true,
@@ -654,11 +668,11 @@ export function validateRequestContext<T = any>(
 ): { data: T | Record<string, any>; error?: ValidationError<T> } {
   // If no schema, return request context values as-is
   if (!schema) {
-    return { data: (requestContext?.all ?? {}) as T };
+    return { data: getRequestContextInputValues(requestContext) as T };
   }
 
   // Get the values from request context
-  const contextValues = requestContext?.all ?? {};
+  const contextValues = getRequestContextInputValues(requestContext);
 
   // Convert PublicSchema to StandardSchemaWithJSON for validation
   const standardSchema = toStandardSchema(schema);
@@ -675,7 +689,9 @@ export function validateRequestContext<T = any>(
   }
 
   // Validation failed, return error
-  const errorMessages = validation.issues.map(e => `- ${e.path?.join('.') || 'root'}: ${e.message}`).join('\n');
+  const errorMessages = validation.issues
+    .map(e => `- ${e.path?.map(p => getPathKey(p)).join('.') || 'root'}: ${e.message}`)
+    .join('\n');
 
   // Redact sensitive keys before including in error message
   const redactedContext = redactSensitiveKeys(contextValues);

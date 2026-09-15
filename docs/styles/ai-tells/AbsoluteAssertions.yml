@@ -1,0 +1,21 @@
+---
+extends: existence
+message: "AI overreach: '%s'. Verify this claim or soften it."
+level: error
+ignorecase: true
+tokens:
+  - the only way to
+  - the only real solution
+  - the only way forward
+  - the single most important
+  - the most important thing is
+  - above all else
+  - above everything else
+  - more than anything else
+  - there is no better
+  - there is no other way
+  - there can be no doubt
+  - make no mistake
+  - make no mistake about it
+  - there's no denying
+  - there is no denying

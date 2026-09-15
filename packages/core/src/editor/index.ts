@@ -18,4 +18,7 @@ export type {
   SandboxProvider,
   BlobStoreProvider,
   BrowserProvider,
+  WorkspaceProvider,
+  WorkflowBuilderOptions,
+  IWorkflowBuilder,
 } from './types';

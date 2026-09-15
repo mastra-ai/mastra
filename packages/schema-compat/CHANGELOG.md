@@ -1,5 +1,283 @@
 # @mastra/schema-compat
 
+## 1.3.10
+
+### Patch Changes
+
+- Reduced TypeScript memory usage for applications that define many tools with Zod schemas. ([#23677](https://github.com/mastra-ai/mastra/pull/23677))
+
+- Fixed structured output 400s on OpenAI strict endpoints by stripping JSON Schema validation keywords that strict mode rejects. `prepareJsonSchemaForOpenAIStrictMode` now recursively removes these keywords — including inside `$defs`/`definitions` referenced schemas — and folds their intent into each node's `description`, matching how the tool path already degrades constraints. ([#23547](https://github.com/mastra-ai/mastra/pull/23547))
+
+  **Keywords removed**
+
+  - Array: `uniqueItems`, `minItems`, `maxItems`
+  - String: `minLength`, `maxLength`, `pattern`, `format`
+  - Number: `minimum`, `maximum`, `exclusiveMinimum`, `exclusiveMaximum`, `multipleOf`
+  - Structural (dropped, no useful mapping): `contains`, `minContains`, `maxContains`, `minProperties`, `maxProperties`, `patternProperties`, `unevaluatedItems`, `unevaluatedProperties`
+  - Composition/conditional: `allOf` is flattened into the containing node, `oneOf` is converted to the supported `anyOf`, and `not`/`if`/`then`/`else`/`dependentRequired`/`dependentSchemas` are dropped
+
+  Referenced schemas hoisted into `$defs`/`definitions` receive the same required-property, `additionalProperties: false`, and keyword handling as inline schemas.
+
+## 1.3.10-alpha.1
+
+### Patch Changes
+
+- Reduced TypeScript memory usage for applications that define many tools with Zod schemas. ([#23677](https://github.com/mastra-ai/mastra/pull/23677))
+
+## 1.3.10-alpha.0
+
+### Patch Changes
+
+- Fixed structured output 400s on OpenAI strict endpoints by stripping JSON Schema validation keywords that strict mode rejects. `prepareJsonSchemaForOpenAIStrictMode` now recursively removes these keywords — including inside `$defs`/`definitions` referenced schemas — and folds their intent into each node's `description`, matching how the tool path already degrades constraints. ([#23547](https://github.com/mastra-ai/mastra/pull/23547))
+
+  **Keywords removed**
+
+  - Array: `uniqueItems`, `minItems`, `maxItems`
+  - String: `minLength`, `maxLength`, `pattern`, `format`
+  - Number: `minimum`, `maximum`, `exclusiveMinimum`, `exclusiveMaximum`, `multipleOf`
+  - Structural (dropped, no useful mapping): `contains`, `minContains`, `maxContains`, `minProperties`, `maxProperties`, `patternProperties`, `unevaluatedItems`, `unevaluatedProperties`
+  - Composition/conditional: `allOf` is flattened into the containing node, `oneOf` is converted to the supported `anyOf`, and `not`/`if`/`then`/`else`/`dependentRequired`/`dependentSchemas` are dropped
+
+  Referenced schemas hoisted into `$defs`/`definitions` receive the same required-property, `additionalProperties: false`, and keyword handling as inline schemas.
+
+## 1.3.9
+
+### Patch Changes
+
+- Fixed OpenAI tool schema conversion to avoid duplicating nested optional object and array definitions, preventing compatible MCP tools from being rejected. ([#22929](https://github.com/mastra-ai/mastra/pull/22929))
+
+## 1.3.9-alpha.0
+
+### Patch Changes
+
+- Fixed OpenAI tool schema conversion to avoid duplicating nested optional object and array definitions, preventing compatible MCP tools from being rejected. ([#22929](https://github.com/mastra-ai/mastra/pull/22929))
+
+## 1.3.8
+
+### Patch Changes
+
+- Update README to include accurate, up-to-date information ([#22858](https://github.com/mastra-ai/mastra/pull/22858))
+
+- Remove `CHANGELOG.md` from distributed npm files resulting in reduced package size ([#22737](https://github.com/mastra-ai/mastra/pull/22737))
+
+## 1.3.8-alpha.1
+
+### Patch Changes
+
+- Update README to include accurate, up-to-date information ([#22858](https://github.com/mastra-ai/mastra/pull/22858))
+
+## 1.3.8-alpha.0
+
+### Patch Changes
+
+- Remove `CHANGELOG.md` from distributed npm files resulting in reduced package size ([#22737](https://github.com/mastra-ai/mastra/pull/22737))
+
+## 1.3.7
+
+### Patch Changes
+
+- Optional nested JSON Schema properties with multiple types no longer produce exponentially large OpenAI tool payloads. Payload growth now remains linear as these schemas become more deeply nested. ([#21190](https://github.com/mastra-ai/mastra/pull/21190))
+
+## 1.3.7-alpha.0
+
+### Patch Changes
+
+- Optional nested JSON Schema properties with multiple types no longer produce exponentially large OpenAI tool payloads. Payload growth now remains linear as these schemas become more deeply nested. ([#21190](https://github.com/mastra-ai/mastra/pull/21190))
+
+## 1.3.6
+
+### Patch Changes
+
+- Fixed OpenAI structured output requests failing when a schema uses `z.record()`. The OpenAI compatibility layer now removes the `propertyNames` keyword, which OpenAI strict mode does not permit. Requests that used to fail with "Invalid schema ... 'propertyNames' is not permitted" are now accepted. ([#20977](https://github.com/mastra-ai/mastra/pull/20977))
+
+  **Known limitation.** OpenAI strict mode cannot express an open-ended map. A `z.record()` field is still sent as a plain object with no value schema, so the model is not told what keys or values to produce. Use an explicit `z.object({ ... })` shape when you need the model to fill a map. See [#19273](https://github.com/mastra-ai/mastra/issues/19273).
+
+- Fix supervisor agent tool schemas for Gemini via OpenRouter. Properties with no Gemini-compatible type — most commonly `z.any()`, which serializes to an empty schema — are now rewritten into a permissive `anyOf` instead of being dropped. This resolves the misleading `required[N]: property is not defined` error when using Gemini models through OpenRouter as a supervisor agent (fixes #17325), while keeping fields the model is expected to fill (such as `resumeData` for tool suspend/resume) present in the tool contract. ([#17386](https://github.com/mastra-ai/mastra/pull/17386))
+
+- Fixed Zod v3 schema conversion for CommonJS consumers. ([#21147](https://github.com/mastra-ai/mastra/pull/21147))
+
+- Fixed tool execute-time input validation for Zod tools on Anthropic Claude 3.5 Haiku. The compat layer now skips string min/max checks that were removed from the model-facing JSON Schema, while preserving refinements, defaults, and other validation semantics. ([#19701](https://github.com/mastra-ai/mastra/pull/19701))
+
+## 1.3.6-alpha.3
+
+### Patch Changes
+
+- Fixed Zod v3 schema conversion for CommonJS consumers. ([#21147](https://github.com/mastra-ai/mastra/pull/21147))
+
+## 1.3.6-alpha.2
+
+### Patch Changes
+
+- Fixed OpenAI structured output requests failing when a schema uses `z.record()`. The OpenAI compatibility layer now removes the `propertyNames` keyword, which OpenAI strict mode does not permit. Requests that used to fail with "Invalid schema ... 'propertyNames' is not permitted" are now accepted. ([#20977](https://github.com/mastra-ai/mastra/pull/20977))
+
+  **Known limitation.** OpenAI strict mode cannot express an open-ended map. A `z.record()` field is still sent as a plain object with no value schema, so the model is not told what keys or values to produce. Use an explicit `z.object({ ... })` shape when you need the model to fill a map. See [#19273](https://github.com/mastra-ai/mastra/issues/19273).
+
+## 1.3.6-alpha.1
+
+### Patch Changes
+
+- Fixed tool execute-time input validation for Zod tools on Anthropic Claude 3.5 Haiku. The compat layer now skips string min/max checks that were removed from the model-facing JSON Schema, while preserving refinements, defaults, and other validation semantics. ([#19701](https://github.com/mastra-ai/mastra/pull/19701))
+
+## 1.3.6-alpha.0
+
+### Patch Changes
+
+- Fix supervisor agent tool schemas for Gemini via OpenRouter. Properties with no Gemini-compatible type — most commonly `z.any()`, which serializes to an empty schema — are now rewritten into a permissive `anyOf` instead of being dropped. This resolves the misleading `required[N]: property is not defined` error when using Gemini models through OpenRouter as a supervisor agent (fixes #17325), while keeping fields the model is expected to fill (such as `resumeData` for tool suspend/resume) present in the tool contract. ([#17386](https://github.com/mastra-ai/mastra/pull/17386))
+
+## 1.3.5
+
+### Patch Changes
+
+- Fixed Claude requests failing when tool inputs use a top-level union of object schemas. ([#20724](https://github.com/mastra-ai/mastra/pull/20724))
+
+## 1.3.5-alpha.0
+
+### Patch Changes
+
+- Fixed Claude requests failing when tool inputs use a top-level union of object schemas. ([#20724](https://github.com/mastra-ai/mastra/pull/20724))
+
+## 1.3.4
+
+### Patch Changes
+
+- test(schema-compat): fix 'successful' typo in provider e2e test descriptions ([#19167](https://github.com/mastra-ai/mastra/pull/19167))
+
+- Fixed a crash when converting Zod v4 schemas containing `z.record(...)` through `applyCompatLayer` with any provider compat layer attached (e.g. `GoogleSchemaCompatLayer`, `OpenAISchemaCompatLayer`). ([#17052](https://github.com/mastra-ai/mastra/pull/17052))
+
+  The record patch is now applied in `toStandardSchema` before the `StandardSchemaWithJSON` short-circuit, so it covers Zod >= 4.2 (which natively exposes `~standard.jsonSchema` and bypasses the Zod v4 adapter) as well as older Zod v4 versions that go through the adapter. Affects Zod 4.0.0–4.3.x; the underlying `z.record()` bug is fixed upstream in Zod 4.4.0.
+
+  Fixes [#17051](https://github.com/mastra-ai/mastra/issues/17051).
+
+- Fixed Meta (Llama) and DeepSeek schemas leaking raw number bounds to the model. A field like `z.number().int()` was sent to the model with bogus `minimum: -9007199254740991` / `maximum: 9007199254740991` values, and `z.number().min(1).max(50)` leaked `minimum`/`maximum` keywords, even though OpenAI, Google, and Anthropic already strip these. Numeric constraints are now moved into the field description for Meta and DeepSeek too, matching the other providers. ([#19073](https://github.com/mastra-ai/mastra/pull/19073))
+
+  **Before** (Meta/DeepSeek, `z.object({ age: z.number().min(0).max(120) })`):
+
+  ```json
+  { "age": { "type": "number", "minimum": 0, "maximum": 120 } }
+  ```
+
+  **After**:
+
+  ```json
+  { "age": { "type": "number", "description": "constraints: greater than or equal to 0, lower than or equal to 120" } }
+  ```
+
+  Closes #19072.
+
+## 1.3.4-alpha.2
+
+### Patch Changes
+
+- Fixed a crash when converting Zod v4 schemas containing `z.record(...)` through `applyCompatLayer` with any provider compat layer attached (e.g. `GoogleSchemaCompatLayer`, `OpenAISchemaCompatLayer`). ([#17052](https://github.com/mastra-ai/mastra/pull/17052))
+
+  The record patch is now applied in `toStandardSchema` before the `StandardSchemaWithJSON` short-circuit, so it covers Zod >= 4.2 (which natively exposes `~standard.jsonSchema` and bypasses the Zod v4 adapter) as well as older Zod v4 versions that go through the adapter. Affects Zod 4.0.0–4.3.x; the underlying `z.record()` bug is fixed upstream in Zod 4.4.0.
+
+  Fixes [#17051](https://github.com/mastra-ai/mastra/issues/17051).
+
+## 1.3.4-alpha.1
+
+### Patch Changes
+
+- test(schema-compat): fix 'successful' typo in provider e2e test descriptions ([#19167](https://github.com/mastra-ai/mastra/pull/19167))
+
+## 1.3.4-alpha.0
+
+### Patch Changes
+
+- Fixed Meta (Llama) and DeepSeek schemas leaking raw number bounds to the model. A field like `z.number().int()` was sent to the model with bogus `minimum: -9007199254740991` / `maximum: 9007199254740991` values, and `z.number().min(1).max(50)` leaked `minimum`/`maximum` keywords, even though OpenAI, Google, and Anthropic already strip these. Numeric constraints are now moved into the field description for Meta and DeepSeek too, matching the other providers. ([#19073](https://github.com/mastra-ai/mastra/pull/19073))
+
+  **Before** (Meta/DeepSeek, `z.object({ age: z.number().min(0).max(120) })`):
+
+  ```json
+  { "age": { "type": "number", "minimum": 0, "maximum": 120 } }
+  ```
+
+  **After**:
+
+  ```json
+  { "age": { "type": "number", "description": "constraints: greater than or equal to 0, lower than or equal to 120" } }
+  ```
+
+  Closes #19072.
+
+## 1.3.3
+
+### Patch Changes
+
+- Fix the Zod v4 nullable and optional handlers gating on the wrapper type instead of the wrapped inner type. They checked `value.constructor.name` (always `"ZodNullable"`/`"ZodOptional"`), so the inner type was always processed. A nullable/optional wrapping an unsupported inner type (such as a tuple) is now passed through unchanged, matching the v3 handler, instead of being processed and rejected. Closes #18687. ([#18688](https://github.com/mastra-ai/mastra/pull/18688))
+
+## 1.3.3-alpha.0
+
+### Patch Changes
+
+- Fix the Zod v4 nullable and optional handlers gating on the wrapper type instead of the wrapped inner type. They checked `value.constructor.name` (always `"ZodNullable"`/`"ZodOptional"`), so the inner type was always processed. A nullable/optional wrapping an unsupported inner type (such as a tuple) is now passed through unchanged, matching the v3 handler, instead of being processed and rejected. Closes #18687. ([#18688](https://github.com/mastra-ai/mastra/pull/18688))
+
+## 1.3.2
+
+### Patch Changes
+
+- Fix the Zod v4 string handler silently dropping unrecognized `string_format` checks. Formats without a textual description (such as `ipv4`, `ipv6`, `datetime`, `date`, `time`, `base64`, `cuid2`, `ulid`, `nanoid`, `jwt`) are now preserved as validation instead of being removed, so schemas using them keep rejecting invalid input. Closes #18634. ([#18673](https://github.com/mastra-ai/mastra/pull/18673))
+
+- Fix inverted date constraint descriptions in the Zod v4 schema handler. `z.date().min()` and `z.date().max()` were described with their bounds swapped (a lower bound was labelled "older than" and an upper bound "newer than"), so the schema sent to the model stated the opposite and impossible constraint. The handler now matches Zod semantics and the existing v3 handler. Closes #18581. ([#18582](https://github.com/mastra-ai/mastra/pull/18582))
+
+- Fixed 'Type instantiation is excessively deep' (TS2589) errors that occurred when defining workflows with Zod schemas. Workflow and step type inference is now significantly faster and no longer causes TypeScript to crash or report depth errors. ([#18608](https://github.com/mastra-ai/mastra/pull/18608))
+
+## 1.3.2-alpha.1
+
+### Patch Changes
+
+- Fix the Zod v4 string handler silently dropping unrecognized `string_format` checks. Formats without a textual description (such as `ipv4`, `ipv6`, `datetime`, `date`, `time`, `base64`, `cuid2`, `ulid`, `nanoid`, `jwt`) are now preserved as validation instead of being removed, so schemas using them keep rejecting invalid input. Closes #18634. ([#18673](https://github.com/mastra-ai/mastra/pull/18673))
+
+## 1.3.2-alpha.0
+
+### Patch Changes
+
+- Fix inverted date constraint descriptions in the Zod v4 schema handler. `z.date().min()` and `z.date().max()` were described with their bounds swapped (a lower bound was labelled "older than" and an upper bound "newer than"), so the schema sent to the model stated the opposite and impossible constraint. The handler now matches Zod semantics and the existing v3 handler. Closes #18581. ([#18582](https://github.com/mastra-ai/mastra/pull/18582))
+
+- Fixed 'Type instantiation is excessively deep' (TS2589) errors that occurred when defining workflows with Zod schemas. Workflow and step type inference is now significantly faster and no longer causes TypeScript to crash or report depth errors. ([#18608](https://github.com/mastra-ai/mastra/pull/18608))
+
+## 1.3.1
+
+### Patch Changes
+
+- Fixed createTool type error when passing jsonSchema() or a Schema object from @ai-sdk/provider-utils as inputSchema — no more cast needed ([#17435](https://github.com/mastra-ai/mastra/pull/17435))
+
+## 1.3.1-alpha.0
+
+### Patch Changes
+
+- Fixed createTool type error when passing jsonSchema() or a Schema object from @ai-sdk/provider-utils as inputSchema — no more cast needed ([#17435](https://github.com/mastra-ai/mastra/pull/17435))
+
+## 1.3.0
+
+### Minor Changes
+
+- Random bump ([#18178](https://github.com/mastra-ai/mastra/pull/18178))
+
+## 1.3.0-alpha.0
+
+### Minor Changes
+
+- Random bump ([#18178](https://github.com/mastra-ai/mastra/pull/18178))
+
+## 1.2.14
+
+### Patch Changes
+
+- Security remediation for the 2026-06-17 "easy-day-js" supply-chain incident. Patch bump to publish clean versions and move the `latest` dist-tag forward, superseding the compromised versions that declared the malicious `easy-day-js` dependency. ([#18056](https://github.com/mastra-ai/mastra/pull/18056))
+
+## 1.2.14-alpha.0
+
+### Patch Changes
+
+- Security remediation for the 2026-06-17 "easy-day-js" supply-chain incident. Patch bump to publish clean versions and move the `latest` dist-tag forward, superseding the compromised versions that declared the malicious `easy-day-js` dependency. ([#18056](https://github.com/mastra-ai/mastra/pull/18056))
+
+## 1.2.12
+
+### Patch Changes
+
+- Fixed schema compatibility type declarations so JSON Schema types are bundled correctly. ([#17877](https://github.com/mastra-ai/mastra/pull/17877))
+
 ## 1.2.11
 
 ### Patch Changes

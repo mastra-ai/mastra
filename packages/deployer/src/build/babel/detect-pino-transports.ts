@@ -1,4 +1,4 @@
-import type { PluginObj, NodePath } from '@babel/core';
+import type { PluginObject, NodePath } from '@babel/core';
 import { types as t } from '@babel/core';
 
 /**
@@ -166,7 +166,7 @@ function extractTransportsFromArg(arg: t.Node): string[] {
  * @param transports - Set to collect detected transport package names
  * @returns Babel plugin object
  */
-export function detectPinoTransports(transports: Set<string>): PluginObj {
+export function detectPinoTransports(transports: Set<string>): PluginObject {
   return {
     name: 'detect-pino-transports',
     visitor: {

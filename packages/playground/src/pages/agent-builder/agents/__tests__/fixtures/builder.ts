@@ -24,6 +24,16 @@ export const settingsAllFeatures: BuilderSettingsResponse = {
   },
 };
 
+export const settingsAgentsOnly: BuilderSettingsResponse = {
+  enabled: true,
+  modelPolicy: { active: false },
+  features: {
+    agent: {
+      agents: true,
+    },
+  },
+};
+
 export const settingsPartialFeatures: BuilderSettingsResponse = {
   enabled: true,
   features: {
@@ -41,6 +51,24 @@ export const emptyAvailableModels: BuilderAvailableModelsResponse = {
 };
 
 export const emptyAgents: Record<string, GetAgentResponse> = {};
+
+export const oneOtherAgent: Record<string, GetAgentResponse> = {
+  'helper-agent': {
+    id: 'helper-agent',
+    name: 'Helper Agent',
+    instructions: 'You are a helper agent.',
+    tools: {},
+    workflows: {},
+    agents: {},
+    provider: 'openai',
+    modelId: 'gpt-5-mini',
+    modelVersion: 'v2',
+    modelList: undefined,
+    defaultOptions: {},
+    defaultGenerateOptionsLegacy: {},
+    defaultStreamOptionsLegacy: {},
+  },
+};
 export const emptyTools: Record<string, GetToolResponse> = {};
 export const emptyWorkflows: Record<string, GetWorkflowResponse> = {};
 

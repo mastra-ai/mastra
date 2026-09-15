@@ -1,5 +1,8 @@
-import { ErrorState, Spinner, Button } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 
+import { RotateCcw } from 'lucide-react';
 import { usePermissionPatterns } from '../hooks/use-permission-patterns';
 import { ALL_SIDEBAR_PERMISSIONS } from '../route-permissions';
 import { MASTRA_STUDIO_CONFIG_LOCAL_STORAGE_KEY } from '@/domains/configuration/context/studio-config-context';
@@ -88,7 +91,11 @@ const GateInvalidBaseUrl = ({ error, baseUrl }: GateInvalidBaseUrlProps) => {
       <ErrorState
         title="Failed to load studio"
         message={messages.join('\n\n')}
-        action={<Button onClick={handleReset}>Reset Studio Configuration</Button>}
+        action={
+          <Button icon={<RotateCcw />} onClick={handleReset}>
+            Reset Studio Configuration
+          </Button>
+        }
       />
     </div>
   );

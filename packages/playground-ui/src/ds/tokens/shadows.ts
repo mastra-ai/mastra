@@ -13,6 +13,9 @@ export const Shadows = {
 
   // Dialog/modal shadows
   dialog: '0 16px 48px rgba(0, 0, 0, 0.6)',
+
+  // Panel resting on the page, below dialog
+  panel: '0 1px 2px -1px oklch(0% 0 0deg / 8%), 0 10px 26px -18px oklch(0% 0 0deg / 16%)',
 };
 
 // Glow effects for interactive elements (focus states, etc.)

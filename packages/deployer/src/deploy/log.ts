@@ -19,16 +19,38 @@ export const createPinoStream = (logger: IMastraLogger) => {
   });
 };
 
+/**
+ * Args are joined into a shell command (`shell: true` is required for package
+ * manager shims on Windows), so only allow characters that appear in package
+ * specifiers and CLI flags — never shell metacharacters (CodeQL
+ * js/shell-command-constructed-from-input).
+ */
+const SAFE_SHELL_ARG = /^[\w@%+=:,./^~-]*$/;
+
 export function createChildProcessLogger({ logger, root }: { logger: IMastraLogger; root: string }) {
   const pinoStream = createPinoStream(logger);
   return async ({ cmd, args, env }: { cmd: string; args: string[]; env: Record<string, string> }) => {
     try {
+      for (const arg of args) {
+        if (!SAFE_SHELL_ARG.test(arg)) {
+          throw new Error(`Refusing to pass unsafe argument to shell command: ${JSON.stringify(arg)}`);
+        }
+      }
       const subprocess = spawn(cmd, args, {
         cwd: root,
         shell: true,
         env,
         // No stdin for the child process — it doesn't need interactive input
         stdio: ['ignore', 'pipe', 'pipe'],
+      });
+
+      let stdout = '';
+      let stderr = '';
+      subprocess.stdout?.on('data', chunk => {
+        stdout += chunk.toString();
+      });
+      subprocess.stderr?.on('data', chunk => {
+        stderr += chunk.toString();
       });
 
       // Pipe stdout and stderr through the logging stream.
@@ -42,9 +64,9 @@ export function createChildProcessLogger({ logger, root }: { logger: IMastraLogg
         subprocess.on('close', code => {
           pinoStream.end();
           if (code === 0) {
-            resolve({ success: true });
+            resolve({ success: true, stdout, stderr });
           } else {
-            reject(new Error(`Process exited with code ${code}`));
+            reject(Object.assign(new Error(`Process exited with code ${code}`), { stdout, stderr }));
           }
         });
 

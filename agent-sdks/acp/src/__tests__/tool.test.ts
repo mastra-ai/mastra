@@ -1,3 +1,4 @@
+import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
 
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
@@ -9,11 +10,12 @@ const mocks = vi.hoisted(() => {
   const ndJsonStream = vi.fn(() => ({ readable: {}, writable: {} }));
   const connectionInstances: MockClientSideConnection[] = [];
   let onPrompt: ((connection: MockClientSideConnection) => Promise<void> | void) | undefined;
+  let onInitialize: (() => Promise<unknown>) | undefined;
   let sessionResponse: Record<string, unknown> = { sessionId: 'session-1' };
 
   class MockClientSideConnection {
     client: any;
-    initialize = vi.fn().mockResolvedValue({});
+    initialize = vi.fn().mockImplementation(() => (onInitialize ? onInitialize() : Promise.resolve({})));
     authenticate = vi.fn().mockResolvedValue({});
     newSession = vi.fn().mockImplementation(() => Promise.resolve(sessionResponse));
     cancel = vi.fn().mockResolvedValue({});
@@ -39,6 +41,12 @@ const mocks = vi.hoisted(() => {
     },
     set onPrompt(value: ((connection: MockClientSideConnection) => Promise<void> | void) | undefined) {
       onPrompt = value;
+    },
+    get onInitialize() {
+      return onInitialize;
+    },
+    set onInitialize(value: (() => Promise<unknown>) | undefined) {
+      onInitialize = value;
     },
     get sessionResponse() {
       return sessionResponse;
@@ -68,16 +76,22 @@ vi.mock('@agentclientprotocol/sdk', async importOriginal => {
 });
 
 function createProcess() {
-  return {
-    stdin: new PassThrough(),
-    stdout: new PassThrough(),
-    stderr: new PassThrough(),
-    killed: false,
-    kill: vi.fn(function (this: { killed: boolean }) {
-      this.killed = true;
-      return true;
-    }),
+  const process = new EventEmitter() as EventEmitter & {
+    stdin: PassThrough;
+    stdout: PassThrough;
+    stderr: PassThrough;
+    killed: boolean;
+    kill: ReturnType<typeof vi.fn>;
   };
+  process.stdin = new PassThrough();
+  process.stdout = new PassThrough();
+  process.stderr = new PassThrough();
+  process.killed = false;
+  process.kill = vi.fn(() => {
+    process.killed = true;
+    return true;
+  });
+  return process;
 }
 
 describe('createACPTool', () => {
@@ -85,6 +99,7 @@ describe('createACPTool', () => {
     vi.clearAllMocks();
     mocks.connectionInstances.length = 0;
     mocks.onPrompt = undefined;
+    mocks.onInitialize = undefined;
     mocks.sessionResponse = { sessionId: 'session-1' };
     mocks.spawn.mockImplementation(() => createProcess());
   });
@@ -215,6 +230,7 @@ describe('ACPConnection', () => {
     vi.clearAllMocks();
     mocks.connectionInstances.length = 0;
     mocks.onPrompt = undefined;
+    mocks.onInitialize = undefined;
     mocks.sessionResponse = { sessionId: 'session-1' };
     mocks.spawn.mockImplementation(() => createProcess());
   });
@@ -347,6 +363,111 @@ describe('ACPConnection', () => {
         options: [{ optionId: 'allow_once', name: 'Allow once', kind: 'allow_once' }],
       }),
     ).resolves.toEqual({ outcome: { outcome: 'selected', optionId: 'allow_once' } });
+  });
+
+  it('uses the client returned by createClient and passes it the default client', async () => {
+    const { ACPConnection } = await import('../connection');
+
+    const extMethod = vi.fn().mockResolvedValue({ ok: true });
+    const createClient = vi.fn((defaultClient: any) => Object.assign(defaultClient, { extMethod }));
+
+    const connection = new ACPConnection({
+      id: 'grok',
+      description: 'Grok via ACP',
+      command: 'grok',
+      persistSession: true,
+      createClient,
+    });
+
+    await connection.prompt('needs extension methods');
+    const client = mocks.connectionInstances[0]?.client;
+
+    expect(createClient).toHaveBeenCalledTimes(1);
+    await expect(client.extMethod('_grok/ping', {})).resolves.toEqual({ ok: true });
+    expect(extMethod).toHaveBeenCalledWith('_grok/ping', {});
+
+    // default client behavior is preserved
+    await expect(
+      client.requestPermission({
+        sessionId: 'session-1',
+        toolCallId: 'tool-1',
+        options: [{ optionId: 'allow_once', name: 'Allow once', kind: 'allow_once' }],
+      }),
+    ).resolves.toEqual({ outcome: { outcome: 'selected', optionId: 'allow_once' } });
+  });
+
+  it('kills the agent process and rejects when createClient throws', async () => {
+    const { ACPConnection } = await import('../connection');
+
+    const connection = new ACPConnection({
+      id: 'grok',
+      description: 'Grok via ACP',
+      command: 'grok',
+      persistSession: true,
+      createClient: () => {
+        throw new Error('bad client factory');
+      },
+    });
+
+    await expect(connection.prompt('never runs')).rejects.toThrow('bad client factory');
+    expect((mocks.spawn.mock.results[0]?.value as ReturnType<typeof createProcess>).kill).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses the default client when createClient is omitted', async () => {
+    const { ACPConnection } = await import('../connection');
+
+    const connection = new ACPConnection({
+      id: 'claude-code',
+      description: 'Build anything with Claude Code',
+      command: 'claude',
+      persistSession: true,
+    });
+
+    await connection.prompt('no custom client');
+    const client = mocks.connectionInstances[0]?.client;
+
+    expect(client.extMethod).toBeUndefined();
+    expect(typeof client.sessionUpdate).toBe('function');
+  });
+
+  it('rejects the prompt when the agent process fails to spawn', async () => {
+    const { ACPConnection } = await import('../connection');
+
+    mocks.onInitialize = () => new Promise(() => {});
+
+    const connection = new ACPConnection({
+      id: 'claude-code',
+      description: 'Build anything with Claude Code',
+      command: 'definitely-not-a-real-command',
+      persistSession: true,
+    });
+
+    const promptPromise = connection.prompt('never starts');
+    const agentProcess = mocks.spawn.mock.results[0]?.value as ReturnType<typeof createProcess>;
+    agentProcess.emit('error', new Error('spawn definitely-not-a-real-command ENOENT'));
+
+    await expect(promptPromise).rejects.toThrow('spawn definitely-not-a-real-command ENOENT');
+  });
+
+  it('rejects the prompt when the agent process exits during initialization', async () => {
+    const { ACPConnection } = await import('../connection');
+
+    mocks.onInitialize = () => new Promise(() => {});
+
+    const connection = new ACPConnection({
+      id: 'claude-code',
+      description: 'Build anything with Claude Code',
+      command: 'claude',
+      persistSession: true,
+    });
+
+    const promptPromise = connection.prompt('exits early');
+    const agentProcess = mocks.spawn.mock.results[0]?.value as ReturnType<typeof createProcess>;
+    agentProcess.emit('exit', 1, null);
+
+    await expect(promptPromise).rejects.toThrow(
+      'ACP agent process exited during initialization (code: 1, signal: null)',
+    );
   });
 
   it('delegates permission requests to onPermissionRequest callback', async () => {
@@ -565,6 +686,7 @@ describe('AcpAgent', () => {
     vi.clearAllMocks();
     mocks.connectionInstances.length = 0;
     mocks.onPrompt = undefined;
+    mocks.onInitialize = undefined;
     mocks.sessionResponse = { sessionId: 'session-1' };
     mocks.spawn.mockImplementation(() => createProcess());
   });

@@ -1,6 +1,6 @@
 ---
 title: "Reference: Textual difference scorer | Evals"
-description: Documentation for the Textual Difference Scorer in Mastra, which measures textual differences between strings using sequence matching.
+description: "The createTextualDifferenceScorer() function uses sequence matching to measure the textual differences between two strings."
 packages:
   - "@mastra/core"
   - "@mastra/evals"
@@ -40,7 +40,7 @@ This function returns an instance of the MastraScorer class. See the [MastraScor
 
 `.run()` returns a result in the following shape:
 
-```typescript prettier:false
+```typescript oxfmt:false
 {
   runId: string,
   analyzeStepResult: {
@@ -79,10 +79,10 @@ Final score: `(similarity_ratio * confidence) * scale`
 
 A textual difference score between 0 and 1:
 
-- **1.0**: Identical texts – no differences detected.
-- **0.7–0.9**: Minor differences – few changes needed.
-- **0.4–0.6**: Moderate differences – noticeable changes required.
-- **0.1–0.3**: Major differences – extensive changes needed.
+- **1.0**: The texts are identical.
+- **0.7 to 0.9**: Minor differences, few changes needed.
+- **0.4 to 0.6**: Moderate differences, noticeable changes required.
+- **0.1 to 0.3**: Major differences, extensive changes needed.
 - **0.0**: Completely different texts.
 
 ## Example

@@ -1,0 +1,24 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "original message"
+      },
+      "response": {
+        "content": "original response"
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "clone followup"
+      },
+      "response": {
+        "content": "clone followup response"
+      }
+    }
+  ]
+}

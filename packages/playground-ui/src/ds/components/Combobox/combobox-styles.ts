@@ -1,7 +1,16 @@
-import { buttonVariants } from '../Button/Button';
+import { cva } from 'class-variance-authority';
+import { buttonVariants, isIconButtonSize } from '../Button/Button';
+import type { ButtonSize } from '../Button/Button';
 import { controlTriggerOpenState } from '@/ds/primitives/control-size';
-import type { ControlSize, ControlTriggerVisualVariant } from '@/ds/primitives/control-size';
-import { transitions } from '@/ds/primitives/transitions';
+import type { ControlTriggerVisualVariant } from '@/ds/primitives/control-size';
+import {
+  menuItemCheckClass,
+  menuItemClass,
+  menuPopupClass,
+  menuPositionerClass,
+  menuSearchClasses,
+  menuEmptyClass,
+} from '@/ds/primitives/menu-item';
 import { cn } from '@/lib/utils';
 
 /**
@@ -33,7 +42,7 @@ export function comboboxTriggerClass({
   className,
 }: {
   variant: ComboboxVariant;
-  size: ControlSize;
+  size: ButtonSize;
   error?: boolean;
   className?: string;
 }): string {
@@ -42,8 +51,9 @@ export function comboboxTriggerClass({
   return cn(
     buttonVariants({ variant: visualVariant, size }),
     // Fill the field and push the value left / chevron right (Button's base
-    // centers its content with `justify-center`).
-    'w-full min-w-32 justify-between',
+    // centers its content with `justify-center`). Icon sizes are a fixed square
+    // showing only the chevron, so they keep Button's centering.
+    !isIconButtonSize(size) && 'w-full justify-between',
     // Read as "active" while the popup is open, per variant (see map above).
     controlTriggerOpenState[visualVariant],
     'data-[placeholder]:text-neutral3',
@@ -51,6 +61,22 @@ export function comboboxTriggerClass({
     className,
   );
 }
+
+/**
+ * Options are shared menu items. Options may carry a description (two lines),
+ * so the fixed Button height becomes a minimum and the item grows with `py-1`.
+ */
+export const comboboxItemClass = cva(cn(menuItemClass, 'h-auto min-h-form-md py-1'), {
+  variants: {
+    multiple: {
+      false: '',
+      true: '',
+    },
+  },
+  defaultVariants: {
+    multiple: false,
+  },
+});
 
 export const comboboxStyles = {
   /** Root wrapper */
@@ -62,84 +88,45 @@ export const comboboxStyles = {
   /** Placeholder text color */
   placeholder: 'text-neutral3',
 
-  /** Popup container — concentric with rounded-xl + p-1 (8px items inside 12px container). */
-  popup: cn(
-    'min-w-(--anchor-width) w-max max-w-(--available-width) rounded-xl border border-border1 bg-surface3 text-neutral4',
-    'shadow-dialog',
-    'origin-(--transform-origin)',
-    'transition-[transform,scale,opacity] duration-150 ease-out',
-    'data-starting-style:scale-95 data-starting-style:opacity-0',
-    'data-ending-style:scale-95 data-ending-style:opacity-0',
-  ),
+  /**
+   * Popup container — shared menu popup, but the search row sits edge-to-edge
+   * above the list, so padding/scrolling move to the list itself.
+   */
+  popup: cn(menuPopupClass, 'max-h-none overflow-hidden p-0'),
 
   /** Positioner */
-  positioner: 'z-50 pointer-events-auto',
+  positioner: cn(menuPositionerClass, 'pointer-events-auto'),
 
   /** Search input container — borderless top section, hairline divider below. */
-  searchContainer: cn('flex items-center border-b border-border1 px-2.5 py-1.5', transitions.colors),
+  searchContainer: menuSearchClasses.container,
 
   /** Search icon */
-  searchIcon: cn('mr-2 h-3.5 w-3.5 shrink-0 text-neutral3', transitions.colors),
+  searchIcon: menuSearchClasses.icon,
 
   /** Search input */
-  searchInput: cn(
-    'flex h-7 w-full rounded-md bg-transparent py-1 text-ui-smd leading-ui-sm text-neutral6',
-    'placeholder:text-neutral3 disabled:cursor-not-allowed disabled:opacity-50',
-    'outline-none focus:outline-none focus-visible:outline-none',
-    transitions.colors,
-  ),
+  searchInput: cn(menuSearchClasses.input, 'disabled:cursor-not-allowed disabled:opacity-50'),
 
   /** Empty state */
-  empty: 'not-empty:block hidden py-4 text-center text-ui-smd text-neutral3',
+  empty: cn(menuEmptyClass, 'empty:hidden'),
 
   /** Options list */
-  list: 'max-h-dropdown-max-height overflow-y-auto overflow-x-hidden p-1',
+  // `empty:p-0` — Empty renders outside the List, so an empty List must not leave its padding behind.
+  list: 'max-h-dropdown-max-height overflow-y-auto overflow-x-hidden p-1 empty:p-0',
 
-  /** Option item base — rounded-md sits concentrically inside rounded-xl + p-1. */
-  item: cn(
-    'group/item relative flex cursor-pointer select-none items-center gap-2 rounded-md',
-    'pl-2.5 pr-2 py-1.5 min-h-8',
-    'text-ui-smd leading-ui-sm text-neutral4',
-    'outline-none focus:outline-none focus-visible:outline-none',
-    transitions.colors,
-    'data-highlighted:bg-surface4 data-highlighted:text-neutral6',
-    'data-selected:text-neutral6',
-  ),
+  /** Option item base — rounded-lg sits concentrically inside rounded-xl + p-1. */
+  item: comboboxItemClass({ multiple: false }),
 
-  /** Multi-select item — keeps the left checkbox slot, no right indicator. */
-  itemMulti: cn(
-    'relative flex cursor-pointer select-none items-center gap-2.5 rounded-md',
-    'pl-2 pr-2.5 py-1.5 min-h-8',
-    'text-ui-smd leading-ui-sm text-neutral4',
-    'outline-none focus:outline-none focus-visible:outline-none',
-    transitions.colors,
-    'data-highlighted:bg-surface4 data-highlighted:text-neutral6',
-    'data-selected:text-neutral6',
-  ),
+  /** Multi-select item — same item rhythm with a right-aligned selected check. */
+  itemMulti: comboboxItemClass({ multiple: true }),
 
   /** Right-aligned slot grouping end content + selection check. */
   itemRightSlot: 'ml-auto flex items-center gap-2 shrink-0',
 
-  /** Check indicator container — inline, fixed 16x16, shown only when item is selected. */
-  checkContainer: 'flex h-4 w-4 shrink-0 items-center justify-center text-accent1',
+  /** Check indicator container — inline, shown only when item is selected. */
+  checkContainer: cn(menuItemCheckClass, 'ml-0'),
 
   /** Check icon (single select) */
-  checkIcon: 'h-3.5 w-3.5',
-
-  /** Checkbox container (multi select) */
-  checkbox: 'flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border',
-
-  /** Checkbox selected state */
-  checkboxSelected: 'bg-accent1 border-accent1',
-
-  /** Checkbox unselected state */
-  checkboxUnselected: 'border-border2',
-
-  /** Check icon for checkbox (multi select) */
-  checkboxIcon: 'h-3 w-3 text-surface1',
-
-  /** Option content wrapper */
-  optionContent: 'flex items-center gap-2 w-full min-w-0',
+  checkIcon: 'size-full',
 
   /** Option label/description wrapper */
   optionText: 'flex flex-col gap-0.5 min-w-0',

@@ -18,7 +18,9 @@ import { UnicodeNormalizer } from '../../processors/processors/unicode-normalize
 import type { ProcessorProvider, ProcessorPhase } from '../types';
 
 // Reusable schema fragments
-const structuredOutputOptionsSchema = z.object({ jsonPromptInjection: z.boolean().optional() }).optional();
+const structuredOutputOptionsSchema = z
+  .object({ jsonPromptInjection: z.union([z.boolean(), z.enum(['system', 'inline', 'auto'])]).optional() })
+  .optional();
 const providerOptionsSchema = z.record(z.string(), z.any()).optional();
 
 // ---------------------------------------------------------------------------
@@ -200,7 +202,6 @@ export const languageDetectorProvider: ProcessorProvider = {
     instructions: z.string().optional(),
     minTextLength: z.number().optional(),
     includeDetectionDetails: z.boolean().optional(),
-    translationQuality: z.enum(['speed', 'quality', 'balanced']).optional(),
     providerOptions: providerOptionsSchema,
   }),
   availablePhases: ['processInput'] as ProcessorPhase[],

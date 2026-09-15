@@ -1,0 +1,32 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "Write hello.txt",
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_write_hello",
+            "name": "mastra_workspace_write_file",
+            "arguments": { "path": "hello.txt", "content": "hello world" }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "toolCallId": "call_write_hello",
+        "hasToolResult": true
+      },
+      "response": {
+        "content": "Done writing hello.txt with auto-approved permissions."
+      }
+    }
+  ]
+}

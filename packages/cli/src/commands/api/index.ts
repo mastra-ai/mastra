@@ -2,7 +2,9 @@ import type { Command as CommanderCommand } from 'commander';
 import { getAnalytics } from '../../analytics/index.js';
 import { requestApi } from './client.js';
 import { ApiCliError, errorEnvelope, toApiCliError } from './errors.js';
+import { FACTORY_API_ROUTE_CATALOG, FACTORY_API_ROUTE_METADATA } from './factory-route-metadata.generated.js';
 import { parseInput, resolvePathParams, stripPathParamsFromInput } from './input.js';
+import { LEARNING_ROUTE_METADATA } from './learning-route-metadata.js';
 import { normalizeData } from './normalizers.js';
 import { normalizeSuccess, writeJson } from './output.js';
 import { normalizeResponse } from './response-normalizer.js';
@@ -13,6 +15,16 @@ import type { ApiGlobalOptions } from './target.js';
 import type { ApiCommandActionOptions, ApiCommandDescriptor, HttpMethod } from './types.js';
 
 const API_ANALYTICS_SHUTDOWN_TIMEOUT_MS = 1000;
+
+/**
+ * All route metadata addressable by CLI commands: generated `@mastra/server`
+ * and Factory routes plus hand-authored Mastra platform learning routes.
+ */
+export const CLI_ROUTE_METADATA = {
+  ...API_ROUTE_METADATA,
+  ...FACTORY_API_ROUTE_METADATA,
+  ...LEARNING_ROUTE_METADATA,
+} as const;
 
 export const API_COMMANDS = {} as Record<string, ApiCommandDescriptor>;
 
@@ -25,6 +37,10 @@ export function registerApiCommand(program: CommanderCommand): void {
     .command('api')
     .description('Call Mastra APIs')
     .option('--url <url>', 'target Mastra server URL')
+    .option(
+      '--server-api-prefix <serverApiPrefix>',
+      'API route prefix of the Mastra server (default: /api; also honors MASTRA_API_PREFIX)',
+    )
     .option('--header <header>', 'custom HTTP header (repeatable)', collect, [])
     .option('--timeout <ms>', 'client-side request timeout')
     .option('--pretty', 'pretty-print JSON output', false);
@@ -242,6 +258,20 @@ export function registerApiCommand(program: CommanderCommand): void {
     description: 'Get a trace span',
     examples: [{ description: 'Get a specific trace span', command: 'mastra api trace span trace_123 span_456' }],
   });
+  addAction(trace, 'query', 'POST /observability/traces/query', {
+    description: 'Query observability traces with advanced predicates',
+    input: 'required',
+    examples: [
+      {
+        description: 'Query traces in a time range',
+        command: `mastra api trace query '{"timeRange":{"from":"2026-08-01T00:00:00.000Z","to":"2026-08-08T00:00:00.000Z"}}'`,
+      },
+      {
+        description: 'Query traces containing failed tool calls',
+        command: `mastra api trace query '{"timeRange":{"from":"2026-08-01T00:00:00.000Z","to":"2026-08-08T00:00:00.000Z"},"where":{"spans":{"some":{"op":"and","args":[{"op":"eq","left":{"path":"spanType"},"right":{"literal":"tool_call"}},{"op":"exists","path":"error"}]}}}}'`,
+      },
+    ],
+  });
 
   const log = api.command('log').description('Inspect runtime logs');
   addAction(log, 'list', 'GET /observability/logs', {
@@ -362,6 +392,28 @@ export function registerApiCommand(program: CommanderCommand): void {
     description: 'Get score details',
     examples: [{ description: 'Get an observability score by ID', command: 'mastra api score get score_123' }],
   });
+  addAction(score, 'delete', 'DELETE /observability/scores', {
+    description: 'Delete scores by ID',
+    input: 'required',
+    examples: [
+      {
+        description: 'Delete scores for an organization and resource',
+        command: `mastra api score delete '{"scoreIds":["score_123"],"organizationId":"org_123","resourceId":"resource_123"}'`,
+      },
+    ],
+  });
+
+  const feedback = api.command('feedback').description('Delete observability feedback');
+  addAction(feedback, 'delete', 'DELETE /observability/feedback', {
+    description: 'Delete feedback by ID',
+    input: 'required',
+    examples: [
+      {
+        description: 'Delete feedback for an organization',
+        command: `mastra api feedback delete '{"feedbackIds":["feedback_123"],"organizationId":"org_123"}'`,
+      },
+    ],
+  });
 
   const dataset = api.command('dataset').description('Create, list, and inspect datasets');
   addAction(dataset, 'list', 'GET /datasets', { description: 'List datasets', list: true });
@@ -401,6 +453,268 @@ export function registerApiCommand(program: CommanderCommand): void {
     input: 'optional',
     list: true,
   });
+
+  const factory = api.command('factory').description('Manage Factory projects and automation');
+  const factoryProject = factory.command('project').description('Manage Factory projects');
+  addAction(factoryProject, 'list', FACTORY_API_ROUTE_CATALOG.projectList, {
+    description: 'List Factory projects for the current organization',
+    list: true,
+    routePlacement: 'origin',
+  });
+  addAction(factoryProject, 'get', FACTORY_API_ROUTE_CATALOG.projectGet, {
+    description: 'Get a Factory project',
+    routePlacement: 'origin',
+  });
+  addAction(factoryProject, 'create', FACTORY_API_ROUTE_CATALOG.projectCreate, {
+    description: 'Create a Factory project',
+    input: 'required',
+    routePlacement: 'origin',
+  });
+  addAction(factoryProject, 'update', FACTORY_API_ROUTE_CATALOG.projectUpdate, {
+    description: 'Update a Factory project',
+    input: 'required',
+    routePlacement: 'origin',
+  });
+  addAction(factoryProject, 'delete', FACTORY_API_ROUTE_CATALOG.projectDelete, {
+    description: 'Delete a Factory project',
+    routePlacement: 'origin',
+  });
+
+  const factoryWorkItem = factory.command('work-item').description('Manage Factory work items');
+  addAction(factoryWorkItem, 'list', FACTORY_API_ROUTE_CATALOG.workItemList, {
+    description: 'List Factory work items and running sessions',
+    routePlacement: 'origin',
+  });
+  addAction(factoryWorkItem, 'create', FACTORY_API_ROUTE_CATALOG.workItemCreate, {
+    description: 'Create a Factory work item in Intake',
+    input: 'required',
+    routePlacement: 'origin',
+    examples: [
+      {
+        description: 'Create a work item in Intake',
+        command: `mastra api factory work-item create <project-id> '{"title":"Investigate flaky tests"}'`,
+      },
+    ],
+  });
+  addAction(factoryWorkItem, 'update', FACTORY_API_ROUTE_CATALOG.workItemUpdate, {
+    description: 'Update Factory work-item metadata without changing its stage',
+    input: 'required',
+    routePlacement: 'origin',
+  });
+  addAction(factoryWorkItem, 'delete', FACTORY_API_ROUTE_CATALOG.workItemDelete, {
+    description: 'Delete a Factory work item',
+    routePlacement: 'origin',
+  });
+  addAction(factoryWorkItem, 'transition', FACTORY_API_ROUTE_CATALOG.workItemTransition, {
+    description: 'Transition a Factory work item using its expected revision',
+    input: 'required',
+    routePlacement: 'origin',
+    examples: [
+      {
+        description: 'Move a work item with optimistic concurrency',
+        command: `mastra api factory work-item transition <project-id> <work-item-id> '{"board":"work","stage":"planning","requestId":"00000000-0000-4000-8000-000000000000","cause":"manual","expectedRevision":1}'`,
+      },
+    ],
+  });
+  addAction(factoryWorkItem, 'start', FACTORY_API_ROUTE_CATALOG.workItemStart, {
+    description: 'Explicitly start a Factory work-item run',
+    input: 'required',
+    routePlacement: 'origin',
+  });
+  addAction(factoryWorkItem, 'automation-run', FACTORY_API_ROUTE_CATALOG.workItemAutomationRun, {
+    description: 'Enqueue an idempotent deferred skill dispatch for a trusted external orchestrator',
+    input: 'required',
+    routePlacement: 'origin',
+    examples: [
+      {
+        description: 'Dispatch a skill run with optimistic concurrency and an idempotent request id',
+        command: `mastra api factory work-item automation-run <project-id> <work-item-id> '{"requestId":"00000000-0000-4000-8000-000000000000","expectedRevision":1,"role":"work","skillName":"factory-plan"}'`,
+      },
+    ],
+  });
+
+  addAction(factory, 'boards', FACTORY_API_ROUTE_CATALOG.boardCatalog, {
+    description: 'List the boards installed on a Factory project with their phases and transitions',
+    routePlacement: 'origin',
+  });
+
+  addAction(factory, 'metrics', FACTORY_API_ROUTE_CATALOG.metricsGet, {
+    description: 'Get Factory project metrics',
+    input: 'optional',
+    routePlacement: 'origin',
+  });
+
+  const factoryHealth = factory.command('health').description('Inspect Factory queue health');
+  addAction(factoryHealth, 'thresholds', FACTORY_API_ROUTE_CATALOG.healthThresholdsGet, {
+    description: 'Get queue-health thresholds',
+    routePlacement: 'origin',
+  });
+
+  const factoryDecision = factory.command('decision').description('Review Factory decisions');
+  addAction(factoryDecision, 'list', FACTORY_API_ROUTE_CATALOG.decisionList, {
+    description: 'List Factory decisions',
+    input: 'optional',
+    routePlacement: 'origin',
+  });
+  addAction(factoryDecision, 'approve', FACTORY_API_ROUTE_CATALOG.decisionApprove, {
+    description: 'Approve a Factory decision',
+    routePlacement: 'origin',
+  });
+  addAction(factoryDecision, 'dismiss', FACTORY_API_ROUTE_CATALOG.decisionDismiss, {
+    description: 'Dismiss a Factory decision',
+    routePlacement: 'origin',
+  });
+  addAction(factoryDecision, 'retry', FACTORY_API_ROUTE_CATALOG.decisionRetry, {
+    description: 'Retry a failed, retryable Factory decision',
+    routePlacement: 'origin',
+  });
+
+  const factoryAttention = factory.command('attention').description('Manage the Factory attention inbox');
+  addAction(factoryAttention, 'list', FACTORY_API_ROUTE_CATALOG.attentionList, {
+    description: 'List the Factory attention inbox',
+    input: 'optional',
+    routePlacement: 'origin',
+  });
+  addAction(factoryAttention, 'read-all', FACTORY_API_ROUTE_CATALOG.attentionReadAll, {
+    description: 'Mark Factory attention items as read',
+    input: 'optional',
+    routePlacement: 'origin',
+  });
+  addAction(factoryAttention, 'read', FACTORY_API_ROUTE_CATALOG.attentionRead, {
+    description: 'Mark a Factory attention item as read',
+    routePlacement: 'origin',
+  });
+  addAction(factoryAttention, 'archive', FACTORY_API_ROUTE_CATALOG.attentionArchive, {
+    description: 'Archive a Factory attention item',
+    routePlacement: 'origin',
+  });
+  addAction(factoryAttention, 'restore', FACTORY_API_ROUTE_CATALOG.attentionRestore, {
+    description: 'Restore a Factory attention item',
+    routePlacement: 'origin',
+  });
+
+  const factorySupervisor = factory.command('supervisor').description('Inspect the Factory supervisor');
+  addAction(factorySupervisor, 'session', FACTORY_API_ROUTE_CATALOG.supervisorSession, {
+    description: 'Get or create the deterministic Factory supervisor session',
+    routePlacement: 'origin',
+  });
+  addAction(factorySupervisor, 'health', FACTORY_API_ROUTE_CATALOG.supervisorHealth, {
+    description: 'Run the deterministic Factory supervisor health check',
+    routePlacement: 'origin',
+  });
+
+  const learning = api
+    .command('learning')
+    .description('Query Trace Intelligence themes across agent traces (Mastra platform)');
+  addAction(learning, 'entities', 'GET /learning/entities', {
+    description: 'List entities with Trace Intelligence output',
+    input: 'required',
+    list: true,
+    examples: [
+      {
+        description: 'List agents with available trace signal themes',
+        command: `mastra api learning entities '{"entityType":"agent"}'`,
+      },
+    ],
+  });
+  addAction(learning, 'snapshots', 'GET /learning/entities/:entityId/theme-snapshots', {
+    description: 'List analysis snapshots for an entity and ordered trace signals',
+    input: 'required',
+    list: true,
+    examples: [
+      {
+        description: 'List snapshots for an agent across all four trace signals',
+        command: `mastra api learning snapshots my-agent '{"entityType":"agent","signalNames":"goal,outcome,behavior,sentiment"}'`,
+      },
+    ],
+  });
+  addAction(learning, 'flow', 'GET /learning/entities/:entityId/theme-flow', {
+    description: 'Get the cross-signal theme flow for one snapshot',
+    input: 'required',
+    examples: [
+      {
+        description: 'Get the goal-to-outcome flow for a snapshot',
+        command: `mastra api learning flow my-agent '{"entityType":"agent","signalNames":"goal,outcome","snapshotId":"snapshot_abc"}'`,
+      },
+    ],
+  });
+  addAction(learning, 'paths', 'GET /learning/entities/:entityId/theme-paths', {
+    description: 'Get per-trace theme assignments for one snapshot',
+    input: 'required',
+    examples: [
+      {
+        description: 'Map traces to themes across goal and outcome',
+        command: `mastra api learning paths my-agent '{"entityType":"agent","signalNames":"goal,outcome","snapshotId":"snapshot_abc","limit":100}'`,
+      },
+    ],
+  });
+
+  const learningTheme = learning.command('theme').description('List and inspect trace signal themes');
+  addAction(learningTheme, 'list', 'GET /learning/entities/:entityId/themes', {
+    description: 'List themes for one trace signal in one snapshot',
+    input: 'required',
+    list: true,
+    examples: [
+      {
+        description: 'List goal themes in a snapshot',
+        command: `mastra api learning theme list my-agent '{"entityType":"agent","signalName":"goal","snapshotId":"snapshot_abc"}'`,
+      },
+    ],
+  });
+  addAction(learningTheme, 'get', 'GET /learning/entities/:entityId/themes/:themeId', {
+    description: 'Get one theme in one snapshot',
+    input: 'required',
+    examples: [
+      {
+        description: 'Get one goal theme in a snapshot',
+        command: `mastra api learning theme get my-agent 42 '{"entityType":"agent","signalName":"goal","snapshotId":"snapshot_abc"}'`,
+      },
+    ],
+  });
+  addAction(learningTheme, 'examples', 'GET /learning/entities/:entityId/themes/:themeId/examples', {
+    description: 'List trace examples for one theme in one snapshot',
+    input: 'required',
+    list: true,
+    examples: [
+      {
+        description: 'List trace examples for a theme',
+        command: `mastra api learning theme examples my-agent 42 '{"entityType":"agent","signalName":"goal","snapshotId":"snapshot_abc","limit":10}'`,
+      },
+    ],
+  });
+  addAction(learningTheme, 'history', 'GET /learning/entities/:entityId/themes/:themeId/history', {
+    description: 'Get lifecycle history for one durable theme',
+    input: 'required',
+    examples: [
+      {
+        description: 'Get history for a theme across snapshots',
+        command: `mastra api learning theme history my-agent 42 '{"entityType":"agent","signalName":"goal"}'`,
+      },
+    ],
+  });
+
+  const learningNoise = learning.command('noise').description('Inspect unclustered (noise) traces');
+  addAction(learningNoise, 'get', 'GET /learning/entities/:entityId/noise', {
+    description: 'Get the noise bucket for one trace signal in one snapshot',
+    input: 'required',
+    examples: [
+      {
+        description: 'Get the goal noise bucket in a snapshot',
+        command: `mastra api learning noise get my-agent '{"entityType":"agent","signalName":"goal","snapshotId":"snapshot_abc"}'`,
+      },
+    ],
+  });
+  addAction(learningNoise, 'examples', 'GET /learning/entities/:entityId/noise/examples', {
+    description: 'List trace examples for the noise bucket in one snapshot',
+    input: 'required',
+    list: true,
+    examples: [
+      {
+        description: 'List noise trace examples',
+        command: `mastra api learning noise examples my-agent '{"entityType":"agent","signalName":"goal","snapshotId":"snapshot_abc","limit":10}'`,
+      },
+    ],
+  });
 }
 
 /**
@@ -416,7 +730,7 @@ export function registerApiCommand(program: CommanderCommand): void {
 function addAction(
   parent: CommanderCommand,
   name: string,
-  routeKey: keyof typeof API_ROUTE_METADATA,
+  routeKey: keyof typeof CLI_ROUTE_METADATA,
   options: ApiCommandActionOptions,
 ): void {
   const descriptor = buildDescriptor(parent, name, routeKey, options);
@@ -507,12 +821,12 @@ function looksLikeJsonObject(value: string): boolean {
 function buildDescriptor(
   parent: CommanderCommand,
   name: string,
-  routeKey: keyof typeof API_ROUTE_METADATA,
+  routeKey: keyof typeof CLI_ROUTE_METADATA,
   options: ApiCommandActionOptions,
 ): ApiCommandDescriptor {
-  const route = API_ROUTE_METADATA[routeKey];
+  const route = CLI_ROUTE_METADATA[routeKey];
   const verboseRoute = options.verboseRouteKey
-    ? API_ROUTE_METADATA[options.verboseRouteKey as keyof typeof API_ROUTE_METADATA]
+    ? CLI_ROUTE_METADATA[options.verboseRouteKey as keyof typeof CLI_ROUTE_METADATA]
     : undefined;
   const commandName = [...commandPath(parent), parseCommandName(name)].join(' ');
   const pathParamsFromInput = new Set(options.pathParamsFromInput ?? []);
@@ -534,6 +848,7 @@ function buildDescriptor(
     responseShape: route.responseShape,
     queryParams: [...route.queryParams],
     bodyParams: [...route.bodyParams],
+    routePlacement: options.routePlacement ?? 'api-prefix',
     defaultTimeoutMs: options.defaultTimeoutMs,
     examples: options.examples,
     verbose: verboseRoute
@@ -653,6 +968,7 @@ export async function executeDescriptor(
       descriptor: requestDescriptor,
       pathParams,
       input: requestInput,
+      apiPrefix: target.apiPrefix,
     };
     let response: unknown;
     let effectiveDescriptor = requestDescriptor;

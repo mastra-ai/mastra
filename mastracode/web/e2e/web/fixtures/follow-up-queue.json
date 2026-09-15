@@ -1,0 +1,24 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "Start a long task"
+      },
+      "response": {
+        "content": "LONG_TASK_STARTED: processing your request now"
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "Follow up message"
+      },
+      "response": {
+        "content": "FOLLOW_UP_HANDLED: got your follow-up"
+      }
+    }
+  ]
+}

@@ -8,25 +8,28 @@ on:
 
 permissions:
   contents: read
-  issues: read
   pull-requests: read
-  checks: write
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  # Keep PR updates and approval-comment updates from canceling each other.
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || ((github.event.comment.body == '!allow-major' || github.event.changes.body.from == '!allow-major') && github.event.issue.number) || github.run_id }}
   cancel-in-progress: true
 
 jobs:
   check-major-bump:
-    runs-on: ubuntu-latest
-    # Only run on canonical repo (secrets unavailable for forks) and for PR events or PR comments
+    runs-on: starsling-ubuntu-24.04-2
+    # Only run for PR events or comments that can add/remove the approval command.
     if: |
       github.repository == 'mastra-ai/mastra' &&
-      (github.event_name == 'pull_request' || (github.event_name == 'issue_comment' && github.event.issue.pull_request))
+      (github.event_name == 'pull_request' || (
+        github.event_name == 'issue_comment' &&
+        github.event.issue.pull_request &&
+        (github.event.comment.body == '!allow-major' || github.event.changes.body.from == '!allow-major')
+      ))
     steps:
       - name: Check for major changesets
         id: check_major
-        uses: actions/github-script@v8
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
         with:
           script: |
             const prNumber = context.payload?.pull_request?.number || context.payload?.issue?.number;
@@ -63,10 +66,8 @@ jobs:
             ).data;
 
             const headSha = pr.head.sha;
-            // Output SHAs for downstream steps
+            // Output head SHA for downstream steps
             core.setOutput('head_sha', headSha);
-            // Output base SHA for checkout step (to prevent malicious PR from modifying local action)
-            core.setOutput('base_sha', pr.base.sha);
 
             // Regex to check for major in frontmatter
             const majorRegex = /:\s*["']?major["']?/;
@@ -94,27 +95,34 @@ jobs:
 
       - name: Checkout for local action
         if: steps.check_major.outputs.has_major_changeset == 'true'
-        uses: actions/checkout@v4
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 20
         with:
-          # Pin to PR base SHA to prevent malicious PRs from modifying the local action
-          ref: ${{ steps.check_major.outputs.base_sha }}
+          # Always check out the local action from the trusted default branch.
+          # Never use PR-derived refs here: this privileged workflow (issue_comment)
+          # runs the checked-out action with access to app secrets.
+          ref: main
           sparse-checkout: .github/actions
           sparse-checkout-cone-mode: false
 
       - name: Generate GitHub App token
         if: steps.check_major.outputs.has_major_changeset == 'true'
-        id: app_token
+        id: app-auth
         uses: ./.github/actions/app-auth
         with:
           client-id: ${{ vars.DANE_CLIENT_ID }}
           private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          permission-checks: write
+          permission-issues: read
+          permission-members: read
 
       - name: Check if major version bump is allowed
         if: steps.check_major.outputs.has_major_changeset == 'true'
         id: check_approval
-        uses: actions/github-script@v8
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
         with:
-          github-token: ${{ steps.app_token.outputs.token }}
+          github-token: ${{ steps.app-auth.outputs.token }}
           script: |
             const prNumber = context.payload?.pull_request?.number || context.payload?.issue?.number;
             const { owner, repo } = context.repo;
@@ -147,9 +155,9 @@ jobs:
               issue_number: prNumber,
             });
 
-            // Filter to only approval comments first
+            // Use the same exact command matching as the issue_comment job gate.
             const approvalComments = comments.filter(
-              comment => comment.body.trim().toLowerCase() === '!allow-major'
+              comment => comment.body === '!allow-major'
             );
 
             if (approvalComments.length === 0) {

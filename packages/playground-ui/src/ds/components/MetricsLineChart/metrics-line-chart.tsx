@@ -1,5 +1,6 @@
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { MetricsLineChartTooltip } from './metrics-line-chart-tooltip';
+import { CHART_TICK_FONT_SIZE } from '@/ds/tokens';
 
 const LABEL_COLOR = '#a1a1aa';
 
@@ -18,24 +19,34 @@ export function MetricsLineChart({
   height = 210,
   yDomain,
   onPointClick,
+  xAxisInterval = 5,
+  xAxisMinTickGap,
+  showDots = false,
 }: {
   data: Record<string, unknown>[];
   series: MetricsLineChartSeries[];
   height?: number;
   yDomain?: [number, number];
   onPointClick?: MetricsLineChartPointClickHandler;
+  /** X-axis tick density. Default `5` (every 6th point). Pass
+   * `"preserveStartEnd"` with `xAxisMinTickGap` for a width-responsive axis. */
+  xAxisInterval?: number | 'preserveStart' | 'preserveEnd' | 'preserveStartEnd';
+  /** Minimum px gap between rendered ticks; recharts drops labels to honor it. */
+  xAxisMinTickGap?: number;
+  /** Render a visible dot on every point (needed for single-point series). */
+  showDots?: boolean;
 }) {
   const isClickable = typeof onPointClick === 'function';
 
   return (
     <div>
-      <div className="flex flex-wrap w-full items-end gap-4 gap-y-1 mb-4 ">
+      <div className="mb-4 flex w-full flex-wrap items-end gap-4 gap-y-1">
         {series.map(s => {
           const aggregated = s.aggregate?.(data);
           return (
             <div key={s.dataKey} className="inline-flex items-baseline gap-2">
-              <div className="size-2 shrink-0 rounded-full -translate-y-px" style={{ backgroundColor: s.color }} />
-              <span className="text-ui-sm text-neutral3 truncate max-w-24">{s.label}</span>
+              <div className="size-2 shrink-0 -translate-y-px rounded-full" style={{ backgroundColor: s.color }} />
+              <span className="text-ui-sm text-neutral3 max-w-24 truncate">{s.label}</span>
               {aggregated && (
                 <span className="text-ui-sm text-neutral4">
                   {aggregated.value}
@@ -57,13 +68,14 @@ export function MetricsLineChart({
             />
             <XAxis
               dataKey="time"
-              tick={{ fontSize: 10, fill: LABEL_COLOR, fontFamily: 'var(--font-mono)' }}
+              tick={{ fontSize: CHART_TICK_FONT_SIZE, fill: LABEL_COLOR, fontFamily: 'var(--font-mono)' }}
               tickLine={false}
               axisLine={false}
-              interval={5}
+              interval={xAxisInterval}
+              minTickGap={xAxisMinTickGap}
             />
             <YAxis
-              tick={{ fontSize: 10, fill: LABEL_COLOR, fontFamily: 'var(--font-mono)' }}
+              tick={{ fontSize: CHART_TICK_FONT_SIZE, fill: LABEL_COLOR, fontFamily: 'var(--font-mono)' }}
               tickLine={false}
               axisLine={false}
               width={30}
@@ -77,7 +89,7 @@ export function MetricsLineChart({
                 dataKey={s.dataKey}
                 stroke={s.color}
                 strokeWidth={2}
-                dot={false}
+                dot={showDots ? { r: 3, fill: s.color, strokeWidth: 0 } : false}
                 activeDot={
                   isClickable
                     ? {

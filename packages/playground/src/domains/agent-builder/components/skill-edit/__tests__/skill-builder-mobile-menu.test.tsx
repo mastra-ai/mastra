@@ -1,13 +1,12 @@
-// @vitest-environment jsdom
-import { TooltipProvider } from '@mastra/playground-ui';
+import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
 import { MemoryRouter } from 'react-router';
-import { afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { SkillBuilderMobileMenu } from '../skill-builder-mobile-menu';
 import type { SkillEditFormValues } from '@/domains/agent-builder/hooks/use-autosave-skill';
@@ -80,6 +79,12 @@ describe('SkillBuilderMobileMenu', () => {
     installRadixDomShims();
   });
 
+  beforeEach(() => {
+    // The visibility mutation reads auth capabilities to gate workspace writes;
+    // default to auth-disabled so permission checks pass without network noise.
+    server.use(http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({ enabled: false, login: null })));
+  });
+
   afterEach(() => {
     cleanup();
   });
@@ -145,9 +150,7 @@ describe('SkillBuilderMobileMenu', () => {
     await openDropdown();
     fireEvent.click(await screen.findByTestId('skill-builder-mobile-menu-visibility-add'));
 
-    await act(async () => {
-      fireEvent.click(await screen.findByTestId('skill-builder-visibility-confirm-yes'));
-    });
+    fireEvent.click(await screen.findByTestId('skill-builder-visibility-confirm-yes'));
 
     await waitFor(() => {
       expect(capturedBody).toMatchObject({ visibility: 'public' });

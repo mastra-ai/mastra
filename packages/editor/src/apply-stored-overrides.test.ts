@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
+import { createDurableAgent, DurableAgent } from '@mastra/core/agent/durable';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
@@ -124,12 +125,19 @@ describe('applyStoredOverrides', () => {
       outputSchema: z.object({ ok: z.boolean() }),
       execute: async () => ({ ok: true }),
     });
+    const emptyDescriptionTool = createTool({
+      id: 'empty-description-tool',
+      description: 'Code description',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ ok: z.boolean() }),
+      execute: async () => ({ ok: true }),
+    });
     const codeAgent = new Agent({
       id: 'my-agent',
       name: 'Code Agent',
       instructions: 'Code instructions',
       model: 'openai/gpt-4o',
-      tools: { 'code-tool': codeTool },
+      tools: { 'code-tool': codeTool, 'empty-description-tool': emptyDescriptionTool },
       editor: { tools: { description: true } },
     });
     new Mastra({
@@ -146,7 +154,11 @@ describe('applyStoredOverrides', () => {
         name: 'Stored Agent',
         instructions: 'Stored instructions',
         model: { provider: 'openai', name: 'gpt-4o' },
-        tools: { 'code-tool': { description: 'Stored code-tool description' }, 'stored-tool': {} },
+        tools: {
+          'code-tool': { description: 'Stored code-tool description' },
+          'empty-description-tool': { description: '' },
+          'stored-tool': {},
+        },
       },
     });
 
@@ -155,7 +167,57 @@ describe('applyStoredOverrides', () => {
     expect(await result.getInstructions()).toBe('Code instructions');
     const tools = await result.listTools();
     expect(tools['code-tool']?.description).toBe('Stored code-tool description');
+    expect(tools['empty-description-tool']?.description).toBe('');
     expect(tools['stored-tool']).toBeUndefined();
+  });
+
+  it('preserves a createDurableAgent wrapper and its code-owned tools when applying an instructions-only override', async () => {
+    const storage = new InMemoryStore();
+    const editor = new MastraEditor();
+    const ping = createTool({
+      id: 'ping',
+      description: 'Ping',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ ok: z.boolean() }),
+      execute: async () => ({ ok: true }),
+    });
+    const codeAgent = new Agent({
+      id: 'my-agent',
+      name: 'Code Agent',
+      instructions: 'Code instructions',
+      model: 'openai/gpt-4o',
+      tools: { ping },
+      editor: { instructions: true, tools: false },
+    });
+    const durableAgent = createDurableAgent({ agent: codeAgent });
+    new Mastra({
+      storage,
+      editor,
+      agents: { 'my-agent': durableAgent },
+    });
+
+    // Publish an override that touches only instructions/model — it carries no tools.
+    const agentsStore = await storage.getStore('agents');
+    await agentsStore?.create({
+      agent: {
+        id: 'my-agent',
+        name: 'Stored Agent',
+        instructions: 'Overridden instructions',
+        model: { provider: 'openai', name: 'gpt-4o' },
+      },
+    });
+
+    const result = await editor.agent.applyStoredOverrides(durableAgent);
+
+    // The served agent must stay a DurableAgent (its delegating behavior intact)…
+    expect(result).toBeInstanceOf(DurableAgent);
+    // …keep its code-owned tool (editor: { tools: false })…
+    const tools = await result.listTools();
+    expect(Object.keys(tools)).toContain('ping');
+    // …and reflect the instructions override.
+    expect(await result.getInstructions()).toBe('Overridden instructions');
+    // The original singleton must not be mutated by the fork.
+    expect(await durableAgent.getInstructions()).toBe('Code instructions');
   });
 
   it('does not override model from stored config (model is code-only)', async () => {
@@ -484,7 +546,9 @@ describe('applyStoredOverrides', () => {
     });
 
     const result = await editor.agent.applyStoredOverrides(codeAgent);
-    const tools = await result.listTools({ requestContext: new RequestContext() });
+    const requestContext = new RequestContext();
+    requestContext.setRaw('nonSerializable', () => 'preserved');
+    const tools = await result.listTools({ requestContext });
 
     expect(tools['code-tool']).toBeDefined();
     expect(tools['GITHUB_LIST_REPOSITORY_ISSUES']).toBeDefined();
@@ -497,5 +561,8 @@ describe('applyStoredOverrides', () => {
         authorId: 'author-1',
       }),
     );
+    const providerRequestContext = vi.mocked(stubProvider.resolveToolsVNext!).mock.calls[0]?.[0].requestContext;
+    expect(providerRequestContext).toBe(requestContext);
+    expect(providerRequestContext?.getRaw('nonSerializable')).toBe(requestContext.getRaw('nonSerializable'));
   });
 });

@@ -1,7 +1,13 @@
 import type { UpdateStoredScorerParams } from '@mastra/client-js';
-import { Notice, Badge, Button, MainContentLayout, Spinner, toast } from '@mastra/playground-ui';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { MainContentLayout } from '@mastra/playground-ui/components/MainContent';
+import { Notice } from '@mastra/playground-ui/components/Notice';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
 import { useQueryClient } from '@tanstack/react-query';
+import { Rocket, Eye } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router';
 import { AgentEditLayout } from '@/domains/agents/components/agent-edit-page/agent-edit-layout';
@@ -182,10 +188,11 @@ function CmsScorersEditForm({
         <Notice variant="info" title="This is a previous version" className="m-4 mb-0">
           <Notice.Message>You are seeing a specific version of the scorer.</Notice.Message>
           <div className="flex gap-2">
-            <Button type="button" variant="default" size="sm" onClick={onClearVersion}>
+            <Button icon={<Eye />} type="button" variant="default" size="sm" onClick={onClearVersion}>
               View latest version
             </Button>
             <Button
+              icon={<Rocket />}
               type="button"
               variant="default"
               size="sm"
@@ -239,12 +246,12 @@ function CmsScorersEditPage() {
       <MainContentLayout className="grid-rows-[1fr]">
         <AgentEditLayout
           leftSlot={
-            <div className="flex items-center justify-center h-full">
+            <div className="flex h-full items-center justify-center">
               <Spinner className="size-8" />
             </div>
           }
         >
-          <div className="flex items-center justify-center h-full">
+          <div className="flex h-full items-center justify-center">
             <Spinner className="size-8" />
           </div>
         </AgentEditLayout>
@@ -256,9 +263,9 @@ function CmsScorersEditPage() {
     return (
       <MainContentLayout className="grid-rows-[1fr]">
         <AgentEditLayout
-          leftSlot={<div className="flex items-center justify-center h-full text-neutral3">Scorer not found</div>}
+          leftSlot={<div className="text-neutral3 flex h-full items-center justify-center">Scorer not found</div>}
         >
-          <div className="flex items-center justify-center h-full text-neutral3">Scorer not found</div>
+          <div className="text-neutral3 flex h-full items-center justify-center">Scorer not found</div>
         </AgentEditLayout>
       </MainContentLayout>
     );
@@ -268,7 +275,7 @@ function CmsScorersEditPage() {
     <MainContentLayout className="grid-rows-[1fr]">
       <RouteHeaderActions owner="cms-scorer-edit">
         <div className="flex items-center gap-2">
-          {hasDraft && <Badge variant="info">Unpublished changes</Badge>}
+          {hasDraft && <Badge variant="blue">Unpublished changes</Badge>}
           <ScorerVersionCombobox
             scorerId={scorerId}
             value={selectedVersionId ?? ''}

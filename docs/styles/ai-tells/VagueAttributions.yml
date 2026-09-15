@@ -1,0 +1,80 @@
+---
+extends: existence
+message: "AI vague attribution: '%s'. Name the specific source or delete the claim."
+level: error
+ignorecase: true
+tokens:
+  - experts argue
+  - experts suggest
+  - experts believe
+  - experts say
+  - experts agree
+  - experts warn
+  - experts note
+  - experts predict
+  - experts contend
+  - experts recommend
+  - experts have noted
+  - experts have argued
+  - experts have suggested
+  - experts have warned
+  - industry reports suggest
+  - industry reports indicate
+  - industry reports show
+  - industry experts
+  - industry observers
+  - industry analysts
+  - observers have cited
+  - observers have noted
+  - observers note
+  - critics argue
+  - critics suggest
+  - critics contend
+  - critics have noted
+  - critics have argued
+  - some critics argue
+  - some experts argue
+  - some experts suggest
+  - some experts believe
+  - some analysts
+  - some observers
+  - some researchers
+  - many experts
+  - many analysts
+  - many observers
+  - many researchers
+  - studies show that
+  - studies suggest that
+  - studies indicate that
+  - studies have shown that
+  - studies have found that
+  - research shows that
+  - research suggests that
+  - research indicates that
+  - research has shown that
+  - research has found that
+  - several studies
+  - several experts
+  - several analysts
+  - several observers
+  - numerous studies
+  - numerous experts
+  - a growing body of research
+  - a growing body of evidence
+  - a growing number of experts
+  - the evidence suggests
+  - the data suggests
+  - the research suggests
+
+  # Candidate not yet implemented: the inverted attribution, where the claim
+  # rests on unnamed people failing to act rather than on unnamed people
+  # asserting something. The pattern is a noun trailed by a dismissive relative
+  # clause, as in a warning nobody reads, a version pin nobody maintains,
+  # results nobody verified, or an adoption nobody noticed. It does the same
+  # argumentative work as the tokens above while resting on nothing anyone
+  # checked, since the writer has not surveyed the readers of that warning.
+  #
+  # The gate has to separate that from the verifiable sense, where the clause
+  # names a real condition: a pull request nobody in the repository authored
+  # is a state a dependency bump produces, and it is checkable. Drafting
+  # tokens without that discriminator would flag both.

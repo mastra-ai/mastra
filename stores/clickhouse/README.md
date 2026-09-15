@@ -8,13 +8,6 @@ Clickhouse implementation for Mastra, providing efficient storage capabilities w
 npm install @mastra/clickhouse
 ```
 
-## Prerequisites
-
-- Clickhouse server (version 23.3 or higher required for delete operations; earlier versions may work for read/write operations)
-  - Lightweight `DELETE FROM` requires ClickHouse 22.8+ with `allow_experimental_lightweight_delete = 1` (for 22.8–23.2), or 23.3+ where it is generally available.
-  - The `deleteTask`, `deleteTasks`, and `deleteMessages` methods use `DELETE FROM` — ensure your server supports lightweight delete before using those operations.
-- Node.js 22.13.0 or later
-
 ## Usage
 
 ```typescript
@@ -59,93 +52,15 @@ const { messages } = await store.listMessages({ threadId: 'thread-123' });
 await store.close();
 ```
 
-## Configuration
+## Documentation
 
-The Clickhouse store can be initialized with the following configuration:
+- [ClickHouse integration guide](https://mastra.ai/integrations/databases/clickhouse)
+- [Storage reference](https://mastra.ai/reference/storage/overview)
 
-```typescript
-type ClickhouseConfig = {
-  url: string; // Clickhouse HTTP interface URL
-  username: string; // Database username
-  password: string; // Database password
-};
-```
+## Changelog
 
-## Features
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/stores/clickhouse/CHANGELOG.md) for version history and release notes.
 
-### Storage Features
+## Support
 
-- Thread and message storage with JSON support
-- Efficient batch operations
-- Rich metadata support
-- Timestamp tracking
-- Workflow snapshot persistence
-- Optimized for high-volume data ingestion
-- Uses Clickhouse's MergeTree and ReplacingMergeTree engines for optimal performance
-
-### Table Engines
-
-The store uses different table engines for different types of data:
-
-- `MergeTree()`: Used for messages, traces, and evals
-- `ReplacingMergeTree()`: Used for threads and workflow snapshots
-
-## Storage Methods
-
-### Thread Operations
-
-- `saveThread({ thread })`: Create or update a thread
-- `getThreadById({ threadId })`: Get a thread by ID
-- `listThreadsByResourceId({ resourceId, offset, limit, orderBy? })`: List paginated threads for a resource
-- `updateThread({ id, title, metadata })`: Update thread title and metadata
-- `deleteThread({ threadId })`: Delete a thread and its messages
-
-### Message Operations
-
-- `saveMessages({ messages })`: Save multiple messages
-- `listMessages({ threadId, perPage?, page? })`: Get messages for a thread with pagination
-- `updateMessages({ messages })`: Update existing messages
-
-### Resource Operations
-
-- `getResourceById({ resourceId })`: Get a resource by ID
-- `saveResource({ resource })`: Create or save a resource
-- `updateResource({ resourceId, workingMemory })`: Update resource working memory
-
-### Workflow Operations
-
-- `persistWorkflowSnapshot({ workflowName, runId, snapshot })`: Save workflow state
-- `loadWorkflowSnapshot({ workflowName, runId })`: Load workflow state
-- `listWorkflowRuns({ workflowName, pagination })`: List workflow runs with pagination
-- `getWorkflowRunById({ workflowName, runId })`: Get a specific workflow run
-
-### Evaluation/Scoring Operations
-
-- `getScoreById({ id })`: Get a score by ID
-- `saveScore(score)`: Save an evaluation score
-- `listScoresByScorerId({ scorerId, pagination })`: List scores by scorer with pagination
-- `listScoresByRunId({ runId, pagination })`: List scores by run with pagination
-- `listScoresByEntityId({ entityId, entityType, pagination })`: List scores by entity with pagination
-- `listScoresBySpan({ traceId, spanId, pagination })`: List scores by span with pagination
-
-### Operations Not Currently Supported
-
-- AI Observability (traces/spans): Not currently supported
-
-## Data Types
-
-The store supports the following data types:
-
-- `text`: String
-- `timestamp`: DateTime64(3)
-- `uuid`: String
-- `jsonb`: String (JSON serialized)
-- `integer`: Int64
-- `bigint`: Int64
-- `float`: Float64
-- `boolean`: Bool
-
-## Related Links
-
-- [Clickhouse Documentation](https://clickhouse.com/docs)
-- [Clickhouse Node.js Client](https://github.com/clickhouse/clickhouse-js)
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.

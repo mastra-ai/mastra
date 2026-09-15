@@ -1,3 +1,4 @@
+import { PubSub as PubSubClient } from '@google-cloud/pubsub';
 import type { Event } from '@mastra/core/events';
 import { afterAll, afterEach, describe, expect, it } from 'vitest';
 import { GoogleCloudPubSub } from '.';
@@ -98,6 +99,75 @@ describe.sequential('GoogleCloudPubSub group support', () => {
       expect(msgs2.length).toBe(1);
       expect(msgs1[0]!.type).toBe('hello');
       expect(msgs2[0]!.type).toBe('hello');
+    });
+
+    it('two subscribers racing on a fresh topic both attach and receive (issue #18203)', async () => {
+      // A producer (agent.stream) and a consumer (agent.observe) can subscribe to the
+      // same fresh topic within the subscription-creation window, so both reach init()
+      // and race createSubscription for the same name. The loser must attach to the
+      // existing subscription instead of failing, and both callbacks must receive events.
+      const pubsub = createPubSub();
+      const topic = uniqueTopic();
+
+      const collected1: Event[] = [];
+      const collected2: Event[] = [];
+
+      // Subscribe concurrently (no await between) so the two init() calls overlap.
+      await Promise.all([
+        pubsub.subscribe(topic, (event, ack) => {
+          collected1.push(event);
+          ack?.();
+        }),
+        pubsub.subscribe(topic, (event, ack) => {
+          collected2.push(event);
+          ack?.();
+        }),
+      ]);
+
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      await pubsub.publish(topic, makeEvent({ type: 'raced' }));
+
+      const [msgs1, msgs2] = await Promise.all([
+        waitForMessages(1, collected1, 5000),
+        waitForMessages(1, collected2, 5000),
+      ]);
+
+      expect(msgs1.length).toBe(1);
+      expect(msgs2.length).toBe(1);
+      expect(msgs1[0]!.type).toBe('raced');
+      expect(msgs2[0]!.type).toBe('raced');
+    });
+
+    it('re-attaches to an existing subscription when createSubscription returns ALREADY_EXISTS (issue #18203)', async () => {
+      // Drive the ungrouped recovery branch directly: pre-create the exact subscription
+      // the adapter will use (out-of-band) so its own createSubscription loses with
+      // ALREADY_EXISTS (gRPC code 6). For an ungrouped topic the adapter must re-attach
+      // to the existing subscription instead of returning undefined and throwing. This
+      // also mirrors the restart case where a subscription survives a previous process.
+      const pubsub = createPubSub();
+      const topic = uniqueTopic();
+      const subscriptionName = pubsub.getSubscriptionName(topic);
+
+      const raw = new PubSubClient({ projectId: 'pubsub-test', apiEndpoint: EMULATOR_HOST });
+      try {
+        await raw.createTopic(topic);
+        await raw.topic(topic).createSubscription(subscriptionName);
+
+        const collected: Event[] = [];
+        await pubsub.subscribe(topic, (event, ack) => {
+          collected.push(event);
+          ack?.();
+        });
+
+        await pubsub.publish(topic, makeEvent({ type: 'recovered' }));
+
+        await waitForMessages(1, collected, 5000);
+
+        expect(collected.length).toBe(1);
+        expect(collected[0]!.type).toBe('recovered');
+      } finally {
+        await raw.close();
+      }
     });
   });
 
@@ -212,6 +282,77 @@ describe.sequential('GoogleCloudPubSub group support', () => {
 
       expect(collected.length).toBe(1);
       expect(collected[0]!.type).toBe('unique-msg');
+    });
+  });
+
+  describe('localOnly publish', () => {
+    it('delivers to subscribers in the same process without round-tripping through Pub/Sub', async () => {
+      const pubsub = createPubSub();
+      const topic = uniqueTopic();
+      const collected: Event[] = [];
+
+      await pubsub.subscribe(topic, (event, ack) => {
+        collected.push(event);
+        ack?.();
+      });
+
+      // Payload carries a live class instance — if this hit Pub/Sub it would be
+      // JSON-serialized and lose its prototype on the way back.
+      class Holder {
+        constructor(public readonly value: string) {}
+        describe() {
+          return `holder(${this.value})`;
+        }
+      }
+      const holder = new Holder('alpha');
+      await pubsub.publish(topic, makeEvent({ type: 'local', data: { holder } }), { localOnly: true });
+
+      await waitForMessages(1, collected, 1000);
+      expect(collected.length).toBe(1);
+      const delivered = collected[0]!.data.holder as Holder;
+      expect(delivered).toBe(holder);
+      expect(delivered.describe()).toBe('holder(alpha)');
+    });
+
+    it('does not leak local-only events to other instances sharing the same topic', async () => {
+      const publisher = createPubSub();
+      const remote = createPubSub();
+      const topic = uniqueTopic();
+      const remoteCollected: Event[] = [];
+
+      // Remote instance subscribes via real Pub/Sub.
+      await remote.subscribe(topic, (event, ack) => {
+        remoteCollected.push(event);
+        ack?.();
+      });
+
+      // Give the remote subscription a moment to attach to the emulator.
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      await publisher.publish(topic, makeEvent({ type: 'private' }), { localOnly: true });
+
+      // The remote subscriber should never see this — confirm by waiting.
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      expect(remoteCollected.length).toBe(0);
+    });
+
+    it('unsubscribe stops local delivery too', async () => {
+      const pubsub = createPubSub();
+      const topic = uniqueTopic();
+      const collected: Event[] = [];
+
+      const cb = (event: Event, ack?: () => Promise<void>) => {
+        collected.push(event);
+        ack?.();
+      };
+
+      await pubsub.subscribe(topic, cb);
+      await pubsub.unsubscribe(topic, cb);
+
+      await pubsub.publish(topic, makeEvent(), { localOnly: true });
+
+      await new Promise(resolve => setTimeout(resolve, 300));
+      expect(collected.length).toBe(0);
     });
   });
 });

@@ -10,12 +10,19 @@ import {
   transformScoreRow,
   createStorageErrorId,
 } from '@mastra/core/storage';
-import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
+import type { PaginationInfo, StoragePagination, ScoreTenancyFilters } from '@mastra/core/storage';
 
 import { RedisDB } from '../../db';
 import type { RedisDomainConfig } from '../../db';
 import type { RedisClient } from '../../types';
 import { processRecord } from '../utils';
+
+/** Returns true when a row matches the multi-tenant scope filters (or none provided). */
+function matchesTenancy(row: Record<string, unknown>, filters?: ScoreTenancyFilters): boolean {
+  if (filters?.organizationId !== undefined && row.organizationId !== filters.organizationId) return false;
+  if (filters?.projectId !== undefined && row.projectId !== filters.projectId) return false;
+  return true;
+}
 
 export class ScoresRedis extends ScoresStorage {
   private client: RedisClient;
@@ -64,12 +71,14 @@ export class ScoresRedis extends ScoresStorage {
     entityType,
     source,
     pagination = { page: 0, perPage: 20 },
+    filters,
   }: {
     scorerId: string;
     entityId?: string;
     entityType?: string;
     source?: ScoringSource;
     pagination?: StoragePagination;
+    filters?: ScoreTenancyFilters;
   }): Promise<{
     scores: ScoreRowData[];
     pagination: PaginationInfo;
@@ -85,6 +94,9 @@ export class ScoresRedis extends ScoresStorage {
         return false;
       }
       if (source && row.source !== source) {
+        return false;
+      }
+      if (!matchesTenancy(row, filters)) {
         return false;
       }
       return true;
@@ -143,24 +155,28 @@ export class ScoresRedis extends ScoresStorage {
   public async listScoresByRunId({
     runId,
     pagination = { page: 0, perPage: 20 },
+    filters,
   }: {
     runId: string;
     pagination?: StoragePagination;
+    filters?: ScoreTenancyFilters;
   }): Promise<{
     scores: ScoreRowData[];
     pagination: PaginationInfo;
   }> {
-    return this.fetchAndFilterScores(pagination, row => row.runId === runId);
+    return this.fetchAndFilterScores(pagination, row => row.runId === runId && matchesTenancy(row, filters));
   }
 
   public async listScoresByEntityId({
     entityId,
     entityType,
     pagination = { page: 0, perPage: 20 },
+    filters,
   }: {
     entityId: string;
     entityType?: string;
     pagination?: StoragePagination;
+    filters?: ScoreTenancyFilters;
   }): Promise<{
     scores: ScoreRowData[];
     pagination: PaginationInfo;
@@ -172,6 +188,9 @@ export class ScoresRedis extends ScoresStorage {
       if (entityType && row.entityType !== entityType) {
         return false;
       }
+      if (!matchesTenancy(row, filters)) {
+        return false;
+      }
       return true;
     });
   }
@@ -180,15 +199,20 @@ export class ScoresRedis extends ScoresStorage {
     traceId,
     spanId,
     pagination = { page: 0, perPage: 20 },
+    filters,
   }: {
     traceId: string;
     spanId: string;
     pagination?: StoragePagination;
+    filters?: ScoreTenancyFilters;
   }): Promise<{
     scores: ScoreRowData[];
     pagination: PaginationInfo;
   }> {
-    return this.fetchAndFilterScores(pagination, row => row.traceId === traceId && row.spanId === spanId);
+    return this.fetchAndFilterScores(
+      pagination,
+      row => row.traceId === traceId && row.spanId === spanId && matchesTenancy(row, filters),
+    );
   }
 
   private async fetchAndFilterScores(

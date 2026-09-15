@@ -13,7 +13,7 @@ import { cn } from '@/lib/utils';
 
 const inputVariants = cva(
   cn(
-    'flex w-full text-neutral6 border bg-transparent',
+    'flex w-full border bg-transparent text-neutral6',
     'transition-all duration-normal ease-out-custom',
     'placeholder:text-neutral2 placeholder:transition-opacity placeholder:duration-normal',
     'focus:placeholder:opacity-70',
@@ -21,8 +21,8 @@ const inputVariants = cva(
     // For incrementable numeric inputs, compose <InputGroup> with +/- buttons
     // instead — see the NumberWithStepper story. WebKit uses the spin-button
     // pseudo-elements; Firefox needs `appearance: textfield` on the input.
-    '[&::-webkit-outer-spin-button]:appearance-none [&::-webkit-outer-spin-button]:m-0',
-    '[&::-webkit-inner-spin-button]:appearance-none [&::-webkit-inner-spin-button]:m-0',
+    '[&::-webkit-outer-spin-button]:m-0 [&::-webkit-outer-spin-button]:appearance-none',
+    '[&::-webkit-inner-spin-button]:m-0 [&::-webkit-inner-spin-button]:appearance-none',
     '[&[type=number]]:[appearance:textfield]',
     // type="search": drop WebKit's native clear button so the DS owns the search chrome.
     // Compose an <InputGroup> with an InputGroupButton to add a clear control.
@@ -40,13 +40,12 @@ const inputVariants = cva(
         xs: cn(controlSizeClasses.xs, 'px-[.75em]'),
         sm: cn(controlSizeClasses.sm, 'px-[.75em]'),
         md: cn(controlSizeClasses.md, 'px-[.75em]'),
-        default: cn(controlSizeClasses.default, 'px-[.85em]'),
         lg: cn(controlSizeClasses.lg, 'px-[.85em]'),
       },
     },
     defaultVariants: {
       variant: 'default',
-      size: 'default',
+      size: 'md',
     },
   },
 );

@@ -3,14 +3,13 @@
     "name": "test-426c5ef4",
     "testFile": "src/agent/agent-gemini.e2e.test.ts",
     "testName": "Gemini Model Compatibility Tests > Direct generate() method - Gemini basic functionality > should handle generation with structured output",
-    "createdAt": "2026-05-18T10:50:49.845Z",
-    "updatedAt": "2026-05-28T17:33:38.534Z"
+    "createdAt": "2026-07-14T17:14:58.350Z"
   },
   "recordings": [
     {
-      "hash": "c168448cb13506fc",
+      "hash": "15c5e9ba05ce8c56",
       "request": {
-        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
         "method": "POST",
         "body": {
           "generationConfig": {
@@ -46,7 +45,7 @@
             ]
           }
         },
-        "timestamp": 1779989612340
+        "timestamp": 1784049297453
       },
       "response": {
         "status": 200,
@@ -54,9 +53,9 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
           "content-type": "application/json; charset=UTF-8",
-          "date": "Thu, 28 May 2026 17:33:38 GMT",
+          "date": "Tue, 14 Jul 2026 17:14:58 GMT",
           "server": "scaffolding on HTTPServer2",
-          "server-timing": "gfet4t7; dur=6080",
+          "server-timing": "gfet4t7; dur=872",
           "vary": "Origin, X-Origin, Referer",
           "x-content-type-options": "nosniff",
           "x-frame-options": "SAMEORIGIN",
@@ -69,35 +68,30 @@
               "content": {
                 "parts": [
                   {
-                    "text": "{\n  \"benefits\": [\"Improved cardiovascular health\", \"Increased muscle strength and endurance\", \"Reduced risk of chronic diseases\"]\n}"
+                    "text": "{\"benefits\":[\"Improved cardiovascular health\",\"Weight management\",\"Stress reduction\"]}"
                   }
                 ],
                 "role": "model"
               },
               "finishReason": "STOP",
-              "avgLogprobs": -0.12693698317916305
+              "index": 0
             }
           ],
           "usageMetadata": {
-            "promptTokenCount": 15,
-            "candidatesTokenCount": 27,
-            "totalTokenCount": 42,
+            "promptTokenCount": 11,
+            "candidatesTokenCount": 13,
+            "totalTokenCount": 88,
             "promptTokensDetails": [
               {
                 "modality": "TEXT",
-                "tokenCount": 15
+                "tokenCount": 11
               }
             ],
-            "candidatesTokensDetails": [
-              {
-                "modality": "TEXT",
-                "tokenCount": 27
-              }
-            ],
+            "thoughtsTokenCount": 64,
             "serviceTier": "standard"
           },
-          "modelVersion": "gemini-2.0-flash",
-          "responseId": "bHwYaragM-vljMcPrMCJuAU"
+          "modelVersion": "gemini-2.5-flash",
+          "responseId": "kW5WauzTH8zkkdUPgYub4Aw"
         },
         "isStreaming": false
       }

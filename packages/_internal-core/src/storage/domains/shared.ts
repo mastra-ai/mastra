@@ -18,6 +18,8 @@ export enum EntityType {
   OUTPUT_PROCESSOR = 'output_processor',
   /** Output Step Processor */
   OUTPUT_STEP_PROCESSOR = 'output_step_processor',
+  /** Tool Result Processor */
+  TOOL_RESULT_PROCESSOR = 'tool_result_processor',
   /** Workflow Step */
   WORKFLOW_STEP = 'workflow_step',
   /** Tool */

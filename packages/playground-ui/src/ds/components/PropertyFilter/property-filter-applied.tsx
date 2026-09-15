@@ -8,6 +8,7 @@ import { PickMultiPanel } from './pick-multi-panel';
 import type { PropertyFilterField, PropertyFilterToken } from './types';
 import { Input } from '@/ds/components/Input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover/popover';
+import { MENU_SIDE_OFFSET } from '@/ds/primitives/menu-item';
 
 export type PropertyFilterAppliedProps = {
   fields: PropertyFilterField[];
@@ -155,7 +156,7 @@ type PickMultiTokenPillProps = {
   field: Extract<PropertyFilterField, { kind: 'pick-multi' }>;
   token: PropertyFilterToken;
   tokens: PropertyFilterToken[];
-  onChange: (fieldId: string, value: string | string[] | undefined) => void;
+  onChange: (fieldId: string, value: string | string[]) => void;
   onRemove: () => void;
   disabled?: boolean;
 };
@@ -173,7 +174,7 @@ function PickMultiTokenPill({ field, token, tokens, onChange, onRemove, disabled
             {stringifyTokenValue(token.value)}
           </Button>
         </PopoverTrigger>
-        <PopoverContent align="start" sideOffset={8} className="w-64 p-2" data-pick-multi-panel>
+        <PopoverContent align="start" sideOffset={MENU_SIDE_OFFSET} className="w-64 p-0" data-pick-multi-panel>
           <PickMultiPanel field={field} tokens={tokens} onChange={onChange} />
         </PopoverContent>
       </Popover>
@@ -222,7 +223,7 @@ export function PropertyFilterApplied({
   };
 
   return (
-    <div className="flex items-center gap-2 flex-wrap">
+    <div className="flex flex-wrap items-center gap-2">
       {tokens.map((token, index) => {
         const field = fields.find(f => f.id === token.fieldId);
         if (!field) return null;
@@ -260,17 +261,10 @@ export function PropertyFilterApplied({
               token={token}
               tokens={tokens}
               disabled={disabled}
-              onChange={(fieldId, value) => {
-                // Unselecting everything (empty array) keeps the pill alive in
-                // a neutral state — the user explicitly removes it via ×. This
-                // lets the page-level Reset neutralize values without dropping
-                // the pill structure.
-                if (value === undefined) {
-                  removeTokenAt(index);
-                  return;
-                }
-                replaceTokenAt(index, { fieldId, value });
-              }}
+              // Unselecting everything (empty array) keeps the pill alive in a
+              // neutral state — the user explicitly removes it via ×. This lets
+              // the page-level Reset neutralize values without dropping the pill.
+              onChange={(fieldId, value) => replaceTokenAt(index, { fieldId, value })}
               onRemove={() => removeTokenAt(index)}
             />
           );

@@ -2,6 +2,7 @@ import { chmod, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
 import { getToken, getCurrentOrgId } from '../auth/credentials.js';
+import { serializeEnvFile } from '../env/env-file.js';
 import { loadProjectConfig } from '../studio/project-config.js';
 import { parseEnvFile } from './deploy.js';
 import { fetchServerProjects, getServerProjectEnv, updateServerProjectEnv } from './platform-api.js';
@@ -149,37 +150,16 @@ export async function envPullAction(file: string | undefined, opts: { config?: s
   const projectId = await resolveProjectId(opts, { token, orgId });
 
   const envVars = await getServerProjectEnv(token, orgId, projectId);
-  const keys = Object.keys(envVars);
 
   const target = file ?? '.env';
-  const shellSafeKey = /^[A-Za-z_][A-Za-z0-9_]*$/;
-  const lines = ['# Pulled from Mastra Server — do not edit manually', ''];
-  let skipped = 0;
-  for (const key of keys.sort()) {
-    if (!shellSafeKey.test(key)) {
-      lines.push(`# Skipped unsafe key: ${key.replace(/[^\w.-]/g, '?')}`);
-      skipped++;
-      continue;
-    }
-    const value = envVars[key]!;
-    // Always quote values to prevent shell metacharacter interpretation when sourced
-    const escaped = value
-      .replace(/\\/g, '\\\\')
-      .replace(/\r/g, '\\r')
-      .replace(/\n/g, '\\n')
-      .replace(/\t/g, '\\t')
-      .replace(/"/g, '\\"')
-      .replace(/\$/g, '\\$')
-      .replace(/`/g, '\\`');
-    lines.push(`${key}="${escaped}"`);
-  }
-  lines.push(''); // trailing newline
+  const { content, written, skipped } = serializeEnvFile(envVars, {
+    header: 'Pulled from Mastra Server — do not edit manually',
+  });
 
   const outputPath = resolve(target);
-  await writeFile(outputPath, lines.join('\n'), { encoding: 'utf-8', mode: 0o600 });
+  await writeFile(outputPath, content, { encoding: 'utf-8', mode: 0o600 });
   await chmod(outputPath, 0o600);
 
-  const written = keys.length - skipped;
   if (written === 0) {
     console.info(`\n  No environment variables set in the project. Wrote empty ${target}.\n`);
   } else {
@@ -187,4 +167,7 @@ export async function envPullAction(file: string | undefined, opts: { config?: s
       `\n  Pulled ${written} variable(s) to ${target}.${skipped > 0 ? ` Skipped ${skipped} unsafe key(s).` : ''}\n`,
     );
   }
+  console.info(
+    '  Note: this reads project-level variables only — environment-scoped vars (e.g. added in the UI) are not included. Use `mastra env vars pull` for the full set.\n',
+  );
 }

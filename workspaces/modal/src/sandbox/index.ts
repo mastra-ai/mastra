@@ -2,7 +2,7 @@
  * @see https://modal.com/docs/reference/modal.Sandbox
  */
 
-import type { MastraSandboxOptions, ProviderStatus, SandboxInfo } from '@mastra/core/workspace';
+import type { MastraSandboxOptions, ProviderStatus, SandboxCloneOptions, SandboxInfo } from '@mastra/core/workspace';
 import { MastraSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
 import { ClientClosedError, ModalClient, NotFoundError } from 'modal';
 import type { App, Image, Sandbox } from 'modal';
@@ -43,7 +43,10 @@ export interface ModalSandboxOptions extends Omit<MastraSandboxOptions, 'process
   timeoutMs?: number;
   /** Environment variables baked into the sandbox at create time. */
   env?: Record<string, string>;
-  /** Default working directory inside the sandbox. */
+  /** Default working directory inside the sandbox.
+   * @deprecated Use `workingDirectory` (the base sandbox option) instead.
+   * When both are set, `workingDirectory` wins.
+   */
   workdir?: string;
   /** Modal token ID. Falls back to MODAL_TOKEN_ID env var. */
   tokenId?: string;
@@ -92,16 +95,16 @@ export class ModalSandbox extends MastraSandbox {
   private readonly baseImage: string;
   private readonly timeoutMs: number;
   private readonly env: Record<string, string>;
-  private readonly workdir?: string;
   private readonly tokenId?: string;
   private readonly tokenSecret?: string;
   private readonly _instructionsOverride?: InstructionsOption;
+  private readonly _constructorOptions: ModalSandboxOptions;
 
   constructor(options: ModalSandboxOptions = {}) {
     super({
       ...options,
       name: 'ModalSandbox',
-      processes: new ModalProcessManager({ env: options.env ?? {} }),
+      processes: new ModalProcessManager(),
     });
 
     this.id = options.id ?? this._generateId();
@@ -109,10 +112,37 @@ export class ModalSandbox extends MastraSandbox {
     this.baseImage = options.baseImage ?? 'ubuntu:22.04';
     this.timeoutMs = options.timeoutMs ?? 300_000;
     this.env = options.env ?? {};
-    this.workdir = options.workdir;
+    if (options.workingDirectory === undefined && options.workdir !== undefined) {
+      this.setWorkingDirectory(options.workdir);
+    }
     this.tokenId = options.tokenId;
     this.tokenSecret = options.tokenSecret;
     this._instructionsOverride = options.instructions;
+    this._constructorOptions = { ...options };
+  }
+
+  /**
+   * Construct a sibling `ModalSandbox` that inherits this sandbox's
+   * configuration (credentials, app, base image, workdir, instructions) with
+   * per-instance overrides.
+   *
+   * Performs no I/O — the sandbox clone provisions (or reconnects to a
+   * running Modal sandbox with the same logical `id`) on its own `start()`.
+   * Use it when one configured sandbox acts as the template for a fleet of
+   * independent sandboxes (e.g. one per project).
+   *
+   * `options.idleTimeoutMinutes` maps to Modal's `timeoutMs` (wall-clock
+   * lifetime); `options.sandboxId` is ignored because Modal reconnects by
+   * logical `id`.
+   */
+  clone(options: SandboxCloneOptions = {}): ModalSandbox {
+    const { id: _id, ...base } = this._constructorOptions;
+    return new ModalSandbox({
+      ...base,
+      ...(options.id !== undefined && { id: options.id }),
+      ...(options.env !== undefined && { env: options.env }),
+      ...(options.idleTimeoutMinutes !== undefined && { timeoutMs: options.idleTimeoutMinutes * 60_000 }),
+    });
   }
 
   /**
@@ -158,7 +188,7 @@ export class ModalSandbox extends MastraSandbox {
         name: this.id,
         timeoutMs: this.timeoutMs,
         env: Object.keys(this.env).length > 0 ? this.env : undefined,
-        workdir: this.workdir,
+        workdir: this.workingDirectory,
       });
       this._createdAt = new Date();
       this.logger.debug(`${LOG_PREFIX} Created new sandbox from snapshot: ${this._sb?.sandboxId}`);
@@ -171,7 +201,7 @@ export class ModalSandbox extends MastraSandbox {
       name: this.id,
       timeoutMs: this.timeoutMs,
       env: Object.keys(this.env).length > 0 ? this.env : undefined,
-      workdir: this.workdir,
+      workdir: this.workingDirectory,
     });
     this._createdAt = new Date();
     this.logger.debug(`${LOG_PREFIX} Created sandbox: ${this._sb.sandboxId}`);

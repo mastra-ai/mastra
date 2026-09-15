@@ -1,0 +1,16 @@
+---
+extends: existence
+message: "AI announcement heading: '%s'. Cut the heading or rename it to the topic."
+level: error
+ignorecase: true
+scope: heading
+tokens:
+  - What You'll Learn
+  - What You Will Learn
+  - What We'll Cover
+  - What We Will Cover
+  - What to Expect
+  - What We're Building
+  - What We Are Building
+  - Here's What You'll Get
+  - Here's What You Get

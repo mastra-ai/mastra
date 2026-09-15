@@ -5,12 +5,15 @@ import { TripWire } from '../../agent/trip-wire';
 import type { MastraModelConfig } from '../../llm/model/shared.types';
 import type { ObservabilityContext } from '../../observability';
 import { InternalSpans, resolveObservabilityContext } from '../../observability';
+import type { RequestContext } from '../../request-context';
 import type { PublicSchema } from '../../schema';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../../schema';
 import type { ChunkType } from '../../stream';
 import type { Processor } from '../index';
 import { selectMessagesToCheck } from './message-selection';
 import type { LastMessageOnlyOption } from './message-selection';
+import { handleModelError } from './model-error-strategy';
+import type { ModelErrorStrategy } from './model-error-strategy';
 
 export interface SystemPromptScrubberOptions extends LastMessageOnlyOption {
   /** Strategy to use when system prompts are detected: 'block' | 'warn' | 'filter' | 'redact' */
@@ -27,6 +30,8 @@ export interface SystemPromptScrubberOptions extends LastMessageOnlyOption {
   placeholderText?: string;
   /** Model to use for the detection agent */
   model: MastraModelConfig;
+  /** How internal model errors are handled. Defaults to 'warn'. */
+  errorStrategy?: ModelErrorStrategy;
   /**
    * Structured output options used for the detection agent
    */
@@ -76,6 +81,7 @@ export class SystemPromptScrubber implements Processor<'system-prompt-scrubber'>
   private detectionAgent: Agent;
   private lastMessageOnly: boolean;
   private structuredOutputOptions?: SystemPromptScrubberOptions['structuredOutputOptions'];
+  private errorStrategy: ModelErrorStrategy;
 
   constructor(options: SystemPromptScrubberOptions) {
     if (!options.model) {
@@ -89,6 +95,7 @@ export class SystemPromptScrubber implements Processor<'system-prompt-scrubber'>
     this.placeholderText = options.placeholderText || '[SYSTEM_PROMPT]';
     this.lastMessageOnly = options.lastMessageOnly ?? false;
     this.structuredOutputOptions = options.structuredOutputOptions;
+    this.errorStrategy = options.errorStrategy ?? 'warn';
 
     // Initialize instructions after customPatterns is set
     this.instructions = options.instructions || this.getDefaultInstructions();
@@ -116,9 +123,10 @@ export class SystemPromptScrubber implements Processor<'system-prompt-scrubber'>
       streamParts: ChunkType[];
       state: Record<string, any>;
       abort: (reason?: string) => never;
+      requestContext?: RequestContext;
     } & Partial<ObservabilityContext>,
   ): Promise<ChunkType | null> {
-    const { part, abort, ...rest } = args;
+    const { part, abort, requestContext, ...rest } = args;
     const observabilityContext = resolveObservabilityContext(rest);
 
     // Only process text-delta chunks
@@ -132,7 +140,7 @@ export class SystemPromptScrubber implements Processor<'system-prompt-scrubber'>
     }
 
     try {
-      const detectionResult = await this.detectSystemPrompts(text, observabilityContext);
+      const detectionResult = await this.detectSystemPrompts(text, abort, observabilityContext, requestContext);
 
       if (detectionResult.detections && detectionResult.detections.length > 0) {
         const detectedTypes = detectionResult.detections.map(detection => detection.type);
@@ -170,6 +178,10 @@ export class SystemPromptScrubber implements Processor<'system-prompt-scrubber'>
 
       return part;
     } catch (error) {
+      // Re-throw tripwire errors, but fail open for other errors
+      if (error instanceof TripWire) {
+        throw error;
+      }
       // Fail open - allow content through if detection fails
       console.warn('[SystemPromptScrubber] Detection failed, allowing content:', error);
       return part;
@@ -183,10 +195,12 @@ export class SystemPromptScrubber implements Processor<'system-prompt-scrubber'>
   async processOutputResult({
     messages,
     abort,
+    requestContext,
     ...rest
   }: {
     messages: MastraDBMessage[];
     abort: (reason?: string) => never;
+    requestContext?: RequestContext;
   } & Partial<ObservabilityContext>): Promise<MastraDBMessage[]> {
     const observabilityContext = resolveObservabilityContext(rest);
     const processedMessages: MastraDBMessage[] = [];
@@ -210,7 +224,12 @@ export class SystemPromptScrubber implements Processor<'system-prompt-scrubber'>
       }
 
       try {
-        const detectionResult = await this.detectSystemPrompts(textContent, observabilityContext);
+        const detectionResult = await this.detectSystemPrompts(
+          textContent,
+          abort,
+          observabilityContext,
+          requestContext,
+        );
 
         if (detectionResult.detections && detectionResult.detections.length > 0) {
           const detectedTypes = detectionResult.detections.map(detection => detection.type);
@@ -262,10 +281,12 @@ export class SystemPromptScrubber implements Processor<'system-prompt-scrubber'>
    */
   private async detectSystemPrompts(
     text: string,
+    abort: (reason?: string) => never,
     observabilityContext?: ObservabilityContext,
+    requestContext?: RequestContext,
   ): Promise<SystemPromptDetectionResult> {
     try {
-      const model = await this.detectionAgent.getModel();
+      const model = await this.detectionAgent.getModel({ requestContext });
 
       const baseDetectionSchema = z.object({
         type: z.string().describe('Type of system prompt detected'),
@@ -301,6 +322,7 @@ export class SystemPromptScrubber implements Processor<'system-prompt-scrubber'>
             ...(this.structuredOutputOptions ?? {}),
             schema,
           },
+          requestContext,
           ...observabilityContext,
         });
 
@@ -312,15 +334,25 @@ export class SystemPromptScrubber implements Processor<'system-prompt-scrubber'>
         const standardSchema = toStandardSchema(schema as PublicSchema);
         const response = await this.detectionAgent.generateLegacy(text, {
           output: standardSchemaToJSONSchema(standardSchema),
+          requestContext,
           ...observabilityContext,
         });
 
+        if (!response.object) {
+          throw new Error('Legacy output returned no object');
+        }
         result = response.object as SystemPromptDetectionResult;
       }
 
       return result;
     } catch (error) {
-      console.warn('[SystemPromptScrubber] Detection agent failed:', error);
+      handleModelError({
+        error,
+        errorStrategy: this.errorStrategy,
+        abort,
+        warningMessage: '[SystemPromptScrubber] Detection agent failed:',
+        abortMessage: 'System prompt detection failed because the internal model call failed',
+      });
       return {
         detections: null,
         reason: null,

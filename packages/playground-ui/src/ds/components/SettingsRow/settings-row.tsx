@@ -1,32 +1,11 @@
-import type { ReactNode } from 'react';
-import { Label } from '@/ds/components/Label/label';
-import { cn } from '@/lib/utils';
+import { SettingsRowLayout } from '@/ds/new/settings/settings-row';
+import type { SettingsRowProps as SharedSettingsRowProps } from '@/ds/new/settings/settings-row';
 
-export type SettingsRowProps = {
-  label: ReactNode;
-  description?: ReactNode;
-  htmlFor?: string;
-  className?: string;
-  children: ReactNode;
+export type SettingsRowProps = Omit<SharedSettingsRowProps, 'tone' | 'viewOnly'> & {
+  variant?: 'default' | 'factory' | null;
 };
 
-export function SettingsRow({ label, description, htmlFor, className, children }: SettingsRowProps) {
-  return (
-    <div
-      className={cn('flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between', className)}
-      data-slot="settings-row"
-    >
-      <div>
-        {htmlFor ? (
-          <Label htmlFor={htmlFor} className="text-sm font-medium">
-            {label}
-          </Label>
-        ) : (
-          <p className="text-sm font-medium">{label}</p>
-        )}
-        {description && <p className="text-sm text-neutral3">{description}</p>}
-      </div>
-      {children}
-    </div>
-  );
+/** @deprecated Import SettingsRow from @mastra/playground-ui/new/settings. */
+export function SettingsRow({ variant, ...props }: SettingsRowProps) {
+  return <SettingsRowLayout {...props} layout={variant === 'factory' ? 'factory' : 'standalone'} />;
 }

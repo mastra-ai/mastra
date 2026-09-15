@@ -1,6 +1,7 @@
 import type { MastraServerCache } from '../cache/base';
 import type { IMastraLogger } from '../logger';
-import { PubSub } from './pubsub';
+import { isLeaseProvider, PubSub } from './pubsub';
+import type { LeaseProvider } from './pubsub';
 import type { Event, EventCallback, SubscribeOptions } from './types';
 
 /**
@@ -17,6 +18,19 @@ export interface CachingPubSubOptions {
    * Falls back to console.error if not provided.
    */
   logger?: IMastraLogger;
+  /**
+   * Optional per-topic caching policy. Defaults to caching every topic.
+   *
+   * Returning `false` takes the same path as a `localOnly` publish: no list
+   * entry, no index, no counter allocation — the event is handed straight to
+   * the inner PubSub and still delivered live.
+   *
+   * This exists because `localOnly` is not always visible here. When a caller
+   * wraps a PubSub that itself decides `localOnly` (e.g. the `mastra.pubsub`
+   * proxy), the cache runs *above* that decision and never sees the flag, so
+   * the policy has to be supplied at construction time instead.
+   */
+  shouldCache?: (topic: string) => boolean;
 }
 
 /**
@@ -55,6 +69,7 @@ export interface CachingPubSubOptions {
 export class CachingPubSub extends PubSub {
   private readonly keyPrefix: string;
   private readonly logger?: IMastraLogger;
+  private readonly shouldCache?: (topic: string) => boolean;
   /** Maps original callbacks to their wrapped versions for proper unsubscribe */
   private callbackMap = new Map<EventCallback, EventCallback>();
 
@@ -66,10 +81,15 @@ export class CachingPubSub extends PubSub {
     super();
     this.keyPrefix = options.keyPrefix ?? 'pubsub:';
     this.logger = options.logger;
+    this.shouldCache = options.shouldCache;
   }
 
   get supportsNativeBatching(): boolean {
     return this.inner.supportsNativeBatching;
+  }
+
+  get supportsOffsets(): boolean {
+    return true;
   }
 
   /**
@@ -81,6 +101,23 @@ export class CachingPubSub extends PubSub {
     } else {
       console.error(message, error);
     }
+  }
+
+  /**
+   * Stable key used to deduplicate an event across the cache-replay and
+   * live-delivery paths.
+   *
+   * We cannot dedup on `event.id`: `CachingPubSub.publish` assigns the id and
+   * caches the event with it, but inner PubSub implementations
+   * (EventEmitterPubSub, UnixSocketPubSub, …) regenerate `id` inside their own
+   * `publish`, so the cached copy and the live copy of the SAME publish carry
+   * different ids. The sequential `index` is assigned here and is preserved by
+   * every inner implementation, so it matches across both paths. Events without
+   * an index are never cached (see `publish`), so they can't be replay/live
+   * duplicated — falling back to `id` for them is safe.
+   */
+  private dedupKey(event: Event): string {
+    return event.index !== undefined ? `i:${event.index}` : `id:${event.id}`;
   }
 
   /**
@@ -103,42 +140,63 @@ export class CachingPubSub extends PubSub {
    *
    * Uses atomic increment for index assignment to prevent race conditions
    * when multiple events are published concurrently.
+   *
+   * `localOnly` events bypass the cache entirely — no list entry, no index, no
+   * counter allocation — and are handed straight to the inner PubSub. They are
+   * never relayed to other instances, so a shared replay cache can have no
+   * reader for them; caching them only grows the store without bound (some
+   * payloads, e.g. `workflow.events.v2.*` watch events carrying cumulative step
+   * results, are multiple megabytes each). Consumers of `localOnly` topics
+   * subscribe live and never replay, and every downstream `index` check is
+   * guarded for absence, so dropping the index is safe.
+   *
+   * Topics rejected by the `shouldCache` option take the exact same path, for
+   * callers whose `localOnly` decision is made below this layer.
    */
-  async publish(topic: string, event: Omit<Event, 'id' | 'createdAt' | 'index'>): Promise<void> {
+  async publish(
+    topic: string,
+    event: Omit<Event, 'id' | 'createdAt' | 'index'>,
+    options?: { localOnly?: boolean },
+  ): Promise<void> {
+    if (options?.localOnly || this.shouldCache?.(topic) === false) {
+      const fullEvent: Event = {
+        ...event,
+        id: crypto.randomUUID(),
+        createdAt: new Date(),
+      };
+      await this.inner.publish(topic, fullEvent, options);
+      return;
+    }
+
     const cacheKey = this.getCacheKey(topic);
     const counterKey = this.getCounterKey(topic);
 
-    let index: number | undefined;
-    let indexFailed = false;
-    try {
-      // Atomically get next index (increment returns value after incrementing, so subtract 1 for 0-based index)
-      index = (await this.cache.increment(counterKey)) - 1;
-    } catch (error) {
-      this.logError(`[CachingPubSub] Failed to increment counter for ${topic}`, error);
-      indexFailed = true;
-    }
-
-    // On counter failure leave `index` undefined rather than defaulting to 0:
-    // downstream consumers that key off `index` (e.g. replay-from-offset)
-    // would otherwise see colliding indices across failed publishes.
-    const fullEvent: Event = {
+    const baseEvent: Omit<Event, 'index'> = {
       ...event,
       id: crypto.randomUUID(),
       createdAt: new Date(),
+    };
+
+    // Cache BEFORE live publish so late-joining observers never miss events.
+    // Index allocation and the list append happen in one cache operation so
+    // network-backed caches can do it in a single round-trip (issue #22477).
+    let index: number | undefined;
+    try {
+      index = await this.cache.listPushIndexed(cacheKey, counterKey, baseEvent);
+    } catch (error) {
+      this.logError(`[CachingPubSub] Failed to cache event for ${topic}`, error);
+    }
+
+    // On cache failure leave `index` undefined rather than defaulting to 0:
+    // downstream consumers that key off `index` (e.g. replay-from-offset)
+    // would otherwise see colliding indices across failed publishes.
+    const fullEvent: Event = {
+      ...baseEvent,
       ...(index !== undefined ? { index } : {}),
     };
 
-    if (!indexFailed) {
-      try {
-        // Cache BEFORE live publish so late-joining observers never miss events
-        await this.cache.listPush(cacheKey, fullEvent);
-      } catch (error) {
-        this.logError(`[CachingPubSub] Failed to cache event for ${topic}`, error);
-      }
-    }
-
     // Always publish to inner PubSub — cache failure must not block live delivery
-    await this.inner.publish(topic, fullEvent);
+    await this.inner.publish(topic, fullEvent, options);
   }
 
   /**
@@ -150,92 +208,114 @@ export class CachingPubSub extends PubSub {
 
   /**
    * Subscribe to a topic with automatic replay of cached events.
-   *
-   * Order of operations:
-   * 1. Subscribe to live events FIRST (to avoid missing events during replay)
-   * 2. Fetch and replay cached history
-   * 3. Deduplicate events at the boundary using event IDs
-   *
-   * Each subscriber gets its own deduplication set to ensure
-   * multiple subscribers can independently receive all events.
+   * Delegates to {@link subscribeFromOffset} with offset 0.
    */
   async subscribeWithReplay(topic: string, cb: EventCallback): Promise<void> {
-    // Each subscriber gets its own seen set for deduplication
-    // This prevents the same event from being delivered twice to THIS subscriber
-    // (once via cache replay and once via live subscription)
-    let seen: Set<string> | null = new Set<string>();
-
-    // Wrap callback to deduplicate events during replay/live overlap.
-    // After replay completes, seen is nulled out and the wrapper becomes a passthrough.
-    const wrappedCb: EventCallback = (event, ack) => {
-      if (seen) {
-        if (!seen.has(event.id)) {
-          seen.add(event.id);
-          cb(event, ack);
-        }
-      } else {
-        cb(event, ack);
-      }
-    };
-
-    // 1. Subscribe to live events FIRST to avoid race condition
-    this.callbackMap.set(cb, wrappedCb);
-    await this.inner.subscribe(topic, wrappedCb);
-
-    // 2. Fetch and replay cached history
-    const history = await this.getHistory(topic);
-    for (const event of history) {
-      if (!seen!.has(event.id)) {
-        seen!.add(event.id);
-        cb(event);
-      }
-    }
-
-    // Deduplication only needed during replay/live overlap — null out to free memory
-    // and skip unnecessary has/add for all subsequent live events
-    seen = null;
+    return this.subscribeFromOffset(topic, 0, cb);
   }
 
   /**
    * Subscribe to a topic with replay starting from a specific index.
    * More efficient than full replay when the client knows their last position.
    *
+   * Order of operations:
+   * 1. Subscribe to live events FIRST — buffer deliveries during bootstrap
+   * 2. Fetch and deliver cached history in order
+   * 3. Drain the buffer, skipping events already delivered via history
+   * 4. Switch to passthrough with an index watermark for steady-state dedup
+   *
    * @param topic - The topic to subscribe to
    * @param offset - Start replaying from this index (0-based)
    * @param cb - Callback invoked for each event
    */
   async subscribeFromOffset(topic: string, offset: number, cb: EventCallback): Promise<void> {
-    // Each subscriber gets its own seen set for deduplication
-    let seen: Set<string> | null = new Set<string>();
+    // --- Phase 1: subscribe live, buffer everything during bootstrap ---
+    let bootstrapping = true;
+    const buffer: Array<{
+      event: Event;
+      ack?: Parameters<EventCallback>[1];
+      nack?: Parameters<EventCallback>[2];
+    }> = [];
+    let lastDelivered = -1;
 
-    // Wrap callback to deduplicate events during replay/live overlap.
-    // After replay completes, seen is nulled out and the wrapper becomes a passthrough.
-    const wrappedCb: EventCallback = (event, ack) => {
-      if (seen) {
-        if (!seen.has(event.id)) {
-          seen.add(event.id);
-          cb(event, ack);
-        }
-      } else {
-        cb(event, ack);
+    const wrappedCb: EventCallback = (event, ack, nack) => {
+      // Drop events strictly before the requested offset on the live path.
+      // Dropped deliveries are still acknowledged: the consumer will never see
+      // them, so leaving them unacknowledged would strand them on the backend.
+      if (typeof event.index === 'number' && event.index < offset) {
+        return ack?.();
       }
+
+      if (bootstrapping) {
+        buffer.push({ event, ack, nack });
+        return;
+      }
+
+      // Steady-state: skip events we already delivered via history or buffer drain.
+      // Allow nack-redelivered messages through — they carry the same index but
+      // deliveryAttempt > 1, and the consumer must see them to retry processing.
+      const isRetry = typeof event.deliveryAttempt === 'number' && event.deliveryAttempt > 1;
+      if (typeof event.index === 'number' && event.index <= lastDelivered && !isRetry) {
+        // Already delivered via history or the buffer drain. Acknowledge the
+        // duplicate so it doesn't stay pending on the backend.
+        return ack?.();
+      }
+
+      if (typeof event.index === 'number' && event.index > lastDelivered) {
+        lastDelivered = event.index;
+      }
+      // Hand the consumer's outcome back to the backend so it can ack or nack.
+      return cb(event, ack, nack);
     };
 
-    // 1. Subscribe to live events FIRST to avoid race condition
     this.callbackMap.set(cb, wrappedCb);
     await this.inner.subscribe(topic, wrappedCb);
 
-    // 2. Fetch and replay cached history FROM the specified index
-    const history = await this.getHistory(topic, offset);
-    for (const event of history) {
-      if (!seen!.has(event.id)) {
-        seen!.add(event.id);
-        cb(event);
+    try {
+      // --- Phase 2: fetch and deliver cached history ---
+      const seen = new Set<string>();
+      const history = await this.getHistory(topic, offset);
+      for (const event of history) {
+        const key = this.dedupKey(event);
+        seen.add(key);
+        if (typeof event.index === 'number') {
+          lastDelivered = event.index;
+        }
+        // Awaited so history is delivered in order before the buffer drain.
+        // History comes from storage, not the transport, so there is nothing
+        // to acknowledge.
+        await cb(event);
       }
-    }
 
-    // Deduplication only needed during replay/live overlap — null out to free memory
-    seen = null;
+      // --- Phase 3: drain buffer, suppressing duplicates history already covered ---
+      for (const { event, ack, nack } of buffer) {
+        const key = this.dedupKey(event);
+        if (seen.has(key)) {
+          continue;
+        }
+        seen.add(key);
+        if (typeof event.index === 'number') {
+          lastDelivered = event.index;
+        }
+        // The consumer settles these itself through the ack/nack it was handed
+        // on the live path. Awaited so a rejection can still reach nack, which
+        // the backend would otherwise have routed.
+        try {
+          await cb(event, ack, nack);
+        } catch {
+          await nack?.();
+        }
+      }
+
+      // --- Phase 4: flip to passthrough ---
+      bootstrapping = false;
+      buffer.length = 0;
+    } catch (error) {
+      // Rollback: unsubscribe wrappedCb so it doesn't strand in bootstrap mode
+      this.callbackMap.delete(cb);
+      await this.inner.unsubscribe(topic, wrappedCb).catch(() => {});
+      throw error;
+    }
   }
 
   /**
@@ -264,14 +344,40 @@ export class CachingPubSub extends PubSub {
   }
 
   /**
-   * Clear cached events for a specific topic.
-   * Call this when a stream completes to free memory.
-   * Also clears the index counter.
+   * Expose the inner's {@link LeaseProvider} when it has one, otherwise
+   * `undefined`. Leasing is a capability of the underlying backend
+   * (e.g. Redis), not of the caching decorator itself — so rather than
+   * unconditionally declaring lease methods (which would make
+   * {@link isLeaseProvider} report `true` even when the inner can't
+   * coordinate a lock), we surface the inner's capability directly. The
+   * signals runtime unwraps this so wrapping with caching preserves real
+   * distributed lease semantics without faking them.
    */
-  async clearTopic(topic: string): Promise<void> {
+  getLeaseProvider(): LeaseProvider | undefined {
+    return isLeaseProvider(this.inner) ? this.inner : undefined;
+  }
+
+  /**
+   * Clear cached events for a specific topic (and the index counter), and
+   * forward the clear to the inner transport.
+   *
+   * Call this when a stream completes to free memory. The forward matters for
+   * persistent inner transports (e.g. Redis Streams): without it, wrapping a
+   * pubsub in `CachingPubSub` silently turns `clearTopic` into a cache-only
+   * no-op and the inner stream leaks forever.
+   */
+  override async clearTopic(topic: string): Promise<void> {
     const cacheKey = this.getCacheKey(topic);
     const counterKey = this.getCounterKey(topic);
-    await Promise.all([this.cache.delete(cacheKey), this.cache.delete(counterKey)]);
+    try {
+      await Promise.all([this.cache.delete(cacheKey), this.cache.delete(counterKey), this.inner.clearTopic(topic)]);
+    } catch (error) {
+      // Honor the base-class contract: clearTopic is best-effort and callers
+      // invoke it fire-and-forget, so a cache failure must not become an
+      // unhandled rejection. A failed delete means retained state may leak
+      // until the transport-level TTL backstop, so make it visible.
+      this.logError(`[CachingPubSub] Failed to clear topic ${topic}`, error);
+    }
   }
 
   /**

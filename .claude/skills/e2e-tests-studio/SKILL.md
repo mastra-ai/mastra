@@ -30,6 +30,52 @@ model: claude-opus-4-5
 - ✅ "Chat messages stream correctly and maintain conversation context"
 - ✅ "Workflow execution triggers tools in the correct order"
 
+## BDD Structure (REQUIRED)
+
+**Every E2E spec MUST follow the same BDD shape as the MSW tests.** In `packages/playground`, `e2e-bdd/test-needs-when-describe` enforces this shape.
+
+The structure has exactly three levels:
+
+1. **Outer `test.describe`** = the unit under test (one page or feature per file).
+2. **Inner `test.describe('when …')`** = exactly ONE precondition. The title MUST start with `when`.
+3. **Each `test`** = exactly ONE observable outcome.
+
+```ts
+import { test, expect } from '@playwright/test';
+import { resetStorage } from '../__utils__/reset-storage';
+
+test.describe('Tools list page', () => {
+  // the unit
+  test.afterEach(async () => {
+    await resetStorage();
+  });
+
+  test.describe('when a registered tool is clicked', () => {
+    // ONE precondition (starts with "when")
+    test('navigates to that tool detail page', async ({ page }) => {
+      // ONE outcome
+      await page.goto('/tools');
+      await page.locator('text=Get current weather for a location').click();
+      await expect(page).toHaveURL(/\/tools\/weatherInfo$/);
+    });
+
+    test('shows the tool name as the page heading', async ({ page }) => {
+      // ONE outcome
+      await page.goto('/tools');
+      await page.locator('text=Get current weather for a location').click();
+      await expect(page.locator('h2')).toHaveText('weatherInfo');
+    });
+  });
+});
+```
+
+Rules:
+
+- One outer `test.describe` per file naming the unit.
+- Every leaf `test` lives inside a `test.describe('when …')` precondition group. **No top-level flat `test()`.**
+- Split a multi-assertion `test()` only where assertions represent **distinct outcomes**; keep tightly-coupled assertions that prove a single outcome together. Never drop an assertion.
+- Place `beforeEach`/`afterEach` in the narrowest `describe` scope that needs them.
+
 ## Prerequisites
 
 Requires Playwright MCP server. If the `browser_navigate` tool is unavailable, instruct the user to add it:
@@ -102,15 +148,17 @@ test.describe('[Feature Name] - Behavior Tests', () => {
     await resetStorage(page);
   });
 
-  test('should [verb describing behavior] when [trigger condition]', async () => {
-    // ARRANGE: Set up preconditions
-    // - Navigate to the feature
-    // - Configure any required state
-    // ACT: Perform the user action that triggers the behavior
-    // ASSERT: Verify the OUTCOME, not the UI state
-    // - Check data persistence
-    // - Verify downstream effects
-    // - Confirm API calls made correctly
+  test.describe('when [the single precondition for these outcomes]', () => {
+    test('[verb describing the single observable outcome]', async () => {
+      // ARRANGE: Set up preconditions
+      // - Navigate to the feature
+      // - Configure any required state
+      // ACT: Perform the user action that triggers the behavior
+      // ASSERT: Verify the OUTCOME, not the UI state
+      // - Check data persistence
+      // - Verify downstream effects
+      // - Confirm API calls made correctly
+    });
   });
 });
 ```
@@ -120,149 +168,161 @@ test.describe('[Feature Name] - Behavior Tests', () => {
 #### Pattern 1: Configuration Affects Behavior
 
 ```ts
-test('selecting LLM provider should use that provider for agent responses', async () => {
-  // ARRANGE
-  await page.goto('/agents/my-agent/chat');
+test.describe('when a different LLM provider is selected', () => {
+  test('uses that provider for agent responses', async () => {
+    // ARRANGE
+    await page.goto('/agents/my-agent/chat');
 
-  // Intercept API to verify provider
-  let capturedProvider: string | null = null;
-  await page.route('**/api/chat', route => {
-    const body = JSON.parse(route.request().postData() || '{}');
-    capturedProvider = body.provider;
-    route.continue();
+    // Intercept API to verify provider
+    let capturedProvider: string | null = null;
+    await page.route('**/api/chat', route => {
+      const body = JSON.parse(route.request().postData() || '{}');
+      capturedProvider = body.provider;
+      route.continue();
+    });
+
+    // ACT: Select a different provider
+    await page.getByTestId('provider-selector').click();
+    await page.getByRole('option', { name: 'OpenAI' }).click();
+
+    // Send a message to trigger the agent
+    await page.getByTestId('chat-input').fill('Hello');
+    await page.getByTestId('send-button').click();
+
+    // ASSERT: Verify the selected provider was used
+    await expect.poll(() => capturedProvider).toBe('openai');
   });
-
-  // ACT: Select a different provider
-  await page.getByTestId('provider-selector').click();
-  await page.getByRole('option', { name: 'OpenAI' }).click();
-
-  // Send a message to trigger the agent
-  await page.getByTestId('chat-input').fill('Hello');
-  await page.getByTestId('send-button').click();
-
-  // ASSERT: Verify the selected provider was used
-  await expect.poll(() => capturedProvider).toBe('openai');
 });
 ```
 
 #### Pattern 2: Data Persistence
 
 ```ts
-test('created agent should persist after page reload', async () => {
-  // ARRANGE
-  await page.goto('/agents');
-  const agentName = `Test Agent ${nanoid()}`;
+test.describe('when a new agent is created', () => {
+  test('persists after page reload', async () => {
+    // ARRANGE
+    await page.goto('/agents');
+    const agentName = `Test Agent ${nanoid()}`;
 
-  // ACT: Create new agent
-  await page.getByTestId('create-agent-button').click();
-  await page.getByTestId('agent-name-input').fill(agentName);
-  await page.getByTestId('save-agent-button').click();
+    // ACT: Create new agent
+    await page.getByTestId('create-agent-button').click();
+    await page.getByTestId('agent-name-input').fill(agentName);
+    await page.getByTestId('save-agent-button').click();
 
-  // Wait for creation to complete
-  await expect(page.getByText(agentName)).toBeVisible();
+    // Wait for creation to complete
+    await expect(page.getByText(agentName)).toBeVisible();
 
-  // ASSERT: Verify persistence
-  await page.reload();
-  await expect(page.getByText(agentName)).toBeVisible({ timeout: 10000 });
+    // ASSERT: Verify persistence
+    await page.reload();
+    await expect(page.getByText(agentName)).toBeVisible({ timeout: 10000 });
+  });
 });
 ```
 
 #### Pattern 3: Tool Execution Produces Correct Output
 
 ```ts
-test('weather tool should return formatted weather data', async () => {
-  // ARRANGE
-  await selectFixture(page, 'weather-success');
-  await page.goto('/tools/weather-tool');
+test.describe('when the weather tool is executed with a city', () => {
+  test('returns formatted weather data for that city', async () => {
+    // ARRANGE
+    await selectFixture(page, 'weather-success');
+    await page.goto('/tools/weather-tool');
 
-  // ACT: Execute tool with parameters
-  await page.getByTestId('param-city').fill('San Francisco');
-  await page.getByTestId('execute-tool-button').click();
+    // ACT: Execute tool with parameters
+    await page.getByTestId('param-city').fill('San Francisco');
+    await page.getByTestId('execute-tool-button').click();
 
-  // ASSERT: Verify OUTPUT content, not just that output appears
-  const output = page.getByTestId('tool-output');
-  await expect(output).toContainText('temperature');
-  await expect(output).toContainText('San Francisco');
+    // ASSERT: Verify OUTPUT content, not just that output appears
+    const output = page.getByTestId('tool-output');
+    await expect(output).toContainText('temperature');
+    await expect(output).toContainText('San Francisco');
 
-  // Verify structured data if applicable
-  const outputText = await output.textContent();
-  const outputData = JSON.parse(outputText || '{}');
-  expect(outputData).toHaveProperty('temperature');
-  expect(outputData).toHaveProperty('conditions');
+    // Verify structured data if applicable
+    const outputText = await output.textContent();
+    const outputData = JSON.parse(outputText || '{}');
+    expect(outputData).toHaveProperty('temperature');
+    expect(outputData).toHaveProperty('conditions');
+  });
 });
 ```
 
 #### Pattern 4: Workflow Step Chaining
 
 ```ts
-test('workflow should pass data between steps correctly', async () => {
-  // ARRANGE
-  await selectFixture(page, 'workflow-multi-step');
-  const sessionId = nanoid();
-  await page.goto(`/workflows/data-pipeline?session=${sessionId}`);
+test.describe('when a multi-step workflow is run', () => {
+  test('passes data between steps correctly', async () => {
+    // ARRANGE
+    await selectFixture(page, 'workflow-multi-step');
+    const sessionId = nanoid();
+    await page.goto(`/workflows/data-pipeline?session=${sessionId}`);
 
-  // ACT: Trigger workflow execution
-  await page.getByTestId('workflow-input').fill('test input data');
-  await page.getByTestId('run-workflow-button').click();
+    // ACT: Trigger workflow execution
+    await page.getByTestId('workflow-input').fill('test input data');
+    await page.getByTestId('run-workflow-button').click();
 
-  // ASSERT: Verify each step received correct input from previous step
-  // Wait for completion
-  await expect(page.getByTestId('workflow-status')).toHaveText('completed', { timeout: 30000 });
+    // ASSERT: Verify each step received correct input from previous step
+    // Wait for completion
+    await expect(page.getByTestId('workflow-status')).toHaveText('completed', { timeout: 30000 });
 
-  // Check step outputs show data transformation chain
-  const step1Output = await page.getByTestId('step-1-output').textContent();
-  const step2Output = await page.getByTestId('step-2-output').textContent();
+    // Check step outputs show data transformation chain
+    const step1Output = await page.getByTestId('step-1-output').textContent();
+    const step2Output = await page.getByTestId('step-2-output').textContent();
 
-  // Verify step 2 received step 1's output as input
-  expect(step2Output).toContain(step1Output);
+    // Verify step 2 received step 1's output as input
+    expect(step2Output).toContain(step1Output);
+  });
 });
 ```
 
 #### Pattern 5: Streaming Chat with Context
 
 ```ts
-test('chat should maintain conversation context across messages', async () => {
-  // ARRANGE
-  await selectFixture(page, 'contextual-chat');
-  const chatId = nanoid();
-  await page.goto(`/agents/assistant/chat/${chatId}`);
+test.describe('when a multi-turn conversation is held', () => {
+  test('maintains conversation context across messages', async () => {
+    // ARRANGE
+    await selectFixture(page, 'contextual-chat');
+    const chatId = nanoid();
+    await page.goto(`/agents/assistant/chat/${chatId}`);
 
-  // ACT: Multi-turn conversation
-  await page.getByTestId('chat-input').fill('My name is Alice');
-  await page.getByTestId('send-button').click();
-  await expect(page.getByTestId('assistant-message').last()).toBeVisible({ timeout: 20000 });
+    // ACT: Multi-turn conversation
+    await page.getByTestId('chat-input').fill('My name is Alice');
+    await page.getByTestId('send-button').click();
+    await expect(page.getByTestId('assistant-message').last()).toBeVisible({ timeout: 20000 });
 
-  await page.getByTestId('chat-input').fill('What is my name?');
-  await page.getByTestId('send-button').click();
+    await page.getByTestId('chat-input').fill('What is my name?');
+    await page.getByTestId('send-button').click();
 
-  // ASSERT: Verify context was maintained
-  const response = page.getByTestId('assistant-message').last();
-  await expect(response).toContainText('Alice', { timeout: 20000 });
+    // ASSERT: Verify context was maintained
+    const response = page.getByTestId('assistant-message').last();
+    await expect(response).toContainText('Alice', { timeout: 20000 });
+  });
 });
 ```
 
 #### Pattern 6: Error Recovery
 
 ```ts
-test('should show actionable error and allow retry when API fails', async () => {
-  // ARRANGE: Set up failure fixture
-  await selectFixture(page, 'api-failure');
-  await page.goto('/tools/flaky-tool');
+test.describe('when the API fails during tool execution', () => {
+  test('shows an actionable error and allows a successful retry', async () => {
+    // ARRANGE: Set up failure fixture
+    await selectFixture(page, 'api-failure');
+    await page.goto('/tools/flaky-tool');
 
-  // ACT: Trigger the error
-  await page.getByTestId('execute-tool-button').click();
+    // ACT: Trigger the error
+    await page.getByTestId('execute-tool-button').click();
 
-  // ASSERT: Error is shown with recovery option
-  await expect(page.getByTestId('error-message')).toContainText('failed');
-  await expect(page.getByTestId('retry-button')).toBeVisible();
+    // ASSERT: Error is shown with recovery option
+    await expect(page.getByTestId('error-message')).toContainText('failed');
+    await expect(page.getByTestId('retry-button')).toBeVisible();
 
-  // Switch to success fixture and retry
-  await selectFixture(page, 'api-success');
-  await page.getByTestId('retry-button').click();
+    // Switch to success fixture and retry
+    await selectFixture(page, 'api-success');
+    await page.getByTestId('retry-button').click();
 
-  // Verify recovery worked
-  await expect(page.getByTestId('tool-output')).toBeVisible({ timeout: 10000 });
-  await expect(page.getByTestId('error-message')).not.toBeVisible();
+    // Verify recovery worked
+    await expect(page.getByTestId('tool-output')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId('error-message')).not.toBeVisible();
+  });
 });
 ```
 
@@ -285,20 +345,22 @@ test('dropdown opens when clicked', async () => {
 });
 ```
 
-**AFTER (Behavior-focused):**
+**AFTER (Behavior-focused + BDD nesting):**
 
 ```ts
-test('selecting model from dropdown updates agent configuration', async () => {
-  // Open dropdown and select model
-  await page.getByTestId('model-dropdown').click();
-  await page.getByRole('option', { name: 'GPT-4' }).click();
+test.describe('when a model is selected from the dropdown', () => {
+  test('updates and persists the agent configuration', async () => {
+    // Open dropdown and select model
+    await page.getByTestId('model-dropdown').click();
+    await page.getByRole('option', { name: 'GPT-4' }).click();
 
-  // Verify the selection persists and affects behavior
-  await page.reload();
-  await expect(page.getByTestId('model-dropdown')).toHaveText('GPT-4');
+    // Verify the selection persists and affects behavior
+    await page.reload();
+    await expect(page.getByTestId('model-dropdown')).toHaveText('GPT-4');
 
-  // Optionally: verify the model is used in actual requests
-  // (via request interception or checking response metadata)
+    // Optionally: verify the model is used in actual requests
+    // (via request interception or checking response metadata)
+  });
 });
 ```
 
@@ -359,6 +421,9 @@ cd packages/playground && pnpm test:e2e
 Before considering tests complete, verify:
 
 - [ ] Each test has a clear user story comment
+- [ ] One outer `test.describe` names the unit under test
+- [ ] Every `test` is nested in a `test.describe('when …')` precondition block (no flat top-level `test()`)
+- [ ] Each `test` asserts exactly ONE observable outcome
 - [ ] Tests verify OUTCOMES, not intermediate UI states
 - [ ] Tests would FAIL if the feature broke (not just if UI changed)
 - [ ] Persistence is verified via `page.reload()` where applicable
@@ -380,12 +445,14 @@ Before considering tests complete, verify:
 
 ## Anti-Patterns to Avoid
 
-| ❌ Don't                           | ✅ Do Instead                                                |
-| ---------------------------------- | ------------------------------------------------------------ |
-| Test that modal opens              | Test that modal action completes and persists                |
-| Test that button is clickable      | Test that clicking button produces expected result           |
-| Test loading spinner appears       | Test that loaded data is correct                             |
-| Test form validation message shows | Test that invalid form cannot submit AND valid form succeeds |
-| Test dropdown has options          | Test that selecting option changes system behavior           |
-| Test sidebar navigation works      | Test that navigated page has correct data/functionality      |
-| Assert element is visible          | Assert element contains expected data/state                  |
+| ❌ Don't                                              | ✅ Do Instead                                                |
+| ----------------------------------------------------- | ------------------------------------------------------------ |
+| Test that modal opens                                 | Test that modal action completes and persists                |
+| Test that button is clickable                         | Test that clicking button produces expected result           |
+| Test loading spinner appears                          | Test that loaded data is correct                             |
+| Test form validation message shows                    | Test that invalid form cannot submit AND valid form succeeds |
+| Test dropdown has options                             | Test that selecting option changes system behavior           |
+| Test sidebar navigation works                         | Test that navigated page has correct data/functionality      |
+| Assert element is visible                             | Assert element contains expected data/state                  |
+| Top-level flat `test()` with no precondition describe | Nest every `test` in a `test.describe('when …')` block       |
+| One `test()` asserting several unrelated outcomes     | One `test()` per observable outcome                          |

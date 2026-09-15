@@ -68,7 +68,7 @@ export function useMetrics() {
 
 function getDateRangeLabel(preset: DatePreset, customRange: DateRange | undefined) {
   if (preset !== 'custom') {
-    return DATE_PRESETS.find(p => p.value === preset)!.label;
+    return DATE_PRESETS.find(p => p.value === preset)?.label ?? preset;
   }
   if (customRange?.from) {
     if (customRange.to) {
@@ -108,7 +108,7 @@ export function MetricsProvider({
   onFilterTokensChange: (tokens: PropertyFilterToken[]) => void;
   customRange?: DateRange;
   onCustomRangeChange?: (range: DateRange | undefined) => void;
-  /** Base path for drilldown links to the Traces page. Defaults to `/observability` when omitted. */
+  /** Base path for drilldown links to the Traces page. Defaults to `/traces` when omitted. */
   tracesBasePath?: string;
   /** Base path for drilldown links to the Logs page. Defaults to `/logs` when omitted. */
   logsBasePath?: string;

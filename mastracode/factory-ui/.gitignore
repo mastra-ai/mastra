@@ -1,0 +1,2 @@
+# Vite SPA build output (default location when built without MASTRACODE_OUT_DIR)
+dist/

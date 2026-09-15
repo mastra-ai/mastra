@@ -1,16 +1,18 @@
-import { EntityType } from '@mastra/core/observability';
+import type { EntityType } from '@mastra/core/observability';
 import type { ListTracesArgs } from '@mastra/core/storage';
 import type { TraceDatePreset } from './types';
 import type { PropertyFilterField, PropertyFilterToken } from '@/ds/components/PropertyFilter/types';
 
-export type EntityOptions = { label: string; entityType: EntityType };
+type EntityTypeValue = `${EntityType}`;
+
+export type EntityOptions = { label: string; entityType: EntityTypeValue };
 
 export const ROOT_ENTITY_TYPES = {
-  AGENT: EntityType.AGENT,
-  WORKFLOW: EntityType.WORKFLOW_RUN,
-  SCORER: EntityType.SCORER,
-  INGEST: EntityType.RAG_INGESTION,
-} as const;
+  AGENT: 'agent',
+  WORKFLOW: 'workflow_run',
+  SCORER: 'scorer',
+  INGEST: 'rag_ingestion',
+} as const satisfies Record<string, EntityTypeValue>;
 
 export const ROOT_ENTITY_TYPE_OPTIONS = [
   { label: 'Agent', entityType: ROOT_ENTITY_TYPES.AGENT },
@@ -84,20 +86,22 @@ export const TRACE_STATUS_VALUES = new Set<TraceStatusFilter>(['running', 'succe
 
 export const DEFAULT_TRACE_FILTERS_STORAGE_KEY = 'mastra:traces:saved-filters';
 
-/** Serialize the filter-related URL params (date + rootEntityType + status +
- *  generic filterX set) to localStorage so the user can restore them on next
- *  visit. Throws no errors — storage being unavailable is fine. */
+/** Serialize the filter-related URL params (relative date preset + rootEntityType +
+ *  status + generic filterX set) to localStorage so the user can restore them on next
+ *  visit. A `custom` absolute range is never saved: it would be stale by the next visit.
+ *  An empty set clears the key. Throws no errors — storage being unavailable is fine. */
 export function saveTraceFiltersToStorage(
   params: URLSearchParams,
   storageKey: string = DEFAULT_TRACE_FILTERS_STORAGE_KEY,
 ): void {
   const serialized = getPreservedTraceFilterParams(params);
   const preset = params.get(TRACE_DATE_PRESET_PARAM);
-  if (preset) serialized.set(TRACE_DATE_PRESET_PARAM, preset);
-  const from = params.get(TRACE_DATE_FROM_PARAM);
-  if (from) serialized.set(TRACE_DATE_FROM_PARAM, from);
-  const to = params.get(TRACE_DATE_TO_PARAM);
-  if (to) serialized.set(TRACE_DATE_TO_PARAM, to);
+  if (preset && preset !== 'custom') serialized.set(TRACE_DATE_PRESET_PARAM, preset);
+
+  if (!serialized.toString()) {
+    clearSavedTraceFilters(storageKey);
+    return;
+  }
 
   try {
     localStorage.setItem(storageKey, serialized.toString());

@@ -1,4 +1,6 @@
-import { Breadcrumb, Button, Crumb } from '@mastra/playground-ui';
+import { Breadcrumb, Crumb } from '@mastra/playground-ui/components/Breadcrumb';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Header } from '@mastra/playground-ui/components/Header';
 import { RefreshCwIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
@@ -35,18 +37,18 @@ export const EditTopBar = ({
   const toggleLabel = mode === 'test' ? 'Switch to Edit mode' : 'Switch to View mode';
 
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-4 pt-4 md:px-10">
-      <Breadcrumb label="Agent navigation" className="min-w-0" listClassName="min-w-0">
-        <Crumb as={Link} to="/agent-builder/agents">
+    <Header className="h-10 min-h-10 gap-2 overflow-hidden px-2">
+      <Breadcrumb label="Agent navigation" className="min-w-0 flex-1 overflow-hidden" listClassName="min-w-0">
+        <Crumb as={Link} to="/agent-builder/agents" data-testid="agent-builder-back-to-list">
           Agent list
         </Crumb>
-        <Crumb as="span" isCurrent>
+        <Crumb as="span" isCurrent data-testid="agent-builder-title">
           <AgentBuilderTitle isLoading={isLoading} />
         </Crumb>
       </Breadcrumb>
-      <div className="justify-self-end flex items-center gap-2 shrink-0">
-        {rightAside && <div className="shrink-0 mr-1">{rightAside}</div>}
-        {primaryAction && <div className="shrink-0 flex">{primaryAction}</div>}
+      <div className="ml-auto flex shrink-0 items-center gap-2">
+        {rightAside && <div className="mr-1 shrink-0">{rightAside}</div>}
+        {primaryAction && <div className="flex shrink-0">{primaryAction}</div>}
         {mobileExtra && <div className="shrink-0 lg:hidden">{mobileExtra}</div>}
         {mode && onModeToggle && (
           <Button
@@ -54,15 +56,15 @@ export const EditTopBar = ({
             size="sm"
             onClick={onModeToggle}
             disabled={modeToggleDisabled}
-            className="hidden lg:inline-flex shrink-0"
+            className="hidden shrink-0 lg:inline-flex"
             data-testid="agent-builder-mode-toggle"
             aria-label={toggleLabel}
+            icon={<RefreshCwIcon />}
           >
-            <RefreshCwIcon />
             {toggleLabel}
           </Button>
         )}
       </div>
-    </div>
+    </Header>
   );
 };

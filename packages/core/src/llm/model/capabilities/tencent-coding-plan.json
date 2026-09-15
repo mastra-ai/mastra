@@ -1,3 +1,13 @@
 {
-  "attachment": ["kimi-k2.5"]
+  "attachment": ["kimi-k2.5"],
+  "temperature": [
+    "glm-5",
+    "hunyuan-2.0-instruct",
+    "hunyuan-2.0-thinking",
+    "hunyuan-t1",
+    "hunyuan-turbos",
+    "kimi-k2.5",
+    "minimax-m2.5",
+    "tc-code-latest"
+  ]
 }

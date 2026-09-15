@@ -1,0 +1,163 @@
+import { describe, expect, it, vi } from 'vitest';
+
+import { createFactoryStorageForTests } from '../../storage/test-utils.js';
+import type { GithubIntegration } from './integration.js';
+import { recordFactoryPullRequestProvenance } from './provenance.js';
+import type { FactoryPullRequestProvenanceData } from './provenance.js';
+
+async function setup() {
+  const seeded = await createFactoryStorageForTests();
+  const sourceControl = seeded.sourceControl.forIntegration('github');
+  const integrationStorage = seeded.integrations.forIntegration<
+    Record<string, unknown>,
+    Record<string, unknown>,
+    FactoryPullRequestProvenanceData
+  >('github');
+  const project = await seeded.projects.create({
+    orgId: 'org-1',
+    userId: 'user-1',
+    input: { name: 'Project 1' },
+  });
+  const item = (
+    await seeded.workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'issue',
+          externalId: 'github-issue:42',
+          url: 'https://github.com/acme/repo/issues/42',
+        },
+        title: 'Issue 42',
+        stages: ['execute'],
+        sessions: {},
+        metadata: {},
+      },
+    })
+  ).item;
+  const installation = await sourceControl.installations.upsert({
+    orgId: 'org-1',
+    connectedByUserId: 'user-1',
+    externalId: '7',
+  });
+  const repository = await sourceControl.repositories.upsert({
+    orgId: 'org-1',
+    input: { installationId: installation.id, externalId: '10', slug: 'acme/repo', defaultBranch: 'main' },
+  });
+  const connection = await sourceControl.connections.create({
+    orgId: 'org-1',
+    factoryProjectId: project.id,
+    installationId: installation.id,
+    createdByUserId: 'user-1',
+  });
+  await sourceControl.projectRepositories.link({
+    orgId: 'org-1',
+    connectionId: connection.id,
+    repositoryId: repository.id,
+    createdByUserId: 'user-1',
+    sandboxProvider: 'local',
+    sandboxWorkdir: '/workspace',
+  });
+  const pullsGet = vi.fn().mockResolvedValue({
+    data: { number: 17, html_url: 'https://github.com/acme/repo/pull/17', base: { repo: { id: 10 } } },
+  });
+  const github = {
+    getInstallationOctokit: vi.fn(() => ({ pulls: { get: pullsGet } })),
+  } as unknown as GithubIntegration;
+  const input = {
+    binding: {
+      id: 'binding-1',
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      workItemId: item.id,
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      projectPath: '/workspace',
+      branch: 'feature',
+      role: 'work',
+      status: 'active' as const,
+      kickoffKey: 'kickoff-1',
+      createdAt: new Date(),
+      revokedAt: null,
+    },
+    item,
+    assistantMessageId: 'message-1',
+    toolCallId: 'call-1',
+    toolName: 'execute_command',
+    toolInput: { command: 'gh pr create --title "PR 17" --body "body"' },
+    toolResult: { stdout: 'https://github.com/acme/repo/pull/17\n' },
+    status: 'success' as const,
+  };
+  return { sourceControl, integrationStorage, workItems: seeded.workItems, project, github, pullsGet, input };
+}
+
+describe('recordFactoryPullRequestProvenance', () => {
+  it('records only a verified gh pr create result for the exact bound Factory work item', async () => {
+    const { sourceControl, integrationStorage, workItems, project, github, pullsGet, input } = await setup();
+    await recordFactoryPullRequestProvenance(github, sourceControl, integrationStorage, workItems, input);
+
+    expect(pullsGet).toHaveBeenCalledWith({ owner: 'acme', repo: 'repo', pull_number: 17 });
+    expect((await integrationStorage.subscriptions.listByTarget('factory-pr-provenance:10:17'))[0]).toMatchObject({
+      threadId: 'thread-1',
+      data: {
+        bindingId: 'binding-1',
+        workItemId: input.item.id,
+        factoryProjectId: project.id,
+        assistantMessageId: 'message-1',
+        toolCallId: 'call-1',
+      },
+    });
+  });
+
+  it('repairs a review card created before provenance was recorded', async () => {
+    const { sourceControl, integrationStorage, workItems, project, github, input } = await setup();
+    const review = await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'factory-rule-dispatcher',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'pull-request',
+          externalId: 'github-pr:17',
+          url: 'https://github.com/acme/repo/pull/17',
+        },
+        title: 'PR 17',
+        stages: ['intake'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+
+    await recordFactoryPullRequestProvenance(github, sourceControl, integrationStorage, workItems, input);
+
+    expect((await workItems.get({ orgId: 'org-1', id: review.item.id }))?.parentWorkItemId).toBe(input.item.id);
+  });
+
+  it('ignores unrelated command results and API mismatches', async () => {
+    const { sourceControl, integrationStorage, workItems, github, input, pullsGet } = await setup();
+    await recordFactoryPullRequestProvenance(github, sourceControl, integrationStorage, workItems, {
+      ...input,
+      toolInput: { command: 'gh pr view 17' },
+    });
+    expect(pullsGet).not.toHaveBeenCalled();
+
+    pullsGet.mockResolvedValueOnce({
+      data: { number: 17, html_url: 'https://github.com/other/repo/pull/17', base: { repo: { id: 99 } } },
+    });
+    await recordFactoryPullRequestProvenance(github, sourceControl, integrationStorage, workItems, input);
+    expect(await integrationStorage.subscriptions.listByTarget('factory-pr-provenance:10:17')).toEqual([]);
+  });
+
+  it('fails closed when pull request verification is unavailable', async () => {
+    const { sourceControl, integrationStorage, workItems, github, input, pullsGet } = await setup();
+    pullsGet.mockRejectedValueOnce(new Error('GitHub unavailable'));
+
+    await expect(
+      recordFactoryPullRequestProvenance(github, sourceControl, integrationStorage, workItems, input),
+    ).resolves.toBeUndefined();
+    expect(await integrationStorage.subscriptions.listByTarget('factory-pr-provenance:10:17')).toEqual([]);
+  });
+});

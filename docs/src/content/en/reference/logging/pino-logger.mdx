@@ -1,6 +1,6 @@
 ---
 title: "Reference: PinoLogger | Observability"
-description: Documentation for PinoLogger, which provides methods to record events at various severity levels.
+description: "A Logger instance is created using new PinoLogger() and provides methods to record events at severity levels."
 packages:
   - "@mastra/core"
   - "@mastra/loggers"
@@ -8,7 +8,7 @@ packages:
 
 # PinoLogger
 
-A Logger instance is created using `new PinoLogger()` and provides methods to record events at various severity levels.
+A Logger instance is created using `new PinoLogger()` and provides methods to record events at severity levels.
 
 ## Usage example
 
@@ -82,6 +82,13 @@ export const mastra = new Mastra({
     description:
       'Custom log levels and numeric values, forwarded to Pino. Standard severity is still logged via `debug`, `info`, `warn`, and `error`; extra levels follow Pino’s custom-level behavior.',
   },
+  {
+    name: 'serializers',
+    type: "pino.LoggerOptions['serializers']",
+    isOptional: true,
+    description:
+      'Custom Pino serializers, merged over the defaults. By default the `error` key uses Pino’s standard error serializer (alongside the built-in `err`), so `logger.warn("...", { error })` records the type, message, and stack instead of an empty object.',
+  },
 ]}
 />
 
@@ -133,7 +140,7 @@ const logger = new MastraPinoWithAudit({
 export const mastra = new Mastra({ logger })
 ```
 
-Numeric values follow Pino’s ordering (built-in levels use 10–60). A level of `35` sits between `info` (30) and `warn` (40), so with `level: 'info'` both `info` and `audit` lines are emitted.
+Numeric values follow Pino’s ordering (built-in levels use 10 to 60). A level of `35` sits between `info` (30) and `warn` (40), so with `level: 'info'` both `info` and `audit` lines are emitted.
 
 ## File transport (structured logs)
 
@@ -161,7 +168,7 @@ fileLogger.warn('Low disk space', {
 
 ## Upstash transport (remote log drain)
 
-Streams structured logs to a remote Redis list using the `UpstashTransport`. The logger accepts a string message and a structured metadata object. This enables centralized logging for distributed environments, supporting filtering by `destinationPath`, `type`, and `runId`.
+Streams structured logs to a remote Redis list using the `UpstashTransport`. The logger accepts a string message and a structured metadata object. It supports centralized logging for distributed environments, supporting filtering by `destinationPath`, `type`, and `runId`.
 
 ```typescript title="src/mastra/loggers/upstash-transport.ts"
 import { UpstashTransport } from '@mastra/loggers/upstash'
@@ -196,7 +203,7 @@ You can create custom transports using the `createCustomTransport` utility to in
 
 ### Sentry transport example
 
-Creates a custom transport using `createCustomTransport` and integrates it with a third-party logging stream such as `pino-sentry-transport`. This allows forwarding logs to an external system like Sentry for advanced monitoring and observability.
+Creates a custom transport using `createCustomTransport` and integrates it with a third-party logging stream such as `pino-sentry-transport`. The custom transport forwards logs to an external system such as Sentry for advanced monitoring and observability.
 
 ```typescript title="src/mastra/loggers/sentry-transport.ts"
 import { createCustomTransport } from '@mastra/core/loggers'

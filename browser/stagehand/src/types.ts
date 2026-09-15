@@ -2,19 +2,41 @@
  * Stagehand Browser Types
  */
 
-import type { BrowserConfig as BaseBrowserConfig } from '@mastra/core/browser';
+import type { ModelConfiguration as StagehandModelConfiguration } from '@browserbasehq/stagehand';
+import type { BrowserConfig as BaseBrowserConfig, BrowserRecordingOptions } from '@mastra/core/browser';
 import type { StagehandToolName } from './tools/constants';
 
 /**
- * Model configuration for Stagehand AI operations
+ * Model configuration for Stagehand AI operations.
  */
-export type ModelConfiguration =
-  | string // Format: "provider/model" (e.g., "openai/gpt-4o", "anthropic/claude-3-5-sonnet-20241022")
-  | {
-      modelName: string;
-      apiKey?: string;
-      baseURL?: string;
-    };
+export type ModelConfiguration = StagehandModelConfiguration;
+
+/**
+ * Providers Stagehand can resolve from a `provider/model` string.
+ *
+ * Stagehand splits the model id on its first slash and looks the prefix up in
+ * its internal AI SDK provider registry; an unknown prefix throws during
+ * browser startup rather than at configuration time. Mirrored here so callers
+ * can reject a bad provider up front. Keep in sync with `AISDKProviders` in
+ * `@browserbasehq/stagehand`.
+ */
+export const STAGEHAND_MODEL_PROVIDERS = [
+  'anthropic',
+  'azure',
+  'bedrock',
+  'cerebras',
+  'deepseek',
+  'gateway',
+  'google',
+  'groq',
+  'mistral',
+  'ollama',
+  'openai',
+  'perplexity',
+  'togetherai',
+  'vertex',
+  'xai',
+] as const;
 
 /**
  * Stagehand-specific configuration fields.
@@ -51,6 +73,16 @@ interface StagehandConfigExtensions {
    * @default 'openai/gpt-4o'
    */
   model?: ModelConfiguration;
+
+  /**
+   * Enable Stagehand experimental features.
+   */
+  experimental?: boolean;
+
+  /**
+   * Disable the Stagehand API so model execution runs locally.
+   */
+  disableAPI?: boolean;
 
   /**
    * Enable self-healing selectors.
@@ -103,6 +135,14 @@ interface StagehandConfigExtensions {
    * @default false
    */
   preserveUserDataDir?: boolean;
+
+  /**
+   * Alpha: opt into browser recording tools.
+   *
+   * Recording tools are disabled by default. Provide an output directory to add
+   * `browser_record` and `browser_record_caption` to this browser's toolset.
+   */
+  recording?: BrowserRecordingOptions;
 
   /**
    * Tool names to exclude from the browser toolset.

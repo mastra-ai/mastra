@@ -5,6 +5,7 @@ import { join } from 'node:path';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { encode } from './codec';
 import type { Event } from './types';
 import { UnixSocketPubSub } from './unix-socket-pubsub';
 
@@ -67,6 +68,312 @@ describe('UnixSocketPubSub', () => {
       expect(secondCb).toHaveBeenCalledTimes(1);
     });
     expect(secondCb.mock.calls[0]![0].type).toBe('hello');
+  });
+
+  it('round-robins local subscribers in the same group', async () => {
+    const path = await socketPath();
+    const pubsub = new UnixSocketPubSub(path);
+    pubsubs.push(pubsub);
+
+    const firstCb = vi.fn();
+    const secondCb = vi.fn();
+    await pubsub.subscribe('topic-a', firstCb, { group: 'workers' });
+    await pubsub.subscribe('topic-a', secondCb, { group: 'workers' });
+
+    await pubsub.publish('topic-a', makeEvent({ type: 'first' }));
+    await pubsub.publish('topic-a', makeEvent({ type: 'second' }));
+
+    expect(firstCb).toHaveBeenCalledTimes(1);
+    expect(secondCb).toHaveBeenCalledTimes(1);
+  });
+
+  it('treats an empty group name as a group', async () => {
+    const path = await socketPath();
+    const broker = new UnixSocketPubSub(path);
+    const client = new UnixSocketPubSub(path);
+    pubsubs.push(broker, client);
+
+    const brokerCb = vi.fn();
+    const clientCb = vi.fn();
+    await broker.subscribe('topic-a', brokerCb, { group: '' });
+    await client.subscribe('topic-a', clientCb, { group: '' });
+
+    for (let index = 0; index < 4; index++) {
+      await broker.publish('topic-a', makeEvent({ type: `event-${index}` }));
+    }
+
+    await waitFor(() => {
+      expect(brokerCb).toHaveBeenCalledTimes(2);
+      expect(clientCb).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it('resets group rotation after the membership ends', async () => {
+    const path = await socketPath();
+    const pubsub = new UnixSocketPubSub(path);
+    pubsubs.push(pubsub);
+
+    const firstCb = vi.fn();
+    const secondCb = vi.fn();
+    await pubsub.subscribe('topic-a', firstCb, { group: 'workers' });
+    await pubsub.subscribe('topic-a', secondCb, { group: 'workers' });
+    await pubsub.publish('topic-a', makeEvent({ type: 'before-reset' }));
+    expect(firstCb).toHaveBeenCalledTimes(1);
+
+    await pubsub.unsubscribe('topic-a', firstCb);
+    await pubsub.unsubscribe('topic-a', secondCb);
+
+    const nextFirstCb = vi.fn();
+    const nextSecondCb = vi.fn();
+    await pubsub.subscribe('topic-a', nextFirstCb, { group: 'workers' });
+    await pubsub.subscribe('topic-a', nextSecondCb, { group: 'workers' });
+    await pubsub.publish('topic-a', makeEvent({ type: 'after-reset' }));
+
+    expect(nextFirstCb).toHaveBeenCalledTimes(1);
+    expect(nextSecondCb).not.toHaveBeenCalled();
+  });
+
+  it('fans out to ungrouped subscribers and selects one process per group', async () => {
+    const path = await socketPath();
+    const broker = new UnixSocketPubSub(path);
+    const clientA = new UnixSocketPubSub(path);
+    const clientB = new UnixSocketPubSub(path);
+    pubsubs.push(broker, clientA, clientB);
+
+    const brokerFanout = vi.fn();
+    const clientFanout = vi.fn();
+    const brokerWorker = vi.fn();
+    const clientAWorker = vi.fn();
+    const clientBWorker = vi.fn();
+    await broker.subscribe('topic-a', brokerFanout);
+    await clientA.subscribe('topic-a', clientFanout);
+    await broker.subscribe('topic-a', brokerWorker, { group: 'workers' });
+    await clientA.subscribe('topic-a', clientAWorker, { group: 'workers' });
+    await clientB.subscribe('topic-a', clientBWorker, { group: 'workers' });
+
+    for (let index = 0; index < 6; index++) {
+      await broker.publish('topic-a', makeEvent({ type: `event-${index}` }));
+    }
+
+    await waitFor(() => {
+      expect(brokerFanout).toHaveBeenCalledTimes(6);
+      expect(clientFanout).toHaveBeenCalledTimes(6);
+      expect(brokerWorker).toHaveBeenCalledTimes(2);
+      expect(clientAWorker).toHaveBeenCalledTimes(2);
+      expect(clientBWorker).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it('delivers once to each independent group on a topic', async () => {
+    const path = await socketPath();
+    const broker = new UnixSocketPubSub(path);
+    const client = new UnixSocketPubSub(path);
+    pubsubs.push(broker, client);
+
+    const workers = vi.fn();
+    const auditors = vi.fn();
+    await broker.subscribe('topic-a', workers, { group: 'workers' });
+    await client.subscribe('topic-a', auditors, { group: 'auditors' });
+
+    await broker.publish('topic-a', makeEvent({ type: 'grouped' }));
+
+    await waitFor(() => {
+      expect(workers).toHaveBeenCalledTimes(1);
+      expect(auditors).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it('removes a remote group membership only after its last local subscriber unsubscribes', async () => {
+    const path = await socketPath();
+    const broker = new UnixSocketPubSub(path);
+    const client = new UnixSocketPubSub(path);
+    pubsubs.push(broker, client);
+
+    const first = vi.fn();
+    const second = vi.fn();
+    await broker.publish('bootstrap', makeEvent());
+    expect(broker.isBroker).toBe(true);
+
+    await client.subscribe('topic-a', first, { group: 'workers' });
+    await client.subscribe('topic-a', second, { group: 'workers' });
+    expect(client.isBroker).toBe(false);
+
+    await client.unsubscribe('topic-a', first);
+
+    await broker.publish('topic-a', makeEvent({ type: 'still-subscribed' }));
+    await waitFor(() => expect(second).toHaveBeenCalledTimes(1));
+
+    await client.unsubscribe('topic-a', second);
+    await broker.publish('topic-a', makeEvent({ type: 'unsubscribed' }));
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(second).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps localOnly grouped delivery within the publishing instance', async () => {
+    const path = await socketPath();
+    const broker = new UnixSocketPubSub(path);
+    const client = new UnixSocketPubSub(path);
+    pubsubs.push(broker, client);
+
+    const brokerWorker = vi.fn();
+    const clientWorker = vi.fn();
+    await broker.subscribe('topic-a', brokerWorker, { group: 'workers' });
+    await client.subscribe('topic-a', clientWorker, { group: 'workers' });
+
+    await client.publish('topic-a', makeEvent({ type: 'local-grouped' }), { localOnly: true });
+
+    expect(clientWorker).toHaveBeenCalledTimes(1);
+    expect(brokerWorker).not.toHaveBeenCalled();
+  });
+
+  it('relays client-published events back to the publishing client', async () => {
+    const path = await socketPath();
+    const broker = new UnixSocketPubSub(path);
+    const client = new UnixSocketPubSub(path);
+    pubsubs.push(broker, client);
+
+    const brokerCb = vi.fn();
+    const clientCb = vi.fn();
+    await broker.subscribe('topic-a', brokerCb);
+    await client.subscribe('topic-a', clientCb);
+
+    expect(broker.isBroker).toBe(true);
+    expect(client.isBroker).toBe(false);
+
+    // Client publishes — broker should relay back to the client
+    await client.publish('topic-a', makeEvent({ type: 'from-client' }));
+
+    await waitFor(() => {
+      expect(brokerCb).toHaveBeenCalledTimes(1);
+      expect(clientCb).toHaveBeenCalledTimes(1);
+    });
+    expect(brokerCb.mock.calls[0]![0].type).toBe('from-client');
+    expect(clientCb.mock.calls[0]![0].type).toBe('from-client');
+  });
+
+  it('_localOnly events stay entirely within the publishing instance', async () => {
+    const path = await socketPath();
+    const broker = new UnixSocketPubSub(path);
+    const clientA = new UnixSocketPubSub(path);
+    const clientB = new UnixSocketPubSub(path);
+    pubsubs.push(broker, clientA, clientB);
+
+    const brokerCb = vi.fn();
+    const clientACb = vi.fn();
+    const clientBCb = vi.fn();
+    await broker.subscribe('topic-a', brokerCb);
+    await clientA.subscribe('topic-a', clientACb);
+    await clientB.subscribe('topic-a', clientBCb);
+
+    // ClientA publishes a localOnly event — only clientA's own subscribers
+    // see it. The broker and clientB are different PubSub instances (even when
+    // they share an OS process in this test) and must not receive the event,
+    // because crossing the broker would JSON-serialize the payload and strip
+    // any live methods (e.g. MastraModelOutput.getFullOutput).
+    await clientA.publish('topic-a', makeEvent({ type: 'internal' }), { localOnly: true });
+
+    await waitFor(() => {
+      expect(clientACb).toHaveBeenCalledTimes(1);
+    });
+    // Allow extra time for any unintended relay to broker or clientB
+    await new Promise(r => setTimeout(r, 100));
+    expect(brokerCb).not.toHaveBeenCalled();
+    expect(clientBCb).not.toHaveBeenCalled();
+  });
+
+  it('_localOnly events published by the broker only fire the broker subscribers', async () => {
+    const path = await socketPath();
+    const broker = new UnixSocketPubSub(path);
+    const client = new UnixSocketPubSub(path);
+    pubsubs.push(broker, client);
+
+    const brokerCb = vi.fn();
+    const clientCb = vi.fn();
+    await broker.subscribe('topic-a', brokerCb);
+    await client.subscribe('topic-a', clientCb);
+
+    // Broker publishes localOnly — only broker's own subscribers fire.
+    await broker.publish('topic-a', makeEvent({ type: 'internal' }), { localOnly: true });
+
+    await waitFor(() => {
+      expect(brokerCb).toHaveBeenCalledTimes(1);
+    });
+    await new Promise(r => setTimeout(r, 100));
+    expect(clientCb).not.toHaveBeenCalled();
+  });
+
+  it('localOnly prevents large payloads from crossing the wire to any other instance', async () => {
+    const path = await socketPath();
+    const broker = new UnixSocketPubSub(path);
+    const clientA = new UnixSocketPubSub(path);
+    const clientB = new UnixSocketPubSub(path);
+    pubsubs.push(broker, clientA, clientB);
+
+    const brokerCb = vi.fn();
+    const clientACb = vi.fn();
+    const clientBCb = vi.fn();
+    await broker.subscribe('topic-a', brokerCb);
+    await clientA.subscribe('topic-a', clientACb);
+    await clientB.subscribe('topic-a', clientBCb);
+
+    // Simulate the real problem: a 2 MB cumulative stepResults payload
+    const largePayload = 'x'.repeat(2 * 1024 * 1024);
+
+    // With localOnly: only clientA (the publisher) sees it.
+    await clientA.publish('topic-a', makeEvent({ type: 'step.end', data: { stepResults: largePayload } }), {
+      localOnly: true,
+    });
+
+    await waitFor(() => {
+      expect(clientACb).toHaveBeenCalledTimes(1);
+    });
+    await new Promise(r => setTimeout(r, 200));
+    expect(brokerCb).not.toHaveBeenCalled();
+    expect(clientBCb).not.toHaveBeenCalled();
+
+    // Without localOnly: same large event fans out to broker + both clients
+    await clientA.publish('topic-a', makeEvent({ type: 'step.end', data: { stepResults: largePayload } }));
+
+    await waitFor(() => {
+      expect(clientBCb).toHaveBeenCalledTimes(1);
+    });
+    expect(brokerCb).toHaveBeenCalledTimes(1);
+    expect(clientACb).toHaveBeenCalledTimes(2);
+  });
+
+  it('localOnly preserves non-serializable payload values (live class instances)', async () => {
+    const path = await socketPath();
+    const broker = new UnixSocketPubSub(path);
+    const clientA = new UnixSocketPubSub(path);
+    pubsubs.push(broker, clientA);
+
+    const clientACb = vi.fn();
+    await clientA.subscribe('topic-a', clientACb);
+
+    // Payload with a live method that JSON.stringify would drop. This is the
+    // exact shape `processWorkflowEnd` publishes on `workflows-finish` for the
+    // execution-workflow: the run result is a MastraModelOutput instance whose
+    // getFullOutput() method must survive delivery.
+    class LiveResult {
+      getValue() {
+        return 'still alive';
+      }
+    }
+    const liveResult = new LiveResult();
+
+    await clientA.publish('topic-a', makeEvent({ type: 'workflow.end', data: { result: liveResult } as any }), {
+      localOnly: true,
+    });
+
+    await waitFor(() => {
+      expect(clientACb).toHaveBeenCalledTimes(1);
+    });
+    const delivered = clientACb.mock.calls[0]![0] as Event;
+    const deliveredResult = (delivered.data as { result: LiveResult }).result;
+    // Must be the same instance with the method intact
+    expect(deliveredResult).toBe(liveResult);
+    expect(typeof deliveredResult.getValue).toBe('function');
+    expect(deliveredResult.getValue()).toBe('still alive');
   });
 
   it('allows a temporarily backpressured remote client to catch up below the queue cap', async () => {
@@ -199,6 +506,402 @@ describe('UnixSocketPubSub', () => {
     expect(goodCb).toHaveBeenCalledTimes(1);
   });
 
+  describe('membership ack timeout', () => {
+    /**
+     * Simulates a broker running an older protocol version: it accepts
+     * connections and subscribe/unsubscribe frames but never sends
+     * `subscribed`/`unsubscribed` acks.
+     */
+    async function startLegacyBroker(path: string): Promise<{ close: () => Promise<void> }> {
+      const sockets = new Set<net.Socket>();
+      const server = net.createServer(socket => {
+        sockets.add(socket);
+        socket.on('close', () => sockets.delete(socket));
+        socket.on('error', () => {});
+        socket.on('data', () => {}); // swallow frames, never ack
+      });
+      await new Promise<void>((resolve, reject) => {
+        server.once('error', reject);
+        server.listen(path, resolve);
+      });
+      return {
+        close: () => {
+          sockets.forEach(socket => socket.destroy());
+          return new Promise(resolve => server.close(() => resolve()));
+        },
+      };
+    }
+
+    it('rejects an invalid membershipAckTimeoutMs option', async () => {
+      const path = await socketPath();
+      for (const value of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+        expect(() => new UnixSocketPubSub(path, { membershipAckTimeoutMs: value })).toThrow(
+          'membershipAckTimeoutMs must be a positive finite number',
+        );
+      }
+    });
+
+    it('subscribe resolves best-effort when the broker never acks', async () => {
+      const path = await socketPath('legacy.sock');
+      const legacyBroker = await startLegacyBroker(path);
+      try {
+        const client = new UnixSocketPubSub(path, { membershipAckTimeoutMs: 100 });
+        pubsubs.push(client);
+        await expect(
+          Promise.race([
+            client.subscribe('topic-a', vi.fn()),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('subscribe hung past ack timeout')), 2000)),
+          ]),
+        ).resolves.toBeUndefined();
+      } finally {
+        await legacyBroker.close();
+      }
+    });
+
+    it('unsubscribe resolves best-effort when the broker never acks', async () => {
+      const path = await socketPath('legacy-unsub.sock');
+      const legacyBroker = await startLegacyBroker(path);
+      try {
+        const client = new UnixSocketPubSub(path, { membershipAckTimeoutMs: 100 });
+        pubsubs.push(client);
+        const cb = vi.fn();
+        await client.subscribe('topic-a', cb);
+        await expect(
+          Promise.race([
+            client.unsubscribe('topic-a', cb),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('unsubscribe hung past ack timeout')), 2000)),
+          ]),
+        ).resolves.toBeUndefined();
+      } finally {
+        await legacyBroker.close();
+      }
+    });
+  });
+
+  describe('inbound frame size limit', () => {
+    const LIMIT = 64 * 1024;
+
+    async function connectRaw(path: string): Promise<{ socket: net.Socket; lines: string[]; closed: Promise<void> }> {
+      const socket = net.createConnection(path);
+      socket.setEncoding('utf8');
+      // Oversized writes race the broker's destroy; ignore EPIPE/ECONNRESET noise.
+      socket.on('error', () => {});
+      const lines: string[] = [];
+      let buffer = '';
+      socket.on('data', (chunk: string) => {
+        buffer += chunk;
+        while (true) {
+          const newlineIndex = buffer.indexOf('\n');
+          if (newlineIndex === -1) break;
+          lines.push(buffer.slice(0, newlineIndex));
+          buffer = buffer.slice(newlineIndex + 1);
+        }
+      });
+      const closed = new Promise<void>(resolve => socket.once('close', () => resolve()));
+      await new Promise<void>((resolve, reject) => {
+        socket.once('connect', resolve);
+        socket.once('error', reject);
+      });
+      return { socket, lines, closed };
+    }
+
+    function write(socket: net.Socket, data: string | Buffer): Promise<void> {
+      return new Promise(resolve => socket.write(data, () => resolve()));
+    }
+
+    it('rejects an invalid maxInboundFrameBytes option', async () => {
+      const path = await socketPath();
+      for (const value of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+        expect(() => new UnixSocketPubSub(path, { maxInboundFrameBytes: value })).toThrow(
+          'maxInboundFrameBytes must be a positive finite number',
+        );
+      }
+    });
+
+    it('destroys a remote client that sends an oversized unterminated frame without affecting others', async () => {
+      const path = await socketPath();
+      const broker = new UnixSocketPubSub(path, { maxInboundFrameBytes: LIMIT });
+      const healthy = new UnixSocketPubSub(path);
+      pubsubs.push(broker, healthy);
+      await broker.subscribe('topic-a', vi.fn());
+
+      const healthyCb = vi.fn();
+      await healthy.subscribe('topic-a', healthyCb);
+      expect(broker.remoteClientCount).toBe(1);
+
+      const raw = await connectRaw(path);
+      await waitFor(() => expect(broker.remoteClientCount).toBe(2));
+
+      // Never send a newline; the broker must give up once the buffered bytes exceed the cap.
+      await write(raw.socket, 'x'.repeat(LIMIT + 1));
+      await raw.closed;
+      await waitFor(() => expect(broker.remoteClientCount).toBe(1));
+
+      await broker.publish('topic-a', makeEvent({ type: 'still-alive' }));
+      await waitFor(() => expect(healthyCb).toHaveBeenCalledTimes(1));
+      expect(healthy.isBroker).toBe(false);
+    });
+
+    it('destroys a remote client that sends an oversized terminated frame', async () => {
+      const path = await socketPath();
+      const broker = new UnixSocketPubSub(path, { maxInboundFrameBytes: LIMIT });
+      pubsubs.push(broker);
+
+      const brokerCb = vi.fn();
+      await broker.subscribe('topic-a', brokerCb);
+
+      const raw = await connectRaw(path);
+      await waitFor(() => expect(broker.remoteClientCount).toBe(1));
+
+      const frame = JSON.stringify({
+        type: 'publish',
+        topic: 'topic-a',
+        event: makeEvent({ type: 'too-big', data: { payload: 'x'.repeat(LIMIT) } }),
+      });
+      await write(raw.socket, `${frame}\n`);
+      await raw.closed;
+      await waitFor(() => expect(broker.remoteClientCount).toBe(0));
+      expect(brokerCb).not.toHaveBeenCalled();
+    });
+
+    it('accepts a valid frame delivered in many small chunks below the limit', async () => {
+      const path = await socketPath();
+      const broker = new UnixSocketPubSub(path, { maxInboundFrameBytes: LIMIT });
+      pubsubs.push(broker);
+      await broker.subscribe('topic-a', vi.fn());
+
+      const raw = await connectRaw(path);
+      try {
+        // Include a multi-byte character so a split UTF-8 sequence is exercised.
+        const frame = `${JSON.stringify({ type: 'subscribe', topic: 'topic-é' })}\n`;
+        const bytes = Buffer.from(frame, 'utf8');
+        for (let i = 0; i < bytes.length; i++) {
+          await write(raw.socket, bytes.subarray(i, i + 1));
+        }
+        await waitFor(() => {
+          expect(raw.lines.map(line => JSON.parse(line))).toContainEqual({ type: 'subscribed', topic: 'topic-é' });
+        });
+        expect(broker.remoteClientCount).toBe(1);
+      } finally {
+        raw.socket.destroy();
+      }
+    });
+
+    it('keeps memory proportional to payload when a frame arrives in many tiny chunks', async () => {
+      const path = await socketPath();
+      const limit = 4 * 1024 * 1024;
+      const broker = new UnixSocketPubSub(path, { maxInboundFrameBytes: limit });
+      pubsubs.push(broker);
+      await broker.subscribe('topic-a', vi.fn());
+
+      const raw = await connectRaw(path);
+      try {
+        // Stay under the byte cap but deliver one byte per socket read. Retaining a Buffer object per
+        // read costs a few hundred bytes each, so the old chunk-list parser amplified 256 KiB of
+        // payload into ~75 MiB of heap before the byte cap could ever trip.
+        const payloadBytes = 256 * 1024;
+        const frame = `${JSON.stringify({ type: 'subscribe', topic: 'x'.repeat(payloadBytes) })}\n`;
+        const bytes = Buffer.from(frame, 'utf8');
+        expect(bytes.length).toBeLessThanOrEqual(limit);
+
+        const heapBefore = process.memoryUsage().heapUsed;
+        for (let i = 0; i < bytes.length - 1; i++) {
+          // Flush each byte and yield so the broker observes a separate `data` event per byte.
+          await write(raw.socket, bytes.subarray(i, i + 1));
+          await new Promise(resolve => setImmediate(resolve));
+        }
+        // With the frame still unterminated, retained memory must stay near the payload size.
+        expect(process.memoryUsage().heapUsed - heapBefore).toBeLessThan(16 * 1024 * 1024);
+
+        await write(raw.socket, bytes.subarray(bytes.length - 1));
+        await waitFor(() => {
+          expect(raw.lines.map(line => JSON.parse(line).type)).toContain('subscribed');
+        });
+        expect(broker.remoteClientCount).toBe(1);
+      } finally {
+        raw.socket.destroy();
+      }
+    }, 60_000);
+
+    it('drops a broker connection that sends an oversized frame', async () => {
+      const path = await socketPath();
+      const serverSockets: net.Socket[] = [];
+      const server = net.createServer((socket: net.Socket) => {
+        serverSockets.push(socket);
+        socket.on('error', () => {});
+        // Answer the client's subscribe frame with an oversized reply.
+        socket.once('data', () => socket.write('x'.repeat(LIMIT + 1)));
+      });
+      await new Promise<void>((resolve, reject) => {
+        server.once('error', reject);
+        server.listen(path, () => resolve());
+      });
+      const pubsub = new UnixSocketPubSub(path, { maxInboundFrameBytes: LIMIT });
+      pubsubs.push(pubsub);
+
+      try {
+        await expect(pubsub.subscribe('topic-a', vi.fn())).rejects.toThrow('broker connection closed');
+        await waitFor(() => expect(serverSockets[0]?.destroyed).toBe(true));
+      } finally {
+        await new Promise<void>(resolve => server.close(() => resolve()));
+      }
+    });
+  });
+
+  it('waits for an in-flight broker registration before completing overlapping subscriptions', async () => {
+    const path = await socketPath();
+    const sockets = new Set<net.Socket>();
+    let acknowledgeSubscribe: (() => void) | undefined;
+    let subscribeReceivedResolve: (() => void) | undefined;
+    const subscribeReceived = new Promise<void>(resolve => {
+      subscribeReceivedResolve = resolve;
+    });
+    const server = net.createServer((socket: net.Socket) => {
+      sockets.add(socket);
+      socket.on('close', () => sockets.delete(socket));
+      socket.setEncoding('utf8');
+      let pending = '';
+      socket.on('data', (chunk: string) => {
+        pending += chunk;
+        const lines = pending.split('\n');
+        pending = lines.pop() ?? '';
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          const frame = JSON.parse(line);
+          if (frame.type !== 'subscribe') continue;
+          const acknowledge = () => {
+            socket.write(`${JSON.stringify({ type: 'subscribed', topic: frame.topic, group: frame.group })}\n`);
+          };
+          if (frame.topic === 'topic-a') {
+            acknowledgeSubscribe = acknowledge;
+            subscribeReceivedResolve?.();
+          } else {
+            acknowledge();
+          }
+        }
+      });
+    });
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(path, () => resolve());
+    });
+    const pubsub = new UnixSocketPubSub(path);
+    pubsubs.push(pubsub);
+
+    try {
+      await pubsub.subscribe('bootstrap', vi.fn());
+
+      let firstCompleted = false;
+      const first = pubsub.subscribe('topic-a', vi.fn(), { group: 'workers' }).then(() => {
+        firstCompleted = true;
+      });
+      await subscribeReceived;
+
+      const secondCallback = vi.fn();
+      let secondCompleted = false;
+      const second = pubsub.subscribe('topic-a', secondCallback, { group: 'workers' }).then(() => {
+        secondCompleted = true;
+      });
+      let duplicateCompleted = false;
+      const duplicate = pubsub.subscribe('topic-a', secondCallback, { group: 'workers' }).then(() => {
+        duplicateCompleted = true;
+      });
+      await new Promise(resolve => setImmediate(resolve));
+
+      expect(firstCompleted).toBe(false);
+      expect(secondCompleted).toBe(false);
+      expect(duplicateCompleted).toBe(false);
+      expect(acknowledgeSubscribe).toBeTypeOf('function');
+      acknowledgeSubscribe!();
+      await Promise.all([first, second, duplicate]);
+      expect(firstCompleted).toBe(true);
+      expect(secondCompleted).toBe(true);
+      expect(duplicateCompleted).toBe(true);
+    } finally {
+      await pubsub.close();
+      for (const socket of sockets) socket.destroy();
+      await new Promise<void>(resolve => server.close(() => resolve()));
+    }
+  });
+
+  it('keeps the final callback active until the broker acknowledges unsubscribe', async () => {
+    const path = await socketPath();
+    const sockets = new Set<net.Socket>();
+    let acknowledgeUnsubscribe: (() => void) | undefined;
+    let unsubscribeReceivedResolve: (() => void) | undefined;
+    const unsubscribeReceived = new Promise<void>(resolve => {
+      unsubscribeReceivedResolve = resolve;
+    });
+    const event = {
+      ...makeEvent({ type: 'during-unsubscribe' }),
+      id: 'event-1',
+      createdAt: new Date(),
+      deliveryAttempt: 1,
+    };
+    const server = net.createServer((socket: net.Socket) => {
+      sockets.add(socket);
+      socket.on('close', () => sockets.delete(socket));
+      socket.setEncoding('utf8');
+      let pending = '';
+      socket.on('data', (chunk: string) => {
+        pending += chunk;
+        const lines = pending.split('\n');
+        pending = lines.pop() ?? '';
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          const frame = JSON.parse(line);
+          if (frame.type === 'subscribe') {
+            socket.write(`${JSON.stringify({ type: 'subscribed', topic: frame.topic, group: frame.group })}\n`);
+          } else if (frame.type === 'unsubscribe') {
+            acknowledgeUnsubscribe = () => {
+              socket.write(`${JSON.stringify({ type: 'unsubscribed', topic: frame.topic, group: frame.group })}\n`);
+            };
+            socket.write(
+              `${JSON.stringify(encode({ type: 'event', topic: frame.topic, group: frame.group, event }))}\n`,
+            );
+            unsubscribeReceivedResolve?.();
+          }
+        }
+      });
+    });
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(path, () => resolve());
+    });
+    const pubsub = new UnixSocketPubSub(path);
+    pubsubs.push(pubsub);
+    const cb = vi.fn();
+
+    try {
+      await pubsub.subscribe('topic-a', cb, { group: 'workers' });
+
+      let unsubscribeCompleted = false;
+      const unsubscribe = pubsub.unsubscribe('topic-a', cb).then(() => {
+        unsubscribeCompleted = true;
+      });
+      await unsubscribeReceived;
+      await waitFor(() => expect(cb).toHaveBeenCalledTimes(1));
+      expect(unsubscribeCompleted).toBe(false);
+
+      const replacement = vi.fn();
+      await pubsub.subscribe('topic-a', replacement, { group: 'workers' });
+      expect(acknowledgeUnsubscribe).toBeTypeOf('function');
+      acknowledgeUnsubscribe!();
+      await unsubscribe;
+      expect(unsubscribeCompleted).toBe(true);
+
+      for (const socket of sockets) {
+        socket.write(`${JSON.stringify(encode({ type: 'event', topic: 'topic-a', group: 'workers', event }))}\n`);
+      }
+      await waitFor(() => expect(replacement).toHaveBeenCalledTimes(1));
+      expect(cb).toHaveBeenCalledTimes(1);
+    } finally {
+      await pubsub.close();
+      for (const socket of sockets) socket.destroy();
+      await new Promise<void>(resolve => server.close(() => resolve()));
+    }
+  });
+
   it('rejects subscribe when the broker disconnects before acknowledging', async () => {
     const path = await socketPath();
     const server = net.createServer((socket: net.Socket) => {
@@ -291,6 +994,26 @@ describe('UnixSocketPubSub', () => {
     });
   });
 
+  it('preserves grouped subscriptions when a follower becomes the broker', async () => {
+    const path = await socketPath();
+    const broker = new UnixSocketPubSub(path);
+    const follower = new UnixSocketPubSub(path);
+    pubsubs.push(broker, follower);
+
+    const worker = vi.fn();
+    await broker.subscribe('topic-a', vi.fn(), { group: 'workers' });
+    await follower.subscribe('topic-a', worker, { group: 'workers' });
+
+    await broker.close();
+    pubsubs.splice(pubsubs.indexOf(broker), 1);
+    await follower.publish('topic-a', makeEvent({ type: 'after-grouped-close' }));
+
+    await waitFor(() => {
+      expect(follower.isBroker).toBe(true);
+      expect(worker).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it('reclaims a stale socket file', async () => {
     const path = await socketPath();
     await writeFile(path, 'stale');
@@ -303,5 +1026,87 @@ describe('UnixSocketPubSub', () => {
 
     expect(pubsub.isBroker).toBe(true);
     expect(cb).toHaveBeenCalledTimes(1);
+  });
+
+  describe('local nack redelivery', () => {
+    it('redelivers nacked events to the same subscriber with bumped deliveryAttempt', async () => {
+      const path = await socketPath();
+      const pubsub = new UnixSocketPubSub(path);
+      pubsubs.push(pubsub);
+
+      const attempts: number[] = [];
+      let nacksRemaining = 2;
+      await pubsub.subscribe('topic-a', async (event, _ack, nack) => {
+        attempts.push(event.deliveryAttempt ?? 1);
+        if (nacksRemaining > 0) {
+          nacksRemaining--;
+          await nack?.();
+        }
+      });
+
+      await pubsub.publish('topic-a', makeEvent({ type: 'redelivered' }));
+
+      await waitFor(() => {
+        expect(attempts.length).toBe(3);
+      });
+      // Contract from Event type: deliveryAttempt starts at 1 and increments
+      // on each redelivery so consumers can see how many times they've seen
+      // the same logical event.
+      expect(attempts).toEqual([1, 2, 3]);
+    });
+
+    it('caps local redeliveries so a permanently-nacking subscriber does not loop forever', async () => {
+      const path = await socketPath();
+      const pubsub = new UnixSocketPubSub(path);
+      pubsubs.push(pubsub);
+
+      let deliveries = 0;
+      await pubsub.subscribe('topic-a', async (_event, _ack, nack) => {
+        deliveries++;
+        await nack?.();
+      });
+
+      await pubsub.publish('topic-a', makeEvent({ type: 'poison' }));
+
+      // The redelivery schedule is bounded: with the current internal
+      // constants the entire chain finishes in well under 3s. We don't
+      // pin to a specific count because that's an internal tuning knob,
+      // but we do prove the cap holds:
+      //   1. wait past any plausible redelivery window,
+      //   2. sample the count,
+      //   3. wait again,
+      //   4. assert the count did not move.
+      // This catches the "retries are unbounded" regression that a single
+      // short timeout would silently let through.
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      const settled = deliveries;
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      expect(deliveries).toBe(settled);
+      // Sanity: there was at least one nack-driven redelivery, and the
+      // total is small (current cap is 1 initial + 6 redeliveries = 7;
+      // leave headroom so light tuning doesn't break the test).
+      expect(deliveries).toBeGreaterThanOrEqual(2);
+      expect(deliveries).toBeLessThanOrEqual(10);
+    }, 10_000);
+
+    it('does not redeliver after the subscription is removed', async () => {
+      const path = await socketPath();
+      const pubsub = new UnixSocketPubSub(path);
+      pubsubs.push(pubsub);
+
+      let deliveries = 0;
+      const cb = async (_event: Event, _ack?: () => Promise<void>, nack?: () => Promise<void>): Promise<void> => {
+        deliveries++;
+        await nack?.();
+        await pubsub.unsubscribe('topic-a', cb);
+      };
+      await pubsub.subscribe('topic-a', cb);
+
+      await pubsub.publish('topic-a', makeEvent({ type: 'unsubscribed' }));
+
+      await new Promise(resolve => setTimeout(resolve, 500));
+      expect(deliveries).toBe(1);
+    });
   });
 });

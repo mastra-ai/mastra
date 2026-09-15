@@ -4,12 +4,11 @@ import type {
   ReasoningUIPart,
   TextUIPart,
   ToolInvocation,
-  ToolInvocationUIPart,
   UIMessage,
   UseChatOptions,
 } from '@ai-sdk/ui-utils';
 import { v4 as uuid } from '@lukeed/uuid';
-import type { AgentExecutionOptionsBase, SerializableStructuredOutputOptions } from '@mastra/core/agent';
+import type { SerializableStructuredOutputOptions } from '@mastra/core/agent';
 import type { AIV5Type, MessageListInput } from '@mastra/core/agent/message-list';
 import { getErrorFromUnknown } from '@mastra/core/error';
 import type { GenerateReturn, CoreMessage } from '@mastra/core/llm';
@@ -44,15 +43,22 @@ import type {
   SendAgentSignalParams,
   QueueAgentMessageParams,
   SubscribeAgentThreadParams,
+  ListAgentSuspendedRunsParams,
+  ListAgentSuspendedRunsResponse,
+  GetAgentPlanResponse,
   ProcessAgentThreadStreamOptions,
   CreateCodeAgentVersionParams,
   ActivateAgentVersionResponse,
   CompareVersionsResponse,
   DeleteAgentVersionResponse,
   RestoreAgentVersionResponse,
+  PartProviderMetadata,
+  MaybeProviderMetadata,
+  ToolInvocationUIPartWithMeta,
 } from '../types';
 
 import { parseClientRequestContext, requestContextQueryString, toQueryParams } from '../utils';
+import { getClientToolModelOutput } from '../utils/client-tool-model-output';
 import { processClientTools } from '../utils/process-client-tools';
 import { processMastraNetworkStream, processMastraStream } from '../utils/process-mastra-stream';
 import { zodToJsonSchema } from '../utils/zod-to-json-schema';
@@ -63,6 +69,15 @@ type ResumeStreamParams<OUTPUT extends {}> = StreamParamsBaseWithoutMessages<OUT
   runId: string;
   toolCallId?: string;
   structuredOutput?: StructuredOutputOptions<OUTPUT>;
+};
+
+type RecoverParams = {
+  runId: string;
+  requestContext?: Record<string, unknown>;
+  versions?: {
+    agents?: Record<string, { versionId: string } | { status: 'draft' | 'published' }>;
+    defaultStatus?: 'draft' | 'published';
+  };
 };
 
 type ToolCallRespondFn<OUTPUT> = (
@@ -237,6 +252,8 @@ async function executeToolCallAndRespond<OUTPUT>({
           },
         });
 
+        const modelOutput = await getClientToolModelOutput(clientTool, result);
+
         // Build the tool-result content block. If we have observability
         // data (carrier + buffered spans/logs), attach it directly on
         // the result so it travels with the specific tool call it
@@ -246,6 +263,9 @@ async function executeToolCallAndRespond<OUTPUT>({
           toolCallId: toolCall.payload.toolCallId,
           toolName: toolCall.payload.toolName,
           result,
+          // Carry the client-side toModelOutput result so the server uses it
+          // when building the model prompt, while result keeps the raw value.
+          ...(modelOutput != null ? { providerOptions: { mastra: { modelOutput } } } : {}),
         };
 
         if (observability) {
@@ -271,6 +291,7 @@ async function executeToolCallAndRespond<OUTPUT>({
           structuredOutput?: StructuredOutputOptions<OUTPUT>;
         } = {
           ...params,
+          clientTools: params.clientToolsResolver?.() ?? params.clientTools,
         };
 
         delete (respondOptions as { messages?: MessageListInput }).messages;
@@ -374,6 +395,7 @@ export class Agent extends BaseResource {
     options: ClientOptions,
     private agentId: string,
     private version?: AgentVersionIdentifier,
+    private routeOverrides?: { stream?: string },
   ) {
     super(options);
     this.voice = new AgentVoice(options, this.agentId, this.version);
@@ -478,7 +500,10 @@ export class Agent extends BaseResource {
           streamOptions: {
             ...streamOptions,
             requestContext: parseClientRequestContext(streamOptions.requestContext),
-            clientTools: processClientTools(streamOptions.clientTools),
+            clientTools: processClientTools(streamOptions.clientToolsResolver?.() ?? streamOptions.clientTools),
+            // Functions can't ride along to the server; the live resolver stays
+            // in the local signal runtime options for continuation rounds.
+            clientToolsResolver: undefined,
           },
         },
       } as Params,
@@ -524,6 +549,16 @@ export class Agent extends BaseResource {
    */
   details(requestContext?: RequestContext | Record<string, any>): Promise<GetAgentResponse> {
     return this.request(`/agents/${this.agentId}${this.getQueryString(requestContext)}`);
+  }
+
+  /**
+   * Reads a markdown plan submitted by this agent through the core submit_plan tool.
+   * The server only serves paths under `.mastracode/plans/` and only when the
+   * agent exposes that capability.
+   */
+  readPlan(path: string, requestContext?: RequestContext | Record<string, any>): Promise<GetAgentPlanResponse> {
+    const contextQuery = this.getQueryString(requestContext, '&');
+    return this.request(`/agents/${this.agentId}/plans/file?path=${encodeURIComponent(path)}${contextQuery}`);
   }
 
   /**
@@ -699,7 +734,12 @@ export class Agent extends BaseResource {
           }
 
           const activeRuntimeOptions = agent.getSignalRuntimeOptions({ runId, resourceId, threadId });
-          const activeClientTools = activeRuntimeOptions?.clientTools;
+          if (!activeRuntimeOptions) {
+            agent.deleteSignalRuntimeOptions(runId);
+            return;
+          }
+
+          const activeClientTools = activeRuntimeOptions.clientToolsResolver?.() ?? activeRuntimeOptions.clientTools;
           if (!activeClientTools) {
             agent.deleteSignalRuntimeOptions(runId);
             return;
@@ -715,6 +755,7 @@ export class Agent extends BaseResource {
             if (!clientTool || typeof clientTool.execute !== 'function') continue;
 
             let result: unknown;
+            let modelOutput: unknown;
             let observability: ClientToolObservabilityEnvelope | undefined;
             try {
               const execution = await executeClientToolWithObservability({
@@ -737,8 +778,16 @@ export class Agent extends BaseResource {
               });
               result = execution.result;
               observability = execution.observability;
+              try {
+                modelOutput = await getClientToolModelOutput(clientTool, result);
+              } catch {
+                // A failing toModelOutput shouldn't discard a successful tool
+                // execution; continue with the raw result only.
+                modelOutput = undefined;
+              }
             } catch (error) {
               result = { error: String(error) };
+              modelOutput = undefined;
             }
 
             const toolResultContent = {
@@ -770,6 +819,11 @@ export class Agent extends BaseResource {
               toolCallId: toolCall.toolCallId,
               toolName: toolCall.toolName,
               output: { type: 'json', value: result as JSONValue },
+              // Carry the client-side toModelOutput result so the server uses it
+              // when building the model prompt, while output keeps the raw result.
+              ...(modelOutput != null
+                ? { providerOptions: { mastra: { modelOutput: modelOutput as JSONValue } } }
+                : {}),
               ...(observability ? { __mastraObservability: observability } : {}),
             } satisfies AIV5Type.ToolResultPart & { __mastraObservability?: ClientToolObservabilityEnvelope };
 
@@ -1091,7 +1145,7 @@ export class Agent extends BaseResource {
       output: params.output ? zodToJsonSchema(params.output) : undefined,
       experimental_output: params.experimental_output ? zodToJsonSchema(params.experimental_output) : undefined,
       requestContext: parseClientRequestContext(params.requestContext),
-      clientTools: processClientTools(params.clientTools),
+      clientTools: processClientTools(params.clientToolsResolver?.() ?? params.clientTools),
     };
 
     const { resourceId, threadId, requestContext } = processedParams as GenerateLegacyParams;
@@ -1114,7 +1168,7 @@ export class Agent extends BaseResource {
       }
 
       for (const toolCall of toolCalls) {
-        const clientTool = params.clientTools?.[toolCall.toolName] as Tool;
+        const clientTool = processedParams.clientTools?.[toolCall.toolName] as Tool;
 
         if (clientTool && clientTool.execute) {
           const { result, observability } = await executeClientToolWithObservability({
@@ -1184,10 +1238,11 @@ export class Agent extends BaseResource {
       ...options,
       messages: messages,
     } as StreamParams<OUTPUT>;
+    const resolvedClientTools = params.clientToolsResolver?.() ?? params.clientTools;
     const processedParams = {
       ...params,
       requestContext: parseClientRequestContext(params.requestContext),
-      clientTools: processClientTools(params.clientTools),
+      clientTools: processClientTools(resolvedClientTools),
       structuredOutput: params.structuredOutput
         ? {
             ...params.structuredOutput,
@@ -1212,7 +1267,9 @@ export class Agent extends BaseResource {
     if (response.finishReason === 'tool-calls') {
       return executeToolCallAndRespond<OUTPUT>({
         response,
-        params,
+        // Dispatch from the resolved tools so resolver-only calls execute; the
+        // continuation re-invokes the resolver per round via params.clientToolsResolver.
+        params: { ...params, clientTools: resolvedClientTools },
         agentId: this.agentId,
         resourceId,
         threadId,
@@ -1263,18 +1320,35 @@ export class Agent extends BaseResource {
     let currentReasoningPart: ReasoningUIPart | undefined = undefined;
     let currentReasoningTextDetail: { type: 'text'; text: string; signature?: string } | undefined = undefined;
 
-    function updateToolInvocationPart(toolCallId: string, invocation: ToolInvocation) {
+    // `providerMetadata` has to land on the part itself, not inside `toolInvocation`: the
+    // server's MessageList adapters read `part.providerMetadata` when rebuilding the prompt,
+    // so metadata nested in the invocation (e.g. Gemini's `vertex.thoughtSignature`) is lost
+    // on the next turn of a client-tool continuation.
+    function updateToolInvocationPart(
+      toolCallId: string,
+      invocation: ToolInvocation,
+      partProviderMetadata?: PartProviderMetadata,
+    ) {
       const part = message.parts.find(
         part => part.type === 'tool-invocation' && part.toolInvocation.toolCallId === toolCallId,
-      ) as ToolInvocationUIPart | undefined;
+      ) as ToolInvocationUIPartWithMeta | undefined;
 
       if (part != null) {
         part.toolInvocation = invocation;
+        if (partProviderMetadata !== undefined) {
+          // Merge per namespace so a later chunk adding `mastra.*` doesn't drop `vertex.*`
+          // set by the original tool call.
+          part.providerMetadata = { ...(part.providerMetadata ?? {}), ...partProviderMetadata };
+        }
       } else {
-        message.parts.push({
+        const newPart: ToolInvocationUIPartWithMeta = {
           type: 'tool-invocation',
           toolInvocation: invocation,
-        });
+        };
+        if (partProviderMetadata !== undefined) {
+          newPart.providerMetadata = partProviderMetadata;
+        }
+        message.parts.push(newPart);
       }
     }
 
@@ -1466,13 +1540,16 @@ export class Agent extends BaseResource {
         execUpdate();
       },
       async onToolCallPart(value) {
+        const partialToolCall = partialToolCalls[value.toolCallId];
+        const streamedArgs = partialToolCall?.text ? parsePartialJson(partialToolCall.text).value : undefined;
+        const toolCall = streamedArgs === undefined ? value : { ...value, args: streamedArgs };
         const invocation = {
           state: 'call',
           step,
-          ...value,
+          ...toolCall,
         } as const;
 
-        if (partialToolCalls[value.toolCallId] != null) {
+        if (partialToolCall != null) {
           // change the partial tool call to a full tool call
           message.toolInvocations![partialToolCalls[value.toolCallId]!.index] = invocation;
         } else {
@@ -1483,7 +1560,7 @@ export class Agent extends BaseResource {
           message.toolInvocations.push(invocation);
         }
 
-        updateToolInvocationPart(value.toolCallId, invocation);
+        updateToolInvocationPart(value.toolCallId, invocation, (value as MaybeProviderMetadata).providerMetadata);
 
         execUpdate();
 
@@ -1491,19 +1568,19 @@ export class Agent extends BaseResource {
         // In the future we should make this non-blocking, which
         // requires additional state management for error handling etc.
         if (onToolCall) {
-          const result = await onToolCall({ toolCall: value });
+          const result = await onToolCall({ toolCall });
           if (result != null) {
             const invocation = {
               state: 'result',
               step,
-              ...value,
+              ...toolCall,
               result,
             } as const;
 
             // store the result in the tool invocation
             message.toolInvocations![message.toolInvocations!.length - 1] = invocation;
 
-            updateToolInvocationPart(value.toolCallId, invocation);
+            updateToolInvocationPart(value.toolCallId, invocation, (value as MaybeProviderMetadata).providerMetadata);
 
             execUpdate();
           }
@@ -1532,7 +1609,11 @@ export class Agent extends BaseResource {
 
         toolInvocations[toolInvocationIndex] = invocation as ToolInvocation;
 
-        updateToolInvocationPart(value.toolCallId, invocation as ToolInvocation);
+        updateToolInvocationPart(
+          value.toolCallId,
+          invocation as ToolInvocation,
+          (value as MaybeProviderMetadata).providerMetadata,
+        );
 
         execUpdate();
       },
@@ -1599,7 +1680,7 @@ export class Agent extends BaseResource {
       output: params.output ? zodToJsonSchema(params.output) : undefined,
       experimental_output: params.experimental_output ? zodToJsonSchema(params.experimental_output) : undefined,
       requestContext: parseClientRequestContext(params.requestContext),
-      clientTools: processClientTools(params.clientTools),
+      clientTools: processClientTools(params.clientToolsResolver?.() ?? params.clientTools),
     };
 
     // Create a readable stream that will handle the response processing
@@ -1669,18 +1750,35 @@ export class Agent extends BaseResource {
     let currentReasoningPart: ReasoningUIPart | undefined = undefined;
     let currentReasoningTextDetail: { type: 'text'; text: string; signature?: string } | undefined = undefined;
 
-    function updateToolInvocationPart(toolCallId: string, invocation: ToolInvocation) {
+    // `providerMetadata` has to land on the part itself, not inside `toolInvocation`: the
+    // server's MessageList adapters read `part.providerMetadata` when rebuilding the prompt,
+    // so metadata nested in the invocation (e.g. Gemini's `vertex.thoughtSignature`) is lost
+    // on the next turn of a client-tool continuation.
+    function updateToolInvocationPart(
+      toolCallId: string,
+      invocation: ToolInvocation,
+      partProviderMetadata?: PartProviderMetadata,
+    ) {
       const part = message.parts.find(
         part => part.type === 'tool-invocation' && part.toolInvocation.toolCallId === toolCallId,
-      ) as ToolInvocationUIPart | undefined;
+      ) as ToolInvocationUIPartWithMeta | undefined;
 
       if (part != null) {
         part.toolInvocation = invocation;
+        if (partProviderMetadata !== undefined) {
+          // Merge per namespace so a later chunk adding `mastra.*` doesn't drop `vertex.*`
+          // set by the original tool call.
+          part.providerMetadata = { ...(part.providerMetadata ?? {}), ...partProviderMetadata };
+        }
       } else {
-        message.parts.push({
+        const newPart: ToolInvocationUIPartWithMeta = {
           type: 'tool-invocation',
           toolInvocation: invocation,
-        });
+        };
+        if (partProviderMetadata !== undefined) {
+          newPart.providerMetadata = partProviderMetadata;
+        }
+        message.parts.push(newPart);
       }
     }
 
@@ -1830,13 +1928,16 @@ export class Agent extends BaseResource {
           }
 
           case 'tool-call': {
+            const partialToolCall = partialToolCalls[chunk.payload.toolCallId];
+            const streamedArgs = partialToolCall?.text ? parsePartialJson(partialToolCall.text).value : undefined;
+            const toolCall = streamedArgs === undefined ? chunk.payload : { ...chunk.payload, args: streamedArgs };
             const invocation = {
               state: 'call',
               step,
-              ...chunk.payload,
+              ...toolCall,
             } as const;
 
-            if (partialToolCalls[chunk.payload.toolCallId] != null) {
+            if (partialToolCall != null) {
               // change the partial tool call to a full tool call
               message.toolInvocations![partialToolCalls[chunk.payload.toolCallId]!.index] =
                 invocation as ToolInvocation;
@@ -1848,7 +1949,11 @@ export class Agent extends BaseResource {
               message.toolInvocations.push(invocation as ToolInvocation);
             }
 
-            updateToolInvocationPart(chunk.payload.toolCallId, invocation as ToolInvocation);
+            updateToolInvocationPart(
+              chunk.payload.toolCallId,
+              invocation as ToolInvocation,
+              (chunk.payload as MaybeProviderMetadata).providerMetadata,
+            );
 
             execUpdate();
 
@@ -1856,19 +1961,23 @@ export class Agent extends BaseResource {
             // In the future we should make this non-blocking, which
             // requires additional state management for error handling etc.
             if (onToolCall) {
-              const result = await onToolCall({ toolCall: chunk.payload as any });
+              const result = await onToolCall({ toolCall: toolCall as any });
               if (result != null) {
                 const invocation = {
                   state: 'result',
                   step,
-                  ...chunk.payload,
+                  ...toolCall,
                   result,
                 } as const;
 
                 // store the result in the tool invocation
                 message.toolInvocations![message.toolInvocations!.length - 1] = invocation as ToolInvocation;
 
-                updateToolInvocationPart(chunk.payload.toolCallId, invocation as ToolInvocation);
+                updateToolInvocationPart(
+                  chunk.payload.toolCallId,
+                  invocation as ToolInvocation,
+                  (chunk.payload as MaybeProviderMetadata).providerMetadata,
+                );
 
                 execUpdate();
               }
@@ -1957,7 +2066,11 @@ export class Agent extends BaseResource {
 
             toolInvocations[toolInvocationIndex] = invocation as ToolInvocation;
 
-            updateToolInvocationPart(chunk.payload.toolCallId, invocation as ToolInvocation);
+            updateToolInvocationPart(
+              chunk.payload.toolCallId,
+              invocation as ToolInvocation,
+              (chunk.payload as MaybeProviderMetadata).providerMetadata,
+            );
 
             execUpdate();
             break;
@@ -2020,7 +2133,11 @@ export class Agent extends BaseResource {
       requestBody = resumeStreamBody;
     }
 
-    const response: Response = await this.request(`/agents/${this.agentId}/${route}`, {
+    const requestPath =
+      route === 'stream' && this.routeOverrides?.stream
+        ? this.routeOverrides.stream
+        : `/agents/${this.agentId}/${route}`;
+    const response: Response = await this.request(requestPath, {
       method: 'POST',
       body: requestBody,
       stream: true,
@@ -2031,12 +2148,26 @@ export class Agent extends BaseResource {
     }
 
     try {
-      let toolCalls: ToolInvocation[] = [];
       let messages: UIMessage[] = [];
       let streamRunId: string | undefined = processedParams.runId;
 
       // Use tee() to split the stream into two branches
       const [streamForController, streamForProcessing] = response.body.tee();
+      const decoder = new TextDecoder();
+      let pendingText = '';
+
+      const enqueueReadableText = (text: string, isFinal = false) => {
+        pendingText += text;
+        const lines = pendingText.split('\n\n');
+        pendingText = isFinal ? '' : (lines.pop() ?? '');
+
+        const readableLines = lines
+          .filter(line => line.trim() !== '[DONE]' && line.trim() !== 'data: [DONE]')
+          .join('\n\n');
+        if (readableLines) {
+          controller.enqueue(new TextEncoder().encode(`${readableLines}\n\n`));
+        }
+      };
 
       // Pipe one branch directly to the controller
       const pipePromise = streamForController
@@ -2045,19 +2176,14 @@ export class Agent extends BaseResource {
             async write(chunk) {
               // Filter out terminal markers so the client stream doesn't end before recursion
               try {
-                const text = new TextDecoder().decode(chunk);
-                const lines = text.split('\n\n');
-                const readableLines = lines
-                  .filter(line => line.trim() !== '[DONE]' && line.trim() !== 'data: [DONE]')
-                  .join('\n\n');
-                if (readableLines) {
-                  const encoded = new TextEncoder().encode(readableLines);
-                  controller.enqueue(encoded);
-                }
+                enqueueReadableText(decoder.decode(chunk, { stream: true }));
               } catch (error) {
                 console.error('Error enqueueing to controller:', error);
                 controller.enqueue(chunk);
               }
+            },
+            close() {
+              enqueueReadableText(decoder.decode(), true);
             },
           }),
         )
@@ -2084,63 +2210,79 @@ export class Agent extends BaseResource {
         },
         onFinish: async ({ finishReason, message }) => {
           if (finishReason === 'tool-calls') {
-            const toolCall = [...(message?.parts ?? [])]
-              .reverse()
-              .find(part => part.type === 'tool-invocation')?.toolInvocation;
-            if (toolCall) {
+            const toolInvocationsById = new Map<string, ToolInvocation>();
+
+            for (const part of message?.parts ?? []) {
+              if (part.type !== 'tool-invocation' || !part.toolInvocation?.toolCallId) {
+                continue;
+              }
+
               const toolInvocationWithMetadata = message?.toolInvocations?.find(
-                invocation => invocation.toolCallId === toolCall.toolCallId,
+                invocation => invocation.toolCallId === part.toolInvocation.toolCallId,
               );
-              toolCalls.push({
+
+              toolInvocationsById.set(part.toolInvocation.toolCallId, {
                 ...toolInvocationWithMetadata,
-                ...toolCall,
-                ...(!getClientToolObservabilityContext(toolCall) && toolInvocationWithMetadata
+                ...part.toolInvocation,
+                ...(!getClientToolObservabilityContext(part.toolInvocation) && toolInvocationWithMetadata
                   ? { observability: getClientToolObservabilityContext(toolInvocationWithMetadata) }
                   : {}),
               });
             }
 
-            let shouldExecuteClientTool = false;
-            // Handle tool calls if needed
-            for (const toolCall of toolCalls) {
-              const clientTool = processedParams.clientTools?.[toolCall.toolName] as Tool;
-              if (clientTool && clientTool.execute) {
-                shouldExecuteClientTool = true;
+            for (const toolInvocation of message?.toolInvocations ?? []) {
+              if (!toolInvocation.toolCallId) {
+                continue;
+              }
 
-                // Synthesize a Mastra-shaped terminal chunk so React's toUIMessage
-                // reducer flips the matching `dynamic-tool` part from
-                // `input-available` to `output-available` / `output-error`.
-                // Without this, the React-side `dynamic-tool` part is stuck in
-                // `input-available` forever because the server stream never emits
-                // a terminal chunk for client-executed tools.
+              toolInvocationsById.set(toolInvocation.toolCallId, {
+                ...toolInvocationsById.get(toolInvocation.toolCallId),
+                ...toolInvocation,
+              });
+            }
+
+            const executableToolCalls = [...toolInvocationsById.values()].filter(toolCall => {
+              const clientTool = processedParams.clientTools?.[toolCall.toolName] as Tool;
+              return Boolean(clientTool?.execute);
+            });
+
+            if (executableToolCalls.length > 0) {
+              const syntheticChunks: Array<
+                | {
+                    type: 'tool-result';
+                    runId: string;
+                    from: 'AGENT';
+                    payload: {
+                      toolCallId: string;
+                      toolName: string;
+                      result: unknown;
+                      isError: boolean;
+                      providerExecuted: false;
+                    };
+                  }
+                | {
+                    type: 'tool-error';
+                    runId: string;
+                    from: 'AGENT';
+                    payload: {
+                      toolCallId: string;
+                      toolName: string;
+                      error: unknown;
+                      args?: unknown;
+                      providerExecuted: false;
+                    };
+                  }
+              > = [];
+              const toolResultContents: Array<Record<string, unknown>> = [];
+
+              for (const toolCall of executableToolCalls) {
+                const clientTool = processedParams.clientTools?.[toolCall.toolName] as Tool;
+
                 const runId: string = streamRunId ?? toolCall.toolCallId;
                 let result: unknown;
+                let modelOutput: unknown;
                 let observability: ClientToolObservabilityEnvelope | undefined;
-                let synthetic:
-                  | {
-                      type: 'tool-result';
-                      runId: string;
-                      from: 'AGENT';
-                      payload: {
-                        toolCallId: string;
-                        toolName: string;
-                        result: unknown;
-                        isError: boolean;
-                        providerExecuted: false;
-                      };
-                    }
-                  | {
-                      type: 'tool-error';
-                      runId: string;
-                      from: 'AGENT';
-                      payload: {
-                        toolCallId: string;
-                        toolName: string;
-                        error: unknown;
-                        args?: unknown;
-                        providerExecuted: false;
-                      };
-                    };
+                let synthetic: (typeof syntheticChunks)[number];
 
                 try {
                   ({ result, observability } = await executeClientToolWithObservability({
@@ -2161,6 +2303,8 @@ export class Agent extends BaseResource {
                       },
                     },
                   }));
+
+                  modelOutput = await getClientToolModelOutput(clientTool, result);
 
                   synthetic = {
                     type: 'tool-result',
@@ -2194,15 +2338,30 @@ export class Agent extends BaseResource {
                   result = { error: error instanceof Error ? error.message : String(error) };
                 }
 
-                // Wait for the server-side stream pipe to finish before
-                // enqueueing the synthetic chunk so the React reducer observes
-                // the server `finish` chunk first, then our terminal tool chunk.
-                try {
-                  await pipePromise;
-                } catch {
-                  // pipePromise already has its own .catch; ignore here.
-                }
+                syntheticChunks.push(synthetic);
+                toolResultContents.push({
+                  type: 'tool-result' as const,
+                  toolCallId: toolCall.toolCallId,
+                  toolName: toolCall.toolName,
+                  input: toolCall.args,
+                  result,
+                  ...(modelOutput != null
+                    ? { providerOptions: { mastra: { modelOutput: modelOutput as JSONValue } } }
+                    : {}),
+                  ...(observability ? { __mastraObservability: observability } : {}),
+                });
+              }
 
+              // Wait for the server-side stream pipe to finish before
+              // enqueueing synthetic chunks so the React reducer observes
+              // the server `finish` chunk first, then terminal tool chunks.
+              try {
+                await pipePromise;
+              } catch {
+                // pipePromise already has its own .catch; ignore here.
+              }
+
+              for (const synthetic of syntheticChunks) {
                 try {
                   const errorForSerialization = synthetic.type === 'tool-error' ? synthetic.payload.error : undefined;
                   const serializedError =
@@ -2222,83 +2381,54 @@ export class Agent extends BaseResource {
                 } catch (enqueueErr) {
                   console.error('Failed to enqueue synthetic tool-result chunk:', enqueueErr);
                 }
-
-                const lastMessageRaw = messages[messages.length - 1];
-                const lastMessage: UIMessage | undefined =
-                  lastMessageRaw != null ? JSON.parse(JSON.stringify(lastMessageRaw)) : undefined;
-
-                const toolInvocationPart = lastMessage?.parts?.find(
-                  part => part.type === 'tool-invocation' && part.toolInvocation?.toolCallId === toolCall.toolCallId,
-                ) as ToolInvocationUIPart | undefined;
-
-                if (toolInvocationPart) {
-                  toolInvocationPart.toolInvocation = {
-                    ...toolInvocationPart.toolInvocation,
-                    state: 'result',
-                    result,
-                    ...(observability ? { __mastraObservability: observability } : {}),
-                  };
-                }
-
-                const toolInvocation = lastMessage?.toolInvocations?.find(
-                  toolInvocation => toolInvocation.toolCallId === toolCall.toolCallId,
-                ) as ToolInvocation | undefined;
-
-                if (toolInvocation) {
-                  toolInvocation.state = 'result';
-                  // @ts-expect-error - result property exists when state is 'result'
-                  toolInvocation.result = result;
-                  if (observability) {
-                    (
-                      toolInvocation as unknown as { __mastraObservability?: ClientToolObservabilityEnvelope }
-                    ).__mastraObservability = observability;
-                  }
-                }
-
-                // Build updated messages for the recursive call
-                // When threadId is present, server has memory - don't re-include original messages to avoid storage duplicates
-                // When no threadId (stateless), include full conversation history for context
-                const newMessages =
-                  lastMessage != null ? [...messages.filter(m => m.id !== lastMessage.id), lastMessage] : [...messages];
-
-                const updatedMessages = threadId
-                  ? newMessages
-                  : [...(Array.isArray(processedParams.messages) ? processedParams.messages : []), ...newMessages];
-
-                // Recursively call stream with updated messages
-                // This will wait for the recursive stream to complete before continuing.
-                // Resume routes are one-shot (they consume server-side resumeData),
-                // so client-tool continuations must fall back to the corresponding
-                // non-resume stream endpoint. Other routes (e.g. stream-until-idle)
-                // are idempotent continuations and stay on the same endpoint.
-                const recursionRoute =
-                  route === 'resume-stream'
-                    ? 'stream'
-                    : route === 'resume-stream-until-idle'
-                      ? 'stream-until-idle'
-                      : route;
-                try {
-                  await this.processStreamResponse(
-                    {
-                      ...processedParams,
-                      messages: updatedMessages,
-                    },
-                    controller,
-                    recursionRoute,
-                  );
-                } catch (error) {
-                  console.error('Error processing recursive stream response:', error);
-                }
               }
-            }
 
-            // Close the controller after all processing is complete
-            // Wait for current pipe to finish before closing
-            if (!shouldExecuteClientTool) {
+              const toolResultMessage = {
+                role: 'tool' as const,
+                content: toolResultContents,
+              };
+
+              const updatedMessages = threadId
+                ? [toolResultMessage]
+                : [
+                    ...(Array.isArray(processedParams.messages) ? processedParams.messages : []),
+                    ...messages,
+                    toolResultMessage,
+                  ];
+
+              // Recursively call stream with updated messages
+              // This will wait for the recursive stream to complete before continuing.
+              // Resume routes are one-shot (they consume server-side resumeData),
+              // so client-tool continuations must fall back to the corresponding
+              // non-resume stream endpoint. Other routes (e.g. stream-until-idle)
+              // are idempotent continuations and stay on the same endpoint.
+              const recursionRoute =
+                route === 'resume-stream'
+                  ? 'stream'
+                  : route === 'resume-stream-until-idle'
+                    ? 'stream-until-idle'
+                    : route;
+              try {
+                await this.processStreamResponse(
+                  {
+                    ...processedParams,
+                    messages: updatedMessages,
+                    clientTools: processClientTools(
+                      processedParams.clientToolsResolver?.() ?? processedParams.clientTools,
+                    ),
+                  },
+                  controller,
+                  recursionRoute,
+                );
+              } catch (error) {
+                console.error('Error processing recursive stream response:', error);
+              }
+            } else {
+              // Close the controller after all processing is complete
+              // Wait for current pipe to finish before closing
               await pipePromise;
               controller.close();
             }
-            // If client tool was executed, the recursive call will handle closing the stream
           } else {
             // No tool calls - wait for pipe to complete then close the stream
             await pipePromise;
@@ -2390,6 +2520,7 @@ export class Agent extends BaseResource {
 
   async approveNetworkToolCall(params: {
     runId: string;
+    model?: string;
     requestContext?: RequestContext | Record<string, any>;
   }): Promise<
     Response & {
@@ -2439,6 +2570,9 @@ export class Agent extends BaseResource {
 
   async declineNetworkToolCall(params: {
     runId: string;
+    model?: string;
+    /** Optional explanation surfaced in place of the default decline message. */
+    reason?: string;
     requestContext?: RequestContext | Record<string, any>;
   }): Promise<
     Response & {
@@ -2528,8 +2662,8 @@ export class Agent extends BaseResource {
   >;
   async stream<OUTPUT>(
     messagesOrParams: MessageListInput,
-    options?: AgentExecutionOptionsBase<any> & {
-      structuredOutput?: StreamParamsBaseWithoutMessages<any>;
+    options?: StreamParamsBaseWithoutMessages<any> & {
+      structuredOutput?: StructuredOutputOptions<any>;
     },
   ): Promise<
     Response & {
@@ -2556,7 +2690,7 @@ export class Agent extends BaseResource {
     const processedParams: StreamParams<OUTPUT> = {
       ...params,
       requestContext: parseClientRequestContext(params.requestContext),
-      clientTools: processClientTools(params.clientTools),
+      clientTools: processClientTools(params.clientToolsResolver?.() ?? params.clientTools),
       structuredOutput,
     };
 
@@ -2649,8 +2783,8 @@ export class Agent extends BaseResource {
   >;
   async streamUntilIdle<OUTPUT>(
     messagesOrParams: MessageListInput,
-    options?: AgentExecutionOptionsBase<any> & {
-      structuredOutput?: StreamParamsBaseWithoutMessages<any>;
+    options?: StreamParamsBaseWithoutMessages<any> & {
+      structuredOutput?: StructuredOutputOptions<any>;
       maxIdleMs?: number;
     },
   ): Promise<
@@ -2678,7 +2812,7 @@ export class Agent extends BaseResource {
     const processedParams: StreamParams<OUTPUT> = {
       ...params,
       requestContext: parseClientRequestContext(params.requestContext),
-      clientTools: processClientTools(params.clientTools),
+      clientTools: processClientTools(params.clientToolsResolver?.() ?? params.clientTools),
       structuredOutput,
     };
 
@@ -2722,9 +2856,35 @@ export class Agent extends BaseResource {
     return streamResponse;
   }
 
+  /**
+   * Lists suspended runs for this agent from storage — runs waiting on a
+   * tool-call approval or on a tool that suspended. Backed by storage, so it
+   * works after a server restart and across server instances. Pass the
+   * returned runId to approveToolCall(), declineToolCall(), or resumeStream().
+   * @param params - Optional filters (threadId, resourceId, fromDate, toDate) and pagination (perPage, page)
+   * @param requestContext - Optional request context
+   * @returns Promise containing the matching runs and the total count before pagination
+   */
+  async listSuspendedRuns(
+    params?: ListAgentSuspendedRunsParams,
+    requestContext?: RequestContext | Record<string, any>,
+  ): Promise<ListAgentSuspendedRunsResponse> {
+    const searchParams = new URLSearchParams(requestContextQueryString(requestContext).slice(1));
+    if (params?.threadId) searchParams.set('threadId', params.threadId);
+    if (params?.resourceId) searchParams.set('resourceId', params.resourceId);
+    if (params?.fromDate) searchParams.set('fromDate', params.fromDate.toISOString());
+    if (params?.toDate) searchParams.set('toDate', params.toDate.toISOString());
+    if (params?.perPage !== undefined) searchParams.set('perPage', String(params.perPage));
+    if (params?.page !== undefined) searchParams.set('page', String(params.page));
+
+    const query = searchParams.size ? `?${searchParams}` : '';
+    return this.request<ListAgentSuspendedRunsResponse>(`/agents/${this.agentId}/suspended-runs${query}`);
+  }
+
   async approveToolCall(params: {
     runId: string;
     toolCallId: string;
+    model?: string;
     requestContext?: RequestContext | Record<string, any>;
   }): Promise<
     Response & {
@@ -2782,6 +2942,7 @@ export class Agent extends BaseResource {
     threadId: string;
     toolCallId: string;
     approved: boolean;
+    resumeData?: unknown;
     requestContext?: RequestContext | Record<string, any>;
     messages?: MessageListInput;
     streamOptions?: StreamParamsBaseWithoutMessages<any>;
@@ -2799,6 +2960,9 @@ export class Agent extends BaseResource {
   async declineToolCall(params: {
     runId: string;
     toolCallId: string;
+    model?: string;
+    /** Optional explanation surfaced to the model in place of the default decline message. */
+    reason?: string;
     requestContext?: RequestContext | Record<string, any>;
   }): Promise<
     Response & {
@@ -2937,7 +3101,7 @@ export class Agent extends BaseResource {
       ...options,
       resumeData,
       requestContext: parseClientRequestContext(options.requestContext),
-      clientTools: processClientTools(options.clientTools),
+      clientTools: processClientTools(options.clientToolsResolver?.() ?? options.clientTools),
       structuredOutput: options.structuredOutput
         ? {
             ...options.structuredOutput,
@@ -2960,6 +3124,60 @@ export class Agent extends BaseResource {
       statusText: response.statusText,
       headers: response.headers,
     }) as Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    };
+
+    streamResponse.processDataStream = async ({
+      onChunk,
+    }: {
+      onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+    }) => {
+      await processMastraStream({
+        stream: streamResponse.body as ReadableStream<Uint8Array>,
+        onChunk,
+      });
+    };
+
+    return streamResponse;
+  }
+
+  /**
+   * Re-drives an orphaned RUNNING durable-agent run after a process restart.
+   *
+   * Only supported when the target agent is a durable agent (createDurableAgent).
+   * The server rebuilds the runtime state from the persisted snapshot, replays
+   * past chunks, and continues the loop to completion.
+   */
+  async recover(params: RecoverParams): Promise<
+    Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    }
+  > {
+    const body = {
+      runId: params.runId,
+      requestContext: parseClientRequestContext(params.requestContext),
+      versions: params.versions,
+    };
+
+    const response: Response = await this.request(`/agents/${this.agentId}/recover`, {
+      method: 'POST',
+      body,
+      stream: true,
+    });
+
+    if (!response.body) {
+      throw new Error('No response body');
+    }
+
+    const streamResponse = response as Response & {
       processDataStream: ({
         onChunk,
       }: {
@@ -3005,7 +3223,7 @@ export class Agent extends BaseResource {
       ...options,
       resumeData,
       requestContext: parseClientRequestContext(options.requestContext),
-      clientTools: processClientTools(options.clientTools),
+      clientTools: processClientTools(options.clientToolsResolver?.() ?? options.clientTools),
       structuredOutput: options.structuredOutput
         ? {
             ...options.structuredOutput,
@@ -3056,6 +3274,7 @@ export class Agent extends BaseResource {
   async approveToolCallGenerate(params: {
     runId: string;
     toolCallId: string;
+    model?: string;
     requestContext?: RequestContext | Record<string, any>;
   }): Promise<any> {
     const { requestContext, ...rest } = params;
@@ -3072,6 +3291,9 @@ export class Agent extends BaseResource {
   async declineToolCallGenerate(params: {
     runId: string;
     toolCallId: string;
+    model?: string;
+    /** Optional explanation surfaced to the model in place of the default decline message. */
+    reason?: string;
     requestContext?: RequestContext | Record<string, any>;
   }): Promise<any> {
     const { requestContext, ...rest } = params;
@@ -3093,7 +3315,7 @@ export class Agent extends BaseResource {
 
     const response: Response & {
       processDataStream: (options?: Omit<Parameters<typeof processDataStream>[0], 'stream'>) => Promise<void>;
-    } = await this.request(`/agents/${this.agentId}/stream-legacy`, {
+    } = await this.request(this.routeOverrides?.stream ?? `/agents/${this.agentId}/stream-legacy`, {
       method: 'POST',
       body: processedParams,
       stream: true,
@@ -3172,36 +3394,6 @@ export class Agent extends BaseResource {
                   },
                 });
 
-                const lastMessage: UIMessage = JSON.parse(JSON.stringify(messages[messages.length - 1]));
-
-                const toolInvocationPart = lastMessage?.parts?.find(
-                  part => part.type === 'tool-invocation' && part.toolInvocation?.toolCallId === toolCall.toolCallId,
-                ) as ToolInvocationUIPart | undefined;
-
-                if (toolInvocationPart) {
-                  toolInvocationPart.toolInvocation = {
-                    ...toolInvocationPart.toolInvocation,
-                    state: 'result',
-                    result,
-                    ...(observability ? { __mastraObservability: observability } : {}),
-                  };
-                }
-
-                const toolInvocation = lastMessage?.toolInvocations?.find(
-                  toolInvocation => toolInvocation.toolCallId === toolCall.toolCallId,
-                ) as ToolInvocation | undefined;
-
-                if (toolInvocation) {
-                  toolInvocation.state = 'result';
-                  // @ts-expect-error - result property exists when state is 'result'
-                  toolInvocation.result = result;
-                  if (observability) {
-                    (
-                      toolInvocation as unknown as { __mastraObservability?: ClientToolObservabilityEnvelope }
-                    ).__mastraObservability = observability;
-                  }
-                }
-
                 // write the tool result part to the stream
                 const writer = writable.getWriter();
 
@@ -3220,18 +3412,36 @@ export class Agent extends BaseResource {
                   writer.releaseLock();
                 }
 
-                // Build updated messages for the recursive call
-                // When threadId is present, server has memory - don't re-include original messages to avoid storage duplicates
-                // When no threadId (stateless), include full conversation history for context
-                const newMessages = [...messages.filter(m => m.id !== lastMessage.id), lastMessage];
-                const updatedMessages = threadId
-                  ? newMessages
-                  : [...(Array.isArray(processedParams.messages) ? processedParams.messages : []), ...newMessages];
+                const toolResultMessage = {
+                  role: 'tool' as const,
+                  content: [
+                    {
+                      type: 'tool-result' as const,
+                      toolCallId: toolCall.toolCallId,
+                      toolName: toolCall.toolName,
+                      input: toolCall.args,
+                      result,
+                      ...(observability ? { __mastraObservability: observability } : {}),
+                    },
+                  ],
+                };
 
-                // Recursively call stream with updated messages
+                const updatedMessages = threadId
+                  ? [toolResultMessage]
+                  : [
+                      ...(Array.isArray(processedParams.messages) ? processedParams.messages : []),
+                      ...messages,
+                      toolResultMessage,
+                    ];
+
+                // Recursively call stream with updated messages, refreshing
+                // client tools from the resolver so continuations see current tools
                 this.processStreamResponseLegacy(
                   {
                     ...processedParams,
+                    clientTools: processClientTools(
+                      processedParams.clientToolsResolver?.() ?? processedParams.clientTools,
+                    ),
                     messages: updatedMessages,
                   },
                   writable,

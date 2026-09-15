@@ -1,3 +1,15 @@
 {
-  "attachment": ["moonshotai/Kimi-K2.6", "nvidia/llama-3.3-70b-instruct-fp8"]
+  "attachment": ["moonshotai/Kimi-K2.6", "moonshotai/Kimi-K2.7-Code"],
+  "temperature": [
+    "deepseek-ai/DeepSeek-V4-Flash-0731",
+    "moonshotai/Kimi-K2.6",
+    "moonshotai/Kimi-K2.7-Code",
+    "zai-org/GLM-5.2"
+  ],
+  "structuredOutput": [
+    "deepseek-ai/DeepSeek-V4-Flash-0731",
+    "moonshotai/Kimi-K2.6",
+    "moonshotai/Kimi-K2.7-Code",
+    "zai-org/GLM-5.2"
+  ]
 }

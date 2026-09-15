@@ -1,4 +1,3 @@
-import type { Client, InValue } from '@libsql/client';
 import type {
   BackgroundTask,
   BackgroundTaskStatus,
@@ -7,13 +6,26 @@ import type {
   UpdateBackgroundTask,
 } from '@mastra/core/background-tasks';
 import { BackgroundTasksStorage, TABLE_BACKGROUND_TASKS, TABLE_SCHEMAS } from '@mastra/core/storage';
+import type { PruneOptions, PruneResult, RetentionTablesDescriptor, TableRetentionPolicy } from '@mastra/core/storage';
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
+import type { SqliteClient as Client, SqliteInValue as InValue } from '../../db/client';
 import { buildSelectColumns } from '../../db/utils';
+import { runPrune, resolveTargets } from '../../retention';
 
-function serializeJson(v: unknown): any {
-  if (typeof v === 'object' && v != null) return JSON.stringify(v);
-  return v ?? null;
+function serializeJson(v: unknown): InValue {
+  if (v === undefined) return null;
+
+  let serialized: string | undefined;
+  try {
+    serialized = JSON.stringify(v);
+  } catch (error) {
+    throw new Error('Failed to serialize background task value as JSON', { cause: error });
+  }
+  if (serialized === undefined) {
+    throw new Error('Failed to serialize background task value as JSON');
+  }
+  return serialized;
 }
 
 function parseJson(val: unknown): any {
@@ -53,6 +65,15 @@ function rowToTask(row: Record<string, any>): BackgroundTask {
 }
 
 export class BackgroundTasksLibSQL extends BackgroundTasksStorage {
+  /**
+   * Completed/failed task records accumulate. Anchored on `completedAt`, which
+   * is NULL while a task is in-flight (pending/running/suspended) — so `completedAt
+   * < cutoff` never prunes a live task, no explicit status filter needed.
+   */
+  static override readonly retentionTables: RetentionTablesDescriptor = {
+    backgroundTasks: { table: TABLE_BACKGROUND_TASKS, column: 'completedAt', indexed: true },
+  };
+
   #db: LibSQLDB;
   #client: Client;
 
@@ -78,6 +99,16 @@ export class BackgroundTasksLibSQL extends BackgroundTasksStorage {
 
   async dangerouslyClearAll(): Promise<void> {
     await this.#db.deleteData({ tableName: TABLE_BACKGROUND_TASKS });
+  }
+
+  /** Delete completed tasks older than the `backgroundTasks` policy's `maxAge`, batched. */
+  async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
+    const targets = resolveTargets({
+      policies,
+      descriptor: BackgroundTasksLibSQL.retentionTables,
+      order: ['backgroundTasks'],
+    });
+    return runPrune({ db: this.#db, domain: 'backgroundTasks', targets, options, logger: this.logger });
   }
 
   async createTask(task: BackgroundTask): Promise<void> {
@@ -108,7 +139,11 @@ export class BackgroundTasksLibSQL extends BackgroundTasksStorage {
     });
   }
 
-  async updateTask(taskId: string, update: UpdateBackgroundTask): Promise<void> {
+  async updateTask(
+    taskId: string,
+    update: UpdateBackgroundTask,
+    options?: { expectedStatus?: BackgroundTask['status'] },
+  ): Promise<boolean> {
     const setClauses: string[] = [];
     const params: InValue[] = [];
 
@@ -145,13 +180,19 @@ export class BackgroundTasksLibSQL extends BackgroundTasksStorage {
       params.push(update.completedAt?.toISOString() ?? null);
     }
 
-    if (setClauses.length === 0) return;
+    if (setClauses.length === 0) return false;
 
     params.push(taskId);
-    await this.#client.execute({
-      sql: `UPDATE ${TABLE_BACKGROUND_TASKS} SET ${setClauses.join(', ')} WHERE id = ?`,
+    let where = 'id = ?';
+    if (options?.expectedStatus) {
+      where += ' AND status = ?';
+      params.push(options.expectedStatus);
+    }
+    const result = await this.#client.execute({
+      sql: `UPDATE ${TABLE_BACKGROUND_TASKS} SET ${setClauses.join(', ')} WHERE ${where}`,
       args: params,
     });
+    return result.rowsAffected > 0;
   }
 
   async getTask(taskId: string): Promise<BackgroundTask | null> {

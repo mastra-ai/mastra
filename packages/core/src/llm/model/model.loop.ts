@@ -8,11 +8,13 @@ import type { LoopOptions } from '../../loop/types';
 import type { Mastra } from '../../mastra';
 import { SpanType, resolveObservabilityContext } from '../../observability';
 import { executeWithContextSync } from '../../observability/utils';
+import { getToolDefinitionsForTracing } from '../../stream/aisdk/v5/compat/prepare-tools';
 import type { MastraModelOutput } from '../../stream/base/output';
 import type { ModelManagerModelConfig } from '../../stream/types';
 import { delay } from '../../utils';
 
 import type { ModelLoopStreamArgs } from './model.loop.types';
+import { resolveResponseModelId } from './server-side-fallback';
 import type { MastraModelOptions } from './shared.types';
 
 export class MastraLLMVNext extends MastraBase {
@@ -105,7 +107,7 @@ export class MastraLLMVNext extends MastraBase {
   stream<Tools extends ToolSet, OUTPUT = undefined>({
     resumeContext,
     runId,
-    stopWhen = stepCountIs(5),
+    stopWhen,
     maxSteps,
     tools = {} as Tools,
     modelSettings,
@@ -125,34 +127,51 @@ export class MastraLLMVNext extends MastraBase {
     toolCallConcurrency,
     _internal,
     agentId,
+    agentVersionId,
     agentName,
     toolCallId,
     requestContext,
+    actor,
+    mcp,
     methodType,
     includeRawChunks,
+    experimentalTransform,
+    hideSignals,
     autoResumeSuspendedTools,
     maxProcessorRetries,
     processorStates,
     activeTools,
     isTaskComplete,
+    goal,
     onIterationComplete,
     workspace,
     ...rest
   }: ModelLoopStreamArgs<Tools, OUTPUT>): MastraModelOutput<OUTPUT> {
     const observabilityContext = resolveObservabilityContext(rest);
+    // `maxSteps` is sugar for the stop condition `stepCountIs(maxSteps)`. When a
+    // custom `stopWhen` is also provided, compose the two (the loop ORs stop
+    // conditions) instead of letting the maxSteps cap replace the user's
+    // condition. The default cap only applies when neither is set.
     let stopWhenToUse;
-
     if (maxSteps && typeof maxSteps === 'number') {
-      stopWhenToUse = stepCountIs(maxSteps);
+      const userConditions = stopWhen ? (Array.isArray(stopWhen) ? stopWhen : [stopWhen]) : [];
+      stopWhenToUse = [stepCountIs(maxSteps), ...userConditions];
     } else {
-      stopWhenToUse = stopWhen;
+      stopWhenToUse = stopWhen ?? stepCountIs(5);
     }
 
     const messages = messageList.get.all.aiV5.model();
 
     const firstModel = this.#firstModel.model;
 
-    const modelSpan = observabilityContext.tracingContext.currentSpan?.createChildSpan({
+    const parentSpan = observabilityContext.tracingContext.currentSpan;
+    // Serialized once per generation so exporters can surface the tool schemas
+    // the model received; skipped entirely when tracing is off.
+    const toolDefinitions = parentSpan
+      ? getToolDefinitionsForTracing({ tools, toolChoice, activeTools: activeTools as string[] | undefined })
+      : undefined;
+
+    const modelSpan = parentSpan?.createChildSpan({
       name: `llm: '${firstModel.modelId}'`,
       type: SpanType.MODEL_GENERATION,
       input: {
@@ -163,6 +182,7 @@ export class MastraLLMVNext extends MastraBase {
         provider: firstModel.provider,
         streaming: true,
         parameters: modelSettings,
+        ...(toolDefinitions ? { tools: toolDefinitions } : {}),
       },
       metadata: {
         runId,
@@ -201,7 +221,7 @@ export class MastraLLMVNext extends MastraBase {
         messageList,
         models: this.#models,
         logger: this.logger,
-        tools: tools as Tools,
+        tools,
         stopWhen: stopWhenToUse,
         toolChoice,
         modelSettings,
@@ -217,15 +237,21 @@ export class MastraLLMVNext extends MastraBase {
         requireToolApproval,
         toolCallConcurrency,
         agentId,
+        agentVersionId,
         agentName,
         requestContext,
+        actor,
+        mcp,
         methodType,
         includeRawChunks,
+        experimentalTransform,
+        hideSignals,
         autoResumeSuspendedTools,
         maxProcessorRetries,
         processorStates,
         activeTools,
         isTaskComplete,
+        goal,
         onIterationComplete,
         workspace,
         ...observabilityContext,
@@ -298,10 +324,14 @@ export class MastraLLMVNext extends MastraBase {
               attributes: {
                 finishReason: props?.finishReason,
                 responseId: props?.response.id,
-                responseModel: props?.response.modelId,
+                // Account for Anthropic server-side fallbacks: when the primary
+                // model declines a turn and a fallback serves it, attribute the
+                // response to the model that actually generated it.
+                responseModel: resolveResponseModelId(props?.providerMetadata, props?.response.modelId),
               },
               usage: props?.totalUsage,
               providerMetadata: props?.providerMetadata,
+              stepProviderMetadata: props?.steps.map(step => step.providerMetadata),
             });
 
             try {

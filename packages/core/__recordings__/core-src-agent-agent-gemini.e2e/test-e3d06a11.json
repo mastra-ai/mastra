@@ -3,14 +3,13 @@
     "name": "test-e3d06a11",
     "testFile": "src/agent/agent-gemini.e2e.test.ts",
     "testName": "Gemini Model Compatibility Tests > Direct generate() method - Gemini basic functionality > should handle conversation ending with tool result",
-    "createdAt": "2026-05-18T10:50:52.186Z",
-    "updatedAt": "2026-05-28T17:33:42.304Z"
+    "createdAt": "2026-07-14T17:15:00.631Z"
   },
   "recordings": [
     {
-      "hash": "90180c154fa3cbfa",
+      "hash": "4afd0b3da57172a9",
       "request": {
-        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
         "method": "POST",
         "body": {
           "generationConfig": {},
@@ -28,6 +27,7 @@
               "parts": [
                 {
                   "functionCall": {
+                    "id": "call_1",
                     "name": "weather-tool",
                     "args": {
                       "location": "San Francisco"
@@ -41,6 +41,7 @@
               "parts": [
                 {
                   "functionResponse": {
+                    "id": "call_1",
                     "name": "weather-tool",
                     "response": {
                       "name": "weather-tool",
@@ -83,7 +84,7 @@
             }
           }
         },
-        "timestamp": 1779989621226
+        "timestamp": 1784049300117
       },
       "response": {
         "status": 200,
@@ -91,9 +92,9 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
           "content-type": "application/json; charset=UTF-8",
-          "date": "Thu, 28 May 2026 17:33:42 GMT",
+          "date": "Tue, 14 Jul 2026 17:15:00 GMT",
           "server": "scaffolding on HTTPServer2",
-          "server-timing": "gfet4t7; dur=969",
+          "server-timing": "gfet4t7; dur=495",
           "vary": "Origin, X-Origin, Referer",
           "x-content-type-options": "nosniff",
           "x-frame-options": "SAMEORIGIN",
@@ -106,35 +107,29 @@
               "content": {
                 "parts": [
                   {
-                    "text": "OK. The weather in San Francisco is Sunny, 72°F.\n"
+                    "text": "The weather in San Francisco is sunny with a temperature of 72°F.\n"
                   }
                 ],
                 "role": "model"
               },
               "finishReason": "STOP",
-              "avgLogprobs": -0.0010282766512211632
+              "index": 0
             }
           ],
           "usageMetadata": {
-            "promptTokenCount": 40,
+            "promptTokenCount": 90,
             "candidatesTokenCount": 17,
-            "totalTokenCount": 57,
+            "totalTokenCount": 107,
             "promptTokensDetails": [
               {
                 "modality": "TEXT",
-                "tokenCount": 40
-              }
-            ],
-            "candidatesTokensDetails": [
-              {
-                "modality": "TEXT",
-                "tokenCount": 17
+                "tokenCount": 90
               }
             ],
             "serviceTier": "standard"
           },
-          "modelVersion": "gemini-2.0-flash",
-          "responseId": "dXwYat3aIOaV_uMP5vCuyQ4"
+          "modelVersion": "gemini-2.5-flash",
+          "responseId": "lG5WaoClC86CnsEP2pfK-Aw"
         },
         "isStreaming": false
       }

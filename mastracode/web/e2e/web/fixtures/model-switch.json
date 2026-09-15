@@ -1,0 +1,15 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "Hello after model switch",
+        "hasToolResult": false
+      },
+      "response": {
+        "content": "Hello! I'm responding after the model switch."
+      }
+    }
+  ]
+}

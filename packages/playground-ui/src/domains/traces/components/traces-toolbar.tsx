@@ -10,10 +10,6 @@ type TracesToolbarProps = {
   onClear?: () => void;
   /** Fully remove all filter pills. */
   onRemoveAll?: () => void;
-  onSave?: () => void;
-  /** When provided, an extra "Remove saved filters" option is shown —
-   *  wire it up only when there is actually a saved set to remove. */
-  onRemoveSaved?: () => void;
   isLoading?: boolean;
   filterFields: PropertyFilterField[];
   filterTokens: PropertyFilterToken[];
@@ -27,8 +23,6 @@ type TracesToolbarProps = {
 export function TracesToolbar({
   onClear,
   onRemoveAll,
-  onSave,
-  onRemoveSaved,
   isLoading,
   filterFields,
   filterTokens,
@@ -38,15 +32,20 @@ export function TracesToolbar({
   lockedTooltipContent,
 }: TracesToolbarProps) {
   const hasActiveFilters = filterTokens.length > 0;
+
   const lockedSet = new Set(lockedFieldIds ?? []);
   const editableTokens = filterTokens.filter(t => !lockedSet.has(t.fieldId));
   const hasNonDefaultFilter = editableTokens.some(token => isNonDefaultFilter(token, filterFields));
   const hasEditableFilters = editableTokens.length > 0;
 
+  // Without filters the toolbar renders nothing; returning null avoids an empty
+  // grid row (and its gap) in `PageLayout.TopArea`.
+  if (!hasActiveFilters) return null;
+
   return (
     // 1fr | auto — pills wrap in the first column; Clear stays pinned to the
     // top of the second column regardless of how many pill rows render.
-    <div className={cn('grid grid-cols-[1fr_auto] gap-3 items-start ')}>
+    <div className={cn('grid grid-cols-[1fr_auto] items-start gap-3 ')}>
       <PropertyFilterApplied
         fields={filterFields}
         tokens={filterTokens}
@@ -62,8 +61,6 @@ export function TracesToolbar({
           disabled={isLoading}
           onClear={hasNonDefaultFilter ? onClear : undefined}
           onRemoveAll={onRemoveAll}
-          onSave={onSave}
-          onRemoveSaved={onRemoveSaved}
         />
       )}
     </div>

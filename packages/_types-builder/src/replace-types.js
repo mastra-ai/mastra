@@ -1,6 +1,6 @@
 // Typescript tooling really sucks so we are going to do some transfomrations ourselves
 import { readFile, mkdir, copyFile, stat } from 'node:fs/promises';
-import { join, dirname, relative, resolve, extname } from 'node:path';
+import { join, dirname, relative, resolve, extname, sep } from 'node:path';
 import { Project, SyntaxKind } from 'ts-morph';
 import { getPackageInfo } from 'local-pkg';
 import { pathToFileURL } from 'node:url';
@@ -188,18 +188,18 @@ async function replaceBundledReferences(file, rootDir, bundledPackages, visited,
 
     let sourcePkgName = pkgName;
     let sourcePkgRootPath = await getPackageRootPath(pkgName, resolverParentFile);
-    if (!sourcePkgRootPath) {
-      continue;
-    }
+    let typesFiles;
 
-    let pkgJson = JSON.parse(await readFile(join(sourcePkgRootPath, 'package.json'), 'utf8'));
-    const exportSpecifier =
-      pkgJson.name && pkgJson.name !== pkgName
-        ? moduleSpecifier.getLiteralValue().replace(pkgName, pkgJson.name)
-        : moduleSpecifier.getLiteralValue();
-    let typesFiles = resolveExports(pkgJson, exportSpecifier, {
-      conditions: ['types'],
-    });
+    if (sourcePkgRootPath) {
+      const pkgJson = JSON.parse(await readFile(join(sourcePkgRootPath, 'package.json'), 'utf8'));
+      const exportSpecifier =
+        pkgJson.name && pkgJson.name !== pkgName
+          ? moduleSpecifier.getLiteralValue().replace(pkgName, pkgJson.name)
+          : moduleSpecifier.getLiteralValue();
+      typesFiles = resolveExports(pkgJson, exportSpecifier, {
+        conditions: ['types'],
+      });
+    }
 
     if (!typesFiles || typesFiles.length === 0) {
       const typesPkgName = getTypesPackageName(pkgName);
@@ -210,7 +210,7 @@ async function replaceBundledReferences(file, rootDir, bundledPackages, visited,
 
       sourcePkgName = typesPkgName;
       sourcePkgRootPath = typesPkgRootPath;
-      pkgJson = JSON.parse(await readFile(join(sourcePkgRootPath, 'package.json'), 'utf8'));
+      const pkgJson = JSON.parse(await readFile(join(sourcePkgRootPath, 'package.json'), 'utf8'));
       typesFiles = pkgJson.types ? [pkgJson.types] : resolveExports(pkgJson, typesPkgName, { conditions: ['types'] });
     }
 
@@ -242,7 +242,11 @@ async function replaceBundledReferences(file, rootDir, bundledPackages, visited,
 
     await copyDeclarationGraph(sourceTypesPath, sourcePkgRootPath, destTypesRoot, rootDir, bundledPackages, visited);
 
-    let relativeImport = relative(fileDirname, destTypesPath);
+    // Module specifiers must always use POSIX separators ('/'), but path.relative()
+    // returns OS-native separators (backslashes on Windows). Without this normalization,
+    // generated .d.ts files contain unresolvable specifiers like '..\_types\...' that
+    // break `moduleResolution: "bundler"` on Windows. On POSIX, sep === '/' so this is a no-op.
+    let relativeImport = relative(fileDirname, destTypesPath).split(sep).join('/');
     if (!relativeImport.startsWith('.')) {
       relativeImport = './' + relativeImport;
     }

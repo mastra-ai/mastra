@@ -1,0 +1,19 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "endpoint": "chat",
+        "model": "gpt-5.4-mini",
+        "userMessage": "Start a slow shell passthrough run."
+      },
+      "chunkSize": 4,
+      "streamingProfile": {
+        "ttft": 500,
+        "tps": 4
+      },
+      "response": {
+        "content": "Slow run started. Slow run finished."
+      }
+    }
+  ]
+}

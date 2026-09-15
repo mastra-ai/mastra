@@ -5,7 +5,7 @@ import { PullTransport } from '../transport/pull-transport';
 import type { WorkerTransport } from '../transport/transport';
 import type { StepExecutionStrategy } from '../types';
 import { MastraWorker } from '../worker';
-import type { WorkerDeps } from '../worker';
+import type { WorkerDeps, WorkerStopOptions } from '../worker';
 
 const DEFAULT_GROUP = 'mastra-orchestration';
 
@@ -87,12 +87,12 @@ export class OrchestrationWorker extends MastraWorker {
     this.#running = true;
   }
 
-  async stop(): Promise<void> {
+  async stop(options?: WorkerStopOptions): Promise<void> {
     if (!this.#running) return;
 
     try {
       if (this.#transport) {
-        await this.#transport.stop();
+        await this.#transport.stop(options);
         this.#transport = undefined;
       }
     } finally {
@@ -128,8 +128,26 @@ export class OrchestrationWorker extends MastraWorker {
       runId: event.runId,
       retry: result.retry,
     });
-    if (nack) {
-      await nack();
+    // Only ask the transport to redeliver on retryable failures. On terminal
+    // failures (e.g. WorkflowEventProcessor exhausted its delivery budget and
+    // already published workflow.fail) we ack so the poisoned event drops out
+    // of the queue instead of looping forever.
+    if (result.retry) {
+      if (nack) {
+        try {
+          await nack();
+        } catch (e) {
+          this.deps?.logger?.error('OrchestrationWorker: error nacking event', { error: e });
+        }
+      }
+      return;
+    }
+    if (ack) {
+      try {
+        await ack();
+      } catch (e) {
+        this.deps?.logger?.error('OrchestrationWorker: error acking terminal event', { error: e });
+      }
     }
   }
 }

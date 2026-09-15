@@ -1,0 +1,62 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "Call the GitHub plugin before update.",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_github_poll_before",
+            "name": "e2e_plugin_lookup",
+            "arguments": {
+              "query": "before"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "hasToolResult": true,
+        "toolCallId": "call_github_poll_before",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat"
+      },
+      "response": {
+        "content": "GitHub poll plugin follow-up complete."
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat"
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_github_poll_after",
+            "name": "e2e_plugin_lookup",
+            "arguments": {
+              "query": "after"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "hasToolResult": true,
+        "toolCallId": "call_github_poll_after",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat"
+      },
+      "response": {
+        "content": "GitHub poll plugin follow-up complete."
+      }
+    }
+  ]
+}

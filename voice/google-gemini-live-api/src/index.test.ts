@@ -230,8 +230,13 @@ describe('GeminiLiveVoice', () => {
     });
   });
 
-  describe('Audio Streaming', () => {
+  describe.each([
+    { audioConfig: undefined, inputSampleRate: 16000 },
+    { audioConfig: { inputSampleRate: undefined }, inputSampleRate: 16000 },
+    { audioConfig: { inputSampleRate: 48000 }, inputSampleRate: 48000 },
+  ])('Audio Streaming at $inputSampleRate Hz', ({ audioConfig, inputSampleRate }) => {
     beforeEach(async () => {
+      voice = new GeminiLiveVoice({ apiKey: 'test-api-key', audioConfig });
       // Setup connected state and mock WebSocket
       (voice as any).state = 'connected';
       const mockSend = vi.fn();
@@ -249,26 +254,42 @@ describe('GeminiLiveVoice', () => {
       const audioData = new Int16Array([1, 2, 3, 4, 5]);
       await voice.send(audioData);
 
-      expect(mockWs.send).toHaveBeenCalled();
+      expect(mockWs.send).toHaveBeenCalledTimes(1);
       const sentData = JSON.parse(mockWs.send.mock.calls[0][0]);
-      expect(sentData).toHaveProperty('realtime_input');
-      expect(sentData.realtime_input).toHaveProperty('media_chunks');
+      expect(sentData).toEqual({
+        realtime_input: {
+          audio: {
+            mime_type: `audio/pcm;rate=${inputSampleRate}`,
+            data: Buffer.from(audioData.buffer).toString('base64'),
+          },
+        },
+      });
+      expect(sentData.realtime_input).not.toHaveProperty('media_chunks');
     });
 
     it('should handle audio stream', async () => {
       const audioStream = new PassThrough();
-      const sendPromise = voice.send(audioStream);
+      await voice.send(audioStream);
 
-      // Write enough data to meet minimum chunk size (32 bytes = 16 samples)
-      const audioData = new Int16Array(20); // 40 bytes
-      for (let i = 0; i < 20; i++) {
-        audioData[i] = i;
+      const chunks = [new Int16Array([1, 2, 3, 4]), new Int16Array([-1, -2, -3, -4])];
+      for (const chunk of chunks) {
+        audioStream.write(Buffer.from(chunk.buffer));
       }
-      audioStream.write(Buffer.from(audioData.buffer));
       audioStream.end();
 
-      await sendPromise;
-      expect(mockWs.send).toHaveBeenCalled();
+      expect(mockWs.send).toHaveBeenCalledTimes(chunks.length);
+      for (const [index, chunk] of chunks.entries()) {
+        const sentData = JSON.parse(mockWs.send.mock.calls[index][0]);
+        expect(sentData).toEqual({
+          realtime_input: {
+            audio: {
+              mime_type: `audio/pcm;rate=${inputSampleRate}`,
+              data: Buffer.from(chunk.buffer).toString('base64'),
+            },
+          },
+        });
+        expect(sentData.realtime_input).not.toHaveProperty('media_chunks');
+      }
     });
 
     it('should throw error when not connected', async () => {
@@ -548,6 +569,216 @@ describe('GeminiLiveVoice', () => {
 
       await expect(errorPromise).resolves.toBeDefined();
     });
+
+    it('should execute a tool call delivered through both wire formats only once', async () => {
+      const mockExecute = vi.fn(async ({}: { context: any }) => ({ result: 'ok' }));
+      const tools = {
+        testTool: {
+          id: 'testTool',
+          description: 'Test tool',
+          inputSchema: { type: 'object', properties: {} },
+          execute: mockExecute,
+        },
+      };
+
+      voice.addTools(tools);
+
+      (voice as any).state = 'connected';
+      (voice as any).ws = {
+        send: vi.fn(),
+        readyState: 1, // WebSocket.OPEN
+        close: vi.fn(),
+        once: vi.fn(),
+      };
+      (voice as any).connectionManager.setWebSocket((voice as any).ws);
+      mockWs = (voice as any).ws;
+
+      const toolCallEvents: any[] = [];
+      voice.on('toolCall', event => toolCallEvents.push(event));
+
+      // The same provider call (id `call-1`) is delivered twice: once embedded
+      // in serverContent.modelTurn.parts and once as a top-level toolCall.
+      (voice as any).handleServerContent({
+        modelTurn: {
+          parts: [{ functionCall: { name: 'testTool', args: { test: 'value' }, id: 'call-1' } }],
+        },
+      });
+      // Flush the async dispatch started by handleServerContent
+      await new Promise(resolve => setTimeout(resolve, 0));
+
+      await (voice as any).handleToolCall({
+        toolCall: {
+          functionCalls: [{ name: 'testTool', args: { test: 'value' }, id: 'call-1' }],
+        },
+      });
+
+      expect(mockExecute).toHaveBeenCalledTimes(1);
+      expect(mockExecute).toHaveBeenCalledWith(
+        { test: 'value' },
+        expect.objectContaining({ requestContext: undefined }),
+      );
+      expect(toolCallEvents).toHaveLength(1);
+      expect(mockWs.send).toHaveBeenCalledTimes(1);
+      expect(JSON.parse(mockWs.send.mock.calls[0]![0])).toMatchObject({
+        toolResponse: {
+          functionResponses: [{ id: 'call-1', name: 'testTool', response: { result: 'ok' } }],
+        },
+      });
+    });
+
+    it('should execute tool calls with an id reused across reconnections', async () => {
+      const mockExecute = vi.fn(async ({}: { context: any }) => ({ result: 'ok' }));
+      const tools = {
+        testTool: {
+          id: 'testTool',
+          description: 'Test tool',
+          inputSchema: { type: 'object', properties: {} },
+          execute: mockExecute,
+        },
+      };
+
+      voice.addTools(tools);
+
+      vi.spyOn((voice as any).connectionManager, 'waitForOpen').mockResolvedValue(undefined as any);
+      (voice as any).waitForSessionCreated = vi.fn().mockResolvedValue(undefined);
+
+      // First connection: process a tool call with id `call-1`
+      await voice.connect();
+      mockWs = mockWsInstance;
+
+      await (voice as any).handleToolCall({
+        toolCall: { name: 'testTool', args: { test: 'value' }, id: 'call-1' },
+      });
+      expect(mockExecute).toHaveBeenCalledTimes(1);
+
+      // Disconnect and reconnect on the same instance; the provider may reuse
+      // the call id from the prior connection on the new one.
+      await voice.disconnect();
+      await voice.connect();
+      mockWs = mockWsInstance;
+
+      await (voice as any).handleToolCall({
+        toolCall: { name: 'testTool', args: { test: 'value' }, id: 'call-1' },
+      });
+
+      // The tool must execute again and a toolResponse must go out on the new socket
+      expect(mockExecute).toHaveBeenCalledTimes(2);
+      const frames = mockWs.send.mock.calls.map((c: any[]) => JSON.parse(c[0]));
+      expect(
+        frames.some(
+          (frame: any) =>
+            frame.toolResponse?.functionResponses?.[0]?.id === 'call-1' &&
+            frame.toolResponse?.functionResponses?.[0]?.name === 'testTool',
+        ),
+      ).toBe(true);
+    });
+
+    describe('unregistered tool names', () => {
+      // Gemini blocks the turn until every functionCall id in the batch is answered. A
+      // tool-not-found that sends nothing leaves the call unanswered, so the model goes
+      // silent until hangup.
+      const connect = (instance: any) => {
+        instance.state = 'connected';
+        instance.ws = {
+          send: vi.fn(),
+          readyState: 1, // WebSocket.OPEN
+          close: vi.fn(),
+          once: vi.fn(),
+        };
+        instance.connectionManager.setWebSocket(instance.ws);
+        return instance.ws;
+      };
+
+      const responsesFrom = (ws: any) =>
+        ws.send.mock.calls
+          .map((c: any[]) => JSON.parse(c[0]))
+          .filter((frame: any) => frame.toolResponse)
+          .map((frame: any) => frame.toolResponse.functionResponses[0]);
+
+      it('should still answer the call id when the tool is not registered', async () => {
+        voice.addTools({
+          known: {
+            id: 'known',
+            description: 'Known tool',
+            inputSchema: { type: 'object', properties: {} },
+            execute: async () => ({ ok: true }),
+          },
+        });
+        const ws = connect(voice as any);
+
+        const errors: any[] = [];
+        voice.on('error', event => errors.push(event));
+
+        await (voice as any).handleToolCall({
+          toolCall: { functionCalls: [{ name: 'noSuchTool', args: {}, id: 'call-2' }] },
+        });
+
+        expect(ws.send).toHaveBeenCalledTimes(1);
+        expect(JSON.parse(ws.send.mock.calls[0]![0])).toEqual({
+          toolResponse: {
+            functionResponses: [
+              {
+                id: 'call-2',
+                name: 'noSuchTool',
+                response: { error: 'Tool "noSuchTool" not found' },
+              },
+            ],
+          },
+        });
+
+        // The fix is additive: the tool_not_found event contract is unchanged.
+        expect(errors).toHaveLength(1);
+        expect(errors[0]).toMatchObject({
+          code: 'tool_not_found',
+          details: { toolName: 'noSuchTool', availableTools: ['known'] },
+        });
+      });
+
+      it('should answer every id in a batch mixing unknown and known tools', async () => {
+        voice.addTools({
+          known: {
+            id: 'known',
+            description: 'Known tool',
+            inputSchema: { type: 'object', properties: {} },
+            execute: async () => ({ ok: true }),
+          },
+        });
+        const ws = connect(voice as any);
+
+        await (voice as any).handleToolCall({
+          toolCall: {
+            functionCalls: [
+              { name: 'nope', args: {}, id: 'call-a' },
+              { name: 'known', args: {}, id: 'call-b' },
+            ],
+          },
+        });
+
+        // Previously only `call-b` was answered, leaving the batch incomplete.
+        expect(responsesFrom(ws).map((r: any) => r.id)).toEqual(['call-a', 'call-b']);
+      });
+
+      it('should answer a tool declared via config but absent from the dispatch registry', async () => {
+        // `GeminiToolConfig` entries have no `execute`, so they are declared to Gemini but
+        // are never dispatchable. The call must still be answered rather than stalling.
+        const configVoice = new GeminiLiveVoice({
+          apiKey: 'test-api-key',
+          model: 'gemini-2.0-flash-live-001',
+          tools: [{ name: 'configOnlyTool', description: 'd', parameters: { type: 'object', properties: {} } }],
+        });
+        const ws = connect(configVoice as any);
+
+        await (configVoice as any).handleToolCall({
+          toolCall: { functionCalls: [{ name: 'configOnlyTool', args: {}, id: 'c-1' }] },
+        });
+
+        expect(responsesFrom(ws)).toEqual([
+          { id: 'c-1', name: 'configOnlyTool', response: { error: 'Tool "configOnlyTool" not found' } },
+        ]);
+
+        configVoice.disconnect();
+      });
+    });
   });
 
   describe('Session Management', () => {
@@ -604,6 +835,67 @@ describe('GeminiLiveVoice', () => {
       voice.setAutoReconnect(true);
       const info = voice.getSessionInfo();
       expect(info.config?.enableResumption).toBe(true);
+    });
+
+    describe('sendContext', () => {
+      beforeEach(() => {
+        (voice as any).state = 'connected';
+        (voice as any).ws = {
+          send: vi.fn(),
+          readyState: 1,
+          close: vi.fn(),
+          once: vi.fn(),
+        };
+        (voice as any).connectionManager.setWebSocket((voice as any).ws);
+        mockWs = (voice as any).ws;
+      });
+
+      it('should send client_content with turnComplete: false by default', async () => {
+        await voice.sendContext([
+          { role: 'user', content: 'Hello' },
+          { role: 'assistant', content: 'Hi there!' },
+        ]);
+
+        expect(mockWs.send).toHaveBeenCalledTimes(1);
+        const sentData = JSON.parse(mockWs.send.mock.calls[0][0]);
+        expect(sentData).toHaveProperty('client_content');
+        expect(sentData.client_content.turnComplete).toBe(false);
+        expect(sentData.client_content.turns).toHaveLength(2);
+        expect(sentData.client_content.turns[0]).toEqual({ role: 'user', parts: [{ text: 'Hello' }] });
+        expect(sentData.client_content.turns[1]).toEqual({ role: 'model', parts: [{ text: 'Hi there!' }] });
+      });
+
+      it('should allow turnComplete: true override', async () => {
+        await voice.sendContext([{ role: 'user', content: 'Final message' }], { turnComplete: true });
+
+        const sentData = JSON.parse(mockWs.send.mock.calls[0][0]);
+        expect(sentData.client_content.turnComplete).toBe(true);
+      });
+
+      it('should update local context history', async () => {
+        voice.clearContext();
+        await voice.sendContext([
+          { role: 'user', content: 'Question' },
+          { role: 'assistant', content: 'Answer' },
+        ]);
+
+        const history = voice.getContextHistory();
+        expect(history).toHaveLength(2);
+        expect(history[0].role).toBe('user');
+        expect(history[0].content).toBe('Question');
+        expect(history[1].role).toBe('assistant');
+        expect(history[1].content).toBe('Answer');
+      });
+
+      it('should skip sending when turns array is empty', async () => {
+        await voice.sendContext([]);
+        expect(mockWs.send).not.toHaveBeenCalled();
+      });
+
+      it('should throw when not connected', async () => {
+        (voice as any).state = 'disconnected';
+        await expect(voice.sendContext([{ role: 'user', content: 'Hello' }])).rejects.toThrow('Not connected');
+      });
     });
   });
 
@@ -751,6 +1043,9 @@ describe('GeminiLiveVoice', () => {
       }, 5);
 
       await expect(listenPromise).resolves.toBe('Hello world');
+      expect(mockWs.send).toHaveBeenCalledTimes(1);
+      const sentData = JSON.parse(mockWs.send.mock.calls[0][0]);
+      expect(sentData.client_content.turns[0].parts[0].inlineData.mimeType).toBe('audio/pcm');
     });
 
     it('should emit speaking and speaker stream for inbound audio and cleanup on turnComplete', async () => {
@@ -1205,17 +1500,164 @@ describe('GeminiLiveVoice', () => {
     });
 
     it('should emit usage event from usageMetadata', async () => {
-      const usagePromise = new Promise<any>(resolve => voice.on('usage', resolve));
+      const usage = vi.fn();
+      voice.on('usage', usage);
 
       await (voice as any).handleGeminiMessage({
         usageMetadata: { promptTokenCount: 1, responseTokenCount: 2, totalTokenCount: 3 },
       });
 
-      const usage = await usagePromise;
-      expect(usage.inputTokens).toBe(1);
-      expect(usage.outputTokens).toBe(2);
-      expect(usage.totalTokens).toBe(3);
-      expect(['audio', 'text', 'video']).toContain(usage.modality);
+      expect(usage).toHaveBeenCalledTimes(1);
+      expect(usage).toHaveBeenCalledWith({ inputTokens: 1, outputTokens: 2, totalTokens: 3, modality: 'text' });
+    });
+  });
+
+  describe('usage metadata dispatch (#23719)', () => {
+    const usageMetadata = { promptTokenCount: 100, responseTokenCount: 50, totalTokenCount: 150 };
+    const expectedUsage = { inputTokens: 100, outputTokens: 50, totalTokens: 150, modality: 'text' };
+
+    it('emits usage once alongside turn-complete content', async () => {
+      const usage = vi.fn();
+      const turnComplete = vi.fn();
+      voice.on('usage', usage);
+      voice.on('turnComplete', turnComplete);
+
+      await (voice as any).handleGeminiMessage({
+        serverContent: { modelTurn: { parts: [] }, turnComplete: true },
+        usageMetadata,
+      });
+
+      expect(turnComplete).toHaveBeenCalledTimes(1);
+      expect(usage).toHaveBeenCalledTimes(1);
+      expect(usage).toHaveBeenCalledWith(expectedUsage);
+    });
+
+    it('preserves audio delivery and content-derived usage modality', async () => {
+      const usage = vi.fn();
+      const speaking = vi.fn();
+      const turnComplete = vi.fn();
+      voice.on('usage', usage);
+      voice.on('speaking', speaking);
+      voice.on('turnComplete', turnComplete);
+      const audio = Buffer.from([1, 0, 2, 0]).toString('base64');
+
+      await (voice as any).handleGeminiMessage({
+        serverContent: {
+          modelTurn: { parts: [{ inlineData: { mimeType: 'audio/pcm;rate=24000', data: audio } }] },
+          turnComplete: true,
+        },
+        usageMetadata,
+      });
+
+      expect(speaking).toHaveBeenCalledTimes(1);
+      expect(speaking).toHaveBeenCalledWith({ audio, audioData: new Int16Array([1, 2]), sampleRate: 24000 });
+      expect(turnComplete).toHaveBeenCalledTimes(1);
+      expect(usage).toHaveBeenCalledTimes(1);
+      expect(usage).toHaveBeenCalledWith({ ...expectedUsage, modality: 'audio' });
+    });
+
+    it.each(['setup', 'setupComplete'])('preserves %s routing alongside usage', async field => {
+      const usage = vi.fn();
+      voice.on('usage', usage);
+      const message = { [field]: {}, usageMetadata };
+      const setup = vi.spyOn(voice as any, 'handleSetupComplete');
+      try {
+        await (voice as any).handleGeminiMessage(message);
+        expect(setup).toHaveBeenCalledTimes(1);
+        expect(setup).toHaveBeenCalledWith(message);
+        expect(usage).toHaveBeenCalledTimes(1);
+        expect(usage).toHaveBeenCalledWith(expectedUsage);
+      } finally {
+        setup.mockRestore();
+      }
+    });
+
+    it('awaits tool handling before emitting accompanying usage', async () => {
+      const usage = vi.fn();
+      voice.on('usage', usage);
+      const message = { toolCall: { name: 'testTool', args: {}, id: 'call-1' }, usageMetadata };
+      let finishTool!: () => void;
+      const toolFinished = new Promise<void>(resolve => {
+        finishTool = resolve;
+      });
+      const tool = vi.spyOn(voice as any, 'handleToolCall').mockImplementation(() => toolFinished);
+      try {
+        const dispatch = (voice as any).handleGeminiMessage(message);
+        expect(tool).toHaveBeenCalledTimes(1);
+        expect(tool).toHaveBeenCalledWith(message);
+        expect(usage).not.toHaveBeenCalled();
+        finishTool();
+        await dispatch;
+        expect(usage).toHaveBeenCalledTimes(1);
+        expect(usage).toHaveBeenCalledWith(expectedUsage);
+      } finally {
+        finishTool();
+        tool.mockRestore();
+      }
+    });
+
+    it.each([false, true])('preserves session resumption alongside usage (content: %s)', async withContent => {
+      const usage = vi.fn();
+      const sessionHandle = vi.fn();
+      const turnComplete = vi.fn();
+      voice.on('usage', usage);
+      voice.on('sessionHandle', sessionHandle);
+      voice.on('turnComplete', turnComplete);
+
+      await (voice as any).handleGeminiMessage({
+        ...(withContent ? { serverContent: { turnComplete: true } } : {}),
+        usageMetadata,
+        sessionResumptionUpdate: { resumable: true, newHandle: 'updated-handle' },
+      });
+
+      expect(usage).toHaveBeenCalledTimes(1);
+      expect(usage).toHaveBeenCalledWith(expectedUsage);
+      expect(sessionHandle).toHaveBeenCalledTimes(1);
+      expect(sessionHandle).toHaveBeenCalledWith({ handle: 'updated-handle', expiresAt: expect.any(Date) });
+      expect((voice as any).sessionHandle).toBe('updated-handle');
+      expect(turnComplete).toHaveBeenCalledTimes(withContent ? 1 : 0);
+    });
+
+    it.each([
+      { field: 'serverContent', payload: { turnComplete: true }, handler: 'handleServerContent' },
+      { field: 'toolCall', payload: { name: 'testTool', args: {}, id: 'call-1' }, handler: 'handleToolCall' },
+    ])('does not emit usage for $field without metadata', async ({ field, payload, handler }) => {
+      const usage = vi.fn();
+      voice.on('usage', usage);
+      const message = { [field]: payload };
+      const routed = vi.spyOn(voice as any, handler);
+      try {
+        await (voice as any).handleGeminiMessage(message);
+        expect(routed).toHaveBeenCalledTimes(1);
+        expect(routed).toHaveBeenCalledWith(field === 'serverContent' ? payload : message);
+        expect(usage).not.toHaveBeenCalled();
+      } finally {
+        routed.mockRestore();
+      }
+    });
+
+    it.each([
+      { metadata: {}, expected: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+      {
+        metadata: { promptTokenCount: 0, responseTokenCount: 0, totalTokenCount: 0 },
+        expected: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      },
+      {
+        metadata: {
+          promptTokenCount: 100,
+          responseTokenCount: 50,
+          totalTokenCount: 200,
+          cachedContentTokenCount: 20,
+          thoughtsTokenCount: 30,
+        },
+        expected: { inputTokens: 100, outputTokens: 50, totalTokens: 200 },
+      },
+    ])('preserves provider counts and existing defaults: $metadata', async ({ metadata, expected }) => {
+      const usage = vi.fn();
+      voice.on('usage', usage);
+      await (voice as any).handleGeminiMessage({ serverContent: { turnComplete: true }, usageMetadata: metadata });
+      expect(usage).toHaveBeenCalledTimes(1);
+      expect(usage).toHaveBeenCalledWith({ ...expected, modality: 'text' });
     });
   });
 

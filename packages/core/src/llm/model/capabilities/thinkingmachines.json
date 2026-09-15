@@ -1,0 +1,4 @@
+{
+  "attachment": ["thinkingmachines/Inkling", "thinkingmachines/Inkling:peft:262144"],
+  "temperature": ["thinkingmachines/Inkling", "thinkingmachines/Inkling:peft:262144"]
+}

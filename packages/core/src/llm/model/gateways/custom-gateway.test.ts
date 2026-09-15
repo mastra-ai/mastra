@@ -404,9 +404,9 @@ describe('Custom Gateway Integration', () => {
     it('should handle gateway resolution errors gracefully', () => {
       const customGateway = new TestCustomGateway();
 
-      // Invalid model ID format (missing parts)
+      // Invalid model ID format (missing model part)
       expect(() => {
-        new ModelRouterLanguageModel('custom/invalid', [customGateway]);
+        new ModelRouterLanguageModel('custom/', [customGateway]);
       }).toThrow();
     });
 
@@ -451,6 +451,92 @@ describe('Custom Gateway Integration', () => {
       expect(model).toBeDefined();
       expect(model.provider).toBe('my-provider');
       expect(model.modelId).toBe('model-1');
+    });
+  });
+
+  describe('Custom gateway dedup regression', () => {
+    it('uses the custom gateway when it shadows a default gateway id (first-wins)', () => {
+      // A custom gateway with the same id as the default Netlify gateway.
+      // Before the GatewayManager dedup fix, the default would override the
+      // custom gateway, losing the user's override. Now first-wins dedup keeps
+      // the custom gateway.
+      const shadowGateway: MastraModelGatewayInterface = {
+        id: 'netlify',
+        name: 'custom-netlify-override',
+        shouldEnable: () => true,
+        fetchProviders: vi.fn(async () => ({
+          'shadow-provider': {
+            name: 'Shadow',
+            models: ['shadow-model'],
+            apiKeyEnvVar: 'SHADOW_KEY',
+            gateway: 'netlify',
+            url: 'https://shadow.example/v1',
+          },
+        })),
+        buildUrl: () => 'https://shadow.example/v1',
+        getApiKey: vi.fn(async () => 'shadow-key'),
+        resolveAuth: vi.fn(() => ({ apiKey: 'shadow-auth-key', source: 'gateway' as const })),
+        resolveLanguageModel: vi.fn(
+          () =>
+            ({
+              specificationVersion: 'v2',
+              doGenerate: vi.fn(),
+              doStream: vi.fn(),
+            }) as any,
+        ),
+      };
+
+      const model = new ModelRouterLanguageModel('netlify/shadow-provider/shadow-model', [shadowGateway]);
+
+      // The custom gateway wins over the default Netlify gateway.
+      expect(model.gatewayId).toBe('netlify');
+      expect(model.provider).toBe('shadow-provider');
+      expect(model.modelId).toBe('shadow-model');
+      expect(shadowGateway.resolveAuth).not.toHaveBeenCalled(); // not called at construction time
+    });
+
+    it('does not reserve a gateway id from a disabled custom gateway before an enabled default', async () => {
+      // A disabled custom gateway with the same id as a default should not
+      // block the enabled default from being used. Use a netlify-prefixed id
+      // so resolution depends on the netlify gateway (openai/gpt-4o would
+      // fall back to models.dev and hide a regression here).
+      const disabledGateway: MastraModelGatewayInterface = {
+        id: 'netlify',
+        name: 'disabled-netlify-override',
+        shouldEnable: () => false,
+        fetchProviders: vi.fn(async () => ({})),
+        buildUrl: () => '',
+        getApiKey: vi.fn(async () => 'should-not-be-used'),
+        resolveLanguageModel: vi.fn(() => ({}) as any),
+      };
+
+      // Ensure the default Netlify gateway's getApiKey throws predictably
+      // (missing token) instead of attempting a network token exchange.
+      const prevToken = process.env['NETLIFY_TOKEN'];
+      const prevSiteId = process.env['NETLIFY_SITE_ID'];
+      delete process.env['NETLIFY_TOKEN'];
+      delete process.env['NETLIFY_SITE_ID'];
+
+      try {
+        const model = new ModelRouterLanguageModel('netlify/openai/gpt-4o', [disabledGateway]);
+
+        expect(model).toBeDefined();
+        expect(model.gatewayId).toBe('netlify');
+
+        // Driving resolution: the default Netlify gateway is retained (its
+        // getApiKey throws on the missing token), so resolveLanguageModel is
+        // never reached. If the disabled gateway were incorrectly retained,
+        // its getApiKey would return 'should-not-be-used' and
+        // resolveLanguageModel would be called — failing this assertion.
+        await model.supportedUrls;
+        expect(disabledGateway.resolveLanguageModel).not.toHaveBeenCalled();
+        expect(disabledGateway.getApiKey).not.toHaveBeenCalled();
+      } finally {
+        if (prevToken !== undefined) process.env['NETLIFY_TOKEN'] = prevToken;
+        else delete process.env['NETLIFY_TOKEN'];
+        if (prevSiteId !== undefined) process.env['NETLIFY_SITE_ID'] = prevSiteId;
+        else delete process.env['NETLIFY_SITE_ID'];
+      }
     });
   });
 });

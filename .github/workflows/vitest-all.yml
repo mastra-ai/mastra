@@ -13,7 +13,7 @@ permissions: {}
 jobs:
   test:
     name: UNIT Test (Shard ${{ matrix.shard }})
-    runs-on: ubuntu-latest
+    runs-on: starsling-ubuntu-24.04
     if: ${{ github.repository == 'mastra-ai/mastra' }}
     timeout-minutes: 30
     strategy:
@@ -30,7 +30,8 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 20
         with:
           fetch-depth: 0
 
@@ -57,7 +58,7 @@ jobs:
 
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: vitest-blob-${{ matrix.shard }}
           path: .vitest-reports/
@@ -66,7 +67,7 @@ jobs:
 
   e2e-test:
     name: E2E Test (${{ matrix.project }})
-    runs-on: ubuntu-latest
+    runs-on: starsling-ubuntu-24.04
     if: ${{ github.repository == 'mastra-ai/mastra' }}
     timeout-minutes: 30
     strategy:
@@ -93,7 +94,8 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 20
         with:
           fetch-depth: 0
 
@@ -138,7 +140,7 @@ jobs:
 
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: vitest-blob-${{ steps.normalize.outputs.project_id }}
           path: .vitest-reports/
@@ -147,7 +149,7 @@ jobs:
 
   merge-reports:
     name: Merge Test Reports
-    runs-on: ubuntu-latest
+    runs-on: starsling-ubuntu-24.04
     needs: [test, e2e-test]
     if: always()
     # Minimal permissions - read-only access
@@ -156,13 +158,14 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 20
 
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
 
       - name: Download all test results
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           pattern: vitest-blob-*
           path: .vitest-reports

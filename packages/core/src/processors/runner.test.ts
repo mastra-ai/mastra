@@ -1,5 +1,6 @@
 import type { TextPart } from '@internal/ai-sdk-v4';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { MastraDBMessage } from '../agent/message-list';
 import { MessageList } from '../agent/message-list';
 import { createSignal } from '../agent/signals';
 import { TripWire } from '../agent/trip-wire';
@@ -549,14 +550,61 @@ describe('ProcessorRunner', () => {
       const result = await runner.runOutputProcessors(messageList);
 
       const messages = await result.get.all.prompt();
-      expect(messages).toHaveLength(2);
+      const assistantTexts = messages
+        .filter(m => m.role === 'assistant')
+        .flatMap(m => (Array.isArray(m.content) ? m.content : [{ type: 'text' as const, text: m.content }]))
+        .map(part => (part as TextPart).text);
 
-      const assistantMessage = messages.find(m => m.role === 'assistant');
-      expect(assistantMessage).toBeDefined();
-      expect(assistantMessage!.content).toHaveLength(3);
-      expect((assistantMessage!.content[0] as TextPart).text).toBe('initial response');
-      expect((assistantMessage!.content[1] as TextPart).text).toBe('extra message A');
-      expect((assistantMessage!.content[2] as TextPart).text).toBe('extra message B');
+      expect(assistantTexts).toEqual(['initial response', 'extra message A', 'extra message B']);
+    });
+
+    it('should still pass response messages after drainUnsavedMessages clears the live set', async () => {
+      let receivedMessages: MastraDBMessage[] = [];
+      const outputProcessors: Processor[] = [
+        {
+          id: 'processor1',
+          name: 'Processor 1',
+          processOutputResult: async ({ messages }) => {
+            receivedMessages = messages;
+            return messages.map(message => ({
+              ...message,
+              content: {
+                ...message.content,
+                parts: [{ type: 'text' as const, text: 'rewritten' }],
+                content: 'rewritten',
+              },
+            }));
+          },
+        },
+      ];
+
+      runner = new ProcessorRunner({
+        inputProcessors: [],
+        outputProcessors,
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      messageList.add([createMessage('initial response', 'assistant')], 'response');
+      expect(messageList.drainUnsavedMessages()).toHaveLength(1);
+      expect(messageList.get.response.db()).toHaveLength(0);
+      expect(messageList.getPersisted.response.db()).toHaveLength(1);
+
+      await runner.runOutputProcessors(messageList);
+
+      expect(receivedMessages).toHaveLength(1);
+      expect(receivedMessages[0]?.content.parts?.[0]).toMatchObject({
+        type: 'text',
+        text: 'initial response',
+      });
+
+      const messages = await messageList.get.all.prompt();
+      const assistantTexts = messages
+        .filter(m => m.role === 'assistant')
+        .flatMap(m => (Array.isArray(m.content) ? m.content : [{ type: 'text' as const, text: m.content }]))
+        .map(part => (part as TextPart).text);
+
+      expect(assistantTexts).toEqual(['rewritten']);
     });
 
     it('should abort if tripwire is triggered in output processor', async () => {
@@ -622,15 +670,12 @@ describe('ProcessorRunner', () => {
 
       const result = await runner.runOutputProcessors(messageList);
       const messages = await result.get.all.prompt();
+      const assistantTexts = messages
+        .filter(m => m.role === 'assistant')
+        .flatMap(m => (Array.isArray(m.content) ? m.content : [{ type: 'text' as const, text: m.content }]))
+        .map(part => (part as TextPart).text);
 
-      expect(messages).toHaveLength(2);
-
-      const assistantMessage = messages.find(m => m.role === 'assistant');
-      expect(assistantMessage).toBeDefined();
-      expect(assistantMessage!.content).toHaveLength(3);
-      expect((assistantMessage!.content[0] as TextPart).text).toBe('initial response');
-      expect((assistantMessage!.content[1] as TextPart).text).toBe('message from processor 1');
-      expect((assistantMessage!.content[2] as TextPart).text).toBe('message from processor 3');
+      expect(assistantTexts).toEqual(['initial response', 'message from processor 1', 'message from processor 3']);
     });
   });
 
@@ -1864,6 +1909,99 @@ describe('ProcessorRunner', () => {
       expect(receivedContext.retryCount).toBe(1);
     });
 
+    it('surfaces step providerMetadata to processOutputStep on a content-filter block with empty steps', async () => {
+      // Mirrors the AWS Bedrock guardrail case: the model step is blocked
+      // (finishReason: "content-filter"), the completed-steps array is empty,
+      // and the guardrail assessment is only available via providerMetadata.
+      let receivedProviderMetadata: Record<string, unknown> | undefined;
+
+      const guardrailTrace = {
+        bedrock: {
+          trace: {
+            guardrail: {
+              actionReason: 'Guardrail blocked.',
+              inputAssessment: {
+                'guardrail-1': {
+                  topicPolicy: { topics: [{ name: 'SystemPromptDisclosure', action: 'BLOCKED', type: 'DENY' }] },
+                },
+              },
+            },
+          },
+        },
+      };
+
+      const outputProcessors: Processor[] = [
+        {
+          id: 'guardrail-attribution',
+          name: 'Guardrail Attribution',
+          processOutputStep: async ({ messages, providerMetadata }) => {
+            receivedProviderMetadata = providerMetadata;
+            return messages;
+          },
+        },
+      ];
+
+      runner = new ProcessorRunner({
+        inputProcessors: [],
+        outputProcessors,
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      messageList.add([createMessage('user message', 'user')], 'user');
+
+      await runner.runProcessOutputStep({
+        steps: [],
+        messages: messageList.get.all.db(),
+        messageList,
+        stepNumber: 0,
+        finishReason: 'content-filter',
+        providerMetadata: guardrailTrace,
+      });
+
+      // The processor can attribute the block to the responsible policy even
+      // though `steps` is empty.
+      expect(receivedProviderMetadata).toEqual(guardrailTrace);
+      expect((receivedProviderMetadata as typeof guardrailTrace)?.bedrock?.trace?.guardrail?.actionReason).toBe(
+        'Guardrail blocked.',
+      );
+    });
+
+    it('leaves providerMetadata undefined when the step produced none', async () => {
+      let received: { providerMetadata?: unknown; sawKey?: boolean } = {};
+
+      const outputProcessors: Processor[] = [
+        {
+          id: 'no-metadata',
+          name: 'No Metadata',
+          processOutputStep: async args => {
+            received = { providerMetadata: args.providerMetadata, sawKey: 'providerMetadata' in args };
+            return args.messages;
+          },
+        },
+      ];
+
+      runner = new ProcessorRunner({
+        inputProcessors: [],
+        outputProcessors,
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      messageList.add([createMessage('user message', 'user')], 'user');
+
+      await runner.runProcessOutputStep({
+        steps: [],
+        messages: messageList.get.all.db(),
+        messageList,
+        stepNumber: 0,
+        finishReason: 'stop',
+        text: 'all good',
+      });
+
+      expect(received.providerMetadata).toBeUndefined();
+    });
+
     it('should abort with retry option in processOutputStep', async () => {
       interface ToneMetadata {
         issue: string;
@@ -2740,10 +2878,16 @@ describe('ProcessorRunner', () => {
         cacheKey: 'workflow-state-cache-key',
         contents: 'workflow state',
       }));
-      const processor: Processor = {
+      const firstProcessInputStep = vi.fn(() => ({ runId: 'processor-overwrite-attempt' }) as any);
+      const secondProcessInputStep = vi.fn(() => undefined);
+      const firstProcessor: Processor = {
         id: 'workflow-state-processor',
-        processInputStep: () => undefined,
+        processInputStep: firstProcessInputStep,
         computeStateSignal,
+      };
+      const secondProcessor: Processor = {
+        id: 'workflow-run-id-processor',
+        processInputStep: secondProcessInputStep,
       };
       const workflow = createWorkflow({
         id: 'workflow-state-test',
@@ -2752,9 +2896,10 @@ describe('ProcessorRunner', () => {
         type: 'processor',
         options: { validateInputs: false },
       })
-        .then(createStep(processor as any))
+        .then(createStep(firstProcessor as any))
+        .then(createStep(secondProcessor as any))
         .commit() as ProcessorWorkflow;
-      workflow.__stateSignalProcessors = [processor];
+      workflow.__stateSignalProcessors = [firstProcessor];
       const chunks: unknown[] = [];
 
       runner = new ProcessorRunner({
@@ -2771,6 +2916,7 @@ describe('ProcessorRunner', () => {
         model: {} as any,
         tools: {},
         retryCount: 0,
+        runId: 'run-workflow-processor',
         requestContext,
         memory: memory as any,
         writer: {
@@ -2780,6 +2926,8 @@ describe('ProcessorRunner', () => {
         },
       });
 
+      expect(firstProcessInputStep).toHaveBeenCalledWith(expect.objectContaining({ runId: 'run-workflow-processor' }));
+      expect(secondProcessInputStep).toHaveBeenCalledWith(expect.objectContaining({ runId: 'run-workflow-processor' }));
       expect(computeStateSignal).toHaveBeenCalledTimes(1);
       expect(messageList.get.all.db().at(-1)?.content.metadata?.signal).toEqual(
         expect.objectContaining({
@@ -3229,18 +3377,19 @@ describe('ProcessorRunner', () => {
         contents: 'stored delta',
         createdAt: new Date('2026-01-01T00:00:01.000Z'),
       });
-      const localDelta = createStateSignal({
-        id: 'local-delta',
-        mode: 'delta',
-        cacheKey: 'delta:local',
-        version: 3,
-        contents: 'local delta',
-        createdAt: new Date('2026-01-01T00:00:02.000Z'),
-      });
-      messageList.addSignal(localDelta);
       const storedMessages = new MessageList({ threadId: 'thread-1' });
       storedMessages.addSignal(snapshot);
       storedMessages.addSignal(delta);
+      const localDelta = messageList.addSignal(
+        createStateSignal({
+          id: 'local-delta',
+          mode: 'delta',
+          cacheKey: 'delta:local',
+          version: 3,
+          contents: 'local delta',
+          createdAt: new Date('2026-01-01T00:00:02.000Z'),
+        }),
+      );
 
       const requestContext = new RequestContext();
       const thread = {
@@ -3269,10 +3418,11 @@ describe('ProcessorRunner', () => {
         perPage: false,
         hasMore: false,
       }));
+      const listMessagesById = vi.fn(async () => ({ messages: storedMessages.get.all.db() }));
       const memory = {
         getThreadById: vi.fn(async () => thread),
         saveThread: vi.fn(async ({ thread }) => thread),
-        storage: { getStore: vi.fn(async () => ({ listMessages })) },
+        storage: { getStore: vi.fn(async () => ({ listMessages, listMessagesById })) },
       };
       const computeStateSignal = vi.fn((_args: any) => undefined);
 
@@ -3294,9 +3444,8 @@ describe('ProcessorRunner', () => {
         memory: memory as any,
       });
 
-      expect(listMessages).toHaveBeenCalledWith(
-        expect.objectContaining({ threadId: 'thread-1', resourceId: 'resource-1', perPage: false }),
-      );
+      expect(listMessages).not.toHaveBeenCalled();
+      expect(listMessagesById).toHaveBeenCalledWith({ messageIds: ['stored-snapshot'] });
       const computeArgs = computeStateSignal.mock.calls[0]?.[0];
       expect(computeArgs.activeStateSignals.map(signal => signal.id)).toEqual(
         expect.arrayContaining([snapshot.id, delta.id, localDelta.id]),
@@ -3409,6 +3558,37 @@ describe('ProcessorRunner', () => {
           retryCount: 0,
         }),
       ).rejects.toThrow('computeStateSignal requires Mastra memory');
+    });
+
+    it('skips computeStateSignal when memory is present but no threadId/resourceId resolves', async () => {
+      const compute = vi.fn(() => ({ cacheKey: 'state', contents: 'state' }));
+      const memory = {
+        getThreadById: vi.fn(),
+        saveThread: vi.fn(),
+      };
+      runner = new ProcessorRunner({
+        inputProcessors: [{ id: 'state-processor', computeStateSignal: compute }],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      // Ephemeral invocation (e.g. workflow agent step): memory is configured
+      // but there is no thread/resource identity for this run.
+      await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 0,
+        steps: [],
+        model: {} as any,
+        tools: {},
+        retryCount: 0,
+        requestContext: new RequestContext(),
+        memory: memory as any,
+      });
+
+      expect(compute).not.toHaveBeenCalled();
+      expect(messageList.get.all.db().filter(m => m.role === 'signal')).toHaveLength(0);
+      expect(memory.saveThread).not.toHaveBeenCalled();
     });
 
     it('honors processor.stateId over processor.id in computeStateSignal', async () => {
@@ -3566,6 +3746,78 @@ describe('ProcessorRunner', () => {
       expect(firstTracking?.version).toBe(1);
       expect(secondTracking?.version).toBe(2);
       expect(secondTracking?.lastSignalId).not.toBe(firstTracking?.lastSignalId);
+    });
+  });
+
+  describe('applyMessagesToMessageList', () => {
+    it('preserves a message promoted from memory to response after source capture', () => {
+      const message = createMessage('final response', 'assistant');
+      messageList.add(message, 'memory');
+      const idsBeforeProcessing = messageList.get.all.db().map(({ id }) => id);
+      const check = messageList.makeMessageSourceChecker();
+
+      messageList.add(message, 'response');
+      ProcessorRunner.applyMessagesToMessageList([message], messageList, idsBeforeProcessing, check, 'response');
+
+      expect(messageList.get.response.db()).toEqual([message]);
+      expect(messageList.get.remembered.db()).toEqual([]);
+    });
+
+    it('preserves exact-reference messages without changing identity, order, or source', () => {
+      const inputMessage = createMessage('input');
+      const responseMessage = createMessage('response', 'assistant');
+      messageList.add(inputMessage, 'input').add(responseMessage, 'response');
+      const idsBeforeProcessing = messageList.get.all.db().map(({ id }) => id);
+      const check = messageList.makeMessageSourceChecker();
+
+      ProcessorRunner.applyMessagesToMessageList(
+        [inputMessage, responseMessage],
+        messageList,
+        idsBeforeProcessing,
+        check,
+      );
+
+      expect(messageList.get.all.db()).toEqual([inputMessage, responseMessage]);
+      expect(messageList.get.input.db()).toEqual([inputMessage]);
+      expect(messageList.get.response.db()).toEqual([responseMessage]);
+    });
+
+    it('replaces a distinct message with the same id using the captured source', () => {
+      const original = createMessage('original');
+      const replacement = {
+        ...original,
+        content: { ...original.content, parts: [{ type: 'text' as const, text: 'updated' }] },
+      };
+      messageList.add(original, 'input');
+      const idsBeforeProcessing = [original.id];
+      const check = messageList.makeMessageSourceChecker();
+
+      ProcessorRunner.applyMessagesToMessageList([replacement], messageList, idsBeforeProcessing, check, 'response');
+
+      expect(messageList.get.all.db()).toEqual([replacement]);
+      expect(messageList.get.input.db()).toEqual([replacement]);
+      expect(messageList.get.response.db()).toEqual([]);
+    });
+
+    it('removes omitted messages and assigns the default source to new messages', () => {
+      const omitted = createMessage('omitted');
+      const retained = createMessage('retained');
+      const added = createMessage('added', 'assistant');
+      messageList.add([omitted, retained], 'input');
+      const idsBeforeProcessing = messageList.get.all.db().map(({ id }) => id);
+      const check = messageList.makeMessageSourceChecker();
+
+      ProcessorRunner.applyMessagesToMessageList(
+        [retained, added],
+        messageList,
+        idsBeforeProcessing,
+        check,
+        'response',
+      );
+
+      expect(messageList.get.all.db()).toEqual([retained, added]);
+      expect(messageList.get.input.db()).toEqual([retained]);
+      expect(messageList.get.response.db()).toEqual([added]);
     });
   });
 

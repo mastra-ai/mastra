@@ -5,3 +5,4 @@ export * from './content-similarity';
 export * from './tone';
 export * from './tool-call-accuracy';
 export * from './trajectory';
+export * from './checks';

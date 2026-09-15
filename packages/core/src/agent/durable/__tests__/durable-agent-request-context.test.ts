@@ -11,7 +11,14 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
-import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../../../request-context';
+import { MockMemory } from '../../../memory/mock';
+import {
+  RequestContext,
+  MASTRA_AUTH_TOKEN_KEY,
+  MASTRA_INHERITED_MEMORY_KEY,
+  MASTRA_RESOURCE_ID_KEY,
+  MASTRA_THREAD_ID_KEY,
+} from '../../../request-context';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
@@ -256,7 +263,7 @@ describe('DurableAgent RequestContext reserved keys', () => {
   });
 
   describe('RequestContext serialization', () => {
-    it('should not include requestContext in serialized workflow input', async () => {
+    it('snapshots JSON-safe requestContext entries for parity with the non-durable agent', async () => {
       const mockModel = createTextModel('Hello!');
 
       const baseAgent = new Agent({
@@ -268,18 +275,82 @@ describe('DurableAgent RequestContext reserved keys', () => {
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
       const requestContext = new RequestContext();
-      requestContext.set('sensitiveData', 'should-not-serialize');
+      requestContext.set('userId', 'user-123');
+      // A delegated/caller context can still carry the parent's framework-managed
+      // memory entry before preparation installs or clears this run's own value.
+      requestContext.set('MastraMemory', { thread: { id: 'parent-thread' }, resourceId: 'parent-resource' });
+      // Non-JSON values are dropped from the snapshot.
+      requestContext.set('liveHandle', () => 'not-serializable');
 
       const result = await durableAgent.prepare('Hello', {
         requestContext,
       });
 
-      // Workflow input should be JSON-serializable
-      // RequestContext is not serialized (it's stored in registry or passed separately)
-      const serialized = JSON.stringify(result.workflowInput);
-      expect(serialized).toBeDefined();
-      expect(serialized).not.toContain('sensitiveData');
-      expect(serialized).not.toContain('should-not-serialize');
+      // The serializable subset of requestContext is snapshotted on workflow
+      // input so durable scorers can see customContext, mirroring the
+      // non-durable agent which forwards Object.fromEntries(requestContext.entries())
+      // to scorers. The full RequestContext (which can hold live handles) is
+      // not serialized — it stays on the run registry.
+      //
+      // The snapshot is taken *before* preparation mutates the request context
+      // (e.g. adding MASTRA_VERSIONS_KEY / MastraMemory), so persisted
+      // customContext must reflect only caller-provided entries.
+      const entries = (result.workflowInput as { requestContextEntries?: Record<string, unknown> })
+        .requestContextEntries;
+      expect(entries).toEqual({ userId: 'user-123' });
+    });
+
+    it('should not persist a delegating agent memory instance from the reserved key', async () => {
+      const mockModel = createTextModel('Hello!');
+
+      const baseAgent = new Agent({
+        id: 'inherited-memory-snapshot-agent',
+        name: 'Inherited Memory Snapshot Agent',
+        instructions: 'Test inherited memory snapshot',
+        model: mockModel as LanguageModelV2,
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+      const requestContext = new RequestContext();
+      requestContext.set('userId', 'user-123');
+      // Delegation puts a live MastraMemory instance here. It stringifies fine, so
+      // without an explicit exclusion it would be persisted into the workflow input
+      // and come back from resume as a method-less husk.
+      requestContext.setRaw(MASTRA_INHERITED_MEMORY_KEY, new MockMemory());
+
+      const result = await durableAgent.prepare('Hello', {
+        requestContext,
+      });
+
+      const entries = (result.workflowInput as { requestContextEntries?: Record<string, unknown> })
+        .requestContextEntries;
+      expect(entries).toEqual({ userId: 'user-123' });
+    });
+
+    it('should not persist the framework-managed auth token into workflow input', async () => {
+      const mockModel = createTextModel('Hello!');
+
+      const baseAgent = new Agent({
+        id: 'auth-token-snapshot-agent',
+        name: 'Auth Token Snapshot Agent',
+        instructions: 'Test auth token snapshot',
+        model: mockModel as LanguageModelV2,
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+      const requestContext = new RequestContext();
+      requestContext.set('userId', 'user-123');
+      // Server auth middleware stores the raw bearer token here. It must never
+      // be persisted into durable workflow input.
+      requestContext.set(MASTRA_AUTH_TOKEN_KEY, 'super-secret-bearer-token');
+
+      const result = await durableAgent.prepare('Hello', {
+        requestContext,
+      });
+
+      const entries = (result.workflowInput as { requestContextEntries?: Record<string, unknown> })
+        .requestContextEntries;
+      expect(entries).toEqual({ userId: 'user-123' });
     });
   });
 });

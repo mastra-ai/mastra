@@ -1,3 +1,4 @@
+import type { ActorSignal } from '../auth/ee';
 import type { MastraScorers } from '../evals';
 import type { PubSub } from '../events';
 import type { Mastra } from '../mastra';
@@ -34,6 +35,7 @@ export type ExecuteFunctionParams<
   workflowId: string;
   mastra: Mastra;
   requestContext: RequestContext<TRequestContext>;
+  actor?: ActorSignal;
   inputData: TStepInput;
   state: TState;
   setState(state: TState): Promise<void>;

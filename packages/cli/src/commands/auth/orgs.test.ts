@@ -17,7 +17,7 @@ vi.mock('@clack/prompts', () => ({
   cancel: vi.fn(),
 }));
 
-const { resolveCurrentOrg } = await import('./orgs.js');
+const { OrgSelectionCancelledError, resolveCurrentOrg } = await import('./orgs.js');
 
 const ORG_A = { id: 'org_a', name: 'Org A' };
 const ORG_B = { id: 'org_b', name: 'Org B' };
@@ -130,6 +130,18 @@ describe('resolveCurrentOrg', () => {
     expect(selectMock).toHaveBeenCalledTimes(1);
     expect(result).toEqual({ orgId: 'org_b', orgName: 'Org B' });
     expect(setCurrentOrgIdMock).toHaveBeenCalledWith('org_b');
+  });
+
+  test('throws instead of exiting when cancellation is owned by the caller', async () => {
+    const controller = new AbortController();
+    fetchOrgsMock.mockResolvedValue([ORG_A, ORG_B]);
+    getCurrentOrgIdMock.mockResolvedValue('org_a');
+    selectMock.mockResolvedValue(Symbol.for('clack:cancel'));
+
+    await expect(
+      resolveCurrentOrg('tok', { forcePrompt: true, exitOnCancel: false, signal: controller.signal }),
+    ).rejects.toBeInstanceOf(OrgSelectionCancelledError);
+    expect(selectMock).toHaveBeenCalledWith(expect.objectContaining({ signal: controller.signal }));
   });
 
   test('throws when no orgs exist', async () => {

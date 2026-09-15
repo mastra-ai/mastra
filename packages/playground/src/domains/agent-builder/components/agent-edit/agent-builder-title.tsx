@@ -1,29 +1,17 @@
-import { Skeleton } from '@mastra/playground-ui';
+import { CrumbSkeleton } from '@mastra/playground-ui/components/Breadcrumb';
 import { useFormContext, useWatch } from 'react-hook-form';
 import type { AgentBuilderEditFormValues } from '../../schemas';
 
 export interface AgentBuilderTitleProps {
-  className?: string;
   isLoading?: boolean;
 }
 
-export const AgentBuilderTitle = ({ className, isLoading = false }: AgentBuilderTitleProps) => {
+/** Current-crumb label for the agent builder; rendered inside a `Crumb`. */
+export const AgentBuilderTitle = ({ isLoading = false }: AgentBuilderTitleProps) => {
   const { control } = useFormContext<AgentBuilderEditFormValues>();
   const name = useWatch({ control, name: 'name' });
 
-  const displayName = name && name.trim() ? name : 'Untitled';
+  if (isLoading) return <CrumbSkeleton data-testid="agent-builder-title-skeleton" />;
 
-  return (
-    <div className={className} data-testid="agent-builder-title">
-      <div className="flex items-center gap-2 min-w-0">
-        <span className="block text-ui-md leading-ui-md text-white truncate" data-testid="agent-builder-title-name">
-          {isLoading ? (
-            <Skeleton className="inline-block h-4 w-24 align-middle" data-testid="agent-builder-title-skeleton" />
-          ) : (
-            displayName
-          )}
-        </span>
-      </div>
-    </div>
-  );
+  return <span data-testid="agent-builder-title-name">{name && name.trim() ? name : 'Untitled'}</span>;
 };

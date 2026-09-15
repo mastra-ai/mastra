@@ -1,9 +1,7 @@
-import {
-  MemoryCardView,
-  useDrilldown,
-  useTopActiveThreadsMetrics,
-  useTopResourcesByThreadsMetrics,
-} from '@mastra/playground-ui';
+import { MemoryCardView } from '@mastra/playground-ui/domains/metrics/components/memory-card-view';
+import { useDrilldown } from '@mastra/playground-ui/domains/metrics/hooks/use-drilldown';
+import { useTopActiveThreadsMetrics } from '@mastra/playground-ui/domains/metrics/hooks/use-top-active-threads-metrics';
+import { useTopResourcesByThreadsMetrics } from '@mastra/playground-ui/domains/metrics/hooks/use-top-resources-by-threads-metrics';
 import { useLinkComponent } from '@/lib/framework';
 
 export function MemoryCard() {

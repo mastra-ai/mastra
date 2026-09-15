@@ -1,4 +1,4 @@
-import type { NodePath, PluginObj } from '@babel/core';
+import type { NodePath, PluginObject } from '@babel/core';
 import * as babel from '@babel/core';
 import type { NewExpression } from '@babel/types';
 
@@ -13,14 +13,14 @@ import type { NewExpression } from '@babel/types';
  * Cloudflare Workers should only create one PostgresStore instance to avoid connection
  * pool exhaustion and ensure proper resource management.
  *
- * @returns {PluginObj} A Babel plugin object that validates PostgresStore usage
+ * @returns {PluginObject} A Babel plugin object that validates PostgresStore usage
  *
  * @example
  * // Throws error if multiple instances found:
  * const store1 = new PostgresStore();
  * const store2 = new PostgresStore(); // Error thrown here
  */
-export function postgresStoreInstanceChecker(): PluginObj {
+export function postgresStoreInstanceChecker(): PluginObject {
   const t = babel.types;
   const instances: { path: NodePath<NewExpression>; location: string }[] = [];
 
@@ -53,5 +53,5 @@ export function postgresStoreInstanceChecker(): PluginObj {
         throw lastInstance?.path.buildCodeFrameError(errorMessage);
       }
     },
-  } as PluginObj;
+  };
 }

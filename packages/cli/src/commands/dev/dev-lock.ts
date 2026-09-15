@@ -6,7 +6,7 @@ import pc from 'picocolors';
 
 const LOCK_FILENAME = 'dev.lock';
 
-interface LockData {
+export interface LockData {
   pid: number;
   host?: string;
   port?: number;
@@ -50,7 +50,7 @@ function parseLockContents(contents: string): LockData | null {
 function printDuplicateError(lock: LockData): never {
   console.error('');
   console.error(
-    pc.red('  ✗ ') + pc.bold(pc.red('Another instance of `mastra dev` is already running in this directory')),
+    pc.red('  ✗ ') + pc.bold(pc.red('Another development server instance is already running in this directory')),
   );
   console.error('');
   console.error(`  ${pc.red('│')} PID ${pc.bold(String(lock.pid))} is still active.`);
@@ -62,7 +62,7 @@ function printDuplicateError(lock: LockData): never {
   console.error(`  ${pc.red('│')} (e.g. database locks, port collisions).`);
   console.error('');
   console.error(`  ${pc.dim('To fix this:')}`);
-  console.error(`  ${pc.dim('•')} Stop the other \`mastra dev\` process (PID ${lock.pid}), or`);
+  console.error(`  ${pc.dim('•')} Stop the other development server process (PID ${lock.pid}), or`);
   console.error(`  ${pc.dim('•')} If that process is stuck, run: ${pc.cyan(`kill ${lock.pid}`)}`);
   console.error('');
   process.exit(1);
@@ -87,7 +87,7 @@ async function checkAndRemoveStaleLock(lockPath: string): Promise<void> {
 }
 
 /**
- * Attempt to acquire the dev lock. If another `mastra dev` instance is
+ * Attempt to acquire the dev lock. If another development server instance is
  * already running against the same `.mastra` directory, print a
  * user-friendly error and exit instead of letting resources fail with
  * confusing lock errors.
@@ -137,6 +137,26 @@ export async function updateDevLock(dotMastraPath: string, host: string, port: n
     await writeFile(lockPath, JSON.stringify(data), 'utf-8');
   } catch {
     // Best-effort; if the lockfile can't be updated, don't block dev startup.
+  }
+}
+
+/**
+ * Read-only check for a live dev server in `dotMastraPath`, without side
+ * effects: unlike `acquireDevLock()`, this never removes a stale lockfile
+ * (removing it is `mastra dev`'s job when it next starts, not a caller that
+ * merely wants to know whether it's safe to touch the directory).
+ *
+ * Returns the lock data if a dev server currently owns it and is still
+ * alive, `null` if there's no lock or the pid it names is no longer running.
+ */
+export async function readLiveDevLock(dotMastraPath: string): Promise<LockData | null> {
+  const lockPath = getLockPath(dotMastraPath);
+  try {
+    const contents = await readFile(lockPath, 'utf-8');
+    const lock = parseLockContents(contents);
+    return lock && isProcessRunning(lock.pid) ? lock : null;
+  } catch {
+    return null;
   }
 }
 

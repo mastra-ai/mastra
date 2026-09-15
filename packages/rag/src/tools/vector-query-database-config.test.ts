@@ -172,6 +172,74 @@ describe('createVectorQueryTool with database-specific configurations', () => {
     );
   });
 
+  it('should pass MongoDB configuration to vectorQuerySearch', async () => {
+    const databaseConfig: DatabaseConfig = {
+      mongodb: {
+        numCandidates: 500,
+      },
+    };
+
+    const tool = createVectorQueryTool({
+      vectorStoreName: 'mongodb',
+      indexName: 'testIndex',
+      model: mockModel,
+      databaseConfig,
+    });
+
+    const requestContext = new RequestContext();
+
+    await tool.execute(
+      {
+        queryText: 'test query',
+        topK: 5,
+      },
+      {
+        mastra: mockMastra as any,
+        requestContext,
+      },
+    );
+
+    expect(vectorQuerySearch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        databaseConfig,
+      }),
+    );
+  });
+
+  it('should pass Turbopuffer configuration to vectorQuerySearch', async () => {
+    const databaseConfig: DatabaseConfig = {
+      turbopuffer: {
+        consistency: 'eventual',
+      },
+    };
+
+    const tool = createVectorQueryTool({
+      vectorStoreName: 'turbopuffer',
+      indexName: 'testIndex',
+      model: mockModel,
+      databaseConfig,
+    });
+
+    const requestContext = new RequestContext();
+
+    await tool.execute(
+      {
+        queryText: 'test query',
+        topK: 5,
+      },
+      {
+        mastra: mockMastra as any,
+        requestContext,
+      },
+    );
+
+    expect(vectorQuerySearch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        databaseConfig,
+      }),
+    );
+  });
+
   it('should handle multiple database configurations', async () => {
     const databaseConfig: DatabaseConfig = {
       pinecone: {

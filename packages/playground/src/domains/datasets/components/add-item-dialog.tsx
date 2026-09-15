@@ -1,22 +1,19 @@
 'use client';
 
-import {
-  Button,
-  CodeEditor,
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogBody,
-  Label,
-  toast,
-} from '@mastra/playground-ui';
+import type { DatasetItemToolMock } from '@mastra/client-js';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
+import { Label } from '@mastra/playground-ui/components/Label';
+import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
+import { toast } from '@mastra/playground-ui/utils/toast';
+import { Plus, X } from 'lucide-react';
 import { useState } from 'react';
 import { useDatasetMutations } from '../hooks/use-dataset-mutations';
+import { DatasetItemScorerSelector } from './dataset-detail/dataset-item-scorer-selector';
 
 /** Schema validation error from API */
 interface SchemaValidationError {
-  field: 'input' | 'groundTruth';
+  field: 'input' | 'groundTruth' | 'toolMocks';
   errors: Array<{ path: string; message: string }>;
 }
 
@@ -46,8 +43,8 @@ function ValidationErrors({ field, errors }: { field: string; errors: Array<{ pa
   return (
     <div className="mt-2 space-y-1">
       {errors.map((err, idx) => (
-        <p key={idx} className="text-xs text-destructive">
-          <code className="bg-destructive/10 px-1 rounded">
+        <p key={idx} className="text-destructive text-ui-sm">
+          <code className="bg-destructive/10 rounded px-1">
             {field}
             {err.path !== '/' ? err.path : ''}
           </code>
@@ -69,9 +66,30 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
   const [input, setInput] = useState('{}');
   const [groundTruth, setGroundTruth] = useState('');
   const [expectedTrajectory, setExpectedTrajectory] = useState('');
+  const [toolMocks, setToolMocks] = useState('');
+  const [scorerOverrideEnabled, setScorerOverrideEnabled] = useState(false);
+  const [selectedScorerIds, setSelectedScorerIds] = useState<string[]>([]);
   const [requestContext, setRequestContext] = useState('');
   const [validationErrors, setValidationErrors] = useState<SchemaValidationError | null>(null);
   const { addItem } = useDatasetMutations();
+
+  const resetForm = () => {
+    setInput('{}');
+    setGroundTruth('');
+    setExpectedTrajectory('');
+    setToolMocks('');
+    setScorerOverrideEnabled(false);
+    setSelectedScorerIds([]);
+    setRequestContext('');
+    setValidationErrors(null);
+  };
+
+  const handleDialogOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) {
+      resetForm();
+    }
+    onOpenChange(nextOpen);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -106,6 +124,22 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
       }
     }
 
+    // Parse toolMocks if provided — must be a JSON array.
+    let parsedToolMocks: DatasetItemToolMock[] | undefined;
+    if (toolMocks.trim()) {
+      try {
+        const parsed = JSON.parse(toolMocks);
+        if (!Array.isArray(parsed)) {
+          toast.error('Tool Mocks must be a JSON array');
+          return;
+        }
+        parsedToolMocks = parsed as DatasetItemToolMock[];
+      } catch {
+        toast.error('Tool Mocks must be valid JSON');
+        return;
+      }
+    }
+
     // Parse requestContext if provided
     let parsedRequestContext: Record<string, unknown> | undefined;
     if (requestContext.trim()) {
@@ -123,19 +157,13 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
         input: parsedInput,
         groundTruth: parsedGroundTruth,
         expectedTrajectory: parsedTrajectory,
+        toolMocks: parsedToolMocks,
+        scorerIds: scorerOverrideEnabled ? selectedScorerIds : undefined,
         requestContext: parsedRequestContext,
       });
 
       toast.success('Item added successfully');
-      setValidationErrors(null);
-
-      // Reset form
-      setInput('{}');
-      setGroundTruth('');
-      setExpectedTrajectory('');
-      setRequestContext('');
-      onOpenChange(false);
-
+      handleDialogOpenChange(false);
       onSuccess?.();
     } catch (error) {
       // Check for schema validation error from API
@@ -164,75 +192,104 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
     }
   };
 
+  // Clear validation errors when toolMocks changes
+  const handleToolMocksChange = (value: string) => {
+    setToolMocks(value);
+    if (validationErrors?.field === 'toolMocks') {
+      setValidationErrors(null);
+    }
+  };
+
   const handleCancel = () => {
-    setInput('{}');
-    setGroundTruth('');
-    setExpectedTrajectory('');
-    setRequestContext('');
-    setValidationErrors(null);
-    onOpenChange(false);
+    handleDialogOpenChange(false);
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Add Item</DialogTitle>
-        </DialogHeader>
-        <DialogBody>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="item-input">Input (JSON) *</Label>
-              <CodeEditor value={input} onChange={handleInputChange} showCopyButton={false} className="min-h-[120px]" />
-              {validationErrors?.field === 'input' && (
-                <ValidationErrors field="input" errors={validationErrors.errors} />
-              )}
-            </div>
+    <SideDialog
+      dialogTitle="Add Item"
+      dialogDescription="Create a new dataset item"
+      isOpen={open}
+      onClose={handleCancel}
+      level={1}
+    >
+      <SideDialog.Top>Add Item</SideDialog.Top>
 
-            <div className="space-y-2">
-              <Label htmlFor="item-ground-truth">Ground Truth (JSON, optional)</Label>
-              <CodeEditor
-                value={groundTruth}
-                onChange={handleGroundTruthChange}
-                showCopyButton={false}
-                className="min-h-[80px]"
-              />
-              {validationErrors?.field === 'groundTruth' && (
-                <ValidationErrors field="groundTruth" errors={validationErrors.errors} />
-              )}
-            </div>
+      <SideDialog.Content>
+        <SideDialog.Header>
+          <SideDialog.Heading>Add Item</SideDialog.Heading>
+        </SideDialog.Header>
 
-            <div className="space-y-2">
-              <Label htmlFor="item-trajectory">Expected Trajectory (JSON, optional)</Label>
-              <CodeEditor
-                value={expectedTrajectory}
-                onChange={setExpectedTrajectory}
-                showCopyButton={false}
-                className="min-h-[80px]"
-              />
-            </div>
+        <form onSubmit={handleSubmit} className="grid gap-4">
+          <div className="grid gap-2">
+            <Label htmlFor="item-input">Input (JSON) *</Label>
+            <CodeEditor value={input} onChange={handleInputChange} showCopyButton={false} className="min-h-[240px]" />
+            {validationErrors?.field === 'input' && <ValidationErrors field="input" errors={validationErrors.errors} />}
+          </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="item-request-context">Request Context (JSON, optional)</Label>
-              <CodeEditor
-                value={requestContext}
-                onChange={setRequestContext}
-                showCopyButton={false}
-                className="min-h-[80px]"
-              />
-            </div>
+          <div className="grid gap-2">
+            <Label htmlFor="item-ground-truth">Ground Truth (JSON, optional)</Label>
+            <CodeEditor
+              value={groundTruth}
+              onChange={handleGroundTruthChange}
+              showCopyButton={false}
+              className="min-h-[200px]"
+            />
+            {validationErrors?.field === 'groundTruth' && (
+              <ValidationErrors field="groundTruth" errors={validationErrors.errors} />
+            )}
+          </div>
 
-            <div className="flex justify-end gap-2 pt-4">
-              <Button type="button" onClick={handleCancel}>
-                Cancel
-              </Button>
-              <Button type="submit" variant="primary" disabled={addItem.isPending}>
-                {addItem.isPending ? 'Adding...' : 'Add Item'}
-              </Button>
-            </div>
-          </form>
-        </DialogBody>
-      </DialogContent>
-    </Dialog>
+          <div className="grid gap-2">
+            <Label htmlFor="item-trajectory">Expected Trajectory (JSON, optional)</Label>
+            <CodeEditor
+              value={expectedTrajectory}
+              onChange={setExpectedTrajectory}
+              showCopyButton={false}
+              className="min-h-[200px]"
+            />
+          </div>
+
+          <div className="grid gap-2">
+            <Label htmlFor="item-tool-mocks">Tool Mocks (JSON array, optional)</Label>
+            <CodeEditor
+              value={toolMocks}
+              onChange={handleToolMocksChange}
+              showCopyButton={false}
+              className="min-h-[200px]"
+            />
+            {validationErrors?.field === 'toolMocks' && (
+              <ValidationErrors field="toolMocks" errors={validationErrors.errors} />
+            )}
+          </div>
+
+          <DatasetItemScorerSelector
+            overrideEnabled={scorerOverrideEnabled}
+            onOverrideEnabledChange={setScorerOverrideEnabled}
+            selectedScorerIds={selectedScorerIds}
+            onSelectedScorerIdsChange={setSelectedScorerIds}
+            disabled={addItem.isPending}
+          />
+
+          <div className="grid gap-2">
+            <Label htmlFor="item-request-context">Request Context (JSON, optional)</Label>
+            <CodeEditor
+              value={requestContext}
+              onChange={setRequestContext}
+              showCopyButton={false}
+              className="min-h-[200px]"
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-4">
+            <Button icon={<X />} type="button" onClick={handleCancel}>
+              Cancel
+            </Button>
+            <Button icon={<Plus />} type="submit" variant="primary" disabled={addItem.isPending}>
+              {addItem.isPending ? 'Adding...' : 'Add Item'}
+            </Button>
+          </div>
+        </form>
+      </SideDialog.Content>
+    </SideDialog>
   );
 }

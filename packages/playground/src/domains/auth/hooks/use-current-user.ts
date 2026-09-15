@@ -4,6 +4,20 @@ import { useQuery } from '@tanstack/react-query';
 import type { CurrentUser } from '../types';
 import { fetchWithRefresh } from './fetch-with-refresh';
 
+const AUTH_TRANSIENT_MAX_RETRIES = 3;
+const AUTH_TRANSIENT_MAX_BACKOFF_MS = 8_000;
+
+export class CurrentUserError extends Error {
+  constructor(public readonly status: number) {
+    super(`Failed to fetch current user: ${status}`);
+    this.name = 'CurrentUserError';
+  }
+}
+
+export function isUnauthenticatedError(error: unknown): boolean {
+  return error instanceof CurrentUserError && error.status === 401;
+}
+
 /**
  * Hook to fetch the current authenticated user.
  *
@@ -47,12 +61,21 @@ export function useCurrentUser() {
       });
 
       if (!response.ok) {
-        throw new Error(`Failed to fetch current user: ${response.status}`);
+        throw new CurrentUserError(response.status);
       }
 
       return response.json();
     },
     staleTime: 60 * 1000, // Cache for 1 minute
-    retry: false,
+    // Retry the /api/auth/me query on transient auth-provider failures (HTTP 503)
+    // so the UI stays in `isLoading` instead of flipping to `isError` and
+    // triggering login — that redirect is what fed the WorkOS 429 lockout loop
+    // (PLTFRM-1270). 401 (terminal) still fails fast.
+    retry: (failureCount, error) => {
+      if (!(error instanceof CurrentUserError)) return false;
+      if (error.status !== 503) return false;
+      return failureCount < AUTH_TRANSIENT_MAX_RETRIES;
+    },
+    retryDelay: attemptIndex => Math.min(AUTH_TRANSIENT_MAX_BACKOFF_MS, 500 * 2 ** attemptIndex),
   });
 }

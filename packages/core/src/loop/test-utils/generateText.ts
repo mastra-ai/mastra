@@ -743,9 +743,9 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
           modelId: 'test-response-model-id',
           modelProvider: 'mock-provider',
           modelVersion: 'v2',
-          // Dates are serialized to ISO strings when the response crosses the evented engine's
-          // pubsub boundary (JSON.stringify), so user-observable shapes use strings here.
-          timestamp: new Date(10000).toISOString(),
+          // With direct execution (default), timestamps remain as Date objects.
+          // With evented execution they would be serialized to ISO strings via JSON.stringify.
+          timestamp: new Date(10000),
           messages: [
             {
               role: 'assistant',
@@ -768,9 +768,8 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
           modelId: 'test-response-model-id',
           modelProvider: 'mock-provider',
           modelVersion: 'v2',
-          // Dates are serialized to ISO strings when the response crosses the evented engine's
-          // pubsub boundary (JSON.stringify), so user-observable shapes use strings here.
-          timestamp: new Date(10000).toISOString(),
+          // With direct execution (default), timestamps remain as Date objects.
+          timestamp: new Date(10000),
           messages: [
             {
               role: 'assistant',

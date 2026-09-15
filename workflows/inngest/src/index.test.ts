@@ -18,7 +18,7 @@ import {
   simulateReadableStream,
 } from '@mastra/core/test-utils/llm-mock';
 import { createTool } from '@mastra/core/tools';
-import type { StreamEvent } from '@mastra/core/workflows';
+import type { StreamEvent, Workflow } from '@mastra/core/workflows';
 import { createHonoServer } from '@mastra/deployer/server';
 import { DefaultStorage } from '@mastra/libsql';
 import { Observability } from '@mastra/observability';
@@ -217,6 +217,51 @@ async function resetInngest(expectedFnIds: string[] = []) {
   await waitForFunctionRegistration(expectedFnIds);
 }
 
+describe('Inngest type regressions', () => {
+  it('should correctly thread TRequestContext type without TS2416 errors', () => {
+    // This is a compile-time test to ensure TS2416 doesn't regress when InngestWorkflow
+    // overrides createRun from the base Workflow class.
+    const inngest = new Inngest({ id: 'test' });
+    type CustomContext = { userId: string };
+    const { createWorkflow, createStep } = init<CustomContext>(inngest);
+
+    const step1 = createStep<any, any, any, any, any, any, CustomContext>({
+      id: 'step1',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ user: z.string() }),
+      execute: async ({ requestContext }) => {
+        // requestContext should be typed as RequestContext<CustomContext>
+        return { user: requestContext.get('userId') as string };
+      },
+    });
+
+    const workflow = createWorkflow({
+      id: 'typed-context-workflow',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ user: z.string() }),
+      requestContextSchema: z.object({ userId: z.string() }),
+      steps: [step1],
+    });
+
+    workflow.then(step1).commit();
+
+    const baseWorkflow: Workflow<any, any, any, any, any, any, any, CustomContext> = workflow;
+
+    const typecheckRunContext = async () => {
+      const run = await baseWorkflow.createRun();
+      const requestContext = new RequestContext<CustomContext>();
+      requestContext.set('userId', 'test-user');
+
+      void run.start({ inputData: {}, requestContext });
+      void run.startAsync({ inputData: {}, requestContext });
+      void run.resume({ requestContext });
+    };
+
+    expect(baseWorkflow).toBe(workflow);
+    void typecheckRunContext;
+  });
+});
+
 describe('MastraInngestWorkflow', () => {
   let globServer: any;
 
@@ -235,6 +280,119 @@ describe('MastraInngestWorkflow', () => {
       standaloneInngestProcess.kill();
       standaloneInngestProcess = null;
     }
+  });
+
+  describe.sequential('FGA actor signal', () => {
+    it('bypasses membership resolution for a trusted system actor across a nested-workflow step boundary', async ctx => {
+      const inngest = new Inngest({
+        id: 'mastra',
+        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
+      });
+
+      const { createWorkflow, createStep } = init(inngest);
+
+      const fgaProvider = {
+        require: vi.fn().mockResolvedValue(undefined),
+        check: vi.fn(),
+        filterAccessible: vi.fn(),
+      };
+
+      const agent = new Agent({
+        id: 'membership-agent',
+        name: 'Membership Agent',
+        instructions: 'Say ok',
+        model: new MockLanguageModelV2({
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+            content: [{ type: 'text', text: 'ok' }],
+            warnings: [],
+          }),
+        }),
+      });
+
+      // Inside a durable step, forward the per-call actor + tenant-scoped requestContext
+      // to a nested agent FGA check, exactly as a trusted background workflow would.
+      const callAgentStep = createStep({
+        id: 'call-agent',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ text: z.string() }),
+        execute: async ({ actor, requestContext, mastra }) => {
+          const res = await mastra!.getAgent('membership-agent').generate('hello', { actor, requestContext });
+          return { text: res.text };
+        },
+      });
+
+      const nestedWorkflow = createWorkflow({
+        id: 'nested-actor-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ text: z.string() }),
+        steps: [callAgentStep],
+      })
+        .then(callAgentStep)
+        .commit();
+
+      const workflow = createWorkflow({
+        id: 'actor-parent-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ text: z.string() }),
+        steps: [nestedWorkflow],
+      })
+        .then(nestedWorkflow)
+        .commit();
+
+      const mastra = new Mastra({
+        logger: false,
+        storage: new DefaultStorage({
+          id: 'test-storage',
+          url: ':memory:',
+        }),
+        agents: { 'membership-agent': agent },
+        workflows: {
+          'actor-parent-workflow': workflow,
+        },
+        server: {
+          fga: fgaProvider,
+          apiRoutes: [
+            {
+              path: '/inngest/api',
+              method: 'ALL',
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
+            },
+          ],
+        },
+      });
+
+      const app = await createHonoServer(mastra);
+
+      const srv = (globServer = serve({
+        fetch: app.fetch,
+        port: (ctx as any).handlerPort,
+      }));
+      await resetInngest();
+
+      const requestContext = new RequestContext();
+      requestContext.set('organizationId', 'org-1');
+
+      const run = await workflow.createRun();
+      const result = await run.start({
+        inputData: {},
+        requestContext,
+        actor: { actorKind: 'system', sourceWorkflow: 'nightly-workflow' },
+      });
+
+      srv.close();
+
+      // The trusted actor bypasses membership resolution at the nested agent FGA check,
+      // which only happens if `actor` survived the parent -> nested-workflow step boundary.
+      expect(fgaProvider.require).not.toHaveBeenCalled();
+      expect(result.status).toBe('success');
+      expect(result.steps['nested-actor-workflow']).toMatchObject({
+        status: 'success',
+        output: { text: 'ok' },
+      });
+    });
   });
 
   describe.sequential('Basic Workflow Execution', () => {
@@ -9969,6 +10127,90 @@ describe('MastraInngestWorkflow', () => {
 
         srv.close();
       });
+
+      it('propagates a nested step resume label into the parent snapshot', async ctx => {
+        // A step inside a nested workflow suspends with `resumeLabel`. That label
+        // must survive the nested->parent suspend boundary, otherwise the parent
+        // snapshot only names the wrapping step and a caller has no way to target
+        // the actual parked leaf — which is exactly how concurrently suspended
+        // tool calls become impossible to resume individually.
+        const inngest = new Inngest({
+          id: 'mastra',
+          baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
+        });
+
+        const { createWorkflow, createStep } = init(inngest);
+
+        const innerStep = createStep({
+          id: 'inner-approval',
+          inputSchema: z.object({ item: z.string() }),
+          outputSchema: z.object({ item: z.string(), ok: z.boolean() }),
+          suspendSchema: z.object({ msg: z.string() }),
+          resumeSchema: z.object({ ok: z.boolean() }),
+          execute: async ({ inputData, resumeData, suspend }) => {
+            if (!resumeData) {
+              await suspend({ msg: `approve ${inputData.item}` }, { resumeLabel: 'nested-approve' });
+              return { item: inputData.item, ok: false };
+            }
+            return { item: inputData.item, ok: resumeData.ok };
+          },
+        });
+
+        const innerWorkflow = createWorkflow({
+          id: 'inner-label-wf',
+          inputSchema: z.object({ item: z.string() }),
+          outputSchema: z.object({ item: z.string(), ok: z.boolean() }),
+          options: { validateInputs: false },
+        })
+          .then(innerStep)
+          .commit();
+
+        const outerWorkflow = createWorkflow({
+          id: 'outer-label-wf',
+          inputSchema: z.object({ item: z.string() }),
+          outputSchema: z.object({ item: z.string(), ok: z.boolean() }),
+          options: { validateInputs: false },
+        })
+          .then(innerWorkflow)
+          .commit();
+
+        const storage = new DefaultStorage({ id: 'test-storage', url: ':memory:' });
+        const mastra = new Mastra({
+          storage,
+          workflows: { 'outer-label-wf': outerWorkflow, 'inner-label-wf': innerWorkflow },
+          server: {
+            apiRoutes: [
+              {
+                path: '/inngest/api',
+                method: 'ALL',
+                createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
+              },
+            ],
+          },
+        });
+
+        const app = await createHonoServer(mastra);
+        const srv = (globServer = serve({ fetch: app.fetch, port: (ctx as any).handlerPort }));
+        await resetInngest();
+
+        try {
+          const run = await outerWorkflow.createRun();
+          const result = await run.start({ inputData: { item: 'gadget' } });
+          expect(result.status).toBe('suspended');
+
+          const store = await storage.getStore('workflows');
+          const snapshot: any = await store?.loadWorkflowSnapshot({
+            workflowName: 'outer-label-wf',
+            runId: run.runId,
+          });
+
+          expect(snapshot?.resumeLabels?.['nested-approve']).toBeDefined();
+          // The label resolves to the outer step wrapping the nested workflow.
+          expect(snapshot?.resumeLabels?.['nested-approve']?.stepId).toBe('inner-label-wf');
+        } finally {
+          srv.close();
+        }
+      });
     });
 
     describe('Workflow results', () => {
@@ -14655,9 +14897,16 @@ async function waitForSharedFunctionRegistration(expectedFnIds: string[] = [], m
       const fns = (data.functions ?? []) as Array<{ slug?: string; id?: string; name?: string }>;
       const candidates = fns.flatMap(f => [f.slug, f.id, f.name].filter(Boolean) as string[]);
       if (expectedFnIds.length > 0) {
-        if (expectedFnIds.every(id => candidates.some(c => matches(id, c)))) {
+        const missing = expectedFnIds.filter(id => !candidates.some(c => matches(id, c)));
+        if (missing.length === 0) {
           console.log(`[waitForSharedFunctionRegistration] all ${expectedFnIds.length} expected functions registered`);
           return true;
+        }
+        if (i === maxAttempts - 1) {
+          console.log(
+            `[waitForSharedFunctionRegistration] missing ${missing.length}/${expectedFnIds.length} after ${maxAttempts} attempts; dev server has ${fns.length} functions`,
+          );
+          console.log(`[waitForSharedFunctionRegistration] first missing: ${missing.slice(0, 10).join(', ')}`);
         }
       } else if (fns.length > 0) {
         return true;
@@ -14694,26 +14943,31 @@ async function startSharedInngest(expectedFnIds: string[] = []) {
 
   // Check if a server is already running (Docker or host CLI). Don't equate
   // "port reachable" with "Docker" — that would break host inngest-cli setups.
+  let devServerAlreadyRunning = false;
   try {
     const response = await fetch(`http://localhost:${SHARED_INNGEST_PORT}/dev`);
-    if (response.ok) {
-      _sharedInngestServerRunning = true;
-      console.log(`[startSharedInngest] Inngest already running on port ${SHARED_INNGEST_PORT}`);
-      // Trigger registration so the running server picks up *this* run's
-      // workflows (its previous registry may be stale from an earlier suite).
-      try {
-        await fetch(`http://localhost:${SHARED_HANDLER_PORT}/inngest/api`, { method: 'PUT' });
-      } catch {
-        // Ignore
-      }
-      const ok = await waitForSharedFunctionRegistration(expectedFnIds);
-      if (!ok && expectedFnIds.length > 0) {
-        throw new Error(`[startSharedInngest] expected functions not registered: ${expectedFnIds.join(', ')}`);
-      }
-      return;
-    }
+    devServerAlreadyRunning = response.ok;
   } catch {
     // Not running yet
+  }
+
+  if (devServerAlreadyRunning) {
+    _sharedInngestServerRunning = true;
+    console.log(`[startSharedInngest] Inngest already running on port ${SHARED_INNGEST_PORT}`);
+    // Trigger registration so the running server picks up *this* run's
+    // workflows (its previous registry may be stale from an earlier suite).
+    try {
+      await fetch(`http://localhost:${SHARED_HANDLER_PORT}/inngest/api`, { method: 'PUT' });
+    } catch {
+      // Ignore — dev server will poll the handler URL on its own schedule
+    }
+    const ok = await waitForSharedFunctionRegistration(expectedFnIds);
+    if (!ok && expectedFnIds.length > 0) {
+      throw new Error(
+        `[startSharedInngest] expected functions not registered after polling (see waitForSharedFunctionRegistration logs for missing ids)`,
+      );
+    }
+    return;
   }
 
   // Start the inngest dev server as a background process using the npm CLI
@@ -14827,10 +15081,28 @@ createWorkflowTestSuite({
       // Not running yet, will use inngest-cli
     }
 
-    // Collect all workflows from registry
+    // Collect all workflows + any Mastra-level agents/tools the entries declare
+    // (used by `.agent('id')` / `.tool('id')` by-id forms).
     const workflows: Record<string, InngestWorkflow<any, any, any, any, any, any, any>> = {};
+    const agents: Record<string, any> = {};
+    const tools: Record<string, any> = {};
     for (const [id, entry] of Object.entries(registry)) {
       workflows[id] = entry.workflow as InngestWorkflow<any, any, any, any, any, any, any>;
+      // Fail loudly if two registry entries declare the same agent/tool id with
+      // different instances — Object.assign would silently last-write-win and
+      // route by-id lookups to the wrong instance.
+      for (const [agentId, agent] of Object.entries(entry.mastraAgents ?? {})) {
+        if (agentId in agents && agents[agentId] !== agent) {
+          throw new Error(`registerWorkflows: agent id collision across registry entries: "${agentId}"`);
+        }
+        agents[agentId] = agent;
+      }
+      for (const [toolId, tool] of Object.entries(entry.mastraTools ?? {})) {
+        if (toolId in tools && tools[toolId] !== tool) {
+          throw new Error(`registerWorkflows: tool id collision across registry entries: "${toolId}"`);
+        }
+        tools[toolId] = tool;
+      }
     }
 
     // Create storage
@@ -14847,6 +15119,8 @@ createWorkflowTestSuite({
     sharedMastra = new Mastra({
       storage: sharedStorage,
       workflows,
+      agents: Object.keys(agents).length ? agents : undefined,
+      tools: Object.keys(tools).length ? tools : undefined,
       server: {
         apiRoutes: [
           {
@@ -14893,7 +15167,9 @@ createWorkflowTestSuite({
     // We pass through the expected function ids so the registration wait verifies
     // *our* workflows have synced — not just that the dev server has at least one
     // function left over from a previous suite.
-    const expectedFnIds = Object.keys(workflows).map(id => `workflow.${id}`);
+    // Use workflow.id (Inngest function id), not registry keys — nested suites
+    // register e.g. `nested-basic-main` under the `nested-basic` registry key.
+    const expectedFnIds = Object.values(registry).map(entry => `workflow.${entry.workflow.id}`);
     console.log('[registerWorkflows] Starting Inngest...');
     await startSharedInngest(expectedFnIds);
     console.log('[registerWorkflows] Inngest started and functions registered');

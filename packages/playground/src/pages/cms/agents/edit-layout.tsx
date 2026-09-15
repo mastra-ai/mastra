@@ -1,5 +1,9 @@
-import { Notice, Badge, Button, MainContentLayout, Spinner } from '@mastra/playground-ui';
-import { Check, Download, GitPullRequest, Save } from 'lucide-react';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { MainContentLayout } from '@mastra/playground-ui/components/MainContent';
+import { Notice } from '@mastra/playground-ui/components/Notice';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Check, Download, GitPullRequest, Save, Rocket, Eye } from 'lucide-react';
 import { useCallback, useEffect, useMemo } from 'react';
 import { Outlet, useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
 import { AgentCmsFormShell } from '@/domains/agents/components/agent-cms-form-shell';
@@ -11,6 +15,7 @@ import { useAgentVersion, useAgentVersions } from '@/domains/agents/hooks/use-ag
 import { useStoredAgent } from '@/domains/agents/hooks/use-stored-agents';
 import { mapAgentResponseToDataSource } from '@/domains/agents/utils/compute-agent-initial-values';
 import type { AgentDataSource } from '@/domains/agents/utils/compute-agent-initial-values';
+import { getEditorOwnership } from '@/domains/agents/utils/editor-ownership';
 import { useEditorSource } from '@/domains/configuration/hooks/use-editor-source';
 import { useLinkComponent } from '@/lib/framework';
 import { useMastraPlatform } from '@/lib/mastra-platform/hooks/use-mastra-platform';
@@ -61,10 +66,11 @@ function EditFormContent({
     <Notice variant="info" title="This is a previous version" className="mb-4">
       <Notice.Message>You are seeing a specific version of the agent.</Notice.Message>
       <div className="flex items-center gap-2">
-        <Button type="button" variant="default" size="sm" onClick={() => setSearchParams({})}>
+        <Button icon={<Eye />} type="button" variant="default" size="sm" onClick={() => setSearchParams({})}>
           View latest version
         </Button>
         <Button
+          icon={<Rocket />}
           type="button"
           variant="default"
           size="sm"
@@ -85,7 +91,7 @@ function EditFormContent({
       activeVersionId={activeVersionId}
     />
   );
-  const isEditorLocked = isCodeAgentOverride && editorConfig === false;
+  const isEditorLocked = getEditorOwnership(isCodeAgentOverride, editorConfig).isFullyLocked;
 
   return (
     <AgentCmsFormShell
@@ -107,9 +113,9 @@ function EditFormContent({
       rightPanel={rightPanel}
     >
       {isEditorLocked ? (
-        <div className="p-6">
+        <div className="p-4">
           <Notice variant="info" title="Editing disabled">
-            <Notice.Message>This code-defined agent has disabled Studio editing with `editor: false`.</Notice.Message>
+            <Notice.Message>This code-defined agent has disabled Studio editing.</Notice.Message>
           </Notice>
         </div>
       ) : (
@@ -133,7 +139,7 @@ function EditLayoutWrapper() {
 
   // Fetch versions first — this endpoint returns an empty array for code-only agents
   const { data: versionsData } = useAgentVersions({
-    agentId: agentId ?? '',
+    agentId,
     params: { orderBy: { direction: 'DESC' } },
   });
 
@@ -234,7 +240,7 @@ function EditLayoutWrapper() {
 
   const isNotFound = !isLoading && !agent && !codeAgent;
   const isReady = !isLoading && !!agentId && (!!agent || !!codeAgent);
-  const isCodeAgentEditable = !isCodeAgentOverride || codeAgent?.editor !== false;
+  const isCodeAgentEditable = !getEditorOwnership(isCodeAgentOverride, codeAgent?.editor).isFullyLocked;
   const editorSource = useEditorSource();
   const showCodeModeActions = isCodeAgentOverride && editorSource === 'code';
   const canOpenPr = isCodeAgentEditable && isMastraPlatform && !!mastraPlatformApiEndpoint && !!mastraPlatformProjectId;
@@ -247,12 +253,15 @@ function EditLayoutWrapper() {
       {isReady && (
         <RouteHeaderActions owner="cms-agent-edit">
           <div className="flex items-center gap-2">
-            {hasDraft && <Badge variant="info">Unpublished changes</Badge>}
+            {hasDraft && <Badge variant="blue">Unpublished changes</Badge>}
             {showCodeModeActions ? (
               isCodeAgentEditable ? (
                 <>
-                  <Button onClick={() => void handleDownloadJson()} disabled={isSavingDraft || isSubmitting}>
-                    <Download />
+                  <Button
+                    onClick={() => void handleDownloadJson()}
+                    disabled={isSavingDraft || isSubmitting}
+                    icon={<Download />}
+                  >
                     Download JSON
                   </Button>
                   <Button
@@ -316,7 +325,7 @@ function EditLayoutWrapper() {
 
       {isNotFound ? (
         <>
-          <div className="flex items-center justify-center h-full text-neutral3">Agent not found</div>
+          <div className="text-neutral3 flex h-full items-center justify-center">Agent not found</div>
           <div className="hidden">
             <EditFormContent
               agentId={agentId ?? ''}

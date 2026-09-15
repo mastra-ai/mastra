@@ -32,6 +32,7 @@ async function testContent(content: string): Promise<{ blocked: boolean; error?:
     const model = google('gemini-2.5-flash');
     await generateText({
       model,
+      allowSystemInMessages: false,
       prompt: content.slice(0, 50000), // Limit to avoid token limits
       providerOptions: {
         google: { safetySettings },

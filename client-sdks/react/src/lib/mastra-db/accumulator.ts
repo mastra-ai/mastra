@@ -8,6 +8,7 @@ import type {
 } from '@mastra/core/agent/message-list';
 import type { AgentChunkType, ChunkType, NetworkChunkType } from '@mastra/core/stream';
 import type { WorkflowStreamResult, StepResult } from '@mastra/core/workflows';
+import { uint8ArrayToBase64, encodeFilePartDataForStorage } from '../../agent/signal-data';
 import { formatCompletionFeedback, formatStreamCompletionFeedback } from './formatCompletionFeedback';
 import { CLIENT_MESSAGE_ID_KEY } from './types';
 import type {
@@ -23,7 +24,9 @@ import type {
 // `MastraMessagePart` (from @mastra/core) is V4-shaped:
 //   - text/reasoning parts have no `state`, `textId`, `reasoningId`, or `redacted`
 //   - the V4 reasoning part requires a `details` array we do not synthesize
-//   - the V4 file part is `{ mimeType, data }`; we emit V5-shaped `{ mediaType, url }`
+//   - file parts use the canonical DB shape `{ mimeType, data }` so MessageList /
+//     `toAISdkMessages` adapters can read them (V5-shaped `{ mediaType, url }`
+//     only survives conversion on the way *out* to AI SDK UI parts)
 //   - V4 source parts wrap a `LanguageModelV1Source` object; we emit V5-shaped
 //     flat `source-url` / `source-document` parts
 //
@@ -64,6 +67,16 @@ const withMetadata = (message: MastraDBMessage, metadata: MastraDBMessageMetadat
 // the rest of the metadata intact.
 const clearPendingStatus = (message: MastraDBMessage): MastraDBMessage => {
   const { status: _status, [CLIENT_MESSAGE_ID_KEY]: _clientMessageId, ...rest } = message.content.metadata ?? {};
+  return withMetadata(message, rest);
+};
+
+// Like `clearPendingStatus` but retains the `clientMessageId` correlation key.
+// Used during `data-user-message` reconciliation so the rendered row key (which
+// prefers `clientMessageId`) stays stable across the id swap, preventing a
+// React unmount/remount and the resulting layout shift. `clientMessageId` is
+// still stripped from persisted threads by `resolveInitialMessages`.
+const clearPendingStatusKeepClientId = (message: MastraDBMessage): MastraDBMessage => {
+  const { status: _status, ...rest } = message.content.metadata ?? {};
   return withMetadata(message, rest);
 };
 
@@ -118,6 +131,7 @@ const partProviderMetadata = (part: MastraMessagePart): Record<string, unknown> 
 export const finishStreamingAssistantMessage = (conversation: MastraDBMessage[]): MastraDBMessage[] => {
   const lastMessage = conversation[conversation.length - 1];
   if (!lastMessage || lastMessage.role !== 'assistant') return conversation;
+  if (lastMessage.content.parts.length === 0) return conversation.slice(0, -1);
 
   const nextParts = lastMessage.content.parts.map(part => {
     if ((part.type === 'text' || part.type === 'reasoning') && partState(part) === 'streaming') {
@@ -330,34 +344,60 @@ const signalContentsToUserMessages = (contents: unknown, metadata: MastraDBMessa
 
     if (typedPart.type === 'image') {
       const image = typedPart.image;
-      return [
-        {
-          type: 'file',
-          mediaType:
-            typeof typedPart.mediaType === 'string'
-              ? typedPart.mediaType
-              : typeof typedPart.mimeType === 'string'
-                ? typedPart.mimeType
-                : 'image/*',
-          url: typeof image === 'string' ? image : image instanceof URL ? image.toString() : '',
-        } as unknown as MastraMessagePart,
-      ];
+      const mimeType =
+        typeof typedPart.mediaType === 'string'
+          ? typedPart.mediaType
+          : typeof typedPart.mimeType === 'string'
+            ? typedPart.mimeType
+            : 'image/*';
+      if (
+        typeof image === 'string' ||
+        image instanceof URL ||
+        image instanceof ArrayBuffer ||
+        image instanceof Uint8Array
+      ) {
+        return [
+          {
+            type: 'file',
+            mimeType,
+            data: encodeFilePartDataForStorage(image, mimeType),
+          },
+        ];
+      }
+      return [{ type: 'file', mimeType, data: '' }];
     }
 
     if (typedPart.type === 'file') {
       const data = typedPart.data;
+      const mimeType =
+        typeof typedPart.mediaType === 'string'
+          ? typedPart.mediaType
+          : typeof typedPart.mimeType === 'string'
+            ? typedPart.mimeType
+            : 'application/octet-stream';
+      if (
+        typeof data === 'string' ||
+        data instanceof URL ||
+        data instanceof ArrayBuffer ||
+        data instanceof Uint8Array
+      ) {
+        return [
+          {
+            type: 'file',
+            mimeType,
+            data: encodeFilePartDataForStorage(data, mimeType),
+            ...(typeof typedPart.filename === 'string' ? { filename: typedPart.filename } : {}),
+          },
+        ];
+      }
+      const urlFallback = typeof typedPart.url === 'string' ? typedPart.url : '';
       return [
         {
           type: 'file',
-          mediaType:
-            typeof typedPart.mediaType === 'string'
-              ? typedPart.mediaType
-              : typeof typedPart.mimeType === 'string'
-                ? typedPart.mimeType
-                : 'application/octet-stream',
-          url: typeof data === 'string' ? data : data instanceof URL ? data.toString() : '',
+          mimeType,
+          data: urlFallback,
           ...(typeof typedPart.filename === 'string' ? { filename: typedPart.filename } : {}),
-        } as unknown as MastraMessagePart,
+        },
       ];
     }
 
@@ -389,6 +429,21 @@ const signalContentsToUserMessages = (contents: unknown, metadata: MastraDBMessa
 
   const parts = content.flatMap(toMessagePart);
   return parts.length ? [makeUserMessage(parts)] : [];
+};
+
+const reconcilePendingUserEcho = (
+  message: MastraDBMessage,
+  echoedContents: unknown,
+  metadata: MastraDBMessageMetadata,
+  options: { signalId?: string; keepClientMessageId: boolean },
+): MastraDBMessage => {
+  const echoedMessages = signalContentsToUserMessages(echoedContents, metadata);
+  const echoedParts = echoedMessages[0]?.content.parts;
+  let reconciled = typeof options.signalId === 'string' ? { ...message, id: options.signalId } : message;
+  if (echoedParts?.length) {
+    reconciled = { ...reconciled, content: { ...reconciled.content, parts: echoedParts } };
+  }
+  return options.keepClientMessageId ? clearPendingStatusKeepClientId(reconciled) : clearPendingStatus(reconciled);
 };
 
 const makeToolInvocationPart = (invocation: MastraToolInvocation): MastraToolInvocationPart => ({
@@ -461,19 +516,28 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
             message.content.metadata[CLIENT_MESSAGE_ID_KEY] === echoedClientMessageId,
         )
       ) {
-        return result.map(message =>
-          message.content.metadata?.status === 'pending' &&
-          message.content.metadata[CLIENT_MESSAGE_ID_KEY] === echoedClientMessageId
-            ? clearPendingStatus(typeof signalId === 'string' ? { ...message, id: signalId } : message)
-            : message,
+        return finishStreamingAssistantMessage(
+          result.map(message =>
+            message.content.metadata?.status === 'pending' &&
+            message.content.metadata[CLIENT_MESSAGE_ID_KEY] === echoedClientMessageId
+              ? reconcilePendingUserEcho(message, (chunk as any).data.contents, metadata, {
+                  signalId: typeof signalId === 'string' ? signalId : undefined,
+                  keepClientMessageId: true,
+                })
+              : message,
+          ),
         );
       }
 
       if (typeof signalId === 'string' && result.some(message => message.id === signalId)) {
-        return result.map(message =>
-          message.id === signalId && message.content.metadata?.status === 'pending'
-            ? clearPendingStatus(message)
-            : message,
+        return finishStreamingAssistantMessage(
+          result.map(message =>
+            message.id === signalId && message.content.metadata?.status === 'pending'
+              ? reconcilePendingUserEcho(message, (chunk as any).data.contents, metadata, {
+                  keepClientMessageId: false,
+                })
+              : message,
+          ),
         );
       }
 
@@ -525,7 +589,8 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
     }
 
     case 'start': {
-      const messageId = typeof chunk.payload.messageId === 'string' ? chunk.payload.messageId : undefined;
+      // Retained stream history may contain `start` chunks emitted without a payload.
+      const messageId = typeof chunk.payload?.messageId === 'string' ? chunk.payload.messageId : undefined;
       if (messageId && result.some(message => message.id === messageId)) return result;
       return [...result, newAssistantMessage(messageId ?? `start-${chunk.runId + Date.now()}`, [], metadata)];
     }
@@ -533,10 +598,16 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
     case 'text-start': {
       const lastMessage = result[result.length - 1];
       const textId = chunk.payload.id || `text-${Date.now()}`;
+      // Dedupe a repeated text-start only when the currently open (tail) text
+      // part already carries this id. Matching anywhere in the message would
+      // wrongly swallow a post-tool continuation that reuses the same text id
+      // (text → tool → text), leaving the second segment without its own part.
+      const tailPart = lastMessage?.content.parts[lastMessage.content.parts.length - 1];
       if (
         chunk.payload.id &&
         lastMessage?.role === 'assistant' &&
-        lastMessage.content.parts.some(part => part.type === 'text' && partTextId(part) === textId)
+        tailPart?.type === 'text' &&
+        partTextId(tailPart) === textId
       ) {
         return result;
       }
@@ -616,6 +687,19 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
 
       if (textPartIndex === -1) {
         textPartIndex = parts.findLastIndex(part => part.type === 'text' && partState(part) === 'streaming');
+      }
+
+      // A text run is closed once ANY non-text part is emitted after it — a tool
+      // call, reasoning, a source/citation, a file, a step marker, etc. If the
+      // matched text part is followed by such a part (e.g. text → tool → text or
+      // text → reasoning → text, where a provider like DeepSeek reuses the same
+      // text id across segments), this delta belongs to a NEW text segment.
+      // Appending to the earlier part would merge the two text blocks and push
+      // the intervening part out of order in the live view (issue #18964).
+      // Storage persists them as separate parts, which is why a reload already
+      // renders correctly.
+      if (textPartIndex !== -1 && parts.some((part, index) => index > textPartIndex && part.type !== 'text')) {
+        textPartIndex = -1;
       }
 
       if (textPartIndex === -1) {
@@ -920,6 +1004,31 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
           state: 'call',
           args: parsedArgs,
         } as MastraToolInvocation,
+      } as MastraMessagePart;
+
+      return replaceAt(result, messageIndex, withParts(targetMessage, parts));
+    }
+
+    case 'tool-output-denied': {
+      const location = locateToolPart(result, chunk.payload.toolCallId, false);
+      if (!location || location.toolPartIndex < 0) return result;
+      const { messageIndex, toolPartIndex } = location;
+      const targetMessage = result[messageIndex];
+      if (!targetMessage || targetMessage.role !== 'assistant') return result;
+
+      const parts = [...targetMessage.content.parts];
+      const toolPart = parts[toolPartIndex];
+      if (!isToolPart(toolPart)) return result;
+
+      parts[toolPartIndex] = {
+        ...toolPart,
+        toolInvocation: {
+          ...toolPart.toolInvocation,
+          state: 'output-denied',
+          toolName: chunk.payload.toolName,
+          args: chunk.payload.args ?? toolPart.toolInvocation.args,
+          approval: chunk.payload.approval,
+        },
       } as MastraMessagePart;
 
       return replaceAt(result, messageIndex, withParts(targetMessage, parts));
@@ -1244,20 +1353,20 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
 
       const parts = [...lastMessage.content.parts];
 
-      let url: string;
+      let data: string;
       if (typeof chunk.payload.data === 'string') {
-        url = chunk.payload.base64
+        data = chunk.payload.base64
           ? `data:${chunk.payload.mimeType};base64,${chunk.payload.data}`
           : `data:${chunk.payload.mimeType},${encodeURIComponent(chunk.payload.data)}`;
       } else {
-        const base64 = btoa(String.fromCharCode(...chunk.payload.data));
-        url = `data:${chunk.payload.mimeType};base64,${base64}`;
+        const base64 = uint8ArrayToBase64(chunk.payload.data);
+        data = `data:${chunk.payload.mimeType};base64,${base64}`;
       }
 
       parts.push({
         type: 'file',
-        mediaType: chunk.payload.mimeType,
-        url,
+        mimeType: chunk.payload.mimeType,
+        data,
         providerMetadata: chunk.payload.providerMetadata,
       } as unknown as MastraMessagePart);
 
@@ -1379,13 +1488,40 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
       return [...result, newMessage];
     }
 
+    // ----- Rotated response message ids (`step-start.payload.messageId` carries
+    // the id the following step's output is persisted under; processors like
+    // observational memory can rotate it mid-run) -----
+    case 'step-start': {
+      const stepMessageId = typeof chunk.payload?.messageId === 'string' ? chunk.payload.messageId : undefined;
+      if (!stepMessageId) return result;
+
+      const lastMessage = result[result.length - 1];
+      if (!lastMessage || lastMessage.role !== 'assistant') return result;
+      if (result.some(message => message.id === stepMessageId)) return result;
+
+      // Re-key the pending message in place while it only holds `data-*` parts
+      // (they belong to the run, not a persisted row); once model content has
+      // streamed under the previous id, split into a new message instead.
+      const hasModelContent = lastMessage.content.parts.some(part => !String(part.type).startsWith('data-'));
+      if (!hasModelContent) {
+        return replaceLast(result, { ...lastMessage, id: stepMessageId });
+      }
+
+      return appendAssistantMessage(finishStreamingAssistantMessage(result), stepMessageId, [], metadata);
+    }
+
     // ----- Lifecycle / step / framing chunks (not surfaced on DB messages) -----
-    case 'step-start':
     case 'step-finish':
     case 'step-output':
     case 'raw':
     case 'watch':
     case 'response-metadata':
+      return result;
+
+    // ----- Goal evaluation signal (feedback is already injected into the
+    // message history by the core goal step; the chunk is a consumer-only
+    // signal and is not surfaced as its own DB message). -----
+    case 'goal':
       return result;
 
     // ----- Object chunks (object/object-result are not stored on DB messages) -----
@@ -1439,11 +1575,12 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
     case 'network-validation-end':
     case 'network-object':
     case 'network-object-result':
+    case 'tool-output-denied':
       return result;
 
     default:
       // Exhaustiveness check: any new `ChunkType` variant must be added above.
-      return assertExhaustive(chunk, result);
+      return assertExhaustive(chunk as never, result);
   }
 };
 

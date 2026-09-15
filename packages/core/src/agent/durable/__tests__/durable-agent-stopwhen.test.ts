@@ -490,3 +490,98 @@ describe('DurableAgent stopWhen edge cases', () => {
     cleanup();
   });
 });
+
+describe('DurableAgent stopWhen behavior', () => {
+  let pubsub: EventEmitterPubSub;
+
+  beforeEach(() => {
+    pubsub = new EventEmitterPubSub();
+  });
+
+  afterEach(async () => {
+    await pubsub.close();
+  });
+
+  it('should stop the durable loop when stopWhen returns true after first iteration', async () => {
+    // Same shape as the passing 'honor per-stream maxSteps' test above
+    // (which loops the model 6 times). stopWhen should halt after iteration 1.
+    const { model: mockModel, getCallCount } = createRepeatedToolThenTextModel(
+      'loopTool',
+      { value: 'next' },
+      5,
+      'done',
+    );
+
+    const loopTool = createTool({
+      id: 'loopTool',
+      description: 'Continue the loop',
+      inputSchema: z.object({ value: z.string() }),
+      execute: async () => ({ ok: true }),
+    });
+
+    const baseAgent = new Agent({
+      id: 'stopwhen-behavior-agent',
+      name: 'StopWhen Behavior Agent',
+      instructions: 'Use tools until done.',
+      model: mockModel as LanguageModelV2,
+      tools: { loopTool },
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+    const stopWhen = vi.fn().mockImplementation(({ steps }: { steps: any[] }) => steps.length >= 2);
+
+    const result = await durableAgent.stream('Loop until final answer', {
+      stopWhen,
+      maxSteps: 10,
+    });
+    await drain(result.fullStream as ReadableStream<any>);
+
+    // Without stopWhen this would call the model 6 times (5 tool + 1 text).
+    // stopWhen halts the loop once 2 steps have accumulated, capping it short.
+    const callCount = getCallCount();
+    expect(callCount).toBeGreaterThanOrEqual(2);
+    expect(callCount).toBeLessThan(6);
+    expect(stopWhen).toHaveBeenCalled();
+
+    result.cleanup();
+  });
+
+  it('should let the loop continue when stopWhen returns false (bounded by maxSteps)', async () => {
+    const { model: mockModel, getCallCount } = createRepeatedToolThenTextModel(
+      'loopTool',
+      { value: 'next' },
+      5,
+      'done',
+    );
+
+    const loopTool = createTool({
+      id: 'loopTool',
+      description: 'Continue the loop',
+      inputSchema: z.object({ value: z.string() }),
+      execute: async () => ({ ok: true }),
+    });
+
+    const baseAgent = new Agent({
+      id: 'stopwhen-continue-agent',
+      name: 'StopWhen Continue Agent',
+      instructions: 'Use tools until done.',
+      model: mockModel as LanguageModelV2,
+      tools: { loopTool },
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+    const stopWhen = vi.fn().mockReturnValue(false);
+
+    const result = await durableAgent.stream('Loop until final answer', {
+      stopWhen,
+      maxSteps: 3,
+    });
+    await drain(result.fullStream as ReadableStream<any>);
+
+    // stopWhen never halts; maxSteps=3 caps the loop at 3 model calls.
+    expect(getCallCount()).toBe(3);
+    expect(stopWhen).toHaveBeenCalled();
+
+    result.cleanup();
+  });
+});

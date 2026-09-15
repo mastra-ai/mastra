@@ -3,6 +3,7 @@ import type { BackgroundTaskManager } from '../../../background-tasks';
 import type { AgentBackgroundConfig } from '../../../background-tasks/types';
 import { getModelMethodFromAgentMethod } from '../../../llm/model/model-method-from-agent';
 import type { ModelLoopStreamArgs, ModelMethodType } from '../../../llm/model/model.loop.types';
+import type { ToolCallConcurrency } from '../../../loop/types';
 import type { MastraMemory } from '../../../memory/memory';
 import type { MemoryConfigInternal } from '../../../memory/types';
 import { resolveObservabilityContext } from '../../../observability';
@@ -15,6 +16,7 @@ import type { SaveQueueManager } from '../../save-queue';
 import type { CreatedAgentSignal } from '../../signals';
 import type { AgentMethodType } from '../../types';
 import type { PrepareStreamRunScope } from './run-scope';
+import { LOOP_OPTIONS_KEY } from './run-scope-keys';
 import type { AgentCapabilities } from './schema';
 
 interface StreamStepOptions<OUTPUT = undefined> {
@@ -22,12 +24,13 @@ interface StreamStepOptions<OUTPUT = undefined> {
   runId: string;
   returnScorerData?: boolean;
   requireToolApproval?: RequireToolApproval;
-  toolCallConcurrency?: number;
+  toolCallConcurrency?: ToolCallConcurrency;
   resumeContext?: {
     resumeData: any;
     snapshot: any;
   };
   agentId: string;
+  agentVersionId?: string;
   agentName?: string;
   toolCallId?: string;
   methodType: AgentMethodType;
@@ -58,6 +61,7 @@ export function createStreamStep<OUTPUT = undefined>({
   toolCallConcurrency,
   resumeContext,
   agentId,
+  agentVersionId,
   agentName,
   toolCallId,
   methodType,
@@ -82,7 +86,7 @@ export function createStreamStep<OUTPUT = undefined>({
       // `loopOptions` carries class instances (MessageList, Tools) and closures
       // (onStepFinish, onFinish, ...) — none of which survive the evented engine's
       // JSON round-trip in step inputs. map-results-step parked it on runScope.
-      const loopOptions = runScope.loopOptions! as ModelLoopStreamArgs<any, OUTPUT> & {
+      const loopOptions = runScope.getOrThrow(LOOP_OPTIONS_KEY) as ModelLoopStreamArgs<any, OUTPUT> & {
         initialSignalEchoes?: CreatedAgentSignal[];
       };
 
@@ -122,6 +126,7 @@ export function createStreamStep<OUTPUT = undefined>({
           initialSignalEchoes: loopOptions.initialSignalEchoes,
         },
         agentId,
+        agentVersionId,
         agentName,
         toolCallId,
         methodType: modelMethodType,

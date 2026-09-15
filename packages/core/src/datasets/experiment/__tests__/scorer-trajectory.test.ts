@@ -8,6 +8,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { z } from 'zod';
+import { ScorerRunError } from '../../../evals/base';
 import type { MastraScorer } from '../../../evals/base';
 import type { Trajectory } from '../../../evals/types';
 import type { Mastra } from '../../../mastra';
@@ -265,6 +266,61 @@ describe('steps scorer config — per-step dispatch', () => {
     expect(echoResult?.stepId).toBe('echo');
   });
 
+  it('retains completed output from a failed step scorer without persisting its recovered score', async () => {
+    const workflow = buildTwoStepWorkflow();
+    (mastra.getWorkflowById as ReturnType<typeof vi.fn>).mockReturnValue(workflow);
+    (mastra.getWorkflow as ReturnType<typeof vi.fn>).mockReturnValue(workflow);
+
+    const recoveredFailure = new ScorerRunError({
+      scorerId: 'partial-step-scorer',
+      steps: ['generateScore', 'generateReason'],
+      failedStep: 'generateReason',
+      completedSteps: ['generateScore'],
+      result: {
+        output: { upper: 'HELLO' },
+        runId: 'partial-step-run',
+        score: 0,
+        generateScorePrompt: 'score the upper-case output',
+      },
+      cause: new Error('step reason failed'),
+    });
+    const partialScorer = {
+      id: 'partial-step-scorer',
+      name: 'partial-step-scorer',
+      description: '',
+      type: 'agent' as const,
+      run: vi.fn().mockRejectedValue(recoveredFailure),
+    } as unknown as MastraScorer<any, any, any, any>;
+    const workingScorer = createAgentScorer('working-step-scorer');
+
+    const result = await runExperiment(mastra, {
+      datasetId,
+      targetType: 'workflow',
+      targetId: 'two-step-wf',
+      scorers: { steps: { upper: [partialScorer, workingScorer] } } as any,
+    });
+
+    const scores = result.results[0]?.scores ?? [];
+    expect(scores.find(score => score.scorerId === 'partial-step-scorer')).toMatchObject({
+      score: 0,
+      reason: null,
+      error: 'Scorer Run Failed: step reason failed',
+      failedStep: 'generateReason',
+      completedSteps: ['generateScore'],
+      targetScope: 'span',
+      stepId: 'upper',
+    });
+    expect(scores.find(score => score.scorerId === 'working-step-scorer')).toMatchObject({
+      score: 1,
+      error: null,
+      stepId: 'upper',
+    });
+    const scoreStoreLookups = (storage.getStore as ReturnType<typeof vi.fn>).mock.calls.filter(
+      ([domain]) => domain === 'scores',
+    );
+    expect(scoreStoreLookups).toHaveLength(1);
+  });
+
   it('skips step scorers for steps that did not run successfully', async () => {
     const workflow = buildTwoStepWorkflow();
     (mastra.getWorkflowById as ReturnType<typeof vi.fn>).mockReturnValue(workflow);
@@ -360,5 +416,100 @@ describe('categorised scorer config (AgentScorerConfig)', () => {
     expect(scores).toHaveLength(2);
     expect(agentScorer.run).toHaveBeenCalledOnce();
     expect(trajScorer.run).toHaveBeenCalledOnce();
+  });
+});
+
+describe('expectedTrajectory pass-through (#21743)', () => {
+  const expectedTrajectory = { steps: [{ stepType: 'tool_call' as const, name: 'getWeather' }] };
+
+  let storage: MastraCompositeStore;
+  let datasetsStorage: DatasetsInMemory;
+  let mastra: Mastra;
+
+  beforeEach(() => {
+    ({ storage, datasetsStorage } = buildStorage());
+    ({ mastra } = buildMastra(storage));
+  });
+
+  it('forwards a dataset item expectedTrajectory to the scorer run', async () => {
+    const dataset = await datasetsStorage.createDataset({ name: 'Test', description: '' });
+    await datasetsStorage.addItem({
+      datasetId: dataset.id,
+      input: 'What is the weather in London in Fahrenheit?',
+      expectedTrajectory,
+    });
+
+    const scorer = createCapturingScorer('traj-scorer');
+
+    await runExperiment(mastra, {
+      datasetId: dataset.id,
+      targetType: 'agent',
+      targetId: 'test-agent',
+      scorers: [scorer],
+    });
+
+    const callArg = (scorer.run as ReturnType<typeof vi.fn>).mock.calls[0]?.[0];
+    expect(callArg?.expectedTrajectory).toEqual(expectedTrajectory);
+  });
+
+  it('forwards an inline data item expectedTrajectory to the scorer run', async () => {
+    const scorer = createCapturingScorer('traj-scorer');
+
+    await runExperiment(mastra, {
+      data: [{ input: 'What is the weather in London in Fahrenheit?', expectedTrajectory }],
+      targetType: 'agent',
+      targetId: 'test-agent',
+      scorers: [scorer],
+    });
+
+    const callArg = (scorer.run as ReturnType<typeof vi.fn>).mock.calls[0]?.[0];
+    expect(callArg?.expectedTrajectory).toEqual(expectedTrajectory);
+  });
+
+  it('passes undefined when the item has no expectedTrajectory', async () => {
+    const dataset = await datasetsStorage.createDataset({ name: 'Test', description: '' });
+    await datasetsStorage.addItem({
+      datasetId: dataset.id,
+      input: 'What is the weather in London in Fahrenheit?',
+    });
+
+    const scorer = createCapturingScorer('traj-scorer');
+
+    const result = await runExperiment(mastra, {
+      datasetId: dataset.id,
+      targetType: 'agent',
+      targetId: 'test-agent',
+      scorers: [scorer],
+    });
+
+    expect(result.status).toBe('completed');
+    const callArg = (scorer.run as ReturnType<typeof vi.fn>).mock.calls[0]?.[0];
+    expect(callArg?.expectedTrajectory).toBeUndefined();
+  });
+
+  it('forwards expectedTrajectory to step-scoped scorers', async () => {
+    const inputSchema = z.object({ prompt: z.string() });
+    const outputSchema = z.object({ upper: z.string() });
+    const upperStep = createStep({
+      id: 'upper',
+      inputSchema,
+      outputSchema,
+      execute: async ({ inputData }) => ({ upper: inputData.prompt.toUpperCase() }),
+    });
+    const workflow = createWorkflow({ id: 'one-step-wf', inputSchema, outputSchema }).then(upperStep).commit();
+    (mastra.getWorkflowById as ReturnType<typeof vi.fn>).mockReturnValue(workflow);
+    (mastra.getWorkflow as ReturnType<typeof vi.fn>).mockReturnValue(workflow);
+
+    const stepScorer = createAgentScorer('upper-scorer');
+
+    await runExperiment(mastra, {
+      data: [{ input: { prompt: 'Hello' }, expectedTrajectory }],
+      targetType: 'workflow',
+      targetId: 'one-step-wf',
+      scorers: { steps: { upper: [stepScorer] } } as any,
+    });
+
+    const callArg = (stepScorer.run as ReturnType<typeof vi.fn>).mock.calls[0]?.[0];
+    expect(callArg?.expectedTrajectory).toEqual(expectedTrajectory);
   });
 });

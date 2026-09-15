@@ -170,7 +170,7 @@ export class CloudflareVector extends MastraVector<VectorizeVectorFilter> {
         account_id: this.accountId,
       });
 
-      return res?.result?.map(index => index.name!) || [];
+      return res?.result?.map((index: { name?: string }) => index.name!) || [];
     } catch (error) {
       throw new MastraError(
         {
@@ -327,20 +327,23 @@ export class CloudflareVector extends MastraVector<VectorizeVectorFilter> {
       });
     }
 
+    if (!update.vector) {
+      throw new MastraError({
+        id: createVectorErrorId('VECTORIZE', 'UPDATE_VECTOR', 'MISSING_VECTOR'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'Vectorize requires vector values when updating; metadata-only updates are not supported. Provide update.vector alongside update.metadata.',
+        details: { indexName, id },
+      });
+    }
+
     try {
-      const updatePayload: any = {
+      await this.upsert({
+        indexName,
         ids: [id],
-        account_id: this.accountId,
-      };
-
-      if (update.vector) {
-        updatePayload.vectors = [update.vector];
-      }
-      if (update.metadata) {
-        updatePayload.metadata = [update.metadata];
-      }
-
-      await this.upsert({ indexName: indexName, vectors: updatePayload.vectors, metadata: updatePayload.metadata });
+        vectors: [update.vector],
+        ...(update.metadata && { metadata: [update.metadata] }),
+      });
     } catch (error) {
       throw new MastraError(
         {
@@ -386,17 +389,74 @@ export class CloudflareVector extends MastraVector<VectorizeVectorFilter> {
     }
   }
 
+  /**
+   * Deletes multiple vectors by their IDs.
+   *
+   * Vectorize has no filtered-delete primitive, so metadata-filter deletion is rejected.
+   *
+   * @param indexName - The name of the index containing the vectors.
+   * @param ids - The IDs of the vectors to delete. Mutually exclusive with `filter`.
+   * @throws Will throw an error if the arguments are invalid or the deletion operation fails.
+   */
   async deleteVectors({ indexName, filter, ids }: DeleteVectorsParams): Promise<void> {
-    throw new MastraError({
-      id: createVectorErrorId('VECTORIZE', 'DELETE_VECTORS', 'NOT_SUPPORTED'),
-      text: 'deleteVectors is not yet implemented for Vectorize vector store',
-      domain: ErrorDomain.STORAGE,
-      category: ErrorCategory.SYSTEM,
-      details: {
-        indexName,
-        ...(filter && { filter: JSON.stringify(filter) }),
-        ...(ids && { idsCount: ids.length }),
-      },
-    });
+    if (ids && filter) {
+      throw new MastraError({
+        id: createVectorErrorId('VECTORIZE', 'DELETE_VECTORS', 'MUTUALLY_EXCLUSIVE'),
+        text: 'Cannot specify both ids and filter - they are mutually exclusive',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName },
+      });
+    }
+
+    if (filter) {
+      throw new MastraError({
+        id: createVectorErrorId('VECTORIZE', 'DELETE_VECTORS', 'UNSUPPORTED_FILTER'),
+        text: 'Deleting by metadata filter is not supported for Vectorize vector store - delete by ids instead',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.SYSTEM,
+        details: { indexName, filter: JSON.stringify(filter) },
+      });
+    }
+
+    if (!ids) {
+      throw new MastraError({
+        id: createVectorErrorId('VECTORIZE', 'DELETE_VECTORS', 'NO_TARGET'),
+        text: 'Either filter or ids must be provided',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName },
+      });
+    }
+
+    if (ids.length === 0) {
+      throw new MastraError({
+        id: createVectorErrorId('VECTORIZE', 'DELETE_VECTORS', 'EMPTY_IDS'),
+        text: 'Cannot delete with empty ids array',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName },
+      });
+    }
+
+    try {
+      await this.client.vectorize.indexes.deleteByIds(indexName, {
+        ids,
+        account_id: this.accountId,
+      });
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createVectorErrorId('VECTORIZE', 'DELETE_VECTORS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            indexName,
+            idsCount: ids.length,
+          },
+        },
+        error,
+      );
+    }
   }
 }

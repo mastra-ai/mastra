@@ -1,35 +1,22 @@
 'use client';
 
-import type { DatasetItem } from '@mastra/client-js';
-import {
-  AlertDialog,
-  Button,
-  ButtonsGroup,
-  DataKeysAndValues,
-  DataPanel,
-  DropdownMenu,
-  toast,
-} from '@mastra/playground-ui';
-import { format } from 'date-fns/format';
-import {
-  BracesIcon,
-  EllipsisVerticalIcon,
-  FileInputIcon,
-  FileOutputIcon,
-  History,
-  Pencil,
-  RouteIcon,
-  TagIcon,
-  Trash2,
-} from 'lucide-react';
+import type { DatasetItem, DatasetItemToolMock } from '@mastra/client-js';
+import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
+import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
+import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
+import { toast } from '@mastra/playground-ui/utils/toast';
+import { EllipsisVerticalIcon, History, Pencil, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
 import { EditModeContent } from '../dataset-detail/dataset-item-form';
+import { DatasetItemDetails } from './dataset-item-details';
 import { useLinkComponent } from '@/lib/framework';
 
 /** Schema validation error from API */
 interface SchemaValidationError {
-  field: 'input' | 'groundTruth';
+  field: 'input' | 'groundTruth' | 'toolMocks';
   errors: Array<{ path: string; message: string }>;
 }
 
@@ -74,6 +61,9 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
   const [groundTruthValue, setGroundTruthValue] = useState('');
   const [metadataValue, setMetadataValue] = useState('');
   const [trajectoryValue, setTrajectoryValue] = useState('');
+  const [toolMocksValue, setToolMocksValue] = useState('');
+  const [scorerOverrideEnabled, setScorerOverrideEnabled] = useState(item.scorerIds !== undefined);
+  const [selectedScorerIds, setSelectedScorerIds] = useState(item.scorerIds ?? []);
   const [requestContextValue, setRequestContextValue] = useState('');
 
   // Validation error state
@@ -89,6 +79,9 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
       setGroundTruthValue(item.groundTruth ? JSON.stringify(item.groundTruth, null, 2) : '');
       setMetadataValue(item.metadata ? JSON.stringify(item.metadata, null, 2) : '');
       setTrajectoryValue(item.expectedTrajectory ? JSON.stringify(item.expectedTrajectory, null, 2) : '');
+      setToolMocksValue(item.toolMocks?.length ? JSON.stringify(item.toolMocks, null, 2) : '');
+      setScorerOverrideEnabled(item.scorerIds !== undefined);
+      setSelectedScorerIds(item.scorerIds ?? []);
       setRequestContextValue(item.requestContext ? JSON.stringify(item.requestContext, null, 2) : '');
       setIsEditing(false); // Exit edit mode on item change
       setShowDeleteConfirm(false); // Reset delete state on item change
@@ -148,6 +141,24 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
       }
     }
 
+    // Parse toolMocks: empty string means clear, otherwise must be a JSON array
+    let parsedToolMocks: DatasetItemToolMock[] | undefined;
+    if (toolMocksValue.trim()) {
+      try {
+        const parsed = JSON.parse(toolMocksValue);
+        if (!Array.isArray(parsed)) {
+          toast.error('Tool Mocks must be a JSON array');
+          return;
+        }
+        parsedToolMocks = parsed as DatasetItemToolMock[];
+      } catch {
+        toast.error('Tool Mocks must be valid JSON');
+        return;
+      }
+    } else {
+      parsedToolMocks = [];
+    }
+
     // Parse requestContext if provided
     let parsedRequestContext: Record<string, unknown> | undefined;
     if (requestContextValue.trim()) {
@@ -159,18 +170,29 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
       }
     }
 
+    let scorerIds: string[] | null | undefined;
+    if (scorerOverrideEnabled) {
+      scorerIds = selectedScorerIds;
+    } else if (item.scorerIds !== undefined) {
+      scorerIds = null;
+    }
+
     try {
-      await updateItem.mutateAsync({
+      const updatedItem = await updateItem.mutateAsync({
         datasetId,
         itemId: item.id,
         input: parsedInput,
         groundTruth: parsedGroundTruth,
         metadata: parsedMetadata,
         expectedTrajectory: parsedTrajectory,
+        toolMocks: parsedToolMocks,
+        scorerIds,
         requestContext: parsedRequestContext,
       });
 
       toast.success('Item updated successfully');
+      setScorerOverrideEnabled(updatedItem.scorerIds !== undefined);
+      setSelectedScorerIds(updatedItem.scorerIds ?? []);
       setIsEditing(false);
       setValidationErrors(null);
     } catch (error) {
@@ -190,6 +212,9 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
     setGroundTruthValue(item.groundTruth ? JSON.stringify(item.groundTruth, null, 2) : '');
     setMetadataValue(item.metadata ? JSON.stringify(item.metadata, null, 2) : '');
     setTrajectoryValue(item.expectedTrajectory ? JSON.stringify(item.expectedTrajectory, null, 2) : '');
+    setToolMocksValue(item.toolMocks?.length ? JSON.stringify(item.toolMocks, null, 2) : '');
+    setScorerOverrideEnabled(item.scorerIds !== undefined);
+    setSelectedScorerIds(item.scorerIds ?? []);
     setRequestContextValue(item.requestContext ? JSON.stringify(item.requestContext, null, 2) : '');
     setIsEditing(false);
     setValidationErrors(null);
@@ -239,7 +264,7 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
               <>
                 <Button
                   as={Link}
-                  href={`/datasets/${datasetId}/items/${item.id}`}
+                  href={`/datasets/${datasetId}/items/${item.id}/versions?version=${item.datasetVersion}`}
                   size="md"
                   tooltip="Go to item versions history"
                   aria-label="Go to item versions history"
@@ -284,6 +309,12 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
               setMetadataValue={setMetadataValue}
               trajectoryValue={trajectoryValue}
               setTrajectoryValue={setTrajectoryValue}
+              toolMocksValue={toolMocksValue}
+              setToolMocksValue={setToolMocksValue}
+              scorerOverrideEnabled={scorerOverrideEnabled}
+              setScorerOverrideEnabled={setScorerOverrideEnabled}
+              selectedScorerIds={selectedScorerIds}
+              setSelectedScorerIds={setSelectedScorerIds}
               requestContextValue={requestContextValue}
               setRequestContextValue={setRequestContextValue}
               validationErrors={validationErrors}
@@ -292,63 +323,7 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
               isSaving={updateItem.isPending}
             />
           ) : (
-            <>
-              <DataKeysAndValues>
-                <DataKeysAndValues.Key>Dataset Id</DataKeysAndValues.Key>
-                <DataKeysAndValues.ValueWithCopyBtn
-                  copyTooltip="Copy Dataset Id to clipboard"
-                  copyValue={item.datasetId}
-                >
-                  {item.datasetId}
-                </DataKeysAndValues.ValueWithCopyBtn>
-                <DataKeysAndValues.Key>Version</DataKeysAndValues.Key>
-                <DataKeysAndValues.Value>v{item.datasetVersion}</DataKeysAndValues.Value>
-                <DataKeysAndValues.Key>Created</DataKeysAndValues.Key>
-                <DataKeysAndValues.Value>
-                  {format(new Date(item.createdAt), 'MMM d, yyyy h:mm aaa')}
-                </DataKeysAndValues.Value>
-                {item.updatedAt && new Date(item.updatedAt).getTime() !== new Date(item.createdAt).getTime() && (
-                  <>
-                    <DataKeysAndValues.Key>Updated</DataKeysAndValues.Key>
-                    <DataKeysAndValues.Value>
-                      {format(new Date(item.updatedAt), 'MMM d, yyyy h:mm aaa')}
-                    </DataKeysAndValues.Value>
-                  </>
-                )}
-              </DataKeysAndValues>
-
-              <div className="grid gap-3 mt-3">
-                <DataPanel.CodeSection
-                  title="Input"
-                  icon={<FileInputIcon />}
-                  codeStr={JSON.stringify(item.input ?? null, null, 2)}
-                />
-                <DataPanel.CodeSection
-                  title="Ground Truth"
-                  icon={<FileOutputIcon />}
-                  codeStr={JSON.stringify(item.groundTruth ?? null, null, 2)}
-                />
-                {item.expectedTrajectory != null && (
-                  <DataPanel.CodeSection
-                    title="Expected Trajectory"
-                    icon={<RouteIcon />}
-                    codeStr={JSON.stringify(item.expectedTrajectory, null, 2)}
-                  />
-                )}
-                {item.requestContext != null && (
-                  <DataPanel.CodeSection
-                    title="Request Context"
-                    icon={<BracesIcon />}
-                    codeStr={JSON.stringify(item.requestContext, null, 2)}
-                  />
-                )}
-                <DataPanel.CodeSection
-                  title="Metadata"
-                  icon={<TagIcon />}
-                  codeStr={JSON.stringify(item.metadata ?? null, null, 2)}
-                />
-              </div>
-            </>
+            <DatasetItemDetails item={item} />
           )}
         </DataPanel.Content>
       </DataPanel>

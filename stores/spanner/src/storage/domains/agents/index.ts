@@ -50,6 +50,7 @@ const VERSION_CONFIG_KEYS = [
   'workspace',
   'skills',
   'skillsFormat',
+  'durable',
 ] as const;
 
 export class AgentsSpanner extends AgentsStorage {
@@ -207,6 +208,7 @@ export class AgentsSpanner extends AgentsStorage {
       workspace: transformed.workspace ?? undefined,
       skills: transformed.skills ?? undefined,
       skillsFormat: transformed.skillsFormat ?? undefined,
+      durable: transformed.durable ?? undefined,
       changedFields: transformed.changedFields ?? undefined,
       changeMessage: transformed.changeMessage ?? undefined,
       createdAt: transformed.createdAt,
@@ -295,7 +297,9 @@ export class AgentsSpanner extends AgentsStorage {
             // the transaction (and its row locks) stay pending on the server
             // until explicitly released. Without this rollback, a failed
             // create() blocks subsequent reads/writes against the same rows.
-            await tx.rollback().catch(() => {});
+            await tx.rollback().catch(rollbackErr => {
+              throw new AggregateError([err, rollbackErr], 'Transaction and rollback both failed');
+            });
             throw err;
           }
         }),
@@ -396,7 +400,9 @@ export class AgentsSpanner extends AgentsStorage {
             });
             await tx.commit();
           } catch (err) {
-            await tx.rollback().catch(() => {});
+            await tx.rollback().catch(rollbackErr => {
+              throw new AggregateError([err, rollbackErr], 'Transaction and rollback both failed');
+            });
             throw err;
           }
         }),

@@ -1,6 +1,5 @@
 import { Workspace, CompositeFilesystem } from '@mastra/core/workspace';
-import type { WorkspaceFilesystem, WorkspaceSandbox, SkillSource } from '@mastra/core/workspace';
-import type { WorkspaceConfig } from '@mastra/core/workspace';
+import type { WorkspaceFilesystem, WorkspaceSandbox, SkillSource, WorkspaceConfig } from '@mastra/core/workspace';
 import type {
   StorageCreateWorkspaceInput,
   StorageUpdateWorkspaceInput,
@@ -9,11 +8,11 @@ import type {
   StorageResolvedWorkspaceType,
   StorageListWorkspacesResolvedOutput,
   StorageWorkspaceSnapshotType,
-  StorageWorkspaceToolsConfig,
   StorageFilesystemConfig,
   StorageSandboxConfig,
 } from '@mastra/core/storage';
 
+import { toRuntimeWorkspaceToolsConfig, toStorageWorkspaceToolsConfig } from '../workspace-tools-config';
 import { CrudEditorNamespace } from './base';
 import type { StorageAdapter } from './base';
 
@@ -128,9 +127,8 @@ export class EditorWorkspaceNamespace extends CrudEditorNamespace<
       config.skills = snapshot.skills;
     }
 
-    // Workspace tool configuration maps directly
     if (snapshot.tools) {
-      config.tools = snapshot.tools;
+      config.tools = toRuntimeWorkspaceToolsConfig(snapshot.tools);
     }
 
     if (snapshot.autoSync !== undefined) {
@@ -183,11 +181,8 @@ export class EditorWorkspaceNamespace extends CrudEditorNamespace<
 
     const tools = workspace.getToolsConfig();
     if (tools) {
-      // Only serialize static boolean values — runtime functions can't be stored
-      const storageTools: StorageWorkspaceToolsConfig = {};
-      if (typeof tools.enabled === 'boolean') storageTools.enabled = tools.enabled;
-      if (typeof tools.requireApproval === 'boolean') storageTools.requireApproval = tools.requireApproval;
-      if (Object.keys(storageTools).length > 0) {
+      const storageTools = toStorageWorkspaceToolsConfig(tools);
+      if (storageTools) {
         snapshot.tools = storageTools;
       }
     }
@@ -240,6 +235,24 @@ export class EditorWorkspaceNamespace extends CrudEditorNamespace<
     return await provider.createSandbox(sandboxConfig.config);
   }
 
+  /**
+   * Resolve a stored workspace provider config to a complete runtime Workspace instance.
+   * Looks up the provider by ID in the editor's workspace provider registry.
+   */
+  async resolveWorkspaceProvider(
+    providerId: string,
+    config: Record<string, unknown>,
+  ): Promise<Workspace<any, any, any>> {
+    const provider = this.editor.__workspaces.get(providerId);
+    if (!provider) {
+      throw new Error(
+        `Workspace provider "${providerId}" is not registered. ` +
+          `Register it via new MastraEditor({ workspaces: { '${providerId}': yourProvider } })`,
+      );
+    }
+    return await provider.createWorkspace(config);
+  }
+
   protected async getStorageAdapter(): Promise<
     StorageAdapter<
       StorageCreateWorkspaceInput,
@@ -257,7 +270,29 @@ export class EditorWorkspaceNamespace extends CrudEditorNamespace<
 
     return {
       create: input => store.create({ workspace: input }),
-      getByIdResolved: id => store.getByIdResolved(id),
+      getByIdResolved: async (id, options) => {
+        if (options?.versionId || options?.versionNumber !== undefined) {
+          const workspace = await store.getById(id);
+          if (!workspace) return null;
+
+          const version = options.versionId
+            ? await store.getVersion(options.versionId)
+            : await store.getVersionByNumber(id, options.versionNumber!);
+          if (!version || version.workspaceId !== id) return null;
+
+          const {
+            id: versionId,
+            workspaceId: _workspaceId,
+            versionNumber: _versionNumber,
+            changedFields: _changedFields,
+            changeMessage: _changeMessage,
+            createdAt: _createdAt,
+            ...snapshot
+          } = version;
+          return { ...workspace, ...snapshot, resolvedVersionId: versionId } as StorageResolvedWorkspaceType;
+        }
+        return store.getByIdResolved(id, options?.status ? { status: options.status } : undefined);
+      },
       update: input => store.update(input),
       delete: id => store.delete(id),
       list: args => store.list(args),

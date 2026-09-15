@@ -1,7 +1,14 @@
+import { RequestContext } from '@mastra/core/di';
 import { SpanType, SamplingStrategyType, InternalSpans } from '@mastra/core/observability';
-import type { TracingEvent, ObservabilityExporter, AnyExportedSpan } from '@mastra/core/observability';
+import type { TracingEvent, MetricEvent, ObservabilityExporter, AnyExportedSpan } from '@mastra/core/observability';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DefaultObservabilityInstance } from './instances';
+import { PricingRegistry } from './metrics/pricing-registry';
+import { SensitiveDataFilter } from './span_processors';
+
+const testPricingRegistry = PricingRegistry.fromText(`
+{"i":"mock-provider-mock-model-id","p":"mock-provider","m":"mock-model-id","s":{"v":"model_pricing/v1","d":{"u":"USD","t":[{"r":{"it":{"c":1e-7},"ot":{"c":2e-7}}}]}}}
+`);
 
 // Mock console to avoid noise in test output
 const mockConsole = {
@@ -82,6 +89,101 @@ describe('Span Filtering', () => {
       expect(spanTypes).not.toContain(SpanType.MODEL_CHUNK);
       expect(spanTypes).toContain(SpanType.AGENT_RUN);
       expect(spanTypes).toContain(SpanType.MODEL_GENERATION);
+    });
+
+    it('should reparent descendants of excluded spans so exporters see no orphans', () => {
+      // Documented config: drop MODEL_STEP / MODEL_CHUNK. Tool calls are
+      // children of MODEL_STEP — without reparenting they export parentSpanId
+      // pointing at a span exporters never received (#20818).
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+        excludeSpanTypes: [SpanType.MODEL_CHUNK, SpanType.MODEL_STEP],
+      });
+
+      const agentSpan = tracing.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+      });
+      const modelSpan = agentSpan.createChildSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-model',
+        attributes: { model: 'gpt-4', provider: 'openai' },
+      });
+      const stepSpan = modelSpan.createChildSpan({
+        type: SpanType.MODEL_STEP,
+        name: 'test-step',
+      });
+      const toolSpan = stepSpan.createChildSpan({
+        type: SpanType.TOOL_CALL,
+        name: "tool: 'my_tool'",
+        attributes: { toolId: 'my_tool', toolType: 'function' },
+      });
+
+      expect(stepSpan.isExcluded).toBe(true);
+      expect(toolSpan.getParentSpanId()).toBe(modelSpan.id);
+      expect(toolSpan.exportSpan().parentSpanId).toBe(modelSpan.id);
+      // includeInternalSpans must still skip excludeSpanTypes ancestors
+      expect(toolSpan.getParentSpanId(true)).toBe(modelSpan.id);
+      expect(toolSpan.exportSpan(true).parentSpanId).toBe(modelSpan.id);
+
+      toolSpan.end();
+      stepSpan.end();
+      modelSpan.end();
+      agentSpan.end();
+
+      const exported = testExporter.events
+        .filter(e => e.type === 'span_ended' || e.type === 'span_started')
+        .map(e => e.exportedSpan);
+      const byId = new Map(exported.map(s => [s.id, s]));
+      const toolExported = exported.find(s => s.type === SpanType.TOOL_CALL);
+      expect(toolExported).toBeDefined();
+      expect(toolExported!.parentSpanId).toBe(modelSpan.id);
+      expect(byId.has(toolExported!.parentSpanId!)).toBe(true);
+
+      const orphans = exported.filter(s => s.parentSpanId && !byId.has(s.parentSpanId));
+      expect(orphans).toEqual([]);
+    });
+
+    it('carries the root external parent when reparenting collapses to it', () => {
+      // When the trace root itself is excluded, descendants export at the
+      // root's position. The root's external parent (ambient OTel) must
+      // travel with them as externalParentSpanId — never as the stored
+      // parent, which would point outside Mastra storage.
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+        excludeSpanTypes: [SpanType.WORKFLOW_RUN],
+      });
+
+      const rootSpan = tracing.startSpan({
+        type: SpanType.WORKFLOW_RUN,
+        name: 'workflow-under-otel',
+        tracingOptions: { parentSpanId: 'ffff0000ffff0000' },
+      });
+      const stepSpan = rootSpan.createChildSpan({
+        type: SpanType.WORKFLOW_STEP,
+        name: 'step',
+      });
+      const toolSpan = stepSpan.createChildSpan({
+        type: SpanType.TOOL_CALL,
+        name: "tool: 'my_tool'",
+        attributes: { toolId: 'my_tool', toolType: 'function' },
+      });
+
+      expect((rootSpan as any).isExcluded).toBe(true);
+
+      // Collapsed to the root's position — no stored parent, external id travels
+      expect(stepSpan.exportSpan().parentSpanId).toBeUndefined();
+      expect(stepSpan.exportSpan().externalParentSpanId).toBe('ffff0000ffff0000');
+
+      // A child with an exported Mastra parent keeps that parent
+      expect(toolSpan.exportSpan().parentSpanId).toBe(stepSpan.id);
+      expect(toolSpan.exportSpan().externalParentSpanId).toBeUndefined();
     });
 
     it('should export all spans when excludeSpanTypes is empty', () => {
@@ -302,6 +404,34 @@ describe('Span Filtering', () => {
       parent.end();
     });
 
+    it('should not read requestContext on excluded span types', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+        excludeSpanTypes: [SpanType.MODEL_CHUNK],
+      });
+
+      const requestContext = new RequestContext();
+      requestContext.set('userId', 'user-123');
+      const sizeSpy = vi.spyOn(requestContext, 'size');
+      const serializeSpy = vi.spyOn(requestContext, 'serializeForSpan');
+
+      const parent = tracing.startSpan({ type: SpanType.AGENT_RUN, name: 'agent' });
+      const chunk = parent.createChildSpan({
+        type: SpanType.MODEL_CHUNK,
+        name: 'chunk',
+        requestContext,
+      });
+
+      expect(sizeSpy).not.toHaveBeenCalled();
+      expect(serializeSpy).not.toHaveBeenCalled();
+      expect(chunk.requestContext).toBeUndefined();
+
+      parent.end();
+    });
+
     it('should still attach metadata on excluded spans for correlation context', () => {
       const tracing = new DefaultObservabilityInstance({
         serviceName: 'test',
@@ -492,6 +622,297 @@ describe('Span Filtering', () => {
       // Only AGENT_RUN events should be exported
       const spanTypes = testExporter.events.map(e => e.exportedSpan.type);
       expect(spanTypes).not.toContain(SpanType.MODEL_CHUNK);
+    });
+  });
+
+  describe('metrics decoupled from span export filtering', () => {
+    class MetricCollectingExporter implements ObservabilityExporter {
+      name = 'metric-collector';
+      tracingEvents: TracingEvent[] = [];
+      metricEvents: MetricEvent[] = [];
+
+      async onTracingEvent(event: TracingEvent): Promise<void> {
+        this.tracingEvents.push(event);
+      }
+      async onMetricEvent(event: MetricEvent): Promise<void> {
+        this.metricEvents.push(event);
+      }
+      async shutdown(): Promise<void> {}
+      async flush(): Promise<void> {}
+    }
+
+    it('should emit duration metrics for spans excluded via excludeSpanTypes', async () => {
+      const collector = new MetricCollectingExporter();
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [collector],
+        excludeSpanTypes: [SpanType.AGENT_RUN],
+      });
+
+      const agentSpan = tracing.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+      });
+      agentSpan.end();
+      await tracing.flush();
+
+      // Span should NOT be exported
+      const exportedTypes = collector.tracingEvents.map(e => e.exportedSpan.type);
+      expect(exportedTypes).not.toContain(SpanType.AGENT_RUN);
+
+      // Duration metric SHOULD still be emitted
+      const durationMetric = collector.metricEvents.find(e => e.metric.name === 'mastra_agent_duration_ms');
+      expect(durationMetric).toBeDefined();
+
+      await tracing.shutdown();
+    });
+
+    it('should emit token and cost metrics for model spans excluded via excludeSpanTypes', async () => {
+      const pricingRegistrySpy = vi.spyOn(PricingRegistry, 'getGlobal').mockReturnValue(testPricingRegistry);
+      const collector = new MetricCollectingExporter();
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [collector],
+        excludeSpanTypes: [SpanType.MODEL_GENERATION],
+      });
+
+      try {
+        const agentSpan = tracing.startSpan({
+          type: SpanType.AGENT_RUN,
+          name: 'test-agent',
+        });
+        const modelSpan = agentSpan.createChildSpan({
+          type: SpanType.MODEL_GENERATION,
+          name: "llm: 'mock'",
+        });
+        modelSpan.end({
+          attributes: {
+            provider: 'mock-provider',
+            model: 'mock-model-id',
+            usage: { inputTokens: 30, outputTokens: 35 },
+          },
+        });
+        agentSpan.end();
+        await tracing.flush();
+
+        // MODEL_GENERATION should NOT be exported
+        const exportedTypes = collector.tracingEvents.map(e => e.exportedSpan.type);
+        expect(exportedTypes).not.toContain(SpanType.MODEL_GENERATION);
+
+        // Duration, token, and cost metrics SHOULD still be emitted
+        const durationMetric = collector.metricEvents.find(e => e.metric.name === 'mastra_model_duration_ms');
+        expect(durationMetric).toBeDefined();
+
+        const inputTokenMetrics = collector.metricEvents.filter(
+          e => e.metric.name === 'mastra_model_total_input_tokens',
+        );
+        expect(inputTokenMetrics).toHaveLength(1);
+        const inputTokenMetric = inputTokenMetrics[0];
+        expect(inputTokenMetric?.metric.value).toBe(30);
+        expect(inputTokenMetric?.metric.costContext).toMatchObject({
+          provider: 'mock-provider',
+          model: 'mock-model-id',
+          costUnit: 'USD',
+          estimatedCost: 0.000003,
+        });
+
+        const outputTokenMetrics = collector.metricEvents.filter(
+          e => e.metric.name === 'mastra_model_total_output_tokens',
+        );
+        expect(outputTokenMetrics).toHaveLength(1);
+        const outputTokenMetric = outputTokenMetrics[0];
+        expect(outputTokenMetric?.metric.value).toBe(35);
+        expect(outputTokenMetric?.metric.costContext).toMatchObject({
+          provider: 'mock-provider',
+          model: 'mock-model-id',
+          costUnit: 'USD',
+          estimatedCost: 0.000007,
+        });
+      } finally {
+        await tracing.shutdown();
+        pricingRegistrySpy.mockRestore();
+      }
+    });
+
+    it('should preserve cost context when provider/model are only in start attributes (real AI SDK pattern)', async () => {
+      const pricingRegistrySpy = vi.spyOn(PricingRegistry, 'getGlobal').mockReturnValue(testPricingRegistry);
+      const collector = new MetricCollectingExporter();
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [collector],
+        excludeSpanTypes: [SpanType.MODEL_GENERATION],
+      });
+
+      try {
+        const agentSpan = tracing.startSpan({
+          type: SpanType.AGENT_RUN,
+          name: 'test-agent',
+        });
+        // provider/model set at creation time, matching real AI SDK behaviour
+        const modelSpan = agentSpan.createChildSpan({
+          type: SpanType.MODEL_GENERATION,
+          name: "llm: 'mock'",
+          attributes: {
+            provider: 'mock-provider',
+            model: 'mock-model-id',
+            responseModel: '   ',
+          },
+        });
+        // end() only passes responseModel + usage (not provider/model)
+        modelSpan.end({
+          attributes: {
+            responseModel: '',
+            usage: { inputTokens: 20, outputTokens: 15 },
+          },
+        });
+        agentSpan.end();
+        await tracing.flush();
+
+        const inputTokenMetrics = collector.metricEvents.filter(
+          e => e.metric.name === 'mastra_model_total_input_tokens',
+        );
+        expect(inputTokenMetrics).toHaveLength(1);
+        expect(inputTokenMetrics[0]?.metric.value).toBe(20);
+        // costContext must have provider from start attributes
+        expect(inputTokenMetrics[0]?.metric.costContext).toMatchObject({
+          provider: 'mock-provider',
+          model: 'mock-model-id',
+          costUnit: 'USD',
+        });
+        expect(inputTokenMetrics[0]?.metric.costContext?.estimatedCost).toBeGreaterThan(0);
+      } finally {
+        await tracing.shutdown();
+        pricingRegistrySpy.mockRestore();
+      }
+    });
+
+    it('should emit duration metrics for spans dropped by spanFilter', async () => {
+      const collector = new MetricCollectingExporter();
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [collector],
+        spanFilter: (span: AnyExportedSpan) => span.type !== SpanType.TOOL_CALL,
+      });
+
+      const agentSpan = tracing.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+      });
+      const toolSpan = agentSpan.createChildSpan({
+        type: SpanType.TOOL_CALL,
+        name: 'test-tool',
+      });
+      toolSpan.end();
+      agentSpan.end();
+      await tracing.flush();
+
+      // TOOL_CALL should NOT be exported
+      const exportedTypes = collector.tracingEvents.map(e => e.exportedSpan.type);
+      expect(exportedTypes).not.toContain(SpanType.TOOL_CALL);
+
+      // Tool duration metric SHOULD still be emitted
+      const toolDuration = collector.metricEvents.find(e => e.metric.name === 'mastra_tool_duration_ms');
+      expect(toolDuration).toBeDefined();
+
+      await tracing.shutdown();
+    });
+
+    it('should not emit metrics for internal spans (no double-count with rollup)', async () => {
+      const collector = new MetricCollectingExporter();
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [collector],
+      });
+
+      const processorSpan = tracing.startSpan({
+        type: SpanType.PROCESSOR_RUN,
+        name: 'test-processor',
+      });
+      const hiddenModel = processorSpan.createChildSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: "llm: 'mock'",
+        tracingPolicy: { internal: InternalSpans.ALL },
+      });
+      hiddenModel.end({
+        attributes: {
+          provider: 'mock-provider',
+          model: 'mock-model-id',
+          responseModel: '   ',
+          usage: { inputTokens: 50, outputTokens: 10 },
+        },
+      });
+      processorSpan.end();
+      await tracing.flush();
+
+      // Token metrics should only appear once (from rollup, not duplicated).
+      const inputTokenMetrics = collector.metricEvents.filter(e => e.metric.name === 'mastra_model_total_input_tokens');
+      expect(inputTokenMetrics).toHaveLength(1);
+      expect(inputTokenMetrics[0]!.metric.value).toBe(50);
+
+      await tracing.shutdown();
+    });
+
+    it('should still emit metrics for exported spans (no regression)', async () => {
+      const collector = new MetricCollectingExporter();
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [collector],
+      });
+
+      const agentSpan = tracing.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+      });
+      agentSpan.end();
+      await tracing.flush();
+
+      // Span SHOULD be exported
+      const exportedTypes = collector.tracingEvents.map(e => e.exportedSpan.type);
+      expect(exportedTypes).toContain(SpanType.AGENT_RUN);
+
+      // Duration metric SHOULD also be emitted
+      const durationMetric = collector.metricEvents.find(e => e.metric.name === 'mastra_agent_duration_ms');
+      expect(durationMetric).toBeDefined();
+
+      await tracing.shutdown();
+    });
+
+    it('should apply span output processors before emitting auto-extracted metrics', async () => {
+      const collector = new MetricCollectingExporter();
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [collector],
+        spanOutputProcessors: [new SensitiveDataFilter()],
+      });
+
+      const agentSpan = tracing.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+      });
+      agentSpan.end({ metadata: { apiKey: 'sk-real-secret' } });
+      await tracing.flush();
+
+      const endedSpan = collector.tracingEvents.find(e => e.type === 'span_ended')?.exportedSpan;
+      expect(endedSpan?.metadata?.apiKey).toBe('[REDACTED]');
+
+      const durationMetric = collector.metricEvents.find(e => e.metric.name === 'mastra_agent_duration_ms');
+      expect(durationMetric?.metric.metadata?.apiKey).toBe('[REDACTED]');
+
+      await tracing.shutdown();
     });
   });
 });

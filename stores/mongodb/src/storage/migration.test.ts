@@ -264,6 +264,112 @@ describe('MongoDB Spans Schema Compatibility', () => {
     // Clean up
     await collection.deleteMany({ traceId: 'mixed-test-trace' });
   });
+
+  it('should apply trace date filters to both legacy string dates and BSON dates', async () => {
+    const db = client.db(TEST_CONFIG.dbName);
+    const collection = db.collection(SPANS_COLLECTION);
+    const tracePrefix = `mixed-date-filter-${Date.now()}`;
+
+    try {
+      await collection.insertMany([
+        {
+          traceId: `${tracePrefix}-legacy`,
+          spanId: 'root',
+          parentSpanId: null,
+          name: 'Legacy String Date Span',
+          spanType: SpanType.AGENT_RUN,
+          scope: null,
+          attributes: null,
+          metadata: null,
+          links: null,
+          input: null,
+          output: null,
+          error: null,
+          isEvent: false,
+          startedAt: '2024-02-01T00:00:00.000Z',
+          endedAt: '2024-02-01T00:00:05.000Z',
+          createdAt: '2024-02-01T00:00:00.000Z',
+          updatedAt: '2024-02-01T00:00:05.000Z',
+        },
+        {
+          traceId: `${tracePrefix}-date`,
+          spanId: 'root',
+          parentSpanId: null,
+          name: 'BSON Date Span',
+          spanType: SpanType.AGENT_RUN,
+          scope: null,
+          attributes: null,
+          metadata: null,
+          links: null,
+          input: null,
+          output: null,
+          error: null,
+          isEvent: false,
+          startedAt: new Date('2024-02-01T00:00:10.000Z'),
+          endedAt: new Date('2024-02-01T00:00:15.000Z'),
+          createdAt: new Date('2024-02-01T00:00:10.000Z'),
+          updatedAt: new Date('2024-02-01T00:00:15.000Z'),
+        },
+        {
+          traceId: `${tracePrefix}-outside`,
+          spanId: 'root',
+          parentSpanId: null,
+          name: 'Outside Date Range Span',
+          spanType: SpanType.AGENT_RUN,
+          scope: null,
+          attributes: null,
+          metadata: null,
+          links: null,
+          input: null,
+          output: null,
+          error: null,
+          isEvent: false,
+          startedAt: '2024-03-01T00:00:00.000Z',
+          endedAt: '2024-03-01T00:00:05.000Z',
+          createdAt: '2024-03-01T00:00:00.000Z',
+          updatedAt: '2024-03-01T00:00:05.000Z',
+        },
+      ]);
+
+      await store.init();
+      const observabilityStore = await store.getStore('observability');
+      expect(observabilityStore).toBeDefined();
+
+      const byStartedAt = await observabilityStore?.listTraces({
+        filters: {
+          startedAt: {
+            start: new Date('2024-02-01T00:00:00.000Z'),
+            end: new Date('2024-02-01T00:00:30.000Z'),
+          },
+        },
+        pagination: { page: 0, perPage: 10 },
+      });
+
+      expect(byStartedAt?.spans.map(span => span.traceId).sort()).toEqual([
+        `${tracePrefix}-date`,
+        `${tracePrefix}-legacy`,
+      ]);
+      expect(byStartedAt?.spans.every(span => span.startedAt instanceof Date)).toBe(true);
+
+      const byEndedAt = await observabilityStore?.listTraces({
+        filters: {
+          endedAt: {
+            start: new Date('2024-02-01T00:00:00.000Z'),
+            end: new Date('2024-02-01T00:00:30.000Z'),
+          },
+        },
+        pagination: { page: 0, perPage: 10 },
+      });
+
+      expect(byEndedAt?.spans.map(span => span.traceId).sort()).toEqual([
+        `${tracePrefix}-date`,
+        `${tracePrefix}-legacy`,
+      ]);
+      expect(byEndedAt?.spans.every(span => span.endedAt instanceof Date)).toBe(true);
+    } finally {
+      await collection.deleteMany({ traceId: { $regex: `^${tracePrefix}` } });
+    }
+  });
 });
 
 /**

@@ -1,0 +1,43 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "Propose a tok/s spike reproduction plan",
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_plan_tok_spike",
+            "name": "submit_plan",
+            "arguments": {
+              "path": ".mastracode/plans/tok-spike-test.md"
+            }
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 200,
+          "completion_tokens": 550,
+          "total_tokens": 750
+        }
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "hasToolResult": true
+      },
+      "response": {
+        "content": "Plan approved. Beginning implementation of the reproduction steps.",
+        "usage": {
+          "prompt_tokens": 300,
+          "completion_tokens": 40,
+          "total_tokens": 340
+        }
+      }
+    }
+  ]
+}

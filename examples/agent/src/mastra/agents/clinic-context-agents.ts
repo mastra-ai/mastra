@@ -42,7 +42,8 @@ Always include the clinicId and patientId in your response.`,
 export const clinicSupervisorAgent = new Agent({
   id: 'clinic-supervisor-agent',
   name: 'Clinic Supervisor Agent',
-  description: 'Supervisor agent that delegates patient lookups to the specialist sub-agent. Tests requestContext propagation through agent delegation.',
+  description:
+    'Supervisor agent that delegates patient lookups to the specialist sub-agent. Tests requestContext propagation through agent delegation.',
   instructions: `You are a clinic supervisor. When a user asks you to look up patient data, delegate the task to the clinic-specialist-agent.
 Do not look up records yourself — always hand off to the specialist.
 Report back the specialist's response, including the clinicId they used.`,

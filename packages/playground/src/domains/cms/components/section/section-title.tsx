@@ -1,4 +1,4 @@
-import { cn } from '@mastra/playground-ui';
+import { cn } from '@mastra/playground-ui/utils/cn';
 
 export type SectionTitleProps = {
   icon?: React.ReactNode;

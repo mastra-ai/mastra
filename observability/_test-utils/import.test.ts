@@ -7,8 +7,8 @@
  */
 
 import { describe, it } from 'vitest';
-import fs from 'fs';
-import path from 'path';
+import fs from 'node:fs';
+import path from 'node:path';
 
 // Discover all public exporter packages in observability directory
 function getObservabilityPackages() {

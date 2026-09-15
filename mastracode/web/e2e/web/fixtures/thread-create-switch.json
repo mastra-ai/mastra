@@ -1,0 +1,24 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "Hello from thread one"
+      },
+      "response": {
+        "content": "THREAD_ONE_RESPONSE"
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "Hello from thread two"
+      },
+      "response": {
+        "content": "THREAD_TWO_RESPONSE"
+      }
+    }
+  ]
+}

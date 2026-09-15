@@ -9,6 +9,7 @@ import { HTTPException } from '../http-exception';
 import {
   threadIdPathParams,
   agentIdQuerySchema,
+  optionalAgentIdQuerySchema,
   getMemoryStatusQuerySchema,
   getMemoryConfigQuerySchema,
   listThreadsQuerySchema,
@@ -45,6 +46,8 @@ import {
   deleteMessagesResponseSchema,
   cloneThreadBodySchema,
   cloneThreadResponseSchema,
+  transferThreadBodySchema,
+  transferThreadResponseSchema,
   getObservationalMemoryQuerySchema,
   getObservationalMemoryResponseSchema,
   awaitBufferStatusBodySchema,
@@ -61,7 +64,13 @@ import {
   toLocalMessage,
   toLocalOMRecord,
 } from './gateway-memory-client';
-import { validateBody, getEffectiveResourceId, getEffectiveThreadId, enforceThreadAccess } from './utils';
+import {
+  validateBody,
+  getEffectiveResourceId,
+  getContextResourceId,
+  getEffectiveThreadId,
+  enforceThreadAccess,
+} from './utils';
 
 interface MemoryContext extends Context {
   agentId?: string;
@@ -1106,6 +1115,13 @@ export const LIST_MESSAGES_ROUTE = createRoute({
       if (agent && (await isGatewayAgentAsync(agent))) {
         const gwClient = getGatewayClient();
         if (gwClient) {
+          if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
+            throw new HTTPException(501, {
+              message:
+                'Gateway memory message metadata filters are not supported by this gateway endpoint. Remove filter.metadata or query a local memory store.',
+            });
+          }
+
           // Validate thread ownership before returning messages
           const threadResult = await gwClient.getThread(effectiveThreadId);
           if (threadResult) {
@@ -1298,8 +1314,14 @@ export const SAVE_MESSAGES_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Messages should be an array' });
       }
 
+      // The body schema is intentionally permissive (unknown[]); narrow to the
+      // fields this handler validates and normalizes.
+      const incomingMessages = messages as Array<
+        { id?: string; threadId?: string; resourceId?: string; createdAt?: string | Date } & Record<string, unknown>
+      >;
+
       const resourceIdByThread = new Map<string, string>();
-      for (const message of messages) {
+      for (const message of incomingMessages) {
         if (!message.threadId || !message.resourceId) {
           continue;
         }
@@ -1314,7 +1336,7 @@ export const SAVE_MESSAGES_ROUTE = createRoute({
       }
 
       // Validate that all messages have threadId and resourceId
-      const invalidMessages = messages.filter(message => !message.threadId || !message.resourceId);
+      const invalidMessages = incomingMessages.filter(message => !message.threadId || !message.resourceId);
       if (invalidMessages.length > 0) {
         throw new HTTPException(400, {
           message: `All messages must have threadId and resourceId fields. Found ${invalidMessages.length} invalid message(s).`,
@@ -1323,7 +1345,7 @@ export const SAVE_MESSAGES_ROUTE = createRoute({
 
       // If effectiveResourceId is set, validate all messages belong to this resource
       if (effectiveResourceId) {
-        const unauthorizedMessages = messages.filter(message => message.resourceId !== effectiveResourceId);
+        const unauthorizedMessages = incomingMessages.filter(message => message.resourceId !== effectiveResourceId);
         if (unauthorizedMessages.length > 0) {
           throw new HTTPException(403, {
             message: 'Access denied: cannot save messages for a different resource',
@@ -1331,7 +1353,7 @@ export const SAVE_MESSAGES_ROUTE = createRoute({
         }
 
         // Validate that all threads belong to this resource (prevents cross-resource data pollution)
-        const threadIds = [...new Set(messages.map(m => m.threadId).filter(Boolean))] as string[];
+        const threadIds = [...new Set(incomingMessages.map(m => m.threadId).filter(Boolean))] as string[];
         for (const threadId of threadIds) {
           const thread = await memory.getThreadById({ threadId });
           await enforceThreadAccess({
@@ -1344,7 +1366,7 @@ export const SAVE_MESSAGES_ROUTE = createRoute({
           });
         }
       } else {
-        const threadIds = [...new Set(messages.map(m => m.threadId).filter(Boolean))] as string[];
+        const threadIds = [...new Set(incomingMessages.map(m => m.threadId).filter(Boolean))] as string[];
         for (const threadId of threadIds) {
           const thread = await memory.getThreadById({ threadId });
           await enforceThreadAccess({
@@ -1358,7 +1380,7 @@ export const SAVE_MESSAGES_ROUTE = createRoute({
         }
       }
 
-      const processedMessages = messages.map(message => ({
+      const processedMessages = incomingMessages.map(message => ({
         ...message,
         id: message.id || memory.generateId(),
         createdAt: message.createdAt ? new Date(message.createdAt) : new Date(),
@@ -1497,8 +1519,8 @@ export const UPDATE_THREAD_ROUTE = createRoute({
 
       const updatedThread = {
         ...thread,
-        title: title || thread.title,
-        metadata: metadata || thread.metadata,
+        title: title !== undefined ? title : thread.title,
+        metadata: metadata !== undefined ? metadata : thread.metadata,
         // Don't allow changing resourceId if effectiveResourceId is set (prevents reassigning threads)
         resourceId: effectiveResourceId || resourceId || thread.resourceId,
         createdAt: thread.createdAt,
@@ -1640,6 +1662,92 @@ export const CLONE_THREAD_ROUTE = createRoute({
       return result;
     } catch (error) {
       return handleError(error, 'Error cloning thread');
+    }
+  },
+});
+
+export const TRANSFER_THREAD_ROUTE = createRoute({
+  method: 'POST',
+  path: '/memory/threads/:threadId/transfer',
+  responseType: 'json',
+  pathParamSchema: threadIdPathParams,
+  queryParamSchema: optionalAgentIdQuerySchema,
+  bodySchema: transferThreadBodySchema,
+  responseSchema: transferThreadResponseSchema,
+  summary: 'Transfer thread ownership',
+  description:
+    'Reassigns a thread and all of its messages to a different resource. Requires a privileged (non-resource-scoped) context.',
+  tags: ['Memory'],
+  requiresAuth: true,
+  handler: async ({ mastra, agentId, threadId, resourceId, requestContext }) => {
+    try {
+      const effectiveThreadId = getEffectiveThreadId(requestContext, threadId);
+      validateBody({ threadId: effectiveThreadId });
+
+      // Privilege gate: a resource-scoped caller (user/tenant) must not reassign ownership.
+      const scopeId = getContextResourceId(requestContext);
+      if (scopeId) {
+        throw new HTTPException(403, {
+          message: 'Thread transfer requires a privileged (non-resource-scoped) context',
+        });
+      }
+
+      // Without a resource scope we can only authorize the transfer through FGA. If
+      // `server.auth` is configured but there is no FGA provider to authorize the
+      // caller, an unscoped request would otherwise be treated as privileged, which
+      // would let any authenticated caller reassign ownership. Reject that state
+      // rather than granting an implicit privilege.
+      const server = mastra.getServer?.();
+      if (server?.auth && !server?.fga) {
+        throw new HTTPException(403, {
+          message:
+            'Thread transfer requires explicit authorization. Configure an FGA provider (memory:write) to authorize privileged, non-resource-scoped transfers.',
+        });
+      }
+
+      // Intentional: when neither `server.auth` nor `server.fga` is configured the
+      // entire memory API is open by design (an unauthenticated server already exposes
+      // thread update/delete). Transfer grants no capability an attacker on such a
+      // server lacks, so an unscoped context is treated as privileged here — matching
+      // sibling mutation routes rather than adding a route-specific restriction.
+
+      const agent = agentId ? await getAgentFromContext({ mastra, agentId, requestContext }) : undefined;
+      if (agent && (await isGatewayAgentAsync(agent))) {
+        throw new HTTPException(501, { message: 'Thread transfer is not supported for gateway agents' });
+      }
+
+      // Resolve either the agent's memory or, for agent-less (storage-backed) memory,
+      // the memory store directly so a transfer without an `agentId` still works.
+      const memory = await getMemoryFromContext({ mastra, agentId, requestContext, allowMissingAgent: true });
+      const memoryStore = memory ? undefined : await getStorageFromContext({ mastra })?.getStore('memory');
+      if (!memory && !memoryStore) {
+        throw new HTTPException(400, { message: 'Memory is not initialized' });
+      }
+
+      const sourceThread = memory
+        ? await memory.getThreadById({ threadId: effectiveThreadId! })
+        : await memoryStore!.getThreadById({ threadId: effectiveThreadId! });
+      if (!sourceThread) {
+        throw new HTTPException(404, { message: 'Thread not found' });
+      }
+
+      // Privileged context: ownership check is a no-op, but FGA MEMORY_WRITE still applies when configured.
+      await enforceThreadAccess({
+        mastra,
+        requestContext,
+        threadId: effectiveThreadId!,
+        thread: sourceThread,
+        effectiveResourceId: undefined,
+        permission: MastraFGAPermissions.MEMORY_WRITE,
+      });
+
+      const result = memory
+        ? await memory.updateThreadResourceId({ threadId: effectiveThreadId!, resourceId })
+        : await memoryStore!.updateThreadResourceId({ threadId: effectiveThreadId!, resourceId });
+
+      return { ...result, resourceId: result.resourceId ?? null };
+    } catch (error) {
+      return handleError(error, 'Error transferring thread');
     }
   },
 });

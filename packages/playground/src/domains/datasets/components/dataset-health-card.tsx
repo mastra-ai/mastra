@@ -1,5 +1,7 @@
 import type { DatasetExperiment } from '@mastra/client-js';
-import { HorizontalBars, MetricsCard, CHART_COLORS } from '@mastra/playground-ui';
+import { HorizontalBars } from '@mastra/playground-ui/components/HorizontalBars';
+import { MetricsCard } from '@mastra/playground-ui/components/MetricsCard';
+import { CHART_COLORS } from '@mastra/playground-ui/domains/metrics/components/metrics-utils';
 import { useMemo } from 'react';
 
 interface DatasetHealthCardProps {
@@ -21,6 +23,7 @@ export function DatasetHealthCard({ experiments, isLoading, isError }: DatasetHe
     >();
 
     for (const exp of experiments) {
+      if (!exp.targetType || !exp.targetId) continue;
       const key = exp.targetId;
       if (!targetMap.has(key)) {
         targetMap.set(key, {

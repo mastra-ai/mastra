@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { paginationNumber } from './common';
 
 export const backgroundTaskStatusSchema = z.enum([
   'pending',
@@ -33,8 +34,8 @@ export const listBackgroundTasksQuerySchema = z.object({
   dateFilterBy: backgroundTaskDateColumnSchema.optional(),
   orderBy: backgroundTaskDateColumnSchema.optional(),
   orderDirection: z.enum(['asc', 'desc']).optional(),
-  page: z.coerce.number().optional(),
-  perPage: z.coerce.number().optional(),
+  page: paginationNumber().optional(),
+  perPage: paginationNumber().optional(),
 });
 
 export const backgroundTaskIdPathParams = z.object({
@@ -67,4 +68,4 @@ export const listBackgroundTaskResponseSchema = z.object({
   total: z.number(),
 });
 
-export const backgroundTaskStreamResponseSchema = z.any();
+export const backgroundTaskStreamResponseSchema = z.unknown();

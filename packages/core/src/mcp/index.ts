@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import slugify from '@sindresorhus/slugify';
 import type { ToolsInput } from '../agent';
 import { MastraBase } from '../base';
 import { MastraError } from '../error';
@@ -7,6 +6,7 @@ import { RegisteredLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { RequestContext } from '../request-context';
 import type { InternalCoreTool, MCPToolType } from '../tools';
+import { slugify } from '../utils/slugify';
 import type {
   MCPServerConfig,
   MCPServerHonoSSEOptions,
@@ -59,8 +59,8 @@ export abstract class MCPServerBase<TId extends string = string> extends MastraB
   protected readonly agents?: MCPServerConfig['agents'];
   /** Workflows to be exposed as tools. */
   protected readonly workflows?: MCPServerConfig['workflows'];
-  /** Original tools configuration for re-conversion when Mastra instance is registered. */
-  protected readonly originalTools: ToolsInput;
+  /** Original tools configuration for re-conversion when Mastra instance is registered. Mutable to support dynamic tool management. */
+  protected originalTools: ToolsInput;
 
   /**
    * Public getter for the server's unique ID.

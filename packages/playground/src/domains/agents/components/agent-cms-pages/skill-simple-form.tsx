@@ -1,4 +1,7 @@
-import { CodeEditor, Input, MarkdownRenderer, Txt } from '@mastra/playground-ui';
+import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
+import { Input } from '@mastra/playground-ui/components/Input';
+import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 
 export interface SkillSimpleFormProps {
   name: string;
@@ -20,7 +23,7 @@ export function SkillSimpleForm({
   readOnly,
 }: SkillSimpleFormProps) {
   return (
-    <div className="flex flex-col gap-4 h-full">
+    <div className="flex h-full flex-col gap-4">
       <div className="flex flex-col gap-1.5">
         <Txt as="label" variant="ui-sm" className="text-neutral3">
           Name
@@ -40,13 +43,13 @@ export function SkillSimpleForm({
         />
       </div>
 
-      <div className="flex flex-col gap-1.5 flex-1 min-h-0">
+      <div className="flex min-h-0 flex-1 flex-col gap-1.5">
         <Txt as="label" variant="ui-sm" className="text-neutral3">
           Instructions
         </Txt>
 
         {readOnly ? (
-          <div className="flex-1 min-h-0 overflow-y-auto rounded-lg border border-border1 bg-surface2 p-4">
+          <div className="border-border1 bg-surface2 min-h-0 flex-1 overflow-y-auto rounded-lg border p-4">
             {instructions ? (
               <MarkdownRenderer>{instructions}</MarkdownRenderer>
             ) : (
@@ -56,7 +59,7 @@ export function SkillSimpleForm({
             )}
           </div>
         ) : (
-          <div className="flex-1 min-h-0 flex flex-col">
+          <div className="flex min-h-0 flex-1 flex-col">
             <CodeEditor
               data-testid="skill-instructions-input"
               value={instructions}

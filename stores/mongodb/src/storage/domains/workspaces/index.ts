@@ -193,33 +193,29 @@ export class MongoDBWorkspacesStorage extends WorkspacesStorage {
         updatedAt: now,
       };
 
-      await collection.insertOne(this.serializeWorkspace(newWorkspace));
-
       // Extract snapshot config from flat input
       const snapshotConfig: Record<string, any> = {};
       for (const field of SNAPSHOT_FIELDS) {
-        if ((workspace as any)[field] !== undefined) {
-          snapshotConfig[field] = (workspace as any)[field];
-        }
+        if ((workspace as any)[field] !== undefined) snapshotConfig[field] = (workspace as any)[field];
       }
-
-      // Create version 1
       const versionId = randomUUID();
-      try {
-        await this.createVersion({
-          id: versionId,
-          workspaceId: id,
-          versionNumber: 1,
-          ...snapshotConfig,
-          changedFields: Object.keys(snapshotConfig),
-          changeMessage: 'Initial version',
-        } as CreateWorkspaceVersionInput);
-      } catch (versionError) {
-        // Clean up the orphaned workspace record
-        await collection.deleteOne({ id });
-        throw versionError;
+      const versionDoc: Record<string, any> = {
+        id: versionId,
+        workspaceId: id,
+        versionNumber: 1,
+        changedFields: Object.keys(snapshotConfig),
+        changeMessage: 'Initial version',
+        createdAt: new Date(),
+      };
+      for (const field of SNAPSHOT_FIELDS) {
+        if (snapshotConfig[field] !== undefined) versionDoc[field] = snapshotConfig[field];
       }
 
+      await this.#connector.withTransaction(async session => {
+        await collection.insertOne(this.serializeWorkspace(newWorkspace), { session });
+        const versionsCol = await this.getCollection(TABLE_WORKSPACE_VERSIONS);
+        await versionsCol.insertOne(versionDoc, { session });
+      });
       return newWorkspace;
     } catch (error) {
       if (error instanceof MastraError) {
@@ -274,6 +270,7 @@ export class MongoDBWorkspacesStorage extends WorkspacesStorage {
       }
 
       // If we have config updates, create a new version
+      let newVersionDoc: Record<string, any> | null = null;
       if (Object.keys(configFields).length > 0) {
         const latestVersion = await this.getLatestVersion(id);
 
@@ -289,16 +286,18 @@ export class MongoDBWorkspacesStorage extends WorkspacesStorage {
 
         // Extract existing snapshot and merge with updates
         const existingSnapshot = this.extractSnapshotFields(latestVersion);
-
-        await this.createVersion({
+        const mergedSnapshot = { ...existingSnapshot, ...configFields };
+        newVersionDoc = {
           id: randomUUID(),
           workspaceId: id,
           versionNumber: latestVersion.versionNumber + 1,
-          ...existingSnapshot,
-          ...configFields,
           changedFields: Object.keys(configFields),
           changeMessage: `Updated: ${Object.keys(configFields).join(', ')}`,
-        } as CreateWorkspaceVersionInput);
+          createdAt: new Date(),
+        };
+        for (const field of SNAPSHOT_FIELDS) {
+          if ((mergedSnapshot as any)[field] !== undefined) newVersionDoc[field] = (mergedSnapshot as any)[field];
+        }
       }
 
       // Handle metadata-level updates
@@ -320,7 +319,23 @@ export class MongoDBWorkspacesStorage extends WorkspacesStorage {
         updateDoc.metadata = { ...existingMetadata, ...metadataFields.metadata };
       }
 
-      await collection.updateOne({ id }, { $set: updateDoc });
+      await this.#connector.withTransaction(async session => {
+        if (newVersionDoc) {
+          const versionsCol = await this.getCollection(TABLE_WORKSPACE_VERSIONS);
+          await versionsCol.insertOne(newVersionDoc, { session });
+        }
+        const col = await this.getCollection(TABLE_WORKSPACES);
+        const updateResult = await col.updateOne({ id }, { $set: updateDoc }, { session });
+        if (updateResult.matchedCount === 0) {
+          throw new MastraError({
+            id: createStorageErrorId('MONGODB', 'UPDATE_WORKSPACE', 'NOT_FOUND_AFTER_UPDATE'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.SYSTEM,
+            text: `Workspace with id ${id} was deleted during update`,
+            details: { id },
+          });
+        }
+      });
 
       const updatedWorkspace = await collection.findOne<any>({ id });
       if (!updatedWorkspace) {
@@ -351,12 +366,12 @@ export class MongoDBWorkspacesStorage extends WorkspacesStorage {
 
   async delete(id: string): Promise<void> {
     try {
-      // Delete all versions first
-      await this.deleteVersionsByParentId(id);
-
-      // Then delete the workspace
-      const collection = await this.getCollection(TABLE_WORKSPACES);
-      await collection.deleteOne({ id });
+      await this.#connector.withTransaction(async session => {
+        const versionsCol = await this.getCollection(TABLE_WORKSPACE_VERSIONS);
+        await versionsCol.deleteMany({ workspaceId: id }, { session });
+        const col = await this.getCollection(TABLE_WORKSPACES);
+        await col.deleteOne({ id }, { session });
+      });
     } catch (error) {
       throw new MastraError(
         {

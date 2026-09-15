@@ -1,17 +1,12 @@
-import {
-  EntityName,
-  EntityDescription,
-  EntityContent,
-  Entity,
-  ScrollArea,
-  Searchbar,
-  Section,
-  SubSectionRoot,
-  Switch,
-  WorkflowIcon,
-  cn,
-} from '@mastra/playground-ui';
-import type { RuleGroup } from '@mastra/playground-ui';
+import { EntityName, EntityDescription, EntityContent, Entity } from '@mastra/playground-ui/components/Entity';
+import { InputGroup, InputGroupAddon, InputGroupInput } from '@mastra/playground-ui/components/InputGroup';
+import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { Section, SubSectionRoot } from '@mastra/playground-ui/components/Section';
+import { Switch } from '@mastra/playground-ui/components/Switch';
+import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
+import { cn } from '@mastra/playground-ui/utils/cn';
+import type { RuleGroup } from '@mastra/playground-ui/utils/rule-engine';
+import { SearchIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useWatch } from 'react-hook-form';
 
@@ -32,8 +27,8 @@ export function WorkflowsPage() {
     if (!workflows) return [];
     return Object.entries(workflows).map(([id, workflow]) => ({
       value: id,
-      label: (workflow as { name?: string }).name || id,
-      description: (workflow as { description?: string }).description || '',
+      label: workflow.name || id,
+      description: workflow.description || '',
     }));
   }, [workflows]);
 
@@ -91,7 +86,7 @@ export function WorkflowsPage() {
 
   return (
     <ScrollArea className="h-full">
-      <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-4">
         <SectionHeader
           title="Workflows"
           subtitle={`Select workflows this agent can trigger.${count > 0 ? ` (${count} selected)` : ''}`}
@@ -102,7 +97,17 @@ export function WorkflowsPage() {
             <SubSectionHeader title="Available Workflows" icon={<WorkflowIcon />} />
           </Section.Header>
 
-          <Searchbar onSearch={setSearch} label="Search workflows" placeholder="Search workflows" />
+          <InputGroup variant="outline">
+            <InputGroupAddon align="inline-start">
+              <SearchIcon />
+            </InputGroupAddon>
+            <InputGroupInput
+              type="search"
+              aria-label="Search workflows"
+              placeholder="Search workflows"
+              onChange={event => setSearch(event.target.value)}
+            />
+          </InputGroup>
 
           {filteredOptions.length > 0 && (
             <div className="flex flex-col gap-1">

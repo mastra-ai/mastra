@@ -2,7 +2,7 @@ import React from 'react';
 
 export const AzureIcon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg
-    className="h-3 w-3"
+    className="size-3"
     xmlns="http://www.w3.org/2000/svg"
     width="16"
     height="16"

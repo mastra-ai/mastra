@@ -458,6 +458,33 @@ describe('convertFullStreamChunkToMastra', () => {
       expect(errorSpy).not.toHaveBeenCalled();
       errorSpy.mockRestore();
     });
+
+    it('does not log the raw input when JSON cannot be repaired', () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const marker = 'SENSITIVE_REPORT_CONTENT';
+      const input = `{"content":"${marker}" garbage ]]`;
+      const chunk: StreamPart = {
+        type: 'tool-call',
+        toolCallId: 'call-7',
+        toolName: 'large_payload_tool',
+        input,
+        providerExecuted: false,
+      };
+
+      const result = convertFullStreamChunkToMastra(chunk, { runId: 'test-run-123' });
+      expect(result?.type).toBe('tool-call');
+      if (result?.type === 'tool-call') {
+        expect(result.payload.args).toBeUndefined();
+      }
+      expect(errorSpy).toHaveBeenCalledTimes(1);
+      expect(JSON.stringify(errorSpy.mock.calls)).not.toContain(marker);
+      expect(errorSpy.mock.calls[0]?.[1]).toEqual({
+        toolCallId: 'call-7',
+        toolName: 'large_payload_tool',
+        inputLength: input.length,
+      });
+      errorSpy.mockRestore();
+    });
   });
 
   describe('sanitizeToolCallInput', () => {
@@ -613,6 +640,42 @@ describe('convertFullStreamChunkToMastra', () => {
       });
     });
 
+    it('should forward text-delta chunks that only carry providerMetadata', () => {
+      const chunk: StreamPart = {
+        type: 'text-delta',
+        id: 'text-1',
+        delta: '',
+        providerMetadata: {
+          google: { thoughtSignature: 'sig-abc' },
+        },
+      };
+
+      const result = convertFullStreamChunkToMastra(chunk, { runId: 'test-run-123' });
+
+      expect(result).toEqual({
+        type: 'text-delta',
+        runId: 'test-run-123',
+        from: ChunkFrom.AGENT,
+        payload: {
+          id: 'text-1',
+          providerMetadata: {
+            google: { thoughtSignature: 'sig-abc' },
+          },
+          text: '',
+        },
+      });
+    });
+
+    it('should drop empty text-delta chunks with no providerMetadata', () => {
+      const chunk: StreamPart = {
+        type: 'text-delta',
+        id: 'text-1',
+        delta: '',
+      };
+
+      expect(convertFullStreamChunkToMastra(chunk, { runId: 'test-run-123' })).toBeUndefined();
+    });
+
     it('should handle finish chunks correctly', () => {
       const chunk: StreamPart = {
         type: 'finish',
@@ -647,6 +710,10 @@ describe('convertFullStreamChunkToMastra', () => {
         anthropic: {
           cacheReadInputTokens: 94,
           cacheCreationInputTokens: 6,
+          cacheCreation: {
+            ephemeral_5m_input_tokens: 4,
+            ephemeral_1h_input_tokens: 2,
+          },
         },
       };
       const chunk: StreamPart = {
@@ -671,6 +738,8 @@ describe('convertFullStreamChunkToMastra', () => {
         expect(result.payload.stepResult.reason).toBe('stop');
         expect(result.payload.output.usage.cachedInputTokens).toBe(94);
         expect(result.payload.output.usage.cacheCreationInputTokens).toBe(6);
+        expect(result.payload.output.usage.cacheCreationInputTokens5m).toBe(4);
+        expect(result.payload.output.usage.cacheCreationInputTokens1h).toBe(2);
         expect(result.payload.providerMetadata).toEqual(providerMetadata);
         expect(result.payload.metadata.providerMetadata).toEqual(providerMetadata);
       }
@@ -713,6 +782,101 @@ describe('convertFullStreamChunkToMastra', () => {
         expect(result.payload.providerMetadata).toEqual(providerMetadata);
         expect(result.payload.metadata.providerMetadata).toEqual(providerMetadata);
       }
+    });
+  });
+
+  describe('newer AI SDK content types', () => {
+    it('should convert reasoning-file parts instead of dropping them', () => {
+      const chunk: StreamPart = {
+        type: 'reasoning-file',
+        data: 'reasoning-file-data',
+        mediaType: 'application/pdf',
+        providerMetadata: { anthropic: { some: 'meta' } },
+      };
+
+      const result = convertFullStreamChunkToMastra(chunk, { runId: 'test-run-123' });
+
+      expect(result).toEqual({
+        type: 'reasoning-file',
+        runId: 'test-run-123',
+        from: ChunkFrom.AGENT,
+        payload: {
+          data: 'reasoning-file-data',
+          base64: 'reasoning-file-data',
+          mimeType: 'application/pdf',
+          providerMetadata: { anthropic: { some: 'meta' } },
+        },
+      });
+    });
+
+    it('should not treat URL-backed reasoning-file data as base64', () => {
+      const chunk: StreamPart = {
+        type: 'reasoning-file',
+        data: 'https://example.com/thoughts.pdf',
+        mediaType: 'application/pdf',
+      };
+
+      const result = convertFullStreamChunkToMastra(chunk, { runId: 'test-run-123' });
+
+      expect(result).toEqual({
+        type: 'reasoning-file',
+        runId: 'test-run-123',
+        from: ChunkFrom.AGENT,
+        payload: {
+          data: 'https://example.com/thoughts.pdf',
+          base64: undefined,
+          mimeType: 'application/pdf',
+        },
+      });
+    });
+
+    it('should convert custom parts instead of dropping them', () => {
+      const chunk: StreamPart = {
+        type: 'custom',
+        kind: 'anthropic.container_upload',
+        providerMetadata: { anthropic: { fileId: 'file_1' } },
+      };
+
+      const result = convertFullStreamChunkToMastra(chunk, { runId: 'test-run-123' });
+
+      expect(result).toEqual({
+        type: 'custom',
+        runId: 'test-run-123',
+        from: ChunkFrom.AGENT,
+        payload: {
+          kind: 'anthropic.container_upload',
+          providerMetadata: { anthropic: { fileId: 'file_1' } },
+        },
+      });
+    });
+
+    it('should surface unknown stream part types as raw chunks instead of dropping them', () => {
+      const chunk = { type: 'some-future-part', value: 'do-not-drop-me' } as unknown as StreamPart;
+
+      const result = convertFullStreamChunkToMastra(chunk, { runId: 'test-run-123' });
+
+      expect(result).toEqual({
+        type: 'raw',
+        runId: 'test-run-123',
+        from: ChunkFrom.AGENT,
+        payload: { type: 'some-future-part', value: 'do-not-drop-me' },
+      });
+    });
+
+    it('should convert raw parts emitted by the generate-to-stream fallback', () => {
+      const chunk: StreamPart = {
+        type: 'raw',
+        rawValue: { type: 'some-future-part', value: 'do-not-drop-me' },
+      };
+
+      const result = convertFullStreamChunkToMastra(chunk, { runId: 'test-run-123' });
+
+      expect(result).toEqual({
+        type: 'raw',
+        runId: 'test-run-123',
+        from: ChunkFrom.AGENT,
+        payload: { type: 'some-future-part', value: 'do-not-drop-me' },
+      });
     });
   });
 });

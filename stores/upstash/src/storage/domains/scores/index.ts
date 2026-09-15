@@ -9,7 +9,7 @@ import {
   transformScoreRow as coreTransformScoreRow,
   createStorageErrorId,
 } from '@mastra/core/storage';
-import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
+import type { PaginationInfo, StoragePagination, ScoreTenancyFilters } from '@mastra/core/storage';
 import type { Redis } from '@upstash/redis';
 import { UpstashDB, resolveUpstashConfig } from '../../db';
 import type { UpstashDomainConfig } from '../../db';
@@ -21,6 +21,19 @@ import { processRecord } from '../utils';
  */
 function transformScoreRow(row: Record<string, any>): ScoreRowData {
   return coreTransformScoreRow(row);
+}
+
+/** Returns true when a row matches the multi-tenant scope filters (or none provided). */
+function matchesTenancy(row: Record<string, any>, filters?: ScoreTenancyFilters): boolean {
+  if (filters?.organizationId !== undefined && row.organizationId !== filters.organizationId) return false;
+  if (filters?.projectId !== undefined && row.projectId !== filters.projectId) return false;
+  return true;
+}
+
+function compareScoresByCreatedAtDesc(a: Record<string, any>, b: Record<string, any>): number {
+  const createdAtDiff = new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+  if (createdAtDiff !== 0) return createdAtDiff;
+  return String(b.id ?? '').localeCompare(String(a.id ?? ''));
 }
 
 export class ScoresUpstash extends ScoresStorage {
@@ -67,12 +80,14 @@ export class ScoresUpstash extends ScoresStorage {
     entityType,
     source,
     pagination = { page: 0, perPage: 20 },
+    filters,
   }: {
     scorerId: string;
     entityId?: string;
     entityType?: string;
     source?: ScoringSource;
     pagination?: StoragePagination;
+    filters?: ScoreTenancyFilters;
   }): Promise<{
     scores: ScoreRowData[];
     pagination: PaginationInfo;
@@ -108,13 +123,14 @@ export class ScoresUpstash extends ScoresStorage {
         if (entityId && row.entityId !== entityId) return false;
         if (entityType && row.entityType !== entityType) return false;
         if (source && row.source !== source) return false;
+        if (!matchesTenancy(row, filters)) return false;
         return true;
       });
     const perPage = normalizePerPage(perPageInput, 100); // false → MAX_SAFE_INTEGER
     const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
     const end = perPageInput === false ? filtered.length : start + perPage;
     const total = filtered.length;
-    const paged = filtered.slice(start, end);
+    const paged = [...filtered].sort(compareScoresByCreatedAtDesc).slice(start, end);
     const scores = paged.map(row => transformScoreRow(row));
     return {
       scores,
@@ -181,9 +197,11 @@ export class ScoresUpstash extends ScoresStorage {
   async listScoresByRunId({
     runId,
     pagination = { page: 0, perPage: 20 },
+    filters,
   }: {
     runId: string;
     pagination?: StoragePagination;
+    filters?: ScoreTenancyFilters;
   }): Promise<{
     scores: ScoreRowData[];
     pagination: PaginationInfo;
@@ -213,12 +231,15 @@ export class ScoresUpstash extends ScoresStorage {
         }
         return raw as Record<string, any>;
       })
-      .filter((row): row is Record<string, any> => !!row && typeof row === 'object' && row.runId === runId);
+      .filter(
+        (row): row is Record<string, any> =>
+          !!row && typeof row === 'object' && row.runId === runId && matchesTenancy(row, filters),
+      );
     const total = filtered.length;
     const perPage = normalizePerPage(perPageInput, 100); // false → MAX_SAFE_INTEGER
     const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
     const end = perPageInput === false ? filtered.length : start + perPage;
-    const paged = filtered.slice(start, end);
+    const paged = [...filtered].sort(compareScoresByCreatedAtDesc).slice(start, end);
     const scores = paged.map(row => transformScoreRow(row));
     return {
       scores,
@@ -235,10 +256,12 @@ export class ScoresUpstash extends ScoresStorage {
     entityId,
     entityType,
     pagination = { page: 0, perPage: 20 },
+    filters,
   }: {
     entityId: string;
     entityType?: string;
     pagination?: StoragePagination;
+    filters?: ScoreTenancyFilters;
   }): Promise<{
     scores: ScoreRowData[];
     pagination: PaginationInfo;
@@ -272,13 +295,14 @@ export class ScoresUpstash extends ScoresStorage {
         if (!row || typeof row !== 'object') return false;
         if (row.entityId !== entityId) return false;
         if (entityType && row.entityType !== entityType) return false;
+        if (!matchesTenancy(row, filters)) return false;
         return true;
       });
     const total = filtered.length;
     const perPage = normalizePerPage(perPageInput, 100); // false → MAX_SAFE_INTEGER
     const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
     const end = perPageInput === false ? filtered.length : start + perPage;
-    const paged = filtered.slice(start, end);
+    const paged = [...filtered].sort(compareScoresByCreatedAtDesc).slice(start, end);
     const scores = paged.map(row => transformScoreRow(row));
     return {
       scores,
@@ -295,10 +319,12 @@ export class ScoresUpstash extends ScoresStorage {
     traceId,
     spanId,
     pagination = { page: 0, perPage: 20 },
+    filters,
   }: {
     traceId: string;
     spanId: string;
     pagination?: StoragePagination;
+    filters?: ScoreTenancyFilters;
   }): Promise<{
     scores: ScoreRowData[];
     pagination: PaginationInfo;
@@ -332,13 +358,14 @@ export class ScoresUpstash extends ScoresStorage {
         if (!row || typeof row !== 'object') return false;
         if (row.traceId !== traceId) return false;
         if (row.spanId !== spanId) return false;
+        if (!matchesTenancy(row, filters)) return false;
         return true;
       });
     const total = filtered.length;
     const perPage = normalizePerPage(perPageInput, 100); // false → MAX_SAFE_INTEGER
     const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
     const end = perPageInput === false ? filtered.length : start + perPage;
-    const paged = filtered.slice(start, end);
+    const paged = [...filtered].sort(compareScoresByCreatedAtDesc).slice(start, end);
     const scores = paged.map(row => transformScoreRow(row));
     return {
       scores,

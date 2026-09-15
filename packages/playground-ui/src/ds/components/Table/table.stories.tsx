@@ -23,7 +23,7 @@ type Story = StoryObj<typeof Table>;
 
 export const Default: Story = {
   render: () => (
-    <div className="w-[600px]">
+    <div className="w-150">
       <Table>
         <Thead>
           <Th>Name</Th>
@@ -34,21 +34,21 @@ export const Default: Story = {
           <Row>
             <TxtCell>Item One</TxtCell>
             <Cell>
-              <Badge variant="success">Active</Badge>
+              <Badge variant="green">Active</Badge>
             </Cell>
             <TxtCell>Jan 14, 2026</TxtCell>
           </Row>
           <Row>
             <TxtCell>Item Two</TxtCell>
             <Cell>
-              <Badge variant="default">Pending</Badge>
+              <Badge>Pending</Badge>
             </Cell>
             <TxtCell>Jan 13, 2026</TxtCell>
           </Row>
           <Row>
             <TxtCell>Item Three</TxtCell>
             <Cell>
-              <Badge variant="error">Error</Badge>
+              <Badge variant="red">Error</Badge>
             </Cell>
             <TxtCell>Jan 12, 2026</TxtCell>
           </Row>
@@ -60,7 +60,7 @@ export const Default: Story = {
 
 export const SmallSize: Story = {
   render: () => (
-    <div className="w-[600px]">
+    <div className="w-150">
       <Table size="small">
         <Thead>
           <Th>Name</Th>
@@ -70,13 +70,13 @@ export const SmallSize: Story = {
           <Row>
             <TxtCell>Item One</TxtCell>
             <Cell>
-              <Badge variant="success">Active</Badge>
+              <Badge variant="green">Active</Badge>
             </Cell>
           </Row>
           <Row>
             <TxtCell>Item Two</TxtCell>
             <Cell>
-              <Badge variant="success">Active</Badge>
+              <Badge variant="green">Active</Badge>
             </Cell>
           </Row>
         </Tbody>
@@ -87,7 +87,7 @@ export const SmallSize: Story = {
 
 export const WithDateTimeCell: Story = {
   render: () => (
-    <div className="w-[600px]">
+    <div className="w-150">
       <Table>
         <Thead>
           <Th>Event</Th>
@@ -114,7 +114,7 @@ export const WithDateTimeCell: Story = {
 
 export const WithEntryCell: Story = {
   render: () => (
-    <div className="w-[700px]">
+    <div className="w-175">
       <Table>
         <Thead>
           <Th>Agent</Th>
@@ -124,13 +124,13 @@ export const WithEntryCell: Story = {
           <Row>
             <EntryCell name="Customer Support Agent" description="Handles customer inquiries" icon={<Bot />} />
             <Cell>
-              <Badge variant="success">Online</Badge>
+              <Badge variant="green">Online</Badge>
             </Cell>
           </Row>
           <Row>
             <EntryCell name="Data Analysis Agent" description="Processes analytics data" icon={<Bot />} />
             <Cell>
-              <Badge variant="default">Idle</Badge>
+              <Badge>Idle</Badge>
             </Cell>
           </Row>
         </Tbody>
@@ -141,7 +141,7 @@ export const WithEntryCell: Story = {
 
 export const ClickableRows: Story = {
   render: () => (
-    <div className="w-[600px]">
+    <div className="w-150">
       <Table>
         <Thead>
           <Th>Name</Th>
@@ -168,7 +168,7 @@ export const ClickableRows: Story = {
 
 export const SelectedRow: Story = {
   render: () => (
-    <div className="w-[600px]">
+    <div className="w-150">
       <Table>
         <Thead>
           <Th>Name</Th>
@@ -178,19 +178,19 @@ export const SelectedRow: Story = {
           <Row>
             <TxtCell>Regular Row</TxtCell>
             <Cell>
-              <Badge variant="success">Active</Badge>
+              <Badge variant="green">Active</Badge>
             </Cell>
           </Row>
           <Row selected>
             <TxtCell>Selected Row</TxtCell>
             <Cell>
-              <Badge variant="success">Active</Badge>
+              <Badge variant="green">Active</Badge>
             </Cell>
           </Row>
           <Row>
             <TxtCell>Regular Row</TxtCell>
             <Cell>
-              <Badge variant="success">Active</Badge>
+              <Badge variant="green">Active</Badge>
             </Cell>
           </Row>
         </Tbody>

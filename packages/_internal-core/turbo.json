@@ -8,7 +8,7 @@
     },
     "build:lib": {
       "outputs": ["dist/**"],
-      "inputs": ["src/**", "tsup.config.ts", "tsconfig.json", "package.json"]
+      "inputs": ["src/**", "tsdown.config.ts", "tsconfig.json", "package.json"]
     }
   }
 }

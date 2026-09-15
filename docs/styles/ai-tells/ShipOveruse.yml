@@ -1,0 +1,16 @@
+---
+extends: existence
+message: "AI overused word: '%s'. Name the specific action or object. Disable this rule for maritime or logistics writing."
+level: error
+nonword: true
+ignorecase: true
+# "Ship" is an AI and startup overuse fingerprint. It covers the release verb
+# ("ship it," "ship fast," "ship the feature") and the maritime clichés ("run a
+# tight ship," "the ship has sailed"). The match stays deliberately broad and
+# carries no exemptions: the logistics verb ("ship the order") and the vessel
+# noun ("a cargo ship") look identical to a regex, so a writer in those domains
+# turns the whole rule off rather than chase a carve-out list. Word boundaries
+# keep the -ship suffixes (relationship, leadership) and the compounds
+# (spaceship, flagship, worship, shipment) clean.
+tokens:
+  - "\\bship(?:s|ped|ping)?\\b"

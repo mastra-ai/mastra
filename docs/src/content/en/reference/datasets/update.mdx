@@ -1,6 +1,6 @@
 ---
 title: "Reference: dataset.update() | Datasets"
-description: "Documentation for the `dataset.update()` method, which updates dataset metadata and schemas."
+description: "Updates dataset metadata, name, description, and/or schemas. Use Standard JSON Schema (Zod, Valibot, ArkType, etc.) for defining schemas."
 packages:
   - "@mastra/core"
 ---
@@ -17,9 +17,7 @@ Updates dataset metadata, name, description, and/or schemas. Use Standard JSON S
 import { Mastra } from '@mastra/core'
 import { z } from 'zod'
 
-const mastra = new Mastra({
-  /* storage config */
-})
+const mastra = new Mastra({/* storage config */})
 
 const dataset = await mastra.datasets.get({ id: 'dataset-id' })
 

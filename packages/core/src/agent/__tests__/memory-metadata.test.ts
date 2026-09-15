@@ -2,7 +2,15 @@ import { simulateReadableStream, MockLanguageModelV1 } from '@internal/ai-sdk-v4
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MockMemory } from '../../memory/mock';
+import type { Processor } from '../../processors';
 import { Agent } from '../agent';
+
+class SerializingMockMemory extends MockMemory {
+  async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
+    await super.saveThread({ thread: structuredClone(thread) });
+    return thread;
+  }
+}
 
 function memoryMetadataTests(version: 'v1' | 'v2') {
   describe(`${version} - agent memory with metadata`, () => {
@@ -229,6 +237,102 @@ function memoryMetadataTests(version: 'v1' | 'v2') {
 
       const thread = await mockMemory.getThreadById({ threadId: 'thread-1' });
       expect(thread?.metadata).toEqual({ existingField: 'should-persist', client: 'updated' });
+    });
+
+    it('should preserve metadata written mid-run by a processor when finishing a new thread', async () => {
+      const mockMemory = new SerializingMockMemory();
+
+      const metadataWriter: Processor = {
+        id: 'metadata-writer',
+        async processInput({ messages }) {
+          await mockMemory.updateThread({
+            id: 'thread-processor-metadata',
+            title: '',
+            metadata: { fromProcessor: 'survived' },
+          });
+          return messages;
+        },
+      };
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'test',
+        model: dummyModel,
+        memory: mockMemory,
+        inputProcessors: [metadataWriter],
+      });
+
+      if (version === 'v1') {
+        await agent.generateLegacy('hello', {
+          memory: {
+            resource: 'user-1',
+            thread: { id: 'thread-processor-metadata', metadata: { client: 'test' } },
+          },
+        });
+      } else {
+        await agent.generate('hello', {
+          memory: {
+            resource: 'user-1',
+            thread: { id: 'thread-processor-metadata', metadata: { client: 'test' } },
+          },
+        });
+      }
+
+      const thread = await mockMemory.getThreadById({ threadId: 'thread-processor-metadata' });
+      expect(thread?.metadata).toEqual({ client: 'test', fromProcessor: 'survived' });
+    });
+
+    it('should preserve metadata written mid-run when a title is also generated', async () => {
+      const mockMemory = new SerializingMockMemory();
+      mockMemory.getMergedThreadConfig = () => ({ generateTitle: true }) as any;
+
+      await mockMemory.saveThread({
+        thread: {
+          id: 'thread-title-metadata',
+          resourceId: 'user-1',
+          metadata: { keep: 'me' },
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+
+      const metadataWriter: Processor = {
+        id: 'metadata-writer',
+        async processInput({ messages }) {
+          await mockMemory.updateThread({
+            id: 'thread-title-metadata',
+            title: '',
+            metadata: { workingMemory: '# Important' },
+          });
+          return messages;
+        },
+      };
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'test',
+        model: dummyModel,
+        memory: mockMemory,
+        inputProcessors: [metadataWriter],
+      });
+
+      if (version === 'v1') {
+        await agent.generateLegacy('hello', {
+          memory: { resource: 'user-1', thread: { id: 'thread-title-metadata' } },
+        });
+      } else {
+        await agent.generate('hello', {
+          memory: { resource: 'user-1', thread: { id: 'thread-title-metadata' } },
+        });
+      }
+
+      await vi.waitFor(async () => {
+        const thread = await mockMemory.getThreadById({ threadId: 'thread-title-metadata' });
+        expect(thread?.title).toBeTruthy();
+        expect(thread?.metadata).toEqual({ keep: 'me', workingMemory: '# Important' });
+      });
     });
 
     it('should not update metadata if it is the same using generate', async () => {

@@ -1,6 +1,6 @@
 ---
 title: "Reference: dataset.listVersions() | Datasets"
-description: "Documentation for the `dataset.listVersions()` method, which lists all versions of a dataset."
+description: "Use dataset.listVersions() to retrieve a dataset's version history with pagination, including creation timestamps and change metadata for each version."
 packages:
   - "@mastra/core"
 ---
@@ -16,9 +16,7 @@ Lists all versions of the dataset with pagination.
 ```typescript
 import { Mastra } from '@mastra/core'
 
-const mastra = new Mastra({
-  /* storage config */
-})
+const mastra = new Mastra({/* storage config */})
 
 const dataset = await mastra.datasets.get({ id: 'dataset-id' })
 

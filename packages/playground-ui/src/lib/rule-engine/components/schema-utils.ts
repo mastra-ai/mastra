@@ -100,11 +100,13 @@ export const getFieldOptionAtPath = (schema: JsonSchema, path: string): FieldOpt
 
   for (let i = 0; i < segments.length; i++) {
     const segment = segments[i];
-    if (!currentProperties || !currentProperties[segment]) {
+    if (segment === undefined) return undefined;
+
+    const property = currentProperties?.[segment];
+    if (!property) {
       return undefined;
     }
 
-    const property = currentProperties[segment];
     currentPath = currentPath ? `${currentPath}.${segment}` : segment;
     const type = getPropertyType(property);
     const hasChildren = hasNestedChildren(property);

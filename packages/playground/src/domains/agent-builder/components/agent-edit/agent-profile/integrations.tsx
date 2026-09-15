@@ -1,4 +1,6 @@
-import { Skeleton, StatusBadge, Txt } from '@mastra/playground-ui';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useEditPage } from '@/domains/agent-builder/contexts/edit-page-context';
 import { usePublishAndConnectChannel } from '@/domains/agent-builder/hooks/use-publish-and-connect-channel';
 import { PlatformIcon } from '@/domains/agents/components/agent-channels/platform-icons';
@@ -21,15 +23,15 @@ export const Integrations = ({ agentId, editable = true }: IntegrationsProps) =>
 
   if (isLoading) {
     return (
-      <div className="flex justify-center px-6 py-8" data-testid="integrations-detail-picker-loading">
-        <div className="flex w-full max-w-[48rem] flex-col items-center gap-6 text-center">
+      <div className="flex justify-center px-4 py-5" data-testid="integrations-detail-picker-loading">
+        <div className="flex w-full max-w-[48rem] flex-col items-center gap-4 text-center">
           <div className="flex flex-col items-center gap-2">
             <Skeleton className="h-6 w-48" />
             <Skeleton className="h-4 w-80" />
           </div>
 
           <div className="flex flex-wrap items-stretch justify-center gap-4">
-            <div className="flex w-48 flex-col items-center gap-3 rounded-xl border border-border1 bg-surface3 px-4 py-6">
+            <div className="border-border1 bg-surface3 flex w-48 flex-col items-center gap-3 rounded-xl border px-4 py-4">
               <Skeleton className="size-14 rounded-xl" />
               <div className="flex flex-col items-center gap-1">
                 <Skeleton className="h-4 w-24" />
@@ -37,7 +39,7 @@ export const Integrations = ({ agentId, editable = true }: IntegrationsProps) =>
               </div>
               <Skeleton className="h-badge-default w-20 rounded-full" />
             </div>
-            <div className="flex w-48 flex-col items-center gap-3 rounded-xl border border-border1 bg-surface3 px-4 py-6">
+            <div className="border-border1 bg-surface3 flex w-48 flex-col items-center gap-3 rounded-xl border px-4 py-4">
               <Skeleton className="size-14 rounded-xl" />
               <div className="flex flex-col items-center gap-1">
                 <Skeleton className="h-4 w-24" />
@@ -53,7 +55,7 @@ export const Integrations = ({ agentId, editable = true }: IntegrationsProps) =>
 
   if (platforms.length === 0) {
     return (
-      <div className="flex justify-center px-6 py-8" data-testid="integrations-detail-picker">
+      <div className="flex justify-center px-4 py-5" data-testid="integrations-detail-picker">
         <Txt variant="ui-md" className="text-neutral3">
           No integrations configured for this project
         </Txt>
@@ -62,10 +64,10 @@ export const Integrations = ({ agentId, editable = true }: IntegrationsProps) =>
   }
 
   return (
-    <div className="flex justify-center px-6 py-8" data-testid="integrations-detail-picker">
-      <div className="flex w-full max-w-[48rem] flex-col items-center gap-6 text-center">
+    <div className="flex justify-center px-4 py-5" data-testid="integrations-detail-picker">
+      <div className="flex w-full max-w-[48rem] flex-col items-center gap-4 text-center">
         <div className="flex flex-col gap-2">
-          <Txt variant="header-sm" className="font-semibold text-neutral6">
+          <Txt variant="header-sm" className="text-neutral6 font-semibold">
             Channel integrations
           </Txt>
           <Txt variant="ui-md" className="text-neutral3">
@@ -119,14 +121,14 @@ const IntegrationCard = ({ platform, agentId, disabled, requiresLibrary, onSelec
       onClick={() => onSelect(installation)}
       disabled={disabled}
       data-testid={`integration-card-${platform.id}`}
-      className="flex w-48 flex-col items-center gap-3 rounded-xl border border-border1 bg-surface3 px-4 py-6 text-center transition-colors hover:bg-surface4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent1 disabled:cursor-not-allowed disabled:opacity-60"
+      className="border-border1 bg-surface3 hover:bg-surface4 focus-visible:ring-accent1 flex w-48 flex-col items-center gap-3 rounded-xl border px-4 py-4 text-center transition-colors focus-visible:ring-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60"
     >
-      <div className="grid size-14 place-items-center rounded-xl bg-surface4">
+      <div className="bg-surface4 grid size-14 place-items-center rounded-xl">
         <PlatformIcon platform={platform.id} className="h-7 w-7" />
       </div>
 
       <div className="flex flex-col items-center gap-1">
-        <Txt variant="ui-md" className="font-semibold text-neutral6">
+        <Txt variant="ui-md" className="text-neutral6 font-semibold">
           {platform.name}
         </Txt>
         {description ? (
@@ -137,23 +139,23 @@ const IntegrationCard = ({ platform, agentId, disabled, requiresLibrary, onSelec
       </div>
 
       {!platform.isConfigured ? (
-        <StatusBadge variant="warning" size="sm" withDot>
+        <Badge variant="yellow" size="sm" indicator="dot">
           Not configured
-        </StatusBadge>
+        </Badge>
       ) : installation ? (
-        <StatusBadge variant="success" size="sm" withDot>
+        <Badge variant="green" size="sm" indicator="dot">
           Connected
-        </StatusBadge>
+        </Badge>
       ) : (
-        <StatusBadge variant="neutral" size="sm" withDot>
+        <Badge size="sm" indicator="dot">
           Not connected
-        </StatusBadge>
+        </Badge>
       )}
 
       {showLibraryBadge ? (
-        <StatusBadge variant="warning" size="sm" withDot>
+        <Badge variant="yellow" size="sm" indicator="dot">
           Add to library to connect
-        </StatusBadge>
+        </Badge>
       ) : null}
     </button>
   );

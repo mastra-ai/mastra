@@ -14,8 +14,8 @@ import { z } from 'zod/v4';
 
 import { createTool } from '../../tools';
 import { extractLines } from '../line-utils';
-import { startWorkspaceSpan } from '../tools/tracing';
-import type { Skill, WorkspaceSkills } from './types';
+import { startSkillSpan } from '../tools/tracing';
+import type { Skill, SkillsContext, WorkspaceSkills } from './types';
 
 // =============================================================================
 // Factory
@@ -61,15 +61,29 @@ export function formatSkillActivation(skill: Skill): string {
 // Individual Tools
 // =============================================================================
 
+async function getScopedSkills(skills: WorkspaceSkills, requestContext?: object): Promise<WorkspaceSkills> {
+  return skills.getScoped
+    ? skills.getScoped({ requestContext: requestContext as SkillsContext['requestContext'] })
+    : skills;
+}
+
 /**
  * Resolve a skill identifier (name or path) to a Skill.
  * The `skills.get()` method handles both name-based lookup (with tie-breaking)
  * and path-based lookup (escape hatch for disambiguation).
+ *
+ * Calls `maybeRefresh()` first so edits on disk are picked up between tool
+ * invocations without restarting the server. Refresh is gated by an internal
+ * staleness check + cooldown, so the cost is a small directory `stat` rather
+ * than a full re-walk. File-level reloads (SKILL.md content edits) only
+ * trigger when the workspace is configured with `checkSkillFileMtime: true`.
  */
 async function resolveSkill(
   skills: WorkspaceSkills,
   identifier: string,
 ): Promise<{ skill: Skill } | { notFound: string }> {
+  await skills.maybeRefresh();
+
   const skill = await skills.get(identifier);
   if (skill) return { skill };
 
@@ -89,14 +103,15 @@ function createSkillTool(skills: WorkspaceSkills) {
         .describe('The name or path of the skill to activate. Use the path when multiple skills share the same name.'),
     }),
     execute: async ({ name }, context) => {
-      const span = startWorkspaceSpan(context, context?.workspace, {
-        category: 'skill',
+      const span = startSkillSpan(context, {
         operation: 'activate',
         input: { name },
+        attributes: { skillName: name },
       });
 
       try {
-        const result = await resolveSkill(skills, name);
+        const scopedSkills = await getScopedSkills(skills, context?.requestContext);
+        const result = await resolveSkill(scopedSkills, name);
 
         if ('notFound' in result) {
           span.end({ success: false });
@@ -129,15 +144,16 @@ function createSkillSearchTool(skills: WorkspaceSkills) {
       topK: z.number().optional().describe('Maximum number of results to return (default: 5)'),
     }),
     execute: async ({ query, skillNames, topK }, context) => {
-      const span = startWorkspaceSpan(context, context?.workspace, {
-        category: 'skill',
+      const span = startSkillSpan(context, {
         operation: 'search',
         input: { query, skillNames, topK },
         attributes: {},
       });
 
       try {
-        const results = await skills.search(query, { topK, skillNames });
+        const scopedSkills = await getScopedSkills(skills, context?.requestContext);
+        await scopedSkills.maybeRefresh();
+        const results = await scopedSkills.search(query, { topK, skillNames });
 
         if (results.length === 0) {
           span.end({ success: true }, { resultCount: 0 });
@@ -184,16 +200,16 @@ function createSkillReadTool(skills: WorkspaceSkills) {
         .describe('Ending line number (1-indexed, inclusive). If omitted, reads to the end.'),
     }),
     execute: async ({ skillName, path, startLine, endLine }, context) => {
-      const span = startWorkspaceSpan(context, context?.workspace, {
-        category: 'skill',
+      const span = startSkillSpan(context, {
         operation: 'read',
         input: { skillName, path, startLine, endLine },
-        attributes: {},
+        attributes: { skillName },
       });
 
       try {
+        const scopedSkills = await getScopedSkills(skills, context?.requestContext);
         // Resolve skill by name or path (get() handles both with tie-breaking)
-        const resolved = await resolveSkill(skills, skillName);
+        const resolved = await resolveSkill(scopedSkills, skillName);
         if ('notFound' in resolved) {
           span.end({ success: false });
           return resolved.notFound;
@@ -202,14 +218,14 @@ function createSkillReadTool(skills: WorkspaceSkills) {
 
         // Try each reader using the resolved path to target the exact skill candidate
         let content: string | Buffer | null = null;
-        content = await skills.getReference(resolvedPath, path);
-        if (content === null) content = await skills.getScript(resolvedPath, path);
-        if (content === null) content = await skills.getAsset(resolvedPath, path);
+        content = await scopedSkills.getReference(resolvedPath, path);
+        if (content === null) content = await scopedSkills.getScript(resolvedPath, path);
+        if (content === null) content = await scopedSkills.getAsset(resolvedPath, path);
 
         if (content === null) {
-          const refs = (await skills.listReferences(resolvedPath)).map(f => `references/${f}`);
-          const scriptsList = (await skills.listScripts(resolvedPath)).map(f => `scripts/${f}`);
-          const assets = (await skills.listAssets(resolvedPath)).map(f => `assets/${f}`);
+          const refs = (await scopedSkills.listReferences(resolvedPath)).map(f => `references/${f}`);
+          const scriptsList = (await scopedSkills.listScripts(resolvedPath)).map(f => `scripts/${f}`);
+          const assets = (await scopedSkills.listAssets(resolvedPath)).map(f => `assets/${f}`);
           const allFiles = [...refs, ...scriptsList, ...assets];
           const fileList = allFiles.length > 0 ? `\nAvailable files: ${allFiles.join(', ')}` : '';
           span.end({ success: false });
@@ -227,8 +243,25 @@ function createSkillReadTool(skills: WorkspaceSkills) {
         content = textContent;
 
         const result = extractLines(content, startLine, endLine);
+
+        // An empty range is indistinguishable from a failed read, so the model keeps paginating
+        if (result.lines.start === 0 && result.lines.end === 0) {
+          const reason =
+            (startLine ?? 1) > result.totalLines
+              ? `Requested startLine ${startLine} is past the end of the file. The file has been fully read; stop paginating.`
+              : `Requested range ${startLine}-${endLine} is empty because startLine is greater than endLine.`;
+          span.end({ success: true }, { bytesTransferred: 0 });
+          return `File "${path}" has ${result.totalLines} lines (valid range 1-${result.totalLines}). ${reason}`;
+        }
+
+        // Header ranged reads so the model sees EOF coming instead of overshooting to find it
+        const output =
+          startLine !== undefined || endLine !== undefined
+            ? `${path} (lines ${result.lines.start}-${result.lines.end} of ${result.totalLines})\n${result.content}`
+            : result.content;
+
         span.end({ success: true }, { bytesTransferred: Buffer.byteLength(result.content, 'utf-8') });
-        return result.content;
+        return output;
       } catch (err) {
         span.error(err);
         throw err;

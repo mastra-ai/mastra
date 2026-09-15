@@ -1,0 +1,29 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "Start a slow run that will be interrupted.",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat"
+      },
+      "chunkSize": 4,
+      "streamingProfile": {
+        "ttft": 500,
+        "tps": 2
+      },
+      "response": {
+        "content": "Initial run text that should be interrupted before completing the full slow response."
+      }
+    },
+    {
+      "match": {
+        "userMessage": "Follow-up after abort.",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat"
+      },
+      "response": {
+        "content": "Follow-up after abort completed successfully."
+      }
+    }
+  ]
+}

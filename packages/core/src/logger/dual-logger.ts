@@ -1,3 +1,4 @@
+import { buildLogRecordData } from '@internal/core/logger';
 import type { MastraError } from '../error';
 import type { LoggerContext } from '../observability/types/logging';
 import { resolveCurrentSpan } from '../observability/utils';
@@ -6,6 +7,12 @@ import type { IMastraLogger } from './logger';
 import type { BaseLogMessage, LoggerTransport } from './transport';
 
 /**
+ * @deprecated Fallback for loggers that do not implement the observability
+ * adapter contract (`AdaptableLogger`). Loggers with adapter support
+ * (`ConsoleLogger`, `PinoLogger`) get trace correlation and export attached
+ * natively instead. Will be removed in the next major release — implement
+ * `__attachObservability()` on custom loggers.
+ *
  * A transparent wrapper around IMastraLogger that also forwards log calls
  * to a LoggerContext (loggerVNext) for observability dual-write.
  *
@@ -26,6 +33,15 @@ export class DualLogger implements IMastraLogger {
   constructor(inner: IMastraLogger, getLoggerVNext?: () => LoggerContext | undefined) {
     this.#inner = inner;
     this.#getLoggerVNext = getLoggerVNext;
+  }
+
+  /**
+   * The wrapped underlying logger, without the observability dual-write layer.
+   * Use this when forwarding a logger to observability to avoid recursing back
+   * through the dual-write path.
+   */
+  get baseLogger(): IMastraLogger {
+    return this.#inner;
   }
 
   /**
@@ -122,35 +138,16 @@ export class DualLogger implements IMastraLogger {
   }
 
   /**
-   * Adapt IMastraLogger's variadic args to LoggerContext's structured data param.
-   * Extracts the first plain object as `data`, serializes Error args, and
-   * collects any remaining primitives so the dual write preserves all context.
+   * Adapt IMastraLogger's variadic args to LoggerContext's structured data
+   * param via the shared adapter helper. Historical DualLogger behavior of
+   * always passing `{}` (never undefined) is preserved for storage parity.
    */
   #forwardToVNext(level: 'debug' | 'info' | 'warn' | 'error', message: string, args: any[]): void {
     try {
       const loggerVNext = this.#resolveLoggerVNext();
       if (!loggerVNext) return;
 
-      const objectData = args.find(
-        (arg): arg is Record<string, unknown> =>
-          arg !== null && typeof arg === 'object' && !Array.isArray(arg) && !(arg instanceof Error),
-      );
-      const errorArg = args.find((arg): arg is Error => arg instanceof Error);
-      const extraArgs = args.filter(arg => arg !== objectData && arg !== errorArg);
-
-      loggerVNext[level](message, {
-        ...(objectData ?? {}),
-        ...(errorArg
-          ? {
-              error: {
-                name: errorArg.name,
-                message: errorArg.message,
-                stack: errorArg.stack,
-              },
-            }
-          : {}),
-        ...(extraArgs.length > 0 ? { args: extraArgs } : {}),
-      });
+      loggerVNext[level](message, buildLogRecordData(args) ?? {});
     } catch {
       // Never let loggerVNext errors break the primary logger
     }

@@ -1,6 +1,6 @@
 ---
 title: "Reference: Scorer utils | Evals"
-description: Utility functions for extracting data from scorer run inputs and outputs, including text content, reasoning, system messages, and tool calls.
+description: "Mastra provides utility functions to help extract and process data from scorer run inputs and outputs. These utilities are particularly useful in the preprocess step of custom scorers."
 packages:
   - "@mastra/core"
   - "@mastra/evals"
@@ -75,7 +75,7 @@ const scorer = createScorer({
 
 Extracts the text content from the first user message in the run input.
 
-```typescript prettier:false
+```typescript oxfmt:false
 .preprocess(({ run }) => {
   const userMessage = getUserMessageFromRunInput(run.input);
   return { userMessage };
@@ -99,7 +99,7 @@ Extracts the text content from the first user message in the run input.
 
 Extracts text content from all input messages as an array.
 
-```typescript prettier:false
+```typescript oxfmt:false
 .preprocess(({ run }) => {
   const allUserMessages = extractInputMessages(run.input);
   return { conversationHistory: allUserMessages.join("\n") };
@@ -112,7 +112,7 @@ Extracts text content from all input messages as an array.
 
 Extracts text content from all assistant response messages as an array.
 
-```typescript prettier:false
+```typescript oxfmt:false
 .preprocess(({ run }) => {
   const allResponses = extractAgentResponseMessages(run.output);
   return { allResponses };
@@ -191,7 +191,7 @@ const reasoningQualityScorer = createScorer({
 
 Extracts all system messages from the run input, including both standard system messages and tagged system messages (specialized prompts like memory instructions).
 
-```typescript prettier:false
+```typescript oxfmt:false
 .preprocess(({ run }) => {
   const systemMessages = getSystemMessagesFromRunInput(run.input);
   return { 
@@ -207,7 +207,7 @@ Extracts all system messages from the run input, including both standard system 
 
 Combines all system messages into a single prompt string, joined with double newlines.
 
-```typescript prettier:false
+```typescript oxfmt:false
 .preprocess(({ run }) => {
   const fullSystemPrompt = getCombinedSystemPrompt(run.input);
   return { fullSystemPrompt };
@@ -245,7 +245,7 @@ const toolUsageScorer = createScorer({
 
 **Returns:**
 
-```typescript prettier:false
+```typescript oxfmt:false
 {
   tools: string[];           // Array of tool names
   toolCallInfos: ToolCallInfo[];  // Detailed tool call information
@@ -317,7 +317,7 @@ const result = await myScorer.run({
 
 ### `extractTrajectory`
 
-Extracts a `Trajectory` from agent output messages (`MastraDBMessage[]`). Converts tool invocations into `ToolCallStep` objects. The `runEvals` pipeline calls this automatically for trajectory scorers — you only need it for direct testing.
+Extracts a `Trajectory` from agent output messages (`MastraDBMessage[]`). Converts tool invocations into `ToolCallStep` objects. The `runEvals` pipeline calls this automatically for trajectory scorers: you only need it for direct testing.
 
 Available from `@mastra/core/evals`.
 
@@ -329,7 +329,7 @@ const trajectory = extractTrajectory(agentOutputMessages)
 // trajectory.rawOutput — the original MastraDBMessage[] array
 ```
 
-**Returns:** `Trajectory` — Contains `steps: TrajectoryStep[]`, `totalDurationMs`, and `rawOutput`.
+**Returns:** `Trajectory`: Contains `steps: TrajectoryStep[]`, `totalDurationMs`, and `rawOutput`.
 
 ### `extractWorkflowTrajectory`
 
@@ -347,7 +347,7 @@ const trajectory = extractWorkflowTrajectory(
 // trajectory.steps — WorkflowStepStep[] in execution order
 ```
 
-**Returns:** `Trajectory` — Contains `steps: TrajectoryStep[]`, `totalDurationMs`, and `rawWorkflowResult`.
+**Returns:** `Trajectory`: Contains `steps: TrajectoryStep[]`, `totalDurationMs`, and `rawWorkflowResult`.
 
 ### `extractTrajectoryFromTrace`
 
@@ -396,7 +396,7 @@ Spans with types `GENERIC`, `MODEL_STEP`, `MODEL_CHUNK`, and `WORKFLOW_CONDITION
 
 Compares an actual trajectory against an expected trajectory and returns a detailed comparison result. Used internally by `createTrajectoryAccuracyScorerCode`.
 
-The `expected` parameter accepts either a `Trajectory` (actual trajectory) or `{ steps: ExpectedStep[] }`. When using `ExpectedStep[]`, you can match by name only, name + stepType, or include data for comparison. See [Expected steps](/reference/evals/trajectory-accuracy#expected-steps) for details.
+The `expected` parameter accepts either a `Trajectory` (actual trajectory) or `{ steps: ExpectedStep[] }`. When using `ExpectedStep[]`, you can match by name only or by name + stepType. You can also include data for comparison. See [Expected steps](/reference/evals/trajectory-accuracy#expected-steps) for details.
 
 ```typescript
 import { compareTrajectories } from '@mastra/evals/scorers/utils'

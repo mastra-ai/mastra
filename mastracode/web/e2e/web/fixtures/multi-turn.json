@@ -1,0 +1,26 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "My name is Ada",
+        "hasToolResult": false
+      },
+      "response": {
+        "content": "Nice to meet you, Ada."
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "What is my name?",
+        "hasToolResult": false
+      },
+      "response": {
+        "content": "Your name is Ada."
+      }
+    }
+  ]
+}

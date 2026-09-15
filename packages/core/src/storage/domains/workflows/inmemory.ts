@@ -7,6 +7,7 @@ import type {
   StorageListWorkflowRunsInput,
   UpdateWorkflowStateOptions,
 } from '../../types';
+import { matchesExpectedWorkflowStatus } from '../../types';
 import { createEmptyWorkflowSnapshot, mergeWorkflowStepResult } from '../../workflow-snapshot';
 import type { InMemoryDB } from '../inmemory-db';
 import { WorkflowsStorage } from './base';
@@ -265,7 +266,12 @@ export class WorkflowsInMemory extends WorkflowsStorage {
       throw new Error(`Snapshot not found for runId ${runId}`);
     }
 
-    snapshot = { ...snapshot, ...opts };
+    const { expectedStatus, ...state } = opts;
+    if (!matchesExpectedWorkflowStatus(snapshot.status, expectedStatus)) {
+      return;
+    }
+
+    snapshot = { ...snapshot, ...state };
     this.db.workflows.set(key, {
       ...run,
       snapshot: snapshot,
@@ -291,12 +297,18 @@ export class WorkflowsInMemory extends WorkflowsStorage {
   }): Promise<void> {
     const key = this.getWorkflowKey(workflowName, runId);
     const now = new Date();
+    const existing = this.db.workflows.get(key);
     const data: StorageWorkflowRun = {
       workflow_name: workflowName,
       run_id: runId,
-      resourceId,
+      // A re-persist without a resourceId (e.g. resume) must not erase a
+      // previously-set value. Matches the persistent stores' COALESCE upserts.
+      resourceId: resourceId ?? existing?.resourceId,
       snapshot,
-      createdAt: createdAt ?? now,
+      // Preserve the original creation time when re-persisting an existing run; only set it
+      // on first insert. Otherwise listWorkflowRuns ordering and date filters drift to the
+      // last activity time. Matches the persistent stores (pg/mysql/mongodb/libsql).
+      createdAt: createdAt ?? existing?.createdAt ?? now,
       updatedAt: updatedAt ?? now,
     };
 
@@ -409,8 +421,12 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     runId: string;
     workflowName?: string;
   }): Promise<WorkflowRun | null> {
-    const runs = Array.from(this.db.workflows.values()).filter((r: any) => r.run_id === runId);
-    let run = runs.find((r: any) => r.workflow_name === workflowName);
+    // `workflowName` is optional in the storage contract. The pg/libsql adapters
+    // match by `runId` alone when it is omitted and return the most recent run
+    // (ORDER BY createdAt DESC LIMIT 1), so mirror that here.
+    const run = Array.from(this.db.workflows.values())
+      .filter((r: any) => r.run_id === runId && (!workflowName || r.workflow_name === workflowName))
+      .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
 
     if (!run) return null;
 

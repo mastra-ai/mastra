@@ -33,7 +33,16 @@ import {
   TABLE_TOOL_PROVIDER_CONNECTIONS,
   TABLE_NOTIFICATIONS,
   TABLE_HARNESS_SESSIONS,
+  TABLE_THREAD_STATE,
+  TABLE_WORKFLOW_DEFINITIONS,
+  TABLE_KNOWLEDGE_NODES,
+  TABLE_KNOWLEDGE_RECORDS,
+  TABLE_KNOWLEDGE_MENTIONS,
+  TABLE_KNOWLEDGE_CURSORS,
+  TABLE_KNOWLEDGE_ACTIVITY,
+  TABLE_KNOWLEDGE_SEMANTIC_OUTBOX,
 } from '@mastra/core/storage';
+import type { ClickhouseReplicationConfig } from './replication';
 
 export const TABLE_ENGINES: Record<TABLE_NAMES, string> = {
   [TABLE_MESSAGES]: `MergeTree()`,
@@ -75,6 +84,14 @@ export const TABLE_ENGINES: Record<TABLE_NAMES, string> = {
   [TABLE_HARNESS_SESSIONS]: `ReplacingMergeTree()`,
   mastra_channel_installations: `ReplacingMergeTree()`,
   mastra_channel_config: `ReplacingMergeTree()`,
+  [TABLE_THREAD_STATE]: `ReplacingMergeTree()`,
+  [TABLE_WORKFLOW_DEFINITIONS]: `ReplacingMergeTree()`,
+  [TABLE_KNOWLEDGE_NODES]: `ReplacingMergeTree()`,
+  [TABLE_KNOWLEDGE_RECORDS]: `ReplacingMergeTree()`,
+  [TABLE_KNOWLEDGE_MENTIONS]: `ReplacingMergeTree()`,
+  [TABLE_KNOWLEDGE_CURSORS]: `ReplacingMergeTree()`,
+  [TABLE_KNOWLEDGE_ACTIVITY]: `ReplacingMergeTree()`,
+  [TABLE_KNOWLEDGE_SEMANTIC_OUTBOX]: `ReplacingMergeTree()`,
 };
 
 export const COLUMN_TYPES: Record<StorageColumn['type'], string> = {
@@ -105,6 +122,7 @@ export type ClickhouseConfig = {
   url: string;
   username: string;
   password: string;
+  replication?: ClickhouseReplicationConfig;
   ttl?: {
     [TableKey in TABLE_NAMES]?: {
       row?: { interval: number; unit: IntervalUnit; ttlKey?: string };

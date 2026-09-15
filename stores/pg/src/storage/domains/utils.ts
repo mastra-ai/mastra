@@ -1,4 +1,4 @@
-import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
+import type { DatasetTenancyFilters, ExperimentTenancyFilters, StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
 import { TABLE_SCHEMAS } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 
@@ -118,4 +118,37 @@ export function transformFromSqlRow<T>({
   });
 
   return result as T;
+}
+
+/**
+ * Tenancy scope shape shared by domains that carry `organizationId` / `projectId`
+ * columns (datasets, experiments, ...). Aliases the core tenancy filter types so
+ * this helper stays in sync if the core shape ever changes.
+ */
+export type TenancyScope = DatasetTenancyFilters | ExperimentTenancyFilters;
+
+/**
+ * Build additional `AND "col" = $N` conditions for a tenancy read-scope filter.
+ * Uses double-quoted PG identifiers and continues numbering from `startIndex`.
+ * Returns empty arrays and unchanged `nextIndex` when no filters apply.
+ *
+ * Shared across domains (datasets, experiments, ...) so tenancy predicates stay
+ * consistent and cross-tenant reads/deletes do not leak.
+ */
+export function tenancyWhere(
+  filters: TenancyScope | undefined,
+  startIndex: number,
+): { conditions: string[]; params: any[]; nextIndex: number } {
+  const conditions: string[] = [];
+  const params: any[] = [];
+  let idx = startIndex;
+  if (filters?.organizationId !== undefined) {
+    conditions.push(`"organizationId" = $${idx++}`);
+    params.push(filters.organizationId);
+  }
+  if (filters?.projectId !== undefined) {
+    conditions.push(`"projectId" = $${idx++}`);
+    params.push(filters.projectId);
+  }
+  return { conditions, params, nextIndex: idx };
 }

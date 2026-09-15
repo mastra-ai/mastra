@@ -301,10 +301,11 @@ export class LaminarExporter extends BaseExporter {
       isRemote: false,
     };
 
-    const parentSpanContext = span.parentSpanId
+    const exportedParentSpanId = span.parentSpanId ?? span.externalParentSpanId;
+    const parentSpanContext = exportedParentSpanId
       ? {
           traceId,
-          spanId: normalizeSpanId(span.parentSpanId),
+          spanId: normalizeSpanId(exportedParentSpanId),
           traceFlags: TraceFlags.SAMPLED,
           isRemote: false,
         }
@@ -576,6 +577,7 @@ function mapLaminarSpanType(spanType: SpanType): LaminarSpanType {
       return 'LLM';
     case SpanType.TOOL_CALL:
     case SpanType.MCP_TOOL_CALL:
+    case SpanType.PROVIDER_TOOL_CALL:
       return 'TOOL';
     default:
       return 'DEFAULT';

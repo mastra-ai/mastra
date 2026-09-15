@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import type { AutoFormFieldProps } from '@autoform/react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { FormHTMLAttributes, PropsWithChildren } from 'react';
@@ -73,5 +72,34 @@ describe('CustomAutoForm', () => {
     await waitFor(() => {
       expect(onSubmit).toHaveBeenCalledWith({ mode: 'b' }, expect.anything());
     });
+  });
+
+  it('submits Date values without dropping them during empty-value cleanup', async () => {
+    const onSubmit = vi.fn();
+    const startDate = new Date('2024-01-01T00:00:00Z');
+    const schema = new CustomZodProvider(
+      z.object({
+        startDate: z.date(),
+        note: z.string().optional(),
+      }),
+    );
+
+    render(
+      <CustomAutoForm
+        schema={schema}
+        uiComponents={uiComponents}
+        formComponents={{ date: () => null }}
+        defaultValues={{ startDate, note: '' }}
+        onSubmit={onSubmit}
+        withSubmit
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Submit' }));
+
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledWith({ startDate }, expect.anything());
+    });
+    expect(onSubmit.mock.calls[0]![0].startDate).toBeInstanceOf(Date);
   });
 });

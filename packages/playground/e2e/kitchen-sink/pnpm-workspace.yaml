@@ -17,4 +17,3 @@ overrides:
 
 allowBuilds:
   esbuild: true
-  msw: false

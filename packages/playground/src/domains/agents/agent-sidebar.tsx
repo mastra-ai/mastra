@@ -7,16 +7,12 @@ export function AgentSidebar({
   agentId,
   threadId,
   threads,
-  isLoading,
-  memoryType,
-  hasMemory,
+  onHidePanel,
 }: {
   agentId: string;
   threadId: string;
-  threads?: StorageThreadType[];
-  isLoading: boolean;
-  memoryType?: 'local' | 'gateway';
-  hasMemory: boolean;
+  threads: StorageThreadType[];
+  onHidePanel?: () => void;
 }) {
   const { mutateAsync } = useDeleteThread();
   const { paths, navigate } = useLinkComponent();
@@ -33,10 +29,8 @@ export function AgentSidebar({
       agentId={agentId}
       threadId={threadId}
       threads={threads}
-      isLoading={isLoading}
       onDelete={handleDelete}
-      memoryType={memoryType}
-      hasMemory={hasMemory}
+      onHidePanel={onHidePanel}
     />
   );
 }

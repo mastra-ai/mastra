@@ -49,14 +49,15 @@ const buttonsGroupVariants = cva(
           '[&>*:has(~_*:not([aria-hidden=true]):not([data-base-ui-focus-guard]):not([aria-owns]))]:rounded-r-none',
           '[&>*:not(:first-child):not([aria-hidden=true]):not([data-base-ui-focus-guard]):not([aria-owns])]:rounded-l-none',
           // One-line seam: `-ml-px` overlaps adjacent borders onto the same pixel. Filled
-          // segments (opaque bg: default/primary buttons, the text chip) keep their own
-          // border — the bg hides the neighbour's. Transparent/outline segments null their
-          // left border at rest (so the neighbour's shows without doubling) and reveal it on
-          // hover / keyboard-focus, where the z-10 lift paints the complete border on top.
+          // segments (opaque bg: default/outline/primary/destructive buttons, the text chip) keep
+          // their own border — the bg hides the neighbour's. Transparent segments
+          // null their left border at rest (so the neighbour's shows without doubling) and
+          // reveal it on hover / keyboard-focus, where the z-10 lift paints the complete border.
           '[&>*:not([data-slot=buttons-group-separator]):not([aria-hidden=true]):not([data-base-ui-focus-guard]):not([aria-owns]):not(:first-child)]:-ml-px',
-          '[&>*:not([data-slot=buttons-group-separator]):not([data-slot=buttons-group-text]):not([data-variant=default]):not([data-variant=primary]):not([aria-hidden=true]):not([data-base-ui-focus-guard]):not([aria-owns]):not(:first-child):not(:hover):not(:focus-visible):not(:has(:focus-visible))]:border-l-transparent',
-          // `primary` is filled but borderless — give it (only) an inset-shadow divider.
+          '[&>*:not([data-slot=buttons-group-separator]):not([data-slot=buttons-group-text]):not([data-variant=default]):not([data-variant=primary]):not([data-variant=destructive]):not([aria-hidden=true]):not([data-variant=outline]):not([data-base-ui-focus-guard]):not([aria-owns]):not(:first-child):not(:hover):not(:focus-visible):not(:has(:focus-visible))]:border-l-transparent',
+          // Borderless filled variants get an inset-shadow divider.
           '[&>[data-variant=primary]:not([aria-hidden=true]):not(:first-child)]:shadow-[inset_1px_0_0_0_var(--color-border1)]',
+          '[&>[data-variant=destructive]:not([aria-hidden=true]):not(:first-child)]:shadow-[inset_1px_0_0_0_var(--color-border1)]',
           // Animate only colour/bg so the seam + ring snap (no fade desynced from the z-10 drop).
           '[&>*:not([data-slot=buttons-group-separator]):not([aria-hidden=true])]:transition-[color,background-color]',
           // Group owns sizing (no consumer width classes): fill on flex/InputGroup/input,
@@ -79,8 +80,9 @@ const buttonsGroupVariants = cva(
           '[&>:first-child]:rounded-t-xl',
           '[&>:last-child]:rounded-b-xl',
           '[&>*:not([data-slot=buttons-group-separator]):not(:first-child)]:-mt-px',
-          '[&>*:not([data-slot=buttons-group-separator]):not([data-slot=buttons-group-text]):not([data-variant=default]):not([data-variant=primary]):not(:first-child):not(:hover):not(:focus-visible):not(:has(:focus-visible))]:border-t-transparent',
+          '[&>*:not([data-slot=buttons-group-separator]):not([data-slot=buttons-group-text]):not([data-variant=default]):not([data-variant=primary]):not([data-variant=destructive]):not(:first-child):not([data-variant=outline]):not(:hover):not(:focus-visible):not(:has(:focus-visible))]:border-t-transparent',
           '[&>[data-variant=primary]:not(:first-child)]:shadow-[inset_0_1px_0_0_var(--color-border1)]',
+          '[&>[data-variant=destructive]:not(:first-child)]:shadow-[inset_0_1px_0_0_var(--color-border1)]',
           '[&>*:not([data-slot=buttons-group-separator])]:transition-[color,background-color]',
         ),
       },
@@ -146,9 +148,9 @@ ButtonsGroupSeparator.displayName = 'ButtonsGroupSeparator';
 
 const buttonsGroupTextVariants = cva(
   cn(
-    'inline-flex items-center justify-center bg-surface3 border border-border1 text-neutral5 select-none',
-    'rounded-full gap-[.75em] px-[1em] whitespace-nowrap shrink-0',
-    '[&>svg]:w-[1.1em] [&>svg]:h-[1.1em] [&>svg]:opacity-50',
+    'inline-flex items-center justify-center border border-border1 bg-surface3 text-neutral5 select-none',
+    'shrink-0 gap-[.75em] rounded-full px-[1em] whitespace-nowrap',
+    '[&>svg]:size-[1.1em] [&>svg]:opacity-50',
   ),
   {
     variants: {
@@ -156,12 +158,11 @@ const buttonsGroupTextVariants = cva(
         xs: controlSizeClasses.xs,
         sm: controlSizeClasses.sm,
         md: controlSizeClasses.md,
-        default: controlSizeClasses.default,
         lg: controlSizeClasses.lg,
       },
     },
     defaultVariants: {
-      size: 'default',
+      size: 'md',
     },
   },
 );
@@ -171,7 +172,7 @@ export type ButtonsGroupTextProps = React.ComponentPropsWithoutRef<'div'> & {
 };
 
 export const ButtonsGroupText = React.forwardRef<HTMLDivElement, ButtonsGroupTextProps>(
-  ({ className, size = 'default', ...props }, ref) => {
+  ({ className, size = 'md', ...props }, ref) => {
     return (
       <div
         ref={ref}
@@ -184,4 +185,5 @@ export const ButtonsGroupText = React.forwardRef<HTMLDivElement, ButtonsGroupTex
 );
 ButtonsGroupText.displayName = 'ButtonsGroupText';
 
+// eslint-disable-next-line react-refresh/only-export-components -- exported variant helper is part of ButtonsGroup's public API
 export { buttonsGroupVariants };

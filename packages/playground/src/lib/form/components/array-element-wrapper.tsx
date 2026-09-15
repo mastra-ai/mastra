@@ -1,16 +1,13 @@
 import type { ArrayElementWrapperProps } from '@autoform/react';
-import { Button, Icon } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { TrashIcon } from 'lucide-react';
 import React from 'react';
 
 export const ArrayElementWrapper: React.FC<ArrayElementWrapperProps> = ({ children, onRemove }) => {
   return (
-    <div className="pl-4 border-l border-border1">
+    <div className="border-border1 border-l pl-4">
       {children}
-      <Button onClick={onRemove} type="button">
-        <Icon size="sm">
-          <TrashIcon />
-        </Icon>
+      <Button onClick={onRemove} type="button" icon={<TrashIcon />}>
         Delete
       </Button>
     </div>

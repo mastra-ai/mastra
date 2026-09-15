@@ -28,7 +28,7 @@ export type VoyageMultimodalModel = 'voyage-multimodal-3' | 'voyage-multimodal-3
 /**
  * VoyageAI contextualized chunk embedding models
  */
-export type VoyageContextModel = 'voyage-context-3';
+export type VoyageContextModel = 'voyage-context-3' | 'voyage-context-4';
 
 /**
  * All VoyageAI embedding models
@@ -69,6 +69,8 @@ export interface VoyageTextEmbeddingConfig {
   model: VoyageTextModel;
   /** API key (defaults to VOYAGE_API_KEY env var) */
   apiKey?: string;
+  /** Custom base URL for the Voyage API (e.g. a provider-hosted endpoint such as https://ai.mongodb.com/v1). */
+  baseUrl?: string;
   /** Input type for retrieval optimization */
   inputType?: VoyageInputType;
   /** Output embedding dimension (model-dependent, default 1024) */
@@ -139,6 +141,8 @@ export interface VoyageMultimodalEmbeddingConfig {
   model: VoyageMultimodalModel;
   /** API key (defaults to VOYAGE_API_KEY env var) */
   apiKey?: string;
+  /** Custom base URL for the Voyage API (e.g. a provider-hosted endpoint such as https://ai.mongodb.com/v1). */
+  baseUrl?: string;
   /** Input type for retrieval optimization */
   inputType?: VoyageInputType;
   /** Whether to truncate inputs that exceed context length (default true) */
@@ -157,6 +161,8 @@ export interface VoyageContextualizedEmbeddingConfig {
   model: VoyageContextModel;
   /** API key (defaults to VOYAGE_API_KEY env var) */
   apiKey?: string;
+  /** Custom base URL for the Voyage API (e.g. a provider-hosted endpoint such as https://ai.mongodb.com/v1). */
+  baseUrl?: string;
   /** Input type for retrieval optimization */
   inputType?: VoyageInputType;
   /** Output embedding dimension (default 1024) */
@@ -298,6 +304,13 @@ export const CONTEXTUALIZED_MODEL_INFO: Record<VoyageContextModel, Omit<VoyageMo
     isMultimodal: false,
     isContextualized: true,
   },
+  'voyage-context-4': {
+    maxInputTokens: 32000,
+    defaultDimension: 1024,
+    supportedDimensions: [256, 512, 1024, 2048],
+    isMultimodal: false,
+    isContextualized: true,
+  },
 };
 
 // ============================================================================
@@ -381,6 +394,8 @@ export interface VoyageRerankerConfig {
   model: VoyageRerankerModel;
   /** API key (defaults to VOYAGE_API_KEY env var) */
   apiKey?: string;
+  /** Custom base URL for the Voyage API (e.g. a provider-hosted endpoint such as https://ai.mongodb.com/v1). */
+  baseUrl?: string;
   /** Whether to truncate inputs that exceed context length (default true) */
   truncation?: boolean;
 }

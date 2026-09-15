@@ -1,62 +1,47 @@
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { ThemeToggle } from '@mastra/playground-ui/components/ThemeToggle';
 import {
-  PageLayout,
-  SectionCard,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  SettingsContainer,
+  SettingsDescription,
+  SettingsGroup,
+  SettingsHeader,
+  SettingsLayout,
   SettingsRow,
-  useTheme,
-} from '@mastra/playground-ui';
-import type { Theme } from '@mastra/playground-ui';
+  SettingsTitle,
+} from '@mastra/playground-ui/new/settings';
 import { StudioConfigForm } from '@/domains/configuration/components/studio-config-form';
 import { useStudioConfig } from '@/domains/configuration/context/studio-config-state';
 
-const THEME_OPTIONS: { value: Theme; label: string }[] = [
-  { value: 'dark', label: 'Dark' },
-  { value: 'light', label: 'Light' },
-  { value: 'system', label: 'System' },
-];
-
-const isTheme = (value: string): value is Theme => THEME_OPTIONS.some(option => option.value === value);
-
 export const StudioSettingsPage = () => {
   const { baseUrl, headers, apiPrefix } = useStudioConfig();
-  const { theme, setTheme } = useTheme();
 
   return (
-    <PageLayout width="narrow">
-      <PageLayout.MainArea className="flex flex-col gap-5 mt-6">
-        <SectionCard title="Theme" description="Customize the appearance of the studio.">
-          <SettingsRow label="Theme mode" htmlFor="theme">
-            <Select
-              value={theme}
-              onValueChange={value => {
-                if (isTheme(value)) setTheme(value);
-              }}
-            >
-              <SelectTrigger id="theme" className="w-full sm:w-48">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {THEME_OPTIONS.map(option => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </SettingsRow>
-        </SectionCard>
+    <PageLayout className="p-0">
+      <SettingsLayout>
+        <div className="mx-auto flex max-w-4xl flex-col gap-8">
+          <SettingsGroup>
+            <SettingsHeader>
+              <SettingsTitle>General</SettingsTitle>
+              <SettingsDescription>Stored in this browser.</SettingsDescription>
+            </SettingsHeader>
+            <SettingsContainer>
+              <SettingsRow label="Theme" description="Customize the appearance of the studio.">
+                <ThemeToggle />
+              </SettingsRow>
+            </SettingsContainer>
+          </SettingsGroup>
 
-        <SectionCard
-          title="Mastra Connection"
-          description="Configure the Mastra instance URL, API prefix, and request headers used by the studio."
-        >
-          <StudioConfigForm initialConfig={{ baseUrl, headers, apiPrefix }} />
-        </SectionCard>
-      </PageLayout.MainArea>
+          <SettingsGroup>
+            <SettingsHeader>
+              <SettingsTitle>Mastra Connection</SettingsTitle>
+              <SettingsDescription>
+                Configure the Mastra instance URL, API prefix, and request headers used by the studio.
+              </SettingsDescription>
+            </SettingsHeader>
+            <StudioConfigForm variant="factory" initialConfig={{ baseUrl, headers, apiPrefix }} />
+          </SettingsGroup>
+        </div>
+      </SettingsLayout>
     </PageLayout>
   );
 };

@@ -9,8 +9,8 @@ import './spinner.css';
 const spinnerVariants = cva('spinner inline-block text-neutral6', {
   variants: {
     size: {
-      sm: 'w-4 h-4',
-      md: 'w-6 h-6',
+      sm: 'size-4',
+      md: 'size-6',
     },
     variant: {
       default: '',

@@ -617,6 +617,14 @@ export interface WorkflowTestConfig {
   ) => Promise<WorkflowResult>;
 
   /**
+   * Whether the engine deletes a run's snapshot row when the run reaches a
+   * non-paused terminal status that `shouldPersistSnapshot` declined to persist
+   * (evented engine, #22209). Engines that simply skip the terminal write keep
+   * the last persisted (e.g. suspended) snapshot instead.
+   */
+  deletesDeclinedTerminalSnapshots?: boolean;
+
+  /**
    * Resume a suspended workflow.
    * This is optional - only implement if the engine supports explicit resume testing.
    *
@@ -852,6 +860,12 @@ export interface WorkflowTestContext extends WorkflowCreatorContext {
   ) => Promise<WorkflowResult>;
 
   /**
+   * Whether the engine deletes a run's snapshot row when the run reaches a
+   * non-paused terminal status that `shouldPersistSnapshot` declined to persist.
+   */
+  deletesDeclinedTerminalSnapshots?: boolean;
+
+  /**
    * Time travel to a specific step in a workflow.
    * This allows re-running a workflow from a specific step with provided context.
    * Returns undefined if the engine doesn't support time travel testing.
@@ -909,6 +923,18 @@ export interface WorkflowRegistryEntry {
    * Call this in beforeEach to prevent mock call count accumulation.
    */
   resetMocks?: () => void;
+  /**
+   * Agents this workflow expects to be registered on the shared Mastra instance
+   * (used by `.agent('id')` by-id forms). Engine harnesses aggregate these
+   * across all entries when constructing Mastra.
+   */
+  mastraAgents?: Record<string, any>;
+  /**
+   * Tools this workflow expects to be registered on the shared Mastra instance
+   * (used by `.tool('id')` by-id forms). Engine harnesses aggregate these
+   * across all entries when constructing Mastra.
+   */
+  mastraTools?: Record<string, any>;
   // Optional getters/resetters for test state
   [key: string]: any;
 }

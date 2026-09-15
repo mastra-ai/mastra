@@ -117,6 +117,7 @@ export class ObservabilityMySQL extends ObservabilityStorage {
       generateTableSQL({
         tableName: TABLE_SPANS,
         schema: TABLE_SCHEMAS[TABLE_SPANS],
+        compositePrimaryKey: ['traceId', 'spanId'],
       }),
     );
 
@@ -663,6 +664,7 @@ export class ObservabilityMySQL extends ObservabilityStorage {
   }
 
   async batchDeleteTraces(args: BatchDeleteTracesArgs): Promise<void> {
+    this.assertUnscopedBatchDeleteTraces(args);
     try {
       if (!args.traceIds.length) {
         return;

@@ -73,6 +73,33 @@ describe('MetaSchemaCompatLayer', () => {
     });
   });
 
+  describe('number constraint handling', () => {
+    it('strips the safe-integer bounds that z.number().int() emits', () => {
+      const schema = z.object({ count: z.number().int() });
+
+      const layer = new MetaSchemaCompatLayer(modelInfo);
+      const count = (layer.toJSONSchema(schema).properties as Record<string, any>).count;
+
+      // Without the number handler these leak as minimum: -9007199254740991 /
+      // maximum: 9007199254740991, which is meaningless noise for the model.
+      expect(count.type).toBe('integer');
+      expect(count.minimum).toBeUndefined();
+      expect(count.maximum).toBeUndefined();
+    });
+
+    it('moves numeric min/max into the description instead of leaking keywords', () => {
+      const schema = z.object({ score: z.number().min(1).max(50) });
+
+      const layer = new MetaSchemaCompatLayer(modelInfo);
+      const score = (layer.toJSONSchema(schema).properties as Record<string, any>).score;
+
+      expect(score.minimum).toBeUndefined();
+      expect(score.maximum).toBeUndefined();
+      expect(score.description).toContain('greater than or equal to 1');
+      expect(score.description).toContain('lower than or equal to 50');
+    });
+  });
+
   describe('processZodType - Basic Transformations', () => {
     const modelInfo: ModelInformation = {
       provider: 'meta',

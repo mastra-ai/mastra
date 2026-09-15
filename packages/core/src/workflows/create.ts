@@ -13,29 +13,67 @@
  * By keeping the Workflow class in `workflow.ts` and the factories here,
  * neither module needs to import the other's runtime dependencies.
  */
+import type { InferPublicSchema, PublicSchema } from '../schema';
 import { createWorkflow as createEventedWorkflowImpl } from './evented/workflow';
 import type { Step } from './step';
-import type { DefaultEngineType, WorkflowConfig } from './types';
+import type { CreateWorkflowParams, DefaultEngineType, InferSchemaOutput } from './types';
 import { Workflow } from './workflow';
 
 /**
- * Create a workflow, auto-promoting to the evented engine when a `schedule`
- * is declared.
+ * Creates a workflow for composing typed steps. Declaring a `schedule`
+ * automatically selects the evented engine.
+ *
+ * @example
+ * `yourStep` is a configured step with string input and output.
+ * ```typescript
+ * import { createWorkflow } from '@mastra/core/workflows';
+ * import { z } from 'zod';
+ *
+ * const workflow = createWorkflow({
+ *   id: 'greeting',
+ *   inputSchema: z.string(),
+ *   outputSchema: z.string(),
+ * }).then(yourStep).commit();
+ * ```
+ *
+ * @see For documentation bundled with your installed package, locate
+ * `@mastra/core/package.json` with your project's resolver or package-manager
+ * tooling, then read `dist/docs/SKILL.md` from that package root and follow its
+ * reference links. Use package-manager tools for virtual or archived packages.
+ *
+ * @see [Workflow documentation](https://mastra.ai/docs/workflows/overview)
+ * if packaged docs are unavailable.
  */
 export function createWorkflow<
   TWorkflowId extends string = string,
-  TState = unknown,
-  TInput = unknown,
-  TOutput = unknown,
+  TInputSchema extends PublicSchema<any> = PublicSchema<any>,
+  TOutputSchema extends PublicSchema<any> = PublicSchema<any>,
+  TStateSchema extends PublicSchema<any> | undefined = undefined,
   TSteps extends Step<string, any, any, any, any, any, DefaultEngineType>[] = Step[],
-  TRequestContext extends Record<string, any> | unknown = unknown,
->(params: WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps, TRequestContext>) {
+  TRequestContextSchema extends PublicSchema<any> | undefined = undefined,
+>(params: CreateWorkflowParams<TWorkflowId, TStateSchema, TInputSchema, TOutputSchema, TSteps, TRequestContextSchema>) {
   if (params.schedule) {
-    return createEventedWorkflowImpl(
-      params as WorkflowConfig<TWorkflowId, TState, TInput, TOutput, Step[]>,
-    ) as unknown as Workflow<DefaultEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TInput, TRequestContext>;
+    return createEventedWorkflowImpl(params as any) as unknown as Workflow<
+      DefaultEngineType,
+      TSteps,
+      TWorkflowId,
+      InferSchemaOutput<TStateSchema>,
+      InferPublicSchema<TInputSchema>,
+      InferPublicSchema<TOutputSchema>,
+      InferPublicSchema<TInputSchema>,
+      InferSchemaOutput<TRequestContextSchema>
+    >;
   }
-  return new Workflow<DefaultEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TInput, TRequestContext>(params);
+  return new Workflow<
+    DefaultEngineType,
+    TSteps,
+    TWorkflowId,
+    InferSchemaOutput<TStateSchema>,
+    InferPublicSchema<TInputSchema>,
+    InferPublicSchema<TOutputSchema>,
+    InferPublicSchema<TInputSchema>,
+    InferSchemaOutput<TRequestContextSchema>
+  >(params as any);
 }
 
 /**
@@ -46,15 +84,22 @@ export function createWorkflow<
  */
 export function createEventedWorkflow<
   TWorkflowId extends string = string,
-  TState = unknown,
-  TInput = unknown,
-  TOutput = unknown,
+  TInputSchema extends PublicSchema<any> = PublicSchema<any>,
+  TOutputSchema extends PublicSchema<any> = PublicSchema<any>,
+  TStateSchema extends PublicSchema<any> | undefined = undefined,
   TSteps extends Step<string, any, any, any, any, any, DefaultEngineType>[] = Step[],
-  TRequestContext extends Record<string, any> | unknown = unknown,
->(params: WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps, TRequestContext>) {
-  return createEventedWorkflowImpl(
-    params as WorkflowConfig<TWorkflowId, TState, TInput, TOutput, Step[]>,
-  ) as unknown as Workflow<DefaultEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TInput, TRequestContext>;
+  TRequestContextSchema extends PublicSchema<any> | undefined = undefined,
+>(params: CreateWorkflowParams<TWorkflowId, TStateSchema, TInputSchema, TOutputSchema, TSteps, TRequestContextSchema>) {
+  return createEventedWorkflowImpl(params as any) as unknown as Workflow<
+    DefaultEngineType,
+    TSteps,
+    TWorkflowId,
+    InferSchemaOutput<TStateSchema>,
+    InferPublicSchema<TInputSchema>,
+    InferPublicSchema<TOutputSchema>,
+    InferPublicSchema<TInputSchema>,
+    InferSchemaOutput<TRequestContextSchema>
+  >;
 }
 
 export function cloneWorkflow<

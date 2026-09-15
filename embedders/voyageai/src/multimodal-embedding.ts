@@ -16,12 +16,13 @@ import type {
 } from './types';
 
 /**
- * Convert our content format to VoyageAI SDK format
+ * Convert our content format to the VoyageAI SDK's content-item shape.
+ * The API requires typed objects (never bare strings) inside each input's `content` array.
  */
-function toSdkContent(content: VoyageMultimodalContent): unknown {
+function toSdkContent(content: VoyageMultimodalContent): Record<string, unknown> {
   switch (content.type) {
     case 'text':
-      return content.text;
+      return { type: 'text', text: content.text };
     case 'image_url':
       return { type: 'image_url', image_url: content.image_url };
     case 'image_base64':
@@ -34,10 +35,11 @@ function toSdkContent(content: VoyageMultimodalContent): unknown {
 }
 
 /**
- * Convert multimodal input to SDK format
+ * Convert a multimodal input to the SDK's input-item shape: an object with a
+ * `content` array of typed content objects.
  */
-function toSdkInput(input: VoyageMultimodalInput): unknown[] {
-  return input.content.map(toSdkContent);
+function toSdkInput(input: VoyageMultimodalInput): { content: Record<string, unknown>[] } {
+  return { content: input.content.map(toSdkContent) };
 }
 
 /**
@@ -92,7 +94,7 @@ export class VoyageMultimodalEmbeddingModel {
       );
     }
 
-    this.client = new VoyageAIClient({ apiKey });
+    this.client = new VoyageAIClient({ apiKey, ...(config.baseUrl ? { baseUrl: config.baseUrl } : {}) });
   }
 
   /**
@@ -117,13 +119,9 @@ export class VoyageMultimodalEmbeddingModel {
     // Convert inputs to SDK format
     const sdkInputs = values.map(toSdkInput);
 
-    // Use the SDK's multimodalEmbed method
-    // Note: The `as any` cast is necessary because the SDK's type definitions don't properly
-    // type the flexible multimodal input structure. The SDK accepts mixed content types:
-    // - strings for text content
-    // - objects like { type: 'image_url', image_url: '...' } for images/video
-    // Our internal `unknown[]` return type from toSdkInput needs to bridge to the SDK's
-    // expected `any[][]` format for the multimodal inputs parameter.
+    // The `as any` remains only for image/video content: the SDK's generated request type uses
+    // camelCase keys (imageUrl/imageBase64/videoUrl) while the Voyage wire API and our public
+    // VoyageMultimodalContent types use snake_case (image_url/...). Text content is fully typed.
     const response = await this.client.multimodalEmbed({
       inputs: sdkInputs as any,
       model: this.modelId,

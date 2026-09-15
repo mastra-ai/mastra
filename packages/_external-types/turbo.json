@@ -5,7 +5,7 @@
     "build:lib": {
       "dependsOn": ["^build"],
       "outputs": ["dist/**", "!dist/docs/**"],
-      "inputs": ["$TURBO_DEFAULT$", "./tsup.config.ts"]
+      "inputs": ["$TURBO_DEFAULT$", "./tsdown.config.ts"]
     },
     "build": {
       "dependsOn": ["build:lib"],

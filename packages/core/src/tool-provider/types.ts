@@ -1,3 +1,4 @@
+import type { RequestContext } from '../request-context';
 import type { StorageToolConfig } from '../storage/types';
 import type { ToolAction } from '../tools/types';
 
@@ -78,7 +79,7 @@ export interface ToolProviderListResult<T> {
 export interface ResolveToolProviderToolsOptions {
   /** User ID for user-scoped tool execution (e.g., Composio) */
   userId?: string;
-  /** Per-request context (e.g., user-specific API keys, tenant IDs) */
+  /** Per-request context snapshot for the legacy resolver. */
   requestContext?: Record<string, unknown>;
   /** Additional provider-specific options */
   [key: string]: unknown;
@@ -135,7 +136,11 @@ export interface ToolProviderConnection {
    * Identity binding kind.
    *
    * - `'author'` — uses the agent author's connection (v1 default).
-   * - `'invoker'` — uses the end-user's connection (reserved).
+   * - `'invoker'` — executes as the authenticated end-user (invoker). The
+   *   pinned `connectionId` selects the exact provider account (which may be
+   *   an account another user shared with the invoker); the provider resolves
+   *   the invoker's user id from authenticated, server-populated context,
+   *   never from the Memory resource id.
    * - `'platform'` — uses a shared platform account (reserved).
    */
   kind: 'author' | 'invoker' | 'platform';
@@ -144,7 +149,8 @@ export interface ToolProviderConnection {
   /**
    * Provider-opaque identifier for the OAuth bucket.
    *
-   * Required for `'author'` and `'platform'`; reserved (empty) for `'invoker'`.
+   * Required for `'author'` and `'platform'`. For `'invoker'`, carries the
+   * exact provider account id the invoker selected (personal or shared).
    */
   connectionId: string;
   /**
@@ -245,8 +251,23 @@ export interface ResolveToolsOpts {
    * invoker, not just the author. Falsy = fall back to request context.
    */
   authorId?: string;
-  /** Per-request context (auth, tenant, currentUser, ...). */
-  requestContext?: Record<string, unknown>;
+  /**
+   * Identity binding kind of the connection being resolved. Absent = treat
+   * as `'author'` (back-compat). For `'invoker'`, providers must resolve the
+   * user bucket from trusted, server-populated request context and route
+   * execution to the exact `connectionId`.
+   */
+  kind?: ToolProviderConnection['kind'];
+  /** Toolkit slug this resolution targets. Absent for legacy callers. */
+  toolkit?: string;
+  /**
+   * Identity bucketing for this connection. Providers may use it to decide
+   * whether to pin a specific account or let the backend auto-resolve within
+   * the user bucket. Absent = treat as `'per-author'` (back-compat).
+   */
+  scope?: ToolProviderConnectionScope;
+  /** Live per-request context. Use its typed accessors instead of serializing it. */
+  requestContext?: RequestContext;
 }
 
 /**
@@ -380,6 +401,16 @@ export interface ToolProvider {
    * legacy providers may omit it.
    */
   readonly capabilities?: ToolProviderCapabilities;
+
+  /**
+   * Default identity-bucketing scope for connections authorized against this
+   * provider. Set by the app author at construction time — this is a tenancy
+   * architecture decision, not an end-user choice. The authorize flow uses it
+   * when the request does not specify a `scope`, so a provider configured with
+   * `defaultScope: 'caller-supplied'` produces per-tenant connections without
+   * any UI control. Falls back to `'per-author'` when absent.
+   */
+  readonly defaultScope?: ToolProviderConnectionScope;
 
   // ── Legacy surface (kept for back-compat) ─────────────────────────────
 

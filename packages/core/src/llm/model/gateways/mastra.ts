@@ -1,5 +1,5 @@
 import { createAnthropic } from '@ai-sdk/anthropic-v6';
-import { createOpenRouter } from '@openrouter/ai-sdk-provider-v5';
+import { createOpenRouter } from '@openrouter/ai-sdk-provider-v6';
 import { MastraError } from '../../../error/index.js';
 import { PROVIDER_REGISTRY } from '../provider-registry.js';
 import { MastraModelGateway } from './base.js';
@@ -12,9 +12,25 @@ export interface MastraGatewayConfig {
   customFetch?: typeof globalThis.fetch;
 }
 
+/**
+ * Builds the headers for the OAuth gateway paths. The gateway credential lives in a reserved
+ * internal header, so caller-provided headers must not be able to replace it — including via a
+ * differently-cased spelling, since HTTP header names are case-insensitive.
+ */
+function withGatewayAuthHeader(apiKey: string, headers?: Record<string, string>): Record<string, string> {
+  const reserved = GATEWAY_AUTH_HEADER.toLowerCase();
+  const result: Record<string, string> = { 'User-Agent': MASTRA_USER_AGENT };
+  for (const [key, value] of Object.entries(headers ?? {})) {
+    if (key.toLowerCase() === reserved) continue;
+    result[key] = value;
+  }
+  result[GATEWAY_AUTH_HEADER] = `Bearer ${apiKey}`;
+  return result;
+}
+
 export class MastraGateway extends MastraModelGateway {
   readonly id = 'mastra';
-  readonly name = 'Memory Gateway';
+  readonly name = 'Gateway';
 
   constructor(private config?: MastraGatewayConfig) {
     super();
@@ -41,7 +57,7 @@ export class MastraGateway extends MastraModelGateway {
       mastra: {
         apiKeyEnvVar: 'MASTRA_GATEWAY_API_KEY',
         apiKeyHeader: 'Authorization',
-        name: 'Memory Gateway',
+        name: 'Gateway',
         gateway: 'mastra',
         models: [...models],
         docUrl: 'https://mastra.ai/docs/gateway',
@@ -87,11 +103,7 @@ export class MastraGateway extends MastraModelGateway {
       return createAnthropic({
         apiKey: 'oauth-gateway-placeholder',
         baseURL,
-        headers: {
-          'User-Agent': MASTRA_USER_AGENT,
-          [GATEWAY_AUTH_HEADER]: `Bearer ${apiKey}`,
-          ...headers,
-        },
+        headers: withGatewayAuthHeader(apiKey, headers),
         fetch: this.config.customFetch as any,
       })(modelId) as unknown as GatewayLanguageModel;
     }
@@ -101,11 +113,7 @@ export class MastraGateway extends MastraModelGateway {
       return createOpenRouter({
         apiKey: 'oauth-gateway-placeholder',
         baseURL,
-        headers: {
-          'User-Agent': MASTRA_USER_AGENT,
-          [GATEWAY_AUTH_HEADER]: `Bearer ${apiKey}`,
-          ...headers,
-        },
+        headers: withGatewayAuthHeader(apiKey, headers),
         fetch: this.config.customFetch,
       }).chat(fullModelId) as unknown as GatewayLanguageModel;
     }

@@ -4,6 +4,7 @@ import {
   normalizePerPage,
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_SCHEMAS,
+  matchesExpectedWorkflowStatus,
   WorkflowsStorage,
   createStorageErrorId,
 } from '@mastra/core/storage';
@@ -13,10 +14,21 @@ import type {
   WorkflowRun,
   WorkflowRuns,
   CreateIndexOptions,
+  TABLE_NAMES,
+  PruneOptions,
+  PruneResult,
+  RetentionTablesDescriptor,
+  TableRetentionPolicy,
 } from '@mastra/core/storage';
+import { parseSqlIdentifier } from '@mastra/core/utils';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
-import { PgDB, resolvePgConfig, generateTableSQL } from '../../db';
+import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
+import { buildConstraintName } from '../../db/constraint-utils';
+import { sanitizeJsonForPg } from '../../db/sanitize-json';
+import { runPrune, resolveTargets } from '../../retention';
+
+export { sanitizeJsonForPg };
 
 function getSchemaName(schema?: string) {
   return schema ? `"${schema}"` : '"public"';
@@ -27,28 +39,28 @@ function getTableName({ indexName, schemaName }: { indexName: string; schemaName
   return schemaName ? `${schemaName}.${quotedIndexName}` : quotedIndexName;
 }
 
+/** Base name (before any schema prefix) of the expression index backing the status filter. */
+const WORKFLOW_SNAPSHOT_STATUS_INDEX = 'mastra_workflow_snapshot_name_status_createdat_idx';
+
 /**
- * Sanitizes JSON string for PostgreSQL jsonb:
- * - Removes problematic Unicode sequences:
- *   - \u0000 (null character) - causes error 22P05 "unsupported Unicode escape sequence"
- *   - \uD800-\uDFFF (unpaired surrogates) - causes "Unicode low surrogate must follow a high surrogate"
- *   - \\uD800 (escaped-backslash + surrogate, e.g. from JS regex literals like [^\ud800-\udfff]):
- *     removing just \uXXXX would leave a dangling backslash that creates a new invalid escape (e.g. \-)
- * - Escapes any remaining invalid JSON escape sequences (e.g. \v, \k, \-)
+ * Schema-prefixed name of the status index, lowercased and truncated the same way Postgres
+ * stores it, so the init snapshot's index set answers "does it exist?" without a probe or a
+ * no-op `CREATE INDEX` (schema-prefixed names routinely exceed the 63-byte limit).
  */
-export function sanitizeJsonForPg(jsonString: string): string {
-  return (
-    jsonString
-      // Remove null char and surrogate escape sequences. The optional extra backslash (\\\\?)
-      // also handles the escaped-backslash variant (\\uXXXX), which would otherwise leave a
-      // dangling backslash and produce a new invalid escape sequence after removal.
-      .replace(/\\\\?u(0000|[Dd][89A-Fa-f][0-9A-Fa-f]{2})/g, '')
-      // Fix any remaining invalid JSON escape sequences safely without rewriting
-      // already-escaped backslashes. Running this AFTER surrogate removal ensures that
-      // characters newly exposed by the removal (e.g. a hyphen left after \\ud800-\\udfff)
-      // are also caught and escaped.
-      .replace(/(^|[^\\])(\\(?!["\\/bfnrtu]))/g, '$1\\\\')
-  );
+function workflowSnapshotStatusIndexName(schemaName?: string): string {
+  return buildConstraintName({
+    baseName: WORKFLOW_SNAPSHOT_STATUS_INDEX,
+    schemaName: schemaName && schemaName !== 'public' ? schemaName : undefined,
+  });
+}
+
+/**
+ * Expression index on `(workflow_name, snapshot->>'status', "createdAt" DESC)` so
+ * listWorkflowRuns() status filters can use an index instead of scanning every snapshot.
+ */
+function workflowSnapshotStatusIndexSQL(indexName: string, schemaName?: string): string {
+  const tableName = getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(schemaName) });
+  return `CREATE INDEX IF NOT EXISTS "${indexName}" ON ${tableName} (workflow_name, (snapshot ->> 'status'), "createdAt" DESC)`;
 }
 
 export class WorkflowsPG extends WorkflowsStorage {
@@ -60,10 +72,19 @@ export class WorkflowsPG extends WorkflowsStorage {
   /** Tables managed by this domain */
   static readonly MANAGED_TABLES = [TABLE_WORKFLOW_SNAPSHOT] as const;
 
+  /**
+   * Workflow run snapshots accumulate as runs execute. Anchored on the
+   * timezone-aware `updatedAtZ` mirror column (last activity) so suspended or
+   * long-running runs are not pruned by start age.
+   */
+  static override readonly retentionTables: RetentionTablesDescriptor = {
+    workflowSnapshot: { table: TABLE_WORKFLOW_SNAPSHOT, column: 'updatedAtZ', indexed: true },
+  };
+
   constructor(config: PgDomainConfig) {
     super();
-    const { client, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
-    this.#db = new PgDB({ client, schemaName, skipDefaultIndexes });
+    const { client, readClient, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
+    this.#db = new PgDB({ client, readClient, schemaName, skipDefaultIndexes });
     this.#schema = schemaName || 'public';
     this.#skipDefaultIndexes = skipDefaultIndexes;
     // Filter indexes to only those for tables managed by this domain
@@ -93,12 +114,24 @@ export class WorkflowsPG extends WorkflowsStorage {
     };
   }
 
+  static getDefaultIndexDefs(schemaPrefix: string): CreateIndexOptions[] {
+    return [
+      {
+        name: `${schemaPrefix}mastra_workflow_snapshot_name_createdat_idx`,
+        table: TABLE_WORKFLOW_SNAPSHOT,
+        columns: ['workflow_name', 'createdAt DESC'],
+      },
+    ];
+  }
+
   /**
    * Returns all DDL statements for this domain: table with unique constraint.
    * Used by exportSchemas to produce a complete, reproducible schema export.
    */
   static getExportDDL(schemaName?: string): string[] {
     const statements: string[] = [];
+    const parsedSchema = schemaName ? parseSqlIdentifier(schemaName, 'schema name') : '';
+    const schemaPrefix = parsedSchema && parsedSchema !== 'public' ? `${parsedSchema}_` : '';
 
     // Table (includes the UNIQUE constraint on workflow_name, run_id via generateTableSQL)
     statements.push(
@@ -110,26 +143,48 @@ export class WorkflowsPG extends WorkflowsStorage {
       }),
     );
 
+    for (const idx of WorkflowsPG.getDefaultIndexDefs(schemaPrefix)) {
+      statements.push(generateIndexSQL(idx, schemaName));
+    }
+
+    statements.push(`${workflowSnapshotStatusIndexSQL(workflowSnapshotStatusIndexName(parsedSchema), schemaName)};`);
+
     return statements;
   }
 
   /**
    * Returns default index definitions for the workflows domain tables.
-   * Currently no default indexes are defined for workflows.
    */
   getDefaultIndexDefinitions(): CreateIndexOptions[] {
-    return [];
+    const schemaPrefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
+    return WorkflowsPG.getDefaultIndexDefs(schemaPrefix);
   }
 
   /**
    * Creates default indexes for optimal query performance.
-   * Currently no default indexes are defined for workflows.
    */
   async createDefaultIndexes(): Promise<void> {
-    if (this.#skipDefaultIndexes) {
-      return;
+    if (this.#skipDefaultIndexes) return;
+    for (const indexDef of this.getDefaultIndexDefinitions()) {
+      try {
+        await this.#db.createIndex(indexDef);
+      } catch (error) {
+        this.logger?.warn?.(`Failed to create index ${indexDef.name}:`, error);
+      }
     }
-    // No default indexes for workflows domain
+
+    // Expression index backing the status filter in listWorkflowRuns(). Only valid on jsonb
+    // columns — legacy json/text snapshot columns still go through the sanitizing regexp,
+    // which cannot use an index anyway.
+    const snapshotType = await this.#db.getColumnType(TABLE_WORKFLOW_SNAPSHOT, 'snapshot');
+    if (snapshotType !== 'jsonb') return;
+
+    const indexName = workflowSnapshotStatusIndexName(this.#schema);
+    try {
+      await this.#db.createIndexFromStatement(indexName, workflowSnapshotStatusIndexSQL(indexName, this.#schema));
+    } catch (error) {
+      this.logger?.warn?.(`Failed to create index ${indexName}:`, error);
+    }
   }
 
   async init(): Promise<void> {
@@ -141,6 +196,42 @@ export class WorkflowsPG extends WorkflowsStorage {
     });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
+  }
+
+  /**
+   * Lazily ensures a btree index exists on each configured policy's retention
+   * anchor column so age-based `prune()` deletes stay fast on large tables.
+   * Called from the prune path (not init) so only deployments that configure
+   * retention pay the index's write/disk overhead. Best-effort: failures are
+   * logged and pruning proceeds (correct, just slower).
+   * Created even with `skipDefaultIndexes` — retention is an explicit opt-in,
+   * so its supporting index is not part of the default index set.
+   */
+  private async ensureRetentionIndexes(policies: Record<string, TableRetentionPolicy>): Promise<void> {
+    const prefix = this.#schema && this.#schema !== 'public' ? `${this.#schema}_` : '';
+    for (const [key, entry] of Object.entries(WorkflowsPG.retentionTables)) {
+      if (!entry.indexed || !policies[key]) continue;
+      try {
+        await this.#db.ensureIndex({
+          indexName: `${prefix}mastra_${key}_retention_idx`,
+          tableName: entry.table as TABLE_NAMES,
+          column: entry.column,
+        });
+      } catch (error) {
+        this.logger?.warn?.(`Failed to create retention index for ${entry.table}:`, error);
+      }
+    }
+  }
+
+  /** Delete workflow run snapshots older than the `workflowSnapshot` policy's `maxAge`, batched. */
+  async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
+    await this.ensureRetentionIndexes(policies);
+    const targets = resolveTargets({
+      policies,
+      descriptor: WorkflowsPG.retentionTables,
+      order: ['workflowSnapshot'],
+    });
+    return runPrune({ db: this.#db, domain: 'workflows', targets, options });
   }
 
   /**
@@ -221,11 +312,12 @@ export class WorkflowsPG extends WorkflowsStorage {
         const now = new Date();
         const sanitizedSnapshot = sanitizeJsonForPg(JSON.stringify(snapshot));
         await t.none(
-          `INSERT INTO ${tableName} (workflow_name, run_id, snapshot, "createdAt", "updatedAt")
-           VALUES ($1, $2, $3, $4, $5)
+          `INSERT INTO ${tableName}
+           (workflow_name, run_id, snapshot, "createdAt", "updatedAt", "createdAtZ", "updatedAtZ")
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
            ON CONFLICT (workflow_name, run_id) DO UPDATE
-           SET snapshot = $3, "updatedAt" = $5`,
-          [workflowName, runId, sanitizedSnapshot, now, now],
+           SET snapshot = $3, "updatedAt" = $5, "updatedAtZ" = $7`,
+          [workflowName, runId, sanitizedSnapshot, now, now, now, now],
         );
 
         return snapshot.context;
@@ -279,14 +371,24 @@ export class WorkflowsPG extends WorkflowsStorage {
           throw new Error(`Snapshot not found for runId ${runId}`);
         }
 
+        // `expectedStatus` is a compare-and-set guard, not state. It is checked here, inside the
+        // row lock, and stripped so it can never be merged into the persisted snapshot.
+        const { expectedStatus, ...state } = opts;
+        if (!matchesExpectedWorkflowStatus(snapshot.status, expectedStatus)) {
+          return undefined;
+        }
+
         // Merge the new options with the existing snapshot
-        const updatedSnapshot = { ...snapshot, ...opts };
+        const updatedSnapshot = { ...snapshot, ...state };
 
         // Update the snapshot within the same transaction
         const sanitizedSnapshot = sanitizeJsonForPg(JSON.stringify(updatedSnapshot));
+        const now = new Date();
         await t.none(
-          `UPDATE ${tableName} SET snapshot = $1, "updatedAt" = $2 WHERE workflow_name = $3 AND run_id = $4`,
-          [sanitizedSnapshot, new Date(), workflowName, runId],
+          `UPDATE ${tableName}
+           SET snapshot = $1, "updatedAt" = $2, "updatedAtZ" = $3
+           WHERE workflow_name = $4 AND run_id = $5`,
+          [sanitizedSnapshot, now, now, workflowName, runId],
         );
 
         return updatedSnapshot;
@@ -329,11 +431,21 @@ export class WorkflowsPG extends WorkflowsStorage {
       // Sanitize the snapshot JSON to remove problematic Unicode sequences
       const sanitizedSnapshot = sanitizeJsonForPg(JSON.stringify(snapshot));
       await this.#db.client.none(
-        `INSERT INTO ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })} (workflow_name, run_id, "resourceId", snapshot, "createdAt", "updatedAt")
-                 VALUES ($1, $2, $3, $4, $5, $6)
+        `INSERT INTO ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })} AS t
+                 (workflow_name, run_id, "resourceId", snapshot, "createdAt", "updatedAt", "createdAtZ", "updatedAtZ")
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                  ON CONFLICT (workflow_name, run_id) DO UPDATE
-                 SET "resourceId" = $3, snapshot = $4, "updatedAt" = $6`,
-        [workflowName, runId, resourceId, sanitizedSnapshot, createdAtValue, updatedAtValue],
+                 SET "resourceId" = COALESCE($3, t."resourceId"), snapshot = $4, "updatedAt" = $6, "updatedAtZ" = $8`,
+        [
+          workflowName,
+          runId,
+          resourceId,
+          sanitizedSnapshot,
+          createdAtValue,
+          updatedAtValue,
+          createdAtValue,
+          updatedAtValue,
+        ],
       );
     } catch (error) {
       throw new MastraError(
@@ -407,7 +519,7 @@ export class WorkflowsPG extends WorkflowsStorage {
 
       const queryValues = values;
 
-      const result = await this.#db.client.oneOrNone(query, queryValues);
+      const result = await this.#db.readClient.oneOrNone(query, queryValues);
 
       if (!result) {
         return null;
@@ -473,15 +585,20 @@ export class WorkflowsPG extends WorkflowsStorage {
       }
 
       if (status) {
-        // Use regexp_replace to strip problematic Unicode escape sequences before casting to jsonb.
-        // PostgreSQL's jsonb cast fails on:
-        // - \u0000 (null character) with error 22P05 "unsupported Unicode escape sequence"
-        // - \uD800-\uDFFF (unpaired surrogates) with "Unicode low surrogate must follow a high surrogate"
-        // The regex pattern matches \u0000 and all surrogate code points (D800-DFFF).
+        // On jsonb columns PostgreSQL already rejects problematic Unicode escape sequences at
+        // insert time, so the sanitizing regexp is a no-op there — and it prevents the planner
+        // from using any index on the status field, forcing a sequential scan.
+        // Legacy tables whose snapshot column is still json/text can contain those sequences,
+        // so they keep the regexp_replace path:
+        // - \u0000 (null character) fails the jsonb cast with 22P05 "unsupported Unicode escape sequence"
+        // - \uD800-\uDFFF (unpaired surrogates) fail with "Unicode low surrogate must follow a high surrogate"
         // See: https://github.com/mastra-ai/mastra/issues/11563
-        conditions.push(
-          `regexp_replace(snapshot::text, '\\\\u(0000|[Dd][89A-Fa-f][0-9A-Fa-f]{2})', '', 'g')::jsonb ->> 'status' = $${paramIndex}`,
-        );
+        const snapshotType = await this.#db.getColumnType(TABLE_WORKFLOW_SNAPSHOT, 'snapshot');
+        const statusExpr =
+          snapshotType === 'jsonb'
+            ? `snapshot ->> 'status'`
+            : `regexp_replace(snapshot::text, '\\\\u(0000|[Dd][89A-Fa-f][0-9A-Fa-f]{2})', '', 'g')::jsonb ->> 'status'`;
+        conditions.push(`${statusExpr} = $${paramIndex}`);
         values.push(status);
         paramIndex++;
       }

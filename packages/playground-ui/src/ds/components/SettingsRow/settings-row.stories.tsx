@@ -1,11 +1,30 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import type { LucideIcon } from 'lucide-react';
+import { MonitorIcon, MoonIcon, SunIcon } from 'lucide-react';
 import { SettingsRow } from './settings-row';
 import { Button } from '@/ds/components/Button';
 import { SectionCard } from '@/ds/components/SectionCard';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
 
+const THEME_OPTIONS: { value: string; label: string; Icon: LucideIcon }[] = [
+  { value: 'dark', label: 'Dark', Icon: MoonIcon },
+  { value: 'light', label: 'Light', Icon: SunIcon },
+  { value: 'system', label: 'System', Icon: MonitorIcon },
+];
+
+function ThemeOptionLabel({ option }: { option: (typeof THEME_OPTIONS)[number] }) {
+  const { Icon } = option;
+
+  return (
+    <span className="inline-flex max-w-full min-w-0 items-center gap-2">
+      <Icon aria-hidden="true" className="size-4 shrink-0 opacity-70" />
+      <span className="min-w-0 truncate">{option.label}</span>
+    </span>
+  );
+}
+
 const meta: Meta<typeof SettingsRow> = {
-  title: 'Layout/SettingsRow',
+  title: 'Deprecated/SettingsRow',
   component: SettingsRow,
   parameters: {
     layout: 'padded',
@@ -28,12 +47,14 @@ export const WithSelect: Story = {
       <SettingsRow label="Theme mode" htmlFor="theme">
         <Select defaultValue="dark">
           <SelectTrigger id="theme" className="w-full sm:w-48">
-            <SelectValue />
+            <SelectValue className="inline-flex max-w-full min-w-0 items-center" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="dark">Dark</SelectItem>
-            <SelectItem value="light">Light</SelectItem>
-            <SelectItem value="system">System</SelectItem>
+            {THEME_OPTIONS.map(option => (
+              <SelectItem key={option.value} value={option.value}>
+                <ThemeOptionLabel option={option} />
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </SettingsRow>
@@ -51,12 +72,14 @@ export const WithDescription: Story = {
       >
         <Select defaultValue="dark">
           <SelectTrigger id="theme" className="w-full sm:w-48">
-            <SelectValue />
+            <SelectValue className="inline-flex max-w-full min-w-0 items-center" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="dark">Dark</SelectItem>
-            <SelectItem value="light">Light</SelectItem>
-            <SelectItem value="system">System</SelectItem>
+            {THEME_OPTIONS.map(option => (
+              <SelectItem key={option.value} value={option.value}>
+                <ThemeOptionLabel option={option} />
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </SettingsRow>
@@ -81,12 +104,14 @@ export const Stacked: Story = {
         <SettingsRow label="Theme mode" description="Choose how the studio appears." htmlFor="theme">
           <Select defaultValue="dark">
             <SelectTrigger id="theme" className="w-full sm:w-48">
-              <SelectValue />
+              <SelectValue className="inline-flex max-w-full min-w-0 items-center" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="dark">Dark</SelectItem>
-              <SelectItem value="light">Light</SelectItem>
-              <SelectItem value="system">System</SelectItem>
+              {THEME_OPTIONS.map(option => (
+                <SelectItem key={option.value} value={option.value}>
+                  <ThemeOptionLabel option={option} />
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </SettingsRow>
@@ -102,6 +127,39 @@ export const Stacked: Story = {
           </Select>
         </SettingsRow>
       </div>
+    </SectionCard>
+  ),
+};
+
+export const FactoryVariant: Story = {
+  render: () => (
+    <SectionCard
+      title="Factory observational memory"
+      description="Models and thresholds used to summarize and retain context."
+      contentClassName="px-0 pb-0"
+    >
+      <SettingsRow
+        variant="factory"
+        htmlFor="factory-observer-model"
+        label="Observer model"
+        description="Summarizes the conversation into observations"
+      >
+        <Select defaultValue="dark">
+          <SelectTrigger id="factory-observer-model" className="w-full lg:w-72">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="dark">claude-opus-5</SelectItem>
+          </SelectContent>
+        </Select>
+      </SettingsRow>
+      <SettingsRow
+        variant="factory"
+        label="Observe attachments"
+        description="Whether attached files are included in observations"
+      >
+        <Button>Auto</Button>
+      </SettingsRow>
     </SectionCard>
   ),
 };

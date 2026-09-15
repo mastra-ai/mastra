@@ -1,4 +1,5 @@
-import { Button, EmptyState } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { CircleAlertIcon, ExternalLinkIcon } from 'lucide-react';
 
 export const WorkspaceNotSupported = () => (
@@ -20,8 +21,9 @@ export const WorkspaceNotSupported = () => (
           href="https://mastra.ai/en/docs/workspace/overview"
           target="_blank"
           rel="noopener noreferrer"
+          icon={<ExternalLinkIcon />}
         >
-          Workspaces Documentation <ExternalLinkIcon />
+          Workspaces Documentation
         </Button>
       }
     />

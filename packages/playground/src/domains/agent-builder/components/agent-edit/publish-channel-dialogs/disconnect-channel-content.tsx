@@ -1,4 +1,7 @@
-import { Button, DialogDescription, DialogFooter, DialogHeader, DialogTitle, toast } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@mastra/playground-ui/components/Dialog';
+import { toast } from '@mastra/playground-ui/utils/toast';
+import { Check, X } from 'lucide-react';
 import { useDisconnectChannel } from '@/domains/agents/hooks/use-channels';
 import type { ChannelPlatformInfo } from '@/domains/agents/hooks/use-channels';
 
@@ -32,10 +35,11 @@ export function DisconnectChannelContent({ platform, agentId, onCancel, onClose 
         </DialogDescription>
       </DialogHeader>
       <DialogFooter>
-        <Button variant="ghost" onClick={onCancel} disabled={isPending}>
+        <Button icon={<X />} variant="ghost" onClick={onCancel} disabled={isPending}>
           Cancel
         </Button>
         <Button
+          icon={<Check />}
           variant="default"
           onClick={handleConfirm}
           disabled={isPending}

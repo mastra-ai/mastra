@@ -1,15 +1,9 @@
-import {
-  Button,
-  DataList,
-  DataListSkeleton,
-  ListSearch,
-  NoDataPageLayout,
-  PageLayout,
-  StatusBadge,
-  Txt,
-  toast,
-} from '@mastra/playground-ui';
-import { useMemo, useState } from 'react';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { toast } from '@mastra/playground-ui/utils/toast';
+import { Plug, Unplug } from 'lucide-react';
 import {
   useChannelPlatforms,
   useChannelInstallations,
@@ -19,72 +13,37 @@ import {
 import type { ChannelPlatformInfo } from '../../hooks/use-channels';
 import { PlatformIcon } from './platform-icons';
 
-const COLUMNS = '1fr auto auto';
-
 export interface AgentChannelsProps {
   agentId: string;
 }
 
 export const AgentChannels = ({ agentId }: AgentChannelsProps) => {
   const { data: platforms, isLoading } = useChannelPlatforms();
-  const [search, setSearch] = useState('');
 
-  if (!isLoading && (!platforms || platforms.length === 0)) {
+  if (isLoading) {
     return (
-      <NoDataPageLayout>
-        <Txt variant="ui-sm" className="text-neutral6">
-          No channel platforms configured.
-        </Txt>
-      </NoDataPageLayout>
+      <div className="space-y-2">
+        <Skeleton className="h-9 w-full" />
+      </div>
+    );
+  }
+
+  if (!platforms || platforms.length === 0) {
+    return (
+      <Txt variant="ui-sm" className="text-neutral6">
+        No channel platforms configured.
+      </Txt>
     );
   }
 
   return (
-    <PageLayout>
-      <PageLayout.TopArea>
-        <div className="max-w-120">
-          <ListSearch onSearch={setSearch} label="Filter channels" placeholder="Filter by platform name" />
-        </div>
-      </PageLayout.TopArea>
-
-      <ChannelsList platforms={platforms ?? []} isLoading={isLoading} agentId={agentId} search={search} />
-    </PageLayout>
-  );
-};
-
-interface ChannelsListProps {
-  platforms: ChannelPlatformInfo[];
-  isLoading: boolean;
-  agentId: string;
-  search: string;
-}
-
-function ChannelsList({ platforms, isLoading, agentId, search }: ChannelsListProps) {
-  const filtered = useMemo(() => {
-    const term = search.toLowerCase();
-    return platforms.filter(platform => platform.name.toLowerCase().includes(term));
-  }, [platforms, search]);
-
-  if (isLoading) {
-    return <DataListSkeleton columns={COLUMNS} />;
-  }
-
-  return (
-    <DataList columns={COLUMNS}>
-      <DataList.Top>
-        <DataList.TopCell className="">Platform</DataList.TopCell>
-        <DataList.TopCell className="justify-end text-right">Status</DataList.TopCell>
-        <DataList.TopCell className="">{''}</DataList.TopCell>
-      </DataList.Top>
-
-      {filtered.length === 0 && search ? <DataList.NoMatch message="No channels match your search" /> : null}
-
-      {filtered.map(platform => (
+    <ul className="divide-border1 divide-y">
+      {platforms.map(platform => (
         <ChannelRow key={platform.id} platform={platform} agentId={agentId} />
       ))}
-    </DataList>
+    </ul>
   );
-}
+};
 
 interface ChannelRowProps {
   platform: ChannelPlatformInfo;
@@ -111,49 +70,46 @@ function ChannelRow({ platform, agentId }: ChannelRowProps) {
   };
 
   return (
-    <DataList.RowStatic>
-      <DataList.Cell className="text-left text-neutral4">
-        <span className="flex items-center gap-3 min-w-0">
-          <PlatformIcon platform={platform.id} className="h-5 w-5 shrink-0" />
-          <span className="flex flex-col min-w-0">
-            <span className="truncate">{platform.name}</span>
-            {activeInstallation ? (
-              <Txt variant="ui-xs" className="text-neutral5 truncate">
-                {activeInstallation.displayName || 'Workspace'}
-              </Txt>
-            ) : null}
-          </span>
-        </span>
-      </DataList.Cell>
+    <li className="flex items-center gap-3 py-2.5">
+      <PlatformIcon platform={platform.id} className="h-5 w-5 shrink-0" />
 
-      <DataList.Cell className="flex justify-end">
-        {isLoading ? null : activeInstallation ? (
-          <StatusBadge variant="success" size="sm">
-            Connected
-          </StatusBadge>
-        ) : !platform.isConfigured ? (
-          <StatusBadge variant="warning" size="sm">
-            Not configured
-          </StatusBadge>
+      <span className="flex min-w-0 flex-1 flex-col">
+        <Txt as="span" variant="ui-md" className="text-neutral5 truncate">
+          {platform.name}
+        </Txt>
+        {activeInstallation ? (
+          <Txt variant="ui-xs" className="text-neutral3 truncate">
+            {activeInstallation.displayName || 'Workspace'}
+          </Txt>
         ) : null}
-      </DataList.Cell>
+      </span>
 
-      <DataList.Cell className="justify-end text-right">
-        {isLoading ? null : activeInstallation ? (
-          <button
-            type="button"
-            onClick={handleDisconnect}
-            disabled={isDisconnecting}
-            className="shrink-0 text-[11px] text-neutral5 hover:text-accent2 transition-colors disabled:opacity-50"
-          >
-            {isDisconnecting ? 'Removing...' : 'Remove'}
-          </button>
-        ) : platform.isConfigured ? (
-          <Button size="sm" variant="default" onClick={handleConnect} disabled={isConnecting}>
-            {isConnecting ? 'Connecting...' : 'Connect'}
-          </Button>
-        ) : null}
-      </DataList.Cell>
-    </DataList.RowStatic>
+      {isLoading ? null : activeInstallation ? (
+        <Badge variant="green" size="sm" indicator="dot">
+          Connected
+        </Badge>
+      ) : !platform.isConfigured ? (
+        <Badge variant="yellow" size="sm" indicator="dot">
+          Not configured
+        </Badge>
+      ) : null}
+
+      {isLoading ? null : activeInstallation ? (
+        <Button
+          icon={<Unplug />}
+          size="sm"
+          variant="ghost"
+          onClick={handleDisconnect}
+          disabled={isDisconnecting}
+          className="shrink-0"
+        >
+          {isDisconnecting ? 'Removing...' : 'Remove'}
+        </Button>
+      ) : platform.isConfigured ? (
+        <Button icon={<Plug />} size="sm" variant="default" onClick={handleConnect} disabled={isConnecting}>
+          {isConnecting ? 'Connecting...' : 'Connect'}
+        </Button>
+      ) : null}
+    </li>
   );
 }

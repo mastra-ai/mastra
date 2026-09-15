@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import type { UISpan, UISpanStyle } from '../types';
 import { TimelineStructureSign } from './timeline-structure-sign';
 import { cn } from '@/lib/utils';
@@ -9,6 +10,7 @@ type TimelineNameColProps = {
   depth?: number;
   onSpanClick?: (id: string) => void;
   selectedSpanId?: string;
+  revealSpanId?: string;
   isLastChild?: boolean;
   hasChildren?: boolean;
   isRootSpan?: boolean;
@@ -22,18 +24,30 @@ export function TimelineNameCol({
   depth = 0,
   onSpanClick,
   selectedSpanId,
+  revealSpanId,
   isLastChild,
   hasChildren: _hasChildren,
   isRootSpan,
   isExpanded: _isExpanded,
 }: TimelineNameColProps) {
+  const rowRef = useRef<HTMLDivElement>(null);
+  const isSelected = selectedSpanId === span.id;
+  const isRevealed = revealSpanId === span.id;
+  const shouldScrollIntoView = isSelected || isRevealed;
+
+  // Nested rows mount late, once expansion opens their ancestors; the effect runs on that
+  // mount as well as when the row becomes the selected / revealed one.
+  useEffect(() => {
+    if (shouldScrollIntoView) rowRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }, [shouldScrollIntoView]);
+
   return (
     <div
-      data-span-id={span.id}
+      ref={rowRef}
       aria-label={`View details for span ${span.name}`}
-      className={cn('rounded-md flex opacity-80 min-h-8 items-center rounded-l-lg', {
-        'opacity-30 [&:hover]:opacity-60': isFaded,
-        'bg-surface4': selectedSpanId === span.id,
+      className={cn('flex min-h-8 items-center rounded-md rounded-l-lg opacity-80', {
+        'opacity-40 [&:hover]:opacity-70 dark:opacity-30 dark:[&:hover]:opacity-60': isFaded,
+        'bg-surface4': isSelected,
       })}
       style={{ paddingLeft: `${depth * 1}rem` }}
     >
@@ -42,21 +56,31 @@ export function TimelineNameCol({
       <button
         onClick={() => onSpanClick?.(span.id)}
         className={cn(
-          'text-ui-smd flex items-center text-left gap-1.5 text-neutral6 w-full min-w-0 rounded-md h-full px-2 py-1 transition-colors',
-          '[&>svg]:transition-all [&>svg]:shrink-0 [&>svg]:opacity-0 [&>svg]:w-[1em] [&>svg]:h-[1em] [&>svg]:ml-auto',
+          'flex size-full min-w-0 items-center gap-1.5 rounded-md px-2 py-1 text-left text-ui-smd text-neutral6 transition-colors',
+          '[&>svg]:ml-auto [&>svg]:size-[1em] [&>svg]:shrink-0 [&>svg]:opacity-0 [&>svg]:transition-all',
           'hover:bg-surface4 [&:hover>svg]:opacity-60',
-          'focus:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-accent1',
+          'focus:outline-none focus-visible:ring-1 focus-visible:ring-accent1 focus-visible:ring-inset',
         )}
       >
         {spanUI?.color && (
           <span
             aria-hidden
             title={spanUI.label}
-            className="inline-block w-2 h-2 shrink-0 rounded-full"
+            className="inline-block size-2 shrink-0 rounded-full"
             style={{ backgroundColor: spanUI.color }}
           />
         )}
-        <span className="min-w-0 truncate">{span.name}</span>
+        {/* Searchable: the span name is what the timeline search matches on. When the match
+            is in the span's payload instead, the whole name is painted in the indirect color
+            so the row explains its own presence. */}
+        <span
+          data-highlight={span.matchedInPayloadOnly ? undefined : ''}
+          data-highlight-indirect={span.matchedInPayloadOnly ? '' : undefined}
+          title={span.matchedInPayloadOnly ? 'Matches your search in this span’s details' : undefined}
+          className="min-w-0 truncate"
+        >
+          {span.name}
+        </span>
       </button>
     </div>
   );

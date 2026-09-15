@@ -9,13 +9,21 @@ import type {
   NotificationRecord,
   NotificationSignalAttributes,
   NotificationStatus,
+  PruneOptions,
+  PruneResult,
+  RetentionTablesDescriptor,
+  TableRetentionPolicy,
   UpdateNotificationInput,
 } from '@mastra/core/storage';
 import type { Collection, Filter, UpdateFilter } from 'mongodb';
 
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
 import { resolveMongoDBConfig } from '../../db';
+import { resolveTargets, runPrune } from '../../retention';
 import type { MongoDBDomainConfig, MongoDBIndexConfig } from '../../types';
+
+/** Ids per updateMany/find command — keeps the `$in` filter far below MongoDB's 16 MiB BSON limit. */
+const BULK_ID_BATCH_SIZE = 500;
 
 const statusTimestamp = (status: NotificationStatus, now: Date) => {
   if (status === 'delivered') return { deliveredAt: now };
@@ -136,6 +144,11 @@ export class NotificationsMongoDB extends NotificationsStorage {
 
   static readonly MANAGED_COLLECTIONS = [TABLE_NOTIFICATIONS] as const;
 
+  /** Anchor is the notification's creation time, stored as a BSON date. */
+  static override readonly retentionTables: RetentionTablesDescriptor = {
+    notifications: { table: TABLE_NOTIFICATIONS, column: 'createdAt', indexed: true },
+  };
+
   constructor(config: MongoDBDomainConfig) {
     super();
     this.#connector = resolveMongoDBConfig(config);
@@ -147,6 +160,16 @@ export class NotificationsMongoDB extends NotificationsStorage {
 
   private async getCollection(): Promise<Collection<Record<string, any>>> {
     return this.#connector.getCollection(TABLE_NOTIFICATIONS);
+  }
+
+  /** Delete notifications older than the policy's `maxAge`, batched. */
+  async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
+    const targets = resolveTargets({
+      policies,
+      descriptor: NotificationsMongoDB.retentionTables,
+      order: ['notifications'],
+    });
+    return runPrune({ connector: this.#connector, domain: 'notifications', targets, options, logger: this.logger });
   }
 
   async init(): Promise<void> {
@@ -331,6 +354,31 @@ export class NotificationsMongoDB extends NotificationsStorage {
 
     const updated = await this.getNotification({ threadId: input.threadId, id: input.id });
     if (!updated) throw new Error(`Notification ${input.id} was not found for thread ${input.threadId}`);
+    return updated;
+  }
+
+  // Inlined instead of importing `UpdateNotificationsStatusInput` so this adapter's `.d.ts` stays valid
+  // against older @mastra/core versions that predate the bulk method.
+  override async updateNotificationsStatus(input: {
+    threadId: string;
+    ids: string[];
+    status: NotificationStatus;
+  }): Promise<NotificationRecord[]> {
+    const ids = Array.from(new Set(input.ids));
+    if (ids.length === 0) return [];
+
+    const now = new Date();
+    const update = { $set: { status: input.status, ...statusTimestamp(input.status, now), updatedAt: now } };
+    const collection = await this.getCollection();
+    const updated: NotificationRecord[] = [];
+    // Keep each command's `$in` list bounded so very long id lists stay under the BSON document limit.
+    for (let offset = 0; offset < ids.length; offset += BULK_ID_BATCH_SIZE) {
+      const filter = { threadId: input.threadId, id: { $in: ids.slice(offset, offset + BULK_ID_BATCH_SIZE) } };
+      await collection.updateMany(filter, update);
+      // updateMany reports counts only; re-read the matched rows so callers get the updated records.
+      const rows = await collection.find({ ...filter, status: input.status }).toArray();
+      for (const row of rows) updated.push(rowToNotification(row));
+    }
     return updated;
   }
 

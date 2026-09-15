@@ -14,3 +14,18 @@ declare module 'probe-image-size' {
 
   export default probeImageSize;
 }
+
+declare module 'probe-image-size/sync' {
+  interface SyncProbeResult {
+    width: number;
+    height: number;
+    type: string;
+    mime: string;
+    wUnits: string;
+    hUnits: string;
+  }
+
+  function probeImageSizeSync(buffer: Uint8Array): SyncProbeResult | null;
+
+  export default probeImageSizeSync;
+}

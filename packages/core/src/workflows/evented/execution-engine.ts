@@ -14,7 +14,7 @@ import type {
 } from '../types';
 import { cleanStepResult, hydrateSerializedStepErrors } from '../utils';
 import type { WorkflowEventProcessor } from './workflow-event-processor';
-import { getStep } from './workflow-event-processor/utils';
+import { getStepId } from './workflow-event-processor/utils';
 
 export class EventedExecutionEngine extends ExecutionEngine {
   protected eventProcessor: WorkflowEventProcessor;
@@ -101,6 +101,9 @@ export class EventedExecutionEngine extends ExecutionEngine {
       resolveResult = resolve;
       rejectResult = reject;
     });
+    // Let Mastra.shutdown() drain this run before it tears down the pubsub
+    // subscriptions the run needs to make progress.
+    const releaseTracking = this.mastra?.__trackEventedRun(resultPromise) ?? (() => {});
 
     const finishCb = async (event: Event, ack?: () => Promise<void>) => {
       if (event.runId !== params.runId) {
@@ -126,6 +129,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
     try {
       await pubsub.subscribe('workflows-finish', finishCb);
     } catch (err) {
+      releaseTracking();
       this.mastra?.getLogger()?.error('Failed to subscribe to workflows-finish:', err);
       throw err;
     }
@@ -134,8 +138,8 @@ export class EventedExecutionEngine extends ExecutionEngine {
     // Wrap in try/catch to ensure proper cleanup and rejection on errors
     try {
       if (params.resume) {
-        const prevStep = getStep(this.resolveWorkflow(params.workflowId, params.runId), params.resume.resumePath);
-        const prevResult = params.resume.stepResults[prevStep?.id ?? 'input'];
+        const prevStepId = getStepId(this.resolveWorkflow(params.workflowId, params.runId), params.resume.resumePath);
+        const prevResult = params.resume.stepResults[prevStepId ?? 'input'];
         // Extract state from stepResults.__state or use initialState
         const resumeState = params.resume.stepResults?.__state ?? params.initialState ?? {};
 
@@ -160,11 +164,11 @@ export class EventedExecutionEngine extends ExecutionEngine {
           },
         });
       } else if (params.timeTravel) {
-        const prevStep = getStep(
+        const prevStepId = getStepId(
           this.resolveWorkflow(params.workflowId, params.runId),
           params.timeTravel.executionPath,
         );
-        const prevResult = params.timeTravel.stepResults[prevStep?.id ?? 'input'];
+        const prevResult = params.timeTravel.stepResults[prevStepId ?? 'input'];
         await pubsub.publish('workflows', {
           type: 'workflow.start',
           runId: params.runId,
@@ -182,8 +186,8 @@ export class EventedExecutionEngine extends ExecutionEngine {
           },
         });
       } else if (params.restart) {
-        const prevStep = getStep(this.resolveWorkflow(params.workflowId, params.runId), params.restart.activePaths);
-        const prevResult = params.restart.stepResults[prevStep?.id ?? 'input'];
+        const prevStepId = getStepId(this.resolveWorkflow(params.workflowId, params.runId), params.restart.activePaths);
+        const prevResult = params.restart.stepResults[prevStepId ?? 'input'];
         await pubsub.publish('workflows', {
           type: 'workflow.start',
           runId: params.runId,
@@ -220,11 +224,17 @@ export class EventedExecutionEngine extends ExecutionEngine {
       // Clean up subscription and reject the promise on error
       await pubsub.unsubscribe('workflows-finish', finishCb);
       rejectResult(err);
+      releaseTracking();
       throw err;
     }
 
     // Wait for workflow to complete
-    const resultData: any = await resultPromise;
+    let resultData: any;
+    try {
+      resultData = await resultPromise;
+    } finally {
+      releaseTracking();
+    }
 
     // Extract state from resultData (stored in stepResults.__state)
     const finalState = resultData.state ?? resultData.stepResults?.__state ?? params.initialState ?? {};

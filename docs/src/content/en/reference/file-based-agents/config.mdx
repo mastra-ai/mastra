@@ -1,0 +1,127 @@
+---
+title: "config.ts | File-based Agents"
+description: "An agent's config.ts sets its model and runtime options. Use it for options that belong to the Agent itself, while sibling files provide instructions, tools, skills, et cetera."
+packages:
+  - "@mastra/core"
+---
+
+# config.ts
+
+:::beta
+
+Breaking changes may occur without a major version bump until the API is stable.
+
+:::
+
+An agent's `config.ts` sets its model and runtime options. Use it for options that belong to the [`Agent`](/reference/agents/agent) itself, while sibling files provide instructions, tools, skills, et cetera.
+
+## What belongs in `config.ts`
+
+`config.ts` is the required entry point for a file-based agent's model and runtime options. Put agent-level settings here when they don't need their own file, such as the model, description, default execution options, retry behavior, scorers, and display identity.
+
+Keep adjacent concerns in sibling files when you want file-based routing to merge them into the agent. For example, use `instructions.md` for the always-on prompt and `tools/` for model-callable actions.
+
+## Quickstart
+
+The following `config.ts` plus an `instructions.md` file creates a working file-based agent:
+
+```typescript title="src/mastra/agents/weather/config.ts"
+import { agentConfig } from '@mastra/core/agent'
+
+export default agentConfig({
+  model: '__GATEWAY_OPENAI_MODEL__',
+})
+```
+
+```markdown title="src/mastra/agents/weather/instructions.md"
+You are a helpful weather assistant. Answer questions about current conditions and forecasts.
+```
+
+Mastra uses the `weather` directory name as the default agent `id` and `name`. The sibling `instructions.md` supplies the required instructions.
+
+## Set the model
+
+The `model` field is the only required field in `agentConfig()`. The build fails when an agent directory doesn't provide a model. Other capabilities either come from sibling files or have defaults.
+
+```typescript title="src/mastra/agents/weather/config.ts"
+import { agentConfig } from '@mastra/core/agent'
+
+export default agentConfig({
+  model: '__GATEWAY_OPENAI_MODEL__',
+})
+```
+
+## Identity from the directory
+
+A file-based agent's `id` and `name` default to the directory name. For `src/mastra/agents/weather/`, Mastra registers the agent as `weather` unless you override those fields.
+
+Override `id` or `name` when the stable routing key and the display name should differ.
+
+```typescript title="src/mastra/agents/weather/config.ts"
+import { agentConfig } from '@mastra/core/agent'
+
+export default agentConfig({
+  id: 'weather-assistant',
+  name: 'Weather Assistant',
+  model: '__GATEWAY_OPENAI_MODEL__',
+})
+```
+
+## Set runtime options
+
+`agentConfig()` accepts [`Agent` constructor options](/reference/agents/agent#constructor-parameters), except that `id`, `name`, and sibling-file fields can be supplied by the file-based convention. Use the Agent reference for the full option list.
+
+Please note:
+
+- File-based subagents require a non-empty `description` because the parent model uses it for delegation routing.
+- `defaultOptions`, `maxRetries`, `scorers`, and other Agent options can live in `config.ts` when they don't need their own file.
+
+## Where adjacent settings live
+
+Keep `config.ts` focused on runtime options. Use sibling files for concerns that benefit from their own location.
+
+| Setting | File or folder | Why it lives there |
+| - | - | - |
+| Instructions | [`instructions.md` or `instructions.ts`](/reference/file-based-agents/instructions) | Keeps the always-on prompt readable as markdown, or computed in TypeScript |
+| Tools | [`tools/`](/reference/file-based-agents/tools) | Gives each callable action its own typed module |
+| Skills | [`skills/`](/reference/file-based-agents/skills) | Keeps load-on-demand procedures separate from always-on instructions |
+| Memory | [`memory.ts`](/reference/file-based-agents/memory) | Configures persistent memory without crowding runtime options |
+| Workspace | [`workspace.ts`](/reference/file-based-agents/workspace) | Configures files and sandbox behavior separately from model settings |
+| Processors | [`processors/`](/reference/file-based-agents/processors) | Separates input and output processing pipelines |
+| Subagents | [`subagents/`](/reference/file-based-agents/subagents) | Gives each specialist child agent its own directory |
+
+## Precedence
+
+`config.ts` merges with the agent's other files according to these rules:
+
+| Domain | Source A | Source B | Winner |
+| - | - | - | - |
+| Instructions | Dynamic `config.instructions` | [`instructions.ts` or `instructions.md`](/reference/file-based-agents/instructions) | Dynamic `config.instructions` |
+| Instructions | Static `config.instructions` | [`instructions.ts` or `instructions.md`](/reference/file-based-agents/instructions) | The instructions file |
+| Instructions | [`instructions.ts`](/reference/file-based-agents/instructions) | [`instructions.md`](/reference/file-based-agents/instructions) | `instructions.ts` |
+| Tools | `config.tools` | [`tools/`](/reference/file-based-agents/tools) | Both merge; `config.tools` wins on key collisions |
+| Tools | Function `config.tools` | [`tools/`](/reference/file-based-agents/tools) | Function `config.tools`; discovered tools are ignored |
+| Skills | `config.skills` | [`skills/`](/reference/file-based-agents/skills) | Both merge; `config.skills` wins on name collisions |
+| Skills | Function `config.skills` | [`skills/`](/reference/file-based-agents/skills) | Function `config.skills`; discovered skills are ignored |
+| Memory | `config.memory` | [`memory.ts`](/reference/file-based-agents/memory) | `config.memory` |
+| Workspace | `config.workspace` | [`workspace.ts`](/reference/file-based-agents/workspace) | `config.workspace` |
+
+Missing `instructions.md`, `instructions.ts`, and `config.instructions` fails the build. Missing both `config.memory` and `memory.ts` leaves the agent without memory.
+
+## Discovery lifecycle
+
+File-based primitives are discovered by the Mastra bundler under `mastra dev` and `mastra build`. During discovery, Mastra reads supported files under `src/mastra/` and imports TypeScript and JavaScript modules. It also reads markdown instructions and skills. The bundler then copies workspace seed files and registers the assembled primitives with your Mastra app.
+
+After discovery, a file-based agent runs as a normal [`Agent`](/reference/agents/agent). Calling it from the Agent API, Studio, workflows, or your application code uses the same runtime as a code-defined agent.
+
+Discovery is source-based and conservative.
+
+It skips symlinks, test files, and directories that aren't agent directories. Workflows and singleton project files are file-routed only when they have a default export.
+
+Start your app through the Mastra CLI so discovery runs:
+
+```bash npm2yarn
+npx mastra dev
+```
+
+If you import your `mastra` instance directly, `agents/<name>/` directories and the other conventions aren't discovered. When you consume Mastra as a library, register those primitives in code instead.

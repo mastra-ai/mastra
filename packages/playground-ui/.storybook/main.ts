@@ -1,6 +1,7 @@
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { StorybookConfig } from '@storybook/react-vite';
+import { mergeConfig } from 'vite';
 
 const config: StorybookConfig = {
   stories: ['../src/**/*.mdx', '../src/**/*.stories.@(js|jsx|mjs|ts|tsx)'],
@@ -13,6 +14,20 @@ const config: StorybookConfig = {
     name: getAbsolutePath('@storybook/react-vite'),
     options: {},
   },
+  typescript: {
+    reactDocgen: 'react-docgen-typescript',
+  },
+  viteFinal: config =>
+    mergeConfig(config, {
+      resolve: {
+        alias: [
+          {
+            find: /^@mastra\/react$/,
+            replacement: fileURLToPath(new URL('./mocks/mastra-react.ts', import.meta.url)),
+          },
+        ],
+      },
+    }),
 };
 
 export default config;

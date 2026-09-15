@@ -1,0 +1,196 @@
+---
+extends: existence
+message: "AI anaphora: '%s'. Vary the sentence openings or combine into one statement."
+level: error
+nonword: true
+tokens:
+  # "No X. No Y. No Z." pattern (3+ consecutive)
+  - "\\bNo [^.]+\\. No [^.]+\\. No [^.]+"
+
+  # "No X. No Y." pattern (2 consecutive)
+  - "\\bNo \\w[^.]+\\. No \\w[^.]+"
+
+  # "No X, no Y, no Z." pattern (3+ comma-separated)
+  # 2-item "No X, no Y." is owned by ContrastiveNegation; keep only 3+ here.
+  - "\\bNo [^,]+, no [^,]+, no [^.!?]+"
+
+  # "Not X. Not Y. Not Z." pattern
+  - "\\bNot [^.]+\\. Not [^.]+\\. Not [^.]+"
+
+  # "Not X. Not Y." pattern (2 consecutive)
+  - "\\bNot \\w[^.]+\\. Not \\w[^.]+"
+
+  # "No more X. No more Y. No more Z." pattern
+  - "\\bNo more [^.]+\\. No more [^.]+\\. No more [^.]+"
+
+  # "No more X. No more Y." pattern (2 consecutive)
+  - "\\bNo more \\w[^.]+\\. No more \\w[^.]+"
+
+  # "It's X. It's Y. It's Z." pattern
+  - "\\b[Ii]t'?s [^.]+\\. [Ii]t'?s [^.]+\\. [Ii]t'?s [^.]+"
+
+  # "This is X. This is Y. This is Z." pattern
+  - "\\b[Tt]his is [^.]+\\. [Tt]his is [^.]+\\. [Tt]his is [^.]+"
+
+  # Three consecutive rhetorical questions
+  - "\\b(?:What|Why|How|Where|When|Who|Which|Is|Are|Can|Could|Should|Would|Do|Does) [^?]+\\? (?:What|Why|How|Where|When|Who|Which|Is|Are|Can|Could|Should|Would|Do|Does) [^?]+\\? (?:What|Why|How|Where|When|Who|Which|Is|Are|Can|Could|Should|Would|Do|Does) [^?]+\\?"
+
+  # "X works because Y. Z works because W." parallel justifications
+  - "\\b[A-Z][^.]+works because [^.]+\\. [A-Z][^.]+works because [^.]+\\. [A-Z][^.]+works because [^.]+"
+
+  # "One X. One Y. One Z." pattern (3+ consecutive)
+  - "\\bOne [^.]+\\. One [^.]+\\. One [^.]+"
+
+  # "One X, one Y, one Z." pattern (3+ comma-separated)
+  - "\\bOne [^,]+, one [^,]+, one [^.!?]+"
+
+  # "One X, one Y." pattern (2 comma-separated)
+  - "\\bOne [^,]+, one [^.!?]+"
+
+  # "Every X. Every Y. Every Z." pattern (3+ consecutive)
+  - "\\bEvery [^.]+\\. Every [^.]+\\. Every [^.]+"
+
+  # "Every X, every Y, every Z." pattern (3+ comma-separated)
+  - "\\bEvery [^,]+, every [^,]+, every [^.!?]+"
+
+  # "Every X, every Y." pattern (2 comma-separated)
+  - "\\bEvery [^,]+, every [^.!?]+"
+
+  # "Each X. Each Y. Each Z." pattern (3+ consecutive)
+  - "\\bEach [^.]+\\. Each [^.]+\\. Each [^.]+"
+
+  # "Each X, each Y, each Z." pattern (3+ comma-separated)
+  - "\\bEach [^,]+, each [^,]+, each [^.!?]+"
+
+  # "Each X, each Y." pattern (2 comma-separated)
+  - "\\bEach [^,]+, each [^.!?]+"
+
+  # "Zero X. Zero Y. Zero Z." pattern (3+ consecutive)
+  - "\\bZero [^.]+\\. Zero [^.]+\\. Zero [^.]+"
+
+  # "Zero X, zero Y, zero Z." pattern (3+ comma-separated)
+  - "\\bZero [^,]+, zero [^,]+, zero [^.!?]+"
+
+  # "Zero X, zero Y." pattern (2 comma-separated)
+  - "\\bZero [^,]+, zero [^.!?]+"
+
+  # "A single X. A single Y." pattern (2+ consecutive)
+  - "\\bA single [^.]+\\. A single [^.]+"
+
+  # "A single X, a single Y." pattern (2+ comma-separated)
+  - "\\bA single [^,]+, a single [^.!?]+"
+
+  # "Many X. Many Y." pattern (2+ consecutive)
+  - "\\bMany [^.]+\\. Many [^.]+\\."
+
+  # "Few X. Few Y." pattern (2+ consecutive)
+  - "\\bFew [^.]+\\. Few [^.]+\\."
+
+  # "All X. All Y. All Z." pattern (3+ consecutive)
+  - "\\bAll [^.]+\\. All [^.]+\\. All [^.]+"
+
+  # Three prepositional phrase chains: "with X, through Y, and for Z" style
+  - "\\b(?:with|through|by|for|via|within) [^,]+, (?:with|through|by|for|via|within) [^,]+, (?:and )?(?:with|through|by|for|via|within) [^.!?]+"
+
+  # === Adverb anaphora ===
+
+  # "Always X. Always Y." pattern (2+ consecutive)
+  - "\\bAlways [^.]+\\. Always [^.]+\\."
+
+  # "always X, always Y." pattern (2+ comma-separated)
+  - "\\b[Aa]lways [^,]+, always [^.!?]+"
+
+  # "Never X. Never Y." pattern (2+ consecutive)
+  - "\\bNever [^.]+\\. Never [^.]+\\."
+
+  # "never X, never Y." pattern (2+ comma-separated)
+  - "\\b[Nn]ever [^,]+, never [^.!?]+"
+
+  # "Fully X. Fully Y." pattern (2+ consecutive)
+  - "\\bFully [^.]+\\. Fully [^.]+\\."
+
+  # "fully X, fully Y." pattern (2+ comma-separated)
+  - "\\b[Ff]ully [^,]+, fully [^.!?]+"
+
+  # "Completely X. Completely Y." pattern (2+ consecutive)
+  - "\\bCompletely [^.]+\\. Completely [^.]+\\."
+
+  # "completely X, completely Y." pattern (2+ comma-separated)
+  - "\\b[Cc]ompletely [^,]+, completely [^.!?]+"
+
+  # "Entirely X. Entirely Y." pattern (2+ consecutive)
+  - "\\bEntirely [^.]+\\. Entirely [^.]+\\."
+
+  # "entirely X, entirely Y." pattern (2+ comma-separated)
+  - "\\b[Ee]ntirely [^,]+, entirely [^.!?]+"
+
+  # "Truly X. Truly Y." pattern (2+ consecutive)
+  - "\\bTruly [^.]+\\. Truly [^.]+\\."
+
+  # "truly X, truly Y." pattern (2+ comma-separated)
+  - "\\b[Tt]ruly [^,]+, truly [^.!?]+"
+
+  # "Purely X. Purely Y." pattern (2+ consecutive)
+  - "\\bPurely [^.]+\\. Purely [^.]+\\."
+
+  # "purely X, purely Y." pattern (2+ comma-separated)
+  - "\\b[Pp]urely [^,]+, purely [^.!?]+"
+
+  # "Only X. Only Y." pattern (2+ consecutive)
+  - "\\bOnly [^.]+\\. Only [^.]+\\."
+
+  # "only X, only Y." pattern (2+ comma-separated)
+  - "\\b[Oo]nly [^,]+, only [^.!?]+"
+
+  # "Just X. Just Y." pattern (2+ consecutive)
+  - "\\bJust [^.]+\\. Just [^.]+\\."
+
+  # "just X, just Y." pattern (2+ comma-separated)
+  - "\\b[Jj]ust [^,]+, just [^.!?]+"
+
+  # === Indefinite-article exemplification stack ===
+  # AI loves stacking hypothetical scenarios as parallel sentences:
+  # "A hook wants to count failures. A subagent wants to record a
+  # result. A skill wants to stash a value." The pattern — A/An +
+  # noun (1-3 words) + present-tense verb — paired across 3
+  # sentences is distinctive enough to flag even when verbs differ.
+  - "\\b(?:A|An) \\w+(?: \\w+){0,2} \\w+s [^.]+\\. (?:A|An) \\w+(?: \\w+){0,2} \\w+s [^.]+\\. (?:A|An) \\w+(?: \\w+){0,2} \\w+s [^.!?]+"
+
+  # 2-sentence parallel-mirror pair: "An unset X counts as Y.
+  # A set-but-wrong value belongs to Z." Same A/An + NP + verb-s
+  # pattern but paired instead of tripled. Common in technical prose
+  # written by humans too, but the dramatic shared-verb framing
+  # reads as an AI tell in practice.
+  - "\\b(?:A|An) \\w+(?: \\w+){0,2} \\w+s [^.]+\\. (?:A|An) \\w+(?: \\w+){0,2} \\w+s [^.!?]+"
+
+  # === Definite-article noun-list fragment ===
+  # "The X, the Y, the Z." — three or more comma-separated
+  # definite noun phrases as a verbless sentence. AI uses this
+  # as a faux-summary closer. Subjects are up to 5 words to
+  # tolerate parenthetical glosses like "Time-To-Live (TTL)".
+  # Sentence-initial capital "The" reduces mid-sentence
+  # false positives.
+  - "\\bThe [\\w-]+(?: [\\w-]+){0,4}(?:, the [\\w-]+(?: [\\w-]+){0,4}){2,}\\."
+
+  # === "Whether X, or whether Y." subordinate-clause fragment ===
+  # AI promotes a "whether... or whether..." subordinate-clause
+  # pair to a standalone sentence with no main clause. The
+  # paired "whether" markers carry the rhetorical weight a real
+  # verb would carry.
+  - "\\bWhether [^.]+, or whether [^.!?]+\\."
+
+  # Two consecutive "Whether X." sentences — same pattern, paired.
+  - "\\bWhether [^.]+\\. Whether [^.]+\\."
+
+  # === Paired "For X, ... For Y," scope openers ===
+  # Two consecutive sentences each fronted by a "For <scope>," label:
+  # "For search, that join reverses. For writes, the table takes one
+  # append." The single fronted "For X," is ordinary English several
+  # hundred times over in the Go and Python standard libraries, so only
+  # the pair fires, and the discourse markers ("For example," "For now,"
+  # "For simplicity,") are excluded at either position. The pair matches
+  # one corpus hit with those out, the fmt docs ("For Scanln, it stops at
+  # newlines. For Scan,"), which is the construction itself and fires by
+  # design. ScopePartition owns the "On the X side," and "At X time,"
+  # spellings of the same move.
+  - "\\bFor (?!(?:example|instance|now|details|more|this|that|these|those|some|historical|backward|backwards|simplicity|performance|efficiency|convenience|consistency|compatibility|clarity|debugging|testing|security|reference|completeness|context|comparison|brevity|safety|starters|any|all|each|every|the|a|an|one|its|our|your|my|their|no|most|many|what|whatever)\\b)[A-Za-z][a-z-]*(?: [a-z-]+)?, [^.]+\\. For (?!(?:example|instance|now|details|more|this|that|these|those|some|historical|backward|backwards|simplicity|performance|efficiency|convenience|consistency|compatibility|clarity|debugging|testing|security|reference|completeness|context|comparison|brevity|safety|starters|any|all|each|every|the|a|an|one|its|our|your|my|their|no|most|many|what|whatever)\\b)[A-Za-z][a-z-]*(?: [a-z-]+)?,"

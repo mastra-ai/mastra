@@ -1,7 +1,7 @@
 import type { SystemModelMessage } from '@internal/ai-sdk-v5';
 import xxhash from 'xxhash-wasm';
 import type { Processor } from '..';
-import { MessageList } from '../../agent';
+import { MessageList, isMastraSignalMessage } from '../../agent';
 import type { IMastraLogger } from '../../logger';
 import { parseMemoryRequestContext } from '../../memory';
 import type { MastraDBMessage } from '../../memory';
@@ -327,15 +327,30 @@ export class SemanticRecall implements Processor {
   }
 
   /**
+   * Check if a message is a user turn delivered through the agent signal
+   * pipeline. User messages sent via `agent.sendMessage` (e.g. the Studio
+   * playground) are stored as `role: 'signal'` rows and only projected to
+   * `role: 'user'` at prompt time — after input processors run — so they must
+   * be treated as user messages when extracting the recall query.
+   */
+  private isUserMessageSignal(message: MastraDBMessage): boolean {
+    if (!isMastraSignalMessage(message)) return false;
+    const signal = message.content.metadata?.signal;
+    if (typeof signal !== 'object' || signal === null || Array.isArray(signal)) return false;
+    const type = (signal as { type?: unknown }).type;
+    return type === 'user' || type === 'user-message';
+  }
+
+  /**
    * Extract the user query from messages for semantic search
    */
   private extractUserQuery(messages: MastraDBMessage[]): string | null {
-    // Find the last user message
+    // Find the last user message (plain or signal-delivered)
     for (let i = messages.length - 1; i >= 0; i--) {
       const msg = messages[i];
       if (!msg) continue;
 
-      if (msg.role === 'user') {
+      if (msg.role === 'user' || this.isUserMessageSignal(msg)) {
         // Extract text content from MastraMessageV2
         // Ensure msg.content is an object before accessing nested properties
         if (typeof msg.content !== 'object' || msg.content === null) {

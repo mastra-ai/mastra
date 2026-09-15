@@ -1,5 +1,6 @@
 export { getAllSpanIds, getSpanDescendantIds } from './get-all-span-ids';
 export { useBranch, type UseBranchArgs } from './use-branch';
+export { useDownloadTraceJson } from './use-download-trace-json';
 export { useSpanDetail } from './use-span-detail';
 export { useTraceLightSpans } from './use-trace-light-spans';
 export {
@@ -7,6 +8,7 @@ export {
   type UseTraceOrBranchSpansArgs,
   type UseTraceOrBranchSpansResult,
 } from './use-trace-or-branch-spans';
+export { useTraceSearch, type UseTraceSearchResult } from './use-trace-search';
 export { useTraceSpans } from './use-trace-spans';
 export { useTraces } from './use-traces';
 export { useTags } from './use-tags';
@@ -21,8 +23,6 @@ export {
   type UseTraceUrlStateOptions,
   type SetURLSearchParamsLike,
 } from './use-trace-url-state';
-export {
-  useTraceFilterPersistence,
-  type UseTraceFilterPersistenceResult,
-  type TraceFilterPersistenceOptions,
-} from './use-trace-filter-persistence';
+export { useTraceFilterPersistence, type TraceFilterPersistenceOptions } from './use-trace-filter-persistence';
+export { useExpandedSpanIds } from './use-expanded-span-ids';
+export { useVisibleTraceRows } from './use-visible-trace-rows';

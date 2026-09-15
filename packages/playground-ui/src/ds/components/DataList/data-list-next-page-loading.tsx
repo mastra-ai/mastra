@@ -20,9 +20,10 @@ export function DataListNextPageLoading({
   return (
     <div
       ref={setEndOfListElement}
-      className={cn('col-span-full text-ui-md text-neutral3 opacity-50 flex justify-center min-h-1', {
+      // Zero-height when idle so it adds no trailing space below the last row;
+      // IntersectionObserver still fires for a zero-area target at the viewport edge.
+      className={cn('col-span-full -mt-px flex justify-center text-ui-md text-neutral3 opacity-50', {
         'py-4': isLoading,
-        'py-0': !hasMore,
       })}
     >
       {isLoading && loadingText}

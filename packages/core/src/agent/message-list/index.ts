@@ -18,6 +18,7 @@ export type {
   MastraMessageV1,
   MastraMessageContentV2,
   MastraMessagePart,
+  MastraErrorPart,
   MastraToolApproval,
   MastraToolInvocation,
   MastraToolInvocationPart,
@@ -51,11 +52,13 @@ export {
   ensureGeminiCompatibleMessages,
   ensureAnthropicCompatibleMessages,
   sanitizeOrphanedToolPairs,
+  pairOrphanedToolCalls,
   hasOpenAIReasoningItemId,
   getOpenAIReasoningItemId,
   hasResponseProviderItemId,
   getResponseProviderItemIdFromPart,
   findToolCallArgs,
+  dropCrossProviderExecutedParts,
 } from './utils/provider-compat';
 export {
   getResponseProviderItemId,

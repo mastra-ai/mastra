@@ -129,4 +129,35 @@ describe('RequestContext Type Tests', () => {
       context.set('objectKey', { foo: 'bar' });
     });
   });
+
+  describe('Issue #21286: open-map runtime keys via *Raw helpers', () => {
+    type MyContext = {
+      name: string;
+      age: number;
+    };
+
+    it('should keep declared keys strictly typed on get/set', () => {
+      const context = new RequestContext<MyContext>();
+
+      expectTypeOf(context.get('age')).toEqualTypeOf<number>();
+      context.set('name', 'Ada');
+
+      // @ts-expect-error - undeclared keys stay rejected on the strict API
+      context.get('session.cache');
+
+      // @ts-expect-error - undeclared keys stay rejected on the strict API
+      context.set('session.cache', { hits: 0 });
+    });
+
+    it('should accept runtime-only keys through getRaw/setRaw/hasRaw/deleteRaw', () => {
+      const context = new RequestContext<MyContext>();
+
+      context.setRaw('session.cache', { hits: 0 });
+      const cache = context.getRaw('session.cache');
+      expectTypeOf(cache).toEqualTypeOf<unknown>();
+
+      expectTypeOf(context.hasRaw('session.cache')).toEqualTypeOf<boolean>();
+      expectTypeOf(context.deleteRaw('session.cache')).toEqualTypeOf<boolean>();
+    });
+  });
 });

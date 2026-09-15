@@ -1,4 +1,5 @@
-import { Column, SelectFieldBlock } from '@mastra/playground-ui';
+import { Column } from '@mastra/playground-ui/components/Columns';
+import { SelectFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
 import { format } from 'date-fns';
 import { useDatasetVersions } from '../../hooks/use-dataset-versions';
 
@@ -31,7 +32,7 @@ export function DatasetCompareVersionToolbar({
   }));
 
   return (
-    <Column.Toolbar className="grid grid-cols-[1fr_1fr_1fr_10rem] gap-4 w-full">
+    <Column.Toolbar className="grid w-full grid-cols-[1fr_1fr_1fr_10rem] gap-4">
       <div />
       <SelectFieldBlock
         label="Version A"

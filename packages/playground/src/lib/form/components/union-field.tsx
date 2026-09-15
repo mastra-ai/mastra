@@ -1,6 +1,6 @@
 import type { ParsedField } from '@autoform/core';
 import type { AutoFormFieldProps } from '@autoform/react';
-import { Txt } from '@mastra/playground-ui';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { CustomAutoFormField } from './custom-auto-form-field';
 
 export const UnionField: React.FC<AutoFormFieldProps> = ({ field, inputProps }) => {

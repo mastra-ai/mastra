@@ -16,9 +16,9 @@ export function DatePicker({ className, classNames, showOutsideDays = true, ...p
         caption_label: 'text-text font-medium ',
         nav: 'flex items-center',
         nav_button_previous: cn(
-          'flex justify-center items-center h-7 w-7 bg-transparent p-0 opacity-50 hover:opacity-100',
+          'flex size-7 items-center justify-center bg-transparent p-0 opacity-50 hover:opacity-100',
         ),
-        nav_button_next: cn('flex justify-center items-center h-7 w-7 bg-transparent p-0 opacity-50 hover:opacity-100'),
+        nav_button_next: cn('flex size-7 items-center justify-center bg-transparent p-0 opacity-50 hover:opacity-100'),
         dropdown_month: 'w-full border-collapse space-y-1',
         weeknumber: 'flex',
         day: cn(
@@ -26,7 +26,7 @@ export function DatePicker({ className, classNames, showOutsideDays = true, ...p
           props.mode === 'range'
             ? '[&:has(>.day-range-end)]:rounded-r-md [&:has(>.day-range-start)]:rounded-l-md first:[&:has([aria-selected])]:rounded-l-md last:[&:has([aria-selected])]:rounded-r-md'
             : '[&:has([aria-selected])]:rounded-md',
-          'h-8 w-8 p-0 hover:bg-lightGray-7/50 font-normal aria-selected:opacity-100',
+          'hover:bg-lightGray-7/50 size-8 p-0 font-normal aria-selected:opacity-100',
         ),
         day_range_start: 'day-range-start rounded-l-md',
         day_range_end: 'day-range-end rounded-r-md',

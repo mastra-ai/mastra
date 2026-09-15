@@ -27,8 +27,10 @@ const pushNotificationConfigSchema = z.object({
 const messageSendConfigurationSchema = z.object({
   acceptedOutputModes: z.array(z.string()).optional().describe('Accepted output modalities by the client'),
   blocking: z.boolean().optional().describe('If the server should treat the client as a blocking request'),
+  returnImmediately: z.boolean().optional().describe('If the v1 server should return before task completion'),
   historyLength: z.number().optional().describe('Number of recent messages to be retrieved'),
   pushNotificationConfig: pushNotificationConfigSchema.optional(),
+  taskPushNotificationConfig: pushNotificationConfigSchema.optional(),
 });
 
 // Part schemas
@@ -64,12 +66,26 @@ const dataPartSchema = z.object({
 
 const partSchema = z.union([textPartSchema, filePartSchema, dataPartSchema]);
 
+const v1PartSchema = z
+  .object({
+    text: z.string().optional(),
+    raw: z.string().optional(),
+    url: z.string().optional(),
+    data: z.unknown().optional(),
+    filename: z.string().optional(),
+    mediaType: z.string().optional(),
+    metadata: z.record(z.string(), z.unknown()).optional(),
+  })
+  .refine(part => [part.text, part.raw, part.url, part.data].filter(value => value !== undefined).length === 1, {
+    message: 'A v1 part must contain exactly one of text, raw, url, or data',
+  });
+
 // Message schema
 const messageSchema = z.object({
-  kind: z.literal('message').describe('Event type'),
+  kind: z.literal('message').optional().describe('Event type'),
   messageId: z.string().describe('Identifier created by the message creator'),
-  role: z.enum(['user', 'agent']).describe("Message sender's role"),
-  parts: z.array(partSchema).describe('Message content'),
+  role: z.enum(['user', 'agent', 'ROLE_USER', 'ROLE_AGENT']).describe("Message sender's role"),
+  parts: z.array(z.union([partSchema, v1PartSchema])).describe('Message content'),
   contextId: z.string().optional().describe('The context the message is associated with'),
   taskId: z.string().optional().describe('Identifier of task the message is related to'),
   referenceTaskIds: z.array(z.string()).optional().describe('List of tasks referenced as context by this message'),
@@ -100,6 +116,17 @@ const taskIdParamsSchema = z.object({
   metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
+const listTasksParamsSchema = z.object({
+  tenant: z.string().optional(),
+  contextId: z.string().optional(),
+  status: z.union([z.string(), z.number()]).optional(),
+  pageSize: z.number().int().min(1).max(100).optional(),
+  pageToken: z.string().optional(),
+  historyLength: z.number().int().min(0).optional(),
+  statusTimestampAfter: z.string().optional(),
+  includeArtifacts: z.boolean().optional(),
+});
+
 export const taskResubscribeParamsSchema = taskIdParamsSchema;
 
 export const setPushNotificationConfigParamsSchema = z.object({
@@ -120,7 +147,7 @@ export const deletePushNotificationConfigParamsSchema = taskIdParamsSchema.exten
 // Legacy schema for backwards compatibility
 export const messageSendBodySchema = z.object({
   message: messageSchema,
-  metadata: z.record(z.string(), z.any()).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const taskQueryBodySchema = z.object({
@@ -147,6 +174,11 @@ export const agentExecutionBodySchema = z.discriminatedUnion('method', [
     ...requestBaseSchema,
     method: z.literal('tasks/get'),
     params: taskQueryParamsSchema,
+  }),
+  z.object({
+    ...requestBaseSchema,
+    method: z.literal('tasks/list'),
+    params: listTasksParamsSchema,
   }),
   z.object({
     ...requestBaseSchema,

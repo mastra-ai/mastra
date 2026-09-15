@@ -1,0 +1,11 @@
+extends: existence
+message: "AI-typical vocabulary detected: '%s'"
+level: suggestion
+link: https://en.wikipedia.org/wiki/Wikipedia:Signs_of_AI_writing
+tokens:
+  - '\bboast\b'
+  - 'boasted'
+  - 'boasting'
+  - 'rich (history|array)'
+  - 'complex landscape'
+  - 'dynamic landscape'

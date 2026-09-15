@@ -24,6 +24,7 @@ import { RequestContextService } from '../services/request-context.service';
 import { RouteHandlerService } from '../services/route-handler.service';
 import { parseMultipartFormData } from '../utils/parse-multipart';
 import { getMastraRoutePath } from '../utils/route-path';
+import { toWebRequest } from '../utils/to-web-request';
 
 /**
  * Main Mastra controller that handles all routes dynamically.
@@ -79,6 +80,7 @@ export class MastraController {
       body,
       requestContext: this.requestContext.requestContext,
       abortSignal: this.requestContext.abortSignal,
+      request: toWebRequest(req),
     });
   }
 

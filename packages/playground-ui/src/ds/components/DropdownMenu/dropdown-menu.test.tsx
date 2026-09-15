@@ -3,12 +3,98 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { DropdownMenu } from './dropdown-menu';
+import { Button } from '@/ds/components/Button';
 
 afterEach(() => {
   cleanup();
 });
 
+describe('DropdownMenu.Trigger', () => {
+  it('renders a design-system Button by default', () => {
+    render(
+      <DropdownMenu>
+        <DropdownMenu.Trigger>Open</DropdownMenu.Trigger>
+      </DropdownMenu>,
+    );
+
+    const trigger = screen.getByRole('button', { name: 'Open' });
+    expect(trigger.tagName).toBe('BUTTON');
+    expect(trigger.getAttribute('data-variant')).toBe('default');
+  });
+
+  it('forwards variant and size to the Button', () => {
+    render(
+      <DropdownMenu>
+        <DropdownMenu.Trigger variant="ghost" size="xs" className="tabular-nums">
+          Open
+        </DropdownMenu.Trigger>
+      </DropdownMenu>,
+    );
+
+    const trigger = screen.getByRole('button', { name: 'Open' });
+    expect(trigger.getAttribute('data-variant')).toBe('ghost');
+    expect(trigger.className).toContain('tabular-nums');
+  });
+
+  it('lets a custom render element own the look', () => {
+    render(
+      <DropdownMenu>
+        <DropdownMenu.Trigger variant="ghost" render={<Button variant="outline">Open</Button>} />
+      </DropdownMenu>,
+    );
+
+    expect(screen.getAllByRole('button')).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'Open' }).getAttribute('data-variant')).toBe('outline');
+  });
+
+  it('still supports the legacy asChild prop', () => {
+    render(
+      <DropdownMenu>
+        <DropdownMenu.Trigger asChild>
+          <Button variant="outline">Open</Button>
+        </DropdownMenu.Trigger>
+      </DropdownMenu>,
+    );
+
+    expect(screen.getAllByRole('button')).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'Open' }).getAttribute('data-variant')).toBe('outline');
+  });
+
+  it('uses tooltip as the accessible name of an icon-only trigger', () => {
+    render(
+      <DropdownMenu>
+        <DropdownMenu.Trigger size="icon-sm" tooltip="More actions">
+          <svg />
+        </DropdownMenu.Trigger>
+      </DropdownMenu>,
+    );
+
+    expect(screen.getByRole('button', { name: 'More actions' })).toBeTruthy();
+  });
+});
+
 describe('DropdownMenu', () => {
+  describe('when a compact menu action is selected', () => {
+    it('runs the action and keeps sizing props off the DOM', () => {
+      const onSelect = vi.fn();
+      render(
+        <DropdownMenu defaultOpen>
+          <DropdownMenu.Trigger>Open</DropdownMenu.Trigger>
+          <DropdownMenu.Content size="sm">
+            <DropdownMenu.Item size="sm" onSelect={onSelect}>
+              Download CSV
+            </DropdownMenu.Item>
+          </DropdownMenu.Content>
+        </DropdownMenu>,
+      );
+      const item = screen.getByRole('menuitem', { name: 'Download CSV' });
+      expect(screen.getByRole('menu').hasAttribute('size')).toBe(false);
+      expect(item.hasAttribute('size')).toBe(false);
+      fireEvent.click(item);
+      expect(onSelect).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it('renders Label standalone without throwing (no Group ancestor required)', () => {
     expect(() => render(<DropdownMenu.Label>Heading</DropdownMenu.Label>)).not.toThrow();
   });
@@ -18,7 +104,14 @@ describe('DropdownMenu', () => {
       render(
         <DropdownMenu defaultOpen>
           <DropdownMenu.Trigger>Open</DropdownMenu.Trigger>
-          <DropdownMenu.Content>
+          <DropdownMenu.Content
+            alignOffset={4}
+            collisionAvoidance={{ side: 'shift', align: 'shift', fallbackAxisSide: 'none' }}
+            collisionBoundary={document.body}
+            collisionPadding={8}
+            positionMethod="fixed"
+            sticky
+          >
             <DropdownMenu.Label>Top-level label</DropdownMenu.Label>
             <DropdownMenu.Separator />
             <DropdownMenu.Group>
@@ -36,7 +129,13 @@ describe('DropdownMenu', () => {
             <DropdownMenu.Separator />
             <DropdownMenu.Sub>
               <DropdownMenu.SubTrigger>Submenu</DropdownMenu.SubTrigger>
-              <DropdownMenu.SubContent>
+              <DropdownMenu.SubContent
+                alignOffset={-2}
+                arrowPadding={6}
+                collisionBoundary={document.body}
+                disableAnchorTracking
+                positionMethod="fixed"
+              >
                 <DropdownMenu.Item>Sub item</DropdownMenu.Item>
               </DropdownMenu.SubContent>
             </DropdownMenu.Sub>
@@ -48,6 +147,27 @@ describe('DropdownMenu', () => {
         </DropdownMenu>,
       ),
     ).not.toThrow();
+  });
+
+  it('accepts Base UI positioning props on menu content', () => {
+    render(
+      <DropdownMenu defaultOpen>
+        <DropdownMenu.Trigger>Open</DropdownMenu.Trigger>
+        <DropdownMenu.Content
+          anchor={document.body}
+          arrowPadding={6}
+          collisionAvoidance={{ side: 'shift', align: 'shift', fallbackAxisSide: 'none' }}
+          collisionBoundary={document.body}
+          collisionPadding={8}
+          positionMethod="fixed"
+          sticky
+        >
+          <DropdownMenu.Item>Positioned action</DropdownMenu.Item>
+        </DropdownMenu.Content>
+      </DropdownMenu>,
+    );
+
+    expect(screen.getByRole('menuitem', { name: 'Positioned action' })).toBeTruthy();
   });
 
   it('fires the onSelect handler when an item is clicked', () => {

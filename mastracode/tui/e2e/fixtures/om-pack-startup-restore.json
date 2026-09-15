@@ -1,0 +1,14 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "endpoint": "chat",
+        "model": "gpt-5.4-mini",
+        "userMessage": "Create OM pack startup restore thread."
+      },
+      "response": {
+        "content": "OM pack startup restore thread ready."
+      }
+    }
+  ]
+}

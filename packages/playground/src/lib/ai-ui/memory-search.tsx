@@ -1,5 +1,8 @@
 import type { MemorySearchResult, MemorySearchResponse } from '@mastra/client-js';
-import { Button, Input, Txt, cn } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Input } from '@mastra/playground-ui/components/Input';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { Search, X, ExternalLink } from 'lucide-react';
 import { useState, useCallback, useRef, useEffect } from 'react';
 
@@ -40,6 +43,8 @@ export const MemorySearch = ({
   const prevThreadIdRef = useRef<string | undefined>(currentThreadId);
   const lastSearchTimeRef = useRef<number>(0);
   const pendingSearchRef = useRef<string | null>(null);
+  const queryRef = useRef(query);
+  queryRef.current = query;
 
   // Debounced search
   const handleSearch = useCallback(
@@ -155,9 +160,10 @@ export const MemorySearch = ({
     prevThreadIdRef.current = currentThreadId;
   }, [currentThreadId, query, handleSearch]);
 
-  // Sync chat input value with internal state when provided
+  // Sync chat input value with internal state when provided.
+  // Keyed on chatInputValue only: re-running on local `query` edits would overwrite the user's typing.
   useEffect(() => {
-    if (chatInputValue !== undefined && chatInputValue !== query) {
+    if (chatInputValue !== undefined && chatInputValue !== queryRef.current) {
       setQuery(chatInputValue);
 
       if (searchTimeoutRef.current) {
@@ -199,7 +205,7 @@ export const MemorySearch = ({
         clearTimeout(searchTimeoutRef.current);
       }
     };
-  }, [chatInputValue]);
+  }, [chatInputValue, handleSearch]);
 
   const handleResultClick = (messageId: string, threadId?: string) => {
     onResultClick?.(messageId, threadId);
@@ -223,17 +229,17 @@ export const MemorySearch = ({
   return (
     <div className={cn('flex flex-col h-full', className)} ref={dropdownRef}>
       <div className="relative shrink-0">
-        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-neutral3" />
+        <Search className="text-neutral3 absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 transform" />
         <Input
           type="text"
           value={query}
           onChange={handleInputChange}
           onKeyDown={handleKeyDown}
           placeholder="Search memory..."
-          className="pl-10 pr-10 bg-surface3 border-border1"
+          className="bg-surface3 border-border1 pr-10 pl-10"
         />
         {query && (
-          <Button onClick={clearSearch} className="absolute right-1 top-1/2 transform -translate-y-1/2 h-6 w-6 p-0">
+          <Button onClick={clearSearch} className="absolute top-1/2 right-1 h-6 w-6 -translate-y-1/2 transform p-0">
             <X className="h-4 w-4" />
           </Button>
         )}
@@ -241,7 +247,7 @@ export const MemorySearch = ({
 
       {/* Search results dropdown */}
       {(isOpen || (query && (isSearching || results.length === 0))) && (
-        <div className="mt-2 flex-1 bg-surface3 border border-border1 rounded-lg shadow-lg overflow-y-auto">
+        <div className="bg-surface3 border-border1 mt-2 flex-1 overflow-y-auto rounded-lg border shadow-lg">
           {error ? (
             <div className="p-4 text-center">
               <Txt variant="ui-sm" className="text-red-500">
@@ -274,7 +280,7 @@ export const MemorySearch = ({
                   <div className="flex flex-col gap-2">
                     {/* Context before */}
                     {result.context?.before && result.context.before.length > 0 && (
-                      <div className="opacity-50 text-xs space-y-1">
+                      <div className="text-ui-sm space-y-1 opacity-50">
                         {result.context.before.map((msg, idx) => (
                           <div key={idx} className="flex items-start gap-2">
                             <span className="font-medium">{msg.role}:</span>
@@ -286,11 +292,11 @@ export const MemorySearch = ({
 
                     {/* Main result */}
                     <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
+                      <div className="min-w-0 flex-1">
+                        <div className="mb-1 flex items-center gap-2">
                           <span
                             className={cn(
-                              'text-xs font-medium px-2 py-0.5 rounded',
+                              'text-ui-sm font-medium px-2 py-0.5 rounded',
                               result.role === 'user'
                                 ? 'bg-blue-500/20 text-blue-400'
                                 : 'bg-green-500/20 text-green-400',
@@ -314,7 +320,7 @@ export const MemorySearch = ({
                                 • {result.threadTitle}
                               </Txt>
                               {result.threadId !== currentThreadId && (
-                                <ExternalLink className="w-3 h-3 text-blue-400" />
+                                <ExternalLink className="h-3 w-3 text-blue-400" />
                               )}
                             </div>
                           )}
@@ -327,7 +333,7 @@ export const MemorySearch = ({
 
                     {/* Context after */}
                     {result.context?.after && result.context.after.length > 0 && (
-                      <div className="opacity-50 text-xs space-y-1">
+                      <div className="text-ui-sm space-y-1 opacity-50">
                         {result.context.after.map((msg, idx) => (
                           <div key={idx} className="flex items-start gap-2">
                             <span className="font-medium">{msg.role}:</span>

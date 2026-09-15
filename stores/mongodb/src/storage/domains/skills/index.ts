@@ -22,6 +22,7 @@ import type {
   ListSkillVersionsInput,
   ListSkillVersionsOutput,
 } from '@mastra/core/storage/domains/skills';
+import { skillSnapshotFieldValuesEqual } from '@mastra/core/storage/domains/skills';
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
 import { resolveMongoDBConfig } from '../../db';
 import type { MongoDBDomainConfig, MongoDBIndexConfig } from '../../types';
@@ -183,32 +184,29 @@ export class MongoDBSkillsStorage extends SkillsStorage {
         updatedAt: now,
       };
 
-      await collection.insertOne(this.serializeSkill(newSkill));
-
       // Extract snapshot config from flat input
       const snapshotConfig: Record<string, any> = {};
       for (const field of SNAPSHOT_FIELDS) {
-        if ((skill as any)[field] !== undefined) {
-          snapshotConfig[field] = (skill as any)[field];
-        }
+        if ((skill as any)[field] !== undefined) snapshotConfig[field] = (skill as any)[field];
+      }
+      const versionId = randomUUID();
+      const versionDoc: Record<string, any> = {
+        id: versionId,
+        skillId: id,
+        versionNumber: 1,
+        changedFields: Object.keys(snapshotConfig),
+        changeMessage: 'Initial version',
+        createdAt: new Date(),
+      };
+      for (const field of SNAPSHOT_FIELDS) {
+        if (snapshotConfig[field] !== undefined) versionDoc[field] = snapshotConfig[field];
       }
 
-      // Create version 1
-      const versionId = randomUUID();
-      try {
-        await this.createVersion({
-          id: versionId,
-          skillId: id,
-          versionNumber: 1,
-          ...snapshotConfig,
-          changedFields: Object.keys(snapshotConfig),
-          changeMessage: 'Initial version',
-        } as CreateSkillVersionInput);
-      } catch (versionError) {
-        // Clean up the orphaned skill record
-        await collection.deleteOne({ id });
-        throw versionError;
-      }
+      await this.#connector.withTransaction(async session => {
+        await collection.insertOne(this.serializeSkill(newSkill), { session });
+        const versionsCol = await this.getCollection(TABLE_SKILL_VERSIONS);
+        await versionsCol.insertOne(versionDoc, { session });
+      });
 
       return newSkill;
     } catch (error) {
@@ -263,34 +261,6 @@ export class MongoDBSkillsStorage extends SkillsStorage {
         }
       }
 
-      // If we have config updates, create a new version
-      if (Object.keys(configFields).length > 0) {
-        const latestVersion = await this.getLatestVersion(id);
-
-        if (!latestVersion) {
-          throw new MastraError({
-            id: createStorageErrorId('MONGODB', 'UPDATE_SKILL', 'NO_VERSION'),
-            domain: ErrorDomain.STORAGE,
-            category: ErrorCategory.USER,
-            text: `Cannot update config fields for skill ${id} - no versions exist`,
-            details: { id },
-          });
-        }
-
-        // Extract existing snapshot and merge with updates
-        const existingSnapshot = this.extractSnapshotFields(latestVersion);
-
-        await this.createVersion({
-          id: randomUUID(),
-          skillId: id,
-          versionNumber: latestVersion.versionNumber + 1,
-          ...existingSnapshot,
-          ...configFields,
-          changedFields: Object.keys(configFields),
-          changeMessage: `Updated: ${Object.keys(configFields).join(', ')}`,
-        } as CreateSkillVersionInput);
-      }
-
       // Handle metadata-level updates
       if (metadataFields.authorId !== undefined) updateDoc.authorId = metadataFields.authorId;
       if (metadataFields.visibility !== undefined) updateDoc.visibility = metadataFields.visibility;
@@ -305,7 +275,54 @@ export class MongoDBSkillsStorage extends SkillsStorage {
         updateDoc.status = metadataFields.status;
       }
 
-      await collection.updateOne({ id }, { $set: updateDoc });
+      // Build new version doc if config fields changed
+      let newVersionDoc: Record<string, any> | null = null;
+      if (Object.keys(configFields).length > 0) {
+        const latestVersion = await this.getLatestVersion(id);
+
+        if (!latestVersion) {
+          throw new MastraError({
+            id: createStorageErrorId('MONGODB', 'UPDATE_SKILL', 'NO_VERSION'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            text: `Cannot update config fields for skill ${id} - no versions exist`,
+            details: { id },
+          });
+        }
+
+        const existingSnapshot = this.extractSnapshotFields(latestVersion);
+        const changedFields = Object.keys(configFields).filter(
+          field =>
+            !skillSnapshotFieldValuesEqual(
+              configFields[field],
+              existingSnapshot[field as keyof typeof existingSnapshot],
+            ),
+        );
+
+        if (changedFields.length > 0) {
+          const mergedSnapshot = { ...existingSnapshot, ...configFields };
+          newVersionDoc = {
+            id: randomUUID(),
+            skillId: id,
+            versionNumber: latestVersion.versionNumber + 1,
+            changedFields,
+            changeMessage: `Updated: ${changedFields.join(', ')}`,
+            createdAt: new Date(),
+          };
+          for (const field of SNAPSHOT_FIELDS) {
+            if ((mergedSnapshot as any)[field] !== undefined) newVersionDoc[field] = (mergedSnapshot as any)[field];
+          }
+        }
+      }
+
+      await this.#connector.withTransaction(async session => {
+        if (newVersionDoc) {
+          const versionsCol = await this.getCollection(TABLE_SKILL_VERSIONS);
+          await versionsCol.insertOne(newVersionDoc, { session });
+        }
+        const col = await this.getCollection(TABLE_SKILLS);
+        await col.updateOne({ id }, { $set: updateDoc }, { session });
+      });
 
       const updatedSkill = await collection.findOne<any>({ id });
       if (!updatedSkill) {
@@ -336,12 +353,12 @@ export class MongoDBSkillsStorage extends SkillsStorage {
 
   async delete(id: string): Promise<void> {
     try {
-      // Delete all versions first
-      await this.deleteVersionsByParentId(id);
-
-      // Then delete the skill
-      const collection = await this.getCollection(TABLE_SKILLS);
-      await collection.deleteOne({ id });
+      await this.#connector.withTransaction(async session => {
+        const versionsCol = await this.getCollection(TABLE_SKILL_VERSIONS);
+        await versionsCol.deleteMany({ skillId: id }, { session });
+        const col = await this.getCollection(TABLE_SKILLS);
+        await col.deleteOne({ id }, { session });
+      });
     } catch (error) {
       throw new MastraError(
         {

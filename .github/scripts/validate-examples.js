@@ -1,7 +1,7 @@
-import { execSync } from 'child_process';
-import fs from 'fs';
+import { execSync } from 'node:child_process';
+import fs from 'node:fs';
 import { globby } from 'globby';
-import { join, dirname } from 'path';
+import { join, dirname } from 'node:path';
 
 // Find all package.json files in examples directory
 const packageJsonFiles = await globby(['examples/**/package.json', '!**/node_modules/**', '!./examples/dane/**']);

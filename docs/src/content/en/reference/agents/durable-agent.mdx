@@ -1,15 +1,21 @@
 ---
-title: "Reference: DurableAgent | Agents"
-description: "API reference for DurableAgent, which wraps an Agent with durable execution and resumable streams."
+title: 'Reference: DurableAgent | Agents'
+description: 'DurableAgent wraps an existing Agent with durable execution and resumable streams.'
 packages:
-  - "@mastra/core"
+  - '@mastra/core'
 ---
 
 # DurableAgent
 
+:::beta
+
+Breaking changes may occur without a major version bump until the API is stable.
+
+:::
+
 `DurableAgent` wraps an existing [`Agent`](/reference/agents/agent) with durable execution and resumable streams. It runs the agentic loop so that a client can disconnect and reconnect without missing events, and it streams those events over [PubSub](/docs/server/pubsub). Use it when a run must outlive a single request or survive a dropped connection.
 
-Create one with the [`createDurableAgent`](#createdurableagentoptions) factory, or use [`createEventedAgent`](#createeventedagentoptions) for fire-and-forget execution on the built-in workflow engine. For Inngest-powered execution, use `createInngestAgent` from `@mastra/inngest`.
+Create one with the [`createDurableAgent`](#createdurableagentoptions) factory, or use [`createEventedAgent`](#createeventedagentoptions) for fire-and-forget execution on the built-in workflow engine. For Inngest-powered execution, use [`createInngestAgent`](/reference/agents/inngest-agent) from `@mastra/inngest`.
 
 ## Usage example
 
@@ -41,6 +47,29 @@ const text = await output.text
 
 cleanup()
 ```
+
+### Using the `durable` config flag
+
+Set `durable: true` on `AgentConfig` and the agent is automatically wrapped with `createDurableAgent` when it's attached to a `Mastra` instance. Use an object to forward advanced options such as `cache`, `pubsub`, `maxSteps`, `cleanupTimeoutMs`, or `shouldCache`.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { Agent } from '@mastra/core/agent'
+
+const myAgent = new Agent({
+  id: 'my-agent',
+  name: 'My Agent',
+  instructions: 'You are a helpful assistant',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  durable: true, // or: { maxSteps: 10, cleanupTimeoutMs: 60_000 }
+})
+
+export const mastra = new Mastra({
+  agents: { myAgent },
+})
+```
+
+`mastra.getAgent('myAgent')` returns the wrapped `DurableAgent`. Standalone agents (constructed but never registered on a `Mastra` instance) don't become durable. The wrapping is applied at registration.
 
 ## `createDurableAgent(options)`
 
@@ -98,12 +127,19 @@ Returns: `DurableAgent`
     isOptional: true,
     description: 'Maximum number of steps for the agentic loop.',
   },
+  {
+    name: 'shouldCache',
+    type: '(topic: string) => boolean',
+    isOptional: true,
+    description:
+      'Per-topic opt-out of the replay cache. Return `false` to publish a topic straight to the underlying PubSub without recording it; subscribers of that topic receive live events only and cannot resume from an offset. Useful for trading replay for minimum publish latency on hot topics when the cache is remote (for example, cross-region Redis). Run-local topics are always excluded, regardless of this option.',
+  },
 ]}
 />
 
 ## `createEventedAgent(options)`
 
-Wraps an `Agent` with fire-and-forget durable execution on the built-in workflow engine. Like `createDurableAgent`, it returns a result you stream from, but the underlying workflow runs non-blocking (via `startAsync`) instead of running to completion before the stream is wired up. Use it when you want the run to progress independently of the caller. It does not accept `id` or `name` overrides.
+Wraps an `Agent` with fire-and-forget durable execution on the built-in workflow engine. Like `createDurableAgent`, it returns a result you stream from, but the underlying workflow runs non-blocking (via `startAsync`) instead of running to completion before the stream is wired up. Use it when you want the run to progress independently of the caller. It doesn't accept `id` or `name` overrides.
 
 ```typescript
 import { createEventedAgent } from '@mastra/core/agent/durable'
@@ -142,6 +178,13 @@ Returns: `EventedAgent` (a subclass of `DurableAgent`)
     type: 'number',
     isOptional: true,
     description: 'Maximum number of steps for the agentic loop.',
+  },
+  {
+    name: 'shouldCache',
+    type: '(topic: string) => boolean',
+    isOptional: true,
+    description:
+      'Per-topic opt-out of the replay cache. Return `false` to publish a topic straight to the underlying PubSub without recording it; subscribers of that topic receive live events only and cannot resume from an offset. Useful for trading replay for minimum publish latency on hot topics when the cache is remote (for example, cross-region Redis). Run-local topics are always excluded, regardless of this option.',
   },
 ]}
 />
@@ -191,6 +234,13 @@ The `DurableAgent` class accepts the same options as `createDurableAgent`, plus 
     type: 'number',
     isOptional: true,
     description: 'Maximum number of steps for the agentic loop.',
+  },
+  {
+    name: 'shouldCache',
+    type: '(topic: string) => boolean',
+    isOptional: true,
+    description:
+      'Per-topic opt-out of the replay cache. Return `false` to publish a topic straight to the underlying PubSub without recording it; subscribers of that topic receive live events only and cannot resume from an offset. Useful for trading replay for minimum publish latency on hot topics when the cache is remote (for example, cross-region Redis). Run-local topics are always excluded, regardless of this option.',
   },
   {
     name: 'cleanupTimeoutMs',
@@ -251,13 +301,205 @@ const { output, cleanup } = await durableAgent.observe(runId, {
 await output.text
 ```
 
+By default `observe()` waits indefinitely for events. If the process running the run stops unexpectedly, the run stops producing events but never emits a completion event, so the observed stream would wait forever. Pass `idleTimeoutMs` to end the stream after a bounded period of silence. Before timing out, `observe()` can consult an optional `isAlive` check. Return `true` while work continues, such as during a long-running tool call or a pause for human input. A `false` result ends the stream with an error, as does omitting `isAlive`. A transient throw from `isAlive` is treated as "still alive", so a momentary check failure never ends a live stream.
+
+```typescript
+const { output } = await durableAgent.observe(runId, {
+  idleTimeoutMs: 30_000,
+  isAlive: () => runHeartbeat.isFresh(runId),
+})
+```
+
+Ending a run on idle timeout runs the same cleanup as a run that errors (see the warning below), so its cached state is released rather than retained. Both options are opt-in. Omit them for the previous wait-indefinitely behavior.
+
 Returns: `Promise<DurableAgentStreamResult>`
 
 :::warning
 
-The `cleanup()` returned by `observe()` destroys the run's registry entries and cached events. Only call it when you are done with the run. If the run is suspended and you intend to resume later, do not call `cleanup()` — let the auto-cleanup timer handle it after the run finishes or errors. Auto-cleanup does not fire on suspended events.
+The `cleanup()` returned by `observe()` destroys the run's registry entries and cached events. Only call it when you are done with the run. If the run is suspended and you intend to resume later, don't call `cleanup()`. Let the auto-cleanup timer handle it after the run finishes or errors. Auto-cleanup doesn't fire on suspended events.
 
 :::
+
+#### `prepare(messages, options?)`
+
+Prepares a run for durable execution without starting it. Registers the run in the internal registry and returns the serialized workflow input. Use this when you need to control when and how the workflow is triggered.
+
+```typescript
+const { runId, messageId, workflowInput, threadId, resourceId } = await durableAgent.prepare(
+  'Summarize the document',
+  {
+    memory: { threadId: 'thread-1', resourceId: 'user-1' },
+  },
+)
+```
+
+Returns:
+
+```typescript
+interface PrepareResult {
+  runId: string
+  messageId: string
+  workflowInput: any
+  registryEntry: object
+  threadId?: string
+  resourceId?: string
+}
+```
+
+### Cancellation
+
+#### `abortRunStream(runId)`
+
+Stops a run by ID from any process that shares the agent's [PubSub](/docs/server/pubsub). Only the `runId` from `stream()` or `prepare()` is needed, so a later request can stop a run it didn't start. The run ends the same way as `abort()` on the stream result: the `finish` event carries reason `abort`, `onAbort` fires, and `observe()` consumers see the stream end.
+
+```typescript
+const { runId } = await durableAgent.stream('Summarize the document')
+
+// later, from a different request handler
+durableAgent.abortRunStream(runId)
+```
+
+The abort request is published over PubSub, so a multi-process deployment needs a shared backend such as [`RedisStreamsPubSub`](/reference/pubsub/redis-streams). The default `EventEmitterPubSub` only reaches runs in the same process. `InngestAgent` doesn't implement this method. Cancel an Inngest run with the `abort()` returned by its `stream()`.
+
+Stopping a durable run through `abortRunStream()` or `abortThreadStream()` requires `@mastra/core@1.62.0` or later. Earlier versions record the abort without stopping the run.
+
+Returns: `boolean`. `true` when this process aborted the run locally or can see it executing. The abort request is published either way.
+
+#### `abortThreadStream({ threadId, resourceId? })`
+
+Aborts the active run on a memory thread with the same abort request as `abortRunStream()`. The run is resolved from this process's thread runtime, so it must have been started here or observed through `subscribeToThread()` on this process. The server route `POST /agents/:agentId/threads/abort` uses this method.
+
+```typescript
+durableAgent.abortThreadStream({ resourceId: 'user-1', threadId: 'thread-1' })
+```
+
+Returns: `boolean`. `false` when this process has no active run recorded for the thread. No abort request is sent in that case.
+
+### Recovery
+
+#### `listActiveRuns(options?)`
+
+Lists this agent's runs whose persisted snapshot is in `running` status: runs whose agentic loop was mid-execution when the workflow engine last saved state. On a live process they transition to `suspended` or a terminal status. After a crash or restart they stay `running` with nothing driving them, which is what `recoverActiveRuns()` re-drives. Runs started by other durable agents on the same storage aren't included.
+
+```typescript
+const { runs, total } = await durableAgent.listActiveRuns({ resourceId: 'user-1' })
+
+for (const run of runs) {
+  await durableAgent.recoverActiveRuns({ runId: run.runId })
+}
+```
+
+Reads workflow snapshot storage on the Mastra instance the agent is registered with, and throws if the agent isn't registered with one. Use persistent storage: the default in-memory store loses these rows on the restart that orphans them.
+
+Only runs in `running` status are returned. Suspended runs keep their snapshots but aren't included, and finished runs aren't retained. Filter by `resourceId` to scope the list to one user.
+
+Returns:
+
+```typescript
+interface DurableAgentListActiveRunsResult {
+  runs: Array<{
+    runId: string
+    status: 'running'
+    threadId?: string
+    resourceId?: string
+    updatedAt: Date
+  }>
+  total: number
+}
+```
+
+<PropertiesTable
+  content={[
+  {
+    name: 'options.threadId',
+    type: 'string',
+    isOptional: true,
+    description: 'Only return runs that belong to this memory thread.',
+  },
+  {
+    name: 'options.resourceId',
+    type: 'string',
+    isOptional: true,
+    description: 'Only return runs that belong to this memory resource.',
+  },
+  {
+    name: 'options.fromDate',
+    type: 'Date',
+    isOptional: true,
+    description: 'Only return runs created at or after this date.',
+  },
+  {
+    name: 'options.toDate',
+    type: 'Date',
+    isOptional: true,
+    description: 'Only return runs created at or before this date.',
+  },
+  {
+    name: 'options.perPage',
+    type: 'number',
+    isOptional: true,
+    description: 'Runs per page. Applies only when `page` is also set. Must be a positive integer.',
+  },
+  {
+    name: 'options.page',
+    type: 'number',
+    isOptional: true,
+    description: 'Zero-indexed page number. Applies only when `perPage` is also set. Must be a non-negative integer.',
+  },
+]}
+/>
+
+#### `recoverActiveRuns(options?)`
+
+Discovers runs stuck in `running` status for this agent and re-drives them from the last persisted snapshot. Accepts the same filters and pagination as `listActiveRuns()`, plus `runId`. Returns a summary of what was recovered.
+
+```typescript
+const result = await durableAgent.recoverActiveRuns()
+// { recovered: [{ runId, status }], succeeded: 2, failed: 0 }
+```
+
+Pass a `runId` to recover a single known run:
+
+```typescript
+await durableAgent.recoverActiveRuns({ runId: 'run-abc-123' })
+```
+
+Returns:
+
+```typescript
+interface DurableAgentRecoverActiveRunsResult {
+  recovered: Array<{ runId: string; status: 'success' | 'failed'; error?: Error }>
+  succeeded: number
+  failed: number
+}
+```
+
+<PropertiesTable
+  content={[
+  {
+    name: 'options.runId',
+    type: 'string',
+    isOptional: true,
+    description: 'Recover a specific run by ID. When set, the discovery filters and pagination are ignored.',
+  },
+]}
+/>
+
+#### `recover(runId, options?)`
+
+Recovers a single run by ID. Returns a streamable result with the same shape as `stream()`. Use this when you need to observe the recovery stream in real time.
+
+```typescript
+const { output, cleanup } = await durableAgent.recover('run-abc-123', {
+  onChunk: chunk => console.log(chunk),
+  onError: ({ error }) => console.error(error),
+})
+
+await output.text
+cleanup()
+```
+
+Returns: [`Promise<DurableAgentStreamResult>`](#durableagentstreamresult)
 
 ## Stream options
 
@@ -269,7 +511,7 @@ The `cleanup()` returned by `observe()` destroys the run's registry entries and 
     name: 'runId',
     type: 'string',
     isOptional: true,
-    description: 'Unique identifier for this run. Use it later with `resume()` or `observe()`.',
+    description: 'Unique identifier for this run. Use it later with `resume()`, `observe()`, or `abortRunStream()`.',
   },
   {
     name: 'instructions',
@@ -330,13 +572,28 @@ The `cleanup()` returned by `observe()` destroys the run's registry entries and 
     name: 'modelSettings',
     type: 'object',
     isOptional: true,
-    description: 'Model-specific settings such as temperature.',
+    description:
+      'Model-specific settings such as temperature. Credential-bearing headers (`Authorization`, `X-Api-Key`, and similar) are stripped from the serialized snapshot before it crosses process boundaries.',
+  },
+  {
+    name: 'stopWhen',
+    type: "AgentExecutionOptions['stopWhen']",
+    isOptional: true,
+    description:
+      'Predicate or composition that ends the agentic loop early. The closure rides on the in-process run registry; cross-process resumes degrade to `maxSteps` only.',
+  },
+  {
+    name: 'system',
+    type: 'string | string[]',
+    isOptional: true,
+    description: 'Additional system message appended after the agent instructions and before user messages.',
   },
   {
     name: 'requireToolApproval',
-    type: 'boolean',
+    type: 'boolean | ((args: { toolName: string; args: unknown; requestContext: RequestContext; workspace?: string }) => boolean | Promise<boolean>)',
     isOptional: true,
-    description: 'Require approval for all tool calls, which suspends the run until resumed.',
+    description:
+      'Require approval for tool calls. Pass `true` or `false` to gate all or none, or a function for per-call policy. Function-form policies live on the in-process run registry; cross-process resumes fall back to a `true` shadow.',
   },
   {
     name: 'autoResumeSuspendedTools',
@@ -369,10 +626,71 @@ The `cleanup()` returned by `observe()` destroys the run's registry entries and 
     description: 'Structured output configuration.',
   },
   {
+    name: 'untilIdle',
+    type: 'boolean | { maxIdleMs?: number }',
+    isOptional: true,
+    description:
+      'When set, keeps the stream open across background-task continuations until the agent is idle. Pass `true` for the default 5-minute idle timeout, or `{ maxIdleMs }` to customise. Equivalent to the deprecated `streamUntilIdle()` method. Also supported on `resume()`.',
+  },
+  {
+    name: 'disableBackgroundTasks',
+    type: 'boolean',
+    isOptional: true,
+    description: 'Disable background-task dispatch for this run. Background-eligible tools execute inline instead.',
+  },
+  {
+    name: 'tracingOptions',
+    type: "AgentExecutionOptions['tracingOptions']",
+    isOptional: true,
+    description:
+      'Tracing metadata, tags, trace ID, parent span ID, and `requestContextKeys` forwarded to the agent and model spans. Fully JSON-serializable.',
+  },
+  {
+    name: 'actor',
+    type: "AgentExecutionOptions['actor']",
+    isOptional: true,
+    description: 'Per-call actor signal forwarded to FGA checks and tool execution.',
+  },
+  {
+    name: 'transform',
+    type: "AgentExecutionOptions['transform']",
+    isOptional: true,
+    description:
+      'Per-invocation tool payload transform policy. The `transformToolPayload` closure lives on the in-process run registry; only the JSON-safe `targets` shadow is serialized.',
+  },
+  {
+    name: 'prepareStep',
+    type: "AgentExecutionOptions['prepareStep']",
+    isOptional: true,
+    description:
+      'Per-step preparation hook invoked as a `PrepareStepProcessor` at the start of every iteration. Closure-only — stored on the in-process run registry. Cross-process resumes lose the hook.',
+  },
+  {
+    name: 'isTaskComplete',
+    type: "AgentExecutionOptions['isTaskComplete']",
+    isOptional: true,
+    description:
+      'Per-call completion policy. Scorer instances and `onComplete` live on the in-process run registry; the JSON-safe primitives (`strategy`, `timeout`, `parallel`, `suppressFeedback`, `scorerNames`) are serialized for cross-process observability.',
+  },
+  {
+    name: 'delegation',
+    type: "AgentExecutionOptions['delegation']",
+    isOptional: true,
+    description:
+      'Sub-agent delegation hooks (`onDelegationStart`, `onDelegationComplete`, `messageFilter`). Callbacks are baked into the sub-agent tool wrappers at prepare time. Cross-process resumes lose the callbacks.',
+  },
+  {
     name: 'versions',
     type: 'object',
     isOptional: true,
     description: 'Version overrides for sub-agent delegation.',
+  },
+  {
+    name: 'abortSignal',
+    type: 'AbortSignal',
+    isOptional: true,
+    description:
+      "External abort signal. Forwarded to the durable run's internal `AbortController`, so either source can cancel the run. Cross-process resumes cannot recover the signal — pass a fresh one to `resume()` if you need post-resume abortability.",
   },
   {
     name: 'onChunk',
@@ -404,6 +722,20 @@ The `cleanup()` returned by `observe()` destroys the run's registry entries and 
     isOptional: true,
     description: 'Called when the run suspends, for example for tool approval.',
   },
+  {
+    name: 'onAbort',
+    type: "AgentExecutionOptions['onAbort']",
+    isOptional: true,
+    description:
+      'Called when the run is aborted via `abortSignal`, `result.abort()`, `abortRunStream()`, or `abortThreadStream()`. Receives the steps completed before the abort and, in `text`, the assistant text streamed so far.',
+  },
+  {
+    name: 'onIterationComplete',
+    type: "AgentExecutionOptions['onIterationComplete']",
+    isOptional: true,
+    description:
+      'Called after every agentic-loop iteration with the latest `messageList`, `finishReason`, and `isFinal` flag. Observation-only on durable agents: returning `continue: false` or feedback does not influence the loop.',
+  },
 ]}
 />
 
@@ -411,7 +743,7 @@ The `cleanup()` returned by `observe()` destroys the run's registry entries and 
 
 ## DurableAgentStreamResult
 
-The object returned by `stream()`, `resume()`, and `observe()`.
+The object returned by `stream()`, `resume()`, `observe()`, and `recover()`.
 
 ```typescript
 interface DurableAgentStreamResult<OUTPUT = undefined> {
@@ -421,6 +753,7 @@ interface DurableAgentStreamResult<OUTPUT = undefined> {
   threadId?: string
   resourceId?: string
   cleanup: () => void
+  abort: () => void
 }
 ```
 
@@ -458,11 +791,18 @@ interface DurableAgentStreamResult<OUTPUT = undefined> {
     type: '() => void',
     description: 'Unsubscribes from PubSub and clears registry entries for the run. Call it when done with the run.',
   },
+  {
+    name: 'abort',
+    type: '() => void',
+    description:
+      'Aborts the run by flipping the internal `AbortController`. Surfaces as an `AbortError` inside the durable LLM-execution step and fires the `onAbort` callback. Safe to call after the run has finished — a no-op in that case.',
+  },
 ]}
 />
 
 ## Related
 
+- [`createInngestAgent()`](/reference/agents/inngest-agent)
 - [Agent class](/reference/agents/agent)
 - [PubSub](/docs/server/pubsub)
 - [`.getMemory()`](/reference/agents/getMemory)

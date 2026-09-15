@@ -1,13 +1,15 @@
 import type { ArrayWrapperProps } from '@autoform/react';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger, Txt, Icon } from '@mastra/playground-ui';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { Brackets, PlusIcon } from 'lucide-react';
 import React from 'react';
 
 export const ArrayWrapper: React.FC<ArrayWrapperProps> = ({ label, children, onAddItem }) => {
   return (
     <div>
-      <div className="flex gap-2 justify-between">
-        <Txt as="h3" variant="ui-sm" className="text-neutral3 pb-2 flex items-center gap-1">
+      <div className="flex justify-between gap-2">
+        <Txt as="h3" variant="ui-sm" className="text-neutral3 flex items-center gap-1 pb-2">
           <Icon size="sm">
             <Brackets />
           </Icon>
@@ -19,9 +21,10 @@ export const ArrayWrapper: React.FC<ArrayWrapperProps> = ({ label, children, onA
           <Tooltip>
             <TooltipTrigger asChild>
               <button
+                aria-label={`Add ${label} item`}
                 onClick={onAddItem}
                 type="button"
-                className="text-neutral3 bg-surface3 rounded-md p-1 hover:bg-surface4 hover:text-neutral6 h-icon-sm w-icon-sm"
+                className="text-neutral3 bg-surface3 hover:bg-surface4 hover:text-neutral6 h-icon-sm w-icon-sm rounded-md p-1"
               >
                 <Icon size="sm">
                   <PlusIcon />

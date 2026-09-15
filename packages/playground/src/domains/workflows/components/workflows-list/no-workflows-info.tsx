@@ -1,4 +1,5 @@
-import { Button, EmptyState } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { CircleSlashIcon, ExternalLinkIcon } from 'lucide-react';
 
 export const NoWorkflowsInfo = () => (
@@ -19,8 +20,9 @@ export const NoWorkflowsInfo = () => (
           href="https://mastra.ai/docs/workflows/overview"
           target="_blank"
           rel="noopener noreferrer"
+          icon={<ExternalLinkIcon />}
         >
-          Workflows Documentation <ExternalLinkIcon />
+          Workflows Documentation
         </Button>
       }
     />

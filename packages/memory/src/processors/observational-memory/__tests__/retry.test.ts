@@ -19,6 +19,7 @@ describe('isTransientLLMError', () => {
     expect(isTransientLLMError(new Error('socket hang up'))).toBe(true);
     expect(isTransientLLMError(new Error('connection closed'))).toBe(true);
     expect(isTransientLLMError(new Error('Request timeout'))).toBe(true);
+    expect(isTransientLLMError(new Error('Connection terminated due to connection timeout'))).toBe(true);
   });
 
   it('matches retryable HTTP statuses', () => {
@@ -30,6 +31,23 @@ describe('isTransientLLMError', () => {
 
   it('matches AI SDK-style isRetryable: true', () => {
     expect(isTransientLLMError({ isRetryable: true })).toBe(true);
+  });
+
+  it('matches OpenRouter-style mid-stream errors with a numeric code property', () => {
+    // OpenRouter injects provider errors into the SSE stream as
+    // { code: 502, message, metadata: { error_type: 'provider_unavailable' } }
+    // and Mastra's getErrorFromUnknown copies those props onto the Error.
+    const err = Object.assign(new Error('JSON error injected into SSE stream'), {
+      code: 502,
+      metadata: { error_type: 'provider_unavailable' },
+    });
+    expect(isTransientLLMError(err)).toBe(true);
+    expect(isTransientLLMError({ code: 429, message: 'rate limited' })).toBe(true);
+  });
+
+  it('does NOT retry on non-retryable numeric code properties', () => {
+    expect(isTransientLLMError({ code: 400, message: 'bad request' })).toBe(false);
+    expect(isTransientLLMError({ code: 401, message: 'unauthorized' })).toBe(false);
   });
 
   it('walks the error.cause chain', () => {

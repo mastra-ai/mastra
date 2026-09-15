@@ -1,5 +1,395 @@
 # @mastra/voice-google-gemini-live
 
+## 0.14.10
+
+### Patch Changes
+
+- Fix missing usage events when Gemini Live sends usage metadata alongside response content, setup, or tool calls. Preserve content-derived modality and normal message routing while processing usage independently. ([#23835](https://github.com/mastra-ai/mastra/pull/23835))
+
+- Fixed realtime audio input to include the configured sample rate in its MIME type, so Gemini Live can interpret incoming PCM audio at the correct rate. ([#23834](https://github.com/mastra-ai/mastra/pull/23834))
+
+- Updated dependencies [[`ffe16f1`](https://github.com/mastra-ai/mastra/commit/ffe16f17447449b7155f1f15992e3c9e5f6511ac), [`80608ed`](https://github.com/mastra-ai/mastra/commit/80608ede1a9e5d7d8488ac511245bf327e8987e3)]:
+  - @mastra/schema-compat@1.3.10
+
+## 0.14.10-alpha.1
+
+### Patch Changes
+
+- Fix missing usage events when Gemini Live sends usage metadata alongside response content, setup, or tool calls. Preserve content-derived modality and normal message routing while processing usage independently. ([#23835](https://github.com/mastra-ai/mastra/pull/23835))
+
+- Fixed realtime audio input to include the configured sample rate in its MIME type, so Gemini Live can interpret incoming PCM audio at the correct rate. ([#23834](https://github.com/mastra-ai/mastra/pull/23834))
+
+- Updated dependencies [[`ffe16f1`](https://github.com/mastra-ai/mastra/commit/ffe16f17447449b7155f1f15992e3c9e5f6511ac)]:
+  - @mastra/schema-compat@1.3.10-alpha.1
+
+## 0.14.10-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`80608ed`](https://github.com/mastra-ai/mastra/commit/80608ede1a9e5d7d8488ac511245bf327e8987e3)]:
+  - @mastra/schema-compat@1.3.10-alpha.0
+
+## 0.14.9
+
+### Patch Changes
+
+- Deduplicate tool calls by provider call id: the same function call delivered through both `serverContent.modelTurn.parts[].functionCall` and a top-level `toolCall` message now executes once and emits a single `toolResponse` instead of running the tool twice. ([#22985](https://github.com/mastra-ai/mastra/pull/22985))
+
+- Send a functionResponse when Gemini Live calls an unregistered tool name. Previously the provider emitted a tool_not_found error and returned without answering the call, leaving the turn unanswered so the model went silent until the user hung up. ([#23131](https://github.com/mastra-ai/mastra/pull/23131))
+
+- Updated dependencies [[`40f3647`](https://github.com/mastra-ai/mastra/commit/40f36478291d6098f762fc639d545357732b77b4)]:
+  - @mastra/schema-compat@1.3.9
+
+## 0.14.9-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`40f3647`](https://github.com/mastra-ai/mastra/commit/40f36478291d6098f762fc639d545357732b77b4)]:
+  - @mastra/schema-compat@1.3.9-alpha.0
+
+## 0.14.9-alpha.1
+
+### Patch Changes
+
+- Send a functionResponse when Gemini Live calls an unregistered tool name. Previously the provider emitted a tool_not_found error and returned without answering the call, leaving the turn unanswered so the model went silent until the user hung up. ([#23131](https://github.com/mastra-ai/mastra/pull/23131))
+
+## 0.14.9-alpha.0
+
+### Patch Changes
+
+- Deduplicate tool calls by provider call id: the same function call delivered through both `serverContent.modelTurn.parts[].functionCall` and a top-level `toolCall` message now executes once and emits a single `toolResponse` instead of running the tool twice. ([#22985](https://github.com/mastra-ai/mastra/pull/22985))
+
+## 0.14.8
+
+### Patch Changes
+
+- Update README to include accurate, up-to-date information ([#22858](https://github.com/mastra-ai/mastra/pull/22858))
+
+- Remove `CHANGELOG.md` from distributed npm files resulting in reduced package size ([#22737](https://github.com/mastra-ai/mastra/pull/22737))
+
+- Updated dependencies [[`e983f74`](https://github.com/mastra-ai/mastra/commit/e983f749873189f767f509eb33d1a3596c0f1c74), [`28ce924`](https://github.com/mastra-ai/mastra/commit/28ce924276eeca492e6a360e5482ed20c2785ef6)]:
+  - @mastra/schema-compat@1.3.8
+
+## 0.14.8-alpha.1
+
+### Patch Changes
+
+- Update README to include accurate, up-to-date information ([#22858](https://github.com/mastra-ai/mastra/pull/22858))
+
+- Updated dependencies [[`e983f74`](https://github.com/mastra-ai/mastra/commit/e983f749873189f767f509eb33d1a3596c0f1c74)]:
+  - @mastra/schema-compat@1.3.8-alpha.1
+
+## 0.14.8-alpha.0
+
+### Patch Changes
+
+- Remove `CHANGELOG.md` from distributed npm files resulting in reduced package size ([#22737](https://github.com/mastra-ai/mastra/pull/22737))
+
+- Updated dependencies [[`28ce924`](https://github.com/mastra-ai/mastra/commit/28ce924276eeca492e6a360e5482ed20c2785ef6)]:
+  - @mastra/schema-compat@1.3.8-alpha.0
+
+## 0.14.7
+
+### Patch Changes
+
+- Updated dependencies [[`cf418b6`](https://github.com/mastra-ai/mastra/commit/cf418b65efb81997e9b8dc7638eee363c5d96c96)]:
+  - @mastra/schema-compat@1.3.7
+
+## 0.14.7-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`cf418b6`](https://github.com/mastra-ai/mastra/commit/cf418b65efb81997e9b8dc7638eee363c5d96c96)]:
+  - @mastra/schema-compat@1.3.7-alpha.0
+
+## 0.14.6
+
+### Patch Changes
+
+- dependencies updates: ([#20409](https://github.com/mastra-ai/mastra/pull/20409))
+  - Updated dependency [`google-auth-library@^10.9.1` ↗︎](https://www.npmjs.com/package/google-auth-library/v/10.9.1) (from `^10.9.0`, in `dependencies`)
+
+- Fixed Gemini Live session readiness waits to release timeout resources after settling. ([#21083](https://github.com/mastra-ai/mastra/pull/21083))
+
+- Updated dependencies [[`6bff877`](https://github.com/mastra-ai/mastra/commit/6bff877e214695ff8d9c84b06c13a6e6bcf9f1ed), [`f5a17d9`](https://github.com/mastra-ai/mastra/commit/f5a17d95c19e7d4149996932bd8d1905089f031d), [`5dba2a4`](https://github.com/mastra-ai/mastra/commit/5dba2a41600385751f5aace79878904e1972609d), [`9be8878`](https://github.com/mastra-ai/mastra/commit/9be8878dcf0388e84fc4873e0eec27bd49b881a4)]:
+  - @mastra/schema-compat@1.3.6
+
+## 0.14.6-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`5dba2a4`](https://github.com/mastra-ai/mastra/commit/5dba2a41600385751f5aace79878904e1972609d)]:
+  - @mastra/schema-compat@1.3.6-alpha.3
+
+## 0.14.6-alpha.3
+
+### Patch Changes
+
+- Fixed Gemini Live session readiness waits to release timeout resources after settling. ([#21083](https://github.com/mastra-ai/mastra/pull/21083))
+
+## 0.14.6-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`6bff877`](https://github.com/mastra-ai/mastra/commit/6bff877e214695ff8d9c84b06c13a6e6bcf9f1ed)]:
+  - @mastra/schema-compat@1.3.6-alpha.2
+
+## 0.14.6-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`9be8878`](https://github.com/mastra-ai/mastra/commit/9be8878dcf0388e84fc4873e0eec27bd49b881a4)]:
+  - @mastra/schema-compat@1.3.6-alpha.1
+
+## 0.14.6-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#20409](https://github.com/mastra-ai/mastra/pull/20409))
+  - Updated dependency [`google-auth-library@^10.9.1` ↗︎](https://www.npmjs.com/package/google-auth-library/v/10.9.1) (from `^10.9.0`, in `dependencies`)
+- Updated dependencies [[`f5a17d9`](https://github.com/mastra-ai/mastra/commit/f5a17d95c19e7d4149996932bd8d1905089f031d)]:
+  - @mastra/schema-compat@1.3.6-alpha.0
+
+## 0.14.5
+
+### Patch Changes
+
+- Updated dependencies [[`14562d6`](https://github.com/mastra-ai/mastra/commit/14562d6ea724ed4ccb9fb079d016ec7ab1bd92a4)]:
+  - @mastra/schema-compat@1.3.5
+
+## 0.14.5-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`14562d6`](https://github.com/mastra-ai/mastra/commit/14562d6ea724ed4ccb9fb079d016ec7ab1bd92a4)]:
+  - @mastra/schema-compat@1.3.5-alpha.0
+
+## 0.14.4
+
+### Patch Changes
+
+- dependencies updates: ([#19038](https://github.com/mastra-ai/mastra/pull/19038))
+  - Updated dependency [`google-auth-library@^10.9.0` ↗︎](https://www.npmjs.com/package/google-auth-library/v/10.9.0) (from `^10.6.2`, in `dependencies`)
+- Updated dependencies [[`bc1121a`](https://github.com/mastra-ai/mastra/commit/bc1121a7bb98f7cd73e82e3a7913a667a9fa9911), [`171c3a2`](https://github.com/mastra-ai/mastra/commit/171c3a23f36199ad1354166fb515b22b57f310c2), [`6789ab4`](https://github.com/mastra-ai/mastra/commit/6789ab4191ddcd32a932898b360b191e80cee1a9)]:
+  - @mastra/schema-compat@1.3.4
+
+## 0.14.4-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`171c3a2`](https://github.com/mastra-ai/mastra/commit/171c3a23f36199ad1354166fb515b22b57f310c2)]:
+  - @mastra/schema-compat@1.3.4-alpha.2
+
+## 0.14.4-alpha.2
+
+### Patch Changes
+
+- dependencies updates: ([#19038](https://github.com/mastra-ai/mastra/pull/19038))
+  - Updated dependency [`google-auth-library@^10.9.0` ↗︎](https://www.npmjs.com/package/google-auth-library/v/10.9.0) (from `^10.6.2`, in `dependencies`)
+
+## 0.14.4-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`bc1121a`](https://github.com/mastra-ai/mastra/commit/bc1121a7bb98f7cd73e82e3a7913a667a9fa9911)]:
+  - @mastra/schema-compat@1.3.4-alpha.1
+
+## 0.14.4-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`6789ab4`](https://github.com/mastra-ai/mastra/commit/6789ab4191ddcd32a932898b360b191e80cee1a9)]:
+  - @mastra/schema-compat@1.3.4-alpha.0
+
+## 0.14.3
+
+### Patch Changes
+
+- Updated the ws dependency to ^8.21.0 to pull in fixes for an uninitialized memory disclosure (GHSA-58qx-3vcg-4xpx) and a memory exhaustion denial-of-service (GHSA-96hv-2xvq-fx4p) in the WebSocket server. ([#18789](https://github.com/mastra-ai/mastra/pull/18789))
+
+- Updated dependencies [[`1042cb4`](https://github.com/mastra-ai/mastra/commit/1042cb4da227c0a1315a6362262be3058866c5f8)]:
+  - @mastra/schema-compat@1.3.3
+
+## 0.14.3-alpha.1
+
+### Patch Changes
+
+- Updated the ws dependency to ^8.21.0 to pull in fixes for an uninitialized memory disclosure (GHSA-58qx-3vcg-4xpx) and a memory exhaustion denial-of-service (GHSA-96hv-2xvq-fx4p) in the WebSocket server. ([#18789](https://github.com/mastra-ai/mastra/pull/18789))
+
+## 0.14.3-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`1042cb4`](https://github.com/mastra-ai/mastra/commit/1042cb4da227c0a1315a6362262be3058866c5f8)]:
+  - @mastra/schema-compat@1.3.3-alpha.0
+
+## 0.14.2
+
+### Patch Changes
+
+- Updated dependencies [[`d0702ee`](https://github.com/mastra-ai/mastra/commit/d0702eedc1594cb2d0d83476440cfc2ec8820adb), [`9feeaa0`](https://github.com/mastra-ai/mastra/commit/9feeaa0f9a1af07039e5b4f22b932b0cb18617e8), [`213feb8`](https://github.com/mastra-ai/mastra/commit/213feb87bfdd1d8ec00ea660e218f9bcfcb34e7b)]:
+  - @mastra/schema-compat@1.3.2
+
+## 0.14.2-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`d0702ee`](https://github.com/mastra-ai/mastra/commit/d0702eedc1594cb2d0d83476440cfc2ec8820adb)]:
+  - @mastra/schema-compat@1.3.2-alpha.1
+
+## 0.14.2-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`9feeaa0`](https://github.com/mastra-ai/mastra/commit/9feeaa0f9a1af07039e5b4f22b932b0cb18617e8), [`213feb8`](https://github.com/mastra-ai/mastra/commit/213feb87bfdd1d8ec00ea660e218f9bcfcb34e7b)]:
+  - @mastra/schema-compat@1.3.2-alpha.0
+
+## 0.14.1
+
+### Patch Changes
+
+- Updated dependencies [[`d5fa3cd`](https://github.com/mastra-ai/mastra/commit/d5fa3cda1788c3cb93a361a3c6ec47de6ba21e98)]:
+  - @mastra/schema-compat@1.3.1
+
+## 0.14.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`d5fa3cd`](https://github.com/mastra-ai/mastra/commit/d5fa3cda1788c3cb93a361a3c6ec47de6ba21e98)]:
+  - @mastra/schema-compat@1.3.1-alpha.0
+
+## 0.14.0
+
+### Minor Changes
+
+- Added `sendContext()` method to `GeminiLiveVoice` for seeding conversation history into a fresh voice session without triggering a model response. This lets apps replay prior turns from Mastra Memory (or any external store) on a cold connect so the model has full context before the user speaks — enabling seamless handoff between text chat and voice on a shared thread. ([#18286](https://github.com/mastra-ai/mastra/pull/18286))
+
+  **Usage:**
+
+  ```ts
+  await voice.connect();
+
+  await voice.sendContext([
+    { role: 'user', content: 'What is the weather?' },
+    { role: 'assistant', content: 'It is 72°F in San Francisco.' },
+  ]);
+
+  // Model stays silent until the user actually speaks
+  await voice.send(micStream);
+  ```
+
+### Patch Changes
+
+- Fix resumeSession() always timing out. Session resumption now works end-to-end: new sessions request server-issued tokens, inbound handles are stored and emitted, and resuming reconnects with the correct handle in the setup frame. ([#18190](https://github.com/mastra-ai/mastra/pull/18190))
+
+- Fix sendContext() being rejected (WS 1007) on gemini-3.1-flash-live-preview by emitting `history_config: { initial_history_in_client_content: true }` in the setup frame. Also exposes `initialHistoryInClientContent` on `GeminiSessionConfig` so callers can opt out explicitly. ([#18368](https://github.com/mastra-ai/mastra/pull/18368))
+
+- Fixed realtime audio streaming being immediately rejected by the Gemini Live API. Audio frames now use the current API format, replacing a deprecated payload shape that caused the connection to close on the first frame. ([#18291](https://github.com/mastra-ai/mastra/pull/18291))
+
+  The `session` event for disconnections now includes `code` and `reason` fields, so consumers can see why the server closed the connection.
+
+## 0.14.0-alpha.1
+
+### Patch Changes
+
+- Fix sendContext() being rejected (WS 1007) on gemini-3.1-flash-live-preview by emitting `history_config: { initial_history_in_client_content: true }` in the setup frame. Also exposes `initialHistoryInClientContent` on `GeminiSessionConfig` so callers can opt out explicitly. ([#18368](https://github.com/mastra-ai/mastra/pull/18368))
+
+## 0.14.0-alpha.0
+
+### Minor Changes
+
+- Added `sendContext()` method to `GeminiLiveVoice` for seeding conversation history into a fresh voice session without triggering a model response. This lets apps replay prior turns from Mastra Memory (or any external store) on a cold connect so the model has full context before the user speaks — enabling seamless handoff between text chat and voice on a shared thread. ([#18286](https://github.com/mastra-ai/mastra/pull/18286))
+
+  **Usage:**
+
+  ```ts
+  await voice.connect();
+
+  await voice.sendContext([
+    { role: 'user', content: 'What is the weather?' },
+    { role: 'assistant', content: 'It is 72°F in San Francisco.' },
+  ]);
+
+  // Model stays silent until the user actually speaks
+  await voice.send(micStream);
+  ```
+
+### Patch Changes
+
+- Fix resumeSession() always timing out. Session resumption now works end-to-end: new sessions request server-issued tokens, inbound handles are stored and emitted, and resuming reconnects with the correct handle in the setup frame. ([#18190](https://github.com/mastra-ai/mastra/pull/18190))
+
+- Fixed realtime audio streaming being immediately rejected by the Gemini Live API. Audio frames now use the current API format, replacing a deprecated payload shape that caused the connection to close on the first frame. ([#18291](https://github.com/mastra-ai/mastra/pull/18291))
+
+  The `session` event for disconnections now includes `code` and `reason` fields, so consumers can see why the server closed the connection.
+
+## 0.13.0
+
+### Minor Changes
+
+- Random bump ([#18178](https://github.com/mastra-ai/mastra/pull/18178))
+
+### Patch Changes
+
+- Updated dependencies [[`b04369d`](https://github.com/mastra-ai/mastra/commit/b04369d6b167c698ef103981171a8bf92808e756)]:
+  - @mastra/schema-compat@1.3.0
+
+## 0.13.0-alpha.0
+
+### Minor Changes
+
+- Random bump ([#18178](https://github.com/mastra-ai/mastra/pull/18178))
+
+### Patch Changes
+
+- Updated dependencies [[`b04369d`](https://github.com/mastra-ai/mastra/commit/b04369d6b167c698ef103981171a8bf92808e756)]:
+  - @mastra/schema-compat@1.3.0-alpha.0
+
+## 0.12.4
+
+### Patch Changes
+
+- Security remediation for the 2026-06-17 "easy-day-js" supply-chain incident. Patch bump to publish clean versions and move the `latest` dist-tag forward, superseding the compromised versions that declared the malicious `easy-day-js` dependency. ([#18056](https://github.com/mastra-ai/mastra/pull/18056))
+
+- Updated dependencies [[`77a2351`](https://github.com/mastra-ai/mastra/commit/77a2351ee79296e360bce822cb3391f7cfd6489d)]:
+  - @mastra/schema-compat@1.2.14
+
+## 0.12.4-alpha.0
+
+### Patch Changes
+
+- Security remediation for the 2026-06-17 "easy-day-js" supply-chain incident. Patch bump to publish clean versions and move the `latest` dist-tag forward, superseding the compromised versions that declared the malicious `easy-day-js` dependency. ([#18056](https://github.com/mastra-ai/mastra/pull/18056))
+
+- Updated dependencies [[`77a2351`](https://github.com/mastra-ai/mastra/commit/77a2351ee79296e360bce822cb3391f7cfd6489d)]:
+  - @mastra/schema-compat@1.2.14-alpha.0
+
+## 0.12.2
+
+### Patch Changes
+
+- Updated dependencies [[`9b1adf7`](https://github.com/mastra-ai/mastra/commit/9b1adf7f39943c869182106bc4016e793b3304ac)]:
+  - @mastra/schema-compat@1.2.12
+
+## 0.12.1
+
+### Patch Changes
+
+- dependencies updates: ([#17144](https://github.com/mastra-ai/mastra/pull/17144))
+  - Updated dependency [`@google/genai@^1.52.0` ↗︎](https://www.npmjs.com/package/@google/genai/v/1.52.0) (from `^1.45.0`, in `dependencies`)
+
+- dependencies updates: ([#17518](https://github.com/mastra-ai/mastra/pull/17518))
+  - Updated dependency [`google-auth-library@^10.6.2` ↗︎](https://www.npmjs.com/package/google-auth-library/v/10.6.2) (from `^10.6.1`, in `dependencies`)
+
+- Update ai-sdk deps ([#17144](https://github.com/mastra-ai/mastra/pull/17144))
+
+## 0.12.1-alpha.1
+
+### Patch Changes
+
+- dependencies updates: ([#17144](https://github.com/mastra-ai/mastra/pull/17144))
+  - Updated dependency [`@google/genai@^1.52.0` ↗︎](https://www.npmjs.com/package/@google/genai/v/1.52.0) (from `^1.45.0`, in `dependencies`)
+
+- Update ai-sdk deps ([#17144](https://github.com/mastra-ai/mastra/pull/17144))
+
 ## 0.12.1-alpha.0
 
 ### Patch Changes

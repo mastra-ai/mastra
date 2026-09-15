@@ -1,5 +1,6 @@
-import { Skeleton, Txt, toast } from '@mastra/playground-ui';
-import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMemo, useEffect } from 'react';
 import { parse } from 'superjson';
 import { z } from 'zod';
@@ -8,7 +9,7 @@ import { useAgents } from '@/domains/agents/hooks/use-agents';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useTool } from '@/domains/tools/hooks';
 import { useExecuteTool } from '@/domains/tools/hooks/use-execute-tool';
-import { resolveSerializedZodOutput } from '@/lib/form/utils';
+import { jsonSchemaToZodRuntime } from '@/lib/form/json-schema-to-zod-runtime';
 import { usePlaygroundStore } from '@/store/playground-store';
 
 export interface ToolPanelProps {
@@ -67,14 +68,12 @@ export const ToolPanel = ({ toolId }: ToolPanelProps) => {
     });
   };
 
-  const zodInputSchema = tool?.inputSchema
-    ? resolveSerializedZodOutput(jsonSchemaToZod(parse(tool?.inputSchema)))
-    : z.object({});
+  const zodInputSchema = tool?.inputSchema ? jsonSchemaToZodRuntime(parse(tool?.inputSchema)) : z.object({});
 
   if (isLoading) {
     return (
-      <div className="p-6">
-        <Skeleton className="h-8 w-48 mb-4" />
+      <div className="p-4">
+        <Skeleton className="mb-4 h-8 w-48" />
         <Skeleton className="h-32 w-full" />
       </div>
     );
@@ -84,7 +83,7 @@ export const ToolPanel = ({ toolId }: ToolPanelProps) => {
 
   if (!tool)
     return (
-      <div className="py-12 text-center px-6">
+      <div className="px-4 py-8 text-center">
         <Txt variant="header-md" className="text-neutral3">
           Tool not found
         </Txt>
@@ -93,7 +92,7 @@ export const ToolPanel = ({ toolId }: ToolPanelProps) => {
 
   if (!canExecuteTool)
     return (
-      <div className="py-12 text-center px-6">
+      <div className="px-4 py-8 text-center">
         <Txt variant="ui-sm" className="text-neutral3">
           You don't have permission to execute tools.
         </Txt>

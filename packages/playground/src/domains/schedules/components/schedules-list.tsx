@@ -1,5 +1,5 @@
 import type { ScheduleResponse } from '@mastra/client-js';
-import { DataList, DataListSkeleton } from '@mastra/playground-ui';
+import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import { useMemo } from 'react';
 import { formatScheduleTimestamp, formatRelativeTime } from '../utils/format';
 import { ScheduleStatusText } from './schedule-status-badge';
@@ -20,17 +20,21 @@ export function SchedulesList({ schedules, isLoading, search = '' }: SchedulesLi
   const filtered = useMemo(() => {
     const term = search.toLowerCase();
     if (!term) return schedules;
-    return schedules.filter(s => s.id.toLowerCase().includes(term) || s.target.workflowId.toLowerCase().includes(term));
+    return schedules.filter(
+      s => s.id.toLowerCase().includes(term) || (s.workflowId ?? s.agentId ?? '').toLowerCase().includes(term),
+    );
   }, [schedules, search]);
+
+  const { containerRef, getRowProps } = useDataListKeyboard({ count: filtered.length, global: true });
 
   if (isLoading) {
     return <DataListSkeleton columns={COLUMNS} />;
   }
 
   return (
-    <DataList columns={COLUMNS} className="min-w-0">
+    <DataList columns={COLUMNS} className="min-w-0" scrollRef={containerRef}>
       <DataList.Top>
-        <DataList.TopCell>Workflow</DataList.TopCell>
+        <DataList.TopCell>Target</DataList.TopCell>
         <DataList.TopCell>Schedule ID</DataList.TopCell>
         <DataList.TopCell>Cron</DataList.TopCell>
         <DataList.TopCell>Status</DataList.TopCell>
@@ -41,29 +45,29 @@ export function SchedulesList({ schedules, isLoading, search = '' }: SchedulesLi
       {filtered.length === 0 && search ? <DataList.NoMatch message="No schedules match your search" /> : null}
       {filtered.length === 0 && !search ? <DataList.NoMatch message="No schedules configured" /> : null}
 
-      {filtered.map(s => (
-        <DataList.RowLink key={s.id} to={paths.scheduleLink(s.id)} LinkComponent={Link}>
-          <DataList.NameCell>{s.target.workflowId}</DataList.NameCell>
-          <DataList.Cell height="compact" className="min-w-0">
-            <span className="block truncate font-mono text-ui-smd text-neutral3" title={s.id}>
+      {filtered.map((s, index) => (
+        <DataList.RowLink key={s.id} to={paths.scheduleLink(s.id)} LinkComponent={Link} {...getRowProps(index)}>
+          <DataList.NameCell>{s.workflowId ?? s.agentId}</DataList.NameCell>
+          <DataList.Cell className="min-w-0">
+            <span className="text-ui-smd text-neutral3 block truncate font-mono" title={s.id}>
               {s.id}
             </span>
           </DataList.Cell>
-          <DataList.Cell height="compact">
+          <DataList.Cell>
             <span className="inline-flex items-center gap-2 whitespace-nowrap">
-              <code className="font-mono text-ui-sm">{s.cron}</code>
+              <code className="text-ui-sm font-mono">{s.cron}</code>
               {s.timezone ? <span className="text-neutral4 text-ui-xs">{s.timezone}</span> : null}
             </span>
           </DataList.Cell>
-          <DataList.Cell height="compact">
+          <DataList.Cell>
             <ScheduleStatusText status={s.status} />
           </DataList.Cell>
-          <DataList.Cell height="compact">
+          <DataList.Cell>
             <span className="whitespace-nowrap" title={formatScheduleTimestamp(s.nextFireAt)}>
               {formatRelativeTime(s.nextFireAt)}
             </span>
           </DataList.Cell>
-          <DataList.Cell height="compact">
+          <DataList.Cell>
             {s.lastRun ? (
               <span className="inline-flex items-center gap-2 whitespace-nowrap">
                 <WorkflowRunStatusInline status={s.lastRun.status} />

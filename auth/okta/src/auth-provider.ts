@@ -8,32 +8,28 @@ import type {
   ISSOProvider,
   ISessionProvider,
   IUserProvider,
+  MastraAuthRequest,
   Session,
   SSOCallbackResult,
   SSOLoginConfig,
-} from '@mastra/core/auth';
-import type { MastraAuthProviderOptions } from '@mastra/core/server';
-import { MastraAuthProvider } from '@mastra/core/server';
+} from '@internal/auth';
+import { getRequestHeader } from '@internal/auth';
+import type { MastraAuthProviderOptions } from '@internal/auth/provider';
+import { MastraAuthProvider } from '@internal/auth/provider';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
-
-type HonoRequestLike = {
-  raw?: Request;
-  headers?: Headers;
-  header(name: string): string | undefined;
-};
-
-type MastraAuthRequest = Request | HonoRequestLike;
-
-function getRequestHeader(request: MastraAuthRequest, name: string): string | null {
-  if (request instanceof Request) {
-    return request.headers.get(name);
-  }
-
-  return request.raw?.headers.get(name) ?? request.headers?.get(name) ?? request.header(name) ?? null;
-}
 
 import type { OktaUser, MastraAuthOktaOptions } from './types.js';
 import { mapOktaClaimsToUser } from './types.js';
+
+/**
+ * Trim trailing slashes. Index scan instead of regex to avoid backtracking
+ * (CodeQL js/polynomial-redos).
+ */
+function trimTrailingSlashes(value: string): string {
+  let end = value.length;
+  while (end > 0 && value[end - 1] === '/') end--;
+  return value.slice(0, end);
+}
 
 /** Default cookie name for Okta sessions */
 const DEFAULT_COOKIE_NAME = 'okta_session';
@@ -133,6 +129,7 @@ export class MastraAuthOkta
   protected issuer: string;
   protected endpointBase: string;
   protected redirectUri: string;
+  protected audience: string | string[];
   protected scopes: string[];
   protected cookieName: string;
   protected cookieMaxAge: number;
@@ -182,13 +179,16 @@ export class MastraAuthOkta
     this.clientId = clientId;
     this.clientSecret = clientSecret;
     // Normalize trailing slashes so a stray `OKTA_ISSUER=https://domain/` doesn't produce `.../oauth2//v1/...`
-    this.issuer = (issuer ?? `https://${domain}/oauth2/default`).replace(/\/+$/, '');
+    this.issuer = trimTrailingSlashes(issuer ?? `https://${domain}/oauth2/default`);
     // Org authorization servers use issuer `https://{domain}` but serve endpoints under `/oauth2/v1/*`.
     // Custom authorization servers use issuer `https://{domain}/oauth2/<name>` and serve endpoints under `<issuer>/v1/*`.
     // `issuer` is still used verbatim for JWT `iss`-claim validation on both server types.
     this.endpointBase =
       this.issuer.includes('/oauth2/') || this.issuer.endsWith('/oauth2') ? this.issuer : `${this.issuer}/oauth2`;
     this.redirectUri = redirectUri;
+    // Defaults to the client ID, which is the `aud` of an Okta ID token. Deployments that
+    // send access tokens need the authorization server's audience instead.
+    this.audience = options?.audience ?? process.env.OKTA_AUDIENCE ?? clientId;
     this.scopes = options?.scopes ?? DEFAULT_SCOPES;
     this.cookieName = options?.session?.cookieName ?? DEFAULT_COOKIE_NAME;
     this.cookieMaxAge = options?.session?.cookieMaxAge ?? DEFAULT_COOKIE_MAX_AGE;
@@ -236,7 +236,7 @@ export class MastraAuthOkta
     try {
       const { payload } = await jwtVerify(token, this.jwks, {
         issuer: this.issuer,
-        audience: this.clientId,
+        audience: this.audience,
       });
 
       return mapOktaClaimsToUser(payload);

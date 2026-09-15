@@ -1,16 +1,11 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
-import {
-  Button,
-  EmptyState,
-  Entity,
-  EntityContent,
-  EntityName,
-  EntityDescription,
-  ScrollArea,
-  Searchbar,
-  Switch,
-} from '@mastra/playground-ui';
-import { Plus, Drill } from 'lucide-react';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { Entity, EntityContent, EntityName, EntityDescription } from '@mastra/playground-ui/components/Entity';
+import { InputGroup, InputGroupAddon, InputGroupInput } from '@mastra/playground-ui/components/InputGroup';
+import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { Switch } from '@mastra/playground-ui/components/Switch';
+import { Plus, CircleSlashIcon, SearchIcon } from 'lucide-react';
 import { useState } from 'react';
 import { useWatch } from 'react-hook-form';
 
@@ -67,7 +62,7 @@ export function SkillsPage() {
 
   return (
     <ScrollArea className="h-full">
-      <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between">
           <SectionHeader
             title="Skills"
@@ -75,14 +70,23 @@ export function SkillsPage() {
           />
 
           {!readOnly && (
-            <Button variant="outline" size="sm" onClick={() => setDialogOpen(true)}>
-              <Plus className="size-3" />
+            <Button variant="outline" size="sm" onClick={() => setDialogOpen(true)} icon={<Plus />}>
               Add a skill
             </Button>
           )}
         </div>
 
-        <Searchbar onSearch={setSearch} label="Search skills" placeholder="Search skills" />
+        <InputGroup variant="outline">
+          <InputGroupAddon align="inline-start">
+            <SearchIcon />
+          </InputGroupAddon>
+          <InputGroupInput
+            type="search"
+            aria-label="Search skills"
+            placeholder="Search skills"
+            onChange={event => setSearch(event.target.value)}
+          />
+        </InputGroup>
 
         {filteredSkills.length > 0 && (
           <div className="flex flex-col gap-2">
@@ -105,15 +109,14 @@ export function SkillsPage() {
         )}
 
         {!isLoading && storedSkills.length === 0 && (
-          <div className="py-12">
+          <div className="py-8">
             <EmptyState
-              iconSlot={<Drill height={40} width={40} />}
+              iconSlot={<CircleSlashIcon height={40} width={40} />}
               titleSlot="No skills available"
               descriptionSlot="Create a skill to give your agent specialized knowledge."
               actionSlot={
                 !readOnly ? (
-                  <Button onClick={() => setDialogOpen(true)}>
-                    <Plus />
+                  <Button onClick={() => setDialogOpen(true)} icon={<Plus />}>
                     Add a skill
                   </Button>
                 ) : undefined

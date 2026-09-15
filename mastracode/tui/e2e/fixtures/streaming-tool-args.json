@@ -1,0 +1,40 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "hasToolResult": true
+      },
+      "response": {
+        "content": "Streaming view tool e2e complete."
+      }
+    },
+    {
+      "match": {
+        "userMessage": "Inspect the streaming args fixture file.",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_streaming_args_e2e_view",
+            "name": "view",
+            "arguments": {
+              "path": "src/streaming-args.ts",
+              "offset": 12,
+              "limit": 7
+            }
+          }
+        ]
+      },
+      "chunkSize": 8,
+      "streamingProfile": {
+        "ttft": 200,
+        "tps": 2
+      }
+    }
+  ]
+}

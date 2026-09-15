@@ -1,0 +1,63 @@
+---
+extends: existence
+message: "AI defensive hedge: '%s'. State your point directly without pre-defending it."
+level: error
+nonword: true
+tokens:
+  # "This is more of X than Y, but..." pattern
+  - "\\b[Tt]his is more of [^,]+ than [^,]+, but [^.!?]+"
+  - "\\b[Ii]t'?s more of [^,]+ than [^,]+, but [^.!?]+"
+
+  # "Not the most X, but..." pattern
+  - "\\b[Ii]t'?s not the most [^,]+, but [^.!?]+"
+  - "\\b[Tt]his isn'?t the most [^,]+, but [^.!?]+"
+
+  # "May seem/might seem X, but..." pattern
+  - "\\b[Tt]his may seem [^,]+, but [^.!?]+"
+  - "\\b[Tt]his might seem [^,]+, but [^.!?]+"
+  - "\\b[Ii]t may seem [^,]+, but [^.!?]+"
+  - "\\b[Ii]t might seem [^,]+, but [^.!?]+"
+
+  # "Might sound X, but..." pattern
+  - "\\b[Tt]his might sound [^,]+, but [^.!?]+"
+  - "\\b[Ii]t might sound [^,]+, but [^.!?]+"
+  - "\\b[Tt]hat might sound [^,]+, but [^.!?]+"
+
+  # "Admittedly/Granted" openers
+  - "\\bAdmittedly, [^,]+, but [^.!?]+"
+  - "\\bGranted, [^,]+, but [^.!?]+"
+
+  # "To be fair" pattern
+  - "\\bTo be fair, [^,]+, but [^.!?]+"
+  - "\\bTo be honest, [^,]+, but [^.!?]+"
+
+  # "While this might/may appear" pattern
+  - "\\bWhile this might appear [^,]+, [^.!?]+"
+  - "\\bWhile this may appear [^,]+, [^.!?]+"
+  - "\\bWhile it might appear [^,]+, [^.!?]+"
+  - "\\bWhile it may appear [^,]+, [^.!?]+"
+
+  # "Not meant to be X, but..." pattern
+  - "\\b[Tt]his isn'?t meant to be [^,]+, but [^.!?]+"
+  - "\\b[Ii]t'?s not meant to be [^,]+, but [^.!?]+"
+
+  # "On the surface X, but..." pattern
+  - "\\bOn the surface, [^,]+, but [^.!?]+"
+  - "\\bOn the surface this [^,]+, but [^.!?]+"
+
+  # "At first glance" pattern
+  - "\\bAt first glance, [^,]+, but [^.!?]+"
+  - "\\bAt first glance this [^,]+, but [^.!?]+"
+
+  # "I know this seems/sounds" pattern
+  - "\\bI know this seems [^,]+, but [^.!?]+"
+  - "\\bI know this sounds [^,]+, but [^.!?]+"
+  - "\\bI know it seems [^,]+, but [^.!?]+"
+  - "\\bI know it sounds [^,]+, but [^.!?]+"
+
+  # "While X, Y" hedged openers (preemptive concession)
+  - "\\bWhile [^,]+ can [^,]+, [^.!?]+"
+  - "\\bWhile [^,]+ is [^,]+, [^.!?]+"
+  - "\\bWhile [^,]+ are [^,]+, [^.!?]+"
+  - "\\bWhile [^,]+ may [^,]+, [^.!?]+"
+  - "\\bAlthough [^,]+, [^.!?]+"

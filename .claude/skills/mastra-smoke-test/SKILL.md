@@ -62,19 +62,22 @@ When scope discovery identifies a branch:
 
 **Do not skip tests unless you hit an actual blocker.** "Seemed complex" or "wasn't sure" are not valid reasons. Attempt everything - only stop a test when you literally cannot proceed. Report what you tried and what blocked you.
 
-| #   | Test              | Reference                       | When Required                |
-| --- | ----------------- | ------------------------------- | ---------------------------- |
-| 1   | **Setup**         | `references/tests/setup.md`     | Always                       |
-| 2   | **Agents**        | `references/tests/agents.md`    | `--test agents` or full      |
-| 3   | **Tools**         | `references/tests/tools.md`     | `--test tools` or full       |
-| 4   | **Workflows**     | `references/tests/workflows.md` | `--test workflows` or full   |
-| 5   | **Traces**        | `references/tests/traces.md`    | `--test traces` or full      |
-| 6   | **Scorers**       | `references/tests/scorers.md`   | `--test scorers` or full     |
-| 7   | **Memory**        | `references/tests/memory.md`    | `--test memory` or full      |
-| 8   | **MCP**           | `references/tests/mcp.md`       | `--test mcp` or full         |
-| 9   | **Errors**        | `references/tests/errors.md`    | `--test errors` or full      |
-| 10  | **Studio Deploy** | `references/tests/studio.md`    | `--test studio` (cloud only) |
-| 11  | **Server Deploy** | `references/tests/server.md`    | `--test server` (cloud only) |
+| #   | Test              | Reference                         | When Required                      |
+| --- | ----------------- | --------------------------------- | ---------------------------------- |
+| 1   | **Setup**         | `references/tests/setup.md`       | Always                             |
+| 2   | **Agents**        | `references/tests/agents.md`      | `--test agents` or full            |
+| 3   | **Tools**         | `references/tests/tools.md`       | `--test tools` or full             |
+| 4   | **Workflows**     | `references/tests/workflows.md`   | `--test workflows` or full         |
+| 5   | **Traces**        | `references/tests/traces.md`      | `--test traces` or full            |
+| 6   | **Scorers**       | `references/tests/scorers.md`     | `--test scorers` or full           |
+| 7   | **Memory**        | `references/tests/memory.md`      | `--test memory` or full            |
+| 8   | **MCP**           | `references/tests/mcp.md`         | `--test mcp` or full               |
+| 9   | **Errors**        | `references/tests/errors.md`      | `--test errors` or full            |
+| 10  | **Experiments**   | `references/tests/experiments.md` | `--test experiments` or local full |
+| 11  | **Studio Deploy** | `references/tests/studio.md`      | `--test studio` (cloud only)       |
+| 12  | **Server Deploy** | `references/tests/server.md`      | `--test server` (cloud only)       |
+
+Full staging and production runs skip **Experiments** as not applicable; the companion worker is a local build artifact. A targeted `--test experiments` run therefore requires `--env local`.
 
 ### Execution Flow
 
@@ -214,18 +217,19 @@ See `references/tests/setup.md` for setup details.
 
 ## Test Options (`--test`)
 
-| Option      | Description              | Environments |
-| ----------- | ------------------------ | ------------ |
-| `agents`    | Agent page and chat      | All          |
-| `tools`     | Tools page and execution | All          |
-| `workflows` | Workflows page and run   | All          |
-| `traces`    | Observability/traces     | All          |
-| `scorers`   | Evaluation/scorers page  | All          |
-| `memory`    | Conversation persistence | All          |
-| `mcp`       | MCP servers page         | All          |
-| `errors`    | Error handling           | All          |
-| `studio`    | Studio deploy only       | Cloud        |
-| `server`    | Server deploy only       | Cloud        |
+| Option        | Description                | Environments |
+| ------------- | -------------------------- | ------------ |
+| `agents`      | Agent page and chat        | All          |
+| `tools`       | Tools page and execution   | All          |
+| `workflows`   | Workflows page and run     | All          |
+| `traces`      | Observability/traces       | All          |
+| `scorers`     | Evaluation/scorers page    | All          |
+| `memory`      | Conversation persistence   | All          |
+| `mcp`         | MCP servers page           | All          |
+| `errors`      | Error handling             | All          |
+| `experiments` | Experiment worker protocol | Local        |
+| `studio`      | Studio deploy only         | Cloud        |
+| `server`      | Server deploy only         | Cloud        |
 
 ## Prerequisites
 

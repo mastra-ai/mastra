@@ -1,16 +1,13 @@
 import type { ListStoredAgentsParams, StoredSkillResponse } from '@mastra/client-js';
-import {
-  EmptyState,
-  ErrorState,
-  ListSearch,
-  PageHeader,
-  PageLayout,
-  PermissionDenied,
-  SessionExpired,
-  is401UnauthorizedError,
-  is403ForbiddenError,
-} from '@mastra/playground-ui';
-import { SparklesIcon, StarIcon } from 'lucide-react';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
+import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
+import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
+import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
+import { CircleSlashIcon, StarIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import {
@@ -87,9 +84,9 @@ export default function AgentBuilderFavoritePage() {
       if (agentsError) return renderError(agentsError, 'agents');
       if (agents.length === 0) {
         return (
-          <div className="flex items-center justify-center pt-16">
+          <div className="flex items-center-safe justify-center-safe">
             <EmptyState
-              iconSlot={<StarIcon className="h-8 w-8 text-neutral3" />}
+              iconSlot={<CircleSlashIcon className="text-neutral3 h-8 w-8" />}
               titleSlot="No favorite agents yet"
               descriptionSlot="Star agents to keep them here for quick access."
             />
@@ -104,9 +101,9 @@ export default function AgentBuilderFavoritePage() {
     if (skillsError) return renderError(skillsError, 'skills');
     if (skills.length === 0) {
       return (
-        <div className="flex items-center justify-center pt-16">
+        <div className="flex items-center-safe justify-center-safe">
           <EmptyState
-            iconSlot={<SparklesIcon className="h-8 w-8 text-neutral3" />}
+            iconSlot={<CircleSlashIcon className="text-neutral3 h-8 w-8" />}
             titleSlot="No favorite skills yet"
             descriptionSlot="Star skills to keep them here for quick access."
           />
@@ -118,7 +115,7 @@ export default function AgentBuilderFavoritePage() {
 
   return (
     <>
-      <PageLayout className="px-4 md:px-10">
+      <PageLayout height="full" className="px-4 md:px-10">
         <PageLayout.TopArea>
           <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between md:gap-4">
             <PageHeader>
@@ -134,10 +131,10 @@ export default function AgentBuilderFavoritePage() {
           </div>
           <div className="flex items-center gap-4">
             {features.skills && (
-              <div className="flex rounded-lg border border-border1 overflow-hidden">
+              <div className="border-border1 flex overflow-hidden rounded-lg border">
                 <button
                   onClick={() => setTab('agents')}
-                  className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                  className={`text-ui-sm px-3 py-1.5 font-medium transition-colors ${
                     tab === 'agents' ? 'bg-surface4 text-neutral6' : 'bg-surface2 text-neutral3 hover:text-neutral5'
                   }`}
                 >
@@ -145,7 +142,7 @@ export default function AgentBuilderFavoritePage() {
                 </button>
                 <button
                   onClick={() => setTab('skills')}
-                  className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                  className={`text-ui-sm px-3 py-1.5 font-medium transition-colors ${
                     tab === 'skills' ? 'bg-surface4 text-neutral6' : 'bg-surface2 text-neutral3 hover:text-neutral5'
                   }`}
                 >
@@ -153,7 +150,7 @@ export default function AgentBuilderFavoritePage() {
                 </button>
               </div>
             )}
-            <div className="flex-1 max-w-120">
+            <div className="max-w-120 flex-1">
               <ListSearch onSearch={setSearch} label="Filter favorites" placeholder="Filter by name or description" />
             </div>
           </div>

@@ -9,7 +9,14 @@
 
 import { existsSync, mkdirSync } from 'node:fs';
 import { Stagehand } from '@browserbasehq/stagehand';
-import { MastraBrowser, ScreencastStreamImpl, DEFAULT_THREAD_ID } from '@mastra/core/browser';
+import {
+  MastraBrowser,
+  ScreencastStreamImpl,
+  DEFAULT_THREAD_ID,
+  createBrowserRecordingTools,
+  resolveViewportSize,
+  DEFAULT_BROWSER_VIEWPORT,
+} from '@mastra/core/browser';
 import type {
   BrowserState,
   BrowserTabState,
@@ -53,6 +60,7 @@ export class StagehandBrowser extends MastraBrowser {
 
   /** Debounce timers per thread for tab change reconnection */
   private tabChangeDebounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private readonly pendingCloseReasons = new Map<string, 'agent' | 'user' | 'process_restart' | 'error'>();
 
   constructor(config: StagehandBrowserConfig = {}) {
     super(config);
@@ -109,53 +117,16 @@ export class StagehandBrowser extends MastraBrowser {
    * Build Stagehand options from config.
    * Returns the configuration object expected by Stagehand constructor.
    */
-  private async buildStagehandOptions(): Promise<{
-    env: 'LOCAL' | 'BROWSERBASE';
-    model?: string;
-    selfHeal?: boolean;
-    domSettleTimeoutMs?: number;
-    verbose?: 0 | 1 | 2;
-    systemPrompt?: string;
-    logger?: StagehandBrowserConfig['logger'];
-    disablePino?: boolean;
-    apiKey?: string;
-    projectId?: string;
-    localBrowserLaunchOptions?: {
-      cdpUrl?: string;
-      headless?: boolean;
-      viewport?: { width: number; height: number };
-      userDataDir?: string;
-      executablePath?: string;
-      preserveUserDataDir?: boolean;
-    };
-  }> {
+  private async buildStagehandOptions(): Promise<ConstructorParameters<typeof Stagehand>[0]> {
     const config = this.stagehandConfig;
 
-    const stagehandOptions: {
-      env: 'LOCAL' | 'BROWSERBASE';
-      model?: string;
-      selfHeal?: boolean;
-      domSettleTimeoutMs?: number;
-      verbose?: 0 | 1 | 2;
-      systemPrompt?: string;
-      logger?: StagehandBrowserConfig['logger'];
-      disablePino?: boolean;
-      apiKey?: string;
-      projectId?: string;
-      localBrowserLaunchOptions?: {
-        cdpUrl?: string;
-        headless?: boolean;
-        viewport?: { width: number; height: number };
-        userDataDir?: string;
-        executablePath?: string;
-        preserveUserDataDir?: boolean;
-      };
-    } = {
+    const stagehandOptions: ConstructorParameters<typeof Stagehand>[0] = {
       env: config.env ?? 'LOCAL',
-      // v3 uses "provider/model" format
-      model: typeof config.model === 'string' ? config.model : config.model?.modelName,
+      model: config.model,
+      experimental: config.experimental,
+      disableAPI: config.disableAPI,
       selfHeal: config.selfHeal ?? true,
-      domSettleTimeoutMs: config.domSettleTimeout,
+      domSettleTimeout: config.domSettleTimeout,
       verbose: (config.verbose ?? 0) as 0 | 1 | 2,
       systemPrompt: config.systemPrompt,
       logger: config.logger ?? (() => {}),
@@ -185,7 +156,9 @@ export class StagehandBrowser extends MastraBrowser {
       stagehandOptions.localBrowserLaunchOptions = {
         cdpUrl: wsUrl,
         headless: this.headless,
-        viewport: config.viewport,
+        // Omitting the viewport makes Stagehand skip emulation entirely on the
+        // CDP path, so the page follows the real window.
+        viewport: resolveViewportSize(config.viewport),
         userDataDir: config.profile,
         executablePath: config.executablePath,
         preserveUserDataDir: config.preserveUserDataDir,
@@ -193,7 +166,10 @@ export class StagehandBrowser extends MastraBrowser {
     } else if (config.env !== 'BROWSERBASE') {
       stagehandOptions.localBrowserLaunchOptions = {
         headless: this.headless,
-        viewport: config.viewport,
+        // Stagehand overwrites an absent viewport with its own default when it
+        // launches the browser itself, so `'window'` cannot be honored here and
+        // falls back to explicit dimensions.
+        viewport: resolveViewportSize(config.viewport) ?? DEFAULT_BROWSER_VIEWPORT,
         userDataDir: config.profile,
         executablePath: config.executablePath,
         preserveUserDataDir: config.preserveUserDataDir,
@@ -215,6 +191,7 @@ export class StagehandBrowser extends MastraBrowser {
   }
 
   protected override async doLaunch(): Promise<void> {
+    this.pendingCloseReasons.clear();
     const scope = this.getScope();
 
     // Set up the thread manager's factory function for creating new Stagehand instances
@@ -239,6 +216,17 @@ export class StagehandBrowser extends MastraBrowser {
   }
 
   /**
+   * Whether this provider drives a browser it did not launch as a local OS
+   * process — a Browserbase cloud session, or a browser reached over `cdpUrl`.
+   * Such a browser's PID belongs to another host/namespace and must never be
+   * signalled locally.
+   */
+  private isConnectedToRemoteBrowser(): boolean {
+    const config = this.stagehandConfig;
+    return config.env === 'BROWSERBASE' || config.cdpUrl != null;
+  }
+
+  /**
    * Set up close event listener for a shared Stagehand instance.
    * Listens to both context and page close events for robust detection.
    */
@@ -251,13 +239,20 @@ export class StagehandBrowser extends MastraBrowser {
    * fire when Chrome is killed externally (SIGTERM/SIGKILL).
    */
   private setupCloseListener(stagehand: Stagehand, onDisconnect: () => void, threadId?: string): void {
-    const chromePid = getStagehandChromePid(stagehand);
-    // Store PID so the base class can kill the process group on disconnect/close
-    if (chromePid != null) {
-      if (threadId) {
-        this.threadBrowserPids.set(threadId, chromePid);
-      } else {
-        this.sharedBrowserPid = chromePid;
+    // Only capture the PID for browsers we launched locally. A Browserbase
+    // session or a browser reached over `cdpUrl` runs in another PID namespace
+    // (a cloud host, a container): its PID is meaningless — and dangerous — to
+    // signal from this machine, so we never store it. This leaves the base
+    // class's process-group cleanup as a no-op for remote browsers.
+    if (!this.isConnectedToRemoteBrowser()) {
+      const chromePid = getStagehandChromePid(stagehand);
+      // Store PID so the base class can kill the process group on disconnect/close
+      if (chromePid != null) {
+        if (threadId) {
+          this.threadBrowserPids.set(threadId, chromePid);
+        } else {
+          this.sharedBrowserPid = chromePid;
+        }
       }
     }
 
@@ -265,6 +260,7 @@ export class StagehandBrowser extends MastraBrowser {
     const handleDisconnect = () => {
       if (disconnectHandled) return;
       disconnectHandled = true;
+      this.rememberClosedBrowserState(stagehand, 'user', threadId);
       onDisconnect();
     };
 
@@ -331,8 +327,38 @@ export class StagehandBrowser extends MastraBrowser {
   }
 
   override async closeThreadSession(threadId: string): Promise<void> {
+    const stagehand = this.threadManager.getExistingManagerForThread(threadId);
+    if (stagehand) {
+      this.rememberClosedBrowserState(stagehand, 'agent', threadId);
+    }
     await super.closeThreadSession(threadId);
     this.patchExitType();
+  }
+
+  private browserStateKey(threadId?: string): string {
+    return threadId ?? this.getCurrentThread() ?? DEFAULT_THREAD_ID;
+  }
+
+  markBrowserCloseReason(reason: 'agent' | 'user' | 'process_restart' | 'error', threadId?: string): void {
+    this.pendingCloseReasons.set(this.browserStateKey(threadId), reason);
+  }
+
+  private getCloseReason(threadId?: string): 'agent' | 'user' | 'process_restart' | 'error' | undefined {
+    return (
+      this.pendingCloseReasons.get(this.browserStateKey(threadId)) ?? this.pendingCloseReasons.get(DEFAULT_THREAD_ID)
+    );
+  }
+
+  private rememberClosedBrowserState(stagehand: Stagehand, reason: 'agent' | 'user', threadId?: string): void {
+    const state = this.getBrowserStateFromStagehand(stagehand, threadId);
+    if (!state || state.tabs.length === 0) return;
+
+    const closedState: BrowserState = { ...state, closeReason: this.getCloseReason(threadId) ?? reason };
+    if (threadId) {
+      this.threadManager.updateBrowserState(threadId, closedState);
+    } else {
+      this.lastBrowserState = closedState;
+    }
   }
 
   private patchExitType(): void {
@@ -525,6 +551,10 @@ export class StagehandBrowser extends MastraBrowser {
 
   override getTools(): Record<string, Tool<any, any>> {
     const tools = createStagehandTools(this);
+    if (this.stagehandConfig.recording) {
+      Object.assign(tools, createBrowserRecordingTools(this, this.stagehandConfig.recording));
+    }
+
     const exclude = this.stagehandConfig.excludeTools;
     if (exclude?.length) {
       for (const name of exclude) {
@@ -933,10 +963,10 @@ export class StagehandBrowser extends MastraBrowser {
       if (scope === 'thread' && effectiveThreadId) {
         const stagehand = this.threadManager.getExistingManagerForThread(effectiveThreadId);
         if (!stagehand) return null;
-        return this.getBrowserStateFromStagehand(stagehand);
+        return this.getBrowserStateFromStagehand(stagehand, effectiveThreadId);
       }
 
-      return this.getBrowserStateFromStagehand(this.sharedManager);
+      return this.getBrowserStateFromStagehand(this.sharedManager, effectiveThreadId);
     } catch {
       return null;
     }
@@ -949,13 +979,13 @@ export class StagehandBrowser extends MastraBrowser {
   protected getBrowserStateForThread(threadId?: string): BrowserState | null {
     const effectiveThreadId = threadId ?? this.getCurrentThread() ?? DEFAULT_THREAD_ID;
     const stagehand = this.threadManager.getExistingManagerForThread(effectiveThreadId);
-    return this.getBrowserStateFromStagehand(stagehand);
+    return this.getBrowserStateFromStagehand(stagehand, effectiveThreadId);
   }
 
   /**
    * Get browser state from a specific Stagehand instance.
    */
-  private getBrowserStateFromStagehand(stagehand: Stagehand | null): BrowserState | null {
+  private getBrowserStateFromStagehand(stagehand: Stagehand | null, threadId?: string): BrowserState | null {
     if (!stagehand?.context) return null;
 
     try {
@@ -970,9 +1000,11 @@ export class StagehandBrowser extends MastraBrowser {
         return { url: page.url() };
       });
 
+      const closeReason = this.getCloseReason(threadId);
       return {
         tabs,
         activeTabIndex: activeIndex,
+        ...(closeReason ? { closeReason } : {}),
       };
     } catch {
       return null;
@@ -1208,6 +1240,22 @@ export class StagehandBrowser extends MastraBrowser {
         stream.emitUrl(params.frame.url);
         // Update session state on navigation
         this.updateSessionBrowserState(threadId);
+
+        // Same-tab navigations (e.g. clicking a link that loads a new origin
+        // in the current tab) can silently stop Chromium's screencast on the
+        // existing target. Reconnect so frames keep flowing. Reuses the
+        // per-thread debounce timer to coalesce rapid sub-navigations.
+        const existingTimer = this.tabChangeDebounceTimers.get(streamKey);
+        if (existingTimer) {
+          clearTimeout(existingTimer);
+        }
+        this.tabChangeDebounceTimers.set(
+          streamKey,
+          setTimeout(() => {
+            this.tabChangeDebounceTimers.delete(streamKey);
+            void this.reconnectScreencastForThread(threadId, 'same-tab navigation');
+          }, 300),
+        );
       }
     };
 

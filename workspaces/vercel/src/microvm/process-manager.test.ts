@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import { VercelMicroVMProcessManager } from './process-manager';
-import type { VercelMicroVMSandbox } from './index';
+import { VercelSandboxProcessManager } from './process-manager';
+import type { VercelSandbox } from './index';
 
 /**
  * Build a fake detached @vercel/sandbox Command that emits the given logs and
@@ -36,15 +36,16 @@ function makeFakeCommand(opts: {
   return { command, kill };
 }
 
-/** Build a fake VercelMicroVMSandbox exposing a sandbox with runCommand. */
-function makeSandboxStub(runCommand: ReturnType<typeof vi.fn>) {
+/** Build a fake VercelSandbox exposing a sandbox with runCommand. */
+function makeSandboxStub(runCommand: ReturnType<typeof vi.fn>, env: Record<string, string> = {}) {
   return {
     ensureRunning: vi.fn().mockResolvedValue(undefined),
+    getEnv: () => ({ ...env }),
     sandbox: { runCommand },
-  } as unknown as VercelMicroVMSandbox;
+  } as unknown as VercelSandbox;
 }
 
-describe('VercelMicroVMProcessManager', () => {
+describe('VercelSandboxProcessManager', () => {
   it('spawns a detached command via sh -c and streams output', async () => {
     const { command } = makeFakeCommand({
       cmdId: 'cmd-1',
@@ -56,7 +57,7 @@ describe('VercelMicroVMProcessManager', () => {
     });
     const runCommand = vi.fn().mockResolvedValue(command);
 
-    const pm = new VercelMicroVMProcessManager({ env: {} });
+    const pm = new VercelSandboxProcessManager();
     pm.sandbox = makeSandboxStub(runCommand);
 
     const handle = await pm.spawn('echo hello');
@@ -79,7 +80,7 @@ describe('VercelMicroVMProcessManager', () => {
     const { command } = makeFakeCommand({ cmdId: 'cmd-2', exitCode: 3 });
     const runCommand = vi.fn().mockResolvedValue(command);
 
-    const pm = new VercelMicroVMProcessManager();
+    const pm = new VercelSandboxProcessManager();
     pm.sandbox = makeSandboxStub(runCommand);
 
     const handle = await pm.spawn('false');
@@ -92,7 +93,7 @@ describe('VercelMicroVMProcessManager', () => {
     const { command, kill } = makeFakeCommand({ cmdId: 'cmd-3' });
     const runCommand = vi.fn().mockResolvedValue(command);
 
-    const pm = new VercelMicroVMProcessManager();
+    const pm = new VercelSandboxProcessManager();
     pm.sandbox = makeSandboxStub(runCommand);
 
     const handle = await pm.spawn('sleep 100');
@@ -101,12 +102,12 @@ describe('VercelMicroVMProcessManager', () => {
     expect(kill).toHaveBeenCalledTimes(1);
   });
 
-  it('merges env from manager defaults and spawn options', async () => {
+  it('merges the sandbox env and spawn options env', async () => {
     const { command } = makeFakeCommand({ cmdId: 'cmd-4', exitCode: 0 });
     const runCommand = vi.fn().mockResolvedValue(command);
 
-    const pm = new VercelMicroVMProcessManager({ env: { BASE: '1' } });
-    pm.sandbox = makeSandboxStub(runCommand);
+    const pm = new VercelSandboxProcessManager();
+    pm.sandbox = makeSandboxStub(runCommand, { BASE: '1' });
 
     await pm.spawn('node app.js', { cwd: '/app', env: { EXTRA: '2' } });
     const params = runCommand.mock.calls[0]![0];
@@ -114,11 +115,25 @@ describe('VercelMicroVMProcessManager', () => {
     expect(params.env).toEqual({ BASE: '1', EXTRA: '2' });
   });
 
+  it('defaults cwd to the sandbox workingDirectory when no cwd is given', async () => {
+    const { command } = makeFakeCommand({ cmdId: 'cmd-wd', exitCode: 0 });
+    const runCommand = vi.fn().mockResolvedValue(command);
+
+    const pm = new VercelSandboxProcessManager();
+    const stub = makeSandboxStub(runCommand);
+    Object.defineProperty(stub, 'workingDirectory', { value: '/srv/app' });
+    pm.sandbox = stub;
+
+    await pm.spawn('pwd');
+    const params = runCommand.mock.calls[0]![0];
+    expect(params.cwd).toBe('/srv/app');
+  });
+
   it('lists tracked processes', async () => {
     const { command } = makeFakeCommand({ cmdId: 'cmd-5', exitCode: 0 });
     const runCommand = vi.fn().mockResolvedValue(command);
 
-    const pm = new VercelMicroVMProcessManager();
+    const pm = new VercelSandboxProcessManager();
     pm.sandbox = makeSandboxStub(runCommand);
 
     const handle = await pm.spawn('echo hi');
@@ -130,7 +145,7 @@ describe('VercelMicroVMProcessManager', () => {
     const { command } = makeFakeCommand({ cmdId: 'cmd-6', exitCode: 0 });
     const runCommand = vi.fn().mockResolvedValue(command);
 
-    const pm = new VercelMicroVMProcessManager();
+    const pm = new VercelSandboxProcessManager();
     pm.sandbox = makeSandboxStub(runCommand);
 
     const handle = await pm.spawn('cat');

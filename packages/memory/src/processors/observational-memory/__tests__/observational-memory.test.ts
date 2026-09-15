@@ -1,12 +1,21 @@
-import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { coreFeatures } from '@mastra/core/features';
+import { MASTRA_THREAD_ID_KEY, RequestContext } from '@mastra/core/request-context';
 import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { z } from 'zod';
 
 import { injectAnchorIds, parseAnchorId, stripEphemeralAnchorIds } from '../anchor-ids';
 import { BufferingCoordinator } from '../buffering-coordinator';
-import { OBSERVATIONAL_MEMORY_DEFAULTS } from '../constants';
+import {
+  createCurrentTaskExtractor,
+  createSuggestedResponseExtractor,
+  createThreadTitleExtractor,
+} from '../built-in-extractors';
+import { OBSERVATIONAL_MEMORY_DEFAULTS, getRetrievalInstructions } from '../constants';
+import { Extractor } from '../extractor';
 import {
   filterObservedMessages,
   getBufferedChunks,
@@ -29,14 +38,15 @@ import {
   buildObserverHistoryMessage,
   buildMultiThreadObserverHistoryMessage,
   parseObserverOutput,
-  optimizeObservationsForContext,
   formatMessagesForObserver,
   hasCurrentTaskSection,
   extractCurrentTask,
   sanitizeObservationLines,
   detectDegenerateRepetition,
+  describeDegenerateOutput,
 } from '../observer-agent';
 import { ObserverRunner } from '../observer-runner';
+import { registerOp, unregisterOp, isOpActiveInProcess } from '../operation-registry';
 import { ObservationalMemoryProcessor } from '../processor';
 import type { MemoryContextProvider } from '../processor';
 
@@ -2473,7 +2483,12 @@ describe('Observer Agent Helpers', () => {
 
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
-        observation: { messageTokens: 1000, bufferTokens: false, model: 'test-model' },
+        observation: {
+          messageTokens: 1000,
+          bufferTokens: false,
+          model: 'test-model',
+          observeAttachments: true,
+        },
         reflection: { observationTokens: 1000 },
       });
 
@@ -2584,8 +2599,11 @@ describe('Observer Agent Helpers', () => {
           ],
         };
 
+        const requestContext = new RequestContext();
+        requestContext.set(MASTRA_THREAD_ID_KEY, 'test-thread');
+
         await observer.call(undefined, [message], undefined, {
-          requestContext: { threadId: 'test-thread' } as any,
+          requestContext,
         });
 
         // The function model should be resolved with requestContext, looked up,
@@ -2642,15 +2660,24 @@ describe('Observer Agent Helpers', () => {
         ],
       };
 
-      await observer.call(undefined, [message]);
+      // Generated provider data can change independently of this text-only scenario.
+      const llmModule = await import('@mastra/core/llm');
+      const spy = vi.spyOn(llmModule, 'modelSupportsAttachments').mockReturnValue(false);
 
-      const content = capturedPrompt[1].content as any[];
-      expect(content.some((part: any) => part.type === 'image')).toBe(false);
-      const joined = content
-        .filter((part: any) => part.type === 'text')
-        .map((part: any) => part.text)
-        .join('\n');
-      expect(joined).toContain('[Image #1: photo.png]');
+      try {
+        await observer.call(undefined, [message]);
+
+        expect(spy).toHaveBeenCalledWith('openrouter/deepseek/deepseek-v4-flash');
+        const content = capturedPrompt[1].content as any[];
+        expect(content.some((part: any) => part.type === 'image')).toBe(false);
+        const joined = content
+          .filter((part: any) => part.type === 'text')
+          .map((part: any) => part.text)
+          .join('\n');
+        expect(joined).toContain('[Image #1: photo.png]');
+      } finally {
+        spy.mockRestore();
+      }
     });
 
     it('auto mode forwards attachments for multimodal function-based observer model', async () => {
@@ -2698,11 +2725,14 @@ describe('Observer Agent Helpers', () => {
           ],
         };
 
+        const requestContext = new RequestContext();
+        requestContext.set(MASTRA_THREAD_ID_KEY, 'test-thread');
+
         await observer.call(undefined, [message], undefined, {
-          requestContext: { threadId: 'test-thread' } as any,
+          requestContext,
         });
 
-        expect(spy).toHaveBeenCalledWith('openai/gpt-4o');
+        expect(spy.mock.calls[0][0]).toBe('openai/gpt-4o');
         const content = capturedPrompt[1].content as any[];
         expect(content.some((part: any) => part.type === 'image')).toBe(true);
       } finally {
@@ -2710,7 +2740,7 @@ describe('Observer Agent Helpers', () => {
       }
     });
 
-    it('should inject thread title instructions into the observer request when enabled', async () => {
+    it('should keep skip-continuation task guidance separate from resolved output sections', async () => {
       let capturedPrompt: any;
 
       const observer = new ObserverRunner({
@@ -2720,6 +2750,12 @@ describe('Observer Agent Helpers', () => {
           bufferTokens: false,
           previousObserverTokens: 1000,
           threadTitle: true,
+          extractors: [
+            createCurrentTaskExtractor(),
+            createSuggestedResponseExtractor(),
+            createThreadTitleExtractor(),
+            new Extractor({ name: 'User info', instructions: 'Extract user information.' }),
+          ],
         } as any,
         observedMessageIds: new Set(),
         resolveModel: () => ({ model: 'test-model' as any }),
@@ -2742,13 +2778,31 @@ describe('Observer Agent Helpers', () => {
 
       await observer.call(undefined, [createTestMessage('Need a better title', 'user')], undefined, {
         priorThreadTitle: 'Old thread title',
+        skipContinuationHints: true,
       });
 
       expect(Array.isArray(capturedPrompt)).toBe(true);
       expect(capturedPrompt).toHaveLength(2);
       expect(capturedPrompt[0]).toMatchObject({ role: 'user' });
-      expect(capturedPrompt[0].content).toContain('Also output a <thread-title>');
+      const systemPrompt = buildObserverSystemPrompt(false, undefined, true, [
+        createCurrentTaskExtractor(),
+        createSuggestedResponseExtractor(),
+        createThreadTitleExtractor(),
+        new Extractor({ name: 'User info', instructions: 'Extract user information.' }),
+      ]);
+
+      expect(capturedPrompt[0].content).not.toContain('Also output a <thread-title>');
       expect(capturedPrompt[0].content).toContain('- prior thread-title: Old thread title');
+      expect(systemPrompt).toContain('<current-task>');
+      expect(systemPrompt).toContain('<suggested-response>');
+      expect(systemPrompt).toContain('<thread-title>');
+      expect(systemPrompt).toContain('<user-info>');
+      expect(capturedPrompt[0].content).toContain('Output <observations> every time.');
+      expect(capturedPrompt[0].content).not.toContain(
+        'If the observations include information relevant to <thread-title>',
+      );
+      expect(capturedPrompt[0].content).not.toContain('Only output <observations> and <thread-title>');
+      expect(capturedPrompt[0].content).not.toContain('Do NOT include <current-task> or <suggested-response>');
       expect(capturedPrompt[0].content).toContain(
         'Use the prior current-task, suggested-response, and thread-title as continuity hints',
       );
@@ -2807,8 +2861,8 @@ describe('Observer Agent Helpers', () => {
 
       expect(observerResolveSpy).toHaveBeenCalledWith(om.getTokenCounter().countMessages(observerMessages));
       expect(reflectorResolveSpy).toHaveBeenCalledWith(1);
-      expect(observerCreateAgentSpy).toHaveBeenCalledWith('openai/gpt-4o');
-      expect(reflectorCreateAgentSpy).toHaveBeenCalledWith('openai/gpt-4o-mini');
+      expect(observerCreateAgentSpy.mock.calls[0][0]).toBe('openai/gpt-4o');
+      expect(reflectorCreateAgentSpy.mock.calls[0][0]).toBe('openai/gpt-4o-mini');
     });
   });
 
@@ -2960,6 +3014,30 @@ Here's the implementation...
       expect(result.currentTask).toBe('Working on implementation');
       expect(result.observations).not.toContain('Working on implementation');
       expect(result.observations).not.toContain('<current-task>');
+    });
+
+    it('should parse thread title and custom inline extractor sections together', () => {
+      const userInfo = new Extractor({ name: 'User info', instructions: 'Extract user information.' });
+      const output = `
+<observations>
+- 🔴 User Tyler introduced himself.
+</observations>
+
+<thread-title>
+Tyler introduction
+</thread-title>
+
+<user-info>
+name: Tyler
+</user-info>
+      `;
+
+      const result = parseObserverOutput(output, [userInfo]);
+
+      expect(result.threadTitle).toBe('Tyler introduction');
+      expect(result.extractedValues).toEqual({ 'user-info': 'name: Tyler' });
+      expect(result.observations).toContain('User Tyler introduced himself');
+      expect(result.observations).not.toContain('<user-info>');
     });
 
     it('should handle output without continuation hint', () => {
@@ -3231,52 +3309,110 @@ User asked about </current-task> parsing and how it works
       expect(result.degenerate).toBe(true);
       expect(result.observations).toBe('');
     });
+
+    // Long-period multi-line loops defeat the window-sampling strategy: with a
+    // repeating block of period P chars, sampled windows only collide when two
+    // sample positions are congruent mod P, so ~50 samples land on ~50 distinct
+    // phases and find zero duplicates. Both cases below reproduce real observer
+    // output found in production records (2026-08-21).
+    it('should detect a long-period multi-line repetition loop (21-line block x 62)', () => {
+      const block = Array.from(
+        { length: 21 },
+        (_, i) =>
+          `* 🟡 (08:44) Found \`API.md\` lines ${200 + i * 10}-${210 + i * 10}: \`/api/learning/entities/:entityId/route-${i}\` accepts \`signalName\` — no catalog enrichment currently present.`,
+      ).join('\n');
+      const uniquePrefix = Array.from(
+        { length: 30 },
+        (_, i) =>
+          `* 🔴 (0${(i % 9) + 1}:1${i % 6}) User asked about distinct topic number ${i} with unique detail ${i * 37}`,
+      ).join('\n');
+      const text = `${uniquePrefix}\n${Array(62).fill(block).join('\n')}`;
+      expect(detectDegenerateRepetition(text)).toBe(true);
+
+      const description = describeDegenerateOutput(text);
+      expect(description).toContain('duplicateRatio=0.00');
+      expect(description).toContain('duplicateLineRatio=0.96');
+      expect(description).toContain('countedLines=1332');
+    });
+
+    it('should detect a short-period multi-line repetition loop (8-line block x 140)', () => {
+      const block = Array.from(
+        { length: 8 },
+        (_, i) =>
+          `* 🟡 (14:0${i}) Verified \`verifier-runner.ts\` line ${100 + i}: baseline replay hook number ${i} registered against the lifecycle map.`,
+      ).join('\n');
+      const text = Array(140).fill(block).join('\n');
+      expect(detectDegenerateRepetition(text)).toBe(true);
+    });
+
+    it('should detect duplicate substantial lines just over the ratio threshold', () => {
+      const repeatedConstraint =
+        '- 🔴 User requires every production change to preserve backwards compatibility and include documented rollback instructions.';
+      const uniqueObservations = Array.from(
+        { length: 8 },
+        (_, i) =>
+          `- 🟡 Distinct reflected project fact ${i}: ${String.fromCharCode(65 + i).repeat(150 + i * 17)} terminal-${i}`,
+      );
+      const lines = uniqueObservations.flatMap(unique => [repeatedConstraint, unique]);
+      lines.push(repeatedConstraint, repeatedConstraint, repeatedConstraint, repeatedConstraint);
+      const text = lines.join('\n');
+
+      expect(text.length).toBeGreaterThan(2000);
+      expect(detectDegenerateRepetition(text)).toBe(true);
+    });
+
+    it('should not flag long legitimate output with unique lines', () => {
+      const text = Array.from(
+        { length: 300 },
+        (_, i) =>
+          `* 🟡 (1${i % 10}:${String(i % 60).padStart(2, '0')}) Observation number ${i}: examined file-${i}.ts and found unique detail ${i * 13} relating to subsystem ${i % 7}`,
+      ).join('\n');
+      expect(text.length).toBeGreaterThan(2000);
+      expect(detectDegenerateRepetition(text)).toBe(false);
+    });
+
+    it('should not flag output where only short lines repeat', () => {
+      const unique = Array.from(
+        { length: 40 },
+        (_, i) =>
+          `* 🟡 (12:${String(i % 60).padStart(2, '0')}) Unique observation ${i} with distinct content token ${i * 31}`,
+      );
+      // Interleave legitimately repetitive short separators/bullets
+      const text = unique.flatMap(line => [line, '---', '## Current Task']).join('\n');
+      expect(detectDegenerateRepetition(text)).toBe(false);
+    });
   });
 
-  describe('optimizeObservationsForContext', () => {
-    it('should strip yellow and green emojis', () => {
-      const observations = `
-- 🔴 Critical info
-- 🟡 Medium info
-- 🟢 Low info
-      `;
-
-      const optimized = optimizeObservationsForContext(observations);
-      expect(optimized).toContain('🔴 Critical info');
-      expect(optimized).not.toContain('🟡');
-      expect(optimized).not.toContain('🟢');
+  describe('describeDegenerateOutput', () => {
+    it('reports length, duplicate stats, and the most-repeated window on one line', () => {
+      const block =
+        'getLanguageModel().doGenerate(options: LanguageModelV2CallOptions): PromiseLike<LanguageModelV2GenerateResult>, ';
+      const text = block.repeat(100);
+      const description = describeDegenerateOutput(text);
+      expect(description).toContain(`length=${text.length}`);
+      expect(description).toMatch(/duplicateRatio=0\.\d+/);
+      expect(description).toMatch(/duplicateLineRatio=(?:\d+\.\d+|n\/a)/);
+      expect(description).toMatch(/countedLines=\d+/);
+      expect(description).toMatch(/topWindowCount=\d+/);
+      expect(description).toContain('topWindow="');
+      expect(description).toContain('head="');
+      expect(description).toContain('tail="');
+      expect(description).not.toContain('\n');
     });
 
-    it('should strip anchor IDs before injecting context', () => {
-      const observations = '[O1] - 🔴 Critical info\n[O2] - 🟡 Medium info';
-      const optimized = optimizeObservationsForContext(observations);
-
-      expect(optimized).toContain('🔴 Critical info');
-      expect(optimized).toContain('- Medium info');
-      expect(optimized).not.toContain('[O1]');
-      expect(optimized).not.toContain('[O2]');
+    it('bounds snippets to the requested size', () => {
+      const text = 'x'.repeat(10_000);
+      const description = describeDegenerateOutput(text, 100);
+      const head = /head="(x+)"/.exec(description)?.[1];
+      const tail = /tail="(x+)"/.exec(description)?.[1];
+      expect(head?.length).toBe(100);
+      expect(tail?.length).toBe(100);
     });
 
-    it('should preserve red emojis', () => {
-      const observations = '- 🔴 Critical user preference';
-      const optimized = optimizeObservationsForContext(observations);
-      expect(optimized).toContain('🔴');
-    });
-
-    it('should simplify arrows', () => {
-      const observations = '- Task -> completed successfully';
-      const optimized = optimizeObservationsForContext(observations);
-      expect(optimized).not.toContain('->');
-    });
-
-    it('should collapse multiple newlines', () => {
-      const observations = `Line 1
-
-
-
-Line 2`;
-      const optimized = optimizeObservationsForContext(observations);
-      expect(optimized).not.toContain('\n\n\n');
+    it('omits the tail when the text is short', () => {
+      const description = describeDegenerateOutput('short text', 400);
+      expect(description).toContain('head="short text"');
+      expect(description).not.toContain('tail=');
     });
   });
 });
@@ -3298,7 +3434,13 @@ describe('didProviderChange', () => {
 
   it('returns true when both sides are fully-formatted but differ', () => {
     expect(didProviderChange('openai/gpt-4o', 'anthropic/claude-opus-4-7')).toBe(true);
-    expect(didProviderChange('openai.responses/gpt-5.4', 'openai/gpt-5.4')).toBe(true);
+    expect(didProviderChange('openai/gpt-4o', 'openai/gpt-5.4')).toBe(true);
+    expect(didProviderChange('openai.responses/gpt-4o', 'openai/gpt-5.4')).toBe(true);
+  });
+
+  it('returns false when provider subnamespaces differ but base provider and modelId match', () => {
+    expect(didProviderChange('openai.responses/gpt-5.4', 'openai/gpt-5.4')).toBe(false);
+    expect(didProviderChange('openai/gpt-5.4', 'openai.responses/gpt-5.4')).toBe(false);
   });
 
   it('returns false when persisted history has bare modelId that matches actor modelId', () => {
@@ -3515,6 +3657,26 @@ _range: \`ignored-by-reconciler\`_
       const result = parseReflectorOutput(output);
       expect(result.observations).toContain('Project Context');
       expect(result.observations).toContain('Completed auth implementation');
+    });
+
+    it('should preserve substantial repeated lines at the duplicate ratio boundary', () => {
+      const repeatedConstraint =
+        '- 🔴 User requires every production change to preserve backwards compatibility and include documented rollback instructions.';
+      const uniqueObservations = Array.from(
+        { length: 9 },
+        (_, i) =>
+          `- 🟡 Distinct reflected project fact ${i}: ${String.fromCharCode(65 + i).repeat(150 + i * 17)} terminal-${i}`,
+      );
+      const lines = uniqueObservations.flatMap(unique => [repeatedConstraint, unique]);
+      lines.push(repeatedConstraint, repeatedConstraint);
+      const output = lines.join('\n');
+
+      expect(output.length).toBeGreaterThan(2000);
+      const result = parseReflectorOutput(output);
+
+      expect(result.degenerate).not.toBe(true);
+      expect(result.observations).toContain(repeatedConstraint);
+      expect(result.observations).toContain('Distinct reflected project fact 8');
     });
 
     it('should strip ephemeral anchor IDs from reflector output', () => {
@@ -4063,13 +4225,154 @@ describe('ObservationalMemory Integration', () => {
       );
       const formattedText = formatted.join('\n\n');
 
-      expect(formattedText).toContain('## Group `group-1`');
-      expect(formattedText).toContain('_range: `msg-1:msg-2`_');
-      expect(formattedText).toContain('recall tool');
+      expect(formattedText).toContain('<observation-group id="group-1" range="msg-1:msg-2">');
+      expect(formattedText).toContain('- 🔴 User prefers direct answers');
+      expect(formattedText).toContain('</observation-group>');
     });
 
     it('should default retrieval mode to false', () => {
       expect(om.config.retrieval).toBe(false);
+    });
+  });
+
+  describe('retrieval instructions', () => {
+    const makeRetrievalOm = (
+      retrieval: boolean | { vector?: boolean; scope?: 'thread' | 'resource'; instructions?: string },
+    ) =>
+      new ObservationalMemory({
+        storage,
+        retrieval,
+        observation: {
+          messageTokens: 500,
+          model: 'test-model',
+        },
+        reflection: {
+          observationTokens: 1000,
+          model: 'test-model',
+        },
+      });
+
+    it('describes cross-thread routing between search, threads, and messages for resource scope', () => {
+      const instructions = getRetrievalInstructions('resource');
+
+      expect(instructions).toContain('mode: "search"');
+      expect(instructions).toContain('mode: "threads"');
+      expect(instructions).toContain('mode: "messages"');
+      expect(instructions).toContain("ALL of this user's conversation threads");
+      // Fallback guidance: irrelevant search results should lead to thread discovery
+      expect(instructions).toContain('If search results look irrelevant, do not give up');
+      // Threads without observations may still hold the answer in raw history
+      expect(instructions).toContain('raw history may exist for threads that have no observations yet');
+    });
+
+    it('omits search routing for browsing-only resource retrieval', () => {
+      const instructions = getRetrievalInstructions('resource', undefined, false);
+
+      expect(instructions).not.toContain('mode: "search"');
+      expect(instructions).toContain('mode: "threads"');
+      expect(instructions).toContain('mode: "messages"');
+      expect(instructions).toContain("ALL of this user's conversation threads");
+      // Thread discovery is still the fallback for finding past conversations
+      expect(instructions).toContain('Raw history may exist for threads that have no observations yet');
+    });
+
+    it('omits search routing for browsing-only thread retrieval', () => {
+      const instructions = getRetrievalInstructions('thread', undefined, false);
+
+      expect(instructions).not.toContain('mode: "search"');
+      expect(instructions).toContain('mode: "messages"');
+      expect(instructions).toContain('mode: "threads"');
+    });
+
+    it('describes current-thread usage for thread scope', () => {
+      const instructions = getRetrievalInstructions('thread');
+
+      expect(instructions).toContain('limited to the current conversation thread');
+      expect(instructions).toContain('mode: "search"');
+      expect(instructions).toContain('mode: "messages"');
+      expect(instructions).not.toContain("ALL of this user's conversation threads");
+      expect(instructions).not.toContain('do not give up');
+    });
+
+    it('appends custom instructions after the native guidance without replacing it', () => {
+      const custom = 'Prefer the current conversation when it already contains the answer.';
+      const instructions = getRetrievalInstructions('resource', custom);
+
+      expect(instructions).toContain('## Recall — looking up source messages');
+      expect(instructions).toContain('### Additional recall guidance');
+      expect(instructions.indexOf(custom)).toBeGreaterThan(instructions.indexOf('### Additional recall guidance'));
+    });
+
+    it('omits the custom guidance section when custom instructions are empty', () => {
+      expect(getRetrievalInstructions('resource', '   ')).not.toContain('### Additional recall guidance');
+      expect(getRetrievalInstructions('resource')).not.toContain('### Additional recall guidance');
+    });
+
+    it('injects scope-aware instructions into actor context', () => {
+      const observations = '<observation-group id="group-1" range="msg-1:msg-2">\n- 🔴 Fact\n</observation-group>';
+
+      const resourceText = (makeRetrievalOm({ vector: true, scope: 'resource' }) as any)
+        .formatObservationsForContext(observations, undefined, undefined, undefined, undefined, undefined, true)
+        .join('\n\n');
+      expect(resourceText).toContain('If search results look irrelevant, do not give up');
+
+      // Browsing-only retrieval (no vector) must not steer the agent toward search
+      const browsingText = (makeRetrievalOm({ scope: 'resource' }) as any)
+        .formatObservationsForContext(observations, undefined, undefined, undefined, undefined, undefined, true)
+        .join('\n\n');
+      expect(browsingText).not.toContain('mode: "search"');
+      expect(browsingText).toContain('mode: "threads"');
+
+      const threadText = (makeRetrievalOm({ scope: 'thread' }) as any)
+        .formatObservationsForContext(observations, undefined, undefined, undefined, undefined, undefined, true)
+        .join('\n\n');
+      expect(threadText).toContain('limited to the current conversation thread');
+    });
+
+    it('injects appended custom instructions into actor context', () => {
+      const custom = 'Use a small limit with detail="low" for an initial scan.';
+      const text = (makeRetrievalOm({ scope: 'resource', instructions: custom }) as any)
+        .formatObservationsForContext('- 🔴 Fact', undefined, undefined, undefined, undefined, undefined, true)
+        .join('\n\n');
+
+      expect(text).toContain('### Additional recall guidance');
+      expect(text).toContain(custom);
+    });
+
+    it('returns recall guidance without observations for resource-scoped retrieval', async () => {
+      const retrievalOm = makeRetrievalOm({ scope: 'resource', instructions: 'Avoid historical tool calls.' });
+      const record = await (retrievalOm as any).getOrCreateRecord(threadId, resourceId);
+      expect(record.activeObservations).toBeFalsy();
+
+      const messages = await retrievalOm.buildContextSystemMessages({ threadId, resourceId, record });
+
+      expect(messages).toBeDefined();
+      const text = messages!.join('\n\n');
+      expect(text).toContain('## Recall — looking up source messages');
+      expect(text).toContain('mode: "threads"');
+      expect(text).toContain('Avoid historical tool calls.');
+    });
+
+    it('returns undefined without observations for thread-scoped retrieval', async () => {
+      const retrievalOm = makeRetrievalOm({ scope: 'thread' });
+      const record = await (retrievalOm as any).getOrCreateRecord(threadId, resourceId);
+
+      const messages = await retrievalOm.buildContextSystemMessages({ threadId, resourceId, record });
+
+      expect(messages).toBeUndefined();
+    });
+
+    it('returns undefined without observations when retrieval is disabled', async () => {
+      const record = await (om as any).getOrCreateRecord(threadId, resourceId);
+
+      const messages = await om.buildContextSystemMessages({ threadId, resourceId, record });
+
+      expect(messages).toBeUndefined();
+    });
+
+    it('defaults retrieval scope to resource when retrieval is true', () => {
+      expect(makeRetrievalOm(true).retrievalScope).toBe('resource');
+      expect(makeRetrievalOm({ scope: 'thread' }).retrievalScope).toBe('thread');
     });
   });
 
@@ -5178,8 +5481,8 @@ describe('Scenario: Information should be preserved through observation cycle', 
     expect(systemPrompt).not.toContain('<thread-title>');
   });
 
-  it('observer system prompt should include thread title instructions when enabled', () => {
-    const systemPrompt = buildObserverSystemPrompt(false, undefined, true);
+  it('observer system prompt should include thread title instructions from the extractor list', () => {
+    const systemPrompt = buildObserverSystemPrompt(false, undefined, true, [createThreadTitleExtractor()]);
 
     expect(systemPrompt).toContain('<thread-title>');
     expect(systemPrompt).toContain('A short, noun-phrase title for this conversation');
@@ -5327,7 +5630,7 @@ Ask about favorite vegetarian dishes
     observerSpy.mockRestore();
   });
 
-  it('should send attachment parts to the observer alongside placeholder text', async () => {
+  it('should only send commonly supported attachment parts to the observer by default', async () => {
     let capturedPrompt: any = null;
 
     const om = new ObservationalMemory({
@@ -5343,6 +5646,14 @@ Ask about favorite vegetarian dishes
     vi.spyOn(om.observer as any, 'createAgent').mockReturnValue({
       stream: async (prompt: any) => {
         capturedPrompt = prompt;
+        const hasUnsupportedHtml = prompt.some(
+          (message: any) =>
+            Array.isArray(message.content) &&
+            message.content.some((part: any) => part.type === 'file' && part.mimeType === 'text/html'),
+        );
+        if (hasUnsupportedHtml) {
+          throw new Error("'file part media type text/html' functionality not supported");
+        }
         return {
           getFullOutput: async () => ({
             text: `<observations>\n- User shared a reference image and floorplan\n</observations>`,
@@ -5358,6 +5669,12 @@ Ask about favorite vegetarian dishes
       parts: [
         { type: 'text', text: 'Please compare these attachments.' },
         { type: 'image', image: 'https://example.com/reference-board.png', mimeType: 'image/png' } as any,
+        {
+          type: 'file',
+          data: 'https://example.com/report.html',
+          mimeType: 'text/html',
+          filename: 'report.html',
+        } as any,
         {
           type: 'file',
           data: 'https://example.com/specs/floorplan.pdf',
@@ -5377,7 +5694,8 @@ Ask about favorite vegetarian dishes
     expect(historyMessage).toBeDefined();
     expect(historyMessage.content[0].text).toContain('New Message History');
     expect(historyMessage.content[1].text).toContain('[Image #1: reference-board.png]');
-    expect(historyMessage.content[1].text).toContain('[File #1: floorplan.pdf]');
+    expect(historyMessage.content[1].text).toContain('[File #1: report.html]');
+    expect(historyMessage.content[1].text).toContain('[File #2: floorplan.pdf]');
     expect(
       historyMessage.content.some(
         (part: any) => part.type === 'image' && part.image === 'https://example.com/reference-board.png',
@@ -5392,6 +5710,11 @@ Ask about favorite vegetarian dishes
           part.data === 'https://example.com/specs/floorplan.pdf',
       ),
     ).toBe(true);
+    expect(
+      historyMessage.content.some(
+        (part: any) => part.type === 'file' && part.mimeType === 'text/html' && part.filename === 'report.html',
+      ),
+    ).toBe(false);
   });
 
   it('should pass reflection instruction to reflector agent during synchronous reflection', async () => {
@@ -6019,6 +6342,65 @@ describe('Resource Scope Observation Flow', () => {
     multiThreadSpy.mockRestore();
   });
 
+  it('isolates structured extraction source output per thread in multi-thread observation', async () => {
+    const structuredPrompts: string[] = [];
+    const model = new MockLanguageModelV2({
+      doStream: async ({ prompt }: { prompt: unknown }) => {
+        const promptText = JSON.stringify(prompt);
+        const isStructuredExtraction = promptText.includes('thread-1-secret') || promptText.includes('thread-2-secret');
+        if (isStructuredExtraction) structuredPrompts.push(promptText);
+        const output = isStructuredExtraction
+          ? JSON.stringify({ priority: promptText.includes('thread-1-secret') ? 'alpha' : 'beta' })
+          : promptText.includes('Thread one')
+            ? `<observations>\n- thread-1-secret priority alpha\n</observations>`
+            : `<observations>\n- thread-2-secret priority beta\n</observations>`;
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'obs-1', modelId: 'mock-observer', timestamp: new Date() },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: output },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 } },
+          ]),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        };
+      },
+    });
+    const observer = new ObserverRunner({
+      observationConfig: {
+        model,
+        messageTokens: 1000,
+        bufferTokens: false,
+        previousObserverTokens: 1000,
+        observeAttachments: 'auto',
+        extractors: [new Extractor({ name: 'Priority', instructions: 'Extract priority.', schema: z.string() })],
+      } as any,
+      observedMessageIds: new Set(),
+      resolveModel: () => ({ model: model as any }),
+      tokenCounter: { countMessages: () => 1 } as any,
+    });
+    const results = await observer.callMultiThread(
+      undefined,
+      new Map([
+        ['thread-1', [createTestMessage('Thread one says alpha.', 'user', 't1-msg-1')]],
+        ['thread-2', [createTestMessage('Thread two says beta.', 'user', 't2-msg-1')]],
+      ]),
+      ['thread-1', 'thread-2'],
+    );
+
+    expect(results.results.get('thread-1')?.extractedValues).toEqual({ priority: 'alpha' });
+    expect(results.results.get('thread-2')?.extractedValues).toEqual({ priority: 'beta' });
+    expect(structuredPrompts).toHaveLength(2);
+    const threadOnePrompt = structuredPrompts.find(prompt => prompt.includes('thread-1-secret'));
+    const threadTwoPrompt = structuredPrompts.find(prompt => prompt.includes('thread-2-secret'));
+    expect(threadOnePrompt).toBeDefined();
+    expect(threadOnePrompt).not.toContain('thread-2-secret');
+    expect(threadTwoPrompt).toBeDefined();
+    expect(threadTwoPrompt).not.toContain('thread-1-secret');
+  });
+
   it('should NOT use thread tags in thread scope mode', async () => {
     const storage = createInMemoryStorage();
 
@@ -6186,6 +6568,130 @@ describe('Locking Behavior', () => {
     // Verify the flag was cleared in storage
     const updatedRecord = await storage.getObservationalMemory('thread-1', 'resource-1');
     expect(updatedRecord!.isReflecting).toBe(false);
+  });
+
+  it('manual reflect() skips quietly when a reflection is already in flight in this process', async () => {
+    const storage = createInMemoryStorage();
+
+    let reflectorCalled = false;
+    const mockReflectorModel = createStreamCapableMockModel({
+      doGenerate: async () => {
+        reflectorCalled = true;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+          content: [
+            {
+              type: 'text' as const,
+              text: `<observations>
+- Consolidated observation
+</observations>
+<current-task>None</current-task>
+<suggested-response>Continue</suggested-response>`,
+            },
+          ],
+          warnings: [],
+        };
+      },
+    });
+
+    const om = new ObservationalMemory({
+      storage,
+      observation: { messageTokens: 100, model: mockReflectorModel as any },
+      reflection: { observationTokens: 100, model: mockReflectorModel as any },
+      scope: 'thread',
+    });
+
+    await storage.initializeObservationalMemory({
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      scope: 'thread',
+      config: {},
+    });
+    const record = await storage.getObservationalMemory('thread-1', 'resource-1');
+    await storage.updateActiveObservations({
+      id: record!.id,
+      observations: '- Some observation about the user',
+      tokenCount: 500,
+      lastObservedAt: new Date(),
+    });
+
+    // Simulate an IN-FLIGHT reflection in this process: flag set AND op registered.
+    await storage.setReflectingFlag(record!.id, true);
+    registerOp(record!.id, 'reflecting');
+    try {
+      const result = await om.reflect('thread-1', 'resource-1');
+
+      expect(result.reflected).toBe(false);
+      expect(reflectorCalled).toBe(false);
+
+      // The skip must not clobber the in-flight reflection's lock.
+      const after = await storage.getObservationalMemory('thread-1', 'resource-1');
+      expect(after!.isReflecting).toBe(true);
+      expect(isOpActiveInProcess(record!.id, 'reflecting')).toBe(true);
+    } finally {
+      unregisterOp(record!.id, 'reflecting');
+      await storage.setReflectingFlag(record!.id, false);
+    }
+  });
+
+  it('manual reflect() clears a stale isReflecting flag from a dead process and proceeds', async () => {
+    const storage = createInMemoryStorage();
+
+    let reflectorCalled = false;
+    const mockReflectorModel = createStreamCapableMockModel({
+      doGenerate: async () => {
+        reflectorCalled = true;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+          content: [
+            {
+              type: 'text' as const,
+              text: `<observations>
+- Consolidated observation
+</observations>
+<current-task>None</current-task>
+<suggested-response>Continue</suggested-response>`,
+            },
+          ],
+          warnings: [],
+        };
+      },
+    });
+
+    const om = new ObservationalMemory({
+      storage,
+      observation: { messageTokens: 100, model: mockReflectorModel as any },
+      reflection: { observationTokens: 100, model: mockReflectorModel as any },
+      scope: 'thread',
+    });
+
+    await storage.initializeObservationalMemory({
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      scope: 'thread',
+      config: {},
+    });
+    const record = await storage.getObservationalMemory('thread-1', 'resource-1');
+    await storage.updateActiveObservations({
+      id: record!.id,
+      observations: '- Some observation about the user',
+      tokenCount: 500,
+      lastObservedAt: new Date(),
+    });
+
+    // Stale scenario: flag set in storage but NO op registered in this process.
+    await storage.setReflectingFlag(record!.id, true);
+
+    const result = await om.reflect('thread-1', 'resource-1');
+
+    expect(result.reflected).toBe(true);
+    expect(reflectorCalled).toBe(true);
+    const after = await storage.getObservationalMemory('thread-1', 'resource-1');
+    expect(after!.isReflecting).toBe(false);
   });
 
   it('should not force reflection when activateAfterIdle has expired below threshold', async () => {
@@ -9838,7 +10344,7 @@ describe('Full Async Buffering Flow', () => {
     const reflectorCalls: { input: string }[] = [];
 
     const mockModel = createStreamCapableMockModel({
-      doGenerate: async ({ prompt }) => {
+      doGenerate: async ({ prompt }: { prompt: unknown }) => {
         const promptText = JSON.stringify(prompt);
 
         // Detect whether this is a reflection call (reflector prompt mentions "consolidate")
@@ -10412,12 +10918,12 @@ describe('Full Async Buffering Flow', () => {
     expect(observerCalls.length).toBeGreaterThan(0);
 
     // The mock captures `input: JSON.stringify(prompt).slice(0, 200)`.
-    // buildObserverPrompt appends "Do NOT include <current-task> or <suggested-response>"
-    // when skipContinuationHints is true. Since the mock only captures 200 chars
-    // of the serialized prompt, we can't reliably check the end of the prompt here.
-    // The important thing: the observer was called (buffering happened), and the
-    // skipContinuationHints logic is unit-tested in buildObserverPrompt's own tests.
-    // For this integration test, we verify the async buffering path was exercised.
+    // buildObserverPrompt appends skipContinuationHints guidance near the end of the prompt.
+    // Since the mock only captures 200 chars of the serialized prompt, we can't reliably
+    // check the end of the prompt here. The important thing: the observer was called
+    // (buffering happened), and the skipContinuationHints logic is unit-tested in
+    // buildObserverPrompt's own tests. For this integration test, we verify the async
+    // buffering path was exercised.
     const lastCall = observerCalls[observerCalls.length - 1];
     expect(lastCall).toBeDefined();
     expect(lastCall.input.length).toBeGreaterThan(0);
@@ -10428,104 +10934,101 @@ describe('Full Async Buffering Flow', () => {
   // activate(). The core hint-propagation behavior is covered by the direct test below:
   // "should clear stale thread continuation hints after buffered activation when latest
   // activated chunk has no hints"
-  it.todo(
-    'should clear stale thread continuation hints on sync observation when latest output omits them',
-    async () => {
-      // Use enough messages and a low threshold so that two activation rounds can
-      // succeed sequentially.  The first observer response includes continuation
-      // hints; the second omits them.  After the second activation, the stale
-      // hints from the first round must be cleared (written as undefined).
-      const { storage, threadId, resourceId, step, waitForAsyncOps } = await setupAsyncBufferingScenario({
-        messageTokens: 1000,
-        bufferTokens: 500,
-        bufferActivation: 0.7,
-        reflectionObservationTokens: 50000,
-        messageCount: 10,
-        observerResponses: [
-          // Call 1 (async buffering from step 0): hints are parsed from the mock
-          // response and stored in the buffered chunk.
-          // Note: closing tags must be on their own line — the parser regex
-          // requires `^<\/current-task>` (start-of-line anchor with /m flag).
-          '<observations>\n- 🔴 Initial observation\n</observations>\n<current-task>\nImplement sync path\n</current-task>\n<suggested-response>\nContinue with step 2\n</suggested-response>',
-          // Call 2 (async buffering from step 2): no hints → activation clears them.
-          '<observations>\n- 🟡 Follow-up observation without hints\n</observations>',
-        ],
-      });
+  it.todo('should clear stale thread continuation hints on sync observation when latest output omits them', async () => {
+    // Use enough messages and a low threshold so that two activation rounds can
+    // succeed sequentially.  The first observer response includes continuation
+    // hints; the second omits them.  After the second activation, the stale
+    // hints from the first round must be cleared (written as undefined).
+    const { storage, threadId, resourceId, step, waitForAsyncOps } = await setupAsyncBufferingScenario({
+      messageTokens: 1000,
+      bufferTokens: 500,
+      bufferActivation: 0.7,
+      reflectionObservationTokens: 50000,
+      messageCount: 10,
+      observerResponses: [
+        // Call 1 (async buffering from step 0): hints are parsed from the mock
+        // response and stored in the buffered chunk.
+        // Note: closing tags must be on their own line — the parser regex
+        // requires `^<\/current-task>` (start-of-line anchor with /m flag).
+        '<observations>\n- 🔴 Initial observation\n</observations>\n<current-task>\nImplement sync path\n</current-task>\n<suggested-response>\nContinue with step 2\n</suggested-response>',
+        // Call 2 (async buffering from step 2): no hints → activation clears them.
+        '<observations>\n- 🟡 Follow-up observation without hints\n</observations>',
+      ],
+    });
 
-      // Step 0 triggers async buffering. After waiting, save fresh messages
-      // so the threshold is met, then a fresh step 0 activates the buffered chunk,
-      // propagating continuation hints to thread metadata.
-      await step(0);
-      await waitForAsyncOps();
+    // Step 0 triggers async buffering. After waiting, save fresh messages
+    // so the threshold is met, then a fresh step 0 activates the buffered chunk,
+    // propagating continuation hints to thread metadata.
+    await step(0);
+    await waitForAsyncOps();
 
-      // Add messages so unobserved token count meets the threshold on the next turn
-      const round1Filler = 'The quick brown fox jumps over the lazy dog. '.repeat(10);
-      const round1Messages = Array.from({ length: 10 }, (_, i) => ({
-        id: `round1-msg-${i}`,
-        threadId,
-        resourceId,
-        role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
-        content: {
-          format: 2 as const,
-          parts: [{ type: 'text' as const, text: `Round1 ${i}: ${round1Filler}` }],
-        },
-        type: 'text',
-        createdAt: new Date(Date.UTC(2025, 0, 1, 11, i)),
-      }));
-      await storage.saveMessages({ messages: round1Messages });
+    // Add messages so unobserved token count meets the threshold on the next turn
+    const round1Filler = 'The quick brown fox jumps over the lazy dog. '.repeat(10);
+    const round1Messages = Array.from({ length: 10 }, (_, i) => ({
+      id: `round1-msg-${i}`,
+      threadId,
+      resourceId,
+      role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+      content: {
+        format: 2 as const,
+        parts: [{ type: 'text' as const, text: `Round1 ${i}: ${round1Filler}` }],
+      },
+      type: 'text',
+      createdAt: new Date(Date.UTC(2025, 0, 1, 11, i)),
+    }));
+    await storage.saveMessages({ messages: round1Messages });
 
-      await step(0, { freshState: true });
-      await waitForAsyncOps();
-      const threadAfterFirstObservation = await storage.getThreadById({ threadId });
-      const firstOM = ((threadAfterFirstObservation?.metadata as any)?.mastra?.om ?? {}) as any;
-      expect(firstOM.currentTask).toBe('Implement sync path');
-      expect(firstOM.suggestedResponse).toBe('Continue with step 2');
+    await step(0, { freshState: true });
+    await waitForAsyncOps();
+    const threadAfterFirstObservation = await storage.getThreadById({ threadId });
+    const firstOM = ((threadAfterFirstObservation?.metadata as any)?.mastra?.om ?? {}) as any;
+    expect(firstOM.currentTask).toBe('Implement sync path');
+    expect(firstOM.suggestedResponse).toBe('Continue with step 2');
 
-      // Save fresh messages so the threshold is exceeded again on the next round.
-      const filler = 'The quick brown fox jumps over the lazy dog. '.repeat(10);
-      const freshMessages = Array.from({ length: 10 }, (_, i) => ({
-        id: `sync-clear-msg-${i}`,
-        threadId,
-        resourceId,
-        role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
-        content: {
-          format: 2 as const,
-          parts: [{ type: 'text' as const, text: `Follow-up ${i}: ${filler}` }],
-        },
-        type: 'text',
-        createdAt: new Date(Date.UTC(2025, 0, 1, 13, i)),
-      }));
-      await storage.saveMessages({ messages: freshMessages });
+    // Save fresh messages so the threshold is exceeded again on the next round.
+    const filler = 'The quick brown fox jumps over the lazy dog. '.repeat(10);
+    const freshMessages = Array.from({ length: 10 }, (_, i) => ({
+      id: `sync-clear-msg-${i}`,
+      threadId,
+      resourceId,
+      role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+      content: {
+        format: 2 as const,
+        parts: [{ type: 'text' as const, text: `Follow-up ${i}: ${filler}` }],
+      },
+      type: 'text',
+      createdAt: new Date(Date.UTC(2025, 0, 1, 13, i)),
+    }));
+    await storage.saveMessages({ messages: freshMessages });
 
-      // New step 0 triggers another async buffering round (observer call 2, no hints).
-      // After waiting, another step 0 with fresh messages activates the new chunk,
-      // clearing the stale hints.
-      await step(0, { freshState: true });
-      await waitForAsyncOps();
+    // New step 0 triggers another async buffering round (observer call 2, no hints).
+    // After waiting, another step 0 with fresh messages activates the new chunk,
+    // clearing the stale hints.
+    await step(0, { freshState: true });
+    await waitForAsyncOps();
 
-      // Add more messages for the final activation round
-      const round3Messages = Array.from({ length: 10 }, (_, i) => ({
-        id: `round3-msg-${i}`,
-        threadId,
-        resourceId,
-        role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
-        content: {
-          format: 2 as const,
-          parts: [{ type: 'text' as const, text: `Round3 ${i}: ${filler}` }],
-        },
-        type: 'text',
-        createdAt: new Date(Date.UTC(2025, 0, 1, 15, i)),
-      }));
-      await storage.saveMessages({ messages: round3Messages });
+    // Add more messages for the final activation round
+    const round3Messages = Array.from({ length: 10 }, (_, i) => ({
+      id: `round3-msg-${i}`,
+      threadId,
+      resourceId,
+      role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+      content: {
+        format: 2 as const,
+        parts: [{ type: 'text' as const, text: `Round3 ${i}: ${filler}` }],
+      },
+      type: 'text',
+      createdAt: new Date(Date.UTC(2025, 0, 1, 15, i)),
+    }));
+    await storage.saveMessages({ messages: round3Messages });
 
-      await step(0, { freshState: true });
-      await waitForAsyncOps();
-      const threadAfterSecondObservation = await storage.getThreadById({ threadId });
-      const secondOM = ((threadAfterSecondObservation?.metadata as any)?.mastra?.om ?? {}) as any;
-      expect(secondOM.currentTask).toBeUndefined();
-      expect(secondOM.suggestedResponse).toBeUndefined();
-    },
-  );
+    await step(0, { freshState: true });
+    await waitForAsyncOps();
+    const threadAfterSecondObservation = await storage.getThreadById({ threadId });
+    const secondOM = ((threadAfterSecondObservation?.metadata as any)?.mastra?.om ?? {}) as any;
+    expect(secondOM.currentTask).toBeUndefined();
+    expect(secondOM.suggestedResponse).toBeUndefined();
+  });
 
   it('should clear stale thread continuation hints after buffered activation when latest activated chunk has no hints', async () => {
     // Use enough messages so that pending tokens exceed blockAfter (1.2 × 1000 = 1200).
@@ -10853,17 +11356,37 @@ describe('Full Async Buffering Flow', () => {
       messageCount: 20, // ~4000 tokens, well above the 2000 threshold
     });
 
-    // Step 0: no observation (step 0 never does sync observation)
-    await step(0);
+    // Step 0: since #16523, sync observation already fires here when pending
+    // tokens exceed the threshold — the messages are over-threshold from the start.
+    const listAfterStep0 = await step(0);
     await waitForAsyncOps();
     const callsAfterStep0 = observerCalls.length;
+    expect(callsAfterStep0).toBeGreaterThan(0);
 
-    // Step 1: pending tokens exceed threshold → sync observation MUST fire,
-    // even though bufferTokens is set and blockAfter is not configured.
+    // Add FRESH over-threshold messages so step 1 has something unobserved to
+    // observe — otherwise step 0 (which now observes) leaves nothing behind and
+    // the step > 0 half of this regression guard would be unreachable.
+    const freshFiller = 'The quick brown fox jumps over the lazy dog. '.repeat(10);
+    for (let i = 0; i < 20; i++) {
+      listAfterStep0.add(
+        {
+          id: `fresh-msg-${i}`,
+          role: i % 2 === 0 ? 'user' : 'assistant',
+          content: { format: 2, parts: [{ type: 'text', text: `Fresh ${i}: ${freshFiller}` }] },
+          type: 'text',
+          createdAt: new Date(Date.UTC(2025, 0, 1, 11, i)),
+          threadId,
+          resourceId,
+        } as any,
+        'memory',
+      );
+    }
+
+    // Step 1: the blockAfter gate must not have silently disabled sync
+    // observation — the regression this test guards is `if (!blockAfter) return
+    // false` disabling ALL sync observation at step > 0.
     await step(1);
     await waitForAsyncOps();
-
-    // The observer must have been called at step 1 (sync observation path)
     expect(observerCalls.length).toBeGreaterThan(callsAfterStep0);
 
     // Verify observations were actually persisted to the record
@@ -10871,7 +11394,7 @@ describe('Full Async Buffering Flow', () => {
     expect(record?.activeObservations).toBeTruthy();
   });
 
-  it('should defer async buffering when messages contain pending tool calls (state: call)', async () => {
+  it('should exclude pending tail tool calls from async buffering while still buffering the completed prefix', async () => {
     const { MessageList } = await import('@mastra/core/agent');
     const { RequestContext } = await import('@mastra/core/di');
 
@@ -10891,7 +11414,7 @@ describe('Full Async Buffering Flow', () => {
 
     const observerCalls: { input: string }[] = [];
     const mockModel = createStreamCapableMockModel({
-      doGenerate: async ({ prompt }) => {
+      doGenerate: async ({ prompt }: { prompt: unknown }) => {
         observerCalls.push({ input: JSON.stringify(prompt).slice(0, 200) });
         return {
           rawCall: { rawPrompt: null, rawSettings: {} },
@@ -10992,8 +11515,8 @@ describe('Full Async Buffering Flow', () => {
     const processor = new ObservationalMemoryProcessor(om, createMemoryProvider(om));
 
     // Step 0: Load messages with pending tool call.
-    // Even though total tokens (~2200) exceed threshold (2000),
-    // OM should NOT trigger async buffering because a message has state: 'call'.
+    // The pending call must never be observed; the completed messages before it
+    // may still buffer as a safe chronological prefix.
     const messageList = new MessageList({ threadId, resourceId });
     const sharedState: Record<string, unknown> = {};
     const requestContext = new RequestContext();
@@ -11016,8 +11539,16 @@ describe('Full Async Buffering Flow', () => {
     });
     await waitForAsyncOps();
 
-    // Observer should NOT have been called because there's a pending tool call
-    expect(observerCalls.length).toBe(0);
+    // The pending tool call itself must never be observed. Completed messages
+    // before it may buffer as a safe chronological prefix (#22573 policy).
+    const recordAfterStep0 = await storage.getObservationalMemory(threadId, resourceId);
+    const bufferedIdsAfterStep0 = (recordAfterStep0?.bufferedObservationChunks ?? []).flatMap(
+      chunk => chunk.messageIds,
+    );
+    expect(bufferedIdsAfterStep0).not.toContain('pending-msg-tool-call');
+    for (const call of observerCalls) {
+      expect(call.input).not.toContain('call_pending_123');
+    }
 
     // ─── Simulate tool completion: update the message in the messageList ───
     // In real usage, llm-execution-step mutates the state:'call' part to state:'result'
@@ -11076,7 +11607,7 @@ describe('Full Async Buffering Flow', () => {
 
     const observerCalls: { input: string }[] = [];
     const mockModel = createStreamCapableMockModel({
-      doGenerate: async ({ prompt }) => {
+      doGenerate: async ({ prompt }: { prompt: unknown }) => {
         observerCalls.push({ input: JSON.stringify(prompt).slice(0, 200) });
         return {
           rawCall: { rawPrompt: null, rawSettings: {} },
@@ -11552,7 +12083,7 @@ describe('Full Async Buffering Flow', () => {
 
       let _reflectorCallCount = 0;
       const mockModel = createStreamCapableMockModel({
-        doGenerate: async ({ prompt }) => {
+        doGenerate: async ({ prompt }: { prompt: unknown }) => {
           const promptText = JSON.stringify(prompt);
           const isReflection = promptText.includes('consolidat') || promptText.includes('reflect');
           if (isReflection) {
@@ -12055,6 +12586,90 @@ describe('Full Async Buffering Flow', () => {
       expect(result.messageTokensActivated).toBe(2000);
       expect(result.activatedCycleIds).toEqual(['c-0']);
       expect(remaining).toHaveLength(1);
+    });
+
+    it('forceMaxActivation: no observable effect with the documented defaults', async () => {
+      // Documented defaults: messageTokens=30k, bufferActivation=0.8 → retentionFloor=6k,
+      // blockAfter=1.2 → 36k. currentPending=36000, target=30000.
+      // Six 6k chunks: boundary 5 is the lowest over boundary (30k, overshoot=0),
+      // so the forced branch and the normal branch pick the same boundary and one
+      // chunk stays buffered. The docs must not describe this as draining the buffer.
+      const chunks = Array.from({ length: 6 }, (_, i) => ({
+        cycleId: `c-${i}`,
+        messageTokens: 6000,
+        observationTokens: 100,
+        obs: `Chunk ${i}`,
+      }));
+
+      const forced = await setupAndActivate({
+        chunks,
+        activationRatio: 0.8,
+        messageTokensThreshold: 30000,
+        currentPendingTokens: 36000,
+        forceMaxActivation: true,
+      });
+      const normal = await setupAndActivate({
+        chunks,
+        activationRatio: 0.8,
+        messageTokensThreshold: 30000,
+        currentPendingTokens: 36000,
+      });
+
+      expect(forced.result.chunksActivated).toBe(5);
+      expect(forced.result.chunksActivated).toBe(normal.result.chunksActivated);
+      expect(forced.result.messageTokensActivated).toBe(normal.result.messageTokensActivated);
+      expect(forced.remaining).toHaveLength(1);
+    });
+
+    it('forceMaxActivation: activates one extra chunk only when the retention floor is large', async () => {
+      // threshold=100k, ratio=0.7 → retentionFloor=30000, maxOvershoot=28500, minRemaining=1000
+      // currentPending=100000, target=70000
+      // Chunk 0: 69k (under). Chunk 1: 30k → cumulative 99k (over, overshoot=29000).
+      // Normal: overshoot 29000 > 28500 → falls back to the under boundary (1 chunk).
+      // Forced: remainingAfterOver = 1000 >= minRemaining → takes the over boundary (2 chunks).
+      const chunks = [
+        { cycleId: 'c-0', messageTokens: 69000, observationTokens: 500, obs: 'Chunk 0' },
+        { cycleId: 'c-1', messageTokens: 30000, observationTokens: 300, obs: 'Chunk 1' },
+      ];
+
+      const forced = await setupAndActivate({
+        chunks,
+        activationRatio: 0.7,
+        messageTokensThreshold: 100000,
+        currentPendingTokens: 100000,
+        forceMaxActivation: true,
+      });
+      const normal = await setupAndActivate({
+        chunks,
+        activationRatio: 0.7,
+        messageTokensThreshold: 100000,
+        currentPendingTokens: 100000,
+      });
+
+      // Forced activation never goes past the lowest boundary that reaches the target.
+      expect(forced.result.chunksActivated).toBe(2);
+      expect(forced.result.messageTokensActivated).toBe(99000);
+      expect(normal.result.chunksActivated).toBe(1);
+      expect(normal.result.messageTokensActivated).toBe(69000);
+    });
+
+    it('single buffered chunk covering the whole window leaves less than the minimum remaining', async () => {
+      // threshold=30k, ratio=0.8 → retentionFloor=6000, minRemaining=1000
+      // currentPending=36000, target=30000. One 36k chunk is the only boundary:
+      // overshoot=6000 > maxOvershoot=5700 and remainingAfterOver=0 < 1000, and there is
+      // no under boundary, so the final fallback activates it anyway and leaves 0 tokens.
+      const chunks = [{ cycleId: 'c-0', messageTokens: 36000, observationTokens: 400, obs: 'Chunk 0' }];
+
+      const { result, remaining } = await setupAndActivate({
+        chunks,
+        activationRatio: 0.8,
+        messageTokensThreshold: 30000,
+        currentPendingTokens: 36000,
+      });
+
+      expect(result.chunksActivated).toBe(1);
+      expect(result.messageTokensActivated).toBe(36000);
+      expect(remaining).toHaveLength(0);
     });
 
     it('large message scenario: safeguard falls back to small chunk when oversized message dominates', async () => {
@@ -12762,6 +13377,32 @@ describe('threadId validation in thread scope', () => {
     });
 
     await expect(om.getOrCreateRecord('', 'resource-1')).rejects.toThrow(/requires a threadId/);
+  });
+
+  it('should classify missing thread context as a bad request', async () => {
+    const { MessageList } = await import('@mastra/core/agent');
+    const storage = createInMemoryStorage();
+    const om = new ObservationalMemory({
+      storage,
+      observation: { messageTokens: 500, model: 'test-model' },
+      reflection: { observationTokens: 1000, model: 'test-model' },
+    });
+
+    let error: unknown;
+    try {
+      om.getThreadContext(undefined, new MessageList());
+    } catch (caught) {
+      error = caught;
+    }
+
+    expect(error).toBeInstanceOf(MastraError);
+    expect(error).toMatchObject({
+      id: 'OBSERVATIONAL_MEMORY_THREAD_ID_REQUIRED',
+      domain: ErrorDomain.MASTRA_MEMORY,
+      category: ErrorCategory.USER,
+      details: { status: 400 },
+    });
+    expect((error as Error).message).toMatch(/requires a threadId/);
   });
 
   it('should NOT throw when getOrCreateRecord is called without threadId in resource scope', async () => {
@@ -15719,10 +16360,14 @@ describe('Processor stream events: buffering status and activation markers', () 
     // record (e.g. setBufferingObservationFlag) are visible everywhere. Real DBs
     // return fresh rows on each query, so the cached record remains stale.
     const originalGetOrCreate = om.getOrCreateRecord.bind(om);
-    om.getOrCreateRecord = async (...args: Parameters<typeof om.getOrCreateRecord>) => {
-      const record = await originalGetOrCreate(...args);
-      return JSON.parse(JSON.stringify(record));
-    };
+    const getOrCreateSpy = vi
+      .spyOn(om, 'getOrCreateRecord')
+      .mockImplementation(async (...args: Parameters<typeof om.getOrCreateRecord>) => {
+        const record = await originalGetOrCreate(...args);
+        return JSON.parse(JSON.stringify(record));
+      });
+    const setPendingSpy = vi.spyOn(storage, 'setPendingMessageTokens');
+    const emitProgressSpy = vi.spyOn(om, 'emitProgress');
 
     await storage.saveThread({
       thread: {
@@ -15817,12 +16462,14 @@ describe('Processor stream events: buffering status and activation markers', () 
       await new Promise(r => setTimeout(r, 50));
     }
 
+    expect(emitProgressSpy).toHaveBeenCalledTimes(1);
+    expect(setPendingSpy).toHaveBeenCalledTimes(1);
+    expect(getOrCreateSpy.mock.calls.length).toBeLessThan(3);
     expect(capturedStatusParts.length).toBeGreaterThanOrEqual(1);
 
     const lastStatus = capturedStatusParts[capturedStatusParts.length - 1];
-    // emitProgress should use a fresh record from storage (not the stale cached
-    // one from turn.start()). The fresh record reflects the isBufferingObservation
-    // flag set by buffer(), so the status should NOT be 'idle'.
+    // The turn-scoped record is updated before the asynchronous buffer work yields,
+    // so progress remains current without another storage fetch.
     expect(lastStatus.data.windows.buffered.observations.status).not.toBe('idle');
   });
 
@@ -16402,6 +17049,8 @@ describe('Message ordering regressions', () => {
   async function setupOrderingScenario(opts: {
     messageTokens: number;
     bufferTokens?: number | false;
+    bufferActivation?: number;
+    seedMessages?: boolean;
     observerDelay?: number;
   }) {
     const { MessageList } = await import('@mastra/core/agent');
@@ -16451,6 +17100,7 @@ describe('Message ordering regressions', () => {
       observation: {
         messageTokens: opts.messageTokens,
         ...(bufferTokensConfig !== false ? { bufferTokens: bufferTokensConfig } : { bufferTokens: false }),
+        ...(opts.bufferActivation !== undefined ? { bufferActivation: opts.bufferActivation } : {}),
       },
       reflection: { observationTokens: 200_000 },
     });
@@ -16480,7 +17130,9 @@ describe('Message ordering regressions', () => {
       type: 'text',
       createdAt: new Date(Date.UTC(2025, 0, 1, 8, 30 + i)),
     }));
-    await storage.saveMessages({ messages: seedMessages });
+    if (opts.seedMessages !== false) {
+      await storage.saveMessages({ messages: seedMessages });
+    }
 
     const state: Record<string, unknown> = {};
     const capturedParts: any[] = [];
@@ -16654,36 +17306,54 @@ describe('Message ordering regressions', () => {
 
     s.addUserMessage('Tell me about React');
     await s.runStep(0);
+
+    // Since #16523, an over-threshold step 0 observes during runStep — snapshot
+    // the record state here so we can prove finalize adds NO side effects on top.
+    // Positive anchor first: the step-0 observation must actually have happened,
+    // otherwise the unchanged-state comparisons below hold vacuously ('' === '').
+    const recordAfterStep = await s.getOMRecord();
+    expect(recordAfterStep?.activeObservations).toBeTruthy();
+    expect(recordAfterStep?.lastObservedAt).toBeDefined();
+    const metadataAfterStep = await s.getOMMetadata();
+
     s.addAssistantMessage('React is a UI library.');
     await s.finalize();
 
     const record = await s.getOMRecord();
-    // observation must NOT have fired during finalize
-    expect(record?.activeObservations ?? '').toBe('');
-    expect(record?.lastObservedAt).toBeUndefined();
+    // observation must NOT have fired during finalize — state unchanged from the step
+    expect(record?.activeObservations ?? '').toBe(recordAfterStep?.activeObservations ?? '');
+    expect(record?.lastObservedAt).toEqual(recordAfterStep?.lastObservedAt);
 
     const omMetadata = await s.getOMMetadata();
-    expect(omMetadata?.currentTask).toBeUndefined();
-    expect(omMetadata?.suggestedResponse).toBeUndefined();
+    expect(omMetadata?.currentTask).toEqual(metadataAfterStep?.currentTask);
+    expect(omMetadata?.suggestedResponse).toEqual(metadataAfterStep?.suggestedResponse);
   });
 
   // ─── Test 2: deferred observation should happen at beginning of next turn ───
 
-  it('2 — deferred observation should happen at the beginning of the next turn', async () => {
+  it('2 — observation fires during a step (step 0 included since #16523), never during finalize', async () => {
     const s = await setupOrderingScenario({ messageTokens: 1 });
 
-    // Turn 1: single step
+    // Turn 1: single step. With messageTokens: 1 the user message alone exceeds
+    // the threshold, so since #16523 observation fires at step 0 of THIS turn
+    // instead of deferring to the next turn.
     s.addUserMessage('Hello');
     await s.runStep(0);
+
+    let record = await s.getOMRecord();
+    expect(record?.activeObservations).toBeTruthy();
+    expect(record?.lastObservedAt).toBeDefined();
+    const lastObservedAfterTurn1Step = record!.lastObservedAt;
+
+    // The assistant response lands after the step — finalize must not observe it.
     s.addAssistantMessage('Hi there');
     await s.finalize();
+    record = await s.getOMRecord();
+    expect(record?.lastObservedAt).toEqual(lastObservedAfterTurn1Step);
 
-    // After turn 1: no observation yet
-    let record = await s.getOMRecord();
-    expect(record?.activeObservations ?? '').toBe('');
-    expect(record?.lastObservedAt).toBeUndefined();
-
-    // Turn 2: multi-step (step 0 + step 1 triggers observation)
+    // Turn 2: the backlog (turn 1 assistant message + new user message) is
+    // observed at the next turn's steps, not before.
+    const observerSpy = vi.spyOn((s.om as any).observer, 'call');
     s.resetForNewTurn();
     s.addUserMessage('Follow-up');
     await s.runStep(0);
@@ -16692,10 +17362,15 @@ describe('Message ordering regressions', () => {
     s.addAssistantMessage('Here are results');
     await s.finalize();
 
-    // After turn 2 step 1: observation should have fired
     record = await s.getOMRecord();
     expect(record?.activeObservations).toBeTruthy();
     expect(record?.lastObservedAt).toBeDefined();
+    // Positive anchor: turn 2 must have called the observer — a timestamp
+    // comparison alone also holds when turn 2 never observes at all.
+    expect(observerSpy).toHaveBeenCalled();
+    expect(new Date(record!.lastObservedAt!).getTime()).toBeGreaterThanOrEqual(
+      new Date(lastObservedAfterTurn1Step!).getTime(),
+    );
   });
 
   // ─── Test 2b: next turn step 0 activates buffered chunks and loads correct context ───
@@ -16836,7 +17511,8 @@ describe('Message ordering regressions', () => {
       return ctx;
     };
 
-    // ── Turn 1: step 0 (no observation) → finalize → messages persist ──
+    // ── Turn 1: since #16523, an over-threshold step 0 observes immediately.
+    // The failing observer propagates (sync strategy rethrows) → abort throws.
     let ml = new MessageList({ threadId, resourceId });
     let processor = new ObservationalMemoryProcessor(om, createMemoryProvider(om));
 
@@ -16851,51 +17527,35 @@ describe('Message ordering regressions', () => {
       } as any,
       'input',
     );
-    await processor.processInputStep({
-      messageList: ml,
-      messages: [],
-      requestContext: makeCtx(),
-      stepNumber: 0,
-      state,
-      steps: [],
-      systemMessages: [],
-      model: failingModel as any,
-      retryCount: 0,
-      writer: mockWriter as any,
-      abort,
-    });
+    await expect(
+      processor.processInputStep({
+        messageList: ml,
+        messages: [],
+        requestContext: makeCtx(),
+        stepNumber: 0,
+        state,
+        steps: [],
+        systemMessages: [],
+        model: failingModel as any,
+        retryCount: 0,
+        writer: mockWriter as any,
+        abort,
+      }),
+    ).rejects.toThrow();
 
-    ml.add(
-      {
-        id: 'fail-assistant-1',
-        role: 'assistant',
-        content: { format: 2, parts: [{ type: 'text', text: 'Hi there' }] },
-        createdAt: new Date('2025-01-01T10:01:00Z'),
-        threadId,
-        resourceId,
-      } as any,
-      'response',
-    );
-    await processor.processOutputResult({
-      messageList: ml,
-      messages: ml.get.response.db(),
-      requestContext: makeCtx(),
-      state,
-      abort,
-      result: {} as any,
-      retryCount: 0,
-    });
-
-    // Verify Turn 1 messages persisted
+    // The user message was persisted *before* observation ran (persist-before-observe),
+    // so the failed observation must not have lost it — nor the seed messages.
     let result = await storage.listMessages({
       threadId,
       orderBy: { field: 'createdAt', direction: 'ASC' },
       perPage: false,
     });
     expect(result.messages.some(m => m.id === 'fail-user-1')).toBe(true);
-    expect(result.messages.some(m => m.id === 'fail-assistant-1')).toBe(true);
+    expect(result.messages.some(m => m.id === 'seed-0')).toBe(true);
+    expect(result.messages.some(m => m.id === 'seed-1')).toBe(true);
 
-    // ── Turn 2: step 0 → step 1 (observation fires, model fails → abort) ──
+    // ── Turn 2: fresh processor, same failure at step 0 → previously persisted
+    // messages must still survive across turns ──
     Object.keys(state).forEach(k => delete state[k]);
     ml = new MessageList({ threadId, resourceId });
     processor = new ObservationalMemoryProcessor(om, createMemoryProvider(om));
@@ -16911,27 +17571,12 @@ describe('Message ordering regressions', () => {
       } as any,
       'input',
     );
-    await processor.processInputStep({
-      messageList: ml,
-      messages: [],
-      requestContext: makeCtx(),
-      stepNumber: 0,
-      state,
-      steps: [],
-      systemMessages: [],
-      model: failingModel as any,
-      retryCount: 0,
-      writer: mockWriter as any,
-      abort,
-    });
-
-    // Step 1: threshold exceeded → sync observation fires → model throws → abort
     await expect(
       processor.processInputStep({
         messageList: ml,
         messages: [],
         requestContext: makeCtx(),
-        stepNumber: 1,
+        stepNumber: 0,
         state,
         steps: [],
         systemMessages: [],
@@ -16942,16 +17587,53 @@ describe('Message ordering regressions', () => {
       }),
     ).rejects.toThrow();
 
-    // Despite observation failure, all previously persisted messages must survive
+    // Despite repeated observation failures, all previously persisted messages survive
     result = await storage.listMessages({
       threadId,
       orderBy: { field: 'createdAt', direction: 'ASC' },
       perPage: false,
     });
     expect(result.messages.some(m => m.id === 'fail-user-1')).toBe(true);
-    expect(result.messages.some(m => m.id === 'fail-assistant-1')).toBe(true);
-    // Turn 2's user message was saved at step 1 *before* observation ran
+    // Turn 2's user message was saved *before* observation ran
     expect(result.messages.some(m => m.id === 'fail-user-2')).toBe(true);
+    expect(result.messages.some(m => m.id === 'seed-0')).toBe(true);
+    expect(result.messages.some(m => m.id === 'seed-1')).toBe(true);
+  });
+
+  it('om-continuation stays live but is excluded from synchronous persistence', async () => {
+    // Active observations with no completed observation cursor reproduce the window where
+    // a later buffering step can synchronously persist the injected continuation.
+    const s = await setupOrderingScenario({
+      messageTokens: 1000,
+      bufferTokens: 1,
+      bufferActivation: 1,
+      seedMessages: false,
+    });
+    const record = await s.om.getOrCreateRecord(s.threadId, s.resourceId);
+    await s.storage.updateActiveObservations({
+      id: record.id,
+      observations: '* 🟡 Existing observation enables continuation context',
+      tokenCount: 8,
+      lastObservedAt: null,
+    });
+
+    const firstUserId = s.addUserMessage('Start a conversation with active observations');
+    await s.runStep(0);
+    expect(s.currentMessageList.get.all.db().map(m => m.id)).toContain('om-continuation');
+    expect((await s.getStoredMessages()).map(m => m.id)).not.toContain('om-continuation');
+
+    await s.om.waitForBuffering(s.threadId, s.resourceId, 5000);
+
+    const secondUserId = s.addUserMessage(`Continue after observational context is injected ${'word '.repeat(80)}`);
+    await s.runStep(1);
+
+    const liveIds = s.currentMessageList.get.all.db().map(m => m.id);
+    const storedIds = (await s.getStoredMessages()).map(m => m.id);
+
+    expect(liveIds).toContain('om-continuation');
+    expect(storedIds).toContain(firstUserId);
+    expect(storedIds).toContain(secondUserId);
+    expect(storedIds).not.toContain('om-continuation');
   });
 
   // ─── Test 4: all messages present in storage after processOutputResult ───
@@ -16967,9 +17649,12 @@ describe('Message ordering regressions', () => {
     const stored = await s.getStoredMessages();
     const runtimeMessages = s.currentMessageList.get.all.db();
 
-    // Every non-system message from runtime must exist in storage by exact ID
+    // Every non-system message from runtime must exist in storage by exact ID.
+    // The synthetic 'om-continuation' hint is deliberately never persisted
+    // (every OM cleanup path skips it) — present here since #16523 because
+    // the over-threshold step 0 now observes.
     for (const msg of runtimeMessages) {
-      if (msg.role === 'system') continue;
+      if (msg.role === 'system' || msg.id === 'om-continuation') continue;
       const inStorage = stored.find(sm => sm.id === msg.id);
       expect(inStorage).toBeDefined();
     }
@@ -17147,5 +17832,478 @@ describe('Message ordering regressions', () => {
     // No duplicate IDs
     const ids = stored.map(m => m.id);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+});
+
+describe('filterObservedMessages — tool-call/result pair preservation', () => {
+  it('keeps the tool-call message during marker pruning when its result is still unobserved', async () => {
+    const { MessageList } = await import('@mastra/core/agent');
+
+    const threadId = 'tool-pair-marker-thread';
+    const resourceId = 'tool-pair-marker-resource';
+    const messageList = new MessageList({ threadId, resourceId });
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+    const t1 = new Date('2025-01-01T10:00:01.000Z');
+
+    messageList.add(
+      {
+        id: 'tool-call-before-marker',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'call',
+                toolCallId: 'tc-marker-1',
+                toolName: 'test-tool',
+                args: {},
+              },
+            },
+          ],
+        },
+        createdAt: t0,
+      } as any,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'marker-msg',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            { type: 'text', text: 'observed-prefix' },
+            { type: 'data-om-observation-end', data: { cycleId: 'marker-cycle' } },
+            { type: 'text', text: 'fresh-tail' },
+          ],
+        },
+        createdAt: t1,
+      } as any,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'tool-result-after-marker',
+        threadId,
+        resourceId,
+        role: 'tool',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'tc-marker-1',
+                result: 'tool output',
+              },
+            },
+          ],
+        },
+        createdAt: new Date(t1.getTime() + 1),
+      } as any,
+      'memory',
+    );
+
+    filterObservedMessages({
+      messageList,
+      record: { observedMessageIds: ['tool-call-before-marker', 'marker-msg'] } as any,
+      useMarkerBoundaryPruning: true,
+    });
+
+    const remaining = messageList.get.all.db();
+    const remainingIds = remaining.map((m: any) => m.id);
+    const marker = remaining.find((m: any) => m.id === 'marker-msg');
+
+    expect(remainingIds).toContain('tool-call-before-marker');
+    expect(remainingIds).toContain('marker-msg');
+    expect(remainingIds).toContain('tool-result-after-marker');
+    expect(marker?.content?.parts?.map((part: any) => part.type)).toEqual(['text']);
+    expect(marker?.content?.parts?.[0]?.text).toBe('fresh-tail');
+  });
+
+  it('removes the tool-call message during marker pruning when its result was already observed before the marker', async () => {
+    const { MessageList } = await import('@mastra/core/agent');
+
+    const threadId = 'tool-pair-marker-observed-thread';
+    const resourceId = 'tool-pair-marker-observed-resource';
+    const messageList = new MessageList({ threadId, resourceId });
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+    const t1 = new Date('2025-01-01T10:00:01.000Z');
+    const t2 = new Date('2025-01-01T10:00:02.000Z');
+
+    messageList.add(
+      {
+        id: 'tool-call-before-observed-result',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'call',
+                toolCallId: 'tc-marker-2',
+                toolName: 'test-tool',
+                args: {},
+              },
+            },
+          ],
+        },
+        createdAt: t0,
+      } as any,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'tool-result-before-marker',
+        threadId,
+        resourceId,
+        role: 'tool',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'tc-marker-2',
+                result: 'tool output',
+              },
+            },
+          ],
+        },
+        createdAt: t1,
+      } as any,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'marker-msg-observed-result',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            { type: 'text', text: 'observed-prefix' },
+            { type: 'data-om-observation-end', data: { cycleId: 'marker-cycle-2' } },
+            { type: 'text', text: 'fresh-tail' },
+          ],
+        },
+        createdAt: t2,
+      } as any,
+      'memory',
+    );
+
+    filterObservedMessages({
+      messageList,
+      record: {
+        observedMessageIds: [
+          'tool-call-before-observed-result',
+          'tool-result-before-marker',
+          'marker-msg-observed-result',
+        ],
+      } as any,
+      useMarkerBoundaryPruning: true,
+    });
+
+    const remaining = messageList.get.all.db();
+    const remainingIds = remaining.map((m: any) => m.id);
+
+    expect(remainingIds).not.toContain('tool-call-before-observed-result');
+    expect(remainingIds).not.toContain('tool-result-before-marker');
+    expect(remainingIds).toEqual(['marker-msg-observed-result']);
+  });
+
+  it('keeps the tool-call message when its result is in an unobserved message', async () => {
+    const { MessageList } = await import('@mastra/core/agent');
+
+    const threadId = 'tool-pair-test-thread';
+    const resourceId = 'tool-pair-test-resource';
+    const messageList = new MessageList({ threadId, resourceId });
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+    const t1 = new Date('2025-01-01T10:00:01.000Z');
+
+    // Add observed message with tool call
+    messageList.add(
+      {
+        id: 'tool-call-msg',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'call',
+                toolCallId: 'tc-1',
+                toolName: 'test-tool',
+                args: {},
+              },
+            },
+          ],
+        },
+        createdAt: t0,
+      } as any,
+      'memory',
+    );
+
+    // Add unobserved message with tool result
+    messageList.add(
+      {
+        id: 'tool-result-msg',
+        threadId,
+        resourceId,
+        role: 'user',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'tc-1',
+                result: 'tool output',
+              },
+            },
+          ],
+        },
+        createdAt: t1,
+      } as any,
+      'memory',
+    );
+
+    filterObservedMessages({
+      messageList,
+      record: { observedMessageIds: ['tool-call-msg'] } as any,
+    });
+
+    const remaining = messageList.get.all.db();
+    const remainingIds = remaining.map((m: any) => m.id);
+
+    expect(remainingIds).toContain('tool-call-msg');
+  });
+
+  it('keeps the tool-call message when fallback cursor pruning would remove it', async () => {
+    const { MessageList } = await import('@mastra/core/agent');
+
+    const threadId = 'tool-pair-fallback-cursor-thread';
+    const resourceId = 'tool-pair-fallback-cursor-resource';
+    const messageList = new MessageList({ threadId, resourceId });
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+    const t1 = new Date('2025-01-01T10:00:01.000Z');
+    const t2 = new Date('2025-01-01T10:00:02.000Z');
+
+    messageList.add(
+      {
+        id: 'tool-call-before-cursor',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'call',
+                toolCallId: 'tc-cursor-1',
+                toolName: 'test-tool',
+                args: {},
+              },
+            },
+          ],
+        },
+        createdAt: t0,
+      } as any,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'cursor-msg',
+        threadId,
+        resourceId,
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'cursor' }] },
+        createdAt: t1,
+      } as any,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'tool-result-after-cursor',
+        threadId,
+        resourceId,
+        role: 'tool',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'tc-cursor-1',
+                result: 'tool output',
+              },
+            },
+          ],
+        },
+        createdAt: t2,
+      } as any,
+      'memory',
+    );
+
+    filterObservedMessages({
+      messageList,
+      record: { observedMessageIds: ['cursor-msg'] } as any,
+      useMarkerBoundaryPruning: false,
+    });
+
+    const remainingIds = messageList.get.all.db().map((m: any) => m.id);
+
+    expect(remainingIds).toContain('tool-call-before-cursor');
+    expect(remainingIds).toContain('tool-result-after-cursor');
+    expect(remainingIds).not.toContain('cursor-msg');
+  });
+
+  it('keeps the tool-call message when fallback time pruning would remove it', async () => {
+    const { MessageList } = await import('@mastra/core/agent');
+
+    const threadId = 'tool-pair-fallback-time-thread';
+    const resourceId = 'tool-pair-fallback-time-resource';
+    const messageList = new MessageList({ threadId, resourceId });
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+    const t1 = new Date('2025-01-01T10:00:01.000Z');
+
+    messageList.add(
+      {
+        id: 'tool-call-before-last-observed',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'call',
+                toolCallId: 'tc-time-1',
+                toolName: 'test-tool',
+                args: {},
+              },
+            },
+          ],
+        },
+        createdAt: t0,
+      } as any,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'tool-result-after-last-observed',
+        threadId,
+        resourceId,
+        role: 'tool',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'tc-time-1',
+                result: 'tool output',
+              },
+            },
+          ],
+        },
+        createdAt: t1,
+      } as any,
+      'memory',
+    );
+
+    filterObservedMessages({
+      messageList,
+      record: {
+        observedMessageIds: [],
+        lastObservedAt: t0,
+      } as any,
+      useMarkerBoundaryPruning: false,
+    });
+
+    const remainingIds = messageList.get.all.db().map((m: any) => m.id);
+
+    expect(remainingIds).toContain('tool-call-before-last-observed');
+    expect(remainingIds).toContain('tool-result-after-last-observed');
+  });
+
+  it('removes the tool-call message when no result is pending', async () => {
+    const { MessageList } = await import('@mastra/core/agent');
+
+    const threadId = 'tool-pair-no-result-thread';
+    const resourceId = 'tool-pair-no-result-resource';
+    const messageList = new MessageList({ threadId, resourceId });
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+
+    // Add observed message with tool call but no result
+    messageList.add(
+      {
+        id: 'tool-call-msg-alone',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'call',
+                toolCallId: 'tc-2',
+                toolName: 'test-tool',
+                args: {},
+              },
+            },
+          ],
+        },
+        createdAt: t0,
+      } as any,
+      'memory',
+    );
+
+    filterObservedMessages({
+      messageList,
+      record: { observedMessageIds: ['tool-call-msg-alone'] } as any,
+    });
+
+    const remaining = messageList.get.all.db();
+    const remainingIds = remaining.map((m: any) => m.id);
+
+    expect(remainingIds).not.toContain('tool-call-msg-alone');
   });
 });

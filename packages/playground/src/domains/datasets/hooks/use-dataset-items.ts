@@ -1,4 +1,4 @@
-import { useInView } from '@mastra/playground-ui';
+import { useInView } from '@mastra/playground-ui/hooks/use-in-view';
 import { useMastraClient } from '@mastra/react';
 import { useQuery, useInfiniteQuery } from '@tanstack/react-query';
 import { useEffect } from 'react';

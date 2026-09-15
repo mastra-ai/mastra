@@ -1,5 +1,6 @@
-import { cn, Textarea } from '@mastra/playground-ui';
-import type { TextareaProps } from '@mastra/playground-ui';
+import { Textarea } from '@mastra/playground-ui/components/Textarea';
+import type { TextareaProps } from '@mastra/playground-ui/components/Textarea';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { forwardRef } from 'react';
 
 export type ChatTextareaProps = Omit<TextareaProps, 'size' | 'variant' | 'rows'>;

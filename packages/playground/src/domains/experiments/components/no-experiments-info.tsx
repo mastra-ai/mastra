@@ -1,7 +1,8 @@
-import { Button, EmptyState } from '@mastra/playground-ui';
-import { CircleSlashIcon, ExternalLinkIcon } from 'lucide-react';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { CircleSlashIcon, ExternalLinkIcon, Play } from 'lucide-react';
 
-export const NoExperimentsInfo = () => (
+export const NoExperimentsInfo = ({ onRunExperiment }: { onRunExperiment?: () => void }) => (
   <div className="flex h-full items-center justify-center">
     <EmptyState
       iconSlot={<CircleSlashIcon />}
@@ -14,14 +15,20 @@ export const NoExperimentsInfo = () => (
       }
       actionSlot={
         <div className="flex flex-col items-center gap-2">
+          {onRunExperiment && (
+            <Button variant="primary" onClick={onRunExperiment} icon={<Play />}>
+              Run Experiment
+            </Button>
+          )}
           <Button
             variant="ghost"
             as="a"
-            href="https://mastra.ai/en/docs/evals/datasets/running-experiments"
+            href="https://mastra.ai/docs/evals/experiments"
             target="_blank"
             rel="noopener noreferrer"
+            icon={<ExternalLinkIcon />}
           >
-            Experiments Documentation <ExternalLinkIcon />
+            Experiments Documentation
           </Button>
         </div>
       }

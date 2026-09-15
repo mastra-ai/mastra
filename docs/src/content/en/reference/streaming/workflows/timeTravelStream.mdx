@@ -1,13 +1,13 @@
 ---
 title: "Reference: Run.timeTravelStream() | Streaming"
-description: Documentation for the `Run.timeTravelStream()` method for streaming workflow time travel execution.
+description: "The .timeTravelStream() method re-executes a workflow starting from any specific step with streaming events."
 packages:
   - "@mastra/core"
 ---
 
 # Run.timeTravelStream()
 
-The `.timeTravelStream()` method re-executes a workflow starting from any specific step with streaming events. This allows you to receive real-time updates during time travel execution while maintaining full visibility into each step's progress.
+The `.timeTravelStream()` method re-executes a workflow starting from any specific step with streaming events. You can receive real-time updates during time travel execution while maintaining full visibility into each step's progress.
 
 ## Usage example
 
@@ -62,7 +62,7 @@ All parameters are the same as [`Run.timeTravel()`](../../workflows/run-methods/
 
 ## Stream events
 
-The stream emits various workflow events during execution:
+The stream emits workflow events during execution:
 
 - `workflow-step-start`: Emitted when a step begins execution
 - `workflow-step-finish`: Emitted when a step completes successfully
@@ -162,6 +162,6 @@ const result = await output.result
 
 - [Run.timeTravel()](../../workflows/run-methods/timeTravel)
 - [Time Travel](/docs/workflows/time-travel)
-- [Workflow Streaming](/docs/streaming/workflow-streaming)
+- [Workflow Streaming](/docs/workflows/overview#inspecting-workflow-stream-payloads)
 - [Run.stream()](./stream)
 - [Run.resumeStream()](./resumeStream)

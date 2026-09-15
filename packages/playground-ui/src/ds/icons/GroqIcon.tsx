@@ -2,7 +2,7 @@ import React from 'react';
 
 export const GroqIcon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg
-    className="h-3 w-3"
+    className="size-3"
     data-testid="geist-icon"
     height="78"
     strokeLinejoin="round"

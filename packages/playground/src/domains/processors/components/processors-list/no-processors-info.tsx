@@ -1,4 +1,5 @@
-import { Button, EmptyState } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { CircleSlashIcon, ExternalLinkIcon } from 'lucide-react';
 
 export const NoProcessorsInfo = () => (
@@ -14,8 +15,9 @@ export const NoProcessorsInfo = () => (
           href="https://mastra.ai/docs/agents/processors"
           target="_blank"
           rel="noopener noreferrer"
+          icon={<ExternalLinkIcon />}
         >
-          Processors Documentation <ExternalLinkIcon />
+          Processors Documentation
         </Button>
       }
     />

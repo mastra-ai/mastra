@@ -13,6 +13,14 @@
     "lint": {
       "dependsOn": []
     },
+    "lint:fix": {
+      "dependsOn": [],
+      "cache": false
+    },
+    "//#lint:format": {
+      "dependsOn": [],
+      "cache": false
+    },
     "typecheck": {
       "dependsOn": ["^build"]
     },
@@ -24,8 +32,18 @@
       "cache": false,
       "persistent": true
     },
+    // The watch rebuilds dist from scratch, so it cannot run while `build` writes the same directory.
+    "@mastra/playground-ui#dev": {
+      "dependsOn": ["^build", "@mastra/playground-ui#build"],
+      "cache": false,
+      "persistent": true
+    },
     "validate:package": {
       "dependsOn": []
+    },
+    "//#format:oxfmt": {
+      "dependsOn": [],
+      "cache": false
     }
   }
 }

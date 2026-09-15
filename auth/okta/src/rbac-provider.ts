@@ -5,8 +5,8 @@
  * Can be used with any auth provider (Auth0, Clerk, etc.) or with MastraAuthOkta.
  */
 
-import type { IRBACProvider, RoleMapping } from '@mastra/core/auth/ee';
-import { resolvePermissionsFromMapping, matchesPermission } from '@mastra/core/auth/ee';
+import type { IRBACProvider, RoleMapping } from '@internal/auth/ee';
+import { resolvePermissionsFromMapping, matchesPermission } from '@internal/auth/ee';
 import pkg from '@okta/okta-sdk-nodejs';
 const { Client } = pkg;
 import { LRUCache } from 'lru-cache';

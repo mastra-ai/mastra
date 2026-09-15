@@ -1,5 +1,5 @@
-import { promises as fs } from 'fs';
-import path from 'path';
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
 
 const IGNORE_LIST = [
   '@internal',
@@ -87,7 +87,7 @@ async function main() {
 
     // Check files array
     const filesArr = pkg.files || [];
-    const missing = ['dist', 'CHANGELOG.md'].filter(f => !filesArr.includes(f));
+    const missing = ['dist'].filter(f => !filesArr.includes(f));
     if (missing.length > 0) {
       console.log(`❌ ${file}: missing ${missing.join(', ')}`);
       hasError = true;

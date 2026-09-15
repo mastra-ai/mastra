@@ -30,8 +30,8 @@ export function DataKeysAndValuesValueWithCopyBtn({
             onClick={handleCopy}
             type="button"
             className={cn(
-              'flex gap-2 items-center text-left whitespace-nowrap',
-              '[&>svg]:w-3 [&>svg]:h-3 [&>svg]:shrink-0 [&>svg]:opacity-70 [&:hover>svg]:opacity-100',
+              'flex items-center gap-2 text-left whitespace-nowrap',
+              '[&:hover>svg]:opacity-100 [&>svg]:size-3 [&>svg]:shrink-0 [&>svg]:opacity-70',
               { '[&>svg]:w-4 [&>svg]:h-4 [&>svg]:text-accent1': isCopied },
             )}
             aria-label={isCopied ? 'Copied!' : copyTooltip}

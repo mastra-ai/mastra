@@ -52,6 +52,18 @@ export function detectRuntime(): RuntimePlatform {
   return 'node';
 }
 
+/**
+ * Whether the deployer should skip installing dependencies (and lockfile
+ * generation) in the build output directory. Enabled by setting
+ * MASTRA_BUILD_SKIP_INSTALL to "true" or "1". Useful for hermetic build
+ * systems (e.g. Bazel) that supply node_modules externally and run in a
+ * network-less sandbox where the output install would be redundant and fatal.
+ */
+export function shouldSkipInstall(): boolean {
+  const value = process.env.MASTRA_BUILD_SKIP_INSTALL;
+  return value === 'true' || value === '1';
+}
+
 export function upsertMastraDir({ dir = process.cwd() }: { dir?: string }) {
   const dirPath = join(dir, '.mastra');
 
@@ -273,7 +285,12 @@ export interface StudioInjectionConfig {
   requestContextPresets: string;
   experimentalUI: string;
   agentSignals: string;
+  signalsUI: string;
+  organizationId: string;
+  platformProjectId: string;
+  platformObservabilityEndpoint: string;
   autoDetectUrl?: string;
+  devServerInstanceId?: string;
 }
 
 /**
@@ -286,24 +303,55 @@ export interface StudioInjectionConfig {
  * source HTML) with the provided expression verbatim.
  */
 export function injectStudioHtmlConfig(html: string, config: StudioInjectionConfig): string {
-  html = html.replace(`'%%MASTRA_SERVER_HOST%%'`, config.host);
-  html = html.replace(`'%%MASTRA_SERVER_PORT%%'`, config.port);
-  html = html.replace(`'%%MASTRA_SERVER_PROTOCOL%%'`, config.protocol);
-  html = html.replace(`'%%MASTRA_API_PREFIX%%'`, config.apiPrefix);
-  html = html.replace(`'%%MASTRA_HIDE_CLOUD_CTA%%'`, config.hideCloudCta);
-  html = html.replace(`'%%MASTRA_CLOUD_API_ENDPOINT%%'`, config.cloudApiEndpoint);
-  html = html.replace(`'%%MASTRA_EXPERIMENTAL_FEATURES%%'`, config.experimentalFeatures);
-  html = html.replace(`'%%MASTRA_TEMPLATES%%'`, config.templates);
-  html = html.replace(`'%%MASTRA_TELEMETRY_DISABLED%%'`, config.telemetryDisabled);
-  html = html.replace(`'%%MASTRA_REQUEST_CONTEXT_PRESETS%%'`, config.requestContextPresets);
-  html = html.replace(`'%%MASTRA_EXPERIMENTAL_UI%%'`, config.experimentalUI);
-  html = html.replace(`'%%MASTRA_AGENT_SIGNALS%%'`, config.agentSignals);
+  // `String.prototype.replace`/`replaceAll` treat `$` sequences ($$, $&, $`,
+  // $', $n) in the replacement string as special patterns. Config values are
+  // dynamic (e.g. request context presets), so use a replacement function to
+  // insert them verbatim.
+  const replace = (token: string, value: string) => {
+    html = html.replace(token, () => value);
+  };
+
+  replace(`'%%MASTRA_DEV_SERVER_INSTANCE_ID%%'`, config.devServerInstanceId ?? "''");
+  replace(`'%%MASTRA_SERVER_HOST%%'`, config.host);
+  replace(`'%%MASTRA_SERVER_PORT%%'`, config.port);
+  replace(`'%%MASTRA_SERVER_PROTOCOL%%'`, config.protocol);
+  replace(`'%%MASTRA_API_PREFIX%%'`, config.apiPrefix);
+  replace(`'%%MASTRA_HIDE_CLOUD_CTA%%'`, config.hideCloudCta);
+  replace(`'%%MASTRA_CLOUD_API_ENDPOINT%%'`, config.cloudApiEndpoint);
+  replace(`'%%MASTRA_EXPERIMENTAL_FEATURES%%'`, config.experimentalFeatures);
+  replace(`'%%MASTRA_TEMPLATES%%'`, config.templates);
+  replace(`'%%MASTRA_TELEMETRY_DISABLED%%'`, config.telemetryDisabled);
+  replace(`'%%MASTRA_REQUEST_CONTEXT_PRESETS%%'`, config.requestContextPresets);
+  replace(`'%%MASTRA_EXPERIMENTAL_UI%%'`, config.experimentalUI);
+  replace(`'%%MASTRA_AGENT_SIGNALS%%'`, config.agentSignals);
+  replace(`'%%MASTRA_SIGNALS_UI%%'`, config.signalsUI);
+  replace(`'%%MASTRA_ORGANIZATION_ID%%'`, config.organizationId);
+  replace(`'%%MASTRA_PLATFORM_PROJECT_ID%%'`, config.platformProjectId);
+  replace(`'%%MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT%%'`, config.platformObservabilityEndpoint);
   if (config.autoDetectUrl) {
-    html = html.replace(`'%%MASTRA_AUTO_DETECT_URL%%'`, config.autoDetectUrl);
+    replace(`'%%MASTRA_AUTO_DETECT_URL%%'`, config.autoDetectUrl);
   }
-  html = html.replaceAll('%%MASTRA_STUDIO_BASE_PATH%%', config.basePath);
+  html = html.replaceAll('%%MASTRA_STUDIO_BASE_PATH%%', () => config.basePath);
 
   return html;
+}
+
+/**
+ * Escape a dynamic value for embedding inside a single-quoted JavaScript
+ * string literal in the Studio `index.html` (e.g. `window.X = '<value>'`).
+ * Without it, an env-derived value containing `'` or `</script>` breaks out
+ * of the literal and corrupts (or injects into) the served page.
+ */
+export function escapeStudioHtmlValue(value: string): string {
+  return value
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "\\'")
+    .replace(/\n/g, '\\n')
+    .replace(/\r/g, '\\r')
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
 }
 
 /**

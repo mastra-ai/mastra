@@ -398,6 +398,20 @@ describe('ModalProcessManager', () => {
     );
   });
 
+  it('setEnv after construction reaches subsequent spawns', async () => {
+    const proc = makeProcess(0);
+    mockSandbox.exec = vi.fn().mockResolvedValue(proc);
+
+    const sandbox = await startedSandbox();
+    sandbox.setEnv(env => ({ ...env, GH_TOKEN: 'tok_1' }));
+    await sandbox.processes.spawn('true');
+
+    expect(mockSandbox.exec).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ env: { GH_TOKEN: 'tok_1' } }),
+    );
+  });
+
   it('spawn() filters undefined values from env', async () => {
     const proc = makeProcess(0);
     mockSandbox.exec = vi.fn().mockResolvedValue(proc);
@@ -417,6 +431,47 @@ describe('ModalProcessManager', () => {
     await sandbox.processes.spawn('pwd', { cwd: '/app' });
 
     expect(mockSandbox.exec).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ workdir: '/app' }));
+  });
+
+  it('spawn() defaults workdir to the configured workingDirectory', async () => {
+    const proc = makeProcess(0);
+    mockSandbox.exec = vi.fn().mockResolvedValue(proc);
+
+    const sandbox = await startedSandbox({ workingDirectory: '/srv/app' });
+    await sandbox.processes.spawn('pwd');
+
+    expect(mockSandbox.exec).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ workdir: '/srv/app' }));
+    expect(sandbox.workingDirectory).toBe('/srv/app');
+  });
+
+  it('per-spawn cwd wins over the configured workingDirectory', async () => {
+    const proc = makeProcess(0);
+    mockSandbox.exec = vi.fn().mockResolvedValue(proc);
+
+    const sandbox = await startedSandbox({ workingDirectory: '/srv/app' });
+    await sandbox.processes.spawn('pwd', { cwd: '/app' });
+
+    expect(mockSandbox.exec).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ workdir: '/app' }));
+  });
+
+  it('workingDirectory wins over the deprecated workdir alias; alias still applies alone', async () => {
+    const both = new ModalSandbox({ workingDirectory: '/srv/app', workdir: '/legacy' });
+    expect(both.workingDirectory).toBe('/srv/app');
+
+    const aliasOnly = new ModalSandbox({ workdir: '/legacy' });
+    expect(aliasOnly.workingDirectory).toBe('/legacy');
+  });
+
+  it('spawn() omits workdir when neither cwd nor workingDirectory is set', async () => {
+    const proc = makeProcess(0);
+    mockSandbox.exec = vi.fn().mockResolvedValue(proc);
+
+    const sandbox = await startedSandbox();
+    await sandbox.processes.spawn('pwd');
+
+    const [, execParams] = mockSandbox.exec.mock.calls[0]!;
+    expect(execParams.workdir).toBeUndefined();
+    expect(sandbox.workingDirectory).toBeUndefined();
   });
 
   it('spawn() passes per-spawn timeout as timeoutMs', async () => {
@@ -556,5 +611,49 @@ describe('ModalSandbox.retryOnDead()', () => {
 
     await expect(sandbox.processes.spawn('cmd')).rejects.toThrow('permission denied');
     expect(callCount).toBe(1);
+  });
+});
+
+describe('ModalSandbox.clone', () => {
+  it('constructs an unstarted sibling without any I/O', () => {
+    const template = new ModalSandbox({ tokenId: 'tid', tokenSecret: 'tsec', appName: 'mastra' });
+
+    const child = template.clone({ id: 'mc-project-1' });
+
+    expect(child).toBeInstanceOf(ModalSandbox);
+    expect(child).not.toBe(template);
+    expect(child.id).toBe('mc-project-1');
+    expect(child.status).toBe('pending');
+    expect(mockSandboxes.create).not.toHaveBeenCalled();
+  });
+
+  it('inherits template config and applies env override', () => {
+    const template = new ModalSandbox({ tokenId: 'tid', tokenSecret: 'tsec', appName: 'mastra', env: { BASE: '1' } });
+
+    const child = template.clone({ env: { GITHUB_TOKEN: 'ghs_abc' } });
+
+    expect(child['_constructorOptions']).toMatchObject({
+      tokenId: 'tid',
+      tokenSecret: 'tsec',
+      appName: 'mastra',
+      env: { GITHUB_TOKEN: 'ghs_abc' },
+    });
+  });
+
+  it('maps idleTimeoutMinutes to timeoutMs', () => {
+    const template = new ModalSandbox({ tokenId: 'tid', tokenSecret: 'tsec', timeoutMs: 120_000 });
+
+    const child = template.clone({ idleTimeoutMinutes: 15 });
+
+    expect(child['_constructorOptions']).toMatchObject({ timeoutMs: 900_000 });
+  });
+
+  it('inherits template defaults when no overrides are passed', () => {
+    const template = new ModalSandbox({ tokenId: 'tid', tokenSecret: 'tsec', timeoutMs: 120_000, env: { BASE: '1' } });
+
+    const child = template.clone();
+
+    expect(child.id).not.toBe(template.id);
+    expect(child['_constructorOptions']).toMatchObject({ tokenId: 'tid', timeoutMs: 120_000, env: { BASE: '1' } });
   });
 });

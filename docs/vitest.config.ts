@@ -4,6 +4,6 @@ export default defineConfig({
   test: {
     name: 'unit:docs',
     environment: 'node',
-    include: ['src/**/*.test.ts'],
+    include: ['src/**/*.test.ts', 'scripts/**/*.test.ts'],
   },
 })

@@ -1,5 +1,6 @@
-import { Button, Input } from '@mastra/playground-ui';
-import { Lock } from 'lucide-react';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Input } from '@mastra/playground-ui/components/Input';
+import { Lock, LogIn } from 'lucide-react';
 import { useState } from 'react';
 import { useSSOLogin } from '../hooks/use-auth-actions';
 import { useAuthCapabilities } from '../hooks/use-auth-capabilities';
@@ -7,6 +8,7 @@ import { useCredentialsLogin } from '../hooks/use-credentials-login';
 import { useCredentialsSignUp } from '../hooks/use-credentials-signup';
 import type { SSOConfig } from '../types';
 import { LoginLayout } from './login-layout';
+import { withStudioBasePath } from '@/lib/studio-base-path';
 
 export type LoginPageProps = {
   /** URL to redirect to after successful login */
@@ -54,7 +56,7 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
 
   if (isLoadingCapabilities) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-surface1">
+      <div className="bg-surface1 flex min-h-screen items-center justify-center">
         <div className="text-neutral3">Loading...</div>
       </div>
     );
@@ -62,7 +64,7 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
 
   if (!capabilities?.enabled || !capabilities?.login) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-surface1">
+      <div className="bg-surface1 flex min-h-screen items-center justify-center">
         <div className="text-neutral3">Authentication is not configured</div>
       </div>
     );
@@ -84,7 +86,7 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
     } else if (redirectUri) {
       window.location.href = redirectUri;
     } else {
-      window.location.href = '/';
+      window.location.href = withStudioBasePath('/');
     }
   };
 
@@ -114,14 +116,14 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
   };
 
   const description = login.description ? (
-    <div className="flex items-start gap-2.5 rounded-md border border-border1 bg-surface1 p-3">
-      <Lock className="mt-0.5 h-4 w-4 shrink-0 text-neutral4" />
-      <p className="text-sm text-neutral3">{login.description}</p>
+    <div className="border-border1 bg-surface1 flex items-start gap-2.5 rounded-md border p-3">
+      <Lock className="text-neutral4 mt-0.5 h-4 w-4 shrink-0" />
+      <p className="text-neutral3 text-ui-md">{login.description}</p>
     </div>
   ) : null;
 
   const errorBanner = errorMessage ? (
-    <div className="rounded-md bg-red-500/10 p-3 text-sm text-red-400">{errorMessage}</div>
+    <div className="text-ui-md rounded-md bg-red-500/10 p-3 text-red-400">{errorMessage}</div>
   ) : null;
 
   return (
@@ -134,7 +136,7 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
         <form onSubmit={handleCredentialsSubmit} className="space-y-4">
           {!isSignIn && (
             <div className="space-y-2">
-              <label htmlFor="name" className="block text-sm text-neutral4">
+              <label htmlFor="name" className="text-neutral4 text-ui-md block">
                 Name
               </label>
               <Input
@@ -150,7 +152,7 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
           )}
 
           <div className="space-y-2">
-            <label htmlFor="email" className="block text-sm text-neutral4">
+            <label htmlFor="email" className="text-neutral4 text-ui-md block">
               Email
             </label>
             <Input
@@ -166,7 +168,7 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
           </div>
 
           <div className="space-y-2">
-            <label htmlFor="password" className="block text-sm text-neutral4">
+            <label htmlFor="password" className="text-neutral4 text-ui-md block">
               Password
             </label>
             <Input
@@ -181,14 +183,14 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
             />
           </div>
 
-          {error && <div className="rounded-md bg-red-500/10 p-3 text-sm text-red-400">{error.message}</div>}
+          {error && <div className="text-ui-md rounded-md bg-red-500/10 p-3 text-red-400">{error.message}</div>}
 
-          <Button type="submit" disabled={isPending} className="w-full" size="lg">
+          <Button icon={<LogIn />} type="submit" disabled={isPending} className="w-full" size="lg">
             {isPending ? (isSignIn ? 'Signing in...' : 'Creating account...') : isSignIn ? 'Sign in' : 'Create account'}
           </Button>
 
           {signUpEnabled && (
-            <div className="text-center text-sm">
+            <div className="text-ui-md text-center">
               <span className="text-neutral3">
                 {isSignIn ? "Don't have an account? " : 'Already have an account? '}
               </span>
@@ -203,10 +205,10 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
       {hasSSO && hasCredentials && (
         <div className="relative">
           <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-border1" />
+            <div className="border-border1 w-full border-t" />
           </div>
-          <div className="relative flex justify-center text-sm">
-            <span className="bg-surface1 px-2 text-neutral3">or continue with</span>
+          <div className="text-ui-md relative flex justify-center">
+            <span className="bg-surface1 text-neutral3 px-2">or continue with</span>
           </div>
         </div>
       )}

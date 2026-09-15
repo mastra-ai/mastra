@@ -13,6 +13,22 @@ import type { LSPDiagnostic, DiagnosticSeverity } from '../lsp/types';
 import type { WorkspaceSandbox } from '../sandbox';
 import type { Workspace } from '../workspace';
 
+const NUMERIC_STRING_REGEX = /^-?\d+(?:\.\d+)?$/;
+
+/**
+ * Preprocessor for numeric tool params: models sometimes send numbers as
+ * strings (e.g. `"10"` instead of `10`), and a strict `z.number()` rejects
+ * the call outright. Coerce unambiguous numeric strings; anything else
+ * passes through unchanged so schema validation still reports it.
+ */
+export function coerceNumericString(value: unknown): unknown {
+  if (typeof value !== 'string') {
+    return value;
+  }
+  const trimmed = value.trim();
+  return NUMERIC_STRING_REGEX.test(trimmed) ? Number(trimmed) : value;
+}
+
 /**
  * Extract workspace from tool execution context.
  * Throws if workspace is not available.
@@ -97,9 +113,15 @@ export async function getEditDiagnosticsText(workspace: Workspace, filePath: str
     // Use the filesystem's path resolution to get the real disk path.
     // This correctly handles contained: true (virtual paths → basePath)
     // and contained: false (absolute paths used as-is).
+    // Use posix resolve to ensure POSIX LSP paths don't get Windows drive letters appended,
+    // but fall back to win32 resolve if the root is explicitly a Windows absolute path.
+    const isWindowsRoot =
+      /^[A-Za-z]:[\\/]/.test(lspManager.root) || /^(?:\\\\|\/\/)[^\\]+[\\][^\\/]+/.test(lspManager.root);
     const absolutePath =
       workspace.filesystem?.resolveAbsolutePath?.(filePath) ??
-      path.resolve(lspManager.root, filePath.replace(/^\/+/, ''));
+      (isWindowsRoot
+        ? path.win32.resolve(lspManager.root, filePath.replace(/^\/+/, ''))
+        : path.posix.resolve(lspManager.root, filePath.replace(/^\/+/, '')));
 
     const DIAG_TIMEOUT_MS = 10_000;
     let diagTimer: ReturnType<typeof setTimeout>;

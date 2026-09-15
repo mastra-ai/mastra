@@ -86,7 +86,7 @@ class LocalProcessHandle extends ProcessHandle {
         }
         resolve({
           success: this.exitCode === 0,
-          exitCode: this.exitCode!,
+          exitCode: this.exitCode,
           stdout: this.stdout,
           stderr: this.stderr,
           executionTimeMs: Date.now() - this.startTime,
@@ -146,6 +146,19 @@ class LocalProcessHandle extends ProcessHandle {
     }
     return new Promise<void>((resolve, reject) => {
       this.subprocess.stdin!.write(data, (err: Error | null | undefined) => (err ? reject(err) : resolve()));
+    });
+  }
+
+  async closeStdin(): Promise<void> {
+    if (this.exitCode !== undefined) {
+      throw new Error(`Process ${this.pid} has already exited with code ${this.exitCode}`);
+    }
+    if (!this.subprocess.stdin) {
+      throw new Error(`Process ${this.pid} does not have stdin available`);
+    }
+    if (this.subprocess.stdin.writableEnded) return;
+    return new Promise<void>((resolve, reject) => {
+      this.subprocess.stdin!.end((err?: Error | null) => (err ? reject(err) : resolve()));
     });
   }
 }
@@ -210,7 +223,16 @@ export class LocalProcessManager extends SandboxProcessManager<LocalSandbox> {
       }
     }
     const env = this.sandbox.buildEnv(options.env);
-    const wrapped = this.sandbox.wrapCommandForIsolation(command);
+    const invocation = options.originalInvocation;
+    // Preserve the script as one argument instead of letting cmd.exe interpret its operators.
+    const directShell =
+      isWindows &&
+      this.sandbox.isolation === 'none' &&
+      invocation !== undefined &&
+      /^(sh|sh\.exe)$/i.test(path.win32.basename(invocation.command)) &&
+      invocation.args[0] === '-c' &&
+      invocation.args.length >= 2;
+    const wrapped = directShell ? invocation : this.sandbox.wrapCommandForIsolation(command);
 
     // Base options shared across all platforms.
     const baseOptions = {
@@ -238,7 +260,8 @@ export class LocalProcessManager extends SandboxProcessManager<LocalSandbox> {
       // Process tree killing uses `taskkill /T` instead of Unix process groups.
       execaOptions = {
         ...baseOptions,
-        shell: this.sandbox.isolation === 'none',
+        shell: !directShell && this.sandbox.isolation === 'none',
+        windowsHide: true,
       };
     } else {
       // On Unix, `detached: true` creates a new process group so we can kill the

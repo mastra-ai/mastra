@@ -16,6 +16,7 @@ import {
   normalizePerPage,
   safelyParseJSON,
   ensureDate,
+  hasErrorCode,
 } from '@mastra/core/storage';
 import type {
   DatasetRecord,
@@ -26,6 +27,8 @@ import type {
   UpdateDatasetInput,
   AddDatasetItemInput,
   UpdateDatasetItemInput,
+  DeleteDatasetItemInput,
+  PurgeDatasetItemInput,
   ListDatasetsInput,
   ListDatasetsOutput,
   ListDatasetItemsInput,
@@ -36,14 +39,31 @@ import type {
   BatchDeleteItemsInput,
   CreateIndexOptions,
   TargetType,
+  DatasetTenancyFilters,
 } from '@mastra/core/storage';
+import type { TxClient } from '../../client';
 import { PgDB, resolvePgConfig, generateTableSQL } from '../../db';
-import type { PgDomainConfig } from '../../db';
-import { getTableName, getSchemaName } from '../utils';
+import type { DbClient, PgDomainConfig } from '../../db';
+import { getTableName, getSchemaName, tenancyWhere } from '../utils';
 
 /** Serialize a value for a jsonb column. Returns null for null/undefined. */
 function jsonbArg(value: unknown): string | null {
   return value === undefined || value === null ? null : JSON.stringify(value);
+}
+
+function parseStoredJSON<T>(value: unknown): T {
+  if (typeof value === 'string') {
+    try {
+      return JSON.parse(value) as T;
+    } catch {
+      return value as T;
+    }
+  }
+  return value as T;
+}
+
+function parseOptionalJSON<T>(value: unknown, emptyValue: null | undefined): T | null | undefined {
+  return value === null || value === undefined ? emptyValue : parseStoredJSON<T>(value);
 }
 
 export class DatasetsPG extends DatasetsStorage {
@@ -56,8 +76,8 @@ export class DatasetsPG extends DatasetsStorage {
 
   constructor(config: PgDomainConfig) {
     super();
-    const { client, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
-    this.#db = new PgDB({ client, schemaName, skipDefaultIndexes });
+    const { client, readClient, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
+    this.#db = new PgDB({ client, readClient, schemaName, skipDefaultIndexes });
     this.#schema = schemaName || 'public';
     this.#skipDefaultIndexes = skipDefaultIndexes;
     this.#indexes = indexes?.filter(idx => (DatasetsPG.MANAGED_TABLES as readonly string[]).includes(idx.table));
@@ -94,9 +114,19 @@ export class DatasetsPG extends DatasetsStorage {
     await this.#addColumnIfNotExists(TABLE_DATASETS, 'targetType', 'TEXT');
     await this.#addColumnIfNotExists(TABLE_DATASETS, 'targetIds', 'JSONB');
     await this.#addColumnIfNotExists(TABLE_DATASETS, 'scorerIds', 'JSONB');
+    await this.#addColumnIfNotExists(TABLE_DATASETS, 'organizationId', 'TEXT');
+    await this.#addColumnIfNotExists(TABLE_DATASETS, 'projectId', 'TEXT');
+    await this.#addColumnIfNotExists(TABLE_DATASETS, 'candidateKey', 'TEXT');
+    await this.#addColumnIfNotExists(TABLE_DATASETS, 'candidateId', 'TEXT');
     await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'requestContext', 'JSONB');
     await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'source', 'JSONB');
     await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'expectedTrajectory', 'JSONB');
+    await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'organizationId', 'TEXT');
+    await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'projectId', 'TEXT');
+    await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'toolMocks', 'JSONB');
+    await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'unmockedToolPolicy', 'TEXT');
+    await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'scorerIds', 'JSONB');
+    await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'externalId', 'TEXT');
 
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
@@ -107,6 +137,9 @@ export class DatasetsPG extends DatasetsStorage {
     if (!exists) {
       const fullTableName = getTableName({ indexName: table, schemaName: getSchemaName(this.#schema) });
       await this.#db.client.none(`ALTER TABLE ${fullTableName} ADD COLUMN "${column}" ${sqlType}`);
+      // Raw DDL bypasses alterTable's snapshot maintenance — report it so later
+      // init-path checks in the same window see the column.
+      this.#db.noteColumnAdded(table, column);
     }
   }
 
@@ -117,6 +150,11 @@ export class DatasetsPG extends DatasetsStorage {
         name: 'idx_dataset_items_dataset_version',
         table: TABLE_DATASET_ITEMS,
         columns: ['datasetId', 'datasetVersion'],
+      },
+      {
+        name: 'idx_dataset_items_external_id_history',
+        table: TABLE_DATASET_ITEMS,
+        columns: ['datasetId', 'externalId', 'datasetVersion'],
       },
       {
         name: 'idx_dataset_items_dataset_validto_deleted',
@@ -133,6 +171,22 @@ export class DatasetsPG extends DatasetsStorage {
         table: TABLE_DATASET_VERSIONS,
         columns: ['datasetId', 'version'],
         unique: true,
+      },
+      // Tenancy: leading-tenant indexes for multi-tenant scans (parity with observability storage).
+      {
+        name: 'idx_datasets_org_project',
+        table: TABLE_DATASETS,
+        columns: ['organizationId', 'projectId'],
+      },
+      {
+        name: 'idx_datasets_candidate',
+        table: TABLE_DATASETS,
+        columns: ['candidateKey', 'candidateId'],
+      },
+      {
+        name: 'idx_dataset_items_org_project',
+        table: TABLE_DATASET_ITEMS,
+        columns: ['organizationId', 'projectId'],
       },
     ];
   }
@@ -174,6 +228,10 @@ export class DatasetsPG extends DatasetsStorage {
       targetType: (row.targetType as TargetType) || null,
       targetIds: row.targetIds || null,
       scorerIds: row.scorerIds || null,
+      organizationId: (row.organizationId as string | null) ?? null,
+      projectId: (row.projectId as string | null) ?? null,
+      candidateKey: (row.candidateKey as string | null) ?? null,
+      candidateId: (row.candidateId as string | null) ?? null,
       version: row.version as number,
       createdAt: ensureDate(row.createdAtZ || row.createdAt)!,
       updatedAt: ensureDate(row.updatedAtZ || row.updatedAt)!,
@@ -181,34 +239,50 @@ export class DatasetsPG extends DatasetsStorage {
   }
 
   private transformItemRow(row: Record<string, any>): DatasetItem {
+    const metadata = parseOptionalJSON<Record<string, unknown>>(row.metadata, undefined);
+    const emptyValue = metadata?.__purged === true ? null : undefined;
     return {
       id: row.id as string,
       datasetId: row.datasetId as string,
       datasetVersion: row.datasetVersion as number,
-      input: safelyParseJSON(row.input),
-      groundTruth: row.groundTruth ? safelyParseJSON(row.groundTruth) : undefined,
-      expectedTrajectory: row.expectedTrajectory ? safelyParseJSON(row.expectedTrajectory) : undefined,
-      requestContext: row.requestContext ? safelyParseJSON(row.requestContext) : undefined,
-      metadata: row.metadata ? safelyParseJSON(row.metadata) : undefined,
-      source: row.source ? safelyParseJSON(row.source) : undefined,
+      externalId: (row.externalId as string | null) ?? null,
+      organizationId: (row.organizationId as string | null) ?? null,
+      projectId: (row.projectId as string | null) ?? null,
+      input: row.input === null ? null : parseStoredJSON(row.input),
+      groundTruth: parseOptionalJSON(row.groundTruth, emptyValue),
+      expectedTrajectory: parseOptionalJSON(row.expectedTrajectory, emptyValue),
+      toolMocks: parseOptionalJSON(row.toolMocks, emptyValue),
+      unmockedToolPolicy: row.unmockedToolPolicy ?? emptyValue,
+      scorerIds: parseOptionalJSON(row.scorerIds, emptyValue),
+      requestContext: parseOptionalJSON(row.requestContext, emptyValue),
+      metadata,
+      source: parseOptionalJSON(row.source, emptyValue),
       createdAt: ensureDate(row.createdAtZ || row.createdAt)!,
       updatedAt: ensureDate(row.updatedAtZ || row.updatedAt)!,
     };
   }
 
   private transformItemRowFull(row: Record<string, any>): DatasetItemRow {
+    const metadata = parseOptionalJSON<Record<string, unknown>>(row.metadata, undefined);
+    const emptyValue = metadata?.__purged === true ? null : undefined;
     return {
       id: row.id as string,
       datasetId: row.datasetId as string,
       datasetVersion: row.datasetVersion as number,
+      externalId: (row.externalId as string | null) ?? null,
+      organizationId: (row.organizationId as string | null) ?? null,
+      projectId: (row.projectId as string | null) ?? null,
       validTo: row.validTo as number | null,
       isDeleted: Boolean(row.isDeleted),
-      input: safelyParseJSON(row.input),
-      groundTruth: row.groundTruth ? safelyParseJSON(row.groundTruth) : undefined,
-      expectedTrajectory: row.expectedTrajectory ? safelyParseJSON(row.expectedTrajectory) : undefined,
-      requestContext: row.requestContext ? safelyParseJSON(row.requestContext) : undefined,
-      metadata: row.metadata ? safelyParseJSON(row.metadata) : undefined,
-      source: row.source ? safelyParseJSON(row.source) : undefined,
+      input: row.input === null ? null : parseStoredJSON(row.input),
+      groundTruth: parseOptionalJSON(row.groundTruth, emptyValue),
+      expectedTrajectory: parseOptionalJSON(row.expectedTrajectory, emptyValue),
+      toolMocks: parseOptionalJSON(row.toolMocks, emptyValue),
+      unmockedToolPolicy: row.unmockedToolPolicy ?? emptyValue,
+      scorerIds: parseOptionalJSON(row.scorerIds, emptyValue),
+      requestContext: parseOptionalJSON(row.requestContext, emptyValue),
+      metadata,
+      source: parseOptionalJSON(row.source, emptyValue),
       createdAt: ensureDate(row.createdAtZ || row.createdAt)!,
       updatedAt: ensureDate(row.updatedAtZ || row.updatedAt)!,
     };
@@ -227,7 +301,8 @@ export class DatasetsPG extends DatasetsStorage {
 
   async createDataset(input: CreateDatasetInput): Promise<DatasetRecord> {
     try {
-      const id = crypto.randomUUID();
+      const id = input.id ?? crypto.randomUUID();
+      if (input.id !== undefined) this.validateCallerDefinedDatasetId(input.id);
       const now = new Date();
       const nowIso = now.toISOString();
 
@@ -242,8 +317,12 @@ export class DatasetsPG extends DatasetsStorage {
           groundTruthSchema: input.groundTruthSchema ?? null,
           requestContextSchema: input.requestContextSchema ?? null,
           targetType: input.targetType ?? null,
-          targetIds: input.targetIds !== undefined ? JSON.stringify(input.targetIds) : null,
-          scorerIds: input.scorerIds ? JSON.stringify(input.scorerIds) : null,
+          targetIds: input.targetIds ?? null,
+          scorerIds: input.scorerIds ?? null,
+          organizationId: input.organizationId ?? null,
+          projectId: input.projectId ?? null,
+          candidateKey: input.candidateKey ?? null,
+          candidateId: input.candidateId ?? null,
           version: 0,
           createdAt: nowIso,
           updatedAt: nowIso,
@@ -261,11 +340,20 @@ export class DatasetsPG extends DatasetsStorage {
         targetType: input.targetType ?? null,
         targetIds: input.targetIds ?? null,
         scorerIds: input.scorerIds ?? null,
+        organizationId: input.organizationId ?? null,
+        projectId: input.projectId ?? null,
+        candidateKey: input.candidateKey ?? null,
+        candidateId: input.candidateId ?? null,
         version: 0,
         createdAt: now,
         updatedAt: now,
       };
     } catch (error) {
+      if (input.id !== undefined && hasErrorCode(error, new Set(['23505']))) {
+        const existing = await this.#getDatasetById(this.#db.client, { id: input.id });
+        if (existing) return this.resolveExistingDataset(existing, { ...input, id: input.id });
+      }
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'CREATE_DATASET', 'FAILED'),
@@ -277,10 +365,34 @@ export class DatasetsPG extends DatasetsStorage {
     }
   }
 
-  async getDatasetById({ id }: { id: string }): Promise<DatasetRecord | null> {
+  async getDatasetById(args: { id: string; filters?: DatasetTenancyFilters }): Promise<DatasetRecord | null> {
+    return this.#getDatasetById(this.#db.readClient, args);
+  }
+
+  protected override getDatasetForMutation(args: {
+    id: string;
+    filters?: DatasetTenancyFilters;
+  }): Promise<DatasetRecord | null> {
+    return this.#getDatasetById(this.#db.client, args);
+  }
+
+  protected override listItemsForMutation(args: ListDatasetItemsInput): Promise<ListDatasetItemsOutput> {
+    return this.#listItems(this.#db.client, args);
+  }
+
+  /**
+   * Same lookup against an explicit client. Mutation paths pass the writer so a
+   * lagging read replica cannot yield stale or missing rows mid-update.
+   */
+  async #getDatasetById(
+    client: Pick<DbClient, 'oneOrNone'> | Pick<TxClient, 'oneOrNone'>,
+    { id, filters }: { id: string; filters?: DatasetTenancyFilters },
+  ): Promise<DatasetRecord | null> {
     try {
       const tableName = getTableName({ indexName: TABLE_DATASETS, schemaName: getSchemaName(this.#schema) });
-      const result = await this.#db.client.oneOrNone(`SELECT * FROM ${tableName} WHERE "id" = $1`, [id]);
+      const { conditions, params } = tenancyWhere(filters, 2);
+      const whereSql = ['"id" = $1', ...conditions].join(' AND ');
+      const result = await client.oneOrNone(`SELECT * FROM ${tableName} WHERE ${whereSql}`, [id, ...params]);
       return result ? this.transformDatasetRow(result) : null;
     } catch (error) {
       throw new MastraError(
@@ -296,7 +408,7 @@ export class DatasetsPG extends DatasetsStorage {
 
   protected async _doUpdateDataset(args: UpdateDatasetInput): Promise<DatasetRecord> {
     try {
-      const existing = await this.getDatasetById({ id: args.id });
+      const existing = await this.#getDatasetById(this.#db.client, { id: args.id, filters: args.filters });
       if (!existing) {
         throw new MastraError({
           id: createStorageErrorId('PG', 'UPDATE_DATASET', 'NOT_FOUND'),
@@ -352,6 +464,8 @@ export class DatasetsPG extends DatasetsStorage {
         setClauses.push(`"scorerIds" = $${paramIndex++}`);
         values.push(args.scorerIds === null ? null : JSON.stringify(args.scorerIds));
       }
+      // Tenancy (organizationId, projectId) and candidate identity (candidateKey,
+      // candidateId) are immutable after creation — they're not part of UpdateDatasetInput.
 
       values.push(args.id);
       await this.#db.client.none(
@@ -374,6 +488,10 @@ export class DatasetsPG extends DatasetsStorage {
         targetType: (args.targetType !== undefined ? args.targetType : existing.targetType) ?? null,
         targetIds: (args.targetIds !== undefined ? args.targetIds : existing.targetIds) ?? null,
         scorerIds: (args.scorerIds !== undefined ? args.scorerIds : existing.scorerIds) ?? null,
+        organizationId: existing.organizationId ?? null,
+        projectId: existing.projectId ?? null,
+        candidateKey: existing.candidateKey ?? null,
+        candidateId: existing.candidateId ?? null,
         updatedAt: new Date(now),
       };
     } catch (error) {
@@ -389,7 +507,7 @@ export class DatasetsPG extends DatasetsStorage {
     }
   }
 
-  async deleteDataset({ id }: { id: string }): Promise<void> {
+  async deleteDataset({ id, filters }: { id: string; filters?: DatasetTenancyFilters }): Promise<void> {
     try {
       const datasetsTable = getTableName({ indexName: TABLE_DATASETS, schemaName: getSchemaName(this.#schema) });
       const itemsTable = getTableName({ indexName: TABLE_DATASET_ITEMS, schemaName: getSchemaName(this.#schema) });
@@ -403,29 +521,43 @@ export class DatasetsPG extends DatasetsStorage {
         schemaName: getSchemaName(this.#schema),
       });
 
-      // Detach experiments — each wrapped in try/catch because experiment tables may not exist yet
-      try {
-        await this.#db.client.none(
-          `DELETE FROM ${experimentResultsTable} WHERE "experimentId" IN (SELECT "id" FROM ${experimentsTable} WHERE "datasetId" = $1)`,
-          [id],
-        );
-      } catch {
-        /* table may not exist */
-      }
-      try {
-        await this.#db.client.none(
-          `UPDATE ${experimentsTable} SET "datasetId" = NULL, "datasetVersion" = NULL WHERE "datasetId" = $1`,
-          [id],
-        );
-      } catch {
-        /* table may not exist */
-      }
+      // Atomic gate + cascade under a single transaction; the tenancy predicate
+      // is folded into a SELECT ... FOR UPDATE lock and the parent DELETE, so
+      // a concurrent delete/recreate under a different tenant cannot let a
+      // scoped delete hit another tenant's row. Silent no-op on mismatch.
+      const { conditions, params } = tenancyWhere(filters, 2);
+      const scopedWhere = ['"id" = $1', ...conditions].join(' AND ');
 
-      // Cascade delete — atomic transaction
       await this.#db.client.tx(async t => {
+        const locked = await t.oneOrNone(`SELECT "id" FROM ${datasetsTable} WHERE ${scopedWhere} FOR UPDATE`, [
+          id,
+          ...params,
+        ]);
+        if (!locked) return;
+
+        // Detach experiments only if their tables exist. We probe with
+        // to_regclass instead of try/catch inside the transaction, because a
+        // failed DML in Postgres puts the connection into an aborted state
+        // (SQLSTATE 25P02), which would cause every subsequent DELETE below
+        // to fail and roll back the whole transaction.
+        const experimentTablesExist = await t.oneOrNone<{ exists: boolean }>(
+          `SELECT to_regclass($1) IS NOT NULL AND to_regclass($2) IS NOT NULL AS exists`,
+          [experimentResultsTable, experimentsTable],
+        );
+        if (experimentTablesExist?.exists) {
+          await t.none(
+            `DELETE FROM ${experimentResultsTable} WHERE "experimentId" IN (SELECT "id" FROM ${experimentsTable} WHERE "datasetId" = $1)`,
+            [id],
+          );
+          await t.none(
+            `UPDATE ${experimentsTable} SET "datasetId" = NULL, "datasetVersion" = NULL WHERE "datasetId" = $1`,
+            [id],
+          );
+        }
+
         await t.none(`DELETE FROM ${versionsTable} WHERE "datasetId" = $1`, [id]);
         await t.none(`DELETE FROM ${itemsTable} WHERE "datasetId" = $1`, [id]);
-        await t.none(`DELETE FROM ${datasetsTable} WHERE "id" = $1`, [id]);
+        await t.none(`DELETE FROM ${datasetsTable} WHERE ${scopedWhere}`, [id, ...params]);
       });
     } catch (error) {
       if (error instanceof MastraError) throw error;
@@ -445,7 +577,49 @@ export class DatasetsPG extends DatasetsStorage {
       const { page, perPage: perPageInput } = args.pagination;
       const tableName = getTableName({ indexName: TABLE_DATASETS, schemaName: getSchemaName(this.#schema) });
 
-      const countResult = await this.#db.client.one(`SELECT COUNT(*) as count FROM ${tableName}`);
+      const conditions: string[] = [];
+      const queryParams: any[] = [];
+      let paramIndex = 1;
+
+      if (args.filters) {
+        const { organizationId, projectId, candidateKey, candidateId, targetType, targetIds, name } = args.filters;
+        if (organizationId !== undefined) {
+          conditions.push(`"organizationId" = $${paramIndex++}`);
+          queryParams.push(organizationId);
+        }
+        if (projectId !== undefined) {
+          conditions.push(`"projectId" = $${paramIndex++}`);
+          queryParams.push(projectId);
+        }
+        if (candidateKey !== undefined) {
+          conditions.push(`"candidateKey" = $${paramIndex++}`);
+          queryParams.push(candidateKey);
+        }
+        if (candidateId !== undefined) {
+          conditions.push(`"candidateId" = $${paramIndex++}`);
+          queryParams.push(candidateId);
+        }
+        if (targetType !== undefined) {
+          conditions.push(`"targetType" = $${paramIndex++}`);
+          queryParams.push(targetType);
+        }
+        if (targetIds !== undefined && targetIds.length > 0) {
+          // jsonb ?| text[] — true if any of the strings exists as a top-level element.
+          conditions.push(`"targetIds" ?| $${paramIndex++}::text[]`);
+          queryParams.push(targetIds);
+        }
+        if (name !== undefined && name.length > 0) {
+          conditions.push(`"name" ILIKE $${paramIndex++}`);
+          queryParams.push(`%${name}%`);
+        }
+      }
+
+      const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+      const countResult = await this.#db.readClient.one(
+        `SELECT COUNT(*) as count FROM ${tableName} ${whereClause}`,
+        queryParams,
+      );
       const total = parseInt(countResult.count, 10);
 
       if (total === 0) {
@@ -456,9 +630,9 @@ export class DatasetsPG extends DatasetsStorage {
       const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
       const limitValue = perPageInput === false ? total : perPage;
 
-      const rows = await this.#db.client.manyOrNone(
-        `SELECT * FROM ${tableName} ORDER BY "createdAt" DESC, "id" ASC LIMIT $1 OFFSET $2`,
-        [limitValue, offset],
+      const rows = await this.#db.readClient.manyOrNone(
+        `SELECT * FROM ${tableName} ${whereClause} ORDER BY "createdAt" DESC, "id" ASC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
+        [...queryParams, limitValue, offset],
       );
 
       return {
@@ -499,23 +673,33 @@ export class DatasetsPG extends DatasetsStorage {
       const nowIso = now.toISOString();
 
       let newVersion: number;
+      let parentOrganizationId: string | null = null;
+      let parentProjectId: string | null = null;
 
       await this.#db.client.tx(async t => {
         const row = await t.one(
-          `UPDATE ${datasetsTable} SET "version" = "version" + 1 WHERE "id" = $1 RETURNING "version"`,
+          `UPDATE ${datasetsTable} SET "version" = "version" + 1 WHERE "id" = $1 RETURNING "version", "organizationId", "projectId"`,
           [args.datasetId],
         );
         newVersion = row.version as number;
+        parentOrganizationId = (row.organizationId as string | null) ?? null;
+        parentProjectId = (row.projectId as string | null) ?? null;
 
         await t.none(
-          `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","validTo","isDeleted","input","groundTruth","expectedTrajectory","requestContext","metadata","source","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,NULL,false,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+          `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","externalId","organizationId","projectId","validTo","isDeleted","input","groundTruth","expectedTrajectory","toolMocks","unmockedToolPolicy","scorerIds","requestContext","metadata","source","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,$4,$5,$6,NULL,false,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
           [
             id,
             args.datasetId,
             newVersion,
+            args.externalId ?? null,
+            parentOrganizationId,
+            parentProjectId,
             JSON.stringify(args.input),
             jsonbArg(args.groundTruth),
             jsonbArg(args.expectedTrajectory),
+            jsonbArg(args.toolMocks),
+            args.unmockedToolPolicy ?? null,
+            jsonbArg(args.scorerIds),
             jsonbArg(args.requestContext),
             jsonbArg(args.metadata),
             jsonbArg(args.source),
@@ -536,9 +720,14 @@ export class DatasetsPG extends DatasetsStorage {
         id,
         datasetId: args.datasetId,
         datasetVersion: newVersion!,
+        organizationId: parentOrganizationId,
+        projectId: parentProjectId,
         input: args.input,
         groundTruth: args.groundTruth,
         expectedTrajectory: args.expectedTrajectory,
+        toolMocks: args.toolMocks,
+        unmockedToolPolicy: args.unmockedToolPolicy,
+        scorerIds: args.scorerIds,
         requestContext: args.requestContext,
         metadata: args.metadata,
         source: args.source,
@@ -560,24 +749,6 @@ export class DatasetsPG extends DatasetsStorage {
 
   protected async _doUpdateItem(args: UpdateDatasetItemInput): Promise<DatasetItem> {
     try {
-      const existing = await this.getItemById({ id: args.id });
-      if (!existing) {
-        throw new MastraError({
-          id: createStorageErrorId('PG', 'UPDATE_ITEM', 'NOT_FOUND'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-          details: { itemId: args.id },
-        });
-      }
-      if (existing.datasetId !== args.datasetId) {
-        throw new MastraError({
-          id: createStorageErrorId('PG', 'UPDATE_ITEM', 'DATASET_MISMATCH'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-          details: { itemId: args.id, expectedDatasetId: args.datasetId, actualDatasetId: existing.datasetId },
-        });
-      }
-
       const datasetsTable = getTableName({ indexName: TABLE_DATASETS, schemaName: getSchemaName(this.#schema) });
       const itemsTable = getTableName({ indexName: TABLE_DATASET_ITEMS, schemaName: getSchemaName(this.#schema) });
       const versionsTable = getTableName({
@@ -588,42 +759,77 @@ export class DatasetsPG extends DatasetsStorage {
       const versionId = crypto.randomUUID();
       const now = new Date();
       const nowIso = now.toISOString();
-
-      // Merge fields: use new value if provided (including null to clear), else keep existing
-      const mergedInput = args.input !== undefined ? args.input : existing.input;
-      const mergedGroundTruth = args.groundTruth !== undefined ? args.groundTruth : existing.groundTruth;
-      const mergedExpectedTrajectory =
-        args.expectedTrajectory !== undefined ? args.expectedTrajectory : existing.expectedTrajectory;
-      const mergedRequestContext = args.requestContext !== undefined ? args.requestContext : existing.requestContext;
-      const mergedMetadata = args.metadata !== undefined ? args.metadata : existing.metadata;
-      const mergedSource = args.source !== undefined ? args.source : existing.source;
-
-      let newVersion: number;
+      let updated!: DatasetItem;
 
       await this.#db.client.tx(async t => {
-        // 1. Bump dataset version
+        // Serialize item writers with purge before reading payload data.
+        await t.oneOrNone(`SELECT "id" FROM ${datasetsTable} WHERE "id" = $1 FOR UPDATE`, [args.datasetId]);
+        const existing = await this.#getItemById(t, { id: args.id });
+        if (!existing) {
+          throw new MastraError({
+            id: createStorageErrorId('PG', 'UPDATE_ITEM', 'NOT_FOUND'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            details: { itemId: args.id },
+          });
+        }
+        if (existing.datasetId !== args.datasetId) {
+          throw new MastraError({
+            id: createStorageErrorId('PG', 'UPDATE_ITEM', 'DATASET_MISMATCH'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            details: { itemId: args.id, expectedDatasetId: args.datasetId, actualDatasetId: existing.datasetId },
+          });
+        }
+        if (existing.metadata?.__purged === true) {
+          throw new MastraError({
+            id: 'DATASET_ITEM_PURGED',
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            details: { datasetId: args.datasetId, itemId: args.id },
+            text: `Purged dataset item cannot be updated: ${args.id}`,
+          });
+        }
+
+        const mergedInput = args.input !== undefined ? args.input : existing.input;
+        const mergedGroundTruth = args.groundTruth !== undefined ? args.groundTruth : existing.groundTruth;
+        const mergedExpectedTrajectory =
+          args.expectedTrajectory !== undefined ? args.expectedTrajectory : existing.expectedTrajectory;
+        const mergedToolMocks = args.toolMocks !== undefined ? args.toolMocks : existing.toolMocks;
+        const mergedUnmockedToolPolicy =
+          args.unmockedToolPolicy !== undefined ? args.unmockedToolPolicy : existing.unmockedToolPolicy;
+        const mergedScorerIds = args.scorerIds !== undefined ? (args.scorerIds ?? undefined) : existing.scorerIds;
+        const mergedRequestContext = args.requestContext !== undefined ? args.requestContext : existing.requestContext;
+        const mergedMetadata = args.metadata !== undefined ? args.metadata : existing.metadata;
+        const mergedSource = args.source !== undefined ? args.source : existing.source;
+
         const row = await t.one(
-          `UPDATE ${datasetsTable} SET "version" = "version" + 1 WHERE "id" = $1 RETURNING "version"`,
+          `UPDATE ${datasetsTable} SET "version" = "version" + 1 WHERE "id" = $1 RETURNING "version", "organizationId", "projectId"`,
           [args.datasetId],
         );
-        newVersion = row.version as number;
+        const newVersion = row.version as number;
+        const parentOrganizationId = (row.organizationId as string | null) ?? null;
+        const parentProjectId = (row.projectId as string | null) ?? null;
 
-        // 2. Close old row (set validTo = newVersion)
         await t.none(
           `UPDATE ${itemsTable} SET "validTo" = $1 WHERE "id" = $2 AND "validTo" IS NULL AND "isDeleted" = false`,
           [newVersion, args.id],
         );
-
-        // 3. Insert new row with merged fields, preserving original createdAt
         await t.none(
-          `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","validTo","isDeleted","input","groundTruth","expectedTrajectory","requestContext","metadata","source","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,NULL,false,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+          `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","externalId","organizationId","projectId","validTo","isDeleted","input","groundTruth","expectedTrajectory","toolMocks","unmockedToolPolicy","scorerIds","requestContext","metadata","source","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,$4,$5,$6,NULL,false,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
           [
             args.id,
             args.datasetId,
             newVersion,
+            existing.externalId ?? null,
+            parentOrganizationId,
+            parentProjectId,
             JSON.stringify(mergedInput),
             jsonbArg(mergedGroundTruth),
             jsonbArg(mergedExpectedTrajectory),
+            jsonbArg(mergedToolMocks),
+            mergedUnmockedToolPolicy ?? null,
+            jsonbArg(mergedScorerIds),
             jsonbArg(mergedRequestContext),
             jsonbArg(mergedMetadata),
             jsonbArg(mergedSource),
@@ -633,25 +839,29 @@ export class DatasetsPG extends DatasetsStorage {
             nowIso,
           ],
         );
-
-        // 4. Insert dataset_version row
         await t.none(
           `INSERT INTO ${versionsTable} ("id","datasetId","version","createdAt","createdAtZ") VALUES ($1,$2,$3,$4,$5)`,
           [versionId, args.datasetId, newVersion, nowIso, nowIso],
         );
-      });
 
-      return {
-        ...existing,
-        datasetVersion: newVersion!,
-        input: mergedInput,
-        groundTruth: mergedGroundTruth,
-        expectedTrajectory: mergedExpectedTrajectory,
-        requestContext: mergedRequestContext,
-        metadata: mergedMetadata,
-        source: mergedSource,
-        updatedAt: now,
-      };
+        updated = {
+          ...existing,
+          datasetVersion: newVersion,
+          organizationId: parentOrganizationId,
+          projectId: parentProjectId,
+          input: mergedInput,
+          groundTruth: mergedGroundTruth,
+          expectedTrajectory: mergedExpectedTrajectory,
+          toolMocks: mergedToolMocks,
+          unmockedToolPolicy: mergedUnmockedToolPolicy,
+          scorerIds: mergedScorerIds,
+          requestContext: mergedRequestContext,
+          metadata: mergedMetadata,
+          source: mergedSource,
+          updatedAt: now,
+        };
+      });
+      return updated;
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
@@ -665,53 +875,56 @@ export class DatasetsPG extends DatasetsStorage {
     }
   }
 
-  protected async _doDeleteItem({ id, datasetId }: { id: string; datasetId: string }): Promise<void> {
+  protected async _doDeleteItem({ id, datasetId }: DeleteDatasetItemInput): Promise<void> {
     try {
-      const existing = await this.getItemById({ id });
-      if (!existing) return; // no-op if not found
-      if (existing.datasetId !== datasetId) {
-        throw new MastraError({
-          id: createStorageErrorId('PG', 'DELETE_ITEM', 'DATASET_MISMATCH'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-          details: { itemId: id, expectedDatasetId: datasetId, actualDatasetId: existing.datasetId },
-        });
-      }
-
       const datasetsTable = getTableName({ indexName: TABLE_DATASETS, schemaName: getSchemaName(this.#schema) });
       const itemsTable = getTableName({ indexName: TABLE_DATASET_ITEMS, schemaName: getSchemaName(this.#schema) });
       const versionsTable = getTableName({
         indexName: TABLE_DATASET_VERSIONS,
         schemaName: getSchemaName(this.#schema),
       });
-
       const versionId = crypto.randomUUID();
       const nowIso = new Date().toISOString();
 
       await this.#db.client.tx(async t => {
-        // 1. Bump dataset version
+        await t.oneOrNone(`SELECT "id" FROM ${datasetsTable} WHERE "id" = $1 FOR UPDATE`, [datasetId]);
+        const existing = await this.#getItemById(t, { id });
+        if (!existing) return;
+        if (existing.datasetId !== datasetId) {
+          throw new MastraError({
+            id: createStorageErrorId('PG', 'DELETE_ITEM', 'DATASET_MISMATCH'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            details: { itemId: id, expectedDatasetId: datasetId, actualDatasetId: existing.datasetId },
+          });
+        }
+
         const row = await t.one(
-          `UPDATE ${datasetsTable} SET "version" = "version" + 1 WHERE "id" = $1 RETURNING "version"`,
+          `UPDATE ${datasetsTable} SET "version" = "version" + 1 WHERE "id" = $1 RETURNING "version", "organizationId", "projectId"`,
           [datasetId],
         );
         const newVersion = row.version as number;
-
-        // 2. Close old row
+        const parentOrganizationId = (row.organizationId as string | null) ?? null;
+        const parentProjectId = (row.projectId as string | null) ?? null;
         await t.none(
           `UPDATE ${itemsTable} SET "validTo" = $1 WHERE "id" = $2 AND "validTo" IS NULL AND "isDeleted" = false`,
           [newVersion, id],
         );
-
-        // 3. Insert tombstone (isDeleted=true, validTo=NULL — tombstone is the "current" terminal version)
         await t.none(
-          `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","validTo","isDeleted","input","groundTruth","expectedTrajectory","requestContext","metadata","source","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,NULL,true,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+          `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","externalId","organizationId","projectId","validTo","isDeleted","input","groundTruth","expectedTrajectory","toolMocks","unmockedToolPolicy","scorerIds","requestContext","metadata","source","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,$4,$5,$6,NULL,true,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
           [
             id,
             datasetId,
             newVersion,
+            existing.externalId ?? null,
+            parentOrganizationId,
+            parentProjectId,
             JSON.stringify(existing.input),
             jsonbArg(existing.groundTruth),
             jsonbArg(existing.expectedTrajectory),
+            jsonbArg(existing.toolMocks),
+            existing.unmockedToolPolicy ?? null,
+            jsonbArg(existing.scorerIds),
             jsonbArg(existing.requestContext),
             jsonbArg(existing.metadata),
             jsonbArg(existing.source),
@@ -721,8 +934,6 @@ export class DatasetsPG extends DatasetsStorage {
             nowIso,
           ],
         );
-
-        // 4. Insert dataset_version row
         await t.none(
           `INSERT INTO ${versionsTable} ("id","datasetId","version","createdAt","createdAtZ") VALUES ($1,$2,$3,$4,$5)`,
           [versionId, datasetId, newVersion, nowIso, nowIso],
@@ -741,84 +952,153 @@ export class DatasetsPG extends DatasetsStorage {
     }
   }
 
+  protected async _doPurgeItem({ id, datasetId }: PurgeDatasetItemInput): Promise<void> {
+    try {
+      const datasetsTable = getTableName({ indexName: TABLE_DATASETS, schemaName: getSchemaName(this.#schema) });
+      const itemsTable = getTableName({ indexName: TABLE_DATASET_ITEMS, schemaName: getSchemaName(this.#schema) });
+      const experimentsTable = getTableName({ indexName: TABLE_EXPERIMENTS, schemaName: getSchemaName(this.#schema) });
+      const experimentResultsTable = getTableName({
+        indexName: TABLE_EXPERIMENT_RESULTS,
+        schemaName: getSchemaName(this.#schema),
+      });
+      const purgedAt = new Date().toISOString();
+      const purgedMetadata = JSON.stringify({ __purged: true, purgedAt });
+
+      await this.#db.client.tx(async t => {
+        const dataset = await t.oneOrNone(`SELECT "id" FROM ${datasetsTable} WHERE "id" = $1 FOR UPDATE`, [datasetId]);
+        if (!dataset) return;
+        const item = await t.oneOrNone(
+          `SELECT "id" FROM ${itemsTable} WHERE "id" = $1 AND "datasetId" = $2 LIMIT 1 FOR UPDATE`,
+          [id, datasetId],
+        );
+        if (!item) return;
+
+        await t.none(
+          `UPDATE ${itemsTable} SET "input" = 'null'::jsonb, "groundTruth" = NULL, "expectedTrajectory" = NULL, "toolMocks" = NULL, "unmockedToolPolicy" = NULL, "scorerIds" = NULL, "requestContext" = NULL, "metadata" = $2::jsonb, "source" = NULL WHERE "id" = $1 AND "datasetId" = $3`,
+          [id, purgedMetadata, datasetId],
+        );
+
+        const experimentTablesExist = await t.one<{ exists: boolean }>(
+          `SELECT to_regclass($1) IS NOT NULL AND to_regclass($2) IS NOT NULL AS exists`,
+          [experimentResultsTable, experimentsTable],
+        );
+        if (experimentTablesExist.exists) {
+          await t.none(
+            `UPDATE ${experimentResultsTable} SET "input" = 'null'::jsonb, "output" = NULL, "groundTruth" = NULL, "error" = NULL, "toolMockReport" = NULL, "tags" = NULL, "comment" = NULL, "metadata" = $2::jsonb WHERE "itemId" = $1 AND "experimentId" IN (SELECT "id" FROM ${experimentsTable} WHERE "datasetId" = $3)`,
+            [id, purgedMetadata, datasetId],
+          );
+        }
+      });
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'PURGE_ITEM', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
   protected async _doBatchInsertItems(input: BatchInsertItemsInput): Promise<DatasetItem[]> {
     try {
-      const dataset = await this.getDatasetById({ id: input.datasetId });
-      if (!dataset) {
-        throw new MastraError({
-          id: createStorageErrorId('PG', 'BULK_ADD_ITEMS', 'DATASET_NOT_FOUND'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-          details: { datasetId: input.datasetId },
-        });
-      }
-
+      if (input.items.length === 0) return [];
       const datasetsTable = getTableName({ indexName: TABLE_DATASETS, schemaName: getSchemaName(this.#schema) });
       const itemsTable = getTableName({ indexName: TABLE_DATASET_ITEMS, schemaName: getSchemaName(this.#schema) });
       const versionsTable = getTableName({
         indexName: TABLE_DATASET_VERSIONS,
         schemaName: getSchemaName(this.#schema),
       });
-
-      const now = new Date();
-      const nowIso = now.toISOString();
-      const versionId = crypto.randomUUID();
-
-      // Pre-generate IDs
-      const itemsWithIds = input.items.map(itemInput => ({ id: crypto.randomUUID(), input: itemInput }));
-
-      let newVersion: number;
+      let results: DatasetItem[] = [];
 
       await this.#db.client.tx(async t => {
-        // 1. Single version bump
-        const row = await t.one(
-          `UPDATE ${datasetsTable} SET "version" = "version" + 1 WHERE "id" = $1 RETURNING "version"`,
+        const dataset = await t.oneOrNone(
+          `SELECT "version", "organizationId", "projectId" FROM ${datasetsTable} WHERE "id" = $1 FOR UPDATE`,
           [input.datasetId],
         );
-        newVersion = row.version as number;
+        if (!dataset)
+          throw new MastraError({
+            id: createStorageErrorId('PG', 'BULK_ADD_ITEMS', 'DATASET_NOT_FOUND'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            details: { datasetId: input.datasetId },
+          });
 
-        // 2. N item inserts
-        for (const { id, input: itemInput } of itemsWithIds) {
-          await t.none(
-            `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","validTo","isDeleted","input","groundTruth","expectedTrajectory","requestContext","metadata","source","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,NULL,false,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
-            [
+        const externalIds = [...new Set(input.items.flatMap(item => (item.externalId ? [item.externalId] : [])))];
+        const historyRows = externalIds.length
+          ? await t.manyOrNone(
+              `SELECT * FROM ${itemsTable} WHERE "datasetId" = $1 AND "externalId" = ANY($2::text[]) ORDER BY "datasetVersion"`,
+              [input.datasetId, externalIds],
+            )
+          : [];
+        const plan = this.planDatasetItemBatch(
+          input.items,
+          historyRows.map(row => this.transformItemRowFull(row)),
+          () => crypto.randomUUID(),
+        );
+        const resolved = new Map<string, DatasetItem>(
+          [...plan.existingCurrentItems].map(([id, row]) => [id, this.datasetItemFromRow(row)]),
+        );
+        if (plan.inserts.length > 0) {
+          const newVersion = Number(dataset.version) + 1;
+          const now = new Date();
+          const nowIso = now.toISOString();
+          await t.none(`UPDATE ${datasetsTable} SET "version" = $2 WHERE "id" = $1`, [input.datasetId, newVersion]);
+          for (const { id, item } of plan.inserts) {
+            await t.none(
+              `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","externalId","organizationId","projectId","validTo","isDeleted","input","groundTruth","expectedTrajectory","toolMocks","unmockedToolPolicy","scorerIds","requestContext","metadata","source","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,$4,$5,$6,NULL,false,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
+              [
+                id,
+                input.datasetId,
+                newVersion,
+                item.externalId ?? null,
+                dataset.organizationId ?? null,
+                dataset.projectId ?? null,
+                JSON.stringify(item.input),
+                jsonbArg(item.groundTruth),
+                jsonbArg(item.expectedTrajectory),
+                jsonbArg(item.toolMocks),
+                item.unmockedToolPolicy ?? null,
+                jsonbArg(item.scorerIds),
+                jsonbArg(item.requestContext),
+                jsonbArg(item.metadata),
+                jsonbArg(item.source),
+                nowIso,
+                nowIso,
+                nowIso,
+                nowIso,
+              ],
+            );
+            resolved.set(id, {
               id,
-              input.datasetId,
-              newVersion,
-              JSON.stringify(itemInput.input),
-              jsonbArg(itemInput.groundTruth),
-              jsonbArg(itemInput.expectedTrajectory),
-              jsonbArg(itemInput.requestContext),
-              jsonbArg(itemInput.metadata),
-              jsonbArg(itemInput.source),
-              nowIso,
-              nowIso,
-              nowIso,
-              nowIso,
-            ],
+              datasetId: input.datasetId,
+              datasetVersion: newVersion,
+              externalId: item.externalId ?? null,
+              organizationId: dataset.organizationId ?? null,
+              projectId: dataset.projectId ?? null,
+              input: item.input,
+              groundTruth: item.groundTruth,
+              expectedTrajectory: item.expectedTrajectory,
+              toolMocks: item.toolMocks,
+              unmockedToolPolicy: item.unmockedToolPolicy,
+              scorerIds: item.scorerIds,
+              requestContext: item.requestContext,
+              metadata: item.metadata,
+              source: item.source,
+              createdAt: now,
+              updatedAt: now,
+            });
+          }
+          await t.none(
+            `INSERT INTO ${versionsTable} ("id","datasetId","version","createdAt","createdAtZ") VALUES ($1,$2,$3,$4,$5)`,
+            [crypto.randomUUID(), input.datasetId, newVersion, nowIso, nowIso],
           );
         }
-
-        // 3. Single dataset_version row
-        await t.none(
-          `INSERT INTO ${versionsTable} ("id","datasetId","version","createdAt","createdAtZ") VALUES ($1,$2,$3,$4,$5)`,
-          [versionId, input.datasetId, newVersion, nowIso, nowIso],
-        );
+        results = plan.resolvedIds.map(id => resolved.get(id)!);
       });
-
-      return itemsWithIds.map(({ id, input: itemInput }) => ({
-        id,
-        datasetId: input.datasetId,
-        datasetVersion: newVersion!,
-        input: itemInput.input,
-        groundTruth: itemInput.groundTruth,
-        expectedTrajectory: itemInput.expectedTrajectory,
-        requestContext: itemInput.requestContext,
-        metadata: itemInput.metadata,
-        source: itemInput.source,
-        createdAt: now,
-        updatedAt: now,
-      }));
+      return results;
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
@@ -834,26 +1114,6 @@ export class DatasetsPG extends DatasetsStorage {
 
   protected async _doBatchDeleteItems(input: BatchDeleteItemsInput): Promise<void> {
     try {
-      const dataset = await this.getDatasetById({ id: input.datasetId });
-      if (!dataset) {
-        throw new MastraError({
-          id: createStorageErrorId('PG', 'BULK_DELETE_ITEMS', 'DATASET_NOT_FOUND'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-          details: { datasetId: input.datasetId },
-        });
-      }
-
-      // Fetch current items outside tx (same as LibSQL — skip items not found or mismatched)
-      const currentItems: DatasetItem[] = [];
-      for (const itemId of input.itemIds) {
-        const item = await this.getItemById({ id: itemId });
-        if (item && item.datasetId === input.datasetId) {
-          currentItems.push(item);
-        }
-      }
-      if (currentItems.length === 0) return;
-
       const datasetsTable = getTableName({ indexName: TABLE_DATASETS, schemaName: getSchemaName(this.#schema) });
       const itemsTable = getTableName({ indexName: TABLE_DATASET_ITEMS, schemaName: getSchemaName(this.#schema) });
       const versionsTable = getTableName({
@@ -865,6 +1125,28 @@ export class DatasetsPG extends DatasetsStorage {
       const versionId = crypto.randomUUID();
 
       await this.#db.client.tx(async t => {
+        await t.oneOrNone(`SELECT "id" FROM ${datasetsTable} WHERE "id" = $1 FOR UPDATE`, [input.datasetId]);
+        const dataset = await this.#getDatasetById(t, { id: input.datasetId });
+        if (!dataset) {
+          throw new MastraError({
+            id: createStorageErrorId('PG', 'BULK_DELETE_ITEMS', 'DATASET_NOT_FOUND'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            details: { datasetId: input.datasetId },
+          });
+        }
+
+        // Fetch current items after taking the dataset lock, skipping missing or mismatched items.
+        const currentRows = await t.manyOrNone(
+          `SELECT * FROM ${itemsTable} WHERE "id" = ANY($1::text[]) AND "datasetId" = $2 AND "validTo" IS NULL AND "isDeleted" = false`,
+          [input.itemIds, input.datasetId],
+        );
+        const currentItems = currentRows.map(row => this.transformItemRow(row));
+        if (currentItems.length === 0) return;
+
+        const parentOrganizationId = dataset.organizationId ?? null;
+        const parentProjectId = dataset.projectId ?? null;
+
         // 1. Single version bump
         const row = await t.one(
           `UPDATE ${datasetsTable} SET "version" = "version" + 1 WHERE "id" = $1 RETURNING "version"`,
@@ -879,14 +1161,20 @@ export class DatasetsPG extends DatasetsStorage {
             [newVersion, item.id],
           );
           await t.none(
-            `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","validTo","isDeleted","input","groundTruth","expectedTrajectory","requestContext","metadata","source","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,NULL,true,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+            `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","externalId","organizationId","projectId","validTo","isDeleted","input","groundTruth","expectedTrajectory","toolMocks","unmockedToolPolicy","scorerIds","requestContext","metadata","source","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,$4,$5,$6,NULL,true,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
             [
               item.id,
               input.datasetId,
               newVersion,
+              item.externalId ?? null,
+              parentOrganizationId,
+              parentProjectId,
               JSON.stringify(item.input),
               jsonbArg(item.groundTruth),
               jsonbArg(item.expectedTrajectory),
+              jsonbArg(item.toolMocks),
+              item.unmockedToolPolicy ?? null,
+              jsonbArg(item.scorerIds),
               jsonbArg(item.requestContext),
               jsonbArg(item.metadata),
               jsonbArg(item.source),
@@ -920,17 +1208,24 @@ export class DatasetsPG extends DatasetsStorage {
   // --- SCD-2 queries ---
 
   async getItemById(args: { id: string; datasetVersion?: number }): Promise<DatasetItem | null> {
+    return this.#getItemById(this.#db.readClient, args);
+  }
+
+  async #getItemById(
+    client: Pick<DbClient, 'oneOrNone'> | Pick<TxClient, 'oneOrNone'>,
+    args: { id: string; datasetVersion?: number },
+  ): Promise<DatasetItem | null> {
     try {
       const tableName = getTableName({ indexName: TABLE_DATASET_ITEMS, schemaName: getSchemaName(this.#schema) });
       let result;
 
       if (args.datasetVersion !== undefined) {
-        result = await this.#db.client.oneOrNone(
-          `SELECT * FROM ${tableName} WHERE "id" = $1 AND "datasetVersion" = $2 AND "isDeleted" = false`,
+        result = await client.oneOrNone(
+          `SELECT * FROM ${tableName} WHERE "id" = $1 AND "datasetVersion" <= $2 AND ("validTo" IS NULL OR "validTo" > $2) AND "isDeleted" = false ORDER BY "datasetVersion" DESC LIMIT 1`,
           [args.id, args.datasetVersion],
         );
       } else {
-        result = await this.#db.client.oneOrNone(
+        result = await client.oneOrNone(
           `SELECT * FROM ${tableName} WHERE "id" = $1 AND "validTo" IS NULL AND "isDeleted" = false`,
           [args.id],
         );
@@ -952,7 +1247,7 @@ export class DatasetsPG extends DatasetsStorage {
   async getItemsByVersion({ datasetId, version }: { datasetId: string; version: number }): Promise<DatasetItem[]> {
     try {
       const tableName = getTableName({ indexName: TABLE_DATASET_ITEMS, schemaName: getSchemaName(this.#schema) });
-      const rows = await this.#db.client.manyOrNone(
+      const rows = await this.#db.readClient.manyOrNone(
         `SELECT * FROM ${tableName} WHERE "datasetId" = $1 AND "datasetVersion" <= $2 AND ("validTo" IS NULL OR "validTo" > $3) AND "isDeleted" = false ORDER BY "createdAt" DESC, "id" ASC`,
         [datasetId, version, version],
       );
@@ -972,7 +1267,7 @@ export class DatasetsPG extends DatasetsStorage {
   async getItemHistory(itemId: string): Promise<DatasetItemRow[]> {
     try {
       const tableName = getTableName({ indexName: TABLE_DATASET_ITEMS, schemaName: getSchemaName(this.#schema) });
-      const rows = await this.#db.client.manyOrNone(
+      const rows = await this.#db.readClient.manyOrNone(
         `SELECT * FROM ${tableName} WHERE "id" = $1 ORDER BY "datasetVersion" DESC`,
         [itemId],
       );
@@ -990,6 +1285,14 @@ export class DatasetsPG extends DatasetsStorage {
   }
 
   async listItems(args: ListDatasetItemsInput): Promise<ListDatasetItemsOutput> {
+    return this.#listItems(this.#db.readClient, args);
+  }
+
+  /**
+   * Same listing against an explicit client. `updateDataset` validates existing
+   * items on the writer so a lagging replica cannot hide freshly inserted rows.
+   */
+  async #listItems(client: DbClient, args: ListDatasetItemsInput): Promise<ListDatasetItemsOutput> {
     try {
       const { page, perPage: perPageInput } = args.pagination;
       const tableName = getTableName({ indexName: TABLE_DATASET_ITEMS, schemaName: getSchemaName(this.#schema) });
@@ -1020,13 +1323,22 @@ export class DatasetsPG extends DatasetsStorage {
         paramIndex++;
       }
 
+      if (args.filters) {
+        const { organizationId, projectId } = args.filters;
+        if (organizationId !== undefined) {
+          conditions.push(`"organizationId" = $${paramIndex++}`);
+          queryParams.push(organizationId);
+        }
+        if (projectId !== undefined) {
+          conditions.push(`"projectId" = $${paramIndex++}`);
+          queryParams.push(projectId);
+        }
+      }
+
       const whereClause = `WHERE ${conditions.join(' AND ')}`;
 
       // Count
-      const countResult = await this.#db.client.one(
-        `SELECT COUNT(*) as count FROM ${tableName} ${whereClause}`,
-        queryParams,
-      );
+      const countResult = await client.one(`SELECT COUNT(*) as count FROM ${tableName} ${whereClause}`, queryParams);
       const total = parseInt(countResult.count, 10);
 
       if (total === 0) {
@@ -1037,7 +1349,7 @@ export class DatasetsPG extends DatasetsStorage {
       const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
       const limitValue = perPageInput === false ? total : perPage;
 
-      const rows = await this.#db.client.manyOrNone(
+      const rows = await client.manyOrNone(
         `SELECT * FROM ${tableName} ${whereClause} ORDER BY "createdAt" DESC, "id" ASC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
         [...queryParams, limitValue, offset],
       );
@@ -1094,7 +1406,7 @@ export class DatasetsPG extends DatasetsStorage {
       const { page, perPage: perPageInput } = input.pagination;
       const tableName = getTableName({ indexName: TABLE_DATASET_VERSIONS, schemaName: getSchemaName(this.#schema) });
 
-      const countResult = await this.#db.client.one(
+      const countResult = await this.#db.readClient.one(
         `SELECT COUNT(*) as count FROM ${tableName} WHERE "datasetId" = $1`,
         [input.datasetId],
       );
@@ -1108,7 +1420,7 @@ export class DatasetsPG extends DatasetsStorage {
       const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
       const limitValue = perPageInput === false ? total : perPage;
 
-      const rows = await this.#db.client.manyOrNone(
+      const rows = await this.#db.readClient.manyOrNone(
         `SELECT * FROM ${tableName} WHERE "datasetId" = $1 ORDER BY "version" DESC LIMIT $2 OFFSET $3`,
         [input.datasetId, limitValue, offset],
       );

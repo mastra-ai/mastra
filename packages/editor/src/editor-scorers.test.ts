@@ -5,7 +5,7 @@ import { createScorer } from '@mastra/core/evals';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '@mastra/core/evals';
 import { MastraEditor } from './index';
-import { randomUUID } from 'crypto';
+import { randomUUID } from 'node:crypto';
 import { LibSQLStore } from '@mastra/libsql';
 import { convertArrayToReadableStream, LanguageModelV2, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { MastraModelGateway, ProviderConfig } from '@mastra/core/llm';
@@ -214,6 +214,111 @@ describe('Scorer Definition CRUD (LibSQL)', () => {
     expect(fetched?.name).toBe('My Custom Judge');
     expect(fetched?.type).toBe('llm-judge');
     expect(fetched?.instructions).toBe('Rate how helpful the response is.');
+  });
+
+  describe('scorer registry ownership', () => {
+    const definition = {
+      id: 'quality',
+      name: 'Stored quality',
+      type: 'llm-judge' as const,
+      model: { provider: 'openai', name: 'gpt-4' },
+      instructions: 'Original instructions',
+    };
+
+    async function updateDefinition() {
+      const store = await storage.getStore('scorerDefinitions');
+      const versionId = randomUUID();
+      await store!.createVersion({
+        ...definition,
+        id: versionId,
+        scorerDefinitionId: definition.id,
+        versionNumber: 2,
+        instructions: 'Updated instructions',
+        changedFields: ['instructions'],
+      });
+      return editor.scorer.update({ id: definition.id, activeVersionId: versionId, status: 'published' });
+    }
+
+    it.each(['clear', 'clear all', 'update', 'delete'] as const)(
+      'preserves a same-key code scorer on %s',
+      async operation => {
+        const codeScorer = createScorer({ id: 'quality', description: 'Code quality' }).generateScore(() => 0.8);
+        mastra.addScorer(codeScorer, 'quality', { source: 'code' });
+        await editor.scorer.create(definition);
+        expect(mastra.getScorer('quality')).toBe(codeScorer);
+        expect(codeScorer.source).toBe('code');
+
+        if (operation === 'update') {
+          expect((await updateDefinition()).instructions).toBe('Updated instructions');
+        } else if (operation === 'delete') {
+          await editor.scorer.delete('quality');
+          expect(await editor.scorer.getById('quality')).toBeNull();
+        } else if (operation === 'clear all') {
+          await editor.scorer.create({ ...definition, id: 'stored-only' });
+          expect(mastra.getScorer('stored-only').source).toBe('stored');
+          editor.scorer.clearCache();
+          expect(mastra.listScorers()['stored-only']).toBeUndefined();
+        } else {
+          editor.scorer.clearCache('quality');
+        }
+
+        expect(mastra.listScorers()['quality']).toBe(codeScorer);
+        expect(mastra.getScorer('quality')).toBe(codeScorer);
+        expect(codeScorer.source).toBe('code');
+      },
+    );
+
+    it('removes, rehydrates, updates, and deletes stored-owned registrations', async () => {
+      await editor.scorer.create(definition);
+      const original = mastra.getScorer('quality');
+      expect(original.source).toBe('stored');
+
+      editor.scorer.clearCache('quality');
+      expect(mastra.listScorers()['quality']).toBeUndefined();
+      expect(await editor.scorer.getById('quality')).not.toBeNull();
+      const rehydrated = mastra.getScorer('quality');
+      expect(rehydrated).not.toBe(original);
+      expect(rehydrated.source).toBe('stored');
+
+      expect((await updateDefinition()).instructions).toBe('Updated instructions');
+      expect(mastra.getScorer('quality')).not.toBe(rehydrated);
+      expect(mastra.getScorer('quality').source).toBe('stored');
+      expect((await editor.scorer.getById('quality'))?.instructions).toBe('Updated instructions');
+
+      await editor.scorer.delete('quality');
+      expect(mastra.listScorers()['quality']).toBeUndefined();
+      expect(await editor.scorer.getById('quality')).toBeNull();
+    });
+
+    it.each(['id', 'name'] as const)('preserves a differently keyed code scorer with a matching %s', async field => {
+      const codeScorer = createScorer({
+        id: field === 'id' ? 'quality' : 'code-id',
+        name: field === 'name' ? 'quality' : 'Code quality',
+        description: 'Code quality',
+      }).generateScore(() => 0.8);
+      mastra.addScorer(codeScorer, 'custom-key', { source: 'code' });
+
+      editor.scorer.clearCache('quality');
+      expect(mastra.getScorer('custom-key')).toBe(codeScorer);
+
+      await editor.scorer.create(definition);
+      expect(mastra.getScorer('quality').source).toBe('stored');
+      editor.scorer.clearCache('quality');
+      expect(mastra.listScorers()['quality']).toBeUndefined();
+      expect(mastra.getScorer('custom-key')).toBe(codeScorer);
+
+      editor.scorer.clearCache('quality');
+      expect(mastra.getScorer('custom-key')).toBe(codeScorer);
+      expect(codeScorer.source).toBe('code');
+    });
+
+    it('ignores absent registrations and an unregistered Editor', () => {
+      expect(() => editor.scorer.clearCache('missing')).not.toThrow();
+      expect(mastra.listScorers()).toEqual({});
+      const unregistered = new MastraEditor();
+      expect(() => unregistered.scorer.clearCache('missing')).not.toThrow();
+      expect(() => unregistered.scorer.clearCache()).not.toThrow();
+    });
   });
 
   it('should create a preset scorer definition and retrieve it', async () => {

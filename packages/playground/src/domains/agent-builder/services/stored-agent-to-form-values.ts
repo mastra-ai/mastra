@@ -1,6 +1,7 @@
 import type { AgentBuilderEditFormValues, AgentBuilderModel } from '../schemas';
 import { extractWorkspaceId } from './extract-workspace-id';
 import type { StoredAgent } from '@/domains/agents/hooks/use-stored-agents';
+import { extractFormToolProviders } from '@/domains/tool-providers/mappers/tool-providers-form-mappers';
 
 function flattenAgentSkills(skills: StoredAgent['skills'] | undefined): Record<string, unknown> {
   if (!skills) return {};
@@ -60,5 +61,6 @@ export function storedAgentToFormValues(storedAgent: StoredAgent | null | undefi
     visibility: storedAgent?.visibility,
     avatarUrl,
     model: extractStaticModel(storedAgent?.model),
+    toolProviders: extractFormToolProviders(storedAgent?.toolProviders),
   };
 }

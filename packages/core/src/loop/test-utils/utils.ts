@@ -23,7 +23,7 @@ export function stripMastraCreatedAt<T>(value: T): T {
 
   if (value && typeof value === 'object') {
     const normalizedEntries = Object.entries(value).map(([key, nestedValue]) => {
-      if (key === 'createdAt') {
+      if (key === 'createdAt' || key === 'startedAt') {
         return null;
       }
 
@@ -43,14 +43,17 @@ export function stripMastraCreatedAt<T>(value: T): T {
             Object.entries(providerOptions).filter(([nestedKey]) => nestedKey !== 'mastra'),
           );
 
-          return [
-            key,
-            Object.keys(normalizedMastra).length > 0
-              ? { ...providerOptions, mastra: normalizedMastra }
-              : Object.keys(providerOptionsWithoutMastra).length > 0
-                ? providerOptionsWithoutMastra
-                : undefined,
-          ];
+          if (Object.keys(normalizedMastra).length > 0) {
+            return [key, { ...providerOptions, mastra: normalizedMastra }];
+          }
+
+          if (Object.keys(providerOptionsWithoutMastra).length > 0) {
+            return [key, providerOptionsWithoutMastra];
+          }
+
+          // Drop the providerOptions key entirely so toStrictEqual comparisons
+          // don't fail on a dangling `providerOptions: undefined` property.
+          return null;
         }
       }
 

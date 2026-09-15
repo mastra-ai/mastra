@@ -41,6 +41,28 @@ export type OmCycleParts = {
   activation?: AugmentData<DataOmActivationPart>;
 };
 
+export type OmCycleStatus =
+  | 'observing'
+  | 'observed'
+  | 'buffering'
+  | 'buffering-complete'
+  | 'activated'
+  | 'failed'
+  | 'buffering-failed'
+  | 'disconnected';
+
+export type OmCycleViewModel = {
+  cycleId: string;
+  recordId?: string;
+  status: OmCycleStatus;
+  operationType?: unknown;
+  observations?: unknown;
+  extractedValues?: Record<string, unknown>;
+  extractionFailures?: Array<{ slug: string; error: string }>;
+  omData: Record<string, unknown>;
+  isLoading: boolean;
+};
+
 export type OmIndexablePart =
   | OmCycleParts['start']
   | OmCycleParts['end']
@@ -49,36 +71,3 @@ export type OmIndexablePart =
   | OmCycleParts['bufferingEnd']
   | OmCycleParts['bufferingFailed']
   | OmCycleParts['activation'];
-
-/**
- * Union of OM marker parts rendered inline in the chat by `ObservationMarker`.
- */
-export type OmMarkerPart =
-  | DataOmObservationStartPart
-  | DataOmObservationEndPart
-  | DataOmObservationFailedPart
-  | DataOmBufferingStartPart
-  | DataOmBufferingEndPart
-  | DataOmBufferingFailedPart;
-
-/**
- * Check if a part is an OM observation/buffering marker rendered inline in the chat.
- */
-export function isObservationMarker(part: { type: string }): part is OmMarkerPart {
-  return (
-    part.type === 'data-om-observation-start' ||
-    part.type === 'data-om-observation-end' ||
-    part.type === 'data-om-observation-failed' ||
-    part.type === 'data-om-buffering-start' ||
-    part.type === 'data-om-buffering-end' ||
-    part.type === 'data-om-buffering-failed'
-  );
-}
-
-/**
- * Union of observation-only marker parts rendered by `ObservationIndicator`.
- */
-export type OmObservationMarkerPart =
-  | DataOmObservationStartPart
-  | DataOmObservationEndPart
-  | DataOmObservationFailedPart;

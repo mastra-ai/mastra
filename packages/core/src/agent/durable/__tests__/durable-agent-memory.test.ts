@@ -7,13 +7,14 @@
 
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { MockMemory } from '../../../memory/mock';
 import type { InputProcessor } from '../../../processors';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
+import { SaveQueueManager } from '../../save-queue';
 import { createDurableAgent } from '../create-durable-agent';
 
 // ============================================================================
@@ -44,6 +45,27 @@ function createTextModel(text: string) {
           finishReason: 'stop',
           usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
         },
+      ]),
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      warnings: [],
+    }),
+  });
+}
+
+function createTerminalErrorModel(errorMessage: string, partialText?: string) {
+  return new MockLanguageModelV2({
+    doStream: async () => ({
+      stream: convertArrayToReadableStream([
+        { type: 'stream-start', warnings: [] },
+        ...(partialText
+          ? [
+              { type: 'response-metadata' as const, id: 'id-error', modelId: 'mock-model-id', timestamp: new Date(0) },
+              { type: 'text-start' as const, id: 'text-error' },
+              { type: 'text-delta' as const, id: 'text-error', delta: partialText },
+              { type: 'text-end' as const, id: 'text-error' },
+            ]
+          : []),
+        { type: 'error', error: new Error(errorMessage) },
       ]),
       rawCall: { rawPrompt: null, rawSettings: {} },
       warnings: [],
@@ -234,6 +256,201 @@ describe('DurableAgent memory configuration', () => {
       expect(messages.messages.map(message => message.role)).toEqual(['user', 'assistant']);
       expect(JSON.stringify(messages.messages[0]?.content)).toContain('user input');
       expect(JSON.stringify(messages.messages[1]?.content)).toContain('assistant response');
+      result.cleanup();
+    });
+
+    it('persists an error-only assistant message through the default durable flush path', async () => {
+      const mockMemory = new MockMemory();
+      const flushMessages = vi.spyOn(SaveQueueManager.prototype, 'flushMessages');
+      const baseAgent = new Agent({
+        id: 'persist-terminal-error-agent',
+        name: 'Persist Terminal Error Agent',
+        instructions: 'Test terminal error persistence',
+        model: createTerminalErrorModel('durable terminal failure') as LanguageModelV2,
+        memory: mockMemory,
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+      const threadId = 'thread-terminal-error';
+      const resourceId = 'resource-terminal-error';
+
+      const result = await durableAgent.stream('user input', {
+        memory: { thread: threadId, resource: resourceId },
+      });
+      try {
+        for await (const _chunk of result.fullStream as AsyncIterable<any>) {
+        }
+      } catch {
+        // The durable bridge surfaces the terminal stream error to consumers.
+      }
+
+      await vi.waitFor(async () => {
+        const recalled = await mockMemory.recall({ threadId, resourceId });
+        expect(recalled.messages.map(message => message.role)).toEqual(['user', 'assistant']);
+      });
+
+      const { messages } = await mockMemory.recall({ threadId, resourceId });
+      expect(messages[1]?.content.parts).toMatchObject([
+        { type: 'error', error: { name: 'Error', message: 'durable terminal failure' } },
+      ]);
+      expect(messages[1]?.content.parts).toHaveLength(1);
+      expect(flushMessages).toHaveBeenCalled();
+      expect(
+        flushMessages.mock.calls.some(([messageList]) =>
+          messageList.get.all.db().some(message => message.content.parts?.some(part => part.type === 'error')),
+        ),
+      ).toBe(true);
+      result.cleanup();
+    });
+
+    it('appends a terminal error after partial assistant output in durable memory', async () => {
+      const mockMemory = new MockMemory();
+      const baseAgent = new Agent({
+        id: 'persist-partial-terminal-error-agent',
+        name: 'Persist Partial Terminal Error Agent',
+        instructions: 'Test partial terminal error persistence',
+        model: createTerminalErrorModel('durable partial failure', 'partial response') as LanguageModelV2,
+        memory: mockMemory,
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+      const threadId = 'thread-partial-terminal-error';
+      const resourceId = 'resource-partial-terminal-error';
+
+      const result = await durableAgent.stream('user input', {
+        memory: { thread: threadId, resource: resourceId },
+      });
+      try {
+        for await (const _chunk of result.fullStream as AsyncIterable<any>) {
+        }
+      } catch {
+        // The durable bridge surfaces the terminal stream error to consumers.
+      }
+
+      await vi.waitFor(async () => {
+        const recalled = await mockMemory.recall({ threadId, resourceId });
+        expect(recalled.messages.map(message => message.role)).toEqual(['user', 'assistant']);
+      });
+
+      const { messages } = await mockMemory.recall({ threadId, resourceId });
+      expect(messages[1]?.content.parts).toMatchObject([
+        { type: 'text', text: 'partial response' },
+        { type: 'error', error: { name: 'Error', message: 'durable partial failure' } },
+      ]);
+      expect(messages[1]?.content.parts?.at(-1)).toMatchObject({
+        type: 'error',
+        error: { name: 'Error', message: 'durable partial failure' },
+      });
+      result.cleanup();
+    });
+
+    it('persists input-processor failures before stream collection, including rotated response ids', async () => {
+      for (const { name, rotate } of [
+        { name: 'direct', rotate: false },
+        { name: 'rotated', rotate: true },
+      ]) {
+        const mockMemory = new MockMemory();
+        const errorMessage = `${name} input processor failure`;
+        const failingProcessor: InputProcessor = {
+          id: `${name}-input-processor`,
+          processInputStep: async ({ rotateResponseMessageId }) => {
+            if (rotate) rotateResponseMessageId?.();
+            throw new Error(errorMessage);
+          },
+        };
+        const baseAgent = new Agent({
+          id: `${name}-input-processor-error-agent`,
+          name: 'Input Processor Error Agent',
+          instructions: 'Test input processor failure persistence',
+          model: createTextModel('unreachable') as LanguageModelV2,
+          memory: mockMemory,
+          inputProcessors: [failingProcessor],
+        });
+        const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+        const threadId = `thread-${name}-input-processor-error`;
+        const resourceId = `resource-${name}-input-processor-error`;
+        const result = await durableAgent.stream('user input', {
+          memory: { thread: threadId, resource: resourceId },
+        });
+        try {
+          for await (const _chunk of result.fullStream as AsyncIterable<any>) {
+          }
+        } catch {
+          // The input-processor exception reaches the existing terminal stream error surface.
+        }
+
+        await vi.waitFor(async () => {
+          const recalled = await mockMemory.recall({ threadId, resourceId });
+          expect(recalled.messages.map(message => message.role)).toEqual(['user', 'assistant']);
+        });
+        const { messages } = await mockMemory.recall({ threadId, resourceId });
+        const [errorPart] = messages[1]?.content.parts ?? [];
+        expect(errorPart).toMatchObject({ type: 'error', error: { name: 'Error' } });
+        expect((errorPart as { error?: { message?: string } }).error?.message).toContain(errorMessage);
+        expect(messages[1]?.content.parts).toHaveLength(1);
+        result.cleanup();
+      }
+    });
+
+    it('does not create error parts when an input processor triggers a TripWire', async () => {
+      const mockMemory = new MockMemory();
+      const tripwireProcessor: InputProcessor = {
+        id: 'durable-tripwire',
+        processInput: async ({ abort, messages }) => {
+          abort('Durable tripwire');
+          return messages;
+        },
+      };
+      const baseAgent = new Agent({
+        id: 'durable-tripwire-agent',
+        name: 'Durable TripWire Agent',
+        instructions: 'Test TripWire persistence',
+        model: createTextModel('unreachable') as LanguageModelV2,
+        memory: mockMemory,
+        inputProcessors: [tripwireProcessor],
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+      const threadId = 'thread-durable-tripwire';
+      const resourceId = 'resource-durable-tripwire';
+      const result = await durableAgent.stream('user input', {
+        memory: { thread: threadId, resource: resourceId },
+      });
+      for await (const _chunk of result.fullStream as AsyncIterable<any>) {
+      }
+
+      const { messages } = await mockMemory.recall({ threadId, resourceId });
+      expect(messages.flatMap(message => message.content.parts ?? []).some(part => part.type === 'error')).toBe(false);
+      result.cleanup();
+    });
+
+    it('does not persist messages when memory is readOnly', async () => {
+      const mockMemory = new MockMemory();
+      await mockMemory.createThread({ threadId: 'thread-readonly', resourceId: 'resource-readonly' });
+
+      const baseAgent = new Agent({
+        id: 'readonly-persist-agent',
+        name: 'ReadOnly Persist Agent',
+        instructions: 'Test readOnly persistence',
+        model: createTextModel('assistant response') as LanguageModelV2,
+        memory: mockMemory,
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+      const result = await durableAgent.stream('user input', {
+        memory: {
+          thread: 'thread-readonly',
+          resource: 'resource-readonly',
+          options: { readOnly: true },
+        },
+      });
+      for await (const _chunk of result.fullStream as AsyncIterable<any>) {
+      }
+
+      const messages = await mockMemory.recall({
+        threadId: 'thread-readonly',
+        resourceId: 'resource-readonly',
+      });
+
+      // readOnly means "read memory but do not save new messages".
+      expect(messages.messages).toEqual([]);
       result.cleanup();
     });
   });
@@ -636,5 +853,68 @@ describe('DurableAgent memory edge cases', () => {
     });
 
     expect(result.workflowInput.state.memoryConfig?.lastMessages).toBe(0);
+  });
+
+  // Regression: the durable finish step never ported the non-durable `#executeOnFinish`
+  // title-generation branch, so `memory.options.generateTitle` silently never fired for
+  // durable/evented agents (and Inngest). See create-durable-agentic-workflow.ts.
+  describe('generateTitle', () => {
+    it('generates a thread title from the first message after a completed durable stream', async () => {
+      const mockMemory = new MockMemory();
+      // Mirror the non-durable title-generation test: a dedicated title model so we can
+      // assert the exact generated title, wired via getMergedThreadConfig.
+      const titleModel = createTextModel('Generated Thread Title');
+      mockMemory.getMergedThreadConfig = () => ({ generateTitle: { model: titleModel as LanguageModelV2 } });
+
+      const baseAgent = new Agent({
+        id: 'title-durable-agent',
+        name: 'Title Durable Agent',
+        instructions: 'Test durable title generation',
+        model: createTextModel('assistant response') as LanguageModelV2,
+        memory: mockMemory,
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+      const result = await durableAgent.stream('What is the weather like today?', {
+        memory: { thread: 'thread-title', resource: 'resource-title' },
+      });
+      for await (const _chunk of result.fullStream as AsyncIterable<any>) {
+      }
+
+      const thread = await mockMemory.getThreadById({ threadId: 'thread-title' });
+      expect(thread?.title).toBe('Generated Thread Title');
+      result.cleanup();
+    });
+
+    it('does not overwrite an existing thread title', async () => {
+      const mockMemory = new MockMemory();
+      await mockMemory.createThread({
+        threadId: 'thread-titled',
+        resourceId: 'resource-titled',
+        title: 'Existing Title',
+      });
+
+      const titleModel = createTextModel('Should Not Be Used');
+      mockMemory.getMergedThreadConfig = () => ({ generateTitle: { model: titleModel as LanguageModelV2 } });
+
+      const baseAgent = new Agent({
+        id: 'title-existing-agent',
+        name: 'Title Existing Agent',
+        instructions: 'Test durable title generation no-overwrite',
+        model: createTextModel('assistant response') as LanguageModelV2,
+        memory: mockMemory,
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+      const result = await durableAgent.stream('user input', {
+        memory: { thread: 'thread-titled', resource: 'resource-titled' },
+      });
+      for await (const _chunk of result.fullStream as AsyncIterable<any>) {
+      }
+
+      const thread = await mockMemory.getThreadById({ threadId: 'thread-titled' });
+      expect(thread?.title).toBe('Existing Title');
+      result.cleanup();
+    });
   });
 });

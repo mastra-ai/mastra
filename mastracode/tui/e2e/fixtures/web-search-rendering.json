@@ -1,0 +1,29 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "endpoint": "chat",
+        "model": "gpt-5.4-mini",
+        "sequenceIndex": 0,
+        "userMessage": "Run the deterministic web search rendering e2e."
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_web_search_rendering_e2e",
+            "name": "web_search_20250305",
+            "arguments": {
+              "query": "Mastra e2e web search"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {},
+      "response": {
+        "content": "Web search rendering e2e complete."
+      }
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+---
+extends: sequence
+message: "AI adjective-noun pair: '%s %s'. Use concrete description instead."
+level: error
+ignorecase: true
+tokens:
+  - pattern: multifaceted|intricate|holistic|transformative|groundbreaking|unparalleled|unprecedented|seamless|pivotal|innovative|sophisticated|comprehensive
+    tag: JJ
+  - tag: NN|NNS

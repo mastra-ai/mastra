@@ -1,7 +1,7 @@
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 import { WORKSPACE_TOOLS } from '../../constants';
 import { LocalFilesystem } from '../../filesystem';
@@ -116,6 +116,20 @@ describe('createWorkspaceTools', () => {
     // The tool description should be the base description, not augmented with path context
     expect(executeTool.description).not.toContain('Local filesystem');
     expect(executeTool.description).not.toContain('Local command execution');
+  });
+
+  it('should apply background eligibility without mutating the shared tool', async () => {
+    const workspace = new Workspace({
+      filesystem: new LocalFilesystem({ basePath: tempDir }),
+      tools: {
+        [WORKSPACE_TOOLS.FILESYSTEM.READ_FILE]: { background: { enabled: true, waitTimeoutMs: 1_000 } },
+      },
+    });
+
+    const tools = await createWorkspaceTools(workspace);
+
+    expect(tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].background).toEqual({ enabled: true, waitTimeoutMs: 1_000 });
+    expect(tools[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE].background).toBeUndefined();
   });
 
   it('should have all expected tool names with proper namespacing', async () => {
@@ -478,6 +492,49 @@ describe('createWorkspaceTools', () => {
 
       expect(writeTool.requireApproval).toBe(true);
       expect(writeTool.needsApprovalFn).toBeUndefined();
+    });
+  });
+  describe('writeLockTimeoutMs', () => {
+    /** A filesystem whose writes never settle, so the lock timeout is what ends the call. */
+    function hangingWriteFilesystem(basePath: string) {
+      const filesystem = new LocalFilesystem({ basePath });
+      filesystem.writeFile = () => new Promise<never>(() => {});
+      return filesystem;
+    }
+
+    it('bounds a hung write by the configured timeout', async () => {
+      const workspace = new Workspace({
+        filesystem: hangingWriteFilesystem(tempDir),
+        tools: { writeLockTimeoutMs: 50 },
+      });
+      const tools = await createWorkspaceTools(workspace);
+
+      await expect(
+        tools[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE].execute({ path: 'hangs.txt', content: 'x' }, { workspace }),
+      ).rejects.toThrow('write-lock timeout on "hangs.txt" after 50ms');
+    });
+
+    it('falls back to the 30s default when unset', async () => {
+      const workspace = new Workspace({
+        filesystem: hangingWriteFilesystem(tempDir),
+      });
+      const tools = await createWorkspaceTools(workspace);
+
+      // Fake timers so the 30s default can be asserted exactly without waiting
+      // it out, and so the test leaves no pending lock timer behind.
+      vi.useFakeTimers();
+      try {
+        const write = tools[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE].execute(
+          { path: 'hangs.txt', content: 'x' },
+          { workspace },
+        );
+        const rejected = expect(write).rejects.toThrow('write-lock timeout on "hangs.txt" after 30000ms');
+
+        await vi.advanceTimersByTimeAsync(30_000);
+        await rejected;
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 });

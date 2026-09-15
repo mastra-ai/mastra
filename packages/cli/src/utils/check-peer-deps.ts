@@ -1,8 +1,9 @@
 import { existsSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
 
 import { getPackageInfo } from 'local-pkg';
 import pc from 'picocolors';
-import { satisfies, gtr } from 'semver';
+import { satisfies, gtr, validRange } from 'semver';
 
 import type { MastraPackageInfo } from './mastra-packages.js';
 
@@ -55,6 +56,13 @@ export async function checkMastraPeerDeps(packages: MastraPackageInfo[]): Promis
           continue;
         }
 
+        // Skip non-semver ranges like `workspace:^` or `catalog:` (seen when the
+        // package resolves to monorepo source) - they can't be compared and would
+        // make getUpdateCommand's gtr() throw.
+        if (!validRange(requiredRange)) {
+          continue;
+        }
+
         // Check if the installed version satisfies the peer dep range
         // includePrerelease: true so that 1.1.0-alpha.1 satisfies >=1.0.0-0 <2.0.0-0
         if (!satisfies(installedVersion, requiredRange, { includePrerelease: true })) {
@@ -76,12 +84,21 @@ export async function checkMastraPeerDeps(packages: MastraPackageInfo[]): Promis
 }
 
 /**
- * Detects the package manager being used in the project.
+ * Detects the package manager from the nearest lockfile, including ancestor directories.
  */
-export function detectPackageManager(): 'pnpm' | 'npm' | 'yarn' {
-  if (existsSync('pnpm-lock.yaml')) return 'pnpm';
-  if (existsSync('yarn.lock')) return 'yarn';
-  return 'npm';
+export function detectPackageManager(startDirectory = process.cwd()): 'pnpm' | 'npm' | 'yarn' {
+  let directory = resolve(startDirectory);
+
+  while (true) {
+    if (existsSync(join(directory, 'pnpm-lock.yaml'))) return 'pnpm';
+    if (existsSync(join(directory, 'yarn.lock'))) return 'yarn';
+    if (existsSync(join(directory, 'package-lock.json')) || existsSync(join(directory, 'npm-shrinkwrap.json')))
+      return 'npm';
+
+    const parent = dirname(directory);
+    if (parent === directory) return 'npm';
+    directory = parent;
+  }
 }
 
 /**

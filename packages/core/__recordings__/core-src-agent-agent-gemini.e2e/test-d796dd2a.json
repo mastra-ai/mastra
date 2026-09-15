@@ -3,14 +3,13 @@
     "name": "test-d796dd2a",
     "testFile": "src/agent/agent-gemini.e2e.test.ts",
     "testName": "Gemini Model Compatibility Tests > Direct generate() method - Gemini basic functionality > should handle single turn with maxSteps=1 and messages ending with assistant",
-    "createdAt": "2026-05-18T10:50:51.680Z",
-    "updatedAt": "2026-05-28T17:33:41.205Z"
+    "createdAt": "2026-07-14T17:15:00.112Z"
   },
   "recordings": [
     {
-      "hash": "f1d5d3d4693ada60",
+      "hash": "070895a4843aac06",
       "request": {
-        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
         "method": "POST",
         "body": {
           "generationConfig": {
@@ -54,7 +53,7 @@
             ]
           }
         },
-        "timestamp": 1779989619907
+        "timestamp": 1784049299272
       },
       "response": {
         "status": 200,
@@ -62,9 +61,9 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
           "content-type": "application/json; charset=UTF-8",
-          "date": "Thu, 28 May 2026 17:33:41 GMT",
+          "date": "Tue, 14 Jul 2026 17:15:00 GMT",
           "server": "scaffolding on HTTPServer2",
-          "server-timing": "gfet4t7; dur=1174",
+          "server-timing": "gfet4t7; dur=819",
           "vary": "Origin, X-Origin, Referer",
           "x-content-type-options": "nosniff",
           "x-frame-options": "SAMEORIGIN",
@@ -77,35 +76,30 @@
               "content": {
                 "parts": [
                   {
-                    "text": "{\n  \"selection\": \"C\",\n  \"reason\": \"You indicated that reliability is your most important factor. Therefore, option C (reliable) is the best choice for you.\"\n}"
+                    "text": "{\"selection\": \"C\", \"reason\": \"You value reliability most, and Option C is described as reliable.\"}"
                   }
                 ],
                 "role": "model"
               },
               "finishReason": "STOP",
-              "avgLogprobs": -0.11035105077231802
+              "index": 0
             }
           ],
           "usageMetadata": {
-            "promptTokenCount": 55,
-            "candidatesTokenCount": 41,
-            "totalTokenCount": 96,
+            "promptTokenCount": 50,
+            "candidatesTokenCount": 24,
+            "totalTokenCount": 131,
             "promptTokensDetails": [
               {
                 "modality": "TEXT",
-                "tokenCount": 55
+                "tokenCount": 50
               }
             ],
-            "candidatesTokensDetails": [
-              {
-                "modality": "TEXT",
-                "tokenCount": 41
-              }
-            ],
+            "thoughtsTokenCount": 57,
             "serviceTier": "standard"
           },
-          "modelVersion": "gemini-2.0-flash",
-          "responseId": "dHwYavWuDsPU_uMP1PPAyAI"
+          "modelVersion": "gemini-2.5-flash",
+          "responseId": "k25WasSgFIOvkdUP2f-f0Qk"
         },
         "isStreaming": false
       }

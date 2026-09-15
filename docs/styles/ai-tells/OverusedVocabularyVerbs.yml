@@ -1,0 +1,7 @@
+---
+extends: sequence
+message: "AI vocabulary (verb form): '%s'. Replace with a direct verb."
+level: error
+tokens:
+  - pattern: leverage|leveraging|leverages|navigate|navigates|navigating|navigated|showcase|showcases|showcasing|harness|harnessing|harnesses|embark|embarks|embarking|foster|fosters|fostering|spearhead|spearheads|spearheading
+    tag: VB|VBZ|VBG|VBP|VBD

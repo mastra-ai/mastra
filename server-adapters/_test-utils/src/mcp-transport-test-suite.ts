@@ -287,6 +287,10 @@ export function createMCPTransportTestSuite(config: MCPTransportTestConfig) {
             servers: {
               failing: {
                 url: new URL(`http://localhost:${failingPort}/api/mcp/${failingServer.id}/mcp`),
+                // This test asserts the shape of the server's isError envelope
+                // (result.content carries the serialized error), so opt out of the
+                // default throw-on-error behavior and resolve with the raw result.
+                onToolError: 'return',
               },
             },
           });
@@ -428,6 +432,10 @@ export function createMCPTransportTestSuite(config: MCPTransportTestConfig) {
             servers: {
               failing: {
                 url: new URL(`http://localhost:${sseFailingPort}/api/mcp/${sseFailingServer.id}/sse`),
+                // This test asserts the shape of the server's isError envelope
+                // (result.content carries the serialized error), so opt out of the
+                // default throw-on-error behavior and resolve with the raw result.
+                onToolError: 'return',
               },
             },
           });

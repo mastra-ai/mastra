@@ -1,1 +1,1 @@
-export { cn } from '@mastra/playground-ui';
+export { cn } from '@mastra/playground-ui/utils/cn';

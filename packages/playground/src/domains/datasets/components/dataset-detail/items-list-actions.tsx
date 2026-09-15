@@ -1,6 +1,7 @@
 'use client';
-
-import { Button, Popover, PopoverTrigger, PopoverContent, Icon } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Popover, PopoverTrigger, PopoverContent } from '@mastra/playground-ui/components/Popover';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { MoreVertical, Download, FolderPlus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -34,7 +35,7 @@ export function ActionsMenu({
       <PopoverTrigger asChild>
         <Button variant="ghost" size="sm" disabled={disabled} aria-label="Actions menu">
           <Icon>
-            <MoreVertical className="w-4 h-4" />
+            <MoreVertical className="h-4 w-4" />
           </Icon>
         </Button>
       </PopoverTrigger>
@@ -43,34 +44,28 @@ export function ActionsMenu({
           <Button
             variant="ghost"
             size="sm"
-            className="w-full justify-start gap-2"
+            className="w-full justify-start"
             onClick={() => handleAction(onExportClick)}
+            icon={<Download />}
           >
-            <Icon>
-              <Download className="w-4 h-4" />
-            </Icon>
             Export
           </Button>
           <Button
             variant="ghost"
             size="sm"
-            className="w-full justify-start gap-2"
+            className="w-full justify-start"
             onClick={() => handleAction(onCreateDatasetClick)}
+            icon={<FolderPlus />}
           >
-            <Icon>
-              <FolderPlus className="w-4 h-4" />
-            </Icon>
             Create Dataset
           </Button>
           <Button
             variant="ghost"
             size="sm"
-            className="w-full justify-start gap-2 text-red-500 hover:text-red-400"
+            className="w-full justify-start text-red-500 hover:text-red-400"
             onClick={() => handleAction(onDeleteClick)}
+            icon={<Trash2 />}
           >
-            <Icon>
-              <Trash2 className="w-4 h-4" />
-            </Icon>
             Delete
           </Button>
         </div>

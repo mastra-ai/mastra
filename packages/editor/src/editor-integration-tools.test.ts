@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { randomUUID } from 'crypto';
+import { randomUUID } from 'node:crypto';
 import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import type {

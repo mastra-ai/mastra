@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -139,5 +140,140 @@ describe('LibSQL concurrent writes across domains (regression)', () => {
     });
 
     expect(listed.experiments.map(e => e.id)).toContain(experiment.id);
+  });
+});
+
+describe('LibSQL observational-memory write-lock regression', () => {
+  let tmpDir: string;
+  let store: LibSQLStore;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'libsql-om-lock-'));
+  });
+
+  afterEach(async () => {
+    await store?.close?.();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  // Reproduces the lost-write path where OM buffering (read-modify-write on
+  // bufferedObservationChunks) races interactive workflow transactions on the
+  // same LibSQL client. Before OM participated in withClientWriteLock, the
+  // autocommit SELECT+UPDATE inside updateBufferedObservations could be swept
+  // into an open workflow transaction, causing lost chunks or transaction
+  // contamination.
+  it('preserves all OM buffered chunks that race workflow transactions', async () => {
+    store = new LibSQLStore({ id: 'om-lock-regression', url: `file:${path.join(tmpDir, 'om-race.db')}` });
+    const memory = store.stores.memory!;
+    const workflows = store.stores.workflows!;
+    await memory.init();
+    await workflows.init();
+
+    const resourceId = `resource-${randomUUID()}`;
+    const record = await memory.initializeObservationalMemory({
+      threadId: null,
+      resourceId,
+      scope: 'resource',
+      config: { observationThreshold: 5000, reflectionThreshold: 40000 },
+    });
+
+    // Set up a workflow snapshot to churn against
+    const workflowName = 'om-race-workflow';
+    const runId = 'om-race-run';
+    await workflows.persistWorkflowSnapshot({
+      workflowName,
+      runId,
+      snapshot: {
+        context: {},
+        activePaths: [],
+        timestamp: Date.now(),
+        suspendedPaths: {},
+        serializedStepGraph: [],
+        status: 'running',
+        value: {},
+        runId,
+      } as any,
+    });
+
+    const CHUNK_COUNT = 10;
+    const labels = Array.from({ length: CHUNK_COUNT }, (_, i) => `om-chunk-${i}`);
+
+    // Fire workflow-state transactions concurrently with OM buffer appends —
+    // the exact interleaving that previously dropped buffered chunks.
+    const workflowChurn = Array.from({ length: 12 }, (_, i) =>
+      workflows.updateWorkflowState({
+        workflowName,
+        runId,
+        opts: { status: 'running', activePaths: [i] },
+      }),
+    );
+
+    const omAppends = labels.map(label =>
+      memory.updateBufferedObservations({
+        id: record.id,
+        chunk: {
+          cycleId: `cycle-${randomUUID()}`,
+          observations: label,
+          tokenCount: 50,
+          messageIds: [`msg-${randomUUID()}`],
+          messageTokens: 100,
+          lastObservedAt: new Date(),
+        },
+      }),
+    );
+
+    await Promise.all([...omAppends, ...workflowChurn]);
+
+    const updated = await memory.getObservationalMemory(null, resourceId);
+    const chunks = updated?.bufferedObservationChunks ?? [];
+    expect(chunks.length).toBe(CHUNK_COUNT);
+
+    // Every uniquely identified chunk must be present — no lost writes.
+    const observations = chunks.map(c => c.observations).sort();
+    const expected = [...labels].sort();
+    expect(observations).toEqual(expected);
+
+    // The workflow snapshot must also survive the contention.
+    const snapshot = await workflows.loadWorkflowSnapshot({ workflowName, runId });
+    expect(snapshot).toBeDefined();
+  });
+
+  // Verifies that a failed OM operation does not contaminate or roll back
+  // unrelated work that committed on the same client.
+  it('does not contaminate unrelated writes when an OM operation fails', async () => {
+    store = new LibSQLStore({ id: 'om-fail-regression', url: `file:${path.join(tmpDir, 'om-fail.db')}` });
+    const memory = store.stores.memory!;
+    await memory.init();
+
+    const resourceId = `resource-${randomUUID()}`;
+    const record = await memory.initializeObservationalMemory({
+      threadId: null,
+      resourceId,
+      scope: 'resource',
+      config: { observationThreshold: 5000, reflectionThreshold: 40000 },
+    });
+
+    // A valid flag update that should succeed and persist.
+    await memory.setObservingFlag(record.id, true);
+
+    // A failing OM operation — referencing a non-existent record id.
+    await expect(
+      memory.updateBufferedObservations({
+        id: 'nonexistent-id',
+        chunk: {
+          cycleId: 'cycle-fail',
+          observations: 'should-fail',
+          tokenCount: 50,
+          messageIds: ['msg-fail'],
+          messageTokens: 100,
+          lastObservedAt: new Date(),
+        },
+      }),
+    ).rejects.toThrow();
+
+    // The valid flag update must still be visible — the failure did not roll
+    // it back or contaminate the client state.
+    const updated = await memory.getObservationalMemory(null, resourceId);
+    expect(updated?.isObserving).toBe(true);
   });
 });

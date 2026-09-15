@@ -370,7 +370,9 @@ export class SpannerDB extends MastraBase {
         } catch (err) {
           // The Spanner client does NOT auto-rollback when the runFn throws
           // explicitly release the transaction so its row locks are freed.
-          await tx.rollback().catch(() => {});
+          await tx.rollback().catch(rollbackErr => {
+            throw new AggregateError([err, rollbackErr], 'Transaction and rollback both failed');
+          });
           throw err;
         }
       });
@@ -394,7 +396,11 @@ export class SpannerDB extends MastraBase {
         return await fn();
       } catch (error: any) {
         attempt++;
-        const aborted = error && (error.code === 10 || /ABORTED/i.test(String(error?.message ?? '')));
+        let checkError = error;
+        if (checkError instanceof AggregateError && checkError.errors.length > 0) {
+          checkError = checkError.errors[0];
+        }
+        const aborted = checkError && (checkError.code === 10 || /ABORTED/i.test(String(checkError?.message ?? '')));
         if (!aborted || attempt >= maxAttempts) {
           throw error;
         }
@@ -961,7 +967,9 @@ export class SpannerDB extends MastraBase {
           } catch (err) {
             // The Spanner client does NOT auto-rollback when the runFn throws
             // explicitly release the transaction so its row locks are freed.
-            await tx.rollback().catch(() => {});
+            await tx.rollback().catch(rollbackErr => {
+              throw new AggregateError([err, rollbackErr], 'Transaction and rollback both failed');
+            });
             throw err;
           }
         }),
@@ -996,7 +1004,9 @@ export class SpannerDB extends MastraBase {
             }
             await tx.commit();
           } catch (err) {
-            await tx.rollback().catch(() => {});
+            await tx.rollback().catch(rollbackErr => {
+              throw new AggregateError([err, rollbackErr], 'Transaction and rollback both failed');
+            });
             throw err;
           }
         }),
@@ -1034,7 +1044,9 @@ export class SpannerDB extends MastraBase {
             }
             await tx.commit();
           } catch (err) {
-            await tx.rollback().catch(() => {});
+            await tx.rollback().catch(rollbackErr => {
+              throw new AggregateError([err, rollbackErr], 'Transaction and rollback both failed');
+            });
             throw err;
           }
         }),

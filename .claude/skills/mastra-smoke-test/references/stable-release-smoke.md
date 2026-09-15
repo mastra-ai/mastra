@@ -39,7 +39,7 @@ Use the same dated workspace, but create a separate project from the alpha proje
 mkdir -p "$SMOKE_DIR/logs"
 
 cd "$SMOKE_DIR"
-pnpm create mastra@latest stable-smoke-project -c agents,tools,workflows,scorers -l openai -e
+pnpm create mastra@latest stable-smoke-project --no-git --llm openai --timeout 120000
 cd stable-smoke-project
 pnpm run dev
 ```

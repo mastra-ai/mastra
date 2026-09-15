@@ -3,14 +3,13 @@
     "name": "test-59bf9309",
     "testFile": "src/agent/agent-gemini.e2e.test.ts",
     "testName": "Gemini Model Compatibility Tests > Direct generate() method - Gemini basic functionality > should handle messages starting with assistant-with-tool-call",
-    "createdAt": "2026-05-18T10:50:52.797Z",
-    "updatedAt": "2026-05-28T17:33:42.853Z"
+    "createdAt": "2026-07-14T17:15:02.334Z"
   },
   "recordings": [
     {
-      "hash": "ca86e095a36e5bb9",
+      "hash": "b1c07d64916a2d75",
       "request": {
-        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
         "method": "POST",
         "body": {
           "generationConfig": {},
@@ -28,6 +27,7 @@
               "parts": [
                 {
                   "functionCall": {
+                    "id": "call_1",
                     "name": "test-tool",
                     "args": {
                       "query": "test"
@@ -41,6 +41,7 @@
               "parts": [
                 {
                   "functionResponse": {
+                    "id": "call_1",
                     "name": "test-tool",
                     "response": {
                       "name": "test-tool",
@@ -91,7 +92,7 @@
             }
           }
         },
-        "timestamp": 1779989622309
+        "timestamp": 1784049300635
       },
       "response": {
         "status": 200,
@@ -99,9 +100,9 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
           "content-type": "application/json; charset=UTF-8",
-          "date": "Thu, 28 May 2026 17:33:42 GMT",
+          "date": "Tue, 14 Jul 2026 17:15:02 GMT",
           "server": "scaffolding on HTTPServer2",
-          "server-timing": "gfet4t7; dur=429",
+          "server-timing": "gfet4t7; dur=1683",
           "vary": "Origin, X-Origin, Referer",
           "x-content-type-options": "nosniff",
           "x-frame-options": "SAMEORIGIN",
@@ -114,27 +115,31 @@
               "content": {
                 "parts": [
                   {
-                    "text": ""
+                    "text": "I don't have enough information to answer this question. Could you please provide more context?",
+                    "thoughtSignature": "CoIJARFNMg9Nu9nfo9TYopDy24oR4nOcjakYoUcAM5BCy9CoXNvY+zibPB5crAeg+6Tk6EAzO/A8UwbrUfTA2C8eraFJUWSlMXJk0Treahk1RJeA77kzcKZvjStaAQ73b+8b/QVd5Xa6yF0sPzpUuh1AGv4aFghcUMB7Sj+FLYK0Z7ZRUfRul19fNE1sWzKho/5IO94AIVAa5nohpKPPK0UG4a3dPUUpPkNoM6dbZmODdT7M0VefLF8LixlItSTqXvHF+JT06nF8S9/T9a3tOn68zhrfMtXVrfGFdnmX7eAxet4VGuajUp4xoUrbe4TdRwy2ZJ53cNcov0QLeoAilcAUVAlQUorCFlKHvgTYdlnoezNVWbq5+FwMniICajRYlxzxL5GUVzdMEIuP6oTymM0m/r1g59ZxpWF6rLSm5CTutapCIlcEjcyBrijcZ0Q4+V+Kt8N9ZfoQ5xmIgLOpUz8PIRPro0JoISvSHlaqZo7As1UE3mG25mMJW9ebXIpXOKFOFLQjUgo70cvdhGadYAKDHb3pKtxogt1H3vrrF+38hFR9tHzD4AFwNhI23SBOf7c2Ugin/omnvD9L4Rqr/P0LJ8SyFXyZslHFTfVW8IQ5F52MpLpZN76pjYdou/A9snza3ZEiIG2lkJtjPtoRPIcgThuiKid682NiEutKm7cMs+lWwW7bdRp9DmpXCLWMsH+8VRcgtjX0nv8PXKJlDZMYKxk6W0GNSDSSPYnxvfMTW4so3UvW3R74yfqI8SeuuRTY9yqaWhGLe8fI4JfcM9zmD5shhGis3CYmVgiIaqyNnOsxTMMdfntJtQY8IXqC1Ie1LVFGgMOb3vyypfUoGRfZQnQbwAj/YqCs/bjvlmGp/Bfon64GLcT4cNImO1VjnS0xHYNYxQkbtrhaDajTnccuu/KaYs1ytk8YlA382mt6AMOmv7fC+75MZEDpYztwXCvoKucFlV1lwFoe8UCkjhuXZGrFz/7MNlyR+SOgyQ7aaFC8iQHTRU5CbdF+IfEDJbXYr7bQqhORUB1U4NbrzcJzGbcEVM5SeoorlPidLG/3T75GT41NZabbzFOPKFcZv4fqrMzxHOMpKskTJ4MxbVWj6+heS48eMaxma/hIu9VB6TCpFvKIInFykoOJE2yDYK/r8zt5vD8rtdSD9e2OycWyQIDagvXfrmvNjmzrsDlc/QlnF6G2Qi9j6kFg2LobE4HktTUKzzIuJ8Yzc+m+HljOlGMsxT3/rPBPYqFaz1RGJvEFc8oB9anZ8BfhX6w9HrSgox8t+/WVvgvK7cXohWdTN5CemjyeepCIv/Y1ExHZHt4smwjBUW/2UVkPuMV0wyAgUiA/T/WByfeEmg0t+8qUlJjA24GIoKl/Ip4IIFv5zgjNiauPKtJslXDaAYfrXpnEY+SQ6sc9JiYzAhTlwV3U993pJeEj1ayBihpuRBGk9KJt+2LDh9+57i02p/C+CYaC7XdP3oSnqfgn9oLJLHGLhFVnCOwZsWDwJpg3S40Nb/WZMTe9zcbT6rKZ4SmwCm2Mz3E="
                   }
                 ],
                 "role": "model"
               },
-              "finishReason": "STOP"
+              "finishReason": "STOP",
+              "index": 0
             }
           ],
           "usageMetadata": {
-            "promptTokenCount": 36,
-            "totalTokenCount": 36,
+            "promptTokenCount": 87,
+            "candidatesTokenCount": 19,
+            "totalTokenCount": 371,
             "promptTokensDetails": [
               {
                 "modality": "TEXT",
-                "tokenCount": 36
+                "tokenCount": 87
               }
             ],
+            "thoughtsTokenCount": 265,
             "serviceTier": "standard"
           },
-          "modelVersion": "gemini-2.0-flash",
-          "responseId": "dnwYavifJvy3_uMP0tWnoQo"
+          "modelVersion": "gemini-2.5-flash",
+          "responseId": "lG5WauLpKeilkdUPwqzr8Qo"
         },
         "isStreaming": false
       }

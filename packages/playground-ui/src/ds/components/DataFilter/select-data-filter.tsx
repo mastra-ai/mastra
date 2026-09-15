@@ -4,6 +4,7 @@ import { useState, useMemo, useCallback } from 'react';
 
 import { Button } from '@/ds/components/Button/Button';
 import { DropdownMenu } from '@/ds/components/DropdownMenu/dropdown-menu';
+import { menuSearchClasses } from '@/ds/primitives/menu-item';
 import { cn } from '@/lib/utils';
 
 // ---------------------------------------------------------------------------
@@ -59,34 +60,30 @@ export type SelectDataFilterProps = {
 
 const SUBMENU_SEARCH_THRESHOLD = 6;
 
-function SubMenuSearch({
+function MenuSearch({
   value,
   onChange,
   label = 'Search',
+  placeholder = 'Search...',
 }: {
   value: string;
   onChange: (v: string) => void;
   label?: string;
+  placeholder?: string;
 }) {
   return (
-    <div className={cn('px-2 pb-2')}>
-      <div
-        className={cn(
-          'flex items-center gap-2 border border-border1 rounded-md px-2 py-1',
-          'focus-within:border-neutral2',
-        )}
-      >
-        <SearchIcon className={cn('text-neutral3 h-3.5 w-3.5 shrink-0')} />
-        <input
-          type="text"
-          placeholder="Search..."
-          aria-label={label}
-          value={value}
-          onChange={e => onChange(e.target.value)}
-          onKeyDown={e => e.stopPropagation()}
-          className={cn('bg-transparent text-ui-sm text-neutral4 placeholder:text-neutral3 outline-none w-full')}
-        />
-      </div>
+    // Pull the row flush against the popup edges (the popup pads its items with p-1).
+    <div className={cn(menuSearchClasses.container, '-mx-1 -mt-1 mb-1')}>
+      <SearchIcon className={menuSearchClasses.icon} />
+      <input
+        type="text"
+        placeholder={placeholder}
+        aria-label={label}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        onKeyDown={e => e.stopPropagation()}
+        className={menuSearchClasses.input}
+      />
     </div>
   );
 }
@@ -184,12 +181,12 @@ export function SelectDataFilter({
     return (
       <DropdownMenu.Sub key={cat.id} onOpenChange={resetSubSearch}>
         <DropdownMenu.SubTrigger>
-          <span className={cn('truncate')}>{cat.label}</span>
-          {selectedCount > 0 && <span className={cn('ml-auto text-ui-sm text-accent1')}>{selectedCount}</span>}
+          <span className="flex-1 truncate">{cat.label}</span>
+          {selectedCount > 0 && <span className={cn('text-ui-sm text-accent1')}>{selectedCount}</span>}
         </DropdownMenu.SubTrigger>
-        <DropdownMenu.SubContent className={cn('max-h-[20rem]')}>
+        <DropdownMenu.SubContent>
           {cat.values.length >= searchThreshold && (
-            <SubMenuSearch value={subSearch} onChange={setSubSearch} label={`Search ${cat.label.toLowerCase()}`} />
+            <MenuSearch value={subSearch} onChange={setSubSearch} label={`Search ${cat.label.toLowerCase()}`} />
           )}
           {mode === 'single' ? (
             <DropdownMenu.RadioGroup value={selected[0] ?? ''} onValueChange={val => handleSelect(cat.id, val, mode)}>
@@ -223,13 +220,12 @@ export function SelectDataFilter({
   return (
     <DropdownMenu modal={false}>
       <DropdownMenu.Trigger asChild>
-        <Button variant="outline" disabled={disabled} size="md">
-          <FilterIcon />
+        <Button variant="outline" disabled={disabled} size="md" icon={<FilterIcon />}>
           {label}
           {activeFilterCount > 0 && (
             <span
               className={cn(
-                'ml-0.5 inline-flex items-center justify-center rounded-full bg-accent1/50 text-neutral5 text-ui-sm w-5 h-5',
+                'ml-0.5 inline-flex size-5 items-center justify-center rounded-full bg-accent1/50 text-ui-sm text-neutral5',
               )}
             >
               {activeFilterCount}
@@ -237,47 +233,27 @@ export function SelectDataFilter({
           )}
         </Button>
       </DropdownMenu.Trigger>
-      <DropdownMenu.Content align={align} className={cn('min-w-[12rem]')}>
-        {/* Search */}
-        <div className={cn('px-2 pb-2')}>
-          <div
-            className={cn(
-              'flex items-center gap-2 border border-border1 rounded-md px-2 py-1',
-              'focus-within:border-neutral2',
-            )}
-          >
-            <SearchIcon className={cn('text-neutral3 h-3.5 w-3.5 shrink-0')} />
-            <input
-              type="text"
-              placeholder="Search filters..."
-              aria-label="Search filters"
-              value={filterSearch}
-              onChange={e => setFilterSearch(e.target.value)}
-              onKeyDown={e => e.stopPropagation()}
-              className={cn('bg-transparent text-ui-sm text-neutral4 placeholder:text-neutral3 outline-none w-full')}
-            />
-          </div>
-        </div>
-
-        <DropdownMenu.Separator />
+      <DropdownMenu.Content align={align}>
+        <MenuSearch
+          value={filterSearch}
+          onChange={setFilterSearch}
+          label="Search filters"
+          placeholder="Search filters..."
+        />
 
         {grouped.map(group => {
-          if (group.items.length === 1 && !group.label) {
-            return renderCategory(group.items[0]);
-          }
+          const firstItem = group.items[0];
 
-          if (group.label && group.items.length === 1) {
-            // Single item in a named group — render directly with group as context
-            return renderCategory(group.items[0]);
+          if (group.items.length === 1 && firstItem) {
+            // A single category (grouped or not) renders directly, without a sub-trigger.
+            return renderCategory(firstItem);
           }
 
           // Multiple items under a group label — nest under a sub-trigger
           return (
             <DropdownMenu.Sub key={group.key}>
               <DropdownMenu.SubTrigger>{group.label}</DropdownMenu.SubTrigger>
-              <DropdownMenu.SubContent className={cn('max-h-[20rem]')}>
-                {group.items.map(cat => renderCategory(cat))}
-              </DropdownMenu.SubContent>
+              <DropdownMenu.SubContent>{group.items.map(cat => renderCategory(cat))}</DropdownMenu.SubContent>
             </DropdownMenu.Sub>
           );
         })}

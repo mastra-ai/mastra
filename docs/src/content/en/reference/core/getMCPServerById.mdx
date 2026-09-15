@@ -1,6 +1,6 @@
 ---
 title: "Reference: Mastra.getMCPServerById() | Core"
-description: "Documentation for the `Mastra.getMCPServerById()` method in Mastra, which retrieves a specific MCP server instance by its intrinsic id property."
+description: "The .getMCPServerById() method retrieves an MCP server instance by its intrinsic id property."
 packages:
   - "@mastra/core"
 ---
@@ -17,9 +17,7 @@ const myServer = new MCPServer({
   id: 'my-mcp-server',
   name: 'My Server',
   version: '1.0.0',
-  tools: {
-    /* ... */
-  },
+  tools: {/* ... */},
 })
 
 export const mastra = new Mastra({
@@ -78,5 +76,5 @@ const serverByKey = mastra.getMCPServer('customKey')
 
 ## See also
 
-- [MCP overview](/docs/mcp/overview)
+- [MCP overview](/docs/connections/mcp)
 - [MCP server reference](/reference/tools/mcp-server)

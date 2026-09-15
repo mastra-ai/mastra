@@ -90,10 +90,23 @@ export function createBaseIterationStateUpdate(input: IterationStateUpdateInput)
     options: currentState.options,
     state: executionOutput.state,
     messageId: executionOutput.messageId,
+    // Carried, not recomputed: the request context is fixed for the run, and
+    // the steps that rebuild from Mastra have no other source for it.
+    requestContextEntries: currentState.requestContextEntries,
     iterationCount: currentState.iterationCount + 1,
     accumulatedSteps: [...currentState.accumulatedSteps, stepRecord],
     accumulatedUsage: newUsage,
     lastStepResult: executionOutput.stepResult,
     backgroundTaskPending: executionOutput.backgroundTaskPending,
+    delegationBailed: executionOutput.delegationBailed,
+    // Preserve the two-phase stop flag set by the dowhile predicate's
+    // onIterationComplete handler.  The predicate mutates state on the
+    // *output* of the previous iteration; createBaseIterationStateUpdate
+    // rebuilds the state for the next iteration, so we must carry the
+    // flag forward explicitly.
+    pendingFeedbackStop: currentState.pendingFeedbackStop,
+    // Carry span identity forward unchanged so every iteration shares one trace.
+    agentSpanData: currentState.agentSpanData,
+    modelSpanData: currentState.modelSpanData,
   };
 }

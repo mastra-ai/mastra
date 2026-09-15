@@ -166,8 +166,6 @@ export class MongoDBPromptBlocksStorage extends PromptBlocksStorage {
         updatedAt: now,
       };
 
-      await collection.insertOne(this.serializeBlock(newBlock));
-
       // Extract snapshot config from flat input
       const snapshotConfig: Record<string, any> = {};
       for (const field of SNAPSHOT_FIELDS) {
@@ -178,14 +176,23 @@ export class MongoDBPromptBlocksStorage extends PromptBlocksStorage {
 
       // Create version 1
       const versionId = randomUUID();
-      await this.createVersion({
+      const versionDoc: Record<string, any> = {
         id: versionId,
         blockId: promptBlock.id,
         versionNumber: 1,
-        ...snapshotConfig,
         changedFields: Object.keys(snapshotConfig),
         changeMessage: 'Initial version',
-      } as CreatePromptBlockVersionInput);
+        createdAt: new Date(),
+      };
+      for (const field of SNAPSHOT_FIELDS) {
+        if (snapshotConfig[field] !== undefined) versionDoc[field] = snapshotConfig[field];
+      }
+
+      await this.#connector.withTransaction(async session => {
+        await collection.insertOne(this.serializeBlock(newBlock), { session });
+        const versionsCol = await this.getCollection(TABLE_PROMPT_BLOCK_VERSIONS);
+        await versionsCol.insertOne(versionDoc, { session });
+      });
 
       return newBlock;
     } catch (error) {
@@ -278,12 +285,12 @@ export class MongoDBPromptBlocksStorage extends PromptBlocksStorage {
 
   async delete(id: string): Promise<void> {
     try {
-      // Delete all versions first
-      await this.deleteVersionsByParentId(id);
-
-      // Then delete the block
-      const collection = await this.getCollection(TABLE_PROMPT_BLOCKS);
-      await collection.deleteOne({ id });
+      await this.#connector.withTransaction(async session => {
+        const versionsCol = await this.getCollection(TABLE_PROMPT_BLOCK_VERSIONS);
+        await versionsCol.deleteMany({ blockId: id }, { session });
+        const col = await this.getCollection(TABLE_PROMPT_BLOCKS);
+        await col.deleteOne({ id }, { session });
+      });
     } catch (error) {
       throw new MastraError(
         {

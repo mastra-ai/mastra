@@ -1,5 +1,5 @@
 export * from './error';
-export * from '@a2a-js/sdk';
+export * from '@a2a-js/sdk-v0_3';
 export type {
   A2AAgentCardVerificationContext,
   A2AAgentGenerateResult,

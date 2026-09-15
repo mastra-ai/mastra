@@ -1,13 +1,13 @@
 import { EyeIcon, LogsIcon } from 'lucide-react';
-import type { ElementType } from 'react';
-import { Button } from '../../../ds/components/Button';
+import { Button } from '../../../ds/components/Button/Button';
+import type { LinkComponent } from '../../../ds/types/link-component';
 
 type CardActionButtonProps = {
   /** Pre-built drilldown URL (typically from `useDrilldown().getTracesHref(...)`). */
   href: string;
   /** Override how the underlying anchor is rendered — pass a router-aware Link
    *  to keep navigation in-app. Defaults to `<a>`. */
-  LinkComponent?: ElementType;
+  LinkComponent?: LinkComponent;
 };
 
 /** Icon link in a MetricsCard top bar that opens the Traces page pre-filtered

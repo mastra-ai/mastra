@@ -90,6 +90,9 @@ export interface SandboxCapabilities {
 
   /** Supports sending data to stdin (default: true) */
   supportsStdin?: boolean;
+
+  /** Supports closing stdin to signal EOF (default: false) */
+  supportsCloseStdin?: boolean;
 }
 
 /**

@@ -9,12 +9,27 @@
  * @see https://docs.docker.com/engine/api/
  */
 
+import { posix as posixPath } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import type { RequestContext } from '@mastra/core/di';
-import type { SandboxInfo, ProviderStatus, MastraSandboxOptions } from '@mastra/core/workspace';
-import { MastraSandbox, SandboxError, SandboxNotReadyError } from '@mastra/core/workspace';
+import type {
+  SandboxInfo,
+  ProviderStatus,
+  MastraSandboxOptions,
+  SandboxCloneOptions,
+  SandboxFileInput,
+  WriteFilesOptions,
+} from '@mastra/core/workspace';
+import {
+  MastraSandbox,
+  SandboxAbortError,
+  SandboxError,
+  SandboxNotReadyError,
+  validateSandboxFileMode,
+} from '@mastra/core/workspace';
 import Docker from 'dockerode';
 import type { Container, ContainerInfo } from 'dockerode';
+import { pack as tarPack } from 'tar-stream';
 import { DockerProcessManager } from './process-manager';
 
 const LOG_PREFIX = '[DockerSandbox]';
@@ -33,6 +48,72 @@ type DockerSandboxUlimit = {
 };
 
 type DockerSandboxTmpfs = Record<string, string>;
+
+/** Options applied to a `volume` mount. */
+type DockerSandboxVolumeMount = {
+  type: 'volume';
+  /** Absolute path of the mount inside the container. */
+  target: string;
+  /** Named volume to mount. */
+  source: string;
+  /** Mount read-only. */
+  readOnly?: boolean;
+  /** Options applied to the named volume. */
+  volumeOptions?: {
+    /** Mount a subdirectory of the named volume (Docker Engine 26.0+). */
+    subpath?: string;
+    /** Disable copying data from the container path into the volume. */
+    noCopy?: boolean;
+    /** Labels applied to the volume when it is created. */
+    labels?: Record<string, string>;
+  };
+};
+
+/** Options applied to a `bind` mount. */
+type DockerSandboxBindMount = {
+  type: 'bind';
+  /** Absolute path of the mount inside the container. */
+  target: string;
+  /** Host path to bind into the container. */
+  source: string;
+  /** Mount read-only. */
+  readOnly?: boolean;
+  /** Options applied to the bind mount. */
+  bindOptions?: {
+    /** Bind propagation mode. */
+    propagation?: 'private' | 'rprivate' | 'shared' | 'rshared' | 'slave' | 'rslave';
+  };
+};
+
+/** Options applied to a `tmpfs` mount. */
+type DockerSandboxTmpfsMount = {
+  type: 'tmpfs';
+  /** Absolute path of the mount inside the container. */
+  target: string;
+  /** Mount read-only. */
+  readOnly?: boolean;
+  /** Options applied to the tmpfs mount. */
+  tmpfsOptions?: {
+    /** Size of the tmpfs mount in bytes. */
+    sizeBytes?: number;
+    /** File mode of the tmpfs mount, in octal (e.g. 0o1777). */
+    mode?: number;
+  };
+};
+
+/**
+ * A single Docker mount, mapped 1:1 onto an entry of `HostConfig.Mounts`.
+ *
+ * Unlike `volumes` (which maps to `HostConfig.Binds` / the `-v` syntax), mounts
+ * can express options that `Binds` cannot — most notably `volumeOptions.subpath`,
+ * which mounts a subdirectory of a named volume. Requires Docker Engine 26.0+
+ * (API v1.45+) for `subpath` support.
+ *
+ * This is a discriminated union on `type`: `volume` and `bind` mounts require a
+ * `source` and only accept their own option group, while `tmpfs` mounts take no
+ * `source`. These invariants mirror what Docker enforces at container creation.
+ */
+export type DockerSandboxMount = DockerSandboxVolumeMount | DockerSandboxBindMount | DockerSandboxTmpfsMount;
 
 // =============================================================================
 // Docker Sandbox Options
@@ -78,6 +159,13 @@ export interface DockerSandboxOptions extends Omit<MastraSandboxOptions, 'proces
   cpuPeriod?: number;
   /** Maximum number of PIDs in the container (HostConfig.PidsLimit). */
   pidsLimit?: number;
+  /**
+   * Run an init process (tini) as PID 1 to reap zombie children (HostConfig.Init).
+   * Without this, processes orphaned by a command (e.g. after a timeout/kill) remain
+   * as zombies and keep counting against `pidsLimit`.
+   * @default true
+   */
+  init?: boolean;
   /** Mount the container root filesystem as read-only (HostConfig.ReadonlyRootfs). */
   readonlyRootfs?: boolean;
   /** Linux capabilities to drop (HostConfig.CapDrop), e.g. ['ALL']. */
@@ -90,12 +178,23 @@ export interface DockerSandboxOptions extends Omit<MastraSandboxOptions, 'proces
   ulimits?: DockerSandboxUlimit[];
   /** tmpfs mount paths with options (HostConfig.Tmpfs). */
   tmpfs?: DockerSandboxTmpfs;
+  /**
+   * Mounts mapped 1:1 onto `HostConfig.Mounts`.
+   *
+   * Use this instead of `volumes` when you need mount options that Docker's
+   * `-v`/`HostConfig.Binds` syntax cannot express — in particular
+   * `volumeOptions.subpath` (mount a subdirectory of a named volume). `volumes`
+   * and `mounts` may be combined; both are passed through to Docker.
+   */
+  mounts?: DockerSandboxMount[];
   /** Default command timeout in milliseconds
    * @default 300_000 // 5 minutes
    */
   timeout?: number;
   /** Working directory inside the container
    * @default '/workspace'
+   * @deprecated Use `workingDirectory` (the base sandbox option) instead.
+   * When both are set, `workingDirectory` wins.
    */
   workingDir?: string;
   /** Container labels for filtering and identification */
@@ -178,19 +277,29 @@ export class DockerSandbox extends MastraSandbox {
   private readonly _cpuQuota?: number;
   private readonly _cpuPeriod?: number;
   private readonly _pidsLimit?: number;
+  private readonly _init: boolean;
   private readonly _readonlyRootfs?: boolean;
   private readonly _capDrop?: string[];
   private readonly _capAdd?: string[];
   private readonly _securityOpt?: string[];
   private readonly _ulimits?: DockerSandboxUlimit[];
   private readonly _tmpfs?: DockerSandboxTmpfs;
-  private readonly _workingDir: string;
+  private readonly _mounts?: DockerSandboxMount[];
   private readonly _labels: Record<string, string>;
   private readonly _instructionsOverride?: InstructionsOption;
+  private readonly _constructorOptions: DockerSandboxOptions;
+
+  /**
+   * The effective container working directory. Narrowed to `string`: the
+   * constructor always resolves a value (option, deprecated alias, or
+   * `/workspace`), so unlike the base getter this never returns `undefined`.
+   */
+  override get workingDirectory(): string {
+    return this._workingDirectory!;
+  }
 
   constructor(options: DockerSandboxOptions = {}) {
     const processManager = new DockerProcessManager({
-      env: options.env ?? {},
       defaultTimeout: options.timeout ?? 300_000,
     });
 
@@ -215,13 +324,15 @@ export class DockerSandbox extends MastraSandbox {
     this._cpuQuota = options.cpuQuota;
     this._cpuPeriod = options.cpuPeriod;
     this._pidsLimit = options.pidsLimit;
+    this._init = options.init ?? true;
     this._readonlyRootfs = options.readonlyRootfs;
     this._capDrop = options.capDrop;
     this._capAdd = options.capAdd;
     this._securityOpt = options.securityOpt;
     this._ulimits = options.ulimits;
     this._tmpfs = options.tmpfs;
-    this._workingDir = options.workingDir ?? '/workspace';
+    this._mounts = options.mounts;
+    this.setWorkingDirectory(options.workingDirectory ?? options.workingDir ?? '/workspace');
     this._labels = {
       ...options.labels,
       'mastra.sandbox': 'true',
@@ -229,6 +340,31 @@ export class DockerSandbox extends MastraSandbox {
     };
     this._instructionsOverride = options.instructions;
     this._docker = new Docker(options.dockerOptions);
+    this._constructorOptions = { ...options };
+  }
+
+  /**
+   * Construct a sibling `DockerSandbox` that inherits this sandbox's
+   * configuration (image, resource limits, security options, labels,
+   * connection options) with per-instance overrides.
+   *
+   * Performs no I/O — the sandbox clone provisions (or reconnects to an
+   * existing container labelled with the same logical `id`) on its own
+   * `start()`. Use it when one configured sandbox acts as the template for a
+   * fleet of independent sandboxes (e.g. one per project).
+   *
+   * `options.idleTimeoutMinutes` is ignored (Docker containers have no
+   * provider-side idle teardown; `timeout` here is a command timeout), and
+   * `options.sandboxId` is ignored because reconnection is by logical `id`.
+   */
+  clone(options: SandboxCloneOptions = {}): DockerSandbox {
+    const { id: _id, name: _name, ...base } = this._constructorOptions;
+    return new DockerSandbox({
+      ...base,
+      ...(options.id !== undefined && { id: options.id }),
+      ...(options.env !== undefined && { env: options.env }),
+      ...(options.workingDirectory !== undefined && { workingDirectory: options.workingDirectory }),
+    });
   }
 
   /**
@@ -293,7 +429,7 @@ export class DockerSandbox extends MastraSandbox {
       Image: this._image,
       Cmd: this._command,
       Env: envArray,
-      WorkingDir: this._workingDir,
+      WorkingDir: this.workingDirectory,
       Labels: this._labels,
       HostConfig: {
         Binds: binds.length > 0 ? binds : undefined,
@@ -305,12 +441,14 @@ export class DockerSandbox extends MastraSandbox {
         CpuQuota: this._cpuQuota,
         CpuPeriod: this._cpuPeriod,
         PidsLimit: this._pidsLimit,
+        Init: this._init,
         ReadonlyRootfs: this._readonlyRootfs,
         CapDrop: this._capDrop,
         CapAdd: this._capAdd,
         SecurityOpt: this._securityOpt,
         Ulimits: this._ulimits?.map(toDockerUlimit),
         Tmpfs: this._tmpfs,
+        Mounts: this._mounts?.map(toDockerMount),
       },
       // Keep stdin open for interactive use
       OpenStdin: true,
@@ -401,6 +539,7 @@ export class DockerSandbox extends MastraSandbox {
       ['SecurityOpt', this._securityOpt],
       ['Ulimits', this._ulimits],
       ['Tmpfs', this._tmpfs],
+      ['Mounts', this._mounts?.map(toDockerMount)],
     ];
 
     if (this._privilegedWasSet || hostConfig?.Privileged === true) {
@@ -446,13 +585,97 @@ export class DockerSandbox extends MastraSandbox {
   }
 
   // ---------------------------------------------------------------------------
+  // File Upload
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Bulk-write files into the container's filesystem using Docker's native
+   * archive upload (`putArchive`), the same mechanism as `docker cp`.
+   *
+   * Behavior:
+   * - Requires a started sandbox. Throws {@link SandboxNotReadyError} otherwise
+   *   (Docker containers are not auto-started by this method).
+   * - Absolute paths are used as-is; relative paths resolve against
+   *   {@link workingDirectory}.
+   * - Missing parent directories are created automatically.
+   * - Existing destinations are overwritten (contents and mode).
+   * - Exact bytes are preserved for both `string` and `Buffer` content,
+   *   including empty files and binary data.
+   * - New files use the per-file `mode` when provided (validated integer
+   *   `0o001`–`0o777`), otherwise `0644`; directories created implicitly default
+   *   to Docker's `0755`. Overwriting a file replaces its mode with the
+   *   requested `mode` (or `0644` when omitted).
+   * - Not atomic across files: on failure the promise rejects and earlier or
+   *   partially written files may remain.
+   *
+   * Cancellation (`options.abortSignal`):
+   * - If the signal is already aborted, rejects with {@link SandboxAbortError}
+   *   before creating the archive or starting the upload.
+   * - If the signal aborts during transfer, the underlying `putArchive` request
+   *   is terminated by destroying the tar stream (which ends the request body),
+   *   and the promise rejects with {@link SandboxAbortError}.
+   * - Upload and cancellation race: an upload that completes before the abort is
+   *   observed resolves normally.
+   * - No rollback: files Docker already received or extracted may remain. The
+   *   daemon may continue extraction after rejection, so the caller is
+   *   responsible for any cleanup or sandbox disposal.
+   * - Behavior is unchanged when no signal is supplied.
+   *
+   * @throws {SandboxNotReadyError} If the sandbox has not been started.
+   * @throws {SandboxAbortError} If the write is cancelled via `options.abortSignal`.
+   * @throws {SandboxError} If the archive upload fails.
+   */
+  async writeFiles(files: SandboxFileInput[], options?: WriteFilesOptions): Promise<void> {
+    const container = this.container;
+
+    const signal = options?.abortSignal;
+    if (signal?.aborted) throw new SandboxAbortError('writeFiles');
+
+    if (files.length === 0) return;
+
+    const pack = tarPack();
+    for (const file of files) {
+      if (file.mode !== undefined) validateSandboxFileMode(file.mode);
+      const resolved = posixPath.isAbsolute(file.path)
+        ? posixPath.normalize(file.path)
+        : posixPath.resolve(this.workingDirectory, file.path);
+      const data = Buffer.isBuffer(file.content) ? file.content : Buffer.from(file.content);
+      const mode = file.mode ?? 0o644;
+      // tar entries are relative; strip the leading slash so extraction at `/`
+      // lands the file at its intended absolute path.
+      pack.entry({ name: resolved.replace(/^\/+/, ''), size: data.length, mode }, data);
+    }
+    pack.finalize();
+
+    // Destroying the tar stream ends the putArchive request body, which
+    // terminates the in-flight HTTP upload to the Docker daemon. The
+    // abortSignal is also forwarded to putArchive for transports that observe
+    // it; it is harmless when ignored.
+    const onAbort = () => pack.destroy();
+    if (signal) signal.addEventListener('abort', onAbort, { once: true });
+
+    try {
+      await container.putArchive(pack, { path: '/', abortSignal: signal });
+    } catch (error) {
+      if (signal?.aborted) throw new SandboxAbortError('writeFiles');
+      throw new SandboxError(
+        `Failed to write files to sandbox: ${error instanceof Error ? error.message : String(error)}`,
+        'EXECUTION_FAILED',
+        { reason: 'write_files_failed' },
+      );
+    } finally {
+      if (signal) signal.removeEventListener('abort', onAbort);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // Instructions
   // ---------------------------------------------------------------------------
 
   getInstructions(opts?: { requestContext?: RequestContext }): string {
     const defaultInstructions = [
       `You are working inside a Docker container (image: ${this._image}).`,
-      `The working directory is ${this._workingDir}.`,
+      `The working directory is ${this.workingDirectory}.`,
       'You can execute shell commands using executeCommand().',
       'You can spawn background processes using processes.spawn().',
     ].join('\n');
@@ -475,7 +698,7 @@ export class DockerSandbox extends MastraSandbox {
       createdAt: new Date(),
       metadata: {
         image: this._image,
-        workingDir: this._workingDir,
+        workingDir: this.workingDirectory,
         labels: this._labels,
       },
     };
@@ -706,6 +929,45 @@ function toDockerUlimit(ulimit: DockerSandboxUlimit): Docker.Ulimit {
   };
 }
 
+function toDockerMount(mount: DockerSandboxMount): Docker.MountSettings {
+  const settings: Docker.MountSettings = {
+    Type: mount.type,
+    Target: mount.target,
+    Source: mount.type === 'tmpfs' ? '' : mount.source,
+  };
+
+  if (mount.readOnly !== undefined) settings.ReadOnly = mount.readOnly;
+
+  if (mount.type === 'volume' && mount.volumeOptions) {
+    const { subpath, noCopy, labels } = mount.volumeOptions;
+    // The @types/dockerode VolumeOptions marks NoCopy/Labels/DriverConfig as
+    // required, but the Docker API treats them as optional; build a partial.
+    const volumeOptions: Record<string, unknown> = {};
+    if (subpath !== undefined) volumeOptions.Subpath = subpath;
+    if (noCopy !== undefined) volumeOptions.NoCopy = noCopy;
+    if (labels !== undefined) volumeOptions.Labels = labels;
+    if (Object.keys(volumeOptions).length > 0) {
+      settings.VolumeOptions = volumeOptions as Docker.MountSettings['VolumeOptions'];
+    }
+  }
+
+  if (mount.type === 'bind' && mount.bindOptions?.propagation !== undefined) {
+    settings.BindOptions = { Propagation: mount.bindOptions.propagation };
+  }
+
+  if (mount.type === 'tmpfs' && mount.tmpfsOptions) {
+    const { sizeBytes, mode } = mount.tmpfsOptions;
+    const tmpfsOptions: Record<string, unknown> = {};
+    if (sizeBytes !== undefined) tmpfsOptions.SizeBytes = sizeBytes;
+    if (mode !== undefined) tmpfsOptions.Mode = mode;
+    if (Object.keys(tmpfsOptions).length > 0) {
+      settings.TmpfsOptions = tmpfsOptions as Docker.MountSettings['TmpfsOptions'];
+    }
+  }
+
+  return settings;
+}
+
 function toDockerSandboxOptionName(field: keyof Docker.HostConfig): string {
   const optionNames: Partial<Record<keyof Docker.HostConfig, string>> = {
     Privileged: 'privileged',
@@ -721,6 +983,7 @@ function toDockerSandboxOptionName(field: keyof Docker.HostConfig): string {
     SecurityOpt: 'securityOpt',
     Ulimits: 'ulimits',
     Tmpfs: 'tmpfs',
+    Mounts: 'mounts',
   };
 
   return optionNames[field] ?? String(field);

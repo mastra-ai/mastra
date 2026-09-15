@@ -1,7 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod/v4';
 
+import { resolveBackgroundConfig } from '../background-tasks/resolve-config';
 import { RequestContext } from '../request-context';
+import { makeCoreTool } from '../utils';
 import { createTool, Tool } from './tool';
 
 const mockFindUser = vi.fn().mockImplementation(async nameS => {
@@ -164,6 +166,88 @@ describe('createTool with providerOptions', () => {
         cacheControl: { type: 'ephemeral' },
       },
     });
+  });
+});
+
+describe('createTool with background', () => {
+  it('should preserve background config when creating a tool', () => {
+    const backgroundTool = createTool({
+      id: 'background-tool',
+      description: 'A tool that runs in the background',
+      inputSchema: z.object({
+        input: z.string(),
+      }),
+      background: { enabled: true, timeoutMs: 60_000 },
+      execute: async ({ input }) => {
+        return { output: input };
+      },
+    });
+
+    expect(backgroundTool.background).toEqual({ enabled: true, timeoutMs: 60_000 });
+  });
+
+  it('should be undefined when background is not provided', () => {
+    const toolWithoutBackground = createTool({
+      id: 'no-background-tool',
+      description: 'A tool without background config',
+      inputSchema: z.object({
+        input: z.string(),
+      }),
+      execute: async ({ input }) => {
+        return { output: input };
+      },
+    });
+
+    expect(toolWithoutBackground.background).toBeUndefined();
+  });
+
+  it('should preserve background config through Tool class constructor', () => {
+    const tool = new Tool({
+      id: 'direct-background-tool',
+      description: 'Tool created directly with constructor',
+      inputSchema: z.object({ value: z.string() }),
+      background: { enabled: true },
+      execute: async ({ value }) => ({ result: value }),
+    });
+
+    expect(tool.background).toEqual({ enabled: true });
+  });
+
+  // Regression for #18451: storing `background` on the Tool isn't enough on its
+  // own — the value has to survive conversion to a CoreTool (where the agentic
+  // loop reads it as `backgroundConfig`) and be consumed by the dispatch
+  // resolver. This guards the whole writer -> reader path against field-name
+  // drift between `Tool.background` and `CoreTool.backgroundConfig`.
+  it('flows tool-level background config through to the dispatch resolver', () => {
+    const tool = createTool({
+      id: 'bg-dispatch-tool',
+      description: 'A tool eligible for background execution',
+      inputSchema: z.object({ topic: z.string() }),
+      background: { enabled: true, timeoutMs: 60_000 },
+      execute: async ({ topic }) => ({ summary: topic }),
+    });
+
+    // Mirror the agent's bridge: it reads `tool.background` into
+    // `options.backgroundConfig` when building the CoreTool.
+    const coreTool = makeCoreTool(
+      tool,
+      { name: 'bg-dispatch-tool', requestContext: new RequestContext(), backgroundConfig: tool.background },
+      undefined,
+      undefined,
+      true,
+    );
+
+    // The dispatch path (tool-call-step) reads `backgroundConfig` off the CoreTool.
+    expect((coreTool as any).backgroundConfig).toEqual({ enabled: true, timeoutMs: 60_000 });
+
+    // And the resolver actually selects background execution from that config.
+    const resolved = resolveBackgroundConfig({
+      llmBgOverrides: {},
+      toolName: 'bg-dispatch-tool',
+      toolConfig: (coreTool as any).backgroundConfig,
+    });
+    expect(resolved.runInBackground).toBe(true);
+    expect(resolved.timeoutMs).toBe(60_000);
   });
 });
 

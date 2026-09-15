@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import type { StoredSkillResponse } from '@mastra/client-js';
 import { renderHook } from '@testing-library/react';
 import React from 'react';
