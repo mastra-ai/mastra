@@ -2372,20 +2372,20 @@ export class SessionDisplayState {
       case 'message_update': {
         if (ds.currentMessage?.id !== event.id) break;
 
-        const parts = ds.currentMessage.content.parts.map(part => structuredClone(part));
+        const parts = [...ds.currentMessage.content.parts];
         if (event.event.type === 'text-delta') {
           const textIndex = parts.findLastIndex(part => part.type === 'text');
           const textPart = parts[textIndex];
           if (textPart?.type === 'text') {
-            textPart.text += event.event.delta;
+            parts[textIndex] = { ...textPart, text: textPart.text + event.event.delta };
           } else {
             parts.push({ type: 'text', text: event.event.delta });
           }
         } else if (event.event.type === 'reasoning-delta') {
           const reasoningPart = parts[event.event.index];
           if (reasoningPart?.type === 'reasoning') {
-            reasoningPart.reasoning += event.event.delta;
-            reasoningPart.details = [{ type: 'text', text: reasoningPart.reasoning }];
+            const reasoning = reasoningPart.reasoning + event.event.delta;
+            parts[event.event.index] = { ...reasoningPart, reasoning, details: [{ type: 'text', text: reasoning }] };
           }
         } else {
           parts[event.event.index] = structuredClone(event.event.part);
