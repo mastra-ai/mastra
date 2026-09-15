@@ -6,6 +6,8 @@ import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import type { Component } from '@earendil-works/pi-tui';
+import { PACK_FALLBACK_STATE_KEY } from '@mastra/code-sdk/auth/account-rotation-processor';
+import type { PendingPackFallback } from '@mastra/code-sdk/auth/account-rotation-processor';
 import { getOAuthProviders } from '@mastra/code-sdk/auth/storage';
 import {
   getAvailableModePacks,
@@ -19,6 +21,7 @@ import type { ProviderAccess, ProviderAccessLevel } from '@mastra/code-sdk/onboa
 import {
   resolveThreadActiveModelPackId,
   THREAD_ACTIVE_MODEL_PACK_ID_KEY,
+  THREAD_FALLBACK_STATUS_KEY,
   MASTRA_GATEWAY_PROVIDER,
 } from '@mastra/code-sdk/onboarding/settings';
 import type { LoadedPlugin } from '@mastra/code-sdk/plugins/types';
@@ -106,21 +109,66 @@ const UPDATE_RECHECK_INTERVAL_MS = 45 * 60 * 1_000; // 45 minutes
 const IMAGE_PLACEHOLDER_PATTERN = /\[image\]\s*/g;
 const CAFFEINATE_ARGS = ['-i', '-m'];
 
+function fallbackStatusFromMetadata(
+  metadata: Record<string, unknown> | undefined,
+): { usingPack: string; failedPack: string } | undefined {
+  const persisted = metadata?.[THREAD_FALLBACK_STATUS_KEY];
+  if (
+    persisted &&
+    typeof persisted === 'object' &&
+    typeof (persisted as Record<string, unknown>).usingPack === 'string' &&
+    typeof (persisted as Record<string, unknown>).failedPack === 'string'
+  ) {
+    return persisted as { usingPack: string; failedPack: string };
+  }
+  return undefined;
+}
+
 export async function syncInitialThreadState(state: TUIState): Promise<void> {
   const initThreadId = state.session.thread.getId();
   if (!initThreadId) {
     setCurrentThreadTitle(state, undefined);
+    state.fallbackStatus = undefined;
     return;
   }
 
   const initThreads = await state.session.thread.list();
+  if (state.session.thread.getId() !== initThreadId) return;
+
   const initThread = initThreads.find(t => t.id === initThreadId);
-  setCurrentThreadTitle(state, initThread?.title);
   const metadata = initThread?.metadata as Record<string, unknown> | undefined;
+  const persistedFallbackStatus = fallbackStatusFromMetadata(metadata);
+  const pendingFallback = metadata?.[PACK_FALLBACK_STATE_KEY] as Partial<PendingPackFallback> | null | undefined;
+  const validPendingFallback =
+    pendingFallback &&
+    typeof pendingFallback === 'object' &&
+    typeof pendingFallback.fromPackId === 'string' &&
+    typeof pendingFallback.toPackId === 'string' &&
+    typeof pendingFallback.toModelId === 'string' &&
+    (pendingFallback.reason === 'pool-exhausted' || pendingFallback.reason === 'persistent-outage') &&
+    typeof pendingFallback.at === 'string'
+      ? (pendingFallback as PendingPackFallback)
+      : null;
+  const currentPending = (state.session.state?.get?.() as Record<string, unknown> | undefined)?.[
+    PACK_FALLBACK_STATE_KEY
+  ];
+  if (validPendingFallback || currentPending) {
+    const updates = { [PACK_FALLBACK_STATE_KEY]: validPendingFallback };
+    const applied = state.session.state.setIf
+      ? await state.session.state.setIf(updates, () => state.session.thread.getId() === initThreadId)
+      : state.session.thread.getId() === initThreadId
+        ? await state.session.state.set(updates).then(() => true)
+        : false;
+    if (!applied || state.session.thread.getId() !== initThreadId) return;
+  }
+
+  setCurrentThreadTitle(state, initThread?.title);
+  state.fallbackStatus = persistedFallbackStatus;
   state.activeGithubPrSubscriptions = getGithubPrSubscriptionsFromMetadata(metadata);
   // Prefer the durable ThreadState objective; fall back to the legacy
   // thread-metadata goal for threads created before the migration.
   await state.goalManager.loadFromThread(state);
+  if (state.session.thread.getId() !== initThreadId) return;
   if (!state.goalManager.getGoal()) {
     state.goalManager.loadFromThreadMetadata(metadata);
   }
@@ -999,20 +1047,11 @@ export class MastraTUI {
         : (await this.state.session.thread.list()).find(t => t.id === currentThreadId);
     const access = await this.buildProviderAccess();
     const packs = getAvailableModePacks(access, settings.customModelPacks).filter(p => p.id !== 'custom');
-    const resolvedPackId = resolveThreadActiveModelPackId(
-      settings,
-      packs,
-      resolvedThread?.metadata as Record<string, unknown> | undefined,
-    );
-
-    if (resolvedPackId && settings.models.activeModelPackId !== resolvedPackId) {
-      // Re-read settings to avoid overwriting concurrent changes
-      const fresh = loadSettings();
-      if (fresh.models.activeModelPackId !== resolvedPackId) {
-        fresh.models.activeModelPackId = resolvedPackId;
-        saveSettings(fresh);
-      }
-    }
+    const metadata = resolvedThread?.metadata as Record<string, unknown> | undefined;
+    const resolvedPackId = resolveThreadActiveModelPackId(settings, packs, metadata);
+    this.state.fallbackStatus = fallbackStatusFromMetadata(metadata);
+    await this.state.session.state.set({ activeModelPackId: resolvedPackId });
+    updateStatusLine(this.state);
   }
 
   private showHookWarnings(event: string, warnings: string[]): void {
@@ -1521,6 +1560,7 @@ export class MastraTUI {
     if (this.state.session.thread.getId()) {
       await this.state.session.thread.setSetting({ key: THREAD_ACTIVE_MODEL_PACK_ID_KEY, value: activeModePackId });
     }
+    await this.state.session.state.set({ activeModelPackId: activeModePackId });
 
     settings.models.activeOmPackId = omPack?.id ?? null;
     settings.models.omModelOverride = omPack?.id === 'custom' ? omPack.modelId : null;

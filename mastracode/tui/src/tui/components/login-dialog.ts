@@ -141,6 +141,9 @@ export class LoginDialogComponent extends Box implements Focusable {
     this.contentContainer.addChild(new Text(theme.fg('muted', '(Escape to keep current, Enter to submit)')));
 
     this.input.setValue('');
+    // The account name is not a secret — show the typed text (the OAuth
+    // code prompt above reuses the same input and stays masked).
+    this.input.setMasked(false);
     this.tui.requestRender();
 
     this.inPostLoginPrompt = true;
@@ -162,6 +165,7 @@ export class LoginDialogComponent extends Box implements Focusable {
   private finishPostLoginPrompt(_value: string | null): void {
     this.inPostLoginPrompt = false;
     this.postLoginResolver = undefined;
+    this.input.setMasked(true);
     this.input.onSubmit = () => {
       if (this.inputResolver) {
         this.inputResolver(this.input.getValue());

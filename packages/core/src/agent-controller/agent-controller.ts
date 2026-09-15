@@ -2293,6 +2293,7 @@ export class AgentController<TState = {}> {
     scope?: { abortSignal?: AbortSignal; resourceId?: string; threadId?: string; modeId?: string },
   ): Promise<RequestContext> {
     requestContext = new RequestContext(requestContext?.entries());
+    const threadId = scope?.threadId ?? session.thread.getId();
     const controllerContext: AgentControllerRequestContext<TState> = {
       controllerId: this.id,
       harnessId: this.id,
@@ -2300,7 +2301,11 @@ export class AgentController<TState = {}> {
       getState: () => session.state.get(),
       setState: updates => session.state.set(updates),
       updateState: updater => session.state.update(updater),
-      threadId: scope?.threadId ?? session.thread.getId(),
+      setThreadSetting: setting =>
+        threadId
+          ? session.thread.setSettingOn({ threadId, key: setting.key, value: setting.value })
+          : Promise.resolve(),
+      threadId,
       resourceId: scope?.resourceId ?? session.identity.getResourceId(),
       scope: this.#sessionScopes.get(session),
       session: {

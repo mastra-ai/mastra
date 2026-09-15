@@ -4,7 +4,8 @@
  * so they carry across threads and restarts.
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { MastraBrowser } from '@mastra/core/browser';
 import type { LSPConfig } from '@mastra/core/workspace';
@@ -20,6 +21,7 @@ export { isThinkingLevelSetting, THINKING_LEVEL_VALUES } from '../thinking.js';
 export type { ThinkingLevelSetting, ThinkingLevelSource } from '../thinking.js';
 import { getAppDataDir } from '../utils/project.js';
 import { DEFAULT_STT_PROVIDER, resolveSTTModel } from '../voice/stt-registry.js';
+import { pruneUnknownModePackFallbacks } from './packs.js';
 
 /** A saved custom pack — user-defined model selections for each mode. */
 export interface CustomPack {
@@ -233,6 +235,14 @@ export interface GlobalSettings {
     activeModelPackId: string | null;
     /** Per-mode overrides keyed by built-in pack ID. */
     modePackOverrides: Record<string, Record<string, string>>;
+    /**
+     * Fallback pack per pack ID (packId → packId; builtin ids and
+     * "custom:<name>" both allowed). When every account serving a pack's
+     * provider is exhausted — or the provider is persistently down — the turn
+     * hops to the fallback pack's model. Chains are allowed; a cycle is
+     * capped at one revisit per cascade, then the error surfaces.
+     */
+    packFallbacks: Record<string, string>;
     /** Explicit per-mode defaults — used when no activeModelPackId is set. */
     modeDefaults: Record<string, string>;
     /**
@@ -399,6 +409,7 @@ const DEFAULTS: GlobalSettings = {
   models: {
     activeModelPackId: null,
     modePackOverrides: {},
+    packFallbacks: {},
     modeDefaults: {},
     modeThinkingDefaults: {},
     activeOmPackId: null,
@@ -504,6 +515,20 @@ function parseModePackOverrides(value: unknown): Record<string, Record<string, s
     if (Object.keys(parsedOverrides).length > 0) result[packId] = parsedOverrides;
   }
   return result;
+}
+
+function parsePackFallbacks(value: unknown): Record<string, string> {
+  if (!value || typeof value !== 'object') return {};
+  const result: Record<string, string> = {};
+  for (const [packId, fallbackId] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof fallbackId === 'string' && fallbackId.length > 0) result[packId] = fallbackId;
+  }
+  return result;
+}
+
+/** Shape-parse + drop entries whose source or target pack no longer exists. */
+function loadPackFallbacks(value: unknown, customModelPacks: Array<{ name: string }>): Record<string, string> {
+  return pruneUnknownModePackFallbacks(parsePackFallbacks(value), customModelPacks);
 }
 
 function parseQuietModeMaxToolPreviewLines(value: unknown): number {
@@ -859,6 +884,7 @@ function migrateFromAuth(settingsPath: string): boolean {
   if (existsSync(settingsPath)) {
     try {
       const raw = JSON.parse(readFileSync(settingsPath, 'utf-8'));
+      const rawCustomPacks: Array<{ name: string }> = Array.isArray(raw.customModelPacks) ? raw.customModelPacks : [];
       settings = {
         onboarding: { ...DEFAULTS.onboarding, ...raw.onboarding },
         models: {
@@ -866,6 +892,7 @@ function migrateFromAuth(settingsPath: string): boolean {
           ...raw.models,
           modePackOverrides: parseModePackOverrides(raw.models?.modePackOverrides),
           modeThinkingDefaults: parseModeThinkingDefaults(raw.models?.modeThinkingDefaults),
+          packFallbacks: loadPackFallbacks(raw.models?.packFallbacks, rawCustomPacks),
         },
         preferences: parsePreferences(raw.preferences),
         storage: {
@@ -927,7 +954,7 @@ function migrateFromAuth(settingsPath: string): boolean {
     delete authData[key];
   }
   try {
-    writeFileSync(authPath, JSON.stringify(authData, null, 2), 'utf-8');
+    writeFileAtomically(authPath, JSON.stringify(authData, null, 2));
   } catch {
     // Non-fatal — settings are saved, auth cleanup can fail
   }
@@ -985,6 +1012,7 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
   if (!existsSync(filePath)) return rememberLoadedSettings(getNewInstallDefaults());
   try {
     const raw = JSON.parse(readFileSync(filePath, 'utf-8'));
+    const rawCustomPacks: Array<{ name: string }> = Array.isArray(raw.customModelPacks) ? raw.customModelPacks : [];
     // Spread raw first to preserve unknown top-level keys (forward-compatibility),
     // then overlay with parsed/typed fields so known keys are always correct.
     const settings: GlobalSettings = {
@@ -995,6 +1023,7 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
         ...raw.models,
         modePackOverrides: parseModePackOverrides(raw.models?.modePackOverrides),
         modeThinkingDefaults: parseModeThinkingDefaults(raw.models?.modeThinkingDefaults),
+        packFallbacks: loadPackFallbacks(raw.models?.packFallbacks, rawCustomPacks),
       },
       preferences: parsePreferences(raw.preferences),
       storage: {
@@ -1043,6 +1072,7 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
 }
 
 export const THREAD_ACTIVE_MODEL_PACK_ID_KEY = 'activeModelPackId';
+export const THREAD_FALLBACK_STATUS_KEY = 'mastracodeFallbackStatus';
 
 export interface ThreadSettings {
   activeModelPackId: string | null;
@@ -1131,6 +1161,22 @@ export function resolveModePackModels(
 ): Record<string, string> {
   if (pack.id.startsWith('custom:') || pack.id === 'custom') return pack.models;
   return { ...pack.models, ...settings.models.modePackOverrides?.[pack.id] };
+}
+
+/**
+ * Resolve a session's explicitly active pack when its mode model still matches.
+ * Model matching alone is not pack identity: multiple packs may intentionally
+ * use the same model, and inference would attach an unrelated fallback chain.
+ */
+export function findModePackForModel(
+  settings: GlobalSettings,
+  packs: Array<{ id: string; models: Record<string, string> }>,
+  modelId: string,
+  modeId: string,
+  activePackId: string | undefined,
+): { id: string; models: Record<string, string> } | undefined {
+  const activePack = packs.find(pack => pack.id === activePackId);
+  return activePack && resolveModePackModels(settings, activePack)[modeId] === modelId ? activePack : undefined;
 }
 
 export function resolveModelDefaults(
@@ -1243,6 +1289,16 @@ function getSignalSettingsForSave(settings: GlobalSettings, filePath: string): S
   return settings.signals;
 }
 
+function writeFileAtomically(filePath: string, content: string): void {
+  const tempPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
+  try {
+    writeFileSync(tempPath, content, 'utf-8');
+    renameSync(tempPath, filePath);
+  } finally {
+    rmSync(tempPath, { force: true });
+  }
+}
+
 export function saveSettings(settings: GlobalSettings, filePath: string = getSettingsPath()): void {
   const dir = dirname(filePath);
   if (!existsSync(dir)) {
@@ -1251,7 +1307,7 @@ export function saveSettings(settings: GlobalSettings, filePath: string = getSet
   const signals = getSignalSettingsForSave(settings, filePath);
   settings.signals = signals;
   loadedSignalSettings.set(settings, cloneSignalSettings(signals));
-  writeFileSync(filePath, JSON.stringify(settings, null, 2), 'utf-8');
+  writeFileAtomically(filePath, JSON.stringify(settings, null, 2));
 }
 
 /** Marker file name to track which provider last used a profile. */

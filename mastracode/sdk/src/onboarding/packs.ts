@@ -110,6 +110,77 @@ export function getBuiltinModePack(packId: string): (ModePack & { providerId: st
 }
 
 /**
+ * All builtin mode packs regardless of provider access (descriptions use the
+ * apikey variant). For resolution-time lookups — fallback chains must resolve
+ * even when an access probe is stale; actual auth failures surface through
+ * the provider call itself.
+ */
+export function listBuiltinModePacks(): ModePack[] {
+  return BUILTIN_MODE_PACKS.map(pack => ({
+    id: pack.id,
+    name: pack.name,
+    description: pack.description('apikey'),
+    models: { ...pack.models },
+  }));
+}
+
+/** A pack id is known when it is a builtin mode pack or a saved custom pack. */
+export function isKnownModePackId(packId: string, savedCustomPacks: Array<{ name: string }> = []): boolean {
+  if (BUILTIN_MODE_PACKS.some(pack => pack.id === packId)) return true;
+  return packId.startsWith('custom:') && savedCustomPacks.some(pack => `custom:${pack.name}` === packId);
+}
+
+/**
+ * Drop pack-fallback entries whose source or target pack no longer exists
+ * (e.g. a deleted custom pack). Shape validation happens before this; here we
+ * only prune dangling references, with the same tolerance the rest of settings
+ * parsing uses.
+ */
+export function pruneUnknownModePackFallbacks(
+  fallbacks: Record<string, string>,
+  savedCustomPacks: Array<{ name: string }> = [],
+): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const [packId, fallbackId] of Object.entries(fallbacks)) {
+    if (isKnownModePackId(packId, savedCustomPacks) && isKnownModePackId(fallbackId, savedCustomPacks)) {
+      result[packId] = fallbackId;
+    }
+  }
+  return result;
+}
+
+/**
+ * Walk `settings.models.packFallbacks` from `startPackId`, returning the pack
+ * ids in cascade order starting with the pack itself. Cycles are allowed but
+ * the cascade gets exactly one revisit total (Q15: "full circle then one
+ * revisit then surface"): the walk stops when the next link would add a pack
+ * already in the chain after the revisit was consumed, or when a link
+ * dangles at an unknown pack. An A⇄B cycle therefore yields [A, B, A#2] and
+ * stops. This cap is the cycle handling for both the fallback model chain
+ * (request time) and the /models picker's chain display.
+ */
+export function resolveModePackFallbackChain(
+  fallbacks: Record<string, string>,
+  startPackId: string,
+  savedCustomPacks: Array<{ name: string }> = [],
+): string[] {
+  const chain = [startPackId];
+  let revisitUsed = false;
+  let current = startPackId;
+  while (true) {
+    const next = fallbacks[current];
+    if (!next || !isKnownModePackId(next, savedCustomPacks)) break;
+    if (chain.includes(next)) {
+      if (revisitUsed) break;
+      revisitUsed = true;
+    }
+    chain.push(next);
+    current = next;
+  }
+  return chain;
+}
+
+/**
  * Build the list of available mode packs based on which providers the user
  * can actually reach (API key or OAuth login).
  *

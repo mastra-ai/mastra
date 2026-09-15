@@ -77,6 +77,8 @@ Mastra Code uses Mastra's [model router](https://mastra.ai/models), which routes
 
 `/models` switches model packs. Built-in packs keep every mode on one provider. Use `/model` to override the current mode with another model from that provider. Modified built-in packs are labeled in `/models`; selecting one highlights the overridden modes and lets you activate its overrides or reset it to the original built-in models. To mix providers, create or edit a custom pack with `/models`.
 
+`/models` also configures **fallback packs**: select a pack and choose **Set fallback…** from its action menu. When every account serving the active pack's provider is unavailable — all accounts rate-limited or the provider down after retries — the turn hops to the fallback pack's model for that mode. Fallbacks work for built-in and custom packs, and chains are allowed (A → B → C). Cycles are safe: a cascade revisits any one pack at most once (A → B → A), then the error surfaces. Every hop renders a notice in the transcript and is saved in the thread history. After a hop, the thread stays on the landed pack until you switch back with `/models` — there is no automatic recovery.
+
 If the selected model needs a provider key, Mastra Code prompts for the key and displays its environment variable name, such as `ANTHROPIC_API_KEY`.
 
 - **Enter a key**: The key is stored in `auth.json` and set in the current process environment. The model becomes available immediately.
@@ -104,12 +106,13 @@ OAuth credentials are stored in `auth.json` alongside the database in the app da
 
 You can sign in with more than one account for the same provider — for example, two Claude Max accounts or four Kimi For Coding accounts. Run `/login` and select a provider you are already signed in to: instead of replacing your credentials, Mastra Code opens the account manager for that provider.
 
-The account manager lists every registered account with its label and marks the active one. From there you can:
+The account manager lists every registered account with its label and marks the active one. Selecting an account opens a submenu for it:
 
-- **Add another account** — runs the normal sign-in flow and appends the account.
-- **Select an account** — makes it the active account used for new requests.
-- **Re-authenticate…** — picks an account and refreshes its credentials by signing in again.
-- **Remove…** — deletes an account (after confirmation).
+- **Set as active** — makes it the active account used for new requests (only shown for accounts that aren't active).
+- **Re-authenticate…** — refreshes the account's credentials by signing in again.
+- **Remove…** — deletes the account (after confirmation).
+
+**Add another account** runs the normal sign-in flow and appends the account, then returns to the manager. The new account is not activated — open its submenu and choose **Set as active** to switch to it.
 
 Exactly one account per provider is active at a time; the others are kept for rotation and switching. After a successful sign-in you can name the account — ChatGPT and xAI accounts pre-fill the account's email and GitHub Copilot accounts pre-fill the GitHub login when available. `/logout` still signs out of the provider entirely, removing every registered account.
 

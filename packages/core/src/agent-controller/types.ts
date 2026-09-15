@@ -1008,6 +1008,8 @@ export interface AgentControllerRequestState<TState = unknown> {
   get: () => Readonly<TState>;
   /** Update session-owned controller state. */
   set: (updates: Partial<TState>) => Promise<void>;
+  /** Apply an update only while a caller-owned identity still matches. */
+  setIf?: (updates: Partial<TState>, shouldApply: () => boolean) => Promise<boolean>;
   /** Update session-owned controller state from the latest snapshot in a serialized transaction. */
   update: <TResult>(updater: AgentControllerRequestStateUpdater<TState, TResult>) => Promise<TResult>;
 }
@@ -1054,7 +1056,10 @@ export interface AgentControllerRequestContext<TState = unknown> {
   /** Update controller state from the latest state snapshot in a serialized transaction. */
   updateState?: <TResult>(updater: AgentControllerRequestStateUpdater<TState, TResult>) => Promise<TResult>;
 
-  /** Current thread ID */
+  /** Persist a setting on the thread captured for this request. */
+  setThreadSetting?: (setting: { key: string; value: unknown }) => Promise<void>;
+
+  /** Thread ID captured for this request. */
   threadId: string | null;
 
   /** Current resource ID */

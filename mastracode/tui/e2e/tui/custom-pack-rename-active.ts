@@ -54,6 +54,7 @@ export const customPackRenameActiveScenario = {
     await runtime.waitForScreenText(/Custom pack: Rename Source E2E/i, terminal, 8_000);
     await runtime.waitForScreenText(/Edit\s+Update this pack/i, terminal, 8_000);
 
+    // Rows: [Activate, Edit, Share, Set fallback…, Delete].
     terminal.write('\x1b[B');
     terminal.write('\r');
     await runtime.waitForScreenText(/Edit custom pack: Rename Source E2E/i, terminal, 8_000);

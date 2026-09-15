@@ -26,4 +26,11 @@ export function removeCustomPackFromSettings(settings: GlobalSettings, packId: s
   if (settings.onboarding.modePackId === packId) {
     settings.onboarding.modePackId = null;
   }
+
+  const fallbacks = settings.models.packFallbacks ?? {};
+  settings.models.packFallbacks = Object.fromEntries(
+    Object.entries(fallbacks).filter(
+      ([sourcePackId, targetPackId]) => sourcePackId !== packId && targetPackId !== packId,
+    ),
+  );
 }

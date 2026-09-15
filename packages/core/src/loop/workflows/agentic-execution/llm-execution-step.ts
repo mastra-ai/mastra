@@ -2583,8 +2583,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       // If shouldRetry is true, we continue the loop instead of triggering tripwire
       const stepReason = shouldRetry ? 'retry' : tripwireTriggered ? 'tripwire' : hasErrored ? 'error' : finishReason;
 
-      const nextFallbackModelIndex = shouldRetry ? activeFallbackModelIndex : 0;
-
       // isContinued should be true if:
       // - shouldRetry is true (processor requested retry)
       // - OR there are non-provider-executed tool calls to process (some LLMs return finishReason 'stop' even with tool calls)
@@ -2593,6 +2591,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       // contains both the tool execution and the text output, so no additional loop iteration is needed.
       // The shouldContinue/hasPendingToolCalls decision is computed above so reconciliation can run
       // before the returned snapshots are built.
+      const nextFallbackModelIndex = shouldContinue ? activeFallbackModelIndex : 0;
 
       // On terminal exit, materialize spans for provider tool calls whose result never arrived.
       // On retry (shouldRetry), pending calls from the rejected attempt must also be flushed —
