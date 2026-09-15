@@ -173,31 +173,31 @@ export class Run extends BaseResource {
    * @param params - Object containing the inputData, initialState and requestContext
    * @returns Promise containing the workflow execution results
    */
-  startAsync(params: {
-    inputData: Record<string, any>;
-    initialState?: Record<string, any>;
-    requestContext?: RequestContext | Record<string, any>;
-    tracingOptions?: TracingOptions;
-    resourceId?: string;
-    perStep?: boolean;
-  }): Promise<WorkflowRunResult> {
+  startAsync(
+    params: Omit<Body<'POST /workflows/:workflowId/start-async'>, 'requestContext'> & {
+      requestContext?: RequestContext | Record<string, any>;
+    },
+  ): Promise<RouteResponse<'POST /workflows/:workflowId/start-async'>> {
     const searchParams = new URLSearchParams();
 
     searchParams.set('runId', this.runId);
 
     const requestContext = parseClientRequestContext(params.requestContext);
 
-    return this.request<WorkflowRunResult>(`/workflows/${this.workflowId}/start-async?${searchParams.toString()}`, {
-      method: 'POST',
-      body: {
-        inputData: params.inputData,
-        initialState: params.initialState,
-        requestContext,
-        tracingOptions: params.tracingOptions,
-        resourceId: params.resourceId,
-        perStep: params.perStep,
+    return this.request<RouteResponse<'POST /workflows/:workflowId/start-async'>>(
+      `/workflows/${this.workflowId}/start-async?${searchParams.toString()}`,
+      {
+        method: 'POST',
+        body: {
+          inputData: params.inputData,
+          initialState: params.initialState,
+          requestContext,
+          tracingOptions: params.tracingOptions,
+          resourceId: params.resourceId,
+          perStep: params.perStep,
+        },
       },
-    }).then(deserializeWorkflowError);
+    ).then(result => deserializeWorkflowError(result as WorkflowRunResult));
   }
 
   /**
