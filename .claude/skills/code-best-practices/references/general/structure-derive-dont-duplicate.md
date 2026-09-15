@@ -34,4 +34,4 @@ The same applies to components: don't accept an `itemCount` prop next to the `it
 
 Smell: two parameters where one is `other.length`, `!!other`, or a `map`/`filter` of the other. Drop it and compute it where it's used.
 
-For the state side of this principle — don't store a derived value or sync it with `useEffect` — see [`rerender-no-useeffect-state-reset`](./rerender-no-useeffect-state-reset.md).
+For the state side of this principle — don't store a derived value or sync it with `useEffect` — see [`rerender-no-useeffect-state-reset`](../react/rerender/rerender-no-useeffect-state-reset.md).

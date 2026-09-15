@@ -112,4 +112,4 @@ Apply the same rule outside hooks:
 
 Review smells: callers pass values they do not otherwise use, most callers destructure only a small subset of a return object, inputs and outputs fall into named clusters, changes for unrelated features keep touching the same API, or the unit cannot be described without "and."
 
-This complements [`structure-single-responsibility`](./structure-single-responsibility.md): that rule defines ownership and file boundaries; this rule uses API breadth as a signal that the ownership boundary must be split.
+This complements [`structure-single-responsibility`](../react/structure/structure-single-responsibility.md): that rule defines ownership and file boundaries; this rule uses API breadth as a signal that the ownership boundary must be split.
