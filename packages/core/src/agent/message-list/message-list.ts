@@ -994,11 +994,24 @@ export class MessageList {
     },
   };
 
-  public drainUnsavedMessages(): MastraDBMessage[] {
+  public drainUnsavedMessagesWithGeneratedIds(): {
+    messages: MastraDBMessage[];
+    generatedMessageIds: string[];
+  } {
     const messages = this.messages.filter(m => this.newUserMessages.has(m) || this.newResponseMessages.has(m));
+    const generatedMessageIds = messages
+      .filter(message => this.newResponseMessages.has(message))
+      .map(message => message.id);
     this.newUserMessages.clear();
     this.newResponseMessages.clear();
-    return messages.map(message => this.transformMessageForTranscript(message));
+    return {
+      messages: messages.map(message => this.transformMessageForTranscript(message)),
+      generatedMessageIds,
+    };
+  }
+
+  public drainUnsavedMessages(): MastraDBMessage[] {
+    return this.drainUnsavedMessagesWithGeneratedIds().messages;
   }
 
   private transformToolStateDataForTranscript(data: unknown, phase: 'approval' | 'suspend'): unknown {
