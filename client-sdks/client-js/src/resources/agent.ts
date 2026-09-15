@@ -597,8 +597,9 @@ export class Agent extends BaseResource {
    * @remarks This is a browser-stream adapter compatibility endpoint, not a
    * `SERVER_ROUTES` route. Its historical deployer implementation returns
    * `{ success: true }`; no generated contract exists while the adapter owns it.
+   * The public `boolean` result remains broad for backwards compatibility.
    */
-  closeBrowser(threadId?: string): Promise<{ success: true }> {
+  closeBrowser(threadId?: string): Promise<{ success: boolean }> {
     return this.request(`/agents/${this.agentId}/browser/close`, {
       method: 'POST',
       body: { threadId },
