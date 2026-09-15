@@ -110,6 +110,39 @@ describe('EditorAgentNamespace.update', () => {
     expect(coldResult).toBeNull();
   });
 
+  it('clearCache() unregisters stored agents hydrated by version-specific requests', async () => {
+    const codeAgent = new Agent({
+      name: 'code-agent',
+      instructions: 'CODE',
+      model: { provider: 'openai', name: 'gpt-4' } as any,
+    });
+    const { editor, mastra } = await createEditorWithStore({ 'code-agent': codeAgent });
+
+    await editor.agent.create({
+      id: 'versioned-stored-agent',
+      name: 'Versioned Stored Agent',
+      instructions: 'ONE',
+      model: { provider: 'openai', name: 'gpt-4' },
+    });
+
+    // Reset all cache/registry state so the version-specific load is the only
+    // thing that registers the stored agent (version requests skip the value cache).
+    editor.agent.clearCache();
+    expect(() => mastra.getAgentById('versioned-stored-agent')).toThrow();
+
+    const versioned = await editor.agent.getById('versioned-stored-agent', { versionNumber: 1 });
+    expect(versioned).not.toBeNull();
+    // Registered with Mastra even though it was never added to the value cache.
+    expect(mastra.getAgentById('versioned-stored-agent')).toBeDefined();
+
+    editor.agent.clearCache();
+
+    // The version-specifically-registered stored agent must be gone after clear-all.
+    expect(() => mastra.getAgentById('versioned-stored-agent')).toThrow();
+    // Code-defined agents must survive clear-all.
+    expect(mastra.getAgentById('code-agent')).toBe(codeAgent);
+  });
+
   it('preserves an explicit activeVersionId while creating a new snapshot version', async () => {
     const { editor, agentsStore } = await createEditorWithStore();
 
