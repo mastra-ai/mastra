@@ -221,7 +221,7 @@ export function TraceDataPanelView({
     <DropdownMenu>
       <DropdownMenu.Trigger
         render={
-          <Button size="md" tooltip="Trace actions" aria-label="Trace actions">
+          <Button size="md" variant="ghost" tooltip="Trace actions" aria-label="Trace actions">
             <MoreHorizontalIcon />
           </Button>
         }
@@ -231,12 +231,6 @@ export function TraceDataPanelView({
           <DropdownMenu.Item onSelect={() => setCollapsed(!collapsed)}>
             {collapsed ? <ChevronsUpDownIcon /> : <ChevronsDownUpIcon />}
             {collapsed ? 'Expand panel' : 'Collapse panel'}
-          </DropdownMenu.Item>
-        )}
-        {!isOnTracePage && onEvaluateTrace && (
-          <DropdownMenu.Item onSelect={onEvaluateTrace}>
-            <CircleGaugeIcon />
-            Evaluate trace
           </DropdownMenu.Item>
         )}
         {!isOnTracePage && onSaveAsDatasetItem && (
@@ -290,16 +284,23 @@ export function TraceDataPanelView({
               )}
             </div>
             <ButtonsGroup className="ml-auto shrink-0 self-start">
+              {onEvaluateTrace && (
+                <Button variant="primary" size="md" onClick={onEvaluateTrace} disabled={!rootSpan}>
+                  <CircleGaugeIcon />
+                  Score trace
+                </Button>
+              )}
               {traceActionsMenu}
               {(onPrevious || onNext) && (
                 <DataPanel.NextPrevNav
+                  variant="ghost"
                   onPrevious={onPrevious}
                   onNext={onNext}
                   previousLabel="Previous trace"
                   nextLabel="Next trace"
                 />
               )}
-              <DataPanel.CloseButton onClick={onClose} />
+              <DataPanel.CloseButton variant="ghost" onClick={onClose} />
             </ButtonsGroup>
           </>
         )}
@@ -357,8 +358,9 @@ export function TraceDataPanelView({
                     </TabList>
                   </DataPanel.Header>
 
+                  {/* Tab contents share the tab list's horizontal padding so their edges line up. */}
                   <TabContent value="details" className="min-h-0 py-0">
-                    <DataPanel.Content>
+                    <DataPanel.Content className="px-2">
                       {!isOnTracePage &&
                         !onEvaluateTrace &&
                         !onSaveAsDatasetItem &&
@@ -388,7 +390,7 @@ export function TraceDataPanelView({
                     </DataPanel.Content>
                   </TabContent>
                   <TabContent value="timeline" className="min-h-0 py-0">
-                    <DataPanel.Content>
+                    <DataPanel.Content className="px-2">
                       {/* Same selection + expansion state as the Spans tab, so switching views keeps context. */}
                       <TraceSpanTimeline
                         hierarchicalSpans={hierarchicalSpans}
@@ -404,12 +406,14 @@ export function TraceDataPanelView({
                   </TabContent>
                   {feedbackTabSlot && (
                     <TabContent value="feedback" className="h-full min-h-0 py-0">
-                      <DataPanel.Content>{feedbackTabSlot({ traceId })}</DataPanel.Content>
+                      <DataPanel.Content className="px-2">{feedbackTabSlot({ traceId })}</DataPanel.Content>
                     </TabContent>
                   )}
                   {scoresTabSlot && (
                     <TabContent value="scores" className="h-full min-h-0 py-0">
-                      <DataPanel.Content>{scoresTabSlot({ traceId, rootSpanId: rootSpan?.spanId })}</DataPanel.Content>
+                      <DataPanel.Content className="px-2">
+                        {scoresTabSlot({ traceId, rootSpanId: rootSpan?.spanId })}
+                      </DataPanel.Content>
                     </TabContent>
                   )}
                 </Tabs>

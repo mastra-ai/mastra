@@ -125,7 +125,7 @@ describe('intake configuration', () => {
 
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ config });
-    expect(await seed.intake.getConfig({ orgId: 'org1', userId: 'u1' })).toEqual(config);
+    expect(await seed.intake.getConfig({ orgId: 'org1' })).toEqual(config);
     expect(auditEvents).toEqual([
       {
         action: 'factory.intake.config_updated',
@@ -558,7 +558,7 @@ describe('intake configuration', () => {
     const config = { github: { enabled: true, sourceIds: ['repo-1'] } };
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ config });
-    expect(await seed.intake.getConfig({ orgId: 'org1', userId: 'u1' })).toEqual(config);
+    expect(await seed.intake.getConfig({ orgId: 'org1' })).toEqual(config);
     expect(auditEvents).toEqual([
       {
         action: 'factory.intake.config_updated',
@@ -608,7 +608,6 @@ describe('aggregated intake', () => {
   it('lists selected items with generic external-source references and per-integration cursors', async () => {
     await seed.intake.saveConfig({
       orgId: 'org1',
-      userId: 'u1',
       config: {
         github: { enabled: true, sourceIds: ['repo-1'] },
         linear: { enabled: true, sourceIds: ['team-1'] },
@@ -672,7 +671,6 @@ describe('aggregated intake', () => {
   it('keeps listing items from the capabilities that answer and resumes an unavailable one at its cursor', async () => {
     await seed.intake.saveConfig({
       orgId: 'org1',
-      userId: 'u1',
       config: {
         github: { enabled: true, sourceIds: ['repo-1'] },
         linear: { enabled: true, sourceIds: ['team-1'] },
@@ -696,7 +694,6 @@ describe('aggregated intake', () => {
   it('does not call disabled or unselected capabilities', async () => {
     await seed.intake.saveConfig({
       orgId: 'org1',
-      userId: 'u1',
       config: {
         github: { enabled: false, sourceIds: ['repo-1'] },
         linear: { enabled: true, sourceIds: null },

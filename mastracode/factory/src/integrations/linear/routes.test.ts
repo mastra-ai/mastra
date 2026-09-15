@@ -128,7 +128,6 @@ beforeEach(async () => {
   );
   await seed.intake.saveConfig({
     orgId: 'org1',
-    userId: 'u1',
     config: { linear: { enabled: true, sourceIds: ['proj-1'] } },
   });
   vi.clearAllMocks();
@@ -298,7 +297,6 @@ describe('issues route', () => {
       await connect();
       await seed.intake.saveConfig({
         orgId: 'org1',
-        userId: 'u1',
         config: { linear: { enabled: true, sourceIds: ['proj-1', 'proj-2'] } },
       });
     });
@@ -416,7 +414,6 @@ describe('issues route', () => {
     await connect();
     await seed.intake.saveConfig({
       orgId: 'org1',
-      userId: 'u1',
       config: { linear: { enabled: true, sourceIds: ['proj-1'] } },
     });
     await buildApp(org1()).request('/web/linear/issues');
@@ -427,7 +424,6 @@ describe('issues route', () => {
     await connect();
     await seed.intake.saveConfig({
       orgId: 'org1',
-      userId: 'u1',
       config: { linear: { enabled: true, sourceIds: null } },
     });
     const res = await buildApp(org1()).request('/web/linear/issues');
@@ -439,7 +435,6 @@ describe('issues route', () => {
     await connect();
     await seed.intake.saveConfig({
       orgId: 'org1',
-      userId: 'u1',
       config: { linear: { enabled: false, sourceIds: null } },
     });
     const res = await buildApp(org1()).request('/web/linear/issues');
@@ -572,7 +567,6 @@ describe('issue detail route', () => {
   it('reads nothing while Linear intake is turned off', async () => {
     await seed.intake.saveConfig({
       orgId: 'org1',
-      userId: 'u1',
       config: { linear: { enabled: false, sourceIds: ['proj-1'] } },
     });
 

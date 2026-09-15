@@ -94,6 +94,24 @@ const setupHandlers = (experiments: DatasetExperiment[] = []) => {
   );
 };
 
+describe('Evaluate navigation', () => {
+  describe('when opened on the Review tab', () => {
+    it('shows the review queue empty state', async () => {
+      setupHandlers();
+      renderWithProviders(<Harness />, { router: { initialEntries: ['/agents/chef-agent/evaluate?tab=review'] } });
+      expect(await screen.findByText('No items to review yet')).not.toBeNull();
+      expect(screen.getByRole('tab', { name: 'Review' }).getAttribute('aria-selected')).toBe('true');
+    });
+  });
+  describe('when opened on Experiments', () => {
+    it('provides Run options inside Evaluate', async () => {
+      setupHandlers();
+      renderWithProviders(<Harness />, { router: true });
+      expect(await screen.findByTestId('agent-top-bar-run-options-trigger')).not.toBeNull();
+    });
+  });
+});
+
 const renderDatasetsTab = async () => {
   setupHandlers();
   const utils = renderWithProviders(<Harness />, { router: true });
@@ -169,6 +187,59 @@ describe('AgentPlaygroundEvaluate', () => {
       fireEvent.keyDown(window, { key: 'c' });
 
       expect(screen.queryByText('Create dataset page')).toBeNull();
+    });
+  });
+
+  describe('shortcuts', () => {
+    it('opens Run options on U', async () => {
+      setupHandlers();
+      renderWithProviders(<Harness />, { router: true });
+      await screen.findByTestId('agent-top-bar-run-options-trigger');
+
+      fireEvent.keyDown(window, { key: 'u' });
+
+      expect(await screen.findByRole('heading', { name: 'Run options' })).toBeTruthy();
+    });
+
+    it('opens the Attach dataset dialog on A from the Datasets tab', async () => {
+      setupHandlers();
+      server.use(
+        http.get('*/api/datasets', () =>
+          HttpResponse.json({
+            datasets: [...datasets, { ...makeDataset('ds-4', 'Dataset Four'), targetIds: ['other-agent'] }],
+            pagination: { total: 4, page: 0, perPage: 100, hasMore: false },
+          }),
+        ),
+      );
+      renderWithProviders(<Harness />, { router: true });
+      fireEvent.click(screen.getByRole('tab', { name: 'Datasets' }));
+      await screen.findByRole('button', { name: 'Attach' });
+
+      fireEvent.keyDown(window, { key: 'a' });
+
+      expect(await screen.findByRole('dialog', { name: 'Attach Existing Dataset' })).toBeTruthy();
+    });
+  });
+
+  describe('when only a workflow-targeted dataset is unattached', () => {
+    it('hides the Attach action so the dataset cannot be mislabeled as an agent dataset', async () => {
+      setupHandlers();
+      server.use(
+        http.get('*/api/datasets', () =>
+          HttpResponse.json({
+            datasets: [
+              ...datasets,
+              { ...makeDataset('ds-wf', 'Workflow Dataset'), targetType: 'workflow', targetIds: ['my-workflow'] },
+            ],
+            pagination: { total: 4, page: 0, perPage: 100, hasMore: false },
+          }),
+        ),
+      );
+      renderWithProviders(<Harness />, { router: true });
+      fireEvent.click(screen.getByRole('tab', { name: 'Datasets' }));
+      await screen.findByText('Dataset One');
+
+      expect(screen.queryByRole('button', { name: 'Attach' })).toBeNull();
     });
   });
 
