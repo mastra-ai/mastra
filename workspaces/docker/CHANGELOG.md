@@ -1,5 +1,56 @@
 # @mastra/docker
 
+## 0.8.0-alpha.2
+
+### Minor Changes
+
+- Added a `mounts` option to `DockerSandbox` for mount configurations that the `volumes` option cannot express. Each entry maps directly to Docker's native mount API, so you can now mount a subdirectory of a named volume, set per-mount read-only, labels, bind propagation, and tmpfs sizing. ([#23953](https://github.com/mastra-ai/mastra/pull/23953))
+
+  The most common use case is mounting a read-only parent alongside a writable subdirectory of the same named volume — for example, giving each conversation its own writable folder inside a shared persistent volume. `volumes` and `mounts` can be used together.
+
+  ```typescript
+  import { Workspace } from '@mastra/core/workspace';
+  import { DockerSandbox } from '@mastra/docker';
+
+  const workspace = new Workspace({
+    sandbox: new DockerSandbox({
+      image: 'node:22-slim',
+      mounts: [
+        { type: 'volume', source: 'project-data', target: '/shared', readOnly: true },
+        {
+          type: 'volume',
+          source: 'project-data',
+          target: '/work',
+          volumeOptions: { subpath: 'conversations/abc123' },
+        },
+      ],
+    }),
+  });
+  ```
+
+  Subpath mounting requires Docker Engine 26.0 or newer. Docker does not create the subpath directory — it must already exist inside the named volume before the container starts, so provision it ahead of time.
+
+### Patch Changes
+
+- Fixed `DockerProcessHandle.kill()` reporting exit code 137 while the process kept running inside the container, and stopped killed/timed-out processes from accumulating against `pidsLimit`. ([#23951](https://github.com/mastra-ai/mastra/pull/23951))
+
+  **Namespace-correct kill**
+
+  `kill()` previously used the host PID from `exec.inspect()`, which does not match the PIDs an in-container `kill` can address, so the signal missed the target and the process stayed alive. Each spawned command now runs in its own session/process group (`setsid -w`) and records its PGID to a private file; `kill()` then `SIGSTOP`s and `SIGKILL`s the whole kernel-owned process group in the container's own PID namespace. Because the group identity is enforced by the kernel, descendants are still terminated even if they drop their environment or re-parent to PID 1, and the identity cannot be forged by another container process. Images without `setsid -w` (e.g. BusyBox) fall back to signalling the recorded leader PID directly.
+
+  **Zombie reaping via an init process**
+
+  The default container command (`sleep infinity`) as PID 1 never reaps children, so terminated processes lingered as zombies and consumed PIDs. `DockerSandbox` now runs a Docker init process as PID 1 by default (`HostConfig.Init`), which reaps children. Disable it with the new `init` option:
+
+  ```ts
+  const sandbox = new DockerSandbox({ init: false });
+  ```
+
+  Fixes #23773.
+
+- Updated dependencies [[`a4381a2`](https://github.com/mastra-ai/mastra/commit/a4381a2b36cdb81c4e33c435cd882921edfc146c)]:
+  - @mastra/core@1.67.0-alpha.6
+
 ## 0.8.0-alpha.1
 
 ### Minor Changes

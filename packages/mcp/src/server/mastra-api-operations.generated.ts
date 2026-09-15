@@ -222,6 +222,13 @@ export const MASTRA_API_OPERATIONS = [
     destructive: false,
   },
   {
+    name: 'trace_query',
+    description: 'Query observability traces with advanced predicates',
+    method: 'POST',
+    path: '/observability/traces/query',
+    destructive: true,
+  },
+  {
     name: 'log_list',
     description: 'List runtime logs',
     method: 'GET',
@@ -297,6 +304,20 @@ export const MASTRA_API_OPERATIONS = [
     method: 'GET',
     path: '/observability/scores/:scoreId',
     destructive: false,
+  },
+  {
+    name: 'score_delete',
+    description: 'Delete scores by ID',
+    method: 'DELETE',
+    path: '/observability/scores',
+    destructive: true,
+  },
+  {
+    name: 'feedback_delete',
+    description: 'Delete feedback by ID',
+    method: 'DELETE',
+    path: '/observability/feedback',
+    destructive: true,
   },
   {
     name: 'dataset_list',

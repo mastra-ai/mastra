@@ -112,7 +112,7 @@ describe('MastraApiMCPServer', () => {
 
     const result = await listTools(server);
 
-    expect(MASTRA_API_OPERATIONS).toHaveLength(60);
+    expect(MASTRA_API_OPERATIONS).toHaveLength(63);
     expect(result.tools.map((tool: { name: string }) => tool.name)).toEqual(
       MASTRA_API_OPERATIONS.map(operation => operation.name),
     );

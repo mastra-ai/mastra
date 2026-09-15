@@ -1,5 +1,90 @@
 # @mastra/core
 
+## 1.67.0-alpha.6
+
+### Patch Changes
+
+- Fix workspace `read_file` throwing `TypeError: mimeType.startsWith is not a function` for files whose extension matches an inherited `Object.prototype` member (e.g. `file.constructor`, `file.__proto__`). `getMimeType` now only resolves own string entries of its MIME table, so these filenames fall back to `application/octet-stream` and read as text like any other unknown extension. Fixes #23957. ([#23959](https://github.com/mastra-ai/mastra/pull/23959))
+
+## 1.67.0-alpha.5
+
+### Minor Changes
+
+- Added `NotificationsStorage.updateNotificationsStatus()` to set one status on many notifications of a thread in a single write. The notification inbox tool now uses it to mark a viewed page seen with one round-trip instead of one update per record. ([#23718](https://github.com/mastra-ai/mastra/pull/23718))
+
+  ```ts
+  // Before: one write per notification
+  await Promise.all(ids.map(id => storage.updateNotification({ threadId, id, status: 'seen' })));
+
+  // After: one write for the whole page; returns the updated records
+  const seen = await storage.updateNotificationsStatus({ threadId, ids, status: 'seen' });
+  ```
+
+  Adapters that don't override the method fall back to per-record `updateNotification` calls, so existing custom storages keep working.
+
+- Added configurable error handling to model-backed guardrail processors. Existing configurations continue to warn and fail open when an internal model call fails: ([#23934](https://github.com/mastra-ai/mastra/pull/23934))
+
+  ```ts
+  new PromptInjectionDetector({
+    model: 'openrouter/openai/gpt-oss-safeguard-20b',
+  });
+  ```
+
+  Set `errorStrategy: 'strict'` to stop processing with a tripwire instead of allowing unchecked content:
+
+  ```ts
+  new PromptInjectionDetector({
+    model: 'openrouter/openai/gpt-oss-safeguard-20b',
+    errorStrategy: 'strict',
+  });
+  ```
+
+- Added `hookDurationMs` to output stream processor spans. It is the time spent inside `processOutputStream`, summed across all chunks. Fixes https://github.com/mastra-ai/mastra/issues/22343 ([#23832](https://github.com/mastra-ai/mastra/pull/23832))
+
+  Read it from the span attributes in any exporter:
+
+  ```ts
+  import type { ObservabilityExporter, ExportedSpan } from '@mastra/core/observability';
+
+  const exporter: ObservabilityExporter = {
+    name: 'processor-cost',
+    async exportSpan(span: ExportedSpan) {
+      if (span.entityType === 'output_processor') {
+        console.log(span.name, span.attributes?.hookDurationMs);
+      }
+    },
+  };
+  ```
+
+### Patch Changes
+
+- Fixed `DurableAgent` losing tools discovered by `ToolSearchProcessor` after the first search. With `includeResolvedTools: true`, the first model step correctly saw only `search_tools`, but the next step saw only `search_tools` again instead of the tool the search auto-loaded, so real models looped on `search_tools` forever. The durable loop now keeps the complete resolved toolset separate from the narrowed per-step snapshot, so tools loaded by `search_tools` or `load_tool` become available on the following step. Fixes #22933. ([#23889](https://github.com/mastra-ai/mastra/pull/23889))
+
+- Fixed signals that wake an idle thread so they continue through durable execution when the agent is wrapped by a durable integration such as `@mastra/inngest`, instead of falling back to the wrapped agent's in-process run. Fixes [#23800](https://github.com/mastra-ai/mastra/issues/23800). ([#23868](https://github.com/mastra-ai/mastra/pull/23868))
+
+- Fixed an issue where calling sendSignal() from a processToolResult processor hook could silently drop the just-completed tool call and result from later model inputs and saved history. The in-flight response message is now only sealed when a message id rotation follows, so the next streamed step merges into it instead of replacing it. (#21940) ([#23634](https://github.com/mastra-ai/mastra/pull/23634))
+
+- `ProviderHistoryCompat` now handles signed thinking blocks that cross providers. The new `anthropic-strip-foreign-signed-reasoning` rule drops signed reasoning from the outbound prompt when the turn that produced it was stamped with a different provider (for example Kimi For Coding ↔ `anthropic/claude-sonnet-4-6`), since the receiving provider rejects a foreign signature with ``Invalid `signature` in `thinking` block``. To support provenance-aware rules, `processLLMRequest` args now expose the `messageList` the prompt was built from. Goal scorers created with `createGoalScorer` now include `ProviderHistoryCompat` in their input and error processor lanes by default, since goal judges talk to the same providers as the agent they judge. ([#23695](https://github.com/mastra-ai/mastra/pull/23695))
+
+  ```ts
+  import { ProviderHistoryCompat } from '@mastra/core/processors';
+
+  export const agent = new Agent({
+    inputProcessors: [new ProviderHistoryCompat()],
+    errorProcessors: [new ProviderHistoryCompat()],
+  });
+  ```
+
+- Fix assistant text parts being reordered when merging multiple text parts after tool results. Account for synthetic step-start markers without moving later tool results across text, preserving the order used for stored messages and model history. ([#23840](https://github.com/mastra-ai/mastra/pull/23840))
+
+- Fixed the notification inbox tool leaving notifications pending forever after the agent viewed them. Listing, reading, or searching now marks the returned unread notifications as seen. `list` defaults to unread notifications in pages of 20 and reports `hasMore` and `markedSeen`; pass `status: 'seen'` to list already-viewed notifications or `limit` to change the page size. Internal `metadata` and `payload` fields are no longer included in list and search results. ([#23710](https://github.com/mastra-ai/mastra/pull/23710))
+
+- Simplified core maintenance without changing schema validation, event serialization, or callback behavior. ([#23729](https://github.com/mastra-ai/mastra/pull/23729))
+
+- Improved default goal-judge retries by adding JSON instructions to the latest user message. The first attempt still selects the supported output format automatically. Validation remains strict. Other scorers keep their existing retry behavior. ([#23901](https://github.com/mastra-ai/mastra/pull/23901))
+
+- Add `WidenModelId<T>` and `WidenedMastraModelConfig` type helpers that replace the model-id literal union with `string` for internal plumbing. Public config fields keep `MastraModelConfig` for autocomplete; internal code that merges model values (`??`, ternaries) should widen first so TypeScript does not subtype-reduce the full model registry union. ([#23947](https://github.com/mastra-ai/mastra/pull/23947))
+
 ## 1.67.0-alpha.4
 
 ### Minor Changes
