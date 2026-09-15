@@ -72,7 +72,7 @@ const PROVIDER_HOST_PATTERNS: Array<[RegExp, string]> = [
  * which only the message reveals.
  */
 const USAGE_LIMIT_MESSAGE_PATTERN =
-  /usage (?:limit|cap)|quota (?:exceeded|exhausted|reached)|rate limit (?:exceeded|reached)|exceeded your [a-z ]*limit|weekly limit|monthly limit/i;
+  /usage (?:limit|cap)|insufficient[_ ]quota|quota (?:exceeded|exhausted|reached)|exceeded (?:your )?current quota|insufficient (?:balance|credits?)|credits? exhausted|rate limit (?:exceeded|reached)|exceeded your [a-z ]*limit|weekly limit|monthly limit/i;
 
 const NETWORK_ERROR_CODES = new Set([
   'ECONNRESET',
@@ -249,7 +249,7 @@ function getTriedInstances(state: Record<string, unknown>): Set<string> {
   return created;
 }
 
-function getForcedRefreshProviders(state: Record<string, unknown>): Set<string> {
+function getForcedRefreshInstances(state: Record<string, unknown>): Set<string> {
   const existing = state.forcedAuthRefresh;
   if (existing instanceof Set) return existing;
   const created = new Set<string>();
@@ -358,15 +358,17 @@ export class AccountRotationProcessor implements Processor {
 
     const store = this.options.credentialStore;
     const accounts = store.listAccounts?.(providerId) ?? [];
+    const active = store.getActiveAccount?.(providerId) ?? accounts.find(account => account.active);
 
     // Q7 bucket 2: force one refresh of the active instance before rotating.
     // A 401 usually means a fresh-but-rejected token; the forced refresh
     // covers server-side clock skew and refresh-token races. Success retries
     // the same account — no rotation, no part.
     if (classification.kind === 'rotate' && classification.reason === 'auth-failed') {
-      const forced = getForcedRefreshProviders(state);
-      if (!forced.has(providerId) && typeof store.forceRefreshActiveAccount === 'function') {
-        forced.add(providerId);
+      const forced = getForcedRefreshInstances(state);
+      const refreshKey = `${providerId}:${active?.id ?? 'active'}`;
+      if (!forced.has(refreshKey) && typeof store.forceRefreshActiveAccount === 'function') {
+        forced.add(refreshKey);
         const token = await store.forceRefreshActiveAccount(providerId);
         if (token !== undefined) {
           return { retry: true };
@@ -381,7 +383,6 @@ export class AccountRotationProcessor implements Processor {
     if (accounts.length < 2) return { retry: false };
 
     const tried = getTriedInstances(state);
-    const active = store.getActiveAccount?.(providerId) ?? accounts.find(account => account.active);
     if (active) tried.add(active.id);
     if (tried.size >= accounts.length) {
       return this.declarePoolUnavailable(args, providerId, 'pool-exhausted');

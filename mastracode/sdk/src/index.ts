@@ -128,10 +128,9 @@ const CODE_AGENT_ID = 'code-agent';
 // settings, so all modes/subagents benefit from a short wait before retrying a transient failure.
 // Delay uses exponential backoff: initialDelay * 2^retryCount, capped at maxDelay.
 const MASTRACODE_TRANSIENT_CONNECTION_MAX_RETRIES = 10;
-// Account pools are intentionally unbounded. Individual retry processors still
-// impose their own finite limits, and account rotation stops at its tried-set;
-// this shared core ceiling must not silently starve a larger OAuth pool.
-const MASTRACODE_MAX_PROCESSOR_RETRIES = Number.MAX_SAFE_INTEGER;
+// Leave enough shared retry headroom for large account/fallback cascades while
+// retaining a hard stop if a custom or plugin processor retries indefinitely.
+const MASTRACODE_MAX_PROCESSOR_RETRIES = 1024;
 const MASTRACODE_TRANSIENT_CONNECTION_RETRY_INITIAL_DELAY_MS = 500;
 const MASTRACODE_TRANSIENT_CONNECTION_RETRY_MAX_DELAY_MS = 30000;
 
@@ -1013,9 +1012,8 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         maxProcessorRetries: MASTRACODE_MAX_PROCESSOR_RETRIES,
       }),
     ],
-    // Transient matchers and account rotation each have their own finite stop
-    // conditions. Keep the shared core ceiling effectively unbounded so an
-    // arbitrary-size OAuth pool is not cut off by an unrelated global cap.
+    // Individual processors have tighter limits; this remains a defensive
+    // ceiling for custom/plugin processors that might retry indefinitely.
     maxProcessorRetries: MASTRACODE_MAX_PROCESSOR_RETRIES,
   });
 

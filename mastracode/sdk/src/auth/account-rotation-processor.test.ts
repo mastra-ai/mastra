@@ -122,6 +122,18 @@ describe('classifyRotationError (locked Q7 taxonomy)', () => {
     ).toEqual({ kind: 'rotate', reason: 'quota-exhausted' });
   });
 
+  it.each([
+    'insufficient_quota',
+    'You exceeded your current quota',
+    'Insufficient balance to complete this request',
+    'API credits exhausted',
+  ])('rotates on common 400 quota wording: %s', message => {
+    expect(classifyRotationError(apiError(400, { message }))).toEqual({
+      kind: 'rotate',
+      reason: 'quota-exhausted',
+    });
+  });
+
   it('classifies 401/403 as auth (refresh first, then rotate)', () => {
     expect(classifyRotationError(apiError(401))).toEqual({ kind: 'rotate', reason: 'auth-failed' });
     expect(classifyRotationError(apiError(403))).toEqual({ kind: 'rotate', reason: 'auth-failed' });
@@ -292,23 +304,25 @@ describe('AccountRotationProcessor.processAPIError', () => {
     expect(readAuthJson(seeded.authPath)[PROVIDER]).toMatchObject({ access: 'token-a' });
   });
 
-  it('forces the 401 refresh only once per request per provider', async () => {
+  it('forces the 401 refresh once per account in a request', async () => {
     const seeded = makeTwoAccountStorage();
     const refreshToken = vi
       .spyOn(anthropicOAuthProvider, 'refreshToken')
-      .mockResolvedValue({ access: 'token-a-fresh', refresh: 'refresh-a-fresh', expires: FUTURE });
+      .mockResolvedValueOnce({ access: 'token-a-fresh', refresh: 'refresh-a-fresh', expires: FUTURE })
+      .mockResolvedValueOnce({ access: 'token-b-fresh', refresh: 'refresh-b-fresh', expires: FUTURE });
     const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
     const args = makeArgs({ error: apiError(401) });
 
-    // First 401: refresh succeeds → retry same account.
+    // Account A refreshes once, then a second 401 rotates to B.
     await processor.processAPIError(args as any);
-    // Retry fails again with 401 (fresh-but-rejected): no second forced
-    // refresh — rotate instead.
-    vi.spyOn(anthropicOAuthProvider, 'refreshToken').mockRejectedValue(new Error('refresh rejected'));
-    const secondArgs = makeArgs({ error: apiError(401), state: args.state });
-    await processor.processAPIError(secondArgs as any);
-    expect(refreshToken).toHaveBeenCalledTimes(1);
+    await processor.processAPIError(makeArgs({ error: apiError(401), state: args.state }) as any);
     expect(readAuthJson(seeded.authPath)[PROVIDER]).toMatchObject({ access: 'token-b' });
+
+    // Account B gets its own one-time forced refresh rather than inheriting A's budget.
+    const third = await processor.processAPIError(makeArgs({ error: apiError(401), state: args.state }) as any);
+    expect(third).toEqual({ retry: true });
+    expect(refreshToken).toHaveBeenCalledTimes(2);
+    expect(readAuthJson(seeded.authPath)[PROVIDER]).toMatchObject({ access: 'token-b-fresh' });
   });
 
   it('declares the pool exhausted when every account has been tried', async () => {
