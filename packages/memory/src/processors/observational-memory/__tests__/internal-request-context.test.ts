@@ -305,6 +305,40 @@ describe('OM internal agent request contexts', () => {
   });
 });
 
+describe('multi-thread observer failure state', () => {
+  it('keeps failed messages eligible for a later observation cycle', async () => {
+    const observedMessageIds = new Set<string>(['previously-observed']);
+    const observer = new ObserverRunner({
+      observationConfig: {
+        model: 'mock/model',
+        messageTokens: 1000,
+        bufferTokens: false,
+        previousObserverTokens: 1000,
+        observeAttachments: false,
+        onFailure: 'continue',
+      } as any,
+      observedMessageIds,
+      resolveModel: () => ({ model: 'mock/model' as any }),
+      tokenCounter: { countMessages: () => 1 } as any,
+    });
+
+    vi.spyOn(observer as any, 'createAgent').mockReturnValue({
+      id: 'observational-memory-observer',
+      stream: vi.fn().mockRejectedValue(new TypeError('fetch failed')),
+    });
+
+    const messagesByThread = new Map([
+      ['thread-1', [createMessage('message-1', 'thread-1')]],
+      ['thread-2', [createMessage('message-2', 'thread-2')]],
+    ]);
+
+    await expect(
+      (observer as any).callMultiThreadObserver(undefined, messagesByThread, ['thread-1', 'thread-2']),
+    ).rejects.toMatchObject({ name: 'ObserverProviderError' });
+    expect([...observedMessageIds]).toEqual(['previously-observed']);
+  });
+});
+
 describe('schema-backed extraction does not leak the temporary observer identity', () => {
   function createStructuredExtractor() {
     return new Extractor({
