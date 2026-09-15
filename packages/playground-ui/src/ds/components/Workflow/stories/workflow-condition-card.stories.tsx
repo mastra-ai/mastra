@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { WorkflowConditionCard } from '../cards/workflow-condition-card';
+import { WorkflowConditionCard } from '../cards/condition/workflow-condition-card';
 
 const meta = {
   title: 'Workflows/Condition card',
@@ -10,7 +10,6 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Default: Story = {};
-export const Collapsed: Story = { args: { initiallyOpen: false } };
 export const BranchesAndLoops: Story = {
   render: () => (
     <div className="flex flex-wrap gap-6">

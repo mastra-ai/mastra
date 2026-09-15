@@ -19,6 +19,8 @@ export type WorkflowStepNodeData = {
   duration?: number;
   date?: Date;
   isParallel?: boolean;
+  parallelGroup?: { id: string; pathCount: number };
+  mapContext?: { label: string; description: string };
   canSuspend?: boolean;
   isForEach?: boolean;
   isLarge?: boolean;

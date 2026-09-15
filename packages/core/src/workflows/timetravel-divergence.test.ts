@@ -127,6 +127,25 @@ describe('timeTravel divergence guard', () => {
       expect((params.stepResults['branch-b'] as any)?.status).toBe('skipped');
     });
 
+    it('marks the unrecorded sibling of a pre-target conditional as skipped instead of a fake success', () => {
+      const conditionalEntry = {
+        type: 'conditional',
+        steps: [stepEntry('branch-a'), stepEntry('branch-b')],
+        conditions: [() => true, () => false],
+      } as any;
+      const graph = graphOf(stepEntry('s1'), conditionalEntry, stepEntry('s3'));
+      const snapshot = snapshotWith({
+        input: { v: 1 },
+        s1: recordedStep({ v: 2 }),
+        'branch-a': recordedStep({ v: 3 }),
+        s3: recordedStep({ v: 4 }),
+      });
+
+      const params = createTimeTravelExecutionParams({ steps: ['s3'], snapshot, graph });
+      expect((params.stepResults['branch-a'] as any).status).toBe('success');
+      expect((params.stepResults['branch-b'] as any).status).toBe('skipped');
+    });
+
     it('does not throw for a pre-target conditional where only the selected branch was recorded', () => {
       const conditionalEntry = {
         type: 'conditional',

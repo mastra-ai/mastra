@@ -1,0 +1,283 @@
+import { MastraReactProvider } from '@mastra/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { http, HttpResponse } from 'msw';
+import type { ReactNode } from 'react';
+import { useContext, useState } from 'react';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { twoStepWorkflow } from '../../workflow/__tests__/fixtures/workflow-debug-step-controls';
+import { WorkflowTimeline } from '../../workflow/workflow-timeline';
+import { WorkflowRunContext } from '../workflow-run-context';
+import { WorkflowRunProvider } from '../workflow-run-provider';
+import { WorkflowSelectedStepProvider } from '../workflow-selected-step-context';
+import { WorkflowStepDetailProvider } from '../workflow-step-detail-provider';
+import { completedLoop, suspendedLoop } from './fixtures/completed-loop';
+import { completedChunks, runningChunk } from './fixtures/workflow-stream';
+import { server } from '@/test/msw-server';
+
+const BASE_URL = 'http://localhost:4111';
+afterEach(cleanup);
+
+function CompletedRunProbe() {
+  const [streamFinished, setStreamFinished] = useState(false);
+  const { result, setResult, setRunId, clearData, resumeWorkflow, streamWorkflow, isStreamingWorkflow } =
+    useContext(WorkflowRunContext);
+  return (
+    <>
+      <button
+        onClick={() => {
+          setRunId(completedLoop.runId);
+          setResult({ status: 'success', input: {}, result: {}, steps: {} });
+        }}
+      >
+        Finish run
+      </button>
+      <button
+        onClick={() => {
+          clearData();
+          setRunId('');
+        }}
+      >
+        New run
+      </button>
+      <button
+        onClick={() =>
+          resumeWorkflow({
+            workflowId: 'two-step-workflow',
+            runId: completedLoop.runId,
+            step: 'review',
+            resumeData: { approved: true },
+          })
+        }
+      >
+        Approve
+      </button>
+      <button
+        onClick={async () => {
+          setRunId('live-run');
+          await streamWorkflow({
+            workflowId: 'two-step-workflow',
+            runId: 'live-run',
+            inputData: {},
+            requestContext: {},
+          });
+          setStreamFinished(true);
+        }}
+      >
+        Stream run
+      </button>
+      <button onClick={() => setResult(null)}>Clear result</button>
+      <output aria-label="Stream completion">{streamFinished ? 'Finished' : 'Pending'}</output>
+      <output aria-label="Streaming state">{String(isStreamingWorkflow)}</output>
+      <output aria-label="Run state">{result?.status}</output>
+      <output aria-label="Child state">
+        {result?.steps['analyze-document[0].count-words']?.status ?? 'No child state'}
+      </output>
+    </>
+  );
+}
+
+function renderProvider(initialRunId?: string, children?: ReactNode) {
+  server.use(http.get(`${BASE_URL}/api/workflows/two-step-workflow`, () => HttpResponse.json(twoStepWorkflow)));
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const tree = (runId?: string) => (
+    <MastraReactProvider baseUrl={BASE_URL}>
+      <QueryClientProvider client={queryClient}>
+        <WorkflowStepDetailProvider>
+          <WorkflowRunProvider workflowId="two-step-workflow" initialRunId={runId}>
+            <CompletedRunProbe />
+            {children}
+          </WorkflowRunProvider>
+        </WorkflowStepDetailProvider>
+      </QueryClientProvider>
+    </MastraReactProvider>
+  );
+  const view = render(tree(initialRunId));
+  return { ...view, selectRun: (runId?: string) => view.rerender(tree(runId)) };
+}
+
+describe('WorkflowRunProvider', () => {
+  beforeEach(() => {
+    server.use(
+      http.get(`${BASE_URL}/api/workflows/two-step-workflow/runs/completed-loop`, () =>
+        HttpResponse.json(completedLoop),
+      ),
+    );
+  });
+
+  describe('when a run streams without an input panel mounted', () => {
+    it('updates the shared execution state', async () => {
+      server.use(
+        http.post(`${BASE_URL}/api/workflows/two-step-workflow/create-run`, () =>
+          HttpResponse.json({ runId: 'live-run' }),
+        ),
+        http.post(
+          `${BASE_URL}/api/workflows/two-step-workflow/stream`,
+          () => new HttpResponse(JSON.stringify(runningChunk) + '\x1e'),
+        ),
+      );
+      renderProvider();
+      fireEvent.click(screen.getByRole('button', { name: 'Stream run' }));
+      await waitFor(() => expect(screen.getByLabelText('Run state').textContent).toBe('running'));
+    });
+  });
+
+  describe('when the previous result is cleared before the next run starts', () => {
+    it('shows the next run as it streams', async () => {
+      server.use(
+        http.post(`${BASE_URL}/api/workflows/two-step-workflow/create-run`, () =>
+          HttpResponse.json({ runId: 'live-run' }),
+        ),
+        http.post(
+          `${BASE_URL}/api/workflows/two-step-workflow/stream`,
+          () => new HttpResponse(JSON.stringify(runningChunk) + '\x1e'),
+        ),
+      );
+      renderProvider();
+      fireEvent.click(screen.getByRole('button', { name: 'Clear result' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Stream run' }));
+      await waitFor(() => expect(screen.getByLabelText('Run state').textContent).toBe('running'));
+    });
+  });
+
+  describe('when an old stream connects after selecting a saved run', () => {
+    it('keeps the saved run selected', async () => {
+      let connectStream = () => {};
+      let streamRequested = () => {};
+      const connection = new Promise<void>(resolve => {
+        connectStream = resolve;
+      });
+      const requested = new Promise<void>(resolve => {
+        streamRequested = resolve;
+      });
+      server.use(
+        http.post(`${BASE_URL}/api/workflows/two-step-workflow/create-run`, () =>
+          HttpResponse.json({ runId: 'live-run' }),
+        ),
+        http.post(`${BASE_URL}/api/workflows/two-step-workflow/stream`, async () => {
+          streamRequested();
+          await connection;
+          return new HttpResponse(JSON.stringify(runningChunk) + '\x1e');
+        }),
+      );
+      const view = renderProvider();
+      fireEvent.click(screen.getByRole('button', { name: 'Stream run' }));
+      await requested;
+      view.selectRun(completedLoop.runId);
+      await waitFor(() => expect(screen.getByLabelText('Run state').textContent).toBe('success'));
+      connectStream();
+      await waitFor(() => expect(screen.getByLabelText('Stream completion').textContent).toBe('Finished'));
+      expect(screen.getByLabelText('Streaming state').textContent).toBe('false');
+      expect(screen.getByLabelText('Run state').textContent).toBe('success');
+    });
+  });
+
+  describe('when selecting an uncached run', () => {
+    it('clears the previous result while the selected run loads', async () => {
+      let finishLoading = () => {};
+      const loading = new Promise<void>(resolve => {
+        finishLoading = resolve;
+      });
+      server.use(
+        http.get(`${BASE_URL}/api/workflows/two-step-workflow/runs/another-run`, async () => {
+          await loading;
+          return HttpResponse.json({ ...suspendedLoop, runId: 'another-run' });
+        }),
+      );
+      const view = renderProvider(completedLoop.runId);
+      await waitFor(() => expect(screen.getByLabelText('Run state').textContent).toBe('success'));
+      view.selectRun('another-run');
+      expect(screen.getByLabelText('Run state').textContent).toBe('');
+      expect(screen.getByLabelText('Child state').textContent).toBe('No child state');
+      finishLoading();
+      await screen.findByText('suspended');
+      view.selectRun();
+      expect(screen.getByLabelText('Run state').textContent).toBe('');
+    });
+  });
+
+  describe('when a stored run resumes', () => {
+    it('refreshes persisted child states after the resume stream closes', async () => {
+      let resumed = false;
+      server.use(
+        http.get(`${BASE_URL}/api/workflows/two-step-workflow/runs/completed-loop`, () =>
+          HttpResponse.json(resumed ? completedLoop : suspendedLoop),
+        ),
+        http.post(`${BASE_URL}/api/workflows/two-step-workflow/create-run`, () =>
+          HttpResponse.json({ runId: completedLoop.runId }),
+        ),
+        http.post(`${BASE_URL}/api/workflows/two-step-workflow/resume-stream`, () => {
+          resumed = true;
+          return new HttpResponse('');
+        }),
+      );
+      renderProvider(completedLoop.runId);
+      await screen.findByText('suspended');
+      fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
+      await waitFor(() => expect(screen.getByLabelText('Child state').textContent).toBe('success'));
+    });
+  });
+
+  describe('when a newly streamed run completes', () => {
+    it('keeps its timeline after the stream closes and persisted steps arrive', async () => {
+      let finishLoading = () => {};
+      const loading = new Promise<void>(resolve => {
+        finishLoading = resolve;
+      });
+      server.use(
+        http.post(`${BASE_URL}/api/workflows/two-step-workflow/create-run`, () =>
+          HttpResponse.json({ runId: 'live-run' }),
+        ),
+        http.post(
+          `${BASE_URL}/api/workflows/two-step-workflow/stream`,
+          () => new HttpResponse(completedChunks.map(chunk => JSON.stringify(chunk) + '\x1e').join('')),
+        ),
+        http.get(`${BASE_URL}/api/workflows/two-step-workflow/runs/live-run`, async () => {
+          await loading;
+          return HttpResponse.json({
+            ...completedLoop,
+            runId: 'live-run',
+            steps: {
+              ...completedLoop.steps,
+              'analyze-document[0].extract-excerpt': { status: 'success', startedAt: 100, endedAt: 120 },
+            },
+          });
+        }),
+      );
+      renderProvider(
+        undefined,
+        <WorkflowSelectedStepProvider>
+          <WorkflowTimeline />
+        </WorkflowSelectedStepProvider>,
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'Stream run' }));
+      await waitFor(() => expect(screen.getByLabelText('Stream completion').textContent).toBe('Finished'));
+      expect(screen.getByLabelText('Streaming state').textContent).toBe('false');
+      expect(screen.getByLabelText('Run state').textContent).toBe('success');
+      const timeline = screen.getByTestId('workflow-timeline');
+      fireEvent.click(screen.getByRole('button', { name: 'Expand timeline' }));
+      expect(await screen.findByText('count-words')).not.toBeNull();
+      expect(screen.getByTestId('workflow-timeline-bar')).not.toBeNull();
+      finishLoading();
+      expect(await screen.findByText('extract-excerpt')).not.toBeNull();
+      expect(screen.getByTestId('workflow-timeline')).toBe(timeline);
+      expect(screen.getAllByTestId('workflow-timeline-bar')).toHaveLength(2);
+      fireEvent.click(screen.getByRole('button', { name: 'New run' }));
+      expect(screen.queryByTestId('workflow-timeline')).toBeNull();
+    });
+
+    it('loads persisted child states without requiring route navigation', async () => {
+      renderProvider();
+      fireEvent.click(screen.getByRole('button', { name: 'Finish run' }));
+      await waitFor(() => expect(screen.getByLabelText('Child state').textContent).toBe('success'));
+    });
+
+    it('clears persisted child states when starting another run', async () => {
+      renderProvider();
+      fireEvent.click(screen.getByRole('button', { name: 'Finish run' }));
+      await waitFor(() => expect(screen.getByLabelText('Child state').textContent).toBe('success'));
+      fireEvent.click(screen.getByRole('button', { name: 'New run' }));
+      expect(await screen.findByText('No child state')).not.toBeNull();
+    });
+  });
+});

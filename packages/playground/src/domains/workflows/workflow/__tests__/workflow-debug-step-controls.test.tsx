@@ -128,12 +128,57 @@ describe('WorkflowDebugStepControls', () => {
   });
 
   it('skips the un-taken branch arm and targets the post-branch map step', () => {
-    // start + short-text succeeded; long-text was never taken (absent from steps).
-    // The next runnable step must be the post-branch map join, not the dead arm.
+    const unTakenArmResult = {
+      status: 'paused',
+      input: { text: 'A' },
+      steps: {
+        start: {
+          status: 'success',
+          payload: { text: 'A' },
+          output: { text: 'A' },
+          startedAt: Date.now(),
+          endedAt: Date.now(),
+        },
+        'short-text': {
+          status: 'success',
+          payload: { text: 'A' },
+          output: { text: 'AS' },
+          startedAt: Date.now(),
+          endedAt: Date.now(),
+        },
+      },
+    } as ContextValue['result'];
+
+    const timeTravelWorkflowStream = vi.fn().mockResolvedValue(undefined);
+    renderControls(
+      buildContext({
+        workflowId: 'branch-workflow',
+        workflow: branchWorkflow,
+        result: unTakenArmResult,
+        timeTravelWorkflowStream,
+      }),
+    );
+
+    expect(screen.getByText('mapping_join')).not.toBeNull();
+
+    const button = screen.getByRole('button', { name: /run next step/i }) as HTMLButtonElement;
+    expect(button.disabled).toBe(false);
+
+    fireEvent.click(button);
+
+    expect(timeTravelWorkflowStream).toHaveBeenCalledTimes(1);
+    const payload = timeTravelWorkflowStream.mock.calls[0][0];
+    expect(payload.step).toBe('mapping_join');
+    expect(payload.context).toEqual({ 'short-text': { status: 'success', output: { text: 'AS' } } });
+    expect(payload.perStep).toBe(true);
+  });
+
+  it('skips an explicitly skipped branch arm and targets the post-branch map step', () => {
     const branchResult = {
       status: 'paused',
       input: { text: 'A' },
       steps: {
+        'long-text': { status: 'skipped', startedAt: Date.now(), endedAt: Date.now() },
         start: {
           status: 'success',
           payload: { text: 'A' },
@@ -206,6 +251,8 @@ describe('WorkflowDebugStepControls', () => {
         timeTravelWorkflowStream,
       }),
     );
+
+    expect(screen.getByText('Evaluate branch conditions')).not.toBeNull();
 
     const button = screen.getByRole('button', { name: /run next step/i }) as HTMLButtonElement;
     expect(button.disabled).toBe(false);

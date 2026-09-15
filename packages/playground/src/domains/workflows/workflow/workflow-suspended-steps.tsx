@@ -1,4 +1,5 @@
 import type { GetWorkflowResponse } from '@mastra/client-js';
+import { ActivityWick } from '@mastra/playground-ui/components/Activity';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
@@ -7,6 +8,7 @@ import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { ChevronRight, CirclePause, MoveDownLeft, MoveUpRight, Play } from 'lucide-react';
 import { useState } from 'react';
+import type { CSSProperties } from 'react';
 import { parse } from 'superjson';
 import { z } from 'zod';
 
@@ -40,7 +42,7 @@ function formatPayloadSize(payload: unknown): string {
 
 function getPayloadLabel(payload: unknown, fallback: string): string {
   if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
-    const keys = Object.keys(payload as Record<string, unknown>);
+    const keys = Object.keys(payload);
     if (keys.length === 1) {
       return keys[0];
     }
@@ -59,37 +61,51 @@ export function WorkflowSuspendedSteps({
   }
 
   return (
-    <div className="border-border1 bg-surface4 space-y-5 rounded-lg border p-5" data-testid="workflow-suspended-steps">
-      <div className="flex items-center justify-between gap-3">
-        <Txt as="p" variant="ui-md" className="text-neutral6 flex items-center gap-2 font-semibold">
-          <Icon>
-            <CirclePause />
-          </Icon>
-          Step suspended
-        </Txt>
-        <Badge variant="yellow">Needs input</Badge>
+    <section
+      className="rounded-studio-panel border-border1/50 bg-surface3 shadow-panel pointer-events-auto relative isolate border"
+      data-testid="workflow-suspended-steps"
+      aria-label="Step suspended"
+    >
+      <div className="max-h-[calc(100cqh-64px)] overflow-y-auto overscroll-contain rounded-[inherit]">
+        <div className="border-border1/50 bg-surface2 flex items-center justify-between gap-3 border-b px-5 py-4">
+          <Txt as="h2" variant="ui-sm" className="text-neutral6 flex items-center gap-2 font-medium">
+            <Icon>
+              <CirclePause />
+            </Icon>
+            Step suspended
+          </Txt>
+          <Badge variant="orange" emphasis="muted">
+            Needs input
+          </Badge>
+        </div>
+
+        {suspendedSteps.map(step => {
+          const stepDefinition = workflow.allSteps[step.stepId];
+          if (!stepDefinition || stepDefinition.isWorkflow) return null;
+
+          const stepSchema = stepDefinition?.resumeSchema
+            ? jsonSchemaToZodRuntime(parse(stepDefinition.resumeSchema))
+            : z.record(z.string(), z.any());
+
+          return (
+            <SuspendedStepCard
+              key={`${step.runId}-${step.stepId}`}
+              step={step}
+              stepSchema={stepSchema}
+              description={stepDefinition.description}
+              isStreaming={isStreaming}
+              onResume={onResume}
+            />
+          );
+        })}
       </div>
-
-      {suspendedSteps.map((step, index) => {
-        const stepDefinition = workflow.allSteps[step.stepId];
-        if (!stepDefinition || stepDefinition.isWorkflow) return null;
-
-        const stepSchema = stepDefinition?.resumeSchema
-          ? jsonSchemaToZodRuntime(parse(stepDefinition.resumeSchema))
-          : z.record(z.string(), z.any());
-
-        return (
-          <SuspendedStepCard
-            key={`${step.runId}-${step.stepId}-${index}`}
-            step={step}
-            stepSchema={stepSchema}
-            description={stepDefinition.description}
-            isStreaming={isStreaming}
-            onResume={onResume}
-          />
-        );
-      })}
-    </div>
+      <ActivityWick
+        status="ready"
+        label="Needs input"
+        className="before:hidden"
+        style={{ '--belt-hue': 'var(--warning1)' } as CSSProperties}
+      />
+    </section>
   );
 }
 
@@ -105,9 +121,9 @@ function SuspendedStepCard({ step, stepSchema, description, isStreaming, onResum
   const [isPayloadOpen, setIsPayloadOpen] = useState(false);
 
   return (
-    <div className="space-y-5">
+    <div className="[&+&]:border-border1/50 space-y-5 p-5 [&+&]:border-t">
       <div className="space-y-2">
-        <Txt as="p" variant="ui-md" className="text-neutral6 truncate font-medium">
+        <Txt as="p" variant="ui-md" className="text-neutral6 font-medium break-words">
           {step.stepId}
         </Txt>
         {description && (
@@ -144,7 +160,12 @@ function SuspendedStepCard({ step, stepSchema, description, isStreaming, onResum
             </CollapsibleTrigger>
             <CollapsibleContent>
               <div data-testid="suspended-payload" className="pt-2">
-                <CodeEditor data={step.suspendPayload} className="w-full overflow-x-auto p-2" showCopyButton={false} />
+                <CodeEditor
+                  data={step.suspendPayload}
+                  editable={false}
+                  className="w-full overflow-x-auto p-2"
+                  showCopyButton={false}
+                />
               </div>
             </CollapsibleContent>
           </Collapsible>
@@ -164,6 +185,7 @@ function SuspendedStepCard({ step, stepSchema, description, isStreaming, onResum
             schema={stepSchema}
             isSubmitLoading={isStreaming}
             submitButtonLabel="Resume"
+            submitButtonVariant="primary"
             submitButtonIcon={<Play />}
             submitButtonFullWidth
             collapsible={false}

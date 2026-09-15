@@ -1,16 +1,18 @@
 import type { GetWorkflowResponse } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { Plus } from 'lucide-react';
+import { ChevronRight, Plus } from 'lucide-react';
 import type { ContextType, ReactNode } from 'react';
-import { useState, useEffect, useContext } from 'react';
+import { useEffect, useContext, useState } from 'react';
 
 import { useWorkflowSelectedStep } from '../context/use-workflow-selected-step';
 import type { WorkflowRunStreamResult } from '../context/workflow-run-context';
 import { WorkflowRunContext } from '../context/workflow-run-context';
 import { WorkflowRunDetail } from '../runs/workflow-run-details';
 import { WorkflowRecentRuns } from '../runs/workflow-run-list';
+import { WorkflowRunStatusBadge } from '../workflow/workflow-run-header';
 import { WorkflowTrigger } from '../workflow/workflow-trigger';
 
 import { useWorkflow } from '@/hooks/use-workflows';
@@ -36,7 +38,6 @@ type InitialWorkflowSidebarProps = WorkflowActionProps & {
   workflowId: string;
   workflow?: GetWorkflowResponse;
   isLoading: boolean;
-  setRunId: (runId: string) => void;
 };
 
 type RunWorkflowSidebarProps = InitialWorkflowSidebarProps & {
@@ -56,37 +57,67 @@ function NewWorkflowRunButton({ workflowId, onClick }: { workflowId: string; onC
   const { Link, paths } = useLinkComponent();
 
   return (
-    <div className="border-border1/50 flex-none border-b px-4 py-4">
-      <Button
-        as={Link}
-        href={`${paths.workflowLink(workflowId)}/graph`}
-        variant="primary"
-        className="w-full"
-        onClick={onClick}
-        icon={<Plus />}
-      >
-        New workflow run
-      </Button>
-    </div>
+    <Button
+      as={Link}
+      href={`${paths.workflowLink(workflowId)}/graph`}
+      variant="ghost"
+      size="icon-md"
+      tooltip="New workflow run"
+      onClick={onClick}
+    >
+      <Plus />
+    </Button>
   );
 }
 
-function WorkflowInformationTopSection({ children, newRunButton }: { children: ReactNode; newRunButton?: ReactNode }) {
+function WorkflowInformationTopSection({
+  children,
+  workflowId,
+  showNewRunButton,
+  onNewRun,
+}: {
+  children: ReactNode;
+  workflowId: string;
+  showNewRunButton: boolean;
+  onNewRun: () => void;
+}) {
+  const { result } = useContext(WorkflowRunContext);
+  const [isOpen, setIsOpen] = useState(true);
   return (
-    <section
+    <Collapsible
+      render={<section />}
+      open={isOpen}
+      onOpenChange={setIsOpen}
       data-testid="workflow-information-top-section"
-      className="rounded-studio-panel border-border1/50 bg-surface3 flex max-h-[50%] min-w-0 flex-none flex-col overflow-hidden border"
+      className="rounded-studio-panel border-border1/50 bg-surface3 shadow-panel pointer-events-auto flex max-h-[75%] min-h-0 min-w-0 flex-initial flex-col overflow-hidden border"
     >
-      {newRunButton}
-      <ScrollArea
-        data-testid="workflow-information-top-scroll-area"
-        className="min-h-0 flex-1"
-        viewPortClassName="h-full"
-        mask={{ top: false }}
-      >
-        {children}
-      </ScrollArea>
-    </section>
+      <div className="flex shrink-0 items-center gap-1 pr-2">
+        <CollapsibleTrigger className="text-ui-sm text-neutral4 flex min-w-0 flex-1 items-center gap-2 px-4 py-3 font-medium">
+          <ChevronRight aria-hidden className="text-neutral3 size-4 shrink-0 motion-reduce:transition-none" />
+          <span>Workflow run</span>
+          {!isOpen && result?.status && <WorkflowRunStatusBadge status={result.status} />}
+        </CollapsibleTrigger>
+        {showNewRunButton && (
+          <NewWorkflowRunButton
+            workflowId={workflowId}
+            onClick={() => {
+              setIsOpen(true);
+              onNewRun();
+            }}
+          />
+        )}
+      </div>
+      <CollapsibleContent keepMounted className="flex h-full min-h-0 flex-col">
+        <ScrollArea
+          data-testid="workflow-information-top-scroll-area"
+          className="border-border1/50 min-h-0 flex-1 border-t"
+          viewPortClassName="h-full"
+          mask={{ top: false, bottom: false }}
+        >
+          {children}
+        </ScrollArea>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
 
@@ -100,10 +131,8 @@ function RunWorkflowSidebar({ runId, observeWorkflowStream, ...props }: RunWorkf
 
 function RecentWorkflowRunsSection({ workflowId, activeRunId }: { workflowId: string; activeRunId?: string }) {
   return (
-    <section className="rounded-studio-panel border-border1/50 bg-surface3 min-h-0 min-w-0 flex-1 overflow-hidden border">
-      <ScrollArea className="h-full w-full" viewPortClassName="h-full" mask={{ top: false }}>
-        <WorkflowRecentRuns workflowId={workflowId} runId={activeRunId} />
-      </ScrollArea>
+    <section className="rounded-studio-panel border-border1/50 bg-surface3 shadow-panel pointer-events-auto mt-auto flex max-h-[min(35%,280px)] min-h-0 min-w-0 shrink-0 flex-col overflow-hidden border">
+      <WorkflowRecentRuns workflowId={workflowId} runId={activeRunId} />
     </section>
   );
 }
@@ -117,26 +146,20 @@ export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInform
     streamResult,
     isStreamingWorkflow,
     observeWorkflowStream,
-    closeStreamsAndReset,
     resumeWorkflow,
     cancelWorkflowRun,
     isCancellingWorkflowRun,
     clearData,
-    setRunId: setContextRunId,
     runId: contextRunId,
   } = useContext(WorkflowRunContext);
 
   const { setSelectedStepId } = useWorkflowSelectedStep();
 
-  const [runId, setRunId] = useState<string>('');
-
   const isCurrentRunFinished = ['success', 'failed', 'canceled', 'bailed'].includes(streamResult?.status ?? '');
-  const showNewRunButton =
-    Boolean(initialRunId || runId || contextRunId || isStreamingWorkflow) || isCurrentRunFinished;
+  const showNewRunButton = Boolean(initialRunId || contextRunId || isStreamingWorkflow) || isCurrentRunFinished;
 
   const actionProps = {
     workflowId,
-    setRunId,
     workflow: workflow ?? undefined,
     isLoading,
     createWorkflowRun,
@@ -147,12 +170,6 @@ export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInform
     isCancellingWorkflowRun,
     cancelWorkflowRun,
   };
-
-  useEffect(() => {
-    if (!runId && !initialRunId) {
-      closeStreamsAndReset();
-    }
-  }, [runId, initialRunId, closeStreamsAndReset]);
 
   useEffect(() => {
     if (error) {
@@ -166,23 +183,28 @@ export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInform
   }
 
   if (!workflowId) {
-    return <div data-testid="workflow-information-panel" className="flex h-full min-h-0 w-full flex-col gap-2 p-2" />;
+    return (
+      <div
+        data-testid="workflow-information-panel"
+        className="workflow-information-panel pointer-events-none flex h-full min-h-0 w-full flex-col gap-2 p-2"
+      />
+    );
   }
 
   const resetToNewRun = () => {
-    closeStreamsAndReset();
     clearData();
-    setRunId('');
-    setContextRunId('');
     setSelectedStepId(null);
   };
 
   return (
-    <div data-testid="workflow-information-panel" className="flex h-full min-h-0 w-full flex-col gap-2 p-2">
+    <div
+      data-testid="workflow-information-panel"
+      className="workflow-information-panel pointer-events-none flex h-full min-h-0 w-full flex-col gap-2 p-2"
+    >
       <WorkflowInformationTopSection
-        newRunButton={
-          showNewRunButton ? <NewWorkflowRunButton workflowId={workflowId} onClick={resetToNewRun} /> : undefined
-        }
+        workflowId={workflowId}
+        showNewRunButton={showNewRunButton}
+        onNewRun={resetToNewRun}
       >
         {initialRunId ? (
           <RunWorkflowSidebar {...actionProps} runId={initialRunId} observeWorkflowStream={observeWorkflowStream} />
@@ -191,7 +213,7 @@ export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInform
         )}
       </WorkflowInformationTopSection>
 
-      <RecentWorkflowRunsSection workflowId={workflowId} activeRunId={initialRunId || runId || contextRunId} />
+      <RecentWorkflowRunsSection workflowId={workflowId} activeRunId={initialRunId || contextRunId} />
     </div>
   );
 }

@@ -38,6 +38,6 @@ export type WorkflowRunContextType = {
   withoutTimeTravel?: boolean;
   debugMode: boolean;
   setDebugMode: Dispatch<SetStateAction<boolean>>;
-} & Omit<WorkflowTriggerProps, 'paramsRunId' | 'setRunId' | 'observeWorkflowStream'>;
+} & Omit<WorkflowTriggerProps, 'paramsRunId' | 'observeWorkflowStream'>;
 
 export const WorkflowRunContext = createContext<WorkflowRunContextType>({} as WorkflowRunContextType);

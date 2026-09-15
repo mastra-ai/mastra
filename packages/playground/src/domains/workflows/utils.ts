@@ -66,3 +66,13 @@ export function convertWorkflowRunStateToStreamResult(runState: WorkflowRunState
       : {}),
   } as WorkflowRunStreamResult;
 }
+
+export function isWorkflowRunFinished(status?: string) {
+  return ['success', 'failed', 'canceled', 'bailed', 'tripwire'].includes(status ?? '');
+}
+
+export function getRunTimestamp(value: Date | string | number | undefined): number | undefined {
+  if (value === undefined) return undefined;
+  const timestamp = value instanceof Date ? value.getTime() : new Date(value).getTime();
+  return Number.isFinite(timestamp) ? timestamp : undefined;
+}

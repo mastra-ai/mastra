@@ -1,8 +1,8 @@
 import { ReactFlowProvider, useNodesState } from '@xyflow/react';
 import type { EdgeProps, Node, NodeProps } from '@xyflow/react';
 import { useState } from 'react';
-import { WorkflowConditionCard } from '../../cards/workflow-condition-card';
-import { WorkflowStepCardView } from '../../cards/workflow-step-card-view';
+import { WorkflowConditionCard } from '../../cards/condition/workflow-condition-card';
+import { WorkflowStepCardView } from '../../cards/step/workflow-step-card-view';
 import { WorkflowStepAction } from '../../controls/workflow-step-action';
 import { WorkflowStepActions } from '../../controls/workflow-step-actions';
 import { WORKFLOW_BOUNDARY_NODE_TYPE, WORKFLOW_DATA_EDGE_TYPE } from '../../graph/types';

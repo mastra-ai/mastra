@@ -1,5 +1,5 @@
 import type { FieldConfig, ParsedField, ParsedSchema, SchemaProvider, SchemaValidation } from '@autoform/core';
-import { removeEmptyValues } from '../utils';
+import { isPlainObject, removeEmptyValues } from '../utils';
 import {
   getDef,
   getBaseSchema,
@@ -152,6 +152,24 @@ export function parseSchema(schema: AnySchema): ParsedSchema {
   return { fields };
 }
 
+// `safeParse` resurrects a cleared value where the schema has a default; elsewhere empty means untouched.
+function keepEmptyWhereDefaulted(values: Record<string, any>, defaults: Record<string, any>): Record<string, any> {
+  const kept: Record<string, any> = removeEmptyValues(values);
+
+  for (const [key, defaultValue] of Object.entries(defaults)) {
+    const value = values?.[key];
+    if (value === undefined) continue;
+
+    if (isPlainObject(defaultValue) && isPlainObject(value)) {
+      kept[key] = keepEmptyWhereDefaulted(value, defaultValue);
+    } else if (kept[key] === undefined) {
+      kept[key] = value;
+    }
+  }
+
+  return kept;
+}
+
 export class CustomZodProvider<T extends AnySchema> implements SchemaProvider {
   private _schema: T;
   constructor(schema: T) {
@@ -166,26 +184,22 @@ export class CustomZodProvider<T extends AnySchema> implements SchemaProvider {
   }
 
   validateSchema(values: any): SchemaValidation {
-    const cleanedValues = removeEmptyValues(values);
-    try {
-      const validationResult = (this._schema as any).safeParse(cleanedValues);
-      if (validationResult.success) {
-        return { success: true, data: validationResult.data } as const;
-      } else {
-        const error = validationResult.error;
-        // v3: error.errors, v4: error.issues
-        const issues = error.issues ?? error.errors ?? [];
-        return {
-          success: false,
-          errors: issues.map((err: any) => ({
-            path: err.path as string[],
-            message: err.message,
-          })),
-        } as const;
-      }
-    } catch (error) {
-      throw error;
+    const cleanedValues = keepEmptyWhereDefaulted(values, this.getDefaultValues());
+    const validationResult = (this._schema as any).safeParse(cleanedValues);
+    if (validationResult.success) {
+      return { success: true, data: validationResult.data } as const;
     }
+
+    const error = validationResult.error;
+    // v3: error.errors, v4: error.issues
+    const issues = error.issues ?? error.errors ?? [];
+    return {
+      success: false,
+      errors: issues.map((err: any) => ({
+        path: err.path as string[],
+        message: err.message,
+      })),
+    } as const;
   }
 
   parseSchema(): ParsedSchema {

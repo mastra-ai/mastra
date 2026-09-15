@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { resetStorage } from '../../__utils__/reset-storage';
+import { topLevelWorkflowNodes } from '../../__utils__/workflow-nodes';
 
 // FEATURE: View nested graph from a workflow step
 // USER STORY: As a Studio user, I want to click "View nested graph" on a nested
@@ -18,10 +19,10 @@ test.describe('Workflow nested graph', () => {
 
   test.describe('when "View nested graph" is selected on a nested step', () => {
     test.beforeEach(async ({ page }) => {
-      const nestedNode = page.locator('[data-workflow-node]').filter({ hasText: 'nested-text-processor' });
+      const nestedNode = topLevelWorkflowNodes(page).filter({ hasText: 'nested-text-processor' });
       await expect(nestedNode).toBeVisible();
 
-      await nestedNode.getByRole('button', { name: 'Step actions' }).click();
+      await nestedNode.getByRole('button', { name: 'Step actions' }).first().click();
       await page.getByRole('menuitem', { name: 'View nested graph' }).click();
     });
 

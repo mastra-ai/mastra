@@ -243,16 +243,15 @@ describe('resizable service layouts', () => {
     expect(rightPanel.textContent).toContain('memory studio');
   });
 
-  it('keeps the workflow panel group shrinkable when side slots are present', () => {
+  it('floats the workflow left slot over a canvas that clips instead of scrolling', () => {
     render(
-      <WorkflowLayout workflowId="workflow-id" leftSlot={<div>runs</div>} rightSlot={<div>workflow information</div>}>
+      <WorkflowLayout workflowId="workflow-id" leftSlot={<div>runs</div>}>
         <div>workflow run</div>
       </WorkflowLayout>,
     );
 
     expectPanelGroupsShrinkable();
     expect(screen.getByTestId('collapsible-left-slot').className).toContain('min-w-0');
-    expect(screen.getByTestId('collapsible-right-slot').className).toContain('min-w-0');
-    expect(screen.getByText('workflow run').parentElement?.className).toContain('overflow-y-auto');
+    expect(screen.getByText('workflow run').parentElement?.className).toContain('overflow-hidden');
   });
 });

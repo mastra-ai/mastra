@@ -12,6 +12,8 @@ import type { Step } from '../context/use-current-run';
 import { useWorkflowSelectedStep } from '../context/use-workflow-selected-step';
 import { useWorkflowStepDetail } from '../context/workflow-step-detail-context';
 import { useWaitingStepKey } from './use-workflow-trigger';
+import { WorkflowBodyGraph } from './workflow-body-graph';
+import { getWorkflowCardKind } from './workflow-node-kind';
 import { WorkflowStepActionBar } from './workflow-step-action-bar';
 import type { WorkflowStepNode, WorkflowStepNodeData } from './workflow-step-node-utils';
 
@@ -38,7 +40,7 @@ const WorkflowStepCard = ({
   stepsFlow: Record<string, string[]>;
 }) => {
   const { steps } = useCurrentRun();
-  const { selectedStepId, hoverStepId, setHoverStepId } = useWorkflowSelectedStep();
+  const { selectedStepId, setSelectedStepId, hoverStepId, setHoverStepId } = useWorkflowSelectedStep();
   const { showNestedGraph } = useWorkflowStepDetail();
   const waitingStepKey = useWaitingStepKey();
   const { label, stepId, description } = data;
@@ -59,23 +61,29 @@ const WorkflowStepCard = ({
 
   return (
     <WorkflowStepCardView
-      label={label}
-      description={description}
+      label={data.mapContext?.label ?? label}
+      nodeKind={getWorkflowCardKind(data.workflowStep)}
+      onSelect={() => setSelectedStepId(stepKey)}
+      initiallyOpen={!parentWorkflowName}
+      body={
+        stepGraph?.length ? (
+          <WorkflowBodyGraph stepGraph={stepGraph} workflowName={fullLabel} isForEach={data.isForEach} />
+        ) : undefined
+      }
+      description={description ?? data.mapContext?.description}
       displayStatus={displayStatus}
-      hasStep={Boolean(step)}
       isNestedWorkflowStep={data.workflowStep.kind === 'nested-workflow-step'}
       stepKey={stepKey}
       isSelected={isSelected}
       isWaiting={isWaiting}
       isHovered={isHovered}
       onHoverChange={isHovered => setHoverStepId(isHovered ? stepKey : null)}
-      duration={data.duration}
-      date={data.date}
+      duration={step?.duration ?? data.duration}
+      date={step?.date ?? data.date}
       isForEach={data.isForEach}
       foreachProgress={step?.foreachProgress}
       mapConfig={mapConfig}
       canSuspend={data.canSuspend}
-      isParallel={data.isParallel}
       stepGraph={stepGraph}
       startedAt={step?.startedAt}
       endedAt={step?.endedAt}

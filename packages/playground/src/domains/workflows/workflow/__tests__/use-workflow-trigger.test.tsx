@@ -143,8 +143,6 @@ describe('useWaitingStepKey', () => {
 
   describe('when a paused run resolved a conditional branch', () => {
     it('skips the un-taken arm and waits on the join step', async () => {
-      // The conditional resolved to `long-text`, so `short-text` was never run and has no
-      // result. The waited step must jump past the never-taken arm to the join.
       serveWorkflowRun('branch-workflow', branchWorkflow, pausedRunBranchResolvedState);
 
       renderWithRun('branch-workflow', pausedRunBranchResolvedState.runId, <WaitingProbe />);
