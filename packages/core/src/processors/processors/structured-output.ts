@@ -166,6 +166,7 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
     try {
       const structuringAgentStream = await this.getStructuringStream(
         streamParts.slice(requestState.streamPartsStartIndex),
+        requestState.streamPartsStartIndex > 0,
         requestContext,
         messageList,
         observabilityContext,
@@ -232,6 +233,7 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
    */
   private async getStructuringStream(
     streamParts: ChunkType[],
+    currentAttemptOnly: boolean,
     requestContext?: RequestContext,
     messageList?: ProcessOutputStreamArgs['messageList'],
     observabilityContext?: ObservabilityContext,
@@ -282,7 +284,7 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
       };
       const messages: MessageListInput = [
         ...(messageList?.get?.input?.db() || []),
-        currentAttemptMessage,
+        ...(currentAttemptOnly ? [currentAttemptMessage] : messageList?.get?.response?.db() || []),
         promptMessage,
       ];
 
