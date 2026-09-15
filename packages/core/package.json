@@ -371,6 +371,16 @@
         "default": "./dist/memory/index.cjs"
       }
     },
+    "./memory/internal": {
+      "import": {
+        "types": "./dist/memory/internal.d.ts",
+        "default": "./dist/memory/internal.js"
+      },
+      "require": {
+        "types": "./dist/memory/internal.d.ts",
+        "default": "./dist/memory/internal.cjs"
+      }
+    },
     "./observability": {
       "import": {
         "types": "./dist/observability/index.d.ts",

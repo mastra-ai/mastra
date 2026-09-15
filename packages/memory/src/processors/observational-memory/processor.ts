@@ -45,7 +45,7 @@ export interface MemoryContextProvider {
     otherThreadsContext: string | undefined;
   }>;
   /** Raw message upsert — persist sealed messages to storage without embedding or working memory processing. */
-  persistMessages(messages: MastraDBMessage[]): Promise<void>;
+  persistMessages(messages: MastraDBMessage[], generatedMessageIds?: readonly string[]): Promise<void>;
 }
 
 /**

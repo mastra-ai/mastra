@@ -54,6 +54,7 @@ import type { Mastra } from '../mastra';
 import { mastraCtorHolder } from '../mastra/mastra-ctor-holder';
 import type { VersionOverrides } from '../mastra/types';
 import { mergeVersionOverrides } from '../mastra/types';
+import { persistGeneratedMessages } from '../memory/internal';
 import type { MastraMemory } from '../memory/memory';
 import { normalizeMessageHistoryConfig } from '../memory/message-history-config';
 import { getMemoryRunState } from '../memory/run-state';
@@ -5360,9 +5361,9 @@ export class Agent<
                       threadId: subAgentThreadId,
                     });
 
-                    await memory.saveMessages({
-                      messages: [userMessage, assistantMessage],
-                    });
+                    await persistGeneratedMessages(memory, { messages: [userMessage, assistantMessage] }, [
+                      assistantMessage.id,
+                    ]);
                   } catch (memoryError) {
                     this.logger.error('Failed to save rejection to sub-agent memory', {
                       agent: this.name,
@@ -5594,9 +5595,11 @@ export class Agent<
                       threadId: effectiveGenerateThreadId,
                     });
 
-                    await memory.saveMessages({
-                      messages: fullSubAgentMessages,
-                    });
+                    await persistGeneratedMessages(
+                      memory,
+                      { messages: fullSubAgentMessages },
+                      agentResponseMessages.map(message => message.id),
+                    );
                   } catch (memoryError) {
                     this.logger.error('Failed to save messages to sub-agent memory', {
                       agent: this.name,
@@ -5739,9 +5742,11 @@ export class Agent<
                       threadId: effectiveStreamThreadId,
                     });
 
-                    await streamMemory.saveMessages({
-                      messages: fullSubAgentMessages,
-                    });
+                    await persistGeneratedMessages(
+                      streamMemory,
+                      { messages: fullSubAgentMessages },
+                      agentResponseMessages.map(message => message.id),
+                    );
                   } catch (memoryError) {
                     this.logger.error('Failed to save messages to sub-agent memory', {
                       agent: this.name,
@@ -5871,9 +5876,9 @@ export class Agent<
                     const supervisorMemory = await this.getMemory({ requestContext });
                     if (supervisorMemory) {
                       try {
-                        await supervisorMemory.saveMessages({
-                          messages: [feedbackMessage],
-                        });
+                        await persistGeneratedMessages(supervisorMemory, { messages: [feedbackMessage] }, [
+                          feedbackMessage.id,
+                        ]);
                       } catch (memoryError) {
                         this.logger.error('Failed to save feedback to supervisor memory', {
                           agent: this.name,
@@ -5966,9 +5971,9 @@ export class Agent<
                     const supervisorMemory = await this.getMemory({ requestContext });
                     if (supervisorMemory) {
                       try {
-                        await supervisorMemory.saveMessages({
-                          messages: [feedbackMessage],
-                        });
+                        await persistGeneratedMessages(supervisorMemory, { messages: [feedbackMessage] }, [
+                          feedbackMessage.id,
+                        ]);
                       } catch (memoryError) {
                         this.logger.error('Failed to save feedback to supervisor memory', {
                           agent: this.name,
