@@ -1,6 +1,10 @@
 import type { WorkflowDataEdgeModel } from '@mastra/playground-ui/components/Workflow';
 
-const edgeDataKey = (edge: WorkflowDataEdgeModel) => edge.data?.boundaryPayload ?? edge.data?.previousStepId;
+const edgeDataKey = ({ data }: WorkflowDataEdgeModel) => {
+  if (data?.boundaryPayload !== undefined) return `boundary:${data.boundaryPayload}`;
+  if (data?.previousStepId !== undefined) return `step:${data.previousStepId}`;
+  return undefined;
+};
 
 export function groupWorkflowEdgeData(edges: WorkflowDataEdgeModel[]): WorkflowDataEdgeModel[] {
   const dataGroups = new Map<string, WorkflowDataEdgeModel[]>();

@@ -2,8 +2,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useId, useState } from 'react';
 import type { WorkflowInputDataProps } from '../workflow-input-data';
-import { getProcessorMessage, updateProcessorMessage, withPhaseRole } from './processor-input';
-import { WorkflowSubmitRow } from './workflow-input-submit-row';
+import { getProcessorMessage, getProcessorPhase, updateProcessorMessage, withPhaseRole } from './processor-input';
+import { FormSubmitRow } from '@/lib/form/components/form-submit-row';
 
 const PROCESSOR_PHASES = [
   { value: 'input', label: 'Input - Process input messages before LLM' },
@@ -30,7 +30,7 @@ export const WorkflowProcessorInput = ({
   const messageId = useId();
   const phaseId = useId();
   const message = getProcessorMessage(defaultValues);
-  const phase = defaultValues.phase;
+  const phase = getProcessorPhase(defaultValues);
   const [errors, setErrors] = useState<string[]>([]);
 
   const handleSubmit = () => {
@@ -103,7 +103,7 @@ export const WorkflowProcessorInput = ({
 
       {children}
 
-      <WorkflowSubmitRow
+      <FormSubmitRow
         isSubmitLoading={isSubmitLoading}
         submitButtonLabel={submitButtonLabel}
         submitActions={submitActions}

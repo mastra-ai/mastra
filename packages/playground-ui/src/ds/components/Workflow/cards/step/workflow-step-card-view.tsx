@@ -156,7 +156,9 @@ export function WorkflowStepCardView(props: WorkflowStepCardViewProps) {
               displayStatus && footerStatusClasses[displayStatus],
             )}
           >
-            <span className={isRunning ? 'sr-only motion-reduce:not-sr-only' : undefined}>{statusLabel}</span>
+            <span role="status" className={isRunning ? 'sr-only motion-reduce:not-sr-only' : undefined}>
+              {statusLabel}
+            </span>
             {startedAt !== undefined && (
               <span className="ml-auto">
                 <WorkflowClock startedAt={startedAt} endedAt={endedAt} isRunning={isRunning} />

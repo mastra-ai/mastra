@@ -32,7 +32,7 @@ export function useWorkflowData(selection: WorkflowDataSelection): {
   const boundaryData = selection.workflowName
     ? getWorkflowBoundaryData(steps, selection.workflowName)
     : {
-        input: workflowRun.payload ?? workflowRun.result?.input,
+        input: workflowRun.result?.input ?? workflowRun.payload,
         output: workflowRun.result?.status === 'success' ? workflowRun.result.result : undefined,
       };
   const direction = selection.type === 'workflow-input' ? 'input' : 'output';

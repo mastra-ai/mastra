@@ -14,6 +14,7 @@ import { formatDate } from 'date-fns';
 import { ChevronRight } from 'lucide-react';
 import { useState } from 'react';
 import { WorkflowRunStatusIcon } from '../components/workflow-run-status-icon';
+import { getRunTimestamp } from '../utils';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useDeleteWorkflowRun, useWorkflowRuns } from '@/hooks/use-workflow-runs';
 import { useLinkComponent } from '@/lib/framework';
@@ -100,6 +101,10 @@ export const WorkflowRecentRuns = ({ workflowId, runId }: WorkflowRecentRunsProp
                     {actualRuns.map(run => {
                       const isActiveRun = run.runId === runId;
                       const runInput = isActiveRun ? formatRunInput(run.snapshot) : null;
+                      const runTimestamp =
+                        run?.snapshot && typeof run.snapshot === 'object'
+                          ? getRunTimestamp(run.snapshot.timestamp)
+                          : undefined;
 
                       return (
                         <ThreadListItem
@@ -123,12 +128,12 @@ export const WorkflowRecentRuns = ({ workflowId, runId }: WorkflowRecentRunsProp
                                   {run.runId}
                                 </span>
                               </span>
-                              {run?.snapshot && typeof run.snapshot === 'object' && run.snapshot.timestamp && (
+                              {runTimestamp !== undefined && (
                                 <time
                                   className="text-neutral3 text-ui-xs"
-                                  dateTime={new Date(run.snapshot.timestamp).toISOString()}
+                                  dateTime={new Date(runTimestamp).toISOString()}
                                 >
-                                  {formatDate(run.snapshot.timestamp, 'MMM d, yyyy · h:mm a')}
+                                  {formatDate(runTimestamp, 'MMM d, yyyy · h:mm a')}
                                 </time>
                               )}
                               {runInput && (

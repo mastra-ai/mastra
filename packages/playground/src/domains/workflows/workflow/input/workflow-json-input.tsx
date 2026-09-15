@@ -1,6 +1,6 @@
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import type { WorkflowInputDataProps } from '../workflow-input-data';
-import { WorkflowSubmitRow } from './workflow-input-submit-row';
+import { FormSubmitRow } from '@/lib/form/components/form-submit-row';
 
 type WorkflowJsonInputProps = Omit<WorkflowInputDataProps, 'schema' | 'defaultValues' | 'onSubmit'> & {
   value: string;
@@ -31,7 +31,7 @@ export function WorkflowJsonInput({
       )}
       <CodeEditor value={value} onChange={onChange} editable={!isSubmitLoading} />
       {children}
-      <WorkflowSubmitRow {...submitProps} isSubmitLoading={isSubmitLoading} onSubmit={onSubmit} />
+      <FormSubmitRow {...submitProps} isSubmitLoading={isSubmitLoading} onSubmit={onSubmit} />
     </div>
   );
 }

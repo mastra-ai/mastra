@@ -15,10 +15,11 @@ export function WorkflowDataInspector({ selection }: { selection: WorkflowDataSe
   const { result } = useContext(WorkflowRunContext);
   const { name, direction, value } = useWorkflowData(selection);
   const closeRef = useRef<HTMLButtonElement>(null);
+  const selectionKey = workflowDataKey(selection);
 
   useEffect(() => {
     closeRef.current?.focus({ preventScroll: true });
-  }, []);
+  }, [selectionKey]);
 
   return (
     <section
@@ -52,7 +53,7 @@ export function WorkflowDataInspector({ selection }: { selection: WorkflowDataSe
           </Txt>
         ) : (
           <CodeEditor
-            key={workflowDataKey(selection)}
+            key={selectionKey}
             value={safeStringify(value, 2)}
             editable={false}
             lineNumbers={false}

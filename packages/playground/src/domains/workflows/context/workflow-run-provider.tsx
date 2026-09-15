@@ -5,18 +5,12 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 
-import { convertWorkflowRunStateToStreamResult, isWorkflowRunFinished } from '../utils';
+import { convertWorkflowRunStateToStreamResult, getRunTimestamp, isWorkflowRunFinished } from '../utils';
 import { WorkflowRunContext } from './workflow-run-context';
 import type { WorkflowRunContextType, WorkflowRunStreamResult } from './workflow-run-context';
 import { WorkflowStepDetailContext } from './workflow-step-detail-context';
 import { useTracingSettings } from '@/domains/observability/context/tracing-settings-context';
 import { useWorkflow, useWorkflowRun } from '@/hooks';
-
-function getRunTimestamp(value: Date | string | number | undefined): number | undefined {
-  if (!value) return undefined;
-  const timestamp = value instanceof Date ? value.getTime() : new Date(value).getTime();
-  return Number.isFinite(timestamp) ? timestamp : undefined;
-}
 
 function resolveWorkflowRunResult(
   liveResult: WorkflowRunStreamResult | null,

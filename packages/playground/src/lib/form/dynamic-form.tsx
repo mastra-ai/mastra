@@ -1,13 +1,11 @@
-import { Button } from '@mastra/playground-ui/components/Button';
 import type { ButtonProps } from '@mastra/playground-ui/components/Button';
 import { Label } from '@mastra/playground-ui/components/Label';
-import { cn } from '@mastra/playground-ui/utils/cn';
-import { Loader2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react';
 import type { UseFormReturn } from 'react-hook-form';
 import { z } from 'zod';
 import { AutoForm } from './auto-form';
+import { FormSubmitRow } from './components/form-submit-row';
 import { isEmptyZodObject } from './is-empty-zod-object';
 import { CustomZodProvider } from './zod-provider';
 import { getShape } from './zod-provider/compat';
@@ -126,29 +124,17 @@ export function DynamicForm({
     () => ({
       SubmitButton: ({ children: buttonChildren }: { children: React.ReactNode }) =>
         onSubmit ? (
-          <div
-            data-slot="form-submit-row"
-            className={cn('flex items-center justify-between gap-1', submitButtonFullWidth && 'block')}
+          <FormSubmitRow
+            isSubmitLoading={isSubmitLoading}
+            submitButtonLabel={submitButtonLabel}
+            submitButtonIcon={submitButtonIcon}
+            submitButtonVariant={submitButtonVariant}
+            submitButtonFullWidth={submitButtonFullWidth}
+            submitActions={submitActions}
+            leftActions={leftActions}
           >
-            {!submitButtonFullWidth && (leftActions ?? <div />)}
-            <div className={cn('flex items-center gap-1', submitButtonFullWidth && 'w-full')}>
-              {submitActions}
-              <Button
-                variant={submitButtonVariant}
-                disabled={isSubmitLoading}
-                className={cn(submitButtonFullWidth && 'w-full justify-center')}
-              >
-                {isSubmitLoading ? (
-                  <Loader2 className="animate-spin" />
-                ) : (
-                  <>
-                    {submitButtonIcon}
-                    {submitButtonLabel || buttonChildren}
-                  </>
-                )}
-              </Button>
-            </div>
-          </div>
+            {buttonChildren}
+          </FormSubmitRow>
         ) : null,
     }),
     [

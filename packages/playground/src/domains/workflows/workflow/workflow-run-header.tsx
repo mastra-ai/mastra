@@ -66,7 +66,7 @@ function getRunDuration(result: WorkflowRunStreamResult | null, isRunning: boole
   const startedAt = Math.min(...stepTimes.map(step => step.startedAt));
   const endedTimes = stepTimes.flatMap(step => (step.endedAt ? [step.endedAt] : []));
   const endedAt = endedTimes.length > 0 ? Math.max(...endedTimes) : undefined;
-  const effectiveEndedAt = endedAt ?? (isRunning ? now : undefined);
+  const effectiveEndedAt = isRunning ? now : endedAt;
   return effectiveEndedAt === undefined ? undefined : effectiveEndedAt - startedAt;
 }
 

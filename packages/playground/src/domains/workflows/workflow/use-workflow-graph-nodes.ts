@@ -23,8 +23,11 @@ const findMostResizedNode = (changes: NodeChange<WorkflowGraphNode>[], nodes: Wo
   return mostResizedNode;
 };
 
+const buildGraph = (stepGraph: SerializedStepFlowEntry[]) => ({ stepGraph, ...constructNodesAndEdges({ stepGraph }) });
+
 export function useWorkflowGraphNodes(stepGraph: SerializedStepFlowEntry[]) {
-  const [graph, setGraph] = useState(() => constructNodesAndEdges({ stepGraph }));
+  const [graph, setGraph] = useState(() => buildGraph(stepGraph));
+  if (graph.stepGraph !== stepGraph) setGraph(buildGraph(stepGraph));
   const onNodesChange = (changes: NodeChange<WorkflowGraphNode>[]) => {
     setGraph(currentGraph => {
       const { nodes: currentNodes, edges } = currentGraph;
@@ -47,5 +50,5 @@ export function useWorkflowGraphNodes(stepGraph: SerializedStepFlowEntry[]) {
       return { ...currentGraph, nodes: anchoredNodes };
     });
   };
-  return { ...graph, onNodesChange };
+  return { nodes: graph.nodes, edges: graph.edges, onNodesChange };
 }

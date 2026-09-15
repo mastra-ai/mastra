@@ -24,6 +24,10 @@ export function createProcessorInput() {
   return { messages: [createProcessorMessage(FALLBACK_MESSAGE_TEXT)], phase: 'input' };
 }
 
+export function getProcessorPhase(input: ProcessorInput) {
+  return typeof input?.phase === 'string' ? input.phase : undefined;
+}
+
 export function getProcessorMessage(input: ProcessorInput) {
   if (!Array.isArray(input?.messages)) return '';
   const textPart = input.messages[0]?.content?.parts?.find(part => part.type === 'text');

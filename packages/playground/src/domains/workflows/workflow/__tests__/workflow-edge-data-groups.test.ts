@@ -66,6 +66,17 @@ describe('Workflow edge data groups', () => {
     });
   });
 
+  describe('when a step is named like a workflow boundary', () => {
+    it('keeps its output separate from the workflow input group', () => {
+      const edges: WorkflowDataEdgeModel[] = [
+        { id: 'start-left', source: 'start', target: 'left', data: { boundaryPayload: 'workflow-input' } },
+        { id: 'input-right', source: 'workflow-input', target: 'right', data: { previousStepId: 'workflow-input' } },
+      ];
+
+      expect(groupWorkflowEdgeData(edges).every(edge => edge.data?.dataLabelPlacement === undefined)).toBe(true);
+    });
+  });
+
   describe('when steps run in sequence', () => {
     it('retains the individual data controls', () => {
       expect(groupWorkflowEdgeData(parallelEdges.slice(2))).toEqual(parallelEdges.slice(2));
