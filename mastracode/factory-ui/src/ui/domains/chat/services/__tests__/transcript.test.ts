@@ -286,7 +286,11 @@ describe('transcript reducer message entries', () => {
     state = transcriptReducer(state, { type: 'event', event: { type: 'message_start', message: current } });
     state = transcriptReducer(state, {
       type: 'event',
-      event: { type: 'message_update', id: current.id, event: { type: 'part', index: 1, part: { type: 'text', text: 'After' } } },
+      event: {
+        type: 'message_update',
+        id: current.id,
+        event: { type: 'part', index: 1, part: { type: 'text', text: 'After' } },
+      },
     });
 
     expect(messageParts(state.entries[1])).toEqual([{ type: 'text', text: 'After' }]);

@@ -146,7 +146,15 @@ describe('SessionRunEngine compact message lifecycle', () => {
       {
         type: 'message_update',
         id: 'msg-1',
-        event: { type: 'part', index: 1, part: { type: 'reasoning', reasoning: '', details: [] } },
+        event: {
+          type: 'part',
+          index: 1,
+          part: expect.objectContaining({
+            type: 'reasoning',
+            reasoning: '',
+            details: [{ type: 'text', text: '' }],
+          }),
+        },
       },
       {
         type: 'message_update',
