@@ -53,6 +53,7 @@ export function formatHuman(event: AgentControllerEvent, state: HumanFormatState
     case 'message_end':
       if (event.id !== state.activeAssistantMessageId) return {};
       state.activeAssistantMessageId = undefined;
+      if (state.lastTextLength === 0) return {};
       state.lastTextLength = 0;
       return { stdout: '\n' };
     case 'tool_start':

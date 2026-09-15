@@ -75,6 +75,13 @@ describe('formatHuman', () => {
     expect(state.lastTextLength).toBe(0);
   });
 
+  it('does not emit a newline for a tool-only assistant message', () => {
+    const state = createHumanFormatState();
+    formatHuman({ type: 'message_start', message: textMessage('', 'assistant-1') } as AgentControllerEvent, state);
+
+    expect(formatHuman({ type: 'message_end', id: 'assistant-1' }, state)).toEqual({});
+  });
+
   it('ignores message_end events for a different message', () => {
     const state = createHumanFormatState();
     formatHuman({ type: 'message_start', message: textMessage('', 'assistant-1') } as AgentControllerEvent, state);
