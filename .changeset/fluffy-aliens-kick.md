@@ -2,4 +2,4 @@
 '@mastra/playground-ui': patch
 ---
 
-Migrated SidebarNew neutral colors to semantic theme tokens.
+Improved SidebarNew colors so neutral content follows the active theme.
