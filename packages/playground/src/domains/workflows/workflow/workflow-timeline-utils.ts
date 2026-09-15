@@ -22,6 +22,7 @@ export function formatTimelineDuration(durationMs: number) {
 export function buildTimeline(steps: Record<string, Step>, now: number): TimelineRow[] {
   const entries = Object.entries(steps)
     .filter(([key]) => !isInputKey(key))
+    .sort(([aId, a], [bId, b]) => a.startedAt - b.startedAt || aId.localeCompare(bId))
     .map(([stepId, step]) => {
       const isRunning = step.status === 'running' && step.endedAt === undefined;
       const end = isRunning ? Math.max(now, step.startedAt) : step.endedAt;

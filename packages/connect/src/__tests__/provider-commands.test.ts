@@ -5,6 +5,8 @@ import { resolve } from 'node:path';
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { TEMPLATE_REPO } from '../../scripts/templates-config.js';
+
 const actionTemplate = `import { z } from 'zod';
 import { createAction } from 'nango';
 
@@ -227,7 +229,13 @@ describe('maintainer provider commands', () => {
     const manifest = JSON.parse(
       readFileSync(resolve(packageRoot, 'src/providers/first-provider/.manifest.json'), 'utf8'),
     ) as { providerId: string; localId: string; toolCount: number };
-    expect(manifest).toMatchObject({ providerId: 'first-provider', localId: 'first-provider', toolCount: 1 });
+    expect(manifest).toMatchObject({
+      providerId: 'first-provider',
+      localId: 'first-provider',
+      toolCount: 1,
+      templateSha,
+      templateRepo: TEMPLATE_REPO,
+    });
     const providerIndex = readFileSync(resolve(packageRoot, 'src/providers/index.ts'), 'utf8');
     expect(providerIndex).toContain("import { firstProviderProvider } from './first-provider/index.js';");
     expect(providerIndex).toMatch(

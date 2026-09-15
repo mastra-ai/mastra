@@ -2,19 +2,6 @@
 
 ## 1.18.0
 
-### Minor Changes
-
-- Added `MastraApiMCPServer` to expose supported Mastra server operations from the `mastra api` CLI as MCP tools. The server reads the target API's input schemas and forwards authentication. All non-GET operations, including agent, workflow, experiment, and tool execution, are marked as potentially destructive so MCP clients can ask for confirmation. Factory commands aren't included. ([#23077](https://github.com/mastra-ai/mastra/pull/23077))
-
-  ```typescript
-  import { MastraApiMCPServer } from '@mastra/mcp';
-
-  const operations = await MastraApiMCPServer.create({
-    url: 'https://my-mastra-server.example.com',
-    headers: { Authorization: `Bearer ${process.env.MASTRA_API_TOKEN}` },
-  });
-  ```
-
 ### Patch Changes
 
 - Improved MCP client and server declarations with concise setup examples and directions to bundled documentation. ([#23489](https://github.com/mastra-ai/mastra/pull/23489))
@@ -23,19 +10,6 @@
   - @mastra/core@1.67.0
 
 ## 1.18.0-alpha.1
-
-### Minor Changes
-
-- Added `MastraApiMCPServer` to expose supported Mastra server operations from the `mastra api` CLI as MCP tools. The server reads the target API's input schemas and forwards authentication. All non-GET operations, including agent, workflow, experiment, and tool execution, are marked as potentially destructive so MCP clients can ask for confirmation. Factory commands aren't included. ([#23077](https://github.com/mastra-ai/mastra/pull/23077))
-
-  ```typescript
-  import { MastraApiMCPServer } from '@mastra/mcp';
-
-  const operations = await MastraApiMCPServer.create({
-    url: 'https://my-mastra-server.example.com',
-    headers: { Authorization: `Bearer ${process.env.MASTRA_API_TOKEN}` },
-  });
-  ```
 
 ### Patch Changes
 
