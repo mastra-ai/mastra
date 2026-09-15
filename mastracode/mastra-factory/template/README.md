@@ -45,6 +45,7 @@ Choose authentication, storage, and sandboxes independently. Model providers and
 | [Models](https://factory.mastra.ai/configure/models)       | Provider access, personal or organization credentials, and the default model. |
 | [GitHub](https://factory.mastra.ai/configure/github)       | Repository access and personal issue intake.                                  |
 | [Linear](https://factory.mastra.ai/configure/linear)       | Workspace connection, project selection, and routing issues to a Factory.     |
+| [Jira](https://factory.mastra.ai/configure/jira)           | Site connections, project selection, and routing issues to a Factory.         |
 | [Slack](https://factory.mastra.ai/configure/slack)         | App setup, account linking, and starting sessions from Slack.                 |
 | [Auth](https://factory.mastra.ai/configure/auth)           | Mastra platform sign-in or another provider with Server and Studio support.   |
 | [Storage](https://factory.mastra.ai/configure/storage)     | The database connection or Factory storage adapter.                           |

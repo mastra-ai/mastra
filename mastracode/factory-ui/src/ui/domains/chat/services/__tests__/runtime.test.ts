@@ -109,40 +109,52 @@ describe('chat runtime status', () => {
         state = runtimeReducer(state, { type: 'event', event });
       };
       const usage = { promptTokens: 10, completionTokens: 40, reasoningTokens: 2, totalTokens: 52 };
+      const textDelta = (delta: string): AgentControllerEvent => ({
+        type: 'message_update',
+        id: 'assistant-1',
+        event: { type: 'text-delta', delta },
+      });
       emit({ type: 'agent_start' });
-      for (const message of [
-        dbMessage('user-1', 'user', [{ type: 'text', text: 'Inspect this' }]),
-        dbMessage('signal-1', 'signal', [{ type: 'text', text: 'A reminder' }]),
-        dbMessage('assistant-1', 'assistant', []),
-        dbMessage('assistant-1', 'assistant', [{ type: 'text', text: ' ' }]),
-        dbMessage('assistant-1', 'assistant', [
-          {
-            type: 'tool-invocation',
-            toolInvocation: { state: 'call', toolCallId: 'tool-1', toolName: 'view', args: {} },
+      // Full messages (user turns, signals) and non-text streaming don't start
+      // the decode clock — only a non-empty text delta does.
+      for (const event of [
+        { type: 'message_start', message: dbMessage('user-1', 'user', [{ type: 'text', text: 'Inspect this' }]) },
+        { type: 'message_start', message: dbMessage('signal-1', 'signal', [{ type: 'text', text: 'A reminder' }]) },
+        { type: 'message_start', message: dbMessage('assistant-1', 'assistant', []) },
+        textDelta(''),
+        {
+          type: 'message_update',
+          id: 'assistant-1',
+          event: {
+            type: 'part',
+            index: 0,
+            part: {
+              type: 'tool-invocation',
+              toolInvocation: { state: 'call', toolCallId: 'tool-1', toolName: 'view', args: {} },
+            },
           },
-        ]),
-      ]) {
-        emit({ type: 'message_update', message });
+        },
+      ] satisfies AgentControllerEvent[]) {
+        emit(event);
         vi.advanceTimersByTime(1000);
       }
-      const assistant = dbMessage('assistant-1', 'assistant', [{ type: 'text', text: 'Working' }]);
-      emit({ type: 'message_update', message: assistant });
+      emit(textDelta('Working'));
       vi.advanceTimersByTime(1000);
       emit({ type: 'usage_update', usage });
       expect(state.tokensPerSec).toBe(42);
 
       emit({ type: 'message_start', message: dbMessage('signal-2', 'signal', [{ type: 'text', text: 'A reminder' }]) });
       vi.advanceTimersByTime(5000);
-      emit({ type: 'message_update', message: assistant });
+      emit(textDelta('Working'));
       vi.advanceTimersByTime(1000);
-      emit({ type: 'message_update', message: assistant });
+      emit(textDelta(' more'));
       vi.advanceTimersByTime(1000);
       emit({ type: 'usage_update', usage });
       expect(state.tokensPerSec).toBe(36);
 
       emit({ type: 'agent_end' });
       expect(state.tokensPerSec).toBe(36);
-      emit({ type: 'message_update', message: assistant });
+      emit(textDelta('Working'));
       state = runtimeReducer(state, { type: 'reset' });
       expect(state.tokensPerSec).toBe(0);
       emit({ type: 'usage_update', usage });
