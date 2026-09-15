@@ -97,6 +97,7 @@ function AccountMenu({
     <DropdownMenu>
       <DropdownMenu.Trigger
         ref={menuTriggerRef}
+        aria-label="Account menu"
         render={<button type="button" />}
         className="hover:bg-sidebar-accent focus-visible:ring-ring flex min-h-10 w-full items-center rounded-lg px-2 py-1.5 text-left transition-colors focus-visible:ring-1 focus-visible:outline-none"
       >
