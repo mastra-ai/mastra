@@ -97,7 +97,7 @@ describe('ModelRouter - custom URL api selection', () => {
     expect(createOpenAICompatible).not.toHaveBeenCalled();
   });
 
-  it('keys chat and responses instances separately in the model cache', () => {
+  it('keys chat and responses instances separately in the model cache', async () => {
     const base = {
       gatewayId: 'my-provider',
       modelId: 'my-model',
@@ -110,8 +110,8 @@ describe('ModelRouter - custom URL api selection', () => {
       authScopeKey: 'explicit',
     };
 
-    const chatKey = ModelRouterLanguageModel.computeModelCacheKey({ ...base, api: 'chat' });
-    const responsesKey = ModelRouterLanguageModel.computeModelCacheKey({ ...base, api: 'responses' });
+    const chatKey = await ModelRouterLanguageModel.computeModelCacheKey({ ...base, api: 'chat' });
+    const responsesKey = await ModelRouterLanguageModel.computeModelCacheKey({ ...base, api: 'responses' });
 
     // The api discriminator must be part of the cache key so that chat and
     // responses instances for the same URL/model cannot collide.

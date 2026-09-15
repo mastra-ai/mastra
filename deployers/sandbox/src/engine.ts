@@ -1,5 +1,4 @@
 import { execFile } from 'node:child_process';
-import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -245,18 +244,33 @@ export async function uploadFile(sandbox: WorkspaceSandbox, remotePath: string, 
 /** Lockfiles that, when present in the build output, participate in the install-skip hash. */
 const LOCKFILES = ['package-lock.json', 'npm-shrinkwrap.json', 'pnpm-lock.yaml', 'yarn.lock', 'bun.lock'];
 
+function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+}
+
+function concatBytes(parts: Uint8Array[]): Uint8Array {
+  const result = new Uint8Array(parts.reduce((size, part) => size + part.byteLength, 0));
+  let offset = 0;
+  for (const part of parts) {
+    result.set(part, offset);
+    offset += part.byteLength;
+  }
+  return result;
+}
+
 /**
  * Hash everything that determines the outcome of a dependency install:
  * package.json, any bundled lockfile, and the install command itself. A
  * matching hash means the previous `node_modules` can be reused.
  */
 export async function hashInstallInputs(dir: string, installCommand: string): Promise<string | null> {
-  const hash = createHash('sha256');
+  const parts: Uint8Array[] = [];
   try {
-    hash.update(await readFile(join(dir, 'package.json')));
+    parts.push(await readFile(join(dir, 'package.json')));
   } catch {
     return null;
   }
+  const encoder = new TextEncoder();
   for (const lockfile of LOCKFILES) {
     let content: Buffer;
     try {
@@ -265,8 +279,9 @@ export async function hashInstallInputs(dir: string, installCommand: string): Pr
       // Lockfile not part of the build output.
       continue;
     }
-    hash.update(lockfile).update(content);
+    parts.push(encoder.encode(lockfile), content);
   }
-  hash.update(installCommand);
-  return hash.digest('hex');
+  parts.push(encoder.encode(installCommand));
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', toArrayBuffer(concatBytes(parts)));
+  return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
 }

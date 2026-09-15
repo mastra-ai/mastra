@@ -310,7 +310,7 @@ describe('EditorAgentNamespace.update', () => {
       workspace,
     });
 
-    const { workspaceId } = computeInlineWorkspaceIdentity(workspace.config);
+    const { workspaceId } = await computeInlineWorkspaceIdentity(workspace.config);
     const storedWorkspace = await workspaceStore.getByIdResolved(workspaceId);
     expect(storedWorkspace?.name).toBe('Updated Workspace');
   });

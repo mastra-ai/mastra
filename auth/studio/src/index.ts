@@ -1,5 +1,3 @@
-import { createHash } from 'node:crypto';
-
 import type {
   IOrganizationsProvider,
   ISSOProvider,
@@ -580,8 +578,9 @@ export class MastraAuthStudio
   }
 
   /** Cache key for a verified credential — hash, never the raw secret. */
-  private verificationKey(kind: 'cookie' | 'bearer', credential: string): string {
-    return createHash('sha256').update(`${kind}:${credential}`).digest('hex');
+  private async verificationKey(kind: 'cookie' | 'bearer', credential: string): Promise<string> {
+    const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(`${kind}:${credential}`));
+    return Buffer.from(digest).toString('hex');
   }
 
   private getCachedVerification(key: string): StudioUser | null {
@@ -636,7 +635,7 @@ export class MastraAuthStudio
    * to validate it and get user info.
    */
   private async verifySessionCookie(sessionCookie: string): Promise<StudioUser | null> {
-    const cacheKey = this.verificationKey('cookie', sessionCookie);
+    const cacheKey = await this.verificationKey('cookie', sessionCookie);
     const cached = this.getCachedVerification(cacheKey);
     if (cached) {
       // Keep the userId → cookie mapping warm for IOrganizationsProvider.
@@ -708,7 +707,7 @@ export class MastraAuthStudio
    * to validate it and get user info (used for CLI tokens).
    */
   private async verifyBearerToken(token: string): Promise<StudioUser | null> {
-    const cacheKey = this.verificationKey('bearer', token);
+    const cacheKey = await this.verificationKey('bearer', token);
     const cached = this.getCachedVerification(cacheKey);
     if (cached) return cached;
 

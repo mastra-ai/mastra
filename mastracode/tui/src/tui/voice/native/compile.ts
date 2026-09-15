@@ -24,7 +24,6 @@
  */
 
 import { spawn } from 'node:child_process';
-import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { mkdir, readFile, writeFile, rm, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
@@ -183,7 +182,9 @@ export async function resolveRecognizer(
   }
   // `v3` busts caches built before the .app-bundle + LaunchServices approach
   // (loose binaries never triggered the TCC prompt).
-  const hash = createHash('sha256').update('v3').update(source).update('\0').update(plist).digest('hex').slice(0, 16);
+  const hashInput = new TextEncoder().encode(`v3${source}\0${plist}`);
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', hashInput);
+  const hash = Buffer.from(digest).toString('hex').slice(0, 16);
   const dir = cacheDir();
   const appPath = join(dir, `macos-stt-${hash}.app`);
   const binaryPath = join(appPath, 'Contents', 'MacOS', APP_NAME);

@@ -1,11 +1,10 @@
-import { createHash } from 'node:crypto';
-
+import { sha256Hex } from '../../utils/crypto';
 import { shellQuote } from '../../utils/shell-quote';
 import { LOG_PREFIX } from './types';
 import type { MountContext } from './types';
 
-export function s3CredentialsPrefix(mountPath: string): string {
-  return `/tmp/.mastra-s3-${createHash('sha256').update(mountPath.replace(/\/$/, '')).digest('hex')}-`;
+export async function s3CredentialsPrefix(mountPath: string): Promise<string> {
+  return `/tmp/.mastra-s3-${await sha256Hex(mountPath.replace(/\/$/, ''))}-`;
 }
 
 /** Remove credentials only after their s3fs process has exited, including after reconnects. */
@@ -15,6 +14,7 @@ export async function cleanupS3Credentials(
 ): Promise<void> {
   // The path hash associates each attempt with its original mount, even if recovery moved it.
   // Inspect processes, not just /proc/mounts: lazy unmount can leave a daemon using the file.
+  const credentialsPrefix = await s3CredentialsPrefix(mountPath);
   const script = `test -r /proc/self/comm || exit 1
 credentials_in_use() {
   for process in /proc/[0-9]*; do
@@ -33,7 +33,7 @@ credentials_in_use() {
   return 1
 }
 result=0
-for directory in ${shellQuote(s3CredentialsPrefix(mountPath))}*; do
+for directory in ${shellQuote(credentialsPrefix)}*; do
   test -d "$directory" && test ! -L "$directory" || continue
   attempt=0
   while credentials_in_use && test "$attempt" -lt 20; do

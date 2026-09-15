@@ -2,7 +2,6 @@
  * Cache manager for content hashing and incremental builds
  */
 
-import crypto from 'crypto'
 import fs from 'fs-extra'
 import path from 'path'
 
@@ -19,7 +18,7 @@ interface CacheData {
   entries: Record<string, CacheEntry>
 }
 
-const CACHE_VERSION = '1.0.0'
+const CACHE_VERSION = '2.0.0'
 const CACHE_FILENAME = 'llms-txt-cache.json'
 
 export class CacheManager {
@@ -95,6 +94,11 @@ export class CacheManager {
   }
 }
 
-export function computeHash(content: string): string {
-  return crypto.createHash('md5').update(content).digest('hex')
+export async function computeHash(content: string): Promise<string> {
+  const bytes = new TextEncoder().encode(content)
+  const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', buffer)
+  return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0'))
+    .join('')
+    .slice(0, 32)
 }

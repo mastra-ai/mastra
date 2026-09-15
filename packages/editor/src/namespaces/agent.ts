@@ -399,7 +399,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
         this.logger?.debug(`[ensureStoredWorkspace] Persisted runtime workspace '${workspaceRef.workspaceId}' to DB`);
       } else if (workspaceRef.type === 'inline') {
         // Derive a deterministic, key-order-independent ID from the inline config
-        const { workspaceId, configHash } = computeInlineWorkspaceIdentity(workspaceRef.config);
+        const { workspaceId, configHash } = await computeInlineWorkspaceIdentity(workspaceRef.config);
 
         // Check if already stored in DB
         const existing = await workspaceNs.getById(workspaceId);
@@ -1881,7 +1881,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     if (workspaceRef.type === 'inline') {
       // Use a deterministic ID based on config content to avoid leaking
       // duplicate workspace instances on repeated calls.
-      const { workspaceId } = computeInlineWorkspaceIdentity(workspaceRef.config);
+      const { workspaceId } = await computeInlineWorkspaceIdentity(workspaceRef.config);
       return workspaceNs.hydrateSnapshotToWorkspace(workspaceId, workspaceRef.config, hydrateOptions);
     }
 

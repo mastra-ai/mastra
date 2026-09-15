@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import matter from 'gray-matter';
 import type { BlobStore } from '../../storage/domains/blobs/base';
 import type {
@@ -32,11 +31,11 @@ export interface SkillPublishResult {
 /**
  * Compute SHA-256 hex hash of content (string or Buffer).
  */
-function hashContent(content: string | Buffer): string {
-  if (Buffer.isBuffer(content)) {
-    return createHash('sha256').update(content).digest('hex');
-  }
-  return createHash('sha256').update(content, 'utf-8').digest('hex');
+async function hashContent(content: string | Buffer): Promise<string> {
+  const bytes = typeof content === 'string' ? new TextEncoder().encode(content) : content;
+  const data = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', data);
+  return Buffer.from(digest).toString('hex');
 }
 
 /**
@@ -268,7 +267,7 @@ export async function collectSkillForPublish(source: SkillSource, skillPath: str
   const now = new Date();
 
   for (const file of files) {
-    const hash = hashContent(file.content);
+    const hash = await hashContent(file.content);
     const mimeType = detectMimeType(file.path);
 
     if (file.isBinary) {

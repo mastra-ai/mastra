@@ -1,7 +1,6 @@
-import { createHash } from 'node:crypto';
-
 import type { FilesystemMountConfig } from '@mastra/core/workspace';
 
+import { sha256Hex } from '../../utils/crypto';
 import { shellQuote } from '../../utils/shell-quote';
 import { LOG_PREFIX, validateEndpoint, validatePrefix, validateRegion, validateS3BucketName } from './types';
 import type { MountContext } from './types';
@@ -95,7 +94,7 @@ export async function mountS3(mountPath: string, config: E2BS3MountConfig, ctx: 
   // concurrent mounts race: one mount's write/chmod interleaves with another's rm,
   // causing EACCES or a mount reading another mount's credentials. Hashing the
   // mountPath gives each mount a unique, stable file (same approach as azure.ts).
-  const mountHash = createHash('md5').update(mountPath).digest('hex').slice(0, 8);
+  const mountHash = (await sha256Hex(mountPath)).slice(0, 8);
   const credentialsPath = `/tmp/.passwd-s3fs-${mountHash}`;
 
   // S3-compatible services (R2, MinIO, etc.) require credentials

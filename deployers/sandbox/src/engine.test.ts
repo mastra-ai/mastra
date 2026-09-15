@@ -75,15 +75,18 @@ describe('deployToSandbox', () => {
   });
 
   it('skips the install when the recorded hash matches', async () => {
-    const { createHash } = await import('node:crypto');
     const { readFile } = await import('node:fs/promises');
     const { join } = await import('node:path');
     // Mirror hashInstallInputs: package.json + bundled lockfiles (none in the
     // fixture) + the install command itself.
-    const hash = createHash('sha256')
-      .update(await readFile(join(buildDir, 'package.json')))
-      .update('npm install --omit=dev')
-      .digest('hex');
+    const packageJson = new Uint8Array(await readFile(join(buildDir, 'package.json')));
+    const command = new TextEncoder().encode('npm install --omit=dev');
+    const input = new Uint8Array(packageJson.byteLength + command.byteLength);
+    input.set(packageJson);
+    input.set(command, packageJson.byteLength);
+    const buffer = input.buffer.slice(input.byteOffset, input.byteOffset + input.byteLength) as ArrayBuffer;
+    const digest = await globalThis.crypto.subtle.digest('SHA-256', buffer);
+    const hash = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
 
     const sandbox = new FakeSandbox({ installMarker: hash });
 

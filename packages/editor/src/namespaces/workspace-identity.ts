@@ -1,5 +1,3 @@
-import { createHash } from 'node:crypto';
-
 /**
  * `JSON.stringify` with deterministic key ordering at every level.
  *
@@ -30,7 +28,10 @@ export function stableStringify(value: unknown): string {
  * that equivalent configs resolve to the same stored workspace instead of
  * creating duplicates. Array order and value differences remain significant.
  */
-export function computeInlineWorkspaceIdentity(config: unknown): { workspaceId: string; configHash: string } {
-  const configHash = createHash('sha256').update(stableStringify(config)).digest('hex').slice(0, 12);
+export async function computeInlineWorkspaceIdentity(
+  config: unknown,
+): Promise<{ workspaceId: string; configHash: string }> {
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(stableStringify(config)));
+  const configHash = Buffer.from(digest).toString('hex').slice(0, 12);
   return { workspaceId: `inline-${configHash}`, configHash };
 }

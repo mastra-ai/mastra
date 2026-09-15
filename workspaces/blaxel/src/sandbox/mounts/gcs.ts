@@ -1,7 +1,6 @@
-import crypto from 'node:crypto';
-
 import type { FilesystemMountConfig } from '@mastra/core/workspace';
 
+import { sha256Hex } from '../../utils/crypto';
 import { shellQuote } from '../../utils/shell-quote';
 
 import { LOG_PREFIX, validateGCSBucketName, runCommand, detectPackageManager } from './types';
@@ -125,7 +124,7 @@ export async function mountGCS(mountPath: string, config: BlaxelGCSMountConfig, 
 
   if (hasCredentials) {
     // Use a mount-specific key path to avoid races with concurrent mounts
-    const mountHash = crypto.createHash('md5').update(mountPath).digest('hex').slice(0, 8);
+    const mountHash = (await sha256Hex(mountPath)).slice(0, 8);
     const keyPath = `/tmp/gcs-key-${mountHash}.json`;
     await runCommand(sandbox, `rm -f ${keyPath}`);
     await sandbox.fs.write(keyPath, config.serviceAccountKey!);

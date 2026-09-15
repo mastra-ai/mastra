@@ -27,8 +27,8 @@ describe('S3 credential lifetime', () => {
     rmSync(root, { recursive: true, force: true });
   });
 
-  function credentials(path = mountPath) {
-    const directory = mkdtempSync(s3CredentialsPrefix(path));
+  async function credentials(path = mountPath) {
+    const directory = mkdtempSync(await s3CredentialsPrefix(path));
     directories.push(directory);
     writeFileSync(`${directory}/credentials`, 'test-access:test-secret');
     return directory;
@@ -90,9 +90,9 @@ describe('S3 credential lifetime', () => {
   });
 
   it('cleans only inactive attempts belonging to this mount and preserves relocated daemons', async () => {
-    const inactive = credentials();
-    const relocated = credentials();
-    const otherMount = credentials(`${mountPath}-other`);
+    const inactive = await credentials();
+    const relocated = await credentials();
+    const otherMount = await credentials(`${mountPath}-other`);
     process(42, relocated);
     await cleanupS3Credentials(mountPath, ctx());
     expect(existsSync(inactive)).toBe(false);
@@ -101,14 +101,14 @@ describe('S3 credential lifetime', () => {
   });
 
   it('does not match another process merely mentioning the credential path', async () => {
-    const directory = credentials();
+    const directory = await credentials();
     process(42, directory, 'sh');
     await cleanupS3Credentials(mountPath, ctx());
     expect(existsSync(directory)).toBe(false);
   });
 
   it('retains credentials when the process table cannot be inspected', async () => {
-    const directory = credentials();
+    const directory = await credentials();
     rmSync(join(root, 'proc'), { recursive: true });
     await cleanupS3Credentials(mountPath, ctx());
     expect(existsSync(`${directory}/credentials`)).toBe(true);
@@ -116,7 +116,7 @@ describe('S3 credential lifetime', () => {
   });
 
   it('retains credentials when a live process cannot be inspected', async () => {
-    const directory = credentials();
+    const directory = await credentials();
     mkdirSync(join(root, 'proc/42'));
     await cleanupS3Credentials(mountPath, ctx());
     expect(existsSync(`${directory}/credentials`)).toBe(true);
@@ -126,7 +126,7 @@ describe('S3 credential lifetime', () => {
     const outside = join(root, 'outside');
     mkdirSync(outside);
     writeFileSync(join(outside, 'credentials'), 'keep');
-    const link = `${s3CredentialsPrefix(mountPath)}link`;
+    const link = `${await s3CredentialsPrefix(mountPath)}link`;
     directories.push(link);
     symlinkSync(outside, link);
     await cleanupS3Credentials(mountPath, ctx());
