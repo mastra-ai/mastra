@@ -55,6 +55,7 @@ import type {
   ListTracesArgs as ObservabilityListTracesArgs,
   ListTracesResponse as ObservabilityListTracesResponse,
 } from '../src/resources/observability-route-types.js';
+import type { Run } from '../src/resources/run.js';
 import type { Vector } from '../src/resources/vector.js';
 
 type Equal<Actual, Expected> =
@@ -213,6 +214,45 @@ type _AgentBuilderStart = Expect<
 >;
 type _AgentBuilderResume = Expect<
   Equal<ReturnType<AgentBuilder['resume']>, Promise<RouteResponse<'POST /agent-builder/:actionId/resume'>>>
+>;
+type _AgentApproveToolCall = Expect<
+  Equal<
+    ReturnType<Agent['approveToolCallGenerate']>,
+    Promise<RouteResponse<'POST /agents/:agentId/approve-tool-call-generate'>>
+  >
+>;
+type _AgentDeclineToolCall = Expect<
+  Equal<
+    ReturnType<Agent['declineToolCallGenerate']>,
+    Promise<RouteResponse<'POST /agents/:agentId/decline-tool-call-generate'>>
+  >
+>;
+type _StartAsyncBody = Expect<
+  Omit<Parameters<Run['startAsync']>[0], 'requestContext'> extends Omit<
+    Body<'POST /workflows/:workflowId/start-async'>,
+    'requestContext'
+  >
+    ? true
+    : false
+>;
+type _ResumeAsyncBody = Expect<
+  Omit<Parameters<Run['resumeAsync']>[0], 'requestContext'> extends Omit<
+    Body<'POST /workflows/:workflowId/resume-async'>,
+    'requestContext'
+  >
+    ? true
+    : false
+>;
+type _RestartAsyncBody = Expect<
+  Omit<NonNullable<Parameters<Run['restartAsync']>[0]>, 'requestContext'> extends Omit<
+    Body<'POST /workflows/:workflowId/restart-async'>,
+    'requestContext'
+  >
+    ? true
+    : false
+>;
+type _TimeTravelResponse = Expect<
+  Equal<ReturnType<Run['timeTravel']>, Promise<RouteResponse<'POST /workflows/:workflowId/time-travel'>>>
 >;
 type _ClientLogTransports = Expect<
   Equal<ReturnType<MastraClient['listLogTransports']>, Promise<RouteResponse<'GET /logs/transports'>>>

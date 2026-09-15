@@ -421,18 +421,22 @@ export class Run extends BaseResource {
    * @param params - optional object containing the requestContext
    * @returns Promise containing the workflow restart results
    */
-  restartAsync(params?: {
-    requestContext?: RequestContext | Record<string, any>;
-    tracingOptions?: TracingOptions;
-  }): Promise<WorkflowRunResult> {
+  restartAsync(
+    params?: Omit<Body<'POST /workflows/:workflowId/restart-async'>, 'requestContext'> & {
+      requestContext?: RequestContext | Record<string, any>;
+    },
+  ): Promise<WorkflowRunResult> {
     const requestContext = parseClientRequestContext(params?.requestContext);
-    return this.request<WorkflowRunResult>(`/workflows/${this.workflowId}/restart-async?runId=${this.runId}`, {
-      method: 'POST',
-      body: {
-        requestContext,
-        tracingOptions: params?.tracingOptions,
+    return this.request<RouteResponse<'POST /workflows/:workflowId/restart-async'>>(
+      `/workflows/${this.workflowId}/restart-async?runId=${this.runId}`,
+      {
+        method: 'POST',
+        body: {
+          requestContext,
+          tracingOptions: params?.tracingOptions,
+        },
       },
-    }).then(deserializeWorkflowError);
+    ).then(result => deserializeWorkflowError(result as WorkflowRunResult));
   }
 
   /**
@@ -440,7 +444,10 @@ export class Run extends BaseResource {
    * @param params - Object containing the step, inputData, resumeData, initialState, context, nestedStepsContext, requestContext and tracingOptions
    * @returns Promise containing success message
    */
-  timeTravel({ requestContext: paramsRequestContext, ...params }: TimeTravelParams): Promise<{ message: string }> {
+  timeTravel({
+    requestContext: paramsRequestContext,
+    ...params
+  }: TimeTravelParams): Promise<RouteResponse<'POST /workflows/:workflowId/time-travel'>> {
     const requestContext = parseClientRequestContext(paramsRequestContext);
     return this.request(`/workflows/${this.workflowId}/time-travel?runId=${this.runId}`, {
       method: 'POST',
@@ -458,13 +465,16 @@ export class Run extends BaseResource {
    */
   timeTravelAsync({ requestContext: paramsRequestContext, ...params }: TimeTravelParams): Promise<WorkflowRunResult> {
     const requestContext = parseClientRequestContext(paramsRequestContext);
-    return this.request<WorkflowRunResult>(`/workflows/${this.workflowId}/time-travel-async?runId=${this.runId}`, {
-      method: 'POST',
-      body: {
-        ...params,
-        requestContext,
+    return this.request<RouteResponse<'POST /workflows/:workflowId/time-travel-async'>>(
+      `/workflows/${this.workflowId}/time-travel-async?runId=${this.runId}`,
+      {
+        method: 'POST',
+        body: {
+          ...params,
+          requestContext,
+        },
       },
-    }).then(deserializeWorkflowError);
+    ).then(result => deserializeWorkflowError(result as WorkflowRunResult));
   }
 
   /**
