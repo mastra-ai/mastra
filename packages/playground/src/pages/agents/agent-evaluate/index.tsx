@@ -104,7 +104,7 @@ function AgentEvaluate() {
       isCodeSourceAgent={isCodeSourceAgent}
       readOnly={false}
     >
-      <AgentPlaygroundEvaluate agentId={agentId!} />
+      <AgentPlaygroundEvaluate agentId={agentId!} requestContextSchema={codeAgent.requestContextSchema} />
     </AgentEditFormProvider>
   );
 }

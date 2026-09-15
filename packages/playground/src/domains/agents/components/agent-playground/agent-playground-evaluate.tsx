@@ -33,6 +33,7 @@ import { useAgentExperiments } from '../../hooks/use-agent-experiments';
 import type { AgentExperiment } from '../../hooks/use-agent-experiments';
 import { useStoredAgentMutations } from '../../hooks/use-stored-agents';
 import { mapScorersToApi, mapInstructionBlocksToApi } from '../../utils/agent-form-mappers';
+import { AgentTopBarRunOptions } from '../agent-top-bar-controls';
 import { ExperimentResultsPanel } from './agent-playground-eval';
 import { AgentPlaygroundReview } from './agent-playground-review';
 import { DatasetDetailView } from './dataset-detail-view';
@@ -61,6 +62,7 @@ type DetailView =
 
 interface AgentPlaygroundEvaluateProps {
   agentId: string;
+  requestContextSchema?: string;
 }
 
 function parseIdList(ids: unknown): string[] {
@@ -96,7 +98,7 @@ function EvaluateDocsLink({ href, children }: { href: string; children: ReactNod
   );
 }
 
-export function AgentPlaygroundEvaluate({ agentId }: AgentPlaygroundEvaluateProps) {
+export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: AgentPlaygroundEvaluateProps) {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get('tab');
@@ -990,6 +992,7 @@ export function AgentPlaygroundEvaluate({ agentId }: AgentPlaygroundEvaluateProp
                 </CreateButton>
               </>
             )}
+            <AgentTopBarRunOptions requestContextSchema={requestContextSchema} />
           </div>
         </div>
 

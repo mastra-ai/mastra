@@ -183,11 +183,12 @@ describe('AgentLayout tool tabs', () => {
     expect(screen.queryByTestId('agent-tracing-controls-trigger')).toBeNull();
   });
 
-  it('shows run options in the top-level tab bar on Evaluate because they apply to every sub-tab', async () => {
+  it('keeps run options out of the top-level Evaluate tab bar', async () => {
     server.use(...commonHandlers(enabledPackages));
 
     renderLayout('/agents/agent-1/evaluate');
 
-    expect(await screen.findByTestId('agent-top-bar-run-options-trigger')).not.toBeNull();
+    await screen.findByRole('tab', { name: 'Editor' });
+    expect(screen.queryByTestId('agent-top-bar-run-options-trigger')).toBeNull();
   });
 });
