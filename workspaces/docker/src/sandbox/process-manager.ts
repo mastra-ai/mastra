@@ -433,12 +433,18 @@ export class DockerProcessManager extends SandboxProcessManager {
           // wait() with exit 137 while the targets are still running — the exact
           // bug this fix addresses. Only force-destroy the stream if kill()
           // fails to make progress, as a last resort to unblock wait().
+          const forceClose = () => {
+            if (handle.exitCode === undefined) {
+              handle._killed = true;
+              handle._destroyStream();
+            }
+          };
           handle
             .kill()
             .then(killed => {
-              if (!killed) handle._destroyStream();
+              if (!killed) forceClose();
             })
-            .catch(() => handle._destroyStream());
+            .catch(forceClose);
         }
       }, timeoutMs);
       // Clear timer when process exits naturally
