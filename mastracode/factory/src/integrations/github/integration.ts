@@ -153,6 +153,7 @@ export interface IssuePage {
 
 export interface ListRepoOpenIssuesOptions {
   label?: string;
+  query?: string;
 }
 
 export interface GithubIntegrationConfig {
@@ -607,6 +608,7 @@ export class GithubIntegration implements FactoryIntegration {
     const labels = normalizeLabels(input.labels);
     const result = await this.listRepoOpenIssues(installationId, repoFullName, page, {
       label: labels.length > 0 ? labels.join(',') : undefined,
+      query: input.query,
     });
     return {
       issues: result.issues.map(issue => ({
@@ -769,6 +771,18 @@ export class GithubIntegration implements FactoryIntegration {
   async #listPullRequests(input: InputOf<'listPullRequests'>) {
     const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
     const page = parsePositiveCursor(input.cursor);
+    if (input.query) {
+      // Search hits carry no branches, so each one is fetched in full.
+      const { data } = await octokit.search.issuesAndPullRequests({
+        q: pullRequestSearchQuery(input),
+        per_page: LIST_PAGE_SIZE,
+        page,
+      });
+      const pullRequests = await Promise.all(
+        data.items.map(async hit => parsePullRequest((await octokit.pulls.get({ ...parts, pull_number: hit.number })).data)),
+      );
+      return { pullRequests, nextCursor: data.items.length === LIST_PAGE_SIZE ? String(page + 1) : null };
+    }
     const response = await octokit.pulls.list({
       ...parts,
       state: input.state ?? 'open',
@@ -1113,15 +1127,25 @@ export class GithubIntegration implements FactoryIntegration {
     const parts = splitRepoFullName(repoFullName);
     if (!parts) return { issues: [], nextPage: null };
     const octokit = this.getInstallationOctokit(installationId);
-    const response = await octokit.issues.listForRepo({
-      owner: parts.owner,
-      repo: parts.repo,
-      state: 'open',
-      labels: options.label,
-      per_page: LIST_PAGE_SIZE,
-      page,
-    });
-    const issues = response.data
+    const listed = options.query
+      ? (
+          await octokit.search.issuesAndPullRequests({
+            q: issueSearchQuery(repoFullName, options),
+            per_page: LIST_PAGE_SIZE,
+            page,
+          })
+        ).data.items
+      : (
+          await octokit.issues.listForRepo({
+            owner: parts.owner,
+            repo: parts.repo,
+            state: 'open',
+            labels: options.label,
+            per_page: LIST_PAGE_SIZE,
+            page,
+          })
+        ).data;
+    const issues = listed
       .filter(issue => !issue.pull_request)
       .map(issue => ({
         number: issue.number,
@@ -1134,7 +1158,7 @@ export class GithubIntegration implements FactoryIntegration {
         createdAt: issue.created_at,
         updatedAt: issue.updated_at,
       }));
-    return { issues, nextPage: response.data.length === LIST_PAGE_SIZE ? page + 1 : null };
+    return { issues, nextPage: listed.length === LIST_PAGE_SIZE ? page + 1 : null };
   }
 
   /**
@@ -1431,6 +1455,22 @@ interface GithubReviewCommentData extends GithubCommentData {
   side?: string | null;
   commit_id: string;
   in_reply_to_id?: number | null;
+}
+
+function issueSearchQuery(repoFullName: string, options: ListRepoOpenIssuesOptions): string {
+  const labels = (options.label?.split(',') ?? []).filter(Boolean).map(label => `label:"${label}"`);
+  return [`repo:${repoFullName}`, 'is:issue', 'is:open', ...labels, options.query].join(' ');
+}
+
+function pullRequestSearchQuery(input: InputOf<'listPullRequests'>): string {
+  const state = input.state ?? 'open';
+  return [
+    `repo:${input.sourceId}`,
+    'is:pr',
+    ...(state === 'all' ? [] : [`is:${state}`]),
+    ...(input.includeDrafts === false ? ['draft:false'] : []),
+    input.query,
+  ].join(' ');
 }
 
 function parsePullRequest(pr: GithubPullRequestData): PullRequest {

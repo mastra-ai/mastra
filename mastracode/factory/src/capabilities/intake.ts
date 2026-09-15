@@ -81,6 +81,8 @@ export interface ListIntakeIssuesInput {
   sourceIds: string[];
   /** Provider label names used to filter the issue listing. */
   labels?: string[];
+  /** Identifier or words to match; a provider with no server-side search returns the page unfiltered. */
+  query?: string;
   cursor?: string;
 }
 

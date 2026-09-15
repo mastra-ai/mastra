@@ -26,11 +26,12 @@ export const queryKeys = {
   githubStatus: () => ['github', 'status'] as const,
   githubPat: () => ['github', 'pat'] as const,
   githubRepos: (query: string | undefined) => ['github', 'repos', query ?? null] as const,
-  githubIssues: (githubProjectId: string | undefined, label?: string) =>
-    ['github', 'issues', githubProjectId ?? null, label ?? null] as const,
+  githubIssues: (githubProjectId: string | undefined, label?: string, query?: string) =>
+    ['github', 'issues', githubProjectId ?? null, label ?? null, query ?? null] as const,
   githubIssue: (githubProjectId: string | undefined, number: number | undefined) =>
     ['github', 'issue', githubProjectId ?? null, number ?? null] as const,
-  githubPulls: (githubProjectId: string | undefined) => ['github', 'prs', githubProjectId ?? null] as const,
+  githubPulls: (githubProjectId: string | undefined, query?: string) =>
+    ['github', 'prs', githubProjectId ?? null, query ?? null] as const,
   githubPull: (githubProjectId: string | undefined, number: number | undefined) =>
     ['github', 'pr', githubProjectId ?? null, number ?? null] as const,
   githubRepositorySettings: (githubProjectId: string | undefined) =>
@@ -40,8 +41,8 @@ export const queryKeys = {
   linearStatus: () => ['linear', 'status'] as const,
   linearProjects: () => ['linear', 'projects'] as const,
   linearIssuesAll: () => ['linear', 'issues'] as const,
-  linearIssues: (githubProjectId: string | undefined) =>
-    [...queryKeys.linearIssuesAll(), githubProjectId ?? null] as const,
+  linearIssues: (githubProjectId: string | undefined, query?: string) =>
+    [...queryKeys.linearIssuesAll(), githubProjectId ?? null, query ?? null] as const,
   linearIssue: (factoryProjectId: string | undefined, identifier: string | undefined) =>
     ['linear', 'issue', factoryProjectId ?? null, identifier ?? null] as const,
   intakeConfig: () => ['intake', 'config'] as const,

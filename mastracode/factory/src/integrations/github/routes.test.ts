@@ -230,7 +230,7 @@ vi.mock('./db', () => {
 });
 
 const listRepoOpenIssues = vi.fn(
-  async (_installationId: number, _repoFullName: string, _page: number, _options?: { label?: string }) => ({
+  async (_installationId: number, _repoFullName: string, _page: number, _options?: { label?: string; query?: string }) => ({
     issues: [
       {
         number: 12,
@@ -253,7 +253,8 @@ const addIssueLabels = vi.fn(
 const removeIssueLabel = vi.fn(
   async (_installationId: number, _repoFullName: string, _issueNumber: number, _label: string) => {},
 );
-const listRepoOpenPullRequests = vi.fn(async (_installationId: number, _repoFullName: string, _page: number) => ({
+const listRepoOpenPullRequests = vi.fn(
+  async (_installationId: number, _repoFullName: string, _page: number, _query?: string) => ({
   pullRequests: [
     {
       number: 34,
@@ -379,7 +380,7 @@ const githubStub = {
         input.connection.installationId,
         input.sourceIds[0]!,
         Number(input.cursor ?? '1'),
-        { label: input.labels?.join(',') },
+        { label: input.labels?.join(','), query: input.query },
       );
       return {
         issues: result.issues.map(issue => ({
@@ -417,11 +418,11 @@ const githubStub = {
     },
     listPullRequests: async (input: ListPullRequestsInput) => {
       if (input.connection.type !== 'app-installation') throw new Error('expected installation connection');
-      const result = await listRepoOpenPullRequests(
-        input.connection.installationId,
-        input.sourceId,
-        Number(input.cursor ?? '1'),
-      );
+      const page = Number(input.cursor ?? '1');
+      const result =
+        input.query === undefined
+          ? await listRepoOpenPullRequests(input.connection.installationId, input.sourceId, page)
+          : await listRepoOpenPullRequests(input.connection.installationId, input.sourceId, page, input.query);
       return {
         pullRequests: result.pullRequests.map(pr => ({ ...pr, id: String(pr.number) })),
         nextCursor: result.nextPage === null ? null : String(result.nextPage),
@@ -1432,6 +1433,21 @@ describe('issues route', () => {
     expect(listRepoOpenIssues).toHaveBeenCalledWith(7, 'octo/hello', 2, { label: undefined });
   });
 
+  it('forwards the search query', async () => {
+    seedMaterializedProject();
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/issues?q=%2021068%20');
+    expect(res.status).toBe(200);
+    expect(listRepoOpenIssues).toHaveBeenCalledWith(7, 'octo/hello', 1, { label: undefined, query: '21068' });
+  });
+
+  it('rejects an oversized search query', async () => {
+    seedMaterializedProject();
+    const res = await buildApp({ workosId: 'u1' }).request(`/web/github/projects/p1/issues?q=${'a'.repeat(201)}`);
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: 'invalid_query' });
+    expect(listRepoOpenIssues).not.toHaveBeenCalled();
+  });
+
   it('forwards the status: auto-triaged label filter', async () => {
     seedMaterializedProject();
     const res = await buildApp({ workosId: 'u1' }).request(
@@ -1557,6 +1573,21 @@ describe('prs route', () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ pullRequests: [], nextPage: 4 });
     expect(listRepoOpenPullRequests).toHaveBeenCalledWith(7, 'octo/hello', 3);
+  });
+
+  it('forwards the search query', async () => {
+    seedMaterializedProject();
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/prs?q=21068');
+    expect(res.status).toBe(200);
+    expect(listRepoOpenPullRequests).toHaveBeenCalledWith(7, 'octo/hello', 1, '21068');
+  });
+
+  it('rejects an oversized search query', async () => {
+    seedMaterializedProject();
+    const res = await buildApp({ workosId: 'u1' }).request(`/web/github/projects/p1/prs?q=${'a'.repeat(201)}`);
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: 'invalid_query' });
+    expect(listRepoOpenPullRequests).not.toHaveBeenCalled();
   });
 
   it('502s when GitHub is unavailable', async () => {

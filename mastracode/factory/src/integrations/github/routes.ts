@@ -38,6 +38,7 @@ import type {
   SourceControlInstallation,
   SourceControlRepository,
 } from '../../storage/domains/source-control/base.js';
+import { parseSearchQuery } from '../search-query.js';
 import { listRepositoryCommits } from './commits.js';
 import { getGithubFeatureDiagnostics, isGithubFeatureEnabled } from './config.js';
 import type { GithubIntegration } from './integration.js';
@@ -686,6 +687,8 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
         if (page === null) return c.json({ error: 'invalid_page' }, 400);
         const label = parseIssueLabelFilter(c.req.query('label'));
         if (label === null) return c.json({ error: 'invalid_label' }, 400);
+        const query = parseSearchQuery(c.req.query('q'));
+        if (query === null) return c.json({ error: 'invalid_query' }, 400);
         try {
           const { issues, nextCursor } = await github.intake.listIssues({
             connection: {
@@ -695,6 +698,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
             sourceIds: [loaded.project.repository.slug],
             labels: label ? [label] : undefined,
             cursor: String(page),
+            query,
           });
           const responseIssues = issues.map(issue => ({
             number: Number(issue.id),
@@ -777,6 +781,8 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
         if ('response' in loaded) return loaded.response;
         const page = parseListPage(c.req.query('page'));
         if (page === null) return c.json({ error: 'invalid_page' }, 400);
+        const query = parseSearchQuery(c.req.query('q'));
+        if (query === null) return c.json({ error: 'invalid_query' }, 400);
         try {
           const { pullRequests, nextCursor } = await github.versionControl.listPullRequests({
             connection: {
@@ -786,6 +792,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
             sourceId: loaded.project.repository.slug,
             includeDrafts: false,
             cursor: String(page),
+            query,
           });
           const responsePullRequests = pullRequests.map(pr => ({
             number: Number(pr.id),

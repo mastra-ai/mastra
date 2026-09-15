@@ -134,9 +134,11 @@ export async function listLinearIssues(
   baseUrl: string,
   factoryProjectId: string,
   after?: string,
+  query?: string,
 ): Promise<LinearIssuePage> {
   const params = new URLSearchParams({ factoryProjectId });
   if (after) params.set('after', after);
+  if (query) params.set('q', query);
   return getLinearResource<LinearIssuePage>(baseUrl, `/web/linear/issues?${params.toString()}`);
 }
 

@@ -145,6 +145,28 @@ export interface LinearCreatedComment {
 }
 
 const LINEAR_ISSUES_PAGE_SIZE = 30;
+
+/** `ENG-123` matches that issue; anything else matches words in the title. */
+function linearSearchFilter(query: string | undefined): {
+  filter: string;
+  variableDeclarations: string;
+  variables: Record<string, string | number>;
+} {
+  if (!query) return { filter: '', variableDeclarations: '', variables: {} };
+  const identifier = /^([A-Za-z][A-Za-z0-9]*)-(\d+)$/.exec(query);
+  if (identifier) {
+    return {
+      filter: ', team: { key: { eqIgnoreCase: $teamKey } }, number: { eq: $issueNumber }',
+      variableDeclarations: ', $teamKey: String!, $issueNumber: Float!',
+      variables: { teamKey: identifier[1]!, issueNumber: Number(identifier[2]) },
+    };
+  }
+  return {
+    filter: ', title: { containsIgnoreCase: $query }',
+    variableDeclarations: ', $query: String!',
+    variables: { query },
+  };
+}
 const ISSUE_COMMENTS_PAGE_SIZE = 50;
 /** Hard stop for comment pagination so a misbehaving cursor can't loop forever. */
 const ISSUE_COMMENTS_MAX_PAGES = 20;
@@ -676,7 +698,13 @@ export class LinearIntegration implements FactoryIntegration {
 
   async #listIntakeIssues(input: ListIntakeIssuesInput): Promise<{ issues: IntakeIssue[]; nextCursor: string | null }> {
     const accessToken = getLinearAccessToken(input.connection);
-    const result = await this.listActiveIssues(accessToken, input.cursor, input.sourceIds, input.labels);
+    const result = await this.listActiveIssues(
+      accessToken,
+      input.cursor,
+      input.sourceIds,
+      input.labels,
+      input.query,
+    );
     return {
       issues: result.issues.map(issue => linearIssueToIntakeIssue(issue)),
       nextCursor: result.nextCursor,
@@ -784,20 +812,22 @@ export class LinearIntegration implements FactoryIntegration {
     after?: string,
     projectIds?: string[],
     labels?: string[],
+    query?: string,
   ): Promise<LinearIssuePage> {
     const normalizedLabels = [...new Set((labels ?? []).map(label => label.trim()).filter(Boolean))];
+    const search = linearSearchFilter(query);
     const projectFilter = projectIds?.length ? ', project: { id: { in: $projectIds } }' : '';
     const projectVar = projectIds?.length ? ', $projectIds: [ID!]' : '';
     const labelFilter = normalizedLabels.length > 0 ? ', labels: { name: { in: $labels } }' : '';
     const labelVar = normalizedLabels.length > 0 ? ', $labels: [String!]' : '';
     const data = await linearGraphql<IssuesQueryData>(
       accessToken,
-      `query Intake($first: Int!, $after: String${projectVar}${labelVar}) {
+      `query Intake($first: Int!, $after: String${projectVar}${labelVar}${search.variableDeclarations}) {
         issues(
           first: $first
           after: $after
           orderBy: updatedAt
-          filter: { state: { type: { in: ["triage", "backlog", "unstarted", "started"] } }${projectFilter}${labelFilter} }
+          filter: { state: { type: { in: ["triage", "backlog", "unstarted", "started"] } }${projectFilter}${labelFilter}${search.filter} }
         ) {
           nodes {
             id
@@ -822,6 +852,7 @@ export class LinearIntegration implements FactoryIntegration {
         after: after ?? null,
         ...(projectIds?.length ? { projectIds } : {}),
         ...(normalizedLabels.length > 0 ? { labels: normalizedLabels } : {}),
+        ...search.variables,
       },
     );
     const { nodes, pageInfo } = data.issues;

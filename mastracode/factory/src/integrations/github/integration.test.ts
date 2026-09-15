@@ -361,6 +361,42 @@ describe('GithubIntegration capability surface', () => {
     expect(listForRepo).toHaveBeenCalledWith(expect.objectContaining({ labels: 'bug,urgent' }));
   });
 
+  it('searches issues through GitHub search when a query is given', async () => {
+    const github = new GithubIntegration(validConfig());
+    const issuesAndPullRequests = vi.fn(async () => ({
+      data: {
+        items: [
+          {
+            number: 21068,
+            title: 'Retry failed uploads',
+            html_url: 'https://github.com/acme/app/issues/21068',
+            user: { login: 'ada' },
+            labels: [{ name: 'bug' }],
+            comments: 0,
+            created_at: '2026-07-01T00:00:00Z',
+            updated_at: '2026-07-02T00:00:00Z',
+          },
+        ],
+      },
+    }));
+    vi.spyOn(github, 'getInstallationOctokit').mockReturnValue({ search: { issuesAndPullRequests } } as any);
+
+    const result = await github.intake.listIssues({
+      connection: { type: 'app-installation', installationId: 7 },
+      sourceIds: ['acme/app'],
+      labels: ['bug'],
+      cursor: '2',
+      query: '21068',
+    });
+
+    expect(result.issues.map(issue => issue.identifier)).toEqual(['#21068']);
+    expect(issuesAndPullRequests).toHaveBeenCalledWith({
+      q: 'repo:acme/app is:issue is:open label:"bug" 21068',
+      per_page: 30,
+      page: 2,
+    });
+  });
+
   it('fetches issue details and creates comments through the shared Intake contract', async () => {
     const github = new GithubIntegration(validConfig());
     const get = vi.fn(async () => ({
@@ -509,6 +545,34 @@ describe('GithubIntegration capability surface', () => {
       ],
       nextCursor: null,
     });
+  });
+
+  it('searches pull requests and fetches each hit in full', async () => {
+    const github = new GithubIntegration(validConfig());
+    const issuesAndPullRequests = vi.fn(async () => ({ data: { items: [{ number: 34 }] } }));
+    const get = vi.fn(async () => ({ data: pullRequestData() }));
+    vi.spyOn(github, 'getInstallationOctokit').mockReturnValue({
+      search: { issuesAndPullRequests },
+      pulls: { get },
+    } as any);
+
+    await expect(
+      github.versionControl.listPullRequests({
+        connection: { type: 'app-installation', installationId: 7 },
+        sourceId: 'acme/app',
+        includeDrafts: false,
+        query: 'intake',
+      }),
+    ).resolves.toEqual({
+      pullRequests: [expect.objectContaining({ id: '34', headBranch: 'feat/intake', headSha: 'abc123' })],
+      nextCursor: null,
+    });
+    expect(issuesAndPullRequests).toHaveBeenCalledWith({
+      q: 'repo:acme/app is:pr is:open draft:false intake',
+      per_page: 30,
+      page: 1,
+    });
+    expect(get).toHaveBeenCalledWith({ owner: 'acme', repo: 'app', pull_number: 34 });
   });
 
   it('implements the full pull-request lifecycle through VersionControl', async () => {

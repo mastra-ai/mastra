@@ -32,6 +32,7 @@ export function useBoardIntake({
   definition,
   knownSourceKeys,
   elsewhereSourceKeys = EMPTY_KEYS,
+  search,
 }: {
   factoryProjectId: string;
   repository: LinkedRepositoryPayload;
@@ -39,7 +40,9 @@ export function useBoardIntake({
   knownSourceKeys: ReadonlySet<string>;
   /** Subset of `knownSourceKeys` whose card lives on another board. */
   elsewhereSourceKeys?: ReadonlySet<string>;
+  search?: string;
 }) {
+  const query = search?.trim() || undefined;
   const kind = definition.id;
   const review = kind === 'review';
   const initialPhase = definition.initialPhase;
@@ -99,11 +102,16 @@ export function useBoardIntake({
 
   // Fetch every configured source so teammate filters can include provider identities
   // even when a different intake feed is visible. Only the active feed affects loading.
-  const issues = useProjectIssuesQuery(!review && githubIntakeActive ? projectRepositoryId : undefined);
+  const issues = useProjectIssuesQuery(
+    !review && githubIntakeActive ? projectRepositoryId : undefined,
+    undefined,
+    query,
+  );
   // Auto-triage is a Work-only lane, so only Work browses the triaged feed.
   const triageIssues = useProjectIssuesQuery(
     kind === 'work' && active === 'github' ? projectRepositoryId : undefined,
     AUTO_TRIAGED_LABEL,
+    query,
   );
   // Mirrors the server's resolution: the first route (in listing order) whose
   // label the issue carries wins; unrouted issues belong to Work.
@@ -116,8 +124,8 @@ export function useBoardIntake({
         : [],
     [issues.data, labelRoutes, kind, routesSettled],
   );
-  const pulls = useProjectPullRequestsQuery(review ? projectRepositoryId : undefined);
-  const linearIssues = useLinearIssuesQuery(!review && linearReady ? factoryProjectId : undefined);
+  const pulls = useProjectPullRequestsQuery(review ? projectRepositoryId : undefined, query);
+  const linearIssues = useLinearIssuesQuery(!review && linearReady ? factoryProjectId : undefined, query);
   const boardLinearIssues = useMemo(() => {
     const bindings = (bindingsQuery.data ?? []).filter(
       binding => binding.integrationId === 'linear' && binding.factoryProjectId === factoryProjectId,

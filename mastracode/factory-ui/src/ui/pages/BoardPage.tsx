@@ -156,6 +156,7 @@ function BoardContent({
     definition,
     knownSourceKeys: items.knownSourceKeys,
     elsewhereSourceKeys: items.elsewhereSourceKeys,
+    search,
   });
   const runs = useBoardRuns({ factoryProjectId, refetchItems: items.refetch });
   const relatedItemsFor = relatedWorkItemIndex(items.all);
