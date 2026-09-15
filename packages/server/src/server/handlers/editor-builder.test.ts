@@ -1,5 +1,6 @@
 import type { IAgentBuilder } from '@mastra/core/agent-builder/ee';
 import type { IMastraEditor } from '@mastra/core/editor';
+import { ModelsDevGateway, PROVIDER_REGISTRY } from '@mastra/core/llm';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 import {
@@ -15,8 +16,8 @@ const createMockMastra = (
 ) =>
   ({
     getEditor: () => editor,
-    // buildProvidersList() reads gateways; an empty map keeps it to PROVIDER_REGISTRY.
-    listGateways: () => ({}),
+    // buildProvidersList() resolves API keys through the gateways; models.dev is the one reading env vars.
+    listGateways: () => ({ 'models.dev': new ModelsDevGateway(PROVIDER_REGISTRY) }),
     listTools: () => registry?.tools ?? {},
     listAgents: () => registry?.agents ?? {},
     listWorkflows: () => registry?.workflows ?? {},

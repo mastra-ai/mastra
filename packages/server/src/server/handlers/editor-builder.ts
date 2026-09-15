@@ -10,8 +10,8 @@ import {
 import type { AgentFeatures, InfrastructureStatus } from '../schemas/editor-builder';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import { resolveBuilderModelPolicy } from '../utils/resolve-builder-model-policy';
-import { buildProvidersList } from './agents';
 import { handleError } from './error';
+import { buildProvidersList } from './provider-catalog';
 
 /**
  * Resolve the active builder feature flags. Returns `null` when the editor is
