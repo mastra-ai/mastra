@@ -803,6 +803,44 @@ describe('issue detail route', () => {
     );
   });
 
+  it('finds the held card by stable issue id after Linear renamed the identifier', async () => {
+    const teamSourceId = 'linear-team:team-1';
+    await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'project-1' } });
+    await seed.intake.saveConfig({
+      orgId: 'org1',
+      userId: 'u1',
+      config: { linear: { enabled: true, sourceIds: ['proj-1', teamSourceId] } },
+    });
+    await seed.intake.setBinding({
+      orgId: 'org1',
+      integrationId: 'linear',
+      sourceId: teamSourceId,
+      factoryProjectId: projectB,
+      board: 'work',
+    });
+    await seed.workItems.upsert({
+      orgId: 'org1',
+      userId: 'u1',
+      factoryProjectId: projectB,
+      input: {
+        externalSource: { integrationId: 'linear', type: 'issue', externalId: 'linear:OLD-42', url: issueDetail.url },
+        claimKey: 'linear:issue:issue-1',
+        title: 'OLD-42: Fix intake sync',
+        stages: ['intake'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    fetchIssueDetail.mockResolvedValue({ ...issueDetail, teamId: 'team-1' });
+
+    const res = await buildApp(org1()).request(
+      `/web/linear/issues/ENG-42?factoryProjectId=${projectB}&issueId=issue-1`,
+    );
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ identifier: 'ENG-42' });
+  });
+
   it('stops serving a held card once it is finished', async () => {
     const teamSourceId = 'linear-team:team-1';
     await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'project-1' } });

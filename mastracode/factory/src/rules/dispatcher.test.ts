@@ -4215,6 +4215,127 @@ describe('FactoryDecisionDispatcher', () => {
     expect(await decisionByKey(storage, 'linked-1')).toMatchObject({ status: 'succeeded' });
   });
 
+  it('spends a linked-item decision when another project holds the claim for its record', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    await storage.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: 'other-project',
+      input: {
+        externalSource: { integrationId: 'linear', type: 'issue', externalId: 'linear:ENG-1' },
+        claimKey: 'linear:issue:1',
+        title: 'ENG-1: held elsewhere',
+        stages: ['intake'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    const parent = await createItem(storage);
+    const boards = createLifecycleTestRegistry({
+      execute: {
+        issue: {
+          onEnter: () => ({
+            type: 'upsertLinkedWorkItem',
+            idempotencyKey: 'linked-claimed',
+            board: 'work',
+            source: 'linear-issue',
+            sourceKey: 'linear:ENG-1',
+            claimKey: 'linear:issue:1',
+            title: 'ENG-1: held elsewhere',
+            url: null,
+            stage: 'intake',
+          }),
+        },
+      },
+    });
+    const transitionService = new FactoryTransitionService({ storage, configVersion: 'rules-v1', boards });
+    await transitionService.transition({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: parent.id,
+      board: 'work',
+      stage: 'execute',
+      expectedRevision: parent.revision,
+      actor: { type: 'human', id: 'user-1' },
+      ingress: { type: 'human', identity: 'move-claimed' },
+      cause: 'test',
+    });
+    const { controller } = createSession();
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      isAutoRunEnabled: async () => true,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+    });
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    const filedHere = (await storage.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).filter(
+      item => item.externalSource?.externalId === 'linear:ENG-1',
+    );
+    expect(filedHere).toEqual([]);
+    expect(await decisionByKey(storage, 'linked-claimed')).toMatchObject({ status: 'succeeded' });
+  });
+
+  it('adopts the claim on a linked card filed before claims existed', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const legacy = await storage.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: PROJECT_ID,
+      input: {
+        externalSource: { integrationId: 'linear', type: 'issue', externalId: 'linear:ENG-1' },
+        title: 'ENG-1: filed earlier',
+        stages: ['intake'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    expect(legacy.item.claimKey).toBeNull();
+    const parent = await createItem(storage);
+    const boards = createLifecycleTestRegistry({
+      execute: {
+        issue: {
+          onEnter: () => ({
+            type: 'upsertLinkedWorkItem',
+            idempotencyKey: 'linked-adopt',
+            board: 'work',
+            source: 'linear-issue',
+            sourceKey: 'linear:ENG-1',
+            claimKey: 'linear:issue:1',
+            title: 'ENG-1: filed earlier',
+            url: null,
+            stage: 'intake',
+          }),
+        },
+      },
+    });
+    const transitionService = new FactoryTransitionService({ storage, configVersion: 'rules-v1', boards });
+    await transitionService.transition({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: parent.id,
+      board: 'work',
+      stage: 'execute',
+      expectedRevision: parent.revision,
+      actor: { type: 'human', id: 'user-1' },
+      ingress: { type: 'human', identity: 'move-adopt' },
+      cause: 'test',
+    });
+    const { controller } = createSession();
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      isAutoRunEnabled: async () => true,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+    });
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    expect(await storage.get({ orgId: 'org-1', id: legacy.item.id })).toMatchObject({ claimKey: 'linear:issue:1' });
+    expect(await storage.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).toHaveLength(2);
+  });
+
   it('removes a newly materialized linked item when its initial Intake entry is rejected', async () => {
     const { workItems: storage } = await createFactoryStorageForTests();
     const parent = await createItem(storage);

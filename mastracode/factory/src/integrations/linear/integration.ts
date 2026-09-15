@@ -1150,6 +1150,7 @@ export class LinearIntegration implements FactoryIntegration {
       projects: ctx.storage.projects,
       ingestFactoryIssues: attachLinearRules(this, ctx),
       workItems: ctx.runtime?.workItems,
+      boards: ctx.runtime?.boards,
     });
   }
 

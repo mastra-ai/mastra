@@ -178,6 +178,80 @@ describe('WorkItemsStorage', () => {
     expect(rows.every(row => row.orgId === 'org1')).toBe(true);
   });
 
+  it('refuses a claim held by another project and resolves a renamed record within the project', async () => {
+    const storage = await makeStorage();
+    const claimKey = 'linear:issue:1';
+    const first = await storage.upsert({
+      orgId: 'org1',
+      userId: 'user1',
+      factoryProjectId: 'project1',
+      input: { ...input, claimKey },
+    });
+
+    await expect(
+      storage.upsert({
+        orgId: 'org1',
+        userId: 'user1',
+        factoryProjectId: 'project2',
+        input: { ...input, externalSource: { ...input.externalSource, externalId: 'renamed' }, claimKey },
+      }),
+    ).rejects.toMatchObject({ code: 'work_item_claim_conflict', claimant: { id: first.item.id } });
+
+    const renamed = await storage.upsert({
+      orgId: 'org1',
+      userId: 'user1',
+      factoryProjectId: 'project1',
+      input: { ...input, externalSource: { ...input.externalSource, externalId: 'renamed' }, claimKey },
+    });
+    expect(renamed).toMatchObject({ created: false, item: { id: first.item.id, claimKey } });
+    expect(await storage.list({ orgId: 'org1', factoryProjectId: 'project1' })).toHaveLength(1);
+    expect(await storage.getByClaimKey({ orgId: 'org1', claimKey })).toMatchObject({ id: first.item.id });
+  });
+
+  it('releases the claim when a card finishes so another project can file the record', async () => {
+    const storage = await makeStorage();
+    storage.useTerminalPhasePredicate(item => item.stages.includes('done'));
+    const claimKey = 'linear:issue:1';
+    const first = await storage.upsert({
+      orgId: 'org1',
+      userId: 'user1',
+      factoryProjectId: 'project1',
+      input: { ...input, claimKey },
+    });
+
+    const finished = await storage.update({
+      orgId: 'org1',
+      id: first.item.id,
+      userId: 'user1',
+      patch: { stages: ['done'] },
+    });
+    expect(finished?.item.claimKey).toBeNull();
+
+    const second = await storage.upsert({
+      orgId: 'org1',
+      userId: 'user1',
+      factoryProjectId: 'project2',
+      input: { ...input, claimKey },
+    });
+    expect(second.created).toBe(true);
+    expect(await storage.getByClaimKey({ orgId: 'org1', claimKey })).toMatchObject({ id: second.item.id });
+  });
+
+  it('lets an unclaimed card adopt a claim unless another card holds it', async () => {
+    const storage = await makeStorage();
+    const claimKey = 'linear:issue:1';
+    const legacy = await storage.upsert({ orgId: 'org1', userId: 'user1', factoryProjectId: 'project1', input });
+    expect(legacy.item.claimKey).toBeNull();
+
+    const claimed = await storage.claimWorkItem({ orgId: 'org1', id: legacy.item.id, claimKey });
+    expect(claimed).toMatchObject({ id: legacy.item.id, claimKey });
+    expect(await storage.claimWorkItem({ orgId: 'org1', id: legacy.item.id, claimKey })).toMatchObject({ claimKey });
+
+    const other = await storage.upsert({ orgId: 'org1', userId: 'user1', factoryProjectId: 'project2', input });
+    expect(await storage.claimWorkItem({ orgId: 'org1', id: other.item.id, claimKey })).toBeNull();
+    expect(await storage.claimWorkItem({ orgId: 'org1', id: legacy.item.id, claimKey: 'linear:issue:2' })).toBeNull();
+  });
+
   it('purges replay state when a linked work item is deleted', async () => {
     const storage = await makeStorage();
     const scope = { orgId: 'org1', factoryProjectId: 'p1' };

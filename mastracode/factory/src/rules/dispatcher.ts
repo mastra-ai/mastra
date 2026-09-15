@@ -19,6 +19,7 @@ import { isHumanActorId } from '../storage/domains/audit/actors.js';
 import type { AuditRecorder } from '../storage/domains/audit/domain.js';
 import { withWorkItemFeed } from '../storage/domains/comments/feed-context.js';
 import type { FactoryFeedReader } from '../storage/domains/comments/feed-context.js';
+import { FACTORY_RULE_MATERIALIZATION_KEY, WorkItemClaimConflictError } from '../storage/domains/work-items/base.js';
 import type {
   FactoryDeferredDecisionRecord,
   FactoryDispatchFailureCode,
@@ -26,8 +27,8 @@ import type {
   FactoryRunBindingRecord,
   WorkItemRow,
   WorkItemsStorage,
+  UpsertWorkItemResult,
 } from '../storage/domains/work-items/base.js';
-import { FACTORY_RULE_MATERIALIZATION_KEY } from '../storage/domains/work-items/base.js';
 import { FactoryDispatchError, factoryDispatchFailureCode, factoryDispatchFailureMetadata } from './dispatch-errors.js';
 import type { FactoryTransitionService } from './transition-service.js';
 import type { FactoryCommitDecision, FactoryRuleActor, FactoryRuleCausalEntry } from './types.js';
@@ -1055,21 +1056,40 @@ export class FactoryDecisionDispatcher {
         decision,
       })) ??
       null;
-    let result = await this.#storage.upsert({
-      orgId: record.orgId,
-      userId: 'factory-rule-dispatcher',
-      factoryProjectId: record.factoryProjectId,
-      input: {
-        externalSource: externalSourceForDecision(decision),
-        parentWorkItemId,
-        title: decision.title,
-        board: decision.board,
-        stages: [initialPhase],
-        sessions: {},
-        metadata: { ...decision.metadata, [FACTORY_RULE_MATERIALIZATION_KEY]: record.idempotencyKey },
-      },
-      reuseMode: 'preserve',
-    });
+    let result: UpsertWorkItemResult;
+    try {
+      result = await this.#storage.upsert({
+        orgId: record.orgId,
+        userId: 'factory-rule-dispatcher',
+        factoryProjectId: record.factoryProjectId,
+        input: {
+          externalSource: externalSourceForDecision(decision),
+          ...(decision.claimKey ? { claimKey: decision.claimKey } : {}),
+          parentWorkItemId,
+          title: decision.title,
+          board: decision.board,
+          stages: [initialPhase],
+          sessions: {},
+          metadata: { ...decision.metadata, [FACTORY_RULE_MATERIALIZATION_KEY]: record.idempotencyKey },
+        },
+        reuseMode: 'preserve',
+      });
+    } catch (error) {
+      // Another Factory project in the org holds the live card for this record.
+      // The decision is spent, not failed: retrying would only be refused again.
+      if (error instanceof WorkItemClaimConflictError) return;
+      throw error;
+    }
+    if (!result.created && decision.claimKey && !result.item.claimKey) {
+      // A card filed before claims existed adopts the claim now; a refusal means
+      // another project already owns the record, and this card stays as it is.
+      const claimed = await this.#storage.claimWorkItem({
+        orgId: record.orgId,
+        id: result.item.id,
+        claimKey: decision.claimKey,
+      });
+      if (claimed) result = { ...result, item: claimed };
+    }
     const itemBoard = boardForWorkItem(result.item);
     if (itemBoard !== decision.board) {
       throw new Error(`The work item belongs to board "${itemBoard}", not "${decision.board}".`);
