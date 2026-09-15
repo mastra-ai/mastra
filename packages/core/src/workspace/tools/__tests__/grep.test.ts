@@ -741,21 +741,23 @@ describe('workspace_grep', () => {
     expect(result).toContain('3 matches across 3 files');
   });
 
-  it('should report the count of files skipped for an unsupported extension', async () => {
+  it('should report a skip when an explicit file has an unsupported extension', async () => {
     await fs.writeFile(path.join(tempDir, 'a.bin'), 'findme');
-    await fs.writeFile(path.join(tempDir, 'b.dat'), 'findme');
     const workspace = new Workspace({
       filesystem: new LocalFilesystem({ basePath: tempDir }),
     });
     const tools = await createWorkspaceTools(workspace);
 
-    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute({ pattern: 'findme' }, { workspace });
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute(
+      { pattern: 'findme', path: 'a.bin' },
+      { workspace },
+    );
 
     expect(result).toContain('0 matches across 0 files');
-    expect(result).toContain('2 files skipped: unsupported extension');
+    expect(result).toContain('1 file skipped: unsupported extension');
   });
 
-  it('should report skipped files alongside matches', async () => {
+  it('should not report skips for unsupported files during directory traversal', async () => {
     await fs.writeFile(path.join(tempDir, 'a.ts'), 'findme');
     await fs.writeFile(path.join(tempDir, 'b.bin'), 'findme');
     const workspace = new Workspace({
@@ -766,6 +768,6 @@ describe('workspace_grep', () => {
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute({ pattern: 'findme' }, { workspace });
 
     expect(result).toContain('1 match across 1 file');
-    expect(result).toContain('1 file skipped: unsupported extension');
+    expect(result).not.toContain('skipped: unsupported extension');
   });
 });

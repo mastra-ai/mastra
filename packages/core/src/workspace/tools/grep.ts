@@ -138,7 +138,9 @@ Usage:
         try {
           const stat = await filesystem.stat(searchPath);
           if (stat.type === 'file') {
-            // Single file — search it directly
+            // Single file — search it directly. When the user targets an explicit
+            // file whose extension isn't recognized as text, report it so the
+            // summary distinguishes "no matches" from "file was never searched".
             if (isText(searchPath)) {
               filePaths = [searchPath];
             } else {
@@ -238,13 +240,15 @@ Usage:
                 }
 
                 if (entry.type === 'file') {
-                  // Skip non-text files
-                  if (!isText(entry.name)) {
-                    skippedExtensionCount++;
-                    continue;
-                  }
-                  // Apply glob filter (createGlobMatcher normalizes leading slashes)
+                  // Apply glob filter first (createGlobMatcher normalizes leading
+                  // slashes) so files the user didn't ask for are never considered.
                   if (globMatcher && !globMatcher(fullPath)) continue;
+                  // Skip non-text files. Directory-level skips are intentionally not
+                  // reported: the native-grep capability path cannot enumerate
+                  // zero-match unsupported files without a directory walk (which the
+                  // delegation contract forbids), so a per-directory skip count would
+                  // diverge between the native and fallback code paths.
+                  if (!isText(entry.name)) continue;
                   files.push(fullPath);
                 } else if (entry.type === 'directory' && !entry.isSymlink) {
                   files.push(...collectFiles(fullPath));
@@ -344,10 +348,9 @@ Usage:
           const segments = rel.split('/');
           if (segments.includes('.git')) continue;
           if (!includeHidden && segments.some(segment => segment.startsWith('.'))) continue;
-          if (!isText(segments[segments.length - 1]!)) {
-            skippedExtensionCount++;
-            continue;
-          }
+          // Not counted as a skip — see the directory-walk note above on why
+          // per-directory skip reporting is omitted for parity across paths.
+          if (!isText(segments[segments.length - 1]!)) continue;
 
           const fullPath = searchPath.endsWith('/') ? `${searchPath}${rel}` : `${searchPath}/${rel}`;
           if (ignoreFilter) {
