@@ -1782,10 +1782,8 @@
         "together-ai/deepseek-v4-flash",
         "together-ai/deepseek-v4-pro",
         "together-ai/deepseek-v4.1-flash",
-        "together-ai/gemma-4-31b-it",
         "together-ai/glm-4.7",
         "together-ai/gpt-oss-120b",
-        "together-ai/gpt-oss-20b",
         "together-ai/kimi-k3",
         "together-ai/minimax-m3",
         "vertex-anthropic/claude-haiku-4-5",
@@ -9401,6 +9399,15 @@
       "docUrl": "https://cloud.tencent.com/document/product/1823/130060",
       "gateway": "models.dev"
     },
+    "vispark": {
+      "url": "https://api.lab.vispark.in/v1",
+      "apiKeyEnvVar": "VISPARK_LAB_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "Vispark",
+      "models": ["vispark/vision-large", "vispark/vision-medium", "vispark/vision-small"],
+      "docUrl": "https://lab.vispark.in/#vision",
+      "gateway": "models.dev"
+    },
     "neosmith": {
       "url": "https://router.neosmith.ai/v1",
       "apiKeyEnvVar": "NEOSMITH_API_KEY",
@@ -11509,10 +11516,8 @@
       "together-ai/deepseek-v4-flash",
       "together-ai/deepseek-v4-pro",
       "together-ai/deepseek-v4.1-flash",
-      "together-ai/gemma-4-31b-it",
       "together-ai/glm-4.7",
       "together-ai/gpt-oss-120b",
-      "together-ai/gpt-oss-20b",
       "together-ai/kimi-k3",
       "together-ai/minimax-m3",
       "vertex-anthropic/claude-haiku-4-5",
@@ -16954,6 +16959,7 @@
       "qwen3.8-max"
     ],
     "tencent-token-plan": ["hy3", "hy4-preview"],
+    "vispark": ["vispark/vision-large", "vispark/vision-medium", "vispark/vision-small"],
     "neosmith": [
       "neosmith.intelligent-basic",
       "neosmith.intelligent-maestro",
