@@ -952,6 +952,33 @@ describe('syncInitialThreadState', () => {
     expect(state.session.sendMessage).not.toHaveBeenCalled();
   });
 
+  it('restores the fallback status from thread metadata', async () => {
+    const fallbackStatus = { usingPack: 'OpenAI', failedPack: 'Anthropic' };
+    const state = {
+      session: {
+        thread: {
+          getId: vi.fn(() => 'thread-1'),
+          list: vi
+            .fn()
+            .mockResolvedValue([
+              { id: 'thread-1', title: 'Fallback thread', metadata: { mastracodeFallbackStatus: fallbackStatus } },
+            ]),
+        },
+      },
+      goalManager: {
+        loadFromThread: vi.fn().mockResolvedValue(undefined),
+        getGoal: vi.fn(() => null),
+        loadFromThreadMetadata: vi.fn(),
+      },
+      options: { appName: 'Mastra Code' },
+      ui: { terminal: { setTitle: vi.fn() } },
+    } as unknown as TUIState;
+
+    await syncInitialThreadState(state);
+
+    expect(state.fallbackStatus).toEqual(fallbackStatus);
+  });
+
   it('does not re-hydrate from legacy metadata when the durable objective load succeeds', async () => {
     const persistedGoal = {
       id: 'goal-1',

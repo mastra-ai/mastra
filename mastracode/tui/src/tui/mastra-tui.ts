@@ -19,6 +19,7 @@ import type { ProviderAccess, ProviderAccessLevel } from '@mastra/code-sdk/onboa
 import {
   resolveThreadActiveModelPackId,
   THREAD_ACTIVE_MODEL_PACK_ID_KEY,
+  THREAD_FALLBACK_STATUS_KEY,
   MASTRA_GATEWAY_PROVIDER,
 } from '@mastra/code-sdk/onboarding/settings';
 import type { LoadedPlugin } from '@mastra/code-sdk/plugins/types';
@@ -106,10 +107,25 @@ const UPDATE_RECHECK_INTERVAL_MS = 45 * 60 * 1_000; // 45 minutes
 const IMAGE_PLACEHOLDER_PATTERN = /\[image\]\s*/g;
 const CAFFEINATE_ARGS = ['-i', '-m'];
 
+function syncFallbackStatusFromMetadata(state: TUIState, metadata: Record<string, unknown> | undefined): void {
+  const persisted = metadata?.[THREAD_FALLBACK_STATUS_KEY];
+  if (
+    persisted &&
+    typeof persisted === 'object' &&
+    typeof (persisted as Record<string, unknown>).usingPack === 'string' &&
+    typeof (persisted as Record<string, unknown>).failedPack === 'string'
+  ) {
+    state.fallbackStatus = persisted as { usingPack: string; failedPack: string };
+  } else {
+    state.fallbackStatus = undefined;
+  }
+}
+
 export async function syncInitialThreadState(state: TUIState): Promise<void> {
   const initThreadId = state.session.thread.getId();
   if (!initThreadId) {
     setCurrentThreadTitle(state, undefined);
+    state.fallbackStatus = undefined;
     return;
   }
 
@@ -117,6 +133,7 @@ export async function syncInitialThreadState(state: TUIState): Promise<void> {
   const initThread = initThreads.find(t => t.id === initThreadId);
   setCurrentThreadTitle(state, initThread?.title);
   const metadata = initThread?.metadata as Record<string, unknown> | undefined;
+  syncFallbackStatusFromMetadata(state, metadata);
   state.activeGithubPrSubscriptions = getGithubPrSubscriptionsFromMetadata(metadata);
   // Prefer the durable ThreadState objective; fall back to the legacy
   // thread-metadata goal for threads created before the migration.
@@ -999,12 +1016,11 @@ export class MastraTUI {
         : (await this.state.session.thread.list()).find(t => t.id === currentThreadId);
     const access = await this.buildProviderAccess();
     const packs = getAvailableModePacks(access, settings.customModelPacks).filter(p => p.id !== 'custom');
-    const resolvedPackId = resolveThreadActiveModelPackId(
-      settings,
-      packs,
-      resolvedThread?.metadata as Record<string, unknown> | undefined,
-    );
+    const metadata = resolvedThread?.metadata as Record<string, unknown> | undefined;
+    const resolvedPackId = resolveThreadActiveModelPackId(settings, packs, metadata);
+    syncFallbackStatusFromMetadata(this.state, metadata);
     await this.state.session.state.set({ activeModelPackId: resolvedPackId });
+    updateStatusLine(this.state);
 
     if (resolvedPackId && settings.models.activeModelPackId !== resolvedPackId) {
       // Re-read settings to avoid overwriting concurrent changes

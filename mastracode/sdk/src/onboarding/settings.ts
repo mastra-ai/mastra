@@ -1071,6 +1071,7 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
 }
 
 export const THREAD_ACTIVE_MODEL_PACK_ID_KEY = 'activeModelPackId';
+export const THREAD_FALLBACK_STATUS_KEY = 'mastracodeFallbackStatus';
 
 export interface ThreadSettings {
   activeModelPackId: string | null;
