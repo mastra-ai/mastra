@@ -58,12 +58,14 @@ export function ScorersList({ scorers, isLoading, search = '', sourceFilter = 'a
         <EntityList.TopCellSmart
           long="Agents"
           short={<AgentIcon />}
+          shortIsIcon
           tooltip="Number of attached Agents"
           className="text-center"
         />
         <EntityList.TopCellSmart
           long="Workflows"
           short={<WorkflowIcon />}
+          shortIsIcon
           tooltip="Number of attached Workflows"
           className="text-center"
         />

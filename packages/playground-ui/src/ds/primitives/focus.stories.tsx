@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Plus } from 'lucide-react';
+import { FileInput, Plus, Workflow } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '../components/Button/Button';
 import { Checkbox } from '../components/Checkbox/checkbox';
@@ -7,6 +7,7 @@ import { Combobox } from '../components/Combobox/combobox';
 import { DataList } from '../components/DataList/data-list';
 import { Input } from '../components/Input/input';
 import { Tab, TabList, Tabs } from '../components/Tabs';
+import { AgentIcon } from '../icons/AgentIcon';
 
 const meta = {
   title: 'Primitives/Focus',
@@ -104,6 +105,55 @@ export const NativeFallback: Story = {
       </a>
       <Button>Design system action</Button>
       <Input aria-label="Name" placeholder="Name" />
+    </div>
+  ),
+};
+
+export const HeaderTooltips: Story = {
+  render: () => (
+    <div className="w-full max-w-lg">
+      <DataList columns="minmax(0,1fr) auto auto" fit="container">
+        <DataList.Top>
+          <DataList.TopCell>Scorer</DataList.TopCell>
+          <DataList.TopCellSmart long="Agents" short={<AgentIcon />} shortIsIcon tooltip="Number of attached Agents" />
+          <DataList.TopCellSmart
+            long="Workflows"
+            short={<Workflow />}
+            shortIsIcon
+            tooltip="Number of attached Workflows"
+          />
+        </DataList.Top>
+        <DataList.RowStatic>
+          <DataList.TextCell>Answer relevance</DataList.TextCell>
+          <DataList.TextCell>1</DataList.TextCell>
+          <DataList.TextCell>0</DataList.TextCell>
+        </DataList.RowStatic>
+      </DataList>
+    </div>
+  ),
+};
+
+export const MixedHeaderTooltip: Story = {
+  render: () => (
+    <div className="w-full max-w-lg">
+      <DataList columns="minmax(0,1fr) auto" fit="container">
+        <DataList.Top>
+          <DataList.TopCell>Processor</DataList.TopCell>
+          <DataList.TopCellSmart
+            long="Input Step"
+            short={
+              <>
+                <FileInput /> Step
+              </>
+            }
+            tooltip="Contains Input Step phase"
+          />
+        </DataList.Top>
+        <DataList.RowStatic>
+          <DataList.TextCell>Input processor</DataList.TextCell>
+          <DataList.TextCell>Yes</DataList.TextCell>
+        </DataList.RowStatic>
+      </DataList>
     </div>
   ),
 };

@@ -65,11 +65,24 @@ export function McpServersList({ mcpServers, isLoading, search = '' }: McpServer
       <EntityList.Top>
         <EntityList.TopCell>Name</EntityList.TopCell>
         <EntityList.TopCell>URL</EntityList.TopCell>
-        <EntityList.TopCellSmart long="Agents" short={<AgentIcon />} tooltip="Agent Tools" className="text-center" />
-        <EntityList.TopCellSmart long="Tools" short={<ToolsIcon />} tooltip="Tools" className="text-center" />
+        <EntityList.TopCellSmart
+          long="Agents"
+          short={<AgentIcon />}
+          shortIsIcon
+          tooltip="Agent Tools"
+          className="text-center"
+        />
+        <EntityList.TopCellSmart
+          long="Tools"
+          short={<ToolsIcon />}
+          shortIsIcon
+          tooltip="Tools"
+          className="text-center"
+        />
         <EntityList.TopCellSmart
           long="Workflows"
           short={<WorkflowIcon />}
+          shortIsIcon
           tooltip="Workflow Tools"
           className="text-center"
         />

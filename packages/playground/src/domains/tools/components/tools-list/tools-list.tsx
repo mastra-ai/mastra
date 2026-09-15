@@ -41,6 +41,7 @@ export function ToolsList({ tools, agents, isLoading, search = '' }: ToolsListPr
         <EntityList.TopCellSmart
           long="Agents"
           short={<AgentIcon />}
+          shortIsIcon
           tooltip="Attached Agents"
           className="text-center"
         />
