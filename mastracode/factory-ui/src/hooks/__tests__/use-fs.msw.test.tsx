@@ -294,6 +294,12 @@ describe('normalizePlanPath', () => {
     expect(normalizePlanPath('/leadrvision/.artifacts/plans/\0issue.md', ROOT)).toBeUndefined();
   });
 
+  it('rejects malformed relative .artifacts paths', () => {
+    expect(normalizePlanPath('.artifacts/../secret.md', ROOT)).toBeUndefined();
+    expect(normalizePlanPath('.artifacts/plans\\issue.md', ROOT)).toBeUndefined();
+    expect(normalizePlanPath('.artifacts/plans/\0issue.md', ROOT)).toBeUndefined();
+  });
+
   it('returns undefined for an absolute path when the root is unknown', () => {
     expect(normalizePlanPath('/leadrvision/.artifacts/plans/issue.md', undefined)).toBeUndefined();
   });

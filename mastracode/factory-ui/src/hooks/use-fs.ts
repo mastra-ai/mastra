@@ -43,16 +43,19 @@ export function isPlanReadablePath(path: string | undefined): path is string {
  * absolute path (e.g. `/leadrvision/.artifacts/plans/issue.md`) is normalized
  * against the authoritative `rootPath` from `/web/workspace/rendered/list`
  * (the confined absolute `.artifacts` root). Traversal, wrong-root, backslash,
- * and NUL inputs are rejected rather than guessed — the backend still enforces
- * its own `assertRelativePath`/symlink guards.
+ * and NUL inputs are rejected rather than guessed — including for relative
+ * `.artifacts/*` paths — though the backend still enforces its own
+ * `assertRelativePath`/symlink guards.
  */
 export function normalizePlanPath(path: string | undefined, rootPath: string | undefined): string | undefined {
   if (!path) return undefined;
+  // Reject malformed inputs before any pass-through so relative and absolute
+  // paths share the same traversal/backslash/NUL guards.
+  if (path.includes('\\') || path.includes('\0')) return undefined;
+  if (path.split('/').includes('..')) return undefined;
   if (path.startsWith('.artifacts/')) return path;
   // Only absolute posix paths are normalization candidates.
   if (!path.startsWith('/')) return undefined;
-  if (path.includes('\\') || path.includes('\0')) return undefined;
-  if (path.split('/').includes('..')) return undefined;
   if (!rootPath) return undefined;
   const base = rootPath.endsWith('/') ? rootPath.slice(0, -1) : rootPath;
   if (path !== base && !path.startsWith(`${base}/`)) return undefined;
