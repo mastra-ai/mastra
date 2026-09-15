@@ -1236,7 +1236,12 @@ https://mastra.ai/en/docs/memory/overview`,
                     maxTokens: lastMessages.maxTokens,
                     atMaxRemoveTokens: lastMessages.atMaxRemoveTokens!,
                   },
-            persistMessages: (input, generatedMessageIds) => persistGeneratedMessages(this, input, generatedMessageIds),
+            ...(this.supportsThreadBranching
+              ? {
+                  persistMessages: (input, generatedMessageIds) =>
+                    persistGeneratedMessages(this, input, generatedMessageIds),
+                }
+              : {}),
           }),
         );
       }

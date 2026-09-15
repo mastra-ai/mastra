@@ -142,7 +142,7 @@ describe('branch mutation integrity', () => {
     ).rejects.toMatchObject({ id: 'BRANCH_MUTATION_CONFLICT' });
   });
 
-  it('preserves mixed-batch input order and rejects invalid ordering atomically', async () => {
+  it('canonicalizes mixed batches and places new generated rows after explicit rows', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(forkTime.getTime());
     const branch = await memory.branchThread({ threadId: 'root', branchPointMessageId: 'fork' });
     const explicit = message('explicit', branch.thread.id, new Date(forkTime.getTime() + 10));
@@ -156,14 +156,18 @@ describe('branch mutation integrity', () => {
     expect(accepted.messages.map(item => item.id)).toEqual(['explicit', 'generated']);
     expect(accepted.messages[1]!.createdAt.getTime()).toBeGreaterThan(accepted.messages[0]!.createdAt.getTime());
 
-    const rejectedGenerated = message('rejected-generated', branch.thread.id, forkTime);
-    const rejectedExplicit = message('rejected-explicit', branch.thread.id, forkTime);
-    await expect(
-      persistGeneratedMessages(memory, { messages: [rejectedGenerated, rejectedExplicit] }, ['rejected-generated']),
-    ).rejects.toMatchObject({ id: 'BRANCH_MUTATION_CONFLICT' });
-    expect(
-      (await store.listMessagesById({ messageIds: ['rejected-generated', 'rejected-explicit'] })).messages,
-    ).toEqual([]);
+    const reorderedGenerated = message('reordered-generated', branch.thread.id, forkTime);
+    const reorderedExplicit = message('reordered-explicit', branch.thread.id, new Date(forkTime.getTime() + 20));
+    await persistGeneratedMessages(memory, { messages: [reorderedGenerated, reorderedExplicit] }, [
+      'reordered-generated',
+    ]);
+    const reordered = await store.listMessagesById({
+      messageIds: ['reordered-generated', 'reordered-explicit'],
+    });
+    const reorderedById = new Map(reordered.messages.map(item => [item.id, item]));
+    expect(reorderedById.get('reordered-generated')!.createdAt.getTime()).toBeGreaterThan(
+      reorderedById.get('reordered-explicit')!.createdAt.getTime(),
+    );
   });
 
   it('validates raw observational-memory persistence and its generated provenance', async () => {

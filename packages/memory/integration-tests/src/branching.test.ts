@@ -1,11 +1,13 @@
 import { randomUUID } from 'node:crypto';
-import { mkdtemp } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { MastraDBMessage } from '@mastra/core/agent';
+import { InMemoryStore } from '@mastra/core/storage';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import { describe, expect, it } from 'vitest';
+import { getBranchingTests } from './shared/branching';
 import { mockEmbedder } from './worker/mock-embedder';
 
 const resourceId = 'branch-integration-resource';
@@ -22,9 +24,30 @@ function message(id: string, threadId: string, offset: number): MastraDBMessage 
   };
 }
 
-describe('shared-history branch integration', () => {
+getBranchingTests('InMemory', async () => ({
+  memory: new Memory({
+    storage: new InMemoryStore(),
+    options: { lastMessages: false, generateTitle: false },
+  }),
+}));
+
+getBranchingTests('LibSQL', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'memory-branch-contract-'));
+  const memory = new Memory({
+    storage: new LibSQLStore({ id: randomUUID(), url: `file:${join(directory, 'test.db')}` }),
+    options: { lastMessages: false, generateTitle: false },
+  });
+
+  return {
+    memory,
+    cleanup: () => rm(directory, { recursive: true, force: true }),
+  };
+});
+
+describe('shared-history branch semantic recall integration', () => {
   it('returns only reachable model-facing context through real Memory, LibSQL storage, and vector search', async () => {
-    const dbPath = join(await mkdtemp(join(tmpdir(), 'memory-branch-integration-')), 'test.db');
+    const directory = await mkdtemp(join(tmpdir(), 'memory-branch-integration-'));
+    const dbPath = join(directory, 'test.db');
     const storage = new LibSQLStore({ id: randomUUID(), url: `file:${dbPath}` });
     const vector = new LibSQLVector({ id: randomUUID(), url: `file:${dbPath}` });
     const memory = new Memory({
@@ -38,28 +61,33 @@ describe('shared-history branch integration', () => {
       },
     });
 
-    await memory.createThread({ threadId: 'root', resourceId });
-    await memory.saveMessages({
-      messages: [
-        message('root-a', 'root', 1),
-        message('root-b', 'root', 2),
-        message('parent-post-fork-sentinel', 'root', 3),
-      ],
-    });
-    const child = await memory.branchThread({ threadId: 'root', branchPointMessageId: 'root-b' });
-    const sibling = await memory.branchThread({ threadId: 'root', branchPointMessageId: 'root-a' });
-    await memory.saveMessages({
-      messages: [message('child-tail', child.thread.id, 4), message('sibling-tail-sentinel', sibling.thread.id, 5)],
-    });
+    try {
+      await memory.createThread({ threadId: 'root', resourceId });
+      await memory.saveMessages({
+        messages: [
+          message('root-a', 'root', 1),
+          message('root-b', 'root', 2),
+          message('parent-post-fork-sentinel', 'root', 3),
+        ],
+      });
+      const child = await memory.branchThread({ threadId: 'root', branchPointMessageId: 'root-b' });
+      const sibling = await memory.branchThread({ threadId: 'root', branchPointMessageId: 'root-a' });
+      await memory.saveMessages({
+        messages: [message('child-tail', child.thread.id, 4), message('sibling-tail-sentinel', sibling.thread.id, 5)],
+      });
 
-    const recalled = await memory.recall({
-      threadId: child.thread.id,
-      resourceId,
-      vectorSearchString: 'conversation',
-    });
+      const recalled = await memory.recall({
+        threadId: child.thread.id,
+        resourceId,
+        vectorSearchString: 'conversation',
+      });
 
-    expect(recalled.messages.map(item => item.id)).toEqual(['root-a', 'root-b', 'child-tail']);
-    expect(recalled.messages.map(item => item.id)).not.toContain('parent-post-fork-sentinel');
-    expect(recalled.messages.map(item => item.id)).not.toContain('sibling-tail-sentinel');
+      expect(recalled.messages.map(item => item.id)).toEqual(['root-a', 'root-b', 'child-tail']);
+      expect(recalled.messages.map(item => item.id)).not.toContain('parent-post-fork-sentinel');
+      expect(recalled.messages.map(item => item.id)).not.toContain('sibling-tail-sentinel');
+    } finally {
+      await memory.settled();
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 });
