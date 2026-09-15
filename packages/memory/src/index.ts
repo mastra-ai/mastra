@@ -88,7 +88,14 @@ import {
   serializeThreadBranchMetadata,
   toPublicThreadBranchMetadata,
 } from './branching/lineage';
-import { assertResourceHasNoReadyBranches, getThreadBranchParticipation, queryThreadMessages } from './branching/query';
+import {
+  assertResourceHasNoReadyBranches,
+  getThreadBranchParticipation,
+  queryThreadMessages,
+  resolveThreadBranchSegments,
+} from './branching/query';
+import type { ThreadBranchSegment } from './branching/query';
+import { queryReachableVectorResults } from './branching/semantic-recall';
 import type { ObservationalMemory, ObservationalMemoryConfig } from './processors/observational-memory';
 import { summarizeConversation, SUMMARIZE_THREAD_DEFAULTS } from './processors/observational-memory/summarize';
 import type {
@@ -854,6 +861,32 @@ export class Memory extends MastraMemory {
         );
       }
 
+      const memoryStore = await this.getMemoryStore();
+      let semanticBranchSegments: ThreadBranchSegment[] | undefined;
+      if (config.semanticRecall && vectorSearchString) {
+        if (resourceScope && resourceId) {
+          const resourceThreads = await listRawThreads(memoryStore, resourceId);
+          const resourceHasReadyBranch = resourceThreads.some(
+            thread => parseThreadBranchMetadata(thread)?.state === 'ready',
+          );
+          if (resourceHasReadyBranch) {
+            const resolved = await resolveThreadBranchSegments(memoryStore, threadId, resourceThreads);
+            if (!resolved) {
+              throw createThreadBranchError(
+                'BRANCH_INVALID_REQUEST',
+                'Semantic recall for a resource containing branches requires an existing threadId.',
+              );
+            }
+            semanticBranchSegments = resolved.segments;
+          }
+        } else {
+          const participation = await getThreadBranchParticipation(memoryStore, threadId);
+          if (participation.participant) {
+            semanticBranchSegments = (await resolveThreadBranchSegments(memoryStore, threadId))?.segments;
+          }
+        }
+      }
+
       let usage: { tokens: number } | undefined;
 
       if (config?.semanticRecall && vectorSearchString && this.vector) {
@@ -895,6 +928,33 @@ export class Memory extends MastraMemory {
                   filter: combinedFilter,
                 })),
               );
+              if (semanticBranchSegments) {
+                vectorResults.push(
+                  ...(await queryReachableVectorResults({
+                    memoryStore,
+                    segments: semanticBranchSegments,
+                    topK: vectorConfig.topK,
+                    threshold: typeof config.semanticRecall === 'object' ? config.semanticRecall.threshold : undefined,
+                    userFilter,
+                    query: (topK, branchFilter) =>
+                      this.vector!.query({
+                        indexName,
+                        queryVector: embedding,
+                        topK,
+                        filter: branchFilter,
+                      }),
+                  })),
+                );
+              } else {
+                vectorResults.push(
+                  ...(await this.vector.query({
+                    indexName,
+                    queryVector: embedding,
+                    topK: vectorConfig.topK,
+                    filter: combinedFilter,
+                  })),
+                );
+              }
             }),
           );
         }
