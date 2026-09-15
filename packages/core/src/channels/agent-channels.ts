@@ -36,6 +36,7 @@ import { ChatChannelOutputProcessor, CHAT_CHANNEL_RENDER_CONTEXT_KEY } from './o
 import type { ChatChannelRenderContext } from './output-processor';
 import { ChatChannelProcessor } from './processor';
 import { MastraStateAdapter } from './state-adapter';
+import { isBlankToolMessage } from './stream-helpers';
 import type { PendingApprovalRecord } from './stream-helpers';
 import type {
   ChannelAdapterConfig,
@@ -617,24 +618,71 @@ export class AgentChannels {
               const argsSummary = toolArgs ? formatArgsSummary(toolArgs) : '';
               // Resolve the tool display mode so the approve/deny edit matches
               // the original card's rendering (cards → Block Kit, text → plain).
-              // Streaming is irrelevant here — we're outside the agent loop.
-              const { resolved: toolDisplay } = this.resolveToolDisplay(
+              // The streaming setting is resolved for real rather than assumed
+              // off: it decides whether `'timeline'`/`'grouped'` fall back to
+              // `'cards'`, and it tells a `ToolDisplayFn` which driver is
+              // consuming its result.
+              const streamingEnabled = this.resolveStreaming(adapterConfig?.streaming).enabled;
+              const { resolved: toolDisplay, fn: toolDisplayFn } = this.resolveToolDisplay(
                 platform,
                 adapterConfig?.toolDisplay,
-                false,
+                streamingEnabled,
                 adapterConfig?.cards,
                 adapterConfig?.formatToolCall,
               );
-              const useCards = toolDisplay === 'cards';
+              // Approvals always render as a Block Kit card regardless of mode
+              // (inline task entries can't carry interactive buttons), so the
+              // resolved edit replacing that card stays a card too. `'text'` and
+              // `'hidden'` keep their existing plain-string rendering.
+              const useCards = toolDisplay !== 'text' && toolDisplay !== 'hidden';
+              const renderMode: 'streaming' | 'static' = streamingEnabled ? 'streaming' : 'static';
+
+              const builtInResolved = (kind: 'approved' | 'denied', byUser?: string): PostableMessage =>
+                kind === 'approved'
+                  ? formatToolApproved(displayName, argsSummary, useCards)
+                  : formatToolDenied(displayName, argsSummary, byUser, useCards);
+
+              // Resolved-state edit. Like the `approval` event, a renderer that
+              // returns `undefined`, a blank message, or a stream result falls
+              // back to the built-in card: this edit is what removes the
+              // Approve/Deny buttons, so skipping it would leave the card
+              // permanently actionable.
+              const resolveResolvedMessage = (kind: 'approved' | 'denied', byUser?: string): PostableMessage => {
+                if (!toolDisplayFn) return builtInResolved(kind, byUser);
+                let result: ReturnType<ToolDisplayFn>;
+                try {
+                  result = toolDisplayFn(
+                    {
+                      kind,
+                      toolCallId,
+                      toolName: toolName ?? '',
+                      displayName,
+                      argsSummary,
+                      args: toolArgs,
+                      byUser,
+                    },
+                    { mode: renderMode, platform },
+                  );
+                } catch (err) {
+                  // A throwing renderer must not leave the Approve/Deny buttons in place.
+                  this.log(
+                    'warn',
+                    `toolDisplay threw rendering '${kind}' for ${displayName}; using built-in card`,
+                    err,
+                  );
+                  return builtInResolved(kind, byUser);
+                }
+                if (result == null || result.kind !== 'post') return builtInResolved(kind, byUser);
+                if (result.message == null || isBlankToolMessage(result.message)) {
+                  return builtInResolved(kind, byUser);
+                }
+                return result.message;
+              };
 
               if (!approved) {
-                const byUser = chatThread.isDM ? undefined : event.user.fullName || event.user.userName || 'User';
+                const byUser = chatThread.isDM ? undefined : event.user.fullName || event.user.userName || undefined;
                 try {
-                  await adapter.editMessage(
-                    chatThread.id,
-                    messageId,
-                    formatToolDenied(displayName, argsSummary, byUser, useCards),
-                  );
+                  await adapter.editMessage(chatThread.id, messageId, resolveResolvedMessage('denied', byUser));
                 } catch (err) {
                   this.log('debug', 'Failed to edit denied card', err);
                 }
@@ -682,12 +730,11 @@ export class AgentChannels {
               }
 
               // Immediately edit the card to show "Approved" and remove the buttons
+              const approvedByUser = chatThread.isDM
+                ? undefined
+                : event.user.fullName || event.user.userName || undefined;
               try {
-                await adapter.editMessage(
-                  chatThread.id,
-                  messageId,
-                  formatToolApproved(displayName, argsSummary, useCards),
-                );
+                await adapter.editMessage(chatThread.id, messageId, resolveResolvedMessage('approved', approvedByUser));
               } catch (err) {
                 this.log('debug', 'Failed to edit approved card', err);
               }
