@@ -14,4 +14,4 @@ const record = await storage.markNotificationDelivered({
 // record.status is 'delivered' if it was pending, otherwise unchanged (e.g. 'seen'); null if missing
 ```
 
-Custom `NotificationsStorage` implementations inherit a read-then-write default; override it with a single conditional write to close the race entirely.
+Custom `NotificationsStorage` implementations inherit a read-then-write default; override it with a single conditional write to close the race entirely. At runtime, the dispatcher also falls back to the existing `updateNotification()` API when the new method is absent, so adapters resolved against an older core continue to dispatch without errors.

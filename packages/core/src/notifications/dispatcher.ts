@@ -171,12 +171,17 @@ async function sendNotificationRecord({
   await result.persisted;
   // The signal send above can take seconds; the agent may have marked the
   // notification seen in the meantime, so only promote it if it is still pending.
-  const updated = await storage.markNotificationDelivered({
+  const deliveryUpdate = {
     id: current.id,
     threadId: current.threadId,
     deliveredSignalId: result.signal.id,
     lastDeliveryAttemptAt: now,
-  });
+  };
+  // Feature detection keeps adapters bound to a core version predating the guarded method usable.
+  const updated =
+    typeof storage.markNotificationDelivered === 'function'
+      ? await storage.markNotificationDelivered(deliveryUpdate)
+      : await storage.updateNotification({ ...deliveryUpdate, status: 'delivered' });
   if (!updated) throw new Error(`Notification ${current.id} was not found for thread ${current.threadId}`);
   return { record: updated, signal: result.signal };
 }

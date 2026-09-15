@@ -662,6 +662,40 @@ describe('notification inbox', () => {
     });
   });
 
+  it('falls back to updateNotification when the runtime storage predates markNotificationDelivered', async () => {
+    const storage = new InMemoryNotificationsStorage();
+    Object.defineProperty(storage, 'markNotificationDelivered', { value: undefined });
+    const now = new Date('2026-05-30T12:00:00Z');
+    const sendSignal = vi.fn(signal => ({
+      accepted: Promise.resolve({ action: 'deliver', runId: 'run-1' }),
+      signal,
+    }));
+    const mastra = { getAgentById: vi.fn(async () => ({ sendSignal })) } as any;
+    await storage.createNotification({
+      id: 'n1',
+      agentId: 'agent-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      source: 'github',
+      kind: 'ci-status',
+      priority: 'high',
+      summary: 'CI failed',
+      deliverAt: now,
+    });
+
+    const result = await dispatchDueNotifications({ mastra, storage, now });
+
+    expect(result.failed).toEqual([]);
+    expect(result.delivered).toMatchObject([
+      { id: 'n1', status: 'delivered', deliveredSignalId: result.signals[0]?.id },
+    ]);
+    await expect(storage.getNotification({ threadId: 'thread-1', id: 'n1' })).resolves.toMatchObject({
+      status: 'delivered',
+      deliveredSignalId: result.signals[0]?.id,
+      lastDeliveryAttemptAt: now,
+    });
+  });
+
   it('does not downgrade a notification marked seen while its signal was in flight', async () => {
     const storage = new InMemoryNotificationsStorage();
     const now = new Date('2026-05-30T12:00:00Z');
