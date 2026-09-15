@@ -4,7 +4,7 @@ import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { MemoryRouter, Route, Routes, useParams } from 'react-router';
+import { MemoryRouter, Route, Routes, useParams, useSearchParams } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import CreateDatasetPage from '../index';
@@ -19,6 +19,16 @@ function DatasetProbe() {
   return <div data-testid="dataset-probe">{datasetId}</div>;
 }
 
+function AgentEvaluateProbe() {
+  const { agentId } = useParams();
+  const [searchParams] = useSearchParams();
+  return (
+    <div data-testid="agent-evaluate-probe">
+      {agentId}:{searchParams.get('tab')}
+    </div>
+  );
+}
+
 const renderPage = (initialEntry = '/datasets/new') => {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -30,6 +40,7 @@ const renderPage = (initialEntry = '/datasets/new') => {
           <Routes>
             <Route path="/datasets/new" element={<CreateDatasetPage />} />
             <Route path="/datasets/:datasetId" element={<DatasetProbe />} />
+            <Route path="/agents/:agentId/evaluate" element={<AgentEvaluateProbe />} />
           </Routes>
         </MemoryRouter>
       </QueryClientProvider>
@@ -126,5 +137,29 @@ describe('CreateDatasetPage', () => {
     expect(body?.targetIds).toEqual(['my-wf', 'other-wf']);
 
     expect((await screen.findByTestId('dataset-probe')).textContent).toBe('ds-new');
+  });
+
+  describe('when scoped to a single agent', () => {
+    it('returns to that agent Datasets sub-tab after creating the dataset', async () => {
+      server.use(
+        http.post(`${BASE_URL}/api/datasets`, () =>
+          HttpResponse.json({
+            id: 'ds-agent',
+            name: 'My DS',
+            version: 0,
+            targetType: 'agent',
+            targetIds: ['weather-agent'],
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          }),
+        ),
+      );
+
+      renderPage('/datasets/new?targetType=agent&targetIds=weather-agent');
+      fireEvent.change(screen.getByPlaceholderText('Enter dataset name'), { target: { value: 'My DS' } });
+      fireEvent.click(screen.getByRole('button', { name: /create dataset/i }));
+
+      expect((await screen.findByTestId('agent-evaluate-probe')).textContent).toBe('weather-agent:datasets');
+    });
   });
 });

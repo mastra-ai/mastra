@@ -99,6 +99,94 @@ describe('ToolCard dispatch', () => {
     });
   });
 
+  describe('when tool model output contains image media', () => {
+    it('renders every generated image beside the tool card', () => {
+      renderToolCard(
+        baseProps({
+          modelOutput: {
+            type: 'content',
+            value: [
+              { type: 'media', data: 'https://example.com/generated.png', mediaType: 'image/png' },
+              { type: 'media', data: 'data:image/webp;base64,UklGRg==', mediaType: 'image/webp' },
+              { type: 'media', data: '/9j/4AAQ', mediaType: 'image/jpeg' },
+            ],
+          },
+        }),
+      );
+
+      expect(screen.getAllByRole<HTMLImageElement>('img', { name: 'Preview' }).map(image => image.src)).toEqual([
+        'https://example.com/generated.png',
+        'data:image/webp;base64,UklGRg==',
+        'data:image/jpeg;base64,/9j/4AAQ',
+      ]);
+    });
+  });
+
+  describe('when tool model output contains only non-image media', () => {
+    it('does not add a generated-media section', () => {
+      renderToolCard(
+        baseProps({
+          modelOutput: {
+            type: 'content',
+            value: [{ type: 'media', data: 'audio-data', mediaType: 'audio/mpeg' }],
+          },
+        }),
+      );
+
+      expect(screen.queryByTestId('tool-result-media')).toBeNull();
+    });
+  });
+
+  describe('when tool model output is not content', () => {
+    it('does not add a generated-media section', () => {
+      renderToolCard(
+        baseProps({
+          modelOutput: {
+            type: 'json',
+            value: [{ type: 'media', data: 'image-data', mediaType: 'image/png' }],
+          },
+        }),
+      );
+
+      expect(screen.queryByTestId('tool-result-media')).toBeNull();
+    });
+  });
+
+  describe('when tool model output is malformed', () => {
+    it('does not add a generated-media section for an invalid content collection', () => {
+      renderToolCard(baseProps({ modelOutput: { type: 'content', value: 'not-an-array' } }));
+
+      expect(screen.queryByTestId('tool-result-media')).toBeNull();
+    });
+
+    it('does not add a generated-media section for invalid content parts', () => {
+      const emptyPart: unknown = JSON.parse('null');
+
+      renderToolCard(
+        baseProps({
+          modelOutput: {
+            type: 'content',
+            value: [
+              emptyPart,
+              undefined,
+              { type: 'text', data: 'image-data', mediaType: 'image/png' },
+              { type: 'media', data: 42, mediaType: 'image/png' },
+              { type: 'media', data: 'image-data', mediaType: 42 },
+            ],
+          },
+        }),
+      );
+
+      expect(screen.queryByTestId('tool-result-media')).toBeNull();
+    });
+
+    it('does not add a generated-media section for a missing model output', () => {
+      renderToolCard(baseProps({ modelOutput: undefined }));
+
+      expect(screen.queryByTestId('tool-result-media')).toBeNull();
+    });
+  });
+
   describe('when an aliased submit_plan tool has completed', () => {
     it('routes the intrinsic tool result to the submitted plan card', () => {
       renderToolCard(

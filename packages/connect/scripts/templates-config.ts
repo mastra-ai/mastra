@@ -10,4 +10,4 @@
  * The generator embeds this SHA in each provider's manifest for provenance.
  */
 export const TEMPLATE_REPO = 'NangoHQ/integration-templates';
-export const TEMPLATE_SHA = '56c9369bd7c6878a7fce4fb05f7825a8a31a6d76';
+export const TEMPLATE_SHA = 'bb789a55bfcf744b3c83aa9132e4ffa562106aa3';

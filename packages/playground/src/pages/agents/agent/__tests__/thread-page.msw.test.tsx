@@ -6,8 +6,9 @@ import { http, HttpResponse } from 'msw';
 import { createContext, useContext, useEffect, useImperativeHandle, useState } from 'react';
 import type { ReactNode, Ref } from 'react';
 import { createMemoryRouter, Outlet, RouterProvider, useLocation } from 'react-router';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import AgentSession from '../session';
 import AgentThread from '../thread';
 import {
   preferenceModelProviders,
@@ -147,6 +148,7 @@ const LocationProbe = () => {
 const buildRouter = (initialEntry: string) =>
   createMemoryRouter(
     [
+      { path: '/agents', element: <LocationProbe /> },
       {
         // Mirrors App.tsx: the thread page is a child of the agent tabs layout.
         path: '/agents/:agentId',
@@ -164,6 +166,7 @@ const buildRouter = (initialEntry: string) =>
           { path: 'chat/:threadId', loader: legacyAgentChatLoader },
           { path: 'threads', loader: agentThreadsIndexLoader },
           { path: 'threads/:threadId', element: <AgentThread /> },
+          { path: 'session/:threadId', element: <AgentSession /> },
         ],
       },
     ],
@@ -932,6 +935,49 @@ describe('Standalone thread page', () => {
           modelSettings: expect.objectContaining({ temperature: 0.2 }),
         }),
       );
+    });
+  });
+
+  describe('when the current agent no longer exists', () => {
+    beforeEach(() => {
+      const missingAgent = () => HttpResponse.json({ error: 'Agent not found' }, { status: 404 });
+      server.use(
+        http.get(`${BASE_URL}/api/agents/${AGENT_ID}/voice/speakers`, missingAgent),
+        http.get(`${BASE_URL}/api/memory/config`, missingAgent),
+        http.get(`${BASE_URL}/api/memory/threads/:threadId/working-memory`, missingAgent),
+        http.get(`${BASE_URL}/api/memory/threads/:threadId`, missingAgent),
+        http.post(`${BASE_URL}/api/agents/${AGENT_ID}/threads/subscribe`, missingAgent),
+      );
+    });
+
+    it.each(['threads', 'session'])('replaces cached %s chat data with actionable recovery', async route => {
+      installHandlers();
+      server.use(
+        http.get(`${BASE_URL}/api/agents/${AGENT_ID}`, () =>
+          HttpResponse.json({ error: 'Agent not found' }, { status: 404 }),
+        ),
+      );
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      queryClient.setQueryData(['agent', AGENT_ID, {}], agentResponse);
+      renderAt(`/agents/${AGENT_ID}/${route}/${THREAD_ID}`, queryClient);
+
+      expect(await screen.findByText('Agent not found')).not.toBeNull();
+      expect(screen.getByText(/may have been renamed or removed/)).not.toBeNull();
+      expect(screen.getByRole('button', { name: 'Reload' })).not.toBeNull();
+      expect(screen.getByRole('link', { name: 'Choose agent' })).not.toBeNull();
+      expect(screen.queryByPlaceholderText('Enter your message...')).toBeNull();
+    });
+
+    it('lets the user leave the dead chat and choose an agent', async () => {
+      installHandlers();
+      server.use(
+        http.get(`${BASE_URL}/api/agents/${AGENT_ID}`, () =>
+          HttpResponse.json({ error: 'Agent not found' }, { status: 404 }),
+        ),
+      );
+      renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
+      fireEvent.click(await screen.findByRole('link', { name: 'Choose agent' }));
+      await waitFor(() => expect(screen.getByTestId('location-probe').textContent).toBe('/agents'));
     });
   });
 

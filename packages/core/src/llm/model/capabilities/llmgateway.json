@@ -128,6 +128,7 @@
   ],
   "temperature": [
     "Qwen3.8-27B",
+    "atria-dawn-preview",
     "auto",
     "claude-haiku-4-5",
     "claude-haiku-4-5-20251001",
@@ -140,6 +141,7 @@
     "codestral-2508",
     "custom",
     "deepseek-v3.2",
+    "deepseek-v4-1-flash",
     "deepseek-v4-flash",
     "deepseek-v4-pro",
     "deepseek-v4.1-flash",
