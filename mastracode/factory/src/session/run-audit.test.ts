@@ -1,7 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
-import { FACTORY_OPEN_RUNS_SETTING, observeSessionRunEnd, recordSessionRunStart } from './run-audit.js';
+import {
+  FACTORY_OPEN_RUNS_SETTING,
+  listSessionOpenRuns,
+  observeSessionRunEnd,
+  recordSessionRunStart,
+} from './run-audit.js';
 import type { RunEndCaptureSession } from './run-audit.js';
 
 const OPEN_RUN = {
@@ -53,6 +58,14 @@ async function setup() {
 }
 
 describe('Factory run lifecycle audit', () => {
+  it('exposes the validated open runs used by dispatch admission', async () => {
+    const { session, settings } = makeSession();
+    const stored = { ...OPEN_RUN, agentName: 'build' };
+    settings[FACTORY_OPEN_RUNS_SETTING] = [stored];
+
+    await expect(listSessionOpenRuns(session)).resolves.toEqual([stored]);
+  });
+
   it('retains both kickoffs when roles hand off within the same agent turn', async () => {
     const { start, emit, events, settings } = await setup();
     await start({ ...OPEN_RUN, kickoffId: 'plan', role: 'plan' });

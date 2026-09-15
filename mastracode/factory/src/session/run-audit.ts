@@ -44,9 +44,13 @@ function serializeRunAudit(session: RunEndCaptureSession, write: () => Promise<v
   return pending;
 }
 
-async function readOpenRuns(session: RunEndCaptureSession): Promise<FactoryOpenRun[]> {
+export async function listSessionOpenRuns(session: RunEndCaptureSession): Promise<FactoryOpenRun[]> {
   const stored = await session.thread.getSetting({ key: FACTORY_OPEN_RUNS_SETTING });
   return z.array(factoryOpenRunSchema).parse(stored ?? []);
+}
+
+export async function waitForSessionRunAudit(session: RunEndCaptureSession): Promise<void> {
+  await (pendingWrites.get(session) ?? Promise.resolve());
 }
 
 function runAuditInput(run: FactoryOpenRun) {
@@ -67,7 +71,7 @@ async function recordRunEnds(
   kickoffId?: string,
 ): Promise<void> {
   if (!reason || reason === 'suspended') return;
-  const runs = await readOpenRuns(session);
+  const runs = await listSessionOpenRuns(session);
   if (runs.length === 0) return;
   const remaining = [];
   for (const run of runs) {
@@ -104,7 +108,7 @@ export function recordSessionRunStart(
 ): Promise<void> {
   const openRun = { ...run, agentName: auditAgentName(session.mode.get()) };
   return serializeRunAudit(session, async () => {
-    const runs = await readOpenRuns(session);
+    const runs = await listSessionOpenRuns(session);
     if (!runs.some(existing => existing.kickoffId === run.kickoffId)) {
       await session.thread.setSetting({ key: FACTORY_OPEN_RUNS_SETTING, value: [...runs, openRun] });
     }
