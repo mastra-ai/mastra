@@ -132,9 +132,6 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
     spanId: anchorSpan?.spanId,
   });
 
-  const anchorSpanEntityType =
-    anchorSpan?.entityType === 'agent' ? 'Agent' : anchorSpan?.entityType === 'workflow_run' ? 'Workflow' : undefined;
-
   // Derived from URL + query data — no local state, so a span change (which clears scoreIdParam
   // in the URL) or a direct URL edit always resyncs ScoreDataPanel.
   const featuredScore = url.scoreIdParam ? spanScoresData?.scores?.find(s => s.id === url.scoreIdParam) : undefined;
@@ -234,13 +231,13 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   const isAgentTrace = anchorSpan?.entityType === 'agent';
   // The side panel widens per column shown: Messages (agent turn) and/or span detail.
   const hasMessagesColumn = !!getTraceThreadId(anchorSpan, anchorSpanId ?? undefined);
-  const hasSpanColumn = !!url.spanIdParam;
+  const hasDetailColumn = !!url.spanIdParam || !!featuredScore;
   // The full thread view embeds its own columns (messages, spans, span detail), so it takes the whole frame.
   const isFullThreadOpen = !!url.traceIdParam && fullThreadTraceId === url.traceIdParam;
   const sidePanelWidth =
-    isFullThreadOpen || (hasMessagesColumn && hasSpanColumn)
+    isFullThreadOpen || (hasMessagesColumn && hasDetailColumn)
       ? 'full'
-      : hasMessagesColumn || hasSpanColumn
+      : hasMessagesColumn || hasDetailColumn
         ? 'wide'
         : 'half';
 
@@ -400,16 +397,19 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
               onHighlightSpans={url.handleHighlightSpans}
               feedbackTabBadge={<NeedsReviewDot feedback={traceFeedbackData?.feedback} />}
               feedbackTabSlot={({ traceId: tid }) => <TraceFeedbackTab traceId={tid} />}
+              scorePanelSlot={
+                featuredScore ? (
+                  <ScoreDataPanel
+                    className="rounded-none border-0 bg-transparent"
+                    score={featuredScore}
+                    onClose={() => url.handleScoreChange(null)}
+                  />
+                ) : undefined
+              }
               scoresTabBadge={spanScoresData?.pagination?.total ?? undefined}
               scoresTabSlot={({ traceId: tid, rootSpanId }) =>
                 rootSpanId ? (
-                  <TraceScoresTab
-                    traceId={tid}
-                    spanId={rootSpanId}
-                    isTopLevelSpan={!anchorSpan?.parentSpanId}
-                    entityType={anchorSpanEntityType}
-                    onScoreSelect={url.handleScoreChange}
-                  />
+                  <TraceScoresTab traceId={tid} spanId={rootSpanId} onScoreSelect={url.handleScoreChange} />
                 ) : null
               }
               spanActiveTab={url.spanTabParam ?? 'details'}
@@ -421,9 +421,6 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
               spanPanelClassName="rounded-none border-0 bg-transparent"
             />
           ) : null
-        }
-        scorePanelSlot={
-          featuredScore ? <ScoreDataPanel score={featuredScore} onClose={() => url.handleScoreChange(null)} /> : null
         }
       />
 

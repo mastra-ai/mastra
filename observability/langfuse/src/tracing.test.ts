@@ -53,6 +53,22 @@ vi.mock('@langfuse/client', () => {
 });
 
 vi.mock('@mastra/otel-exporter', () => {
+  function ioAttributes(span: any, field: 'input' | 'output'): Record<string, string> {
+    const value = span[field];
+    if (value === undefined || !span.type) return {};
+    let serialized: string;
+    try {
+      serialized = typeof value === 'string' ? value : JSON.stringify(value);
+    } catch {
+      return {};
+    }
+    const key =
+      span.type === SpanType.MODEL_GENERATION
+        ? `gen_ai.${field}.messages`
+        : `mastra.${String(span.type).toLowerCase()}.${field}`;
+    return { [key]: serialized };
+  }
+
   class MockSpanConverter {
     convertSpan = vi.fn().mockImplementation((span: any) => ({
       name: span.name,
@@ -70,6 +86,8 @@ vi.mock('@mastra/otel-exporter', () => {
         ...(span.attributes?.completionStartTime
           ? { 'mastra.completion_start_time': span.attributes.completionStartTime.toISOString() }
           : {}),
+        ...ioAttributes(span, 'input'),
+        ...ioAttributes(span, 'output'),
         // Pass through entityId/entityName as gen_ai.agent.* (mirrors real SpanConverter behavior)
         ...(span.entityId ? { 'gen_ai.agent.id': span.entityId } : {}),
         ...(span.entityName ? { 'gen_ai.agent.name': span.entityName } : {}),
@@ -430,6 +448,36 @@ describe('LangfuseExporter', () => {
       const attrs = processedSpans[0].attributes;
       expect(attrs['session.id']).toBe('session-456');
       expect(attrs['mastra.metadata.sessionId']).toBeUndefined();
+    });
+
+    it('moves mastra.*.input/output to langfuse.observation.input/output', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(
+        exporter,
+        makeSpan({
+          type: SpanType.WORKFLOW_STEP,
+          input: { text: 'Hello' },
+          output: { text: 'Hi there' },
+          attributes: {},
+        } as any),
+      );
+
+      const attrs = processedSpans[0].attributes;
+      expect(attrs['langfuse.observation.input']).toBe(JSON.stringify({ text: 'Hello' }));
+      expect(attrs['langfuse.observation.output']).toBe(JSON.stringify({ text: 'Hi there' }));
+      expect(attrs['mastra.workflow_step.input']).toBeUndefined();
+      expect(attrs['mastra.workflow_step.output']).toBeUndefined();
+    });
+
+    it('leaves gen_ai input/output untouched for model generation spans', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(exporter, makeSpan({ input: { text: 'Hello' }, output: { text: 'Hi there' } }));
+
+      const attrs = processedSpans[0].attributes;
+      expect(attrs['gen_ai.input.messages']).toBe(JSON.stringify({ text: 'Hello' }));
+      expect(attrs['gen_ai.output.messages']).toBe(JSON.stringify({ text: 'Hi there' }));
+      expect(attrs['langfuse.observation.input']).toBeUndefined();
+      expect(attrs['langfuse.observation.output']).toBeUndefined();
     });
 
     it('maps root-span input/output to langfuse.trace.input/output', async () => {
