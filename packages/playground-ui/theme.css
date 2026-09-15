@@ -96,7 +96,7 @@
   --border: var(--gray-alpha-2);
   --ring: var(--gray-8);
   --sidebar-accent: var(--gray-alpha-1);
-  --selected: var(--gray-alpha-2);
+  --selected: var(--gray-alpha-1);
 
   /* Notice admonition colors — bg uses /20 alpha overlay; fg is the on-surface text/icon color */
   --notice-success: oklch(0.92 0.27 138);
