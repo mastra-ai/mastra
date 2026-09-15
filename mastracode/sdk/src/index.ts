@@ -72,7 +72,11 @@ import { createDynamicTools, createToolHooks } from './agents/tools.js';
 import type { PostToolObserver, ToolLike } from './agents/tools.js';
 
 import { getDynamicWorkspace, getGoalJudgeTools } from './agents/workspace.js';
-import { AccountRotationProcessor, AccountStartNoticeProcessor } from './auth/account-rotation-processor.js';
+import {
+  AccountRotationProcessor,
+  AccountStartNoticeProcessor,
+  PACK_FALLBACK_STATE_KEY,
+} from './auth/account-rotation-processor.js';
 import { isKimiCodingDeviceId } from './auth/providers/kimi-coding.js';
 import { AuthStorage } from './auth/storage.js';
 import { DEFAULT_CONFIG_DIR, validateConfigDirName } from './constants.js';
@@ -91,6 +95,7 @@ import {
   resolveModelDefaults,
   resolveOmRoleModel,
   saveSettings,
+  THREAD_ACTIVE_MODEL_PACK_ID_KEY,
 } from './onboarding/settings.js';
 import { getToolCategory } from './permissions.js';
 import { PluginManager } from './plugins/manager.js';
@@ -744,15 +749,67 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     // target session without an explicit model selection falls back to a
     // real model rather than failing the run: the current session's live
     // selection (what the user actually picked), then the mode's default.
-    const modeId = session.mode.get();
-    const defaultModeModelId = controller.listModes().find(mode => mode.id === modeId)?.defaultModelId;
-    const modelId = session.model.get() || activeSession?.model.get() || defaultModeModelId || '';
+    const targetThread = await session.thread.getById({ threadId });
+    const metadata =
+      targetThread?.resourceId === resourceId
+        ? (targetThread.metadata as Record<string, unknown> | undefined)
+        : undefined;
+    const modes = controller.listModes();
+    const savedModeId = metadata?.currentModeId;
+    const defaultMode = modes.find(mode => mode.default) ?? modes[0];
+    const modeId =
+      typeof savedModeId === 'string' && modes.some(mode => mode.id === savedModeId)
+        ? savedModeId
+        : (defaultMode?.id ?? session.mode.get());
+    const savedModeModelId = metadata?.[`modeModelId_${modeId}`];
+    const legacyModelId = metadata?.currentModelId;
+    const defaultModeModelId = modes.find(mode => mode.id === modeId)?.defaultModelId;
+    const modelId =
+      (typeof savedModeModelId === 'string' ? savedModeModelId : undefined) ??
+      (typeof legacyModelId === 'string' ? legacyModelId : undefined) ??
+      defaultModeModelId ??
+      session.model.get() ??
+      '';
+    const baseState = { ...session.state.get() } as MastraCodeState;
+    delete baseState.activeModelPackId;
+    delete baseState.mastracodePendingPackFallback;
+    const persistedSandboxPaths = metadata?.sandboxAllowedPaths;
+    baseState.sandboxAllowedPaths =
+      Array.isArray(persistedSandboxPaths) && persistedSandboxPaths.every(path => typeof path === 'string')
+        ? persistedSandboxPaths
+        : [];
+    const persistedStateKeys = [
+      'thinkingLevel',
+      'notifications',
+      THREAD_ACTIVE_MODEL_PACK_ID_KEY,
+      PACK_FALLBACK_STATE_KEY,
+    ] as const;
+    for (const key of persistedStateKeys) {
+      const value = metadata?.[key];
+      if (value !== undefined) (baseState as Record<string, unknown>)[key] = value;
+    }
+    let notificationState = baseState;
+    const getNotificationState = () => ({ ...notificationState });
+    const setNotificationState = async (updates: Partial<MastraCodeState>) => {
+      notificationState = { ...notificationState, ...updates };
+      if (session.thread.getId() === threadId) await session.state.set(updates);
+    };
+    const updateNotificationState: NonNullable<AgentControllerRequestContext['updateState']> = async updater => {
+      const update = await updater(getNotificationState());
+      if (update.updates) await setNotificationState(update.updates);
+      for (const event of update.events ?? []) {
+        if (session.thread.getId() === threadId) session.emit(event);
+      }
+      return update.result;
+    };
     const requestContext = new RequestContext();
     const agentControllerContext: AgentControllerRequestContext = {
       controllerId: controller.id,
-      state: session.state.get(),
-      getState: () => session.state.get(),
-      setState: updates => session.state.set(updates),
+      state: getNotificationState(),
+      getState: getNotificationState,
+      setState: setNotificationState,
+      updateState: updateNotificationState,
+      setThreadSetting: setting => session.thread.setSettingOn({ threadId, key: setting.key, value: setting.value }),
       threadId,
       resourceId,
       session: {
@@ -761,13 +818,23 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         modeId,
         modelId,
         state: {
-          get: () => session.state.get(),
-          set: updates => session.state.set(updates),
-          update: updater => session.state.update(updater),
+          get: getNotificationState,
+          set: setNotificationState,
+          update: updateNotificationState,
         },
       },
       workspace: session.getWorkspace(),
-      getSubagentModelId: params => session.subagents.model.get(params ?? {}),
+      emitEvent: event => {
+        if (session.thread.getId() === threadId) session.emit(event);
+      },
+      getSubagentModelId: params => {
+        const agentType = params?.agentType;
+        const perType = agentType ? metadata?.[`subagentModelId_${agentType}`] : undefined;
+        const global = metadata?.subagentModelId;
+        if (typeof perType === 'string') return perType;
+        if (typeof global === 'string') return global;
+        return session.thread.getId() === threadId ? session.subagents.model.get(params ?? {}) : null;
+      },
     };
     requestContext.set('controller', agentControllerContext);
 
@@ -776,7 +843,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       requestContext,
       maxSteps: 1000,
       savePerStep: false,
-      requireToolApproval: (session.state.get() as Record<string, unknown>).yolo !== true,
+      requireToolApproval: notificationState.yolo !== true,
       modelSettings: { temperature: 1 },
     };
   };

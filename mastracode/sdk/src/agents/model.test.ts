@@ -135,12 +135,14 @@ describe('getDynamicModel fallback chain', () => {
     const requestContext = new RequestContext();
     requestContext.set('controller', {
       session: { modelId: 'anthropic/claude-fable-5', modeId: 'build' },
+      threadId: 'thread-1',
       getState: () => ({
         activeModelPackId: 'anthropic',
         mastracodePendingPackFallback: {
           fromPackId: 'anthropic',
           toPackId: 'openai',
           toModelId: 'openai/gpt-5.6-sol',
+          threadId: 'thread-1',
         },
       }),
     });
@@ -150,6 +152,29 @@ describe('getDynamicModel fallback chain', () => {
 
     expect(entries.map(entry => entry.id)).toEqual(['openai', 'github-copilot']);
     expect(entries.map(entry => entry.model.modelId)).toEqual(['gpt-5.6-sol', 'gpt-4.1']);
+  });
+
+  it('ignores pending fallback state captured for another thread', () => {
+    seedSettings({ anthropic: 'openai', openai: 'github-copilot' });
+    const requestContext = new RequestContext();
+    requestContext.set('controller', {
+      session: { modelId: 'anthropic/claude-fable-5', modeId: 'build' },
+      threadId: 'thread-2',
+      getState: () => ({
+        activeModelPackId: 'anthropic',
+        mastracodePendingPackFallback: {
+          fromPackId: 'anthropic',
+          toPackId: 'openai',
+          toModelId: 'openai/gpt-5.6-sol',
+          threadId: 'thread-1',
+        },
+      }),
+    });
+
+    const model = getDynamicModel({ requestContext });
+    const entries = model as Array<{ id?: string }>;
+
+    expect(entries.map(entry => entry.id)).toEqual(['anthropic', 'openai', 'github-copilot']);
   });
 
   it('truncates the chain at a fallback pack that lacks the session mode model', () => {

@@ -118,7 +118,9 @@ const UPDATE_RECHECK_INTERVAL_MS = 45 * 60 * 1_000; // 45 minutes
 const IMAGE_PLACEHOLDER_PATTERN = /\[image\]\s*/g;
 const CAFFEINATE_ARGS = ['-i', '-m'];
 
-function syncFallbackStatusFromMetadata(state: TUIState, metadata: Record<string, unknown> | undefined): void {
+function fallbackStatusFromMetadata(
+  metadata: Record<string, unknown> | undefined,
+): { usingPack: string; failedPack: string } | undefined {
   const persisted = metadata?.[THREAD_FALLBACK_STATUS_KEY];
   if (
     persisted &&
@@ -126,10 +128,9 @@ function syncFallbackStatusFromMetadata(state: TUIState, metadata: Record<string
     typeof (persisted as Record<string, unknown>).usingPack === 'string' &&
     typeof (persisted as Record<string, unknown>).failedPack === 'string'
   ) {
-    state.fallbackStatus = persisted as { usingPack: string; failedPack: string };
-  } else {
-    state.fallbackStatus = undefined;
+    return persisted as { usingPack: string; failedPack: string };
   }
+  return undefined;
 }
 
 export async function syncInitialThreadState(state: TUIState): Promise<void> {
@@ -141,12 +142,13 @@ export async function syncInitialThreadState(state: TUIState): Promise<void> {
   }
 
   const initThreads = await state.session.thread.list();
+  if (state.session.thread.getId() !== initThreadId) return;
+
   const initThread = initThreads.find(t => t.id === initThreadId);
-  setCurrentThreadTitle(state, initThread?.title);
   const metadata = initThread?.metadata as Record<string, unknown> | undefined;
-  syncFallbackStatusFromMetadata(state, metadata);
+  const persistedFallbackStatus = fallbackStatusFromMetadata(metadata);
   const pendingFallback = metadata?.[PACK_FALLBACK_STATE_KEY] as Partial<PendingPackFallback> | null | undefined;
-  if (
+  const validPendingFallback =
     pendingFallback &&
     typeof pendingFallback === 'object' &&
     typeof pendingFallback.fromPackId === 'string' &&
@@ -154,13 +156,28 @@ export async function syncInitialThreadState(state: TUIState): Promise<void> {
     typeof pendingFallback.toModelId === 'string' &&
     (pendingFallback.reason === 'pool-exhausted' || pendingFallback.reason === 'persistent-outage') &&
     typeof pendingFallback.at === 'string'
-  ) {
-    await state.session.state.set({ [PACK_FALLBACK_STATE_KEY]: pendingFallback as PendingPackFallback });
+      ? (pendingFallback as PendingPackFallback)
+      : null;
+  const currentPending = (state.session.state?.get?.() as Record<string, unknown> | undefined)?.[
+    PACK_FALLBACK_STATE_KEY
+  ];
+  if (validPendingFallback || currentPending) {
+    const updates = { [PACK_FALLBACK_STATE_KEY]: validPendingFallback };
+    const applied = state.session.state.setIf
+      ? await state.session.state.setIf(updates, () => state.session.thread.getId() === initThreadId)
+      : state.session.thread.getId() === initThreadId
+        ? await state.session.state.set(updates).then(() => true)
+        : false;
+    if (!applied || state.session.thread.getId() !== initThreadId) return;
   }
+
+  setCurrentThreadTitle(state, initThread?.title);
+  state.fallbackStatus = persistedFallbackStatus;
   state.activeGithubPrSubscriptions = getGithubPrSubscriptionsFromMetadata(metadata);
   // Prefer the durable ThreadState objective; fall back to the legacy
   // thread-metadata goal for threads created before the migration.
   await state.goalManager.loadFromThread(state);
+  if (state.session.thread.getId() !== initThreadId) return;
   if (!state.goalManager.getGoal()) {
     state.goalManager.loadFromThreadMetadata(metadata);
   }
@@ -1121,7 +1138,7 @@ export class MastraTUI {
     const packs = getAvailableModePacks(access, settings.customModelPacks).filter(p => p.id !== 'custom');
     const metadata = resolvedThread?.metadata as Record<string, unknown> | undefined;
     const resolvedPackId = resolveThreadActiveModelPackId(settings, packs, metadata);
-    syncFallbackStatusFromMetadata(this.state, metadata);
+    this.state.fallbackStatus = fallbackStatusFromMetadata(metadata);
     await this.state.session.state.set({ activeModelPackId: resolvedPackId });
     updateStatusLine(this.state);
   }

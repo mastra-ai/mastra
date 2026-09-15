@@ -246,10 +246,16 @@ export function getDynamicModel(
   const controllerState = agentControllerContext?.getState?.() as
     | {
         activeModelPackId?: unknown;
-        mastracodePendingPackFallback?: { toPackId?: unknown; toModelId?: unknown } | null;
+        mastracodePendingPackFallback?: { toPackId?: unknown; toModelId?: unknown; threadId?: unknown } | null;
       }
     | undefined;
-  const pendingFallback = controllerState?.mastracodePendingPackFallback;
+  const pendingState = controllerState?.mastracodePendingPackFallback;
+  const pendingFallback =
+    pendingState &&
+    (pendingState.threadId === undefined ||
+      (typeof pendingState.threadId === 'string' && pendingState.threadId === agentControllerContext?.threadId))
+      ? pendingState
+      : undefined;
   const pendingModelId =
     pendingFallback && typeof pendingFallback.toModelId === 'string' && pendingFallback.toModelId.length > 0
       ? pendingFallback.toModelId

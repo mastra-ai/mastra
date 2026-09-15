@@ -217,6 +217,25 @@ describe('provider attribution', () => {
     ).toBeUndefined();
     expect(providerFromError({ requestUrl: 'https://evilchatgpt.com/backend-api/codex/responses' })).toBeUndefined();
   });
+
+  it('checks all URL fields before falling back to model metadata', () => {
+    expect(
+      providerFromError({
+        url: 'not a URL',
+        requestUrl: 'https://api.anthropic.com/v1/messages',
+        modelId: 'openai/gpt-5.6-sol',
+      }),
+    ).toBe('anthropic');
+  });
+
+  it('prefers a nested request URL over an outer session model id', () => {
+    expect(
+      providerFromError({
+        modelId: 'openai/gpt-5.6-sol',
+        cause: { requestURL: 'https://api.anthropic.com/v1/messages' },
+      }),
+    ).toBe('anthropic');
+  });
 });
 
 describe('AccountRotationProcessor.processAPIError', () => {
@@ -649,6 +668,7 @@ describe('pack-fallback parts', () => {
     const requestContext = new RequestContext();
     requestContext.set('controller', {
       session: { modelId, modeId },
+      threadId: 'thread-1',
       getState: () => ({ activeModelPackId }),
       emitEvent,
       setState,
@@ -685,12 +705,37 @@ describe('pack-fallback parts', () => {
       fromPackId: 'anthropic',
       toPackId: 'openai',
       toModelId: 'openai/gpt-5.6-sol',
+      threadId: 'thread-1',
       reason: 'pool-exhausted',
     });
     expect(args.setThreadSetting).toHaveBeenCalledWith({ key: PACK_FALLBACK_STATE_KEY, value: pendingHop });
     expect(args.setState).toHaveBeenCalledWith({ [PACK_FALLBACK_STATE_KEY]: pendingHop });
     expect(args.setThreadSetting.mock.invocationCallOrder[0]).toBeLessThan(
       args.writer.custom.mock.invocationCallOrder.at(-1)!,
+    );
+    expect(args.writer.custom.mock.invocationCallOrder.at(-1)!).toBeLessThan(
+      args.setState.mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it('does not notify live fallback state when the transcript hop cannot be written', async () => {
+    const seeded = makeTwoAccountStorage();
+    seedSettingsWithFallbacks({ anthropic: 'openai' });
+    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
+    const args = makeControllerArgs('anthropic/claude-fable-5');
+    args.writer.custom.mockImplementation(async part => {
+      if (part.type === PACK_FALLBACK_PART_TYPE) throw new Error('transcript unavailable');
+    });
+
+    await processor.processAPIError({ ...args, error: apiError(429) } as never);
+    await expect(processor.processAPIError({ ...args, error: apiError(429) } as never)).rejects.toThrow(
+      'transcript unavailable',
+    );
+
+    expect(args.setState).not.toHaveBeenCalled();
+    expect(args.setThreadSetting).toHaveBeenLastCalledWith({ key: PACK_FALLBACK_STATE_KEY, value: undefined });
+    expect(args.emitEvent).not.toHaveBeenCalledWith(
+      expect.objectContaining({ message: expect.stringContaining('Switched model pack') }),
     );
   });
 
@@ -866,6 +911,7 @@ describe('Q14 chain gate (400/unknown never hop packs)', () => {
     const requestContext = new RequestContext();
     requestContext.set('controller', {
       session: { modelId, modeId },
+      threadId: 'thread-1',
       getState: () => ({ activeModelPackId }),
       emitEvent,
       setState,
@@ -989,6 +1035,7 @@ describe('cross-provider cascades', () => {
     const requestContext = new RequestContext();
     requestContext.set('controller', {
       session: { modelId, modeId },
+      threadId: 'thread-1',
       getState: () => ({ activeModelPackId }),
       emitEvent,
       setState,

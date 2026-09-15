@@ -305,13 +305,25 @@ export async function handlePackFallbackState(
   // Already consumed (or never set): bail BEFORE clearing — clearing a null
   // key re-emits state_changed with the same changedKey and would loop.
   if (pending === null || pending === undefined) return;
-  const clearPending = async () => {
-    if (ectx.state.session.thread.getId()) {
-      await ectx.state.session.thread.setSetting({ key: PACK_FALLBACK_STATE_KEY, value: undefined });
+  const entryThreadId = ectx.state.session.thread.getId();
+  const pendingThreadId = typeof pending.threadId === 'string' ? pending.threadId : entryThreadId;
+  const setOriginThreadSetting = async (setting: { key: string; value: unknown }) => {
+    if (pendingThreadId) {
+      await ectx.state.session.thread.setSettingOn({ threadId: pendingThreadId, ...setting });
     }
-    await ectx.state.session.state.set({ [PACK_FALLBACK_STATE_KEY]: null });
   };
-  if (typeof pending.toPackId !== 'string' || typeof pending.toModelId !== 'string') {
+  const isOriginThreadActive = () => !pendingThreadId || ectx.state.session.thread.getId() === pendingThreadId;
+  const clearPending = async () => {
+    await setOriginThreadSetting({ key: PACK_FALLBACK_STATE_KEY, value: undefined });
+    if (isOriginThreadActive()) {
+      await ectx.state.session.state.set({ [PACK_FALLBACK_STATE_KEY]: null });
+    }
+  };
+  if (
+    typeof pending.toPackId !== 'string' ||
+    typeof pending.toModelId !== 'string' ||
+    (pending.threadId !== undefined && typeof pending.threadId !== 'string')
+  ) {
     await clearPending();
     return;
   }
@@ -319,6 +331,7 @@ export async function handlePackFallbackState(
     await clearPending();
     return;
   }
+  if (!isOriginThreadActive()) return;
 
   const settings = loadSettings();
   const packs = listResolvableModePacks(settings);
@@ -334,38 +347,38 @@ export async function handlePackFallbackState(
   };
   const packModels = resolveModePackModels(settings, pack) as Record<string, string>;
 
-  // Per-mode models — mirrors applyPack so switching modes after the hop
-  // stays on the landed pack instead of silently returning to the old one.
+  // Persist the complete landed-pack identity to the originating thread before
+  // touching live session state. Every write remains bound to that thread even
+  // if the user switches threads while this async handler is running.
   const modes = ectx.state.controller.listModes();
   for (const mode of modes) {
     const modelId = packModels[mode.id];
     if (modelId) {
-      (mode as { defaultModelId?: string }).defaultModelId = modelId;
-      await ectx.state.session.thread.setSetting({ key: `modeModelId_${mode.id}`, value: modelId });
+      await setOriginThreadSetting({ key: `modeModelId_${mode.id}`, value: modelId });
     }
   }
+  await setOriginThreadSetting({ key: THREAD_ACTIVE_MODEL_PACK_ID_KEY, value: pending.toPackId });
+  await setOriginThreadSetting({ key: THREAD_FALLBACK_STATUS_KEY, value: fallbackStatus });
+
+  // If another thread is now active, leave the origin marker intact so opening
+  // that thread resumes live application. Do not mutate the current session UI.
+  if (!isOriginThreadActive()) return;
+
+  // Subagent selections are durable thread metadata too. Persist them before
+  // applying one guarded live-state update.
+  const subagentModeMap: Record<string, string> = { explore: 'fast', plan: 'plan', execute: 'build' };
+  const subagentState: Record<string, string> = {};
+  for (const [agentType, modeId] of Object.entries(subagentModeMap)) {
+    const modelId = packModels[modeId];
+    if (!modelId) continue;
+    const key = `subagentModelId_${agentType}`;
+    subagentState[key] = modelId;
+    await setOriginThreadSetting({ key, value: modelId });
+  }
+  if (!isOriginThreadActive()) return;
 
   const currentModeId = ectx.state.session.mode.get();
   const currentModeModel = packModels[currentModeId] ?? pending.toModelId;
-  await ectx.state.session.model.switch({ modelId: currentModeModel });
-
-  // Subagent models follow the landed pack too — after a persistent-outage
-  // hop they would otherwise keep calling the dead provider.
-  const subagentModeMap: Record<string, string> = { explore: 'fast', plan: 'plan', execute: 'build' };
-  for (const [agentType, modeId] of Object.entries(subagentModeMap)) {
-    const saModelId = packModels[modeId];
-    if (saModelId) {
-      await ectx.state.session.subagents.model.set({ modelId: saModelId, agentType });
-    }
-  }
-
-  if (ectx.state.session.thread.getId()) {
-    await ectx.state.session.thread.setSetting({ key: THREAD_ACTIVE_MODEL_PACK_ID_KEY, value: pending.toPackId });
-    await ectx.state.session.thread.setSetting({ key: THREAD_FALLBACK_STATUS_KEY, value: fallbackStatus });
-  }
-  ectx.state.fallbackStatus = fallbackStatus;
-  await ectx.state.session.state.set({ activeModelPackId: pending.toPackId });
-
   if (pending.toPackId.startsWith('custom:')) {
     settings.models.modeDefaults = { ...packModels };
   } else {
@@ -381,6 +394,7 @@ export async function handlePackFallbackState(
     | undefined;
   const defaultThinking = resolveDefaultThinkingLevel(settings, currentModeId);
   const effectiveThinking = sessionOverride ?? defaultThinking.level;
+  const stateUpdates: Record<string, unknown> = { activeModelPackId: pending.toPackId, ...subagentState };
   if (
     hasOpenAI &&
     sessionOverride === undefined &&
@@ -389,9 +403,25 @@ export async function handlePackFallbackState(
   ) {
     settings.preferences.thinkingLevel = 'low';
   } else if (currentModeModel.startsWith('openai/') && effectiveThinking === 'max') {
-    await ectx.state.session.state.set({ thinkingLevel: 'xhigh' });
+    stateUpdates.thinkingLevel = 'xhigh';
   }
 
+  const applied = await ectx.state.session.state.setIf!(stateUpdates, isOriginThreadActive);
+  if (!applied) return;
+
+  // No awaited mutable-session operations after the ownership guard: a thread
+  // switch cannot interleave between the check and these live cache updates.
+  ectx.state.session.model.set({ modelId: currentModeModel });
+  ectx.state.session.emit({ type: 'model_changed', modelId: currentModeModel, scope: 'thread', modeId: currentModeId });
+  for (const [key, modelId] of Object.entries(subagentState)) {
+    ectx.state.session.emit({
+      type: 'subagent_model_changed',
+      modelId,
+      scope: 'thread',
+      agentType: key.slice('subagentModelId_'.length),
+    });
+  }
+  ectx.state.fallbackStatus = fallbackStatus;
   saveSettings(settings);
   ectx.updateStatusLine();
   await ectx.refreshModelAuthStatus();
