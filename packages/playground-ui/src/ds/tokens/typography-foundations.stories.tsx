@@ -41,7 +41,7 @@ const TypeRow = ({ token }: { token: TypographyToken }) => {
   const lineHeightPx = Math.round((fontSizePx * Number.parseFloat(LineHeights[token])) / 100);
 
   return (
-    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-b border-border1 py-3 last:border-b-0 sm:grid-cols-[6.5rem_4.5rem_minmax(0,1fr)] sm:gap-3">
+    <div className="border-border1 grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-b py-3 last:border-b-0 sm:grid-cols-[6.5rem_4.5rem_minmax(0,1fr)] sm:gap-3">
       <Txt variant="ui-sm" font="mono" className="text-neutral3">
         {token}
       </Txt>
@@ -57,7 +57,7 @@ const TypeRow = ({ token }: { token: TypographyToken }) => {
 
 const TypeScale = ({ title, tokens }: { title: string; tokens: TypographyToken[] }) => (
   <section className="min-w-0">
-    <div className="flex items-center justify-between gap-4 border-b border-border1 pb-3">
+    <div className="border-border1 flex items-center justify-between gap-4 border-b pb-3">
       <Txt as="h2" variant="header-sm" className="font-medium">
         {title}
       </Txt>
@@ -72,7 +72,7 @@ const TypeScale = ({ title, tokens }: { title: string; tokens: TypographyToken[]
 );
 
 const HierarchySpecimen = ({ role, token, sample }: { role: string; token: TypographyToken; sample: string }) => (
-  <div className="flex min-h-28 min-w-0 flex-col justify-between gap-5 border-t border-border1 py-4">
+  <div className="border-border1 flex min-h-28 min-w-0 flex-col justify-between gap-5 border-t py-4">
     <div className="flex items-center justify-between gap-3">
       <Txt variant="ui-xs" font="mono" className="text-neutral3 uppercase">
         {role}
@@ -90,12 +90,12 @@ const HierarchySpecimen = ({ role, token, sample }: { role: string; token: Typog
 export const TypographyFoundations: Story = {
   name: 'Typography foundations',
   render: () => (
-    <div className="max-w-320 bg-surface2 px-5 sm:px-8">
-      <header className="grid gap-5 border-y border-border1 py-6 sm:grid-cols-[10rem_minmax(0,1fr)] sm:py-8">
+    <div className="bg-surface2 max-w-320 px-5 sm:px-8">
+      <header className="border-border1 grid gap-5 border-y py-6 sm:grid-cols-[10rem_minmax(0,1fr)] sm:py-8">
         <Txt variant="ui-xs" font="mono" className="text-neutral3 uppercase">
           Type system / 10 tokens
         </Txt>
-        <div className="max-w-180 flex flex-col gap-2">
+        <div className="flex max-w-180 flex-col gap-2">
           <Txt as="h1" variant="header-lg" className="font-semibold">
             Typography foundations
           </Txt>
@@ -110,7 +110,7 @@ export const TypographyFoundations: Story = {
         <TypeScale title="Heading scale" tokens={headingTokens} />
       </div>
 
-      <section className="border-t border-border1 py-8">
+      <section className="border-border1 border-t py-8">
         <div className="mb-5 flex items-baseline justify-between gap-4">
           <Txt as="h2" variant="header-sm" className="font-medium">
             Role map
@@ -127,7 +127,7 @@ export const TypographyFoundations: Story = {
         </div>
       </section>
 
-      <footer className="flex flex-col gap-1 border-t border-border1 py-5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-8">
+      <footer className="border-border1 flex flex-col gap-1 border-t py-5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-8">
         <Txt variant="ui-sm">Foundation: text-ui-* and text-header-*.</Txt>
         <Txt variant="ui-sm" className="text-neutral3">
           Txt applies these tokens through its variant prop.
