@@ -4,6 +4,7 @@ import { Agent } from '../agent';
 import { MessageList } from '../agent/message-list';
 import type { MastraDBMessage, MastraMessageContentV2 } from '../agent/message-list/state/types';
 import { isUserAuthoredMessage } from '../agent/signals';
+import { TITLE_PINNED_THREAD_METADATA_KEY } from '../memory';
 import type { ActiveThreadRun } from '../agent/thread-stream-runtime';
 import type { AgentInstructions, ToolsInput, ToolsetsInput } from '../agent/types';
 import type { MastraBrowser } from '../browser/browser';
@@ -1343,7 +1344,13 @@ export class AgentController<TState = {}> {
     )?.trim();
     if (!title) return undefined;
 
-    await this.persistThreadRow({ ...thread, title, updatedAt: new Date() });
+    // An explicit regenerate un-pins the title: auto-naming resumes from here.
+    await this.persistThreadRow({
+      ...thread,
+      title,
+      metadata: { ...thread.metadata, [TITLE_PINNED_THREAD_METADATA_KEY]: false },
+      updatedAt: new Date(),
+    });
     session?.emit({ type: 'thread_title_updated', threadId, title });
     return title;
   }
