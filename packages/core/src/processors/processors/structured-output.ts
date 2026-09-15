@@ -14,11 +14,17 @@ import type { StandardSchemaWithJSON } from '../../schema';
 import { ChunkFrom } from '../../stream';
 import type { ChunkType } from '../../stream';
 import type { ToolCallChunk, ToolResultChunk } from '../../stream/types';
-import type { ProcessOutputStreamArgs, Processor } from '../index';
+import type { ProcessOutputStepArgs, ProcessOutputStreamArgs, Processor } from '../index';
 
 export type { StructuredOutputOptions } from '../../agent/types';
 
 export const STRUCTURED_OUTPUT_PROCESSOR_NAME = 'structured-output';
+
+type StructuredOutputRequestState = {
+  isStructuringAgentStreamStarted: boolean;
+  structuredOutputError?: string;
+  streamPartsStartIndex: number;
+};
 
 /**
  * StructuredOutputProcessor transforms unstructured agent output into structured JSON
@@ -44,10 +50,10 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
   private useAgent = false;
   private errorStrategy: 'strict' | 'warn' | 'fallback';
   private fallbackValue?: OUTPUT;
-  private isStructuringAgentStreamStarted = false;
   private jsonPromptInjection?: boolean | 'system' | 'inline' | 'auto';
   private providerOptions?: ProviderOptions;
   private logger?: IMastraLogger;
+  private readonly requestStates = new WeakMap<object, StructuredOutputRequestState>();
 
   constructor(options: StructuredOutputOptions<OUTPUT>) {
     if (!options.schema) {
@@ -100,8 +106,17 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
     this.agent = agent;
   }
 
+  private getRequestState(state: object): StructuredOutputRequestState {
+    let requestState = this.requestStates.get(state);
+    if (!requestState) {
+      requestState = { isStructuringAgentStreamStarted: false, streamPartsStartIndex: 0 };
+      this.requestStates.set(state, requestState);
+    }
+    return requestState;
+  }
+
   async processOutputStream(args: ProcessOutputStreamArgs): Promise<ChunkType | null | undefined> {
-    const { part, state, streamParts, abort, requestContext, messageList, ...rest } = args;
+    const { part, state, streamParts, requestContext, messageList, ...rest } = args;
     const observabilityContext = resolveObservabilityContext(rest);
     const controller = state.controller as TransformStreamDefaultController<ChunkType<OUTPUT>> | undefined;
 
@@ -114,7 +129,7 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
         await this.processAndEmitStructuredOutput(
           streamParts,
           controller,
-          abort,
+          state,
           observabilityContext,
           requestContext,
           messageList,
@@ -126,19 +141,32 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
     }
   }
 
+  processOutputStep({ state, abort, messages }: ProcessOutputStepArgs) {
+    const requestState = this.requestStates.get(state);
+    if (typeof requestState?.structuredOutputError === 'string') {
+      const reason = requestState.structuredOutputError;
+      delete requestState.structuredOutputError;
+      requestState.isStructuringAgentStreamStarted = false;
+      abort(reason, { retry: true });
+    }
+    return messages;
+  }
+
   private async processAndEmitStructuredOutput(
     streamParts: ChunkType[],
     controller: TransformStreamDefaultController<ChunkType<OUTPUT>> | undefined,
-    abort: ProcessOutputStreamArgs['abort'],
+    state: ProcessOutputStreamArgs['state'],
     observabilityContext?: ObservabilityContext,
     requestContext?: RequestContext,
     messageList?: ProcessOutputStreamArgs['messageList'],
   ): Promise<void> {
-    if (this.isStructuringAgentStreamStarted) return;
-    this.isStructuringAgentStreamStarted = true;
+    const requestState = this.getRequestState(state);
+    if (requestState.isStructuringAgentStreamStarted) return;
+    requestState.isStructuringAgentStreamStarted = true;
     try {
       const structuringAgentStream = await this.getStructuringStream(
-        streamParts,
+        streamParts.slice(requestState.streamPartsStartIndex),
+        requestState.streamPartsStartIndex > 0,
         requestContext,
         messageList,
         observabilityContext,
@@ -160,9 +188,9 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
           continue;
         }
         if (chunk.type === 'error') {
-          this.handleError('Structuring failed', chunk.payload.error, abort);
+          this.handleError('Structuring failed', chunk.payload.error, requestState);
 
-          if (this.errorStrategy === 'warn') {
+          if (this.errorStrategy === 'strict' || this.errorStrategy === 'warn') {
             // avoid enqueuing the error chunk to the main agent stream
             break;
           }
@@ -192,7 +220,10 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
         controller?.enqueue(newChunk);
       }
     } catch (error) {
-      this.handleError('Structured output processing failed', error, abort);
+      this.handleError('Structured output processing failed', error, requestState);
+    }
+    if (requestState.structuredOutputError) {
+      requestState.streamPartsStartIndex = streamParts.length;
     }
   }
 
@@ -202,6 +233,7 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
    */
   private async getStructuringStream(
     streamParts: ChunkType[],
+    currentAttemptOnly: boolean,
     requestContext?: RequestContext,
     messageList?: ProcessOutputStreamArgs['messageList'],
     observabilityContext?: ObservabilityContext,
@@ -246,9 +278,13 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
         ],
       };
 
+      const currentAttemptMessage: MessageInput = {
+        role: 'assistant',
+        content: [{ type: 'text', text: this.buildStructuringPrompt(streamParts) }],
+      };
       const messages: MessageListInput = [
         ...(messageList?.get?.input?.db() || []),
-        ...(messageList?.get?.response?.db() || []),
+        ...(currentAttemptOnly ? [currentAttemptMessage] : messageList?.get?.response?.db() || []),
         promptMessage,
       ];
 
@@ -366,14 +402,15 @@ The input text may be in any format (sentences, bullet points, paragraphs, etc.)
   /**
    * Handle errors based on the configured strategy
    */
-  private handleError(context: string, error: unknown, abort: (reason?: string) => never): void {
+  private handleError(context: string, error: unknown, requestState: StructuredOutputRequestState): void {
     const errorMessage = this.getErrorMessage(error);
     const message = `[StructuredOutputProcessor] ${context}: ${errorMessage}`;
 
     switch (this.errorStrategy) {
       case 'strict':
         this.logger?.error(message, error);
-        abort(message);
+        // Only output-step tripwires participate in the processor retry loop.
+        requestState.structuredOutputError = message;
         break;
       case 'warn':
         this.logger?.warn(message, error);
