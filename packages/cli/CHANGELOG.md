@@ -1,5 +1,31 @@
 # mastra
 
+## 1.30.0-alpha.6
+
+### Minor Changes
+
+- Added per-table markdown copying and CSV downloads to Studio assistant messages. Actions are available once the text containing the table finishes streaming and displaying. ([#23537](https://github.com/mastra-ai/mastra/pull/23537))
+
+  Studio enables these controls automatically; no configuration is required.
+
+### Patch Changes
+
+- Fixed Studio retaining stale agents after hot reload. Missing agents now offer Reload and Choose agent recovery actions instead of leaving users in a dead chat. ([#23936](https://github.com/mastra-ai/mastra/pull/23936))
+
+- Fixed Studio chat model selections and settings resetting after navigation or refresh. Preferences are now saved per chat in the browser and restored for subsequent requests without leaking between chats. Explicitly cleared settings remain cleared after refresh. Previously saved agent-wide settings are not carried over; chats without saved per-chat preferences start from agent defaults. Existing per-chat preferences are preserved. Restored model selections respect the current admin model policy. ([#23676](https://github.com/mastra-ai/mastra/pull/23676))
+
+- Improved Studio tool-call groups to show outcome counts without expanding individual calls, including unfinished calls after a run stops. Expanded groups label each unfinished call as incomplete, including historical calls while a later run is active. Explicit error flags on legacy tool results are recognized as failures. ([#23536](https://github.com/mastra-ai/mastra/pull/23536))
+
+- Added copying for user messages in Studio chat, with controls shown on hover or keyboard focus and kept visible on touch devices. Fixed clipped assistant message action icons. ([#23906](https://github.com/mastra-ai/mastra/pull/23906))
+
+  To reuse a prompt, hover over your message in Studio chat and click Copy, then paste it into the composer or another editor. On touch devices, tap the Copy button below your message.
+
+- Renamed the deploy diagnosis commands so `diagnosis` is the primary name and `suggestions` is the alias. Run `mastra env diagnosis`, `mastra studio deploy diagnosis`, or `mastra server deploy diagnosis` to debug a failed deploy; the previous `suggestions` names still work. ([#23672](https://github.com/mastra-ai/mastra/pull/23672))
+
+- Updated dependencies [[`0f4d9cf`](https://github.com/mastra-ai/mastra/commit/0f4d9cf79b49b6dc6a484a0b2d1cf381eb2343a6), [`50e2658`](https://github.com/mastra-ai/mastra/commit/50e2658cdcdc55a14abde08610a8e2b12fdf67a4), [`8510a6d`](https://github.com/mastra-ai/mastra/commit/8510a6d38b9d211af7d94b7860ab182ce55c39d1), [`5eba942`](https://github.com/mastra-ai/mastra/commit/5eba9420330b3f116810891ae14888f7f256cd4f), [`648dd4f`](https://github.com/mastra-ai/mastra/commit/648dd4f4c4cd330013c0a98f50ffac77fe2ad632), [`3fc8c2d`](https://github.com/mastra-ai/mastra/commit/3fc8c2d35f724c3648150b29e50cf61a9360b274), [`ddb3639`](https://github.com/mastra-ai/mastra/commit/ddb3639e3de41f3fe33f68f81c2e5850ff1280b6), [`502ca89`](https://github.com/mastra-ai/mastra/commit/502ca8904848e77d44622669f2728171d36ad6ca), [`953be88`](https://github.com/mastra-ai/mastra/commit/953be88befd9cdb789b4cfc16680121c663a631b), [`0c4e1b0`](https://github.com/mastra-ai/mastra/commit/0c4e1b087fd8e7ee45b34f304bc238bdd4e587fe), [`6d20620`](https://github.com/mastra-ai/mastra/commit/6d206205f781cfa2598c2a55123a336909e039b4), [`d55aa61`](https://github.com/mastra-ai/mastra/commit/d55aa616b3e88015c3b74342c75bd510c7e764df), [`4573c23`](https://github.com/mastra-ai/mastra/commit/4573c231c108e7d796eab12b8e9b2094f8cc4d47)]:
+  - @mastra/core@1.67.0-alpha.5
+  - @mastra/deployer@1.67.0-alpha.5
+
 ## 1.30.0-alpha.5
 
 ### Patch Changes

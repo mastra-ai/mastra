@@ -37,7 +37,7 @@ const Switch = React.forwardRef<HTMLButtonElement, SwitchProps>(
         data-slot="switch"
         className={cn(
           'peer group/switch inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-0 bg-neutral6/[0.14] p-0.5 outline-hidden',
-          'duration-normal transition-colors ease-out-custom motion-reduce:transition-none',
+          'transition-colors duration-normal ease-out-custom motion-reduce:transition-none',
           'hover:bg-neutral6/[0.18]',
           'active:bg-neutral6/[0.22]',
           'focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-neutral5/55 focus-visible:outline-solid',
@@ -56,7 +56,7 @@ const Switch = React.forwardRef<HTMLButtonElement, SwitchProps>(
           data-slot="switch-thumb"
           className={cn(
             'switch-thumb-motion pointer-events-none relative block h-4 w-5 rounded-full bg-neutral6',
-            'duration-normal transition-[background-color,translate,width,transform] ease-out-custom motion-reduce:transition-none',
+            'transition-[background-color,translate,width,transform] duration-normal ease-out-custom motion-reduce:transition-none',
             'group-active/switch:w-6 group-data-[disabled]/switch:w-5',
             'data-[checked]:translate-x-3 data-[checked]:bg-surface1 data-[unchecked]:translate-x-0',
             'group-active/switch:data-[checked]:translate-x-2',
@@ -82,7 +82,7 @@ function SwitchThumbIcon({
 }) {
   const iconClassName = cn(
     'absolute inset-0 flex items-center justify-center text-surface1',
-    'duration-normal transition-[color,opacity] ease-out-custom motion-reduce:transition-none',
+    'transition-[color,opacity] duration-normal ease-out-custom motion-reduce:transition-none',
     '[&_svg]:stroke-2.5 [&_svg]:size-2.5',
   );
 
