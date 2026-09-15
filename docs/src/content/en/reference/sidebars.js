@@ -197,6 +197,15 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Connect',
+      collapsed: true,
+      items: [
+        { type: 'doc', id: 'connect/overview', label: 'connect()' },
+        { type: 'doc', id: 'connect/credential', label: 'credential()' },
+      ],
+    },
+    {
+      type: 'category',
       label: 'Core',
       collapsed: true,
       items: [
