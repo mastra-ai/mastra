@@ -232,15 +232,19 @@ export type BaseServerOptions = {
    * and the failure details in `content`.
    *
    * - `'throw'` (default): surface the failure on Mastra's failed-tool-call path
-   *   by throwing a `MastraError` that carries the server's `content` text. Tool
+   *   by throwing a `MastraError` that carries the server's `content` text and
+   *   JSON-serialized `structuredContent` in `details.structuredContent`. Tool
    *   spans, stream chunks, scorers, and persisted message parts then reflect the
    *   failure, and the model sees the error text so it can self-correct.
-   * - `'return'`: preserve the legacy behaviour and resolve successfully with the
-   *   raw result (or `structuredContent`), ignoring `isError`.
+   * - `'return'`: preserve the legacy behavior by resolving successfully with
+   *   `structuredContent` when present, or the full `CallToolResult` otherwise.
+   * - `'returnEnvelope'`: resolve successfully with the full `CallToolResult` for
+   *   every failed result so `isError`, `content`, `structuredContent`, and result
+   *   metadata remain available. Successful calls keep their existing return shape.
    *
    * @default 'throw'
    */
-  onToolError?: 'throw' | 'return';
+  onToolError?: 'throw' | 'return' | 'returnEnvelope';
   /**
    * Optional custom JSON Schema validator forwarded to the underlying MCP
    * client. Use this to opt into a non-default validator implementation.
