@@ -1205,7 +1205,13 @@ describe('AgentController signal messages', () => {
     await session.thread.create();
     const signal = session.sendSignal({ content: 'hello from signal' });
     await signal.accepted;
-    await waitFor(() => events.some(event => event.type === 'message_end'));
+    await waitFor(() => {
+      const assistantId = events.find(
+        (event): event is Extract<AgentControllerEvent, { type: 'message_start' }> =>
+          event.type === 'message_start' && event.message.role === 'assistant',
+      )?.message.id;
+      return Boolean(assistantId) && events.some(event => event.type === 'message_end' && event.id === assistantId);
+    });
 
     const signalStart = events.find(
       (event): event is Extract<AgentControllerEvent, { type: 'message_start' }> =>
