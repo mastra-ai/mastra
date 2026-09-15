@@ -200,14 +200,14 @@ describe('getCopilotModelCatalog', () => {
         access: 'tid=account-a;exp=9999999999;',
         refresh: 'ghu_a',
         expires: Date.now() + 60_000,
-        enterpriseUrl: 'a.ghe.com',
+        accountInstanceId: 'github-copilot:account-a',
       })
       .mockResolvedValueOnce({
         type: 'oauth',
         access: 'tid=account-b;exp=9999999999;',
         refresh: 'ghu_b',
         expires: Date.now() + 60_000,
-        enterpriseUrl: 'b.ghe.com',
+        accountInstanceId: 'github-copilot:account-b',
       });
     fetchMock
       .mockResolvedValueOnce(jsonResponse({ data: [{ id: 'model-a', model_picker_enabled: true }] }))
@@ -220,8 +220,8 @@ describe('getCopilotModelCatalog', () => {
     expect(first.map(model => model.id)).toEqual(['model-a']);
     expect(second.map(model => model.id)).toEqual(['model-b']);
     expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
-      'https://copilot-api.a.ghe.com/models',
-      'https://copilot-api.b.ghe.com/models',
+      'https://api.individual.githubcopilot.com/models',
+      'https://api.individual.githubcopilot.com/models',
     ]);
     expect((fetchMock.mock.calls[0]![1].headers as Record<string, string>).Authorization).toContain('account-a');
     expect((fetchMock.mock.calls[1]![1].headers as Record<string, string>).Authorization).toContain('account-b');

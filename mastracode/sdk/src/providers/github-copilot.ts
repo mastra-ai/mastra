@@ -11,7 +11,6 @@
  *   - pi-mono:  https://github.com/badlogic/pi-mono/blob/main/packages/ai/src/utils/oauth/github-copilot.ts
  */
 
-import { createHmac, randomBytes } from 'node:crypto';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import type { MastraModelConfig } from '@mastra/core/llm';
 import type { JSONSchema7 } from '@mastra/schema-compat';
@@ -331,7 +330,6 @@ interface CatalogCacheEntry {
 
 const catalogCache = new Map<string, CatalogCacheEntry>();
 const inflightFetches = new Map<string, Promise<CopilotModelEntry[]>>();
-const catalogCacheKey = randomBytes(32);
 
 /** Reset the in-process Copilot catalog cache (test seam, also useful after logout). */
 export function clearCopilotCatalogCache(): void {
@@ -361,7 +359,7 @@ export async function getCopilotModelCatalog(opts: { authStorage?: AuthStorage }
   const accessToken = credential.access;
   const enterpriseUrl = (credential as GitHubCopilotCredentials).enterpriseUrl;
   const baseUrl = getGitHubCopilotBaseUrl(accessToken, enterpriseUrl);
-  const credentialKey = createHmac('sha256', catalogCacheKey).update(`${accessToken}\0${baseUrl}`).digest('hex');
+  const credentialKey = `${credential.accountInstanceId ?? 'legacy'}\0${baseUrl}`;
 
   const now = Date.now();
   const cached = catalogCache.get(credentialKey);
