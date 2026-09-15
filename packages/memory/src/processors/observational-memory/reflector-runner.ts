@@ -290,10 +290,10 @@ export class ReflectorRunner {
       instructions: buildReflectorSystemPrompt(this.reflectionConfig.instruction, extractors),
       model,
       ...(memory ? { memory } : {}),
+      // See ObserverRunner.createAgent: `mastra` in the constructor config is
+      // what also applies the configured logger.
+      ...(this.mastra ? { mastra: this.mastra } : {}),
     });
-    if (this.mastra) {
-      agent.__registerMastra(this.mastra);
-    }
     return agent;
   }
 

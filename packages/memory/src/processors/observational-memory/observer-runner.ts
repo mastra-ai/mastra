@@ -170,10 +170,13 @@ export class ObserverRunner {
       ),
       model,
       ...(memory ? { memory } : {}),
+      // Constructing with `mastra` is what also hands the agent the configured
+      // logger: the Agent constructor calls both __registerMastra and
+      // __registerPrimitives({ logger: mastra.getLogger() }). Registering
+      // afterwards only did the former, so these background agents kept the
+      // ConsoleLogger every MastraBase starts with.
+      ...(this.mastra ? { mastra: this.mastra } : {}),
     });
-    if (this.mastra) {
-      agent.__registerMastra(this.mastra);
-    }
     return agent;
   }
 
