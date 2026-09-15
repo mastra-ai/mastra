@@ -398,3 +398,70 @@ describe('connect resolver caching and liveness', () => {
     expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
 });
+
+describe('catalog availability', () => {
+  it('resolves checked-in providers when the catalog request fails', async () => {
+    installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
+    const fetchMock = vi.fn().mockImplementation(async input => {
+      const path = new URL(String(input)).pathname;
+      return path === '/v2/integrations'
+        ? new Response('upstream error', { status: 503 })
+        : Response.json({ connections: [makeConnection()] });
+    });
+    const tools = connect({
+      projectId: 'proj_1',
+      client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as unknown as typeof fetch },
+    });
+
+    expect(Object.keys(await tools())).toEqual(['linear_fake_tool']);
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Platform catalog unavailable'));
+  });
+
+  it('rejects when the catalog fails and an active connection has no checked-in provider', async () => {
+    installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
+    const fetchMock = vi.fn().mockImplementation(async input => {
+      const path = new URL(String(input)).pathname;
+      return path === '/v2/integrations'
+        ? new Response('upstream error', { status: 503 })
+        : Response.json({
+            connections: [makeConnection(), makeConnection({ id: 'c_mcp1', integrationId: 'catalog-mcp' })],
+          });
+    });
+    const tools = connect({
+      projectId: 'proj_1',
+      client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as unknown as typeof fetch },
+    });
+
+    await expect(tools()).rejects.toMatchObject({ code: 'platform_error' });
+  });
+});
+
+describe('disconnect lifecycle', () => {
+  it('waits for the in-flight refresh and defers refreshes requested meanwhile', async () => {
+    installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
+    let release: () => void = () => {};
+    const gate = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    const fetchMock = vi.fn().mockImplementation(async input => {
+      await gate;
+      return platformResponse(input, [makeConnection()]);
+    });
+    const tools = connect({
+      projectId: 'proj_1',
+      client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as unknown as typeof fetch },
+    });
+
+    const events: string[] = [];
+    const first = tools().then(() => events.push('first refresh'));
+    const closed = tools.disconnect().then(() => events.push('disconnect'));
+    const deferred = tools.refresh().then(() => events.push('deferred refresh'));
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    release();
+    await Promise.all([first, closed, deferred]);
+    expect(events).toEqual(['first refresh', 'disconnect', 'deferred refresh']);
+    // The deferred refresh ran only after cleanup, so it fetched again.
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+});

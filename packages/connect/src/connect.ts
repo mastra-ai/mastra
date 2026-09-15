@@ -101,17 +101,48 @@ export function connect(options: ConnectOptions = {}): ConnectTools {
 
   let cache: { snapshot: ResolvedConnectTools; fetchedAt: number } | undefined;
   let inflight: Promise<ResolvedConnectTools> | undefined;
+  let closing: Promise<void> | undefined;
   let lastFailureAt: number | undefined;
 
-  /** Fetches a fresh snapshot, deduplicating concurrent calls. Rejects on failure. */
+  /**
+   * Loads the connection list and the integration catalog. A catalog failure
+   * only matters when an active connection needs catalog-backed MCP discovery;
+   * otherwise checked-in HTTP providers resolve with an empty catalog.
+   */
+  const loadSnapshotInputs = async (): Promise<{
+    connections: ProjectConnection[];
+    catalog: IntegrationCatalogEntry[];
+  }> => {
+    const [connectionsResult, catalogResult] = await Promise.allSettled([
+      listProjectConnections(client, projectId),
+      listIntegrations(client),
+    ]);
+    if (connectionsResult.status === 'rejected') throw connectionsResult.reason;
+    const connections = connectionsResult.value;
+    if (catalogResult.status === 'fulfilled') return { connections, catalog: catalogResult.value };
+
+    const checkedIn = new Set(PROVIDERS.map(registration => registration.integrationId));
+    const needsCatalog = connections.some(
+      connection => connection.status === 'active' && !checkedIn.has(connection.integrationId),
+    );
+    if (needsCatalog) throw catalogResult.reason;
+    const reason = catalogResult.reason;
+    console.warn(
+      `[@mastra/connect] Platform catalog unavailable (${reason instanceof Error ? reason.message : String(reason)}); resolving checked-in providers only.`,
+    );
+    return { connections, catalog: [] };
+  };
+
+  /**
+   * Fetches a fresh snapshot, deduplicating concurrent calls. Rejects on
+   * failure. A refresh requested while `disconnect()` runs starts after it.
+   */
   const refresh = (): Promise<ResolvedConnectTools> => {
+    if (closing) return closing.then(refresh);
     if (!inflight) {
       inflight = (async () => {
         try {
-          const [connections, catalog] = await Promise.all([
-            listProjectConnections(client, projectId),
-            listIntegrations(client),
-          ]);
+          const { connections, catalog } = await loadSnapshotInputs();
           const requests = buildRequests(options.integrations, catalog);
           const snapshot = await mapTools(connections, requests, options, client, mcpClients, resolverId);
           cache = { snapshot, fetchedAt: Date.now() };
@@ -139,7 +170,7 @@ export function connect(options: ConnectOptions = {}): ConnectTools {
       // instead of one per agent call.
       const staleSnapshot = cache.snapshot;
       const inCooldown = lastFailureAt !== undefined && Date.now() - lastFailureAt < FAILURE_COOLDOWN_MS;
-      if (!inCooldown && !inflight) {
+      if (!inCooldown && !inflight && !closing) {
         const staleFetchedAt = cache.fetchedAt;
         void refresh().catch((error: unknown) => {
           console.warn(
@@ -159,11 +190,22 @@ export function connect(options: ConnectOptions = {}): ConnectTools {
       cache = undefined;
     },
     refresh,
-    disconnect: async (): Promise<void> => {
-      cache = undefined;
-      const clients = Array.from(mcpClients.values(), entry => entry.client);
-      mcpClients.clear();
-      await Promise.allSettled(clients.map(mcp => mcp.disconnect()));
+    disconnect: (): Promise<void> => {
+      // Let the refresh in progress settle first so it cannot repopulate the
+      // cache or register an MCP client after cleanup; refreshes requested
+      // meanwhile wait for `closing` and start afterwards.
+      closing ??= (async () => {
+        try {
+          while (inflight) await inflight.catch(() => undefined);
+          cache = undefined;
+          const clients = Array.from(mcpClients.values(), entry => entry.client);
+          mcpClients.clear();
+          await Promise.allSettled(clients.map(mcp => mcp.disconnect()));
+        } finally {
+          closing = undefined;
+        }
+      })();
+      return closing;
     },
   });
 }
