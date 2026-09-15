@@ -2,7 +2,7 @@
 '@mastra/duckdb': minor
 ---
 
-Added configurable age-based pruning for DuckDB observability spans, metrics, logs, scores, and feedback. Requires `@mastra/core` 1.68 or newer.
+Added configurable age-based pruning for DuckDB observability spans, metrics, logs, scores, and feedback.
 
 **Before**
 

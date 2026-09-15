@@ -2,7 +2,7 @@
 '@mastra/spanner': minor
 ---
 
-Added configurable age-based pruning for Google Cloud Spanner observability spans and metrics when metrics storage is enabled. Requires `@mastra/core` 1.68 or newer.
+Added configurable age-based pruning for Google Cloud Spanner observability spans and metrics when metrics storage is enabled.
 
 ```typescript
 const storage = new SpannerStore({

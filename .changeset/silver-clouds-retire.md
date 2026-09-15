@@ -2,7 +2,7 @@
 '@mastra/oracledb': minor
 ---
 
-Added configurable age-based pruning for Oracle Database observability spans and logs. Requires `@mastra/core` 1.68 or newer.
+Added configurable age-based pruning for Oracle Database observability spans and logs.
 
 ```typescript
 const storage = new OracleStore({

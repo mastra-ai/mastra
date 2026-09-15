@@ -2,7 +2,7 @@
 '@mastra/mysql': minor
 ---
 
-Added configurable age-based pruning for observability spans. Requires `@mastra/core` 1.68 or newer.
+Added configurable age-based pruning for observability spans.
 
 ```typescript
 import { MySQLStore } from '@mastra/mysql'
