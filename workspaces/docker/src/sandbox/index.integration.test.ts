@@ -224,20 +224,45 @@ describe('DockerSandbox process kill (integration)', () => {
     const baseline = await countProcesses();
 
     // An intermediate shell forks a grandchild that re-execs with a *cleared*
-    // environment (so it carries no marker), then the intermediate exits so the
-    // grandchild re-parents away and loses its ancestry link to the leader. The
-    // leader itself stays alive (trailing `sleep`) so the process is still
-    // running when we kill it. Only a kernel-enforced process-group kill can
-    // reach the orphan — an env-marker/PPID sweep would miss it.
-    const handle = await sandbox.processes!.spawn('sh -c "sh -c \'env -i sleep 300 &\'; sleep 300"');
+    // environment (so it carries no marker), records the grandchild's PID, then
+    // exits so the grandchild re-parents away and loses its ancestry link to the
+    // leader. The leader itself stays alive (trailing `sleep`) so the process is
+    // still running when we kill it. Only a kernel-enforced process-group kill
+    // can reach the orphan — an env-marker/PPID sweep would miss it.
+    const orphanPidFile = '/tmp/orphan-under-test.pid';
+    const handle = await sandbox.processes!.spawn(
+      `sh -c "sh -c 'env -i sleep 300 & echo \\$! > ${orphanPidFile}'; sleep 300"`,
+    );
     await new Promise(r => setTimeout(r, 1000));
 
     const duringPids = await countProcesses();
     expect(duringPids).toBeGreaterThan(baseline);
 
+    // Read the exact orphan PID so we can probe it directly rather than relying
+    // on an aggregate PID-count tolerance.
+    const orphanPid = (await sandbox.executeCommand!('cat', [orphanPidFile])).stdout.trim();
+    expect(orphanPid).toMatch(/^[0-9]+$/);
+
     const killed = await handle.kill();
     expect(killed).toBe(true);
     await handle.wait();
+
+    // The orphaned, environment-less sleep must be gone: probe its exact PID
+    // with `kill -0` (0 = still alive). The process-group kill reached it
+    // despite the missing marker and severed ancestry.
+    let orphanAlive = true;
+    for (let i = 0; i < 20; i++) {
+      await new Promise(r => setTimeout(r, 500));
+      const probe = await sandbox.executeCommand!('sh', [
+        '-c',
+        'if kill -0 "$1" 2>/dev/null; then echo alive; else echo dead; fi',
+        'sh',
+        orphanPid,
+      ]);
+      orphanAlive = probe.stdout.trim() === 'alive';
+      if (!orphanAlive) break;
+    }
+    expect(orphanAlive).toBe(false);
 
     let settled = baseline;
     for (let i = 0; i < 20; i++) {
@@ -245,9 +270,6 @@ describe('DockerSandbox process kill (integration)', () => {
       settled = await countProcesses();
       if (settled <= baseline + 1) break;
     }
-
-    // The orphaned, environment-less sleep is gone: the process group kill
-    // reached it despite the missing marker and severed ancestry.
     expect(settled).toBeLessThanOrEqual(baseline + 1);
     expect(settled).toBeLessThan(duringPids);
   }, 120000);

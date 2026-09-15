@@ -51,12 +51,14 @@ const PROC_DIR = '/tmp/.mastra-proc';
  * the command string.
  */
 const SPAWN_WRAPPER = `
-mkdir -p "\${1%/*}" 2>/dev/null
 umask 077
+d="\${1%/*}"
+mkdir -p "$d" 2>/dev/null
+chmod 700 "$d" 2>/dev/null
 if setsid -w true >/dev/null 2>&1; then
-  exec setsid -w sh -c 'echo $$ > "$1"; sh -c "$2"; ret=$?; rm -f "$1" 2>/dev/null; exit $ret' sh "$1" "$2"
+  exec setsid -w sh -c 'echo $$ > "$1" || exit 126; sh -c "$2"; ret=$?; rm -f "$1" 2>/dev/null; exit $ret' sh "$1" "$2"
 fi
-echo $$ > "$1"
+echo $$ > "$1" || exit 126
 sh -c "$2"
 ret=$?
 rm -f "$1" 2>/dev/null
@@ -76,10 +78,13 @@ const KILL_SCRIPT = `
 f="$1"
 i=0
 while [ ! -r "$f" ] && [ "$i" -lt 40 ]; do sleep 0.05; i=$((i + 1)); done
-[ -r "$f" ] || exit 0
+# If the PGID was never recorded (file absent/unreadable after the wait, or
+# empty), we have no group to signal or verify — report failure rather than
+# falsely claiming the tree was terminated.
+[ -r "$f" ] || exit 1
 pgid=$(cat "$f" 2>/dev/null)
 rm -f "$f" 2>/dev/null
-[ -n "$pgid" ] || exit 0
+[ -n "$pgid" ] || exit 1
 kill -STOP -"$pgid" 2>/dev/null
 kill -KILL -"$pgid" 2>/dev/null
 # Fallback for images without setsid: the leader is not a group leader, so also
