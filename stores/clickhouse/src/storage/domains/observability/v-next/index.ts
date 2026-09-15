@@ -125,7 +125,7 @@ import {
 } from './ddl';
 import type { MigrationEntry, RetentionEntry, RetentionConfig } from './ddl';
 export { TABLE_DELETION_REQUESTS } from './ddl';
-export { recordDeletionRequest } from './deletion-requests';
+export { markDeletionRequestApplied, recordDeletionRequest } from './deletion-requests';
 export type { DeletionRequestRow, RecordDeletionRequestArgs } from './deletion-requests';
 export type { RetentionConfig } from './ddl';
 

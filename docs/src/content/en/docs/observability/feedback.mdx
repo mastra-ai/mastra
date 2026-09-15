@@ -134,7 +134,7 @@ await observability!.deleteFeedback({
 })
 ```
 
-Deleted records also disappear from feedback analytics. ClickHouse uses a lightweight delete to hide rows without guaranteeing immediate physical removal, so open-source deployments must configure an [observability retention period](/reference/storage/retention) to physically purge them. ClickHouse doesn't configure a retention TTL for deletion requests in open-source deployments. Delete APIs intentionally leave cursor-only delta rows untouched. These rows contain identifiers rather than feedback payloads and expire within two days.
+Deleted records also disappear from feedback analytics. ClickHouse uses a lightweight delete to hide rows without guaranteeing immediate physical removal, so open-source deployments must configure an [observability retention period](/reference/storage/retention) to physically purge them. Each request is marked applied once its delete succeeds; if the delete fails, the request stays unapplied, doesn't block updates to the still-visible feedback, and you retry by calling the delete API again. Open-source deployments have no background reconciler. ClickHouse doesn't configure a retention TTL for deletion requests in open-source deployments. Delete APIs intentionally leave cursor-only delta rows untouched. These rows contain identifiers rather than feedback payloads and expire within two days.
 
 ## Query feedback analytics
 
