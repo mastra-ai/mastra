@@ -32,6 +32,22 @@ function batch(): PreparedTraceBatch {
   };
 }
 
+function batchWithSpanCount(spanCount: number): PreparedTraceBatch {
+  const value = trace();
+  const root = value.spans[0]!;
+  value.spans = Array.from({ length: spanCount }, (_, index) => ({
+    ...root,
+    spanId: (index + 1).toString(16).padStart(16, '0'),
+    parentSpanId: index === 0 ? null : root.spanId,
+  }));
+  return {
+    firstTraceIndex: 0,
+    traces: [value],
+    spanCount,
+    payloadBytes: tracePayloadBytes(value),
+  };
+}
+
 function acknowledgement(spanCount = 1): Response {
   return Response.json({ ok: true, data: { spanCount } });
 }
@@ -115,6 +131,25 @@ describe('MastraPlatformTraceTarget', () => {
 
     expect(sleep).toHaveBeenCalledOnce();
     expect(sleep).toHaveBeenCalledWith(2_147_483_647, undefined);
+  });
+
+  it('paces consecutive whole-trace batches to the default span rate', async () => {
+    let now = 1_000;
+    const fetch = vi.fn<Fetch>().mockResolvedValueOnce(acknowledgement(250)).mockResolvedValueOnce(acknowledgement());
+    const sleep = vi.fn(async (milliseconds: number) => {
+      now += milliseconds;
+    });
+    const target = new MastraPlatformTraceTarget(
+      { accessToken: 'secret-token', projectId: 'project_1' },
+      { fetch, sleep, now: () => now },
+    );
+
+    await target.upload(batchWithSpanCount(250));
+    await target.upload(batch());
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(sleep).toHaveBeenCalledOnce();
+    expect(sleep).toHaveBeenCalledWith(2500, undefined);
   });
 
   it('retries a network failure with the unchanged deterministic payload', async () => {

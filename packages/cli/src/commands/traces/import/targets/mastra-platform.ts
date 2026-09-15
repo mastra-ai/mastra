@@ -5,6 +5,7 @@ import type { PreparedTraceBatch } from '../types.js';
 const DEFAULT_ENDPOINT = 'https://observability.mastra.ai';
 const DEFAULT_MAX_ATTEMPTS = 5;
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
+const DEFAULT_SPANS_PER_SECOND = 100;
 const MAX_TIMER_DELAY_MS = 2_147_483_647;
 const OBSERVABILITY_CAPABILITIES_HEADER = 'x-mastra-observability-capabilities';
 const QUOTA_PAUSE_CAPABILITY = 'quota-pause-v1';
@@ -17,11 +18,14 @@ export interface MastraPlatformTraceTargetOptions {
   projectId: string;
   /** A collector origin or a full URL ending in `/spans/publish`. */
   endpoint?: string;
+  /** Internal upload pacing. This is intentionally not a customer-facing CLI option. */
+  spansPerSecond?: number;
 }
 
 export interface MastraPlatformTraceTargetDependencies {
   fetch?: Fetch;
   sleep?: Sleep;
+  now?: () => number;
   maxAttempts?: number;
   requestTimeoutMs?: number;
 }
@@ -46,8 +50,11 @@ export class MastraPlatformTraceTarget implements TraceImportTarget {
   private readonly endpoint: string;
   private readonly fetch: Fetch;
   private readonly sleep: Sleep;
+  private readonly now: () => number;
   private readonly maxAttempts: number;
   private readonly requestTimeoutMs: number;
+  private readonly spansPerSecond: number;
+  private nextUploadAt = 0;
 
   constructor(options: MastraPlatformTraceTargetOptions, dependencies: MastraPlatformTraceTargetDependencies = {}) {
     this.accessToken = requireValue(options.accessToken, 'Mastra Platform access token');
@@ -55,8 +62,10 @@ export class MastraPlatformTraceTarget implements TraceImportTarget {
     this.endpoint = resolveTracesEndpoint(options.endpoint ?? DEFAULT_ENDPOINT, this.projectId);
     this.fetch = dependencies.fetch ?? globalThis.fetch;
     this.sleep = dependencies.sleep ?? sleep;
+    this.now = dependencies.now ?? Date.now;
     this.maxAttempts = dependencies.maxAttempts ?? DEFAULT_MAX_ATTEMPTS;
     this.requestTimeoutMs = dependencies.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
+    this.spansPerSecond = options.spansPerSecond ?? DEFAULT_SPANS_PER_SECOND;
 
     if (!Number.isInteger(this.maxAttempts) || this.maxAttempts < 1) {
       throw new Error('Mastra Platform max attempts must be a positive integer.');
@@ -64,10 +73,14 @@ export class MastraPlatformTraceTarget implements TraceImportTarget {
     if (!Number.isFinite(this.requestTimeoutMs) || this.requestTimeoutMs <= 0) {
       throw new Error('Mastra Platform request timeout must be greater than zero.');
     }
+    if (!Number.isFinite(this.spansPerSecond) || this.spansPerSecond <= 0) {
+      throw new Error('Mastra Platform spans per second must be greater than zero.');
+    }
   }
 
   async upload(batch: PreparedTraceBatch, options: TraceImportTargetUploadOptions = {}): Promise<void> {
     const body = serializePreparedTraceBatch(batch);
+    await this.waitForUploadSlot(batch.spanCount, options.signal);
 
     for (let attempt = 0; ; attempt++) {
       options.signal?.throwIfAborted();
@@ -134,6 +147,15 @@ export class MastraPlatformTraceTarget implements TraceImportTarget {
       await discardResponseBody(response);
       throw platformResponseError(response.status, retryable);
     }
+  }
+
+  private async waitForUploadSlot(spanCount: number, signal?: AbortSignal): Promise<void> {
+    const waitMilliseconds = Math.max(0, this.nextUploadAt - this.now());
+    if (waitMilliseconds > 0) await this.sleep(waitMilliseconds, signal);
+
+    const startedAt = this.now();
+    const batchInterval = Math.ceil((spanCount * 1000) / this.spansPerSecond);
+    this.nextUploadAt = Math.max(this.nextUploadAt, startedAt) + batchInterval;
   }
 }
 

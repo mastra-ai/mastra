@@ -58,6 +58,8 @@ Temporary network and collector failures are retried with bounded backoff. If a
 response is lost after the collector accepted it, the batch remains pending and
 is safely replayed with the same stable IDs. Authentication, quota, payload, and
 other permanent errors are returned immediately without changing progress.
+Consecutive batches are paced to approximately 100 spans per second by default;
+an individual trace remains whole even when it contains more than 100 spans.
 
 Read-back verification, reports, and the customer-facing command are
 implemented by later tickets.
