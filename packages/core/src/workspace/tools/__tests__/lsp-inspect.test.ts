@@ -12,6 +12,9 @@ describe('workspace_lsp_inspect', () => {
   let tempDir: string;
   let workspace: Workspace;
   let tools: Awaited<ReturnType<typeof createWorkspaceTools>>;
+  // lsp_inspect is only registered when the workspace has an active LSP manager,
+  // so tests swap this stub in place of a real one.
+  let lspStub: any;
 
   beforeEach(async () => {
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'lsp-inspect-test-'));
@@ -20,6 +23,8 @@ describe('workspace_lsp_inspect', () => {
       name: 'Test',
       filesystem: new LocalFilesystem({ basePath: tempDir }),
     });
+    lspStub = {};
+    Object.defineProperty(workspace, 'lsp', { get: () => lspStub, configurable: true });
     tools = await createWorkspaceTools(workspace);
   });
 
@@ -53,20 +58,25 @@ describe('workspace_lsp_inspect', () => {
     });
   });
 
-  it('should return error when workspace has no LSP configured', async () => {
-    await fs.writeFile(path.join(tempDir, 'test.ts'), 'const foo = 1');
-
-    // Create workspace without LSP
+  it('should not register the tool when the workspace has no LSP configured', async () => {
     const wsNoLsp = new Workspace({
       id: 'test-ws-no-lsp',
       name: 'Test No LSP',
       filesystem: new LocalFilesystem({ basePath: tempDir }),
     });
+
     const toolsNoLsp = await createWorkspaceTools(wsNoLsp);
 
-    const result = await toolsNoLsp[WORKSPACE_TOOLS.LSP.LSP_INSPECT].execute(
+    expect(toolsNoLsp[WORKSPACE_TOOLS.LSP.LSP_INSPECT]).toBeUndefined();
+  });
+
+  it('should return error when LSP goes away after the tool was registered', async () => {
+    await fs.writeFile(path.join(tempDir, 'test.ts'), 'const foo = 1');
+    lspStub = undefined;
+
+    const result = await tools[WORKSPACE_TOOLS.LSP.LSP_INSPECT].execute(
       { path: 'test.ts', line: 1, match: 'const foo <<< = 1' },
-      { workspace: wsNoLsp },
+      { workspace },
     );
 
     expect(result).toEqual({
@@ -101,7 +111,7 @@ describe('workspace_lsp_inspect', () => {
       }),
     };
 
-    Object.defineProperty(workspace, 'lsp', { get: () => mockLsp });
+    lspStub = mockLsp;
 
     const result = await tools[WORKSPACE_TOOLS.LSP.LSP_INSPECT].execute(
       { path: 'test.ts', line: 1, match: 'const foo <<< = 1' },
@@ -148,7 +158,7 @@ describe('workspace_lsp_inspect', () => {
       }),
     };
 
-    Object.defineProperty(workspace, 'lsp', { get: () => mockLsp });
+    lspStub = mockLsp;
 
     const result = await tools[WORKSPACE_TOOLS.LSP.LSP_INSPECT].execute(
       { path: 'test.ts', line: 1, match: 'const foo: string <<< = "hello"' },
@@ -193,7 +203,7 @@ describe('workspace_lsp_inspect', () => {
       }),
     };
 
-    Object.defineProperty(workspace, 'lsp', { get: () => mockLsp });
+    lspStub = mockLsp;
 
     const result = await tools[WORKSPACE_TOOLS.LSP.LSP_INSPECT].execute(
       { path: 'test.ts', line: 1, match: 'const <<<foo = 1' },
@@ -247,7 +257,7 @@ describe('workspace_lsp_inspect', () => {
       }),
     };
 
-    Object.defineProperty(workspace, 'lsp', { get: () => mockLsp });
+    lspStub = mockLsp;
 
     const result = await tools[WORKSPACE_TOOLS.LSP.LSP_INSPECT].execute(
       { path: 'test.ts', line: 1, match: 'const foo: <<<string = 42' },
@@ -284,7 +294,7 @@ describe('workspace_lsp_inspect', () => {
       prepareQuery: vi.fn().mockResolvedValue(null),
     };
 
-    Object.defineProperty(workspace, 'lsp', { get: () => mockLsp });
+    lspStub = mockLsp;
 
     const result = await tools[WORKSPACE_TOOLS.LSP.LSP_INSPECT].execute(
       { path: 'test.ts', line: 1, match: 'const foo <<< = 1' },
@@ -304,7 +314,7 @@ describe('workspace_lsp_inspect', () => {
       prepareQuery: vi.fn().mockRejectedValue(new Error('Connection failed')),
     };
 
-    Object.defineProperty(workspace, 'lsp', { get: () => mockLsp });
+    lspStub = mockLsp;
 
     const result = await tools[WORKSPACE_TOOLS.LSP.LSP_INSPECT].execute(
       { path: 'test.ts', line: 1, match: 'const foo <<< = 1' },
@@ -343,7 +353,7 @@ describe('workspace_lsp_inspect', () => {
       }),
     };
 
-    Object.defineProperty(workspace, 'lsp', { get: () => mockLsp });
+    lspStub = mockLsp;
 
     const result = await tools[WORKSPACE_TOOLS.LSP.LSP_INSPECT].execute(
       { path: 'test.ts', line: 1, match: 'const foo <<< = 1' },
@@ -383,7 +393,7 @@ describe('workspace_lsp_inspect', () => {
       }),
     };
 
-    Object.defineProperty(workspace, 'lsp', { get: () => mockLsp });
+    lspStub = mockLsp;
     Object.defineProperty(workspace, 'filesystem', { get: () => undefined });
 
     await tools[WORKSPACE_TOOLS.LSP.LSP_INSPECT].execute(
@@ -430,7 +440,7 @@ describe('workspace_lsp_inspect', () => {
       }),
     };
 
-    Object.defineProperty(workspace, 'lsp', { get: () => mockLsp });
+    lspStub = mockLsp;
 
     const result = await tools[WORKSPACE_TOOLS.LSP.LSP_INSPECT].execute(
       { path: 'test.ts', line: 1, match: 'const <<<foo = 1' },
@@ -485,7 +495,7 @@ describe('workspace_lsp_inspect', () => {
       }),
     };
 
-    Object.defineProperty(workspace, 'lsp', { get: () => mockLsp });
+    lspStub = mockLsp;
 
     const result = await tools[WORKSPACE_TOOLS.LSP.LSP_INSPECT].execute(
       { path: 'test.ts', line: 1, match: 'const <<<foo = 1' },

@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { createObservabilityVNextTests } from '@internal/storage-test-utils';
 import { coreFeatures } from '@mastra/core/features';
 import { EntityType, SpanType } from '@mastra/core/observability';
+import { parseQueryThreadsInput, parseTraceQueryRequest, planThreadQuery, planTraceQuery } from '@mastra/core/storage';
 import type { ObservabilityStorage } from '@mastra/core/storage';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DuckDBConnection } from '../../db/index';
@@ -18,6 +19,9 @@ createObservabilityVNextTests({
   capabilities: {
     label: 'DuckDB',
     preferredStrategy: 'event-sourced',
+    traceQuery: true,
+    threadQuery: true,
+    traceQueryStrictFeedbackValueTypes: true,
   },
   getStorage: async () => {
     sharedSuiteStore = new DuckDBStore({ path: ':memory:' });
@@ -106,11 +110,11 @@ describe('ObservabilityStorageDuckDB', () => {
 
     try {
       coreFeatures.add('observability-delta-polling');
-      expect(storage.getFeatures()).toEqual(['metrics', 'logs', 'delta-polling']);
+      expect(storage.getFeatures()).toEqual(['metrics', 'logs', 'delta-polling', 'trace-query', 'thread-query']);
 
       coreFeatures.delete('observability-delta-polling');
 
-      expect(storage.getFeatures()).toEqual(['metrics', 'logs']);
+      expect(storage.getFeatures()).toEqual(['metrics', 'logs', 'trace-query', 'thread-query']);
       await expect(storage.listLogs({ mode: 'delta' })).rejects.toThrow(
         'This storage provider does not support observability delta polling',
       );
@@ -128,15 +132,41 @@ describe('ObservabilityStorageDuckDB', () => {
 
     try {
       coreFeatures.add('observability-delta-polling');
-      expect(lazyStore.observability.getFeatures()).toEqual(['metrics', 'logs', 'delta-polling']);
+      expect(lazyStore.observability.getFeatures()).toEqual([
+        'metrics',
+        'logs',
+        'delta-polling',
+        'trace-query',
+        'thread-query',
+      ]);
 
       coreFeatures.delete('observability-delta-polling');
-      expect(lazyStore.observability.getFeatures()).toEqual(['metrics', 'logs']);
+      expect(lazyStore.observability.getFeatures()).toEqual(['metrics', 'logs', 'trace-query', 'thread-query']);
     } finally {
       coreFeatures.clear();
       for (const feature of originalFeatures) {
         coreFeatures.add(feature);
       }
+      await lazyStore.db.close();
+    }
+  });
+
+  it('forwards thread queries through the lazy store facade', async () => {
+    const lazyStore = new DuckDBStore({ path: ':memory:' });
+    await lazyStore.init();
+
+    try {
+      const response = await lazyStore.observability.queryThreads(
+        planThreadQuery(
+          parseQueryThreadsInput({
+            traces: {
+              timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
+            },
+          }),
+        ),
+      );
+      expect(response).toEqual({ threads: [], page: { next: null } });
+    } finally {
       await lazyStore.db.close();
     }
   });
@@ -155,6 +185,79 @@ describe('ObservabilityStorageDuckDB', () => {
     expect(db.executeBatch).toHaveBeenCalledTimes(1);
     expect(db.executeBatch).toHaveBeenCalledWith([...ALL_DDL, ...ALL_MIGRATIONS]);
     expect(db.execute).not.toHaveBeenCalled();
+  });
+
+  it('creates legacy and typed feedback value columns', async () => {
+    const columns = await store.db.query<{ column_name: string; data_type: string }>(
+      `SELECT column_name, data_type FROM information_schema.columns
+       WHERE table_name = 'feedback_events' AND column_name IN ('value', 'valueString', 'valueNumber')
+       ORDER BY column_name`,
+    );
+
+    expect(columns).toEqual([
+      { column_name: 'value', data_type: 'VARCHAR' },
+      { column_name: 'valueNumber', data_type: 'DOUBLE' },
+      { column_name: 'valueString', data_type: 'VARCHAR' },
+    ]);
+  });
+
+  it('migrates an existing feedback table without inferring legacy value types', async () => {
+    const legacyDb = new DuckDBConnection({ path: ':memory:' });
+    try {
+      await legacyDb.execute(`
+        CREATE TABLE feedback_events (
+          timestamp TIMESTAMP NOT NULL,
+          feedbackId VARCHAR NOT NULL PRIMARY KEY,
+          traceId VARCHAR,
+          feedbackSource VARCHAR NOT NULL,
+          feedbackType VARCHAR NOT NULL,
+          value VARCHAR NOT NULL
+        )
+      `);
+      await legacyDb.execute(`
+        INSERT INTO feedback_events (timestamp, feedbackId, traceId, feedbackSource, feedbackType, value)
+        VALUES (TIMESTAMP '2026-01-01 00:00:00', 'legacy-feedback', 'legacy-trace', 'user', 'rating', '3')
+      `);
+
+      const legacyStorage = new ConcreteObservabilityStorageDuckDB({ db: legacyDb });
+      await legacyStorage.init();
+      await legacyDb.execute(`
+        INSERT INTO span_events (eventType, timestamp, cursorId, traceId, spanId, name, spanType, isEvent, endedAt)
+        VALUES ('start', TIMESTAMP '2026-01-01 00:00:00', nextval('span_events_cursor_id_seq'),
+                'legacy-trace', 'legacy-root', 'legacy-root', 'agent_run', false, TIMESTAMP '2026-01-01 00:00:01')
+      `);
+
+      const rawRows = await legacyDb.query<{ value: string; valueString: string | null; valueNumber: number | null }>(
+        `SELECT value, valueString, valueNumber FROM feedback_events`,
+      );
+      expect(rawRows).toEqual([{ value: '3', valueString: null, valueNumber: null }]);
+
+      const result = await legacyStorage.listFeedback({});
+      expect(result.feedback[0]).toMatchObject({ feedbackId: 'legacy-feedback', value: '3' });
+
+      const query = (predicate: Record<string, unknown>) =>
+        legacyStorage.queryTraces(
+          planTraceQuery(
+            parseTraceQueryRequest({
+              timeRange: { from: '2025-12-31T00:00:00Z', to: '2026-01-02T00:00:00Z' },
+              where: { feedback: { some: predicate } },
+            }),
+          ),
+        );
+      await expect(query({ op: 'eq', left: { path: 'value' }, right: { literal: '3' } })).resolves.toMatchObject({
+        traces: [],
+      });
+      await expect(query({ op: 'eq', left: { path: 'value' }, right: { literal: 3 } })).resolves.toMatchObject({
+        traces: [],
+      });
+      await expect(query({ op: 'in', value: { path: 'value' }, set: ['3'] })).resolves.toMatchObject({ traces: [] });
+      await expect(query({ op: 'in', value: { path: 'value' }, set: [3] })).resolves.toMatchObject({ traces: [] });
+      await expect(query({ op: 'exists', path: 'value' })).resolves.toMatchObject({
+        traces: [expect.objectContaining({ traceId: 'legacy-trace' })],
+      });
+    } finally {
+      await legacyDb.close();
+    }
   });
 
   it('keeps cursor ids out of DuckDB column defaults', () => {
@@ -2166,6 +2269,146 @@ describe('ObservabilityStorageDuckDB', () => {
   // ==========================================================================
 
   describe('feedback', () => {
+    it('round-trips typed values and clears stale typed columns on upsert', async () => {
+      const numericFeedback = {
+        feedbackId: 'feedback-typed-number',
+        timestamp: new Date('2026-01-01T00:00:00Z'),
+        traceId: 'trace-feedback-typed',
+        spanId: null,
+        feedbackSource: 'user',
+        feedbackType: 'rating',
+        value: 3 as string | number,
+        comment: null,
+        experimentId: null,
+        feedbackUserId: null,
+        sourceId: null,
+        metadata: null,
+      };
+      const stringFeedback = {
+        ...numericFeedback,
+        feedbackId: 'feedback-typed-string',
+        timestamp: new Date('2026-01-01T00:01:00Z'),
+        value: '3' as string | number,
+      };
+
+      await storage.createFeedback({ feedback: numericFeedback });
+      await storage.batchCreateFeedback({ feedbacks: [stringFeedback] });
+
+      let result = await storage.listFeedback({
+        filters: { traceId: 'trace-feedback-typed' },
+        orderBy: { field: 'timestamp', direction: 'ASC' },
+      });
+      expect(result.feedback.map(feedback => feedback.value)).toEqual([3, '3']);
+
+      let rawRows = await store.db.query<{
+        feedbackId: string;
+        value: string;
+        valueString: string | null;
+        valueNumber: number | null;
+      }>(
+        `SELECT feedbackId, value, valueString, valueNumber FROM feedback_events
+         WHERE traceId = 'trace-feedback-typed' ORDER BY timestamp`,
+      );
+      expect(rawRows).toEqual([
+        { feedbackId: 'feedback-typed-number', value: '3', valueString: null, valueNumber: 3 },
+        { feedbackId: 'feedback-typed-string', value: '3', valueString: '3', valueNumber: null },
+      ]);
+
+      await storage.createFeedback({ feedback: { ...numericFeedback, value: 'updated' } });
+      await storage.batchCreateFeedback({ feedbacks: [{ ...stringFeedback, value: 4 }] });
+
+      result = await storage.listFeedback({
+        filters: { traceId: 'trace-feedback-typed' },
+        orderBy: { field: 'timestamp', direction: 'ASC' },
+      });
+      expect(result.feedback.map(feedback => feedback.value)).toEqual(['updated', 4]);
+
+      rawRows = await store.db.query(
+        `SELECT feedbackId, value, valueString, valueNumber FROM feedback_events
+         WHERE traceId = 'trace-feedback-typed' ORDER BY timestamp`,
+      );
+      expect(rawRows).toEqual([
+        { feedbackId: 'feedback-typed-number', value: 'updated', valueString: 'updated', valueNumber: null },
+        { feedbackId: 'feedback-typed-string', value: '4', valueString: null, valueNumber: 4 },
+      ]);
+    });
+
+    it('replaces an existing feedbackId with a backdated latest single write', async () => {
+      const original = {
+        feedbackId: 'feedback-supersession-single',
+        timestamp: new Date('2026-01-02T00:00:00Z'),
+        traceId: 'trace-feedback-supersession-single',
+        spanId: null,
+        feedbackSource: 'superseded-patient',
+        feedbackType: 'rating',
+        value: -1,
+        comment: 'old',
+        experimentId: null,
+        feedbackUserId: 'patient-1',
+        sourceId: 'survey-1',
+        metadata: null,
+      };
+      await storage.createFeedback({ feedback: original });
+      await storage.createFeedback({
+        feedback: {
+          ...original,
+          timestamp: new Date('2026-01-01T00:00:00Z'),
+          feedbackSource: 'patient',
+          value: 1,
+          comment: 'new',
+        },
+      });
+
+      const result = await storage.listFeedback({ filters: { traceId: original.traceId } });
+      expect(result.feedback).toHaveLength(1);
+      expect(result.feedback[0]).toMatchObject({
+        feedbackId: original.feedbackId,
+        timestamp: new Date('2026-01-01T00:00:00Z'),
+        feedbackSource: 'patient',
+        value: 1,
+        comment: 'new',
+      });
+    });
+
+    it('retains the last repeated feedbackId in a batch', async () => {
+      const original = {
+        feedbackId: 'feedback-supersession-batch',
+        timestamp: new Date('2026-01-01T00:00:00Z'),
+        traceId: 'trace-feedback-supersession-batch',
+        spanId: null,
+        feedbackSource: 'superseded-patient',
+        feedbackType: 'rating',
+        value: -1,
+        comment: 'old',
+        experimentId: null,
+        feedbackUserId: 'patient-1',
+        sourceId: 'survey-1',
+        metadata: null,
+      };
+      await storage.batchCreateFeedback({
+        feedbacks: [
+          original,
+          {
+            ...original,
+            timestamp: new Date('2026-01-02T00:00:00Z'),
+            feedbackSource: 'patient',
+            value: 1,
+            comment: 'new',
+          },
+        ],
+      });
+
+      const result = await storage.listFeedback({ filters: { traceId: original.traceId } });
+      expect(result.feedback).toHaveLength(1);
+      expect(result.feedback[0]).toMatchObject({
+        feedbackId: original.feedbackId,
+        timestamp: new Date('2026-01-02T00:00:00Z'),
+        feedbackSource: 'patient',
+        value: 1,
+        comment: 'new',
+      });
+    });
+
     it('accepts deprecated `source` filter for feedback (DuckDB-specific)', async () => {
       await storage.createFeedback({
         feedback: {
@@ -2341,6 +2584,82 @@ describe('ObservabilityStorageDuckDB', () => {
         }),
       ]);
     });
+
+    it('excludes numeric-looking strings from all numeric feedback analytics', async () => {
+      const feedback = (feedbackId: string, timestamp: string, value: string | number, entityName: string) => ({
+        feedbackId,
+        timestamp: new Date(timestamp),
+        traceId: `trace-${feedbackId}`,
+        spanId: null,
+        feedbackSource: 'user',
+        feedbackType: 'typed-rating',
+        value,
+        comment: null,
+        experimentId: null,
+        feedbackUserId: null,
+        sourceId: null,
+        entityName,
+        metadata: null,
+      });
+      await storage.batchCreateFeedback({
+        feedbacks: [
+          feedback('numeric-3', '2026-01-01T00:00:00Z', 3, 'agent-a'),
+          feedback('numeric-5', '2026-01-01T00:10:00Z', 5, 'agent-b'),
+          feedback('text-100', '2026-01-01T00:20:00Z', '100', 'agent-a'),
+        ],
+      });
+
+      await expect(
+        storage.getFeedbackAggregate({
+          feedbackType: 'typed-rating',
+          feedbackSource: 'user',
+          aggregation: 'avg',
+        }),
+      ).resolves.toEqual({ value: 4 });
+      await expect(
+        storage.getFeedbackBreakdown({
+          feedbackType: 'typed-rating',
+          feedbackSource: 'user',
+          aggregation: 'avg',
+          groupBy: ['entityName'],
+        }),
+      ).resolves.toEqual({
+        groups: [
+          { dimensions: { entityName: 'agent-b' }, value: 5 },
+          { dimensions: { entityName: 'agent-a' }, value: 3 },
+        ],
+      });
+      await expect(
+        storage.getFeedbackTimeSeries({
+          feedbackType: 'typed-rating',
+          feedbackSource: 'user',
+          aggregation: 'avg',
+          interval: '1h',
+        }),
+      ).resolves.toEqual({
+        series: [
+          {
+            name: 'typed-rating|user',
+            points: [{ timestamp: new Date('2026-01-01T00:00:00.000Z'), value: 4 }],
+          },
+        ],
+      });
+      await expect(
+        storage.getFeedbackPercentiles({
+          feedbackType: 'typed-rating',
+          feedbackSource: 'user',
+          percentiles: [0.5],
+          interval: '1h',
+        }),
+      ).resolves.toEqual({
+        series: [
+          {
+            percentile: 0.5,
+            points: [{ timestamp: new Date('2026-01-01T00:00:00.000Z'), value: 4 }],
+          },
+        ],
+      });
+    });
   });
 
   // ==========================================================================
@@ -2383,7 +2702,7 @@ describe('ObservabilityStorageDuckDB', () => {
       expect(result.metrics[0]!.metricId).toBe('metric-retry-1');
     });
 
-    it('re-inserting the same scoreId does not throw or duplicate', async () => {
+    it('re-inserting the same scoreId replaces the current record without duplicating it', async () => {
       const score = {
         scoreId: 'score-retry-1',
         timestamp: new Date('2026-01-01T00:00:00Z'),
@@ -2396,10 +2715,52 @@ describe('ObservabilityStorageDuckDB', () => {
         metadata: null,
       };
       await storage.createScore({ score });
-      await storage.createScore({ score });
+      const bootstrap = await storage.listScores({ mode: 'delta', filters: { traceId: 'trace-retry-score' } });
+
+      await storage.createScore({ score: { ...score, score: 0.4 } });
+
       const result = await storage.listScores({ filters: { traceId: 'trace-retry-score' } });
       expect(result.scores).toHaveLength(1);
-      expect(result.scores[0]!.scoreId).toBe('score-retry-1');
+      expect(result.scores[0]).toMatchObject({ scoreId: 'score-retry-1', score: 0.4 });
+
+      const delta = await storage.listScores({
+        mode: 'delta',
+        filters: { traceId: 'trace-retry-score' },
+        after: bootstrap.deltaCursor!,
+      });
+      expect(delta.scores).toEqual([]);
+    });
+
+    it('batch re-inserts replace scores without advancing their delta cursors', async () => {
+      const score = {
+        scoreId: 'score-batch-retry-1',
+        timestamp: new Date('2026-01-01T00:00:00Z'),
+        traceId: 'trace-batch-retry-score',
+        spanId: null,
+        scorerId: 'scorer-1',
+        score: 0.9,
+        reason: null,
+        experimentId: null,
+        metadata: null,
+      };
+      await storage.batchCreateScores({ scores: [score] });
+      const bootstrap = await storage.listScores({
+        mode: 'delta',
+        filters: { traceId: 'trace-batch-retry-score' },
+      });
+
+      await storage.batchCreateScores({ scores: [{ ...score, score: 0.4 }] });
+
+      const result = await storage.listScores({ filters: { traceId: 'trace-batch-retry-score' } });
+      expect(result.scores).toHaveLength(1);
+      expect(result.scores[0]).toMatchObject({ scoreId: 'score-batch-retry-1', score: 0.4 });
+
+      const delta = await storage.listScores({
+        mode: 'delta',
+        filters: { traceId: 'trace-batch-retry-score' },
+        after: bootstrap.deltaCursor!,
+      });
+      expect(delta.scores).toEqual([]);
     });
 
     it('re-inserting the same feedbackId does not throw or duplicate', async () => {

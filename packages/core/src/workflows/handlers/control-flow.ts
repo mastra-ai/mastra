@@ -48,6 +48,42 @@ function publishStepEvent(
 }
 
 /**
+ * Builds the display name for a control-flow container span. When the graph
+ * entry carries an authored `id`, it is used so observability tools can
+ * identify the specific operation (e.g. `parallel: 'check-document'`).
+ * Otherwise the generic structural name is used as a fallback.
+ */
+export function getControlFlowSpanName(entry: { id?: string }, fallbackName: string): string {
+  const id = typeof entry.id === 'string' ? entry.id.trim() : '';
+  return id ? `${fallbackName.split(':')[0]}: '${id}'` : fallbackName;
+}
+
+/**
+ * Exposes the authored entry identity and metadata on container span
+ * attributes so processors and exporters can identify the operation without
+ * relying on structural matching. Only includes fields that are present.
+ */
+export function getControlFlowIdentityAttributes(entry: {
+  id?: string;
+  description?: string;
+  metadata?: Record<string, any>;
+}): Record<string, any> {
+  const attributes: Record<string, any> = {};
+  const id = typeof entry.id === 'string' ? entry.id.trim() : '';
+  if (id) {
+    attributes.entryId = id;
+  }
+  const description = typeof entry.description === 'string' ? entry.description.trim() : '';
+  if (description) {
+    attributes.entryDescription = description;
+  }
+  if (entry.metadata && typeof entry.metadata === 'object') {
+    attributes.entryMetadata = entry.metadata;
+  }
+  return attributes;
+}
+
+/**
  * Runs one child of a parallel/conditional block by dispatching on its step type
  * to the matching engine execute method - the same per-type dispatch the engine
  * uses for top-level entries.
@@ -75,6 +111,9 @@ export interface ExecuteParallelParams extends ObservabilityContext {
   resourceId?: string;
   entry: {
     type: 'parallel';
+    id?: string;
+    description?: string;
+    metadata?: Record<string, any>;
     steps: SingleStepEntry[];
   };
   serializedStepGraph: SerializedStepFlowEntry[];
@@ -133,11 +172,12 @@ export async function executeParallel(
     operationId: `workflow.${workflowId}.run.${runId}.parallel.${executionContext.executionPath.join('-')}.span.start`,
     options: {
       type: SpanType.WORKFLOW_PARALLEL,
-      name: `parallel: '${steps.length} branches'`,
+      name: getControlFlowSpanName(entry, `parallel: '${steps.length} branches'`),
       input: engine.getStepOutput(stepResults, prevStep),
       attributes: {
         branchCount: steps.length,
         parallelSteps: steps.map(s => getSingleStepEntryId(s)),
+        ...getControlFlowIdentityAttributes(entry),
       },
       tracingPolicy: engine.options?.tracingPolicy,
     },
@@ -279,6 +319,9 @@ export interface ExecuteConditionalParams extends ObservabilityContext {
   serializedStepGraph: SerializedStepFlowEntry[];
   entry: {
     type: 'conditional';
+    id?: string;
+    description?: string;
+    metadata?: Record<string, any>;
     steps: SingleStepEntry[];
     conditions: ConditionFunction<any, any, any, any, any, DefaultEngineType>[];
   };
@@ -337,10 +380,11 @@ export async function executeConditional(
     operationId: `workflow.${workflowId}.run.${runId}.conditional.${executionContext.executionPath.join('-')}.span.start`,
     options: {
       type: SpanType.WORKFLOW_CONDITIONAL,
-      name: `conditional: '${entry.conditions.length} conditions'`,
+      name: getControlFlowSpanName(entry, `conditional: '${entry.conditions.length} conditions'`),
       input: prevOutput,
       attributes: {
         conditionCount: entry.conditions.length,
+        ...getControlFlowIdentityAttributes(entry),
       },
       tracingPolicy: engine.options?.tracingPolicy,
     },
@@ -603,6 +647,9 @@ export interface ExecuteLoopParams extends ObservabilityContext {
   resourceId?: string;
   entry: {
     type: 'loop';
+    id?: string;
+    description?: string;
+    metadata?: Record<string, any>;
     step: SingleStepEntry;
     condition: LoopConditionFunction<any, any, any, any, any, DefaultEngineType>;
     loopType: 'dowhile' | 'dountil';
@@ -665,10 +712,11 @@ export async function executeLoop(
     operationId: `workflow.${workflowId}.run.${runId}.loop.${executionContext.executionPath.join('-')}.span.start`,
     options: {
       type: SpanType.WORKFLOW_LOOP,
-      name: `loop: '${entry.loopType}'`,
+      name: getControlFlowSpanName(entry, `loop: '${entry.loopType}'`),
       input: prevOutput,
       attributes: {
         loopType: entry.loopType,
+        ...getControlFlowIdentityAttributes(entry),
       },
       tracingPolicy: engine.options?.tracingPolicy,
     },
@@ -872,6 +920,9 @@ export interface ExecuteForeachParams extends ObservabilityContext {
   resourceId?: string;
   entry: {
     type: 'foreach';
+    id?: string;
+    description?: string;
+    metadata?: Record<string, any>;
     step: SingleStepEntry;
     opts: ForeachOptions;
   };
@@ -949,11 +1000,12 @@ export async function executeForeach(
     operationId: `workflow.${workflowId}.run.${runId}.foreach.${executionContext.executionPath.join('-')}.span.start`,
     options: {
       type: SpanType.WORKFLOW_LOOP,
-      name: `loop: 'foreach'`,
+      name: getControlFlowSpanName(entry, `loop: 'foreach'`),
       input: prevOutput,
       attributes: {
         loopType: 'foreach',
         concurrency,
+        ...getControlFlowIdentityAttributes(entry),
       },
       tracingPolicy: engine.options?.tracingPolicy,
     },
@@ -991,6 +1043,7 @@ export async function executeForeach(
 
   const prevForeachOutput = (prevPayload?.suspendPayload?.__workflow_meta?.foreachOutput ||
     []) as PersistedForeachStepResult[];
+  const nestedRunIds: string[] = [];
   const prevResumeLabels = prevPayload?.suspendPayload?.__workflow_meta?.resumeLabels || {};
   const resumeLabels = getResumeLabelsByStepId(prevResumeLabels, stepId);
 
@@ -1136,6 +1189,9 @@ export async function executeForeach(
       if (result.status === 'success' && result.output !== undefined) {
         results[k] = result.output;
       }
+      if (typeof result.metadata?.nestedRunId === 'string') {
+        nestedRunIds[k] = result.metadata.nestedRunId;
+      }
 
       // Preserve `suspendPayload` for iterations that are still suspended so
       // their resume context (e.g. an agent's `__streamState`) survives the
@@ -1143,16 +1199,21 @@ export async function executeForeach(
       // clear it to keep the snapshot small.
       prevForeachOutput[k] = result.status === 'suspended' ? result : { ...result, suspendPayload: {} };
     } catch (err) {
+      const errorObj = err instanceof Error ? err : new Error(String(err));
+      const thrownResult: PersistedForeachStepResult = {
+        status: 'failed',
+        error: errorObj,
+        payload: undefined,
+        startedAt: Date.now(),
+        endedAt: Date.now(),
+      };
       if (!errorResult) {
-        const errorObj = err instanceof Error ? err : new Error(String(err));
-        errorResult = {
-          status: 'failed',
-          error: errorObj,
-          payload: undefined,
-          startedAt: Date.now(),
-          endedAt: Date.now(),
-        };
+        errorResult = thrownResult as StepFailure<any, any, any, any>;
       }
+      // Record the iteration that threw so the failure result below reports it
+      // as failed (and therefore retried) rather than leaving a hole in the
+      // per-iteration progress array.
+      prevForeachOutput[k] = thrownResult;
       killQueue();
     }
 
@@ -1187,6 +1248,9 @@ export async function executeForeach(
 
       if (prevItemResult.status === 'success' && prevItemResult.output !== undefined) {
         results[k] = prevItemResult.output;
+      }
+      if (typeof prevItemResult.metadata?.nestedRunId === 'string') {
+        nestedRunIds[k] = prevItemResult.metadata.nestedRunId;
       }
       // Preserve suspendPayload for still-suspended items (same as worker logic)
       prevForeachOutput[k] =
@@ -1288,7 +1352,22 @@ export async function executeForeach(
       },
     });
 
-    return finalErrorResult;
+    // Persist the per-iteration progress accumulated before the failure, using
+    // the same `__workflow_meta.foreachOutput` channel the suspend path below
+    // uses. Re-entering this foreach (via time travel, or any other path that
+    // replays the step) then skips the iterations that already succeeded
+    // instead of running their side effects a second time. See issue #21749.
+    return {
+      ...finalErrorResult,
+      suspendPayload: {
+        ...finalErrorResult.suspendPayload,
+        __workflow_meta: {
+          ...(finalErrorResult.suspendPayload as any)?.__workflow_meta,
+          foreachOutput: prevForeachOutput,
+          resumeLabels: executionContext.resumeLabels,
+        },
+      },
+    } as StepFailure<any, any, any, any>;
   }
 
   if (exitResult) {
@@ -1410,6 +1489,7 @@ export async function executeForeach(
     ...stepInfo,
     status: 'success',
     output: results,
+    ...(nestedRunIds.length > 0 ? { metadata: { nestedRunId: nestedRunIds } } : {}),
     endedAt: Date.now(),
   } as StepSuccess<any, any, any, any>;
 }

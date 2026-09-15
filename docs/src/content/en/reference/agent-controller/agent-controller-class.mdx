@@ -1,6 +1,6 @@
 ---
 title: "Reference: AgentController | AgentController"
-description: "API reference for AgentController, the shared host that creates isolated sessions and coordinates agents, storage, tools, workspaces, and channels."
+description: "Use the AgentController class as a shared host for Session instances, then create sessions and manage conversation state, events, and run control."
 packages:
   - "@mastra/core"
 ---
@@ -406,7 +406,7 @@ Returns: `Promise<Session<TState> | undefined>`
 
 #### `onSessionCreated(listener, options?)`
 
-Subscribe to process-local notifications after `createSession()` materializes a new live session. Listener errors are isolated and don't prevent other listeners from running. Call the returned function to unsubscribe.
+Subscribe to process-local notifications after `createSession()` materializes a new live session, with isolated listener errors prevented from affecting other listeners. Call the returned function to unsubscribe.
 
 By default listeners are fire-and-forget. Pass `{ blocking: true }` to make `createSession()` await the listener before resolving the new session, so the host can prepare session state before the caller can start a run. Blocking listeners run sequentially in registration order, before fire-and-forget listeners are notified. A blocking listener must not call `createSession()` for the same `(resourceId, scope)` pair. That call would await its own hydration and deadlock.
 
@@ -431,7 +431,7 @@ Returns: `() => void`
 
 #### `onSessionDeleted(listener)`
 
-Subscribe to process-local notifications after `deleteSession()` tears down a live session. Listener errors are isolated and don't prevent other listeners from running. Call the returned function to unsubscribe.
+Subscribe to process-local notifications after `deleteSession()` tears down a live session, with isolated listener errors prevented from affecting other listeners. Call the returned function to unsubscribe.
 
 ```typescript
 const unsubscribe = controller.onSessionDeleted(session => {

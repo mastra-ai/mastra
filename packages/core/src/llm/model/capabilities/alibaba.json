@@ -7,6 +7,7 @@
     "qwen3.6-27b",
     "qwen3.6-35b-a3b",
     "qwen3.6-flash",
+    "qwen3.8-flash",
     "qwen3.8-max"
   ],
   "temperature": [
@@ -74,6 +75,7 @@
     "qwen3.6-27b",
     "qwen3.6-35b-a3b",
     "qwen3.6-flash",
+    "qwen3.8-flash",
     "qwen3.8-max"
   ]
 }

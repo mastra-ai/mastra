@@ -6,6 +6,7 @@ import {
   isNewerVersion,
   performUpdate,
 } from '@mastra/code-sdk/utils/update-check';
+import { insertChatComponentWithBoundarySpacing } from '../chat-boundary-reconciliation.js';
 import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
 import type { SlashCommandContext } from './types.js';
 
@@ -66,7 +67,7 @@ export async function handleUpdateCommand(ctx: SlashCommandContext): Promise<voi
       ctx.state.ui,
     );
 
-    ctx.state.chatContainer.addChild(component);
+    insertChatComponentWithBoundarySpacing(ctx.state.chatContainer, component);
     ctx.state.activeInlineQuestion = component;
     component.focused = true;
     ctx.state.ui.requestRender();

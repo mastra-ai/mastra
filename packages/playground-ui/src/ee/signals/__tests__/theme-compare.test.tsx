@@ -5,6 +5,7 @@ import { delay, http, HttpResponse } from 'msw';
 import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { useThemeSnapshots } from '../hooks/use-theme-snapshots';
 import { SankeySignals } from '../sankey-signals';
 import { timelineTickPositions } from '../snapshot-timeline-data';
 import { computeThemeShareDeltas, themeShareSeries } from '../theme-compare-data';
@@ -40,12 +41,19 @@ class ChartResizeObserver implements ResizeObserver {
 
 function ControlledSankeySignals() {
   const [selectedThemeId, setSelectedThemeId] = useState<string>();
+  const [selectedFrameId, setSelectedFrameId] = useState<string>();
+  const snapshotsQuery = useThemeSnapshots('support-agent', 'agent', ['goal', 'outcome', 'behavior', 'sentiment']);
+  const snapshots = [...(snapshotsQuery.data?.snapshots ?? [])].sort((left, right) => left.ordinal - right.ordinal);
+  const frameId = selectedFrameId ?? snapshots[0]?.snapshotId;
+  if (!frameId) return null;
   return (
     <SankeySignals
       entityId="support-agent"
       signalNames={['goal', 'outcome', 'behavior', 'sentiment']}
       selectedThemeId={selectedThemeId}
       onSelectedThemeIdChange={setSelectedThemeId}
+      selectedFrameId={frameId}
+      onFrameIdChange={setSelectedFrameId}
     />
   );
 }

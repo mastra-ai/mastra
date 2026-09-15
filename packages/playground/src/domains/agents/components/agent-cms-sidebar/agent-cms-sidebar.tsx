@@ -99,7 +99,7 @@ const SidebarLink = ({
       <Link
         href={href}
         className={cn(
-          'flex items-center gap-2.5 px-3 py-2 text-sm transition-colors border-r-2 border-transparent',
+          'flex items-center gap-2.5 px-3 py-2 text-ui-md transition-colors border-r-2 border-transparent',
           active ? 'bg-surface2 text-neutral5 border-accent1' : 'text-neutral3 hover:bg-surface3 hover:text-neutral5',
         )}
       >

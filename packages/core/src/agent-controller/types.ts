@@ -1,6 +1,7 @@
 import type { Agent } from '../agent';
 import type { MastraDBMessage } from '../agent/message-list/state/types';
 import type { AgentInstructions, ToolsInput } from '../agent/types';
+import type { BackgroundTaskManagerConfig } from '../background-tasks';
 import type { MastraBrowser } from '../browser/browser';
 import type { AgentControllerChannelsConfig } from '../channels/agent-controller-channels';
 import type { PubSub } from '../events/pubsub';
@@ -252,6 +253,9 @@ export interface AgentControllerConfig<TState = {}> {
 
   /** Storage backend for persistence (threads, messages, state) */
   storage?: MastraCompositeStore;
+
+  /** Background task configuration for the controller's standalone internal Mastra instance. */
+  backgroundTasks?: BackgroundTaskManagerConfig;
 
   /** Schema defining the shape of controller state (Zod, JSON Schema, Standard Schema, etc.) */
   stateSchema?: PublicSchema<TState, any>;
@@ -805,6 +809,14 @@ export type AgentControllerEvent =
       toolCallId: string;
       result: unknown;
       isError: boolean;
+      /**
+       * True when the tool call resolved without ever running because the user
+       * denied its approval gate or the run was aborted while it was parked
+       * waiting for approval. `isError` stays `false` in that case (the tool
+       * did not fail — it simply never executed), so subscribers that gate on
+       * "the tool actually did work" must exclude `denied === true`.
+       */
+      denied?: boolean;
       providerMetadata?: Record<string, unknown>;
     }
   | { type: 'tool_input_start'; toolCallId: string; toolName: string }
@@ -918,6 +930,7 @@ export type AgentControllerEvent =
       currentModel?: string;
     }
   | { type: 'om_thread_title_updated'; cycleId: string; threadId: string; oldTitle?: string; newTitle: string }
+  | { type: 'thread_title_updated'; threadId: string; title: string }
   | { type: 'subagent_start'; toolCallId: string; agentType: string; task: string; modelId: string; forked?: boolean }
   | { type: 'subagent_text_delta'; toolCallId: string; agentType: string; textDelta: string }
   | {

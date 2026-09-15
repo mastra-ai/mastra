@@ -347,6 +347,7 @@ export const WORKFLOW_DEFINITIONS_SCHEMA: Record<string, StorageColumn> = {
   stateSchema: { type: 'jsonb', nullable: true },
   requestContextSchema: { type: 'jsonb', nullable: true },
   graph: { type: 'jsonb', nullable: false },
+  schedule: { type: 'jsonb', nullable: true },
   status: { type: 'text', nullable: false }, // 'active' | 'archived'
   source: { type: 'text', nullable: false }, // always 'storage' for now
   authorId: { type: 'text', nullable: true },
@@ -645,6 +646,7 @@ export const EXPERIMENT_RESULTS_SCHEMA: Record<string, StorageColumn> = {
   input: { type: 'jsonb', nullable: false },
   output: { type: 'jsonb', nullable: true },
   groundTruth: { type: 'jsonb', nullable: true },
+  metadata: { type: 'jsonb', nullable: true },
   error: { type: 'jsonb', nullable: true },
   startedAt: { type: 'timestamp', nullable: false },
   completedAt: { type: 'timestamp', nullable: false },
@@ -668,6 +670,7 @@ export const KNOWLEDGE_NODES_SCHEMA: Record<string, StorageColumn> = {
   canonicalName: { type: 'text', nullable: false },
   kind: { type: 'text', nullable: true },
   content: { type: 'text', nullable: true },
+  description: { type: 'text', nullable: true },
   scope: { type: 'jsonb', nullable: false },
   scopeKey: { type: 'text', nullable: false },
   version: { type: 'integer', nullable: false },

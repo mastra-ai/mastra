@@ -59,8 +59,6 @@ const paths = {
   workflowRunLink: (workflowId: string, runId: string) => `/workflows/${workflowId}/runs/${runId}`,
   datasetLink: (datasetId: string) => `/datasets/${datasetId}`,
   datasetItemLink: (datasetId: string, itemId: string) => `/datasets/${datasetId}/items/${itemId}`,
-  datasetExperimentLink: (datasetId: string, experimentId: string) =>
-    `/datasets/${datasetId}/experiments/${experimentId}`,
   experimentLink: (experimentId: string) => `/experiments/${experimentId}`,
 } satisfies LinkComponentProviderProps['paths'];
 

@@ -1,6 +1,6 @@
 ---
 title: "Reference: toAISdkMessages() | AI SDK"
-description: API reference for toAISdkMessages(), a function to convert Mastra messages to AI SDK UI messages for AI SDK v5 or v6.
+description: "Converts messages from input formats to AI SDK UI message format. toAISdkMessages() keeps the existing AI SDK v5/default behavior."
 packages:
   - "@mastra/ai-sdk"
   - "@mastra/client-js"
@@ -16,7 +16,7 @@ Converts messages from input formats to AI SDK UI message format. `toAISdkMessag
 
 ## Usage example
 
-```typescript title="app/chat/page.tsx"
+```typescript title="app/chat/page.tsx" oxfmt:false
 import { toAISdkMessages } from '@mastra/ai-sdk/ui'
 import { useChat } from 'ai/react'
 
@@ -98,6 +98,22 @@ Returns an array of AI SDK `UIMessage` objects typed for the selected version.
   },
 ]}
 />
+
+## Terminal error parts
+
+When a v2 agent reaches a terminal failure, Mastra stores the failed assistant turn with an `error` part. The stored payload contains only the error name and message:
+
+```typescript
+const terminalErrorPart = {
+  type: 'error',
+  error: {
+    name: 'Error',
+    message: 'The model request failed.',
+  },
+}
+```
+
+`toAISdkMessages()` preserves this part in AI SDK UI messages so your application can render failed turns from history. Mastra removes `error` parts when it converts messages into provider prompts. An assistant message containing only an `error` part is omitted from the next model request.
 
 ## Examples
 

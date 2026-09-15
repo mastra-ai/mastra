@@ -15,6 +15,7 @@ export interface KnowledgeGraphNode {
   id: string;
   name: string;
   kind: string;
+  description?: string;
   scope: string[];
   rung: KnowledgeRung;
   /** A pinned record's wikilinks reference this node (the pin accent). */

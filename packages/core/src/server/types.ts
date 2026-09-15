@@ -267,8 +267,9 @@ export type ServerConfig = {
    * Max time (ms) to drain in-flight requests after SIGINT/SIGTERM. Must be a
    * finite number from 0 through 2_147_483_647. When the window passes,
    * remaining HTTP connections are force-closed. Mastra shutdown then runs
-   * either way (bounded separately) before the process exits. Set 0 to skip
-   * the drain entirely.
+   * either way before the process exits, giving in-flight evented workflow
+   * runs the same window to finish before pubsub is torn down. Set 0 to skip
+   * both drains.
    * @default 5000
    */
   drainTimeout?: number;
@@ -289,7 +290,15 @@ export type ServerConfig = {
    */
   apiRoutes?: ApiRoute[];
   /**
-   * Middleware for the server
+   * Middleware for the server. Handlers use Hono's `(c, next)` signature and
+   * run on Hono-based serving paths: `mastra dev` / `mastra build`,
+   * `@mastra/hono`, and adapters built on it such as `@mastra/next` and
+   * `@mastra/tanstack-start`. Handlers are skipped for routes declared public
+   * with `requiresAuth: false` (see `skipIfFrameworkPublic` in `@mastra/hono`),
+   * so they cannot block endpoints such as the Studio sign-in routes.
+   * Non-Hono adapters (Express, Fastify, Koa) cannot run Hono handlers and log
+   * a warning when this is set. Register middleware through the framework's
+   * own API there instead.
    */
   middleware?: Middleware | Middleware[];
   /**

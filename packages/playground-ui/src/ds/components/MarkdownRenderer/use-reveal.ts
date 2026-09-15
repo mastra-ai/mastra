@@ -21,9 +21,6 @@ const FASTEST = 60;
 /** Words it will never fall further behind than — about five seconds at full speed. */
 const MAX_LAG = 300;
 
-/** Words a reply already holds on its first render, which it joins rather than retypes. */
-const LEAD_IN = 12;
-
 interface Flow {
   /** Words per second the reply is arriving at, as an exponential average. */
   rate: number;
@@ -32,8 +29,11 @@ interface Flow {
 
 /** Decays what earlier words still count for, then deposits the ones that just arrived. */
 function measure(flow: Flow, now: number, gained: number): number {
-  flow.rate = flow.rate * Math.exp(-(now - flow.at) / FLOW_MS) + gained / (FLOW_MS / 1000);
-  flow.at = now;
+  // rAF timestamps and performance.now() are sampled at different points of a
+  // frame, so a fresh loop can read time slightly behind the last deposit.
+  const elapsed = Math.max(0, now - flow.at);
+  flow.rate = flow.rate * Math.exp(-elapsed / FLOW_MS) + gained / (FLOW_MS / 1000);
+  flow.at = Math.max(flow.at, now);
 
   return flow.rate;
 }
@@ -68,18 +68,22 @@ function wordStops(text: string): number[] {
  * hundred milliseconds, where a deeper buffer would spend the whole reply filling
  * and then sprint to catch up.
  *
+ * The reply it paces is whatever the caller hands it, so a caller with more than
+ * prose to lay down — a tool row between two paragraphs — paces the whole of it
+ * from one place and draws the rest against the same cursor.
+ *
  * Nothing here reads `streaming` past the first render: a reply that stops
  * arriving is one whose measured speed decays, which winds the buffer down on its
  * own. Words, not characters, are what a reader sees land, and they are not the
  * same length: an even flow of characters still drops "and if we do" in one frame
  * and spends four on "implementation".
  */
-export function useReveal(text: string, streaming: boolean): string {
+export function useRevealedText(text: string, streaming: boolean): string {
   const [calm] = useState(prefersReducedMotion);
   const stops = useMemo(() => wordStops(text), [text]);
   const words = stops.length - 1;
 
-  const [landed, setLanded] = useState(() => (streaming && !calm ? Math.max(0, words - LEAD_IN) : words));
+  const [landed, setLanded] = useState(() => (streaming && !calm ? 0 : words));
 
   // Winds the cursor back when a shorter reply replaces the one on screen, which
   // no key can express: same element, same message, new text.
@@ -104,8 +108,8 @@ export function useReveal(text: string, streaming: boolean): string {
 
     let drawn = performance.now();
     let frame = requestAnimationFrame(function step(now) {
-      const elapsed = now - drawn;
-      drawn = now;
+      const elapsed = Math.max(0, now - drawn);
+      drawn = Math.max(drawn, now);
 
       const arriving = measure(flow.current, now, 0);
       const from = cursor.current;

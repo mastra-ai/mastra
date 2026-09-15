@@ -1,6 +1,7 @@
 import type { JSONSchema7 } from 'json-schema';
 import { z } from 'zod/v4';
 import type { MastraDBMessage } from '../agent/message-list';
+import type { AgentSignalType } from '../agent/signals';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../schema';
 import type {
@@ -10,6 +11,7 @@ import type {
   StorageListThreadsOutput,
   StorageCloneThreadInput,
   StorageCloneThreadOutput,
+  StorageCopyThreadOutput,
 } from '../storage';
 import { InMemoryStore } from '../storage';
 import { createTool } from '../tools';
@@ -146,7 +148,10 @@ export class MockMemory extends MastraMemory {
     args: StorageListMessagesInput & {
       threadConfig?: MemoryConfigInternal;
       vectorSearchString?: string;
+      /** @deprecated Use hideSignals: [] to include all, or ['reactive', 'system-reminder'] to hide reminders. */
       includeSystemReminders?: boolean;
+      /** true hides all recognized signals, false includes all, or select exact stored types with an array. Overrides includeSystemReminders. */
+      hideSignals?: boolean | AgentSignalType[];
     },
   ): Promise<{
     messages: MastraDBMessage[];
@@ -162,6 +167,7 @@ export class MockMemory extends MastraMemory {
       threadConfig: _threadConfig,
       vectorSearchString: _vectorSearchString,
       includeSystemReminders,
+      hideSignals,
       ...listMessagesArgs
     } = args;
     const result = await memoryStorage.listMessages(listMessagesArgs);
@@ -171,6 +177,7 @@ export class MockMemory extends MastraMemory {
       messages: filterSystemReminderMessages(
         result.messages.filter(message => message.role !== 'system'),
         includeSystemReminders,
+        hideSignals,
       ),
     };
   }
@@ -442,5 +449,22 @@ export class MockMemory extends MastraMemory {
   async cloneThread(args: StorageCloneThreadInput): Promise<StorageCloneThreadOutput> {
     const memoryStorage = await this.getMemoryStore();
     return memoryStorage.cloneThread(args);
+  }
+
+  override async copyThread(args: StorageCloneThreadInput): Promise<StorageCopyThreadOutput> {
+    const memoryStorage = await this.getMemoryStore();
+    return memoryStorage.copyThread(args);
+  }
+
+  async updateThreadResourceId({
+    threadId,
+    resourceId,
+  }: {
+    threadId: string;
+    resourceId: string;
+    memoryConfig?: MemoryConfigInternal;
+  }): Promise<StorageThreadType> {
+    const memoryStorage = await this.getMemoryStore();
+    return memoryStorage.updateThreadResourceId({ threadId, resourceId });
   }
 }

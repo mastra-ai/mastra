@@ -3,36 +3,10 @@ import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../constants';
 import { extractLinesWithLimit, formatWithLineNumbers } from '../line-utils';
 import { emitWorkspaceMetadata, requireFilesystem } from './helpers';
+import type { MediaToolResult } from './media';
+import { DEFAULT_MAX_MEDIA_BYTES, mediaToModelOutput } from './media';
 import { applyTokenLimit } from './output-helpers';
 import { startWorkspaceSpan } from './tracing';
-
-/**
- * Internal marker on the tool's text result that signals to `toModelOutput`
- * that the file should be surfaced to the model as a media part (image or
- * binary file) rather than as plain text. We attach this on a wrapper object
- * but only the `text` field is shown to the model (via toModelOutput); the
- * marker is stripped before it ever reaches the model.
- *
- * The shape is intentionally JSON-serialisable so it round-trips through
- * storage layers that snapshot tool results.
- */
-type MediaToolResult = {
-  __workspaceMedia: true;
-  text: string;
-  mediaType: string;
-  data: string;
-};
-
-function isMediaToolResult(value: unknown): value is MediaToolResult {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    (value as Record<string, unknown>).__workspaceMedia === true &&
-    typeof (value as Record<string, unknown>).text === 'string' &&
-    typeof (value as Record<string, unknown>).mediaType === 'string' &&
-    typeof (value as Record<string, unknown>).data === 'string'
-  );
-}
 
 /**
  * Default mime types surfaced to the model as media parts. The list is
@@ -42,14 +16,6 @@ function isMediaToolResult(value: unknown): value is MediaToolResult {
  * that some providers reject. Override `mediaTypes` to broaden this.
  */
 const DEFAULT_MEDIA_TYPES: string[] = ['image/png', 'image/jpeg', 'image/webp', 'application/pdf'];
-
-/**
- * Default cap (in bytes) on inline media reads. Files larger than this fall
- * back to metadata-only output instead of being fully base64-encoded into
- * the model context (and persisted in storage on rehydration). 10 MiB is
- * roughly aligned with provider per-image/per-pdf limits.
- */
-const DEFAULT_MAX_MEDIA_BYTES = 10 * 1024 * 1024;
 
 /**
  * `application/*` mime types that are actually text content and safe to read
@@ -275,19 +241,8 @@ export const readFileTool = createTool({
       throw err;
     }
   },
-  toModelOutput: (output: unknown) => {
-    if (isMediaToolResult(output)) {
-      return {
-        type: 'content',
-        value: [
-          { type: 'text', text: output.text },
-          { type: 'media', data: output.data, mediaType: output.mediaType },
-        ],
-      };
-    }
-    // For plain string output, return undefined so we don't store a duplicate
-    // copy on providerMetadata.mastra.modelOutput — the original string result
-    // is already what the model sees.
-    return undefined;
-  },
+  // For plain string output, mediaToModelOutput returns undefined so we don't
+  // store a duplicate copy on providerMetadata.mastra.modelOutput — the
+  // original string result is already what the model sees.
+  toModelOutput: mediaToModelOutput,
 });

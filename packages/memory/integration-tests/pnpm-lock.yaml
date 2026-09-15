@@ -16,6 +16,8 @@ overrides:
   mastra: link:../../cli
   '@internal/llm-recorder': link:../../_llm-recorder
   '@internal/test-utils': link:../../_test-utils
+  '@internal/ai-v6': link:../../_vendored/ai_v6
+  '@mastra/schema-compat': link:../../schema-compat
 
 importers:
 
@@ -30,6 +32,9 @@ importers:
       '@ai-sdk/google':
         specifier: ^1.2.22
         version: 1.2.22(zod@3.25.76)
+      '@ai-sdk/google-ai6':
+        specifier: npm:@ai-sdk/google@^3.0.101
+        version: '@ai-sdk/google@3.0.119(zod@3.25.76)'
       '@ai-sdk/google-v5':
         specifier: npm:@ai-sdk/google@^2.0.70
         version: '@ai-sdk/google@2.0.83(zod@3.25.76)'
@@ -54,6 +59,9 @@ importers:
       '@ai-sdk/react-v6':
         specifier: npm:@ai-sdk/react@^4.0.23
         version: '@ai-sdk/react@4.0.36(react@19.2.7)(zod@3.25.76)'
+      '@internal/ai-v6':
+        specifier: link:../../_vendored/ai_v6
+        version: link:../../_vendored/ai_v6
       '@mastra/ai-sdk':
         specifier: link:../../../client-sdks/ai-sdk
         version: link:../../../client-sdks/ai-sdk
@@ -72,6 +80,9 @@ importers:
       '@mastra/pg':
         specifier: link:../../../stores/pg
         version: link:../../../stores/pg
+      '@mastra/schema-compat':
+        specifier: link:../../schema-compat
+        version: link:../../schema-compat
       '@mastra/upstash':
         specifier: link:../../../stores/upstash
         version: link:../../../stores/upstash
@@ -181,6 +192,12 @@ packages:
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
+  '@ai-sdk/google@3.0.119':
+    resolution: {integrity: sha512-KSumsSzFXLDLuQUV0vjr9MGcOw/RFFaHbT6GC4Nf178ZJ9K+dBvXR3mj/81HIf7ScOTe/WzOyuBWqTvGHkqOww==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      zod: ^3.25.76 || ^4.1.8
+
   '@ai-sdk/google@4.0.20':
     resolution: {integrity: sha512-3aU/y4pkMlRKMdSLDvYosmT/jwYnhpNrn9N4GTYrq0Pg+4MAXLtLwBX2VwpiJMaPfaIs2XCe0IWhEOWHblL1Ww==}
     engines: {node: '>=22'}
@@ -223,6 +240,12 @@ packages:
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
+  '@ai-sdk/provider-utils@4.0.50':
+    resolution: {integrity: sha512-YAcB+7M1JhAYsHorTrWyldCyZihjCKr/QRXH2vFrara/+lwqNE7q5KzoucKLZ7ktFiUonhnhFhRoiymsq/2K2Q==}
+    engines: {node: '>=18.17'}
+    peerDependencies:
+      zod: ^3.25.76 || ^4.1.8
+
   '@ai-sdk/provider-utils@5.0.12':
     resolution: {integrity: sha512-bbhlOgHeYwrIGheLkM6fhS8hVger8uFPmcOLg+kxc9EFh7y30XYorWhthlYAgpadO3SJhFZrIcEknN7qEqEVvA==}
     engines: {node: '>=22'}
@@ -235,6 +258,10 @@ packages:
 
   '@ai-sdk/provider@2.0.3':
     resolution: {integrity: sha512-h88OPkavHTiN9tMn2l5awAznGB0lXzjcLhgR1/rvjB2zlLprsNxbM2tt6OJsHUxduLC3klq0/eqaSf6fX5XVww==}
+    engines: {node: '>=18'}
+
+  '@ai-sdk/provider@3.0.15':
+    resolution: {integrity: sha512-XeZW1CcDF2GMbH4wejW6xBRI2QCOgnkVYUnxoeDadB1mf85riL2bMUeDoh+6gJ/r4mjNfzUPW8OjLjvwTP0u1Q==}
     engines: {node: '>=18'}
 
   '@ai-sdk/provider@4.0.3':
@@ -1403,6 +1430,10 @@ packages:
   undici-types@7.28.0:
     resolution: {integrity: sha512-LJAfY+2w6HGeT8d8J1wNQsUGUEGio6NWWpwdwurQe4f6oojzCFuGLizl1KSve4irsTxyLly1QhEeE6iapdaIvQ==}
 
+  undici@6.28.0:
+    resolution: {integrity: sha512-LIY910g9TI13YS95lrMFrs8Rm/u/irgHeTWoKCoteeJ04CUJ92eEfj0rVn+7VKMPBpUPiUoBKfhNyLI23EE/KA==}
+    engines: {node: '>=18.17'}
+
   undici@7.28.0:
     resolution: {integrity: sha512-cRZYrTDwWznlnRiPjggAGxZXanty6M8RV1ff8Wm4LWXBp7/IG8v5DnOm74DtUBp9OONpK75YlPnIjQqX0dBDtA==}
     engines: {node: '>=20.18.1'}
@@ -1585,6 +1616,12 @@ snapshots:
       '@ai-sdk/provider-utils': 3.0.30(zod@3.25.76)
       zod: 3.25.76
 
+  '@ai-sdk/google@3.0.119(zod@3.25.76)':
+    dependencies:
+      '@ai-sdk/provider': 3.0.15
+      '@ai-sdk/provider-utils': 4.0.50(zod@3.25.76)
+      zod: 3.25.76
+
   '@ai-sdk/google@4.0.20(zod@3.25.76)':
     dependencies:
       '@ai-sdk/provider': 4.0.3
@@ -1630,6 +1667,14 @@ snapshots:
       eventsource-parser: 3.1.0
       zod: 3.25.76
 
+  '@ai-sdk/provider-utils@4.0.50(zod@3.25.76)':
+    dependencies:
+      '@ai-sdk/provider': 3.0.15
+      '@standard-schema/spec': 1.1.0
+      eventsource-parser: 3.1.0
+      undici: 6.28.0
+      zod: 3.25.76
+
   '@ai-sdk/provider-utils@5.0.12(zod@3.25.76)':
     dependencies:
       '@ai-sdk/provider': 4.0.3
@@ -1643,6 +1688,10 @@ snapshots:
       json-schema: 0.4.0
 
   '@ai-sdk/provider@2.0.3':
+    dependencies:
+      json-schema: 0.4.0
+
+  '@ai-sdk/provider@3.0.15':
     dependencies:
       json-schema: 0.4.0
 
@@ -2603,6 +2652,8 @@ snapshots:
   undici-types@6.21.0: {}
 
   undici-types@7.28.0: {}
+
+  undici@6.28.0: {}
 
   undici@7.28.0: {}
 

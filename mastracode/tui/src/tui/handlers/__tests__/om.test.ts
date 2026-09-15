@@ -1,10 +1,10 @@
-import { Container } from '@earendil-works/pi-tui';
+import { Container, Text } from '@earendil-works/pi-tui';
 import stripAnsi from 'strip-ansi';
 import { describe, expect, it, vi } from 'vitest';
 
 import { isChatBoundarySpacer } from '../../components/chat-boundary-spacer.js';
 import type { TUIState } from '../../state.js';
-import { handleOMActivation, handleOMBufferingStart } from '../om.js';
+import { handleOMActivation, handleOMBufferingStart, handleOMObservationEnd, handleOMObservationStart } from '../om.js';
 import type { EventHandlerContext } from '../types.js';
 
 function createCtx() {
@@ -31,6 +31,18 @@ describe('OM event handlers', () => {
     expect(state.activeBufferingMarker).toBeUndefined();
     expect(state.chatContainer.children).not.toContain(marker);
     expect(state.ui.requestRender).toHaveBeenCalled();
+  });
+
+  it('preserves completed text caches when replacing an observation marker', () => {
+    const { ctx, state } = createCtx();
+    const completed = new Text('completed history', 0, 0);
+    state.chatContainer.addChild(completed);
+    const cachedLines = completed.render(80);
+
+    handleOMObservationStart(ctx, 'cycle-1', 100);
+    handleOMObservationEnd(ctx, 'cycle-1', 25, 100, 20, 'observed');
+
+    expect(completed.render(80)).toBe(cachedLines);
   });
 });
 

@@ -35,7 +35,7 @@ export const WithText: Story = {
 export const WithBadge: Story = {
   args: {
     label: 'Status',
-    children: <Badge variant="success">Active</Badge>,
+    children: <Badge variant="green">Active</Badge>,
   },
 };
 
@@ -60,7 +60,7 @@ export const MultipleEntries: Story = {
         </Txt>
       </Entry>
       <Entry label="Status">
-        <Badge variant="success">Running</Badge>
+        <Badge variant="green">Running</Badge>
       </Entry>
       <Entry label="Created">
         <Txt variant="ui-md" className="text-neutral6">

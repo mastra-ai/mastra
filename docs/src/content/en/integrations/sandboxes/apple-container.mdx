@@ -1,6 +1,6 @@
 ---
 title: "Apple Container | Sandbox"
-description: "API reference for AppleContainerSandbox, a local Apple container CLI sandbox for workspace command execution."
+description: "Run Mastra workspace commands in local OCI Linux containers with Apple container, including environment variables, mounts, networking, and reconnection."
 packages:
   - "@mastra/apple-container"
 ---
@@ -36,7 +36,7 @@ const workspace = new Workspace({
     volumes: {
       '/Users/me/project': '/workspace',
     },
-    workingDir: '/workspace',
+    workingDirectory: '/workspace',
   }),
 })
 
@@ -230,11 +230,18 @@ console.log(response.text)
     isOptional: true,
   },
   {
-    name: 'workingDir',
+    name: 'workingDirectory',
     type: 'string',
-    description: 'Working directory inside the container.',
+    description:
+      'Working directory inside the container, used as the default for command execution when no per-command `cwd` is given. A per-command `cwd` always wins.',
     isOptional: true,
     defaultValue: "'/workspace'",
+  },
+  {
+    name: 'workingDir',
+    type: 'string',
+    description: 'Deprecated alias for `workingDirectory`. When both are set, `workingDirectory` wins.',
+    isOptional: true,
   },
   {
     name: 'timeout',
@@ -353,7 +360,7 @@ const sandbox = new AppleContainerSandbox({
 
 These options are only applied when a new container is created. If the sandbox reconnects to an existing container with the same name, destroy and recreate the sandbox to apply changed runtime options.
 Apple `--tmpfs` accepts container paths only, such as `/tmp`; it doesn't accept Docker-style option specs like `/tmp:rw,size=256m`.
-When `readonlyRootfs` is enabled, make sure `workingDir` points to a path supplied by the image or a bind mount. A writable tmpfs is also supported.
+When `readonlyRootfs` is enabled, make sure `workingDirectory` points to a path supplied by the image or a bind mount. A writable tmpfs is also supported.
 
 ## Security model
 

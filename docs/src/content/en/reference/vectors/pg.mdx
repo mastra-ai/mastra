@@ -1,6 +1,6 @@
 ---
 title: "Reference: PG vector store | Vectors"
-description: Documentation for the PgVector class in Mastra, which provides vector search using PostgreSQL with pgvector extension.
+description: "The PgVector class provides vector search using PostgreSQL with pgvector extension. It provides reliable vector similarity search capabilities within your existing PostgreSQL database."
 packages:
   - "@mastra/core"
   - "@mastra/fastembed"
@@ -404,6 +404,8 @@ interface PGIndexStats {
   }
 }
 ```
+
+`count` is an exact `SELECT COUNT(*)`, which scans the whole table, so avoid calling `describeIndex()` on a hot path for a large index. Reads and writes never pay for it: they only use the index metadata, which comes from the Postgres catalog.
 
 ### `deleteIndex()`
 

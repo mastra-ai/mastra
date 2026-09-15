@@ -1,15 +1,15 @@
+import assert from 'node:assert';
+
 import { describe, expect, it } from 'vitest';
 
 import {
   AUDIT_CATEGORIES,
   auditActionLabel,
-  auditActionsForCategories,
-  auditDayEnd,
-  auditDayStart,
   auditActorLabel,
   auditCategory,
+  auditEventBounds,
   auditMetadataPreview,
-  auditRangeBetween,
+  auditNamespacesForCategories,
   auditVisibleMetadata,
   type AuditNamespace,
 } from './auditPresentation';
@@ -55,47 +55,26 @@ describe('audit presentation', () => {
 
   it('treats every selected category as no filter', () => {
     const all = new Set<AuditNamespace>(AUDIT_CATEGORIES.map(category => category.namespace));
-    expect(auditActionsForCategories(all)).toBeUndefined();
-    expect(auditActionsForCategories(new Set<AuditNamespace>(['run']))).toEqual([
-      'factory.run.started',
-      'factory.run.approved',
-      'factory.run.dismissed',
-    ]);
-    expect(auditActionsForCategories(new Set<AuditNamespace>(['intake']))).toEqual([
-      'factory.intake.config_updated',
-      'factory.intake.binding_updated',
-    ]);
+    expect(auditNamespacesForCategories(all)).toBeUndefined();
+    expect(auditNamespacesForCategories(new Set<AuditNamespace>(['agent', 'run']))).toEqual(['run', 'agent']);
   });
 
-  it('keeps partial category filters within the server action cap', () => {
-    for (const excluded of AUDIT_CATEGORIES) {
-      const selected = new Set<AuditNamespace>(
-        AUDIT_CATEGORIES.filter(category => category !== excluded).map(category => category.namespace),
-      );
-      expect(auditActionsForCategories(selected)?.length).toBeLessThanOrEqual(16);
-    }
-  });
+  it('spans the first and last event, padding a single-event log', () => {
+    const first = '2026-08-21T08:00:00.000Z';
+    const last = '2026-08-24T20:00:00.000Z';
 
-  it('uses inclusive local-day boundaries for mobile picks', () => {
-    const selected = new Date(2026, 7, 21, 12, 30);
-    const start = new Date(auditDayStart(selected));
-    const end = new Date(auditDayEnd(selected));
-
-    expect([start.getHours(), start.getMinutes(), start.getSeconds(), start.getMilliseconds()]).toEqual([0, 0, 0, 0]);
-    expect([end.getHours(), end.getMinutes(), end.getSeconds(), end.getMilliseconds()]).toEqual([23, 59, 59, 999]);
-  });
-
-  it('orders inverted picks and preserves a minimum range', () => {
-    const minute = 60_000;
-    const bounds = { from: 0, to: 10 * minute };
-
-    expect(auditRangeBetween(8 * minute, 2 * minute, bounds)).toEqual({
-      from: 2 * minute,
-      to: 8 * minute,
+    expect(auditEventBounds([event({ occurredAt: last }), event({ occurredAt: first })])).toEqual({
+      from: Date.parse(first),
+      to: Date.parse(last),
     });
-    expect(auditRangeBetween(4 * minute, 4 * minute, bounds)).toEqual({
-      from: 1.5 * minute,
-      to: 6.5 * minute,
-    });
+
+    const alone = auditEventBounds([event({ occurredAt: first })]);
+    assert(alone);
+    expect(alone.to - alone.from).toBe(60 * 60_000);
+  });
+
+  it('has no bounds when no event carries a usable time', () => {
+    expect(auditEventBounds([])).toBeUndefined();
+    expect(auditEventBounds([event({ occurredAt: 'not-a-date' })])).toBeUndefined();
   });
 });

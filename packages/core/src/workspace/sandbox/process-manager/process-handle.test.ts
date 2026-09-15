@@ -81,7 +81,7 @@ class TestProcessManager extends SandboxProcessManager {
       ensureRunning: async () => {
         this.ensureRunningCalls += 1;
       },
-    } as MastraSandbox;
+    } as unknown as MastraSandbox;
   }
 
   async spawn(_command: string, options?: SpawnProcessOptions): Promise<ProcessHandle> {

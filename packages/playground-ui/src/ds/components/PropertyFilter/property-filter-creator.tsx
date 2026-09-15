@@ -1,13 +1,24 @@
-import { ArrowLeftIcon, ChevronRightIcon, FilterIcon, ListFilterPlusIcon, PlusIcon } from 'lucide-react';
+import {
+  ArrowLeftIcon,
+  ChevronRightIcon,
+  FilterIcon,
+  ListFilterPlusIcon,
+  PlusIcon,
+  ListFilterPlus,
+  X,
+} from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PickMultiPanel } from './pick-multi-panel';
 import type { PropertyFilterField, PropertyFilterToken } from './types';
 import { Button } from '@/ds/components/Button/Button';
 import type { ButtonProps } from '@/ds/components/Button/Button';
 import { Combobox } from '@/ds/components/Combobox/combobox';
-import { Input } from '@/ds/components/Input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover/popover';
+import { MENU_SIDE_OFFSET, menuEmptyClass, menuItemClass, menuItemTrailingIconClass } from '@/ds/primitives/menu-item';
 import { cn } from '@/lib/utils';
+
+// Plain <button>s navigated with roving focus (not Base UI), so the highlight rides on `:focus`.
+const filterItemFocusClass = 'focus:bg-neutral6/5 focus:text-neutral6';
 
 export type PropertyFilterCreatorProps = {
   fields: PropertyFilterField[];
@@ -56,7 +67,6 @@ export function PropertyFilterCreator({
   }, [fields, hiddenFieldIds]);
   const [open, setOpen] = useState(false);
   const [fieldId, setFieldId] = useState<string | undefined>();
-  const [textValue, setTextValue] = useState('');
   const [multiValue, setMultiValue] = useState<string[]>([]);
   const [error, setError] = useState<string | undefined>();
   // Single source of truth for which pick-multi side panel is open. Opens only
@@ -64,7 +74,6 @@ export function PropertyFilterCreator({
   // auto-open (was too flicker-prone).
   const [openPickMultiFieldId, setOpenPickMultiFieldId] = useState<string | undefined>();
 
-  const textInputRef = useRef<HTMLInputElement>(null);
   // When the user picks a text field we close this popover and hand off focus
   // to the newly-created pill's input — prevent Radix from returning focus to
   // the trigger button in that case.
@@ -93,7 +102,6 @@ export function PropertyFilterCreator({
 
   const reset = useCallback(() => {
     setFieldId(undefined);
-    setTextValue('');
     setMultiValue([]);
     setError(undefined);
   }, []);
@@ -102,22 +110,17 @@ export function PropertyFilterCreator({
     if (!open) reset();
   }, [open, reset]);
 
-  useEffect(() => {
-    if (!open) return;
-    if (selectedField?.kind === 'text') textInputRef.current?.focus();
-  }, [open, selectedField]);
-
   /**
    * Replace whatever token exists for `fieldId` with the given value. Used by
    * both single-select (radio) and multi-select (checkbox) pick-multi panels.
-   * Pass `undefined` or `[]` to remove the token entirely.
+   * An empty list means nothing is selected, which removes the token here —
+   * unlike the applied pill, where the filter stays on in a neutral state.
    */
   const replacePickMultiToken = useCallback(
-    (fieldId: string, value: string | string[] | undefined) => {
+    (fieldId: string, value: string | string[]) => {
       const existingIndex = tokens.findIndex(t => t.fieldId === fieldId);
-      const shouldRemove = value === undefined || (Array.isArray(value) && value.length === 0);
 
-      if (shouldRemove) {
+      if (Array.isArray(value) && value.length === 0) {
         if (existingIndex === -1) return;
         onTokensChange(tokens.filter((_, i) => i !== existingIndex));
         return;
@@ -144,33 +147,25 @@ export function PropertyFilterCreator({
       setError(`Remove the existing ${selectedField.label} filter before adding another.`);
       return;
     }
-    if (selectedField.kind === 'text' && !textValue.trim()) {
-      setError(`Enter a value for ${selectedField.label}.`);
-      return;
-    }
-    if (selectedField.kind === 'multi-select' && multiValue.length === 0) {
+    if (multiValue.length === 0) {
       setError(`Choose at least one ${selectedField.label.toLowerCase()} value.`);
       return;
     }
-    const token: PropertyFilterToken =
-      selectedField.kind === 'multi-select'
-        ? { fieldId: selectedField.id, value: multiValue }
-        : { fieldId: selectedField.id, value: (textValue as string).trim() };
-    onTokensChange([...tokens, token]);
+    onTokensChange([...tokens, { fieldId: selectedField.id, value: multiValue }]);
     setOpen(false);
-  }, [multiValue, onTokensChange, selectedField, singleUseFieldIds, textValue, tokens]);
+  }, [multiValue, onTokensChange, selectedField, singleUseFieldIds, tokens]);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="outline" size={size} disabled={disabled}>
-          <ListFilterPlusIcon />
+        <Button variant="outline" size={size} disabled={disabled} icon={<ListFilterPlusIcon />}>
           {label}
         </Button>
       </PopoverTrigger>
       <PopoverContent
         align="end"
-        className="w-64 p-3"
+        sideOffset={MENU_SIDE_OFFSET}
+        className={cn('w-64', selectedField ? 'p-3' : 'p-1')}
         initialFocus={false}
         finalFocus={() => {
           if (skipCloseFocusRef.current) {
@@ -180,19 +175,14 @@ export function PropertyFilterCreator({
           return true;
         }}
       >
-        <div className="grid gap-3">
+        <div className={cn('grid', selectedField && 'gap-3')}>
           {selectedField && (
             <div className="flex items-center gap-2">
               <button
                 type="button"
                 aria-label="Back to properties"
                 className="text-neutral3 hover:text-neutral6 transition-colors"
-                onClick={() => {
-                  setFieldId(undefined);
-                  setTextValue('');
-                  setMultiValue([]);
-                  setError(undefined);
-                }}
+                onClick={reset}
               >
                 <ArrowLeftIcon className="size-4" />
               </button>
@@ -244,13 +234,7 @@ export function PropertyFilterCreator({
                       type="button"
                       role="menuitem"
                       data-filter-item=""
-                      className={cn(
-                        'group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-ui-md transition-colors',
-                        'focus:bg-surface4 focus:text-neutral6 focus:outline-none',
-                        used
-                          ? 'cursor-not-allowed text-neutral2 opacity-70'
-                          : 'text-neutral4 hover:bg-surface4 hover:text-neutral6',
-                      )}
+                      className={cn(menuItemClass, 'group', filterItemFocusClass)}
                       disabled={used}
                       onClick={() => {
                         setError(undefined);
@@ -268,37 +252,25 @@ export function PropertyFilterCreator({
                       {used ? (
                         <span className="text-neutral3 ml-auto">In use</span>
                       ) : (
-                        <PlusIcon className="text-neutral3 ml-auto size-4 opacity-0 transition-opacity group-hover:opacity-100 group-focus:opacity-100" />
+                        <span
+                          className={cn(
+                            menuItemTrailingIconClass,
+                            'text-neutral3 opacity-0 transition-opacity group-hover:opacity-100 group-focus:opacity-100',
+                          )}
+                        >
+                          <PlusIcon />
+                        </span>
                       )}
                     </button>
                   );
                 })
               ) : (
-                <div className="text-ui-sm text-neutral3 px-2 py-1.5">No matching property.</div>
+                <div className={menuEmptyClass}>No matching property.</div>
               )}
             </div>
           )}
 
-          {selectedField && selectedField.kind === 'text' && (
-            <Input
-              ref={textInputRef}
-              size="md"
-              value={textValue}
-              onChange={e => {
-                setTextValue(e.target.value);
-                setError(undefined);
-              }}
-              placeholder={selectedField.placeholder ?? `Enter ${selectedField.label}`}
-              onKeyDown={e => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  commit();
-                }
-              }}
-            />
-          )}
-
-          {selectedField && selectedField.kind === 'multi-select' && (
+          {selectedField && (
             <Combobox
               multiple
               options={selectedField.options ?? []}
@@ -316,12 +288,12 @@ export function PropertyFilterCreator({
 
           {error && <div className="text-ui-sm text-red-500">{error}</div>}
 
-          {selectedField && selectedField.kind !== 'pick-multi' && (
+          {selectedField && (
             <div className="flex items-center justify-end gap-2">
-              <Button variant="ghost" size="md" onClick={() => setOpen(false)}>
+              <Button icon={<X />} variant="ghost" size="md" onClick={() => setOpen(false)}>
                 Cancel
               </Button>
-              <Button variant="outline" size="md" onClick={commit}>
+              <Button icon={<ListFilterPlus />} variant="outline" size="md" onClick={commit}>
                 Add filter
               </Button>
             </div>
@@ -337,7 +309,7 @@ type PickMultiField = Extract<PropertyFilterField, { kind: 'pick-multi' }>;
 type PickMultiMenuItemProps = {
   field: PickMultiField;
   tokens: PropertyFilterToken[];
-  onChange: (fieldId: string, value: string | string[] | undefined) => void;
+  onChange: (fieldId: string, value: string | string[]) => void;
   open: boolean;
   onToggle: (fieldId: string) => void;
   onClose: () => void;
@@ -366,10 +338,7 @@ function PickMultiMenuItem({ field, tokens, onChange, open, onToggle, onClose }:
           type="button"
           role="menuitem"
           data-filter-item=""
-          className={cn(
-            'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-ui-md text-neutral4 transition-colors hover:bg-surface4 hover:text-neutral6',
-            'focus:bg-surface4 focus:text-neutral6 focus:outline-none',
-          )}
+          className={cn(menuItemClass, filterItemFocusClass)}
           onKeyDown={e => {
             if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
             if (!open) onToggle(field.id);
@@ -382,17 +351,21 @@ function PickMultiMenuItem({ field, tokens, onChange, open, onToggle, onClose }:
             });
           }}
         >
-          {open && <ChevronRightIcon className="text-neutral3 size-4 shrink-0" />}
+          {open && <ChevronRightIcon className="text-neutral3" />}
           <span className="truncate">{field.label}</span>
-          {!open && <ChevronRightIcon className="text-neutral3 ml-auto size-4 shrink-0" />}
+          {!open && (
+            <span className={cn(menuItemTrailingIconClass, 'text-neutral3')}>
+              <ChevronRightIcon />
+            </span>
+          )}
         </button>
       </PopoverTrigger>
       <PopoverContent
         ref={contentRef}
         side="right"
         align="start"
-        sideOffset={8}
-        className="w-64 p-2"
+        sideOffset={MENU_SIDE_OFFSET}
+        className="w-64 p-0"
         initialFocus={false}
         onKeyDown={e => {
           if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'Home' && e.key !== 'End') return;

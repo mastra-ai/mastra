@@ -57,7 +57,7 @@ tokens:
 
   # === Colon-cheat: copula-replacement remediation ===
   # AI evades weak-verb / passive-voice lints by replacing "is" or
-  # "are" with a colon — same appositive shape, no verb.
+  # "are" with a colon — same appositive construction, no verb.
   # "The candidate mechanism is a hook." -->
   # "The candidate mechanism: a hook on Bash that..."
   # Triggered by a 4+ word definite-NP subject, indefinite article

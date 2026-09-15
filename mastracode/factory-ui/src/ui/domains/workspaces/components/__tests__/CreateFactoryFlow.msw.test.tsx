@@ -6,7 +6,7 @@
  * and quitting halfway leaves nothing on the server — until the model step
  * commits the whole thing.
  */
-import { screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
@@ -43,7 +43,6 @@ const repo = {
   private: false,
   installationId: 7,
   installationStorageId: 'inst-7',
-  repositoryStorageId: 'repo-99',
   sandboxProvider: 'local',
   sandboxWorkdir: '/workspace/hello',
 };
@@ -147,6 +146,38 @@ describe('Create Factory wizard', () => {
     expect(screen.queryByLabelText('Loading repositories')).not.toBeInTheDocument();
   });
 
+  it('debounces repository searches before requesting filtered results', async () => {
+    const queries: string[] = [];
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects`, () => HttpResponse.json({ projects: [] })),
+      http.get(`${TEST_BASE_URL}/web/github/status`, () => HttpResponse.json(connectedGithub)),
+      http.get(`${TEST_BASE_URL}/web/github/repos`, ({ request }) => {
+        queries.push(new URL(request.url).searchParams.get('q') ?? '');
+        return HttpResponse.json({ repos: [repo] });
+      }),
+    );
+    const user = userEvent.setup();
+
+    const { client } = renderFlow();
+
+    await screen.findByRole('heading', { name: 'Name your new Factory' });
+    await waitForMutationsIdle(client);
+    expect(queries).toEqual(['']);
+    await user.type(await screen.findByLabelText('Factory name'), 'Mastra{Enter}');
+    const search = await screen.findByLabelText('Search repositories');
+    await waitForMutationsIdle(client);
+    expect(queries.length).toBeGreaterThanOrEqual(2);
+    queries.splice(0);
+
+    const deliberateUser = userEvent.setup({ delay: 350 });
+    await deliberateUser.type(search, 'jal');
+
+    expect(queries).toEqual([]);
+    await act(() => new Promise(resolve => setTimeout(resolve, 800)));
+    await waitForMutationsIdle(client);
+    expect(queries).toEqual(['jal']);
+  });
+
   it('submits the typed name with Enter', async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects`, () => HttpResponse.json({ projects: [] })),
@@ -189,7 +220,7 @@ describe('Create Factory wizard', () => {
   it('creates the Factory, links the repository and saves the model on the last step', async () => {
     const calls: string[] = [];
     seedDraft('project-management');
-    const { patchedBodies } = stubModelStepEndpoints(calls);
+    const { patchedBodies, intakeConfigs } = stubModelStepEndpoints(calls);
     server.use(
       http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
         HttpResponse.json({ enabled: true, connected: false, reason: 'not_connected' }),
@@ -212,8 +243,30 @@ describe('Create Factory wizard', () => {
     await waitForMutationsIdle(client);
     expect(calls).toEqual(['create', 'connect', 'link']);
     expect(patchedBodies).toEqual([{ defaultModelId: 'anthropic/claude-sonnet-4-5' }]);
+    // The picked repository feeds Work intake without a trip to Settings.
+    expect(intakeConfigs).toEqual([
+      { github: { enabled: true, sourceIds: ['octo/hello'] }, linear: { enabled: false, sourceIds: null } },
+    ]);
     expect(screen.getByTestId('pathname')).toHaveTextContent('/factories/fp-1');
     expect(sessionStorage.getItem(STEP_KEY)).toBeNull();
+  });
+
+  it('skips the intake write when the repository already feeds issue intake', async () => {
+    const calls: string[] = [];
+    seedDraft('model-provider');
+    const { intakeConfigs } = stubModelStepEndpoints(calls, {
+      github: { enabled: true, sourceIds: ['octo/hello'] },
+    });
+    const user = userEvent.setup();
+
+    const { client } = renderFlow();
+
+    await user.click(await screen.findByRole('option', { name: /Anthropic/ }));
+    await user.click(await screen.findByRole('option', { name: /anthropic\/claude-sonnet-4-5/ }));
+
+    await waitForMutationsIdle(client);
+    // A retry or a second Factory over the same repo must not rewrite the selection.
+    expect(intakeConfigs).toEqual([]);
   });
 
   it('resumes a failed commit without creating a second Factory', async () => {
@@ -381,17 +434,9 @@ describe('Create Factory wizard', () => {
     const calls: string[] = [];
     seedDraft('project-management');
     stubConnectedLinear();
-    stubModelStepEndpoints(calls);
+    const { intakeConfigs } = stubModelStepEndpoints(calls);
     const bindings: unknown[] = [];
-    const intakeConfigs: unknown[] = [];
     server.use(
-      http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
-        HttpResponse.json({ config: { linear: { enabled: false, sourceIds: null } } }),
-      ),
-      http.put(`${TEST_BASE_URL}/web/intake/config`, async ({ request }) => {
-        intakeConfigs.push(await request.json());
-        return HttpResponse.json({ config: { linear: { enabled: true, sourceIds: null } } });
-      }),
       http.put(`${TEST_BASE_URL}/web/intake/bindings`, async ({ request }) => {
         bindings.push(await request.json());
         return HttpResponse.json({ bindings: [] });
@@ -406,17 +451,19 @@ describe('Create Factory wizard', () => {
     await user.click(await screen.findByRole('option', { name: /anthropic\/claude-sonnet-4-5/ }));
 
     await waitForMutationsIdle(client);
-    expect(bindings).toEqual([{ integrationId: 'linear', sourceId: 'lin-1', factoryProjectId: 'fp-1' }]);
-    // Its issues only reach the board once Linear intake is on.
-    expect(intakeConfigs).toHaveLength(1);
-    expect(intakeConfigs[0]).toMatchObject({ linear: { enabled: true, sourceIds: null } });
+    expect(bindings).toEqual([{ integrationId: 'linear', sourceId: 'lin-1', factoryProjectId: 'fp-1', board: 'work' }]);
+    // The link feeds the repository first; the Linear pick lands on top of it.
+    expect(intakeConfigs).toEqual([
+      { github: { enabled: true, sourceIds: ['octo/hello'] }, linear: { enabled: false, sourceIds: null } },
+      { github: { enabled: true, sourceIds: ['octo/hello'] }, linear: { enabled: true, sourceIds: ['lin-1'] } },
+    ]);
   });
 
-  it('leaves intake untouched when Linear is skipped', async () => {
+  it('keeps Linear out of intake when it is skipped', async () => {
     const calls: string[] = [];
     seedDraft('project-management');
     stubConnectedLinear();
-    stubModelStepEndpoints(calls);
+    const { intakeConfigs } = stubModelStepEndpoints(calls);
     const bindings: unknown[] = [];
     server.use(
       http.put(`${TEST_BASE_URL}/web/intake/bindings`, async ({ request }) => {
@@ -434,7 +481,11 @@ describe('Create Factory wizard', () => {
 
     await waitForMutationsIdle(client);
     expect(screen.getByTestId('pathname')).toHaveTextContent('/factories/fp-1');
+    // No Linear routing without a picked project; only the repository feeds intake.
     expect(bindings).toEqual([]);
+    expect(intakeConfigs).toEqual([
+      { github: { enabled: true, sourceIds: ['octo/hello'] }, linear: { enabled: false, sourceIds: null } },
+    ]);
   });
 
   it('restarts at the name step when the stored draft has no repository to commit', async () => {
@@ -518,13 +569,33 @@ const linkedRepository = {
 };
 
 /**
- * Stub everything the last step writes: the Factory create, the repository
- * link, the PATCH that saves the model pick and the hidden OM provider-defaults
- * save — plus the provider catalog the step lists. `calls` records the write
- * order; the returned array collects the PATCH bodies.
+ * Stub the intake config the last step reads and writes, collecting every
+ * saved config body. Stateful: each PUT becomes what the next GET returns.
  */
-function stubModelStepEndpoints(calls: string[]) {
+function stubIntakeConfig(initial: Record<string, unknown> = {}) {
+  let config = initial;
+  const savedConfigs: unknown[] = [];
+  server.use(
+    http.get(`${TEST_BASE_URL}/web/intake/config`, () => HttpResponse.json({ config })),
+    http.put<never, Record<string, unknown>>(`${TEST_BASE_URL}/web/intake/config`, async ({ request }) => {
+      config = await request.json();
+      savedConfigs.push(config);
+      return HttpResponse.json({ config });
+    }),
+  );
+  return savedConfigs;
+}
+
+/**
+ * Stub everything the last step writes: the Factory create, the repository
+ * link, the intake wiring, the PATCH that saves the model pick and the hidden
+ * OM provider-defaults save — plus the provider catalog the step lists. `calls`
+ * records the write order; the returned arrays collect the PATCH and intake
+ * bodies.
+ */
+function stubModelStepEndpoints(calls: string[], intakeConfig: Record<string, unknown> = {}) {
   const patchedBodies: unknown[] = [];
+  const intakeConfigs = stubIntakeConfig(intakeConfig);
   let savedModelId: string | null = null;
   let created = false;
   server.use(
@@ -547,7 +618,10 @@ function stubModelStepEndpoints(calls: string[]) {
       `${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections/conn-1/repositories`,
       async ({ request }) => {
         calls.push('link');
-        expect(await request.json()).toMatchObject({ repositoryId: 'repo-99', branch: 'main' });
+        expect(await request.json()).toMatchObject({
+          repository: { externalId: '99', slug: 'octo/hello' },
+          branch: 'main',
+        });
         return HttpResponse.json({ projectRepository: linkedRepository });
       },
     ),
@@ -577,7 +651,7 @@ function stubModelStepEndpoints(calls: string[]) {
     ),
     http.post(`${TEST_BASE_URL}/web/config/om/provider-defaults`, () => HttpResponse.json({ ok: true, config: {} })),
   );
-  return { patchedBodies };
+  return { patchedBodies, intakeConfigs };
 }
 
 function stubConnectedLinear() {

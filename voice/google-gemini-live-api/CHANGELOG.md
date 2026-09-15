@@ -1,5 +1,93 @@
 # @mastra/voice-google-gemini-live
 
+## 0.14.10
+
+### Patch Changes
+
+- Fix missing usage events when Gemini Live sends usage metadata alongside response content, setup, or tool calls. Preserve content-derived modality and normal message routing while processing usage independently. ([#23835](https://github.com/mastra-ai/mastra/pull/23835))
+
+- Fixed realtime audio input to include the configured sample rate in its MIME type, so Gemini Live can interpret incoming PCM audio at the correct rate. ([#23834](https://github.com/mastra-ai/mastra/pull/23834))
+
+- Updated dependencies [[`ffe16f1`](https://github.com/mastra-ai/mastra/commit/ffe16f17447449b7155f1f15992e3c9e5f6511ac), [`80608ed`](https://github.com/mastra-ai/mastra/commit/80608ede1a9e5d7d8488ac511245bf327e8987e3)]:
+  - @mastra/schema-compat@1.3.10
+
+## 0.14.10-alpha.1
+
+### Patch Changes
+
+- Fix missing usage events when Gemini Live sends usage metadata alongside response content, setup, or tool calls. Preserve content-derived modality and normal message routing while processing usage independently. ([#23835](https://github.com/mastra-ai/mastra/pull/23835))
+
+- Fixed realtime audio input to include the configured sample rate in its MIME type, so Gemini Live can interpret incoming PCM audio at the correct rate. ([#23834](https://github.com/mastra-ai/mastra/pull/23834))
+
+- Updated dependencies [[`ffe16f1`](https://github.com/mastra-ai/mastra/commit/ffe16f17447449b7155f1f15992e3c9e5f6511ac)]:
+  - @mastra/schema-compat@1.3.10-alpha.1
+
+## 0.14.10-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`80608ed`](https://github.com/mastra-ai/mastra/commit/80608ede1a9e5d7d8488ac511245bf327e8987e3)]:
+  - @mastra/schema-compat@1.3.10-alpha.0
+
+## 0.14.9
+
+### Patch Changes
+
+- Deduplicate tool calls by provider call id: the same function call delivered through both `serverContent.modelTurn.parts[].functionCall` and a top-level `toolCall` message now executes once and emits a single `toolResponse` instead of running the tool twice. ([#22985](https://github.com/mastra-ai/mastra/pull/22985))
+
+- Send a functionResponse when Gemini Live calls an unregistered tool name. Previously the provider emitted a tool_not_found error and returned without answering the call, leaving the turn unanswered so the model went silent until the user hung up. ([#23131](https://github.com/mastra-ai/mastra/pull/23131))
+
+- Updated dependencies [[`40f3647`](https://github.com/mastra-ai/mastra/commit/40f36478291d6098f762fc639d545357732b77b4)]:
+  - @mastra/schema-compat@1.3.9
+
+## 0.14.9-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`40f3647`](https://github.com/mastra-ai/mastra/commit/40f36478291d6098f762fc639d545357732b77b4)]:
+  - @mastra/schema-compat@1.3.9-alpha.0
+
+## 0.14.9-alpha.1
+
+### Patch Changes
+
+- Send a functionResponse when Gemini Live calls an unregistered tool name. Previously the provider emitted a tool_not_found error and returned without answering the call, leaving the turn unanswered so the model went silent until the user hung up. ([#23131](https://github.com/mastra-ai/mastra/pull/23131))
+
+## 0.14.9-alpha.0
+
+### Patch Changes
+
+- Deduplicate tool calls by provider call id: the same function call delivered through both `serverContent.modelTurn.parts[].functionCall` and a top-level `toolCall` message now executes once and emits a single `toolResponse` instead of running the tool twice. ([#22985](https://github.com/mastra-ai/mastra/pull/22985))
+
+## 0.14.8
+
+### Patch Changes
+
+- Update README to include accurate, up-to-date information ([#22858](https://github.com/mastra-ai/mastra/pull/22858))
+
+- Remove `CHANGELOG.md` from distributed npm files resulting in reduced package size ([#22737](https://github.com/mastra-ai/mastra/pull/22737))
+
+- Updated dependencies [[`e983f74`](https://github.com/mastra-ai/mastra/commit/e983f749873189f767f509eb33d1a3596c0f1c74), [`28ce924`](https://github.com/mastra-ai/mastra/commit/28ce924276eeca492e6a360e5482ed20c2785ef6)]:
+  - @mastra/schema-compat@1.3.8
+
+## 0.14.8-alpha.1
+
+### Patch Changes
+
+- Update README to include accurate, up-to-date information ([#22858](https://github.com/mastra-ai/mastra/pull/22858))
+
+- Updated dependencies [[`e983f74`](https://github.com/mastra-ai/mastra/commit/e983f749873189f767f509eb33d1a3596c0f1c74)]:
+  - @mastra/schema-compat@1.3.8-alpha.1
+
+## 0.14.8-alpha.0
+
+### Patch Changes
+
+- Remove `CHANGELOG.md` from distributed npm files resulting in reduced package size ([#22737](https://github.com/mastra-ai/mastra/pull/22737))
+
+- Updated dependencies [[`28ce924`](https://github.com/mastra-ai/mastra/commit/28ce924276eeca492e6a360e5482ed20c2785ef6)]:
+  - @mastra/schema-compat@1.3.8-alpha.0
+
 ## 0.14.7
 
 ### Patch Changes

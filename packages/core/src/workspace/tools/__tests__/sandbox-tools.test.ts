@@ -3,7 +3,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { WORKSPACE_TOOLS } from '../../constants';
 import type { CommandResult } from '../../sandbox';
 import { Workspace } from '../../workspace';
-import { executeCommandTool, executeCommandWithBackgroundTool } from '../execute-command';
+import { executeCommandInputSchema, executeCommandTool, executeCommandWithBackgroundTool } from '../execute-command';
 import { getProcessOutputTool } from '../get-process-output';
 import { killProcessTool } from '../kill-process';
 import {
@@ -510,6 +510,31 @@ describe('get_process_output tool', () => {
       const result = await getProcessOutputTool.execute({ pid: '14', tail: 0 }, ctx);
       expect(result).toContain('log 1\n');
       expect(result).toContain('log 500');
+    });
+  });
+
+  describe('tail schema validation', () => {
+    it('execute_command rejects a fractional tail', () => {
+      expect(executeCommandInputSchema.safeParse({ command: 'ls', tail: 2.5 }).success).toBe(false);
+      expect(executeCommandInputSchema.safeParse({ command: 'ls', tail: '2.5' }).success).toBe(false);
+    });
+
+    it('execute_command accepts an integer tail (number or numeric string)', () => {
+      expect(executeCommandInputSchema.safeParse({ command: 'ls', tail: 2 }).success).toBe(true);
+      expect(executeCommandInputSchema.safeParse({ command: 'ls', tail: '2' }).success).toBe(true);
+      expect(executeCommandInputSchema.safeParse({ command: 'ls', tail: 0 }).success).toBe(true);
+      expect(executeCommandInputSchema.safeParse({ command: 'ls', tail: -5 }).success).toBe(true);
+    });
+
+    it('get_process_output rejects a fractional tail', () => {
+      expect(getProcessOutputTool.inputSchema.safeParse({ pid: '1', tail: 2.5 }).success).toBe(false);
+      expect(getProcessOutputTool.inputSchema.safeParse({ pid: '1', tail: '2.5' }).success).toBe(false);
+    });
+
+    it('get_process_output accepts an integer tail (number or numeric string)', () => {
+      expect(getProcessOutputTool.inputSchema.safeParse({ pid: '1', tail: 2 }).success).toBe(true);
+      expect(getProcessOutputTool.inputSchema.safeParse({ pid: '1', tail: '2' }).success).toBe(true);
+      expect(getProcessOutputTool.inputSchema.safeParse({ pid: '1', tail: 0 }).success).toBe(true);
     });
   });
 

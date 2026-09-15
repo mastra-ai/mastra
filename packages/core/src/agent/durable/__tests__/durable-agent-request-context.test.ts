@@ -276,6 +276,9 @@ describe('DurableAgent RequestContext reserved keys', () => {
 
       const requestContext = new RequestContext();
       requestContext.set('userId', 'user-123');
+      // A delegated/caller context can still carry the parent's framework-managed
+      // memory entry before preparation installs or clears this run's own value.
+      requestContext.set('MastraMemory', { thread: { id: 'parent-thread' }, resourceId: 'parent-resource' });
       // Non-JSON values are dropped from the snapshot.
       requestContext.set('liveHandle', () => 'not-serializable');
 

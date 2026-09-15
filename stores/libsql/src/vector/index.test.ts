@@ -3,12 +3,13 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { createVectorTestSuite } from '@internal/storage-test-utils';
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { createClient } from '@libsql/client';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest';
 
 import { LibSQLVector } from './index.js';
 
 const libSQLVectorDB = new LibSQLVector({
-  url: 'file::memory:?cache=shared',
+  url: process.env.LIBSQL_TEST_URL ?? 'file::memory:?cache=shared',
   id: 'libsql-shared-test',
 });
 
@@ -35,9 +36,8 @@ createVectorTestSuite({
   supportsNotOperator: false,
   // LibSQL-specific: validates and rejects $nor operator
   supportsNorOperator: false,
-  // LibSQL-specific: doesn't support $elemMatch or $size operators
+  // LibSQL-specific: doesn't support $elemMatch
   supportsElemMatch: false,
-  supportsSize: false,
   // LibSQL-specific: silently handles malformed operators (returns empty results instead of throwing)
   supportsStrictOperatorValidation: false,
 });
@@ -267,5 +267,141 @@ describe('LibSQLVector - Store Specific', () => {
 
       expect(results.length).toBe(0);
     });
+  });
+});
+
+describe('LibSQLVector local-file concurrency', () => {
+  let tmpDir: string;
+  let vectors: LibSQLVector[];
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'libsql-vector-concurrency-'));
+    vectors = [];
+  });
+
+  afterEach(async () => {
+    await Promise.all(vectors.map(vector => vector.close()));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('serializes concurrent index creation and preserves every write with a clean database', async () => {
+    const dbPath = path.join(tmpDir, 'shared.db');
+    const indexName = 'concurrent_vectors';
+    const instanceCount = 12;
+    vectors = Array.from(
+      { length: instanceCount },
+      (_, index) => new LibSQLVector({ id: `concurrent-${index}`, url: `file:${dbPath}` }),
+    );
+
+    await Promise.all(
+      vectors.map(async (vector, index) => {
+        await vector.createIndex({ indexName, dimension: 4 });
+        await vector.upsert({
+          indexName,
+          ids: [`vector-${index}`],
+          vectors: [[index + 1, 0, 0, 0]],
+          metadata: [{ label: `write-${index}` }],
+        });
+      }),
+    );
+
+    await expect(vectors[0]!.describeIndex({ indexName })).resolves.toMatchObject({ count: instanceCount });
+
+    const integrityClient = createClient({ url: `file:${dbPath}` });
+    try {
+      const records = await integrityClient.execute(`SELECT metadata FROM ${indexName}`);
+      expect(new Set(records.rows.map(record => JSON.parse(record.metadata as string).label))).toEqual(
+        new Set(Array.from({ length: instanceCount }, (_, index) => `write-${index}`)),
+      );
+
+      const integrity = await integrityClient.execute('PRAGMA integrity_check;');
+      expect(integrity.rows).toHaveLength(1);
+      expect(Object.values(integrity.rows[0]!)).toEqual(['ok']);
+    } finally {
+      integrityClient.close();
+    }
+  });
+
+  it('canonicalizes relative, absolute, percent-encoded, and symlinked-parent file URLs to one queue', async () => {
+    const realParent = path.join(tmpDir, 'real parent');
+    const linkedParent = path.join(tmpDir, 'linked-parent');
+    fs.mkdirSync(realParent);
+    fs.symlinkSync(realParent, linkedParent, 'dir');
+
+    const absolutePath = path.join(realParent, 'aliases.db');
+    const relativePath = path.relative(process.cwd(), absolutePath);
+    const encodedPath = absolutePath.replaceAll(' ', '%20');
+    const linkedPath = path.join(linkedParent, 'aliases.db');
+    const urls = [`file:${relativePath}`, `file:${absolutePath}`, `file:${encodedPath}`, `file:${linkedPath}`];
+    vectors = urls.map((url, index) => new LibSQLVector({ id: `alias-${index}`, url }));
+
+    await Promise.all(vectors.map(vector => vector.createIndex({ indexName: 'aliases', dimension: 2 })));
+    await Promise.all(
+      vectors.map((vector, index) =>
+        vector.upsert({
+          indexName: 'aliases',
+          ids: [`alias-${index}`],
+          vectors: [[index + 1, 0]],
+          metadata: [{ spelling: index }],
+        }),
+      ),
+    );
+
+    await expect(vectors[0]!.describeIndex({ indexName: 'aliases' })).resolves.toMatchObject({ count: urls.length });
+  });
+
+  it('awaits initialization before a public operation touches the client', async () => {
+    const vector = new LibSQLVector({ id: 'initialization-order', url: `file:${path.join(tmpDir, 'order.db')}` });
+    vectors.push(vector);
+    const internals = vector as unknown as {
+      initialization: Promise<void>;
+      turso: ReturnType<typeof createClient>;
+    };
+    await internals.initialization;
+
+    let releaseInitialization!: () => void;
+    internals.initialization = new Promise<void>(resolve => {
+      releaseInitialization = resolve;
+    });
+    const executeSpy = vi.spyOn(internals.turso, 'execute');
+    const operation = vector.listIndexes();
+
+    await Promise.resolve();
+    expect(executeSpy).not.toHaveBeenCalled();
+    releaseInitialization();
+    await expect(operation).resolves.toEqual([]);
+    expect(executeSpy).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('LibSQLVector bare :memory: concurrency', () => {
+  // Regression for mastra-ai/mastra#22328: a bare `:memory:` url has a single
+  // connection, so interleaved upserts, queries and index reads must queue
+  // behind each other's interactive transactions instead of failing with
+  // TRANSACTION_ACTIVE.
+  it('preserves every write across interleaved upserts and reads', async () => {
+    const vector = new LibSQLVector({ id: 'bare-memory-vector', url: ':memory:' });
+    const indexName = 'bare_memory_vectors';
+    await vector.createIndex({ indexName, dimension: 3 });
+
+    const writerCount = 8;
+    await Promise.all([
+      ...Array.from({ length: writerCount }, (_, index) =>
+        vector.upsert({
+          indexName,
+          ids: [`vector-${index}`, `vector-${index}-b`],
+          vectors: [
+            [index + 1, 0, 0],
+            [0, index + 1, 0],
+          ],
+          metadata: [{ label: `write-${index}` }, { label: `write-${index}-b` }],
+        }),
+      ),
+      ...Array.from({ length: writerCount }, () => vector.describeIndex({ indexName })),
+      ...Array.from({ length: writerCount }, () => vector.query({ indexName, queryVector: [1, 0, 0], topK: 3 })),
+    ]);
+
+    await expect(vector.describeIndex({ indexName })).resolves.toMatchObject({ count: writerCount * 2 });
+    await vector.close();
   });
 });

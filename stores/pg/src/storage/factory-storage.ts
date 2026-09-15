@@ -156,7 +156,10 @@ class PgFactoryStorageOps implements FactoryStorageOps {
           row[name] = Boolean(value);
           break;
         case 'json':
-          row[name] = typeof value === 'string' ? JSON.parse(value) : value;
+          // node-pg parses JSONB through its type parsers, so `value` is
+          // already the stored JSON value. Parsing again would throw on a JSON
+          // string scalar (the whole column reads back as a JS string).
+          row[name] = value;
           break;
         case 'bigint':
         case 'integer':
@@ -292,6 +295,16 @@ class PgFactoryStorageOps implements FactoryStorageOps {
     opts?: CollectionListOptions,
   ): Promise<T[]> {
     return this.#select<T>(this.#queryable, collection, where, opts);
+  }
+
+  async count(collection: string, where: CollectionWhere): Promise<number> {
+    const schema = this.#schema(collection);
+    const filter = this.#buildWhere(schema, where);
+    const result = await this.#queryable.query(
+      `SELECT COUNT(*) AS count FROM "${schema.name}" WHERE ${filter.sql}`,
+      filter.args,
+    );
+    return Number(result.rows[0]?.count ?? 0);
   }
 
   async insertOne<T extends Record<string, unknown>>(collection: string, row: Partial<T>): Promise<T> {
@@ -600,6 +613,19 @@ export class PgFactoryStorage extends FactoryStorage {
     for (const [name, spec] of Object.entries(schema.columns)) {
       if (!spec.nullable || spec.type === 'uuid-pk' || spec.primaryKey) continue;
       await this.#pool.query(`ALTER TABLE "${schema.name}" ALTER COLUMN "${name}" DROP NOT NULL`);
+    }
+
+    // Widening evolution: a column now declared bigint may still be the
+    // INTEGER an older schema created, which epoch-ms values overflow.
+    for (const [name, spec] of Object.entries(schema.columns)) {
+      if (spec.type !== 'bigint') continue;
+      const { rows } = await this.#pool.query<{ data_type: string }>(
+        `SELECT data_type FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = $1 AND column_name = $2`,
+        [schema.name, name],
+      );
+      if (rows[0]?.data_type === 'integer') {
+        await this.#pool.query(`ALTER TABLE "${schema.name}" ALTER COLUMN "${name}" TYPE BIGINT`);
+      }
     }
 
     for (const index of schema.uniqueIndexes ?? []) {

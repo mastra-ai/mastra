@@ -27,35 +27,28 @@ describe('Subconscious configuration', () => {
 
     expect(subconscious.resolved).toMatchObject({
       observation: [
-        { name: 'capture', builtIn: true },
-        { name: 'remind', builtIn: true, maxSteps: 5 },
-      ],
-      reflection: [
-        { name: 'curate', builtIn: true, maxSteps: 5 },
-        { name: 'learn', builtIn: true, maxSteps: 5 },
+        { name: 'remind', builtIn: true, maxSteps: 50 },
+        { name: 'curate', builtIn: true, maxSteps: 200 },
       ],
       defaultScope: 'resource',
-      learnedGuidance: true,
       tools: true,
       activity: { recentUpdates: 10 },
     });
   });
 
-  it('supports disabling phases and resolves global and per-agent options', () => {
+  it('supports disabling defaults and resolves global and per-agent options', () => {
     const subconscious = new Subconscious({
-      observation: [],
-      reflection: [{ name: 'curate', model, instructions: 'Prefer canonical project names.', maxSteps: 3 }],
+      observation: [{ name: 'curate', model, instructions: 'Prefer canonical project names.', maxSteps: 3 }],
       model: 'openai/gpt-5-mini',
       defaultScope: 'thread',
       maxScope: 'resource',
-      learnedGuidance: false,
       tools: false,
       activity: false,
       maxSteps: 7,
     });
 
-    expect(subconscious.resolved.observation).toEqual([]);
-    expect(subconscious.resolved.reflection[0]).toMatchObject({
+    expect(subconscious.resolved.observation).toHaveLength(1);
+    expect(subconscious.resolved.observation[0]).toMatchObject({
       name: 'curate',
       model,
       instructions: 'Prefer canonical project names.',
@@ -64,27 +57,32 @@ describe('Subconscious configuration', () => {
     expect(subconscious.resolved).toMatchObject({
       defaultScope: 'thread',
       maxScope: 'resource',
-      learnedGuidance: false,
       tools: false,
       activity: false,
     });
   });
 
+  it('lets a global maxSteps override the per-agent curation default', () => {
+    const subconscious = new Subconscious({ maxSteps: 7 });
+
+    expect(subconscious.resolved.observation.map(agent => [agent.name, agent.maxSteps])).toEqual([
+      ['remind', 7],
+      ['curate', 7],
+    ]);
+  });
+
   it('validates custom agents, duplicate names, and bounds', () => {
-    expect(() => new Subconscious({ observation: ['capture', 'capture'] })).toThrow(/Duplicate/);
-    expect(() => new Subconscious({ observation: ['unknown' as 'capture'] })).toThrow(/Unknown/);
+    expect(() => new Subconscious({ observation: ['remind', 'remind'] })).toThrow(/Duplicate/);
+    expect(() => new Subconscious({ observation: ['unknown' as 'remind'] })).toThrow(/Unknown/);
     expect(() => new Subconscious({ observation: [{ name: 'ticket', schema: z.string() } as any] })).toThrow(
       /requires schema and onExtracted/,
     );
-    expect(
-      () => new Subconscious({ observation: [{ name: 'capture', schema: z.object({ value: z.string() }) }] }),
-    ).toThrow(/custom capture schema requires an onExtracted hook/i);
-    expect(() => new Subconscious({ reflection: [{ name: 'audit' }] })).toThrow(/requires instructions or agent/);
-    expect(() => new Subconscious({ activity: { recentUpdates: 101 } })).toThrow(/between 1 and 100/);
-    expect(() => new Subconscious({ maxSteps: 0 })).toThrow(/between 1 and 25/);
-    expect(() => new Subconscious({ observation: [{ name: 'capture', model, maxSteps: 2 } as any] })).toThrow(
-      /shares the Observer model/,
+    expect(() => new Subconscious({ observation: [{ name: 'audit' }] as any })).toThrow(
+      /requires schema and onExtracted/,
     );
+    expect(() => new Subconscious({ activity: { recentUpdates: 101 } })).toThrow(/between 1 and 100/);
+    expect(() => new Subconscious({ maxSteps: 0 })).toThrow(/between 1 and 500/);
+    expect(() => new Subconscious({ maxSteps: 501 })).toThrow(/between 1 and 500/);
     expect(
       () =>
         new Subconscious({
@@ -93,11 +91,10 @@ describe('Subconscious configuration', () => {
     ).toThrow(/shares the Observer model/);
   });
 
-  it('compiles capture and custom observation hooks into the shared extractor list', () => {
+  it('compiles custom observation hooks into the shared extractor list', () => {
     const onExtracted = vi.fn();
     const subconscious = new Subconscious({
-      observation: ['capture', { name: 'ticket', schema: z.object({ ids: z.array(z.string()) }), onExtracted }],
-      reflection: [],
+      observation: [{ name: 'ticket', schema: z.object({ ids: z.array(z.string()) }), onExtracted }],
     });
     const memory = new Memory({
       storage: new InMemoryStore(),
@@ -106,10 +103,7 @@ describe('Subconscious configuration', () => {
     });
 
     const extractors = getExtractors(memory);
-    expect(extractors.map(extractor => [extractor.slug, extractor.mode])).toEqual([
-      ['capture', 'structured'],
-      ['ticket', 'structured'],
-    ]);
+    expect(extractors.map(extractor => [extractor.slug, extractor.mode])).toEqual([['ticket', 'structured']]);
   });
 
   it('preserves an empty dynamic model list for actionable Agent validation', async () => {

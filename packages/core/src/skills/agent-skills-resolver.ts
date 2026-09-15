@@ -7,6 +7,7 @@
  */
 
 import type { RequestContext } from '../request-context';
+import { SearchEngine } from '../workspace/search';
 import { LocalSkillSource } from '../workspace/skills/local-skill-source';
 import type { SkillSource, SkillSourceEntry, SkillSourceStat } from '../workspace/skills/skill-source';
 import type { WorkspaceSkills } from '../workspace/skills/types';
@@ -111,6 +112,7 @@ export function resolveAgentSkills(skills: SkillInput[]): WorkspaceSkills {
   return new WorkspaceSkillsImpl({
     source,
     skills: skillPaths,
+    searchEngine: new SearchEngine({ bm25: {} }),
     validateOnLoad: true,
   });
 }

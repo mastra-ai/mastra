@@ -1,6 +1,6 @@
 {
   "name": "@mastra/libsql",
-  "version": "1.21.1",
+  "version": "1.23.0",
   "description": "Libsql provider for Mastra - includes both vector and db storage capabilities",
   "type": "module",
   "main": "dist/index.js",
@@ -22,13 +22,14 @@
     "build:lib": "tsdown --silent --config tsdown.config.ts",
     "prepack": "tsx ../../scripts/generate-package-docs.ts",
     "build:watch": "tsdown --watch --silent --config tsdown.config.ts",
-    "test": "vitest run",
+    "test": "vitest run && pnpm test:memory",
+    "test:memory": "LIBSQL_TEST_URL=:memory: vitest run src/storage/index.test.ts src/vector/index.test.ts",
     "lint": "oxlint . && eslint .",
     "lint:fix": "oxlint --fix . && eslint --fix ."
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@libsql/client": "^0.17.4"
+    "@libsql/client": "^0.18.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
@@ -45,11 +46,10 @@
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.51.0-0 <2.0.0-0"
+    "@mastra/core": ">=1.63.1-0 <2.0.0-0"
   },
   "files": [
-    "dist",
-    "CHANGELOG.md"
+    "dist"
   ],
   "homepage": "https://mastra.ai",
   "repository": {

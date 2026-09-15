@@ -70,16 +70,16 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
 
   return (
     <MainContentContent isDivided={true}>
-      <div className="mx-auto w-full max-w-2xl px-8 py-12">
+      <div className="mx-auto w-full max-w-2xl px-5 py-8">
         <Txt as="h1" variant="header-md" className="text-neutral6 pb-4 font-medium">
           {server.name}
         </Txt>
 
-        <div className="flex items-center gap-1 pb-6">
-          <Badge icon={<FolderIcon className="text-neutral6" />} className="text-neutral4! rounded-r-sm">
+        <div className="flex items-center gap-1 pb-4">
+          <Badge icon={<FolderIcon />} size="sm">
             Version
           </Badge>
-          <Badge className="text-neutral4! rounded-l-sm">{server.version_detail.version}</Badge>
+          <Badge size="sm">{server.version_detail.version}</Badge>
         </div>
 
         <Txt className="text-neutral3 pb-4">
@@ -162,7 +162,7 @@ const McpToolList = ({ server }: { server: ServerInfo }) => {
         </Txt>
       </div>
 
-      <div className="flex flex-col gap-2 pt-6">
+      <div className="flex flex-col gap-2 pt-4">
         {toolsKeyArray.map(toolId => {
           const tool = tools[toolId];
 
@@ -178,7 +178,7 @@ function hasAppUi(meta?: Record<string, unknown>): boolean {
   if (!meta) return false;
   const ui = meta.ui as { resourceUri?: string } | undefined;
   if (typeof ui?.resourceUri === 'string' && ui.resourceUri.startsWith('ui://')) return true;
-  if (typeof meta['ui/resourceUri'] === 'string' && (meta['ui/resourceUri'] as string).startsWith('ui://')) return true;
+  if (typeof meta['ui/resourceUri'] === 'string' && meta['ui/resourceUri'].startsWith('ui://')) return true;
   return false;
 }
 
@@ -201,7 +201,7 @@ const ToolEntry = ({ tool, serverId }: { tool: McpToolInfo; serverId: string }) 
             <Link ref={linkRef} href={paths.mcpServerToolLink(serverId, tool.id)}>
               {tool.id}
             </Link>
-            {isAppTool && <Badge className="py-0 text-[10px]">App</Badge>}
+            {isAppTool && <Badge size="xs">App</Badge>}
           </span>
         </EntityName>
         <EntityDescription>{tool.description}</EntityDescription>

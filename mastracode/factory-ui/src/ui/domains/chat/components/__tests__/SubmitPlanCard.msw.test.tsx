@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/render';
 import type { WorkspaceFile } from '../../../../../api/types';
-import type { FactoryUserSession } from '../../../workspaces/services/github';
+import type { FactoryUserSession } from '../../../workspaces/services/user-sessions';
 import { SubmitPlanCard } from '../SubmitPlanCard';
 
 const PLAN_PATH = '.artifacts/plans/add-dark-mode.md';

@@ -53,12 +53,14 @@ export const ROUTE_PERMISSIONS: RoutePermission[] = [
   { route: '/metrics', permission: 'observability:read', name: 'Metrics' },
   { route: '/intelligence', permission: 'observability:read', name: 'Intelligence' },
   { route: '/traces', permission: 'observability:read', name: 'Traces' },
+  { route: '/inbox', permission: 'observability:read', name: 'Inbox' },
   { route: '/logs', permission: 'logs:read', name: 'Logs' },
 
   // Evaluation - uses 'scores' resource (not 'scorers')
   { route: '/scorers', permission: 'scores:read', name: 'Scorers' },
   { route: '/datasets', permission: ['datasets:read'], name: 'Datasets' },
   { route: '/experiments', permission: ['datasets:read'], name: 'Experiments' },
+  { route: '/experiments/review-queue', permission: ['datasets:read'], name: 'Review Queue' },
 
   // Primitives - note: 'mcp' not 'mcps', 'stored' for prompts (stored/prompt-blocks routes)
   { route: '/tools', permission: 'tools:read', name: 'Tools' },

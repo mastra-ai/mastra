@@ -214,6 +214,30 @@ function coalesceTypedRecordsForBatchInsert(records: StorageRecord[]): StorageRe
   return [...recordsById.values()];
 }
 
+/**
+ * Builds the patch for an upsert over an existing row.
+ *
+ * `id` is dropped because it is already set on the stored document.
+ *
+ * For workflow snapshots, `createdAt` is dropped as well so the stored creation
+ * time survives. A snapshot is written repeatedly over the life of a run, and
+ * callers cannot supply a trustworthy `createdAt` on a later save: a request
+ * that read the row before another writer inserted it would carry its own
+ * timestamp and overwrite the real one. patch() is a partial update, so leaving
+ * the key out preserves whatever was stored on first insert. This mirrors the
+ * SQL adapters, whose ON CONFLICT DO UPDATE omits createdAt from the SET list.
+ *
+ * Other tables keep their existing behaviour of writing the incoming createdAt.
+ */
+function buildUpsertPatch(convexTable: string, record: StorageRecord): StorageRecord {
+  const { id: _id, ...updateData } = record;
+  if (convexTable === CONVEX_TABLE_WORKFLOW_SNAPSHOTS) {
+    const { createdAt: _createdAt, ...withoutCreatedAt } = updateData;
+    return withoutCreatedAt;
+  }
+  return updateData;
+}
+
 function coalesceLastRecordById(records: StorageRecord[]): StorageRecord[] {
   const recordsById = new Map<string, StorageRecord>();
   for (const record of records) {
@@ -503,9 +527,7 @@ export async function handleTypedOperation(
         .unique();
 
       if (existing) {
-        // Update existing - don't include id in patch (it's already set)
-        const { id: _, ...updateData } = record;
-        await ctx.db.patch(existing._id, updateData);
+        await ctx.db.patch(existing._id, buildUpsertPatch(convexTable, record));
       } else {
         // Insert new - include id as a regular field
         await ctx.db.insert(convexTable, record);
@@ -523,8 +545,7 @@ export async function handleTypedOperation(
           .unique();
 
         if (existing) {
-          const { id: _, ...updateData } = record;
-          await ctx.db.patch(existing._id, updateData);
+          await ctx.db.patch(existing._id, buildUpsertPatch(convexTable, record));
         } else {
           await ctx.db.insert(convexTable, record);
         }
@@ -600,6 +621,8 @@ export async function handleTypedOperation(
 
     case 'patch': {
       const patchRecord = stripPatchKeys(request.record, ['id']);
+      const matchesExpected = (record: Record<string, any>) =>
+        !request.expected || Object.entries(request.expected).every(([key, value]) => record[key] === value);
       const existing = await ctx.db
         .query(convexTable)
         .withIndex('by_record_id', (q: any) => q.eq('id', request.id))
@@ -608,7 +631,7 @@ export async function handleTypedOperation(
       if (!existing) {
         if (isBackgroundTasksTable(convexTable, request)) {
           const legacy = await findGenericDocumentById(ctx, request.tableName, request.id);
-          if (legacy) {
+          if (legacy && matchesExpected(legacy.record)) {
             await ctx.db.patch(legacy._id, { record: mergeLegacyRecord(legacy.record, patchRecord) });
             return { ok: true, result: true };
           }
@@ -616,6 +639,7 @@ export async function handleTypedOperation(
         return { ok: true, result: false };
       }
 
+      if (!matchesExpected(existing)) return { ok: true, result: false };
       await ctx.db.patch(existing._id, patchRecord);
       if (isBackgroundTasksTable(convexTable, request)) {
         const legacy = await findGenericDocumentById(ctx, request.tableName, request.id);

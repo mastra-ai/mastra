@@ -1,8 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { ArrowUp, Paperclip } from 'lucide-react';
 
+import { Badge } from '../Badge/Badge';
 import { Button } from '../Button';
-import { Chip } from '../Chip';
 import { Composer, ComposerActions, ComposerAttachments, ComposerBox, ComposerInput, ComposerRing } from './composer';
 
 const meta: Meta<typeof Composer> = {
@@ -36,7 +36,7 @@ export const WithAttachmentsAndActions: Story = {
   render: () => (
     <Composer aria-label="Message composer">
       <ComposerAttachments>
-        <Chip>project-notes.txt</Chip>
+        <Badge size="sm">project-notes.txt</Badge>
       </ComposerAttachments>
       <ComposerBox>
         <ComposerInput aria-label="Message" defaultValue="Summarize the attached notes." />

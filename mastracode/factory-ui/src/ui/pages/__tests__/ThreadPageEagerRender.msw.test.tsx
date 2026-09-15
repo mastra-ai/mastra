@@ -1,15 +1,10 @@
 /**
  * Eager-render contract for a factory workspace thread route: the transcript
  * region, thread rail, header, and composer must all appear as soon as the
- * server-side session metadata resolves — *without* waiting for
- * `/web/github/projects/:id/ensure` to complete. `/ensure` is only a
- * background warm-up: while it is still streaming, the composer must become
- * fully usable (send enabled, attachments accepted) as soon as the initial
- * messages request resolves. The only blocking window is message loading.
- *
- * The prepare stepper, by contrast, stays in the (otherwise empty) transcript
- * region until the warm-up finishes — dropping it on step 1/3 reads like a
- * crash. It is a status display there, never an interactivity gate.
+ * server-side session metadata resolves — without waiting on a sandbox, which
+ * boots lazily at the first command. The composer must become fully usable
+ * (send enabled, attachments accepted) as soon as the initial messages request
+ * resolves. The only blocking window is message loading.
  */
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -42,22 +37,12 @@ const workspaceSession = {
 };
 
 interface ThreadRouteController {
-  readonly ensureRequests: () => number;
-  emitProgress(phase: string, message: string): Promise<void>;
-  completeEnsure(): Promise<void>;
   completeMessages(): void;
 }
 
-/** Stub the thread route's network surface, exposing controllable ensure and messages responses. */
+/** Stub the thread route's network surface, exposing a controllable messages response. */
 function stubThreadRoute(): ThreadRouteController {
-  const encoder = new TextEncoder();
-  let streamController: ReadableStreamDefaultController<Uint8Array> | undefined;
-  let ensureRequests = 0;
-  let resolveStreamReady = () => {};
   let resolveMessages = () => {};
-  const streamReady = new Promise<void>(resolve => {
-    resolveStreamReady = resolve;
-  });
   const messagesReady = new Promise<void>(resolve => {
     resolveMessages = resolve;
   });
@@ -94,26 +79,10 @@ function stubThreadRoute(): ThreadRouteController {
       HttpResponse.json({ sessions: [workspaceSession] }),
     ),
     http.get(`${TEST_BASE_URL}/web/github/subscriptions`, () => HttpResponse.json({ subscriptions: [] })),
-    // The background /ensure warm-up — streams SSE progress under test control.
-    http.post(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/ensure`, () => {
-      ensureRequests += 1;
-      const stream = new ReadableStream<Uint8Array>({
-        start(controller) {
-          streamController = controller;
-          resolveStreamReady();
-        },
-      });
-      return new Response(stream, {
-        headers: {
-          'content-type': 'text/event-stream',
-          'cache-control': 'no-cache',
-        },
-      });
-    }),
     http.get(`${TEST_BASE_URL}/web/user-sessions/${SESSION_ID}`, () =>
       HttpResponse.json({ session: workspaceSession }),
     ),
-    // Agent-controller endpoints — these must respond even before /ensure completes.
+    // Agent-controller endpoints — these must respond before any sandbox exists.
     http.post(`${AC}/sessions`, () =>
       HttpResponse.json({ controllerId: 'code', resourceId: SESSION_ID, threadId: SESSION_ID }),
     ),
@@ -148,24 +117,6 @@ function stubThreadRoute(): ThreadRouteController {
   );
 
   return {
-    ensureRequests: () => ensureRequests,
-    async emitProgress(phase, message) {
-      await streamReady;
-      const payload = JSON.stringify({ phase, message });
-      streamController?.enqueue(encoder.encode(`event: progress\ndata: ${payload}\n\n`));
-    },
-    async completeEnsure() {
-      await streamReady;
-      const payload = JSON.stringify({
-        resourceId: SESSION_ID,
-        factoryProjectId: FACTORY_ID,
-        projectRepositoryId: REPO_ID,
-        sandboxId: 'sb-1',
-        sandboxWorkdir: '/local/acme/app',
-      });
-      streamController?.enqueue(encoder.encode(`event: done\ndata: ${payload}\n\n`));
-      streamController?.close();
-    },
     completeMessages() {
       resolveMessages();
     },
@@ -179,9 +130,9 @@ function renderThreadRoute() {
   return renderWithProviders(<RouterProvider router={router} />);
 }
 
-describe('ThreadPage eager render during /ensure', () => {
-  it('becomes fully interactive while /ensure is still pending', async () => {
-    const ensure = stubThreadRoute();
+describe('ThreadPage eager render', () => {
+  it('becomes fully interactive as soon as the initial messages request resolves', async () => {
+    const messages = stubThreadRoute();
     const { client } = renderThreadRoute();
 
     // Header + composer + transcript region should render right away.
@@ -194,29 +145,18 @@ describe('ThreadPage eager render during /ensure', () => {
     const sendButton = screen.getByRole('button', { name: 'Send message' });
     expect(sendButton).toBeDisabled();
 
-    // Messages resolve while /ensure is still streaming: the composer comes
-    // fully online without waiting for the warm-up — while the stepper stays
-    // up in the empty transcript region instead of vanishing on step 1/3.
-    ensure.completeMessages();
+    // Messages resolve: the composer comes fully online and the stepper
+    // releases, because message loading was the only thing it was waiting on.
+    messages.completeMessages();
     const user = userEvent.setup();
-    await user.type(screen.getByRole('textbox', { name: 'Message' }), 'ready before warm-up');
+    await user.type(screen.getByRole('textbox', { name: 'Message' }), 'ready to send');
     await waitFor(() => expect(sendButton).toBeEnabled());
-    expect(screen.getByRole('status', { name: 'Preparing session' })).toBeInTheDocument();
-
-    // Warm-up progress may still stream without re-blocking the composer.
-    await ensure.emitProgress('cloning', 'Cloning acme/app…');
-    expect(sendButton).toBeEnabled();
-
-    // The warm-up fired exactly once for this session entry, and only its
-    // completion releases the stepper.
-    expect(ensure.ensureRequests()).toBe(1);
-    await ensure.completeEnsure();
     await waitFor(() => expect(screen.queryByRole('status', { name: 'Preparing session' })).not.toBeInTheDocument());
     await waitForMutationsIdle(client);
   });
 
   it('keeps the textarea typable during message loading and preserves the draft', async () => {
-    const ensure = stubThreadRoute();
+    const messages = stubThreadRoute();
     const { client } = renderThreadRoute();
 
     // Composer mounts eagerly.
@@ -253,25 +193,20 @@ describe('ThreadPage eager render during /ensure', () => {
     await user.type(textarea, 'my draft prompt');
     expect(textarea.value).toBe('my draft prompt');
 
-    // Messages resolve while /ensure is still pending: the ring stops
-    // spinning, placeholder reverts, Send tooltip clears, and Send becomes
-    // enabled — all without waiting for the warm-up. The stepper stays in the
-    // transcript region as a status display, never an interactivity gate.
-    ensure.completeMessages();
+    // Messages resolve: the ring stops spinning, placeholder reverts, Send
+    // tooltip clears, and Send becomes enabled.
+    messages.completeMessages();
     await waitFor(() => expect(ring.getAttribute('data-busy')).toBe('false'));
     // Draft survives the flag flip without remount.
     expect(textarea.value).toBe('my draft prompt');
-    expect(screen.getByRole('status', { name: 'Preparing session' })).toBeInTheDocument();
     expect(textarea.placeholder).toBe('Ask Mastra Code…');
     expect(sendButton).not.toHaveAttribute('title', 'Initializing session…');
     await waitFor(() => expect(sendButton).not.toBeDisabled());
 
-    // Attachments now work while the warm-up is still streaming.
+    // Attachments now work.
     fireEvent.drop(composerRegion.querySelector('form') ?? composerRegion, { dataTransfer: { files: [image] } });
     expect(await screen.findByRole('button', { name: 'Remove image' })).toBeInTheDocument();
 
-    await ensure.completeEnsure();
-    await waitFor(() => expect(screen.queryByRole('status', { name: 'Preparing session' })).not.toBeInTheDocument());
     await waitForMutationsIdle(client);
   });
 });

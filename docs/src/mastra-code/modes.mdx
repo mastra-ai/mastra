@@ -105,9 +105,9 @@ Each mode has a default model that's selected when you switch to it:
 | Plan | `openai/gpt-5.2-codex` |
 | Fast | `cerebras/zai-glm-4.7` |
 
-Override the model for any mode using the `/models` command. Per-mode model selections persist to the thread, so switching back to a mode restores the last model you used in it.
+Use `/model` to change the current mode model. The active pack becomes Custom, or the current custom pack is updated for that mode. Use `/models` to switch packs. `/packs` is an alias for `/models`.
 
-If you select a model that doesn't have an API key configured, Mastra Code prompts you to enter one. See [Interactive API key prompt](/configuration#interactive-api-key-prompt) for details.
+Use `/login` to add a provider account or `/api-keys` to store an API key.
 
 :::note
 

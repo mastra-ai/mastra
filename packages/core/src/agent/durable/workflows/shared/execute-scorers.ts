@@ -4,11 +4,7 @@ import type { Mastra } from '../../../../mastra';
 import { createObservabilityContext } from '../../../../observability';
 import { RequestContext } from '../../../../request-context';
 import { MessageList } from '../../../message-list';
-import type {
-  DurableAgenticExecutionOutput,
-  DurableAgenticWorkflowInput,
-  SerializableScorersConfig,
-} from '../../types';
+import type { DurableAgenticExecutionOutput, DurableAgenticWorkflowInput } from '../../types';
 
 export interface ExecuteDurableAgentScorersParams {
   /** Workflow init data, carrying the serialized scorer config and run identity. */
@@ -39,7 +35,7 @@ export function executeDurableAgentScorers({
   requestContext,
   tracingContext,
 }: ExecuteDurableAgentScorersParams): void {
-  const scorers = initData.scorers as SerializableScorersConfig | undefined;
+  const scorers = initData.scorers;
   if (!scorers || Object.keys(scorers).length === 0) {
     return;
   }

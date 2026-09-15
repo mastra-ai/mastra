@@ -39,15 +39,15 @@
   }
 
   .mastra-markdown h1 {
-    font-size: 1.3em;
+    font-size: var(--text-header-sm);
   }
 
   .mastra-markdown h2 {
-    font-size: 1.15em;
+    font-size: var(--text-ui-lg);
   }
 
   .mastra-markdown h3 {
-    font-size: 1.05em;
+    font-size: var(--text-ui-md);
   }
 
   .mastra-markdown :is(h4, h5, h6) {
@@ -177,23 +177,5 @@
   .mastra-markdown img {
     max-width: 100%;
     border-radius: 8px;
-  }
-
-  /* A word landing, or a code block appearing whole with its background. Nothing
-   * but opacity, so a word stays inline and lines never re-break behind it. */
-  @keyframes mastra-markdown-arriving {
-    from {
-      opacity: 0;
-    }
-  }
-
-  .mastra-markdown-arriving {
-    animation: mastra-markdown-arriving 800ms cubic-bezier(0.33, 1, 0.68, 1) backwards;
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .mastra-markdown-arriving {
-      animation: none;
-    }
   }
 }

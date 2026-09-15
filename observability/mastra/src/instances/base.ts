@@ -37,12 +37,14 @@ import type { ObservabilityInstanceConfig } from '../config';
 import { SamplingStrategyType } from '../config';
 import { LoggerContextImpl } from '../context/logger';
 import { MetricsContextImpl } from '../context/metrics';
+import { resolveExportedSpanId } from '../ids';
 import { emitAutoExtractedMetrics, emitTokenMetricsForUsage } from '../metrics/auto-extract';
 import { CardinalityFilter } from '../metrics/cardinality';
 import { resolveModelId } from '../model-id';
 import { NoOpSpan } from '../spans';
-import { isPlainRecord, mergeMetadata } from '../spans/metadata';
+import { isPlainRecord, mergeMetadata, stripUndefined } from '../spans/metadata';
 import { addUsageStats } from '../usage';
+import { isMastraBuiltInStorageExporter, isMastraPlatformDeployment } from './platform-policy';
 
 function hasMetadataKey(metadata: unknown, key: string): boolean {
   if (!metadata || typeof metadata !== 'object') {
@@ -112,12 +114,17 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
   constructor(config: ObservabilityInstanceConfig) {
     super({ component: RegisteredLogger.OBSERVABILITY, name: config.serviceName });
 
+    const exporters = config.exporters ?? [];
+    const effectiveExporters = isMastraPlatformDeployment()
+      ? exporters.filter(exporter => !isMastraBuiltInStorageExporter(exporter))
+      : exporters;
+
     // Apply defaults for optional fields
     this.config = {
       serviceName: config.serviceName,
       name: config.name,
       sampling: config.sampling ?? { type: SamplingStrategyType.ALWAYS },
-      exporters: config.exporters ?? [],
+      exporters: effectiveExporters,
       spanOutputProcessors: config.spanOutputProcessors ?? [],
       bridge: config.bridge ?? undefined,
       includeInternalSpans: config.includeInternalSpans ?? false,
@@ -233,9 +240,10 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       traceState = this.computeTraceState(tracingOptions);
     }
 
-    // Merge tracingOptions.metadata with span metadata (tracingOptions.metadata takes precedence for root spans)
+    // Merge tracingOptions.metadata with span metadata (tracingOptions.metadata takes precedence for root
+    // spans, but a key it merely names with an `undefined` value must not erase the span's own value)
     const tracingMetadata = !options.parent ? tracingOptions?.metadata : undefined;
-    const mergedMetadata = mergeMetadata(metadata, tracingMetadata);
+    const mergedMetadata = mergeMetadata(stripUndefined(metadata), stripUndefined(tracingMetadata));
 
     // Extract metadata from RequestContext
     const enrichedMetadata = this.extractMetadataFromRequestContext(requestContext, mergedMetadata, traceState);
@@ -396,6 +404,15 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    * Adds to both the bus (for event routing) and the config (for getExporters).
    */
   registerExporter(exporter: ObservabilityExporter): void {
+    if (isMastraPlatformDeployment() && isMastraBuiltInStorageExporter(exporter)) {
+      this.logger.warn('Storage exporter registration skipped on Mastra Platform', {
+        exporterName: exporter.name,
+        serviceName: this.config.serviceName,
+        instanceName: this.config.name,
+      });
+      return;
+    }
+
     this.observabilityBus.registerExporter(exporter);
     this.config.exporters ??= [];
     if (this.config.exporters.includes(exporter)) {
@@ -469,7 +486,10 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
 
     return new LoggerContextImpl({
       traceId: span?.traceId,
-      spanId: span?.id,
+      // Resolve to a spanId that actually reaches exporters; a raw span.id may
+      // belong to an internal/excluded span that is never exported, leaving
+      // signals referencing a span that doesn't exist downstream.
+      spanId: resolveExportedSpanId(span),
       correlationContext,
       metadata,
       observabilityBus: this.observabilityBus,
@@ -488,7 +508,8 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
 
     return new MetricsContextImpl({
       traceId: span?.traceId,
-      spanId: span?.id,
+      // See getLoggerContext: only reference spanIds that reach exporters.
+      spanId: resolveExportedSpanId(span),
       correlationContext,
       metadata,
       cardinalityFilter: this.cardinalityFilter,
@@ -551,6 +572,10 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     span.end = (options?: EndSpanOptions<TType>) => {
       if (span.isEvent) {
         this.logger.warn(`End event is not available on event spans`);
+        return;
+      }
+
+      if (span.endTime) {
         return;
       }
 
@@ -657,8 +682,9 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       return undefined;
     }
 
-    // Explicit metadata always wins.
-    return mergeMetadata(extracted, explicitMetadata);
+    // Explicit metadata always wins, but a key it merely names with an
+    // `undefined` value must not erase the extracted RequestContext value.
+    return mergeMetadata(extracted, stripUndefined(explicitMetadata));
   }
 
   /**

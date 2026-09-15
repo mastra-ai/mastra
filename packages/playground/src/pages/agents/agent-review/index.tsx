@@ -1,7 +1,8 @@
+import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
+import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
 import { useParams } from 'react-router';
 import { AgentPlaygroundReview } from '@/domains/agents/components/agent-playground';
 import { useAgent } from '@/domains/agents/hooks/use-agent';
@@ -35,6 +36,15 @@ function AgentReview() {
         <Spinner className="h-6 w-6" />
       </div>
     );
+  }
+
+  // A 404 is authoritative even if a previous fetch left stale data in the cache.
+  if (error && is404NotFoundError(error)) {
+    return <div className="py-4 text-center">Agent not found</div>;
+  }
+
+  if (error) {
+    return <ErrorState title="Failed to load agent" message={error.message} />;
   }
 
   if (!codeAgent) {

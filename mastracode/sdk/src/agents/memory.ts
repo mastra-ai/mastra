@@ -5,6 +5,7 @@ import type { MastraVector } from '@mastra/core/vector';
 import { fastembed } from '@mastra/fastembed';
 import { Memory, Subconscious } from '@mastra/memory';
 import { DEFAULT_OM_MODEL_ID, DEFAULT_OBS_THRESHOLD, DEFAULT_REF_THRESHOLD } from '../constants.js';
+import { LOCAL_KNOWLEDGE_ORG_ID, resolveKnowledgeScopeIdentity } from '../knowledge-scope.js';
 import type { MastraCodeState } from '../schema.js';
 import { getOmScope } from '../utils/project.js';
 import { resolveModel } from './model.js';
@@ -69,6 +70,56 @@ Don't say "Agent did x", say "did x". It will be assumed the agent did what was 
 
 Drop caveman for: security warnings, irreversible action confirmations, multi-step sequences where fragment order risks misread, user asks to clarify or repeats question, and anything that requires remembering verbatim content. Resume caveman after clear part done`;
 
+export { LOCAL_KNOWLEDGE_ORG_ID };
+
+// One error per session, not per memory resolution. Keyed on the session id
+// rather than the controller object: the controller is read off the request
+// context on every resolution, so it is a fresh object per request and would
+// dedupe nothing. Bounded so a long-running Factory process cannot grow this
+// without limit — refusing sessions are rare, and losing the oldest ids only
+// costs one extra log line.
+const REPORTED_ORG_UNRESOLVED_LIMIT = 500;
+const reportedOrgUnresolved = new Set<string>();
+
+function reportOrgUnresolved(
+  controller: AgentControllerRequestContext<MastraCodeState> | undefined,
+  factoryProjectId: string | undefined,
+  reason?: string,
+) {
+  const sessionId = controller?.session?.id;
+  if (sessionId) {
+    if (reportedOrgUnresolved.has(sessionId)) return;
+    if (reportedOrgUnresolved.size >= REPORTED_ORG_UNRESOLVED_LIMIT) {
+      reportedOrgUnresolved.delete(reportedOrgUnresolved.values().next().value as string);
+    }
+    reportedOrgUnresolved.add(sessionId);
+  }
+  const session = controller?.session;
+  console.error(
+    `[Subconscious] Knowledge curation disabled: no organization resolved for session ${session?.id ?? 'unknown'} (project ${factoryProjectId ?? 'none'})${reason ? `: ${reason}` : ''}. Knowledge is not written rather than written where it cannot be read.`,
+  );
+}
+
+/**
+ * Whether the experimental subconscious (knowledge graph + reminder sidekick)
+ * is switched on for this process: it needs a vector store and the opt-in flag.
+ */
+export function isSubconsciousEnabled(vector: MastraVector | undefined): boolean {
+  return Boolean(vector) && process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS === '1';
+}
+
+/**
+ * Whether the subconscious tools (`knowledge_*`, `ask_memory`) are registered
+ * for a given session. Beyond the process-level switch, a Factory-owned
+ * session that cannot resolve its org refuses the subconscious entirely (see
+ * `getDynamicMemory`, which applies the same two checks inline because it also
+ * needs the resolved identity). The system prompt's tool guidance calls here so
+ * it never advertises tools that `getDynamicMemory` did not register.
+ */
+export function hasSubconsciousTools(vector: MastraVector | undefined, state: MastraCodeState | undefined): boolean {
+  return isSubconsciousEnabled(vector) && resolveKnowledgeScopeIdentity(state).resolved;
+}
+
 /**
  * Dynamic memory factory function.
  * Reads OM thresholds from controller state via requestContext.
@@ -83,27 +134,29 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
   return ({ requestContext }: { requestContext: RequestContext }) => {
     const controller = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
     const state = controller?.getState() as MastraCodeState | undefined;
-    const subconsciousEnabled = Boolean(vector) && process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS === '1';
+    const subconsciousEnabled = isSubconsciousEnabled(vector);
     const factoryProjectId = state?.factoryProjectId;
     const isFactory = typeof factoryProjectId === 'string' && factoryProjectId.trim().length > 0;
 
+    // A Factory-owned session that could not resolve its org refuses to curate:
+    // writing under a substituted identity produces knowledge the fail-closed
+    // read path can never see.
+    let orgUnresolvedRefusal = false;
+
     if (subconsciousEnabled) {
-      // Factory seeds the authoritative org id into session state; prefer it.
-      // The session owner is a USER id — mapping it into organizationId is only
-      // the legacy fallback for clients (TUI/studio) that never set factoryOrgId.
-      const factoryOrgId = state?.factoryOrgId;
-      const ownerId = controller?.session.ownerId;
-      if (typeof factoryOrgId === 'string' && factoryOrgId.trim()) {
-        requestContext.set('organizationId', factoryOrgId);
-      } else if (ownerId) {
-        requestContext.set('organizationId', ownerId);
+      const identity = resolveKnowledgeScopeIdentity(state);
+      if (identity.resolved) {
+        requestContext.set('organizationId', identity.organizationId);
+      } else {
+        orgUnresolvedRefusal = true;
+        reportOrgUnresolved(controller, identity.knowledgeResourceId, identity.reason);
       }
-      // Factory runs share one knowledge graph per project: anchor the
-      // subconscious knowledge scope's resource rung on the project id.
-      if (isFactory) {
-        requestContext.set('knowledgeResourceId', factoryProjectId);
+      if (identity.knowledgeResourceId) {
+        requestContext.set('knowledgeResourceId', identity.knowledgeResourceId);
       }
     }
+
+    const subconsciousAvailable = subconsciousEnabled && !orgUnresolvedRefusal;
 
     const omScope = state?.omScope ?? getOmScope(state?.projectPath);
 
@@ -115,7 +168,7 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
     const observeAttachments = state?.observeAttachments;
     // Factory sessions get a factory-only Subconscious config, so the cache key
     // carries a factory presence bit to keep the two configs from cross-serving.
-    const cacheKey = `${obsThreshold}:${refThreshold}:${omScope}:${observerPreviousObservationTokens}:${caveman ? 1 : 0}:${observeAttachments}:${isFactory ? 1 : 0}:${subconsciousEnabled ? 1 : 0}`;
+    const cacheKey = `${obsThreshold}:${refThreshold}:${omScope}:${observerPreviousObservationTokens}:${caveman ? 1 : 0}:${observeAttachments}:${isFactory ? 1 : 0}:${subconsciousAvailable ? 1 : 0}`;
     if (cachedMemory && cachedMemoryKey === cacheKey) {
       return cachedMemory;
     }
@@ -133,23 +186,18 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
       vector: vector || false,
       embedder: vector ? fastembed.small : undefined,
       options: {
+        // Generate a durable title from the first user message. Every client uses
+        // the same title in its thread list and active-session chrome.
+        generateTitle: { model: getObserverModel },
         observationalMemory: {
           enabled: true,
           temporalMarkers: true,
           retrieval: vector ? { vector: true } : true,
-          experimental_subconscious: subconsciousEnabled
+          experimental_subconscious: subconsciousAvailable
             ? new Subconscious({
                 defaultScope: 'resource',
                 maxScope: 'resource',
-                // Capture-time pinning is a factory-only opinion; every other
-                // client keeps plain curator-maintained pins.
-                pins: isFactory ? { capturePinning: true } : true,
-                // Factory sessions run the curator every 3 observation runs;
-                // other clients leave the cadence trigger dormant.
-                ...(isFactory ? { curationCadence: 3 } : {}),
-                // Real curation over a factory worklist needs tool room: the
-                // default 5-step budget exhausts mid-batch and the curator never
-                // reaches its cursor acknowledgment (observed live 2026-08-13).
+                pins: true,
                 ...(isFactory ? { maxSteps: 25 } : {}),
               })
             : undefined,

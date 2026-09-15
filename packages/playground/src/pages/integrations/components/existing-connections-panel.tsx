@@ -14,8 +14,8 @@ function ConnectionRow({
   return (
     <li className="flex items-center justify-between border-b py-2">
       <div>
-        <div className="font-mono text-xs">{connection.connectionId}</div>
-        <div className="text-xs text-gray-500">
+        <div className="font-mono text-ui-sm">{connection.connectionId}</div>
+        <div className="text-ui-sm text-gray-500">
           {connection.label ?? '(no label)'} · {connection.status}
           {connection.scope ? ` · ${connection.scope}` : ''}
           {isAdmin && connection.authorId ? ` · author: ${connection.authorId}` : ''}
@@ -74,7 +74,7 @@ function ConnectionGroups({
     <div className="space-y-4">
       {groups.map(([authorKey, rows]) => (
         <div key={authorKey}>
-          <h3 className="text-sm font-semibold text-gray-700" data-testid={`integration-author-group-${authorKey}`}>
+          <h3 className="text-ui-md font-semibold text-gray-700" data-testid={`integration-author-group-${authorKey}`}>
             {authorKey === 'shared' ? 'Shared' : `Owned by ${authorKey}`}
           </h3>
           <ConnectionList
@@ -116,7 +116,7 @@ export function ExistingConnectionsPanel({
 }: ExistingConnectionsPanelProps) {
   return (
     <div className="space-y-2 border rounded p-4">
-      <h2 className="text-lg font-semibold">Existing connections</h2>
+      <h2 className="text-header-sm font-semibold">Existing connections</h2>
       {!providerId || !toolkit ? (
         <p className="text-gray-500">Pick a provider and toolkit to list connections.</p>
       ) : isLoading ? (

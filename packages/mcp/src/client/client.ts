@@ -4,7 +4,7 @@ import type { Stream } from 'node:stream';
 import { MastraBase } from '@mastra/core/base';
 import type { RequestContext } from '@mastra/core/di';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { createTool } from '@mastra/core/tools';
+import { createTool, validateToolOutput } from '@mastra/core/tools';
 import type { NeedsApprovalFn, Tool } from '@mastra/core/tools';
 import { toStandardSchema } from '@mastra/schema-compat';
 import type { JSONSchema7, StandardSchemaWithJSON } from '@mastra/schema-compat';
@@ -138,23 +138,62 @@ function extractModelTextFromToolContent(content: unknown): string | undefined {
 /**
  * Non-enumerable metadata attached to structured tool execute results so
  * `toModelOutput` can read MCP `content` without changing the execute return shape.
+ *
+ * When a tool has an `outputSchema` and the server returns `structuredContent`,
+ * `execute()` returns that structured value directly. The rest of the
+ * CallToolResult envelope is preserved on non-enumerable symbols:
+ * - {@link MCP_CALL_TOOL_CONTENT} holds the MCP `content` blocks (model-facing text).
+ * - {@link MCP_CALL_TOOL_META} holds the result-level `_meta` (e.g. `ui.resourceUri`
+ *   used by MCP Apps hosts), with `ui.serverId` stamped by the client.
+ *
+ * Read them with {@link getMcpCallToolContent} and {@link getMcpCallToolMeta}.
+ * Note: scalar or `null` structured results cannot carry properties, so these
+ * channels are only available when `structuredContent` is an object or array.
  */
 export const MCP_CALL_TOOL_CONTENT = Symbol.for('mastra.mcp.callToolContent');
 
-function attachMcpCallToolContent(structuredContent: unknown, content: unknown): unknown {
+/** Non-enumerable result-level `_meta` attached to structured tool execute results. */
+export const MCP_CALL_TOOL_META = Symbol.for('mastra.mcp.callToolMeta');
+
+function attachMcpCallToolContent(
+  structuredContent: unknown,
+  content: unknown,
+  _meta?: Record<string, unknown>,
+): unknown {
   if (structuredContent !== null && typeof structuredContent === 'object') {
     Object.defineProperty(structuredContent, MCP_CALL_TOOL_CONTENT, {
       value: content,
       enumerable: false,
       configurable: true,
     });
+    if (_meta !== undefined) {
+      Object.defineProperty(structuredContent, MCP_CALL_TOOL_META, {
+        value: _meta,
+        enumerable: false,
+        configurable: true,
+      });
+    }
   }
   return structuredContent;
 }
 
-function getMcpCallToolContent(output: unknown): unknown {
+/**
+ * Read the MCP `content` blocks preserved on a structured tool execute result.
+ * Returns `undefined` for scalar results or results without a hidden content channel.
+ */
+export function getMcpCallToolContent(output: unknown): unknown {
   if (output === null || typeof output !== 'object') return undefined;
   return (output as Record<PropertyKey, unknown>)[MCP_CALL_TOOL_CONTENT];
+}
+
+/**
+ * Read the result-level `_meta` preserved on a structured tool execute result
+ * (e.g. `_meta.ui.resourceUri` for MCP Apps detection). Returns `undefined` for
+ * scalar results or results whose CallToolResult had no `_meta`.
+ */
+export function getMcpCallToolMeta(output: unknown): Record<string, unknown> | undefined {
+  if (output === null || typeof output !== 'object') return undefined;
+  return (output as Record<PropertyKey, unknown>)[MCP_CALL_TOOL_META] as Record<string, unknown> | undefined;
 }
 
 function createStructuredToolToModelOutput(): (output: unknown) =>
@@ -1204,8 +1243,12 @@ export class InternalMastraMCPClient extends MastraBase {
   }
 
   /**
-   * Wraps the output schema with a validator that always succeeds. The MCP client validates
-   * structuredContent via AJV; the JSON schema is surfaced here for documentation only.
+   * Wraps the output schema with a validator that always succeeds. The tool's execute wrapper
+   * returns the full CallToolResult envelope when there is no structuredContent (and for
+   * in-band errors with `onToolError: 'return'`), which would never match the advertised
+   * outputSchema — so enforcement happens inside the execute wrapper, scoped to the
+   * structuredContent path (see buildToolFromListEntry). The JSON schema is surfaced here
+   * for documentation.
    */
   private convertOutputSchema(
     outputSchema: Awaited<ReturnType<Client['listTools']>>['tools'][0]['outputSchema'],
@@ -1374,6 +1417,13 @@ export class InternalMastraMCPClient extends MastraBase {
                 },
               }
             : {};
+        // Real validator for structuredContent. Kept separate from the Tool's outputSchema
+        // (whose validator is a no-op — see convertOutputSchema) because only the
+        // structuredContent success path should be validated, not envelope returns.
+        const rawOutputSchema = tool.outputSchema
+          ? (('jsonSchema' in tool.outputSchema ? tool.outputSchema.jsonSchema : tool.outputSchema) as JSONSchema7)
+          : undefined;
+        const outputValidator = rawOutputSchema ? toStandardSchema(rawOutputSchema) : undefined;
         const mastraTool = createTool({
           id: `${this.name}_${tool.name}`,
           description: tool.description || '',
@@ -1455,7 +1505,29 @@ export class InternalMastraMCPClient extends MastraBase {
                 this.log('debug', `Tool executed successfully: ${tool.name}`);
 
                 if (res.structuredContent !== undefined) {
-                  return attachMcpCallToolContent(res.structuredContent, res.content);
+                  // Enforce the server-advertised outputSchema before the result reaches the
+                  // model. This covers both live-discovered tools and tools hydrated from a
+                  // cached catalog (which never populate the MCP SDK's tools/list output-schema
+                  // cache, so the SDK's own AJV check does not fire for them). On mismatch,
+                  // return the same structured ValidationError shape createTool produces so
+                  // the model can self-correct. Skipped for isError results, which are handled
+                  // above / by the `onToolError: 'return'` envelope path.
+                  if (!res.isError && outputValidator) {
+                    const validation = validateToolOutput(outputValidator, res.structuredContent, tool.name);
+                    if (validation.error) {
+                      this.log('debug', `Tool output failed schema validation: ${tool.name}`, {
+                        message: validation.error.message,
+                      });
+                      return validation.error;
+                    }
+                  }
+                  // Attach content metadata to the original structuredContent reference so the
+                  // hidden symbol channels (content/_meta) are preserved.
+                  return attachMcpCallToolContent(
+                    res.structuredContent,
+                    res.content,
+                    res._meta ? this.stampServerIdInMeta(res._meta) : undefined,
+                  );
                 }
 
                 return res;

@@ -1,6 +1,6 @@
 ---
 title: "Reference: Workspace class | Workspace"
-description: "Documentation for the Workspace class, the central API for filesystem access, sandbox execution, and search in Mastra."
+description: "The Workspace class combines a filesystem and sandbox to provide agents with file storage and command execution capabilities."
 packages:
   - "@mastra/core"
 ---
@@ -425,6 +425,18 @@ Initialization performs:
 - Starts the sandbox provider (creates working directory, sets up isolation if configured)
 - Indexes files from `autoIndexPaths` for search
 
+#### `stop()`
+
+Stop the workspace's live resources without destroying them.
+
+```typescript
+await workspace.stop()
+```
+
+`stop()` shuts down language servers and the browser before stopping the sandbox provider. Remote providers suspend or pause the sandbox for later resumption, while `LocalSandbox` kills background processes and unmounts filesystems. Stopping isn't a teardown. The filesystem and search index remain available along with skills, and the next sandbox operation starts the sandbox again.
+
+`mastra.shutdown()` calls `stop()` for registered workspaces, so a process restart suspends remote sandboxes instead of deleting them. To fully tear a workspace down, call `destroy()` or `mastra.removeWorkspace(id, { destroy: true })` explicitly.
+
 #### `destroy()`
 
 Destroy the workspace and clean up resources.
@@ -435,7 +447,7 @@ await workspace.destroy()
 
 `destroy()` closes workspace-owned resources in order: language servers, browsers, sandbox providers, and filesystem providers. It also clears cached sandbox references.
 
-Call `destroy()` when your application is done with a workspace. `mastra.shutdown()` calls it for registered workspaces during shutdown. To remove a workspace from the Mastra registry, use [`mastra.removeWorkspace()`](/reference/core/removeWorkspace).
+Call `destroy()` when your application is done with a workspace and its sandbox. To remove a workspace from the Mastra registry, use [`mastra.removeWorkspace()`](/reference/core/removeWorkspace).
 
 `LocalFilesystem.destroy()` doesn't delete files on disk. Resolver-backed filesystem and sandbox providers are owned by your application and must be cleaned up by your application.
 
@@ -616,7 +628,7 @@ if (workspace.hasFilesystemConfig()) {
 
 #### `resolveFilesystem({ requestContext })`
 
-Resolve the filesystem for a request context. When a resolver function is configured, calls it with the provided `requestContext`. When a static filesystem is configured, returns it directly. Returns `undefined` if no filesystem is configured.
+Resolve the filesystem for a request context by calling a configured resolver with `requestContext` or returning a configured static filesystem directly. Returns `undefined` when no filesystem is configured.
 
 ```typescript
 import { RequestContext } from '@mastra/core/request-context'
@@ -655,7 +667,7 @@ if (workspace.hasSandboxConfig()) {
 
 #### `resolveSandbox({ requestContext })`
 
-Resolve the sandbox for a request context. When a resolver function is configured, calls it with the provided `requestContext`. When a static sandbox is configured, returns it directly. Returns `undefined` if no sandbox is configured.
+Resolve the sandbox for a request context by calling a configured resolver with `requestContext` or returning a configured static sandbox directly. Returns `undefined` when no sandbox is configured.
 
 ```typescript
 import { RequestContext } from '@mastra/core/request-context'

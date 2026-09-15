@@ -35,6 +35,7 @@ export class InMemoryWorkflowDefinitionsStorage extends WorkflowDefinitionsStora
         ...('requestContextSchema' in input &&
           input.requestContextSchema !== undefined && { requestContextSchema: input.requestContextSchema }),
         ...('graph' in input && input.graph !== undefined && { graph: input.graph }),
+        ...('schedule' in input && input.schedule !== undefined && { schedule: input.schedule ?? undefined }),
         ...('status' in input && input.status !== undefined && { status: input.status }),
         ...('authorId' in input && input.authorId !== undefined && { authorId: input.authorId }),
         updatedAt: now,
@@ -67,6 +68,7 @@ export class InMemoryWorkflowDefinitionsStorage extends WorkflowDefinitionsStora
       stateSchema: input.stateSchema,
       requestContextSchema: input.requestContextSchema,
       graph: input.graph,
+      schedule: 'schedule' in input ? (input.schedule ?? undefined) : undefined,
       status: 'active',
       source: 'storage',
       authorId: 'authorId' in input ? input.authorId : undefined,

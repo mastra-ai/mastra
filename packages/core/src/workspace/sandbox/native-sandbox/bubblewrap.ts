@@ -109,6 +109,15 @@ export function buildBwrapCommand(
     bwrapArgs.push('--bind', path, path);
   }
 
+  // Mount a fresh /dev with the standard device nodes (null, zero, random,
+  // urandom, tty, ...). Without it the namespace has no devices at all, so
+  // git/ssh and ordinary shell redirections (`2>/dev/null`) fail with ENOENT.
+  // IMPORTANT: this must come AFTER all bind loops — in bwrap, later mounts
+  // win, and callers commonly pass readOnlyPaths: ['/dev'] as a workaround for
+  // this very bug. A bind of /dev is mounted nodev, so it would shadow the
+  // device mount and turn the ENOENT into EACCES.
+  bwrapArgs.push('--dev', '/dev');
+
   // Set the working directory
   bwrapArgs.push('--chdir', workspacePath);
 

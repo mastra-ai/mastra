@@ -87,10 +87,10 @@ test.describe('Agent observability tabs', () => {
       let traceListUrl: URL | undefined;
       await mockTraceLists(page, url => (traceListUrl = url));
 
-      await page.goto('/agents/weather-agent/chat/new');
+      await page.goto('/agents/weather-agent/overview');
       await expect(page.getByRole('tab', { name: 'Evaluate' })).toBeVisible();
       await expect(page.getByRole('tab', { name: 'Review' })).toBeVisible();
-      await page.getByRole('tab', { name: 'Traces' }).click();
+      await page.getByRole('tab', { name: 'Agent traces' }).click();
 
       // The traces tab navigates to /agents/:id/traces; the page then enriches the URL
       // with scope filter params, so we assert the path without anchoring on $.
@@ -109,8 +109,8 @@ test.describe('Agent observability tabs', () => {
     test('keeps the agent observability tabs disabled', async ({ page }) => {
       await mockSystemPackages(page, false);
 
-      await page.goto('/agents/weather-agent/chat/new');
-      await page.getByRole('tab', { name: 'Traces' }).hover();
+      await page.goto('/agents/weather-agent/overview');
+      await page.getByRole('tab', { name: 'Agent traces' }).hover();
 
       await expect(page.getByRole('tooltip').getByText('Add @mastra/observability to enable this tab.')).toBeVisible();
     });

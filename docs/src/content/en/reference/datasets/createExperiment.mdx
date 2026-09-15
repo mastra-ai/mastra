@@ -1,6 +1,6 @@
 ---
 title: 'Reference: dataset.createExperiment() | Datasets'
-description: 'Documentation for the `dataset.createExperiment()` method, which creates an experiment whose loop is owned by the caller.'
+description: "Use dataset.createExperiment() to create a caller-driven experiment without starting a run, then submit results and finalize it from your own orchestrator."
 packages:
   - '@mastra/core'
 ---
@@ -35,7 +35,7 @@ const { experimentId, totalItems, datasetVersion } = await dataset.createExperim
 })
 ```
 
-Passing your own `id` makes creation idempotent: calling it again with the same `id` returns the existing experiment instead of failing, so a retried workflow activity is safe. If the `id` belongs to an experiment on another dataset or an experiment with a different target, the call throws an `EXPERIMENT_ID_CONFLICT` error.
+Passing your own `id` makes creation idempotent, so another call with the same `id` returns the existing experiment and keeps a retried workflow activity safe. The call throws an `EXPERIMENT_ID_CONFLICT` error if the `id` belongs to an experiment on another dataset or one with a different target.
 
 `targetType` and `targetId` must be provided together, and the target must exist in the Mastra registry at create time. `scorers` requires a target because Mastra never scores target-less experiments; submit flat scores through `submitExperimentResult` instead.
 
@@ -152,4 +152,4 @@ Passing your own `id` makes creation idempotent: calling it again with the same 
 - [dataset.runExperimentItem()](/reference/datasets/runExperimentItem)
 - [dataset.submitExperimentResult()](/reference/datasets/submitExperimentResult)
 - [dataset.finalizeExperiment()](/reference/datasets/finalizeExperiment)
-- [Running experiments](/docs/datasets/running-experiments#caller-driven-experiments)
+- [Running experiments](/docs/evals/experiments#caller-driven-experiments)

@@ -32,6 +32,7 @@ type SettingsNavItem = {
 type SettingsNavGroup = {
   id: string;
   label?: string;
+  ariaLabel?: string;
   items: SettingsNavItem[];
 };
 
@@ -50,36 +51,6 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
         label: SETTINGS_SECTION_LABELS.preferences,
         icon: Palette,
         searchText: 'preferences general theme appearance color scheme completion sound',
-      },
-      {
-        id: 'factory',
-        label: SETTINGS_SECTION_LABELS.factory,
-        icon: Building2,
-        searchText: 'factory project organization remove delete danger',
-      },
-    ],
-  },
-  {
-    id: 'sources',
-    label: 'Sources',
-    items: [
-      {
-        id: 'repositories',
-        label: SETTINGS_SECTION_LABELS.repositories,
-        icon: GitBranch,
-        searchText: 'repositories source control git branches remotes code worktrees setup github',
-      },
-      {
-        id: 'intake',
-        label: SETTINGS_SECTION_LABELS.intake,
-        icon: Inbox,
-        searchText: 'work intake sources tasks issues pull requests github linear feed sync',
-      },
-      {
-        id: 'connections',
-        label: SETTINGS_SECTION_LABELS.connections,
-        icon: Cable,
-        searchText: 'connections connected accounts slack communication integrations',
       },
     ],
   },
@@ -111,6 +82,42 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
         label: SETTINGS_SECTION_LABELS.behavior,
         icon: SlidersHorizontal,
         searchText: 'behavior auto approve tools smart editing notifications permissions read edit execute mcp',
+      },
+    ],
+  },
+  {
+    id: 'sources',
+    label: 'Sources',
+    items: [
+      {
+        id: 'repositories',
+        label: SETTINGS_SECTION_LABELS.repositories,
+        icon: GitBranch,
+        searchText: 'repositories source control git branches remotes code worktrees sandbox setup github',
+      },
+      {
+        id: 'intake',
+        label: SETTINGS_SECTION_LABELS.intake,
+        icon: Inbox,
+        searchText: 'work intake sources tasks issues pull requests github linear feed sync',
+      },
+      {
+        id: 'connections',
+        label: SETTINGS_SECTION_LABELS.connections,
+        icon: Cable,
+        searchText: 'connections connected accounts slack communication integrations',
+      },
+    ],
+  },
+  {
+    id: 'factory',
+    ariaLabel: SETTINGS_SECTION_LABELS.factory,
+    items: [
+      {
+        id: 'factory',
+        label: SETTINGS_SECTION_LABELS.factory,
+        icon: Building2,
+        searchText: 'factory project organization manage remove delete danger',
       },
     ],
   },
@@ -164,7 +171,7 @@ export function SettingsNavigation() {
             <MainSidebar.NavSection
               key={group.id}
               aria-labelledby={headerId}
-              aria-label={headerId ? undefined : group.id}
+              aria-label={headerId ? undefined : (group.ariaLabel ?? group.id)}
             >
               {group.label && <MainSidebar.NavHeader id={headerId}>{group.label}</MainSidebar.NavHeader>}
               <MainSidebar.NavList>

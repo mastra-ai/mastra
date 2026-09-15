@@ -1,5 +1,5 @@
 import { z } from 'zod/v4';
-import { paginationInfoSchema } from './common';
+import { paginationInfoSchema, createPagePaginationSchema } from './common';
 
 // ============================================================================
 // JSON Schema Types (for inputSchema/groundTruthSchema fields)
@@ -262,9 +262,37 @@ export const datasetAndItemIdPathParams = z.object({
 // Query Parameter Schemas
 // ============================================================================
 
-export const paginationQuerySchema = z.object({
-  page: z.coerce.number().optional().default(0),
-  perPage: z.coerce.number().optional().default(10),
+export const paginationQuerySchema = createPagePaginationSchema(10);
+
+export const listExperimentResultsQuerySchema = paginationQuerySchema.extend({
+  tags: z
+    .preprocess(v => {
+      // Repeated query params arrive as arrays; a single param arrives as a string.
+      // Blank values (`?tags=`) mean "no filter", not "match the empty tag".
+      const list = typeof v === 'string' ? [v] : v;
+      if (!Array.isArray(list)) return list;
+      const nonBlank = list.filter(tag => tag !== '');
+      return nonBlank.length > 0 ? nonBlank : undefined;
+    }, z.array(z.string()).optional())
+    .describe('Only return results that have all of these tags'),
+});
+
+const targetTypeQuerySchema = z
+  .enum(['agent', 'workflow', 'scorer', 'processor'])
+  .optional()
+  .describe('Only return records attached to targets of this type');
+
+export const listDatasetsQuerySchema = paginationQuerySchema.extend({
+  targetType: targetTypeQuerySchema,
+  targetIds: z
+    .preprocess(v => {
+      // Repeated query params arrive as arrays; a single param arrives as a string.
+      const list = typeof v === 'string' ? [v] : v;
+      if (!Array.isArray(list)) return list;
+      const nonBlank = list.filter(id => id !== '');
+      return nonBlank.length > 0 ? nonBlank : undefined;
+    }, z.array(z.string()).optional())
+    .describe('Only return datasets attached to at least one of these target IDs'),
 });
 
 export const listExperimentsQuerySchema = paginationQuerySchema.extend({
@@ -272,6 +300,8 @@ export const listExperimentsQuerySchema = paginationQuerySchema.extend({
   comparisonId: z.string().optional(),
   variantId: z.string().optional(),
   trialIndex: z.coerce.number().int().min(0).optional(),
+  targetType: targetTypeQuerySchema,
+  targetId: z.string().optional().describe('Only return experiments run against this target ID'),
 });
 
 export const tenancyQuerySchema = z.object({
@@ -279,9 +309,7 @@ export const tenancyQuerySchema = z.object({
   projectId: z.string().optional().describe('Restrict lookup to the given project'),
 });
 
-export const listItemsQuerySchema = z.object({
-  page: z.coerce.number().optional().default(0),
-  perPage: z.coerce.number().optional().default(10),
+export const listItemsQuerySchema = createPagePaginationSchema(10).extend({
   version: z.coerce.number().int().optional(), // Optional version filter for snapshot semantics
   search: z.string().optional(),
 });
@@ -339,6 +367,14 @@ export const updateItemBodySchema = z.object({
   metadata: z.record(z.string(), z.unknown()).optional().describe('Additional metadata'),
   source: datasetItemSourceSchema,
 });
+
+export const updateExperimentBodySchema = z
+  .object({
+    name: z.string().optional().describe('New name of the experiment'),
+    description: z.string().optional().describe('New description of the experiment'),
+    metadata: z.record(z.string(), z.unknown()).optional().describe('Replacement metadata for the experiment'),
+  })
+  .strict();
 
 export const triggerExperimentBodySchema = z.object({
   start: z
@@ -474,12 +510,12 @@ export const datasetItemResponseSchema = z.object({
   input: z.unknown(),
   groundTruth: z.unknown().optional(),
   expectedTrajectory: z.unknown().optional(),
-  toolMocks: toolMocksSchema,
-  unmockedToolPolicy: unmockedToolPolicySchema,
-  scorerIds: z.array(z.string()).optional(),
-  requestContext: z.record(z.string(), z.unknown()).optional(),
-  metadata: z.record(z.string(), z.unknown()).optional(),
-  source: datasetItemSourceSchema,
+  toolMocks: toolMocksSchema.nullable(),
+  unmockedToolPolicy: unmockedToolPolicySchema.nullable(),
+  scorerIds: z.array(z.string()).optional().nullable(),
+  requestContext: z.record(z.string(), z.unknown()).optional().nullable(),
+  metadata: z.record(z.string(), z.unknown()).optional().nullable(),
+  source: datasetItemSourceSchema.nullable(),
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
 });
@@ -546,6 +582,7 @@ export const experimentResultResponseSchema = z.object({
   input: z.unknown(),
   output: z.unknown().nullable(),
   groundTruth: z.unknown().nullable(),
+  metadata: z.record(z.string(), z.unknown()).optional().nullable(),
   expectedTrajectory: z.unknown().optional(),
   error: z
     .object({
@@ -632,6 +669,7 @@ export const experimentSummaryResponseSchema = z.object({
       input: z.unknown(),
       output: z.unknown().nullable(),
       groundTruth: z.unknown().nullable(),
+      metadata: z.record(z.string(), z.unknown()).optional().nullable(),
       error: z.string().nullable(),
       startedAt: z.coerce.date(),
       completedAt: z.coerce.date(),
@@ -705,10 +743,11 @@ export const itemVersionResponseSchema = z.object({
   input: z.unknown(),
   groundTruth: z.unknown().optional(),
   expectedTrajectory: z.unknown().optional(),
-  toolMocks: toolMocksSchema,
-  unmockedToolPolicy: unmockedToolPolicySchema,
-  scorerIds: z.array(z.string()).optional(),
-  metadata: z.record(z.string(), z.unknown()).optional(),
+  toolMocks: toolMocksSchema.nullable(),
+  unmockedToolPolicy: unmockedToolPolicySchema.nullable(),
+  scorerIds: z.array(z.string()).optional().nullable(),
+  requestContext: z.record(z.string(), z.unknown()).optional().nullable(),
+  metadata: z.record(z.string(), z.unknown()).optional().nullable(),
   validTo: z.number().int().nullable(),
   isDeleted: z.boolean(),
   createdAt: z.coerce.date(),

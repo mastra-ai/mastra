@@ -74,8 +74,8 @@ describe('ActivityLine', () => {
       args: { path: 'src/index.ts' },
     });
 
-    await screen.findByRole('group', { name: 'Tool: view' });
-    expect(screen.queryByText('Thinking')).not.toBeInTheDocument();
+    await screen.findByRole('group', { name: 'Tool: view' }, { timeout: 3000 });
+    await waitFor(() => expect(screen.queryByText('Thinking')).not.toBeInTheDocument());
   });
 
   it('steps aside while the answer streams', async () => {
@@ -89,7 +89,21 @@ describe('ActivityLine', () => {
 
     // Streamed prose is split into per-word spans to fade in, so match the rendered text as a whole.
     await waitFor(() => expect(document.body).toHaveTextContent('Auth starts at the composer'));
-    expect(screen.queryByText('Thinking')).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText('Thinking')).not.toBeInTheDocument());
+  });
+
+  it('lingers for a beat when output lands, letting its sweep settle instead of vanishing under it', async () => {
+    const session = stubPreparingSession({ autoAgentEnd: false });
+    const user = userEvent.setup();
+    const { client } = renderThread();
+    await ready(session.finishWorkspace, client);
+    await send(user);
+    await screen.findByText('Thinking');
+
+    await session.emit({ type: 'message_update', message: assistantText('Auth starts at the composer') });
+
+    expect(screen.getByText('Thinking')).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText('Thinking')).not.toBeInTheDocument());
   });
 
   it('says nothing when the run is idle', async () => {

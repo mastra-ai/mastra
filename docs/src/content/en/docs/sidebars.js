@@ -73,9 +73,6 @@ const sidebars = {
               type: 'doc',
               id: 'agents/code-mode',
               label: 'Code Mode',
-              customProps: {
-                tags: ['new'],
-              },
             },
           ],
         },
@@ -109,9 +106,6 @@ const sidebars = {
               type: 'doc',
               id: 'workflows/dynamic-workflows',
               label: 'Dynamic Workflows',
-              customProps: {
-                tags: ['new'],
-              },
             },
             {
               type: 'doc',
@@ -288,6 +282,11 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'sandbox/computer',
+              label: 'Computer',
+            },
+            {
+              type: 'doc',
               id: 'sandbox/lsp',
               label: 'LSP',
             },
@@ -310,9 +309,20 @@ const sidebars = {
           },
           items: [
             {
-              type: 'doc',
-              id: 'connections/mcp',
-              label: 'MCP',
+              type: 'category',
+              label: 'Tools & MCP',
+              items: [
+                {
+                  type: 'doc',
+                  id: 'connections/mcp',
+                  label: 'MCP',
+                },
+                {
+                  type: 'doc',
+                  id: 'connections/connect-mcp-client',
+                  label: 'Connect your MCP client to Mastra (draft)',
+                },
+              ],
             },
             {
               type: 'doc',
@@ -466,9 +476,6 @@ const sidebars = {
               type: 'doc',
               id: 'auth/workers',
               label: 'Workers',
-              customProps: {
-                tags: ['new'],
-              },
             },
           ],
         },
@@ -517,9 +524,6 @@ const sidebars = {
               type: 'doc',
               id: 'deployment/workers',
               label: 'Workers',
-              customProps: {
-                tags: ['new'],
-              },
             },
           ],
         },
@@ -546,7 +550,7 @@ const sidebars = {
             {
               type: 'doc',
               id: 'observability/tracing/overview',
-              label: 'Traces',
+              label: 'Usage',
             },
             {
               type: 'doc',
@@ -566,22 +570,9 @@ const sidebars = {
           ],
         },
         {
-          type: 'category',
+          type: 'doc',
+          id: 'observability/metrics/overview',
           label: 'Metrics',
-          link: {
-            type: 'doc',
-            id: 'observability/metrics/overview',
-          },
-          customProps: {
-            contextualSidebar: true,
-          },
-          items: [
-            {
-              type: 'doc',
-              id: 'observability/metrics/querying',
-              label: 'Querying Metrics',
-            },
-          ],
         },
         {
           type: 'category',
@@ -626,25 +617,22 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'evals/vitest-integration',
+              label: 'Vitest Integration',
+            },
+            {
+              type: 'doc',
               id: 'evals/evals-with-memory',
               label: 'Evals with Memory',
             },
-          ],
-        },
-        {
-          type: 'category',
-          label: 'Datasets',
-          link: {
-            type: 'doc',
-            id: 'datasets/overview',
-          },
-          customProps: {
-            contextualSidebar: true,
-          },
-          items: [
             {
               type: 'doc',
-              id: 'datasets/running-experiments',
+              id: 'evals/datasets',
+              label: 'Datasets',
+            },
+            {
+              type: 'doc',
+              id: 'evals/experiments',
               label: 'Experiments',
             },
           ],
@@ -681,6 +669,22 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'guides/agent-lifecycle',
+              label: 'Agent lifecycle',
+              customProps: {
+                tags: ['new'],
+              },
+            },
+            {
+              type: 'doc',
+              id: 'guides/authentication-identity',
+              label: 'Authentication',
+              customProps: {
+                tags: ['new'],
+              },
+            },
+            {
+              type: 'doc',
               id: 'guides/streaming',
               label: 'Streaming',
             },
@@ -709,9 +713,6 @@ const sidebars = {
       type: 'doc',
       id: 'mastra-platform/regions',
       label: 'Regions',
-      customProps: {
-        tags: ['new'],
-      },
     },
     {
       type: 'doc',
@@ -722,9 +723,6 @@ const sidebars = {
       type: 'doc',
       id: 'mastra-platform/trace-intelligence',
       label: 'Trace Intelligence',
-      customProps: {
-        tags: ['new'],
-      },
     },
     {
       type: 'doc',
@@ -750,9 +748,6 @@ const sidebars = {
       type: 'doc',
       id: 'mastra-platform/workspaces',
       label: 'Workspaces',
-      customProps: {
-        tags: ['new'],
-      },
     },
     {
       type: 'doc',

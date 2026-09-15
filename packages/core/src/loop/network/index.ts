@@ -1603,13 +1603,15 @@ export async function createNetworkLoop({
       // requireApproval can be:
       // - boolean (from Mastra createTool or mapped from AI SDK needsApproval: true)
       // - undefined (no approval needed)
-      // If needsApprovalFn exists, evaluate it with the tool args
+      // If needsApprovalFn exists, evaluate it with the tool args and the same
+      // request-context view the agentic loop provides.
       let toolRequiresApproval = (tool as any).requireApproval;
       const needsApprovalFn = getNeedsApprovalFn(tool);
       if (needsApprovalFn) {
-        // Evaluate the function with the parsed args
         try {
-          const needsApprovalResult = await needsApprovalFn(inputDataToUse);
+          const needsApprovalResult = await needsApprovalFn(inputDataToUse, {
+            requestContext: Object.fromEntries(requestContext.entries()),
+          });
           toolRequiresApproval = needsApprovalResult;
         } catch (error) {
           // Log error to help developers debug faulty needsApprovalFn implementations
@@ -2022,6 +2024,9 @@ export async function createNetworkLoop({
     }),
     options: {
       shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'suspended',
+      // Excluding `running` means resume claims cannot persist; suppress the
+      // per-resume warning for this internal workflow.
+      allowUnclaimedResumes: true,
       // Agent-loop snapshots are pure resume artifacts — strip everything a
       // resume never reads before persisting.
       pruneSnapshot: pruneAgentLoopSnapshot,
@@ -2625,6 +2630,9 @@ export async function networkLoop<OUTPUT = undefined>({
     outputSchema: validationStep.outputSchema,
     options: {
       shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'suspended',
+      // Excluding `running` means resume claims cannot persist; suppress the
+      // per-resume warning for this internal workflow.
+      allowUnclaimedResumes: true,
       pruneSnapshot: pruneAgentLoopSnapshot,
       validateInputs: false,
       // Internal agent.network() plumbing — see networkWorkflow above.
@@ -2663,6 +2671,9 @@ export async function networkLoop<OUTPUT = undefined>({
     }),
     options: {
       shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'suspended',
+      // Excluding `running` means resume claims cannot persist; suppress the
+      // per-resume warning for this internal workflow.
+      allowUnclaimedResumes: true,
       pruneSnapshot: pruneAgentLoopSnapshot,
       validateInputs: false,
       // Internal agent.network() plumbing — see networkWorkflow above.

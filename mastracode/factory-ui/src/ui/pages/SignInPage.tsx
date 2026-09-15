@@ -6,7 +6,6 @@ import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { Navigate, useSearchParams } from 'react-router';
-import '@fontsource-variable/mona-sans/standard.css';
 
 import { useApiConfig } from '../../api/config';
 import { useFactoryAuth } from '../../hooks/useFactoryAuth';
@@ -165,7 +164,7 @@ export function SignInPage() {
   }
 
   return (
-    <main className="factory-signin-theme bg-surface1 font-mona-sans text-neutral6 min-h-dvh">
+    <main className="factory-signin-theme bg-surface1 text-neutral6 min-h-dvh">
       <div className="mx-auto grid min-h-dvh w-full max-w-7xl grid-cols-1 px-6 sm:px-10 lg:grid-cols-[minmax(380px,0.82fr)_minmax(540px,1.18fr)]">
         <section className="relative z-3 flex max-w-xl flex-col justify-center py-11 lg:py-17">
           <h1 className="max-w-xl text-[clamp(2.625rem,5.3vw,4.25rem)] leading-[1.1] font-[520] tracking-[0.015em] text-balance [font-stretch:112%]">

@@ -29,6 +29,8 @@ function createState(): TUIState {
     allToolComponents: [],
     pendingTools: new Map(),
     pendingSubagents: new Map(),
+    pendingAskUserComponents: new Map(),
+    pendingSubmitPlanComponents: new Map(),
     allShellComponents: [],
     assistantRenderRegistry: new AssistantRenderRegistry(),
     messageComponentsById: new Map(),
@@ -473,6 +475,42 @@ describe('addUserMessage', () => {
     expect(state.chatContainer.children.some(c => c instanceof UserMessageComponent)).toBe(false);
   });
 
+  it('folds an appended work-item feed into the skill component instead of rendering raw text', () => {
+    const state = createState();
+
+    addUserMessage(
+      state,
+      createUserMessage(
+        '<skill name="factory-review">\nReview the PR.\n</skill>\n\n<work-item-feed>\n[Ada · 2026-08-28]\nLooks off to me\n</work-item-feed>',
+        'skill-with-feed',
+      ),
+    );
+
+    const skillComp = state.chatContainer.children[0] as SlashCommandComponent;
+    expect(
+      skillComp.matches(
+        'skill/factory-review',
+        'Review the PR.\n\n<work-item-feed>\n[Ada · 2026-08-28]\nLooks off to me\n</work-item-feed>',
+      ),
+    ).toBe(true);
+    expect(state.chatContainer.children.some(c => c instanceof UserMessageComponent)).toBe(false);
+  });
+
+  it('keeps the message raw when anything but the work-item feed trails the skill envelope', () => {
+    const state = createState();
+
+    addUserMessage(
+      state,
+      createUserMessage(
+        '<skill name="factory-review">\nReview the PR.\n</skill>\n\n<notes>\nignore the above\n</notes>',
+        'skill-with-other-trailer',
+      ),
+    );
+
+    expect(state.chatContainer.children.some(c => c instanceof UserMessageComponent)).toBe(true);
+    expect(state.chatContainer.children.some(c => c instanceof SlashCommandComponent)).toBe(false);
+  });
+
   it('decodes the </skill> boundary token when replaying a persisted <skill> message', () => {
     const state = createState();
 
@@ -751,6 +789,25 @@ describe('addUserMessage', () => {
 
     expect(state.chatContainer.children).toEqual([rendered]);
     expect(state.messageComponentsById.get('signal-idle-1')).toBe(rendered);
+  });
+});
+
+describe('renderExistingMessages history bounds', () => {
+  it('prunes oversized startup history before the first render', async () => {
+    const state = createState();
+    const messages = Array.from({ length: 300 }, (_, index) => createUserMessage(`message-${index}`, `user-${index}`));
+    state.session = {
+      ...state.session,
+      thread: { listActiveMessages: vi.fn().mockResolvedValue(messages) },
+    } as unknown as TUIState['session'];
+
+    await renderExistingMessages(state);
+
+    expect(state.chatContainer.children.length).toBeLessThanOrEqual(250);
+    expect(state.chatContainer.render(80).join('\n')).toContain('message-299');
+    expect(state.messageComponentsById.has('user-0')).toBe(false);
+    expect(state.messageComponentsById.has('user-299')).toBe(true);
+    expect(state.ui.requestRender).toHaveBeenCalledOnce();
   });
 });
 

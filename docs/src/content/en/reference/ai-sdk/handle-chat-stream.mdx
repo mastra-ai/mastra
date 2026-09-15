@@ -1,6 +1,6 @@
 ---
 title: "Reference: handleChatStream() | AI SDK"
-description: API reference for handleChatStream(), a framework-agnostic handler for streaming agent chat in AI SDK-compatible format.
+description: "Framework-agnostic handler for streaming agent chat in AI SDK-compatible format."
 packages:
   - "@mastra/ai-sdk"
 ---
@@ -54,6 +54,17 @@ export async function POST(req: Request) {
   })
   return createUIMessageStreamResponse({ stream })
 }
+```
+
+## Keeping connections alive
+
+Proxies and load balancers often close a connection that sends no bytes for a while, which drops the response during long reasoning bursts or slow tool calls. Wrap the encoded response with [`withSseHeartbeat()`](/reference/ai-sdk/with-sse-heartbeat) to emit periodic SSE comments while the stream is idle:
+
+```typescript title="app/api/chat/route.ts"
+import { handleChatStream, withSseHeartbeat } from '@mastra/ai-sdk'
+import { createUIMessageStreamResponse } from 'ai'
+
+return withSseHeartbeat(createUIMessageStreamResponse({ stream }), 15000)
 ```
 
 ## Parameters

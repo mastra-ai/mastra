@@ -5,6 +5,7 @@ import { http, HttpResponse } from 'msw';
 import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { useThemeSnapshots } from '../hooks/use-theme-snapshots';
 import { SankeySignals } from '../sankey-signals';
 import { buildThemeLifelines, lifelineConnectors, lifelineSegments } from '../theme-lifelines-data';
 import {
@@ -38,12 +39,19 @@ class ChartResizeObserver implements ResizeObserver {
 
 function ControlledSankeySignals() {
   const [selectedThemeId, setSelectedThemeId] = useState<string>();
+  const [selectedFrameId, setSelectedFrameId] = useState<string>();
+  const snapshotsQuery = useThemeSnapshots('support-agent', 'agent', ['goal', 'outcome', 'behavior', 'sentiment']);
+  const snapshots = [...(snapshotsQuery.data?.snapshots ?? [])].sort((left, right) => left.ordinal - right.ordinal);
+  const frameId = selectedFrameId ?? snapshots[0]?.snapshotId;
+  if (!frameId) return null;
   return (
     <SankeySignals
       entityId="support-agent"
       signalNames={['goal', 'outcome', 'behavior', 'sentiment']}
       selectedThemeId={selectedThemeId}
       onSelectedThemeIdChange={setSelectedThemeId}
+      selectedFrameId={frameId}
+      onFrameIdChange={setSelectedFrameId}
     />
   );
 }
@@ -288,7 +296,7 @@ describe('SankeySignals lifelines mode', () => {
       await within(goalSection).findByRole('listitem', {
         name: 'Legacy support request: present in 2 of 5 landmarks',
       });
-      const goalToggle = within(goalSection).getByRole('button', { name: 'goal' });
+      const goalToggle = within(goalSection).getByRole('button', { name: 'Goal' });
       expect(goalToggle.getAttribute('aria-expanded')).toBe('true');
 
       fireEvent.click(goalToggle);
@@ -313,7 +321,7 @@ describe('SankeySignals lifelines mode', () => {
       fireEvent.click(screen.getByRole('tab', { name: 'Lifelines' }));
       const lifelines = await screen.findByRole('region', { name: 'Theme lifelines' });
       const goalSection = within(lifelines).getByRole('region', { name: 'Goal lifelines' });
-      fireEvent.focus(within(goalSection).getByRole('button', { name: 'goal' }));
+      fireEvent.focus(within(goalSection).getByRole('button', { name: 'Goal' }));
 
       expect((await screen.findByRole('tooltip')).textContent).toContain('What the user wanted');
     });

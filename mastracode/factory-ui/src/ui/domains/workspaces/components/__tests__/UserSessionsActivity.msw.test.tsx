@@ -1,11 +1,11 @@
 /**
- * Sidebar activity dot for user sessions.
+ * Sidebar activity belt for user sessions.
  *
  * User sessions are addressed by their own `sessionId` as `resourceId`, so they
  * read the same active-run registry as factory workspaces. This suite pins down
  * the three-state indicator (initializing / working / idle) for those rows.
  */
-import { screen } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { describe, expect, it } from 'vitest';
@@ -14,7 +14,7 @@ import { queryKeys } from '../../../../../api/keys';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { AGENT_CONTROLLER_ID } from '../../../chat/services/constants';
-import type { FactoryUserSession } from '../../services/github';
+import type { FactoryUserSession } from '../../services/user-sessions';
 import { UserSessionsSection } from '../UserSessionsSection';
 
 const factoryId = 'fp-1';
@@ -93,7 +93,7 @@ function renderSection() {
 }
 
 describe('User sessions sidebar activity', () => {
-  it('lights the working dot when the session has an active thread', async () => {
+  it('lights the working belt when the session has an active thread', async () => {
     stubProjectAndSessions([makeSession({ sessionId: 'sess-1', branch: 'user/feature-a' })]);
     stubActiveSessions(new Set(['sess-1']));
 
@@ -103,7 +103,7 @@ describe('User sessions sidebar activity', () => {
     await screen.findByRole('status', { name: 'Agent working in feature-a' });
   });
 
-  it('shows the initializing dot for a session that has not materialized yet', async () => {
+  it('shows the initializing belt for a session that has not materialized yet', async () => {
     stubProjectAndSessions([makeSession({ sessionId: 'sess-2', branch: 'user/feature-b', materializedAt: null })]);
     stubActiveSessions(new Set());
 
@@ -113,13 +113,13 @@ describe('User sessions sidebar activity', () => {
     await screen.findByRole('status', { name: 'Initializing feature-b' });
   });
 
-  it('resolves the initializing dot once the run that materialized the session finishes', async () => {
-    let materialized = false;
+  it('clears the initializing belt once the run that materialized the session finishes', async () => {
+    let settled = false;
     const active = new Set(['sess-4']);
     stubProjectAndSessions([]);
-    // Serve a mutable session row so the refetch after run end observes the
-    // freshly stamped `materializedAt` (registered after the base stub — the
-    // most recent handler wins).
+    // Serve a mutable session row so the next sessions refetch observes the
+    // stamped `materializedAt` (registered after the base stub — the most
+    // recent handler wins).
     server.use(
       http.get(`${TEST_BASE_URL}/web/github/projects/${projectRepositoryId}/sessions`, () =>
         HttpResponse.json({
@@ -127,7 +127,7 @@ describe('User sessions sidebar activity', () => {
             makeSession({
               sessionId: 'sess-4',
               branch: 'user/feature-d',
-              materializedAt: materialized ? '2026-07-20T00:00:00.000Z' : null,
+              materializedAt: settled ? '2026-07-20T00:00:00.000Z' : null,
             }),
           ],
         }),
@@ -137,24 +137,24 @@ describe('User sessions sidebar activity', () => {
 
     const { client } = renderSection();
     await waitForMutationsIdle(client);
-    await screen.findByRole('status', { name: 'Agent working in feature-d' });
+    await screen.findByRole('status', { name: 'Initializing feature-d' });
 
-    // The run finishes and the server stamps materializedAt. Force the next
-    // activity poll instead of waiting out the real 5s interval.
-    materialized = true;
+    // The run finishes and the server stamps materializedAt; the sessions
+    // list refetches on its own cadence.
+    settled = true;
     active.delete('sess-4');
     await client.invalidateQueries({
       queryKey: queryKeys.agentControllerActivity(AGENT_CONTROLLER_ID, TEST_BASE_URL),
     });
+    await client.invalidateQueries({ queryKey: queryKeys.sessions(projectRepositoryId) });
     await waitForMutationsIdle(client);
 
-    // Run end must refetch the sessions list: the dot lands on solid attention,
-    // not back on (or stuck at) initializing.
-    await screen.findByRole('status', { name: 'feature-d ready — open to dismiss' });
-    expect(screen.queryByRole('status', { name: 'Initializing feature-d' })).not.toBeInTheDocument();
+    // The belt goes dark on an idle session, not back on (or stuck at) initializing.
+    const row = screen.getByRole('button', { name: 'feature-d' }).closest('li');
+    await waitFor(() => expect(row?.querySelector('[role="status"]')).toBeNull());
   });
 
-  it('leaves an idle materialized session without a status dot', async () => {
+  it('leaves an idle materialized session without a status belt', async () => {
     stubProjectAndSessions([makeSession({ sessionId: 'sess-3', branch: 'user/feature-c' })]);
     stubActiveSessions(new Set());
 

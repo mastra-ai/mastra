@@ -105,6 +105,9 @@ type RequestContextOptions = {
 type GeneratedRequest<T> = OptionalizeUndefined<T>;
 type GeneratedResponse<T extends RouteKey> = Serialized<RouteResponse<T>>;
 
+export type ListFeedbackResponse = GeneratedResponse<'GET /observability/feedback'>;
+export type FeedbackItem = ListFeedbackResponse['feedback'][number];
+
 export interface ClientOptions {
   /** Base URL for API requests */
   baseUrl: string;
@@ -506,6 +509,11 @@ export interface GetAgentResponse {
   workspaceTools?: string[];
   /** Browser tool names available to this agent (if browser is configured) */
   browserTools?: string[];
+  /**
+   * Whether the agent has any browser provider — agent-level SDK browser or
+   * workspace-level CLI browser. Gates the Studio browser viewer.
+   */
+  hasBrowser?: boolean;
   /** ID of the agent's workspace (if configured) */
   workspaceId?: string;
   provider: string;
@@ -552,6 +560,8 @@ export interface GetAgentBrowserSessionResponse {
   screencastAvailable: boolean;
 }
 
+export type ClientToolsResolver = () => ToolsInput | undefined;
+
 export type GenerateLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
   messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[];
   model?: string;
@@ -559,6 +569,7 @@ export type GenerateLegacyParams<T extends JSONSchema7 | ZodSchema | undefined =
   experimental_output?: T;
   requestContext?: RequestContext | Record<string, any>;
   clientTools?: ToolsInput;
+  clientToolsResolver?: ClientToolsResolver;
 } & WithoutMethods<
   // Use `any` to avoid "Type instantiation is excessively deep" error from complex ZodSchema generics
   Omit<
@@ -574,6 +585,7 @@ export type StreamLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = u
   experimental_output?: T;
   requestContext?: RequestContext | Record<string, any>;
   clientTools?: ToolsInput;
+  clientToolsResolver?: ClientToolsResolver;
 } & WithoutMethods<
   // Use `any` to avoid "Type instantiation is excessively deep" error from complex ZodSchema generics
   Omit<
@@ -593,6 +605,7 @@ export type StreamParamsBase<OUTPUT = undefined> = {
   tracingOptions?: TracingOptions;
   requestContext?: RequestContext;
   clientTools?: ToolsInput;
+  clientToolsResolver?: ClientToolsResolver;
 } & WithoutMethods<
   Omit<
     AgentExecutionOptions<OUTPUT>,
@@ -839,6 +852,11 @@ export type CloneMemoryThreadResponse = {
   thread: StorageThreadType;
   clonedMessages: MastraDBMessage[];
 };
+
+export type TransferMemoryThreadParams = GeneratedRequest<
+  Body<'POST /memory/threads/:threadId/transfer'> & QueryParams<'POST /memory/threads/:threadId/transfer'>
+> &
+  RequestContextOptions;
 
 export type GetLogsParams = GeneratedRequest<QueryParams<'GET /logs'>>;
 
@@ -2766,9 +2784,24 @@ export interface ExperimentGrouping {
   trialIndex?: number;
 }
 
+export type ExperimentTargetType = 'agent' | 'workflow' | 'scorer' | 'processor';
+
 export interface ListExperimentsParams extends ExperimentGrouping {
   page?: number;
   perPage?: number;
+  /** Only return experiments run against targets of this type */
+  targetType?: ExperimentTargetType;
+  /** Only return experiments run against this target ID */
+  targetId?: string;
+}
+
+export interface ListDatasetsParams {
+  page?: number;
+  perPage?: number;
+  /** Only return datasets attached to targets of this type */
+  targetType?: ExperimentTargetType;
+  /** Only return datasets attached to at least one of these target IDs */
+  targetIds?: string[];
 }
 
 export interface DatasetExperiment {
@@ -2810,7 +2843,9 @@ export interface DatasetExperimentResult {
   input: unknown;
   output: unknown | null;
   groundTruth: unknown | null;
-  error: string | null;
+  metadata?: Record<string, unknown> | null;
+  /** Structured failure info, as persisted by the experiment runner. */
+  error: { message: string; stack?: string; code?: string } | null;
   startedAt: string | Date;
   completedAt: string | Date;
   retryCount: number;
@@ -2820,7 +2855,11 @@ export interface DatasetExperimentResult {
   tags: string[] | null;
   comment?: string | null;
   toolMockReport?: ToolMockReport | null;
-  scores: Array<{
+  /**
+   * Aggregated scorer runs. Absent on endpoints that return raw result rows
+   * (scores live in the scores store, keyed by `runId = experimentId`).
+   */
+  scores?: Array<{
     scorerId: string;
     scorerName: string;
     score: number | null;
@@ -2932,6 +2971,14 @@ export interface GeneratedItem {
   groundTruth?: unknown;
 }
 
+export interface UpdateDatasetExperimentParams {
+  datasetId: string;
+  experimentId: string;
+  name?: string;
+  description?: string;
+  metadata?: Record<string, unknown>;
+}
+
 export interface TriggerDatasetExperimentParams {
   datasetId: string;
   targetType: 'agent' | 'workflow' | 'scorer';
@@ -2988,9 +3035,7 @@ export interface RunExperimentItemParams {
  * `error` object and no aggregated `scores` (scores live in the scores
  * store, keyed by `runId = experimentId`).
  */
-export type DatasetExperimentResultRow = Omit<DatasetExperimentResult, 'error' | 'scores'> & {
-  error: { message: string; stack?: string; code?: string } | null;
-};
+export type DatasetExperimentResultRow = Omit<DatasetExperimentResult, 'scores'>;
 
 export interface RunExperimentItemResponse {
   result: DatasetExperimentResultRow;
@@ -3053,6 +3098,7 @@ export interface DatasetItemVersionResponse {
   expectedTrajectory?: unknown;
   toolMocks?: DatasetItemToolMock[];
   scorerIds?: string[];
+  requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   validTo: number | null;
   isDeleted: boolean;
@@ -3568,6 +3614,8 @@ export type PermissionPattern = string;
 /**
  * Response from GET /auth/permission-patterns.
  */
+export type WorkflowBuilderSettingsResponse = GeneratedResponse<'GET /editor/workflow-builder/settings'>;
+
 export type PermissionPatternsResponse = GeneratedResponse<'GET /auth/permission-patterns'>;
 
 /**

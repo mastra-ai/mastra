@@ -1,11 +1,10 @@
 {
   "name": "@mastra/cloudflare",
-  "version": "1.6.2",
+  "version": "1.6.4",
   "description": "Cloudflare provider for Mastra - includes db storage capabilities",
   "type": "module",
   "files": [
-    "dist",
-    "CHANGELOG.md"
+    "dist"
   ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

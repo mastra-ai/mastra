@@ -217,6 +217,36 @@ export class DuckDBConnection extends MastraBase {
     }
   }
 
+  /** Execute parameterized statements atomically using a single DuckDB connection. */
+  async executeTransaction(statements: readonly { sql: string; params?: readonly unknown[] }[]): Promise<void> {
+    if (statements.length === 0) return;
+
+    const connection = await this.getConnection();
+    try {
+      await connection.run('BEGIN TRANSACTION');
+      for (const statement of statements) {
+        const params = statement.params ?? [];
+        if (params.length === 0) {
+          await connection.run(statement.sql);
+          continue;
+        }
+        let paramIndex = 0;
+        const preparedSql = statement.sql.replace(/\?/g, () => `$${++paramIndex}`);
+        const prepared = await connection.prepare(preparedSql);
+        for (let i = 0; i < params.length; i++) {
+          bindParam(prepared, i + 1, params[i]);
+        }
+        await prepared.run();
+      }
+      await connection.run('COMMIT');
+    } catch (error) {
+      await connection.run('ROLLBACK').catch(() => undefined);
+      throw error;
+    } finally {
+      this.closeConnection(connection);
+    }
+  }
+
   /**
    * Execute multiple SQL statements in order using a single DuckDB connection.
    *

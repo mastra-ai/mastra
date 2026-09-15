@@ -42,8 +42,8 @@ function spacingComponent(label: string): Component {
 }
 
 describe('pruneChatContainer', () => {
-  it('does nothing at the exact 5000-child threshold', () => {
-    const state = createState(5000);
+  it('does nothing at the exact 500-child threshold', () => {
+    const state = createState(500);
     const originalChildren = [...state.chatContainer.children];
 
     pruneChatContainer(state);
@@ -51,7 +51,7 @@ describe('pruneChatContainer', () => {
     expect(state.chatContainer.children).toEqual(originalChildren);
   });
 
-  it('keeps approximately 3000 children at complete entry boundaries without orphan spacers', () => {
+  it('keeps approximately 250 children at complete entry boundaries without orphan spacers', () => {
     const state = createState(0);
     for (let index = 0; index < 3001; index++) {
       state.chatContainer.addChild(spacingComponent(`entry-${index}`));
@@ -61,10 +61,10 @@ describe('pruneChatContainer', () => {
 
     pruneChatContainer(state);
 
-    expect(state.chatContainer.children).toHaveLength(2999);
+    expect(state.chatContainer.children).toHaveLength(249);
     expect(isChatBoundarySpacer(state.chatContainer.children[0])).toBe(false);
     expect(isChatBoundarySpacer(state.chatContainer.children.at(-1))).toBe(false);
-    expect((state.chatContainer.children[0] as Text).render(80).join('\n')).toContain('entry-1501');
+    expect((state.chatContainer.children[0] as Text).render(80).join('\n')).toContain('entry-2876');
     for (let index = 1; index < state.chatContainer.children.length; index += 2) {
       expect(isChatBoundarySpacer(state.chatContainer.children[index])).toBe(true);
       expect(isChatBoundarySpacer(state.chatContainer.children[index + 1])).toBe(false);
@@ -74,14 +74,14 @@ describe('pruneChatContainer', () => {
   it('removes every audited direct and wrapped reference while preserving retained identities', () => {
     const state = createState(6000);
     const removed = state.chatContainer.children[10] as Component;
-    const retained = state.chatContainer.children[5500] as Component;
+    const retained = state.chatContainer.children[5900] as Component;
 
     const removedAssistant = new AssistantMessageComponent();
     const retainedAssistant = new AssistantMessageComponent();
     const removedDispose = vi.spyOn(removedAssistant, 'disposeRenderState');
     const retainedDispose = vi.spyOn(retainedAssistant, 'disposeRenderState');
     state.chatContainer.children[20] = removedAssistant;
-    state.chatContainer.children[5600] = retainedAssistant;
+    state.chatContainer.children[5950] = retainedAssistant;
     state.assistantRenderRegistry.start('removed-message', 'removed-segment', () => removedAssistant);
     state.assistantRenderRegistry.start('retained-message', 'retained-segment', () => retainedAssistant);
 
@@ -106,8 +106,8 @@ describe('pruneChatContainer', () => {
     const retainedReminder = new SystemReminderComponent({ message: 'retained' });
     state.chatContainer.children[30] = removedSlash;
     state.chatContainer.children[40] = removedReminder;
-    state.chatContainer.children[5700] = retainedSlash;
-    state.chatContainer.children[5800] = retainedReminder;
+    state.chatContainer.children[5800] = retainedSlash;
+    state.chatContainer.children[5850] = retainedReminder;
 
     const arrayOwners = [
       'allToolComponents',

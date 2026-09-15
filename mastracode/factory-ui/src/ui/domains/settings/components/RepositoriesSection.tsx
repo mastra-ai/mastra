@@ -9,7 +9,7 @@ import { ConnectRepositoriesPanel } from '../../workspaces';
 import { manageGithubConnection } from '../../workspaces/services/github';
 import { GithubPatBlock } from './GithubPatBlock';
 import { FactorySetupSection } from './FactorySetupSection';
-import { SettingsCard } from './SettingsCard';
+import { SettingsContainer } from '@mastra/playground-ui/new/settings';
 import { SettingsSubsection } from './SettingsSubsection';
 import { UserGithubConnectionRow } from './UserGithubConnectionRow';
 
@@ -25,12 +25,12 @@ export function RepositoriesSection() {
   }
 
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex min-w-0 flex-col gap-8">
       <SettingsSubsection
+        scope="factory"
         title="Repositories"
         description={`Repositories ${activeFactory.name} can edit. What feeds the board is set under Work Intake.`}
         action={
-          // Granting repo access happens on GitHub — stays reachable even when nothing is linked yet.
           githubConnected && (
             <Button variant="outline" size="sm" onClick={() => manageGithubConnection(baseUrl)}>
               Manage GitHub connection
@@ -38,9 +38,9 @@ export function RepositoriesSection() {
           )
         }
       >
-        <SettingsCard className="p-4">
+        <SettingsContainer>
           <ConnectRepositoriesPanel factory={activeFactory} />
-        </SettingsCard>
+        </SettingsContainer>
       </SettingsSubsection>
 
       <FactorySetupSection factory={activeFactory} />

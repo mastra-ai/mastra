@@ -13,7 +13,7 @@ export const Header = ({ children, border = true, className }: HeaderProps) => {
   return (
     <header
       className={cn(
-        'z-50 flex h-header-default w-full items-center gap-4 bg-transparent px-3',
+        'z-50 flex h-header-default w-full items-center gap-2 bg-transparent px-2',
         {
           'border-b border-border1': border,
         },

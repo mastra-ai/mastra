@@ -9,7 +9,7 @@ const meta: Meta<typeof MarkdownRenderer> = {
   decorators: [
     Story => (
       <TooltipProvider>
-        <div className="w-150 p-4">
+        <div className="w-150 max-w-[calc(100vw-2rem)] p-4">
           <Story />
         </div>
       </TooltipProvider>
@@ -97,6 +97,7 @@ Regular text after the quote.`,
 
 export const Tables: Story = {
   args: {
+    tableActions: true,
     children: `## Agent Comparison
 
 | Agent Name | Model | Temperature | Max Tokens |

@@ -1,9 +1,7 @@
-import { Button } from '@mastra/playground-ui/components/Button';
 import { Code } from '@mastra/playground-ui/components/Code';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { ChevronRight } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import type { ReactNode } from 'react';
 
 import { relativeTime } from '../../../../../lib/date/relativeTime';
@@ -15,6 +13,7 @@ import {
   auditVisibleMetadata,
 } from '../../auditPresentation';
 import type { AuditEvent } from '../../services/audit';
+import { LoadMoreSentinel } from '../LoadMoreSentinel';
 
 const AUDIT_GRID_CLASS =
   'grid-cols-[4.5rem_minmax(0,1fr)_1rem] lg:grid-cols-[7rem_minmax(8rem,0.8fr)_minmax(10rem,0.9fr)_minmax(11rem,1.1fr)_minmax(13rem,1.4fr)_1rem]';
@@ -122,62 +121,16 @@ function AuditEventRow({
   );
 }
 
-function InfiniteScrollTrigger({
-  hasNextPage,
-  autoLoad,
-  isFetchingNextPage,
-  onLoadMore,
-}: {
-  hasNextPage: boolean;
-  autoLoad: boolean;
-  isFetchingNextPage: boolean;
-  onLoadMore: () => void;
-}) {
-  const trigger = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const node = trigger.current;
-    if (!node || !hasNextPage || !autoLoad || isFetchingNextPage || typeof IntersectionObserver === 'undefined') return;
-
-    const observer = new IntersectionObserver(
-      entries => {
-        if (!entries[0]?.isIntersecting) return;
-        observer.disconnect();
-        onLoadMore();
-      },
-      { rootMargin: '0px 0px 320px' },
-    );
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [autoLoad, hasNextPage, isFetchingNextPage, onLoadMore]);
-
-  if (!hasNextPage) return null;
-
-  return (
-    <div ref={trigger} className="flex h-12 items-center justify-center" aria-live="polite">
-      {isFetchingNextPage ? (
-        <Spinner size="sm" aria-label="Loading older events" />
-      ) : (
-        <Button variant="ghost" size="xs" onClick={onLoadMore}>
-          Load older events
-        </Button>
-      )}
-    </div>
-  );
-}
-
 export function AuditLogList({
   events,
   actorNames,
   hasNextPage,
-  autoLoad,
   isFetchingNextPage,
   onLoadMore,
 }: {
   events: AuditEvent[];
   actorNames: ReadonlyMap<string, string>;
   hasNextPage: boolean;
-  autoLoad: boolean;
   isFetchingNextPage: boolean;
   onLoadMore: () => void;
 }) {
@@ -216,11 +169,11 @@ export function AuditLogList({
           />
         ))}
       </ul>
-      <InfiniteScrollTrigger
+      <LoadMoreSentinel
         hasNextPage={hasNextPage}
-        autoLoad={autoLoad}
         isFetchingNextPage={isFetchingNextPage}
         onLoadMore={onLoadMore}
+        label="Load older events"
       />
     </div>
   );

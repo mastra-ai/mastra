@@ -1,5 +1,159 @@
 # create-mastra
 
+## 1.30.0
+
+## 1.30.0-alpha.7
+
+## 1.30.0-alpha.6
+
+## 1.30.0-alpha.5
+
+## 1.30.0-alpha.4
+
+## 1.29.1-alpha.3
+
+## 1.29.1-alpha.2
+
+## 1.29.1-alpha.1
+
+## 1.29.1-alpha.0
+
+## 1.29.0
+
+### Patch Changes
+
+- Updated the README's pnpm command to explicitly run the latest create-mastra release. ([#23488](https://github.com/mastra-ai/mastra/pull/23488))
+
+## 1.29.0-alpha.4
+
+## 1.28.1-alpha.3
+
+### Patch Changes
+
+- Updated the README's pnpm command to explicitly run the latest create-mastra release. ([#23488](https://github.com/mastra-ai/mastra/pull/23488))
+
+## 1.28.1-alpha.2
+
+## 1.28.1-alpha.1
+
+## 1.28.1-alpha.0
+
+## 1.28.0
+
+## 1.28.0-alpha.14
+
+## 1.28.0-alpha.13
+
+## 1.28.0-alpha.12
+
+## 1.28.0-alpha.11
+
+## 1.28.0-alpha.10
+
+## 1.28.0-alpha.9
+
+## 1.28.0-alpha.8
+
+## 1.28.0-alpha.7
+
+## 1.28.0-alpha.6
+
+## 1.28.0-alpha.5
+
+## 1.28.0-alpha.4
+
+## 1.28.0-alpha.3
+
+## 1.28.0-alpha.2
+
+## 1.28.0-alpha.1
+
+## 1.27.4-alpha.0
+
+## 1.27.3
+
+### Patch Changes
+
+- Update README to include accurate, up-to-date information ([#22858](https://github.com/mastra-ai/mastra/pull/22858))
+
+- Remove `CHANGELOG.md` from distributed npm files resulting in reduced package size ([#22737](https://github.com/mastra-ai/mastra/pull/22737))
+
+## 1.27.3-alpha.10
+
+## 1.27.3-alpha.9
+
+## 1.27.3-alpha.8
+
+### Patch Changes
+
+- Update README to include accurate, up-to-date information ([#22858](https://github.com/mastra-ai/mastra/pull/22858))
+
+## 1.27.3-alpha.7
+
+## 1.27.3-alpha.6
+
+## 1.27.3-alpha.5
+
+## 1.27.3-alpha.4
+
+## 1.27.3-alpha.3
+
+## 1.27.3-alpha.2
+
+### Patch Changes
+
+- Remove `CHANGELOG.md` from distributed npm files resulting in reduced package size ([#22737](https://github.com/mastra-ai/mastra/pull/22737))
+
+## 1.27.3-alpha.1
+
+## 1.27.3-alpha.0
+
+## 1.27.2
+
+## 1.27.2-alpha.0
+
+## 1.27.1
+
+## 1.27.1-alpha.3
+
+## 1.27.1-alpha.2
+
+## 1.27.1-alpha.1
+
+## 1.27.1-alpha.0
+
+## 1.27.0
+
+## 1.27.0-alpha.1
+
+## 1.26.2-alpha.0
+
+## 1.26.1
+
+## 1.26.1-alpha.13
+
+## 1.26.1-alpha.12
+
+## 1.26.1-alpha.11
+
+## 1.26.1-alpha.10
+
+## 1.26.1-alpha.9
+
+## 1.26.1-alpha.8
+
+## 1.26.1-alpha.7
+
+## 1.26.1-alpha.6
+
+## 1.26.1-alpha.5
+
+## 1.26.1-alpha.4
+
+## 1.26.1-alpha.3
+
+## 1.26.1-alpha.2
+
 ## 1.26.1-alpha.1
 
 ## 1.26.1-alpha.0

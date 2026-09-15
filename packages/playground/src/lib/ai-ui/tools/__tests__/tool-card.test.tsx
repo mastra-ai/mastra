@@ -1,3 +1,6 @@
+import { ChatAgentContext, ChatRunningContext } from '@mastra/playground-ui/domains/chat/context/chat-context';
+import { ToolCallProvider } from '@mastra/playground-ui/domains/chat/context/tool-call-context';
+import { WORKSPACE_TOOLS } from '@mastra/playground-ui/domains/chat/tools/workspace-tool-constants';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -9,9 +12,6 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ToolCard, ToolCardInner } from '../tool-card';
 import type { ToolCardProps } from '../tool-card';
 import { WorkflowRunContext, WorkflowRunProvider } from '@/domains/workflows';
-import { WORKSPACE_TOOLS } from '@/domains/workspace/constants';
-import { ChatAgentContext } from '@/lib/ai-ui/chat/chat-context';
-import { ToolCallProvider } from '@/services/tool-call-provider';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -249,7 +249,7 @@ describe('ToolCard dispatch', () => {
 
   it('renders a generic tool badge as a fallback', () => {
     renderToolCard(baseProps({ toolName: 'searchDocs' }));
-    expect(screen.getByText('searchDocs')).toBeTruthy();
+    expect(screen.getByText('SearchDocs')).toBeTruthy();
   });
 
   it('treats background-task string results as a generic tool badge', () => {
@@ -259,7 +259,30 @@ describe('ToolCard dispatch', () => {
         output: 'Background task started with id abc',
       }),
     );
-    expect(screen.getByText('startJob')).toBeTruthy();
+    expect(screen.getByText('StartJob')).toBeTruthy();
+  });
+
+  it('shimmers an unsettled call while the run is live, and marks a failed one', () => {
+    const running = { isRunning: true, cancelRun: () => {}, canSendWhileStreaming: false };
+    const { rerender } = render(
+      <ChatRunningContext.Provider value={running}>
+        <ToolCard {...baseProps({ toolName: 'searchDocs', state: 'input-available' })} />
+      </ChatRunningContext.Provider>,
+      { wrapper: Providers },
+    );
+    expect(screen.getByTestId('tool-badge').getAttribute('data-status')).toBe('running');
+
+    rerender(
+      <ChatRunningContext.Provider value={running}>
+        <ToolCard {...baseProps({ toolName: 'searchDocs', state: 'output-error' })} />
+      </ChatRunningContext.Provider>,
+    );
+    expect(screen.getByTestId('tool-badge').getAttribute('data-status')).toBe('error');
+  });
+
+  it('keeps an unsettled call from a finished run quiet', () => {
+    renderToolCard(baseProps({ toolName: 'searchDocs', state: 'input-available' }));
+    expect(screen.getByTestId('tool-badge').getAttribute('data-status')).toBe('idle');
   });
 
   it('surfaces the agent suspend payload when suspendedTools is keyed by toolCallId', () => {

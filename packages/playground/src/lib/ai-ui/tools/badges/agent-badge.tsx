@@ -1,14 +1,16 @@
+import { ToolCallMono } from '@mastra/playground-ui/components/ai/tool-call';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
+import type { MessageMetadata } from '@mastra/playground-ui/domains/chat';
+import { BadgeWrapper } from '@mastra/playground-ui/domains/chat/components/badge-wrapper';
+import { NetworkChoiceMetadataDialogTrigger } from '@mastra/playground-ui/domains/chat/components/network-choice-metadata-dialog';
+import { SectionLabel } from '@mastra/playground-ui/domains/chat/components/section-label';
+import type { ToolApprovalButtonsProps } from '@mastra/playground-ui/domains/chat/tools/badges/tool-approval-buttons';
+import { ToolApprovalButtons } from '@mastra/playground-ui/domains/chat/tools/badges/tool-approval-buttons';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import React from 'react';
 import Markdown from 'react-markdown';
 import { ToolCard } from '../tool-card';
 import { BackgroundTaskMetadataDialogTrigger } from './background-task-metadata-dialog';
-import { BadgeWrapper } from './badge-wrapper';
-import { NetworkChoiceMetadataDialogTrigger } from './network-choice-metadata-dialog';
-import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
-import { ToolApprovalButtons } from './tool-approval-buttons';
-import type { MessageMetadata } from '@/lib/ai-ui/messages/message-metadata';
 
 type TextMessage = {
   type: 'text';
@@ -87,7 +89,9 @@ export const AgentBadge = ({
 
   let suspendPayloadSlot =
     typeof suspendPayload === 'string' ? (
-      <pre className="bg-surface4 overflow-x-auto rounded-md p-4 whitespace-pre">{suspendPayload}</pre>
+      <ToolCallMono copyText={suspendPayload} className="text-icon3">
+        {suspendPayload}
+      </ToolCallMono>
     ) : (
       <CodeEditor data={suspendPayload} data-testid="tool-suspend-payload" />
     );
@@ -142,7 +146,7 @@ export const AgentBadge = ({
 
       {suspendPayloadSlot !== undefined && suspendPayload && (
         <div>
-          <p className="pb-2 font-medium">Agent suspend payload</p>
+          <SectionLabel>Agent suspend payload</SectionLabel>
           {suspendPayloadSlot}
         </div>
       )}

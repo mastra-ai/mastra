@@ -1,0 +1,49 @@
+---
+extends: existence
+message: "AI overused word: '%s'. Name the actual behavior instead of calling inaction silence. Disable this rule for prose about sound."
+level: error
+nonword: true
+ignorecase: true
+# "Quiet" is an AI fingerprint for personified inaction: a check "stays
+# quiet," a log "goes quiet," a handler "quietly drops" the error. The whole
+# session that produced this package leaned on "stays quiet" to mean a rule
+# does not fire, which is the tell exactly. Literal quiet is common (a room, a
+# person, an evening), so the construction is the discriminator: an inanimate
+# subject going silent, or the understatement adverb "quietly" ahead of an
+# action verb. Prose about actual sound disables the rule.
+tokens:
+  # --- Silence as inaction: an artifact goes still instead of acting ("the
+  # check stays quiet," "the log goes quiet," "the alarm falls quiet"). A
+  # person or a room can literally do this, so disable the rule for prose
+  # about sound.
+  # "Silent" and "mute" are the synonyms a writer reaches for once "quiet"
+  # is flagged, so they share the tokens; the pair measures zero across
+  # the Go and Python standard libraries.
+  - "\\b(?:stays?|staying|stayed|remains?|remaining|remained) (?:quiet|silent|mute)\\b"
+  - "\\b(?:goes?|going|went|gone) (?:quiet|silent|mute)\\b"
+  - "\\b(?:falls?|falling|fell|fallen) (?:quiet|silent)\\b"
+  - "\\bquiet(?:s|ing|ed)? down\\b"
+  - "\\bkeeps? quiet about\\b"
+
+  # --- Silence imposed: the artifact keeps another one from speaking
+  # ("keeps the console quiet," "kept the log silent"). Measured at zero
+  # across both standard libraries.
+  - "\\bke(?:eps?|eping|pt) (?:a|an|the|this|that|these|those|its|their|each|every|all|both) (?:[a-z'-]+ ){1,3}(?:quiet|silent)\\b"
+
+  # --- Understatement adverb: the artifact acts "quietly," the padding that
+  # frames a change as modest ("quietly drops the error," "quietly ships,"
+  # "quietly falls back," "quietly ignores the flag").
+  - "\\bquietly (?:drops?|ignores?|skips?|discards?|swallows?|handles?|fails?|retries|logs?|ships?|slips?|deprecates?|breaks?|does|absorbs?|masks?|hides?|suppresses?|omits?|sidesteps?|bypasses?|clobbers?|overrides?|adds?|removes?|rewrites?|mutates?|patches?)\\b"
+  - "\\bquietly (?:falls back|rolls? out|opts? out|goes? away|slips? in)\\b"
+
+  # --- The unspoken-truth idiom ("says the quiet part out loud").
+  - "\\bthe quiet part out loud\\b"
+
+  # --- Silencing as a verb: a check muted rather than turned off ("the
+  # flag silences the warning," "silenced every alert"). A
+  # documentation-corpus census (2026-09) listed it among the verbs no
+  # rule read. Nine hits across the seven pre-LLM corpora, mostly the
+  # Rust RFCs and the Python sources writing "silence the lint" and
+  # "silence this exception," the bare infinitive being the form the
+  # corpora use; each is the figure, flagged by design.
+  - "\\bsilenc(?:e|es|ed|ing) (?:the|a|an|its|their|this|that|it|them|every|each)\\b"

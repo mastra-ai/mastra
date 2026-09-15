@@ -1,7 +1,12 @@
 import { ScorerRunError } from '../../evals/base';
 import type { MastraScorer } from '../../evals/base';
 import { extractTrajectory, extractTrajectoryFromTrace } from '../../evals/types';
-import type { ScorerRunInputForAgent, ScorerRunOutputForAgent, Trajectory } from '../../evals/types';
+import type {
+  ScorerRunInputForAgent,
+  ScorerRunOutputForAgent,
+  Trajectory,
+  TrajectoryExpectation,
+} from '../../evals/types';
 import type { Mastra } from '../../mastra';
 import { validateAndSaveScore } from '../../mastra/hooks';
 import { EntityType } from '../../observability';
@@ -167,7 +172,12 @@ export function experimentScoreKey(experimentId: string, itemId: string, attempt
 
 export async function runScorersForItem(
   scorers: MastraScorer<any, any, any, any>[],
-  item: { input: unknown; groundTruth?: unknown; metadata?: Record<string, unknown> },
+  item: {
+    input: unknown;
+    groundTruth?: unknown;
+    expectedTrajectory?: TrajectoryExpectation;
+    metadata?: Record<string, unknown>;
+  },
   output: unknown,
   storage: MastraCompositeStore | null,
   runId: string,
@@ -321,7 +331,12 @@ function extractScorerRunFields(scoreResult: unknown): {
  */
 async function runScorerSafe(
   scorer: MastraScorer<any, any, any, any>,
-  item: { input: unknown; groundTruth?: unknown; metadata?: Record<string, unknown> },
+  item: {
+    input: unknown;
+    groundTruth?: unknown;
+    expectedTrajectory?: TrajectoryExpectation;
+    metadata?: Record<string, unknown>;
+  },
   output: unknown,
   scorerInput?: ScorerRunInputForAgent,
   scorerOutput?: ScorerRunOutputForAgent,
@@ -352,6 +367,7 @@ async function runScorerSafe(
       input: scorerInput ?? item.input,
       output: effectiveOutput,
       groundTruth: item.groundTruth,
+      expectedTrajectory: item.expectedTrajectory,
       scoreSource: 'experiment',
       targetScope: effectiveScope,
       targetEntityType: toScorerTargetEntityType(targetType),
@@ -454,7 +470,12 @@ export function resolveStepScorers(
  */
 export async function runStepScorersForItem(
   stepScorers: Record<string, MastraScorer<any, any, any, any>[]>,
-  item: { input: unknown; groundTruth?: unknown; metadata?: Record<string, unknown> },
+  item: {
+    input: unknown;
+    groundTruth?: unknown;
+    expectedTrajectory?: TrajectoryExpectation;
+    metadata?: Record<string, unknown>;
+  },
   workflowData: WorkflowScorerData | undefined,
   storage: MastraCompositeStore | null,
   runId: string,
@@ -510,6 +531,7 @@ export async function runStepScorersForItem(
             input: stepInput,
             output: stepOutput,
             groundTruth: item.groundTruth,
+            expectedTrajectory: item.expectedTrajectory,
             scoreSource: 'experiment',
             targetScope: 'span',
             targetEntityType: EntityType.WORKFLOW_STEP,

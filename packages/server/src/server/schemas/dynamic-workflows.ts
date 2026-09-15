@@ -17,6 +17,19 @@ const stepOptionsSchema = z
   })
   .optional();
 
+// Optional identity/display fields on control-flow entries (mirrors core's
+// `StepFlowEntryOptions`). Declared explicitly because zod's default object
+// mode strips unknown keys — without these, posted fields would vanish
+// silently before reaching core.
+const entryDisplayFields = {
+  description: z.string().optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+};
+const containerIdentityFields = {
+  id: z.string().optional(),
+  ...entryDisplayFields,
+};
+
 // ----------------------------------------------------------------------------
 // Predicate DSL — declarative condition for `conditional` / `loop` entries.
 // Mirrors `Predicate` in `@mastra/core/workflows/predicate`; duplicated
@@ -70,6 +83,7 @@ const toolEntrySchema = z.object({
 const mappingEntrySchema = z.object({
   type: z.literal('mapping'),
   id: z.string(),
+  ...entryDisplayFields,
   mapConfig: z.string(),
 });
 
@@ -96,21 +110,25 @@ const graphEntrySchema = z.discriminatedUnion('type', [
   workflowEntrySchema,
   z.object({
     type: z.literal('parallel'),
+    ...containerIdentityFields,
     steps: z.array(singleStepEntrySchema),
   }),
   z.object({
     type: z.literal('foreach'),
+    ...containerIdentityFields,
     step: foreachInnerStepSchema,
     opts: z.object({ concurrency: z.number().int().positive() }).optional(),
   }),
   z.object({
     type: z.literal('sleep'),
     id: z.string(),
+    ...entryDisplayFields,
     duration: z.number(),
   }),
   z.object({
     type: z.literal('sleepUntil'),
     id: z.string(),
+    ...entryDisplayFields,
     date: z.string(),
   }),
   z
@@ -120,6 +138,7 @@ const graphEntrySchema = z.discriminatedUnion('type', [
       // accepted over the wire (they'd be arbitrary JS strings we can't
       // safely rehydrate).
       type: z.literal('conditional'),
+      ...containerIdentityFields,
       steps: z.array(singleStepEntrySchema),
       predicates: z.array(predicateSchema),
     })
@@ -131,6 +150,7 @@ const graphEntrySchema = z.discriminatedUnion('type', [
   z.object({
     // Declarative-only loop. Same rationale as `conditional`.
     type: z.literal('loop'),
+    ...containerIdentityFields,
     step: singleStepEntrySchema,
     loopType: z.enum(['dowhile', 'dountil']),
     predicate: predicateSchema,

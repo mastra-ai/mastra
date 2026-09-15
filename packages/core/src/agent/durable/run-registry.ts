@@ -14,18 +14,100 @@ import type { RunRegistryEntry } from './types';
  * Entries are keyed by runId (which are unique UUIDs).
  *
  * Uses TTLCache to prevent unbounded memory growth: entries auto-expire
- * after 10 minutes (refreshed on access) and the registry is hard-capped
- * at 1000 concurrent entries.
+ * (refreshed on access) and the registry is hard-capped at 1000 concurrent
+ * entries.
+ *
+ * The TTL is a crash/leak safety net, NOT an activity timeout. A run that is
+ * actively executing — waiting on a tool, a sub-agent, or a model call — can
+ * go arbitrarily long without anything reading its entry, and disposal is
+ * destructive (it force-closes the run's stream and drops the live model and
+ * tools). Such runs hold their entry alive explicitly via `markRunActive`.
  */
+export const RUN_REGISTRY_TTL_MS = 2 * 60 * 60 * 1000;
+
+/**
+ * How often active runs re-read their registry entry to refresh the sliding
+ * TTL. Two orders of magnitude below the TTL, so a single missed tick is
+ * harmless.
+ */
+export const RUN_REGISTRY_HEARTBEAT_MS = 60 * 1000;
+
 export const globalRunRegistry = new TTLCache<string, RunRegistryEntry>({
   max: 1000,
-  ttl: 10 * 60 * 1000,
+  ttl: RUN_REGISTRY_TTL_MS,
   updateAgeOnGet: true,
   dispose: entry => {
     entry?.cleanup?.();
   },
   noDisposeOnSet: true,
 });
+
+/** runId -> number of in-flight operations holding the entry alive. */
+const activeRuns = new Map<string, number>();
+let activityHeartbeat: ReturnType<typeof setInterval> | undefined;
+
+function runActivityHeartbeat(): void {
+  // The read is the point: `updateAgeOnGet` refreshes the sliding TTL.
+  for (const runId of activeRuns.keys()) {
+    globalRunRegistry.get(runId);
+  }
+}
+
+/**
+ * Hold a run's registry entry alive while an operation is in flight.
+ *
+ * Durable steps await work that can outlast the registry TTL (a tool or
+ * sub-agent call, a stalled model call). Nothing reads the entry while that
+ * await is pending, so the sliding TTL would otherwise expire it mid-run and
+ * dispose the live runtime state out from under the still-running workflow.
+ *
+ * Refcounted, so concurrent operations on the same run each hold their own
+ * claim. The returned release is idempotent — calling it twice releases one
+ * claim, not two. Always release in a `finally`; if a release is ever missed
+ * the entry still expires once the heartbeat stops, so this degrades safely.
+ *
+ * @param runId - The unique run identifier
+ * @returns A function that releases this claim
+ */
+export function markRunActive(runId: string): () => void {
+  activeRuns.set(runId, (activeRuns.get(runId) ?? 0) + 1);
+
+  if (!activityHeartbeat) {
+    activityHeartbeat = setInterval(runActivityHeartbeat, RUN_REGISTRY_HEARTBEAT_MS);
+    // Never keep the process alive just to refresh a cache.
+    activityHeartbeat.unref?.();
+  }
+
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+
+    const remaining = (activeRuns.get(runId) ?? 1) - 1;
+    if (remaining > 0) {
+      activeRuns.set(runId, remaining);
+    } else {
+      activeRuns.delete(runId);
+    }
+
+    if (activeRuns.size === 0 && activityHeartbeat) {
+      clearInterval(activityHeartbeat);
+      activityHeartbeat = undefined;
+    }
+  };
+}
+
+/**
+ * Drop all activity claims and stop the heartbeat. Tests only — production
+ * code releases claims through the function returned by `markRunActive`.
+ */
+export function __resetRunRegistryActivityForTests(): void {
+  activeRuns.clear();
+  if (activityHeartbeat) {
+    clearInterval(activityHeartbeat);
+    activityHeartbeat = undefined;
+  }
+}
 
 export function getActiveDurableAgentWorkflowExecutions(mastra: Mastra): Promise<unknown>[] {
   return Array.from(globalRunRegistry.values()).flatMap(entry =>

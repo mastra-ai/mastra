@@ -9,9 +9,10 @@ import { finalizeStreamingAssistant } from '../assistant-render-registry.js';
 import { insertChatComponentWithBoundarySpacing } from '../chat-boundary-reconciliation.js';
 import { JudgeDisplayComponent } from '../components/judge-display.js';
 import { GradientAnimator } from '../components/obi-loader.js';
+import { renderStatusAnimationFrame } from '../footer-animation-renderer.js';
 import { pruneChatContainer } from '../prune-chat.js';
 import { clearPendingUserMessages, removePendingUserMessage } from '../render-messages.js';
-import { flushRender, requestRender } from '../render-scheduler.js';
+import { flushRender } from '../render-scheduler.js';
 
 import type { EventHandlerContext } from './types.js';
 
@@ -28,8 +29,7 @@ export function handleAgentStart(ctx: EventHandlerContext): void {
 
   if (!state.gradientAnimator) {
     state.gradientAnimator = new GradientAnimator(() => {
-      ctx.updateStatusLine();
-      requestRender(state);
+      renderStatusAnimationFrame(state, ctx.updateStatusLine);
     });
   }
   state.gradientAnimator.start();
@@ -73,7 +73,7 @@ function drainQueuedAction(ctx: EventHandlerContext): boolean {
   // Drain queued follow-up actions once all controller-level follow-ups are done.
   // Each queued action that starts a new agent operation will eventually trigger
   // handleAgentEnd again, which drains the next FIFO item.
-  if (state.session.followUps.count() > 0) {
+  if (state.session.displayState.get().queuedFollowUps > 0) {
     return true;
   }
 

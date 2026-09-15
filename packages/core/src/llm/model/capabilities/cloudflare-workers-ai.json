@@ -5,7 +5,8 @@
     "@cf/meta/llama-4-scout-17b-16e-instruct",
     "@cf/moonshotai/kimi-k2.6",
     "@cf/moonshotai/kimi-k2.7-code",
-    "@cf/qwen/qwen3.8-27b"
+    "@cf/qwen/qwen3.8-27b",
+    "@cf/zai-org/glm-5.3-flash"
   ],
   "temperature": [
     "@cf/aisingapore/gemma-sea-lion-v4-27b-it",
@@ -32,7 +33,9 @@
     "@cf/qwen/qwen3.8-27b",
     "@cf/qwen/qwq-32b",
     "@cf/zai-org/glm-4.7-flash",
-    "@cf/zai-org/glm-5.2"
+    "@cf/zai-org/glm-5.2",
+    "@cf/zai-org/glm-5.3",
+    "@cf/zai-org/glm-5.3-flash"
   ],
   "structuredOutput": [
     "@cf/deepseek-ai/deepseek-v4-flash-0731",
@@ -45,6 +48,8 @@
     "@cf/openai/gpt-oss-20b",
     "@cf/qwen/qwen3.8-27b",
     "@cf/zai-org/glm-4.7-flash",
-    "@cf/zai-org/glm-5.2"
+    "@cf/zai-org/glm-5.2",
+    "@cf/zai-org/glm-5.3",
+    "@cf/zai-org/glm-5.3-flash"
   ]
 }

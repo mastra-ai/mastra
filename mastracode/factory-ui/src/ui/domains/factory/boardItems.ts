@@ -1,8 +1,10 @@
+import { AUTO_TRIAGED_LABEL, NEEDS_APPROVAL_LABEL } from '@mastra/factory/rules/types';
+import { workItemBranch, workItemThreadTitle } from '@mastra/factory/work-item-branch';
+import { isValid } from 'date-fns';
+
 import { relativeTime } from '../../../lib/date/relativeTime';
 import type { WorkItem, WorkItemSessionRef, WorkItemSource } from './services/workItems';
 
-export const AUTO_TRIAGED_LABEL = 'status: auto-triaged';
-export const NEEDS_APPROVAL_LABEL = 'status: needs approval';
 export const HIDDEN_CARD_LABELS = new Set([AUTO_TRIAGED_LABEL, NEEDS_APPROVAL_LABEL]);
 
 export const SOURCE_LABELS: Record<WorkItemSource, string> = {
@@ -28,6 +30,12 @@ export function githubNumberForItem(item: Pick<WorkItem, 'source' | 'metadata'>)
   const itemNumber = item.metadata[metadataKey] ?? item.metadata.number;
   if (typeof itemNumber !== 'number' || !Number.isInteger(itemNumber) || itemNumber <= 0) return;
   return itemNumber;
+}
+
+/** The human issue key a Linear card carries (`ENG-123`), when it has one. */
+export function linearIdentifierForItem(item: Pick<WorkItem, 'source' | 'metadata'>): string | undefined {
+  if (item.source !== 'linear-issue' || typeof item.metadata.identifier !== 'string') return;
+  return item.metadata.identifier;
 }
 
 export type PullRequestStatus = 'draft' | 'open' | 'closed' | 'merged';
@@ -66,13 +74,37 @@ export function externalLinkLabel(source: WorkItemSource): string {
 
 export function workItemMeta(item: WorkItem): string {
   const author = typeof item.metadata.author === 'string' ? item.metadata.author : undefined;
-  const age = relativeTime(item.createdAt);
+  // Prefer when the issue/PR was opened upstream; `item.createdAt` is only
+  // when the factory first saw it, which is "just now" for every backfilled card.
+  const sourceCreatedAt =
+    typeof item.metadata.sourceCreatedAt === 'string' && isValid(new Date(item.metadata.sourceCreatedAt))
+      ? item.metadata.sourceCreatedAt
+      : undefined;
+  const age = relativeTime(sourceCreatedAt ?? item.createdAt);
   const githubNumber = githubNumberForItem(item);
   if (githubNumber !== undefined) return `#${githubNumber}${author ? ` · ${author}` : ''} · ${age}`;
-  if (item.source === 'linear-issue' && typeof item.metadata.identifier === 'string') {
-    return `${item.metadata.identifier}${author ? ` · ${author}` : ''} · ${age}`;
-  }
+  const linearIdentifier = linearIdentifierForItem(item);
+  if (linearIdentifier !== undefined) return `${linearIdentifier}${author ? ` · ${author}` : ''} · ${age}`;
   return `${SOURCE_LABELS[item.source]} · ${age}`;
+}
+
+/** Free-text card match over what names it on the board: its title and its issue key. */
+export function cardMatchesSearch(card: Pick<WorkItem, 'source' | 'metadata' | 'title'>, query: string): boolean {
+  const needle = query.trim().toLowerCase();
+  if (needle === '') return true;
+  const number = githubNumberForItem(card);
+  const identifier = linearIdentifierForItem(card);
+  const named = [card.title, number === undefined ? '' : `#${number}`, identifier ?? ''];
+  return named.some(text => text.toLowerCase().includes(needle));
+}
+
+/**
+ * Branch + thread title for a card's session, shared with the server's runs
+ * (`workItemBranch`), so the title click and a later run converge on one
+ * worktree.
+ */
+export function itemSessionSpec(item: WorkItem): { branch: string; threadTitle: string } {
+  return { branch: workItemBranch(item), threadTitle: workItemThreadTitle(item) };
 }
 
 /**
@@ -95,12 +127,4 @@ export function persistedSourceKeys(items: readonly WorkItem[]): ReadonlySet<str
     if (candidateSourceKey) keys.add(candidateSourceKey);
   }
   return keys;
-}
-
-/** Session refs whose worktree was deleted are stale: their thread went with it. */
-export function liveSessions(
-  sessions: Record<string, WorkItemSessionRef>,
-  liveWorktreePaths: ReadonlySet<string>,
-): Record<string, WorkItemSessionRef> {
-  return Object.fromEntries(Object.entries(sessions).filter(([, session]) => liveWorktreePaths.has(session.sessionId)));
 }

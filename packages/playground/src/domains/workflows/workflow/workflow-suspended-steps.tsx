@@ -67,7 +67,7 @@ export function WorkflowSuspendedSteps({
           </Icon>
           Step suspended
         </Txt>
-        <Badge variant="warning">Needs input</Badge>
+        <Badge variant="yellow">Needs input</Badge>
       </div>
 
       {suspendedSteps.map((step, index) => {

@@ -73,3 +73,63 @@ tokens:
   # --- Ranking placement, gated on a priority noun ("sits at the top of the
   # backlog"). Bare "atop" is already covered by the companion arm above.
   - "\\bsit(?:s|ting)? at the top of the (?:agenda|priority|priorities|to-?do|backlog|pile|queue)\\b"
+
+  # --- Abstract-subject placement: a documentation or configuration element
+  # located by "sits" where "is" would do ("the entry sits in the config
+  # block," "the word changelog sat in the proper-noun list," "the flag sits
+  # under the lint section"). It inverts the discriminator every other
+  # token above uses. The complement here is a bare preposition that proves
+  # nothing on its own, so the curated subject carries the whole burden, and
+  # the set admits only nouns that name a part of a document, a config, or a
+  # ruleset. Physical subjects stay quiet because they are not in the set:
+  # "the cat sits on the mat," "our server rack sits behind the second door,"
+  # and "a cabin sits on the ridge" never reach the verb.
+  #
+  # The known false positive is systems prose giving these same nouns their
+  # storage-layout senses, where the placement is literal and measured: "the
+  # word sits one slot above the frame pointer," "the field sits at offset
+  # 8," "the value sits in a callee-saved register," "the block sits above
+  # the heap." Runtime, compiler, and memory-layout writing disables the rule.
+  # The past-tense "sat" appears only here; the complement-gated tokens
+  # above match "sits" and "sitting" alone.
+  - "\\b(?:the|this|that|each|every|a|an) (?:\\w+ )?(?:entry|word|rule|flag|setting|option|field|block|section|clause|token|value|default|exemption|convention|definition|pattern) (?:\\w+ )?(?:sits|sat|sitting) (?:in|on|at|above|below|under|beneath|within|inside|between|near|beside|alongside|behind)\\b"
+
+  # --- The same placement with the subject left open. The curated token
+  # above proved too narrow against a corpus of rejected commit messages,
+  # which produced "the rules sit in the config" and "a figurative sat in
+  # this message" — a plural subject and one outside the set, both missed.
+  # A bare word in the subject slot measured at zero matches across the Go
+  # and Python standard libraries, so the determiner and the preposition
+  # carry the discriminator between them.
+  #
+  # What this does catch is literal sitting with an animate or physical
+  # subject, which is the cost the rule already accepts at the top of the
+  # file: prose about furniture, landscape, or page layout disables it
+  # rather than the tokens contorting to admit a cat on a mat. A
+  # documentation-corpus audit (2026-09) found "an orphan row sits on a
+  # record" escaping on the modifier alone, so the subject slot now admits
+  # one, and the preposition set covers the placements agent prose uses
+  # ("sits ahead of," "sits outside every fence"); the extra reach adds
+  # three corpus hits, one of them a sail. The curated token stays because
+  # it admits a modifier between the subject and the verb as well.
+  - "\\b(?:a|an|the|this|that|these|those|its|their|both|all)\\s+\\w+\\s+(?:\\w+\\s+)?(?:sits?|sat)\\s+(?:in|on|at|with|beside|under|behind|ahead of|outside|inside|beyond|among|across|atop|over|above|below|beneath|near|alongside|next to)\\b"
+
+  # --- Pronoun and quantifier subjects, the same placement with the
+  # noun carried over from the previous sentence ("these sit ahead of the
+  # subcommand name," "the rest sit up to date," "it sits between the two
+  # stages"). Four corpus hits, each the figure ("it sits on the
+  # quarantine list").
+  - "\\b(?:the rest|the others|these|those|they|it|both|all|most|some|each|several|which) (?:[a-z]+ )?sits? (?:up to date|idle|empty|unused|quoted|escaped|in|on|at|with|beside|under|behind|ahead of|outside|inside|beyond|among|across|atop|over|above|below|beneath|near|alongside|next to)\\b"
+
+  # --- Inverted word order, the preposition first and the subject after
+  # the verb ("over each column sits an index," "beside it sit flat
+  # columns"). Nothing subject-anchored can see this construction; anchoring on
+  # the verb and a following determiner does. Measured at zero across both
+  # standard libraries.
+  - "\\b(?:over|beside|below|above|beneath|under|behind|alongside|inside|atop|before|after|ahead of|next to|between|around|across|outside|within|upon|on|in|at) (?:it|them|each|every|the|a|an|this|that|these|those|its|their)(?: [a-z]+){0,2} sits? (?:a|an|the|its|their|one|two|three|no|every|each|another|flat|[a-z]+s)\\b"
+
+  # --- The state complement that describes a stored value by posture ("a
+  # value sits quoted and escaped in the raw bytes," "the rest sit up to
+  # date"). Three corpus hits, all the byte-layout sense the rule already
+  # disables for ("a byte sits between the file data and the header").
+  - "\\bsits? (?:quoted|escaped|up to date|ahead of|outside|beyond|among|across)\\b"
