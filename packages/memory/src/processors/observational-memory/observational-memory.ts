@@ -2324,7 +2324,7 @@ ${formattedMessages}
       `[OM:bufferInput] cycleId=${cycleId}, msgCount=${messagesToBuffer.length}, msgTokens=${tokensToBuffer}, ids=${messagesToBuffer.map(m => `${m.id?.slice(0, 8)}@${m.createdAt ? new Date(m.createdAt).toISOString() : 'none'}`).join(',')}`,
     );
 
-    await this.runBufferedObservationCycle(
+    const result = await this.runBufferedObservationCycle(
       { threadId, resourceId: freshRecord.resourceId ?? undefined, trigger: 'async-buffer' },
       () =>
         ObservationStrategy.create(this, {
@@ -2341,10 +2341,12 @@ ${formattedMessages}
         }).run(),
     );
 
-    // Update the buffer cursor so the next buffer only sees messages newer than this one.
-    const maxTs = this.getMaxMessageTimestamp(messagesToBuffer);
-    const cursor = new Date(maxTs.getTime() + 1);
-    BufferingCoordinator.lastBufferedAtTime.set(bufferKey, cursor);
+    if (result?.observed) {
+      // Update the buffer cursor so the next buffer only sees messages newer than this one.
+      const maxTs = this.getMaxMessageTimestamp(messagesToBuffer);
+      const cursor = new Date(maxTs.getTime() + 1);
+      BufferingCoordinator.lastBufferedAtTime.set(bufferKey, cursor);
+    }
   }
 
   // ════════════════════════════════════════════════════════════════════════════
@@ -3312,7 +3314,7 @@ ${formattedMessages}
 
       // Call the observer via strategy pattern, firing config-level hooks
       // around the cycle — fire-and-forget callers never see this result.
-      await this.runBufferedObservationCycle(
+      const result = await this.runBufferedObservationCycle(
         { threadId, resourceId: record.resourceId ?? resourceId, trigger: 'async-buffer' },
         () =>
           ObservationStrategy.create(this, {
@@ -3332,6 +3334,10 @@ ${formattedMessages}
             trigger: 'async-buffer',
           }).run(),
       );
+
+      if (!result?.observed) {
+        return { buffered: false, record };
+      }
 
       if (isOmReproCaptureEnabled()) {
         writeObserverExchangeReproCapture({
