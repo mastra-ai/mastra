@@ -911,6 +911,38 @@ describe('MessageHistory', () => {
       });
     });
 
+    it('forwards only persisted generated IDs through the internal persistence hook', async () => {
+      const persistMessages = vi.fn().mockResolvedValue({ messages: [] });
+      const mockStorage = {
+        getThreadById: vi.fn().mockResolvedValue({
+          id: 'thread-1',
+          title: 'Test Thread',
+          metadata: {},
+        }),
+      } as unknown as MemoryStorage;
+      const processor = new MessageHistory({ storage: mockStorage, persistMessages });
+      const generated = {
+        role: 'assistant' as const,
+        content: { format: 2 as const, parts: [{ type: 'text' as const, text: 'Generated response' }] },
+        id: 'generated',
+        createdAt: new Date(),
+      };
+      const system = {
+        role: 'system' as const,
+        content: { format: 2 as const, parts: [{ type: 'text' as const, text: 'Runtime instruction' }] },
+        id: 'system',
+        createdAt: new Date(),
+      };
+
+      await processor.persistMessages({
+        messages: [system, generated],
+        generatedMessageIds: [system.id, generated.id],
+        threadId: 'thread-1',
+      });
+
+      expect(persistMessages).toHaveBeenCalledWith({ messages: [generated] }, [generated.id]);
+    });
+
     it('should drop transient signals but keep normal signals when persisting', async () => {
       const mockStorage = {
         saveMessages: vi.fn().mockResolvedValue(undefined),

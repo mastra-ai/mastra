@@ -165,6 +165,12 @@ export async function resolveThreadLineageEntries(
       throw createThreadBranchError('BRANCH_NOT_FOUND', 'The requested thread branch is unavailable.');
     }
     const branch = parseThreadBranchMetadata(thread);
+    if (branch && branch.observationalMemoryThreadId !== thread.id) {
+      throw createThreadBranchError(
+        'BRANCH_LINEAGE_CORRUPT',
+        'Stored thread branch lineage contains an invalid Observational Memory locator.',
+      );
+    }
     if (branch?.state === 'pending' && !options.includePending) {
       throw createThreadBranchError('BRANCH_NOT_FOUND', 'The requested thread branch is unavailable.');
     }
