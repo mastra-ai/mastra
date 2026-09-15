@@ -12,8 +12,8 @@ Previously the generation span (the whole agent loop) was exported as the `chat`
 invoke_agent weather-agent
 └── chat gpt-5                gen_ai.usage.input_tokens=146   ← loop total
     ├── model_step            (no attributes)
-    │   └── model_inference   (no attributes)
-    ├── execute_tool weather
+    │   ├── model_inference   (no attributes)
+    │   └── execute_tool weather
     └── model_step            (no attributes)
         └── model_inference   (no attributes)
 ```
@@ -24,8 +24,8 @@ invoke_agent weather-agent
 invoke_agent weather-agent
 └── model_generation gpt-5    (no usage)
     ├── agent_step weather-agent
-    │   └── chat gpt-5        gen_ai.usage.input_tokens=61
-    ├── execute_tool weather
+    │   ├── chat gpt-5        gen_ai.usage.input_tokens=61
+    │   └── execute_tool weather
     └── agent_step weather-agent
         └── chat gpt-5        gen_ai.usage.input_tokens=85
 ```
