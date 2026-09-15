@@ -1,8 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Agent } from '../agent';
 
-describe('mastra gateway duck typing', () => {
-  it('does not warn when model exposes a mastra gatewayId without being a ModelRouterLanguageModel instance', async () => {
+describe('mastra gateway memory warning', () => {
+  // The warning used to be suppressed for Mastra gateway models, because the
+  // gateway supplied memory itself. It no longer does, so passing a thread and
+  // resource without configuring memory has to say so for gateway models too.
+  it('warns when a mastra gateway model is used with a thread and resource but no memory', async () => {
     const warn = vi.fn();
 
     const duckTypedGatewayModel = {
@@ -66,7 +69,7 @@ describe('mastra gateway duck typing', () => {
     });
 
     expect(result.text).toBe('ok');
-    expect(warn).not.toHaveBeenCalledWith(
+    expect(warn).toHaveBeenCalledWith(
       'No memory is configured but resourceId and threadId were passed in args',
       expect.anything(),
     );
