@@ -149,11 +149,13 @@ export interface RestrictedMastraCodeMountConfig extends RestrictedMastraCodeCon
   }) => Omit<NonNullable<ConstructorParameters<typeof Mastra>[0]>['server'], 'apiRoutes'>;
 }
 
+/** Validates required host authority decisions and returns the fixed tool allowlist. */
 function validateRestrictedConfig(config: RestrictedMastraCodeConfig): Set<string> {
   if (!config.project.resourceId.trim()) throw new Error('Restricted Mastra Code requires project.resourceId');
   if (!config.project.name.trim()) throw new Error('Restricted Mastra Code requires project.name');
   if (!config.project.rootPath.trim()) throw new Error('Restricted Mastra Code requires project.rootPath');
   if (config.modes.length === 0) throw new Error('Restricted Mastra Code requires at least one mode');
+  if (config.memory === undefined) throw new Error('Restricted Mastra Code requires an explicit memory policy');
 
   const allowedTools = new Set<string>();
   for (const name of config.allowedTools) {
@@ -163,6 +165,7 @@ function validateRestrictedConfig(config: RestrictedMastraCodeConfig): Set<strin
   return allowedTools;
 }
 
+/** Bounds every controller mode by the host's global tool allowlist. */
 function restrictModes(modes: AgentControllerMode[], allowedTools: Set<string>): AgentControllerMode[] {
   return modes.map(mode => ({
     ...mode,
@@ -170,6 +173,7 @@ function restrictModes(modes: AgentControllerMode[], allowedTools: Set<string>):
   }));
 }
 
+/** Filters static and request-scoped host tools before exposing them to the agent. */
 function createRestrictedToolProvider(
   provider: RestrictedToolProvider | undefined,
   allowedTools: Set<string>,
@@ -187,6 +191,7 @@ function createRestrictedToolProvider(
   };
 }
 
+/** Adapts an explicit host observer without enabling discovered hook configuration. */
 function createRestrictedToolHooks(observer: RestrictedMastraCodeConfig['postToolObserver']): ToolHooks | undefined {
   if (!observer) return undefined;
   return {

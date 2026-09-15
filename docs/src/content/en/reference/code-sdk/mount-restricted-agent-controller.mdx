@@ -108,7 +108,7 @@ The factory also skips gateway synchronization, local thread locks, model usage 
   },
   {
     name: 'tools',
-    type: 'Record<string, ToolAction> | RestrictedToolProvider',
+    type: 'RestrictedToolProvider',
     description: 'Host-supplied non-workspace tools. Entries outside allowedTools are removed.',
     isOptional: true,
   },
@@ -134,9 +134,52 @@ The factory also skips gateway synchronization, local thread locks, model usage 
     isOptional: true,
   },
   {
+    name: 'inputProcessors',
+    type: 'InputProcessor[]',
+    description: 'Trusted host-supplied input processors. No processors are discovered or added by default.',
+    isOptional: true,
+  },
+  {
+    name: 'postToolObserver',
+    type: '(context: ToolAfterHookContext) => void | Promise<void>',
+    description: 'Trusted host callback invoked after tool calls. It cannot add or replace tools.',
+    isOptional: true,
+  },
+  {
+    name: 'pubsub',
+    type: 'PubSub',
+    description: 'Host-supplied event transport.',
+    isOptional: true,
+  },
+  {
+    name: 'idGenerator',
+    type: 'AgentControllerConfig["idGenerator"]',
+    description: 'Host-supplied identifier generator for controller resources.',
+    isOptional: true,
+  },
+  {
     name: 'mastra',
     type: 'Mastra',
     description: 'Existing Mastra instance to mount onto. When omitted, the function creates one.',
+    isOptional: true,
+  },
+  {
+    name: 'controllerId',
+    type: 'string',
+    description: 'Registration key for the controller. Defaults to the controller id.',
+    isOptional: true,
+  },
+  {
+    name: 'buildApiRoutes',
+    type: '(deps: { controller: AgentController }) => ApiRoute[]',
+    description: 'Builds explicit server API routes from the restricted controller. Ignored when `mastra` is provided.',
+    isOptional: true,
+  },
+  {
+    name: 'buildServerConfig',
+    type: '(deps: { controller: AgentController }) => ServerConfig',
+    description:
+      'Builds additional server configuration from the restricted controller. Ignored when `mastra` is provided.',
     isOptional: true,
   },
 ]}

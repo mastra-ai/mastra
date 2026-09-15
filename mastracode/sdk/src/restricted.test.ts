@@ -1,6 +1,6 @@
 import childProcess from 'node:child_process';
 import fs from 'node:fs';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const agentConfigs = vi.hoisted<unknown[]>(() => []);
 const controllerConfigs = vi.hoisted<unknown[]>(() => []);
@@ -59,6 +59,11 @@ describe('restricted Mastra Code embedding', () => {
   beforeEach(() => {
     agentConfigs.length = 0;
     controllerConfigs.length = 0;
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
   });
 
   it('exposes an allowlisted remote tool and removes every other supplied tool', async () => {
@@ -124,8 +129,7 @@ describe('restricted Mastra Code embedding', () => {
     });
     const credentialNames = ['MASTRA_GATEWAY_API_KEY', 'ANTHROPIC_API_KEY', 'OPENAI_API_KEY'] as const;
     const before = Object.fromEntries(credentialNames.map(name => [name, process.env[name]]));
-    const originalDefaultOmModel = process.env.DEFAULT_OM_MODEL_ID;
-    process.env.DEFAULT_OM_MODEL_ID = 'ambient/model';
+    vi.stubEnv('DEFAULT_OM_MODEL_ID', 'ambient/model');
 
     vi.resetModules();
     const { createRestrictedMastraCodeAgentController } = await import('./restricted.js');
@@ -142,12 +146,6 @@ describe('restricted Mastra Code embedding', () => {
     expect(existsSync).not.toHaveBeenCalled();
     expect(execSync).not.toHaveBeenCalled();
     expect(Object.fromEntries(credentialNames.map(name => [name, process.env[name]]))).toEqual(before);
-    if (originalDefaultOmModel === undefined) delete process.env.DEFAULT_OM_MODEL_ID;
-    else process.env.DEFAULT_OM_MODEL_ID = originalDefaultOmModel;
-    loadEnvFile.mockRestore();
-    cwd.mockRestore();
-    existsSync.mockRestore();
-    execSync.mockRestore();
   });
 
   it('rejects incomplete authority configuration instead of using local fallbacks', async () => {
@@ -160,6 +158,9 @@ describe('restricted Mastra Code embedding', () => {
     );
     await expect(createRestrictedMastraCodeAgentController(createConfig({ allowedTools: [''] }))).rejects.toThrow(
       'tool names must not be empty',
+    );
+    await expect(createRestrictedMastraCodeAgentController(createConfig({ memory: undefined }))).rejects.toThrow(
+      'explicit memory policy',
     );
   });
 });
