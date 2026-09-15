@@ -3,6 +3,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { getFactoryAuthOrgId, getFactoryAuthUserFromContext, getFactoryAuthUserId } from '../../auth.js';
+import { runsPullRequestCreate } from '../../session/shell-commands.js';
 import type {
   ProjectRepository,
   ProjectSourceControlConnection,
@@ -261,24 +262,6 @@ export function createGithubSubscriptionTools(requestContext: RequestContext, gi
   };
 }
 
-export function stripHeredocBodies(command: string): string {
-  const lines = command.split('\n');
-  const executableLines: string[] = [];
-  let delimiter: string | undefined;
-
-  for (const line of lines) {
-    if (delimiter) {
-      if (line.trim() === delimiter) delimiter = undefined;
-      continue;
-    }
-    executableLines.push(line);
-    const heredoc = line.match(/<<-?\s*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\1/);
-    delimiter = heredoc?.[2];
-  }
-
-  return executableLines.join('\n');
-}
-
 export function parseCreatedPullRequest(context: {
   toolName: string;
   input: unknown;
@@ -287,12 +270,7 @@ export function parseCreatedPullRequest(context: {
 }) {
   if (context.toolName !== 'execute_command' || context.error) return undefined;
   const command = (context.input as { command?: unknown } | undefined)?.command;
-  if (
-    typeof command !== 'string' ||
-    !/(?:^|\n|;|&&|\|\|)\s*gh\s+pr\s+create(?:\s|$)/.test(stripHeredocBodies(command))
-  ) {
-    return undefined;
-  }
+  if (typeof command !== 'string' || !runsPullRequestCreate(command)) return undefined;
   const output = context.output as { stdout?: unknown; result?: unknown } | undefined;
   const stdout = typeof context.output === 'string' ? context.output : (output?.stdout ?? output?.result);
   if (typeof stdout !== 'string') return undefined;

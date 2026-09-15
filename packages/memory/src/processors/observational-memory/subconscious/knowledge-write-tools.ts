@@ -11,8 +11,13 @@ import { createTool } from '@mastra/core/tools';
 import type { JSONSchema7 } from 'json-schema';
 
 const CURATOR_IDENTITY = 'subconscious:curate';
-const MAX_GUIDANCE_LENGTH = 4_000;
 const scopeLevelSchema: JSONSchema7 = { type: 'string', enum: ['org', 'resource', 'thread'] };
+const dateTimeSchema: JSONSchema7 = {
+  type: 'string',
+  format: 'date-time',
+  pattern: '^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$',
+  description: 'RFC 3339 date-time, e.g. 2026-09-15T00:00:00Z',
+};
 
 type KnowledgeWriteToolsMemory = {
   storage: {
@@ -58,6 +63,51 @@ export function createKnowledgeWriteTools(
   }
 
   return {
+    knowledge_create: createTool({
+      id: 'knowledge_create',
+      description:
+        'Create a scoped knowledge node and its first record. Provenance and capture time are stamped by code.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', minLength: 1 },
+          kind: { type: 'string', minLength: 1 },
+          text: { type: 'string', minLength: 1 },
+          nodeScope: scopeLevelSchema,
+          scope: scopeLevelSchema,
+          when: dateTimeSchema,
+        },
+        required: ['name', 'kind', 'text'],
+        additionalProperties: false,
+      } satisfies JSONSchema7,
+      execute: async input => {
+        const value = input as {
+          name: string;
+          kind: string;
+          text: string;
+          nodeScope?: KnowledgeScopeLevel;
+          scope?: KnowledgeScopeLevel;
+          when?: string;
+        };
+        const store = await getStore(memory);
+        const nodeScope = resolveWriteScope(options, value.nodeScope);
+        const recordScope = resolveWriteScope(options, value.scope);
+        const when = value.when ? new Date(value.when) : undefined;
+        if (when && Number.isNaN(when.getTime())) throw new Error('KnowledgeRecord when must be a valid date.');
+        const node = await store.createNode({ name: value.name, kind: value.kind, scope: nodeScope });
+        const record = await store.appendKnowledge({
+          node: node.id,
+          text: value.text,
+          scope: recordScope,
+          sourceThreadId: options.sourceThreadId,
+          when,
+          maxScope: options.maxScope,
+          resolutionScope: options.scope,
+          defaultScope: nodeScope,
+        });
+        return { node, record };
+      },
+    }),
     knowledge_append: createTool({
       id: 'knowledge_append',
       description: 'Append a scoped record to an existing node. Provenance and capture time are stamped by code.',
@@ -67,7 +117,7 @@ export function createKnowledgeWriteTools(
           node: { type: 'string', minLength: 1 },
           text: { type: 'string', minLength: 1 },
           scope: scopeLevelSchema,
-          when: { type: 'string' },
+          when: dateTimeSchema,
         },
         required: ['node', 'text'],
         additionalProperties: false,
@@ -250,7 +300,7 @@ export function createKnowledgeWriteTools(
       } satisfies JSONSchema7,
       execute: async input => {
         const value = input as { node: string; expectedVersion: number; description: string };
-        // Schema maxLength counts code points; this UTF-16 check is authoritative (same pattern as the capture-guidance bound above).
+        // Schema maxLength counts code points; this UTF-16 check matches the storage-level limit.
         if (value.description.length > MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH) {
           throw new Error(
             `Node descriptions are limited to ${MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH} UTF-16 code units. Shorten the description and retry.`,
@@ -291,12 +341,7 @@ export function createKnowledgeWriteTools(
           scope?: KnowledgeScopeLevel;
           expectedVersion?: number;
         };
-        const trimmedName = value.name.trim();
-        const reservedName = trimmedName.toLowerCase();
-        const name = reservedName === 'capture-guidance' ? reservedName : trimmedName;
-        if (reservedName === 'capture-guidance' && value.content.length > MAX_GUIDANCE_LENGTH) {
-          throw new Error(`capture-guidance is limited to ${MAX_GUIDANCE_LENGTH} characters.`);
-        }
+        const name = value.name.trim();
         const store = await getStore(memory);
         const scope = resolveWriteScope(options, value.scope);
         const resolvedNode = await store.resolveNode({ name, scope });

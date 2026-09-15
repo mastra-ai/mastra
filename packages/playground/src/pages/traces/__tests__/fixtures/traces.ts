@@ -78,6 +78,12 @@ export const traceSpans: GetTraceResponse = {
   spans: [{ ...trace, parentSpanId: null }],
 };
 
+/** An agent trace that belongs to a memory thread: qualifies for the Messages column. */
+export const threadedTraceSpans: GetTraceResponse = {
+  traceId: 'trace-a',
+  spans: [{ ...trace, parentSpanId: null, threadId: 'thread-1' }],
+};
+
 export const rootBranchSpans: GetBranchResponse = {
   traceId: 'trace-a',
   spans: [{ ...trace, parentSpanId: null }],

@@ -40,6 +40,8 @@ export interface ChatChannelRenderContext {
   formatError?: (error: Error) => unknown;
   /** Dialect for the final reply text. Absent means `'markdown'` (driver-level default). */
   textFormat?: 'markdown' | 'plain';
+  /** Buffered-text behavior on abort. Absent means `'flush'` (driver-level default). */
+  onAbort?: 'flush' | 'discard';
   approvalContext?: { toolCallId: string; messageId: string };
 }
 
@@ -280,6 +282,7 @@ export class ChatChannelOutputProcessor {
             takePendingApproval: render.takePendingApproval,
             formatError: render.formatError,
             textFormat: render.textFormat,
+            onAbort: render.onAbort,
           })
     ).catch(err => {
       // Prevent unhandled rejection if the driver fails before a terminal chunk

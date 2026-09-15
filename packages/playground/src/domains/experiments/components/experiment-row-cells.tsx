@@ -2,7 +2,9 @@ import type { DatasetExperiment } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { DataList as EntityList } from '@mastra/playground-ui/components/DataList';
 import { formatExperimentDate, STATUS_LABEL, STATUS_VARIANT } from './experiment-columns';
-import { ExperimentNameLabel } from './experiment-name-label';
+import { ExperimentDescriptionLabel, ExperimentNameLabel } from './experiment-name-label';
+import { useTargetRegistries } from '@/domains/experiments/hooks/use-target-registries';
+import { resolveTargetName, TARGET_ICON, TARGET_LABEL } from '@/domains/experiments/utils/target-name';
 
 export interface ExperimentReviewSummary {
   needsReview: number;
@@ -27,11 +29,12 @@ export function ExperimentRowCells({ experiment: exp, datasetName, review }: Exp
       <EntityList.Cell>
         <ExperimentNameLabel experiment={exp} />
       </EntityList.Cell>
+      <EntityList.Cell>
+        <ExperimentDescriptionLabel experiment={exp} />
+      </EntityList.Cell>
       {datasetName !== undefined && <EntityList.TextCell>{datasetName}</EntityList.TextCell>}
       <EntityList.Cell>
-        <span className="truncate">
-          {exp.targetType && exp.targetId ? `${exp.targetType} ${exp.targetId}` : 'external'}
-        </span>
+        <ExperimentTargetCell experiment={exp} />
       </EntityList.Cell>
       <EntityList.Cell>
         <Badge variant={STATUS_VARIANT[status] ?? 'neutral'} indicator="dot">
@@ -48,6 +51,24 @@ export function ExperimentRowCells({ experiment: exp, datasetName, review }: Exp
       </EntityList.Cell>
       <EntityList.TextCell>{formatExperimentDate(exp.createdAt)}</EntityList.TextCell>
     </>
+  );
+}
+
+function ExperimentTargetCell({ experiment }: { experiment: DatasetExperiment }) {
+  const registries = useTargetRegistries();
+  const name = resolveTargetName(experiment, registries);
+  const targetType = experiment.targetId ? experiment.targetType : null;
+  const TargetIcon = targetType ? TARGET_ICON[targetType] : null;
+
+  return (
+    <span className="flex min-w-0 items-center gap-1.5 [&_svg]:size-3.5 [&_svg]:shrink-0">
+      {TargetIcon && (
+        <span className="text-neutral3 flex" role="img" aria-label={TARGET_LABEL[targetType!]}>
+          <TargetIcon />
+        </span>
+      )}
+      <span className={targetType ? 'truncate' : 'text-neutral2 truncate'}>{name}</span>
+    </span>
   );
 }
 

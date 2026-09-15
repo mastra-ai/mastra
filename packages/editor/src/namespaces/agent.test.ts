@@ -90,6 +90,26 @@ describe('EditorAgentNamespace.update', () => {
     expect(record?.activeVersionId).not.toBe(versionTwo?.id);
   });
 
+  it('bypasses the default cache for versionNumber: 0 with warm and cold caches', async () => {
+    const { editor } = await createEditorWithStore();
+
+    await editor.agent.create({
+      id: 'version-zero-agent',
+      name: 'Version Zero Agent',
+      instructions: 'ONE',
+      model: { provider: 'openai', name: 'gpt-4' },
+    });
+
+    // create() populated the namespace's default cache, so this exercises the warm path.
+    const warmResult = await editor.agent.getById('version-zero-agent', { versionNumber: 0 });
+    expect(warmResult).toBeNull();
+
+    // Cold cache should reach version resolution and return the same result.
+    editor.agent.clearCache('version-zero-agent');
+    const coldResult = await editor.agent.getById('version-zero-agent', { versionNumber: 0 });
+    expect(coldResult).toBeNull();
+  });
+
   it('preserves an explicit activeVersionId while creating a new snapshot version', async () => {
     const { editor, agentsStore } = await createEditorWithStore();
 

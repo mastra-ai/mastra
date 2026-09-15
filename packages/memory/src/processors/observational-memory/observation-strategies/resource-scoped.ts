@@ -264,6 +264,8 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
           this.opts.requestContext,
           this.priorMetadataByThread,
           this.opts.observabilityContext,
+          undefined,
+          { resourceId: this.opts.resourceId, trigger: this.opts.trigger },
         );
       }),
     );
@@ -517,7 +519,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
           operationType: 'observation',
           startedAt: this.startedAt,
           tokensAttempted,
-          error: error instanceof Error ? error.message : String(error),
+          error,
           recordId: this.opts.record.id,
           threadId,
         });

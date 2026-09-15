@@ -89,7 +89,7 @@ jobs:
 
       - name: Cache turbo build setup
         if: ${{ env.TURBO_TOKEN == '' }}
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: .turbo/cache
           key: turbo-${{ runner.os }}-${{ github.sha }}
@@ -220,11 +220,15 @@ jobs:
           const memoryChanged = affectedMemoryTests || changed(file =>
             file.startsWith('packages/memory/') || file === '.github/workflows/prebuild.yml'
           );
-          const e2eChanged = affected(isExternalE2eTest) || (runFull && hasChangedSource) || changed(file =>
+          const { studioE2eChanged } = require('./.github/scripts/studio-e2e-routing.cjs');
+          const e2eChanged = studioE2eChanged(nonMarkdownChangedFiles) || affected(isExternalE2eTest) || (runFull && hasChangedSource) || changed(file =>
             (file.startsWith('e2e-tests/') &&
               !file.startsWith('e2e-tests/experiment-worker/') &&
               !file.startsWith('e2e-tests/_local-registry-setup/')) ||
             file.startsWith('packages/playground/e2e/') ||
+            file.startsWith('packages/playground-ui/') ||
+            file.startsWith('server-adapters/hono/') ||
+            file.startsWith('packages/server/') ||
             file === '.github/workflows/e2e-tests.yml' ||
             file === 'pnpm-lock.yaml'
           );
@@ -447,7 +451,7 @@ jobs:
 
       - name: Cache turbo build setup
         if: ${{ env.TURBO_TOKEN == '' }}
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: .turbo/cache
           key: turbo-${{ runner.os }}-${{ github.sha }}

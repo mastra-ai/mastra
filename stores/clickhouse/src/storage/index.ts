@@ -8,7 +8,13 @@ import type { ClickhouseReplicationConfig } from './db/replication';
 import { MemoryStorageClickhouse } from './domains/memory';
 import { ObservabilityStorageClickhouse } from './domains/observability';
 import { ObservabilityStorageClickhouseVNext } from './domains/observability/v-next';
-export type { VNextObservabilityConfig, RetentionConfig } from './domains/observability/v-next';
+export { TABLE_DELETION_REQUESTS, recordDeletionRequest } from './domains/observability/v-next';
+export type {
+  VNextObservabilityConfig,
+  RetentionConfig,
+  DeletionRequestRow,
+  RecordDeletionRequestArgs,
+} from './domains/observability/v-next';
 import { ScoresStorageClickhouse } from './domains/scores';
 import { WorkflowsStorageClickhouse } from './domains/workflows';
 
@@ -102,6 +108,8 @@ export type ClickhouseConfig = {
    * Set `cluster` to also emit ON CLUSTER for table and materialized-view DDL.
    */
   replication?: ClickhouseReplicationConfig;
+  /** Maximum execution time for one advanced trace query. Default 15 seconds. */
+  traceQueryTimeoutMs?: number;
   /**
    * When true, automatic initialization (table creation/migrations) is disabled.
    * This is useful for CI/CD pipelines where you want to:
@@ -333,7 +341,11 @@ export class ClickhouseStoreVNext extends ClickhouseStore {
 
     // Replace the legacy observability domain set up by ClickhouseStore with the
     // vNext implementation. Both share the same underlying client.
-    const observability = new ObservabilityStorageClickhouseVNext({ client: this.db, replication: config.replication });
+    const observability = new ObservabilityStorageClickhouseVNext({
+      client: this.db,
+      replication: config.replication,
+      traceQueryTimeoutMs: config.traceQueryTimeoutMs,
+    });
 
     this.stores = {
       ...this.stores,

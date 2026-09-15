@@ -18,6 +18,7 @@ export type {
   MastraMessageV1,
   MastraMessageContentV2,
   MastraMessagePart,
+  MastraErrorPart,
   MastraToolApproval,
   MastraToolInvocation,
   MastraToolInvocationPart,
@@ -57,6 +58,7 @@ export {
   hasResponseProviderItemId,
   getResponseProviderItemIdFromPart,
   findToolCallArgs,
+  dropCrossProviderExecutedParts,
 } from './utils/provider-compat';
 export {
   getResponseProviderItemId,

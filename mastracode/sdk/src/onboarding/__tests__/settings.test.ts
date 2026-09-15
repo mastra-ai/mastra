@@ -50,7 +50,14 @@ function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
       goalJudgeModel: null,
       goalMaxTurns: null,
     },
-    preferences: { yolo: null, theme: 'auto', thinkingLevel: 'off', quietMode: false, quietModeMaxToolPreviewLines: 2 },
+    preferences: {
+      yolo: null,
+      theme: 'auto',
+      thinkingLevel: 'off',
+      subagentsEnabled: false,
+      quietMode: false,
+      quietModeMaxToolPreviewLines: 2,
+    },
     storage,
     customProviders: [],
     customModelPacks: [
@@ -76,7 +83,12 @@ function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
     },
     shellPassthrough: { mode: 'default' },
     voice: { enabled: false, engine: 'cloud', provider: 'openai', model: 'whisper-1' },
-    signals: { unixSocketPubSub: false, experimentalGithubSignals: false, githubPollIntervalMs: 300_000 },
+    signals: {
+      unixSocketPubSub: false,
+      experimentalGithubSignals: false,
+      experimentalCrossAgentSignals: false,
+      githubPollIntervalMs: 300_000,
+    },
     mcp: { claudeCodeGlobal: false, codexGlobal: false },
     observability: { resources: {}, localTracing: false },
     ...overrides,
@@ -294,8 +306,27 @@ describe('customProviders parsing/persistence', () => {
 
       expect(settings.customProviders).toEqual([]);
       expect(settings.preferences.thinkingLevel).toBe('off');
+      expect(settings.preferences.subagentsEnabled).toBe(false);
       expect(settings.preferences.quietModeMaxToolPreviewLines).toBe(2);
       expect(settings.shellPassthrough).toEqual({ mode: 'default' });
+    });
+  });
+
+  it('parses subagent enablement as an explicit boolean preference', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(
+        filePath,
+        JSON.stringify({ onboarding: {}, models: {}, preferences: { subagentsEnabled: true }, storage: {} }),
+        'utf-8',
+      );
+      expect(loadSettings(filePath).preferences.subagentsEnabled).toBe(true);
+
+      writeFileSync(
+        filePath,
+        JSON.stringify({ onboarding: {}, models: {}, preferences: { subagentsEnabled: 'true' }, storage: {} }),
+        'utf-8',
+      );
+      expect(loadSettings(filePath).preferences.subagentsEnabled).toBe(false);
     });
   });
 
@@ -423,6 +454,30 @@ describe('customProviders parsing/persistence', () => {
 
       expect(loadSettings(filePath).signals.experimentalGithubSignals).toBe(true);
       expect(JSON.parse(readFileSync(filePath, 'utf-8')).signals.experimentalGithubSignals).toBe(true);
+    });
+  });
+
+  it('persists experimental cross-agent signals and defaults them off for old settings files', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(
+        filePath,
+        JSON.stringify({
+          onboarding: {},
+          models: {},
+          preferences: {},
+          storage: {},
+          signals: { unixSocketPubSub: true },
+        }),
+        'utf-8',
+      );
+      expect(loadSettings(filePath).signals.experimentalCrossAgentSignals).toBe(false);
+
+      const settings = loadSettings(filePath);
+      settings.signals.experimentalCrossAgentSignals = true;
+      saveSettings(settings, filePath);
+
+      expect(loadSettings(filePath).signals.experimentalCrossAgentSignals).toBe(true);
+      expect(JSON.parse(readFileSync(filePath, 'utf-8')).signals.experimentalCrossAgentSignals).toBe(true);
     });
   });
 

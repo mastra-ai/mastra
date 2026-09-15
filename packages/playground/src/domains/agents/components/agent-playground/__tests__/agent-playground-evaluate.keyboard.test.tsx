@@ -2,9 +2,11 @@ import type { DatasetExperiment, DatasetRecord } from '@mastra/client-js';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { useForm } from 'react-hook-form';
+import { Route, Routes } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
 import { AgentEditFormProvider } from '../../../context/agent-edit-form-context';
+import { PlaygroundModelProvider } from '../../../context/playground-model-context';
 import { ReviewQueueProvider } from '../../../context/review-queue-context';
 import type { AgentFormValues } from '../../agent-edit-page/utils/form-validation';
 import { AgentPlaygroundEvaluate } from '../agent-playground-evaluate';
@@ -65,11 +67,13 @@ function Harness() {
 
   return (
     <AgentEditFormProvider form={form} mode="edit" isSubmitting={false} handlePublish={async () => {}}>
-      <GenerationProvider>
-        <ReviewQueueProvider>
-          <AgentPlaygroundEvaluate agentId="chef-agent" />
-        </ReviewQueueProvider>
-      </GenerationProvider>
+      <PlaygroundModelProvider>
+        <GenerationProvider>
+          <ReviewQueueProvider>
+            <AgentPlaygroundEvaluate agentId="chef-agent" />
+          </ReviewQueueProvider>
+        </GenerationProvider>
+      </PlaygroundModelProvider>
     </AgentEditFormProvider>
   );
 }
@@ -108,6 +112,63 @@ describe('AgentPlaygroundEvaluate', () => {
 
       await waitFor(() => expect(screen.getByText('Run completed')).toBeTruthy());
       expect(screen.queryByText('completed')).toBeNull();
+    });
+  });
+
+  describe('create actions', () => {
+    it('shows New dataset on the Datasets tab and navigates to the create page on C', async () => {
+      setupHandlers();
+      renderWithProviders(
+        <Routes>
+          <Route path="/" element={<Harness />} />
+          <Route path="/datasets/new" element={<div>Create dataset page</div>} />
+        </Routes>,
+        { router: { initialEntries: ['/'] } },
+      );
+
+      fireEvent.click(screen.getByRole('tab', { name: 'Datasets' }));
+      expect(await screen.findByRole('button', { name: 'New dataset' })).toBeTruthy();
+      expect(screen.queryByRole('button', { name: 'New scorer' })).toBeNull();
+
+      fireEvent.keyDown(window, { key: 'c' });
+
+      expect(await screen.findByText('Create dataset page')).toBeTruthy();
+    });
+
+    it('shows New scorer on the Scorers tab and opens the new scorer view on C', async () => {
+      setupHandlers();
+      renderWithProviders(
+        <Routes>
+          <Route path="/" element={<Harness />} />
+          <Route path="/datasets/new" element={<div>Create dataset page</div>} />
+        </Routes>,
+        { router: { initialEntries: ['/'] } },
+      );
+
+      fireEvent.click(screen.getByRole('tab', { name: 'Scorers' }));
+      expect(await screen.findByRole('button', { name: 'New scorer' })).toBeTruthy();
+      expect(screen.queryByRole('button', { name: 'New dataset' })).toBeNull();
+
+      fireEvent.keyDown(window, { key: 'c' });
+
+      expect(await screen.findByRole('button', { name: 'Back to Scorers' })).toBeTruthy();
+      expect(screen.queryByText('Create dataset page')).toBeNull();
+    });
+
+    it('does not bind C on the Experiments tab', async () => {
+      setupHandlers();
+      renderWithProviders(
+        <Routes>
+          <Route path="/" element={<Harness />} />
+          <Route path="/datasets/new" element={<div>Create dataset page</div>} />
+        </Routes>,
+        { router: { initialEntries: ['/'] } },
+      );
+
+      expect(screen.queryByRole('button', { name: 'New dataset' })).toBeNull();
+      fireEvent.keyDown(window, { key: 'c' });
+
+      expect(screen.queryByText('Create dataset page')).toBeNull();
     });
   });
 

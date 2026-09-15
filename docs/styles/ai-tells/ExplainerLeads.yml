@@ -1,0 +1,46 @@
+---
+extends: existence
+message: "AI explainer lead: '%s'. State the point directly instead of announcing it."
+level: error
+nonword: true
+scope:
+  - "~heading"
+tokens:
+  # ==========================================================================
+  # The free relative ("what/why/how the <subject> <verb>") used as a framing
+  # device in prose rather than as a heading, where ExplainerHeadings covers
+  # it. All three tokens gate the subject behind a determiner, so the
+  # ordinary embedded clause stays clean ("depends on how the shell resolves
+  # it," "explains why the test fails") only when it is doing real work
+  # mid-sentence rather than announcing what follows.
+  # ==========================================================================
+
+  # --- Pattern A: the cleft lead-in — a demonstrative copula pointing at the
+  # free relative ("Here's what the change does," "This is why the pin
+  # matters," "That's how the pieces fit"). The announcement adds nothing the
+  # clause it introduces would not say on its own. Corpus cost on 1.3M lines
+  # of Go and Python stdlib prose: ten hits ("That's why the code is ...,"
+  # "This is what the compiler does ..."), each one the construction itself
+  # rather than a lookalike.
+  - "\\b(?:[Hh]ere's|[Hh]ere is|[Tt]his is|[Tt]hat's|[Tt]hat is) (?:exactly |precisely )?(?:what|why|how|when|where) (?:the|this|that|these|those|a|an|each|every|your|our|its) [-'\\w]+ [-'\\w]+"
+
+  # --- Pattern B: the free relative as a label before a colon ("What the hook
+  # does: it refuses the write."). The capitalized wh-word anchors the label
+  # position, so a lowercase embedded clause that happens to precede a colon
+  # stays out. Only what/why/how here: a capitalized "When" or "Where" opens
+  # an ordinary conditional clause ("When the input is 6:"), which the Go and
+  # Python stdlib corpora show is common human prose. The colon sits in a
+  # lookahead rather than the match: a bold label puts closing markers
+  # between the clause and the colon ("**What the hook does**:"), and a
+  # match that spans that boundary is not verbatim in the raw line, which
+  # silently drops the alert.
+  - "\\b(?:What|Why|How) (?:the|this|that|these|those|a|an|each|every|your|our|its) [^.!?:\\n]{1,50}(?=:)"
+
+  # --- Pattern C: the sentence-initial pseudo-cleft — the free relative as
+  # subject, resolved by a copula ("What the hook does is refuse the write,"
+  # "Why the pin exists is worth explaining"). The capitalized wh-word plus
+  # the trailing copula holds this to the cleft; the plain embedded clause
+  # has neither. When/where stay out for the conditional-clause reason above.
+  # Corpus cost on 1.3M lines of stdlib prose: four hits, one of them "What
+  # this means is," which is the tell whoever wrote it.
+  - "\\b(?:What|Why|How) (?:the|this|that|these|those|a|an|each|every|your|our|its) (?:[-'\\w]+ ){1,3}(?:is|are|was|were)\\b"

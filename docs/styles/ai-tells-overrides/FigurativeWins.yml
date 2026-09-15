@@ -1,0 +1,21 @@
+extends: existence
+message: "Replace '%s' with the specific benefit or outcome."
+level: error
+nonword: true
+ignorecase: true
+tokens:
+  - '\bkick(?:s|ed|ing)? off\b'
+  - '\bwin(?:s|ning)? the day\b'
+  - '\bwon the day\b'
+  - '\bwin(?:s|ning)? out\b'
+  - '\bwon out\b'
+  - '\bwin(?:s|ning)? hands down\b'
+  - '\bcom(?:es|ing)? out on top\b'
+  - '\bcame out on top\b'
+  - '\bwin(?:s|ning)? hearts and minds\b'
+  - '\ban? (?:quick|easy|clear|big|huge|major|real|cheap|early|guaranteed|obvious) win\b'
+  - '\b(?:quick|easy|cheap|early) wins\b'
+  - '\b(?:chalk|notch|score|rack|bank|log)(?:s|ed|ing)? up (?:a|another|some|several)? ?wins?\b'
+  - '\bfor the win\b'
+  - '\b(?:a|the) winning (?:formula|combination|combo|strategy|streak|hand|recipe|play|move)\b'
+  - '\bwin[-/]win\b'

@@ -2483,7 +2483,12 @@ describe('Observer Agent Helpers', () => {
 
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
-        observation: { messageTokens: 1000, bufferTokens: false, model: 'test-model' },
+        observation: {
+          messageTokens: 1000,
+          bufferTokens: false,
+          model: 'test-model',
+          observeAttachments: true,
+        },
         reflection: { observationTokens: 1000 },
       });
 
@@ -2655,15 +2660,24 @@ describe('Observer Agent Helpers', () => {
         ],
       };
 
-      await observer.call(undefined, [message]);
+      // Generated provider data can change independently of this text-only scenario.
+      const llmModule = await import('@mastra/core/llm');
+      const spy = vi.spyOn(llmModule, 'modelSupportsAttachments').mockReturnValue(false);
 
-      const content = capturedPrompt[1].content as any[];
-      expect(content.some((part: any) => part.type === 'image')).toBe(false);
-      const joined = content
-        .filter((part: any) => part.type === 'text')
-        .map((part: any) => part.text)
-        .join('\n');
-      expect(joined).toContain('[Image #1: photo.png]');
+      try {
+        await observer.call(undefined, [message]);
+
+        expect(spy).toHaveBeenCalledWith('openrouter/deepseek/deepseek-v4-flash');
+        const content = capturedPrompt[1].content as any[];
+        expect(content.some((part: any) => part.type === 'image')).toBe(false);
+        const joined = content
+          .filter((part: any) => part.type === 'text')
+          .map((part: any) => part.text)
+          .join('\n');
+        expect(joined).toContain('[Image #1: photo.png]');
+      } finally {
+        spy.mockRestore();
+      }
     });
 
     it('auto mode forwards attachments for multimodal function-based observer model', async () => {
@@ -5616,7 +5630,7 @@ Ask about favorite vegetarian dishes
     observerSpy.mockRestore();
   });
 
-  it('should send attachment parts to the observer alongside placeholder text', async () => {
+  it('should only send commonly supported attachment parts to the observer by default', async () => {
     let capturedPrompt: any = null;
 
     const om = new ObservationalMemory({
@@ -5632,6 +5646,14 @@ Ask about favorite vegetarian dishes
     vi.spyOn(om.observer as any, 'createAgent').mockReturnValue({
       stream: async (prompt: any) => {
         capturedPrompt = prompt;
+        const hasUnsupportedHtml = prompt.some(
+          (message: any) =>
+            Array.isArray(message.content) &&
+            message.content.some((part: any) => part.type === 'file' && part.mimeType === 'text/html'),
+        );
+        if (hasUnsupportedHtml) {
+          throw new Error("'file part media type text/html' functionality not supported");
+        }
         return {
           getFullOutput: async () => ({
             text: `<observations>\n- User shared a reference image and floorplan\n</observations>`,
@@ -5647,6 +5669,12 @@ Ask about favorite vegetarian dishes
       parts: [
         { type: 'text', text: 'Please compare these attachments.' },
         { type: 'image', image: 'https://example.com/reference-board.png', mimeType: 'image/png' } as any,
+        {
+          type: 'file',
+          data: 'https://example.com/report.html',
+          mimeType: 'text/html',
+          filename: 'report.html',
+        } as any,
         {
           type: 'file',
           data: 'https://example.com/specs/floorplan.pdf',
@@ -5666,7 +5694,8 @@ Ask about favorite vegetarian dishes
     expect(historyMessage).toBeDefined();
     expect(historyMessage.content[0].text).toContain('New Message History');
     expect(historyMessage.content[1].text).toContain('[Image #1: reference-board.png]');
-    expect(historyMessage.content[1].text).toContain('[File #1: floorplan.pdf]');
+    expect(historyMessage.content[1].text).toContain('[File #1: report.html]');
+    expect(historyMessage.content[1].text).toContain('[File #2: floorplan.pdf]');
     expect(
       historyMessage.content.some(
         (part: any) => part.type === 'image' && part.image === 'https://example.com/reference-board.png',
@@ -5681,6 +5710,11 @@ Ask about favorite vegetarian dishes
           part.data === 'https://example.com/specs/floorplan.pdf',
       ),
     ).toBe(true);
+    expect(
+      historyMessage.content.some(
+        (part: any) => part.type === 'file' && part.mimeType === 'text/html' && part.filename === 'report.html',
+      ),
+    ).toBe(false);
   });
 
   it('should pass reflection instruction to reflector agent during synchronous reflection', async () => {
@@ -6313,31 +6347,23 @@ describe('Resource Scope Observation Flow', () => {
     const model = new MockLanguageModelV2({
       doStream: async ({ prompt }: { prompt: unknown }) => {
         const promptText = JSON.stringify(prompt);
-        const observerOutput = promptText.includes('Thread one')
-          ? `<observations>\n- thread-1-secret priority alpha\n</observations>`
-          : `<observations>\n- thread-2-secret priority beta\n</observations>`;
+        const isStructuredExtraction = promptText.includes('thread-1-secret') || promptText.includes('thread-2-secret');
+        if (isStructuredExtraction) structuredPrompts.push(promptText);
+        const output = isStructuredExtraction
+          ? JSON.stringify({ priority: promptText.includes('thread-1-secret') ? 'alpha' : 'beta' })
+          : promptText.includes('Thread one')
+            ? `<observations>\n- thread-1-secret priority alpha\n</observations>`
+            : `<observations>\n- thread-2-secret priority beta\n</observations>`;
         return {
           stream: convertArrayToReadableStream([
             { type: 'stream-start', warnings: [] },
             { type: 'response-metadata', id: 'obs-1', modelId: 'mock-observer', timestamp: new Date() },
             { type: 'text-start', id: 'text-1' },
-            { type: 'text-delta', id: 'text-1', delta: observerOutput },
+            { type: 'text-delta', id: 'text-1', delta: output },
             { type: 'text-end', id: 'text-1' },
             { type: 'finish', finishReason: 'stop', usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 } },
           ]),
           rawCall: { rawPrompt: null, rawSettings: {} },
-          warnings: [],
-        };
-      },
-      doGenerate: async ({ prompt }: { prompt: unknown }) => {
-        const promptText = JSON.stringify(prompt);
-        structuredPrompts.push(promptText);
-        const priority = promptText.includes('thread-1-secret') ? 'alpha' : 'beta';
-        return {
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          finishReason: 'stop',
-          usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-          content: [{ type: 'text', text: JSON.stringify({ priority }) }],
           warnings: [],
         };
       },
@@ -11368,7 +11394,7 @@ describe('Full Async Buffering Flow', () => {
     expect(record?.activeObservations).toBeTruthy();
   });
 
-  it('should defer async buffering when messages contain pending tool calls (state: call)', async () => {
+  it('should exclude pending tail tool calls from async buffering while still buffering the completed prefix', async () => {
     const { MessageList } = await import('@mastra/core/agent');
     const { RequestContext } = await import('@mastra/core/di');
 
@@ -11489,8 +11515,8 @@ describe('Full Async Buffering Flow', () => {
     const processor = new ObservationalMemoryProcessor(om, createMemoryProvider(om));
 
     // Step 0: Load messages with pending tool call.
-    // Even though total tokens (~2200) exceed threshold (2000),
-    // OM should NOT trigger async buffering because a message has state: 'call'.
+    // The pending call must never be observed; the completed messages before it
+    // may still buffer as a safe chronological prefix.
     const messageList = new MessageList({ threadId, resourceId });
     const sharedState: Record<string, unknown> = {};
     const requestContext = new RequestContext();
@@ -11513,8 +11539,16 @@ describe('Full Async Buffering Flow', () => {
     });
     await waitForAsyncOps();
 
-    // Observer should NOT have been called because there's a pending tool call
-    expect(observerCalls.length).toBe(0);
+    // The pending tool call itself must never be observed. Completed messages
+    // before it may buffer as a safe chronological prefix (#22573 policy).
+    const recordAfterStep0 = await storage.getObservationalMemory(threadId, resourceId);
+    const bufferedIdsAfterStep0 = (recordAfterStep0?.bufferedObservationChunks ?? []).flatMap(
+      chunk => chunk.messageIds,
+    );
+    expect(bufferedIdsAfterStep0).not.toContain('pending-msg-tool-call');
+    for (const call of observerCalls) {
+      expect(call.input).not.toContain('call_pending_123');
+    }
 
     // ─── Simulate tool completion: update the message in the messageList ───
     // In real usage, llm-execution-step mutates the state:'call' part to state:'result'

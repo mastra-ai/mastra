@@ -27,7 +27,7 @@ const resources = [
     title: 'Community',
     description: 'Join the Mastra Discord community for help, discussion, and collaboration.',
     icon: MessageSquareIcon,
-    href: 'https://discord.gg/BTYqqHKUrf',
+    href: 'https://discord.gg/mastra-ai',
     external: true,
   },
   {
@@ -66,7 +66,7 @@ export default function Resources() {
                   <ExternalLinkIcon className="text-icon3 ml-auto h-3.5 w-3.5 opacity-0 transition-opacity group-hover:opacity-100" />
                 )}
               </div>
-              <p className="text-ui-sm text-text3 leading-relaxed">{resource.description}</p>
+              <p className="text-ui-sm text-text3">{resource.description}</p>
             </a>
           ))}
         </div>

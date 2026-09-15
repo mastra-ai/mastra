@@ -67,6 +67,7 @@ const COLUMN_ACTION_REVEAL_CLASS =
   'pointer-events-none opacity-0 transition-opacity group-hover/column:pointer-events-auto group-hover/column:opacity-100 group-focus-within/column:pointer-events-auto group-focus-within/column:opacity-100 pointer-coarse:pointer-events-auto pointer-coarse:opacity-100 any-pointer-coarse:pointer-events-auto any-pointer-coarse:opacity-100 motion-reduce:transition-none';
 
 export function BoardColumnHeader({
+  phaseKind,
   stage,
   label,
   taskCount,
@@ -80,6 +81,7 @@ export function BoardColumnHeader({
   label: string;
   taskCount: number;
   totalTaskCount: number;
+  phaseKind?: 'resting' | 'working' | 'terminal';
   /** While loading, the task badge is hidden so a false "0/0" never flashes. */
   loading: boolean;
   collapsed: boolean;
@@ -128,7 +130,7 @@ export function BoardColumnHeader({
   return (
     <div className={cn(columnWidthClass(false), 'group/column flex min-h-8 items-start justify-between gap-2')}>
       <div className="flex h-8 min-w-0 items-center gap-2">
-        <BoardStageIcon stage={stage} />
+        <BoardStageIcon stage={stage} kind={phaseKind} />
         <Txt as="h2" variant="ui-smd" className="text-icon3 m-0 truncate font-semibold">
           {label}
         </Txt>

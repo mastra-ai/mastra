@@ -7,8 +7,8 @@ import { RouteHeaderActions, RouteHeaderActionsProvider, RouteHeaderActionsSlot 
 import { RouteHeaderCrumbs, RouteHeaderCrumbsProvider } from '../route-header-crumbs';
 import { getRouteHeaderHeading } from '../route-heading';
 import type { CrumbDef, RouteHeaderHandle } from '../types';
-import { useRouteHeader } from '../use-route-header';
 import { routes } from '@/App';
+import { ExperimentCrumb } from '@/domains/experiments/experiment-crumb';
 
 function getAppRoutes() {
   const rootRoute = routes.find(route => route.children?.some(child => child.path === '/agents'));
@@ -108,11 +108,6 @@ function hasRenderableNode(crumb: CrumbDef) {
   return Boolean(crumb.Component);
 }
 
-function RouteHeaderProbe() {
-  const { docs } = useRouteHeader();
-  return <div data-testid="route-docs">{docs?.href ?? 'none'}</div>;
-}
-
 function RouteHeaderOverrideProbe() {
   return <RouteHeaderCrumbs crumbs={[{ id: 'override', label: 'Override crumb' }]} />;
 }
@@ -171,10 +166,25 @@ describe('route header handles', () => {
     const crumbs = [...parentHandle.crumbs(ctx), ...childHandle.crumbs(ctx)];
 
     expect(crumbs.map(c => c.id)).toEqual(['nav:/experiments', 'experiment', 'experiment-items', 'experiment-item']);
-    expect(crumbs[1]).toMatchObject({ label: 'exp-1', to: '/experiments/exp-1' });
+    // The experiment crumb is hook-driven (name with id fallback) but stays linkable.
+    expect(crumbs[1]).toMatchObject({ Component: ExperimentCrumb, to: '/experiments/exp-1' });
     expect(crumbs[2]).toMatchObject({ label: 'Items' });
     expect(crumbs[2].to).toBeUndefined();
     expect(crumbs[3]).toMatchObject({ label: 'item-1' });
+  });
+
+  it('review queue route yields Experiments / Review Queue with a linkable Experiments crumb', () => {
+    const handles = collectRouteHandles(getAppRoutes());
+    const handle = handles.find(({ path }) => path === '/experiments/review-queue')?.handle;
+
+    expect(handle?.crumbs).toBeTypeOf('function');
+    if (typeof handle?.crumbs !== 'function') return;
+
+    const crumbs = handle.crumbs({ params: {}, pathname: '/experiments/review-queue' });
+
+    expect(crumbs.map(c => c.id)).toEqual(['nav:/experiments', 'nav:/experiments/review-queue']);
+    expect(crumbs[0]).toMatchObject({ label: 'Experiments', to: '/experiments' });
+    expect(crumbs[1]).toMatchObject({ label: 'Review Queue' });
   });
 
   it('dataset item route yields Datasets / {dataset} / Items / {itemId} with a non-clickable Items crumb', () => {
@@ -200,36 +210,20 @@ describe('route header handles', () => {
     expect(crumbs[3]).toMatchObject({ label: 'item-1' });
   });
 
-  it('truncates long item ids to 8 chars with an ellipsis in item and compare crumbs', () => {
+  it('truncates long item ids to 8 chars with an ellipsis in item crumbs', () => {
     const handles = collectRouteHandles(getAppRoutes());
     const itemHandle = handles.find(({ path }) => path === '/datasets/:datasetId/items/:itemId')?.handle;
-    const compareHandle = handles.find(
-      ({ path }) => path === '/datasets/:datasetId/items/:itemId/compare/:secondItemId',
-    )?.handle;
 
     expect(itemHandle?.crumbs).toBeTypeOf('function');
-    expect(compareHandle?.crumbs).toBeTypeOf('function');
-    if (typeof itemHandle?.crumbs !== 'function' || typeof compareHandle?.crumbs !== 'function') return;
+    if (typeof itemHandle?.crumbs !== 'function') return;
 
     const longId = '03bb5c8f-970f-4d09-98cb-e3f0bd5813f0';
-    const secondId = '50203836-7083-448d-8624-97eae4dfb297';
 
     const itemCrumbs = itemHandle.crumbs({
       params: { datasetId: 'ds-1', itemId: longId },
       pathname: `/datasets/ds-1/items/${longId}`,
     });
     expect(itemCrumbs.find(c => c.id === 'dataset-item')).toMatchObject({ label: '03bb5c8f...' });
-
-    const compareCrumbs = compareHandle.crumbs({
-      params: { datasetId: 'ds-1', itemId: longId, secondItemId: secondId },
-      pathname: `/datasets/ds-1/items/${longId}/compare/${secondId}`,
-    });
-    // Truncated label, but the link keeps the full id.
-    expect(compareCrumbs.find(c => c.id === 'dataset-item')).toMatchObject({
-      label: '03bb5c8f...',
-      to: `/datasets/ds-1/items/${longId}`,
-    });
-    expect(compareCrumbs.find(c => c.id === 'dataset-item-compare-second')).toMatchObject({ label: '50203836...' });
   });
 
   it('does not throw when route params contain malformed URI encoding', () => {
@@ -246,30 +240,6 @@ describe('route header handles', () => {
       });
       expect(crumbs.at(-1)).toMatchObject({ label: '%E0%A4%A' });
     }).not.toThrow();
-  });
-
-  it('allows deeper route handles to clear inherited docs links', async () => {
-    const router = createMemoryRouter(
-      [
-        {
-          path: '/',
-          element: <Outlet />,
-          handle: { docs: { href: 'https://example.com/docs' } },
-          children: [
-            {
-              path: 'child',
-              element: <RouteHeaderProbe />,
-              handle: { crumbs: [{ id: 'child', label: 'Child' }], docs: () => undefined },
-            },
-          ],
-        },
-      ],
-      { initialEntries: ['/child'] },
-    );
-
-    render(<RouterProvider router={router} />);
-
-    await waitFor(() => expect(screen.getByTestId('route-docs').textContent).toBe('none'));
   });
 
   it('renders only the active route header action owner', async () => {

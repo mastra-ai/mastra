@@ -7,7 +7,7 @@ import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { useDatasetReviewItems } from '../use-dataset-review-items';
+import { useReviewItems } from '../use-dataset-review-items';
 import {
   DATASET_ID,
   EXPERIMENT_ID,
@@ -32,16 +32,30 @@ const makeWrapper = () => {
 
 afterEach(() => cleanup());
 
-describe('useDatasetReviewItems', () => {
-  it('hydrates the persisted comment (and tags) from the experiment result', async () => {
-    server.use(
-      http.get(`${BASE_URL}/api/datasets/${DATASET_ID}/experiments`, () => HttpResponse.json(experimentsResponse)),
-      http.get(`${BASE_URL}/api/datasets/${DATASET_ID}/experiments/${EXPERIMENT_ID}/results`, () =>
-        HttpResponse.json(resultsResponse),
-      ),
-    );
+const OTHER_EXPERIMENT_ID = 'exp-2';
+const projectExperimentsResponse = {
+  ...experimentsResponse,
+  experiments: [...experimentsResponse.experiments, { ...experimentsResponse.experiments[0], id: OTHER_EXPERIMENT_ID }],
+};
 
-    const { result } = renderHook(() => useDatasetReviewItems(DATASET_ID), { wrapper: makeWrapper() });
+describe('useReviewItems', () => {
+  const resultRequests: string[] = [];
+
+  const setupHandlers = () => {
+    resultRequests.length = 0;
+    server.use(
+      http.get(`${BASE_URL}/api/experiments`, () => HttpResponse.json(projectExperimentsResponse)),
+      http.get(`${BASE_URL}/api/datasets/${DATASET_ID}/experiments/:experimentId/results`, ({ params }) => {
+        resultRequests.push(String(params.experimentId));
+        return HttpResponse.json(resultsResponse);
+      }),
+    );
+  };
+
+  it('hydrates the persisted tags from the experiment result', async () => {
+    setupHandlers();
+
+    const { result } = renderHook(() => useReviewItems({ experimentId: EXPERIMENT_ID }), { wrapper: makeWrapper() });
 
     await waitFor(() => {
       expect(result.current.data).toHaveLength(1);
@@ -49,10 +63,50 @@ describe('useDatasetReviewItems', () => {
 
     const item = result.current.data![0];
     expect(item.id).toBe(RESULT_ID);
+    expect(item.datasetId).toBe(DATASET_ID);
     expect(item.tags).toEqual(['hallucination']);
-    // Regression guard for #19857: the comment used to be hardcoded to ''
-    // on rehydrate, wiping saved comments on every reload.
-    expect(item.comment).toBe('The agent ignored the second question');
+  });
+
+  it('only fetches the selected experiment when scoped', async () => {
+    setupHandlers();
+
+    const { result } = renderHook(() => useReviewItems({ experimentId: EXPERIMENT_ID }), { wrapper: makeWrapper() });
+
+    await waitFor(() => expect(result.current.data).toHaveLength(1));
+    expect(resultRequests).toEqual([EXPERIMENT_ID]);
+  });
+
+  it('fetches every experiment in the project when unscoped', async () => {
+    setupHandlers();
+
+    const { result } = renderHook(() => useReviewItems(), { wrapper: makeWrapper() });
+
+    await waitFor(() => expect(result.current.data).toHaveLength(2));
+    expect(resultRequests.sort()).toEqual([EXPERIMENT_ID, OTHER_EXPERIMENT_ID].sort());
+  });
+
+  it('asks the server for the target scope and only walks the experiments it returns', async () => {
+    resultRequests.length = 0;
+    const experimentQueries: URLSearchParams[] = [];
+    server.use(
+      http.get(`${BASE_URL}/api/experiments`, ({ request }) => {
+        experimentQueries.push(new URL(request.url).searchParams);
+        return HttpResponse.json(experimentsResponse);
+      }),
+      http.get(`${BASE_URL}/api/datasets/${DATASET_ID}/experiments/:experimentId/results`, ({ params }) => {
+        resultRequests.push(String(params.experimentId));
+        return HttpResponse.json(resultsResponse);
+      }),
+    );
+
+    const { result } = renderHook(() => useReviewItems({ targetType: 'agent', targetId: 'agent-1' }), {
+      wrapper: makeWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.data).toHaveLength(1));
+    expect(experimentQueries[0].get('targetType')).toBe('agent');
+    expect(experimentQueries[0].get('targetId')).toBe('agent-1');
+    expect(resultRequests).toEqual([EXPERIMENT_ID]);
   });
 });
 

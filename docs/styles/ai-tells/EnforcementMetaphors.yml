@@ -1,0 +1,90 @@
+---
+extends: existence
+message: "AI enforcement metaphor: '%s'. Say what the check refuses or allows. Disable this rule for security or law-enforcement prose."
+level: error
+nonword: true
+ignorecase: true
+# A check presented as a sentry: a guard "stands down," a gate is "armed," a
+# linter "keeps its teeth," a workflow "polices" the arrangement, a formatter
+# "fights" the installer. The military and watchdog registers substitute for
+# a plain statement of what the mechanism refuses or allows. Every token
+# measured zero across the Go and Python standard libraries except two:
+# "keeps us honest" appears once in a Go comment making exactly this figure,
+# and the arming token avoids the real timer-arming jargon ("arming the ping
+# timer") by gating on enforcement nouns, so timers and alarms stay
+# untouched. Writing about actual guards, weapons, or policing disables the
+# rule.
+tokens:
+  # --- Standing down: the sentry relieved of duty ("the guard stands
+  # down," "stand the commit guard down").
+  - "\\bst(?:and|ands|anding|ood) down\\b"
+  - "\\bstand(?:s|ing)? (?:the|a|an|its|this|that) (?:[a-z]+ )?[a-z]+ down\\b"
+
+  # --- Arming: the mechanism as a set weapon ("the gate stays armed," "a
+  # release armed for the locked file," "arming a gate over every write").
+  # The enforcement noun is the gate, so "arming the ping timer" stays
+  # quiet.
+  - "\\b(?:gate|guard|hook|check|release|trap)s? (?:is |was |were |are |stays? |stayed |remains? |remained |left )?armed\\b"
+  - "\\barm(?:s|ed|ing) (?:a|an|the|its|this|that) (?:[a-z]+ )?(?:gate|guard|hook|check|release|trap)s?\\b"
+
+  # --- Teeth: enforcement as bite ("the gate keeps its teeth," "a
+  # toothless check"). Dentistry prose disables the rule.
+  - "\\b(?:keeps?|kept|keeping|has|have|had|having|grows?|grew|grown|loses?|lost|losing) (?:its|their) teeth\\b"
+  - "\\btoothless\\b"
+
+  # --- Policing and fighting: mechanisms in uniform ("one workflow polices
+  # the arrangement," "a formatter would fight the installer for it").
+  - "\\bpolic(?:es|ed|ing) (?:the|a|an|its|that|this|every|each|what)\\b"
+  - "\\bfight(?:s|ing)? (?:the|a|an|its) [a-z]+ for\\b"
+
+  # --- Kept honest: a check as the conscience ("the gates that keep them
+  # honest," "keeps a before-and-after comparison honest"). The one
+  # standard-library match is a Go comment using the same figure, so it
+  # fires by design. The object slot admits up to three words after a
+  # documentation-corpus audit (2026-09) found the compound object
+  # escaping.
+  - "\\bke(?:eps?|eping|pt) (?:it|them|us|everyone|everybody) honest\\b"
+  - "\\bke(?:eps?|eping|pt) (?:the|a|an|its|every|each|this|that|these|those|all|both) (?:[a-z'-]+ ){1,3}honest\\b"
+
+  # --- Honest numbers: candor credited to a count ("an honest count,"
+  # "an honest denominator," "the honest decode"). The same audit found
+  # the adjective applied to inanimate things four times over; the head
+  # nouns are the ones a measurement takes, so an honest person stays
+  # out, and the token measures zero across both standard libraries.
+  - "\\b(?:an|the|its|their|this|that|each|every|one|no) (?:[a-z]+ )?honest (?:count|denominator|number|numbers|decode|measure|measurement|comparison|baseline|signal|total|answer|accounting|picture|read|reading|estimate|figure|figures|metric|metrics|result|results|score|scores|view|tally|report|summary|ledger|record|log|value|values|ratio|rate|rates|percentage|sample|test|check|run|diff|delta|copy|version|encoding|projection)\\b"
+
+  # --- Gating as a verb: the check as a turnstile ("the root that gates
+  # it," "the live roots gate every swept table," "name-anchoring gates
+  # the top tier," "certain enough to gate a security control"). The
+  # same audit counted thirteen. Eight hits across the Go standard
+  # library ("this gates the experiment," "gated by ConvertHash," "gating
+  # on language version"), each the figure; feature-flag prose that has
+  # settled on the verb disables the rule. The noun stays uncovered.
+  - "\\bgat(?:es|ed|ing) (?:it|them|the|a|an|every|each|this|that|its|their|what|which|whether|on|behind|by|off)\\b"
+  - "\\b[a-z]+s gate (?:it|them|the|a|an|every|each|this|that|its|their|what|which|whether)\\b"
+  - "\\bto gate\\b"
+
+  # --- Standing guard: backing and blocking as posture ("a draft no pull
+  # request stands behind," "one skill stood in the way," "no consumer left
+  # standing"). Physical-position prose disables the rule.
+  - "\\bstand(?:s|ing)? behind\\b"
+  - "\\bstood behind\\b"
+  - "\\bst(?:ands?|ood|anding) in the way\\b"
+  - "\\bleft standing\\b"
+
+  # --- Flooding: a rule drowning its reader in false positives ("a bare
+  # verb would flood"). The checking-noun subject is the gate, so a river
+  # or a network flood stays quiet.
+  - "\\b(?:rule|token|shape|pattern|check|gate|alert)s? (?:that |which |would |will |could |never |then |always |otherwise )?flood(?:s|ed|ing)?\\b"
+
+  # --- Governing and escalating: a setting in office ("the flag governs
+  # whether the cache writes," "the manifest governs how the tag
+  # resolves") and a failure climbing the chain of command ("a warning
+  # escalates to an error"). A documentation-corpus census (2026-09)
+  # listed both among the verbs no rule read. Four hits for governing
+  # and five for escalating across the seven pre-LLM corpora, the PEPs
+  # and Rust RFCs writing "rules that govern how" and "escalated to" of
+  # their own committees and one Go comment escalating to os.Kill, each
+  # the figure; prose about actual governments disables the rule.
+  - "\\bgovern(?:s|ed|ing)? (?:the|a|an|its|their|this|that|each|every|it|them|how|whether|what|which)\\b"
+  - "\\bescalat(?:e|es|ed|ing) to\\b"

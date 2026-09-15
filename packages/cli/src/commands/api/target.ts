@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parse } from 'dotenv';
-import { getToken, type LoginOptions } from '../auth/credentials.js';
+import { getCurrentOrgId, getToken, type LoginOptions } from '../auth/credentials.js';
 import { fetchServerProjects } from '../server/platform-api.js';
 import { loadProjectConfig } from '../studio/project-config.js';
 import { ApiCliError } from './errors.js';
@@ -55,6 +55,16 @@ export async function resolveTarget(
         headers[AUTHORIZATION_HEADER] = `Bearer ${token}`;
       }
     }
+    if (
+      isFactoryPath(path) &&
+      isPlatformHostedFactoryInstance(options.url) &&
+      !getHeader(customHeaders, ORGANIZATION_ID_HEADER)
+    ) {
+      const organizationId = await getCurrentOrgId();
+      if (organizationId) {
+        headers[ORGANIZATION_ID_HEADER] = organizationId;
+      }
+    }
     return { baseUrl: options.url, headers, timeoutMs, apiPrefix };
   }
 
@@ -92,7 +102,13 @@ export async function resolveTarget(
 
     return {
       baseUrl,
-      headers: { Authorization: `Bearer ${token}`, ...customHeaders },
+      headers: {
+        Authorization: `Bearer ${token}`,
+        ...(isFactoryPath(path) && config.organizationId && !getHeader(customHeaders, ORGANIZATION_ID_HEADER)
+          ? { [ORGANIZATION_ID_HEADER]: config.organizationId }
+          : {}),
+        ...customHeaders,
+      },
       timeoutMs,
       apiPrefix,
     };
@@ -193,12 +209,27 @@ export function isPlatformHostedInstance(url: string): boolean {
   );
 }
 
+function isPlatformHostedFactoryInstance(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'https:') return false;
+    const hostname = parsed.hostname.toLowerCase();
+    return hostname.endsWith('.factory.mastra.cloud') || hostname.endsWith('.factory.staging.mastra.cloud');
+  } catch {
+    return false;
+  }
+}
+
 function isObservabilityPath(path?: string): boolean {
   return path?.startsWith('/observability/') || path === '/observability';
 }
 
 function isLearningPath(path?: string): boolean {
   return path?.startsWith('/learning/') || path === '/learning';
+}
+
+function isFactoryPath(path?: string): boolean {
+  return path?.startsWith('/web/factory/') || path === '/web/factory';
 }
 
 function loadDotenv(cwd: string): Record<string, string> {

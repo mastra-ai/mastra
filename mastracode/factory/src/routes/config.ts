@@ -37,6 +37,7 @@ import type {
 import type { ModelPackRecord, ModelPacksStorage } from '../storage/domains/model-packs/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
+import { seedPersonalOmDefaults } from './om-seed.js';
 import {
   getAuthProviderId,
   listTenantCredentialsForRequest,
@@ -529,6 +530,8 @@ export interface ThinkingConfigInfo {
   modeDefaults: Record<string, ThinkingLevelSetting>;
   /** Mode ids known to the controller (for rendering per-mode rows). */
   modes: string[];
+  /** False when the deployment refuses writes, so the UI can render read-only rows. */
+  editable: boolean;
 }
 
 /** `PUT /web/config/thinking` success payload. */
@@ -771,6 +774,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               // per-request, never written into process.env.
               await ctx.storage.setCredential(tenant, getAuthProviderId(provider), { type: 'api_key', key });
               onCredentialsChanged(tenant);
+              await seedPersonalOmDefaults({ memorySettings: options.memorySettings, tenant, provider });
               const records = await ctx.storage.listCredentials(ctx.orgId, ctx.userId);
               const providers = await listProviders({ controller, tenantCredentials: records });
               return c.json({ ok: true, provider: providers.find(p => p.provider === provider) });
@@ -1183,6 +1187,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               globalDefault: settings.preferences.thinkingLevel,
               modeDefaults: settings.models.modeThinkingDefaults,
               modes,
+              editable: !auth.enabled(),
             });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
@@ -1195,7 +1200,13 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
         requiresAuth: false,
         handler: async c => {
           if (auth.enabled()) {
-            return c.json({ error: 'Deployment thinking defaults can only be changed in local mode' }, 403);
+            return c.json(
+              {
+                error:
+                  'Deployment thinking defaults are shared by the whole deployment, so they cannot be changed while authentication is enabled',
+              },
+              403,
+            );
           }
           let body: { globalDefault?: unknown; modeDefaults?: unknown };
           try {

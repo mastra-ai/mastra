@@ -139,6 +139,7 @@ function decision(workItemId: string, status: FactoryDecisionStatus): FactoryDec
     status,
     attempts: status === 'proposed' ? 0 : 1,
     failureOccurrence: 0,
+    source: null,
     failureCode: null,
     canRetry: false,
     lastError: status === 'proposed' ? null : 'boom',

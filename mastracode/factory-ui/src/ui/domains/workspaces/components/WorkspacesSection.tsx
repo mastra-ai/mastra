@@ -9,7 +9,7 @@ import { useLocation, useNavigate, useParams } from 'react-router';
 
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { useActiveRunResources } from '../../../../hooks/useActiveRunResources';
-import { useWorkItemsQuery } from '../../../../hooks/useWorkItems';
+import { useParkedSessions, useWorkItemsQuery } from '../../../../hooks/useWorkItems';
 import { useWorkspacePullRequestMerges } from '../../../../hooks/useWorkspacePullRequestMerges';
 import { useDeleteWorkspaceMutation, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
 import { useChatSessionContext } from '../../chat/context/useChatSessionContext';
@@ -73,6 +73,7 @@ export function WorkspacesSection() {
   const viewerUserId = auth.data?.user?.userId;
   const { pinnedSessions, setPinned } = usePinnedSessions();
   const workItems = useWorkItemsQuery(factoryId);
+  const parkedSessions = useParkedSessions(factoryId);
   const workspaceRows = workspaces.data?.workspaces ?? [];
   const workspaceIds = workspaceRows.map(workspace => workspace.sessionId);
   const runningByPath = useActiveRunResources({
@@ -115,7 +116,9 @@ export function WorkspacesSection() {
         active,
         initializing,
         running,
-        attention: item !== undefined && itemAwaitsPerson(proposalByItem.get(item.id), effectByItem.get(item.id)),
+        attention:
+          parkedSessions.has(workspace.sessionId) ||
+          (item !== undefined && itemAwaitsPerson(proposalByItem.get(item.id), effectByItem.get(item.id))),
         review: getFactorySessionKind(workspace, item) === 'review',
         itemLabel: item && item.source !== 'manual' ? relationshipLabel(item) : undefined,
         itemTitle: item?.title,

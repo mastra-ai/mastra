@@ -11,6 +11,7 @@ import { AgentLayout } from '../../agent-layout';
 import { systemPackages } from './fixtures/channels';
 import { v2Agent } from './fixtures/composer-model-settings';
 import { LinkComponentProvider } from '@/lib/framework';
+import { RouteHeaderActionsProvider, RouteHeaderActionsSlot } from '@/lib/route-header/route-header-actions';
 import { server } from '@/test/msw-server';
 
 vi.mock('@mastra/playground-ui/utils/toast', () => ({
@@ -45,8 +46,8 @@ const noopPaths = {
   workflowRunLink: () => '',
   datasetLink: () => '',
   datasetItemLink: () => '',
-  datasetItemCompareLink: () => '',
   experimentLink: () => '',
+  cmsAgentEditLink: () => '',
 } as never;
 
 function renderLayout(initialEntry = '/agents/agent-1/chat/new') {
@@ -59,18 +60,21 @@ function renderLayout(initialEntry = '/agents/agent-1/chat/new') {
       <QueryClientProvider client={queryClient}>
         <LinkComponentProvider Link={StubLink as never} navigate={navigateSpy} paths={noopPaths}>
           <TooltipProvider>
-            <MemoryRouter initialEntries={[initialEntry]}>
-              <Routes>
-                <Route
-                  path="/agents/:agentId/*"
-                  element={
-                    <AgentLayout>
-                      <div data-testid="agent-child" />
-                    </AgentLayout>
-                  }
-                />
-              </Routes>
-            </MemoryRouter>
+            <RouteHeaderActionsProvider>
+              <RouteHeaderActionsSlot />
+              <MemoryRouter initialEntries={[initialEntry]}>
+                <Routes>
+                  <Route
+                    path="/agents/:agentId/*"
+                    element={
+                      <AgentLayout>
+                        <div data-testid="agent-child" />
+                      </AgentLayout>
+                    }
+                  />
+                </Routes>
+              </MemoryRouter>
+            </RouteHeaderActionsProvider>
           </TooltipProvider>
         </LinkComponentProvider>
       </QueryClientProvider>
@@ -82,6 +86,8 @@ function commonHandlers(packagesResponse = systemPackages) {
   return [
     http.get(`${BASE_URL}/api/agents/agent-1`, () => HttpResponse.json(v2Agent)),
     http.get(`${BASE_URL}/api/system/packages`, () => HttpResponse.json(packagesResponse)),
+    http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({ enabled: false })),
+    http.get(`${BASE_URL}/api/editor/builder/settings`, () => HttpResponse.json({})),
   ];
 }
 
@@ -103,13 +109,25 @@ describe('AgentLayout tool tabs', () => {
 
     renderLayout();
 
-    expect(await screen.findByText('Overview')).not.toBeNull();
-    expect(screen.getByText('Traces')).not.toBeNull();
-    expect(screen.queryByText('Chat')).toBeNull();
+    expect(await screen.findByText('Agent traces')).not.toBeNull();
+    expect(screen.getByRole('tab', { name: 'Chat' })).not.toBeNull();
+    // Overview is now a side panel toggled from the header, not a tab.
+    expect(screen.queryByRole('tab', { name: 'Overview' })).toBeNull();
+    expect(screen.getByTestId('agent-overview-panel-toggle')).not.toBeNull();
 
     // Channels is configuration, not a tool: no tab and no platforms fetch from the tab bar.
     await waitFor(() => expect(screen.queryByText('Channels')).toBeNull());
     expect(onPlatforms).not.toHaveBeenCalled();
+  });
+
+  it('highlights the Chat tab on the thread routes', async () => {
+    server.use(...commonHandlers());
+
+    renderLayout('/agents/agent-1/threads/new');
+
+    const chatTab = await screen.findByRole('tab', { name: 'Chat' });
+    expect(chatTab.getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByRole('tab', { name: 'Agent traces' }).getAttribute('aria-selected')).toBe('false');
   });
 
   it('lets the tab list keep the full row width on mobile by wrapping the right-slot controls', async () => {

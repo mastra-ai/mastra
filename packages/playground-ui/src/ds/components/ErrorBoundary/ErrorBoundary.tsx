@@ -1,4 +1,4 @@
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, Bug, RefreshCw, RotateCcw } from 'lucide-react';
 import * as React from 'react';
 import { Button } from '../Button';
 import { cn } from '@/lib/utils';
@@ -159,12 +159,12 @@ function DefaultErrorFallback({
         <h3
           className={cn(
             'font-medium text-neutral6',
-            isInline ? 'text-ui-md' : 'text-ui-lg @md:text-header-md @lg:text-header-lg',
+            isInline ? 'text-ui-md' : 'text-ui-md @md:text-header-md @lg:text-header-lg',
           )}
         >
           {title ?? 'Something went wrong'}
         </h3>
-        <p className={cn('text-neutral3', isInline ? 'text-ui-sm' : 'text-ui-md @lg:text-ui-lg')}>
+        <p className={cn('text-neutral3', isInline ? 'text-ui-sm' : 'text-ui-md')}>
           {description ?? 'An unexpected error occurred while rendering this part of the page.'}
         </p>
         <p
@@ -176,13 +176,19 @@ function DefaultErrorFallback({
           {error.message}
         </p>
         <div className={cn('flex flex-wrap items-center justify-center gap-2', isInline ? 'mt-1' : 'mt-2')}>
-          <Button variant="primary" size={isInline ? 'sm' : 'lg'} onClick={reset}>
+          <Button icon={<RotateCcw />} variant="primary" size={isInline ? 'sm' : 'lg'} onClick={reset}>
             Try again
           </Button>
-          <Button variant="default" size={isInline ? 'sm' : 'lg'} onClick={() => window.location.reload()}>
+          <Button
+            icon={<RefreshCw />}
+            variant="default"
+            size={isInline ? 'sm' : 'lg'}
+            onClick={() => window.location.reload()}
+          >
             Reload page
           </Button>
           <Button
+            icon={<Bug />}
             as="a"
             variant="default"
             size={isInline ? 'sm' : 'lg'}

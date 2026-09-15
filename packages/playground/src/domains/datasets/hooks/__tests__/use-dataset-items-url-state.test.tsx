@@ -13,48 +13,25 @@ function wrapper(initialUrl: string) {
 /** Drives `useDatasetItemsUrlState` with a real router so the URL is the source of truth. */
 function useHookUnderTest() {
   const [searchParams, setSearchParams] = useSearchParams();
-  return useDatasetItemsUrlState(searchParams, setSearchParams);
+  const state = useDatasetItemsUrlState(searchParams, setSearchParams);
+  return { ...state, search: searchParams.toString() };
 }
 
 describe('useDatasetItemsUrlState', () => {
   describe('reading URL params', () => {
-    it('defaults all fields when the URL is empty', () => {
+    it('defaults the version when the URL is empty', () => {
       const { result } = renderHook(useHookUnderTest, { wrapper: wrapper('/datasets/d1') });
-      expect(result.current.tab).toBe('items');
       expect(result.current.activeVersion).toBeNull();
     });
 
-    it('parses tab and version params', () => {
-      const { result } = renderHook(useHookUnderTest, {
-        wrapper: wrapper('/datasets/d1?tab=experiments&version=3'),
-      });
-      expect(result.current.tab).toBe('experiments');
+    it('parses the version param', () => {
+      const { result } = renderHook(useHookUnderTest, { wrapper: wrapper('/datasets/d1?version=3') });
       expect(result.current.activeVersion).toBe(3);
     });
 
-    it('falls back to defaults when params are invalid', () => {
-      const { result } = renderHook(useHookUnderTest, {
-        wrapper: wrapper('/datasets/d1?tab=bogus&version=-1'),
-      });
-      expect(result.current.tab).toBe('items');
+    it('falls back to the default when the version is invalid', () => {
+      const { result } = renderHook(useHookUnderTest, { wrapper: wrapper('/datasets/d1?version=-1') });
       expect(result.current.activeVersion).toBeNull();
-    });
-  });
-
-  describe('handleTabChange', () => {
-    it('removes the tab param when switching back to "items"', () => {
-      const { result } = renderHook(useHookUnderTest, { wrapper: wrapper('/datasets/d1?tab=review') });
-      act(() => result.current.handleTabChange('items'));
-      expect(result.current.tab).toBe('items');
-    });
-
-    it('preserves version when switching tabs', () => {
-      const { result } = renderHook(useHookUnderTest, {
-        wrapper: wrapper('/datasets/d1?version=2'),
-      });
-      act(() => result.current.handleTabChange('experiments'));
-      expect(result.current.tab).toBe('experiments');
-      expect(result.current.activeVersion).toBe(2);
     });
   });
 
@@ -68,10 +45,10 @@ describe('useDatasetItemsUrlState', () => {
     });
 
     it('preserves unrelated params', () => {
-      const { result } = renderHook(useHookUnderTest, { wrapper: wrapper('/datasets/d1?tab=review') });
+      const { result } = renderHook(useHookUnderTest, { wrapper: wrapper('/datasets/d1?foo=bar') });
       act(() => result.current.handleVersionChange(7));
       expect(result.current.activeVersion).toBe(7);
-      expect(result.current.tab).toBe('review');
+      expect(result.current.search).toBe('foo=bar&version=7');
     });
   });
 });

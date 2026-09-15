@@ -102,10 +102,38 @@ export type NetworkDataPart = {
   };
 };
 
+/**
+ * A tool call that threw inside a nested agent, normalized to a JSON-safe shape.
+ *
+ * The raw `tool-error` payload's `error` field is a live `Error` on the non-durable
+ * path but a plain `{ name, message, stack }` on the durable path, and
+ * `JSON.stringify(new Error(...))` yields `"{}"` — so an `Error` would reach a host
+ * as an empty object over SSE. Both shapes are flattened to `errorText` with
+ * `safeParseErrorObject`, the same helper the non-nested path uses to build its
+ * `tool-output-error` chunk.
+ */
+export type AgentToolError = {
+  toolCallId: string;
+  toolName: string;
+  args?: Record<string, unknown>;
+  /** JSON-safe rendering of the failure. */
+  errorText: string;
+  providerExecuted?: boolean;
+};
+
+/**
+ * `data-tool-agent` payload. Widens `LLMStepResult` with the Mastra-only fields this
+ * transform emits; `status` is likewise emitted at runtime but is not part of the
+ * AI SDK step shape.
+ */
+export type AgentRunSnapshot = LLMStepResult & {
+  toolErrors?: AgentToolError[];
+};
+
 export type AgentDataPart = {
   type: 'data-tool-agent';
   id: string;
-  data: LLMStepResult;
+  data: AgentRunSnapshot;
 };
 
 export type AgentStepDataPart = {
@@ -114,7 +142,7 @@ export type AgentStepDataPart = {
   data: {
     runId: string;
     stepIndex: number;
-    step: LLMStepResult;
+    step: AgentRunSnapshot;
   };
 };
 
@@ -675,6 +703,7 @@ function createAgentRunState(id: unknown = '') {
     toolCalls: [],
     pendingToolCalls: [],
     toolResults: [],
+    toolErrors: [],
     request: {},
     response: createAgentResponseState(),
     providerMetadata: undefined,
@@ -719,6 +748,7 @@ function cloneAgentStep(step: Record<string, any>, { includeDetails }: { include
     toolCalls: [],
     pendingToolCalls: [],
     toolResults: [],
+    toolErrors: [],
     dynamicToolCalls: [],
     dynamicToolResults: [],
     staticToolCalls: [],
@@ -765,7 +795,7 @@ function createAgentDataPart(args: {
     data: serializeAgentRun(current, {
       includeCompletedStepDetails,
       includeResponseMessages,
-    }) as unknown as LLMStepResult,
+    }) as unknown as AgentRunSnapshot,
   };
 }
 
@@ -782,7 +812,7 @@ function createAgentStepDataPart(args: {
     data: {
       runId,
       stepIndex,
-      step: cloneAgentStep(step, { includeDetails: true }) as unknown as LLMStepResult,
+      step: cloneAgentStep(step, { includeDetails: true }) as unknown as AgentRunSnapshot,
     },
   };
 }
@@ -930,6 +960,34 @@ export function transformAgent<OUTPUT>(
       hasChanged = true;
       break;
     }
+    case 'tool-error': {
+      const toolErrorRun = ensureAgentRunState(bufferedSteps, payload.runId!);
+      const toolErrorPayload = payload.payload as {
+        toolCallId: string;
+        toolName: string;
+        args?: Record<string, unknown>;
+        error: unknown;
+        providerExecuted?: boolean;
+      };
+      bufferedSteps.set(payload.runId!, {
+        ...toolErrorRun,
+        pendingToolCalls: removePendingToolCall(toolErrorRun.pendingToolCalls, toolErrorPayload.toolCallId),
+        toolErrors: [
+          ...toolErrorRun.toolErrors,
+          {
+            toolCallId: toolErrorPayload.toolCallId,
+            toolName: toolErrorPayload.toolName,
+            ...(toolErrorPayload.args !== undefined ? { args: toolErrorPayload.args } : {}),
+            errorText: safeParseErrorObject(toolErrorPayload.error),
+            ...(toolErrorPayload.providerExecuted !== undefined
+              ? { providerExecuted: toolErrorPayload.providerExecuted }
+              : {}),
+          },
+        ],
+      });
+      hasChanged = true;
+      break;
+    }
     case 'object-result':
       bufferedSteps.set(payload.runId!, {
         ...ensureAgentRunState(bufferedSteps, payload.runId!),
@@ -1007,6 +1065,7 @@ export function transformAgent<OUTPUT>(
         toolCalls: [],
         pendingToolCalls: [],
         toolResults: [],
+        toolErrors: [],
         usage: payload.payload.output.usage,
         warnings: payload.payload.stepResult.warnings || [],
         steps: [...stepRun.steps, stepResult],

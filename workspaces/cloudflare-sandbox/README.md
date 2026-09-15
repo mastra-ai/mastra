@@ -5,7 +5,7 @@ Cloudflare Sandbox provider for Mastra workspaces. It talks to a deployed [Cloud
 ## Installation
 
 ```bash
-pnpm add @mastra/cloudflare-sandbox
+npm install @mastra/cloudflare-sandbox
 ```
 
 ## Usage
@@ -22,20 +22,15 @@ const sandbox = new CloudflareSandbox({
 const workspace = new Workspace({ sandbox });
 ```
 
-`baseUrl` is the root URL of your bridge Worker, and `apiToken` is the value of the Worker's `SANDBOX_API_KEY` secret.
+## Documentation
 
-Commands run through `POST /v1/sandbox/:id/exec` as an `argv` array, so the bridge does the shell escaping. Files written through `writeFiles()` must resolve under `/workspace`; relative paths are resolved there automatically, and each file is sent as one `PUT /v1/sandbox/:id/file/*` request.
+- [Cloudflare Sandbox integration guide](https://mastra.ai/integrations/sandboxes/cloudflare-sandbox)
+- [Workspace documentation](https://mastra.ai/docs/mastra-platform/workspaces)
 
-Pass `sandboxId` to reconnect to an existing remote sandbox. `stop()` preserves the remote sandbox because the bridge has no suspend operation. `destroy()` deletes it.
+## Changelog
 
-## Integration tests
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/workspaces/cloudflare-sandbox/CHANGELOG.md) for version history and release notes.
 
-The integration suite runs against a real bridge deployment:
+## Support
 
-```bash
-CLOUDFLARE_SANDBOX_BRIDGE_URL=https://<worker>.workers.dev \
-CLOUDFLARE_SANDBOX_API_KEY=<SANDBOX_API_KEY secret> \
-  pnpm --filter @mastra/cloudflare-sandbox test
-```
-
-Without `CLOUDFLARE_SANDBOX_BRIDGE_URL` the suite skips.
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.

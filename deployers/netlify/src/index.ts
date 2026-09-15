@@ -109,6 +109,7 @@ export class NetlifyDeployer extends Deployer {
     toolsPaths: (string | string[])[],
     bundlerOptions: BundlerOptions,
     additionalEntries: Record<string, string>,
+    toolProjectRoot: string,
   ) {
     const inputOptions = await super.getBundlerOptions(
       serverFile,
@@ -120,6 +121,7 @@ export class NetlifyDeployer extends Deployer {
         enableEsmShim: this.target !== 'edge',
       },
       additionalEntries,
+      toolProjectRoot,
     );
 
     if (this.target === 'edge' && Array.isArray(inputOptions.plugins)) {

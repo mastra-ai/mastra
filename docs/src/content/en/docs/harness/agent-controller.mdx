@@ -30,7 +30,7 @@ Use the Agent Controller when your application needs:
 - Subagent orchestration to delegate focused subtasks with constrained tools
 - Persistent threads and selected thread settings across restarts, with isolated live state for each Session
 
-You could assemble all of this yourself on top of the [Agent class](/docs/agents/overview), which exposes the full agent loop, tools, and memory. The AgentController provides opinionated defaults for an ongoing session where the agent acts as a collaborator rather than a one-shot endpoint. Reach for the Agent class directly when you want full control or a request-response call. Reach for the AgentController when you want the collaborative-session model without building the runtime around it.
+You could assemble all of this yourself on top of the [Agent class](/docs/agents/overview), which exposes the full agent loop, tools, and memory. The AgentController provides opinionated defaults for an ongoing session where the agent acts as a collaborator rather than a one-shot endpoint. Use the Agent class directly for full control or request-response calls. Choose AgentController for ongoing sessions without building your own session runtime.
 
 ## Quickstart
 
@@ -140,6 +140,32 @@ const session = await controller.createSession({
 ```
 
 Use [`session.thread.create()`](/reference/agent-controller/session#sessionthreadcreate-title-id-) and [`session.thread.switch()`](/reference/agent-controller/session#sessionthreadswitch-threadid-emitevent-) to move one live Session between conversations.
+
+### List stored messages from the client
+
+Use the Agent Controller client to page through a thread's stored messages. Passing an options object returns the messages with pagination metadata:
+
+```typescript
+import { MastraClient } from '@mastra/client-js'
+
+const client = new MastraClient({ baseUrl: 'http://localhost:4111' })
+const session = client.getAgentController('assistant-controller').session('user-123')
+
+const result = await session.listMessages('support-ticket-42', {
+  page: 0,
+  perPage: 20,
+  orderBy: { field: 'createdAt', direction: 'DESC' },
+  filter: {
+    dateRange: { start: new Date('2026-01-01') },
+  },
+})
+
+console.log(result.messages)
+console.log(result.total)
+console.log(result.hasMore)
+```
+
+`page` is zero-indexed. Omitting `perPage` uses the storage default of 40 messages. Use `include` to request a message by ID with adjacent messages. `limit` is a deprecated alias for `perPage`; existing paged callers may use `{ limit, page }`, but must use `perPage` with `orderBy`, `filter`, or `include`. The existing numeric form, `session.listMessages(threadId, limit)`, remains available when you need the newest message window as an array, ordered oldest-first.
 
 ## Switch modes and models
 
@@ -427,7 +453,7 @@ Subscriptions are isolated by Session. Events from another Session on the same c
 
 ### Client-side sessions
 
-`client.getAgentController(id).session(resourceId, scope?)` returns a session client bound to one resource. Sessions are get-or-create on the server, so `create()` resumes an existing conversation instead of forking it. Pass `scope` when one resource needs independent sessions, such as one per git worktree:
+[`client.getAgentController(id).session(resourceId, scope?)`](/reference/client-js/agent-controller) returns a session client bound to one resource. Sessions are get-or-create on the server, so `create()` resumes an existing conversation instead of forking it. Pass `scope` when one resource needs independent sessions, such as one per git worktree:
 
 ```typescript title="src/components/agent-session.ts"
 import { MastraClient } from '@mastra/client-js'
@@ -440,7 +466,9 @@ await session.create()
 const subscription = await session.subscribe({
   onEvent: event => handleEvent(event),
   onError: error => showDisconnected(error),
-  onReconnect: async () => resync(await session.state()),
+  onReconnect: () => {
+    void session.state().then(resync).catch(showDisconnected)
+  },
   reconnect: true,
 })
 
@@ -454,20 +482,7 @@ The server doesn't replay events missed while the stream was down, so read `sess
 
 Send work with `session.sendMessage(content)`, or `session.sendMessage({ content, files })` to attach base64-encoded files. The reply arrives as `message_*` events on the subscription, not as the return value of the call. Answer a `tool_approval_required` event with `session.approveTool(toolCallId, approved)`, and a `tool_suspended` event with `session.respondToToolSuspension(toolCallId, resumeData)`.
 
-`onEvent` receives every event the session emits, discriminated by `event.type`:
-
-| Group | Events |
-| - | - |
-| Run | `agent_start`, `agent_end`, `usage_update`, `goal_evaluation`, `follow_up_queued` |
-| Messages | `message_start`, `message_update`, `message_end` |
-| Tools | `tool_input_start`, `tool_input_delta`, `tool_input_end`, `tool_start`, `tool_update`, `tool_end`, `shell_output`, `command_exit`, `tool_approval_required`, `tool_suspended`, `tool_suspension_cancelled`, `task_updated` |
-| Session | `state_changed`, `display_state_changed`, `mode_changed`, `model_changed`, `thread_changed`, `thread_created`, `thread_deleted`, `thread_title_updated` |
-| Subagents | `subagent_start`, `subagent_text_delta`, `subagent_tool_start`, `subagent_tool_end`, `subagent_end`, `subagent_model_changed` |
-| Memory | `om_observation_start`, `om_observation_end`, `om_observation_failed`, `om_reflection_start`, `om_reflection_end`, `om_reflection_failed`, `om_buffering_start`, `om_buffering_end`, `om_buffering_failed`, `om_model_changed`, `om_activation`, `om_status`, `om_thread_title_updated` |
-| Workspace | `workspace_ready`, `workspace_error`, `workspace_status_changed` |
-| Notification | `notification`, `notification_summary`, `info`, `error` |
-
-A controller can also emit events the SDK doesn't type, so comparing `event.type` to a literal doesn't narrow the union. Narrow with `isKnownAgentControllerEvent(event)` to get a typed payload.
+`onEvent` receives every event the session emits. See the [Agent Controller API](/reference/client-js/agent-controller#events) reference for the event types and how to narrow them.
 
 ## Related
 

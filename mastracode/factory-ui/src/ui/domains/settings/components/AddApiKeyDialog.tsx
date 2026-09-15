@@ -27,18 +27,25 @@ interface AddApiKeyDialogProps {
    * narrow a shared key.
    */
   defaultScope?: 'user' | 'org';
+  fixedScope?: 'user' | 'org';
   onClose: () => void;
 }
 
 /** Dialog for adding or updating a provider API key, with an org/user scope choice when auth is enabled. */
-export function AddApiKeyDialog({ provider, authEnabled, defaultScope = 'user', onClose }: AddApiKeyDialogProps) {
+export function AddApiKeyDialog({
+  provider,
+  authEnabled,
+  defaultScope = 'user',
+  fixedScope,
+  onClose,
+}: AddApiKeyDialogProps) {
   const displayName = providerDisplayName(provider.provider);
   const saveKeyMutation = useSaveProviderKey();
   const orgKeyAdminQuery = useOrgKeyAdminQuery();
   const canWriteOrgKey = !authEnabled || (orgKeyAdminQuery.data ?? true);
   const preferredScope = provider.source === 'stored-org' ? 'org' : defaultScope;
   const [keyDraft, setKeyDraft] = useState('');
-  const [scope, setScope] = useState<'user' | 'org'>(canWriteOrgKey ? preferredScope : 'user');
+  const [scope, setScope] = useState<'user' | 'org'>(fixedScope ?? (canWriteOrgKey ? preferredScope : 'user'));
 
   const error = saveKeyMutation.error instanceof Error ? saveKeyMutation.error.message : undefined;
   // A shared context wanted an org-wide key but this caller can't write one —
@@ -85,7 +92,7 @@ export function AddApiKeyDialog({ provider, authEnabled, defaultScope = 'user', 
               if (event.key === 'Escape') close();
             }}
           />
-          {authEnabled && (
+          {authEnabled && !fixedScope && (
             <div className="flex items-center justify-between gap-4">
               <Txt as="span" variant="ui-sm" className="text-icon4">
                 Who can use this key

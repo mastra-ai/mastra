@@ -3,6 +3,7 @@ import { SETUP_MARKER_PATH, setupMarkerContent } from '@internal/workspace';
 
 import type { MastraSandbox, SandboxStartHook, WorkspaceSandbox } from '@mastra/core/workspace';
 import type { RepositoryAccess } from '../capabilities/version-control.js';
+import { timedPhase } from '../timing.js';
 import { deriveLocalWorkdir, deriveRemoteRepoDir, repoDirUnder } from './workdir.js';
 
 /**
@@ -263,7 +264,14 @@ export function createSessionSetupHook(
     const workdir = await resolveSessionWorkdir(sessionId, sandbox, repoFullName);
     // Probed before materialize so a wiped checkout reads as "not done" even
     // though materialize is about to restore it.
-    const setupDone = marker ? await markerMatches(sandbox, workdir, marker) : true;
+    const setupDone = marker
+      ? await timedPhase('workspace.setup-marker', () => markerMatches(sandbox, workdir, marker))
+      : true;
+    if (marker) {
+      process.stderr.write(
+        `[factory:setup] ${setupDone ? 'marker matches, skipping setup command' : 'no matching marker, setup command will run'} (${markerShellPath(workdir)})\n`,
+      );
+    }
     await run(sandbox, workdir, {
       setupDone,
       markSetupDone: () => (marker ? writeMarker(sandbox, workdir, marker) : Promise.resolve()),

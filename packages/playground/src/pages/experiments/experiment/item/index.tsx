@@ -1,21 +1,18 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { SpanDataPanelView } from '@mastra/playground-ui/domains/traces/components/span-data-panel-view';
-import { TraceDataPanelView } from '@mastra/playground-ui/domains/traces/components/trace-data-panel-view';
-import { useSpanDetail } from '@mastra/playground-ui/domains/traces/hooks/use-span-detail';
-import { useTraceSpanNavigation } from '@mastra/playground-ui/domains/traces/hooks/use-trace-span-navigation';
-import { PlayCircle } from 'lucide-react';
-import { useCallback, useMemo, useState } from 'react';
+import { toast } from '@mastra/playground-ui/utils/toast';
+import { PlayCircle, X } from 'lucide-react';
+import { useCallback, useMemo } from 'react';
 import { useParams } from 'react-router';
 
 import { RouteItemOverlay } from '@/components/route-item-overlay';
 import { useScoresByExperimentId } from '@/domains/datasets/hooks/use-dataset-experiments';
-import { ExperimentResultPanel } from '@/domains/experiments/components/experiment-result-panel';
-import { ExperimentScorePanel } from '@/domains/experiments/components/experiment-score-panel';
+import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
+import { ExperimentResultDetail } from '@/domains/experiments/components/experiment-result-detail';
 import { useExperimentItemPanel } from '@/domains/experiments/context/experiment-item-panel-context';
-import { useExperimentTrace } from '@/domains/experiments/hooks/use-experiment-trace';
-import { Link } from '@/lib/link';
+import { useExperimentResultDetailState } from '@/domains/experiments/hooks/use-experiment-result-detail-state';
+import { useExperimentTagVocabulary } from '@/domains/experiments/hooks/use-experiment-tag-vocabulary';
 
 function ExperimentItemPage() {
   const { itemId } = useParams<{ itemId: string }>();
@@ -30,12 +27,12 @@ function ExperimentItemPage() {
 function ExperimentItemPageContent({ itemId }: { itemId: string }) {
   const {
     experimentId,
+    datasetId,
     experimentStatus,
     results,
     isLoadingResults,
     hasNextPage,
     close,
-    openInReview,
     goToPreviousItem,
     goToNextItem,
   } = useExperimentItemPanel();
@@ -43,143 +40,63 @@ function ExperimentItemPageContent({ itemId }: { itemId: string }) {
   const result = useMemo(() => results.find(r => r.itemId === itemId) ?? null, [results, itemId]);
 
   const { data: scoresByItemId } = useScoresByExperimentId(experimentId, experimentStatus);
-  const resultScores = result ? scoresByItemId?.[result.itemId] : undefined;
+  const { updateExperimentResult } = useDatasetMutations();
 
-  const [featuredTraceId, setFeaturedTraceId] = useState<string | null>(null);
-  const [featuredSpanId, setFeaturedSpanId] = useState<string | undefined>(undefined);
-  const [featuredScoreId, setFeaturedScoreId] = useState<string | null>(null);
-  const [resultCollapsed, setResultCollapsed] = useState(false);
-  const [traceCollapsed, setTraceCollapsed] = useState(false);
+  const flagForReview = useCallback(
+    async (resultId: string) => {
+      try {
+        await updateExperimentResult.mutateAsync({ datasetId, experimentId, resultId, status: 'needs-review' });
+        toast('Result flagged for review');
+      } catch {
+        toast.error('Failed to flag result for review');
+      }
+    },
+    [datasetId, experimentId, updateExperimentResult],
+  );
+  const tagVocabulary = useExperimentTagVocabulary(datasetId, results);
 
-  const featuredScore = resultScores?.find(s => s.id === featuredScoreId) ?? null;
-
-  const handleScoreClick = useCallback((scoreId: string) => {
-    setFeaturedScoreId(prev => (scoreId === prev ? null : scoreId));
-    setFeaturedTraceId(null);
-    setFeaturedSpanId(undefined);
-  }, []);
-
-  const toNextScore = (): (() => void) | undefined => {
-    if (!featuredScoreId || !resultScores) return undefined;
-    const currentIndex = resultScores.findIndex(s => s.id === featuredScoreId);
-    if (currentIndex >= 0 && currentIndex < resultScores.length - 1) {
-      return () => setFeaturedScoreId(resultScores[currentIndex + 1].id);
-    }
-    return undefined;
-  };
-
-  const toPreviousScore = (): (() => void) | undefined => {
-    if (!featuredScoreId || !resultScores) return undefined;
-    const currentIndex = resultScores.findIndex(s => s.id === featuredScoreId);
-    if (currentIndex > 0) {
-      return () => setFeaturedScoreId(resultScores[currentIndex - 1].id);
-    }
-    return undefined;
-  };
-
-  const { data: traceData, isLoading: isTraceLoading } = useExperimentTrace(featuredTraceId);
-  const traceSpans = traceData?.spans;
-
-  const { data: spanDetailData, isLoading: isSpanLoading } = useSpanDetail(featuredTraceId, featuredSpanId);
-  const featuredSpan = spanDetailData?.span;
-
-  const { handlePreviousSpan: toPreviousSpan, handleNextSpan: toNextSpan } = useTraceSpanNavigation(
-    traceSpans,
-    featuredSpanId ?? null,
-    setFeaturedSpanId,
+  const updateTags = useCallback(
+    async (resultId: string, tags: string[]) => {
+      try {
+        await updateExperimentResult.mutateAsync({ datasetId, experimentId, resultId, tags });
+      } catch {
+        toast.error('Failed to update tags');
+      }
+    },
+    [datasetId, experimentId, updateExperimentResult],
+  );
+  const completeResult = useCallback(
+    async (resultId: string) => {
+      try {
+        await updateExperimentResult.mutateAsync({ datasetId, experimentId, resultId, status: 'complete' });
+        toast('Result marked as reviewed');
+      } catch {
+        toast.error('Failed to complete result');
+      }
+    },
+    [datasetId, experimentId, updateExperimentResult],
   );
 
-  // Row stack: Result (with score split inside) → Trace → Span.
-  const gridRows = (() => {
-    const rows: string[] = [];
-    const showTrace = !!featuredTraceId;
-    rows.push(resultCollapsed ? 'auto' : showTrace ? '2fr' : '1fr');
-    if (showTrace) rows.push(traceCollapsed ? 'auto' : '3fr');
-    if (showTrace && featuredSpanId) rows.push('3fr');
-    return rows.join(' ');
-  })();
+  const resultScores = result ? scoresByItemId?.[result.itemId] : undefined;
+  const detailState = useExperimentResultDetailState(resultScores);
 
   return (
-    <RouteItemOverlay label={`Experiment item ${itemId}`} wide={!!featuredScore && !resultCollapsed}>
+    <RouteItemOverlay label={`Experiment item ${itemId}`} wide={detailState.wide}>
       {result ? (
-        <div
-          className="[&>section]:bg-surface3 grid h-full min-h-0 content-start gap-4 p-3 [&>section]:rounded-lg [&>section]:shadow-lg"
-          style={{ gridTemplateRows: gridRows }}
-        >
-          <ExperimentResultPanel
-            result={result}
-            scores={resultScores}
-            onPrevious={goToPreviousItem}
-            onNext={goToNextItem}
-            onClose={close}
-            onScoreClick={handleScoreClick}
-            featuredScoreId={featuredScoreId}
-            onShowTrace={() => {
-              if (!result.traceId) return;
-              setFeaturedTraceId(result.traceId);
-              setFeaturedSpanId(undefined);
-              setFeaturedScoreId(null);
-              // One-shot: collapse Result so the freshly opened trace has room.
-              setResultCollapsed(true);
-              setTraceCollapsed(false);
-            }}
-            onOpenInReview={() => openInReview(result.id)}
-            collapsed={resultCollapsed}
-            scorePanelSlot={
-              featuredScore ? (
-                <ExperimentScorePanel
-                  score={featuredScore}
-                  onNext={toNextScore()}
-                  onPrevious={toPreviousScore()}
-                  onClose={() => setFeaturedScoreId(null)}
-                  onShowTrace={() => {
-                    if (!featuredScore.traceId) return;
-                    setFeaturedTraceId(featuredScore.traceId);
-                    setFeaturedSpanId(undefined);
-                    setResultCollapsed(true);
-                    setTraceCollapsed(false);
-                  }}
-                  className="rounded-none border-0 bg-transparent"
-                />
-              ) : null
-            }
-          />
-
-          {featuredTraceId && (
-            <>
-              <TraceDataPanelView
-                traceId={featuredTraceId}
-                spans={traceSpans}
-                isLoading={isTraceLoading}
-                onClose={() => {
-                  setFeaturedTraceId(null);
-                  setFeaturedSpanId(undefined);
-                  setResultCollapsed(false);
-                }}
-                onSpanSelect={setFeaturedSpanId}
-                initialSpanId={featuredSpanId ?? null}
-                placement="traces-list"
-                showUnavailableFeaturesMsg={false}
-                collapsed={traceCollapsed}
-                onCollapsedChange={setTraceCollapsed}
-                LinkComponent={Link}
-                traceHref={`/traces?traceId=${encodeURIComponent(featuredTraceId)}`}
-              />
-
-              {featuredSpanId && (
-                <SpanDataPanelView
-                  traceId={featuredTraceId}
-                  spanId={featuredSpanId}
-                  span={featuredSpan}
-                  isLoading={isSpanLoading}
-                  onPrevious={toPreviousSpan}
-                  onNext={toNextSpan}
-                  onClose={() => setFeaturedSpanId(undefined)}
-                />
-              )}
-            </>
-          )}
-        </div>
+        <ExperimentResultDetail
+          className="p-3"
+          result={result}
+          scores={resultScores}
+          state={detailState}
+          onPrevious={goToPreviousItem}
+          onNext={goToNextItem}
+          onClose={close}
+          onComplete={() => completeResult(result.id)}
+          onFlagForReview={() => void flagForReview(result.id)}
+          onTagsChange={tags => void updateTags(result.id, tags)}
+          tagVocabulary={tagVocabulary}
+          isUpdatingTags={updateExperimentResult.isPending}
+        />
       ) : isLoadingResults || hasNextPage ? (
         <div className="h-full p-3">
           <div className="border-border1 bg-surface3 flex h-full items-center justify-center rounded-lg border shadow-lg">
@@ -193,7 +110,11 @@ function ExperimentItemPageContent({ itemId }: { itemId: string }) {
               iconSlot={<PlayCircle />}
               titleSlot="Item not found"
               descriptionSlot={`No loaded result for item "${itemId}".`}
-              actionSlot={<Button onClick={close}>Close</Button>}
+              actionSlot={
+                <Button icon={<X />} onClick={close}>
+                  Close
+                </Button>
+              }
             />
           </div>
         </div>

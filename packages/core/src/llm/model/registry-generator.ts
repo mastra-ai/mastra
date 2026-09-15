@@ -32,28 +32,19 @@ interface GatewayWithStructuredOutputCapabilities {
 function hasAttachmentCapabilities(
   gateway: MastraModelGatewayInterface,
 ): gateway is MastraModelGatewayInterface & GatewayWithAttachmentCapabilities {
-  return (
-    'getAttachmentCapabilities' in gateway &&
-    typeof (gateway as { getAttachmentCapabilities?: unknown }).getAttachmentCapabilities === 'function'
-  );
+  return 'getAttachmentCapabilities' in gateway && typeof gateway.getAttachmentCapabilities === 'function';
 }
 
 function hasTemperatureCapabilities(
   gateway: MastraModelGatewayInterface,
 ): gateway is MastraModelGatewayInterface & GatewayWithTemperatureCapabilities {
-  return (
-    'getTemperatureCapabilities' in gateway &&
-    typeof (gateway as { getTemperatureCapabilities?: unknown }).getTemperatureCapabilities === 'function'
-  );
+  return 'getTemperatureCapabilities' in gateway && typeof gateway.getTemperatureCapabilities === 'function';
 }
 
 function hasStructuredOutputCapabilities(
   gateway: MastraModelGatewayInterface,
 ): gateway is MastraModelGatewayInterface & GatewayWithStructuredOutputCapabilities {
-  return (
-    'getStructuredOutputCapabilities' in gateway &&
-    typeof (gateway as { getStructuredOutputCapabilities?: unknown }).getStructuredOutputCapabilities === 'function'
-  );
+  return 'getStructuredOutputCapabilities' in gateway && typeof gateway.getStructuredOutputCapabilities === 'function';
 }
 
 /**

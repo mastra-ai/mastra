@@ -57,6 +57,33 @@ const stepOptionsInputSchema = z
   .nullish()
   .describe(STEP_OPTIONS_DESCRIPTION);
 
+const ENTRY_ID_DESCRIPTION =
+  'Optional stable entry id — kebab-case, unique within the workflow. Lets editors and tools address this control-flow entry across edits and serialization.';
+const ENTRY_DESCRIPTION_DESCRIPTION = 'Optional human-readable description of why this control-flow operation exists.';
+const ENTRY_METADATA_DESCRIPTION =
+  'Arbitrary JSON-safe metadata attached to this entry (e.g. a display title for visual editors). Does not affect execution.';
+
+// Identity/display fields shared by every control-flow entry (parallel,
+// conditional, foreach, loop, sleep, sleepUntil, mapping). Container entries
+// additionally take an optional `id`; sleep/sleepUntil/mapping already carry a
+// required one.
+const entryDisplayFields = {
+  description: z.string().optional().describe(ENTRY_DESCRIPTION_DESCRIPTION),
+  metadata: jsonSchema.optional().describe(ENTRY_METADATA_DESCRIPTION),
+};
+const entryDisplayInputFields = {
+  description: z.string().nullish().describe(ENTRY_DESCRIPTION_DESCRIPTION),
+  metadata: z.unknown().nullish().describe(ENTRY_METADATA_DESCRIPTION),
+};
+const containerIdentityFields = {
+  id: z.string().min(1).optional().describe(ENTRY_ID_DESCRIPTION),
+  ...entryDisplayFields,
+};
+const containerIdentityInputFields = {
+  id: z.string().min(1).nullish().describe(ENTRY_ID_DESCRIPTION),
+  ...entryDisplayInputFields,
+};
+
 const agentOutputSchemaDescription =
   "OPTIONAL JSON Schema (Draft 2020-12) describing the structured output the agent must produce for this step. When set, the agent runs with structured output and the step's output IS that shape (not `{ text: string }`). Use this when a downstream step needs a machine-readable field — for example, an agent that reads a listing and emits `{ files: string[] }`, which a subsequent `foreach` iterates over.";
 
@@ -134,6 +161,7 @@ export const workflowBuilderMappingEntrySchema = z
   .strictObject({
     type: z.literal('mapping'),
     id: z.string().min(1).describe('Step id — kebab-case, unique within the workflow.'),
+    ...entryDisplayFields,
     mapConfig: z.string().min(1).describe(`A JSON-ENCODED STRING of ${WORKFLOW_BUILDER_MAPPING_CONFIG_DESCRIPTION}`),
   })
   .describe('Mapping step. Its output is an object whose top-level keys are exactly the keys of mapConfig.');
@@ -142,6 +170,7 @@ export const workflowBuilderMappingEntryInputSchema = z
   .strictObject({
     type: z.literal('mapping'),
     id: z.string().min(1).describe('Step id — kebab-case, unique within the workflow.'),
+    ...entryDisplayInputFields,
     mapConfig: z
       .union([workflowBuilderMappingConfigSchema, z.string().min(1)])
       .describe(WORKFLOW_BUILDER_MAPPING_CONFIG_DESCRIPTION),
@@ -229,12 +258,17 @@ const LOOP_DESCRIPTION =
   '`dowhile` keeps looping while the predicate is TRUE; `dountil` keeps looping until the predicate is TRUE (exit condition). The inner step runs at least once and receives its own previous output on later iterations.';
 
 export const workflowBuilderParallelEntrySchema = z
-  .strictObject({ type: z.literal('parallel'), steps: z.array(executableInnerStepSchema).min(1) })
+  .strictObject({
+    type: z.literal('parallel'),
+    ...containerIdentityFields,
+    steps: z.array(executableInnerStepSchema).min(1),
+  })
   .describe(PARALLEL_DESCRIPTION);
 
 export const workflowBuilderForeachEntrySchema = z
   .strictObject({
     type: z.literal('foreach'),
+    ...containerIdentityFields,
     step: executableInnerStepSchema,
     opts: z
       .object({ concurrency: z.number().int().positive() })
@@ -246,17 +280,20 @@ export const workflowBuilderForeachEntrySchema = z
 export const workflowBuilderSleepEntrySchema = z.strictObject({
   type: z.literal('sleep'),
   id: z.string().min(1),
+  ...entryDisplayFields,
   duration: z.number().nonnegative().describe('Milliseconds to wait. Static number only.'),
 });
 export const workflowBuilderSleepUntilEntrySchema = z.strictObject({
   type: z.literal('sleepUntil'),
   id: z.string().min(1),
+  ...entryDisplayFields,
   date: z.string().min(1).describe('ISO 8601 wall-clock date to wait until. Static string only.'),
 });
 
 export const workflowBuilderConditionalEntrySchema = z
   .strictObject({
     type: z.literal('conditional'),
+    ...containerIdentityFields,
     steps: z.array(executableInnerStepSchema).min(1),
     predicates: z
       .array(workflowBuilderPredicateSchema)
@@ -268,6 +305,7 @@ export const workflowBuilderConditionalEntrySchema = z
 export const workflowBuilderLoopEntrySchema = z
   .strictObject({
     type: z.literal('loop'),
+    ...containerIdentityFields,
     step: executableInnerStepSchema,
     loopType: z.enum(['dowhile', 'dountil']),
     predicate: workflowBuilderPredicateSchema.describe('Declarative predicate — no JS closures.'),
@@ -275,14 +313,20 @@ export const workflowBuilderLoopEntrySchema = z
   .describe(LOOP_DESCRIPTION);
 
 // Container input twins: children use the null-tolerant executable input steps,
-// and foreach's optional opts accept null from strict providers.
+// optional identity/display fields accept null, and foreach's optional opts
+// accept null from strict providers.
 export const workflowBuilderParallelEntryInputSchema = z
-  .strictObject({ type: z.literal('parallel'), steps: z.array(executableInnerStepInputSchema).min(1) })
+  .strictObject({
+    type: z.literal('parallel'),
+    ...containerIdentityInputFields,
+    steps: z.array(executableInnerStepInputSchema).min(1),
+  })
   .describe(PARALLEL_DESCRIPTION);
 
 export const workflowBuilderForeachEntryInputSchema = z
   .strictObject({
     type: z.literal('foreach'),
+    ...containerIdentityInputFields,
     step: executableInnerStepInputSchema,
     opts: z
       .object({ concurrency: z.number().int().positive().nullish() })
@@ -291,9 +335,23 @@ export const workflowBuilderForeachEntryInputSchema = z
   })
   .describe(FOREACH_DESCRIPTION);
 
+export const workflowBuilderSleepEntryInputSchema = z.strictObject({
+  type: z.literal('sleep'),
+  id: z.string().min(1),
+  ...entryDisplayInputFields,
+  duration: z.number().nonnegative().describe('Milliseconds to wait. Static number only.'),
+});
+export const workflowBuilderSleepUntilEntryInputSchema = z.strictObject({
+  type: z.literal('sleepUntil'),
+  id: z.string().min(1),
+  ...entryDisplayInputFields,
+  date: z.string().min(1).describe('ISO 8601 wall-clock date to wait until. Static string only.'),
+});
+
 export const workflowBuilderConditionalEntryInputSchema = z
   .strictObject({
     type: z.literal('conditional'),
+    ...containerIdentityInputFields,
     steps: z.array(executableInnerStepInputSchema).min(1),
     predicates: z
       .array(workflowBuilderPredicateSchema)
@@ -305,6 +363,7 @@ export const workflowBuilderConditionalEntryInputSchema = z
 export const workflowBuilderLoopEntryInputSchema = z
   .strictObject({
     type: z.literal('loop'),
+    ...containerIdentityInputFields,
     step: executableInnerStepInputSchema,
     loopType: z.enum(['dowhile', 'dountil']),
     predicate: workflowBuilderPredicateSchema.describe('Declarative predicate — no JS closures.'),
@@ -331,8 +390,8 @@ export const workflowBuilderGraphEntryInputSchema = z.discriminatedUnion('type',
   workflowBuilderNestedWorkflowEntryInputSchema,
   workflowBuilderParallelEntryInputSchema,
   workflowBuilderForeachEntryInputSchema,
-  workflowBuilderSleepEntrySchema,
-  workflowBuilderSleepUntilEntrySchema,
+  workflowBuilderSleepEntryInputSchema,
+  workflowBuilderSleepUntilEntryInputSchema,
   workflowBuilderConditionalEntryInputSchema,
   workflowBuilderLoopEntryInputSchema,
 ]);

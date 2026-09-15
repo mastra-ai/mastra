@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -12,6 +12,8 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogAction,
+  DialogCancel,
 } from './dialog';
 import { Button } from '@/ds/components/Button';
 
@@ -147,5 +149,317 @@ describe('Dialog', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(onOpenChange).toHaveBeenCalledWith(false, expect.anything());
+  });
+});
+
+describe('Dialog variant new', () => {
+  afterEach(() => vi.useRealTimers());
+
+  describe('when a destructive confirmation is opened', () => {
+    it('renders the consequence copy and named actions', () => {
+      render(<NewVariantFixture />);
+      expect(screen.getByRole('alertdialog', { name: 'Delete workspace?' })).toBeDefined();
+      expect(screen.getByText('Uncommitted changes will be lost.')).toBeDefined();
+      expect(screen.getByRole('button', { name: 'Cancel' })).toBeDefined();
+    });
+  });
+
+  describe('when a hold is released early', () => {
+    it('does not confirm', () => {
+      vi.useFakeTimers();
+      const onConfirm = vi.fn();
+      render(<NewVariantFixture onConfirm={onConfirm} hold />);
+      const button = screen.getByRole('button', { name: 'Delete workspace' });
+      fireEvent.keyDown(button, { key: ' ' });
+      act(() => vi.advanceTimersByTime(500));
+      fireEvent.keyUp(button, { key: ' ' });
+      act(() => vi.advanceTimersByTime(1500));
+      expect(onConfirm).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('when a keyboard hold completes', () => {
+    it('confirms exactly once despite repeated keydown events', () => {
+      vi.useFakeTimers();
+      const onConfirm = vi.fn();
+      render(<NewVariantFixture onConfirm={onConfirm} hold />);
+      const button = screen.getByRole('button', { name: 'Delete workspace' });
+      fireEvent.keyDown(button, { key: 'Enter' });
+      fireEvent.keyDown(button, { key: 'Enter', repeat: true });
+      act(() => vi.advanceTimersByTime(1500));
+      fireEvent.keyDown(button, { key: 'Enter', repeat: true });
+      fireEvent.click(button, { detail: 1 });
+      act(() => vi.advanceTimersByTime(1500));
+      expect(onConfirm).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('when a hold action receives a mouse click', () => {
+    it('does not bypass the hold', () => {
+      const onConfirm = vi.fn();
+      render(<NewVariantFixture onConfirm={onConfirm} hold />);
+      fireEvent.click(screen.getByRole('button', { name: 'Delete workspace' }), { detail: 1 });
+      expect(onConfirm).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('when assistive technology activates a hold action', () => {
+    it('confirms on the second activation', () => {
+      vi.useFakeTimers();
+      const onConfirm = vi.fn();
+      render(<NewVariantFixture onConfirm={onConfirm} hold />);
+      const button = screen.getByRole('button', { name: 'Delete workspace' });
+      fireEvent.click(button, { detail: 0 });
+      expect(onConfirm).not.toHaveBeenCalled();
+      expect(screen.getByRole('status').textContent).toContain('Activate again');
+      fireEvent.click(button, { detail: 0 });
+      expect(onConfirm).toHaveBeenCalledTimes(1);
+    });
+
+    it('disarms when the second activation is late', () => {
+      vi.useFakeTimers();
+      const onConfirm = vi.fn();
+      render(<NewVariantFixture onConfirm={onConfirm} hold />);
+      const button = screen.getByRole('button', { name: 'Delete workspace' });
+      fireEvent.click(button, { detail: 0 });
+      act(() => vi.advanceTimersByTime(5000));
+      fireEvent.click(button, { detail: 0 });
+      expect(onConfirm).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('when the confirmation is pending', () => {
+    it('disables both actions', () => {
+      render(<NewVariantFixture pending />);
+      expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Cancel' }).disabled).toBe(true);
+      expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Delete workspace' }).disabled).toBe(true);
+    });
+  });
+});
+
+function NewVariantFixture({ onConfirm = () => {}, hold = false, pending = false, holdSeconds = 1.5 }) {
+  return (
+    <Dialog variant="new" intent="destructive" defaultOpen pending={pending}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Delete workspace?</DialogTitle>
+          <DialogDescription>Uncommitted changes will be lost.</DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <DialogCancel>Cancel</DialogCancel>
+          <DialogAction holdSeconds={holdSeconds} onConfirm={onConfirm} confirmation={hold ? 'hold' : 'click'}>
+            Delete workspace
+          </DialogAction>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+describe('Dialog variant new hold cancellation', () => {
+  afterEach(() => vi.useRealTimers());
+
+  describe.each(['blur', 'pointerLeave', 'pointerCancel'])('when %s interrupts a hold', eventName => {
+    it('cancels the pending confirmation', () => {
+      vi.useFakeTimers();
+      const onConfirm = vi.fn();
+      render(<NewVariantFixture onConfirm={onConfirm} hold />);
+      const button = screen.getByRole('button', { name: 'Delete workspace' });
+      fireEvent.keyDown(button, { key: ' ' });
+      fireEvent[eventName](button);
+      act(() => vi.advanceTimersByTime(1600));
+      expect(onConfirm).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('when the window loses focus', () => {
+    it('cancels the pending confirmation', () => {
+      vi.useFakeTimers();
+      const onConfirm = vi.fn();
+      render(<NewVariantFixture onConfirm={onConfirm} hold />);
+      fireEvent.keyDown(screen.getByRole('button', { name: 'Delete workspace' }), { key: ' ' });
+      fireEvent(window, new Event('blur'));
+      act(() => vi.advanceTimersByTime(1600));
+      expect(onConfirm).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('when the hold action is unmounted', () => {
+    it('clears its pending confirmation', () => {
+      vi.useFakeTimers();
+      const onConfirm = vi.fn();
+      const { unmount } = render(<NewVariantFixture onConfirm={onConfirm} hold />);
+      fireEvent.keyDown(screen.getByRole('button', { name: 'Delete workspace' }), { key: ' ' });
+      unmount();
+      act(() => vi.advanceTimersByTime(1600));
+      expect(onConfirm).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('when the action becomes disabled during a hold', () => {
+    it('cancels the pending confirmation', () => {
+      vi.useFakeTimers();
+      const onConfirm = vi.fn();
+      const { rerender } = render(<NewVariantFixture onConfirm={onConfirm} hold />);
+      fireEvent.keyDown(screen.getByRole('button', { name: 'Delete workspace' }), { key: ' ' });
+      rerender(<NewVariantFixture onConfirm={onConfirm} hold pending />);
+      act(() => vi.advanceTimersByTime(1600));
+      expect(onConfirm).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('when an unrelated key is pressed', () => {
+    it('does not start confirmation', () => {
+      vi.useFakeTimers();
+      const onConfirm = vi.fn();
+      render(<NewVariantFixture onConfirm={onConfirm} hold />);
+      fireEvent.keyDown(screen.getByRole('button', { name: 'Delete workspace' }), { key: 'a' });
+      act(() => vi.advanceTimersByTime(1600));
+      expect(onConfirm).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('when a regular action is confirmed', () => {
+    it('leaves closing to its caller', () => {
+      const onConfirm = vi.fn();
+      render(<NewVariantFixture onConfirm={onConfirm} />);
+      fireEvent.click(screen.getByRole('button', { name: 'Delete workspace' }));
+      expect(onConfirm).toHaveBeenCalledTimes(1);
+      expect(screen.getByRole('alertdialog')).toBeDefined();
+    });
+  });
+
+  describe('when a pending dialog receives Escape', () => {
+    it('rejects the dismissal', () => {
+      const onOpenChange = vi.fn();
+      render(
+        <Dialog variant="new" defaultOpen pending onOpenChange={onOpenChange}>
+          <DialogContent>
+            <DialogTitle>Working</DialogTitle>
+          </DialogContent>
+        </Dialog>,
+      );
+      fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
+      expect(onOpenChange).not.toHaveBeenCalled();
+      expect(screen.getByRole('dialog')).toBeDefined();
+    });
+  });
+});
+
+describe('Dialog variant new hold duration', () => {
+  afterEach(() => vi.useRealTimers());
+
+  describe('when holdSeconds is 2.5', () => {
+    it('confirms only after the configured duration', () => {
+      vi.useFakeTimers();
+      const onConfirm = vi.fn();
+      render(<NewVariantFixture hold holdSeconds={2.5} onConfirm={onConfirm} />);
+      fireEvent.keyDown(screen.getByRole('button', { name: 'Delete workspace' }), { key: ' ' });
+      act(() => vi.advanceTimersByTime(2499));
+      expect(onConfirm).not.toHaveBeenCalled();
+      act(() => vi.advanceTimersByTime(1));
+      expect(onConfirm).toHaveBeenCalledTimes(1);
+    });
+  });
+});
+
+describe('Dialog variant new pointer confirmation', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  describe.each([
+    { name: 'primary pointer', button: 0, primary: true, confirms: true },
+    { name: 'secondary button', button: 2, primary: true, confirms: false },
+    { name: 'non-primary pointer', button: 0, primary: false, confirms: false },
+  ])('when a $name is held', ({ button, primary, confirms }) => {
+    it('only confirms a primary left-button hold', () => {
+      vi.useFakeTimers();
+      const onConfirm = vi.fn();
+      render(<NewVariantFixture hold onConfirm={onConfirm} />);
+      const event = new MouseEvent('pointerdown', { bubbles: true, button });
+      Object.defineProperty(event, 'isPrimary', { value: primary });
+      fireEvent(screen.getByRole('button', { name: 'Delete workspace' }), event);
+      act(() => vi.advanceTimersByTime(1500));
+      expect(onConfirm).toHaveBeenCalledTimes(confirms ? 1 : 0);
+    });
+  });
+
+  describe.each([true, false])('when document hidden becomes %s', hidden => {
+    it('cancels only when the document is hidden', () => {
+      vi.useFakeTimers();
+      const onConfirm = vi.fn();
+      render(<NewVariantFixture hold onConfirm={onConfirm} />);
+      fireEvent.keyDown(screen.getByRole('button', { name: 'Delete workspace' }), { key: ' ' });
+      vi.spyOn(document, 'hidden', 'get').mockReturnValue(hidden);
+      fireEvent(document, new Event('visibilitychange'));
+      act(() => vi.advanceTimersByTime(1500));
+      expect(onConfirm).toHaveBeenCalledTimes(hidden ? 0 : 1);
+    });
+  });
+
+  describe('when the pointer is released before completion', () => {
+    it('cancels confirmation', () => {
+      vi.useFakeTimers();
+      const onConfirm = vi.fn();
+      render(<NewVariantFixture hold onConfirm={onConfirm} />);
+      const button = screen.getByRole('button', { name: 'Delete workspace' });
+      const event = new MouseEvent('pointerdown', { bubbles: true, button: 0 });
+      Object.defineProperty(event, 'isPrimary', { value: true });
+      fireEvent(button, event);
+      fireEvent.pointerUp(button);
+      act(() => vi.advanceTimersByTime(1500));
+      expect(onConfirm).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('when Enter is released before completion', () => {
+    it('cancels confirmation', () => {
+      vi.useFakeTimers();
+      const onConfirm = vi.fn();
+      render(<NewVariantFixture hold onConfirm={onConfirm} />);
+      const button = screen.getByRole('button', { name: 'Delete workspace' });
+      fireEvent.keyDown(button, { key: 'Enter' });
+      fireEvent.keyUp(button, { key: 'Enter' });
+      act(() => vi.advanceTimersByTime(1500));
+      expect(onConfirm).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('when a custom keyboard handler prevents the hold', () => {
+    it('does not confirm', () => {
+      vi.useFakeTimers();
+      const onConfirm = vi.fn();
+      render(
+        <Dialog variant="new" defaultOpen>
+          <DialogContent>
+            <DialogTitle>Confirm</DialogTitle>
+            <DialogAction confirmation="hold" onConfirm={onConfirm} onKeyDown={event => event.preventDefault()}>
+              Confirm
+            </DialogAction>
+          </DialogContent>
+        </Dialog>,
+      );
+      fireEvent.keyDown(screen.getByRole('button', { name: 'Confirm' }), { key: ' ' });
+      act(() => vi.advanceTimersByTime(1500));
+      expect(onConfirm).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('when Cancel is clicked', () => {
+    it('notifies the caller that the dialog closed', () => {
+      const onOpenChange = vi.fn();
+      render(
+        <Dialog variant="new" defaultOpen onOpenChange={onOpenChange}>
+          <DialogContent>
+            <DialogTitle>Confirm</DialogTitle>
+            <DialogCancel>Cancel</DialogCancel>
+          </DialogContent>
+        </Dialog>,
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+      expect(onOpenChange).toHaveBeenCalledWith(false, expect.anything());
+    });
   });
 });

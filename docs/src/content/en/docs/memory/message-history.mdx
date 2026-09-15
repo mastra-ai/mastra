@@ -118,6 +118,12 @@ You can use this history in two ways:
 - **Automatic inclusion**: Mastra automatically includes recent messages in the context window. The default of 10 messages keeps agents grounded in the conversation. Adjust it with `lastMessages` when needed.
 - [**Manual querying**](#querying): For more control, query threads and messages directly with `recall()`. Use the results to choose which memories enter the context window or to render conversation history in your UI.
 
+:::note
+
+`lastMessages` counts every stored message, including tool calls, tool results, and [signals](/docs/harness/signals) of any kind, so a single turn can add several messages to the count. The window also slides forward on every request: once a thread grows past the limit, the oldest message leaves context on each turn, which changes the start of the prompt and invalidates the provider prompt cache. For long-running conversations, use [Observational Memory](/docs/memory/observational-memory), which keeps the prompt prefix stable.
+
+:::
+
 :::tip
 
 When memory is enabled, [Studio](/docs/studio/overview) uses message history to display past conversations in the chat sidebar.
@@ -178,7 +184,7 @@ const agent = mastra.getAgentById('test-agent')
 const memory = await agent.getMemory()
 ```
 
-The `Memory` instance gives you access to functions for listing threads and recalling messages, plus cloning conversations, and more.
+Use the `Memory` instance to query stored threads and messages or clone a conversation.
 
 ## Querying
 
@@ -234,7 +240,7 @@ const thread = await memory.getThreadById({ threadId: 'thread-123' })
 
 Once you have a thread, use [`recall()`](/reference/memory/recall) to retrieve its messages. It supports pagination and [semantic search](/docs/memory/semantic-recall), with optional date filtering.
 
-Basic recall returns all messages from a thread:
+Fetch a thread's history without pagination. Recall hides reminder signals by default; pass `hideSignals: false` to include them, `true` to hide all recognized signals, or an array to omit selected types. See [signal visibility and compatibility](/reference/memory/recall#signal-visibility) for matching rules and precedence.
 
 ```typescript
 const { messages } = await memory.recall({
@@ -345,7 +351,9 @@ const { thread, clonedMessages } = await memory.cloneThread({
 
 You can filter cloned messages by count or date range and specify custom thread IDs. Utility methods are also available to inspect clone relationships.
 
-See [`cloneThread()`](/reference/memory/cloneThread) and [clone utilities](/reference/memory/clone-utilities) for the full API.
+If you don't need the copied messages returned, for example when forking a long thread, use `copyThread()`. It never returns message payloads, and on LibSQL and PostgreSQL the rows are copied inside the database. When semantic recall is enabled, the copied messages are still read back in batches to generate embeddings.
+
+See [`cloneThread()`](/reference/memory/cloneThread), [`copyThread()`](/reference/memory/copyThread), and [clone utilities](/reference/memory/clone-utilities) for the full API.
 
 ## Deleting messages
 

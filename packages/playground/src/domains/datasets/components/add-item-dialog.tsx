@@ -6,6 +6,7 @@ import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { Label } from '@mastra/playground-ui/components/Label';
 import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { Plus, X } from 'lucide-react';
 import { useState } from 'react';
 import { useDatasetMutations } from '../hooks/use-dataset-mutations';
 import { DatasetItemScorerSelector } from './dataset-detail/dataset-item-scorer-selector';
@@ -42,7 +43,7 @@ function ValidationErrors({ field, errors }: { field: string; errors: Array<{ pa
   return (
     <div className="mt-2 space-y-1">
       {errors.map((err, idx) => (
-        <p key={idx} className="text-destructive text-xs">
+        <p key={idx} className="text-destructive text-ui-sm">
           <code className="bg-destructive/10 rounded px-1">
             {field}
             {err.path !== '/' ? err.path : ''}
@@ -218,7 +219,7 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
           <SideDialog.Heading>Add Item</SideDialog.Heading>
         </SideDialog.Header>
 
-        <form onSubmit={handleSubmit} className="grid gap-6">
+        <form onSubmit={handleSubmit} className="grid gap-4">
           <div className="grid gap-2">
             <Label htmlFor="item-input">Input (JSON) *</Label>
             <CodeEditor value={input} onChange={handleInputChange} showCopyButton={false} className="min-h-[240px]" />
@@ -280,10 +281,10 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
           </div>
 
           <div className="flex justify-end gap-2 pt-4">
-            <Button type="button" onClick={handleCancel}>
+            <Button icon={<X />} type="button" onClick={handleCancel}>
               Cancel
             </Button>
-            <Button type="submit" variant="primary" disabled={addItem.isPending}>
+            <Button icon={<Plus />} type="submit" variant="primary" disabled={addItem.isPending}>
               {addItem.isPending ? 'Adding...' : 'Add Item'}
             </Button>
           </div>

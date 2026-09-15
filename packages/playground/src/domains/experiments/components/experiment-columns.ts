@@ -2,11 +2,14 @@ import type { BadgeVariant } from '@mastra/playground-ui/components/Badge';
 
 // experiment name is free-form — an `auto` track would let it starve its neighbours
 export const EXPERIMENT_NAME_COLUMN = 'minmax(9rem,1fr)';
+// description is truncated to a single line; cap it so it never crowds the metric columns
+export const EXPERIMENT_DESCRIPTION_COLUMN = 'minmax(8rem,16rem)';
 export const EXPERIMENT_DATASET_COLUMN = '1fr';
 export const EXPERIMENT_DETAIL_COLUMNS = 'auto auto auto auto auto auto auto';
 
 export const experimentColumnLabels = {
   experiment: 'Experiment',
+  description: 'Description',
   dataset: 'Dataset',
   target: 'Target',
   status: 'Status',

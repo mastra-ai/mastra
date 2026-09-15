@@ -19,7 +19,7 @@ Set your E2B API key with the `E2B_API_KEY` environment variable or the `apiKey`
 
 ## Usage
 
-Add an `E2BDesktopSandbox` to a workspace and assign it to an agent. Because the sandbox supports the [computer capability](/docs/sandbox/overview#computer-use-tools), the workspace registers the `mastra_workspace_computer_*` tools alongside the shell and process tools:
+Add an `E2BDesktopSandbox` to a workspace and assign it to an agent. Because the sandbox supports the [computer capability](/docs/sandbox/computer), the workspace registers the `mastra_workspace_computer_*` tools alongside the shell and process tools:
 
 ```typescript
 import { Agent } from '@mastra/core/agent'
@@ -139,7 +139,7 @@ The default `desktop` template has no FUSE tooling, so [cloud storage mounting](
 
 ## Related
 
-- [Computer-use tools](/docs/sandbox/overview#computer-use-tools)
+- [Computer-use tools](/docs/sandbox/computer#computer-tools)
 - [`E2BSandbox` reference](/integrations/sandboxes/e2b)
 - [`WorkspaceSandbox` interface](/reference/workspace/sandbox)
 - [Sandbox](/docs/sandbox/overview)

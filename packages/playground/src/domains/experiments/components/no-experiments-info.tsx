@@ -16,19 +16,19 @@ export const NoExperimentsInfo = ({ onRunExperiment }: { onRunExperiment?: () =>
       actionSlot={
         <div className="flex flex-col items-center gap-2">
           {onRunExperiment && (
-            <Button variant="primary" onClick={onRunExperiment}>
-              <Play />
+            <Button variant="primary" onClick={onRunExperiment} icon={<Play />}>
               Run Experiment
             </Button>
           )}
           <Button
             variant="ghost"
             as="a"
-            href="https://mastra.ai/en/docs/datasets/running-experiments"
+            href="https://mastra.ai/docs/evals/experiments"
             target="_blank"
             rel="noopener noreferrer"
+            icon={<ExternalLinkIcon />}
           >
-            Experiments Documentation <ExternalLinkIcon />
+            Experiments Documentation
           </Button>
         </div>
       }

@@ -1,5 +1,158 @@
 # @mastra/e2b
 
+## 0.12.0
+
+### Minor Changes
+
+- Added an optional per-file `mode` to `WorkspaceSandbox.writeFiles` inputs so callers can set POSIX permissions (`0o001`–`0o777`) when provisioning files. The Docker sandbox applies the requested mode to each uploaded file, falling back to `0644` when omitted. Sandboxes that cannot honor an explicit mode (Vercel, E2B, Daytona, Cloudflare) reject the request with `SandboxUnsupportedFeatureError` instead of silently ignoring it. Closes #23580. ([#23652](https://github.com/mastra-ai/mastra/pull/23652))
+
+  ```ts
+  await sandbox.writeFiles([
+    { path: 'scripts/setup.sh', content: '#!/bin/sh\necho ready\n', mode: 0o755 },
+    { path: 'config/private.json', content: JSON.stringify({ token }), mode: 0o600 },
+    { path: 'README.md', content: 'Sandbox instructions' }, // defaults to 0644
+  ]);
+  ```
+
+  `@mastra/core` now exports `validateSandboxFileMode`, `assertModesUnsupported`, and `SandboxUnsupportedFeatureError` for sandbox providers; the built-in providers' `@mastra/core` peer dependency floor is raised to `1.67.0` accordingly.
+
+### Patch Changes
+
+- Updated dependencies [[`d9ef543`](https://github.com/mastra-ai/mastra/commit/d9ef54303b7f050f4e364701c3821fc61e7002f2), [`b96744d`](https://github.com/mastra-ai/mastra/commit/b96744daad8c6e181f03fdf38c732206ded428a2), [`ad5ac69`](https://github.com/mastra-ai/mastra/commit/ad5ac69bcd037bfb85c3399d8b39d9364931ad1b), [`e86be03`](https://github.com/mastra-ai/mastra/commit/e86be034c017fca7deae7d1ebb34d36413928cb8), [`492c0ae`](https://github.com/mastra-ai/mastra/commit/492c0aedcee3fde9555111a660b6c975c160a0db), [`0f4d9cf`](https://github.com/mastra-ai/mastra/commit/0f4d9cf79b49b6dc6a484a0b2d1cf381eb2343a6), [`50e2658`](https://github.com/mastra-ai/mastra/commit/50e2658cdcdc55a14abde08610a8e2b12fdf67a4), [`a0aa698`](https://github.com/mastra-ai/mastra/commit/a0aa698427db9730e39f0c9956d21b97307ab313), [`8510a6d`](https://github.com/mastra-ai/mastra/commit/8510a6d38b9d211af7d94b7860ab182ce55c39d1), [`ddbd352`](https://github.com/mastra-ai/mastra/commit/ddbd3527654a058ed413ae164a1246003dcc9030), [`5eba942`](https://github.com/mastra-ai/mastra/commit/5eba9420330b3f116810891ae14888f7f256cd4f), [`4112ecd`](https://github.com/mastra-ai/mastra/commit/4112ecdec76827384d3a7ab4e8db3ccf90ae7ed1), [`37065ad`](https://github.com/mastra-ai/mastra/commit/37065ad6cd3f74afd16417e8d4e0839c13beca40), [`648dd4f`](https://github.com/mastra-ai/mastra/commit/648dd4f4c4cd330013c0a98f50ffac77fe2ad632), [`2990bcc`](https://github.com/mastra-ai/mastra/commit/2990bccd1c648c8f8614da97fbb459819871f5bc), [`617c1b3`](https://github.com/mastra-ai/mastra/commit/617c1b30e7e794bbb77feaced1848fde291fc240), [`1ce03b9`](https://github.com/mastra-ai/mastra/commit/1ce03b9c04c633e815bc21cb78c29f7f19851fb2), [`c3d00db`](https://github.com/mastra-ai/mastra/commit/c3d00db279a95c7dcba0f767704a2bb6544b7b29), [`df14b5d`](https://github.com/mastra-ai/mastra/commit/df14b5d12374137db86f92061f8714b28473672e), [`fff3361`](https://github.com/mastra-ai/mastra/commit/fff33614a3376676797cb9b5a5c5b090b026fa0e), [`422e798`](https://github.com/mastra-ai/mastra/commit/422e798ab1a4b14302c5b49fed2f6c818a82706e), [`3fc8c2d`](https://github.com/mastra-ai/mastra/commit/3fc8c2d35f724c3648150b29e50cf61a9360b274), [`ddb3639`](https://github.com/mastra-ai/mastra/commit/ddb3639e3de41f3fe33f68f81c2e5850ff1280b6), [`4b3f587`](https://github.com/mastra-ai/mastra/commit/4b3f587ceabb3f3697c4c1ad4fb154d58002ef7c), [`47868b2`](https://github.com/mastra-ai/mastra/commit/47868b2dde360b038d829c9f88e15061acf3efb5), [`44c20c9`](https://github.com/mastra-ai/mastra/commit/44c20c9a40ba5ef153e1d5d0c413b825e1de42d7), [`502ca89`](https://github.com/mastra-ai/mastra/commit/502ca8904848e77d44622669f2728171d36ad6ca), [`953be88`](https://github.com/mastra-ai/mastra/commit/953be88befd9cdb789b4cfc16680121c663a631b), [`b95aabb`](https://github.com/mastra-ai/mastra/commit/b95aabba261a39b73430d95f3ed051634117d517), [`055057c`](https://github.com/mastra-ai/mastra/commit/055057ca2102e35008fe30871f7c8f422ae25ec2), [`7290151`](https://github.com/mastra-ai/mastra/commit/7290151bdb3bfe518653b0a66a19d6790925e4a0), [`2990bcc`](https://github.com/mastra-ai/mastra/commit/2990bccd1c648c8f8614da97fbb459819871f5bc), [`9bc7895`](https://github.com/mastra-ai/mastra/commit/9bc789591ad683f304c63bd01e554fbba2df9cf6), [`ffe16f1`](https://github.com/mastra-ai/mastra/commit/ffe16f17447449b7155f1f15992e3c9e5f6511ac), [`f466753`](https://github.com/mastra-ai/mastra/commit/f4667539a0c41ae4aa08a4ed380f374687db2592), [`04c11b3`](https://github.com/mastra-ai/mastra/commit/04c11b3cd698fa37af8fad466dc2bf6fa0d5494d), [`967ab17`](https://github.com/mastra-ai/mastra/commit/967ab179c9814e734af9c3395ff8ef795acbe06c), [`ad5ac69`](https://github.com/mastra-ai/mastra/commit/ad5ac69bcd037bfb85c3399d8b39d9364931ad1b), [`6d20620`](https://github.com/mastra-ai/mastra/commit/6d206205f781cfa2598c2a55123a336909e039b4), [`47868b2`](https://github.com/mastra-ai/mastra/commit/47868b2dde360b038d829c9f88e15061acf3efb5), [`fde3ca5`](https://github.com/mastra-ai/mastra/commit/fde3ca590f7d854ff33354eff4261b907bdacde4), [`3a1d253`](https://github.com/mastra-ai/mastra/commit/3a1d2537ad28754a164aedbf0dd94be224ccb0c3), [`0775cde`](https://github.com/mastra-ai/mastra/commit/0775cdee12b6ad2ad6b5c97874e6248db720224c), [`e3c3e5e`](https://github.com/mastra-ai/mastra/commit/e3c3e5e3e354e88207aa9747f9f0cd3352cea972), [`6902f94`](https://github.com/mastra-ai/mastra/commit/6902f940f1879955a90faa0a0ac871667b59d428), [`d55aa61`](https://github.com/mastra-ai/mastra/commit/d55aa616b3e88015c3b74342c75bd510c7e764df), [`7148bf5`](https://github.com/mastra-ai/mastra/commit/7148bf55b147e3fae90b3ba0c9517adb0af5f2a4), [`e83dfad`](https://github.com/mastra-ai/mastra/commit/e83dfade569ee5aea688de9f2bb8bf8db0a653a7), [`44057ea`](https://github.com/mastra-ai/mastra/commit/44057eac6fd048100574bf71c6dc095f769a6d63), [`d581249`](https://github.com/mastra-ai/mastra/commit/d581249a5bf97d32d73e0f1f30cd50ff108e2d67), [`2289456`](https://github.com/mastra-ai/mastra/commit/228945659b2003633e0ebb33e7e34cc2f6efbded), [`6bb122c`](https://github.com/mastra-ai/mastra/commit/6bb122c5147b612c0fe7f173f940933066c4cfcc), [`2c501bc`](https://github.com/mastra-ai/mastra/commit/2c501bc8f661b27a06842f1312221efa6125e580), [`990b47f`](https://github.com/mastra-ai/mastra/commit/990b47fa7370753967ea7ce83100a522f79ab328), [`90846f2`](https://github.com/mastra-ai/mastra/commit/90846f2bfd890de159ab7c3d4fcf8a71c6fb7125), [`6bdb944`](https://github.com/mastra-ai/mastra/commit/6bdb944acb3f39bccad59ee140d7614420948f6b), [`d1b070c`](https://github.com/mastra-ai/mastra/commit/d1b070cd77a944e6bb2e5848052b1e8275be88a2), [`7f6d101`](https://github.com/mastra-ai/mastra/commit/7f6d101044eefc0d776a555b45dbea1c0d5224c4), [`4573c23`](https://github.com/mastra-ai/mastra/commit/4573c231c108e7d796eab12b8e9b2094f8cc4d47), [`a54766a`](https://github.com/mastra-ai/mastra/commit/a54766a10381295583144847b856d18e8f924d30), [`1bd31e7`](https://github.com/mastra-ai/mastra/commit/1bd31e7fd49e6de56e6e9a157a6b452cbbd86983), [`a4381a2`](https://github.com/mastra-ai/mastra/commit/a4381a2b36cdb81c4e33c435cd882921edfc146c), [`ff45065`](https://github.com/mastra-ai/mastra/commit/ff45065d42132075c4efb064d96169c4eadbab58), [`e872dd6`](https://github.com/mastra-ai/mastra/commit/e872dd6619f3a5a46f1158b190b02f607b74d191)]:
+  - @mastra/core@1.67.0
+
+## 0.12.0-alpha.0
+
+### Minor Changes
+
+- Added an optional per-file `mode` to `WorkspaceSandbox.writeFiles` inputs so callers can set POSIX permissions (`0o001`–`0o777`) when provisioning files. The Docker sandbox applies the requested mode to each uploaded file, falling back to `0644` when omitted. Sandboxes that cannot honor an explicit mode (Vercel, E2B, Daytona, Cloudflare) reject the request with `SandboxUnsupportedFeatureError` instead of silently ignoring it. Closes #23580. ([#23652](https://github.com/mastra-ai/mastra/pull/23652))
+
+  ```ts
+  await sandbox.writeFiles([
+    { path: 'scripts/setup.sh', content: '#!/bin/sh\necho ready\n', mode: 0o755 },
+    { path: 'config/private.json', content: JSON.stringify({ token }), mode: 0o600 },
+    { path: 'README.md', content: 'Sandbox instructions' }, // defaults to 0644
+  ]);
+  ```
+
+  `@mastra/core` now exports `validateSandboxFileMode`, `assertModesUnsupported`, and `SandboxUnsupportedFeatureError` for sandbox providers; the built-in providers' `@mastra/core` peer dependency floor is raised to `1.67.0` accordingly.
+
+### Patch Changes
+
+- Updated dependencies [[`492c0ae`](https://github.com/mastra-ai/mastra/commit/492c0aedcee3fde9555111a660b6c975c160a0db), [`ddbd352`](https://github.com/mastra-ai/mastra/commit/ddbd3527654a058ed413ae164a1246003dcc9030), [`4112ecd`](https://github.com/mastra-ai/mastra/commit/4112ecdec76827384d3a7ab4e8db3ccf90ae7ed1), [`617c1b3`](https://github.com/mastra-ai/mastra/commit/617c1b30e7e794bbb77feaced1848fde291fc240), [`422e798`](https://github.com/mastra-ai/mastra/commit/422e798ab1a4b14302c5b49fed2f6c818a82706e), [`47868b2`](https://github.com/mastra-ai/mastra/commit/47868b2dde360b038d829c9f88e15061acf3efb5), [`b95aabb`](https://github.com/mastra-ai/mastra/commit/b95aabba261a39b73430d95f3ed051634117d517), [`055057c`](https://github.com/mastra-ai/mastra/commit/055057ca2102e35008fe30871f7c8f422ae25ec2), [`7290151`](https://github.com/mastra-ai/mastra/commit/7290151bdb3bfe518653b0a66a19d6790925e4a0), [`9bc7895`](https://github.com/mastra-ai/mastra/commit/9bc789591ad683f304c63bd01e554fbba2df9cf6), [`47868b2`](https://github.com/mastra-ai/mastra/commit/47868b2dde360b038d829c9f88e15061acf3efb5), [`6902f94`](https://github.com/mastra-ai/mastra/commit/6902f940f1879955a90faa0a0ac871667b59d428), [`7148bf5`](https://github.com/mastra-ai/mastra/commit/7148bf55b147e3fae90b3ba0c9517adb0af5f2a4), [`6bdb944`](https://github.com/mastra-ai/mastra/commit/6bdb944acb3f39bccad59ee140d7614420948f6b), [`a54766a`](https://github.com/mastra-ai/mastra/commit/a54766a10381295583144847b856d18e8f924d30), [`ff45065`](https://github.com/mastra-ai/mastra/commit/ff45065d42132075c4efb064d96169c4eadbab58)]:
+  - @mastra/core@1.67.0-alpha.3
+
+## 0.11.0
+
+### Minor Changes
+
+- **Added repository templates, so sandboxes start with a warm checkout** ([#22065](https://github.com/mastra-ai/mastra/pull/22065))
+
+  `createRepoTemplate()` builds an E2B template with the repository already cloned and its setup command already run. Sessions then start from a prepared image instead of paying a cold clone and install.
+
+  ```ts
+  new E2BSandbox({
+    id: sessionId,
+    template: createRepoTemplate({
+      getRepositoryAccess: async () => ({
+        cloneUrl: 'https://github.com/acme/widgets.git',
+        authorization: { scheme: 'bearer', token: await mintInstallationToken() },
+      }),
+      setupCommand: 'pnpm install',
+    }),
+  });
+  ```
+
+  `getRepositoryAccess` supplies the clone URL and, for private repositories, a short-lived credential. It returns `undefined` from `createRepoTemplate()` when the accessor is absent, so a session with no repository needs no conditional at the call site. The credential authenticates the head lookup and the build's clone through an in-shell auth header, reaching the template definition's environment but never the image filesystem. It's set as `GH_TOKEN`, the same variable a session installs before running setup, so a setup command behaves identically in both places.
+
+  **Only the first build ever blocks a start**
+
+  There's one template per repository, setup command, and workdir, with the commit sha as a tag (`mastra-repo-<owner>-<repo>-<hash>:sha-<sha>`). Without an explicit `sha` the template pins itself to the repository's current default-branch head at resolution time. When the head moves, the next sandbox boots immediately from the previous build while the new sha builds in the background, and runtime setup fast-forwards the checkout. A failed build falls back to the default template plus a runtime clone, so a broken build never wedges a session.
+
+  **Added `buildEnv` for setup commands that need credentials**
+
+  Registry tokens, private index URLs, and anything else the setup command needs at build time. Accepts a record or an async resolver. Values are part of the template's identity, so changing one produces a new template.
+
+  **Added `refreshRepoTemplate()` for warming templates ahead of time**
+
+  The same resolution the lazy start path performs, exposed standalone and awaited, so a cron or a merge-to-main handler can build the template before anyone opens a session.
+
+  **Default template ships a current Node.js LTS with corepack enabled**
+
+  The e2b base image carries Node 20.9.0, old enough that corepack-fetched package managers crash on it, so a setup command like `pnpm i && pnpm build` failed out of the box. The default mountable template now installs a pinned Node 24.20.0 over the stale runtime and enables corepack with the download prompt disabled, so `pnpm` and `yarn` resolve to whatever a repository's `packageManager` field pins. Repo templates build on the default mountable template, so they inherit the working toolchain. Pick a different release with the new `nodeVersion` option:
+
+  ```ts
+  createDefaultMountableTemplate({ nodeVersion: '22.23.2' });
+  ```
+
+  The version is exact and identity-bearing: changing it builds a new template, so a version change can never silently reuse a build at the old runtime. Existing default and repo templates rebuild once on first use after upgrading.
+
+  **Machine resources: `cpuCount` and `memoryMB`**
+
+  The built template's sandboxes get exactly that machine size. Resources are part of the template's identity — hashed into the template name alongside the repository, setup command, and build env — so a resize builds a new template instead of silently reusing one built at the old size. Absent options normalize to the SDK defaults (2 vCPU, 1024 MB). When a repo template's build fails and the sandbox degrades to the default mountable template, the default is built at the requested size too, so a 2 GB session's setup never lands in a 1 GB fallback and runs out of memory.
+
+  ```ts
+  new E2BSandbox({
+    id: sessionId,
+    template: createRepoTemplate({ ...ctx, memoryMB: 2048, cpuCount: 4 }),
+  });
+  ```
+
+- `createRepoTemplate` now runs each command (clone, fetch, checkout, and each setup command) as its own cached build step, and `setupCommand` accepts an array. A new `workingDirectory` option sets the cwd for the build and for sandboxes created from the template; the repository is cloned to `<workingDirectory>/<repo>`. When omitted, the clone lands in the base image's working directory instead of `$HOME`. ([#22698](https://github.com/mastra-ai/mastra/pull/22698))
+
+  ```ts
+  createRepoTemplate({
+    getRepositoryAccess,
+    setupCommand: ['pnpm i', 'pnpm build'],
+    workingDirectory: '/workspace',
+  });
+  ```
+
+- **Added a `workingDirectory` option to `MastraSandboxOptions`, honored by every sandbox provider** ([#22697](https://github.com/mastra-ai/mastra/pull/22697))
+
+  Every sandbox now accepts one instance-level `workingDirectory` option that sets the default directory for command execution and process spawns. A per-command `cwd` always wins over it, and when neither is provided each provider keeps its previous default (E2B home, docker `/workspace`, Vercel serverless `/tmp`, and so on). The effective value is readable through the new `sandbox.workingDirectory` getter.
+
+  ```ts
+  const sandbox = new E2BSandbox({ workingDirectory: '/home/user/my-repo' });
+  await sandbox.executeCommand('pwd'); // /home/user/my-repo
+  await sandbox.executeCommand('pwd', [], { cwd: '/tmp' }); // /tmp
+  ```
+
+  Providers that already carried this concept under other names keep those names working as deprecated aliases feeding the same field: `workingDir` on `@mastra/docker` and `@mastra/apple-container`, and `workdir` on `@mastra/modal`. When both the alias and `workingDirectory` are set, `workingDirectory` wins. Use absolute paths: the value is passed to the provider as-is, so `~` and environment variables like `$HOME` are not expanded (except where a provider documents expansion, such as `LocalSandbox` expanding `~`).
+
+### Patch Changes
+
+- Update README to include accurate, up-to-date information ([#22858](https://github.com/mastra-ai/mastra/pull/22858))
+
+- Repo templates now write `.mastra-sandbox/setup` beside the checkout as their last build step. It contains `sha256:<digest of the setup commands>`, so a sandbox booted from the template can tell that this setup already ran. ([#22837](https://github.com/mastra-ai/mastra/pull/22837))
+
+- Repository templates now clone with `--depth=1 --single-branch`, so template builds transfer less history. ([#22840](https://github.com/mastra-ai/mastra/pull/22840))
+
+- Fixed repo templates silently degrading to a repo-less template on hosts without a `git` binary (deployed Mastra servers), which made every session cold-clone at runtime. GitHub (github.com) clone URLs now resolve the default-branch head through the GitHub REST API; other hosts keep using `git ls-remote`. ([#22833](https://github.com/mastra-ai/mastra/pull/22833))
+
+- Remove `CHANGELOG.md` from distributed npm files resulting in reduced package size ([#22737](https://github.com/mastra-ai/mastra/pull/22737))
+
+- Updated dependencies [[`3910c77`](https://github.com/mastra-ai/mastra/commit/3910c77413a3058ab270c6dbc74a59bc3cdf67ea), [`decd47d`](https://github.com/mastra-ai/mastra/commit/decd47d0db2a891a6832e226557145b6658b0b19), [`c1d3422`](https://github.com/mastra-ai/mastra/commit/c1d3422e8052a4282e8547df914b6231e5345f01), [`285ce1c`](https://github.com/mastra-ai/mastra/commit/285ce1c1399341a37e76233aa94dbf9f1a41bd5d), [`e983f74`](https://github.com/mastra-ai/mastra/commit/e983f749873189f767f509eb33d1a3596c0f1c74), [`4596348`](https://github.com/mastra-ai/mastra/commit/45963483f4cd2810f0646469916f74266a3dd607), [`7686114`](https://github.com/mastra-ai/mastra/commit/7686114e3802f4cea414377eaf10999524d670fa), [`ea56b1f`](https://github.com/mastra-ai/mastra/commit/ea56b1fa6e0f99673d2f8a5b7dacc8d351507ff7), [`50469b2`](https://github.com/mastra-ai/mastra/commit/50469b2d085fc8550579ca4b741eb359d1705abc), [`5b5e3cc`](https://github.com/mastra-ai/mastra/commit/5b5e3cc006950b0ff9720c5be8396d4c95e8a6ac), [`809e882`](https://github.com/mastra-ai/mastra/commit/809e882ee9c154ac642eaed396163df706db6ae4), [`cedc25d`](https://github.com/mastra-ai/mastra/commit/cedc25d8c2dec005d8b10b6ce2d36feef1162ff0), [`1255235`](https://github.com/mastra-ai/mastra/commit/125523539237c39f84d126d16476093336089c0d), [`2e87ffb`](https://github.com/mastra-ai/mastra/commit/2e87ffbb454cc88bd8a8c022d1e46325e7907482), [`a499422`](https://github.com/mastra-ai/mastra/commit/a499422cd7eccca184cac7b7a684a6199784aa82), [`cf58c86`](https://github.com/mastra-ai/mastra/commit/cf58c86cb48ccc72677bdaa422e43f102683184c), [`a3606a0`](https://github.com/mastra-ai/mastra/commit/a3606a09f3deaeef17caf04b9c6a0d7cd6b80fe6), [`4095752`](https://github.com/mastra-ai/mastra/commit/40957529233d202446ebecab1f59c76e99910230), [`74b21fd`](https://github.com/mastra-ai/mastra/commit/74b21fd9bbe88e770d9acf4e00e01c8bbb7c9e61), [`045c3c7`](https://github.com/mastra-ai/mastra/commit/045c3c78f2129fea5d4467bb26cff2b49788b3d0), [`a3606a0`](https://github.com/mastra-ai/mastra/commit/a3606a09f3deaeef17caf04b9c6a0d7cd6b80fe6), [`449d112`](https://github.com/mastra-ai/mastra/commit/449d1120cc1f9c43a71308a9fd8b178cfb11355f), [`e8aca33`](https://github.com/mastra-ai/mastra/commit/e8aca339dc92c0b60baad3d948a7c48ec9ae106f), [`c5c9ffc`](https://github.com/mastra-ai/mastra/commit/c5c9ffc3b36bdc7b17d6f911be81e28ba02acfad), [`9d3073c`](https://github.com/mastra-ai/mastra/commit/9d3073c230dbff45d58c259d676b2b137afd2ff5), [`19b71cf`](https://github.com/mastra-ai/mastra/commit/19b71cf1de8afe6f69a3171d8a5a28086790e49b), [`2a0ca02`](https://github.com/mastra-ai/mastra/commit/2a0ca021d95e23f1d1c0b5fe858b0b56f71fe0ba), [`ff539f6`](https://github.com/mastra-ai/mastra/commit/ff539f6dc21137fbeb3f0867f07069cbce45c15f), [`9fdb3bc`](https://github.com/mastra-ai/mastra/commit/9fdb3bc0f9bfab5269b4f3045595e62323da5d3a), [`d53a056`](https://github.com/mastra-ai/mastra/commit/d53a05614893e8d1bbfdab50b42c19435e6bd065), [`420052f`](https://github.com/mastra-ai/mastra/commit/420052fcac3fc672be17fe655667dfbdbd35a2cc), [`28ce924`](https://github.com/mastra-ai/mastra/commit/28ce924276eeca492e6a360e5482ed20c2785ef6)]:
+  - @mastra/core@1.64.0
+
+## 0.11.0-alpha.6
+
+### Patch Changes
+
+- Repository templates now clone with `--depth=1 --single-branch`, so template builds transfer less history. ([#22840](https://github.com/mastra-ai/mastra/pull/22840))
+
+- Updated dependencies [[`7686114`](https://github.com/mastra-ai/mastra/commit/7686114e3802f4cea414377eaf10999524d670fa), [`50469b2`](https://github.com/mastra-ai/mastra/commit/50469b2d085fc8550579ca4b741eb359d1705abc), [`809e882`](https://github.com/mastra-ai/mastra/commit/809e882ee9c154ac642eaed396163df706db6ae4), [`74b21fd`](https://github.com/mastra-ai/mastra/commit/74b21fd9bbe88e770d9acf4e00e01c8bbb7c9e61), [`c5c9ffc`](https://github.com/mastra-ai/mastra/commit/c5c9ffc3b36bdc7b17d6f911be81e28ba02acfad)]:
+  - @mastra/core@1.64.0-alpha.9
+
+## 0.11.0-alpha.5
+
+### Patch Changes
+
+- Update README to include accurate, up-to-date information ([#22858](https://github.com/mastra-ai/mastra/pull/22858))
+
+- Updated dependencies [[`e983f74`](https://github.com/mastra-ai/mastra/commit/e983f749873189f767f509eb33d1a3596c0f1c74), [`cedc25d`](https://github.com/mastra-ai/mastra/commit/cedc25d8c2dec005d8b10b6ce2d36feef1162ff0), [`9fdb3bc`](https://github.com/mastra-ai/mastra/commit/9fdb3bc0f9bfab5269b4f3045595e62323da5d3a)]:
+  - @mastra/core@1.64.0-alpha.7
+
 ## 0.11.0-alpha.4
 
 ### Patch Changes

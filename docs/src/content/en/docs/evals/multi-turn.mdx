@@ -198,7 +198,7 @@ result.turnResults // per-turn gate/threshold/scorer outcomes
 
 Semantics:
 
-- A per-turn gate or scorer sees **only that turn's** `run.input` and `run.output`: never the accumulated conversation. This fixes both blind spots of `inputs`: the wrong turn can't satisfy a check, and `run.input` is correct for each turn.
+- A per-turn gate or scorer receives **only that turn's** `run.input` and `run.output`, rather than the accumulated conversation. A different turn's output can't satisfy the check, and `run.input` contains the input for the turn being evaluated.
 - Per-turn outcomes fold into the [verdict](/docs/evals/gates-and-verdicts): a failing turn gate makes the verdict `failed`. A missed turn threshold (with gates passing) makes it `scored`.
 - `result.turnResults[i]` reports each turn's `gateResults`, `thresholdResults`, and `scores`, so a failure points at the exact turn. Across multiple conversations, turn results are averaged by turn index.
 - A turn with no `gates` or `scorers` advances the conversation.

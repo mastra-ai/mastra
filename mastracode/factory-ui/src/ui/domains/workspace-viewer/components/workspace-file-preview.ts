@@ -1,5 +1,7 @@
 import type { WorkspaceFile } from '../../../../api/types';
-import { highlightCode, languageForPath } from '../../../ui/highlight';
+import { languageForPath } from '@mastra/playground-ui/components/CodeEditor';
+
+import { highlightCode } from '../../../ui/highlight';
 
 export interface WorkspaceFilePreview extends WorkspaceFile {
   language?: string;

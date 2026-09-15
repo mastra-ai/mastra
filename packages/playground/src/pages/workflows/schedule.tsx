@@ -4,6 +4,7 @@ import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/P
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { ArrowLeftIcon, PauseIcon, PlayIcon } from 'lucide-react';
 import { Link, useParams } from 'react-router';
@@ -72,12 +73,11 @@ export default function SchedulePage() {
       <PageLayout.TopArea>
         <PageLayout.Row className="justify-end">
           <PageLayout.Column className="flex justify-end gap-2">
-            <Button as={Link} to={paths.schedulesLink()} variant="ghost">
-              <ArrowLeftIcon />
+            <Button as={Link} to={paths.schedulesLink()} variant="ghost" icon={<ArrowLeftIcon />}>
               Back to schedules
             </Button>
             {workflowId ? (
-              <Button as={Link} to={paths.workflowLink(workflowId)} variant="ghost">
+              <Button icon={<WorkflowIcon />} as={Link} to={paths.workflowLink(workflowId)} variant="ghost">
                 Open workflow
               </Button>
             ) : null}
@@ -105,7 +105,7 @@ export default function SchedulePage() {
       </PageLayout.TopArea>
 
       {schedule ? (
-        <div className="grid h-full grid-cols-[minmax(0,20rem)_1fr] gap-6 overflow-hidden">
+        <div className="grid h-full grid-cols-[minmax(0,20rem)_1fr] gap-4 overflow-hidden">
           <div className="border-border1 flex h-fit flex-col gap-4 rounded-md border p-4">
             <MetaItem label={agentId ? 'Agent' : 'Workflow'}>
               {workflowId ? (

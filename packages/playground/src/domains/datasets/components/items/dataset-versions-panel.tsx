@@ -11,7 +11,7 @@ import {
 } from '@mastra/playground-ui/components/ThreadList';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { format } from 'date-fns';
-import { GitCompareIcon, ArrowRightIcon } from 'lucide-react';
+import { GitCompareIcon, ArrowRightIcon, ChevronDown, X } from 'lucide-react';
 import { useState } from 'react';
 import { useDatasetVersions } from '../../hooks/use-dataset-versions';
 import type { DatasetVersion } from '../../hooks/use-dataset-versions';
@@ -77,7 +77,7 @@ export function DatasetVersionsPanel({
         </Txt>
         {isSelectionActive ? (
           <div className="flex items-center gap-1">
-            <Button variant="ghost" size="sm" onClick={handleCancelSelection}>
+            <Button icon={<X />} variant="ghost" size="sm" onClick={handleCancelSelection}>
               Cancel
             </Button>
             <Button
@@ -86,13 +86,14 @@ export function DatasetVersionsPanel({
               disabled={selectedKeys.size !== 2}
               onClick={handleExecuteCompare}
               tooltip={selectedKeys.size !== 2 ? 'Select two versions to enable comparison' : undefined}
+              icon={<ArrowRightIcon />}
             >
-              <ArrowRightIcon /> Compare
+              Compare
             </Button>
           </div>
         ) : (
-          <Button variant="ghost" size="sm" onClick={() => setIsSelectionActive(true)}>
-            <GitCompareIcon /> Compare
+          <Button variant="ghost" size="sm" onClick={() => setIsSelectionActive(true)} icon={<GitCompareIcon />}>
+            Compare
           </Button>
         )}
       </div>
@@ -134,7 +135,7 @@ export function DatasetVersionsPanel({
                           aria-hidden="true"
                         />
                       )}
-                      <span className="flex min-w-0 flex-1 items-center gap-2 text-xs">
+                      <span className="text-ui-sm flex min-w-0 flex-1 items-center gap-2">
                         <span className="text-neutral5 shrink-0 font-medium">v.{item.version}</span>
                         {createdAtDate && (
                           <span className="text-neutral3 min-w-0 flex-1 truncate">
@@ -150,6 +151,7 @@ export function DatasetVersionsPanel({
               {hasNextPage && (
                 <li>
                   <Button
+                    icon={<ChevronDown />}
                     variant="ghost"
                     size="sm"
                     onClick={() => fetchNextPage()}

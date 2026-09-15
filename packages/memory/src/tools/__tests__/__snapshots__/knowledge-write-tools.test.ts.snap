@@ -1,6 +1,6 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`Subconscious knowledge write tools > keeps snapshots of all nine public input schemas 1`] = `
+exports[`Subconscious knowledge write tools > keeps snapshots of all ten public input schemas 1`] = `
 {
   "knowledge_append": {
     "$schema": "http://json-schema.org/draft-07/schema#",
@@ -23,11 +23,60 @@ exports[`Subconscious knowledge write tools > keeps snapshots of all nine public
         "type": "string",
       },
       "when": {
+        "description": "RFC 3339 date-time, e.g. 2026-09-15T00:00:00Z",
+        "format": "date-time",
+        "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
         "type": "string",
       },
     },
     "required": [
       "node",
+      "text",
+    ],
+    "type": "object",
+  },
+  "knowledge_create": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "kind": {
+        "minLength": 1,
+        "type": "string",
+      },
+      "name": {
+        "minLength": 1,
+        "type": "string",
+      },
+      "nodeScope": {
+        "enum": [
+          "org",
+          "resource",
+          "thread",
+        ],
+        "type": "string",
+      },
+      "scope": {
+        "enum": [
+          "org",
+          "resource",
+          "thread",
+        ],
+        "type": "string",
+      },
+      "text": {
+        "minLength": 1,
+        "type": "string",
+      },
+      "when": {
+        "description": "RFC 3339 date-time, e.g. 2026-09-15T00:00:00Z",
+        "format": "date-time",
+        "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
+        "type": "string",
+      },
+    },
+    "required": [
+      "name",
+      "kind",
       "text",
     ],
     "type": "object",

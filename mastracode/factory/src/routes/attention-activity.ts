@@ -1,4 +1,4 @@
-/** Projects `activity.ts` fan-out rows. Below the badge: the sidebar counts mentions and failures only. */
+/** Projects `activity.ts` fan-out rows. */
 
 import type {
   WorkItemActivityRow,
@@ -119,9 +119,15 @@ export class ActivityAttentionProvider implements AttentionProvider {
     return { open, unread };
   }
 
-  /** Always null: `latestOccurrence*` drives the notification sound, and this tier stays silent. */
-  async latest(): Promise<AttentionLatest | null> {
-    return null;
+  async latest(scope: AttentionScope): Promise<AttentionLatest | null> {
+    const rows = await this.#comments.listActivityForUser({ ...receiptScope(scope), limit: 10 });
+    const newest = (await this.#resolve(scope, rows))[0];
+    if (!newest) return null;
+    return {
+      key: factoryAttentionKey(scope.factoryProjectId, newest.identity),
+      at: newest.activity.occurredAt,
+      unread: newest.receipt === undefined,
+    };
   }
 
   async page(scope: AttentionScope, { view, search, before, limit }: AttentionPageArgs): Promise<AttentionPageResult> {

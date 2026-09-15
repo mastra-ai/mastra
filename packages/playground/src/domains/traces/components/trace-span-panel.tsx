@@ -5,6 +5,9 @@ import { useTraceSpanNavigation } from '@mastra/playground-ui/domains/traces/hoo
 import type { ComponentProps, ReactNode } from 'react';
 
 import { TraceDataPanel } from '@/domains/traces/components/trace-data-panel';
+import { TraceMessagesPanel } from '@/domains/traces/components/trace-messages-panel';
+import { getTraceThreadId } from '@/domains/traces/components/trace-thread-context';
+import { TraceThreadPanel } from '@/domains/traces/components/trace-thread-panel';
 import { Link } from '@/lib/link';
 
 type TraceDataPanelViewProps = ComponentProps<typeof TraceDataPanelView>;
@@ -39,10 +42,23 @@ export interface TraceSpanPanelProps {
   onAddTraceMocksToItem?: TraceDataPanelViewProps['onAddTraceMocksToItem'];
   feedbackTabBadge?: ReactNode;
   feedbackTabSlot?: TraceDataPanelViewProps['feedbackTabSlot'];
+  /** Enables the "Messages" column (reconstructed turn) when the displayed root is a complete agent trace with a thread id. */
+  showPartialThread?: boolean;
+  /** Span ids featured in the timeline (non-featured spans are faded). */
+  featuredSpanIds?: string[];
+  /** Called with the span ids behind a reconstructed message when the user asks to highlight them. */
+  onHighlightSpans?: (spanIds: string[]) => void;
+  /** When true, the whole panel shows the trace's thread (every turn) instead of the trace timeline. */
+  isFullThreadOpen?: boolean;
+  /** Enables the in-place "View full thread" swap; without it the action falls back to a link. */
+  onFullThreadOpenChange?: (open: boolean) => void;
   scoresTabBadge?: ReactNode;
   scoresTabSlot?: TraceDataPanelViewProps['scoresTabSlot'];
   usage?: TraceDataPanelViewProps['usage'];
   traceHref?: string;
+  collapsed?: TraceDataPanelViewProps['collapsed'];
+  onCollapsedChange?: TraceDataPanelViewProps['onCollapsedChange'];
+  showUnavailableFeaturesMsg?: TraceDataPanelViewProps['showUnavailableFeaturesMsg'];
   className?: string;
 
   // Span-panel pass-through.
@@ -74,10 +90,18 @@ export function TraceSpanPanel({
   onAddTraceMocksToItem,
   feedbackTabBadge,
   feedbackTabSlot,
+  showPartialThread,
+  featuredSpanIds,
+  onHighlightSpans,
+  isFullThreadOpen,
+  onFullThreadOpenChange,
   scoresTabBadge,
   scoresTabSlot,
   usage,
   traceHref,
+  collapsed,
+  onCollapsedChange,
+  showUnavailableFeaturesMsg,
   className,
   spanActiveTab,
   onSpanTabChange,
@@ -93,6 +117,24 @@ export function TraceSpanPanel({
     ? spans?.find(s => s.spanId === anchorSpanId)
     : spans?.find(s => s.parentSpanId == null);
   const entityHref = getEntityHref(rootSpan?.entityType, rootSpan?.entityId);
+  const threadId = getTraceThreadId(rootSpan, anchorSpanId);
+
+  // Link to the advanced thread view (?variant=advanced), anchored on this trace's row.
+  const fullThreadHref =
+    rootSpan?.entityId && threadId
+      ? `/agents/${encodeURIComponent(rootSpan.entityId)}/threads/${encodeURIComponent(threadId)}?variant=advanced&traceId=${encodeURIComponent(traceId)}`
+      : undefined;
+
+  if (isFullThreadOpen && threadId) {
+    return (
+      <TraceThreadPanel
+        className={className}
+        threadId={threadId}
+        onBack={() => onFullThreadOpenChange?.(false)}
+        onClose={onClose}
+      />
+    );
+  }
 
   return (
     <TraceDataPanel
@@ -113,8 +155,23 @@ export function TraceSpanPanel({
       placement="traces-list"
       LinkComponent={Link}
       traceHref={traceHref}
+      collapsed={collapsed}
+      onCollapsedChange={onCollapsedChange}
+      showUnavailableFeaturesMsg={showUnavailableFeaturesMsg}
       feedbackTabBadge={feedbackTabBadge}
       feedbackTabSlot={feedbackTabSlot}
+      featuredSpanIds={featuredSpanIds}
+      messagesPanelSlot={
+        showPartialThread && threadId ? (
+          <TraceMessagesPanel
+            traceId={traceId}
+            threadId={threadId}
+            fullThreadHref={fullThreadHref}
+            onViewFullThread={onFullThreadOpenChange ? () => onFullThreadOpenChange(true) : undefined}
+            onHighlightSpans={onHighlightSpans}
+          />
+        ) : undefined
+      }
       scoresTabBadge={scoresTabBadge}
       scoresTabSlot={scoresTabSlot}
       spanPanelSlot={

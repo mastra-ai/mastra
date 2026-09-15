@@ -3,7 +3,7 @@ import type { ExperimentStatus } from '@mastra/core/storage';
 import { MetricsKpiCard } from '@mastra/playground-ui/components/MetricsKpiCard';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
-import { ExternalLinkIcon, GaugeIcon } from 'lucide-react';
+import { GaugeIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
 import { useLinkComponent } from '@/lib/framework';
@@ -68,16 +68,14 @@ export function ExperimentScorerSummary({ scoresByItemId, experimentStatus }: Ex
   }
 
   return (
-    <div className="flex items-stretch gap-2 overflow-x-auto pb-1">
+    <div className="flex flex-col gap-2">
       {scorerSummaries.map(({ scorerId, avg }) => {
         const scorerName = scorers?.[scorerId]?.scorer?.config?.name ?? scorerId;
 
         return (
-          <MetricsKpiCard key={scorerId} className="w-52 min-w-0 flex-none p-3">
+          <MetricsKpiCard key={scorerId} className="min-w-0 p-3">
             <LinkComponent
               href={paths.scorerLink(scorerId)}
-              target="_blank"
-              rel="noopener noreferrer"
               className="text-ui-sm text-neutral3 [&>svg]:text-neutral3 flex min-w-0 items-center gap-1.5 hover:underline [&>svg]:size-3 [&>svg]:shrink-0"
             >
               <Tooltip>
@@ -85,9 +83,8 @@ export function ExperimentScorerSummary({ scoresByItemId, experimentStatus }: Ex
                 <TooltipContent>Scorer</TooltipContent>
               </Tooltip>
               <span className="truncate">{scorerName}</span>
-              <ExternalLinkIcon />
             </LinkComponent>
-            <strong className="text-ui-lg text-neutral4 font-semibold">
+            <strong className="text-ui-md text-neutral4 font-semibold">
               {avg.toFixed(3)}
               <span className="text-ui-sm text-neutral3 ml-1.5 font-normal">avg score</span>
             </strong>

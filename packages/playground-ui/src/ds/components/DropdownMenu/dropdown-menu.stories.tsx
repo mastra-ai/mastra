@@ -29,18 +29,80 @@ const meta: Meta<typeof DropdownMenu> = {
 export default meta;
 type Story = StoryObj<typeof DropdownMenu>;
 
+const menuItems = (
+  <DropdownMenu.Content>
+    <DropdownMenu.Item>Profile</DropdownMenu.Item>
+    <DropdownMenu.Item>Settings</DropdownMenu.Item>
+    <DropdownMenu.Item>Billing</DropdownMenu.Item>
+    <DropdownMenu.Separator />
+    <DropdownMenu.Item>Log out</DropdownMenu.Item>
+  </DropdownMenu.Content>
+);
+
 export const Default: Story = {
   render: () => (
     <DropdownMenu>
-      <DropdownMenu.Trigger asChild>
-        <Button>Open Menu</Button>
-      </DropdownMenu.Trigger>
-      <DropdownMenu.Content>
-        <DropdownMenu.Item>Profile</DropdownMenu.Item>
-        <DropdownMenu.Item>Settings</DropdownMenu.Item>
-        <DropdownMenu.Item>Billing</DropdownMenu.Item>
-        <DropdownMenu.Separator />
-        <DropdownMenu.Item>Log out</DropdownMenu.Item>
+      <DropdownMenu.Trigger>Open Menu</DropdownMenu.Trigger>
+      {menuItems}
+    </DropdownMenu>
+  ),
+};
+
+/** The trigger is a design-system Button: `variant`, `size` and `tooltip` apply directly. */
+export const Variants: Story = {
+  render: () => (
+    <div className="grid gap-4">
+      {(['default', 'outline', 'ghost', 'primary'] as const).map(variant => (
+        <div key={variant} className="flex items-center gap-2">
+          {(['xs', 'sm', 'md', 'lg'] as const).map(size => (
+            <DropdownMenu key={size}>
+              <DropdownMenu.Trigger variant={variant} size={size}>
+                {variant} / {size}
+              </DropdownMenu.Trigger>
+              {menuItems}
+            </DropdownMenu>
+          ))}
+          <DropdownMenu>
+            <DropdownMenu.Trigger variant={variant} size="icon-md" tooltip="More actions">
+              <Settings />
+            </DropdownMenu.Trigger>
+            {menuItems}
+          </DropdownMenu>
+        </div>
+      ))}
+    </div>
+  ),
+};
+
+/** Pass `render` to project the menu behavior onto your own element; the trigger's `variant`/`size` are then ignored. */
+export const CustomRender: Story = {
+  render: () => (
+    <DropdownMenu>
+      <DropdownMenu.Trigger
+        render={
+          <Button variant="outline" size="md">
+            Open Menu
+          </Button>
+        }
+      />
+      {menuItems}
+    </DropdownMenu>
+  ),
+};
+
+export const Compact: Story = {
+  render: () => (
+    <DropdownMenu>
+      <DropdownMenu.Trigger render={<Button size="xs">Open menu</Button>} />
+      <DropdownMenu.Content size="sm" className="w-max min-w-0">
+        <DropdownMenu.Item size="sm">
+          <User />
+          Profile
+        </DropdownMenu.Item>
+        <DropdownMenu.Item size="sm">
+          <Settings />
+          Settings
+        </DropdownMenu.Item>
       </DropdownMenu.Content>
     </DropdownMenu>
   ),
@@ -292,4 +354,62 @@ export const WithDisabledItems: Story = {
       </DropdownMenu.Content>
     </DropdownMenu>
   ),
+};
+
+/** Every item kind side by side, to compare against ContextMenu / Select / Combobox. */
+export const KitchenSink: Story = {
+  render: () => {
+    const [checked, setChecked] = useState(true);
+    const [radio, setRadio] = useState('medium');
+    return (
+      <DropdownMenu defaultOpen>
+        <DropdownMenu.Trigger asChild>
+          <Button variant="outline">Open Menu</Button>
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Content className="w-56">
+          <DropdownMenu.Label>Account</DropdownMenu.Label>
+          <DropdownMenu.Item>Plain item</DropdownMenu.Item>
+          <DropdownMenu.Item>
+            <User />
+            <span>With icon</span>
+            <DropdownMenu.Shortcut>⇧⌘P</DropdownMenu.Shortcut>
+          </DropdownMenu.Item>
+          <DropdownMenu.Item disabled>
+            <CreditCard />
+            <span>Disabled</span>
+          </DropdownMenu.Item>
+          <DropdownMenu.Separator />
+          <DropdownMenu.CheckboxItem checked={checked} onCheckedChange={setChecked}>
+            Checkbox item
+          </DropdownMenu.CheckboxItem>
+          <DropdownMenu.RadioGroup value={radio} onValueChange={setRadio}>
+            <DropdownMenu.RadioItem value="small">Radio small</DropdownMenu.RadioItem>
+            <DropdownMenu.RadioItem value="medium">Radio medium</DropdownMenu.RadioItem>
+          </DropdownMenu.RadioGroup>
+          <DropdownMenu.Separator />
+          <DropdownMenu.Sub>
+            <DropdownMenu.SubTrigger>
+              <UserPlus />
+              <span>Sub menu</span>
+            </DropdownMenu.SubTrigger>
+            <DropdownMenu.SubContent>
+              <DropdownMenu.Item>
+                <Mail />
+                <span>Email</span>
+              </DropdownMenu.Item>
+              <DropdownMenu.Item>
+                <MessageSquare />
+                <span>Message</span>
+              </DropdownMenu.Item>
+            </DropdownMenu.SubContent>
+          </DropdownMenu.Sub>
+          <DropdownMenu.Separator />
+          <DropdownMenu.Item variant="destructive">
+            <LogOut />
+            <span>Destructive</span>
+          </DropdownMenu.Item>
+        </DropdownMenu.Content>
+      </DropdownMenu>
+    );
+  },
 };
