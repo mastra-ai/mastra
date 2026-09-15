@@ -130,7 +130,7 @@ By default, aborting a thread preserves its queued input. To clear pending signa
 subscription.abort({ clearPendingSignals: true })
 ```
 
-You can also call `agent.abortThreadStream({ ...thread, clearPendingSignals: true })` without a subscription. These controls don't unsubscribe listeners. Later messages can still start a new run.
+Without a subscription, use `agent.abortThreadStream({ ...thread, clearPendingSignals: true })`. Existing listeners stay subscribed after cancellation, and later messages can still start a new run.
 
 Selected-ID cancellation only affects the current process. Clear-on-abort also sends the clear flag to a remote active owner through PubSub, but it doesn't clear every process's local queues. Neither operation cancels continuations created by `continueWithMessages()`.
 

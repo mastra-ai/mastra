@@ -406,7 +406,7 @@ const { cancelledSignalIds } = agent.cancelQueuedMessages({
 
 Returns `{ cancelledSignalIds: string[] }`, containing each ID actually cancelled by this call once. An empty array means none of the selected signals were still pending locally. A signal waiting to acquire or transfer its lease remains cancellable. Once execution or forwarding starts, cancellation no longer applies.
 
-The scope is local to this runtime and PubSub instance. The method doesn't send cancellation requests to remote owners. It leaves continuations from `continueWithMessages()`, saved messages, state updates, and notification records unchanged. Accepted acknowledgements remain settled.
+Cancellation is local to this runtime and PubSub instance, with no requests sent to remote owners. It leaves continuations from `continueWithMessages()`, saved messages, state updates, and notification records unchanged. Accepted acknowledgements remain settled.
 
 ### `sendSignal(signal, options)`
 
