@@ -63,7 +63,7 @@ function getDeclaredErrorSchema(status: 400 | 409 | 413 | 422 | 501 | 504): z.Zo
 describe('QUERY_THREADS', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('returns a structured 501 when the installed core lacks advanced observability endpoints', async () => {
+  it('returns a structured 501 when the installed core lacks thread-query support', async () => {
     const { mastra, getStore } = createHarness();
     coreFeatures.delete('observability:v1.13.2');
 
@@ -75,7 +75,7 @@ describe('QUERY_THREADS', () => {
       expect(error.status).toBe(501);
       expect(getDeclaredErrorSchema(501).parse(await error.getResponse().json())).toEqual({
         code: 'TRACE_QUERY_UNSUPPORTED',
-        message: 'New observability endpoints require @mastra/core >= 1.13.2, please upgrade.',
+        message: 'Thread queries require a newer @mastra/core with observability thread-query support. Please upgrade.',
       });
       expect(getStore).not.toHaveBeenCalled();
     } finally {

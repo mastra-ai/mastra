@@ -307,7 +307,7 @@ export const QUERY_THREADS = createNewRoute(NEW_ROUTE_DEFS.QUERY_THREADS, {
   onUnsupportedCore: () =>
     throwTraceQueryError(501, {
       code: 'TRACE_QUERY_UNSUPPORTED',
-      message: 'New observability endpoints require @mastra/core >= 1.13.2, please upgrade.',
+      message: 'Thread queries require a newer @mastra/core with observability thread-query support. Please upgrade.',
     }),
   handler: async ({ mastra, traces, where, page }) => {
     let plan;
