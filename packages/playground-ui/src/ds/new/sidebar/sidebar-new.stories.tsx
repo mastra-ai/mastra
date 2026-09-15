@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Bell, FileText, Home, Settings, Users, Workflow, Wrench } from 'lucide-react';
+import { AlertTriangle, Bell, FileText, Home, Settings, Users, Workflow, Wrench } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { SidebarNew, useSidebarNew } from '.';
 import { Avatar } from '@/ds/components/Avatar';
@@ -103,7 +103,16 @@ function SidebarNewStory() {
           </SidebarNew.NavStack>
         </SidebarNew.Nav>
 
-        <SidebarNew.Footer className="pb-1">
+        <SidebarNew.Footer className="space-y-1.5 pb-1">
+          <SidebarNew.Meter
+            label="Credits"
+            value="$4"
+            status="Credits are low"
+            tone="warning"
+            icon={<AlertTriangle className="size-3 shrink-0 text-notice-warning" aria-hidden />}
+            href="/organization/billing"
+            linkLabel="Credit balance"
+          />
           <DropdownMenu>
             <SidebarNew.NavList>
               <SidebarNew.NavLink

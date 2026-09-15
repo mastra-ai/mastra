@@ -1,6 +1,7 @@
 import { SidebarNewBrand } from './sidebar-new-brand';
 import { SidebarNewFooter } from './sidebar-new-footer';
 import { SidebarNewHeader } from './sidebar-new-header';
+import { SidebarNewMeter } from './sidebar-new-meter';
 import { SidebarNewNav } from './sidebar-new-nav';
 import { SidebarNewNavHeader } from './sidebar-new-nav-header';
 import { SidebarNewNavStack } from './sidebar-new-nav-stack';
@@ -19,6 +20,7 @@ export const SidebarNew = Object.assign(SidebarNewRoot, {
   Brand: SidebarNewBrand,
   Footer: SidebarNewFooter,
   Header: SidebarNewHeader,
+  Meter: SidebarNewMeter,
   MobileTrigger: MainSidebarMobileTrigger,
   Nav: SidebarNewNav,
   NavHeader: SidebarNewNavHeader,

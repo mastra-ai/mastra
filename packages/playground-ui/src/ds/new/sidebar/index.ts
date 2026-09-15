@@ -2,6 +2,7 @@ export { SidebarNew } from './sidebar-new';
 export { SidebarNewBrand, type SidebarNewBrandProps } from './sidebar-new-brand';
 export { SidebarNewFooter, type SidebarNewFooterProps } from './sidebar-new-footer';
 export { SidebarNewHeader, type SidebarNewHeaderProps } from './sidebar-new-header';
+export { SidebarNewMeter, type SidebarNewMeterProps, type SidebarNewMeterTone } from './sidebar-new-meter';
 export { SidebarNewNav, type SidebarNewNavProps } from './sidebar-new-nav';
 export { SidebarNewNavHeader, type SidebarNewNavHeaderProps } from './sidebar-new-nav-header';
 export {
