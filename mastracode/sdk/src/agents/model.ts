@@ -243,7 +243,18 @@ export function getDynamicModel(
 ): ResolvedModel | ModelWithRetries[] {
   const agentControllerContext = requestContext.get('controller') as AgentControllerRequestContext<any> | undefined;
 
-  const modelId = agentControllerContext?.session?.modelId;
+  const controllerState = agentControllerContext?.getState?.() as
+    | {
+        activeModelPackId?: unknown;
+        mastracodePendingPackFallback?: { toPackId?: unknown; toModelId?: unknown } | null;
+      }
+    | undefined;
+  const pendingFallback = controllerState?.mastracodePendingPackFallback;
+  const pendingModelId =
+    pendingFallback && typeof pendingFallback.toModelId === 'string' && pendingFallback.toModelId.length > 0
+      ? pendingFallback.toModelId
+      : undefined;
+  const modelId = pendingModelId ?? agentControllerContext?.session?.modelId;
   if (!modelId) {
     // A missing controller context means the run was started without session
     // request context at all (e.g. a signal delivered to an idle thread) —
@@ -268,7 +279,11 @@ export function getDynamicModel(
 
   const modeId = agentControllerContext?.session?.modeId ?? 'build';
   const packs = listResolvableModePacks(settings);
-  const statePackId = agentControllerContext?.getState?.()?.activeModelPackId;
+  const pendingPackId =
+    pendingFallback && typeof pendingFallback.toPackId === 'string' && pendingFallback.toPackId.length > 0
+      ? pendingFallback.toPackId
+      : undefined;
+  const statePackId = pendingPackId ?? controllerState?.activeModelPackId ?? settings.models.activeModelPackId;
   const activePack = findModePackForModel(
     settings,
     packs,

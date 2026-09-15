@@ -979,6 +979,43 @@ describe('syncInitialThreadState', () => {
     expect(state.fallbackStatus).toEqual(fallbackStatus);
   });
 
+  it('restores a durable pending pack hop into session state', async () => {
+    const pending = {
+      fromPackId: 'anthropic',
+      toPackId: 'openai',
+      toModelId: 'openai/gpt-5.6-sol',
+      reason: 'pool-exhausted',
+      at: '2026-09-14T20:00:00.000Z',
+    };
+    const stateSet = vi.fn(async () => {});
+    const state = {
+      session: {
+        state: { set: stateSet },
+        thread: {
+          getId: vi.fn(() => 'thread-1'),
+          list: vi.fn().mockResolvedValue([
+            {
+              id: 'thread-1',
+              title: 'Pending fallback',
+              metadata: { mastracodePendingPackFallback: pending },
+            },
+          ]),
+        },
+      },
+      goalManager: {
+        loadFromThread: vi.fn().mockResolvedValue(undefined),
+        getGoal: vi.fn(() => null),
+        loadFromThreadMetadata: vi.fn(),
+      },
+      options: { appName: 'Mastra Code' },
+      ui: { terminal: { setTitle: vi.fn() } },
+    } as unknown as TUIState;
+
+    await syncInitialThreadState(state);
+
+    expect(stateSet).toHaveBeenCalledWith({ mastracodePendingPackFallback: pending });
+  });
+
   it('does not re-hydrate from legacy metadata when the durable objective load succeeds', async () => {
     const persistedGoal = {
       id: 'goal-1',

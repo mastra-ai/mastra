@@ -1054,6 +1054,9 @@ export interface AgentControllerRequestContext<TState = unknown> {
   /** Update controller state from the latest state snapshot in a serialized transaction. */
   updateState?: <TResult>(updater: AgentControllerRequestStateUpdater<TState, TResult>) => Promise<TResult>;
 
+  /** Persist a setting on the current thread. */
+  setThreadSetting?: (setting: { key: string; value: unknown }) => Promise<void>;
+
   /** Current thread ID */
   threadId: string | null;
 

@@ -63,7 +63,7 @@ describe('getDynamicModel fallback chain', () => {
     );
   }
 
-  function requestWithSession(modelId: string, modeId = 'build', activeModelPackId?: string) {
+  function requestWithSession(modelId: string, modeId = 'build', activeModelPackId = modelId.split('/')[0]) {
     const requestContext = new RequestContext();
     requestContext.set('controller', {
       session: { modelId, modeId },
@@ -87,6 +87,15 @@ describe('getDynamicModel fallback chain', () => {
     const model = getDynamicModel(requestWithSession('openai/gpt-5.4-mini'));
 
     expect(Array.isArray(model)).toBe(false);
+  });
+
+  it('does not infer another pack when a manual override happens to match its model', () => {
+    seedSettings({ openai: 'github-copilot' });
+
+    const model = getDynamicModel(requestWithSession('openai/gpt-5.6-sol', 'build', 'anthropic'));
+
+    expect(Array.isArray(model)).toBe(false);
+    expect((model as { modelId?: string }).modelId).toBe('gpt-5.6-sol');
   });
 
   it('builds the fallback array from the active pack chain, resolving each pack for the same mode', () => {
@@ -119,6 +128,28 @@ describe('getDynamicModel fallback chain', () => {
     const entries = model as Array<{ id?: string }>;
 
     expect(entries.map(entry => entry.id)).toEqual(['custom:Shared Model', 'openai']);
+  });
+
+  it('starts a new request on the pending landed pack before the TUI finishes persisting stickiness', () => {
+    seedSettings({ anthropic: 'openai', openai: 'github-copilot' });
+    const requestContext = new RequestContext();
+    requestContext.set('controller', {
+      session: { modelId: 'anthropic/claude-fable-5', modeId: 'build' },
+      getState: () => ({
+        activeModelPackId: 'anthropic',
+        mastracodePendingPackFallback: {
+          fromPackId: 'anthropic',
+          toPackId: 'openai',
+          toModelId: 'openai/gpt-5.6-sol',
+        },
+      }),
+    });
+
+    const model = getDynamicModel({ requestContext });
+    const entries = model as Array<{ id?: string; model: { modelId?: string } }>;
+
+    expect(entries.map(entry => entry.id)).toEqual(['openai', 'github-copilot']);
+    expect(entries.map(entry => entry.model.modelId)).toEqual(['gpt-5.6-sol', 'gpt-4.1']);
   });
 
   it('truncates the chain at a fallback pack that lacks the session mode model', () => {

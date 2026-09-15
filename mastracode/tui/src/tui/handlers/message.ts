@@ -305,15 +305,28 @@ export async function handlePackFallbackState(
   // Already consumed (or never set): bail BEFORE clearing — clearing a null
   // key re-emits state_changed with the same changedKey and would loop.
   if (pending === null || pending === undefined) return;
-  // Consume first — a malformed or already-applied payload must never re-trigger.
-  await ectx.state.session.state.set({ [PACK_FALLBACK_STATE_KEY]: null });
-  if (typeof pending.toPackId !== 'string' || typeof pending.toModelId !== 'string') return;
-  if (pending.toModelId.length === 0 || pending.toPackId.length === 0) return;
+  const clearPending = async () => {
+    if (ectx.state.session.thread.getId()) {
+      await ectx.state.session.thread.setSetting({ key: PACK_FALLBACK_STATE_KEY, value: undefined });
+    }
+    await ectx.state.session.state.set({ [PACK_FALLBACK_STATE_KEY]: null });
+  };
+  if (typeof pending.toPackId !== 'string' || typeof pending.toModelId !== 'string') {
+    await clearPending();
+    return;
+  }
+  if (pending.toModelId.length === 0 || pending.toPackId.length === 0) {
+    await clearPending();
+    return;
+  }
 
   const settings = loadSettings();
   const packs = listResolvableModePacks(settings);
   const pack = packs.find(candidate => candidate.id === pending.toPackId);
-  if (!pack) return; // Pack deleted since the hop — state is consumed, bail.
+  if (!pack) {
+    await clearPending();
+    return;
+  }
   const failedPack = packs.find(candidate => candidate.id === pending.fromPackId);
   const fallbackStatus = {
     usingPack: pack.name,
@@ -382,4 +395,7 @@ export async function handlePackFallbackState(
   saveSettings(settings);
   ectx.updateStatusLine();
   await ectx.refreshModelAuthStatus();
+  // Clear only after every durable/session write succeeds. While this remains
+  // pending, getDynamicModel starts any immediate retrigger on the landed pack.
+  await clearPending();
 }
