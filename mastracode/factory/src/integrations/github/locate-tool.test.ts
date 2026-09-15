@@ -108,6 +108,32 @@ describe('locateAcrossFactories', () => {
     ]);
   });
 
+  it('reports repositories whose path probe failed as unsearchable instead of as a missing path', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const pathExists = vi.fn(async ({ slug }: { slug: string }) => {
+      if (slug === 'acme/api') throw Object.assign(new Error('forbidden'), { status: 403 });
+      return { exists: false };
+    });
+    const { deps } = makeDeps({ pathExists });
+
+    const result = await locateAcrossFactories(deps, {
+      orgId: 'org-1',
+      currentFactoryProjectId: 'fp-current',
+      query: 'routes',
+      paths: ['src/routes.ts'],
+    });
+
+    expect(result.factories).toEqual([
+      {
+        factoryProjectId: 'fp-api',
+        name: 'API',
+        repositories: [{ slug: 'acme/api', searchable: false, matches: [] }],
+      },
+    ]);
+    expect(warn).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
+  });
+
   it('reports repositories whose search failed as unsearchable instead of dropping them', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const search = vi.fn(async () => {

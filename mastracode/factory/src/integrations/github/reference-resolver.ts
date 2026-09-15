@@ -2,8 +2,11 @@ import type { SourceControlStorageHandle } from '../../storage/domains/source-co
 import type { FactoryReferenceResolver, ReferencedFactoryProject } from '../base.js';
 
 const MAX_REFERENCES_PER_MESSAGE = 5;
+// A repository name may contain dots (`owner/tool.js`), so the slug is matched
+// lazily and a trailing `.` or `,` only ends it when a space or the end of the
+// text follows — otherwise sentence punctuation lands inside the slug.
 const REPOSITORY_URL_RE =
-  /https?:\/\/(?:www\.)?github\.com\/([A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)\/([A-Za-z0-9_.-]+?)(?:\.git)?(?=[/?#\s>|)]|$)/g;
+  /https?:\/\/(?:www\.)?github\.com\/([A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)\/([A-Za-z0-9_.-]+?)(?:\.git)?(?=[/?#\s>|)]|[.,](?:\s|$)|$)/g;
 
 export function extractGithubRepositorySlugs(text: string): string[] {
   const slugs = new Set<string>();

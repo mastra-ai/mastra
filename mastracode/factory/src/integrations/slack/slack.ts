@@ -563,7 +563,8 @@ export function buildSessionDeepLink({
   resourceId: string;
   threadId: string;
 }): string | undefined {
-  if (!process.env.MASTRACODE_PUBLIC_URL) return undefined;
+  const publicUrl = webPublicUrl();
+  if (!publicUrl) return undefined;
   const isChatOnly = resourceId.startsWith('channel:');
   const workspaceSegment = isChatOnly ? 'channel' : encodeURIComponent(resourceId);
   const threadPath = factoryProjectId
@@ -571,8 +572,8 @@ export function buildSessionDeepLink({
     : `/threads/${threadId}`;
   const needsResourceParam = isChatOnly || !factoryProjectId;
   return needsResourceParam
-    ? `${process.env.MASTRACODE_PUBLIC_URL}${threadPath}?resourceId=${encodeURIComponent(resourceId)}`
-    : `${process.env.MASTRACODE_PUBLIC_URL}${threadPath}`;
+    ? `${publicUrl}${threadPath}?resourceId=${encodeURIComponent(resourceId)}`
+    : `${publicUrl}${threadPath}`;
 }
 
 /**

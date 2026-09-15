@@ -149,7 +149,7 @@ The "New session started" card names the factory it landed in.
 If the request landed in a factory whose repository doesn't contain what it's
 about, the agent searches the other factories' repositories, tells you where
 it found it, and posts an approval card to continue there. Approve it and the thread moves:
-a "Continuing in <factory>" card appears, the new factory's session picks up
+a `Continuing in <factory>` card appears, the new factory's session picks up
 the request in the same thread, and later replies go to it.
 
 A quick tunnel gets a new hostname each run. When it changes, replace the

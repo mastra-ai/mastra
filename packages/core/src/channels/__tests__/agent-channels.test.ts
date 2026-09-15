@@ -1377,6 +1377,47 @@ describe('AgentChannels', () => {
         expect(thread.metadata).not.toHaveProperty('channel_handedOffFrom');
       });
 
+      it('keeps the previous mapping active when the replacement cannot be saved', async () => {
+        const mockMastra = makeMastra();
+        await agentChannels.initialize(mockMastra);
+        const chatThread = makeChatThread({ adapter: agentChannels.adapters.discord });
+        await (agentChannels as any).processChatMessage(chatThread, message, mockMastra, new RequestContext());
+        const memoryStore = await mockMastra.getStorage().getStore('memory');
+        const [original] = (await memoryStore.listThreads({ filter: { metadata: legacyFilter }, perPage: 10 })).threads;
+        const saveThread = vi.spyOn(memoryStore, 'saveThread').mockRejectedValue(new Error('storage down'));
+
+        await expect(
+          agentChannels.rebindThread({
+            ...coordinates,
+            resourceId: 'session-b',
+            threadId: 'session-b',
+            mastra: mockMastra,
+          }),
+        ).rejects.toThrow('storage down');
+        saveThread.mockRestore();
+
+        const mapping = await (agentChannels as any).findThreadMapping({ ...coordinates, mastra: mockMastra });
+        expect(mapping.thread.id).toBe(original!.id);
+        expect(mapping.thread.metadata).toMatchObject({ channel_platform: 'discord' });
+      });
+
+      it('does not rebind when reading the target thread fails', async () => {
+        const mockMastra = makeMastra();
+        await agentChannels.initialize(mockMastra);
+        const memoryStore = await mockMastra.getStorage().getStore('memory');
+        const getThreadById = vi.spyOn(memoryStore, 'getThreadById').mockRejectedValue(new Error('read failed'));
+
+        await expect(
+          agentChannels.rebindThread({
+            ...coordinates,
+            resourceId: 'session-b',
+            threadId: 'session-b',
+            mastra: mockMastra,
+          }),
+        ).rejects.toThrow('read failed');
+        getThreadById.mockRestore();
+      });
+
       it('refuses a thread id that already exists', async () => {
         const mockMastra = makeMastra();
         await agentChannels.initialize(mockMastra);

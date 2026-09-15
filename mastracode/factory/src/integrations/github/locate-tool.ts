@@ -153,9 +153,23 @@ export async function locateAcrossFactories(
       }
       for (const path of input.paths ?? []) {
         for (const candidate of batch) {
-          const probe: { exists: boolean; url?: string } = await search
-            .pathExists({ slug: candidate.slug, path })
-            .catch(() => ({ exists: false }));
+          let probe: { exists: boolean; url?: string };
+          try {
+            probe = await search.pathExists({ slug: candidate.slug, path });
+          } catch (error) {
+            // pathExists only returns `exists: false` for a 404. Anything else
+            // is the API being unavailable, which is the partial-failure the
+            // `searchable` flag exists for — reporting it as a missing path
+            // would drop the repository (and its factory) from the result.
+            console.warn('[factory_locate] path probe failed', {
+              installationExternalId,
+              slug: candidate.slug,
+              path,
+              error,
+            });
+            repositoryFor(candidate).searchable = false;
+            continue;
+          }
           if (probe.exists) {
             addMatch(candidate, { path, url: probe.url ?? `https://github.com/${candidate.slug}/blob/HEAD/${path}` });
           }

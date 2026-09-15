@@ -1177,6 +1177,31 @@ describe('MastraFactory.prepare integrations', () => {
       expect(referenceResolver.mock.calls[0]![0].storage.intake).toBeDefined();
     });
 
+    it('skips a reference resolver whose declared storage domain is not ready', async () => {
+      withController();
+      const storage = fakeStorage();
+      // The resolver reads `intake` directly; registering it against a domain
+      // whose init() failed makes every lookup throw at routing time.
+      vi.spyOn(storage, 'isDomainReady').mockImplementation(domain => domain !== 'intake');
+      const channels = vi.fn((_ctx: IntegrationContext) => fakeChannelsConfig());
+      const githubResolver = vi.fn(async () => []);
+      const referenceResolver = vi.fn(() => vi.fn(async () => []));
+      const factory = new MastraFactory({
+        secretEncryption,
+        storage,
+        integrations: [
+          fakeIntegration({ id: 'linear', referenceResolverDomains: ['intake'], referenceResolver }),
+          fakeIntegration({ id: 'github', referenceResolver: () => githubResolver }),
+          fakeIntegration({ id: 'chat-platform', channels }),
+        ],
+      });
+
+      await factory.prepare();
+
+      expect(referenceResolver).not.toHaveBeenCalled();
+      expect(channels.mock.calls[0]![0].referenceResolvers).toEqual([githubResolver]);
+    });
+
     it('leaves the controller alone when no integration provides channels', async () => {
       const setChannels = withController();
       const factory = new MastraFactory({

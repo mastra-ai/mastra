@@ -1712,15 +1712,16 @@ export class AgentChannels {
       metadata,
     } = await this.findThreadMapping({ externalThreadId, channelId, platform, mastra: resolvedMastra });
 
-    if (await memoryStore.getThreadById({ threadId }).catch(() => null)) {
+    if (await memoryStore.getThreadById({ threadId })) {
       throw new Error(`Cannot rebind ${platform} thread ${externalThreadId}: thread ${threadId} already exists`);
     }
 
+    const previousMetadata = { ...previous?.metadata };
     if (previous) {
       await memoryStore.patchThread({
         id: previous.id,
         metadata: {
-          ...((previous.metadata ?? {}) as Record<string, unknown>),
+          ...previousMetadata,
           channel_platform: HANDED_OFF_PLATFORM,
           channel_handedOffPlatform: platform,
           channel_handedOffTo: threadId,
@@ -1730,16 +1731,38 @@ export class AgentChannels {
 
     const boundMetadata: Record<string, unknown> = { ...metadata };
     if (previous) boundMetadata.channel_handedOffFrom = previous.id;
-    const thread = await memoryStore.saveThread({
-      thread: {
-        id: threadId,
-        title: `${platform} conversation`,
-        resourceId,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        metadata: boundMetadata,
-      },
-    });
+    let thread: StorageThreadType;
+    try {
+      thread = await memoryStore.saveThread({
+        thread: {
+          id: threadId,
+          title: `${platform} conversation`,
+          resourceId,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          metadata: boundMetadata,
+        },
+      });
+    } catch (error) {
+      // The previous thread is already marked handed-off. Without restoring it
+      // the conversation has no active mapping at all and every later message
+      // mints a fresh thread, losing the history. `updateThread` merges
+      // metadata, so the handoff markers are cleared explicitly.
+      if (previous) {
+        await memoryStore
+          .patchThread({
+            id: previous.id,
+            metadata: { ...previousMetadata, channel_handedOffPlatform: undefined, channel_handedOffTo: undefined },
+          })
+          .catch(restoreError =>
+            this.log(
+              'error',
+              `Failed to restore ${platform} thread ${externalThreadId} after a failed rebind: ${restoreError}`,
+            ),
+          );
+      }
+      throw error;
+    }
     return { previous, thread };
   }
 

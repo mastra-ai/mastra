@@ -1218,6 +1218,8 @@ export class GithubIntegration implements FactoryIntegration {
     });
   }
 
+  readonly referenceResolverDomains = ['source-control'] as const;
+
   referenceResolver(ctx: IntegrationContext): FactoryReferenceResolver {
     return createGithubReferenceResolver({ sourceControl: ctx.storage.sourceControl });
   }

@@ -11,6 +11,16 @@ describe('extractGithubRepositorySlugs', () => {
     ).toEqual(['acme/app', 'acme/api', 'acme/docs']);
   });
 
+  it('keeps sentence punctuation out of the slug', () => {
+    expect(
+      extractGithubRepositorySlugs('look at https://github.com/acme/app, then https://github.com/acme/api.'),
+    ).toEqual(['acme/app', 'acme/api']);
+  });
+
+  it('keeps a dot that belongs to the repository name', () => {
+    expect(extractGithubRepositorySlugs('https://github.com/acme/tool.js')).toEqual(['acme/tool.js']);
+  });
+
   it('ignores non-repository github urls', () => {
     expect(extractGithubRepositorySlugs('https://github.com/acme https://gist.github.com/x/y')).toEqual([]);
   });

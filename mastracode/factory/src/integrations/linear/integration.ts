@@ -1163,6 +1163,8 @@ export class LinearIntegration implements FactoryIntegration {
     });
   }
 
+  readonly referenceResolverDomains = ['intake'] as const;
+
   referenceResolver(ctx: IntegrationContext): FactoryReferenceResolver {
     return createLinearReferenceResolver({ linear: this, intake: ctx.storage.intake });
   }

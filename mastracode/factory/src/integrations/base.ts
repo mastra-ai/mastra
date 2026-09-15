@@ -260,6 +260,12 @@ export interface FactoryIntegration {
   feedPublisher?(ctx: IntegrationContext): WorkItemFeedPublisher;
   referenceResolver?(ctx: IntegrationContext): FactoryReferenceResolver;
   /**
+   * Storage domains `referenceResolver` reads. The factory skips the resolver
+   * when any of them failed to initialize, so routing falls back to the
+   * default factory instead of throwing on the first lookup.
+   */
+  referenceResolverDomains?: readonly string[];
+  /**
    * Non-secret config snapshot (booleans + names only, never values). The
    * factory merges it into system diagnostics/startup logs.
    */

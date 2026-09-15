@@ -1181,8 +1181,17 @@ export class MastraFactory {
       feed: commentsDomain,
       ...(githubIntegration ? { sourceControlOwnerId: 'github' } : {}),
     };
+    // A resolver reads storage domains beyond the ones integration readiness
+    // covers (Linear's reads `intake`). Registering it against a domain whose
+    // init() failed makes every lookup throw, which Slack reads as "no
+    // references" — gate on the declared domains instead.
     const referenceResolvers = integrationRegistrations
-      .filter(({ integration, ready }) => ready && integration.referenceResolver)
+      .filter(
+        ({ integration, ready }) =>
+          ready &&
+          integration.referenceResolver &&
+          (integration.referenceResolverDomains ?? []).every(domain => storage.isDomainReady(domain)),
+      )
       .map(({ integration }) =>
         integration.referenceResolver!(buildIntegrationContext(channelContextDeps, integration.id)),
       );
