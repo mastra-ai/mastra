@@ -1,5 +1,14 @@
 # @mastra/duckdb
 
+## 1.9.0-alpha.1
+
+### Patch Changes
+
+- Fixed DuckDB feedback storage to preserve string and numeric value types. ([#23948](https://github.com/mastra-ai/mastra/pull/23948))
+
+- Updated dependencies [[`a4381a2`](https://github.com/mastra-ai/mastra/commit/a4381a2b36cdb81c4e33c435cd882921edfc146c)]:
+  - @mastra/core@1.67.0-alpha.6
+
 ## 1.9.0-alpha.0
 
 ### Minor Changes

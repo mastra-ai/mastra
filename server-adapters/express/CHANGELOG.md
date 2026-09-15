@@ -1,5 +1,13 @@
 # @mastra/express
 
+## 1.5.11-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [[`a4381a2`](https://github.com/mastra-ai/mastra/commit/a4381a2b36cdb81c4e33c435cd882921edfc146c)]:
+  - @mastra/core@1.67.0-alpha.6
+  - @mastra/server@1.67.0-alpha.6
+
 ## 1.5.11-alpha.5
 
 ### Patch Changes
