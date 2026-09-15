@@ -1,9 +1,7 @@
 import type { DatasetRecord } from '@mastra/client-js';
-import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button, CreateButton } from '@mastra/playground-ui/components/Button';
 import { Column, Columns } from '@mastra/playground-ui/components/Columns';
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
-import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import {
   Dialog,
   DialogContent,
@@ -57,6 +55,7 @@ import { useGenerationTasks } from '@/domains/datasets/context/generation-contex
 import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
 import { useDatasets } from '@/domains/datasets/hooks/use-datasets';
 import { ExperimentsList } from '@/domains/experiments/components/experiments-list';
+import { ScorersList } from '@/domains/scores/components/scorers-list/scorers-list';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
 
 type AgentEvalTab = 'experiments' | 'datasets' | 'scorers' | 'review';
@@ -133,7 +132,8 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
   const { form, isCodeAgentOverride } = useAgentEditFormContext();
   const { addItems } = useReviewQueue();
 
-  const agentScorers = useWatch({ control: form.control, name: 'scorers' }) ?? {};
+  const watchedScorers = useWatch({ control: form.control, name: 'scorers' });
+  const agentScorers = useMemo(() => watchedScorers ?? {}, [watchedScorers]);
   const agentInstructions = useWatch({ control: form.control, name: 'instructions' });
   const agentDescription = useWatch({ control: form.control, name: 'description' });
   const agentTools = useWatch({ control: form.control, name: 'tools' });
@@ -194,9 +194,15 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
     return map;
   }, [datasets]);
 
-  const scorerEntries = Object.entries(scorers || {});
-  const attachedScorers = scorerEntries.filter(([id]) => !!agentScorers[id]);
-  const unattachedScorers = scorerEntries.filter(([id]) => !agentScorers[id]);
+  const scorerEntries = useMemo(() => Object.entries(scorers || {}), [scorers]);
+  const attachedScorers = useMemo(
+    () => scorerEntries.filter(([id]) => !!agentScorers[id]),
+    [scorerEntries, agentScorers],
+  );
+  const unattachedScorers = useMemo(
+    () => scorerEntries.filter(([id]) => !agentScorers[id]),
+    [scorerEntries, agentScorers],
+  );
 
   // --- Scorer actions ---
 
@@ -314,20 +320,7 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
     });
   };
 
-  // --- Filtered data for each tab ---
-
-  const filteredScorers = useMemo(() => {
-    if (!scorersSearch) return attachedScorers;
-    const term = scorersSearch.toLowerCase();
-    return attachedScorers.filter(([id, scorer]) => {
-      const name = scorer.scorer?.name || id;
-      return name.toLowerCase().includes(term);
-    });
-  }, [attachedScorers, scorersSearch]);
-
-  const { containerRef: scorersContainerRef, getRowProps: getScorerRowProps } = useDataListKeyboard({
-    count: filteredScorers.length,
-  });
+  const attachedScorersRecord = useMemo(() => Object.fromEntries(attachedScorers), [attachedScorers]);
 
   // Close detail view when switching tabs
   const handleTabChange = (tab: AgentEvalTab) => {
@@ -586,7 +579,7 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
 
   function renderScorersTab() {
     if (isLoadingScorers) {
-      return <DataListSkeleton columns="minmax(10rem,1fr) auto auto auto" />;
+      return <ScorersList scorers={{}} isLoading />;
     }
 
     if (!attachedScorers.length) {
@@ -620,49 +613,14 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
     }
 
     return (
-      <DataList columns="minmax(10rem,1fr) auto auto auto" className="min-w-0" scrollRef={scorersContainerRef}>
-        <DataList.Top>
-          <DataList.TopCell>Name</DataList.TopCell>
-          <DataList.TopCell>Source</DataList.TopCell>
-          <DataList.TopCell>Description</DataList.TopCell>
-          <DataList.TopCell>Datasets</DataList.TopCell>
-        </DataList.Top>
-
-        {filteredScorers.map(([id, scorer], index) => {
-          const name = scorer.scorer?.name || id;
-          const description = scorer.scorer?.description || '';
-          const source = scorer.source ?? 'stored';
-          const linkedCount = allDatasets.filter(ds => {
-            const scorerIds = ds.scorerIds ?? [];
-            return scorerIds.includes(id);
-          }).length;
-          const isFeatured = detailView?.type === 'scorer' && detailView.id === id;
-
-          return (
-            <DataList.RowButton
-              key={id}
-              featured={isFeatured}
-              onClick={() => setDetailView({ type: 'scorer', id })}
-              {...getScorerRowProps(index)}
-            >
-              <DataList.Cell className="text-neutral4 min-w-0">
-                <span className="block truncate">{name}</span>
-              </DataList.Cell>
-              <DataList.Cell>
-                <Badge variant={source === 'code' ? 'neutral' : 'green'}>{source}</Badge>
-              </DataList.Cell>
-              <DataList.Cell className="min-w-0">
-                <span className="block max-w-[200px] truncate">
-                  {description || <span className="text-neutral2">—</span>}
-                </span>
-              </DataList.Cell>
-              <DataList.Cell>
-                {linkedCount > 0 ? `${linkedCount} dataset${linkedCount > 1 ? 's' : ''}` : '—'}
-              </DataList.Cell>
-            </DataList.RowButton>
-          );
-        })}
-      </DataList>
+      <ScorersList
+        scorers={attachedScorersRecord}
+        isLoading={false}
+        search={scorersSearch}
+        keyboardGlobal={false}
+        selectedScorerId={detailView?.type === 'scorer' ? detailView.id : undefined}
+        onSelectScorer={scorer => setDetailView({ type: 'scorer', id: scorer.id })}
+      />
     );
   }
 
