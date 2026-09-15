@@ -2,7 +2,7 @@ import { createHash } from 'crypto';
 import { it, describe, expect, beforeAll, afterAll, inject } from 'vitest';
 import { join, relative } from 'path';
 import { setupMonorepo } from './prepare';
-import { mkdtemp, mkdir, readdir, readFile, readlink, rm, writeFile } from 'fs/promises';
+import { mkdtemp, mkdir, readdir, readFile, readlink, rm, symlink, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import getPort from 'get-port';
 import { execa, execaNode } from 'execa';
@@ -237,6 +237,46 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
       );
     });
   }
+
+  it(
+    'fails the build when a workspace package imports an undeclared workspace dependency',
+    async () => {
+      const agentPath = join(fixturePath, 'packages', 'hello-world', 'src', 'agent', 'my-agent.ts');
+      const originalAgent = await readFile(agentPath, 'utf-8');
+      const agent = originalAgent
+        .replace(
+          "import { Agent } from '@mastra/core/agent';",
+          "import { Agent } from '@mastra/core/agent';\nimport { instructionFromHelper } from '@inner/undeclared-helper';",
+        )
+        .replace('return bold(colorful(`Hello`));', 'return instructionFromHelper();');
+      const helloWorldScopePath = join(fixturePath, 'packages', 'hello-world', 'node_modules', '@inner');
+      await mkdir(helloWorldScopePath, { recursive: true });
+      await symlink(
+        join(fixturePath, 'packages', 'undeclared-helper'),
+        join(helloWorldScopePath, 'undeclared-helper'),
+        'dir',
+      );
+
+      try {
+        await writeFile(agentPath, agent);
+        await removeOutputDir(fixturePath);
+        const result = await execa(pkgManager, ['build'], {
+          cwd: join(fixturePath, 'apps', 'custom'),
+          reject: false,
+          env: process.env,
+        });
+        const output = `${result.stdout}\n${result.stderr}`;
+
+        expect(result.exitCode).not.toBe(0);
+        expect(output).toContain('"@inner/undeclared-helper"');
+        expect(output).toContain('using "workspace:*"');
+        expect(output).not.toContain('Build successful');
+      } finally {
+        await writeFile(agentPath, originalAgent);
+      }
+    },
+    timeout,
+  );
 
   describe.sequential('dev', async () => {
     const buildReservation = reserveBuildQueue();

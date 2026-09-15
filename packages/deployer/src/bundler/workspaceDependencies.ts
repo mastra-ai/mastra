@@ -1,10 +1,13 @@
 import { join, dirname } from 'node:path';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { IMastraLogger } from '@mastra/core/logger';
 import slugify from '@sindresorhus/slugify';
 import * as pkg from 'empathic/package';
 import { findWorkspaces, findWorkspacesRoot, createWorkspacesCache } from 'find-workspaces';
 import { ensureDir } from 'fs-extra';
-import { slash } from '../build/utils';
+import type { RollupOutput } from 'rollup';
+import { parseAst } from 'rollup/parseAst';
+import { getPackageName, isBareModuleSpecifier, slash } from '../build/utils';
 import { DepsService } from '../services';
 
 export type WorkspacePackageInfo = {
@@ -150,6 +153,87 @@ export const collectTransitiveWorkspaceDependencies = ({
 
   return { resolutions, usedWorkspacePackages };
 };
+
+function getStaticModuleSpecifiers(code: string) {
+  const moduleSpecifiers: string[] = [];
+
+  const visit = (value: unknown) => {
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        visit(item);
+      }
+      return;
+    }
+
+    if (!value || typeof value !== 'object') {
+      return;
+    }
+
+    const node = value as Record<string, unknown>;
+    if (
+      node.type === 'ImportDeclaration' ||
+      node.type === 'ExportAllDeclaration' ||
+      node.type === 'ExportNamedDeclaration' ||
+      node.type === 'ImportExpression'
+    ) {
+      const source = node.source;
+      const moduleSpecifier =
+        source && typeof source === 'object' ? (source as Record<string, unknown>).value : undefined;
+      if (typeof moduleSpecifier === 'string') {
+        moduleSpecifiers.push(moduleSpecifier);
+      }
+    }
+
+    for (const child of Object.values(node)) {
+      visit(child);
+    }
+  };
+
+  visit(parseAst(code));
+  return moduleSpecifiers;
+}
+
+export function assertNoUnpackagedWorkspaceImports({
+  output,
+  workspaceMap,
+  usedWorkspacePackages,
+}: {
+  output: RollupOutput;
+  workspaceMap: Map<string, WorkspacePackageInfo>;
+  usedWorkspacePackages: Set<string>;
+}) {
+  const unpackagedWorkspaceImports = new Set<string>();
+
+  for (const file of output.output) {
+    if (file.type !== 'chunk') {
+      continue;
+    }
+
+    for (const dependency of getStaticModuleSpecifiers(file.code)) {
+      if (!isBareModuleSpecifier(dependency)) {
+        continue;
+      }
+
+      const packageName = getPackageName(dependency);
+      if (packageName && workspaceMap.has(packageName) && !usedWorkspacePackages.has(packageName)) {
+        unpackagedWorkspaceImports.add(packageName);
+      }
+    }
+  }
+
+  if (unpackagedWorkspaceImports.size === 0) {
+    return;
+  }
+
+  const packageNames = [...unpackagedWorkspaceImports].sort();
+  throw new MastraError({
+    id: 'DEPLOYER_BUNDLER_UNPACKAGED_WORKSPACE_IMPORT',
+    domain: ErrorDomain.DEPLOYER,
+    category: ErrorCategory.USER,
+    details: { packageNames: packageNames.join(', ') },
+    text: `The generated bundle imports workspace ${packageNames.length === 1 ? 'package' : 'packages'} ${packageNames.map(name => `"${name}"`).join(', ')}, but ${packageNames.length === 1 ? 'it is' : 'they are'} not included in the build output. Declare ${packageNames.length === 1 ? 'it' : 'them'} in the dependencies of the workspace package that imports ${packageNames.length === 1 ? 'it' : 'them'} (for example, using "workspace:*").`,
+  });
+}
 
 /**
  * Creates TGZ packages for workspace dependencies in the workspace-module directory
