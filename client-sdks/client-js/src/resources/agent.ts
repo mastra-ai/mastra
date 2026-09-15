@@ -970,9 +970,9 @@ export class Agent extends BaseResource {
   /**
    * @experimental Agent signals are experimental and may change in a future release.
    */
-  async abortThread(params: SubscribeAgentThreadParams): Promise<{ aborted: boolean }> {
+  async abortThread(params: SubscribeAgentThreadParams): Promise<RouteResponse<'POST /agents/:agentId/threads/abort'>> {
     const { resourceId, threadId } = params;
-    return this.request<{ aborted: boolean }>(`/agents/${this.agentId}/threads/abort`, {
+    return this.request<RouteResponse<'POST /agents/:agentId/threads/abort'>>(`/agents/${this.agentId}/threads/abort`, {
       method: 'POST',
       body: { resourceId, threadId },
     });
