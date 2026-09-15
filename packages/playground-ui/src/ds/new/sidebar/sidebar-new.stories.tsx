@@ -144,7 +144,12 @@ function SidebarNewStory() {
       <SidebarNew className="border-border border-r">
         <SidebarNew.Header>
           {state === 'collapsed' ? (
-            <SidebarNew.Trigger />
+            <div className="relative grid size-7 place-items-center">
+              <LogoWithoutText className="text-muted-foreground size-6 transition-opacity group-focus-within/sidebar:opacity-0 group-hover/sidebar:opacity-0 motion-reduce:transition-none" />
+              <div className="absolute inset-0 opacity-0 transition-opacity group-focus-within/sidebar:opacity-100 group-hover/sidebar:opacity-100 motion-reduce:transition-none">
+                <SidebarNew.Trigger />
+              </div>
+            </div>
           ) : (
             <>
               <SidebarNew.Brand logo={<LogoWithoutText className="size-6" />} title="Mastra Platform" />
