@@ -1,6 +1,7 @@
 import type { ToolBackgroundConfig } from '../background-tasks';
 import type { Mastra } from '../mastra';
 import { RequestContext } from '../request-context';
+import { registerRequestContextExecutionSource } from '../request-context/execution-source';
 import { getRequestContextInputSource, REQUEST_CONTEXT_INPUT_SOURCE } from '../request-context/input-source';
 import { toStandardSchema } from '../schema';
 import type { PublicSchema, StandardSchemaWithJSON, InferPublicSchema } from '../schema';
@@ -463,6 +464,12 @@ export class Tool<
               getRequestContextEncoder(this.requestContextSchema),
             )
           : context?.requestContext;
+
+        if (this.requestContextSchema && context?.requestContext && executionRequestContext) {
+          // Schema input forwarding is not execution identity: preserve the
+          // actual caller even if its input-source metadata points elsewhere.
+          registerRequestContextExecutionSource(executionRequestContext, context.requestContext);
+        }
 
         let suspendData = null;
 
