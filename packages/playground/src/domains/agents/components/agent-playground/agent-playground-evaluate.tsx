@@ -860,6 +860,7 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
                   type="search"
                   aria-label="Search scorers"
                   placeholder="Search scorers..."
+                  value={attachScorerSearch}
                   onChange={event => setAttachScorerSearch(event.target.value)}
                 />
               </InputGroup>
@@ -1010,6 +1011,7 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
                   type="search"
                   aria-label="Search experiments"
                   placeholder="Search experiments..."
+                  value={experimentsSearch}
                   onChange={event => setExperimentsSearch(event.target.value)}
                 />
               </InputGroup>
@@ -1023,6 +1025,7 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
                   type="search"
                   aria-label="Search datasets"
                   placeholder="Search datasets..."
+                  value={datasetsSearch}
                   onChange={event => setDatasetsSearch(event.target.value)}
                 />
               </InputGroup>
@@ -1036,6 +1039,7 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
                   type="search"
                   aria-label="Search scorers"
                   placeholder="Search scorers..."
+                  value={scorersSearch}
                   onChange={event => setScorersSearch(event.target.value)}
                 />
               </InputGroup>
