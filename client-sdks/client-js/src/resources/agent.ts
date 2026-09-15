@@ -593,8 +593,12 @@ export class Agent extends BaseResource {
    * depending on the toolset's scope).
    *
    * @param threadId - Optional thread ID for thread-scoped browser sessions
+   *
+   * @remarks This is a browser-stream adapter compatibility endpoint, not a
+   * `SERVER_ROUTES` route. Its historical deployer implementation returns
+   * `{ success: true }`; no generated contract exists while the adapter owns it.
    */
-  closeBrowser(threadId?: string): Promise<{ success: boolean }> {
+  closeBrowser(threadId?: string): Promise<{ success: true }> {
     return this.request(`/agents/${this.agentId}/browser/close`, {
       method: 'POST',
       body: { threadId },
