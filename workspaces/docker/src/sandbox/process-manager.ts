@@ -55,10 +55,13 @@ const SPAWN_WRAPPER = `
 mkdir -p "\${1%/*}" 2>/dev/null
 umask 077
 if setsid -w true >/dev/null 2>&1; then
-  exec setsid -w sh -c 'echo $$ > "$1"; exec sh -c "$2"' sh "$1" "$2"
+  exec setsid -w sh -c 'echo $$ > "$1"; sh -c "$2"; ret=$?; rm -f "$1" 2>/dev/null; exit $ret' sh "$1" "$2"
 fi
 echo $$ > "$1"
-exec sh -c "$2"
+sh -c "$2"
+ret=$?
+rm -f "$1" 2>/dev/null
+exit $ret
 `;
 
 /**
@@ -84,17 +87,22 @@ kill -KILL -"$pgid" 2>/dev/null
 # signal it directly.
 kill -KILL "$pgid" 2>/dev/null
 # Verify the group is actually gone before reporting success. kill -0 probes
-# for the group's existence without sending a signal; once every member has
-# been reaped it fails, so we poll briefly. If the group survives (e.g. an
-# unkillable process), exit nonzero so kill() reports failure instead of
-# falsely claiming the tree was terminated.
+# for the group's existence without sending a signal, and we poll while it
+# still reports the group alive. When the probe finally fails we must inspect
+# why: ESRCH ("no such process") means every member was reaped, so report
+# success; EPERM or any other error means termination is unconfirmed (e.g. a
+# member dropped privileges and became unsignalable), so exit nonzero and let
+# kill() report failure instead of falsely claiming the tree was terminated.
 j=0
-while kill -0 -"$pgid" 2>/dev/null; do
+while err=$(kill -0 -"$pgid" 2>&1); do
   j=$((j + 1))
   [ "$j" -ge 40 ] && exit 1
   sleep 0.05
 done
-exit 0
+case "$err" in
+  *[Ss]uch\\ process*) exit 0 ;;
+  *) exit 1 ;;
+esac
 `;
 
 // =============================================================================
