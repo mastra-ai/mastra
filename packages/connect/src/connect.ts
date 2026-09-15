@@ -123,7 +123,10 @@ export function connect(options: ConnectOptions = {}): ConnectTools {
 
     const checkedIn = new Set(PROVIDERS.map(registration => registration.integrationId));
     const needsCatalog = connections.some(
-      connection => connection.status === 'active' && !checkedIn.has(connection.integrationId),
+      connection =>
+        connection.status === 'active' &&
+        !checkedIn.has(connection.integrationId) &&
+        !options.integrations?.[connection.integrationId]?.disabled,
     );
     if (needsCatalog) throw catalogResult.reason;
     const reason = catalogResult.reason;

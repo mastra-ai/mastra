@@ -417,6 +417,25 @@ describe('catalog availability', () => {
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Platform catalog unavailable'));
   });
 
+  it('ignores disabled catalog-only integrations when the catalog fails', async () => {
+    installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
+    const fetchMock = vi.fn().mockImplementation(async input => {
+      const path = new URL(String(input)).pathname;
+      return path === '/v2/integrations'
+        ? new Response('upstream error', { status: 503 })
+        : Response.json({
+            connections: [makeConnection(), makeConnection({ id: 'c_mcp1', integrationId: 'catalog-mcp' })],
+          });
+    });
+    const tools = connect({
+      projectId: 'proj_1',
+      integrations: { 'catalog-mcp': { disabled: true } },
+      client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as unknown as typeof fetch },
+    });
+
+    expect(Object.keys(await tools())).toEqual(['linear_fake_tool']);
+  });
+
   it('rejects when the catalog fails and an active connection has no checked-in provider', async () => {
     installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
     const fetchMock = vi.fn().mockImplementation(async input => {
