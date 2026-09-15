@@ -181,6 +181,27 @@ describe('LinearIntegration capability surface', () => {
     ]);
   });
 
+  it('rejects a team page that hands back the cursor it was asked for', async () => {
+    const stuckPage = () =>
+      new Response(
+        JSON.stringify({
+          data: {
+            teams: {
+              nodes: [{ id: 'team-1', key: 'ENG', name: 'Engineering' }],
+              pageInfo: { hasNextPage: true, endCursor: 'stuck' },
+            },
+          },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    const fetchMock = vi.fn(async () => stuckPage());
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(integration().listTeams('linear-token')).rejects.toMatchObject({ code: 'invalid_cursor' });
+    // The first page is asked without a cursor and the second with it; nothing beyond that.
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it('follows team pagination cursors for the complete source catalog', async () => {
     const fetchMock = vi
       .fn()

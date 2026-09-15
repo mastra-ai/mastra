@@ -803,6 +803,7 @@ export class PlatformLinearIntegration implements FactoryIntegration {
         `${API_PREFIX}/workspaces/${encodeURIComponent(workspaceId)}/issues/${encodeURIComponent(issueId)}/comments?first=200&after=${encodeURIComponent(pageInfo.endCursor)}`,
       );
       comments.push(...result.comments);
+      if (result.pageInfo.hasNextPage && result.pageInfo.endCursor === pageInfo.endCursor) throw invalidLinearCursor();
       pageInfo = result.pageInfo;
       page += 1;
     }

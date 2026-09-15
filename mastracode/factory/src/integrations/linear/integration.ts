@@ -880,6 +880,8 @@ export class LinearIntegration implements FactoryIntegration {
       );
       teams.push(...data.teams.nodes);
       if (!data.teams.pageInfo.hasNextPage || !data.teams.pageInfo.endCursor) break;
+      // A page that hands back the cursor it was asked for would replay forever.
+      if (data.teams.pageInfo.endCursor === after) throw invalidLinearCursor();
       after = data.teams.pageInfo.endCursor;
     }
     return teams.map(team => ({
@@ -1001,6 +1003,7 @@ export class LinearIntegration implements FactoryIntegration {
       const comments = data.issue?.comments;
       if (!comments) break;
       nodes.push(...comments.nodes);
+      if (comments.pageInfo.hasNextPage && comments.pageInfo.endCursor === endCursor) throw invalidLinearCursor();
       ({ hasNextPage, endCursor } = comments.pageInfo);
     }
     return nodes;
