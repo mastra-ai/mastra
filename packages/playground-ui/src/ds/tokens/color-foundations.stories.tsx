@@ -31,14 +31,14 @@ const BackgroundSwatch = ({ token, role }: { token: string; role: string }) => (
     <div
       aria-label={`${token} color swatch`}
       role="img"
-      className="h-24 border border-border1"
+      className="border-border1 h-24 border"
       style={{ background: `var(--${token})` }}
     />
     <div className="flex min-w-0 items-start justify-between gap-2">
       <Txt variant="ui-sm" font="mono" className="truncate">
         {token}
       </Txt>
-      <Txt variant="ui-sm" className="shrink-0 text-neutral3">
+      <Txt variant="ui-sm" className="text-neutral3 shrink-0">
         {role}
       </Txt>
     </div>
@@ -50,7 +50,7 @@ const ScaleSwatch = ({ token, step }: { token: string; step: number }) => (
     <div
       aria-label={`${token} color swatch`}
       role="img"
-      className="h-16 border border-border1"
+      className="border-border1 h-16 border"
       style={{ background: `var(--${token})` }}
     />
     <Txt variant="ui-xs" font="mono" className="text-neutral3">
@@ -79,7 +79,7 @@ const ScaleRow = ({ label, description, tokens }: { label: string; description: 
         <Txt variant="ui-xs" font="mono" className="text-neutral3 uppercase">
           Subtle
         </Txt>
-        <div className="h-px flex-1 bg-border1" />
+        <div className="bg-border1 h-px flex-1" />
         <Txt variant="ui-xs" font="mono" className="text-neutral3 uppercase">
           Strong
         </Txt>
@@ -95,11 +95,11 @@ export const ColorFoundations: Story = {
 
     return (
       <div className="max-w-320 px-5 sm:px-8" style={{ background: 'var(--background-2)' }}>
-        <header className="grid gap-5 border-y border-border1 py-6 sm:grid-cols-[10rem_minmax(0,1fr)_auto] sm:py-8">
+        <header className="border-border1 grid gap-5 border-y py-6 sm:grid-cols-[10rem_minmax(0,1fr)_auto] sm:py-8">
           <Txt variant="ui-xs" font="mono" className="text-neutral3 uppercase">
             Neutrals / 23 tokens
           </Txt>
-          <div className="max-w-180 flex flex-col gap-2">
+          <div className="flex max-w-180 flex-col gap-2">
             <Txt as="h1" variant="header-lg" className="font-semibold">
               Color foundations
             </Txt>
@@ -128,12 +128,12 @@ export const ColorFoundations: Story = {
           </div>
         </section>
 
-        <section className="border-t border-border1 py-8">
+        <section className="border-border1 border-t py-8">
           <ScaleRow label="Gray" description="Contrast, not lightness" tokens={grayTokens} />
         </section>
 
         <section
-          className="-mx-5 border-y border-border1 px-5 py-8 sm:-mx-8 sm:px-8"
+          className="border-border1 -mx-5 border-y px-5 py-8 sm:-mx-8 sm:px-8"
           style={{ background: 'var(--background-1)' }}
         >
           <ScaleRow label="Gray alpha" description="Opacity and contrast" tokens={grayAlphaTokens} />
