@@ -419,20 +419,21 @@ export class FactoryTransitionService {
       toStage: request.stage,
     } satisfies Omit<FactoryStageRuleContext, 'stage'>;
 
-    // Single authoritative plan-approval predicate, shared with the dispatcher's
-    // `#plansAreAutoApproved`: a per-item preapproval, or the project setting.
-    const plansAutoApproved =
-      item.plansPreapprovedAt != null ||
-      (this.#autoApprovePlans
-        ? await this.#autoApprovePlans({ orgId: request.orgId, factoryProjectId: request.factoryProjectId })
-        : false);
-
     let evaluation:
       | { outcome: 'accepted'; decisions: Record<string, unknown>[]; intents: TransitionConsentOptions }
       | { outcome: 'rejected'; code: string; reason: string };
     try {
       evaluation = await withRuleTimeout(
         (async () => {
+          // Single authoritative plan-approval predicate, shared with the dispatcher's
+          // `#plansAreAutoApproved`: a per-item preapproval, or the project setting.
+          // Resolved inside the timed block so a resolver rejection surfaces as a
+          // committed rule_error and a slow lookup is bounded by RULE_TIMEOUT_MS.
+          const plansAutoApproved =
+            item.plansPreapprovedAt != null ||
+            (this.#autoApprovePlans
+              ? await this.#autoApprovePlans({ orgId: request.orgId, factoryProjectId: request.factoryProjectId })
+              : false);
           const policy = boardTransitionPolicyResultSchema.parse(
             await board.transitionPolicy?.(
               immutablePolicySnapshot({
