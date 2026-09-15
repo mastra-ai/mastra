@@ -9,8 +9,20 @@ import { InputGroup, InputGroupAddon, InputGroupInput } from '@mastra/playground
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Tabs, TabContent, TabList, Tab } from '@mastra/playground-ui/components/Tabs';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { DatasetsIcon } from '@mastra/playground-ui/icons/DatasetsIcon';
+import { ExperimentsIcon } from '@mastra/playground-ui/icons/ExperimentsIcon';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { CircleSlashIcon, ChevronLeft, ExternalLinkIcon, Paperclip, Plus, SearchIcon } from 'lucide-react';
+import {
+  CircleSlashIcon,
+  ChevronLeft,
+  ClipboardCheck,
+  ExternalLinkIcon,
+  Paperclip,
+  Plus,
+  SearchIcon,
+} from 'lucide-react';
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import { useWatch } from 'react-hook-form';
@@ -911,10 +923,30 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
         {/* Same p-1.5 as the parent agent tab bar so the pills line up. */}
         <div className="border-border1 flex flex-wrap items-center justify-between gap-x-2 border-b p-1.5">
           <TabList variant="pill-ghost" className="shrink-0">
-            <Tab value="experiments">Experiments</Tab>
-            <Tab value="datasets">Datasets</Tab>
-            <Tab value="scorers">Scorers</Tab>
-            <Tab value="review">Review</Tab>
+            <Tab value="experiments">
+              <Icon size="sm">
+                <ExperimentsIcon />
+              </Icon>
+              Experiments
+            </Tab>
+            <Tab value="datasets">
+              <Icon size="sm">
+                <DatasetsIcon />
+              </Icon>
+              Datasets
+            </Tab>
+            <Tab value="scorers">
+              <Icon size="sm">
+                <ScorersIcon />
+              </Icon>
+              Scorers
+            </Tab>
+            <Tab value="review">
+              <Icon size="sm">
+                <ClipboardCheck />
+              </Icon>
+              Review
+            </Tab>
           </TabList>
 
           {/* Tab-specific actions */}
