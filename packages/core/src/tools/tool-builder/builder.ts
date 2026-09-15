@@ -894,13 +894,13 @@ export class CoreToolBuilder extends MastraBase {
         logger.debug(start, { ...logData, ...rest, model: logModelObject });
 
         // When a tool is being resumed (resumeData present in execOptions), skip input
-        // validation. The original args were already validated during the initial
-        // execution, and during resume the tool's execute function checks resumeData
-        // and returns early without using the input args.
+        // validation unless the builder injected additional fields. The original args
+        // were already validated during the initial execution, but builder-local fields
+        // still need validation before Tool.execute skips its own validation.
         const isResuming = !!execOptions?.resumeData;
 
         const parameters = inputValidationSchema ?? this.getParameters();
-        if (!isResuming) {
+        if (!isResuming || this.injectedInputSchema) {
           const { data, error } = validateToolInput(
             parameters as StandardSchemaWithJSON | undefined,
             args,

@@ -303,6 +303,40 @@ describe('CoreToolBuilder background override injection', () => {
       expect(properties).toHaveProperty('resumeData');
     });
 
+    it('rejects malformed suspendedToolRunId when resuming a workflow tool', async () => {
+      const execute = vi.fn().mockResolvedValue({ done: true });
+      const tool = createTool({
+        id: 'workflow-child',
+        description: 'Workflow as a tool',
+        inputSchema: z4.object({ message: z4.string() }),
+        execute,
+      });
+
+      const built = new CoreToolBuilder({
+        originalTool: tool,
+        options: {
+          ...baseOptions(),
+          name: 'workflow-child',
+          agentName: 'parent-agent',
+          agentId: 'parent-agent',
+          runId: 'parent-run',
+          backgroundConfig: undefined,
+        },
+      }).build();
+
+      const result = await built.execute!({ message: 'hi', suspendedToolRunId: 123 } as any, {
+        toolCallId: 'call-1',
+        messages: [],
+        resumeData: { approved: true },
+      });
+
+      expect(result).toMatchObject({
+        error: true,
+        message: expect.stringContaining('Tool input validation failed'),
+      });
+      expect(execute).not.toHaveBeenCalled();
+    });
+
     // Both gates can fire at once: a resumable id AND backgroundTaskEnabled.
     // Ensure all three injected fields end up in the same schema.
     // https://github.com/mastra-ai/mastra/pull/16915#pullrequestreview
