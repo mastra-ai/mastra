@@ -53,6 +53,40 @@ describe('WeaviateVector', () => {
     expect(stats.metric).toBe('cosine');
     expect(typeof stats.count).toBe('number');
   }, 50000);
+
+  it('round-trips a user metadata key that collides with the encoding prefix', async () => {
+    const [id] = await weaviate.upsert({
+      indexName: testIndex,
+      vectors: [[0.5, 0.5, 0.0]],
+      metadata: [{ mastraMeta_id: 'user-value', label: 'prefixed' }],
+    });
+
+    const results = await weaviate.query({
+      indexName: testIndex,
+      queryVector: [0.5, 0.5, 0.0],
+      topK: 1,
+      filter: { label: 'prefixed' },
+    });
+
+    expect(results?.[0]?.id).toBe(id);
+    // The genuine user key must survive round-trip untouched, not be decoded to `id`.
+    expect(results?.[0]?.metadata?.mastraMeta_id).toBe('user-value');
+  }, 50000);
+
+  it('does not mutate the schema when an update is rejected for an empty filter', async () => {
+    await expect(
+      weaviate.updateVector({
+        indexName: testIndex,
+        filter: {},
+        update: { metadata: { brandNewRejectedProp: 'x' } },
+      }),
+    ).rejects.toThrow(/non-empty filter/i);
+
+    const collection = await (weaviate as any).getCollection(testIndex);
+    const config = await collection.config.get();
+    const propNames = config.properties.map((p: { name: string }) => p.name);
+    expect(propNames).not.toContain('brandNewRejectedProp');
+  }, 50000);
 });
 
 // Shared vector store test suite

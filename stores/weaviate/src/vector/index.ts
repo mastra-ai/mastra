@@ -559,6 +559,29 @@ export class WeaviateVector extends MastraVector<WeaviateVectorFilter> {
         });
       }
 
+      // Validate the id/filter target BEFORE touching the collection, otherwise a
+      // rejected update (missing target or empty filter) would still mutate the
+      // collection schema via ensureProperties below.
+      if (id === undefined && filter === undefined) {
+        throw new MastraError({
+          id: createVectorErrorId('WEAVIATE', 'UPDATE_VECTOR', 'INVALID_ARGS'),
+          text: 'Either id or filter must be provided',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { indexName },
+        });
+      }
+
+      if (id === undefined && (typeof filter !== 'object' || filter === null || Object.keys(filter).length === 0)) {
+        throw new MastraError({
+          id: createVectorErrorId('WEAVIATE', 'UPDATE_VECTOR', 'INVALID_ARGS'),
+          text: 'A non-empty filter is required: empty filter not allowed',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { indexName },
+        });
+      }
+
       const collection = await this.getCollection(indexName);
 
       // Mirror upsert's schema handling: create any missing properties with
@@ -583,27 +606,7 @@ export class WeaviateVector extends MastraVector<WeaviateVectorFilter> {
         return;
       }
 
-      if (filter === undefined) {
-        throw new MastraError({
-          id: createVectorErrorId('WEAVIATE', 'UPDATE_VECTOR', 'INVALID_ARGS'),
-          text: 'Either id or filter must be provided',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-          details: { indexName },
-        });
-      }
-
-      if (typeof filter !== 'object' || filter === null || Object.keys(filter).length === 0) {
-        throw new MastraError({
-          id: createVectorErrorId('WEAVIATE', 'UPDATE_VECTOR', 'INVALID_ARGS'),
-          text: 'A non-empty filter is required: empty filter not allowed',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-          details: { indexName },
-        });
-      }
-
-      const filters = this.transformFilter(collection, filter);
+      const filters = this.transformFilter(collection, filter!);
       const matches = await collection.query.fetchObjects({ limit: 10000, ...(filters ? { filters } : {}) });
       for (const obj of matches.objects) {
         await applyUpdate(obj.uuid);
