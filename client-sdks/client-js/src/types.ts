@@ -34,7 +34,7 @@ import type {
 } from '@mastra/core/storage';
 import type { ChunkType } from '@mastra/core/stream';
 import type { QueryResult } from '@mastra/core/vector';
-import type { TimeTravelContext, WorkflowResult, WorkflowRunStatus, WorkflowState } from '@mastra/core/workflows';
+import type { WorkflowResult, WorkflowRunStatus, WorkflowState } from '@mastra/core/workflows';
 import type { PublicSchema } from '@mastra/schema-compat/schema';
 
 import type { JSONSchema7 } from 'json-schema';
@@ -723,17 +723,9 @@ export interface MemorySearchResult {
   };
 }
 
-export interface TimeTravelParams {
-  step: string | string[];
-  inputData?: Record<string, any>;
-  resumeData?: Record<string, any>;
-  initialState?: Record<string, any>;
-  context?: TimeTravelContext<any, any, any, any>;
-  nestedStepsContext?: Record<string, TimeTravelContext<any, any, any, any>>;
+export type TimeTravelParams = Omit<Body<'POST /workflows/:workflowId/time-travel'>, 'requestContext'> & {
   requestContext?: RequestContext | Record<string, any>;
-  tracingOptions?: TracingOptions;
-  perStep?: boolean;
-}
+};
 
 // ============================================================================
 // Stored Agents Types
