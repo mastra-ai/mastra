@@ -37,7 +37,7 @@ async function rewritePathAliases(rootDir: string) {
 }
 
 export default defineConfig(options => ({
-  entry: ['src/index.ts', 'src/ui/index.ts'],
+  entry: ['src/index.ts', 'src/ui/index.ts', 'src/workflows/index.ts'],
   format: ['esm', 'cjs'],
   fixedExtension: false,
   nodeProtocol: 'strip',
