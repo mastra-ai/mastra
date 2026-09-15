@@ -84,6 +84,11 @@ export type OAuthCredential = {
   type: 'oauth';
 } & OAuthCredentials;
 
+export type OAuthCredentialSnapshot = OAuthCredential & {
+  /** Non-secret registry identity for credential-scoped in-process caches. */
+  accountInstanceId?: string;
+};
+
 export type AuthCredential = ApiKeyCredential | OAuthCredential;
 
 /**
@@ -131,7 +136,7 @@ export interface CredentialStore {
    * have no local account registry. Local wrappers use this to keep the access
    * token and account-specific metadata from the same account.
    */
-  getOAuthCredential?(provider: string): Promise<OAuthCredential | undefined>;
+  getOAuthCredential?(provider: string): Promise<OAuthCredentialSnapshot | undefined>;
 
   /**
    * Registered OAuth accounts for a provider, in insertion order. Optional so

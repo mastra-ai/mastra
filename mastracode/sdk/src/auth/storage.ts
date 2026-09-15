@@ -17,6 +17,7 @@ import type {
   AuthStorageData,
   OAuthAccountRecord,
   OAuthCredential,
+  OAuthCredentialSnapshot,
   OAuthCredentials,
   OAuthLoginCallbacks,
   OAuthProviderId,
@@ -661,7 +662,7 @@ export class AuthStorage {
    * the account-rotation processor owns switching so it can persist a visible
    * account-switch notice with the request that triggered the change.
    */
-  async getOAuthCredential(providerId: string): Promise<OAuthCredential | undefined> {
+  async getOAuthCredential(providerId: string): Promise<OAuthCredentialSnapshot | undefined> {
     this.reload();
     const cred = this.data[providerId];
     if (cred?.type !== 'oauth') return undefined;
@@ -669,16 +670,22 @@ export class AuthStorage {
     const provider = getOAuthProvider(providerId);
     if (!provider) return undefined;
 
-    if (Date.now() < cred.expires) return { ...cred };
+    const activeEntry = this.getActiveAccount(providerId);
+    const toSnapshot = (credentials: OAuthCredentials): OAuthCredentialSnapshot => ({
+      type: 'oauth',
+      ...credentials,
+      accountInstanceId: activeEntry?.id,
+    });
+
+    if (Date.now() < cred.expires) return toSnapshot(cred);
 
     // Share one refresh when concurrent requests observe the same expired
     // token, keyed to the observed active account instance.
-    const activeEntry = this.getActiveAccount(providerId);
     const refreshKey = activeEntry ? `${providerId}:${activeEntry.id}` : providerId;
     const pendingRefresh = this.refreshPromises.get(refreshKey);
     if (pendingRefresh) {
       const creds = await pendingRefresh;
-      return creds ? { type: 'oauth', ...creds } : undefined;
+      return creds ? toSnapshot(creds) : undefined;
     }
 
     const refresh = (async (): Promise<OAuthCredentials | undefined> => {
@@ -693,7 +700,7 @@ export class AuthStorage {
     this.refreshPromises.set(refreshKey, refresh);
     try {
       const creds = await refresh;
-      return creds ? { type: 'oauth', ...creds } : undefined;
+      return creds ? toSnapshot(creds) : undefined;
     } finally {
       this.refreshPromises.delete(refreshKey);
     }
