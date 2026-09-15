@@ -40,7 +40,7 @@ export function AgentOverviewPanel({ agentId }: AgentOverviewPanelProps) {
     >
       {/* The header route action owns the close control (see AgentDetailHeaderActions). */}
       <div className="border-border1 flex h-10 min-h-10 items-center border-b px-4">
-        <Txt as="h2" variant="header-md" className="text-neutral6 font-semibold">
+        <Txt as="h2" variant="ui-md" className="text-neutral6 font-medium">
           Config
         </Txt>
       </div>

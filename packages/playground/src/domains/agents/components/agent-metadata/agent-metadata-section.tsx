@@ -54,9 +54,7 @@ export const AgentMetadataSection = ({
             </Icon>
           )}
           <span className="flex min-w-0 items-center gap-1.5">
-            <span className="to-neutral5 bg-linear-to-r from-(--section-accent) bg-clip-text text-transparent forced-colors:bg-none forced-colors:text-inherit">
-              {title}
-            </span>
+            <span className="text-(--section-accent)">{title}</span>
             {count !== undefined && count > 0 && (
               <Txt as="span" variant="caption" className="font-normal tabular-nums">
                 {count}
