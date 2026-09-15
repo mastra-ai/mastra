@@ -69,12 +69,39 @@ const result = await workspace.sandbox?.executeCommand?.('npm', ['test'], {
 
 Relative paths are resolved under `/workspace`. Absolute paths must also resolve within `/workspace`. Each file is sent as its own bridge request, and the bridge caps a single file at 32 MiB.
 
+The Cloudflare sandbox cannot set per-file permissions, so a `writeFiles` call that includes a `mode` is rejected rather than silently ignored.
+
 ```typescript
 await workspace.sandbox?.writeFiles?.([
   { path: 'src/index.ts', content: "console.log('hello')\n" },
   { path: '/workspace/package.json', content: JSON.stringify({ type: 'module' }) },
 ])
 ```
+
+## Read files
+
+Read a single file back from `/workspace` as raw bytes. Relative paths resolve under `/workspace`, and absolute paths must also resolve within it.
+
+```typescript
+const bytes = await workspace.sandbox?.readFile?.('src/index.ts')
+const source = new TextDecoder().decode(bytes)
+```
+
+## Persist and restore the workspace
+
+`persistWorkspace()` archives `/workspace` and returns the raw tar bytes; `hydrateWorkspace()` restores it from those bytes. Store the archive between sessions to resume work after a container sleeps or is recreated.
+
+```typescript
+// Back up before the container can sleep
+const archive = await workspace.sandbox?.persistWorkspace?.({ excludes: ['node_modules'] })
+await myStorage.put('workspace-backup', archive)
+
+// Later, on a fresh or reconnected sandbox
+const archive = await myStorage.get('workspace-backup')
+await workspace.sandbox?.hydrateWorkspace?.(archive)
+```
+
+For bucket mounts and execution sessions, use the corresponding `CloudflareSandboxBridgeClient` methods (`mountBucket`, `unmountBucket`, `createSession`, `deleteSession`) directly.
 
 ## Constructor parameters
 
@@ -147,4 +174,4 @@ await workspace.sandbox?.writeFiles?.([
 
 ## Limitations
 
-The provider supports command execution, streamed output, and file writes. It doesn't currently expose the bridge's bucket mounts, sessions, PTY terminals, or workspace persistence routes, and it doesn't support background process management, stdin, snapshots, or port URLs.
+The provider surfaces command execution, streamed output, file reads and writes, and workspace persistence directly on the sandbox. Bucket mounts and sessions are available on the bridge client (`CloudflareSandboxBridgeClient`) but not on the `CloudflareSandbox` surface. PTY terminals are not exposed, and the provider doesn't support background process management, stdin, snapshots, or port URLs.

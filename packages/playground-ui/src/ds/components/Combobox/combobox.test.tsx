@@ -281,29 +281,18 @@ describe('Combobox', () => {
     expect(trigger.className).toContain('justify-between');
   });
 
-  it('defaults to the filled default variant; outline is transparent-bordered; ghost drops the border', () => {
-    const { rerender } = render(<Combobox options={options} placeholder="Pick provider" />);
-    // Default === the Button `default`: a filled surface.
-    const defaultClass = screen.getByRole('combobox').className;
-    expect(defaultClass).toContain('bg-surface3');
-    expect(defaultClass).not.toContain('bg-transparent');
+  it('renders options on the shared menu item recipe (ghost/md, rounded-lg)', async () => {
+    render(<Combobox options={options} placeholder="Pick provider" />);
 
-    // Outline === a transparent bordered field.
-    rerender(<Combobox options={options} placeholder="Pick provider" variant="outline" />);
-    const outlineClass = screen.getByRole('combobox').className;
-    expect(outlineClass).toContain('bg-transparent');
-    expect(outlineClass).toContain('border-border1');
+    fireEvent.click(screen.getByRole('combobox'));
 
-    // Ghost === borderless: same shape, transparent border instead.
-    rerender(<Combobox options={options} placeholder="Pick provider" variant="ghost" />);
-    const ghostClass = screen.getByRole('combobox').className;
-    expect(ghostClass).toContain('border-transparent');
-    expect(ghostClass).not.toContain('border-border1');
-
-    // Legacy `link` is still accepted for source compatibility, but renders as
-    // the closest field-safe look.
-    rerender(<Combobox options={options} placeholder="Pick provider" variant="link" />);
-    expect(screen.getByRole('combobox').className).toContain('border-transparent');
+    const option = await screen.findByRole('option', { name: 'OpenAI' });
+    expect(option.className).toContain('min-h-form-md');
+    expect(option.className).toContain('text-ui-smd');
+    expect(option.className).toContain('rounded-lg');
+    expect(option.className).not.toContain('rounded-full');
+    expect(option.className).not.toContain('rounded-md');
+    expect(option.className).toContain('data-highlighted:bg-neutral6/5');
   });
 
   it('applies the error border when an error is provided', () => {
@@ -330,6 +319,29 @@ describe('Combobox', () => {
     rerender(<Combobox options={options} size="sm" />);
 
     expect(screen.getByRole('combobox').className).toContain('h-form-sm');
+  });
+
+  it('renders a chevron-only trigger at icon sizes while keeping the value for assistive tech', async () => {
+    const onValueChange = vi.fn();
+    render(
+      <Combobox
+        options={options}
+        value="openai"
+        onValueChange={onValueChange}
+        size="icon-sm"
+        aria-label="Switch provider"
+      />,
+    );
+
+    const trigger = screen.getByRole('combobox', { name: 'Switch provider' });
+    expect(trigger.className).toContain('w-form-sm');
+    expect(trigger.className).not.toContain('w-full');
+    expect(screen.getByText('OpenAI').className).toContain('sr-only');
+
+    fireEvent.click(trigger);
+    fireEvent.click(await screen.findByRole('option', { name: 'Anthropic' }));
+
+    expect(onValueChange).toHaveBeenCalledWith('anthropic');
   });
 
   it('invites a choice in its own words when the caller gives none', () => {

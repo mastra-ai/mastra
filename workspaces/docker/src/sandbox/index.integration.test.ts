@@ -106,6 +106,19 @@ describe('DockerSandbox writeFiles (integration)', () => {
     expect(result.stdout.trim()).toBe('second');
   }, 120000);
 
+  it('applies an explicit file mode on creation and overwrite', async () => {
+    await sandbox.writeFiles([{ path: 'run.sh', content: '#!/bin/sh\necho hi\n', mode: 0o755 }]);
+
+    const created = await sandbox.executeCommand!('stat', ['-c', '%a', '/workspace/run.sh']);
+    expect(created.exitCode).toBe(0);
+    expect(created.stdout.trim()).toBe('755');
+
+    await sandbox.writeFiles([{ path: 'run.sh', content: '#!/bin/sh\necho bye\n', mode: 0o600 }]);
+
+    const overwritten = await sandbox.executeCommand!('stat', ['-c', '%a', '/workspace/run.sh']);
+    expect(overwritten.stdout.trim()).toBe('600');
+  }, 120000);
+
   it('rejects with SandboxAbortError when the signal is already aborted', async () => {
     const controller = new AbortController();
     controller.abort();

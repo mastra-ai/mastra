@@ -1,5 +1,53 @@
 # @mastra/code-sdk
 
+## 1.7.2-alpha.5
+
+### Patch Changes
+
+- Forwarded `updateNotificationsStatus` through the lazy notifications storage so the inbox tool's bulk seen-marking reaches the configured store. ([#23718](https://github.com/mastra-ai/mastra/pull/23718))
+
+- Kimi For Coding models now report `kimi-for-coding` as their provider (instead of `anthropic.messages`) so message history compatibility can tell Kimi turns apart from Anthropic turns when a thread switches between them. No action is required — the value only feeds Mastra's internal provider-stamping and compatibility logic. Turns persisted before this change keep the old `anthropic.messages` stamp and stay indistinguishable from Anthropic turns; they are left as-is. ([#23695](https://github.com/mastra-ai/mastra/pull/23695))
+
+- Updated dependencies [[`0f4d9cf`](https://github.com/mastra-ai/mastra/commit/0f4d9cf79b49b6dc6a484a0b2d1cf381eb2343a6), [`50e2658`](https://github.com/mastra-ai/mastra/commit/50e2658cdcdc55a14abde08610a8e2b12fdf67a4), [`8510a6d`](https://github.com/mastra-ai/mastra/commit/8510a6d38b9d211af7d94b7860ab182ce55c39d1), [`8510a6d`](https://github.com/mastra-ai/mastra/commit/8510a6d38b9d211af7d94b7860ab182ce55c39d1), [`8510a6d`](https://github.com/mastra-ai/mastra/commit/8510a6d38b9d211af7d94b7860ab182ce55c39d1), [`5eba942`](https://github.com/mastra-ai/mastra/commit/5eba9420330b3f116810891ae14888f7f256cd4f), [`648dd4f`](https://github.com/mastra-ai/mastra/commit/648dd4f4c4cd330013c0a98f50ffac77fe2ad632), [`3fc8c2d`](https://github.com/mastra-ai/mastra/commit/3fc8c2d35f724c3648150b29e50cf61a9360b274), [`ddb3639`](https://github.com/mastra-ai/mastra/commit/ddb3639e3de41f3fe33f68f81c2e5850ff1280b6), [`502ca89`](https://github.com/mastra-ai/mastra/commit/502ca8904848e77d44622669f2728171d36ad6ca), [`953be88`](https://github.com/mastra-ai/mastra/commit/953be88befd9cdb789b4cfc16680121c663a631b), [`01a6969`](https://github.com/mastra-ai/mastra/commit/01a69695bb69091c7e477d18a84a557d66fb25a9), [`359c5f8`](https://github.com/mastra-ai/mastra/commit/359c5f8cff989fc5cdd6abaf2c5ca27f97fc2bf3), [`502ca89`](https://github.com/mastra-ai/mastra/commit/502ca8904848e77d44622669f2728171d36ad6ca), [`6d20620`](https://github.com/mastra-ai/mastra/commit/6d206205f781cfa2598c2a55123a336909e039b4), [`359c5f8`](https://github.com/mastra-ai/mastra/commit/359c5f8cff989fc5cdd6abaf2c5ca27f97fc2bf3), [`d55aa61`](https://github.com/mastra-ai/mastra/commit/d55aa616b3e88015c3b74342c75bd510c7e764df), [`4573c23`](https://github.com/mastra-ai/mastra/commit/4573c231c108e7d796eab12b8e9b2094f8cc4d47), [`4573c23`](https://github.com/mastra-ai/mastra/commit/4573c231c108e7d796eab12b8e9b2094f8cc4d47)]:
+  - @mastra/core@1.67.0-alpha.5
+  - @mastra/libsql@1.23.0-alpha.3
+  - @mastra/pg@1.25.0-alpha.2
+  - @mastra/memory@1.30.0-alpha.4
+  - @mastra/duckdb@1.9.0-alpha.0
+  - @mastra/github-signals@0.4.1-alpha.0
+
+## 1.7.2-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`ad5ac69`](https://github.com/mastra-ai/mastra/commit/ad5ac69bcd037bfb85c3399d8b39d9364931ad1b), [`df14b5d`](https://github.com/mastra-ai/mastra/commit/df14b5d12374137db86f92061f8714b28473672e), [`fff3361`](https://github.com/mastra-ai/mastra/commit/fff33614a3376676797cb9b5a5c5b090b026fa0e), [`d3841b9`](https://github.com/mastra-ai/mastra/commit/d3841b96d7e6dc4ec42d9fc8a4000deb34b7f590), [`ffe16f1`](https://github.com/mastra-ai/mastra/commit/ffe16f17447449b7155f1f15992e3c9e5f6511ac), [`04c11b3`](https://github.com/mastra-ai/mastra/commit/04c11b3cd698fa37af8fad466dc2bf6fa0d5494d), [`ad5ac69`](https://github.com/mastra-ai/mastra/commit/ad5ac69bcd037bfb85c3399d8b39d9364931ad1b), [`e83dfad`](https://github.com/mastra-ai/mastra/commit/e83dfade569ee5aea688de9f2bb8bf8db0a653a7), [`6bb122c`](https://github.com/mastra-ai/mastra/commit/6bb122c5147b612c0fe7f173f940933066c4cfcc), [`88f72e5`](https://github.com/mastra-ai/mastra/commit/88f72e51408ece9f80246b0b7c8beba3bee9f631), [`7f6d101`](https://github.com/mastra-ai/mastra/commit/7f6d101044eefc0d776a555b45dbea1c0d5224c4)]:
+  - @mastra/core@1.67.0-alpha.4
+  - @mastra/mcp@1.18.0-alpha.1
+  - @mastra/schema-compat@1.3.10-alpha.1
+  - @mastra/memory@1.30.0-alpha.3
+
+## 1.7.2-alpha.3
+
+### Patch Changes
+
+- Clarified cross-agent peer states, required fresh discovery before sends, bounded expected-reply reminders when a peer becomes unavailable, and added an explicit disconnect tool. Agents can remove a saved connection from the current sender thread with the peer's stable ID: ([#21986](https://github.com/mastra-ai/mastra/pull/21986))
+
+  ```text
+  agent_disconnect({ targetId: "code-agent:resource-id:thread-id" })
+  ```
+
+- The sandbox-backed workspace filesystem now runs `list_files` tree walks and `grep` searches inside the sandbox in a single command (using `find` and `rg`/`grep`), instead of one round trip per directory and file. `walk()` throws `DirectoryNotFoundError` / `NotDirectoryError` for a missing or non-directory root and reports symlink targets. Ripgrep results are kept when `rg` exits with a per-file error (for example an unreadable file) instead of being discarded, and patterns whose meaning differs between POSIX ERE and JavaScript regex (`[[:digit:]]`, `\<`, `\>`) fall back to the host-side search so match columns stay correct. ([#22317](https://github.com/mastra-ai/mastra/pull/22317))
+
+- `/prune vacuum` no longer compacts local libSQL databases that carry a `libsql_vector_idx` vector index. Any VACUUM over such a database deterministically corrupts its `libsql_vector_meta_shadow` table — silently at first, since vector queries keep returning rows — and compounds over repeated runs until `REINDEX` can no longer repair it. Databases are now detected by schema (not filename), skipped rather than compacted, and reported in `/prune` output with the reason, so the skip is never silent. Detection fails closed: a database whose schema cannot be inspected is left untouched instead of vacuumed. Ordinary databases are still compacted as before. ([#23645](https://github.com/mastra-ai/mastra/pull/23645))
+
+- Bump smol-toml to 1.8.0 for a High severity dependency fix (SEC-170/171). ([#23665](https://github.com/mastra-ai/mastra/pull/23665))
+
+- Updated dependencies [[`492c0ae`](https://github.com/mastra-ai/mastra/commit/492c0aedcee3fde9555111a660b6c975c160a0db), [`ddbd352`](https://github.com/mastra-ai/mastra/commit/ddbd3527654a058ed413ae164a1246003dcc9030), [`4112ecd`](https://github.com/mastra-ai/mastra/commit/4112ecdec76827384d3a7ab4e8db3ccf90ae7ed1), [`617c1b3`](https://github.com/mastra-ai/mastra/commit/617c1b30e7e794bbb77feaced1848fde291fc240), [`422e798`](https://github.com/mastra-ai/mastra/commit/422e798ab1a4b14302c5b49fed2f6c818a82706e), [`47868b2`](https://github.com/mastra-ai/mastra/commit/47868b2dde360b038d829c9f88e15061acf3efb5), [`b95aabb`](https://github.com/mastra-ai/mastra/commit/b95aabba261a39b73430d95f3ed051634117d517), [`055057c`](https://github.com/mastra-ai/mastra/commit/055057ca2102e35008fe30871f7c8f422ae25ec2), [`7290151`](https://github.com/mastra-ai/mastra/commit/7290151bdb3bfe518653b0a66a19d6790925e4a0), [`47868b2`](https://github.com/mastra-ai/mastra/commit/47868b2dde360b038d829c9f88e15061acf3efb5), [`9bc7895`](https://github.com/mastra-ai/mastra/commit/9bc789591ad683f304c63bd01e554fbba2df9cf6), [`47868b2`](https://github.com/mastra-ai/mastra/commit/47868b2dde360b038d829c9f88e15061acf3efb5), [`6902f94`](https://github.com/mastra-ai/mastra/commit/6902f940f1879955a90faa0a0ac871667b59d428), [`7148bf5`](https://github.com/mastra-ai/mastra/commit/7148bf55b147e3fae90b3ba0c9517adb0af5f2a4), [`40b783b`](https://github.com/mastra-ai/mastra/commit/40b783bb6d8669500d9e6906eac136e3505af14e), [`6bdb944`](https://github.com/mastra-ai/mastra/commit/6bdb944acb3f39bccad59ee140d7614420948f6b), [`a54766a`](https://github.com/mastra-ai/mastra/commit/a54766a10381295583144847b856d18e8f924d30), [`ff45065`](https://github.com/mastra-ai/mastra/commit/ff45065d42132075c4efb064d96169c4eadbab58)]:
+  - @mastra/core@1.67.0-alpha.3
+  - @mastra/libsql@1.23.0-alpha.2
+  - @mastra/observability@1.17.8-alpha.1
+  - @mastra/mcp@1.17.4-alpha.0
+
 ## 1.7.2-alpha.2
 
 ### Patch Changes

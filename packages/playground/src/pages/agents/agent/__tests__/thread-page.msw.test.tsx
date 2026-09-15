@@ -6,9 +6,18 @@ import { http, HttpResponse } from 'msw';
 import { createContext, useContext, useEffect, useImperativeHandle, useState } from 'react';
 import type { ReactNode, Ref } from 'react';
 import { createMemoryRouter, Outlet, RouterProvider, useLocation } from 'react-router';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import AgentSession from '../session';
 import AgentThread from '../thread';
+import {
+  preferenceModelProviders,
+  memoryConfig,
+  workingMemory,
+  voiceSpeakers,
+  mcpServers,
+  preferenceThread,
+} from './fixtures/thread-preferences';
 import { emptyHistory, liveChunks, staleHistory } from './fixtures/thread-recovery';
 import { AgentLayout } from '@/domains/agents/agent-layout';
 import {
@@ -139,6 +148,7 @@ const LocationProbe = () => {
 const buildRouter = (initialEntry: string) =>
   createMemoryRouter(
     [
+      { path: '/agents', element: <LocationProbe /> },
       {
         // Mirrors App.tsx: the thread page is a child of the agent tabs layout.
         path: '/agents/:agentId',
@@ -156,7 +166,7 @@ const buildRouter = (initialEntry: string) =>
           { path: 'chat/:threadId', loader: legacyAgentChatLoader },
           { path: 'threads', loader: agentThreadsIndexLoader },
           { path: 'threads/:threadId', element: <AgentThread /> },
-          { path: 'overview', element: <div data-testid="overview-page" /> },
+          { path: 'session/:threadId', element: <AgentSession /> },
         ],
       },
     ],
@@ -615,7 +625,7 @@ describe('Standalone thread page', () => {
 
     await screen.findByText('Tonight we cook carbonara.');
     expect(screen.getByRole('tab', { name: 'Chat' }).getAttribute('aria-selected')).toBe('true');
-    expect(screen.getByRole('tab', { name: 'Overview' }).getAttribute('aria-selected')).toBe('false');
+    expect(screen.queryByRole('tab', { name: 'Overview' })).toBeNull();
   });
 
   it('highlights the Chat tab on /threads/new', async () => {
@@ -647,11 +657,13 @@ describe('Standalone thread page', () => {
     );
   });
 
-  it('redirects bare /agents/:agentId to the overview page', async () => {
+  it('redirects bare /agents/:agentId to the new-thread chat', async () => {
     installHandlers();
     renderAt(`/agents/${AGENT_ID}`);
 
-    await waitFor(() => expect(screen.getByTestId('location-probe').textContent).toBe(`/agents/${AGENT_ID}/overview`));
+    await waitFor(() =>
+      expect(screen.getByTestId('location-probe').textContent).toBe(`/agents/${AGENT_ID}/threads/new`),
+    );
   });
 
   it('redirects the legacy chat URL to /threads/:threadId preserving ?messageId=', async () => {
@@ -850,6 +862,125 @@ describe('Standalone thread page', () => {
     });
   });
 
+  describe('when a thread has saved model preferences', () => {
+    it('retains real composer edits through the first send, navigation, and reload', async () => {
+      installHandlers();
+      const sent = vi.fn();
+      server.use(
+        http.get(`${BASE_URL}/api/agents/providers`, () => HttpResponse.json(preferenceModelProviders)),
+        http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json(memoryConfig)),
+        http.get(`${BASE_URL}/api/memory/threads/:threadId/working-memory`, () => HttpResponse.json(workingMemory)),
+        http.get(`${BASE_URL}/api/memory/threads/:threadId`, ({ params }) =>
+          HttpResponse.json({ ...preferenceThread, id: params.threadId }),
+        ),
+        http.get(`${BASE_URL}/api/agents/${AGENT_ID}/voice/speakers`, () => HttpResponse.json(voiceSpeakers)),
+        http.get(`${BASE_URL}/api/mcp/v0/servers`, () => HttpResponse.json(mcpServers)),
+        http.post(
+          `${BASE_URL}/api/agents/${AGENT_ID}/threads/subscribe`,
+          () => new HttpResponse('', { headers: { 'content-type': 'text/event-stream' } }),
+        ),
+      );
+      server.use(
+        http.post(`${BASE_URL}/api/agents/${AGENT_ID}/stream`, async ({ request }) => {
+          sent(await request.json());
+          return new HttpResponse('data: {"type":"finish","payload":{}}\n\n', {
+            headers: { 'content-type': 'text/event-stream' },
+          });
+        }),
+      );
+      const router = renderAt(`/agents/${AGENT_ID}/threads/new`);
+      fireEvent.click(await screen.findByText('gpt-5-mini'));
+      fireEvent.click(await screen.findByRole('option', { name: /gpt-4o-mini/ }));
+      fireEvent.click(screen.getByTestId('composer-model-settings-trigger'));
+      fireEvent.click(await screen.findByRole('radio', { name: 'Stream' }));
+      // Base UI hides slider thumbs until layout measurement, which jsdom cannot provide.
+      const temperature = screen.getAllByRole('slider', { hidden: true })[0];
+      fireEvent.change(temperature, { target: { value: '0.2' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Advanced Settings' }));
+      fireEvent.change(await screen.findByLabelText('Max Steps'), { target: { value: '8' } });
+      fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
+      fireEvent.keyDown(screen.getByTestId('composer-model-settings-trigger'), { key: 'Escape' });
+      const firstInput = await screen.findByRole('textbox');
+      fireEvent.change(firstInput, { target: { value: 'Save my preferences' } });
+      fireEvent.keyDown(firstInput, { key: 'Enter', code: 'Enter' });
+      await waitFor(() => expect(sent).toHaveBeenCalledOnce());
+      await waitFor(() => expect(router.state.location.pathname).not.toBe(`/agents/${AGENT_ID}/threads/new`));
+      const savedPath = router.state.location.pathname;
+      expect(sent).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          model: 'openai/gpt-4o-mini',
+          maxSteps: 8,
+          modelSettings: expect.objectContaining({ temperature: 0.2 }),
+        }),
+      );
+      expect(await screen.findByText('gpt-4o-mini')).toBeTruthy();
+      await act(() => router.navigate(`/agents/${AGENT_ID}/threads/thread-2`));
+      expect(await screen.findByText('gpt-5-mini')).toBeTruthy();
+      await act(() => router.navigate(savedPath));
+      expect(await screen.findByText('gpt-4o-mini')).toBeTruthy();
+      cleanup();
+      renderAt(savedPath);
+      expect(await screen.findByText('gpt-4o-mini')).toBeTruthy();
+      fireEvent.click(screen.getByTestId('composer-model-settings-trigger'));
+      expect((await screen.findByRole('radio', { name: 'Stream' })).getAttribute('aria-checked')).toBe('true');
+      fireEvent.keyDown(screen.getByTestId('composer-model-settings-trigger'), { key: 'Escape' });
+      const input = await screen.findByRole('textbox');
+      fireEvent.change(input, { target: { value: 'Use my saved settings' } });
+      fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' });
+      await waitFor(() => expect(sent).toHaveBeenCalledTimes(2));
+      expect(sent).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          model: 'openai/gpt-4o-mini',
+          maxSteps: 8,
+          modelSettings: expect.objectContaining({ temperature: 0.2 }),
+        }),
+      );
+    });
+  });
+
+  describe('when the current agent no longer exists', () => {
+    beforeEach(() => {
+      const missingAgent = () => HttpResponse.json({ error: 'Agent not found' }, { status: 404 });
+      server.use(
+        http.get(`${BASE_URL}/api/agents/${AGENT_ID}/voice/speakers`, missingAgent),
+        http.get(`${BASE_URL}/api/memory/config`, missingAgent),
+        http.get(`${BASE_URL}/api/memory/threads/:threadId/working-memory`, missingAgent),
+        http.get(`${BASE_URL}/api/memory/threads/:threadId`, missingAgent),
+        http.post(`${BASE_URL}/api/agents/${AGENT_ID}/threads/subscribe`, missingAgent),
+      );
+    });
+
+    it.each(['threads', 'session'])('replaces cached %s chat data with actionable recovery', async route => {
+      installHandlers();
+      server.use(
+        http.get(`${BASE_URL}/api/agents/${AGENT_ID}`, () =>
+          HttpResponse.json({ error: 'Agent not found' }, { status: 404 }),
+        ),
+      );
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      queryClient.setQueryData(['agent', AGENT_ID, {}], agentResponse);
+      renderAt(`/agents/${AGENT_ID}/${route}/${THREAD_ID}`, queryClient);
+
+      expect(await screen.findByText('Agent not found')).not.toBeNull();
+      expect(screen.getByText(/may have been renamed or removed/)).not.toBeNull();
+      expect(screen.getByRole('button', { name: 'Reload' })).not.toBeNull();
+      expect(screen.getByRole('link', { name: 'Choose agent' })).not.toBeNull();
+      expect(screen.queryByPlaceholderText('Enter your message...')).toBeNull();
+    });
+
+    it('lets the user leave the dead chat and choose an agent', async () => {
+      installHandlers();
+      server.use(
+        http.get(`${BASE_URL}/api/agents/${AGENT_ID}`, () =>
+          HttpResponse.json({ error: 'Agent not found' }, { status: 404 }),
+        ),
+      );
+      renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
+      fireEvent.click(await screen.findByRole('link', { name: 'Choose agent' }));
+      await waitFor(() => expect(screen.getByTestId('location-probe').textContent).toBe('/agents'));
+    });
+  });
+
   it('shows "Agent not found" for an unknown agent', async () => {
     installHandlers();
     server.use(http.get(`${BASE_URL}/api/agents/${AGENT_ID}`, () => HttpResponse.json(null)));
@@ -861,7 +992,7 @@ describe('Standalone thread page', () => {
 
 describe('thread link builders', () => {
   it('point to the standalone thread routes', () => {
-    expect(paths.agentLink(AGENT_ID)).toBe(`/agents/${AGENT_ID}/overview`);
+    expect(paths.agentLink(AGENT_ID)).toBe(`/agents/${AGENT_ID}/threads/new`);
     expect(paths.agentNewThreadLink(AGENT_ID)).toBe(`/agents/${AGENT_ID}/threads/new`);
     expect(paths.agentThreadLink(AGENT_ID, THREAD_ID)).toBe(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
     expect(paths.agentThreadLink(AGENT_ID, THREAD_ID, 'msg-1')).toBe(

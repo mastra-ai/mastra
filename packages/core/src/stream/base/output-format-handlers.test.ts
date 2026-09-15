@@ -1,7 +1,9 @@
+import { ReadableStream } from 'node:stream/web';
 import { asSchema } from '@internal/ai-sdk-v5';
 import type { JSONSchema7 } from '@internal/ai-sdk-v5';
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod/v4';
+import { ConsoleLogger } from '../../logger';
 import { convertArrayToReadableStream, convertAsyncIterableToArray } from '../../loop/test-utils/stream-helpers';
 import type { PublicSchema } from '../../schema';
 import type { ChunkType } from '../types';
@@ -96,6 +98,63 @@ continued", "item2"]}`;
 });
 
 describe('output-format-handlers', () => {
+  describe.each([true, false])('recovery with text-end: %s', includeTextEnd => {
+    it.each(['warn', 'fallback'] as const)(
+      'handles %s validation once through the configured logger',
+      async errorStrategy => {
+        const schema = z.object({ name: z.string() });
+        const fallbackValue = { name: 'Default' };
+        const logger = new ConsoleLogger({ level: 'debug' });
+        const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+        const error = vi.spyOn(logger, 'error').mockImplementation(() => {});
+        const transformer = createObjectStreamTransformer({
+          structuredOutput: { schema, errorStrategy, fallbackValue },
+          logger,
+        });
+        const stream = new ReadableStream<ChunkType<z.infer<typeof schema>>>({
+          start(controller) {
+            controller.enqueue({
+              type: 'text-delta',
+              runId: 'recovery-run',
+              from: ChunkFrom.AGENT,
+              payload: { id: 'text-1', text: '[1,2,3]' },
+            });
+            if (includeTextEnd) {
+              controller.enqueue({
+                type: 'text-end',
+                runId: 'recovery-run',
+                from: ChunkFrom.AGENT,
+                payload: { id: 'text-1' },
+              });
+            }
+            controller.close();
+          },
+        }).pipeThrough(transformer);
+        const chunks: ChunkType<z.infer<typeof schema>>[] = [];
+        for await (const chunk of stream) chunks.push(chunk);
+
+        expect(chunks.filter(chunk => chunk.type === 'error')).toEqual([]);
+        expect(error).not.toHaveBeenCalled();
+        const results = chunks.filter(chunk => chunk.type === 'object-result');
+        if (errorStrategy === 'warn') {
+          expect(warn).toHaveBeenCalledExactlyOnceWith(expect.stringContaining('Structured output validation failed'));
+          expect(results).toEqual([]);
+        } else {
+          expect(warn).not.toHaveBeenCalled();
+          expect(results).toEqual([
+            {
+              type: 'object-result',
+              runId: 'recovery-run',
+              from: ChunkFrom.AGENT,
+              object: fallbackValue,
+              metadata: { fallback: true },
+            },
+          ]);
+        }
+      },
+    );
+  });
+
   describe('schema validation', () => {
     it('should validate against zod schema and provide detailed error messages', async () => {
       const schema = z.object({

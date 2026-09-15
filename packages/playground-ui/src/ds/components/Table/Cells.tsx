@@ -21,7 +21,7 @@ export const Cell = ({ className, children, ...props }: CellProps) => {
 export const TxtCell = ({ className, children }: CellProps) => {
   return (
     <Cell className={className}>
-      <Txt as="span" variant="ui-md" className="w-full truncate">
+      <Txt as="span" variant="ui-smd" className="w-full truncate">
         {children}
       </Txt>
     </Cell>

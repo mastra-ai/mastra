@@ -4967,7 +4967,9 @@ export const API_ROUTE_METADATA = {
     "pathParams": [],
     "queryParams": [
       "page",
-      "perPage"
+      "perPage",
+      "targetIds",
+      "targetType"
     ],
     "bodyParams": [],
     "hasQuery": true,
@@ -5274,6 +5276,8 @@ export const API_ROUTE_METADATA = {
       "experimentSetId",
       "page",
       "perPage",
+      "targetId",
+      "targetType",
       "trialIndex",
       "variantId"
     ],
@@ -5327,6 +5331,8 @@ export const API_ROUTE_METADATA = {
       "experimentSetId",
       "page",
       "perPage",
+      "targetId",
+      "targetType",
       "trialIndex",
       "variantId"
     ],
@@ -5624,6 +5630,18 @@ export const API_ROUTE_METADATA = {
   "GET /editor/builder/settings": {
     "method": "GET",
     "path": "/editor/builder/settings",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /editor/workflow-builder/settings": {
+    "method": "GET",
+    "path": "/editor/workflow-builder/settings",
     "pathParams": [],
     "queryParams": [],
     "bodyParams": [],

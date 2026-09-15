@@ -28,7 +28,7 @@ export const Browser = ({ editable = true }: BrowserProps) => {
   const switchStyle: CSSProperties | undefined = browserEnabled ? { backgroundColor: agentColor.tint } : undefined;
 
   return (
-    <div className="flex h-full min-h-0 items-center justify-center px-6 py-8" data-testid="browser-detail-picker">
+    <div className="flex h-full min-h-0 items-center justify-center px-4 py-5" data-testid="browser-detail-picker">
       <div className="flex w-full max-w-[28rem] flex-col items-center gap-5 text-center">
         <div className="grid size-14 place-items-center rounded-full" style={iconStyle}>
           <GlobeIcon className="h-7 w-7" />

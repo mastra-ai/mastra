@@ -87,6 +87,12 @@ export interface AdapterTestSuiteConfig {
   /** Name for the test suite */
   suiteName?: string;
 
+  /** Values produced by the configured framework parser for an omitted body. */
+  emptyBodyNormalization?: {
+    withoutContentType: 'undefined' | 'empty-object' | 'empty-string';
+    withJsonContentType: 'undefined' | 'empty-object' | 'empty-string';
+  };
+
   /**
    * Setup adapter and app for testing
    * Called once before all tests
@@ -564,6 +570,12 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
       getFeatures: () => ({ agent: { favorites: true } }),
       getConfiguration: () => undefined,
       getModelPolicyWarnings: () => [],
+    }),
+    hasEnabledWorkflowBuilderConfig: () => true,
+    resolveWorkflowBuilder: async () => ({
+      enabled: true,
+      getAgent: () => agent,
+      getModelPolicy: () => undefined,
     }),
     prompt: {
       preview: vi.fn().mockResolvedValue('resolved instructions preview'),

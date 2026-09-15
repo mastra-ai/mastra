@@ -14,8 +14,8 @@ import { cn } from '@/lib/utils';
 const inputVariants = cva(
   cn(
     'flex w-full border bg-transparent text-neutral6',
-    'duration-normal transition-all ease-out-custom',
-    'placeholder:duration-normal placeholder:text-neutral2 placeholder:transition-opacity',
+    'transition-all duration-normal ease-out-custom',
+    'placeholder:text-neutral2 placeholder:transition-opacity placeholder:duration-normal',
     'focus:placeholder:opacity-70',
     // type="number": hide native browser spinner arrows (they clip the pill).
     // For incrementable numeric inputs, compose <InputGroup> with +/- buttons
@@ -40,13 +40,12 @@ const inputVariants = cva(
         xs: cn(controlSizeClasses.xs, 'px-[.75em]'),
         sm: cn(controlSizeClasses.sm, 'px-[.75em]'),
         md: cn(controlSizeClasses.md, 'px-[.75em]'),
-        default: cn(controlSizeClasses.default, 'px-[.85em]'),
         lg: cn(controlSizeClasses.lg, 'px-[.85em]'),
       },
     },
     defaultVariants: {
       variant: 'default',
-      size: 'default',
+      size: 'md',
     },
   },
 );

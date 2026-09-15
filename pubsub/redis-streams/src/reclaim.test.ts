@@ -176,6 +176,26 @@ describe('RedisStreamsPubSub reclaim loop', () => {
     }
   });
 
+  it('recovers a hung fan-out (ungrouped) handler after inFlightTimeoutMs', async () => {
+    // Fan-out subscriptions use a private group, so there is never a sibling
+    // to reclaim from and inFlightTimeoutMs is their only recovery path. The
+    // reclaim loop must still run its expiry pass for them.
+    const ps = createPubSub({ inFlightTimeoutMs: 300, maxDeliveryAttempts: 3 });
+    const topic = `t-${randomUUID()}`;
+
+    const attempts: number[] = [];
+    const cb: EventCallback = event => {
+      attempts.push(event.deliveryAttempt ?? 1);
+      // intentionally never ack/nack
+    };
+    await ps.subscribe(topic, cb);
+    await ps.publish(topic, makeEvent({ type: 'hung-fanout' }));
+
+    await waitFor(() => attempts.length === 3, 5000);
+    await sleep(800);
+    expect(attempts).toEqual([1, 2, 3]);
+  });
+
   it('does not time out an in-flight handler that is merely slow', async () => {
     // inFlightTimeoutMs must be measured from delivery, and a handler that
     // settles before the deadline is never nacked or re-invoked.

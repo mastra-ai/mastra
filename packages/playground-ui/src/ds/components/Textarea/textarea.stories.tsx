@@ -14,7 +14,7 @@ const meta: Meta<typeof Textarea> = {
     },
     size: {
       control: { type: 'select' },
-      options: ['sm', 'md', 'lg'],
+      options: ['xs', 'sm', 'md', 'lg'],
     },
     disabled: {
       control: { type: 'boolean' },
@@ -49,6 +49,7 @@ export const Variants: Story = {
 export const Sizes: Story = {
   render: () => (
     <div className="w-dropdown-max-height flex flex-col gap-3">
+      <Textarea size="xs" placeholder="xs" />
       <Textarea size="sm" placeholder="sm" />
       <Textarea size="md" placeholder="md" />
       <Textarea size="lg" placeholder="lg" />

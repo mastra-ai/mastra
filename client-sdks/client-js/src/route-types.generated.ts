@@ -17873,7 +17873,14 @@ export interface GetSystemApiSchema_RouteContract {
 // ============================================================================
 // Route: GET /datasets
 // ============================================================================
-export type GetDatasets_QueryParams = GetScoresRunRunId_QueryParams;
+export type GetDatasets_QueryParams = {
+  page: number | undefined;
+  perPage: number | undefined;
+  /** Only return records attached to targets of this type */
+  targetType?: ('agent' | 'workflow' | 'scorer' | 'processor') | undefined;
+  /** Only return datasets attached to at least one of these target IDs */
+  targetIds?: string[] | undefined;
+};
 
 export type GetDatasets_Response = {
   datasets: Shared_Type_127[];
@@ -18571,6 +18578,10 @@ export type GetExperiments_QueryParams = {
   comparisonId?: string | undefined;
   variantId?: string | undefined;
   trialIndex?: number | undefined;
+  /** Only return records attached to targets of this type */
+  targetType?: ('agent' | 'workflow' | 'scorer' | 'processor') | undefined;
+  /** Only return experiments run against this target ID */
+  targetId?: string | undefined;
 };
 
 export type GetExperiments_Response = {
@@ -19522,6 +19533,62 @@ export interface GetEditorBuilderSettings_RouteContract {
   request: GetEditorBuilderSettings_Request;
   response: GetEditorBuilderSettings_Response;
   responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /editor/workflow-builder/settings
+// ============================================================================
+export type GetEditorWorkflowBuilderSettings_Response = {
+  enabled: boolean;
+  modelPolicy?:
+    | {
+        active: boolean;
+        pickerVisible?: boolean | undefined;
+        allowed?: Shared_Type_151[] | undefined;
+        default?: Shared_Type_152 | undefined;
+      }
+    | undefined;
+};
+
+export type GetEditorWorkflowBuilderSettings_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetEditorWorkflowBuilderSettings_RouteContract {
+  pathParams: never;
+  queryParams: never;
+  body: never;
+  request: GetEditorWorkflowBuilderSettings_Request;
+  response: GetEditorWorkflowBuilderSettings_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /editor/workflow-builder/stream
+// ============================================================================
+export type PostEditorWorkflowBuilderStream_Body = PostAgentsAgentIdGenerate_Body;
+
+export type PostEditorWorkflowBuilderStream_Response = PostAgentsAgentIdGenerate_Response;
+
+export type PostEditorWorkflowBuilderStream_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostEditorWorkflowBuilderStream_Body extends never
+      ? {}
+      : {} extends PostEditorWorkflowBuilderStream_Body
+        ? { body?: PostEditorWorkflowBuilderStream_Body }
+        : { body: PostEditorWorkflowBuilderStream_Body })
+>;
+
+export interface PostEditorWorkflowBuilderStream_RouteContract {
+  pathParams: never;
+  queryParams: never;
+  body: PostEditorWorkflowBuilderStream_Body;
+  request: PostEditorWorkflowBuilderStream_Request;
+  response: PostEditorWorkflowBuilderStream_Response;
+  responseType: 'stream';
 }
 
 // ============================================================================
@@ -22651,6 +22718,8 @@ export interface RouteTypes {
   'GET /background-tasks': GetBackgroundTasks_RouteContract;
   'GET /background-tasks/:backgroundTaskId': GetBackgroundTasksBackgroundTaskId_RouteContract;
   'GET /editor/builder/settings': GetEditorBuilderSettings_RouteContract;
+  'GET /editor/workflow-builder/settings': GetEditorWorkflowBuilderSettings_RouteContract;
+  'POST /editor/workflow-builder/stream': PostEditorWorkflowBuilderStream_RouteContract;
   'GET /editor/builder/models/available': GetEditorBuilderModelsAvailable_RouteContract;
   'GET /editor/builder/infrastructure': GetEditorBuilderInfrastructure_RouteContract;
   'GET /editor/builder/registries': GetEditorBuilderRegistries_RouteContract;
@@ -23168,6 +23237,12 @@ export interface Client {
   };
   '/editor/builder/settings': {
     GET: GetEditorBuilderSettings_RouteContract;
+  };
+  '/editor/workflow-builder/settings': {
+    GET: GetEditorWorkflowBuilderSettings_RouteContract;
+  };
+  '/editor/workflow-builder/stream': {
+    POST: PostEditorWorkflowBuilderStream_RouteContract;
   };
   '/embedders': {
     GET: GetEmbedders_RouteContract;

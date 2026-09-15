@@ -100,6 +100,9 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
     rootSpanId: string | undefined;
   } | null>(null);
   const [addMocksTarget, setAddMocksTarget] = useState<{ traceId: string } | null>(null);
+  // Trace whose side panel currently shows the full thread. Keyed by trace id so selecting
+  // another trace (row click, prev/next) falls back to the trace panel without an effect.
+  const [fullThreadTraceId, setFullThreadTraceId] = useState<string | null>(null);
 
   // Counts for the tab badges. The tab bodies own their pagination and re-use these
   // first-page queries through React Query's cache.
@@ -277,8 +280,14 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   // The side panel widens per column shown: Messages (agent turn) and/or span detail.
   const hasMessagesColumn = !!getTraceThreadId(anchorSpan, anchorSpanId ?? undefined);
   const hasSpanColumn = !!url.spanIdParam;
+  // The full thread view embeds its own columns (messages, spans, span detail), so it takes the whole frame.
+  const isFullThreadOpen = !!url.traceIdParam && fullThreadTraceId === url.traceIdParam;
   const sidePanelWidth =
-    hasMessagesColumn && hasSpanColumn ? 'full' : hasMessagesColumn || hasSpanColumn ? 'wide' : 'half';
+    isFullThreadOpen || (hasMessagesColumn && hasSpanColumn)
+      ? 'full'
+      : hasMessagesColumn || hasSpanColumn
+        ? 'wide'
+        : 'half';
 
   const filtersApplied =
     !!url.selectedEntityOption ||
@@ -306,7 +315,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         onStartTextFilter={setAutoFocusFilterFieldId}
         hiddenFieldIds={hiddenCreatorFieldIds}
       />
-      <div className="min-h-form-default ml-auto flex max-w-full flex-wrap items-center justify-end gap-2">
+      <div className="min-h-form-md ml-auto flex max-w-full flex-wrap items-center justify-end gap-2">
         <TraceColumnsMenu
           preferences={traceColumns.preferences}
           usageDisabledReason={usageDisabledReason}
@@ -459,7 +468,12 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
               usage={selectedTraceUsageSummary}
               isLoadingSpans={isLoadingTraceSpans}
               selectedSpanId={url.spanIdParam ?? null}
-              onClose={url.handleTraceClose}
+              onClose={() => {
+                setFullThreadTraceId(null);
+                url.handleTraceClose();
+              }}
+              isFullThreadOpen={isFullThreadOpen}
+              onFullThreadOpenChange={open => setFullThreadTraceId(open ? (url.traceIdParam ?? null) : null)}
               onSpanSelect={id => url.handleSpanChange(id ?? null)}
               onSpanClose={url.handleSpanClose}
               onSaveAsDatasetItem={args => setDatasetDialogTarget(args)}

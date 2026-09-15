@@ -1,5 +1,6 @@
 import type { StorageThreadType } from '@mastra/core/memory';
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
+import { Kbd } from '@mastra/playground-ui/components/Kbd';
 import {
   ThreadList,
   ThreadListEmpty,
@@ -70,7 +71,12 @@ export const ChatThreads = ({
                   </Icon>
                 </button>
               </TooltipTrigger>
-              <TooltipContent side="right">Hide threads panel</TooltipContent>
+              <TooltipContent side="right">
+                <span className="inline-flex items-center gap-1.5">
+                  Hide threads panel
+                  <Kbd size="xs">{'{'}</Kbd>
+                </span>
+              </TooltipContent>
             </Tooltip>
           )}
         </div>

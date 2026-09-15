@@ -20,7 +20,13 @@ import type {
   SandboxFileInput,
   WriteFilesOptions,
 } from '@mastra/core/workspace';
-import { MastraSandbox, SandboxAbortError, SandboxError, SandboxNotReadyError } from '@mastra/core/workspace';
+import {
+  MastraSandbox,
+  SandboxAbortError,
+  SandboxError,
+  SandboxNotReadyError,
+  validateSandboxFileMode,
+} from '@mastra/core/workspace';
 import Docker from 'dockerode';
 import type { Container, ContainerInfo } from 'dockerode';
 import { pack as tarPack } from 'tar-stream';
@@ -506,8 +512,10 @@ export class DockerSandbox extends MastraSandbox {
    * - Existing destinations are overwritten (contents and mode).
    * - Exact bytes are preserved for both `string` and `Buffer` content,
    *   including empty files and binary data.
-   * - New files are created with mode `0644`; directories created implicitly
-   *   default to Docker's `0755`. Overwriting a file replaces its mode with `0644`.
+   * - New files use the per-file `mode` when provided (validated integer
+   *   `0o001`–`0o777`), otherwise `0644`; directories created implicitly default
+   *   to Docker's `0755`. Overwriting a file replaces its mode with the
+   *   requested `mode` (or `0644` when omitted).
    * - Not atomic across files: on failure the promise rejects and earlier or
    *   partially written files may remain.
    *
@@ -538,13 +546,15 @@ export class DockerSandbox extends MastraSandbox {
 
     const pack = tarPack();
     for (const file of files) {
+      if (file.mode !== undefined) validateSandboxFileMode(file.mode);
       const resolved = posixPath.isAbsolute(file.path)
         ? posixPath.normalize(file.path)
         : posixPath.resolve(this.workingDirectory, file.path);
       const data = Buffer.isBuffer(file.content) ? file.content : Buffer.from(file.content);
+      const mode = file.mode ?? 0o644;
       // tar entries are relative; strip the leading slash so extraction at `/`
       // lands the file at its intended absolute path.
-      pack.entry({ name: resolved.replace(/^\/+/, ''), size: data.length, mode: 0o644 }, data);
+      pack.entry({ name: resolved.replace(/^\/+/, ''), size: data.length, mode }, data);
     }
     pack.finalize();
 

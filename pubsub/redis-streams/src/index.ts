@@ -419,17 +419,23 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
   /**
    * Periodically reclaim idle pending entries in this subscription's group so that
    * messages a crashed/stuck consumer read but never acked get redelivered to
-   * a live sibling. Runs only for grouped subscriptions — fan-out groups are
-   * private to one consumer, so there's no sibling to claim from.
+   * a live sibling. Fan-out groups are private to one consumer, so there is no
+   * sibling to claim from and the XPENDING/XCLAIM scan is skipped for them; the
+   * loop still runs so `inFlightTimeoutMs` can recover a hung handler, which is
+   * the only recovery path a single-consumer group has.
    */
   #startReclaimLoop(sub: Subscription): void {
     if (this.#reclaimIntervalMs <= 0) return;
-    if (!sub.isGrouped) return;
+    if (!sub.isGrouped && this.#inFlightTimeoutMs <= 0) return;
 
     const tick = async () => {
       if (sub.stopped || this.#closed) return;
       try {
         await this.#expireInFlight(sub);
+        if (!sub.isGrouped) {
+          sub.reclaimTimer = setTimeout(runTick, this.#reclaimIntervalMs);
+          return;
+        }
         // List idle pending entries first and only claim the ones this
         // subscription is not already processing. Claiming (XAUTOCLAIM/XCLAIM)
         // resets the entry's idle clock even when the claimant already owns it,

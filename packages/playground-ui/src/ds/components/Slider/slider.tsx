@@ -68,7 +68,7 @@ const Slider = ({
             className={cn(
               'relative block h-5 w-2.5 shrink-0 rounded-full border-2 border-neutral6 bg-neutral2 outline-hidden select-none',
               'after:absolute after:-inset-2 after:content-[""]',
-              'duration-normal transition-shadow',
+              'transition-shadow duration-normal',
               'hover:ring-2 hover:ring-neutral6/30',
               'has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-neutral6/60',
               'data-[orientation=vertical]:h-2.5 data-[orientation=vertical]:w-5',

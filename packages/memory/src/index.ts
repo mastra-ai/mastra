@@ -69,6 +69,7 @@ import type {
   SummarizeConversationResult,
 } from './processors/observational-memory/summarize';
 import { TokenCounter } from './processors/observational-memory/token-counter';
+import type { WidenedObservationalMemoryModel } from './processors/observational-memory/types';
 import { WorkingMemoryExtractor } from './processors/observational-memory/working-memory-extractor';
 import { recallTool } from './tools/om-tools';
 import { createWorkingMemoryTool, deepMergeWorkingMemory } from './tools/working-memory';
@@ -321,6 +322,19 @@ function normalizeObservationalMemoryConfig(
   return config as NormalizedObservationalMemoryConfig;
 }
 
+/**
+ * Observer model selection (`observation.model`, else top-level `model`), read into the widened
+ * model type first: combining values of the public type makes TS subtype-reduce the model-id
+ * literal union, which fails with TS2590 once the provider registry is large enough.
+ */
+function selectObserverModel(
+  omConfig: NormalizedObservationalMemoryConfig,
+): WidenedObservationalMemoryModel | undefined {
+  const observationModel: WidenedObservationalMemoryModel | undefined = omConfig.observation?.model;
+  const topLevelModel: WidenedObservationalMemoryModel | undefined = omConfig.model;
+  return observationModel ?? topLevelModel;
+}
+
 function hasWorkingMemoryExtractor(
   extractors: NonNullable<NonNullable<ObservationalMemoryConfig['observation']>['extract']> | undefined,
 ): boolean {
@@ -478,7 +492,7 @@ export class Memory extends MastraMemory {
     let curatorMemory: Memory | undefined;
     const subconsciousExtractors = omConfig.experimental_subconscious
       .createObservationExtractors(
-        observation.model ?? omConfig.model,
+        selectObserverModel(omConfig),
         () => (curatorMemory ??= new Memory({ storage: this.storage, options: { observationalMemory: false } })),
       )
       .filter(extractor => !existingSlugs.has(extractor.slug));
@@ -2720,7 +2734,7 @@ Notes:
         tools.ask_memory = createAskMemoryTool({
           memory: this,
           config: remind,
-          omModel: omConfig.observation?.model ?? omConfig.model,
+          omModel: selectObserverModel(omConfig),
           getParentAgent: agentId => this._mastraInstance?.getAgentById(agentId),
         });
       }
