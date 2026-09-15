@@ -38,7 +38,9 @@ export class MCPTool extends BaseResource {
    * @returns Promise containing `{ result }`, or the suspended shape described above.
    */
   execute(
-    params: Body<'POST /mcp/:serverId/tools/:toolId/execute'> & { requestContext?: RequestContext },
+    params: Body<'POST /mcp/:serverId/tools/:toolId/execute'> & {
+      requestContext?: RequestContext | Record<string, unknown>;
+    },
   ): Promise<McpToolExecuteResponse> {
     const { requestContext, ...body } = params;
     return this.request(
