@@ -55,6 +55,7 @@ createObservabilityVNextTests({
     label: 'ClickHouse vNext',
     preferredStrategy: 'insert-only',
     traceQuery: true,
+    traceQueryDiscovery: true,
     threadQuery: true,
     traceQuerySpanWriteModel: 'completion-only',
   },
@@ -398,15 +399,28 @@ LIMIT 1`,
       }
     }
 
-    it('advertises metrics, logs, delta polling, trace queries, and thread queries when enabled', () => {
-      expect(storage.getFeatures()).toEqual(['metrics', 'logs', 'delta-polling', 'trace-query', 'thread-query']);
+    it('advertises metrics, logs, delta polling, trace query discovery, and queries when enabled', () => {
+      expect(storage.getFeatures()).toEqual([
+        'metrics',
+        'logs',
+        'delta-polling',
+        'trace-query',
+        'trace-query-discovery',
+        'thread-query',
+      ]);
     });
 
-    it('continues advertising trace and thread queries when delta polling is disabled', () => {
+    it('continues advertising trace query discovery and queries when delta polling is disabled', () => {
       coreFeatures.delete('observability-delta-polling');
 
       try {
-        expect(storage.getFeatures()).toEqual(['metrics', 'logs', 'trace-query', 'thread-query']);
+        expect(storage.getFeatures()).toEqual([
+          'metrics',
+          'logs',
+          'trace-query',
+          'trace-query-discovery',
+          'thread-query',
+        ]);
       } finally {
         coreFeatures.add('observability-delta-polling');
       }

@@ -81,6 +81,7 @@ import { paginationArgsSchema } from './observability-list-query-schemas';
 import {
   assertObservabilityDeltaSupported,
   assertObservabilityThreadQuerySupported,
+  assertObservabilityTraceQueryDiscoverySupported,
   assertObservabilityTraceQuerySupported,
   createObservabilityListQuerySchema,
   getObservabilityStore,
@@ -198,6 +199,13 @@ const traceQueryTimeoutErrorSchema = z
   })
   .strict();
 
+const traceQueryDiscoveryUnsupportedErrorSchema = z
+  .object({
+    code: z.literal('TRACE_QUERY_DISCOVERY_UNSUPPORTED'),
+    message: z.string(),
+  })
+  .strict();
+
 const traceQueryValidationError: ValidationErrorHook = error => ({
   status: 422,
   body: {
@@ -294,6 +302,91 @@ if (QUERY_TRACES.openapi) {
   };
   QUERY_TRACES.openapi.responses[504] = {
     description: 'Trace query exceeded the configured database execution timeout',
+    content: { 'application/json': { schema: traceQueryTimeoutErrorSchema } },
+  };
+}
+
+export const GET_TRACE_QUERY_FIELDS = createNewRoute(NEW_ROUTE_DEFS.GET_TRACE_QUERY_FIELDS, {
+  bodySchema: coreStorage.getTraceQueryFieldsArgsSchema,
+  responseSchema: coreStorage.getTraceQueryFieldsResponseSchema,
+  onValidationError: traceQueryValidationError,
+  maxBodySize: 256 * 1024,
+  preserveHttpExceptions: true,
+  handler: async ({ mastra, timeRange, predicateScope, search, limit }) => {
+    const args = { timeRange, predicateScope, search, limit };
+    const plan = coreStorage.planTraceQueryObservedFields(args);
+    let observabilityStore: Awaited<ReturnType<typeof getObservabilityStore>>;
+    try {
+      observabilityStore = await getObservabilityStore(mastra);
+      assertObservabilityTraceQueryDiscoverySupported(observabilityStore);
+    } catch (error) {
+      if (error instanceof HTTPException && error.status === 501) {
+        throwTraceQueryError(501, { code: 'TRACE_QUERY_DISCOVERY_UNSUPPORTED', message: error.message });
+      }
+      throw error;
+    }
+
+    try {
+      const observed = await observabilityStore.getTraceQueryObservedFields(plan);
+      return {
+        canonicalFields: coreStorage.getTraceQueryCanonicalFieldDescriptors(predicateScope, search),
+        ...observed,
+      };
+    } catch (error) {
+      if (error instanceof coreStorage.TraceQueryExecutionError) {
+        throwTraceQueryError(504, { code: error.code, message: error.message });
+      }
+      throw error;
+    }
+  },
+});
+
+export const GET_TRACE_QUERY_VALUES = createNewRoute(NEW_ROUTE_DEFS.GET_TRACE_QUERY_VALUES, {
+  bodySchema: coreStorage.getTraceQueryValuesArgsSchema,
+  responseSchema: coreStorage.getTraceQueryValuesResponseSchema,
+  onValidationError: traceQueryValidationError,
+  maxBodySize: 256 * 1024,
+  preserveHttpExceptions: true,
+  handler: async ({ mastra, timeRange, predicateScope, path, search, limit }) => {
+    const plan = coreStorage.planTraceQueryValues({ timeRange, predicateScope, path, search, limit });
+    let observabilityStore: Awaited<ReturnType<typeof getObservabilityStore>>;
+    try {
+      observabilityStore = await getObservabilityStore(mastra);
+      assertObservabilityTraceQueryDiscoverySupported(observabilityStore);
+    } catch (error) {
+      if (error instanceof HTTPException && error.status === 501) {
+        throwTraceQueryError(501, { code: 'TRACE_QUERY_DISCOVERY_UNSUPPORTED', message: error.message });
+      }
+      throw error;
+    }
+
+    try {
+      return await observabilityStore.getTraceQueryValues(plan);
+    } catch (error) {
+      if (error instanceof coreStorage.TraceQueryExecutionError) {
+        throwTraceQueryError(504, { code: error.code, message: error.message });
+      }
+      throw error;
+    }
+  },
+});
+
+for (const route of [GET_TRACE_QUERY_FIELDS, GET_TRACE_QUERY_VALUES]) {
+  if (!route.openapi) continue;
+  route.openapi.responses[413] = {
+    description: 'Request body exceeds 256 KiB',
+    content: { 'application/json': { schema: traceQueryBodyTooLargeErrorSchema } },
+  };
+  route.openapi.responses[422] = {
+    description: 'Structurally or semantically invalid trace-query discovery request',
+    content: { 'application/json': { schema: traceQueryValidationResponseSchema } },
+  };
+  route.openapi.responses[501] = {
+    description: 'The configured observability store does not support trace-query discovery',
+    content: { 'application/json': { schema: traceQueryDiscoveryUnsupportedErrorSchema } },
+  };
+  route.openapi.responses[504] = {
+    description: 'Trace-query discovery exceeded the configured database execution timeout',
     content: { 'application/json': { schema: traceQueryTimeoutErrorSchema } },
   };
 }

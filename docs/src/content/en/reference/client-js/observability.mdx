@@ -92,6 +92,50 @@ const result = await mastraClient.queryTraces({
 })
 ```
 
+### Discover trace-query fields and values
+
+`getTraceQueryFields()` returns canonical query fields and observed top-level string metadata fields for one predicate scope. The response includes each field's value kind, supported operators, and whether value suggestions are available.
+
+```typescript
+const timeRange = {
+  from: '2026-08-01T00:00:00.000Z',
+  to: '2026-08-08T00:00:00.000Z',
+}
+
+const fields = await mastraClient.getTraceQueryFields({
+  timeRange,
+  predicateScope: 'spans',
+  search: 'model',
+  limit: 25,
+})
+```
+
+Use the exact local path from the response with the same scope. For example, `model` belongs inside a `spans.some` or `spans.none` predicate. A global picker can fetch `trace`, `spans`, `scores`, and `feedback` in parallel.
+
+Call `getTraceQueryValues()` only after selecting a field with `valueSuggestions: true`:
+
+```typescript
+const controller = new AbortController()
+
+const values = await mastraClient.getTraceQueryValues(
+  {
+    timeRange,
+    predicateScope: 'spans',
+    path: 'model',
+    search: 'claude',
+    limit: 25,
+  },
+  { signal: controller.signal },
+)
+
+// Cancel this autocomplete request when the search text changes.
+controller.abort()
+```
+
+Both methods use case-insensitive literal substring search and accept an empty search. Limits default to 25 and can't exceed 100. Results are ordered by occurrence count, then deterministically by path or value. `observedFieldsTruncated` and `valuesTruncated` indicate that the caller should refine `search`; discovery has no cursor.
+
+Suggestions are bounded and advisory. Manual values remain valid when suggestions are unavailable, empty, or truncated. Discovery doesn't accept a draft query predicate. The client doesn't retry either request, and a per-call `AbortSignal` takes precedence over the signal configured on `MastraClient`.
+
 `queryTraceThreads()` returns thread identities derived from observability traces after applying eligibility and cross-trace conditions. It doesn't read or return memory thread records or messages. In this example, one production trace can have the low factuality score while another production trace in the same thread has the clinician correction:
 
 ```typescript

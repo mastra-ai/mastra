@@ -169,11 +169,12 @@ export const GET_SYSTEM_PACKAGES_ROUTE = createRoute({
       const observabilityStorageType = observabilityStorage?.constructor.name;
       const observabilityStorageFeatures = observabilityStorage?.getFeatures?.();
       const observabilityStorageCapabilities = observabilityStorageFeatures?.some(
-        feature => feature === 'metrics' || feature === 'logs',
+        feature => feature === 'metrics' || feature === 'logs' || feature === 'trace-query-discovery',
       )
         ? {
             metrics: observabilityStorageFeatures.includes('metrics'),
             logs: observabilityStorageFeatures.includes('logs'),
+            traceQueryDiscovery: observabilityStorageFeatures.includes('trace-query-discovery'),
           }
         : undefined;
       const observabilityRuntimeStrategy = observabilityStorage?.runtimeTracingStrategy;
