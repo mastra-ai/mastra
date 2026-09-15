@@ -1,5 +1,24 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { AlertTriangle, Bell, FileText, Home, Settings, Users, Workflow, Wrench } from 'lucide-react';
+import {
+  BarChart3,
+  Bell,
+  ChevronDown,
+  ChevronUp,
+  Code2,
+  Database,
+  FileText,
+  Folder,
+  Home,
+  KeyRound,
+  LayoutGrid,
+  MessageSquare,
+  Plus,
+  Settings,
+  SlidersHorizontal,
+  Users,
+  Workflow,
+  Wrench,
+} from 'lucide-react';
 import { useRef, useState } from 'react';
 import { SidebarNew, useSidebarNew } from '.';
 import { Avatar } from '@/ds/components/Avatar';
@@ -28,6 +47,88 @@ const meta: Meta<typeof SidebarNew> = {
 export default meta;
 type Story = StoryObj<typeof SidebarNew>;
 
+function ProjectPicker({ collapsed }: { collapsed: boolean }) {
+  if (collapsed) {
+    return (
+      <div className="pb-2">
+        <button
+          type="button"
+          aria-label="Select project"
+          className="border-border bg-card text-muted-foreground hover:bg-sidebar-accent hover:text-foreground flex h-8 w-full items-center justify-center rounded-lg border transition-colors"
+        >
+          <Folder className="size-4" aria-hidden />
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="pb-2">
+      <div className="border-border bg-card flex w-full items-center rounded-lg border">
+        <button
+          type="button"
+          className="text-muted-foreground hover:bg-sidebar-accent hover:text-foreground flex h-8 min-w-0 flex-1 items-center gap-2 rounded-l-lg px-2.5 text-left transition-colors"
+        >
+          <span className="text-ui-md min-w-0 flex-1 truncate">Select project</span>
+          <ChevronDown className="size-4 shrink-0" aria-hidden />
+        </button>
+        <button
+          type="button"
+          aria-label="New project"
+          className="border-border text-muted-foreground hover:bg-sidebar-accent hover:text-foreground flex size-8 shrink-0 items-center justify-center rounded-r-lg border-l transition-colors"
+        >
+          <Plus className="size-4" aria-hidden />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function AccountMenu({
+  state,
+  menuTriggerRef,
+  openSettings,
+}: {
+  state: 'default' | 'collapsed';
+  menuTriggerRef: React.RefObject<HTMLButtonElement | null>;
+  openSettings: (view: string) => void;
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenu.Trigger
+        ref={menuTriggerRef}
+        render={<button type="button" />}
+        className="hover:bg-sidebar-accent focus-visible:ring-ring flex min-h-10 w-full items-center rounded-lg px-2 py-1.5 text-left transition-colors focus-visible:ring-1 focus-visible:outline-none"
+      >
+        <Avatar name="Justin Levine" size="sm" />
+        {state === 'default' ? (
+          <>
+            <span className="ml-2 flex min-w-0 flex-1 flex-col">
+              <span className="text-ui-sm text-foreground truncate font-medium">Justin Levine</span>
+              <span className="text-ui-xs text-muted-foreground truncate">Mastra Internal</span>
+            </span>
+            <ChevronUp className="text-muted-foreground size-4 shrink-0" aria-hidden />
+          </>
+        ) : null}
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Content align="start" side="top" sideOffset={8} className="w-64">
+        <div className="text-ui-xs text-muted-foreground px-2 py-1">justin@mastra.ai</div>
+        <DropdownMenu.Separator />
+        <DropdownMenu.Item onSelect={() => openSettings('account-settings')}>
+          <Settings />
+          Account settings
+        </DropdownMenu.Item>
+        <DropdownMenu.Separator />
+        <div className="text-ui-xs text-muted-foreground px-2 py-1">Mastra Internal</div>
+        <DropdownMenu.Item onSelect={() => openSettings('organization-settings')}>
+          <Users />
+          Organization settings
+        </DropdownMenu.Item>
+      </DropdownMenu.Content>
+    </DropdownMenu>
+  );
+}
+
 function SidebarNewStory() {
   const { state, expand } = useSidebarNew();
   const [view, setView] = useState('root');
@@ -39,21 +140,25 @@ function SidebarNewStory() {
   }
 
   return (
-    <div className="bg-surface1 flex h-dvh w-dvw">
-      <SidebarNew className="border-border1 bg-surface2 border-r">
+    <div className="bg-background flex h-dvh w-dvw">
+      <SidebarNew className="border-border border-r">
         <SidebarNew.Header>
           {state === 'collapsed' ? (
-            <SidebarNew.Trigger />
+            <div className="relative grid size-7 place-items-center">
+              <LogoWithoutText className="text-muted-foreground size-6 transition-opacity group-focus-within/sidebar:opacity-0 group-hover/sidebar:opacity-0 motion-reduce:transition-none" />
+              <div className="absolute inset-0 opacity-0 transition-opacity group-focus-within/sidebar:opacity-100 group-hover/sidebar:opacity-100 motion-reduce:transition-none">
+                <SidebarNew.Trigger />
+              </div>
+            </div>
           ) : (
             <>
-              <SidebarNew.Brand logo={<LogoWithoutText className="size-6" />} title="Mastra" />
-              <span className="bg-surface4 text-ui-xs text-neutral4 inline-flex h-5 items-center rounded-full px-2">
-                Staging
-              </span>
+              <SidebarNew.Brand logo={<LogoWithoutText className="size-6" />} title="Mastra Platform" />
               <SidebarNew.Trigger />
             </>
           )}
         </SidebarNew.Header>
+
+        <ProjectPicker collapsed={state === 'collapsed'} />
 
         <SidebarNew.Nav>
           <SidebarNew.NavStack value={view} onValueChange={setView}>
@@ -62,7 +167,6 @@ function SidebarNewStory() {
                 sections={[
                   {
                     key: 'project',
-                    title: 'Project',
                     links: [
                       { name: 'Overview', url: '/', icon: <Home /> },
                       { name: 'Workflows', url: '/workflows', icon: <Workflow /> },
@@ -73,8 +177,37 @@ function SidebarNewStory() {
                     title: 'Observability',
                     links: [
                       { name: 'Metrics', url: '/metrics', icon: <MetricsIcon /> },
-                      { name: 'Traces', url: '/traces', icon: <TraceIcon />, isActive: true },
+                      { name: 'Traces', url: '/traces', icon: <TraceIcon /> },
+                      { name: 'Intelligence', url: '/intelligence', icon: <LayoutGrid /> },
                       { name: 'Logs', url: '/logs', icon: <LogsIcon /> },
+                    ],
+                  },
+                  {
+                    key: 'databases',
+                    title: 'Databases',
+                    links: [
+                      { name: 'Overview', url: '/database', icon: <Database /> },
+                      { name: 'Usage', url: '/database/usage', icon: <BarChart3 />, isActive: true },
+                    ],
+                  },
+                  {
+                    key: 'gateway',
+                    title: 'Gateway',
+                    links: [
+                      { name: 'API keys', url: '/gateway', icon: <KeyRound /> },
+                      { name: 'Usage', url: '/gateway/usage', icon: <BarChart3 /> },
+                      { name: 'Threads', url: '/gateway/threads', icon: <MessageSquare /> },
+                      { name: 'Logs', url: '/gateway/logs', icon: <LogsIcon /> },
+                      { name: 'Code setup', url: '/gateway/code-setup', icon: <Code2 /> },
+                      { name: 'Settings', url: '/gateway/settings', icon: <SlidersHorizontal /> },
+                    ],
+                  },
+                  {
+                    key: 'project-settings',
+                    title: 'Project settings',
+                    links: [
+                      { name: 'General', url: '/settings', icon: <Settings /> },
+                      { name: 'API tokens', url: '/settings/tokens', icon: <Wrench /> },
                     ],
                   },
                 ]}
@@ -103,50 +236,23 @@ function SidebarNewStory() {
           </SidebarNew.NavStack>
         </SidebarNew.Nav>
 
-        <SidebarNew.Footer className="space-y-1.5 pb-1">
+        <SidebarNew.Footer>
           <SidebarNew.Meter
             label="Credits"
-            value="$4"
-            status="Credits are low"
-            tone="warning"
-            icon={<AlertTriangle className="text-notice-warning size-3 shrink-0" aria-hidden />}
+            value="$5"
+            status="Auto top-ups Off"
+            tone="neutral"
             href="/organization/billing"
             linkLabel="Credit balance"
           />
-          <DropdownMenu>
-            <SidebarNew.NavList>
-              <SidebarNew.NavLink
-                link={{ name: 'Justin Levine', url: '#', icon: <Avatar name="Justin Levine" size="sm" /> }}
-                render={
-                  <DropdownMenu.Trigger ref={menuTriggerRef}>
-                    <Avatar name="Justin Levine" size="sm" />
-                    <SidebarNew.NavLabel state={state}>Justin Levine</SidebarNew.NavLabel>
-                  </DropdownMenu.Trigger>
-                }
-              />
-            </SidebarNew.NavList>
-            <DropdownMenu.Content align="start" sideOffset={8} className="w-64">
-              <div className="text-ui-xs text-neutral3 px-2 py-1">justin@mastra.ai</div>
-              <DropdownMenu.Separator />
-              <DropdownMenu.Item onSelect={() => openSettings('account-settings')}>
-                <Settings />
-                Account settings
-              </DropdownMenu.Item>
-              <DropdownMenu.Separator />
-              <div className="text-ui-xs text-neutral3 px-2 py-1">Mastra</div>
-              <DropdownMenu.Item onSelect={() => openSettings('organization-settings')}>
-                <Users />
-                Organization settings
-              </DropdownMenu.Item>
-            </DropdownMenu.Content>
-          </DropdownMenu>
+          <AccountMenu state={state} menuTriggerRef={menuTriggerRef} openSettings={openSettings} />
         </SidebarNew.Footer>
       </SidebarNew>
 
       <main className="min-w-0 flex-1 p-6">
         <SidebarNew.MobileTrigger className="mb-4" />
-        <h1 className="text-header-md text-neutral6 font-medium">Main content</h1>
-        <p className="text-ui-md text-neutral4 mt-2">
+        <h1 className="text-header-md text-foreground font-medium">Main content</h1>
+        <p className="text-ui-md text-muted-foreground mt-2">
           Primary navigation remains grouped. Account and organization settings take over only the sidebar body.
         </p>
       </main>

@@ -20,6 +20,7 @@ export {
   type MainSidebarProviderProps as SidebarNewProviderProps,
   navItemClasses,
   type MainSidebarNavItemSize as SidebarNewNavItemSize,
+  type SidebarState as SidebarNewState,
   type NavLink as SidebarNewLink,
   type NavSection as SidebarNewSection,
   useMainSidebar as useSidebarNew,

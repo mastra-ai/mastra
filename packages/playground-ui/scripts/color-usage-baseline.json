@@ -4500,38 +4500,38 @@
       },
       {
         "file": "packages/playground-ui/src/ds/new/sidebar/sidebar-new-brand.tsx",
-        "token": "neutral6",
+        "token": "foreground",
         "form": "tailwind",
-        "kind": "legacy",
+        "kind": "semantic",
         "count": 1
       },
       {
         "file": "packages/playground-ui/src/ds/new/sidebar/sidebar-new-meter.tsx",
-        "token": "border1",
+        "token": "border",
         "form": "tailwind",
-        "kind": "legacy",
+        "kind": "semantic",
         "count": 2
       },
       {
         "file": "packages/playground-ui/src/ds/new/sidebar/sidebar-new-meter.tsx",
-        "token": "neutral3",
+        "token": "card",
         "form": "tailwind",
-        "kind": "legacy",
+        "kind": "semantic",
         "count": 2
       },
       {
         "file": "packages/playground-ui/src/ds/new/sidebar/sidebar-new-meter.tsx",
-        "token": "neutral4",
+        "token": "foreground",
         "form": "tailwind",
-        "kind": "legacy",
-        "count": 1
+        "kind": "semantic",
+        "count": 2
       },
       {
         "file": "packages/playground-ui/src/ds/new/sidebar/sidebar-new-meter.tsx",
-        "token": "neutral6",
+        "token": "muted-foreground",
         "form": "tailwind",
-        "kind": "legacy",
-        "count": 1
+        "kind": "semantic",
+        "count": 2
       },
       {
         "file": "packages/playground-ui/src/ds/new/sidebar/sidebar-new-meter.tsx",
@@ -4549,51 +4549,86 @@
       },
       {
         "file": "packages/playground-ui/src/ds/new/sidebar/sidebar-new-meter.tsx",
-        "token": "surface2",
+        "token": "sidebar-accent",
         "form": "tailwind",
-        "kind": "legacy",
-        "count": 2
-      },
-      {
-        "file": "packages/playground-ui/src/ds/new/sidebar/sidebar-new-meter.tsx",
-        "token": "surface3",
-        "form": "tailwind",
-        "kind": "legacy",
+        "kind": "semantic",
         "count": 1
       },
       {
         "file": "packages/playground-ui/src/ds/new/sidebar/sidebar-new-nav-header.tsx",
-        "token": "neutral3",
+        "token": "border",
         "form": "tailwind",
-        "kind": "legacy",
+        "kind": "semantic",
         "count": 1
       },
       {
         "file": "packages/playground-ui/src/ds/new/sidebar/sidebar-new-nav-header.tsx",
-        "token": "neutral4",
+        "token": "foreground",
         "form": "tailwind",
-        "kind": "legacy",
-        "count": 1
-      },
-      {
-        "file": "packages/playground-ui/src/ds/new/sidebar/sidebar-new-nav-header.tsx",
-        "token": "neutral5",
-        "form": "tailwind",
-        "kind": "legacy",
+        "kind": "semantic",
         "count": 3
       },
       {
-        "file": "packages/playground-ui/src/ds/new/sidebar/sidebar-new-nav-stack-view.tsx",
-        "token": "neutral5",
+        "file": "packages/playground-ui/src/ds/new/sidebar/sidebar-new-nav-header.tsx",
+        "token": "muted-foreground",
         "form": "tailwind",
-        "kind": "legacy",
+        "kind": "semantic",
         "count": 1
       },
       {
         "file": "packages/playground-ui/src/ds/new/sidebar/sidebar-new-nav-stack-view.tsx",
-        "token": "neutral6",
+        "token": "foreground",
         "form": "tailwind",
-        "kind": "legacy",
+        "kind": "semantic",
+        "count": 1
+      },
+      {
+        "file": "packages/playground-ui/src/ds/new/sidebar/sidebar-new-nav-stack-view.tsx",
+        "token": "muted-foreground",
+        "form": "tailwind",
+        "kind": "semantic",
+        "count": 1
+      },
+      {
+        "file": "packages/playground-ui/src/ds/new/sidebar/sidebar-new-root.tsx",
+        "token": "foreground",
+        "form": "css-variable",
+        "kind": "semantic",
+        "count": 2
+      },
+      {
+        "file": "packages/playground-ui/src/ds/new/sidebar/sidebar-new-root.tsx",
+        "token": "foreground",
+        "form": "tailwind",
+        "kind": "semantic",
+        "count": 1
+      },
+      {
+        "file": "packages/playground-ui/src/ds/new/sidebar/sidebar-new-root.tsx",
+        "token": "muted-foreground",
+        "form": "css-variable",
+        "kind": "semantic",
+        "count": 1
+      },
+      {
+        "file": "packages/playground-ui/src/ds/new/sidebar/sidebar-new-root.tsx",
+        "token": "selected",
+        "form": "css-variable",
+        "kind": "semantic",
+        "count": 1
+      },
+      {
+        "file": "packages/playground-ui/src/ds/new/sidebar/sidebar-new-root.tsx",
+        "token": "sidebar",
+        "form": "tailwind",
+        "kind": "semantic",
+        "count": 1
+      },
+      {
+        "file": "packages/playground-ui/src/ds/new/sidebar/sidebar-new-root.tsx",
+        "token": "sidebar-accent",
+        "form": "css-variable",
+        "kind": "semantic",
         "count": 1
       },
       {
@@ -12838,6 +12873,76 @@
         "count": 7
       },
       {
+        "file": "packages/playground-ui/src/ds/new/sidebar/sidebar-new-meter.test.tsx",
+        "token": "border",
+        "form": "tailwind",
+        "kind": "semantic",
+        "count": 3
+      },
+      {
+        "file": "packages/playground-ui/src/ds/new/sidebar/sidebar-new-meter.test.tsx",
+        "token": "card",
+        "form": "tailwind",
+        "kind": "semantic",
+        "count": 2
+      },
+      {
+        "file": "packages/playground-ui/src/ds/new/sidebar/sidebar-new-meter.test.tsx",
+        "token": "foreground",
+        "form": "css-variable",
+        "kind": "semantic",
+        "count": 3
+      },
+      {
+        "file": "packages/playground-ui/src/ds/new/sidebar/sidebar-new-meter.test.tsx",
+        "token": "foreground",
+        "form": "tailwind",
+        "kind": "semantic",
+        "count": 5
+      },
+      {
+        "file": "packages/playground-ui/src/ds/new/sidebar/sidebar-new-meter.test.tsx",
+        "token": "muted-foreground",
+        "form": "css-variable",
+        "kind": "semantic",
+        "count": 1
+      },
+      {
+        "file": "packages/playground-ui/src/ds/new/sidebar/sidebar-new-meter.test.tsx",
+        "token": "muted-foreground",
+        "form": "tailwind",
+        "kind": "semantic",
+        "count": 4
+      },
+      {
+        "file": "packages/playground-ui/src/ds/new/sidebar/sidebar-new-meter.test.tsx",
+        "token": "selected",
+        "form": "css-variable",
+        "kind": "semantic",
+        "count": 1
+      },
+      {
+        "file": "packages/playground-ui/src/ds/new/sidebar/sidebar-new-meter.test.tsx",
+        "token": "sidebar",
+        "form": "tailwind",
+        "kind": "semantic",
+        "count": 1
+      },
+      {
+        "file": "packages/playground-ui/src/ds/new/sidebar/sidebar-new-meter.test.tsx",
+        "token": "sidebar-accent",
+        "form": "css-variable",
+        "kind": "semantic",
+        "count": 1
+      },
+      {
+        "file": "packages/playground-ui/src/ds/new/sidebar/sidebar-new-meter.test.tsx",
+        "token": "sidebar-accent",
+        "form": "tailwind",
+        "kind": "semantic",
+        "count": 1
+      },
+      {
         "file": "packages/playground-ui/src/ds/primitives/menu-item.test.ts",
         "token": "neutral5",
         "form": "tailwind",
@@ -14990,52 +15095,38 @@
       },
       {
         "file": "packages/playground-ui/src/ds/new/sidebar/sidebar-new.stories.tsx",
-        "token": "border1",
+        "token": "background",
         "form": "tailwind",
-        "kind": "legacy",
+        "kind": "semantic",
         "count": 1
       },
       {
         "file": "packages/playground-ui/src/ds/new/sidebar/sidebar-new.stories.tsx",
-        "token": "neutral3",
+        "token": "border",
         "form": "tailwind",
-        "kind": "legacy",
-        "count": 2
-      },
-      {
-        "file": "packages/playground-ui/src/ds/new/sidebar/sidebar-new.stories.tsx",
-        "token": "neutral4",
-        "form": "tailwind",
-        "kind": "legacy",
-        "count": 2
-      },
-      {
-        "file": "packages/playground-ui/src/ds/new/sidebar/sidebar-new.stories.tsx",
-        "token": "neutral6",
-        "form": "tailwind",
-        "kind": "legacy",
+        "kind": "semantic",
         "count": 1
       },
       {
         "file": "packages/playground-ui/src/ds/new/sidebar/sidebar-new.stories.tsx",
-        "token": "surface1",
+        "token": "foreground",
         "form": "tailwind",
-        "kind": "legacy",
+        "kind": "semantic",
         "count": 1
       },
       {
         "file": "packages/playground-ui/src/ds/new/sidebar/sidebar-new.stories.tsx",
-        "token": "surface2",
+        "token": "muted",
         "form": "tailwind",
-        "kind": "legacy",
+        "kind": "semantic",
         "count": 1
       },
       {
         "file": "packages/playground-ui/src/ds/new/sidebar/sidebar-new.stories.tsx",
-        "token": "surface4",
+        "token": "muted-foreground",
         "form": "tailwind",
-        "kind": "legacy",
-        "count": 1
+        "kind": "semantic",
+        "count": 4
       },
       {
         "file": "packages/playground-ui/src/ds/tokens/color-foundations.stories.tsx",
@@ -15742,9 +15833,9 @@
     ]
   },
   "summary": {
-    "production": 3609,
-    "tests": 141,
-    "stories": 836,
+    "production": 3616,
+    "tests": 163,
+    "stories": 835,
     "tokens": 63
   }
 }
