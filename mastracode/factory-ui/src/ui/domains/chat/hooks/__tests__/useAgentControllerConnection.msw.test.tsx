@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import type { AgentControllerEvent } from '@mastra/client-js';
+import type { AgentControllerEvent, AgentControllerSessionState } from '@mastra/client-js';
 import { waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { useEffect } from 'react';
@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { queryKeys } from '../../../../../api/keys';
-import { renderHookWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
+import { renderHookWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { deriveConnectionStatus, useAgentControllerConnection } from '../useAgentControllerConnection';
 import { reconnectRefetchInterval } from '../../../../../hooks/useAgentControllerSessionSync';
 
@@ -133,11 +133,6 @@ describe('useAgentControllerConnection', () => {
   });
 
   it('given a workspace session with a conventional thread id, when the connection initializes, then session creation binds that exact thread', async () => {
-    // Regression: a factory workspace's thread id is its sessionId (seeded by
-    // FactoryStartCoordinator). If init omits `threadId` and provisioning was
-    // interrupted (or storage was reset), the server binds a fresh random-id
-    // thread and the route's thread lookup 404s forever. Passing the exact id
-    // makes init a get-or-create for the conventional thread.
     let createBody: unknown;
     const onEvent = vi.fn();
 
@@ -273,7 +268,45 @@ describe('useAgentControllerConnection', () => {
     expect(onStream).toHaveBeenCalledTimes(1);
   });
 
-  it('given a state refetch started before a task event, then the stale response does not replace the live tasks', async () => {
+  it.each([
+    {
+      eventName: 'a task event',
+      previousEvent: { type: 'agent_start' },
+      event: {
+        type: 'task_updated',
+        tasks: [{ id: 'new', content: 'New task', status: 'in_progress', activeForm: 'Working on new task' }],
+      },
+      initialState: {
+        running: false,
+        tasks: [{ id: 'old', content: 'Old task', status: 'pending', activeForm: 'Working on old task' }],
+      },
+      liveState: {
+        running: false,
+        tasks: [{ id: 'new', content: 'New task', status: 'in_progress', activeForm: 'Working on new task' }],
+      },
+    },
+    {
+      eventName: 'agent_start',
+      previousEvent: { type: 'agent_end' },
+      event: { type: 'agent_start' },
+      initialState: { running: false },
+      liveState: { running: true },
+    },
+    {
+      eventName: 'agent_end',
+      previousEvent: { type: 'agent_start' },
+      event: { type: 'agent_end' },
+      initialState: { running: true },
+      liveState: { running: false },
+    },
+  ] satisfies {
+    eventName: string;
+    previousEvent: AgentControllerEvent;
+    event: AgentControllerEvent;
+    initialState: Pick<AgentControllerSessionState, 'running' | 'tasks'>;
+    liveState: Pick<AgentControllerSessionState, 'running' | 'tasks'>;
+  }[])('given a refetch before $eventName, then the stale response cannot replace live state', async testCase => {
+    const { previousEvent, event, initialState, liveState } = testCase;
     const encoder = new TextEncoder();
     const onEvent = vi.fn();
     let emit: (event: AgentControllerEvent) => void = () => {};
@@ -297,7 +330,7 @@ describe('useAgentControllerConnection', () => {
           modeId: 'build',
           modelId: 'openai/gpt-4o-mini',
           threadId: 'thread-1',
-          tasks: [{ id: 'old', content: 'Old task', status: 'pending', activeForm: 'Working on old task' }],
+          ...initialState,
         });
       }),
       http.get(
@@ -320,20 +353,21 @@ describe('useAgentControllerConnection', () => {
     );
     await waitFor(() => expect(result.current.status).toBe('ready'));
 
+    emit(previousEvent);
+    await waitFor(() => expect(onEvent).toHaveBeenLastCalledWith(previousEvent));
+
     void client.invalidateQueries({
       queryKey: queryKeys.agentControllerConnectionState(controllerId, resourceId, undefined, 'thread-1'),
       exact: true,
     });
     await waitFor(() => expect(stateReads).toBe(2));
 
-    const liveTasks = [
-      { id: 'new', content: 'New task', status: 'in_progress' as const, activeForm: 'Working on new task' },
-    ];
-    emit({ type: 'task_updated', tasks: liveTasks });
-    await waitFor(() => expect(result.current.state?.tasks).toEqual(liveTasks));
+    emit(event);
+    await waitFor(() => expect(onEvent).toHaveBeenLastCalledWith(event));
 
     releaseRefetch?.();
-    await waitFor(() => expect(result.current.state?.tasks).toEqual(liveTasks));
+    await waitForMutationsIdle(client);
+    expect(result.current.state).toMatchObject(liveState);
   });
 
   it('given reconnect polling is disconnected, then it backs off and stops at the retry cap', () => {
