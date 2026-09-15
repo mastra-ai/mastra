@@ -464,6 +464,7 @@ describe('22573 idle', () => {
         'idle-buffer-thread',
         undefined,
         new Set(),
+        [],
       );
       if (expected) {
         expect(mockOM.buffer).toHaveBeenCalledWith(expect.objectContaining({ messages: messages.slice(0, expected) }));
@@ -503,6 +504,7 @@ describe('22573 idle', () => {
             'idle-buffer-thread',
             'idle-buffer-resource',
             new Set(),
+            source === 'response' ? [message.id] : [],
           );
         }
         expect(mockOM.buffer).not.toHaveBeenCalled();
