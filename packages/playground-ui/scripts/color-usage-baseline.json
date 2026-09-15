@@ -4604,6 +4604,13 @@
         "count": 1
       },
       {
+        "file": "packages/playground-ui/src/ds/new/sidebar/sidebar-new-root.tsx",
+        "token": "sidebar-accent",
+        "form": "css-variable",
+        "kind": "semantic",
+        "count": 1
+      },
+      {
         "file": "packages/playground-ui/src/ds/primitives/control-size.ts",
         "token": "border2",
         "form": "tailwind",
@@ -12889,6 +12896,13 @@
       {
         "file": "packages/playground-ui/src/ds/new/sidebar/sidebar-new-meter.test.tsx",
         "token": "sidebar-accent",
+        "form": "css-variable",
+        "kind": "semantic",
+        "count": 1
+      },
+      {
+        "file": "packages/playground-ui/src/ds/new/sidebar/sidebar-new-meter.test.tsx",
+        "token": "sidebar-accent",
         "form": "tailwind",
         "kind": "semantic",
         "count": 1
@@ -15756,8 +15770,8 @@
     ]
   },
   "summary": {
-    "production": 3611,
-    "tests": 158,
+    "production": 3612,
+    "tests": 159,
     "stories": 834,
     "tokens": 61
   }
