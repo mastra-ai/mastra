@@ -18,8 +18,6 @@ import {
 import type { VersionOverrides } from '../../request-context';
 import { toStandardSchema } from '../../schema';
 import { normalizeToolPayloadTransformPolicy } from '../../tools/payload-transform';
-import { ToolPolicyError } from '../../tools/tool-policy';
-import { getPreparedToolPolicy, setPreparedToolPolicy } from '../../tools/tool-policy-execution';
 import type { CoreTool, ToolHooks, ToolPayloadTransformPolicy } from '../../tools/types';
 import { boundedStringify, deepMerge } from '../../utils';
 import type { Workspace } from '../../workspace';

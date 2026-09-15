@@ -69,8 +69,8 @@ describe('durable memory read reuse', () => {
     expect(second).not.toBe(first);
     expect(await second.load('record', async () => 'new')).toBe('new');
     const snapshot = JSON.parse(JSON.stringify(later.workflowInput));
-    expect(snapshot.requestContextEntries.MastraMemory.thread.id).toBe('thread');
-    expect(snapshot.requestContextEntries.MastraMemory.runState).toBeUndefined();
+    // Current upstream rebuilds the whole framework memory context from run state.
+    expect(snapshot.requestContextEntries?.MastraMemory).toBeUndefined();
     expect(JSON.stringify(snapshot)).not.toContain('ownershipValidated');
   });
 
