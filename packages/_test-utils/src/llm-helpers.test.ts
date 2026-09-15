@@ -354,4 +354,33 @@ describe('canonicalizeJsonSchemaNullability', () => {
       ],
     });
   });
+
+  it('leaves non-schema type arrays unchanged so request hashes still match', () => {
+    const metadata = { type: ['string', 'number'] };
+    const result = canonicalizeRequestJsonSchema({
+      url: 'https://api.openai.com/v1/responses',
+      body: {
+        metadata,
+        tools: [
+          {
+            parameters: {
+              type: ['object', 'null'],
+            },
+          },
+        ],
+      },
+    });
+
+    expect(result.body).toEqual({
+      metadata: { type: ['string', 'number'] },
+      tools: [
+        {
+          parameters: {
+            anyOf: [{ type: 'object' }, { type: 'null' }],
+          },
+        },
+      ],
+    });
+    expect((result.body as { metadata: { type: string[] } }).metadata).toBe(metadata);
+  });
 });

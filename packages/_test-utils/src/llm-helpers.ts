@@ -436,12 +436,52 @@ export function canonicalizeJsonSchemaNullability(value: unknown): unknown {
 }
 
 /**
- * `transformRequest` helper for LLM recordings: walk the request body and
- * canonicalize JSON Schema union encodings before hashing.
+ * Request-body keys that contain a JSON Schema document. Descendants of these
+ * keys are rewritten; other fields (for example `metadata.type`) stay intact.
+ */
+const JSON_SCHEMA_DOCUMENT_KEYS = new Set(['parameters', 'input_schema', 'schema', 'json_schema']);
+
+/**
+ * Non-schema containers that may hold a schema document further down
+ * (OpenAI/Anthropic tool lists, structured-output envelopes).
+ */
+const JSON_SCHEMA_WALK_KEYS = new Set([
+  ...JSON_SCHEMA_DOCUMENT_KEYS,
+  'tools',
+  'function',
+  'response_format',
+  'text',
+  'format',
+]);
+
+function canonicalizeRequestBody(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(canonicalizeRequestBody);
+  }
+  if (value === null || typeof value !== 'object') {
+    return value;
+  }
+
+  const next: Record<string, unknown> = {};
+  for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
+    if (JSON_SCHEMA_DOCUMENT_KEYS.has(key)) {
+      next[key] = canonicalizeJsonSchemaNullability(nested);
+    } else if (JSON_SCHEMA_WALK_KEYS.has(key)) {
+      next[key] = canonicalizeRequestBody(nested);
+    } else {
+      next[key] = nested;
+    }
+  }
+  return next;
+}
+
+/**
+ * `transformRequest` helper for LLM recordings: rewrite JSON Schema union
+ * encodings in known schema-bearing fields before hashing.
  */
 export function canonicalizeRequestJsonSchema({ url, body }: { url: string; body: unknown }): {
   url: string;
   body: unknown;
 } {
-  return { url, body: canonicalizeJsonSchemaNullability(body) };
+  return { url, body: canonicalizeRequestBody(body) };
 }
