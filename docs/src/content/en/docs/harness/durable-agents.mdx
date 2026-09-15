@@ -142,7 +142,7 @@ await mastraClient.createStoredAgent({
 })
 ```
 
-`durable` also accepts `{ maxSteps, cleanupTimeoutMs }`. Cache and pubsub are inherited from the server's `Mastra` instance, so configure distributed backends there if you need durability across replicas. Automatic recovery is still configured in code through `recovery.durableAgents`.
+`durable` also accepts `{ maxSteps, cleanupTimeoutMs }`. Only serializable options are accepted here, so snapshot persistence for API-created agents follows the server's `recovery.durableAgents` setting. Cache and pubsub are inherited from the server's `Mastra` instance, so configure distributed backends there if you need durability across replicas. Automatic recovery is still configured in code through `recovery.durableAgents`.
 
 ### Inngest-powered with `createInngestAgent()`
 
@@ -262,9 +262,32 @@ await durableAgent.resume(runId, { approved: true })
 
 ## Crash recovery
 
-If the server process crashes while a durable agent run is in progress, that run remains in `running` status in storage with no automatic retry. For orderly shutdowns such as rolling deploys, the generated server can also drain in-flight turns before exiting. See [graceful shutdown and rolling deploys](/docs/deployment/mastra-server#graceful-shutdown-and-rolling-deploys). On the next server start you can re-drive these orphaned runs so they pick up where they left off.
+Durable agents can checkpoint each run's state to storage while it executes. If the server process crashes mid-run, the run remains in `running` status in storage with no automatic retry, and on the next server start you can re-drive these orphaned runs so they pick up where they left off. For orderly shutdowns such as rolling deploys, the generated server can also drain in-flight turns before exiting. See [graceful shutdown and rolling deploys](/docs/deployment/mastra-server#graceful-shutdown-and-rolling-deploys).
+
+Under the default persistence policy, these `running` checkpoints are only written when crash recovery is enabled. With `recovery.durableAgents: 'off'` (the default), durable agents persist snapshots only for `pending`, `paused`, and `suspended` runs (the artifacts human-in-the-loop resume depends on) and skip the per-step `running` writes entirely. A custom `shouldPersistSnapshot` predicate can keep `running` checkpoints even with recovery off. See [snapshot persistence](#snapshot-persistence) for the full policy and how to override it.
 
 Durable agent runs are excluded from the generic boot-time restart of active workflow runs. The only automatic recovery path for durable agent runs is `recovery.durableAgents: 'auto'`, which holds a recovery lease and registers thread runtimes before re-driving each run.
+
+### Snapshot persistence
+
+The `shouldPersistSnapshot` option on `createDurableAgent()` (also accepted in the agent-level `durable` config) controls which workflow snapshots a durable agent writes. The default policy:
+
+- Always persists `pending`, `paused`, and `suspended` snapshots. These are what `resume()` and tool approval read, so human-in-the-loop flows work without configuration.
+- Persists `running` checkpoints only when `recovery.durableAgents` is `'auto'`. These per-step writes exist solely to make in-flight runs recoverable after a crash, so they're skipped when nothing consumes them.
+
+To keep crash-recovery checkpoints without enabling automatic recovery (for example, when you call `recoverActiveRuns()` yourself behind a leader election), pass a predicate that includes `running`:
+
+```typescript title="src/mastra/agents/durable.ts"
+export const durableResearcher = createDurableAgent({
+  agent,
+  shouldPersistSnapshot: ({ workflowStatus }) =>
+    ['pending', 'paused', 'suspended', 'running'].includes(workflowStatus),
+})
+```
+
+Mastra logs a warning when a custom predicate excludes `suspended` or `paused`, which breaks human-in-the-loop resume, or excludes `running` while `recovery.durableAgents` is `'auto'`, which makes the agent invisible to automatic recovery.
+
+Evented agents always persist the full snapshot set: the evented engine coordinates workers through storage, so the `running` row is part of its execution model. Inngest agents always persist only `suspended` snapshots, because Inngest's own replay provides durability. Both accept `shouldPersistSnapshot` for API symmetry but log a warning and ignore it.
 
 ### Automatic recovery
 
@@ -301,6 +324,8 @@ const agentResult = await durableAgent.recoverActiveRuns()
 // Recover a single known run
 await durableAgent.recoverActiveRuns({ runId: 'run-abc-123' })
 ```
+
+Manual recovery reads the same `running` checkpoints as automatic recovery. If `recovery.durableAgents` is `'off'` and you haven't set a custom `shouldPersistSnapshot` that includes `running`, in-flight runs are never checkpointed, so `listActiveRuns()` and `recoverActiveRuns()` find nothing after a crash. See [snapshot persistence](#snapshot-persistence).
 
 ### Multi-instance deployments
 

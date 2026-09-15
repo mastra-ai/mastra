@@ -350,7 +350,7 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
           const tenant = await this.#resolveTenant(loose(c));
           if ('response' in tenant) return tenant.response;
           await intake.ensureReady();
-          const config = await intake.getConfig({ ...tenant, integrationIds });
+          const config = await intake.getConfig({ orgId: tenant.orgId, integrationIds });
           return c.json({ config });
         },
       }),
@@ -384,7 +384,7 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
           }
 
           await intake.ensureReady();
-          await intake.saveConfig({ ...tenant, config: registeredConfig });
+          await intake.saveConfig({ orgId: tenant.orgId, config: registeredConfig });
           await audit.emit({
             context: loose(c),
             input: {
@@ -637,7 +637,7 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
           if (!cursors) return c.json({ error: 'invalid_cursor' }, 400);
 
           await intake.ensureReady();
-          const config = await intake.getConfig({ ...tenant, integrationIds });
+          const config = await intake.getConfig({ orgId: tenant.orgId, integrationIds });
           const { pages, failures } = await settleByIntegration(
             integrations.flatMap(integration => {
               const selection = config[integration.id];

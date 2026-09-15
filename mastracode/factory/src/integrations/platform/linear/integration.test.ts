@@ -936,7 +936,6 @@ describe('PlatformLinearIntegration', () => {
     });
     await seed.intake.saveConfig({
       orgId: 'org-1',
-      userId: 'user-1',
       config: { linear: { enabled: true, sourceIds: [project1SourceId] } },
     });
     // Board reads only ingest sources explicitly routed to a board of the project.

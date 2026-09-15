@@ -56,7 +56,7 @@ import { CachingPubSub } from '@mastra/core/events';
 import type { Event, PubSub } from '@mastra/core/events';
 import type { Mastra } from '@mastra/core/mastra';
 import type { MastraModelOutput, ChunkType, FullOutput, MastraOnFinishCallback } from '@mastra/core/stream';
-import type { Workflow } from '@mastra/core/workflows';
+import type { ShouldPersistSnapshotFn, Workflow } from '@mastra/core/workflows';
 import { NonRetriableError } from 'inngest';
 import type { Inngest } from 'inngest';
 
@@ -131,6 +131,13 @@ export interface CreateInngestAgentOptions {
   cache?: MastraServerCache;
   /** Mastra instance for observability (optional, set automatically when registered with Mastra) */
   mastra?: Mastra;
+  /**
+   * Accepted for API symmetry with `createDurableAgent`, but **ignored** by
+   * InngestAgent (a warning is logged if set). Inngest's step memoization and
+   * replay own durability, so InngestAgent pins a `suspended`-only snapshot
+   * policy — Mastra snapshots exist purely for human-in-the-loop resume.
+   */
+  shouldPersistSnapshot?: ShouldPersistSnapshotFn;
 }
 
 /**
@@ -550,7 +557,16 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     pubsub: customPubsub,
     cache,
     mastra: mastraOption,
+    shouldPersistSnapshot,
   } = options;
+
+  if (shouldPersistSnapshot) {
+    console.warn(
+      `InngestAgent '${idOverride ?? agent.id}': ignoring the shouldPersistSnapshot option. ` +
+        `Inngest's step memoization/replay owns durability, so InngestAgent always persists ` +
+        `'suspended' snapshots only (for human-in-the-loop resume).`,
+    );
+  }
 
   // Use provided id/name or fall back to agent.id/agent.name
   const agentId = idOverride ?? agent.id;
