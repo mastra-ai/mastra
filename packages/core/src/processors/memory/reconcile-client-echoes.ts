@@ -176,6 +176,10 @@ function mergeUserEcho(incoming: MastraDBMessage, stored: MastraDBMessage): Mast
   return { ...stored, content: mergedContent };
 }
 
+function isSealedMessage(message: MastraDBMessage): boolean {
+  return Boolean((message.content.metadata as { mastra?: { sealed?: boolean } } | undefined)?.mastra?.sealed);
+}
+
 function mergeEchoContent(stored: MastraMessageContentV2, incoming: MastraMessageContentV2): MastraMessageContentV2 {
   const merged: MastraMessageContentV2 = {
     ...stored,
@@ -348,6 +352,12 @@ export function reconcileClientEchoes(
       continue; // stale echo — already persisted, nothing to write
     }
     if (stored.role === 'user' && message.role === 'user') {
+      // A sealed user message has already crossed an observational-memory
+      // boundary. Accepting an edited echo while retaining that boundary would
+      // make storage and the observation record describe different content.
+      if (isSealedMessage(stored)) {
+        continue;
+      }
       // Client-authored user content: keep the edit, but never let a lossy echo
       // erase server-authored observation markers or sealed metadata.
       reconciled.push(mergeUserEcho(message, stored));

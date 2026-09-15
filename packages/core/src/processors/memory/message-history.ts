@@ -366,17 +366,10 @@ export class MessageHistory implements Processor {
       );
     }
 
-    const lookupSpan = this.createMemorySpan(
-      'recall',
-      observabilityContext,
-      { messageIds },
-      {
-        messageCount: messageIds.length,
-      },
-    );
+    const span = this.memorySpan(observabilityContext);
+    span?.update({ attributes: { reconciliationMessageCount: messageIds.length } });
     try {
       const { messages: storedInput } = await this.storage.listMessagesById({ messageIds });
-      lookupSpan?.end({ output: { success: true } });
       // Only records that actually belong to this thread (and resource) may act as
       // the canonical version of an echoed ID.
       const belongsHere = (message: MastraDBMessage) =>
@@ -391,7 +384,6 @@ export class MessageHistory implements Processor {
       );
       return reconcileClientEchoes(messages, storedById, foreignIds);
     } catch (error) {
-      lookupSpan?.error({ error: error as Error, endSpan: true });
       // Fail closed: a transient read failure must not fall back to an
       // unreconciled upsert that could clobber canonical stored records.
       throw error;

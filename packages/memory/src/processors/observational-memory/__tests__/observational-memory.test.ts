@@ -191,6 +191,85 @@ function createInMemoryStorage(): InMemoryMemory {
   return new InMemoryMemory({ db });
 }
 
+describe('ObservationalMemory client input persistence', () => {
+  it('does not rewrite a stored sealed user message from an edited client echo', async () => {
+    const storage = createInMemoryStorage();
+    const threadId = 'sealed-echo-thread';
+    const resourceId = 'sealed-echo-resource';
+    const createdAt = new Date('2026-01-01T00:00:00Z');
+
+    await storage.saveThread({
+      thread: {
+        id: threadId,
+        resourceId,
+        title: 'Sealed echo regression',
+        createdAt,
+        updatedAt: createdAt,
+        metadata: {},
+      },
+    });
+    await storage.saveMessages({
+      messages: [
+        {
+          id: 'sealed-user-1',
+          role: 'user',
+          content: {
+            format: 2,
+            parts: [{ type: 'text', text: 'Canonical sealed question' }],
+            metadata: { mastra: { sealed: true } },
+          },
+          threadId,
+          resourceId,
+          createdAt,
+        } as MastraDBMessage,
+      ],
+    });
+
+    const model = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop' as const,
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+        content: [{ type: 'text' as const, text: 'unused' }],
+        warnings: [],
+      }),
+    });
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      model: model as any,
+      observation: { messageTokens: 1, bufferTokens: false },
+      reflection: { observationTokens: 1 },
+    });
+
+    await om.persistClientInputMessages(
+      [
+        {
+          id: 'sealed-user-1',
+          role: 'user',
+          content: { format: 2, parts: [{ type: 'text', text: 'Edited client echo' }] },
+          threadId,
+          resourceId,
+          createdAt,
+        } as MastraDBMessage,
+      ],
+      [],
+      threadId,
+      resourceId,
+    );
+
+    const { messages } = await storage.listMessages({
+      threadId,
+      resourceId,
+      perPage: false,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+    });
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.content.parts).toEqual([{ type: 'text', text: 'Canonical sealed question' }]);
+    expect((messages[0]?.content.metadata as { mastra?: { sealed?: boolean } })?.mastra?.sealed).toBe(true);
+  });
+});
+
 describe('ObservationalMemoryProcessor read-only mode', () => {
   it('loads stored context without starting observation side effects', async () => {
     const { MessageList } = await import('@mastra/core/agent');
