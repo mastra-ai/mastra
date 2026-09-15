@@ -56,7 +56,7 @@ import { GenerateConfigDialog, GenerateReviewDialog } from '@/domains/datasets/c
 import { useGenerationTasks } from '@/domains/datasets/context/generation-context';
 import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
 import { useDatasets } from '@/domains/datasets/hooks/use-datasets';
-import { STATUS_LABEL, STATUS_VARIANT } from '@/domains/experiments/components/experiment-columns';
+import { ExperimentsList } from '@/domains/experiments/components/experiments-list';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
 
 type AgentEvalTab = 'experiments' | 'datasets' | 'scorers' | 'review';
@@ -89,17 +89,6 @@ function parseIdList(ids: unknown): string[] {
     return [ids];
   }
   return [];
-}
-
-function formatDate(dateStr: string | Date | undefined | null): string {
-  if (!dateStr) return '—';
-  const d = typeof dateStr === 'string' ? new Date(dateStr) : dateStr;
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-}
-
-function getExperimentStartedAtTime(startedAt: AgentExperiment['startedAt']): number {
-  if (!startedAt) return 0;
-  return startedAt instanceof Date ? startedAt.getTime() : new Date(startedAt).getTime();
 }
 
 function EvaluateDocsLink({ href, children }: { href: string; children: ReactNode }) {
@@ -322,24 +311,6 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
 
   // --- Filtered data for each tab ---
 
-  const filteredExperiments = useMemo(() => {
-    const exps = [...(experiments || [])].sort((a, b) => {
-      const da = getExperimentStartedAtTime(a.startedAt);
-      const db = getExperimentStartedAtTime(b.startedAt);
-      return db - da;
-    });
-    if (!experimentsSearch) return exps;
-    const term = experimentsSearch.toLowerCase();
-    return exps.filter(exp => {
-      const dsName = datasetMap.get(exp.datasetId)?.name ?? '';
-      return (
-        exp.id.toLowerCase().includes(term) ||
-        dsName.toLowerCase().includes(term) ||
-        (exp.targetId ?? '').toLowerCase().includes(term)
-      );
-    });
-  }, [experiments, experimentsSearch, datasetMap]);
-
   const filteredScorers = useMemo(() => {
     if (!scorersSearch) return attachedScorers;
     const term = scorersSearch.toLowerCase();
@@ -349,9 +320,6 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
     });
   }, [attachedScorers, scorersSearch]);
 
-  const { containerRef: experimentsContainerRef, getRowProps: getExperimentRowProps } = useDataListKeyboard({
-    count: filteredExperiments.length,
-  });
   const { containerRef: scorersContainerRef, getRowProps: getScorerRowProps } = useDataListKeyboard({
     count: filteredScorers.length,
   });
@@ -500,7 +468,7 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
 
   function renderExperimentsTab() {
     if (isLoadingExperiments) {
-      return <DataListSkeleton columns="auto minmax(15rem,1fr) auto auto auto auto auto" />;
+      return <ExperimentsList experiments={[]} isLoading />;
     }
 
     if (!experiments?.length) {
@@ -526,55 +494,17 @@ export function AgentPlaygroundEvaluate({ agentId, requestContextSchema }: Agent
     }
 
     return (
-      <DataList
-        columns="auto minmax(15rem,1fr) auto auto auto auto auto"
-        className="min-w-0"
-        scrollRef={experimentsContainerRef}
-      >
-        <DataList.Top>
-          <DataList.TopCell>Experiment</DataList.TopCell>
-          <DataList.TopCell>Dataset</DataList.TopCell>
-          <DataList.TopCell>Status</DataList.TopCell>
-          <DataList.TopCell className="text-center">Items</DataList.TopCell>
-          <DataList.TopCell className="text-center">Processed</DataList.TopCell>
-          <DataList.TopCell className="text-center">Errored</DataList.TopCell>
-          <DataList.TopCell>Date</DataList.TopCell>
-        </DataList.Top>
-
-        {filteredExperiments.map((exp, index) => {
-          const dsName = datasetMap.get(exp.datasetId)?.name ?? exp.datasetId.slice(0, 8);
-          const status = exp.status ?? 'pending';
-          const succeeded = exp.succeededCount ?? 0;
-          const failed = exp.failedCount ?? 0;
-          const total = exp.totalItems ?? 0;
-          const isFeatured = detailView?.type === 'experiment' && detailView.id === exp.id;
-
-          return (
-            <DataList.RowButton
-              key={exp.id}
-              featured={isFeatured}
-              onClick={() => setDetailView({ type: 'experiment', id: exp.id, datasetId: exp.datasetId })}
-              {...getExperimentRowProps(index)}
-            >
-              <DataList.IdCell id={exp.id} />
-              <DataList.Cell className="min-w-0">
-                <span className="block truncate">{dsName}</span>
-              </DataList.Cell>
-              <DataList.Cell>
-                <Badge variant={STATUS_VARIANT[status] ?? 'neutral'} indicator="dot">
-                  {STATUS_LABEL[status] ?? status}
-                </Badge>
-              </DataList.Cell>
-              <DataList.Cell className="text-center">{total}</DataList.Cell>
-              <DataList.Cell className="text-center">{succeeded}</DataList.Cell>
-              <DataList.Cell className="text-center">
-                <span className={failed > 0 ? 'text-accent2' : ''}>{failed}</span>
-              </DataList.Cell>
-              <DataList.Cell>{formatDate(exp.startedAt)}</DataList.Cell>
-            </DataList.RowButton>
-          );
-        })}
-      </DataList>
+      <ExperimentsList
+        experiments={experiments}
+        datasets={datasets}
+        isLoading={false}
+        search={experimentsSearch}
+        keyboardGlobal={false}
+        selectedExperimentId={detailView?.type === 'experiment' ? detailView.id : undefined}
+        onSelectExperiment={exp => {
+          if (exp.datasetId) setDetailView({ type: 'experiment', id: exp.id, datasetId: exp.datasetId });
+        }}
+      />
     );
   }
 
