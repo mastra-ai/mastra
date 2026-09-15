@@ -267,6 +267,37 @@ function hasDotSegment(path: string): boolean {
   });
 }
 
+/**
+ * Client-side shape check on `baseUrlOverride` before it is forwarded to the
+ * platform proxy. The platform is the source of truth on which origins a
+ * connection may target; this rejects trivially unsafe values (non-HTTPS
+ * schemes, embedded credentials, unparseable URLs) so an authenticated
+ * platform request is never issued with a malformed override header.
+ */
+function assertValidBaseUrlOverride(baseUrlOverride: string): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(baseUrlOverride);
+  } catch {
+    throw new MastraConnectError(
+      'invalid_options',
+      `Invalid baseUrlOverride '${baseUrlOverride}': must be an absolute URL.`,
+    );
+  }
+  if (parsed.protocol !== 'https:') {
+    throw new MastraConnectError(
+      'invalid_options',
+      `Invalid baseUrlOverride '${baseUrlOverride}': only https:// URLs are allowed.`,
+    );
+  }
+  if (parsed.username || parsed.password) {
+    throw new MastraConnectError(
+      'invalid_options',
+      `Invalid baseUrlOverride '${baseUrlOverride}': embedded credentials are not allowed.`,
+    );
+  }
+}
+
 export async function proxyRequest(
   client: ResolvedClient,
   connectionId: string,
@@ -293,6 +324,7 @@ export async function proxyRequest(
 
   const headers: Record<string, string> = { ...options.headers };
   if (options.baseUrlOverride !== undefined) {
+    assertValidBaseUrlOverride(options.baseUrlOverride);
     headers['base-url-override'] = options.baseUrlOverride;
   }
   const init: RequestInit = { method: options.method, headers };

@@ -277,6 +277,27 @@ describe('proxyRequest', () => {
     expect(JSON.parse(init.body)).toEqual({ query: '{ viewer { id } }' });
   });
 
+  it('rejects baseUrlOverride values that are not safe HTTPS URLs before sending the request', async () => {
+    const fetchMock = vi.fn();
+    const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
+    for (const baseUrlOverride of [
+      'http://project.supabase.co',
+      'ftp://project.supabase.co',
+      'javascript:alert(1)',
+      'file:///etc/passwd',
+      '//project.supabase.co',
+      'project.supabase.co',
+      'https://user:pass@project.supabase.co',
+      'not a url',
+      '',
+    ]) {
+      await expect(proxyRequest(client, 'c_1', { method: 'GET', path: 'x', baseUrlOverride })).rejects.toMatchObject({
+        code: 'invalid_options',
+      });
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('keeps a provider 404 as proxy_error (never connection_not_found)', async () => {
     const fetchMock = vi.fn().mockResolvedValue(Response.json({ message: 'page not found' }, { status: 404 }));
     const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
