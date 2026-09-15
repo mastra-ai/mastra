@@ -583,8 +583,10 @@ Each vector database enforces specific naming conventions for indexes and collec
 
     - Are capitalized by Weaviate (the first letter is upper-cased)
     - Should contain only letters, numbers, and the `_` character
+    - Must start with a letter, since only the first character is upper-cased (a leading digit or symbol stays invalid)
     - Preserve the original Mastra index name in the collection description, so `listIndexes()` and `describeIndex()` return the name you supplied
     - Example: `my_collection` is stored as `My_collection` and returned as `my_collection`
+    - Example: `123_collection` isn't valid (starts with a digit)
   </TabItem>
 
   <TabItem value="cloudflare" label="Cloudflare">

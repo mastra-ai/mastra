@@ -610,8 +610,21 @@ export class WeaviateVector extends MastraVector<WeaviateVectorFilter> {
       // only the first page and report success. Collect all uuids first, then
       // apply, so mutations can't shift the pagination window mid-iteration.
       const PAGE_SIZE = 1000;
+      // Weaviate rejects fetchObjects once offset+limit exceeds its
+      // QUERY_MAXIMUM_RESULTS cap (default 10000). Fail loudly with a clear
+      // USER error before that happens rather than surfacing a raw driver error.
+      const MAX_FILTERED_UPDATE = 10000;
       const uuids: string[] = [];
       for (let offset = 0; ; offset += PAGE_SIZE) {
+        if (offset >= MAX_FILTERED_UPDATE) {
+          throw new MastraError({
+            id: createVectorErrorId('WEAVIATE', 'UPDATE_VECTOR', 'INVALID_ARGS'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            text: `Filtered updateVector matched more than ${MAX_FILTERED_UPDATE} vectors, which exceeds Weaviate's query result cap. Narrow the filter or update by id.`,
+            details: { indexName, limit: MAX_FILTERED_UPDATE },
+          });
+        }
         const page = await collection.query.fetchObjects({
           limit: PAGE_SIZE,
           offset,
