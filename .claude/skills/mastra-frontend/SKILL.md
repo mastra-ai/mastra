@@ -88,25 +88,36 @@ Application shell
 ├── Sidebar or outer chrome: background-1
 └── Main canvas: background-2
     ├── Content placed directly on the canvas: background-2
-    └── Card or panel: background-3
-        └── Content inside the card: background-3
+    └── Contained structural panel: background-3
+        └── Content inside the panel: background-3
 ```
 
 Background numbers describe containment, not brightness or elevation. Follow these rules:
 
 - Sibling surfaces at the same depth use the same background role.
 - Text, controls, and ordinary content inherit their containing surface. They do not create another layer.
-- Add a panel layer only when the container groups content or owns interaction. Do not wrap sections in cards for decoration.
-- A panel nested inside another panel does not automatically require a fourth shade. Keep `background-3` unless the design system defines another structural role.
+- Add a panel layer only when the container creates a structural region, such as a docked inspector. Do not wrap sections in panels for decoration.
+- A card is a component recipe, not automatically `background-3`. Use its existing variant; cards may blend with the canvas until hover or selection.
+- A panel nested inside another panel does not automatically require a fourth shade. Keep the owning component's surface unless the design system defines another structural role.
 - Sidebars embedded inside a panel belong to that component's documented variant; they are not automatically `background-1`.
 - Dialogs, popovers, menus, and tooltips use their DS component surface. Do not infer their token from app-shell depth.
 - Use spacing to separate sections first. Add a border when adjacent surfaces still need a boundary; do not add both a new background and a border by default.
+
+Factory demonstrates this hierarchy with the current semantic tokens:
+
+- `AppShell` uses `surface1` for the outer frame; the desktop sidebar inherits it.
+- The mobile `MainSidebar` drawer owns `surface2` because it is an overlay variant, not the desktop shell.
+- The main content frame and header use `surface2`.
+- Docked workspace and supervisor panels use `surface3`.
+- Work-item cards keep their component recipe (`neutral6/5`, then `surface3` on hover) instead of treating every card as a panel.
+
+This is a conceptual match, not foundation wiring. Factory still consumes the legacy semantic tokens until an approved migration maps them to the new foundations.
 
 Then identify whether the task is consuming or defining the system.
 
 ### Product and component work
 
-1. Name the role: shell surface, canvas surface, panel surface, text, border, status, or accent.
+1. Name the role: shell surface, canvas surface, structural panel, component card, text, border, status, or accent.
 2. Find the matching semantic `--color-*` token in `theme.css` and confirm an existing usage.
 3. Use the generated semantic utility, such as `bg-surface2`, `text-neutral4`, or `border-border1`.
 4. If no semantic role exists, report the missing role. Do not substitute a raw foundation because it looks close.
@@ -115,7 +126,7 @@ Current product code MUST preserve its owning component's semantic surface token
 
 ### Foundation work
 
-- `background-1`, `background-2`, and `background-3` encode the shell, canvas, and panel layers shown above.
+- `background-1`, `background-2`, and `background-3` encode the shell, canvas, and structural panel layers shown above.
 - `gray-1` through `gray-10` encode contrast from subtle to strong, not lightness. Their tonal direction reverses by theme.
 - `gray-alpha-*` follows the same strength scale, using white overlays in dark mode and black overlays in light mode.
 - These are plain CSS properties. They do not generate Tailwind utilities and MUST NOT replace existing semantic tokens outside an approved migration.
@@ -150,7 +161,7 @@ Keep class strings complete and statically detectable. Use `cn()` for conditiona
 - The change reuses the nearest component and composition precedent.
 - Every text style was chosen from a content role, not a desired pixel size.
 - `Txt` is used as a component interface, not treated as the foundation itself.
-- Shell, canvas, and panel surfaces follow the nesting map; content does not create decorative layers.
+- Shell, canvas, and structural panels follow the nesting map; cards keep their component-owned recipes.
 - Every color was chosen by semantic role; raw foundations remain inside approved system work.
 - Consumer classes affect layout only.
 - The same semantic tokens work in both themes without local overrides.
