@@ -9,6 +9,7 @@ import { linearProvider } from './linear/index.js';
 import { notionProvider } from './notion/index.js';
 import { openaiProvider } from './openai/index.js';
 import { resendProvider } from './resend/index.js';
+import { snowflakeProvider } from './snowflake/index.js';
 import { supabaseProvider } from './supabase/index.js';
 import { workosProvider } from './workos/index.js';
 
@@ -20,6 +21,7 @@ export const PROVIDERS: readonly ProviderRegistration[] = [
   notionProvider,
   openaiProvider,
   resendProvider,
+  snowflakeProvider,
   supabaseProvider,
   workosProvider,
 ];

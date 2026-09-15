@@ -342,6 +342,24 @@ function extractAction(
     if (parameter.getName() === 'nango') parameter.rename('platformProxy');
   }
 
+  // Some templates skip the `NangoActionLocal` alias and type helper
+  // parameters inline as `Parameters<(typeof action)['exec']>[0]`. The
+  // createAction declaration is stripped from the generated module, so
+  // rewrite those references to the imported `PlatformProxy` type.
+  const actionVariableName = createActionCall
+    .getFirstAncestorByKind(SyntaxKind.VariableStatement)
+    ?.getDeclarations()[0]
+    ?.getName();
+  if (actionVariableName) {
+    const inlineContextType = `Parameters<(typeof ${actionVariableName})['exec']>[0]`;
+    const inlineContextNodes = source
+      .getDescendantsOfKind(SyntaxKind.IndexedAccessType)
+      .filter(node => node.getText() === inlineContextType);
+    for (const node of inlineContextNodes.reverse()) {
+      if (!node.wasForgotten()) node.replaceWithText('PlatformProxy');
+    }
+  }
+
   const renamedExecBodyNode = execInitializer.getBody();
   const inputSchemaText = inputDeclaration.getText();
   const execBody = simplifyScalarQuerySerialization(

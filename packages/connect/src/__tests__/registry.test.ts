@@ -17,6 +17,7 @@ describe('shipped provider registry', () => {
       'notion',
       'openai',
       'resend',
+      'snowflake',
       'supabase',
       'workos',
     ]);
