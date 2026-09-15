@@ -316,7 +316,7 @@ export class MastraClient extends BaseResource {
    * @returns Promise containing one record per agent controller, carrying its id
    */
   public async listAgentControllers(): Promise<AgentControllerInfo[]> {
-    const body = await this.request<{ agentControllers: AgentControllerInfo[] }>('/agent-controller');
+    const body = await this.request<RouteResponse<'GET /agent-controller'>>('/agent-controller');
     return body.agentControllers;
   }
 

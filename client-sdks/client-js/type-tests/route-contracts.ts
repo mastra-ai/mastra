@@ -58,6 +58,7 @@ import type {
 } from '../src/resources/observability-route-types.js';
 import type { Run } from '../src/resources/run.js';
 import type { Vector } from '../src/resources/vector.js';
+import type { Workflow } from '../src/resources/workflow.js';
 
 type Equal<Actual, Expected> =
   (<T>() => T extends Actual ? 1 : 2) extends <T>() => T extends Expected ? 1 : 2 ? true : false;
@@ -315,6 +316,30 @@ type _WorkflowResumeAsyncPublicResult = Expect<Equal<Awaited<ReturnType<Run['res
 type _WorkflowRestartAsyncPublicResult = Expect<Equal<Awaited<ReturnType<Run['restartAsync']>>, WorkflowRunResult>>;
 type _WorkflowTimeTravelAsyncPublicResult = Expect<
   Equal<Awaited<ReturnType<Run['timeTravelAsync']>>, WorkflowRunResult>
+>;
+type _WorkflowCreateRunInput = Expect<
+  Parameters<Workflow['createRun']>[0] extends
+    | (QueryParams<'POST /workflows/:workflowId/create-run'> & Body<'POST /workflows/:workflowId/create-run'>)
+    | undefined
+    ? true
+    : false
+>;
+type _AgentToolApprovalInput = Expect<
+  Parameters<Agent['sendToolApproval']>[0] extends Omit<
+    Body<'POST /agents/:agentId/send-tool-approval'>,
+    'requestContext' | 'messages' | 'streamOptions'
+  >
+    ? true
+    : false
+>;
+type _AgentToolApprovalResponse = Expect<
+  Equal<ReturnType<Agent['sendToolApproval']>, Promise<RouteResponse<'POST /agents/:agentId/send-tool-approval'>>>
+>;
+type _AgentControllersResponse = Expect<
+  Equal<
+    Awaited<ReturnType<MastraClient['listAgentControllers']>>[number],
+    RouteResponse<'GET /agent-controller'>['agentControllers'][number]
+  >
 >;
 void scoreRequest;
 void createResponse;

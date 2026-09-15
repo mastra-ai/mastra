@@ -339,12 +339,16 @@ export class AgentVoice extends BaseResource {
    * @returns Promise containing the audio data
    */
   async speak(text: string, options?: { speaker?: string; [key: string]: any }): Promise<Response> {
+    const body: Body<'POST /agents/:agentId/voice/speak'> = {
+      text,
+      speakerId: options?.speaker,
+    };
     return this.request<Response>(`/agents/${this.agentId}/voice/speak`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: { text, options },
+      body,
       stream: true,
     });
   }
@@ -2946,18 +2950,15 @@ export class Agent extends BaseResource {
     return streamResponse;
   }
 
-  async sendToolApproval(params: {
-    resourceId: string;
-    threadId: string;
-    toolCallId: string;
-    approved: boolean;
-    resumeData?: unknown;
-    requestContext?: RequestContext | Record<string, any>;
-    messages?: MessageListInput;
-    streamOptions?: StreamParamsBaseWithoutMessages<any>;
-  }): Promise<{ accepted: true; runId: string; toolCallId?: string }> {
+  async sendToolApproval(
+    params: Omit<Body<'POST /agents/:agentId/send-tool-approval'>, 'requestContext' | 'messages' | 'streamOptions'> & {
+      requestContext?: RequestContext | Record<string, any>;
+      messages?: MessageListInput;
+      streamOptions?: StreamParamsBaseWithoutMessages<any>;
+    },
+  ): Promise<RouteResponse<'POST /agents/:agentId/send-tool-approval'>> {
     const { requestContext, ...rest } = params;
-    return this.request<{ accepted: true; runId: string; toolCallId?: string }>(
+    return this.request<RouteResponse<'POST /agents/:agentId/send-tool-approval'>>(
       `/agents/${this.agentId}/send-tool-approval`,
       {
         method: 'POST',

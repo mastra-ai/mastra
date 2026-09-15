@@ -1,5 +1,5 @@
 import type { RequestContext } from '@mastra/core/request-context';
-import type { PathParams, RouteResponse } from '../route-types.generated.js';
+import type { Body, PathParams, QueryParams, RouteResponse } from '../route-types.generated.js';
 import type {
   ClientOptions,
   GetWorkflowResponse,
@@ -160,14 +160,16 @@ export class Workflow extends BaseResource {
    * @param params - Optional object containing the optional runId
    * @returns Promise containing the Run instance
    */
-  async createRun(params?: { runId?: string; resourceId?: string; disableScorers?: boolean }) {
+  async createRun(
+    params?: QueryParams<'POST /workflows/:workflowId/create-run'> & Body<'POST /workflows/:workflowId/create-run'>,
+  ) {
     const searchParams = new URLSearchParams();
 
     if (!!params?.runId) {
       searchParams.set('runId', params.runId);
     }
 
-    const res = await this.request<{ runId: string }>(
+    const res = await this.request<RouteResponse<'POST /workflows/:workflowId/create-run'>>(
       `/workflows/${this.workflowId}/create-run?${searchParams.toString()}`,
       {
         method: 'POST',
