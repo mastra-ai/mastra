@@ -6,6 +6,7 @@ import { z } from 'zod/v4';
 
 import { Mastra } from '../..';
 import { MessageList } from '../../agent/message-list';
+import { markExplicitModelOutput } from '../../agent/message-list/conversion/tool-result-model-output';
 import { EventEmitterPubSub } from '../../events';
 import { loop } from '../../loop/loop';
 import { MastraLanguageModelV2Mock } from '../../loop/test-utils/MastraLanguageModelV2Mock';
@@ -36,6 +37,12 @@ function toolCallPart(toolCallId: string, toolName: string, input: unknown = {})
 
 function toolResultPart(toolCallId: string, toolName: string, output: any = { type: 'text', value: 'result' }) {
   return { type: 'tool-result' as const, toolCallId, toolName, output };
+}
+
+function explicitModelOutputPart(toolCallId: string, toolName: string, output: any) {
+  const part = toolResultPart(toolCallId, toolName, output);
+  markExplicitModelOutput(part);
+  return part;
 }
 
 function toolCallIdsIn(prompt: LanguageModelV2Prompt): string[] {
@@ -184,7 +191,7 @@ describe('ToolCallFilter', () => {
       },
       {
         role: 'tool',
-        content: [toolResultPart('call-search', 'search', { type: 'text', value: 'Compact search summary' })],
+        content: [explicitModelOutputPart('call-search', 'search', { type: 'text', value: 'Compact search summary' })],
       },
     ];
 
@@ -204,6 +211,21 @@ describe('ToolCallFilter', () => {
       expect(toolCallIdsIn(result)).toEqual([]);
       // The text lands in the assistant message so role ordering stays valid.
       expect(result.map(message => message.role)).toEqual(['user', 'assistant']);
+    });
+
+    it('does not preserve a raw fallback result without explicit model output provenance', async () => {
+      const prompt: LanguageModelV2Prompt = [
+        { role: 'assistant', content: [toolCallPart('call-raw', 'rawTool')] },
+        {
+          role: 'tool',
+          content: [toolResultPart('call-raw', 'rawTool', { type: 'json', value: { secret: 'RAW_RESULT' } })],
+        },
+      ];
+
+      const result = await runFilter(new ToolCallFilter({ preserveModelOutput: true }), prompt);
+
+      expect(JSON.stringify(result)).not.toContain('RAW_RESULT');
+      expect(result).toEqual([]);
     });
 
     it('preserves model output only for the tools being filtered', async () => {
@@ -233,9 +255,9 @@ describe('ToolCallFilter', () => {
         {
           role: 'tool',
           content: [
-            toolResultPart('call-text', 'textTool', { type: 'text', value: 'plain text' }),
-            toolResultPart('call-json', 'jsonTool', { type: 'json', value: { total: 7 } }),
-            toolResultPart('call-content', 'contentTool', {
+            explicitModelOutputPart('call-text', 'textTool', { type: 'text', value: 'plain text' }),
+            explicitModelOutputPart('call-json', 'jsonTool', { type: 'json', value: { total: 7 } }),
+            explicitModelOutputPart('call-content', 'contentTool', {
               type: 'content',
               value: [
                 { type: 'text', text: 'first' },
@@ -260,7 +282,10 @@ describe('ToolCallFilter', () => {
 
       const prompt: LanguageModelV2Prompt = [
         { role: 'assistant', content: [toolCallPart('call-circular', 'circularTool')] },
-        { role: 'tool', content: [toolResultPart('call-circular', 'circularTool', { type: 'json', value: circular })] },
+        {
+          role: 'tool',
+          content: [explicitModelOutputPart('call-circular', 'circularTool', { type: 'json', value: circular })],
+        },
       ];
 
       const result = await runFilter(new ToolCallFilter({ preserveModelOutput: true }), prompt);
@@ -324,7 +349,7 @@ describe('ToolCallFilter', () => {
       { role: 'assistant', content: [toolCallPart('call-search', 'search', { query: 'SECRET_QUERY' })] },
       {
         role: 'tool',
-        content: [toolResultPart('call-search', 'search', { type: 'text', value: 'Compact search summary' })],
+        content: [explicitModelOutputPart('call-search', 'search', { type: 'text', value: 'Compact search summary' })],
       },
     ];
 

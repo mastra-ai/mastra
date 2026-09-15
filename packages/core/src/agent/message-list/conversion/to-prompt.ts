@@ -5,6 +5,7 @@ import { convertDataContentToBase64String } from '../prompt/data-content';
 import { categorizeFileData } from '../prompt/image-utils';
 import type { AIV5Type } from '../types';
 import { sanitizeToolName } from '../utils/tool-name';
+import { transferExplicitModelOutput } from './tool-result-model-output';
 
 type AIV5LanguageModelV2Message = LanguageModelV2Prompt[0];
 type LanguageModelV1Message = LanguageModelV1Prompt[0];
@@ -247,14 +248,16 @@ export function aiV5ModelMessageToV2PromptMessage(modelMessage: AIV5Type.ModelMe
         if (role === `user`) {
           throw new Error(incompatibleMessage);
         }
-        roleContent[role].push({
+        const promptPart = {
           ...part,
           toolName: sanitizeToolName(part.toolName),
           // Providers read `output.type` unguarded (e.g. @ai-sdk/openai-compatible).
           // An output-less tool result (lost result chunk, OM rewrite) must still
           // present a valid LanguageModelV2ToolResultOutput shape.
-          output: part.output ?? { type: 'json', value: null },
-        });
+          output: part.output ?? { type: 'json' as const, value: null },
+        };
+        transferExplicitModelOutput(part, promptPart);
+        roleContent[role].push(promptPart);
         break;
       }
 
@@ -342,7 +345,9 @@ function convertToolResultContent(
 
       if (!outputModified) return part;
       messageModified = true;
-      return { ...part, output: { ...output, value } };
+      const convertedPart = { ...part, output: { ...output, value } };
+      transferExplicitModelOutput(part, convertedPart);
+      return convertedPart;
     });
 
     return messageModified ? { ...message, content } : message;

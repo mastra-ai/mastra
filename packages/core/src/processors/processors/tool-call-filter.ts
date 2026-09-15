@@ -1,5 +1,6 @@
 import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 
+import { hasExplicitModelOutput } from '../../agent/message-list/conversion/tool-result-model-output';
 import type { ProcessLLMRequestArgs, ProcessLLMRequestResult, Processor } from '../index';
 
 type PromptMessage = LanguageModelV2Prompt[number];
@@ -196,6 +197,7 @@ export class ToolCallFilter implements Processor {
       for (const part of message.content as PromptPart[]) {
         if (part.type !== 'tool-result') continue;
         if (!excludedToolCallIds.has(part.toolCallId)) continue;
+        if (!hasExplicitModelOutput(part)) continue;
 
         const text = this.modelOutputToText((part as ToolResultPart).output);
         if (text) {

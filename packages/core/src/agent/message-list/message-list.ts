@@ -26,6 +26,7 @@ import {
   StepContentExtractor,
 } from './conversion';
 import type { ToolCallConversionMode } from './conversion';
+import { markExplicitModelOutput } from './conversion/tool-result-model-output';
 import { TypeDetector } from './detection/TypeDetector';
 import { MessageMerger } from './merge';
 import { convertImageFilePart } from './prompt/convert-file';
@@ -640,9 +641,9 @@ export class MessageList {
               part.toolInvocation?.state === 'result' &&
               part.providerMetadata?.mastra &&
               typeof part.providerMetadata.mastra === 'object' &&
-              // Key off the value, not its presence: a nullish `modelOutput` means the tool's
-              // toModelOutput opted out of mapping, so the raw result must be kept. Keying off
-              // presence would blank out `output` on the tool message sent to the provider.
+              Object.hasOwn(part.providerMetadata.mastra, 'modelOutput') &&
+              // A nullish `modelOutput` means the tool's toModelOutput opted out of mapping,
+              // so the raw result must be kept.
               (part.providerMetadata.mastra as Record<string, unknown>).modelOutput != null
             ) {
               storedModelOutputs.set(
@@ -660,10 +661,12 @@ export class MessageList {
             for (let i = 0; i < modelMsg.content.length; i++) {
               const part = modelMsg.content[i]!;
               if (part.type === 'tool-result' && storedModelOutputs.has(part.toolCallId)) {
-                modelMsg.content[i] = {
+                const modelOutputPart = {
                   ...part,
                   output: storedModelOutputs.get(part.toolCallId) as any,
                 };
+                markExplicitModelOutput(modelOutputPart);
+                modelMsg.content[i] = modelOutputPart;
               }
             }
           }
