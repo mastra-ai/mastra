@@ -5,11 +5,6 @@ overrides:
   '@mastra/core': link:../../core
   '@mastra/mcp': link:../../mcp
   '@internal/test-utils': link:../../_test-utils
-  hono@<4.13.8: 4.13.7
-  nanoid@>=3.0.0 <3.3.19: 3.3.19
-  browserslist@<=4.28.6: 4.28.9
-  vitest@>=4.1.0 <4.1.11: 4.1.11
-  baseline-browser-mapping@<2.11.0: 2.11.0
 
 allowBuilds:
   esbuild: true

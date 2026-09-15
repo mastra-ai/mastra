@@ -269,15 +269,15 @@ overrides:
   # which breaks react-router's build when renovate's pnpm dedupe floats it up.
   cookie: '>=1.1.1 <2'
   tmp: '>=0.2.7'
-  jsondiffpatch: '>=0.7.6'
+  jsondiffpatch: '>=0.7.3'
   ssri: '>=6.0.2'
   jws: ^4.0.1
   client-js-e2e-tests-zod-v3>zod: ^3.24.0
-  client-js-e2e-tests-zod-v4>zod: ^4.6.4
-  # >=1.6.26 fixes user-enumeration (AIKIDO-2026-906996). Stay on 1.7.4
-  # rather than 1.6.33 because 1.6.33 is inside the 1-day minimumReleaseAge window.
-  better-auth: ^1.7.4
-  js-yaml: ^5.4.2
+  client-js-e2e-tests-zod-v4>zod: ^4.3.6
+  # >=1.6.13 fixes stored XSS via javascript: redirect_uri in oidc-provider/mcp
+  # (GHSA Dependabot alert #2266).
+  better-auth: ^1.6.23
+  js-yaml: ^5.2.2
   glob@<=10.5.0: 10.5.0
   body-parser@<=2.2.1: 2.3.0
   inngest: ^4.2.2
@@ -289,15 +289,14 @@ overrides:
   # Security floors for Dependabot alerts (transitive deps; patched versions
   # are within the parents' declared ranges).
   simple-git@<3.36.0: 3.36.0
-  axios@>=1.0.0 <1.20.0: 1.20.0
-  protobufjs@>=7.0.0 <7.6.6: 7.6.6
-  protobufjs@>=8.0.0 <8.8.0: 8.8.0
+  axios@>=1.0.0 <1.16.0: 1.18.0
+  protobufjs@>=7.0.0 <7.6.3: 7.6.5
+  protobufjs@>=8.0.0 <8.6.0: 8.6.6
   minimatch@>=5.0.0 <5.1.8: 5.1.8
   minimatch@>=9.0.0 <9.0.7: 9.0.7
-  ws@>=7.0.0 <7.5.12: 7.5.13
-  ws@>=8.0.0 <8.21.1: 8.21.3
+  ws@>=8.0.0 <8.21.0: 8.21.0
   webpack-dev-server@<5.2.5: 5.2.6
-  qs@>=6.7.0 <6.16.0: 6.16.0
+  qs@>=6.7.0 <6.15.2: 6.15.2
   fast-uri@<3.1.7: 3.1.7
   form-data@<2.5.6: 2.5.6
   form-data@>=4.0.0 <4.0.6: 4.0.6
@@ -305,26 +304,24 @@ overrides:
   brace-expansion@>=2.0.0 <2.1.4: 2.1.4
   brace-expansion@>=4.0.0 <5.0.9: 5.0.9
   immer@>=11.0.0 <11.1.9: 11.1.9
-  # 3.x has no XSS patch (AIKIDO-2026-420462 is fixed in 4.25.5+).
-  '@clerk/shared@>=3.0.0 <4.25.5': 4.31.1
+  '@clerk/shared@>=3.0.0 <3.47.5': 3.47.8
   js-cookie@>=3.0.0 <3.0.7: 3.0.7
   path-to-regexp@<0.1.13: 0.1.13
-  joi@>=17.0.0 <17.13.7: 17.13.8
-  svgo@>=3.0.0 <3.3.5: 3.3.5
+  joi@>=17.0.0 <17.13.4: 17.13.4
+  svgo@>=3.0.0 <3.3.3: 3.3.4
   # undici 5.x has no patched release; the only 5.x consumer is
   # @connectrpc/connect-node@1.7.0 (via @cursor/sdk), which is compatible with
   # the undici 6 Client/Pool APIs.
-  undici@<6.0.0: 6.28.1
-  undici@>=6.0.0 <6.28.1: 6.28.1
-  undici@>=7.0.0 <7.29.1: 7.29.1
-  undici@>=8.0.0 <8.10.2: 8.10.2
-  e2b>undici8: npm:undici@8.10.2
+  undici@<6.0.0: 6.28.0
+  undici@>=6.0.0 <6.28.0: 6.28.0
+  undici@>=7.0.0 <7.29.0: 7.29.0
+  undici@>=8.0.0 <8.9.0: 8.9.0
+  e2b>undici8: npm:undici@8.9.0
   multer@<2.3.0: 2.3.0
   '@hey-api/openapi-ts@<0.97.3': 0.97.3
   '@opentelemetry/core@>=2.0.0 <2.8.0': 2.10.0
-  '@opentelemetry/sdk-node@<0.221.0': 0.221.0
-  '@opentelemetry/exporter-prometheus@<0.221.0': 0.221.0
-  '@opentelemetry/propagator-jaeger@<2.9.0': 2.11.0
+  '@opentelemetry/sdk-node@<0.217.0': 0.221.0
+  '@opentelemetry/exporter-prometheus@<0.217.0': 0.221.0
   uuid@>=13.0.0 <13.0.1: 13.0.1
   # uuid <11.1.1 and tar <7.5.16 are pinned by transitive parents on old
   # majors (msal-node/google-gax/etc. declare uuid ^8-^10; the sqlite3
@@ -337,54 +334,18 @@ overrides:
   websocket-driver@<0.7.5: 0.7.5
   '@babel/core@>=7.0.0 <7.29.6': 8.0.1
   '@babel/plugin-transform-modules-systemjs@>=7.12.0 <7.29.4': 8.0.1
-  dompurify@>=3.0.0 <3.4.15: 3.4.15
-  hono@<4.13.8: 4.13.7
-  '@hono/node-server@<1.19.15': 1.19.17
-  nanoid@>=3.0.0 <3.3.19: 3.3.19
+  dompurify@>=3.0.0 <3.4.13: 3.4.13
+  hono@<4.12.34: 4.12.34
+  '@hono/node-server@<1.19.15': 1.19.15
+  nanoid@>=3.0.0 <3.3.18: 3.3.18
   nanoid@>=5.0.0 <5.1.16: 5.1.16
   postcss@<8.5.23: 8.5.23
-  ip-address@<10.6.0: 10.6.0
+  ip-address@<10.3.1: 10.3.1
   mermaid@>=11.0.0-alpha.1 <11.16.1: 11.16.1
-  sharp@<0.35.4: 0.35.4
-  image-size@<=2.0.2: 2.0.4
-  browserslist@<=4.28.6: 4.28.9
-  tinypool@>=2.0.0 <2.2.0: 2.2.0
-  mysql2@<=3.23.0: 3.24.4
-  '@fastify/busboy@<3.2.2': 3.2.2
-  vitest@>=4.1.0 <4.1.11: 4.1.11
-  zod@>=4.0.0 <4.5.5: 4.6.5
-  deepmerge-ts@<8.0.0: 8.0.2
+  sharp@<0.35.0: 0.35.3
   valibot@<1.4.2: 1.4.2
   find-my-way@<9.7.0: 9.9.0
-  adm-zip@<=0.6.0: 0.6.1
-  toml@<4.2.0: 4.2.0
-  fflate@>=0.4.5 <0.4.9: 0.4.9
-  colord@<2.9.4: 2.10.0
-  postcss-selector-parser@>=6.1.0 <6.1.3: 6.1.4
-  postcss-selector-parser@>=7.1.0 <7.1.3: 7.1.6
-  '@vitest/mocker@>=4.1.0 <4.1.11': 4.1.11
-  '@fastify/forwarded@<3.0.2': 3.0.2
-  ajv@>=8.0.0 <8.20.0: 8.20.0
-  '@noble/hashes@>=2.0.0 <2.4.0': 2.4.0
-  '@docsearch/react@>=4.0.0 <4.7.0': 4.7.0
-  es-toolkit@>=1.11.0 <1.51.0: 1.52.0
-  fast-copy@>=4.0.0 <4.1.0: 4.1.1
-  onnxruntime-node@<1.24.2: 1.26.0
-  '@opentelemetry/auto-instrumentations-node@<0.80.0': 0.80.0
-  '@opentelemetry/instrumentation-pg@<0.73.0': 0.74.0
-  '@opentelemetry/instrumentation-tedious@<0.40.0': 0.41.0
-  '@opentelemetry/instrumentation-oracledb@<0.47.0': 0.47.0
-  '@opentelemetry/instrumentation-mysql@<0.68.0': 0.68.0
-  '@opentelemetry/instrumentation-mysql2@<0.68.0': 0.68.0
-  '@opentelemetry/instrumentation-mongoose@<0.68.0': 0.68.0
-  '@opentelemetry/instrumentation-knex@<0.66.0': 0.66.0
-  '@opentelemetry/instrumentation-cassandra-driver@<0.67.0': 0.67.0
-  cjs-module-lexer@<2.2.0: 2.2.1
-  es-module-lexer@<3.0.0: 3.0.2
-  '@ai-sdk/provider-utils@>=3.0.0 <3.0.28': 3.0.31
-  yargs@>=17.0.0 <18.1.0: 18.1.0
-  jose@>=6.0.0 <6.2.5: 6.2.12
-  fast-copy@>=3.0.0 <3.1.0: 3.1.0
+  adm-zip@<0.6.0: 0.6.0
   '@tootallnate/once@<3.0.1': ^3.0.1
   '@codemirror/lang-jinja': ^6.0.1
   'aggregate-error': 'npm:@socketregistry/aggregate-error@^1'

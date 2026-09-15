@@ -17,7 +17,6 @@ overrides:
   '@mastra/rag': link:../../../../packages/rag
   '@mastra/ttsd': link:../../../../packages/ttsd
   '@internal/test-utils': link:../../../../packages/_test-utils
-  zod@>=4.0.0 <4.5.5: 4.6.5
 
 importers:
 
@@ -64,13 +63,13 @@ packages:
     resolution: {integrity: sha512-pcz//pMnek76mQW9dPX3wOHUoRPLirB3efKv1FOBWPV9ryWXLCaqE631ryV043WkpJCaCEsX30BzyWL7h8qXcg==}
     engines: {node: '>=18'}
     peerDependencies:
-      zod: 4.6.5
+      zod: ^3.25.76 || ^4.1.8
 
   '@ai-sdk/provider-utils@3.0.30':
     resolution: {integrity: sha512-NCJ9JKow5ENAgEZxzvEvF20thwDiH+hutvzmrUDbloRX0azpJHNst8+7pZIVryYhLM9wgpT5/ShTSjPTFhkxEQ==}
     engines: {node: '>=18'}
     peerDependencies:
-      zod: 4.6.5
+      zod: ^3.25.76 || ^4.1.8
 
   '@ai-sdk/provider@2.0.3':
     resolution: {integrity: sha512-h88OPkavHTiN9tMn2l5awAznGB0lXzjcLhgR1/rvjB2zlLprsNxbM2tt6OJsHUxduLC3klq0/eqaSf6fX5XVww==}
@@ -94,7 +93,7 @@ packages:
     resolution: {integrity: sha512-JbRLySD6FAB+ncmHCuPDDrdaFlKOmCqU8ZnntxqmjnpYv0sbHFry2VT+0a+q9E1JFQKUaXd0NvoiA8g+e4R0ZQ==}
     engines: {node: '>=18'}
     peerDependencies:
-      zod: 4.6.5
+      zod: ^3.25.76 || ^4.1.8
 
   eventsource-parser@3.1.0:
     resolution: {integrity: sha512-kJezFj9YFAMLeORyi7aCLxLbD5/qWMQnoMVlVPyHIll7lgRJCc3JVln9Vgl9nwQi0YkMnhdGTMNn7CkRRAptMg==}

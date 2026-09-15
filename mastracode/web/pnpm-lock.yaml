@@ -5,12 +5,10 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  hono: 4.13.7
-  nanoid@>=3.0.0 <3.3.19: 3.3.19
+  hono@<4.12.34: 4.12.34
+  nanoid@>=3.0.0 <3.3.18: 3.3.18
   postcss@<8.5.23: 8.5.23
-  undici@<6.28.1: 6.28.1
-  ws@>=8.0.0 <8.21.3: 8.21.3
-  zod@>=4.0.0 <4.5.5: 4.6.5
+  undici@<6.28.0: 6.28.0
 
 importers:
 
@@ -60,7 +58,7 @@ importers:
         specifier: 22.20.1
         version: 22.20.1
       hono:
-        specifier: 4.13.7
+        specifier: ^4.13.7
         version: 4.13.7
       mastra:
         specifier: link:../../packages/cli
@@ -75,7 +73,7 @@ importers:
         specifier: 4.1.11
         version: 4.1.11(@types/node@22.20.1)(jsdom@26.1.0)(msw@2.15.0(@types/node@22.20.1)(typescript@7.0.2))(vite@6.4.3(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.1)(yaml@2.9.0))
       zod:
-        specifier: 4.6.5
+        specifier: ^4.3.6
         version: 4.6.5
 
 packages:
@@ -84,13 +82,13 @@ packages:
     resolution: {integrity: sha512-GIucFshCN7JZwTDur25PsnLEMRUFfAKuLaA9TP9fzGxPC2Zxzl94tvat93ZdZLURkKOrDukU0E4fj73tKDWjTA==}
     engines: {node: '>=18'}
     peerDependencies:
-      zod: 4.6.5
+      zod: ^3.25.76 || ^4.1.8
 
   '@ai-sdk/provider-utils@4.0.41':
     resolution: {integrity: sha512-I7hhjfw01yEI8NkuAsT8Mv6xbWFr/lqLXMdaJQ2zWfXEpxog1eT7skDcv1+RY29/+5btzH8wD+vVvy48bk9oNQ==}
     engines: {node: '>=18'}
     peerDependencies:
-      zod: 4.6.5
+      zod: ^3.25.76 || ^4.1.8
 
   '@ai-sdk/provider@3.0.14':
     resolution: {integrity: sha512-5X1k57JBJ4H7H1QjX7CnJYAB1I19r/trVZTMcSms7/kLNZ8RaU4Nt2agcwZzv82Hfx6Q7/TOLU7agAKeFfc8cA==}
@@ -1092,8 +1090,8 @@ packages:
     resolution: {integrity: sha512-dkEJPVvun4FryqBmZ5KhDo0K9iDXAwn08tMLDinNdRBNPcYEDiWYysLcc6k3mjTMlbP9KyylvRpd4wFtwrT9rw==}
     engines: {node: ^20.17.0 || >=22.9.0}
 
-  nanoid@3.3.19:
-    resolution: {integrity: sha512-Y2tUNy4ouw6tq5oDSKeQYGOyhkUBhNOcGV/02KC+6kd9eDGqdZd++mjMiIDilrBYvjEnCYvVtsuHCuP+okSfug==}
+  nanoid@3.3.18:
+    resolution: {integrity: sha512-DTg4MJbGMWkfi6VZFdNt2/caMbQy4Ou+Op/hJQvGEWcnVfoA1QA+xzRKAzw9jD6+GVOOeYr/mIcuDSdug6F6+w==}
     engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
     hasBin: true
 
@@ -1253,8 +1251,8 @@ packages:
   undici-types@6.21.0:
     resolution: {integrity: sha512-iwDZqg0QAGrg9Rav5H4n0M64c3mkR59cJ6wQp+7C4nI0gsmExaedaYLNO44eT4AtBBwjbTiGPMlt2Md0T9H9JQ==}
 
-  undici@6.28.1:
-    resolution: {integrity: sha512-zWpdTVD54H48CIybL0rWQ3ukpb9d23wM7eH5RtfdmeP70cWHNjtfo7P4vZX+5CoDcO53J4Pu5uXp7lNfjc6DRA==}
+  undici@6.28.0:
+    resolution: {integrity: sha512-LIY910g9TI13YS95lrMFrs8Rm/u/irgHeTWoKCoteeJ04CUJ92eEfj0rVn+7VKMPBpUPiUoBKfhNyLI23EE/KA==}
     engines: {node: '>=18.17'}
 
   until-async@3.0.2:
@@ -1428,7 +1426,7 @@ snapshots:
       '@ai-sdk/provider': 3.0.14
       '@standard-schema/spec': 1.1.0
       eventsource-parser: 3.1.0
-      undici: 6.28.1
+      undici: 6.28.0
       zod: 4.6.5
 
   '@ai-sdk/provider@3.0.14':
@@ -2218,7 +2216,7 @@ snapshots:
   mute-stream@3.0.0:
     optional: true
 
-  nanoid@3.3.19: {}
+  nanoid@3.3.18: {}
 
   nwsapi@2.2.24:
     optional: true
@@ -2244,7 +2242,7 @@ snapshots:
 
   postcss@8.5.23:
     dependencies:
-      nanoid: 3.3.19
+      nanoid: 3.3.18
       picocolors: 1.1.1
       source-map-js: 1.2.1
 
@@ -2416,7 +2414,7 @@ snapshots:
 
   undici-types@6.21.0: {}
 
-  undici@6.28.1: {}
+  undici@6.28.0: {}
 
   until-async@3.0.2:
     optional: true
