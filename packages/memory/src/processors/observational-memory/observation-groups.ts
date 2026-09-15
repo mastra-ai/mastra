@@ -57,6 +57,12 @@ function findObservationGroupTags(observations: string): ObservationGroupTag[] {
     const closeStart = observations.indexOf(OBSERVATION_GROUP_CLOSE, openEnd + 1);
     if (closeStart === -1) break;
 
+    const nestedStart = observations.indexOf(OBSERVATION_GROUP_OPEN, openEnd + 1);
+    if (nestedStart !== -1 && nestedStart < closeStart) {
+      cursor = nestedStart;
+      continue;
+    }
+
     tags.push({
       start,
       end: closeStart + OBSERVATION_GROUP_CLOSE.length,

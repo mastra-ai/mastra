@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   combineObservationGroupRanges,
+  parseObservationGroups,
   reconcileObservationGroupsFromReflection,
   renderObservationGroupsForReflection,
   type ObservationGroup,
@@ -122,6 +123,18 @@ describe('reconcileObservationGroupsFromReflection', () => {
 });
 
 describe('malformed observation group input', () => {
+  it('skips an incomplete group before a complete group', () => {
+    const observations = `<observation-group id="incomplete" range="1:2">
+Incomplete
+<observation-group id="complete" range="3:4">
+Complete
+</observation-group>`;
+
+    expect(parseObservationGroups(observations)).toEqual([
+      { id: 'complete', range: '3:4', kind: undefined, content: 'Complete' },
+    ]);
+  });
+
   it('processes repeated unterminated group openings in linear time', () => {
     const observations = '<observation-group >' + 'a<observation-group >'.repeat(10_000);
     const start = performance.now();
