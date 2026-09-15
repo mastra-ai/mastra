@@ -71,7 +71,11 @@ export function toolInteraction(
   const approvals = metadata?.requireApprovalMetadata;
   const suspensions = metadata?.suspendedTools;
   return {
-    approval: approvals?.[toolName] ?? approvals?.[toolCallId],
+    approval:
+      metadata?.mode === 'network'
+        ? (approvals?.[toolName] ?? approvals?.[toolCallId])
+        : (approvals?.[toolCallId] ??
+          Object.values(approvals ?? {}).find(approval => approval.toolCallId === toolCallId)),
     suspended: suspensions?.[toolName] ?? suspensions?.[toolCallId],
   };
 }
