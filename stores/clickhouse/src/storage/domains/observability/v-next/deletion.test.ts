@@ -123,6 +123,29 @@ describe('ClickHouse deletion lifecycle', () => {
 
     await expect(deleteFeedback(client, { feedbackIds: ['feedback-1'] })).rejects.toThrow('lightweight delete failed');
     expect(insert).toHaveBeenCalledOnce();
+    expect(insert.mock.calls[0]?.[0].values[0].lastAppliedAt).toBe('1970-01-01T00:00:00.000Z');
+  });
+
+  it('marks the request applied only after the lightweight delete succeeds', async () => {
+    const feedbackClient = createClient();
+    await deleteFeedback(feedbackClient.client, { feedbackIds: ['feedback-1'] }, { cluster: 'test-cluster' });
+    const scoresClient = createClient();
+    await deleteScores(scoresClient.client, { scoreIds: ['score-1'] });
+
+    for (const { insert, command } of [feedbackClient, scoresClient]) {
+      expect(insert).toHaveBeenCalledTimes(2);
+      const pending = insert.mock.calls[0]?.[0].values[0];
+      const applied = insert.mock.calls[1]?.[0].values[0];
+      expect(pending.lastAppliedAt).toBe('1970-01-01T00:00:00.000Z');
+      expect(applied).toMatchObject({ ...pending, lastAppliedAt: expect.any(String), updatedAt: expect.any(String) });
+      expect(applied.lastAppliedAt).not.toBe('1970-01-01T00:00:00.000Z');
+      expect(applied.updatedAt).toBe(applied.lastAppliedAt);
+      expect(insert.mock.invocationCallOrder[1]).toBeGreaterThan(command.mock.invocationCallOrder[0]!);
+    }
+    expect(feedbackClient.insert.mock.calls[1]?.[0].clickhouse_settings).toEqual(
+      expect.objectContaining({ insert_quorum: 'auto', insert_quorum_parallel: 1 }),
+    );
+    expect(scoresClient.insert.mock.calls[1]?.[0].clickhouse_settings).not.toHaveProperty('insert_quorum');
   });
 
   it('re-hides only the matching scope when deletion starts during a review-status update', async () => {
@@ -161,6 +184,7 @@ describe('ClickHouse deletion lifecycle', () => {
     );
     expect(query.mock.calls[1]?.[0].query).toContain("predicateType = 'itemIds'");
     expect(query.mock.calls[1]?.[0].query).toContain('has(predicateValues, {feedbackId:String})');
+    expect(query.mock.calls[1]?.[0].query).toContain('lastAppliedAt > toDateTime64(0, 3)');
     expect(query).toHaveBeenNthCalledWith(
       3,
       expect.objectContaining({
@@ -168,7 +192,7 @@ describe('ClickHouse deletion lifecycle', () => {
         query_params: { feedbackIds: ['feedback-1'] },
       }),
     );
-    expect(insert).toHaveBeenCalledTimes(2);
+    expect(insert).toHaveBeenCalledTimes(3);
     expect(insert).toHaveBeenNthCalledWith(
       2,
       expect.objectContaining({
