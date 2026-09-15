@@ -19,6 +19,26 @@ test.describe('Agents list scrolling', () => {
     await setupMockAuth(page, { enabled: false });
   });
 
+  test.describe('when tabbing into the agents page', () => {
+    test.use({ viewport: { width: 1440, height: 900 } });
+
+    test('reaches the filter without stopping on the page container', async ({ page }) => {
+      await page.route(
+        url => url.pathname === '/api/agents',
+        route => route.fulfill({ json: createAgentList(2) }),
+      );
+      await page.goto('/agents');
+      await expect(page.locator('.data-list-row')).toHaveCount(2);
+      const filter = page.getByRole('textbox', { name: 'Filter agents' });
+
+      await filter.focus();
+      await page.keyboard.press('Shift+Tab');
+      await expect(page.locator('[data-slot="app-shell-main"]')).not.toBeFocused();
+      await page.keyboard.press('Tab');
+      await expect(filter).toBeFocused();
+    });
+  });
+
   for (const { device, viewport } of [
     { device: 'desktop', viewport: { width: 1440, height: 900 } },
     { device: 'tablet', viewport: { width: 768, height: 1024 } },
@@ -81,6 +101,20 @@ test.describe('Agents list scrolling', () => {
       await expect.poll(() => viewport.evaluate(element => element.scrollTop)).toBeGreaterThan(0);
       await expect(viewport).not.toHaveAttribute('data-overflow-y-end');
       await expect(viewport).toHaveCSS('mask-image', 'none');
+      await expect(page.getByRole('link', { name: 'Agent 40 Help with product questions.' })).toBeInViewport();
+    });
+
+    test('lets the keyboard reach and scroll the list viewport', async ({ page }) => {
+      const viewport = listViewport(page);
+      await expect(viewport).toHaveAttribute('data-overflow-y-end');
+      await page.locator('.data-list-row').first().focus();
+      await page.keyboard.press('Shift+Tab');
+      await expect(viewport).toBeFocused();
+
+      await page.keyboard.press('PageDown');
+      await expect(page.locator('.data-list-row').nth(10)).toBeFocused();
+      await page.keyboard.press('End');
+      await expect.poll(() => viewport.evaluate(element => element.scrollTop)).toBeGreaterThan(0);
       await expect(page.getByRole('link', { name: 'Agent 40 Help with product questions.' })).toBeInViewport();
     });
 

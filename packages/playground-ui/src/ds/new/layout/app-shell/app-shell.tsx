@@ -38,7 +38,6 @@ export function AppShell({
         data-slot="app-shell-main"
         aria-label={mainLabel}
         role="group"
-        tabIndex={0}
         className="min-h-0 overflow-y-auto outline-none"
       >
         {children}

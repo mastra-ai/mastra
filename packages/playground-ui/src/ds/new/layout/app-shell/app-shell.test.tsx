@@ -35,12 +35,6 @@ describe('AppShell', () => {
       expect(markup.indexOf('Route header')).toBeLessThan(markup.indexOf('Main content'));
     });
 
-    it('keeps the main content in a keyboard-accessible independent scroll region', () => {
-      const markup = renderShell();
-
-      expect(markup).toContain('data-slot="app-shell-main" aria-label="Page content" role="group" tabindex="0"');
-    });
-
     it('supports a consumer-owned frame wrapper', () => {
       const markup = renderToStaticMarkup(
         <AppShell
