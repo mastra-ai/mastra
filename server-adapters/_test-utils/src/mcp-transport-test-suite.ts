@@ -219,6 +219,25 @@ export function createMCPTransportTestSuite(config: MCPTransportTestConfig) {
           resumeSchema: expect.objectContaining({ type: 'object', properties: { confirmed: { type: 'boolean' } } }),
         });
       });
+
+      it('continues a suspended tool over REST with resumeData and the echoed suspendPayload', async () => {
+        const base = `http://localhost:${port}/api/mcp/native-fixture/tools/interaction/execute`;
+        const post = (body: unknown) =>
+          fetch(base, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+
+        const resumed = await post({ data: {}, resumeData: { confirmed: true }, suspendPayload: { phase: 'confirm' } });
+        expect(resumed.status).toBe(200);
+        expect(await resumed.json()).toEqual({ result: 1 });
+
+        // An answer that fails resumeSchema is a failed call, never a completed one.
+        const invalid = await post({
+          data: {},
+          resumeData: { confirmed: 'yes' },
+          suspendPayload: { phase: 'confirm' },
+        });
+        expect(invalid.status).toBe(500);
+        expect(await invalid.json()).not.toMatchObject({ status: 'completed' });
+      });
     });
 
     describe('HTTP Transport (/api/mcp/:serverId/mcp)', () => {
