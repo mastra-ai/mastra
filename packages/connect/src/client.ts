@@ -328,7 +328,14 @@ export async function proxyRequest(
     headers['base-url-override'] = options.baseUrlOverride;
   }
   const init: RequestInit = { method: options.method, headers };
-  if (options.body !== undefined) {
+  if (typeof options.body === 'string') {
+    // Pre-encoded payloads (multipart, form-encoded) go out unchanged with
+    // the caller's content type; only JSON encoding is applied automatically.
+    if (!Object.keys(headers).some(name => name.toLowerCase() === 'content-type')) {
+      headers['content-type'] = 'text/plain';
+    }
+    init.body = options.body;
+  } else if (options.body !== undefined) {
     headers['content-type'] = 'application/json';
     init.body = JSON.stringify(options.body);
   }
