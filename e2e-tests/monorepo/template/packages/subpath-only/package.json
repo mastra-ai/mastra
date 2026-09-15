@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "type": "module",
   "exports": {
-    "./value": "./src/value.js"
+    ".": "./src/index.ts",
+    "./value": "./src/value.ts"
   }
 }

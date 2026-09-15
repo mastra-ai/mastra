@@ -4,6 +4,7 @@ import { optimizeLodashImports } from '@optimize-lodash/rollup-plugin';
 import commonjs from '@rollup/plugin-commonjs';
 import json from '@rollup/plugin-json';
 import nodeResolve from '@rollup/plugin-node-resolve';
+import * as resolve from 'resolve.exports';
 import { rollup } from 'rollup';
 import type { InputOptions, OutputOptions, Plugin } from 'rollup';
 import { minify as esbuildMinify } from 'rollup-plugin-esbuild';
@@ -17,8 +18,30 @@ import { removeDeployer } from './plugins/remove-deployer';
 import { subpathExternalsResolver } from './plugins/subpath-externals-resolver';
 import { tsConfigPaths } from './plugins/tsconfig-paths';
 import type { ExternalDependencyInfo } from './types';
-import { getNodeResolveOptions, slash } from './utils';
+import { getNodeResolveOptions, getPackageName, slash } from './utils';
 import type { BundlerPlatform } from './utils';
+
+export function resolveWorkspaceSubpathToSource(
+  id: string,
+  workspaceMap: Map<string, WorkspacePackageInfo>,
+): string | null {
+  const packageName = getPackageName(id);
+  if (!packageName || id === packageName) return null;
+
+  const workspacePackage = workspaceMap.get(packageName);
+  if (!workspacePackage?.exports) return null;
+
+  try {
+    const resolvedPath = resolve.exports(
+      { name: packageName, exports: workspacePackage.exports },
+      `.${id.slice(packageName.length)}`,
+    )?.[0];
+
+    return resolvedPath ? join(workspacePackage.location, resolvedPath) : null;
+  } catch {
+    return null;
+  }
+}
 
 export function mastraInternalAliasPlugin(entryFile: string): Plugin {
   const normalizedEntryFile = slash(entryFile);
@@ -103,6 +126,16 @@ export async function getInputOptions(
         name: 'alias-optimized-deps',
         resolveId(id: string) {
           if (!analyzedBundleInfo.dependencies.has(id)) {
+            if (externalsPreset) {
+              const workspaceSource = resolveWorkspaceSubpathToSource(id, analyzedBundleInfo.workspaceMap);
+              if (workspaceSource) {
+                return {
+                  id: workspaceSource,
+                  external: false,
+                };
+              }
+            }
+
             return null;
           }
 
