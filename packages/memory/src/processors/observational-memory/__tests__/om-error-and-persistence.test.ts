@@ -395,7 +395,7 @@ describe('OM Error State', { timeout: 30_000 }, () => {
         observationalMemory: {
           enabled: true,
           observation: {
-            model: [
+            model: () => [
               {
                 model: createTransientFailingObserverModel(() => attempts++) as any,
                 maxRetries: 2,

@@ -163,8 +163,18 @@ export class ObserverRunner {
     // Read the model into the widened type before branching on it so the
     // conditional does not force TypeScript to enumerate every model-id literal.
     let agentModel: WidenModelId<ConcreteObservationModel> = model;
-    if (this.observationConfig.onFailure === 'continue' && Array.isArray(agentModel)) {
-      agentModel = agentModel.map(fallback => ({ ...fallback, maxRetries: 0 }));
+    if (this.observationConfig.onFailure === 'continue') {
+      if (Array.isArray(agentModel)) {
+        agentModel = agentModel.map(fallback => ({ ...fallback, maxRetries: 0 }));
+      } else if (typeof agentModel === 'function') {
+        const resolveDynamicModel = agentModel;
+        agentModel = (async args => {
+          const resolvedModel = await resolveDynamicModel(args);
+          return Array.isArray(resolvedModel)
+            ? resolvedModel.map(fallback => ({ ...fallback, maxRetries: 0 }))
+            : resolvedModel;
+        }) as typeof agentModel;
+      }
     }
     const agent = new Agent({
       id: isMultiThread ? 'multi-thread-observer' : 'observational-memory-observer',
@@ -176,6 +186,7 @@ export class ObserverRunner {
         extractors,
       ),
       model: agentModel,
+      ...(this.observationConfig.onFailure === 'continue' ? { maxRetries: 0 } : {}),
       ...(memory ? { memory } : {}),
       ...(this.mastra ? { mastra: this.mastra } : {}),
     });
