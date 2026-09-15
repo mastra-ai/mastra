@@ -477,7 +477,6 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
               try {
                 const config = await intake.getConfig({
                   orgId: tenant.orgId,
-                  userId: tenant.userId,
                   integrationIds: [binding.integrationId],
                 });
                 const configuredSourceIds = config[binding.integrationId]?.sourceIds ?? [];
