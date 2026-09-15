@@ -106,7 +106,7 @@ function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
   return (
     <>
       {agent.modelList && (
-        <AgentMetadataSection title="Models" icon={<Boxes />}>
+        <AgentMetadataSection title="Models" accent="blue" icon={<Boxes />}>
           <AgentMetadataModelList
             modelList={agent.modelList}
             updateModelInModelList={updateModelInModelList}
@@ -117,7 +117,9 @@ function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
 
       {networkAgents.length > 0 && (
         <AgentMetadataSection
-          title={<SectionTitleWithCount title="Agents" count={networkAgents.length} />}
+          title="Agents"
+          count={networkAgents.length}
+          accent="green"
           icon={<Bot />}
           hint={{ link: 'https://mastra.ai/en/docs/agents/overview', title: 'Agents documentation' }}
         >
@@ -126,17 +128,10 @@ function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
       )}
 
       <AgentMetadataSection
-        title={
-          <SectionTitleWithCount
-            title={
-              <span className="from-accent6 to-neutral5 bg-linear-to-r bg-clip-text text-transparent forced-colors:bg-none forced-colors:text-inherit">
-                Tools
-              </span>
-            }
-            count={tools.length}
-          />
-        }
-        icon={<Wrench className="text-accent6" />}
+        title="Tools"
+        count={tools.length}
+        accent="amber"
+        icon={<Wrench />}
         hint={{
           link: 'https://mastra.ai/en/docs/agents/using-tools-and-mcp',
           title: 'Using Tools and MCP documentation',
@@ -146,7 +141,9 @@ function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
       </AgentMetadataSection>
 
       <AgentMetadataSection
-        title={<SectionTitleWithCount title="Workflows" count={workflows.length} />}
+        title="Workflows"
+        count={workflows.length}
+        accent="blue"
         icon={<Workflow />}
         hint={{ link: 'https://mastra.ai/en/docs/workflows/overview', title: 'Workflows documentation' }}
       >
@@ -155,7 +152,9 @@ function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
 
       {workspaceTools.length > 0 && (
         <AgentMetadataSection
-          title={<SectionTitleWithCount title="Workspace Tools" count={workspaceTools.length} />}
+          title="Workspace Tools"
+          count={workspaceTools.length}
+          accent="green"
           icon={<Folder />}
           hint={{
             link: 'https://mastra.ai/en/reference/workspace/workspace-class#agent-tools',
@@ -168,7 +167,9 @@ function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
 
       {browserTools.length > 0 && (
         <AgentMetadataSection
-          title={<SectionTitleWithCount title="Browser Tools" count={browserTools.length} />}
+          title="Browser Tools"
+          count={browserTools.length}
+          accent="cyan"
           icon={<Globe />}
           hint={{
             link: 'https://mastra.ai/en/docs/agents/adding-browser-control',
@@ -182,6 +183,7 @@ function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
       {(inputProcessors.length > 0 || outputProcessors.length > 0) && (
         <AgentMetadataSection
           title="Processors"
+          accent="orange"
           icon={<Cpu />}
           hint={{ link: 'https://mastra.ai/docs/agents/processors', title: 'Processors documentation' }}
         >
@@ -190,28 +192,30 @@ function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
       )}
 
       <AgentMetadataSection
-        title={<SectionTitleWithCount title="Skills" count={skills.length} />}
+        title="Skills"
+        count={skills.length}
+        accent="purple"
         icon={<Sparkles />}
         hint={{ link: 'https://mastra.ai/en/docs/workspace/skills', title: 'Skills documentation' }}
       >
         <AgentMetadataSkillList skills={skills} agentId={agentId} workspaceId={agent.workspaceId} />
       </AgentMetadataSection>
 
-      <AgentMetadataSection title="Scorers" icon={<Gauge />}>
+      <AgentMetadataSection title="Scorers" accent="pink" icon={<Gauge />}>
         <AgentMetadataScorerList entityId={agent.name} entityType="AGENT" />
       </AgentMetadataSection>
 
-      <AgentMetadataSection title="Memory" icon={<Brain />}>
+      <AgentMetadataSection title="Memory" accent="purple" icon={<Brain />}>
         <AgentMemoryConfig agentId={agentId} />
       </AgentMetadataSection>
 
       {hasChannels && (
-        <AgentMetadataSection title="Channels" icon={<Radio />}>
+        <AgentMetadataSection title="Channels" accent="cyan" icon={<Radio />}>
           <AgentChannels agentId={agentId} />
         </AgentMetadataSection>
       )}
 
-      <AgentMetadataSection title="System Prompt" icon={<FileText />}>
+      <AgentMetadataSection title="System Prompt" accent="pink" icon={<FileText />}>
         <AgentSystemPrompt instructions={extractPrompt(agent.instructions)} />
         {!isCmsLoading && !isCmsAvailable && (
           <Notice variant="warning" title="Read-only">
@@ -234,12 +238,3 @@ function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
     </>
   );
 }
-
-const SectionTitleWithCount = ({ title, count }: { title: React.ReactNode; count: number }) => (
-  <span className="flex items-center gap-1.5">
-    {title}
-    <Txt as="span" variant="caption" className="font-normal tabular-nums">
-      {count}
-    </Txt>
-  </span>
-);
