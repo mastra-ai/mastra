@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SankeyChart } from './sankey-chart';
 import type { SankeyChartNodeSelection } from './sankey-chart-utils';
 import { Sankey, useSankey } from './sankey-context';
-import { buildSankeyHueMap, nodeColor, nodeColorVivid } from './sankeyColor';
+import { buildSankeyHueMap, nodeColor, nodeColorMuted, nodeColorMutedVivid, nodeColorVivid } from './sankeyColor';
 
 afterEach(() => {
   cleanup();
@@ -606,6 +606,28 @@ describe('SankeyChart', () => {
     expect(container.querySelector(`rect[fill="${nodeColor(hueMap.Search ?? 0)}"]`)).not.toBeNull();
     expect(container.querySelector(`stop[stop-color="${nodeColor(hueMap.Search ?? 0)}"]`)).not.toBeNull();
     expect(container.querySelector(`stop[stop-color="${nodeColorVivid(hueMap.EU ?? 0)}"]`)).not.toBeNull();
+  });
+
+  describe('when the caller marks nodes as muted', () => {
+    it('renders muted nodes and their ribbon endpoints with the neutral fill', async () => {
+      const { container } = render(
+        <Sankey data={data} columns={columns} getNodeMuted={nodeId => nodeId === 'Lost'}>
+          <SankeyChart onCurveClick={() => {}} />
+        </Sankey>,
+      );
+      const hueMap = buildSankeyHueMap(['Search', 'Referral', 'EU', 'US', 'Won', 'Lost']);
+
+      await screen.findAllByRole('button', { name: 'Select Sankey curve' });
+
+      // The muted node ignores its hue; every other node keeps hue coloring.
+      expect(container.querySelectorAll(`rect[fill="${nodeColorMuted()}"]`)).toHaveLength(1);
+      expect(container.querySelector(`rect[fill="${nodeColor(hueMap.Lost ?? 0)}"]`)).toBeNull();
+      expect(container.querySelector(`rect[fill="${nodeColor(hueMap.Won ?? 0)}"]`)).not.toBeNull();
+      // Ribbons into the muted node fade to the neutral fill at that endpoint.
+      expect(container.querySelector(`stop[stop-color="${nodeColorMuted()}"]`)).not.toBeNull();
+      expect(container.querySelector(`stop[stop-color="${nodeColorMutedVivid()}"]`)).not.toBeNull();
+      expect(container.querySelector(`stop[stop-color="${nodeColor(hueMap.Lost ?? 0)}"]`)).toBeNull();
+    });
   });
 
   describe('when the caller provides column hues', () => {
