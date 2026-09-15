@@ -79,20 +79,43 @@ Each `text-ui-*` and `text-header-*` utility includes its paired line-height. Co
 
 Review `Foundations/Updated/Typography` before changing typography tokens, `Txt`, or role assignments.
 
-## 5. Choose color by role
+## 5. Map surface hierarchy, then choose color
 
-First identify whether the task is consuming the system or defining it.
+Draw the nesting before selecting a surface token:
+
+```text
+Application shell
+├── Sidebar or outer chrome: background-1
+└── Main canvas: background-2
+    ├── Content placed directly on the canvas: background-2
+    └── Card or panel: background-3
+        └── Content inside the card: background-3
+```
+
+Background numbers describe containment, not brightness or elevation. Follow these rules:
+
+- Sibling surfaces at the same depth use the same background role.
+- Text, controls, and ordinary content inherit their containing surface. They do not create another layer.
+- Add a panel layer only when the container groups content or owns interaction. Do not wrap sections in cards for decoration.
+- A panel nested inside another panel does not automatically require a fourth shade. Keep `background-3` unless the design system defines another structural role.
+- Sidebars embedded inside a panel belong to that component's documented variant; they are not automatically `background-1`.
+- Dialogs, popovers, menus, and tooltips use their DS component surface. Do not infer their token from app-shell depth.
+- Use spacing to separate sections first. Add a border when adjacent surfaces still need a boundary; do not add both a new background and a border by default.
+
+Then identify whether the task is consuming or defining the system.
 
 ### Product and component work
 
-1. Name the role: surface, text, border, status, or accent.
+1. Name the role: shell surface, canvas surface, panel surface, text, border, status, or accent.
 2. Find the matching semantic `--color-*` token in `theme.css` and confirm an existing usage.
 3. Use the generated semantic utility, such as `bg-surface2`, `text-neutral4`, or `border-border1`.
-4. If no semantic role exists, report the missing role. Do not substitute a raw gray because it looks close.
+4. If no semantic role exists, report the missing role. Do not substitute a raw foundation because it looks close.
+
+Current product code MUST preserve its owning component's semantic surface token until the foundation-to-semantic migration is approved. The hierarchy above is the target model, not permission to use raw `background-*` properties in consumers.
 
 ### Foundation work
 
-- `background-1`, `background-2`, and `background-3` encode structural nesting: sidebar or outer chrome, canvas, then panel.
+- `background-1`, `background-2`, and `background-3` encode the shell, canvas, and panel layers shown above.
 - `gray-1` through `gray-10` encode contrast from subtle to strong, not lightness. Their tonal direction reverses by theme.
 - `gray-alpha-*` follows the same strength scale, using white overlays in dark mode and black overlays in light mode.
 - These are plain CSS properties. They do not generate Tailwind utilities and MUST NOT replace existing semantic tokens outside an approved migration.
@@ -127,6 +150,7 @@ Keep class strings complete and statically detectable. Use `cn()` for conditiona
 - The change reuses the nearest component and composition precedent.
 - Every text style was chosen from a content role, not a desired pixel size.
 - `Txt` is used as a component interface, not treated as the foundation itself.
+- Shell, canvas, and panel surfaces follow the nesting map; content does not create decorative layers.
 - Every color was chosen by semantic role; raw foundations remain inside approved system work.
 - Consumer classes affect layout only.
 - The same semantic tokens work in both themes without local overrides.
