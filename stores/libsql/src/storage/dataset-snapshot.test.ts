@@ -33,6 +33,8 @@ async function capture(storage: DatasetsStorage, datasetId: string) {
       ]),
       items: items.map(item => ({
         itemIdentity: item.id,
+        createdAt: item.createdAt.toISOString(),
+        updatedAt: item.updatedAt.toISOString(),
         payload: pickDefined(item, [
           'externalId',
           'input',
@@ -116,11 +118,19 @@ describe.each(['in-memory', 'libsql'] as const)('snapshot representation compati
     const snapshot = await capture(storage, created.id);
     expect(snapshot.configuration).toEqual({ ...configuration, tags: [], targetIds: [], scorerIds: [] });
     expect(snapshot.items[0]?.payload).toEqual(payload);
+    expect(snapshot.items[0]).toMatchObject({
+      createdAt: item.createdAt.toISOString(),
+      updatedAt: item.updatedAt.toISOString(),
+    });
     expect(parseDatasetSnapshot(JSON.stringify(snapshot))).toEqual(snapshot);
     expect({}).not.toHaveProperty('safe');
-    await storage.updateItem({ datasetId: created.id, id: item.id, toolMocks: [] });
+    const updatedItem = await storage.updateItem({ datasetId: created.id, id: item.id, toolMocks: [] });
     const updated = await capture(storage, created.id);
     expect(updated.items[0]?.payload).toEqual({ ...payload, toolMocks: [] });
+    expect(updated.items[0]).toMatchObject({
+      createdAt: item.createdAt.toISOString(),
+      updatedAt: updatedItem!.updatedAt.toISOString(),
+    });
     expect(parseDatasetSnapshot(JSON.stringify(updated))).toEqual(updated);
   });
 

@@ -152,6 +152,8 @@ const snapshot = createDatasetSnapshot({
   items: [
     {
       itemIdentity: '00000000-0000-4000-8000-000000000002',
+      createdAt: '2026-09-01T09:00:00.123Z',
+      updatedAt: '2026-09-10T10:00:00.456Z',
       payload: { input: 'Hello', groundTruth: 'Hola', scorerIds: [] },
     },
   ],
@@ -168,6 +170,8 @@ console.log(parsed.digest === snapshot.digest) // true
 ```
 
 The artifact includes configuration, complete authored item payloads, portable UUIDs, and provenance. Supply stable lowercase UUIDs rather than generating new identities on every serialization. Authored `externalId` values are separate from portable identity and remain unchanged. Absent, `null`, and empty overrides remain distinct. Omit optional properties rather than assigning `undefined`. Dataset descriptions also preserve absent, `null`, and string values.
+
+Each item requires `createdAt` and `updatedAt` as UTC ISO 8601 strings with millisecond precision, matching `Date.toISOString()` for four-digit years. Both timestamps are included in the integrity digest. They represent the item's actual dates, not transfer provenance: an importer must preserve them as the destination item's `createdAt` and `updatedAt`, rather than replacing them with import time. Import time belongs in a separate import receipt. Later destination edits update `updatedAt` normally. These format helpers don't implement storage import.
 
 This preservation applies to the supplied artifact content. Storage adapters may already have normalized values before capture. Format validation neither recovers those distinctions nor guarantees that ordinary dataset CRUD operations can restore them. PostgreSQL JSONB, for example, rejects strings containing the NUL character (`\u0000`) even though they're valid in an artifact. Validate destination storage restrictions before writing artifact contents.
 

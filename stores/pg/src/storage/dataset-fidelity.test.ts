@@ -55,7 +55,14 @@ describe('PostgreSQL dataset field fidelity', () => {
         formatVersion: 1,
         datasetIdentity: randomUUID(),
         configuration: { name: dataset.name },
-        items: [{ itemIdentity: randomUUID(), payload: { input } }],
+        items: [
+          {
+            itemIdentity: randomUUID(),
+            createdAt: '2026-09-01T09:00:00.123Z',
+            updatedAt: '2026-09-10T10:00:00.456Z',
+            payload: { input },
+          },
+        ],
         provenance: {
           exportedAt: new Date().toISOString(),
           sourceDatasetId: dataset.id,

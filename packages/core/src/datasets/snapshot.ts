@@ -120,6 +120,8 @@ const contentSchema = z.strictObject({
   items: z.array(
     z.strictObject({
       itemIdentity: identitySchema,
+      createdAt: z.iso.datetime({ precision: 3 }),
+      updatedAt: z.iso.datetime({ precision: 3 }),
       payload: payloadSchema,
     }),
   ),

@@ -197,8 +197,10 @@ export function createDatasetFidelityTests(getStorage: () => DatasetsStorage) {
               formatVersion: 1,
               datasetIdentity: randomUUID(),
               configuration: { name: record.name, description: record.description, metadata: record.metadata },
-              items: items.map(({ externalId, input, groundTruth, expectedTrajectory }) => ({
+              items: items.map(({ externalId, input, groundTruth, expectedTrajectory, createdAt, updatedAt }) => ({
                 itemIdentity: randomUUID(),
+                createdAt: createdAt.toISOString(),
+                updatedAt: updatedAt.toISOString(),
                 payload: { externalId, input, groundTruth, expectedTrajectory },
               })),
               provenance: {
@@ -214,6 +216,10 @@ export function createDatasetFidelityTests(getStorage: () => DatasetsStorage) {
       expect(snapshot.configuration).toEqual({ name: 'round-trip', description: '', metadata: {} });
       expect(snapshot.items.map(item => item.payload)).toEqual(expect.arrayContaining(payloads));
       expect(snapshot.items).toHaveLength(payloads.length);
+      expect(snapshot.items.map(({ createdAt, updatedAt }) => ({ createdAt, updatedAt }))).toEqual(
+        items.map(item => ({ createdAt: item.createdAt.toISOString(), updatedAt: item.updatedAt.toISOString() })),
+      );
+      // This probes JSON field fidelity through ordinary CRUD, not timestamp-preserving snapshot import.
       const created = await target.createDataset({
         name: snapshot.configuration.name,
         description: snapshot.configuration.description ?? undefined,

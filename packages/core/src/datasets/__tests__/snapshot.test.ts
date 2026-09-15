@@ -13,6 +13,7 @@ import type { DatasetSnapshotContent } from '../index';
 const datasetIdentity = '00000000-0000-4000-8000-000000000001';
 const itemIdentity = '00000000-0000-4000-8000-000000000002';
 const otherIdentity = '00000000-0000-4000-8000-000000000003';
+const timestamps = { createdAt: '2026-09-01T09:00:00.123Z', updatedAt: '2026-09-10T10:00:00.456Z' };
 
 function fixture(): DatasetSnapshotContent {
   return {
@@ -33,6 +34,7 @@ function fixture(): DatasetSnapshotContent {
     items: [
       {
         itemIdentity,
+        ...timestamps,
         payload: {
           externalId: 'case-1',
           input: { question: 'Hello?', nested: [null, false, 0, ''] },
@@ -78,6 +80,39 @@ describe('dataset snapshots', () => {
     expect(datasetSnapshotSchema.safeParse(snapshot).success).toBe(true);
   });
 
+  it.each(['createdAt', 'updatedAt'] as const)('preserves %s and covers it in the digest', field => {
+    const snapshot = createDatasetSnapshot(fixture());
+    expect(parseDatasetSnapshot(JSON.stringify(snapshot)).items[0]![field]).toBe(timestamps[field]);
+    const changed = structuredClone(snapshot);
+    changed.items[0]![field] = '2026-09-05T12:34:56.789Z';
+    expect(() => parseDatasetSnapshot(JSON.stringify(changed))).toThrow('digest mismatch');
+    expect(createDatasetSnapshot({ ...fixture(), items: changed.items }).digest).not.toBe(snapshot.digest);
+  });
+
+  it.each(['createdAt', 'updatedAt'] as const)('requires %s in canonical UTC millisecond format', field => {
+    for (const value of [
+      undefined,
+      null,
+      0,
+      'yesterday',
+      '2026-02-30T12:00:00.000Z',
+      '2026-09-01T12:00:00',
+      '2026-09-01T12:00:00Z',
+      '2026-09-01T12:00:00.123456Z',
+      '2026-09-01T12:00:00.123+01:00',
+    ]) {
+      const content = fixture();
+      const item = { ...content.items[0], [field]: value };
+      if (value === undefined) delete item[field];
+      const invalid = { ...content, items: [item] };
+      const result = datasetSnapshotContentSchema.safeParse(invalid);
+      expect(result.success).toBe(false);
+      if (result.success) throw new Error('Expected invalid timestamp');
+      expect(result.error.issues[0]?.path).toEqual(['items', 0, field]);
+      expect(() => parseDatasetSnapshot(JSON.stringify({ ...invalid, digest: '0'.repeat(64) }))).toThrow();
+    }
+  });
+
   it('supports empty datasets', () => {
     const content = fixture();
     content.items = [];
@@ -95,9 +130,9 @@ describe('dataset snapshots', () => {
   it('preserves absent, null, and empty overrides and missing external IDs', () => {
     const content = fixture();
     content.items = [
-      { itemIdentity, payload: { input: null } },
-      { itemIdentity: otherIdentity, payload: { input: false, scorerIds: null, externalId: null } },
-      { itemIdentity: datasetIdentity, payload: { input: 0, scorerIds: [] } },
+      { itemIdentity, ...timestamps, payload: { input: null } },
+      { itemIdentity: otherIdentity, ...timestamps, payload: { input: false, scorerIds: null, externalId: null } },
+      { itemIdentity: datasetIdentity, ...timestamps, payload: { input: 0, scorerIds: [] } },
     ];
     const result = parseDatasetSnapshot(JSON.stringify(createDatasetSnapshot(content)));
     expect(result.items).toEqual(content.items);
@@ -184,7 +219,7 @@ describe('dataset snapshots', () => {
     Object.defineProperty({}, 'accessor', { enumerable: true, get: () => 1 }),
   ])('rejects non-JSON or lossy payloads (%#)', input => {
     const content = fixture();
-    const invalid = { ...content, items: [{ itemIdentity, payload: { input } }] };
+    const invalid = { ...content, items: [{ itemIdentity, ...timestamps, payload: { input } }] };
     expect(datasetSnapshotContentSchema.safeParse(invalid).success).toBe(false);
   });
 
@@ -237,7 +272,7 @@ describe('dataset snapshots', () => {
 
   it('canonicalizes object keys and item order but preserves authored array order', () => {
     const content = fixture();
-    content.items.push({ itemIdentity: otherIdentity, payload: { input: { b: 2, a: 1 } } });
+    content.items.push({ itemIdentity: otherIdentity, ...timestamps, payload: { input: { b: 2, a: 1 } } });
     const digest = createDatasetSnapshot(content).digest;
     content.items.reverse();
     content.items[0]!.payload.input = { a: 1, b: 2 };
@@ -256,6 +291,7 @@ describe('dataset snapshots', () => {
       items: [
         {
           itemIdentity,
+          ...timestamps,
           payload: {
             input: {
               '2': 'two',
@@ -278,9 +314,9 @@ describe('dataset snapshots', () => {
     const canonical =
       '{"configuration":{"name":""},"datasetIdentity":"' +
       datasetIdentity +
-      '","formatVersion":1,"items":[{"itemIdentity":"' +
+      '","formatVersion":1,"items":[{"createdAt":"2026-09-01T09:00:00.123Z","itemIdentity":"' +
       itemIdentity +
-      '","payload":{"input":{"\\r":"control","10":"ten","2":"two","numbers":[333333333.3333333,1e+30,4.5,0.002,1e-27,0],"€":"euro","😀":"emoji"}}}],"provenance":{"configurationBasis":"export-time","exportedAt":"2026-09-11T12:00:00Z","itemVersion":0,"sourceDatasetId":"source"}}';
+      '","payload":{"input":{"\\r":"control","10":"ten","2":"two","numbers":[333333333.3333333,1e+30,4.5,0.002,1e-27,0],"€":"euro","😀":"emoji"}},"updatedAt":"2026-09-10T10:00:00.456Z"}],"provenance":{"configurationBasis":"export-time","exportedAt":"2026-09-11T12:00:00Z","itemVersion":0,"sourceDatasetId":"source"}}';
     expect(createDatasetSnapshot(content).digest).toBe(createHash('sha256').update(canonical).digest('hex'));
   });
 
