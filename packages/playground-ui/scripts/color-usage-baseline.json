@@ -4598,6 +4598,13 @@
       },
       {
         "file": "packages/playground-ui/src/ds/new/sidebar/sidebar-new-root.tsx",
+        "token": "selected",
+        "form": "css-variable",
+        "kind": "semantic",
+        "count": 1
+      },
+      {
+        "file": "packages/playground-ui/src/ds/new/sidebar/sidebar-new-root.tsx",
         "token": "sidebar",
         "form": "tailwind",
         "kind": "semantic",
@@ -12888,6 +12895,13 @@
       },
       {
         "file": "packages/playground-ui/src/ds/new/sidebar/sidebar-new-meter.test.tsx",
+        "token": "selected",
+        "form": "css-variable",
+        "kind": "semantic",
+        "count": 1
+      },
+      {
+        "file": "packages/playground-ui/src/ds/new/sidebar/sidebar-new-meter.test.tsx",
         "token": "sidebar",
         "form": "tailwind",
         "kind": "semantic",
@@ -15263,6 +15277,20 @@
       },
       {
         "file": "packages/playground-ui/src/ds/tokens/tokens.stories.tsx",
+        "token": "selected",
+        "form": "css-variable",
+        "kind": "semantic",
+        "count": 1
+      },
+      {
+        "file": "packages/playground-ui/src/ds/tokens/tokens.stories.tsx",
+        "token": "selected",
+        "form": "typescript",
+        "kind": "semantic",
+        "count": 1
+      },
+      {
+        "file": "packages/playground-ui/src/ds/tokens/tokens.stories.tsx",
         "token": "sidebar",
         "form": "typescript",
         "kind": "semantic",
@@ -15273,7 +15301,7 @@
         "token": "sidebar-accent",
         "form": "css-variable",
         "kind": "semantic",
-        "count": 2
+        "count": 1
       },
       {
         "file": "packages/playground-ui/src/ds/tokens/tokens.stories.tsx",
@@ -15538,6 +15566,13 @@
       },
       {
         "file": "packages/playground-ui/src/ds/tokens/colors.ts",
+        "token": "selected",
+        "form": "css-variable",
+        "kind": "semantic",
+        "count": 1
+      },
+      {
+        "file": "packages/playground-ui/src/ds/tokens/colors.ts",
         "token": "sidebar",
         "form": "css-variable",
         "kind": "semantic",
@@ -15706,6 +15741,13 @@
       },
       {
         "file": "packages/playground-ui/theme.css",
+        "token": "selected",
+        "form": "css-variable",
+        "kind": "semantic",
+        "count": 1
+      },
+      {
+        "file": "packages/playground-ui/theme.css",
         "token": "sidebar",
         "form": "css-variable",
         "kind": "semantic",
@@ -15770,9 +15812,9 @@
     ]
   },
   "summary": {
-    "production": 3612,
-    "tests": 159,
-    "stories": 834,
-    "tokens": 61
+    "production": 3613,
+    "tests": 160,
+    "stories": 835,
+    "tokens": 63
   }
 }

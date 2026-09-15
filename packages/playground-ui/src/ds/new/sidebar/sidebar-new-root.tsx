@@ -10,7 +10,10 @@ export function SidebarNewRoot({ 'aria-label': ariaLabel = 'Sidebar', className,
   return (
     <aside aria-label={ariaLabel} className="contents">
       <MainSidebarRoot
-        className={cn('bg-sidebar text-foreground [--sidebar-nav-hover:var(--sidebar-accent)]', className)}
+        className={cn(
+          'bg-sidebar text-foreground [--sidebar-nav-active:var(--selected)] [--sidebar-nav-hover:var(--sidebar-accent)]',
+          className,
+        )}
         {...props}
       />
     </aside>
