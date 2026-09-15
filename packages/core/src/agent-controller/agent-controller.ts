@@ -742,6 +742,18 @@ export class AgentController<TState = {}> {
   }
 
   /**
+   * Every live session this controller registered via {@link createSession},
+   * minus the ones being torn down. Lets a host push a shared setting change
+   * onto the sessions it applies to instead of waiting for their next boot.
+   */
+  async listSessions(): Promise<Session<TState>[]> {
+    const settled = await Promise.allSettled(this.#sessionsByResource.values());
+    return settled
+      .flatMap(result => (result.status === 'fulfilled' ? [result.value] : []))
+      .filter(session => !this.#sessionsBeingDeleted.has(session));
+  }
+
+  /**
    * Tear down the live session registered for a resource and optional scope.
    * This only removes runtime state; persisted threads and messages remain.
    * Returns `false` when no live session is registered.

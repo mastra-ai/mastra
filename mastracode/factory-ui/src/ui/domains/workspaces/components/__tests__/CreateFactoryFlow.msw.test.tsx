@@ -649,6 +649,11 @@ function stubModelStepEndpoints(calls: string[], intakeConfig: Record<string, un
         ],
       }),
     ),
+    http.get(`${TEST_BASE_URL}/web/config/om/provider-defaults`, () =>
+      HttpResponse.json({
+        pack: { id: 'anthropic', name: 'Claude Haiku', description: '', modelId: 'anthropic/claude-haiku-4-5' },
+      }),
+    ),
     http.post(`${TEST_BASE_URL}/web/config/om/provider-defaults`, () => HttpResponse.json({ ok: true, config: {} })),
   );
   return { patchedBodies, intakeConfigs };

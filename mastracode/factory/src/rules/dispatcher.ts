@@ -28,7 +28,7 @@ import type {
   WorkItemsStorage,
 } from '../storage/domains/work-items/base.js';
 import { FACTORY_RULE_MATERIALIZATION_KEY } from '../storage/domains/work-items/base.js';
-import { FactoryDispatchError, factoryDispatchFailureCode, factoryDispatchFailureMetadata } from './dispatch-errors.js';
+import { FactoryDispatchError, dispatcherRedelivers, factoryDispatchFailureCode } from './dispatch-errors.js';
 import type { FactoryTransitionService } from './transition-service.js';
 import type { FactoryCommitDecision, FactoryRuleActor, FactoryRuleCausalEntry } from './types.js';
 import { externallyAuthoredWorkItem, FACTORY_RULE_STAGES } from './types.js';
@@ -70,7 +70,7 @@ const RECONCILE_INTERVAL_MS = 30_000;
 
 // Rescheduling a failure that can never succeed only delays the moment a person sees why.
 function isTerminalFailure(attempts: number, failureCode: FactoryDispatchFailureCode): boolean {
-  return attempts >= MAX_ATTEMPTS || !factoryDispatchFailureMetadata(failureCode).canRetry;
+  return attempts >= MAX_ATTEMPTS || !dispatcherRedelivers(failureCode);
 }
 
 /**
@@ -201,8 +201,8 @@ function watchRun(
         // the run because observation/reflection failed. Surface that real
         // cause instead of the generic message, and when it is a permanent
         // provider/config rejection (e.g. the OM model is not accepted by the
-        // account) fail terminally so retries stop hammering a run that can
-        // never succeed until the configuration changes.
+        // account) leave the retry to a person: redelivering would hammer a run
+        // that cannot succeed until the configuration changes.
         if (omFailure) {
           if (isPermanentProviderRejection(omFailure)) {
             throw new FactoryDispatchError(

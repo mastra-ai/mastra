@@ -28,6 +28,7 @@ describe('boardCardStatus', () => {
   it('announces the move the user just asked for over anything the server is doing', () => {
     expect(
       boardCardStatus({
+        factoryId: 'fp-1',
         moving: { stage: 'planning', label: 'Planning' },
         decision: decision({ status: 'failed', lastError: 'ENOENT' }),
       }),
@@ -35,14 +36,21 @@ describe('boardCardStatus', () => {
   });
 
   it('keeps the click that is still resolving ahead of a rule effect queued behind it', () => {
-    expect(boardCardStatus({ preparing: 'Preparing run…', decision: decision({ status: 'pending' }) })).toEqual({
+    expect(
+      boardCardStatus({ factoryId: 'fp-1', preparing: 'Preparing run…', decision: decision({ status: 'pending' }) }),
+    ).toEqual({
       kind: 'busy',
       label: 'Preparing run…',
     });
   });
 
   it('offers the retry and hides the raw failure behind the detail', () => {
-    expect(boardCardStatus({ decision: decision({ status: 'failed', lastError: 'ENOENT: no such file' }) })).toEqual({
+    expect(
+      boardCardStatus({
+        factoryId: 'fp-1',
+        decision: decision({ status: 'failed', lastError: 'ENOENT: no such file' }),
+      }),
+    ).toEqual({
       kind: 'error',
       label: 'Automated run could not start',
       detail: 'ENOENT: no such file',
@@ -53,6 +61,7 @@ describe('boardCardStatus', () => {
   it('does not offer Retry for a deterministic failure', () => {
     expect(
       boardCardStatus({
+        factoryId: 'fp-1',
         decision: decision({
           status: 'failed',
           failureCode: 'unsupported_provider_item',
@@ -67,8 +76,33 @@ describe('boardCardStatus', () => {
     });
   });
 
+  it('names the memory model as the cause, says the fix resumes the run, and still offers Retry', () => {
+    expect(
+      boardCardStatus({
+        factoryId: 'fp-1',
+        decision: decision({
+          status: 'failed',
+          failureCode: 'run_configuration_invalid',
+          canRetry: true,
+          lastError: "The 'gpt-5.4-mini' model is not supported when using Codex with a ChatGPT account.",
+        }),
+      }),
+    ).toEqual({
+      kind: 'error',
+      label: 'Memory model refused by the provider',
+      detail: "The 'gpt-5.4-mini' model is not supported when using Codex with a ChatGPT account.",
+      retryDecisionId: 'decision-1',
+      hint: {
+        text: 'Factory runs summarize their context with this model. Pick another one for the factory and this run resumes on its own.',
+        link: { label: 'Memory settings', href: '/factories/fp-1/settings/memory?scope=factory' },
+      },
+    });
+  });
+
   it('separates an effect the server is retrying from one it has not tried yet', () => {
-    expect(boardCardStatus({ decision: decision({ status: 'retry', lastError: 'ECONNRESET' }) })).toEqual({
+    expect(
+      boardCardStatus({ factoryId: 'fp-1', decision: decision({ status: 'retry', lastError: 'ECONNRESET' }) }),
+    ).toEqual({
       kind: 'error',
       label: 'Automated run could not start — retrying…',
       detail: 'ECONNRESET',
@@ -82,6 +116,7 @@ describe('boardCardStatus', () => {
     // board ends up showing failures nobody caused.
     expect(
       boardCardStatus({
+        factoryId: 'fp-1',
         decision: decision({
           type: 'upsertLinkedWorkItem',
           source: 'github-pr',
@@ -95,7 +130,10 @@ describe('boardCardStatus', () => {
 
   it('names the system a linked card is synced with', () => {
     const sync = (source: FactoryDecisionSummary['source']) =>
-      boardCardStatus({ decision: decision({ type: 'upsertLinkedWorkItem', source, status: 'pending', attempts: 0 }) });
+      boardCardStatus({
+        factoryId: 'fp-1',
+        decision: decision({ type: 'upsertLinkedWorkItem', source, status: 'pending', attempts: 0 }),
+      });
     expect(sync('github-issue')).toEqual({ kind: 'busy', label: 'Syncing GitHub issue…' });
     expect(sync('linear-issue')).toEqual({ kind: 'busy', label: 'Syncing Linear issue…' });
   });
@@ -103,6 +141,7 @@ describe('boardCardStatus', () => {
   it('still reports an effect that has actually been tried and failed', () => {
     expect(
       boardCardStatus({
+        factoryId: 'fp-1',
         decision: decision({
           type: 'upsertLinkedWorkItem',
           source: 'github-issue',
@@ -115,58 +154,71 @@ describe('boardCardStatus', () => {
   });
 
   it('says a run is starting until the registry or the workspace record shows its session', () => {
-    expect(boardCardStatus({ decision: decision({ status: 'pending', attempts: 0 }) })).toEqual({
+    expect(boardCardStatus({ factoryId: 'fp-1', decision: decision({ status: 'pending', attempts: 0 }) })).toEqual({
       kind: 'busy',
       label: 'Starting an automated run…',
     });
-    expect(boardCardStatus({ decision: decision({ status: 'leased' }) })).toEqual({
+    expect(boardCardStatus({ factoryId: 'fp-1', decision: decision({ status: 'leased' }) })).toEqual({
       kind: 'busy',
       label: 'Starting an automated run…',
     });
   });
 
   it('leaves a leased run to the wick once its session is live', () => {
-    expect(boardCardStatus({ decision: decision({ status: 'leased' }), sessionStatus: 'working' })).toEqual({
-      kind: 'idle',
-    });
-    expect(boardCardStatus({ decision: decision({ status: 'leased' }), sessionStatus: 'initializing' })).toEqual({
+    expect(
+      boardCardStatus({ factoryId: 'fp-1', decision: decision({ status: 'leased' }), sessionStatus: 'working' }),
+    ).toEqual({
       kind: 'idle',
     });
     expect(
-      boardCardStatus({ decision: decision({ type: 'transition', status: 'leased' }), sessionStatus: 'working' }),
+      boardCardStatus({ factoryId: 'fp-1', decision: decision({ status: 'leased' }), sessionStatus: 'initializing' }),
+    ).toEqual({
+      kind: 'idle',
+    });
+    expect(
+      boardCardStatus({
+        factoryId: 'fp-1',
+        decision: decision({ type: 'transition', status: 'leased' }),
+        sessionStatus: 'working',
+      }),
     ).toEqual({ kind: 'busy', label: 'Moving this card automatically…' });
   });
 
   it('describes a queued rule effect in terms of what it does, not the queue', () => {
-    expect(boardCardStatus({ decision: decision({ type: 'transition', status: 'pending' }) })).toEqual({
+    expect(
+      boardCardStatus({ factoryId: 'fp-1', decision: decision({ type: 'transition', status: 'pending' }) }),
+    ).toEqual({
       kind: 'busy',
       label: 'Moving this card automatically…',
     });
   });
 
   it('asks for the parked run once nothing is moving on its own', () => {
-    expect(
-      boardCardStatus({
-        proposal: { label: 'Re-review', decisionId: 'decision-9' },
-      }),
-    ).toEqual({ kind: 'waiting', label: 'Re-review', decisionId: 'decision-9' });
+    expect(boardCardStatus({ factoryId: 'fp-1', proposal: { label: 'Re-review', decisionId: 'decision-9' } })).toEqual({
+      kind: 'waiting',
+      label: 'Re-review',
+      decisionId: 'decision-9',
+    });
   });
 
   it('lets active work outrank the parked run', () => {
     expect(
       boardCardStatus({
+        factoryId: 'fp-1',
         proposal: { label: 'Re-review', decisionId: 'decision-9' },
         decision: decision({ type: 'transition', status: 'pending' }),
       }),
     ).toEqual({ kind: 'busy', label: 'Moving this card automatically…' });
     expect(
       boardCardStatus({
+        factoryId: 'fp-1',
         proposal: { label: 'Re-review', decisionId: 'decision-9' },
         sessionStatus: 'working',
       }),
     ).toEqual({ kind: 'idle' });
     expect(
       boardCardStatus({
+        factoryId: 'fp-1',
         proposal: { label: 'Re-review', decisionId: 'decision-9' },
         sessionStatus: 'initializing',
       }),
@@ -174,23 +226,27 @@ describe('boardCardStatus', () => {
   });
 
   it('names the held classification so the card says why it waits on a person', () => {
-    expect(boardCardStatus({ heldAs: 'feature request' })).toEqual({
+    expect(boardCardStatus({ factoryId: 'fp-1', heldAs: 'feature request' })).toEqual({
       kind: 'held',
       label: 'Feature request · needs your approval',
     });
     // A suggested run cannot start until the card is accepted, so the hold is the live question.
     expect(
-      boardCardStatus({ heldAs: 'feature request', proposal: { label: 'Build', decisionId: 'decision-9' } }),
+      boardCardStatus({
+        factoryId: 'fp-1',
+        heldAs: 'feature request',
+        proposal: { label: 'Build', decisionId: 'decision-9' },
+      }),
     ).toEqual({ kind: 'held', label: 'Feature request · needs your approval' });
     // Anything the server is doing outranks the standing hold.
-    expect(boardCardStatus({ heldAs: 'feature request', preparing: 'Starting…' })).toEqual({
+    expect(boardCardStatus({ factoryId: 'fp-1', heldAs: 'feature request', preparing: 'Starting…' })).toEqual({
       kind: 'busy',
       label: 'Starting…',
     });
   });
 
   it('falls back to idle when nothing is in flight', () => {
-    expect(boardCardStatus({})).toEqual({ kind: 'idle' });
+    expect(boardCardStatus({ factoryId: 'fp-1' })).toEqual({ kind: 'idle' });
   });
 });
 

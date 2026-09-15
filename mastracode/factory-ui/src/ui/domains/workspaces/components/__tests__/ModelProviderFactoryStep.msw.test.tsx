@@ -18,6 +18,11 @@ function registerAuthHandler() {
 
 function registerPersistenceHandlers(onFactoryModel: (body: unknown) => void, onOMDefaults: (body: unknown) => void) {
   server.use(
+    http.get(`${TEST_BASE_URL}/web/config/om/provider-defaults`, () =>
+      HttpResponse.json({
+        pack: { id: 'openai', name: 'OpenAI Mini', description: 'Via OpenAI API key', modelId: 'openai/gpt-5.4-mini' },
+      }),
+    ),
     http.patch(`${TEST_BASE_URL}/web/factory/projects/factory-1`, async ({ request }) => {
       onFactoryModel(await request.json());
       return HttpResponse.json({ project: { id: 'factory-1', name: 'Factory', defaultModelId: 'openai/gpt-5.6-sol' } });
@@ -123,7 +128,7 @@ describe('Model provider onboarding', () => {
   });
 
   describe('when OpenAI is already connected', () => {
-    it('persists the suggested Factory model and hidden OM defaults', async () => {
+    it('names the memory model the pick seeds, then persists both defaults', async () => {
       const onFactoryModel = vi.fn<(body: unknown) => void>();
       const onOMDefaults = vi.fn<(body: unknown) => void>();
       const onComplete = vi.fn<() => void>();
@@ -153,6 +158,9 @@ describe('Model provider onboarding', () => {
       expect(screen.getByRole('button', { name: 'Change provider' })).toBeInTheDocument();
       expect(screen.queryByRole('searchbox', { name: 'Search model providers' })).not.toBeInTheDocument();
       expect(screen.getByText('openai/gpt-5.6-sol')).toBeInTheDocument();
+      expect(await screen.findByRole('note', { name: '' })).toHaveTextContent(
+        'Factory runs also summarize their context with openai/gpt-5.4-mini. Change it later in Memory settings.',
+      );
       await user.click(screen.getByRole('button', { name: 'Finish setup' }));
 
       await waitFor(() => expect(onComplete).toHaveBeenCalledOnce());

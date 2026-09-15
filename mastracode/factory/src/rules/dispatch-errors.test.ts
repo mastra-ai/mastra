@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { factoryDispatchFailureMetadata } from './dispatch-errors.js';
+import { dispatcherRedelivers, factoryDispatchFailureMetadata } from './dispatch-errors.js';
 
 describe('Factory dispatch failure policy', () => {
   it('does not offer Retry for deterministic workspace failures', () => {
@@ -21,5 +21,12 @@ describe('Factory dispatch failure policy', () => {
     expect(factoryDispatchFailureMetadata('session_unavailable').canRetry).toBe(true);
     expect(factoryDispatchFailureMetadata('unknown').canRetry).toBe(true);
     expect(factoryDispatchFailureMetadata(null).canRetry).toBe(true);
+  });
+
+  it('leaves a configuration failure to the person who can fix it', () => {
+    expect(factoryDispatchFailureMetadata('run_configuration_invalid').canRetry).toBe(true);
+    expect(dispatcherRedelivers('run_configuration_invalid')).toBe(false);
+    expect(dispatcherRedelivers('repository_clone_failed')).toBe(true);
+    expect(dispatcherRedelivers('repository_git_missing')).toBe(false);
   });
 });

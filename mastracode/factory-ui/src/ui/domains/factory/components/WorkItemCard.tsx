@@ -17,6 +17,7 @@ import {
   cardPrimaryAction,
   resumeStage,
   retryButton,
+  retryRunsTheLane,
   runButton,
   sessionLink,
 } from '../cardPrimaryAction';
@@ -125,6 +126,7 @@ export function WorkItemCard({
 
   const activity = workItemActivity(item, activityPage);
   const status = boardCardStatus({
+    factoryId,
     proposal:
       proposal === undefined || proposedRunLabel === undefined
         ? undefined
@@ -214,16 +216,21 @@ export function WorkItemCard({
 
   // A held card's decision, like a parked suggestion, is the person's to
   // release, so it stays on the card beside a finished triage session.
+  const retry = retryButton({ decisionId: retryDecisionId, retryingDecisionId, onRetry: onRetryDecision });
   const actions = cardActions({
     running: wickStatus !== undefined,
     waiting: status.kind === 'waiting' || status.kind === 'held',
+    fixFirst: status.kind === 'error' && status.hint !== undefined,
     session: sessionLink(sessionHref),
-    retry: retryButton({ decisionId: retryDecisionId, retryingDecisionId, onRetry: onRetryDecision }),
-    run: runButton({
-      action: primaryAction,
-      pending: busyLabel !== undefined,
-      suggestion: status.kind === 'waiting' ? status.label : undefined,
-    }),
+    retry,
+    run:
+      retry && retryRunsTheLane(decision, primaryMove)
+        ? undefined
+        : runButton({
+            action: primaryAction,
+            pending: busyLabel !== undefined,
+            suggestion: status.kind === 'waiting' ? status.label : undefined,
+          }),
   });
 
   return (

@@ -1,6 +1,7 @@
 import { FACTORY_ROLE_STAGES, isFactoryRole, needsApproval } from '@mastra/factory/rules/types';
 import type { FactoryRole, FactoryRuleStage } from '@mastra/factory/rules/types';
 import { itemSessionSpec, pullRequestStatusForItem } from './boardItems';
+import type { FactoryDecisionSummary } from './services/decisions';
 import type { WorkItem, WorkItemSessionRef } from './services/workItems';
 import { isTerminalStage } from './stages';
 import type { BoardStageId } from './stages';
@@ -205,6 +206,14 @@ export function runButton({
   };
 }
 
+/** The failed decision is the lane's own run: its Retry starts what the lane button would, so one pill covers both. */
+export function retryRunsTheLane(
+  decision: Pick<FactoryDecisionSummary, 'type' | 'role'> | undefined,
+  move: CardMove | undefined,
+): boolean {
+  return decision?.type === 'invokeSkill' && move !== undefined && decision.role === move.role;
+}
+
 /** The card's buttons, the likeliest next click first; `urgent` marks the one the card waits on a person for. */
 export function cardActions({
   running,
@@ -212,10 +221,13 @@ export function cardActions({
   session,
   retry,
   run,
+  fixFirst,
 }: {
   running: boolean;
   /** The run is a parked suggestion or a held card's decision: it needs the user, so it lights up once nothing is running. */
   waiting: boolean;
+  /** The failure needs a fix elsewhere first: Retry is offered, but it is not the click the card waits on. */
+  fixFirst?: boolean;
   session?: CardAction;
   retry?: CardAction;
   run?: CardAction;
@@ -226,6 +238,6 @@ export function cardActions({
   const main = nextRetry ?? nextRun ?? session;
   if (main === undefined) return [];
   const rest = [session, nextRun].filter(action => action !== undefined).filter(action => action !== main);
-  const urgent = (action: CardAction) => action === nextRetry || (waiting && action === nextRun);
+  const urgent = (action: CardAction) => (action === nextRetry && !fixFirst) || (waiting && action === nextRun);
   return [main, ...rest].map(action => ({ ...action, urgent: urgent(action) }));
 }

@@ -85,6 +85,11 @@ beforeEach(() => {
         ],
       }),
     ),
+    http.get(`${TEST_BASE_URL}/web/config/om/provider-defaults`, () =>
+      HttpResponse.json({
+        pack: { id: 'anthropic', name: 'Claude Haiku', description: '', modelId: 'anthropic/claude-haiku-4-5' },
+      }),
+    ),
     http.post(`${TEST_BASE_URL}/web/config/om/provider-defaults`, () => HttpResponse.json({ ok: true, config: {} })),
   );
 });

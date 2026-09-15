@@ -13,6 +13,7 @@ import type { SourceControlSession } from '../storage/domains/source-control/bas
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import type { FactoryStorageTestSeed } from '../storage/test-utils.js';
 import { buildProviderAccess, ConfigRoutes, listProviders } from './config.js';
+import type { FailedRunsStore } from './config.js';
 import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
 
 function makeAuthStorage(opts: { loggedIn?: string[]; storedKeys?: string[] }): AuthStorage {
@@ -933,11 +934,18 @@ describe('OM routes with a tenant', () => {
 
   function buildApp(
     session: ReturnType<typeof makeOmSession> | null,
-    opts: { withStorage?: boolean; authEnabled?: boolean; provider?: string } = {},
+    opts: {
+      withStorage?: boolean;
+      authEnabled?: boolean;
+      provider?: string;
+      liveSessions?: ReturnType<typeof makeOmSession>[];
+      failedRuns?: FailedRunsStore;
+    } = {},
   ) {
     const controller = {
       ...makeAgentController([{ provider: opts.provider ?? 'anthropic', hasApiKey: true }]),
       getSessionByResource: async () => session ?? undefined,
+      listSessions: async () => opts.liveSessions ?? [],
     };
     const app = new Hono();
     if (opts.authEnabled !== false) {
@@ -953,6 +961,7 @@ describe('OM routes with a tenant', () => {
         controller,
         modelCredentials: seed.credentials,
         ...(opts.withStorage === false ? {} : { memorySettings: seed.memorySettings, factoryProjects: seed.projects }),
+        ...(opts.failedRuns ? { failedRuns: opts.failedRuns } : {}),
       }).routes(),
     );
     return app;
@@ -978,6 +987,31 @@ describe('OM routes with a tenant', () => {
       type: 'api_key',
       key: 'sk-anthropic',
     });
+  });
+
+  it('previews the OM pack a provider would seed without writing it', async () => {
+    const app = buildApp(makeOmSession());
+    const res = await app.request('/web/config/om/provider-defaults?providerId=openai-codex');
+
+    expect(res.status).toBe(200);
+    expect((await res.json()).pack).toMatchObject({ id: 'openai', modelId: 'openai/gpt-5.4-mini' });
+    await expect(seed.memorySettings.get({ orgId: 'org1', userId: 'user-a' })).resolves.toBeNull();
+  });
+
+  it('previews the Factory model itself for a provider without a built-in OM pack', async () => {
+    const app = buildApp(makeOmSession());
+    const res = await app.request(
+      '/web/config/om/provider-defaults?providerId=github-copilot&factoryModelId=github-copilot/gpt-4.1',
+    );
+
+    expect(res.status).toBe(200);
+    expect((await res.json()).pack).toMatchObject({ id: 'custom', modelId: 'github-copilot/gpt-4.1' });
+  });
+
+  it('rejects an OM pack preview without a provider', async () => {
+    const res = await buildApp(makeOmSession()).request('/web/config/om/provider-defaults');
+
+    expect(res.status).toBe(400);
   });
 
   it('seeds provider-specific OM defaults without an active session', async () => {
@@ -1109,6 +1143,59 @@ describe('OM routes with a tenant', () => {
       observerModelId: 'anthropic/claude-fable-5',
       reflectorModelId: 'anthropic/claude-haiku-4-5',
     });
+  });
+
+  it("pushes a factory-wide model change onto that factory's live sessions, not the others", async () => {
+    const project = await seed.projects.create({ orgId: 'org1', userId: 'user-a', input: { name: 'Factory One' } });
+    const other = await seed.projects.create({ orgId: 'org1', userId: 'user-a', input: { name: 'Factory Two' } });
+    const factoryRun = makeOmSession();
+    factoryRun.state.set({ factoryProjectId: project.id });
+    const otherFactoryRun = makeOmSession();
+    otherFactoryRun.state.set({ factoryProjectId: other.id });
+    const personalChat = makeOmSession();
+    const app = buildApp(null, { liveSessions: [factoryRun, otherFactoryRun, personalChat] });
+
+    const res = await putJson(app, '/web/config/om/observer/model', {
+      factoryId: project.id,
+      modelId: 'openai/gpt-5.6-luna',
+    });
+
+    expect(res.status).toBe(200);
+    expect(factoryRun.om.observer.modelId()).toBe('openai/gpt-5.6-luna');
+    expect(otherFactoryRun.om.observer.modelId()).toBe('google/gemini-3-flash');
+    expect(personalChat.om.observer.modelId()).toBe('google/gemini-3-flash');
+  });
+
+  it('re-queues the runs the refused memory model killed in that factory, nothing else', async () => {
+    const project = await seed.projects.create({ orgId: 'org1', userId: 'user-a', input: { name: 'Factory One' } });
+    const retried: string[] = [];
+    const failedRuns: FailedRunsStore = {
+      listDeferredDecisions: async (_orgId, factoryProjectId) =>
+        factoryProjectId === project.id
+          ? [
+              { id: 'review-1', status: 'failed', failureCode: 'run_configuration_invalid' },
+              { id: 'review-2', status: 'failed', failureCode: 'run_configuration_invalid' },
+              { id: 'clone-1', status: 'failed', failureCode: 'repository_clone_failed' },
+              { id: 'retrying-1', status: 'retry', failureCode: 'run_configuration_invalid' },
+            ]
+          : [],
+      retryDeferredDecision: async (_orgId, _factoryProjectId, decisionId) => {
+        retried.push(decisionId);
+        return null;
+      },
+    };
+    const app = buildApp(null, { failedRuns });
+
+    const personal = await putJson(app, '/web/config/om/observer/model', { modelId: 'openai/gpt-5.6-luna' });
+    expect(personal.status).toBe(200);
+    expect(retried).toEqual([]);
+
+    const factoryWide = await putJson(app, '/web/config/om/observer/model', {
+      factoryId: project.id,
+      modelId: 'openai/gpt-5.6-luna',
+    });
+    expect(factoryWide.status).toBe(200);
+    expect(retried).toEqual(['review-1', 'review-2']);
   });
 
   it('persists a role model switch to the memory-settings domain, snapshotting the other role', async () => {

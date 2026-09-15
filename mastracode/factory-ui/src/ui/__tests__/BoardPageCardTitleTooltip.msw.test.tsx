@@ -57,7 +57,7 @@ const failedDecision: FactoryDecisionSummary = {
   evaluationId: 'evaluation-1',
   workItemId: issueWorkItem.id,
   type: 'invokeSkill',
-  role: null,
+  role: 'triage',
   status: 'failed',
   attempts: 1,
   failureOccurrence: 1,
@@ -140,5 +140,25 @@ describe('Board card error tooltip', () => {
     await user.hover(failure);
 
     expect(await screen.findByText(DECISION_ERROR)).toBeVisible();
+  });
+
+  it('shows Retry in place of the lane button on a run the provider rejected, and puts the fix in the error tooltip', async () => {
+    stubBoardEndpoints([{ ...failedDecision, failureCode: 'run_configuration_invalid', canRetry: true }]);
+    const user = userEvent.setup();
+    renderWorkBoard();
+
+    const failure = await screen.findByRole('alert');
+    expect(failure).toHaveTextContent('Memory model refused by the provider');
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Investigate' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Memory settings' })).not.toBeInTheDocument();
+
+    await user.hover(failure);
+
+    expect(await screen.findByText(/this run resumes on its own/)).toBeVisible();
+    expect(screen.getByRole('link', { name: 'Memory settings' })).toHaveAttribute(
+      'href',
+      `/factories/${FACTORY_ID}/settings/memory?scope=factory`,
+    );
   });
 });

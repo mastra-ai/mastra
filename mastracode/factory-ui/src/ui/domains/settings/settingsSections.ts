@@ -1,3 +1,5 @@
+import type { SettingsScope } from './components/SettingsScope';
+
 export type SettingsSection =
   | 'account'
   | 'preferences'
@@ -27,6 +29,7 @@ export function isSettingsSection(value: unknown): value is SettingsSection {
   return typeof value === 'string' && value in SETTINGS_SECTION_LABELS;
 }
 
-export function settingsSectionPath(factoryId: string, section: SettingsSection): string {
-  return `/factories/${factoryId}/settings/${section}`;
+export function settingsSectionPath(factoryId: string, section: SettingsSection, scope?: SettingsScope): string {
+  const path = `/factories/${factoryId}/settings/${section}`;
+  return scope === undefined ? path : `${path}?scope=${scope}`;
 }

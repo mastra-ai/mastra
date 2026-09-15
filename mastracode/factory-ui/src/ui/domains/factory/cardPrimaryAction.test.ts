@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { cardActions, cardMoves, cardPrimaryAction, resumeStage } from './cardPrimaryAction';
+import { cardActions, cardMoves, cardPrimaryAction, resumeStage, retryRunsTheLane } from './cardPrimaryAction';
 import type { CardAction, CardMove } from './cardPrimaryAction';
 import type { WorkItem, WorkItemSessionRef } from './services/workItems';
 
@@ -238,7 +238,17 @@ describe('cardActions', () => {
     const lit = (actions: CardAction[]) => actions.filter(action => action.urgent).map(action => action.label);
     expect(lit(cardActions({ ...idle, session, run }))).toEqual([]);
     expect(lit(cardActions({ ...idle, session, retry, run }))).toEqual(['Retry']);
+    expect(lit(cardActions({ ...idle, session, retry, run, fixFirst: true }))).toEqual([]);
     expect(lit(cardActions({ ...idle, running: true, waiting: true, session, run }))).toEqual([]);
     expect(lit(cardActions({ ...idle, running: true, session, retry, run }))).toEqual([]);
+  });
+});
+
+describe('retryRunsTheLane', () => {
+  it('holds only for a failed run of the lane role, where Retry stands in for the lane button', () => {
+    expect(retryRunsTheLane({ type: 'invokeSkill', role: 'review' }, review)).toBe(true);
+    expect(retryRunsTheLane({ type: 'invokeSkill', role: 'work' }, review)).toBe(false);
+    expect(retryRunsTheLane({ type: 'notify', role: null }, review)).toBe(false);
+    expect(retryRunsTheLane({ type: 'invokeSkill', role: 'review' }, undefined)).toBe(false);
   });
 });

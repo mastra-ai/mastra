@@ -2,7 +2,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
-import type { OMResponse, ProviderOMDefaultsResponse, UpdateOMResponse } from '../api/types';
+import type {
+  OMResponse,
+  ProviderOMDefaultPreviewResponse,
+  ProviderOMDefaultsResponse,
+  UpdateOMResponse,
+} from '../api/types';
 
 /**
  * Observational Memory config (mirrors the TUI `/om` command). Settings are
@@ -28,6 +33,20 @@ export function useOMQuery(resourceId: string | undefined, scope?: string, facto
       const query = params.size > 0 ? `?${params.toString()}` : '';
       return client.get<OMResponse>(`/web/config/om${query}`);
     },
+  });
+}
+
+/** The observational-memory pack a provider seeds for Factory runs, read without writing it. */
+export function useProviderOMDefaultQuery(providerId: string | undefined, factoryModelId?: string) {
+  const { client } = useApiConfig();
+  return useQuery<ProviderOMDefaultPreviewResponse>({
+    queryKey: queryKeys.omProviderDefault(providerId, factoryModelId),
+    queryFn: () => {
+      const params = new URLSearchParams({ providerId: providerId ?? '' });
+      if (factoryModelId) params.set('factoryModelId', factoryModelId);
+      return client.get<ProviderOMDefaultPreviewResponse>(`/web/config/om/provider-defaults?${params}`);
+    },
+    enabled: Boolean(providerId),
   });
 }
 
