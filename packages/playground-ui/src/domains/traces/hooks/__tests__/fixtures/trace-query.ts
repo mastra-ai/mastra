@@ -7,6 +7,12 @@ export const firstTraceQueryPage: TraceQueryResponse = {
     {
       traceId: 'trace-a',
       rootSpanId: 'span-a',
+      name: 'Agent run',
+      entityId: null,
+      parentSpanId: null,
+      createdAt: '2026-09-01T10:00:00Z',
+      metadata: null,
+      inputPreview: null,
       threadId: null,
       resourceId: null,
       startedAt: '2026-09-01T10:00:00Z',

@@ -326,6 +326,12 @@ An ungrouped query returns only lightweight completed traces:
     {
       "traceId": "trace-123",
       "rootSpanId": "span-123",
+      "name": "Agent run",
+      "entityId": "support-agent",
+      "parentSpanId": null,
+      "createdAt": "2026-08-03T10:00:00.000Z",
+      "metadata": { "customerId": "customer-123" },
+      "inputPreview": "Help with my order",
       "threadId": "thread-123",
       "resourceId": "resource-123",
       "startedAt": "2026-08-03T10:00:00.000Z",
@@ -339,6 +345,8 @@ An ungrouped query returns only lightweight completed traces:
   "page": { "next": null }
 }
 ```
+
+Each trace includes the root span's `name`, `entityId`, `parentSpanId`, and `metadata`. `createdAt` is derived from the root span's `startedAt`. `inputPreview` contains a shortened text preview of the root span's input, not the full input. Missing metadata, entity IDs, and input previews are returned as `null`; `parentSpanId` is `null` for root spans.
 
 A grouped query returns distinct non-null thread IDs in ascending order:
 

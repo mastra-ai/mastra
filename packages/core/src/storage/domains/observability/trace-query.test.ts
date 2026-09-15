@@ -1307,6 +1307,12 @@ describe('trace-query responses and storage capability', () => {
     const trace = {
       traceId: 'trace-1',
       rootSpanId: 'span-1',
+      name: 'Agent run',
+      entityId: 'agent-1',
+      parentSpanId: null,
+      createdAt: '2026-08-01T00:00:00Z',
+      metadata: { customer: { id: 'customer-1' }, labels: ['support'], count: 2 },
+      inputPreview: 'Help with my order',
       threadId: null,
       resourceId: null,
       startedAt: '2026-08-01T00:00:00Z',
