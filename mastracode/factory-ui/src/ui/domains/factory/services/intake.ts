@@ -1,7 +1,7 @@
 /**
  * Browser-side helpers for the intake source configuration (Settings › Intake).
  *
- * The config is stored per `(org, user)` on the server. GitHub uses
+ * The config is stored per org on the server. GitHub uses
  * `sourceIds` (connected source ids); Linear keeps `sourceIds`
  * (provider-owned source ids). `null` id lists mean
  * "nothing selected" — nothing syncs until the user picks entries.
@@ -61,12 +61,12 @@ async function requestIntakeConfig(baseUrl: string, init?: RequestInit): Promise
   return normalizeIntakeConfig(config);
 }
 
-/** Read the caller's intake config (server falls back to the defaults). */
+/** Read the org's intake config (server falls back to the defaults). */
 export async function fetchIntakeConfig(baseUrl: string): Promise<IntakeConfig> {
   return requestIntakeConfig(baseUrl);
 }
 
-/** Save the caller's intake config; resolves to the persisted config. */
+/** Save the org's intake config; resolves to the persisted config. */
 export async function saveIntakeConfig(baseUrl: string, config: IntakeConfig): Promise<IntakeConfig> {
   return requestIntakeConfig(baseUrl, { method: 'PUT', body: JSON.stringify(config) });
 }

@@ -31,6 +31,77 @@ interface GoogleMetadata {
   usageMetadata?: GoogleUsageMetadata;
 }
 
+export interface OpenRouterCostResult {
+  total: number;
+  usedCost: boolean;
+  usedUpstreamCost: boolean;
+}
+
+/**
+ * For non-BYOK requests, `usage.cost` is the complete OpenRouter charge and
+ * `usage.costDetails.upstreamInferenceCost` is only its upstream breakdown. For BYOK requests,
+ * the upstream cost is billed separately and must be added to OpenRouter's own `usage.cost`.
+ *
+ * OpenRouter reports `usage.is_byok` on the wire, but published `@openrouter/ai-sdk-provider`
+ * versions drop it from `providerMetadata.openrouter.usage`. When `isByok` is present it is
+ * authoritative. When it is absent, only the unambiguous shapes are used: a non-BYOK response
+ * reports an upstream cost that is absent, zero, or equal to `cost`, and a BYOK response reports
+ * a zero `cost` with a positive upstream cost. Any other combination falls back to model price
+ * inference rather than double-counting a non-BYOK charge or under-reporting a BYOK one.
+ */
+export function extractOpenRouterCost(providerMetadata?: ProviderMetadata): OpenRouterCostResult | undefined {
+  const usage = providerMetadata?.openrouter?.usage;
+  if (!usage || typeof usage !== 'object' || Array.isArray(usage)) return undefined;
+
+  const cost = usage.cost;
+  const isByok = usage.isByok;
+  const costDetails = usage.costDetails;
+  const upstreamCost =
+    costDetails && typeof costDetails === 'object' && !Array.isArray(costDetails)
+      ? costDetails.upstreamInferenceCost
+      : undefined;
+
+  const isValid = (value: unknown): value is number =>
+    typeof value === 'number' && Number.isFinite(value) && value >= 0;
+
+  if ((cost != null && !isValid(cost)) || (upstreamCost != null && !isValid(upstreamCost))) return undefined;
+  const validCost = isValid(cost) ? cost : undefined;
+  const validUpstreamCost = isValid(upstreamCost) ? upstreamCost : undefined;
+
+  const byok = typeof isByok === 'boolean' ? isByok : inferByok(validCost, validUpstreamCost);
+  if (byok === undefined) return undefined;
+
+  if (!byok) {
+    if (validCost === undefined) return undefined;
+    return { total: validCost, usedCost: true, usedUpstreamCost: false };
+  }
+
+  if (validCost === undefined && validUpstreamCost === undefined) return undefined;
+  const total = (validCost ?? 0) + (validUpstreamCost ?? 0);
+  if (!Number.isFinite(total)) return undefined;
+
+  return {
+    total,
+    usedCost: validCost !== undefined,
+    usedUpstreamCost: validUpstreamCost !== undefined,
+  };
+}
+
+/**
+ * Infer the BYOK mode from the cost fields alone. Returns `undefined` when the shape is
+ * ambiguous, so the caller falls back to model price inference.
+ */
+function inferByok(cost: number | undefined, upstreamCost: number | undefined): boolean | undefined {
+  if (cost === undefined) return undefined;
+  // Non-BYOK: the upstream breakdown is absent, zero, or a copy of the total charge.
+  if (upstreamCost === undefined || upstreamCost === 0 || upstreamCost === cost) return false;
+  // BYOK inside the free allowance: OpenRouter charges nothing and the upstream key pays.
+  if (cost === 0) return true;
+  // A positive OpenRouter surcharge next to a different positive upstream charge could be
+  // either a BYOK surcharge (sum) or a non-BYOK breakdown (do not sum).
+  return undefined;
+}
+
 interface V3InputUsage {
   total?: number;
   noCache?: number;
