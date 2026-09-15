@@ -72,7 +72,7 @@ export function isWorkflowRunFinished(status?: string) {
 }
 
 export function getRunTimestamp(value: Date | string | number | undefined): number | undefined {
-  if (!value) return undefined;
+  if (value === undefined) return undefined;
   const timestamp = value instanceof Date ? value.getTime() : new Date(value).getTime();
   return Number.isFinite(timestamp) ? timestamp : undefined;
 }
