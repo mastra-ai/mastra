@@ -582,11 +582,75 @@ describe('extractOpenRouterCost', () => {
     expect(extractOpenRouterCost({ openrouter: {} })).toBeUndefined();
   });
 
-  it('returns undefined when isByok is missing because the cost fields are ambiguous', () => {
-    const providerMetadata: ProviderMetadata = {
-      openrouter: { usage: { cost: 0.000003, costDetails: { upstreamInferenceCost: 0.000003 } } },
-    };
-    expect(extractOpenRouterCost(providerMetadata)).toBeUndefined();
+  describe('without the isByok discriminator', () => {
+    // Published @openrouter/ai-sdk-provider versions drop `usage.is_byok` from providerMetadata,
+    // so only unambiguous cost shapes are used and everything else falls back to price inference.
+    it('uses usage.cost alone when the upstream breakdown equals it (non-BYOK)', () => {
+      const providerMetadata: ProviderMetadata = {
+        openrouter: { usage: { cost: 0.0000084, costDetails: { upstreamInferenceCost: 0.0000084 } } },
+      };
+      expect(extractOpenRouterCost(providerMetadata)).toEqual({
+        total: 0.0000084,
+        usedCost: true,
+        usedUpstreamCost: false,
+      });
+    });
+
+    it.each([
+      { name: 'costDetails is absent', usage: { cost: 0.000003 } },
+      {
+        name: 'upstreamInferenceCost is null',
+        usage: { cost: 0.000003, costDetails: { upstreamInferenceCost: null } },
+      },
+      { name: 'upstreamInferenceCost is zero', usage: { cost: 0.000003, costDetails: { upstreamInferenceCost: 0 } } },
+    ])('uses usage.cost alone when $name (non-BYOK)', ({ usage }) => {
+      const providerMetadata = { openrouter: { usage } } as ProviderMetadata;
+      expect(extractOpenRouterCost(providerMetadata)).toEqual({
+        total: 0.000003,
+        usedCost: true,
+        usedUpstreamCost: false,
+      });
+    });
+
+    it('treats a zero cost with a positive upstream cost as BYOK and uses the upstream charge', () => {
+      const providerMetadata: ProviderMetadata = {
+        openrouter: { usage: { cost: 0, costDetails: { upstreamInferenceCost: 0.00002615 } } },
+      };
+      expect(extractOpenRouterCost(providerMetadata)).toEqual({
+        total: 0.00002615,
+        usedCost: true,
+        usedUpstreamCost: true,
+      });
+    });
+
+    it('reports a free model as zero when both fields are zero', () => {
+      const providerMetadata: ProviderMetadata = {
+        openrouter: { usage: { cost: 0, costDetails: { upstreamInferenceCost: 0 } } },
+      };
+      expect(extractOpenRouterCost(providerMetadata)?.total).toBe(0);
+    });
+
+    it('returns undefined when a positive cost and a different positive upstream cost are ambiguous', () => {
+      // Could be a BYOK surcharge (sum to 19.95) or a non-BYOK breakdown (use 0.95); never guess.
+      const providerMetadata: ProviderMetadata = {
+        openrouter: { usage: { cost: 0.95, costDetails: { upstreamInferenceCost: 19 } } },
+      };
+      expect(extractOpenRouterCost(providerMetadata)).toBeUndefined();
+    });
+
+    it('returns undefined when only the upstream cost is present', () => {
+      const providerMetadata: ProviderMetadata = {
+        openrouter: { usage: { costDetails: { upstreamInferenceCost: 0.000003 } } },
+      };
+      expect(extractOpenRouterCost(providerMetadata)).toBeUndefined();
+    });
+
+    it('still rejects invalid values before inferring', () => {
+      const providerMetadata: ProviderMetadata = {
+        openrouter: { usage: { cost: 0, costDetails: { upstreamInferenceCost: -1 } } },
+      };
+      expect(extractOpenRouterCost(providerMetadata)).toBeUndefined();
+    });
   });
 
   it('uses usage.cost alone for a non-BYOK request, even when the upstream breakdown is present', () => {
