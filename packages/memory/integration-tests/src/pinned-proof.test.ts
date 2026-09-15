@@ -1,10 +1,3 @@
-/**
- * PROOF RUN (Phase 5) — not a regression test. Drives a real Agent through
- * multiple turns against a real LibSQL store with pins enabled, capturing
- * every prompt the model receives. Output is written to stdout for the
- * .proof/ transcript. Delete or keep: it exercises the same lane either way.
- */
-import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -32,7 +25,7 @@ const embedder: EmbeddingModel<string> = {
 function textStream(text: string) {
   return convertArrayToReadableStream([
     { type: 'stream-start', warnings: [] },
-    { type: 'response-metadata', id: randomUUID(), modelId: 'aimock', timestamp: new Date() },
+    { type: 'response-metadata', id: globalThis.crypto.randomUUID(), modelId: 'aimock', timestamp: new Date() },
     { type: 'text-start', id: 't' },
     { type: 'text-delta', id: 't', delta: text },
     { type: 'text-end', id: 't' },
@@ -50,8 +43,8 @@ describe('Pinned knowledge live proof', () => {
     const directory = await mkdtemp(join(tmpdir(), 'pinned-proof-'));
     directories.push(directory);
     const url = `file:${join(directory, 'proof.db')}`;
-    const storage = new LibSQLStore({ id: randomUUID(), url });
-    const vector = new LibSQLVector({ id: randomUUID(), url });
+    const storage = new LibSQLStore({ id: globalThis.crypto.randomUUID(), url });
+    const vector = new LibSQLVector({ id: globalThis.crypto.randomUUID(), url });
     await storage.init();
 
     const prompts: string[] = [];
@@ -93,7 +86,7 @@ describe('Pinned knowledge live proof', () => {
       memory,
     });
 
-    const threadId = randomUUID();
+    const threadId = globalThis.crypto.randomUUID();
     const resourceId = 'proof-user';
     const requestContext = new RequestContext();
     requestContext.set('organizationId', 'acme');

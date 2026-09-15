@@ -1,8 +1,3 @@
-/**
- * Verifies that Dynamic Workflow runs propagate the session model and isolate
- * workflow memory from the parent Mastra Code conversation.
- */
-import { randomUUID } from 'node:crypto';
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
 import type { ProcessInputArgs, Processor } from '@mastra/core/processors';
@@ -347,7 +342,7 @@ describe('runWorkflow — MastraMemory / ObservationalMemory thread requirement'
     const rc = new RequestContext();
     rc.set('controller', { session: { modelId: 'openai/gpt-5.5' }, state: {} });
     rc.set('MastraMemory', {
-      thread: { id: randomUUID() },
+      thread: { id: globalThis.crypto.randomUUID() },
       resourceId: 'test-resource',
       memoryConfig: undefined,
     });

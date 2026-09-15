@@ -1,10 +1,9 @@
-import { randomUUID } from 'node:crypto';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 
 export const createSampleTrace = (name: string, scope?: string, attributes?: Record<string, string>) => ({
-  id: `trace-${randomUUID()}`,
-  parentSpanId: `span-${randomUUID()}`,
-  traceId: `trace-${randomUUID()}`,
+  id: `trace-${globalThis.crypto.randomUUID()}`,
+  parentSpanId: `span-${globalThis.crypto.randomUUID()}`,
+  traceId: `trace-${globalThis.crypto.randomUUID()}`,
   name,
   scope,
   kind: 'internal',
@@ -19,8 +18,8 @@ export const createSampleTrace = (name: string, scope?: string, attributes?: Rec
 });
 
 export const createSampleWorkflowSnapshot = (threadId: string, status: string, createdAt?: Date) => {
-  const runId = `run-${randomUUID()}`;
-  const stepId = `step-${randomUUID()}`;
+  const runId = `run-${globalThis.crypto.randomUUID()}`;
+  const stepId = `step-${globalThis.crypto.randomUUID()}`;
   const timestamp = createdAt || new Date();
   const snapshot: WorkflowRunState = {
     status: status as WorkflowRunState['status'],

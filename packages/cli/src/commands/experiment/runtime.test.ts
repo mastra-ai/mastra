@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { PassThrough, Readable } from 'node:stream';
 import { ToolMockMatcher } from '@mastra/core/datasets';
@@ -20,15 +20,15 @@ const build: ExperimentWorkerBuildIdentity = {
 function createRequest() {
   const items = [{ id: 'item-1', input: { prompt: 'hello' }, toolMocks: [] }];
   const digest = createHash('sha256').update(canonicalize(items)).digest('hex');
-  const experimentId = randomUUID();
+  const experimentId = globalThis.crypto.randomUUID();
   return {
     type: 'run',
     protocolVersion: '1',
     supportedProtocolVersions: ['1'],
     experimentId,
-    jobId: randomUUID(),
+    jobId: globalThis.crypto.randomUUID(),
     attempt: 1,
-    idempotencyKey: randomUUID(),
+    idempotencyKey: globalThis.crypto.randomUUID(),
     deadlineAt: new Date(Date.now() + 5_000).toISOString(),
     datasetAttestation: { itemCount: items.length, digest, canonicalizationVersion: '1' },
     packet: {

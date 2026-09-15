@@ -1,25 +1,3 @@
-/**
- * Sub-invocations launched from a parent chat turn (workflow agent steps,
- * sub-agent tool calls) must run under a fresh isolated Mastra memory scope
- * so they don't:
- *
- *   - write their prompts/responses into the parent chat thread's history, or
- *   - contend with the parent turn's memory-dependent processors
- *     (observational-memory, task-state, working-memory-state).
- *
- * `withEphemeralMemory` copies the caller's request context into a child,
- * replaces its MastraMemory with a fresh thread id and inherited resource id,
- * then passes that isolated child to `fn`. The parent context is never mutated,
- * so concurrent sub-invocations cannot overwrite or restore each other's
- * memory values. Isolation writes the ephemeral ids instead of scrubbing them:
- * inner agent invocations resolve their thread/resource via those reserved
- * keys, and leaving them unset causes downstream storage saves to throw
- * "Thread ID is required".
- *
- * Callers can override the ephemeral thread id (e.g. for tests) via
- * `options.threadId`.
- */
-import { randomUUID } from 'node:crypto';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '@mastra/core/request-context';
 
 interface EphemeralMemoryOptions {
@@ -38,7 +16,7 @@ export async function withEphemeralMemory<T>(
     | { thread?: { id?: string }; resourceId?: string; memoryConfig?: unknown }
     | undefined;
   const resourceId = requestContext.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
-  const ephemeralThreadId = options.threadId ?? randomUUID();
+  const ephemeralThreadId = options.threadId ?? globalThis.crypto.randomUUID();
   const parentResourceId = mastraMemory?.resourceId ?? resourceId ?? '';
 
   childRequestContext.set('MastraMemory', {

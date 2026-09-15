@@ -1,5 +1,4 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { randomUUID } from 'node:crypto';
 import type { ActorSignal } from '@mastra/core/auth/ee';
 import type { RequestContext } from '@mastra/core/di';
 import { getErrorFromUnknown, MastraNonRetryableError } from '@mastra/core/error';
@@ -674,7 +673,10 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       // Try to extract runId from error cause or generate new one
       if (errorCause && typeof errorCause === 'object' && 'status' in errorCause && errorCause.status === 'failed') {
         result = errorCause as Extract<NestedWorkflowResult, { status: 'failed' }>;
-        runId = 'runId' in errorCause && typeof errorCause.runId === 'string' ? errorCause.runId : randomUUID();
+        runId =
+          'runId' in errorCause && typeof errorCause.runId === 'string'
+            ? errorCause.runId
+            : globalThis.crypto.randomUUID();
       } else {
         // Log before flattening: Error objects don't survive snapshot
         // serialization (JSON.stringify(new Error('x')) is `{}`), so without
@@ -683,7 +685,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           `Nested workflow step ${step.id} failed: ` + (e instanceof Error ? (e.stack ?? e.message) : String(e)),
         );
         // Fallback: if we can't get the result from error, construct a basic failed result
-        runId = randomUUID();
+        runId = globalThis.crypto.randomUUID();
         result = {
           status: 'failed',
           error: e instanceof Error ? e : new Error(String(e)),

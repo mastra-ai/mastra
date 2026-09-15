@@ -1,17 +1,3 @@
-/**
- * GoalManager — persistent cross-turn goals, backed by the Agent's native goal
- * mechanism.
- *
- * The objective lives in the durable `threadState` `'goal'` slot (via
- * `agent.setObjective`/`getObjective`/`clearObjective`/`updateObjectiveOptions`)
- * and is judged in-loop by the core goal step. This manager is a thin adapter:
- * it keeps a synchronous in-memory view of the current objective for the TUI
- * (status line, modal, keyboard shortcuts) and delegates persistence to the
- * agent. There is no standalone judge agent and no between-turn re-invocation —
- * the core goal step drives continuation and surfaces progress via `goal` stream
- * chunks.
- */
-import { randomUUID } from 'node:crypto';
 import { getGoalActivityDurationMs } from '@mastra/core/agent';
 import type { Agent } from '@mastra/core/agent';
 import type { AgentController, Session } from '@mastra/core/agent-controller';
@@ -127,7 +113,7 @@ export class GoalManager {
     const threadId = state.session.thread.getId();
     const agent = this.getAgent(state);
     const now = Date.now();
-    const id = randomUUID();
+    const id = globalThis.crypto.randomUUID();
     this.threadId = threadId ?? undefined;
     this.agentId = agent?.id;
 
@@ -290,7 +276,7 @@ export class GoalManager {
         if (record) {
           this.record = {
             ...record,
-            id: record.id ?? randomUUID(),
+            id: record.id ?? globalThis.crypto.randomUUID(),
             activeDurationMs: normalizeActiveDurationMs(record.activeDurationMs),
           };
           return;
@@ -321,7 +307,7 @@ export class GoalManager {
         judgeModelId: saved.judgeModelId ?? '',
         startedAt: saved.startedAt ? Date.parse(saved.startedAt) || Date.now() : Date.now(),
         updatedAt: Date.now(),
-        id: saved.id ?? randomUUID(),
+        id: saved.id ?? globalThis.crypto.randomUUID(),
       };
     } else {
       this.record = null;

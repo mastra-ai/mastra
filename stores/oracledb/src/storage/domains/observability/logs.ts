@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { createStorageErrorId, listLogsArgsSchema } from '@mastra/core/storage';
 import type { BatchCreateLogsArgs, ListLogsArgs, ListLogsResponse, LogRecord } from '@mastra/core/storage';
@@ -33,7 +31,7 @@ export async function batchCreateLogs(
     const binds = args.logs.map(log =>
       logRecordBinds({
         ...log,
-        logId: log.logId ?? randomUUID(),
+        logId: log.logId ?? globalThis.crypto.randomUUID(),
         executionSource: log.executionSource ?? log.source ?? null,
       }),
     );

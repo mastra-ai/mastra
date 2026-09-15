@@ -1,5 +1,4 @@
 import { spawn } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
 import { existsSync, readdirSync, rmSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
@@ -88,7 +87,7 @@ async function waitForChildEvent(
 }
 
 describe.skipIf(process.platform === 'win32')('cross-agent signals over Unix sockets', () => {
-  const resourceId = `agent-signals-${randomUUID().slice(0, 8)}`;
+  const resourceId = `agent-signals-${globalThis.crypto.randomUUID().slice(0, 8)}`;
   const socketDir = `/tmp/mc/${resourceId}`;
 
   afterEach(async () => {

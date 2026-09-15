@@ -1,5 +1,4 @@
 import { spawn } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import { createServer } from 'node:http';
 import type { Server as HttpServer } from 'node:http';
@@ -202,7 +201,7 @@ async function setupTestServer(withSessionManagement: boolean) {
 
   if (withSessionManagement) {
     const serverTransport = new NodeStreamableHTTPServerTransport({
-      sessionIdGenerator: () => randomUUID(),
+      sessionIdGenerator: () => globalThis.crypto.randomUUID(),
     });
 
     await mcpServer.connect(serverTransport);
@@ -2839,7 +2838,7 @@ describe('MastraMCPClient - Session Reconnection (Issue #7675)', () => {
     );
 
     let serverTransport = new NodeStreamableHTTPServerTransport({
-      sessionIdGenerator: () => randomUUID(),
+      sessionIdGenerator: () => globalThis.crypto.randomUUID(),
     });
 
     await mcpServer.connect(serverTransport);
@@ -2894,7 +2893,7 @@ describe('MastraMCPClient - Session Reconnection (Issue #7675)', () => {
     );
 
     serverTransport = new NodeStreamableHTTPServerTransport({
-      sessionIdGenerator: () => randomUUID(),
+      sessionIdGenerator: () => globalThis.crypto.randomUUID(),
     });
 
     await mcpServer.connect(serverTransport);
@@ -2938,7 +2937,7 @@ describe('MastraMCPClient - Session Reconnection (Issue #7675)', () => {
     );
 
     let serverTransport = new NodeStreamableHTTPServerTransport({
-      sessionIdGenerator: () => randomUUID(),
+      sessionIdGenerator: () => globalThis.crypto.randomUUID(),
     });
 
     await mcpServer.connect(serverTransport);
@@ -2992,7 +2991,7 @@ describe('MastraMCPClient - Session Reconnection (Issue #7675)', () => {
     );
 
     serverTransport = new NodeStreamableHTTPServerTransport({
-      sessionIdGenerator: () => randomUUID(),
+      sessionIdGenerator: () => globalThis.crypto.randomUUID(),
     });
 
     await mcpServer.connect(serverTransport);
@@ -3871,7 +3870,7 @@ describe('MastraMCPClient - custom fetch failure modes (auth-token loop)', () =>
         }
 
         if (body?.method === 'initialize') {
-          sessionId = randomUUID();
+          sessionId = globalThis.crypto.randomUUID();
           res.writeHead(200, {
             'content-type': 'application/json',
             'mcp-session-id': sessionId,

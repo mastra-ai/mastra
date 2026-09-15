@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   TABLE_DATASETS,
@@ -366,7 +365,7 @@ export class ExperimentsMySQL extends ExperimentsStorage {
 
   async createExperiment(input: CreateExperimentInput): Promise<Experiment> {
     try {
-      const id = input.id ?? randomUUID();
+      const id = input.id ?? globalThis.crypto.randomUUID();
       const now = new Date();
 
       await this.operations.insert({
@@ -694,7 +693,7 @@ export class ExperimentsMySQL extends ExperimentsStorage {
       });
     }
     try {
-      const id = input.id ?? randomUUID();
+      const id = input.id ?? globalThis.crypto.randomUUID();
       const now = new Date();
       const purgeMetadata = await this.#withPurgeBarrier(
         input.experimentId,
@@ -872,7 +871,7 @@ export class ExperimentsMySQL extends ExperimentsStorage {
                  `${quoteIdentifier(column, 'column name')} = VALUES(${quoteIdentifier(column, 'column name')})`,
              )
              .join(', ')}`,
-          [randomUUID(), input.experimentId, input.itemId, ...updateValues, new Date()],
+          [globalThis.crypto.randomUUID(), input.experimentId, input.itemId, ...updateValues, new Date()],
         );
 
         const [rows] = await connection.execute(

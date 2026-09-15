@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 
 import type { SendAgentNotificationSignalResult, SendAgentSignalAccepted } from '@mastra/core/agent';
 import { createTool } from '@mastra/core/tools';
@@ -363,7 +363,7 @@ The target must already be saved and freshly advertise the same exact thread end
           resourceId: currentAgent.resourceId,
           threadId: currentAgent.threadId,
         });
-        const messageId = inputMessageId ?? randomUUID();
+        const messageId = inputMessageId ?? globalThis.crypto.randomUUID();
         const fingerprint = fingerprintAgentSignal({ targetId, summary, priority, expectsReply, replyTo, payload });
         const sentSignals = await readSentAgentSignals(agentContext);
         const previousSend = sentSignals.find(signal => signal.messageId === messageId);

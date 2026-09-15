@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { CloudflareSandbox } from '../sandbox';
 
@@ -15,7 +14,7 @@ const describeCloudflare = baseUrl ? describe : describe.skip;
 
 function createSandbox(options: { sandboxId?: string } = {}) {
   return new CloudflareSandbox({
-    id: `mastra-integration-${randomUUID()}`,
+    id: `mastra-integration-${globalThis.crypto.randomUUID()}`,
     baseUrl: baseUrl!,
     apiToken,
     ...options,

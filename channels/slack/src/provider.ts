@@ -1119,7 +1119,7 @@ export class SlackProvider implements ChannelProvider {
     const config = options ?? {};
 
     // Generate unique webhook ID for this installation
-    const webhookId = crypto.randomUUID();
+    const webhookId = globalThis.crypto.randomUUID();
 
     // Build manifest using the manifest builder (includes proper default scopes)
     const appName = config.name ?? agent?.name ?? agentId;
@@ -1164,7 +1164,7 @@ export class SlackProvider implements ChannelProvider {
     }
 
     // Generate installation ID
-    const installationId = crypto.randomUUID();
+    const installationId = globalThis.crypto.randomUUID();
 
     // Build authorization URL using the scopes from the manifest
     const scopes = manifest.oauth_config?.scopes?.bot?.join(',') ?? '';

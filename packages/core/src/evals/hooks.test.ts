@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AvailableHooks } from '../hooks';
 import type { ObservabilityContext } from '../observability';
@@ -122,7 +121,7 @@ function didScore(args: Parameters<typeof invoke>[0]): boolean {
 
 /** OTel trace IDs are 32 hex chars. Sequential synthetic IDs would mask a biased hash. */
 function makeTraceIds(count: number): string[] {
-  return Array.from({ length: count }, () => randomUUID().replace(/-/g, ''));
+  return Array.from({ length: count }, () => globalThis.crypto.randomUUID().replace(/-/g, ''));
 }
 
 function validSpan(traceId: string) {
@@ -211,7 +210,7 @@ describe('runScorer sampling', () => {
     });
 
     it('distributes untraced runIds at approximately the configured rate', () => {
-      const runIds = Array.from({ length: 2000 }, () => randomUUID());
+      const runIds = Array.from({ length: 2000 }, () => globalThis.crypto.randomUUID());
       const sampled = runIds.filter(runId => didScore({ sampling: { type: 'ratio', rate: 0.3 }, runId })).length;
       const expected = runIds.length * 0.3;
       const tolerance = Math.max(10, 6 * Math.sqrt(runIds.length * 0.3 * 0.7));

@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { SourceControlSession } from '../storage/domains/source-control/base.js';
@@ -84,7 +82,7 @@ function seedRepositoryLink(storage: SourceControlStorageInMemory, teardownComma
 
 async function seedSession(storage: SourceControlStorageInMemory): Promise<SourceControlSession> {
   return storage.sessions.create({
-    sessionId: randomUUID(),
+    sessionId: globalThis.crypto.randomUUID(),
     projectRepositoryId: 'repo-link-1',
     orgId: 'org-1',
     userId: 'user-1',

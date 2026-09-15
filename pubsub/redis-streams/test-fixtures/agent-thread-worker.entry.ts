@@ -1,23 +1,3 @@
-/**
- * Fixture worker that simulates a single Vercel-Lambda-like process holding
- * one AgentThreadStreamRuntime + Agent bound to a shared RedisStreamsPubSub.
- *
- * The worker reads newline-delimited JSON commands on stdin and emits
- * newline-delimited JSON events on stdout. Commands:
- *   {"cmd":"send","sigId":"s1","text":"hello","runMs":300}
- *   {"cmd":"exit"}
- *
- * Events:
- *   {"type":"ready"}
- *   {"type":"signal-result","sigId":"s1","accepted":true}
- *   {"type":"run-started","sigId":"s1","runId":"..."}
- *   {"type":"run-finished","sigId":"s1","runId":"..."}
- *   {"type":"run-error","sigId":"s1","error":"..."}
- *
- * The "runMs" field controls how long the stubbed agent.stream() takes to
- * resolve _waitUntilFinished, simulating an in-flight model call.
- */
-import { randomUUID } from 'node:crypto';
 import { createInterface } from 'node:readline';
 
 import type { Agent } from '@mastra/core/agent';
@@ -58,7 +38,7 @@ function makeStubAgent(runMs: number, runtime: AgentThreadStreamRuntime, pubsub:
     stream: async (input: any, options: any) => {
       // The signal carrying the user message exposes its sigId as contents.
       const sigId: string = typeof input === 'string' ? input : (input?.contents ?? input?.text ?? '');
-      const runId = options?.runId ?? randomUUID();
+      const runId = options?.runId ?? globalThis.crypto.randomUUID();
       const finished = new Promise<void>(resolve => {
         const timer = setTimeout(() => {
           runEnds.delete(sigId);

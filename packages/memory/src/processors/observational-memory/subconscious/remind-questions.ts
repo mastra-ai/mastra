@@ -180,7 +180,7 @@ export function createAskMemoryTool(options: {
         } satisfies AskMemoryResult;
       }
 
-      const replyId = `subconscious:remind:${crypto.randomUUID()}:reply`;
+      const replyId = `subconscious:remind:${globalThis.crypto.randomUUID()}:reply`;
       try {
         const scope = resolveKnowledgeToolScope(context);
         const model = await resolveSubconsciousAgentModel({

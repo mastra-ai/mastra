@@ -1,5 +1,3 @@
-import { randomBytes } from 'node:crypto';
-
 export interface ObservationGroup {
   id: string;
   range: string;
@@ -166,7 +164,7 @@ function stripReflectionGroupMetadata(body: string): string {
 }
 
 export function generateAnchorId(): string {
-  return randomBytes(8).toString('hex');
+  return Buffer.from(globalThis.crypto.getRandomValues(new Uint8Array(8))).toString('hex');
 }
 
 export function wrapInObservationGroup(

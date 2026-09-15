@@ -126,7 +126,7 @@ export class ScoresRedis extends ScoresStorage {
     }
 
     const now = new Date();
-    const id = crypto.randomUUID();
+    const id = globalThis.crypto.randomUUID();
 
     const scoreWithId = {
       ...validatedScore,

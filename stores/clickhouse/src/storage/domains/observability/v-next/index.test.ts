@@ -1,16 +1,3 @@
-/**
- * Integration tests for the ClickHouse v-next observability storage domain.
- *
- * Mirrors the DuckDB observability test suite but adapted for v-next semantics:
- * - Insert-only model (no span updates)
- * - ReplacingMergeTree for tracing, append-only MergeTree for signals
- * - Discovery via helper tables (discovery_values / discovery_pairs)
- * - Label-key exclusion in grouped queries
- *
- * Requires a running ClickHouse instance. Use `docker compose up -d` in the
- * clickhouse store directory, or set CLICKHOUSE_URL/CLICKHOUSE_USERNAME/CLICKHOUSE_PASSWORD.
- */
-import { randomUUID } from 'node:crypto';
 import { createClient } from '@clickhouse/client';
 import { createObservabilityVNextTests } from '@internal/storage-test-utils';
 import { coreFeatures } from '@mastra/core/features';
@@ -282,7 +269,7 @@ describe('ObservabilityStorageClickhouseVNext', () => {
         expect(explain).toContain(expectedTable);
         if (expectPrimaryKey) expect(explain).toContain('PrimaryKey');
 
-        const queryId = `trace-query-perf-${randomUUID()}`;
+        const queryId = `trace-query-perf-${globalThis.crypto.randomUUID()}`;
         await runWithClickHouseTraceQueryTimeout(client, { timeoutMs: 15_000 }, compiled, queryId);
         await client.command({ query: 'SYSTEM FLUSH LOGS' });
         const logResult = await client.query({

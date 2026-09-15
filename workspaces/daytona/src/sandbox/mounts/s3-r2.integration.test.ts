@@ -1,4 +1,4 @@
-import { createHash, createHmac, randomUUID } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 
 import { Daytona } from '@daytonaio/sdk';
 import { Workspace } from '@mastra/core/workspace';
@@ -22,7 +22,7 @@ describe.skipIf(process.env.RUN_R2_ISOLATION_TEST !== '1')('R2 temporary-credent
     const bucket = process.env.S3_BUCKET!;
     const accessKeyId = process.env.S3_ACCESS_KEY_ID!;
     const secretAccessKey = process.env.S3_SECRET_ACCESS_KEY!;
-    const root = `mastra-daytona-isolation/${randomUUID()}/`;
+    const root = `mastra-daytona-isolation/${globalThis.crypto.randomUUID()}/`;
     const parent = new S3Filesystem({
       bucket,
       endpoint: endpoint.origin,

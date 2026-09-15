@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import type { MountedMastraCode } from '@mastra/code-sdk';
 import { isLeaseProvider, NoopLeaseProvider } from '@mastra/core/events';
 import type { LeaseProvider, PubSub } from '@mastra/core/events';
@@ -120,7 +118,7 @@ export class PlatformGithubEventWorker extends MastraWorker {
   readonly #now: () => number;
   readonly #dispatch: typeof dispatchGithubWebhook;
   readonly #sourceControl: GithubReconcileRepositorySource;
-  readonly #leaseOwner = randomUUID();
+  readonly #leaseOwner = globalThis.crypto.randomUUID();
 
   #running = false;
   #timer: ReturnType<typeof setTimeout> | undefined;

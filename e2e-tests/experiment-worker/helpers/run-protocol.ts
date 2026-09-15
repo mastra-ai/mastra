@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { killProcessGroup, runCommand } from './command.js';
 import type { ExperimentWorkerManifest } from './inspect-manifest.js';
 
@@ -31,7 +31,7 @@ export function createRunRequest(
 ) {
   const items = options.items ?? ([{ id: 'item-1', input: 'hello', toolMocks: [] }] satisfies JsonValue[]);
   const digest = createHash('sha256').update(canonicalize(items)).digest('hex');
-  const experimentId = `e2e-${randomUUID()}`;
+  const experimentId = `e2e-${globalThis.crypto.randomUUID()}`;
   return {
     type: 'run',
     protocolVersion: '1',

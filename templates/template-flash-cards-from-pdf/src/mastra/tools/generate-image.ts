@@ -3,7 +3,6 @@ import { generateImage as generateImageAI } from 'ai';
 import { openai } from '@ai-sdk/openai';
 import { z } from 'zod';
 import { writeFile, mkdir } from 'fs/promises';
-import { randomUUID } from 'crypto';
 import { join } from 'path';
 
 const OUTPUT_DIR = join(process.cwd(), 'output', 'images');
@@ -30,7 +29,7 @@ export const generateImage = createTool({
 
     await mkdir(OUTPUT_DIR, { recursive: true });
 
-    const filename = `${randomUUID()}.png`;
+    const filename = `${globalThis.crypto.randomUUID()}.png`;
     const imagePath = join(OUTPUT_DIR, filename);
 
     await writeFile(imagePath, Buffer.from(image.base64, 'base64'));

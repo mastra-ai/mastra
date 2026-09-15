@@ -1,5 +1,4 @@
 import type { TestProject } from 'vitest/node';
-import { randomUUID } from 'crypto';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { serve } from '@hono/node-server';
@@ -143,7 +142,7 @@ export function createTestServerSetup(config: TestServerSetupConfig) {
     // snapshot reads/writes across multiple operations. Use a per-process temp file
     // so all pooled connections open the same on-disk database (mirrors the vector
     // store treatment already in place below).
-    const libSqlDbPath = `file:${join(tmpdir(), `mastra-libsql-${randomUUID()}.db`)}`;
+    const libSqlDbPath = `file:${join(tmpdir(), `mastra-libsql-${globalThis.crypto.randomUUID()}.db`)}`;
     const libSqlStore = new LibSQLStore({
       id: storageId,
       url: libSqlDbPath,
@@ -163,7 +162,7 @@ export function createTestServerSetup(config: TestServerSetupConfig) {
 
     // Create vector store (use file-based temp db because libsql vector extensions
     // may not work reliably with :memory: for cross-operation queries)
-    const vectorDbPath = `file:${join(tmpdir(), `mastra-vector-${randomUUID()}.db`)}`;
+    const vectorDbPath = `file:${join(tmpdir(), `mastra-vector-${globalThis.crypto.randomUUID()}.db`)}`;
     const testVector = new LibSQLVector({
       id: `${storageId}-vector`,
       url: vectorDbPath,

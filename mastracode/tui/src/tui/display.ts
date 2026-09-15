@@ -1,8 +1,3 @@
-/**
- * Display helpers for the TUI: error messages, info messages, notifications.
- */
-import { randomUUID } from 'node:crypto';
-
 import { Container, Text } from '@earendil-works/pi-tui';
 
 import { parseError } from '@mastra/code-sdk/utils/errors';
@@ -223,7 +218,7 @@ export function runPermissionHooksForEvent(state: TUIState, event: AgentControll
       // a tool_suspended for request_access arriving in the same synchronous
       // batch) have it available. beginLifecycleRun() reuses this id.
       if (!hookMgr.getRunId()) {
-        hookMgr.setRunId(randomUUID());
+        hookMgr.setRunId(globalThis.crypto.randomUUID());
       }
       return;
     }

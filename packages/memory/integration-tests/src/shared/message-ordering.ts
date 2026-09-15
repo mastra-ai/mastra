@@ -1,19 +1,3 @@
-/**
- * Message Ordering Integration Tests - Issue #9909
- *
- * These tests verify that message part ordering is preserved through the full
- * streaming -> persistence -> retrieval cycle with REAL storage backends.
- *
- * Issue: https://github.com/mastra-ai/mastra/issues/9909
- *
- * Each test compares THREE sources:
- * 1. STREAM - The ground truth of what was streamed from the LLM
- * 2. RAW STORAGE - Direct query to the database (listMessages)
- * 3. RECALL - The processed recall output from Memory
- *
- * Tests run with OpenAI models.
- */
-import { randomUUID } from 'node:crypto';
 import { Agent } from '@mastra/core/agent';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
 import type { MastraModelConfig } from '@mastra/core/llm';
@@ -192,7 +176,7 @@ export function getMessageOrderingTests(config: MessageOrderingTestConfig) {
   for (const modelConfig of models) {
     describe(`Message Ordering with ${modelConfig.name} (${version}) (Issue #9909)`, () => {
       const createMemory = () => {
-        const testId = randomUUID();
+        const testId = globalThis.crypto.randomUUID();
 
         return new Memory({
           options: { lastMessages: 20 },
@@ -216,8 +200,8 @@ export function getMessageOrderingTests(config: MessageOrderingTestConfig) {
           tools,
         });
 
-        const threadId = randomUUID();
-        const resourceId = `ordering-test-user-${randomUUID()}`;
+        const threadId = globalThis.crypto.randomUUID();
+        const resourceId = `ordering-test-user-${globalThis.crypto.randomUUID()}`;
 
         console.info('\n========================================');
         console.info(`TEST: Stream -> Raw Storage -> Recall (${modelConfig.name} ${version})`);
@@ -362,8 +346,8 @@ export function getMessageOrderingTests(config: MessageOrderingTestConfig) {
           tools,
         });
 
-        const threadId = randomUUID();
-        const resourceId = `multi-tool-test-${randomUUID()}`;
+        const threadId = globalThis.crypto.randomUUID();
+        const resourceId = `multi-tool-test-${globalThis.crypto.randomUUID()}`;
 
         console.info('\n========================================');
         console.info(`TEST: Multiple Tool Calls Ordering (${modelConfig.name} ${version})`);
@@ -459,8 +443,8 @@ export function getMessageOrderingTests(config: MessageOrderingTestConfig) {
           tools,
         });
 
-        const threadId = randomUUID();
-        const resourceId = `exact-match-test-${randomUUID()}`;
+        const threadId = globalThis.crypto.randomUUID();
+        const resourceId = `exact-match-test-${globalThis.crypto.randomUUID()}`;
 
         console.info('\n========================================');
         console.info(`TEST: Exact Stream-Storage Match (${modelConfig.name} ${version})`);

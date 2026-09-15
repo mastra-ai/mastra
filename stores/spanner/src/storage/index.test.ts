@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { Spanner } from '@google-cloud/spanner';
 import {
   createSampleMessageV2,
@@ -258,7 +257,7 @@ if (ENABLE_TESTS) {
     });
 
     it('creates a draft workspace with a seed version', async () => {
-      const id = `ws-${randomUUID()}`;
+      const id = `ws-${globalThis.crypto.randomUUID()}`;
       const created = await workspaces.create({
         workspace: { id, name: 'My Workspace', description: 'first', autoSync: true } as any,
       });
@@ -277,7 +276,7 @@ if (ENABLE_TESTS) {
     });
 
     it('creates a new version when config fields change but not for metadata-only updates', async () => {
-      const id = `ws-${randomUUID()}`;
+      const id = `ws-${globalThis.crypto.randomUUID()}`;
       await workspaces.create({ workspace: { id, name: 'W', description: 'a' } as any });
 
       // metadata-only update: no new version
@@ -299,7 +298,7 @@ if (ENABLE_TESTS) {
     });
 
     it('auto-publishes when activeVersionId is set', async () => {
-      const id = `ws-${randomUUID()}`;
+      const id = `ws-${globalThis.crypto.randomUUID()}`;
       await workspaces.create({ workspace: { id, name: 'W' } as any });
       const v1 = await workspaces.getLatestVersion(id);
       const updated = await workspaces.update({ id, activeVersionId: v1!.id } as any);
@@ -308,7 +307,7 @@ if (ENABLE_TESTS) {
     });
 
     it('resolves the active version by default and a specific version by id', async () => {
-      const id = `ws-${randomUUID()}`;
+      const id = `ws-${globalThis.crypto.randomUUID()}`;
       await workspaces.create({ workspace: { id, name: 'orig' } as any });
       const v1 = await workspaces.getLatestVersion(id);
       await workspaces.update({ id, name: 'orig', description: 'v2desc' } as any);
@@ -323,8 +322,8 @@ if (ENABLE_TESTS) {
     });
 
     it('lists workspaces and paginates versions', async () => {
-      const id = `ws-${randomUUID()}`;
-      const authorId = `author-${randomUUID()}`;
+      const id = `ws-${globalThis.crypto.randomUUID()}`;
+      const authorId = `author-${globalThis.crypto.randomUUID()}`;
       await workspaces.create({ workspace: { id, name: 'L', authorId } as any });
       await workspaces.update({ id, description: 'v2' } as any);
       await workspaces.update({ id, description: 'v3' } as any);
@@ -340,7 +339,7 @@ if (ENABLE_TESTS) {
     });
 
     it('deletes a workspace and all its versions', async () => {
-      const id = `ws-${randomUUID()}`;
+      const id = `ws-${globalThis.crypto.randomUUID()}`;
       await workspaces.create({ workspace: { id, name: 'D' } as any });
       await workspaces.update({ id, description: 'v2' } as any);
       expect(await workspaces.countVersions(id)).toBe(2);
@@ -351,16 +350,16 @@ if (ENABLE_TESTS) {
     });
 
     it('getById / getVersion return null for unknown ids', async () => {
-      expect(await workspaces.getById(`missing-${randomUUID()}`)).toBeNull();
-      expect(await workspaces.getVersion(`missing-${randomUUID()}`)).toBeNull();
-      expect(await workspaces.getVersionByNumber(`missing-${randomUUID()}`, 1)).toBeNull();
-      expect(await workspaces.getLatestVersion(`missing-${randomUUID()}`)).toBeNull();
+      expect(await workspaces.getById(`missing-${globalThis.crypto.randomUUID()}`)).toBeNull();
+      expect(await workspaces.getVersion(`missing-${globalThis.crypto.randomUUID()}`)).toBeNull();
+      expect(await workspaces.getVersionByNumber(`missing-${globalThis.crypto.randomUUID()}`, 1)).toBeNull();
+      expect(await workspaces.getLatestVersion(`missing-${globalThis.crypto.randomUUID()}`)).toBeNull();
     });
 
     it('createVersion appends a version and getVersion fetches it by id', async () => {
-      const id = `ws-${randomUUID()}`;
+      const id = `ws-${globalThis.crypto.randomUUID()}`;
       await workspaces.create({ workspace: { id, name: 'CV' } as any });
-      const versionId = randomUUID();
+      const versionId = globalThis.crypto.randomUUID();
       const created = await workspaces.createVersion({
         id: versionId,
         workspaceId: id,
@@ -382,7 +381,7 @@ if (ENABLE_TESTS) {
     });
 
     it('deleteVersion removes a single version; deleteVersionsByParentId clears all', async () => {
-      const id = `ws-${randomUUID()}`;
+      const id = `ws-${globalThis.crypto.randomUUID()}`;
       await workspaces.create({ workspace: { id, name: 'DV' } as any });
       await workspaces.update({ id, description: 'v2' } as any);
       const v2 = await workspaces.getVersionByNumber(id, 2);
@@ -396,10 +395,10 @@ if (ENABLE_TESTS) {
     });
 
     it('list paginates and filters by metadata', async () => {
-      const tag = `grp-${randomUUID()}`;
+      const tag = `grp-${globalThis.crypto.randomUUID()}`;
       for (let i = 0; i < 3; i++) {
         await workspaces.create({
-          workspace: { id: `ws-${randomUUID()}`, name: `M${i}`, metadata: { grp: tag } } as any,
+          workspace: { id: `ws-${globalThis.crypto.randomUUID()}`, name: `M${i}`, metadata: { grp: tag } } as any,
         });
       }
       const page0 = await workspaces.list({ metadata: { grp: tag }, page: 0, perPage: 2 });
@@ -413,8 +412,8 @@ if (ENABLE_TESTS) {
     });
 
     it('listResolved merges the active version config into each record', async () => {
-      const authorId = `author-${randomUUID()}`;
-      const id = `ws-${randomUUID()}`;
+      const authorId = `author-${globalThis.crypto.randomUUID()}`;
+      const id = `ws-${globalThis.crypto.randomUUID()}`;
       await workspaces.create({ workspace: { id, name: 'R', description: 'd1', authorId } as any });
       const resolved = await workspaces.listResolved({ authorId } as any);
       const row = resolved.workspaces.find(w => w.id === id);
@@ -454,7 +453,7 @@ if (ENABLE_TESTS) {
     });
 
     it('favorite increments the counter and is idempotent', async () => {
-      const id = `a-${randomUUID()}`;
+      const id = `a-${globalThis.crypto.randomUUID()}`;
       await makeAgent(id);
       expect(await favorites.favorite({ userId: 'u1', entityType: 'agent', entityId: id })).toEqual({
         favorited: true,
@@ -473,12 +472,16 @@ if (ENABLE_TESTS) {
 
     it('favorite throws when the entity does not exist', async () => {
       await expect(
-        favorites.favorite({ userId: 'u1', entityType: 'agent', entityId: `missing-${randomUUID()}` }),
+        favorites.favorite({
+          userId: 'u1',
+          entityType: 'agent',
+          entityId: `missing-${globalThis.crypto.randomUUID()}`,
+        }),
       ).rejects.toThrow();
     });
 
     it('unfavorite decrements, clamps at 0, and is idempotent', async () => {
-      const id = `s-${randomUUID()}`;
+      const id = `s-${globalThis.crypto.randomUUID()}`;
       await makeSkill(id);
       await favorites.favorite({ userId: 'u1', entityType: 'skill', entityId: id });
       expect(await favorites.unfavorite({ userId: 'u1', entityType: 'skill', entityId: id })).toEqual({
@@ -494,8 +497,8 @@ if (ENABLE_TESTS) {
     });
 
     it('isFavorited / isFavoritedBatch report state per user', async () => {
-      const a1 = `a-${randomUUID()}`;
-      const a2 = `a-${randomUUID()}`;
+      const a1 = `a-${globalThis.crypto.randomUUID()}`;
+      const a2 = `a-${globalThis.crypto.randomUUID()}`;
       await makeAgent(a1);
       await makeAgent(a2);
       await favorites.favorite({ userId: 'u1', entityType: 'agent', entityId: a1 });
@@ -509,8 +512,8 @@ if (ENABLE_TESTS) {
     });
 
     it('listFavoritedIds is scoped by user and entity type', async () => {
-      const a1 = `a-${randomUUID()}`;
-      const s1 = `s-${randomUUID()}`;
+      const a1 = `a-${globalThis.crypto.randomUUID()}`;
+      const s1 = `s-${globalThis.crypto.randomUUID()}`;
       await makeAgent(a1);
       await makeSkill(s1);
       await favorites.favorite({ userId: 'u1', entityType: 'agent', entityId: a1 });
@@ -522,7 +525,7 @@ if (ENABLE_TESTS) {
     });
 
     it('deleteFavoritesForEntity removes rows, resets the counter, and returns the count', async () => {
-      const id = `a-${randomUUID()}`;
+      const id = `a-${globalThis.crypto.randomUUID()}`;
       await makeAgent(id);
       await favorites.favorite({ userId: 'u1', entityType: 'agent', entityId: id });
       await favorites.favorite({ userId: 'u2', entityType: 'agent', entityId: id });
@@ -534,7 +537,7 @@ if (ENABLE_TESTS) {
     });
 
     it('agent and skill counters with colliding ids stay independent', async () => {
-      const id = `shared-${randomUUID()}`;
+      const id = `shared-${globalThis.crypto.randomUUID()}`;
       await makeAgent(id);
       await makeSkill(id);
       await favorites.favorite({ userId: 'u1', entityType: 'agent', entityId: id });
@@ -544,7 +547,7 @@ if (ENABLE_TESTS) {
     });
 
     it('concurrent same-user favorite calls are idempotent (counter never exceeds 1)', async () => {
-      const id = `a-${randomUUID()}`;
+      const id = `a-${globalThis.crypto.randomUUID()}`;
       await makeAgent(id);
       // Fire several concurrent favorite() calls for the same key. Spanner's
       // serializable isolation + ABORTED retry must collapse them into one row.
@@ -562,9 +565,9 @@ if (ENABLE_TESTS) {
       // this matches the cross-adapter conformance contract (and the Postgres
       // reference, which applies no default status). A normal list() with no
       // favorites params still defaults to published-only.
-      const u = `u-${randomUUID()}`;
-      const draft = `a-${randomUUID()}`;
-      const published = `a-${randomUUID()}`;
+      const u = `u-${globalThis.crypto.randomUUID()}`;
+      const draft = `a-${globalThis.crypto.randomUUID()}`;
+      const published = `a-${globalThis.crypto.randomUUID()}`;
       await makeAgent(draft); // create() => draft
       await makeAgent(published);
       const pubV = await agents.getLatestVersion(published);
@@ -611,13 +614,13 @@ if (ENABLE_TESTS) {
     let channels: ChannelsSpanner;
 
     const sampleInstallation = (over: Partial<any> = {}) => ({
-      id: `inst-${randomUUID()}`,
+      id: `inst-${globalThis.crypto.randomUUID()}`,
       platform: 'slack',
-      agentId: `ag-${randomUUID()}`,
+      agentId: `ag-${globalThis.crypto.randomUUID()}`,
       status: 'active' as const,
-      webhookId: `wh-${randomUUID()}`,
+      webhookId: `wh-${globalThis.crypto.randomUUID()}`,
       data: { botToken: 'xoxb', teamId: 'T1' },
-      configHash: `hash-${randomUUID()}`,
+      configHash: `hash-${globalThis.crypto.randomUUID()}`,
       createdAt: new Date(),
       updatedAt: new Date(),
       ...over,
@@ -652,7 +655,7 @@ if (ENABLE_TESTS) {
     });
 
     it('getInstallationByAgent prefers active, then pending; scoped per platform', async () => {
-      const agentId = `ag-${randomUUID()}`;
+      const agentId = `ag-${globalThis.crypto.randomUUID()}`;
       await channels.saveInstallation(sampleInstallation({ id: 'p', platform: 'slack', agentId, status: 'pending' }));
       await channels.saveInstallation(sampleInstallation({ id: 'a', platform: 'slack', agentId, status: 'active' }));
       expect((await channels.getInstallationByAgent('slack', agentId))?.id).toBe('a');
@@ -719,7 +722,7 @@ if (ENABLE_TESTS) {
     });
     const baseResult = (experimentId: string, over: Partial<any> = {}) => ({
       experimentId,
-      itemId: `item-${randomUUID()}`,
+      itemId: `item-${globalThis.crypto.randomUUID()}`,
       itemDatasetVersion: null,
       input: { q: 'x' },
       output: null,
@@ -770,7 +773,7 @@ if (ENABLE_TESTS) {
     });
 
     it('listExperiments filters and paginates', async () => {
-      const targetId = `t-${randomUUID()}`;
+      const targetId = `t-${globalThis.crypto.randomUUID()}`;
       for (let i = 0; i < 3; i++) await experiments.createExperiment(baseExp({ targetId }));
       await experiments.createExperiment(baseExp({ targetId: 'other' }));
 
@@ -1716,7 +1719,7 @@ if (ENABLE_TESTS) {
 
         it('throws when thread does not exist', async () => {
           await expect(
-            memory.updateThread({ id: `missing-${randomUUID()}`, title: 'x', metadata: {} }),
+            memory.updateThread({ id: `missing-${globalThis.crypto.randomUUID()}`, title: 'x', metadata: {} }),
           ).rejects.toThrow(/not found/i);
         });
       });
@@ -1737,12 +1740,14 @@ if (ENABLE_TESTS) {
         });
 
         it('is a no-op for a missing thread', async () => {
-          await expect(memory.deleteThread({ threadId: `missing-${randomUUID()}` })).resolves.toBeUndefined();
+          await expect(
+            memory.deleteThread({ threadId: `missing-${globalThis.crypto.randomUUID()}` }),
+          ).resolves.toBeUndefined();
         });
       });
 
       describe('listThreads', () => {
-        const sharedResourceId = `list-resource-${randomUUID()}`;
+        const sharedResourceId = `list-resource-${globalThis.crypto.randomUUID()}`;
 
         beforeAll(async () => {
           for (let i = 0; i < 5; i++) {
@@ -1970,7 +1975,7 @@ if (ENABLE_TESTS) {
 
       describe('updateResource', () => {
         it('creates a new resource if the id does not exist', async () => {
-          const id = `new-resource-${randomUUID()}`;
+          const id = `new-resource-${globalThis.crypto.randomUUID()}`;
           const updated = await memory.updateResource({
             resourceId: id,
             workingMemory: 'fresh',
@@ -1983,7 +1988,7 @@ if (ENABLE_TESTS) {
 
         it('merges metadata and updates workingMemory on existing resources', async () => {
           const resource = {
-            id: `update-resource-${randomUUID()}`,
+            id: `update-resource-${globalThis.crypto.randomUUID()}`,
             workingMemory: 'old',
             metadata: { a: 1, b: 2 },
             createdAt: new Date(),
@@ -2001,7 +2006,7 @@ if (ENABLE_TESTS) {
 
         it('updates workingMemory only when metadata is omitted', async () => {
           const resource = {
-            id: `wm-only-${randomUUID()}`,
+            id: `wm-only-${globalThis.crypto.randomUUID()}`,
             workingMemory: 'first',
             metadata: { keep: true },
             createdAt: new Date(),
@@ -2016,8 +2021,8 @@ if (ENABLE_TESTS) {
 
       describe('hasMore correctness with include', () => {
         it('keeps hasMore=true when include adds same-thread messages on a paginated window', async () => {
-          const threadId = `wf-hm-${randomUUID()}`;
-          const resourceId = `res-hm-${randomUUID()}`;
+          const threadId = `wf-hm-${globalThis.crypto.randomUUID()}`;
+          const resourceId = `res-hm-${globalThis.crypto.randomUUID()}`;
           await memory.saveThread({
             thread: {
               id: threadId,
@@ -2031,7 +2036,7 @@ if (ENABLE_TESTS) {
           // Insert 5 messages with strictly-ordered createdAt so pagination
           // is deterministic.
           const baseTs = Date.now();
-          const ids = Array.from({ length: 5 }, (_, i) => `m${i}-${randomUUID()}`);
+          const ids = Array.from({ length: 5 }, (_, i) => `m${i}-${globalThis.crypto.randomUUID()}`);
           await memory.saveMessages({
             messages: ids.map((id, i) => ({
               id,
@@ -2082,8 +2087,8 @@ if (ENABLE_TESTS) {
           // Use a real thread so the upstream validation passes; the spy
           // intercepts the first .run() call, which is the COUNT(*) for the
           // listMessages path.
-          const threadId = `wf-err-${randomUUID()}`;
-          const resourceId = `res-err-${randomUUID()}`;
+          const threadId = `wf-err-${globalThis.crypto.randomUUID()}`;
+          const resourceId = `res-err-${globalThis.crypto.randomUUID()}`;
           await memory.saveThread({
             thread: {
               id: threadId,
@@ -2113,8 +2118,8 @@ if (ENABLE_TESTS) {
         // update across many messages must still produce the right per-row
         // updates. Previously this used messages.find() per row (O(n²)).
         it('correctly updates a large batch of messages by id', async () => {
-          const threadId = `wf-upd-${randomUUID()}`;
-          const resourceId = `res-upd-${randomUUID()}`;
+          const threadId = `wf-upd-${globalThis.crypto.randomUUID()}`;
+          const resourceId = `res-upd-${globalThis.crypto.randomUUID()}`;
           await memory.saveThread({
             thread: {
               id: threadId,
@@ -2125,7 +2130,7 @@ if (ENABLE_TESTS) {
               updatedAt: new Date(),
             },
           });
-          const ids = Array.from({ length: 8 }, () => randomUUID());
+          const ids = Array.from({ length: 8 }, () => globalThis.crypto.randomUUID());
           await memory.saveMessages({
             messages: ids.map((id, i) => ({
               id,
@@ -2159,8 +2164,8 @@ if (ENABLE_TESTS) {
         // Functional regression for the IN-batched target query: results must
         // still include every requested target plus the requested neighbours.
         it('returns every requested include target in a single batched lookup', async () => {
-          const threadId = `wf-inc-${randomUUID()}`;
-          const resourceId = `res-inc-${randomUUID()}`;
+          const threadId = `wf-inc-${globalThis.crypto.randomUUID()}`;
+          const resourceId = `res-inc-${globalThis.crypto.randomUUID()}`;
           await memory.saveThread({
             thread: {
               id: threadId,
@@ -2172,7 +2177,7 @@ if (ENABLE_TESTS) {
             },
           });
           const baseTs = Date.now();
-          const ids = Array.from({ length: 6 }, () => randomUUID());
+          const ids = Array.from({ length: 6 }, () => globalThis.crypto.randomUUID());
           await memory.saveMessages({
             messages: ids.map((id, i) => ({
               id,
@@ -2199,8 +2204,8 @@ if (ENABLE_TESTS) {
         });
 
         it('still returns prev/next neighbours alongside the targets', async () => {
-          const threadId = `wf-inc-nb-${randomUUID()}`;
-          const resourceId = `res-inc-nb-${randomUUID()}`;
+          const threadId = `wf-inc-nb-${globalThis.crypto.randomUUID()}`;
+          const resourceId = `res-inc-nb-${globalThis.crypto.randomUUID()}`;
           await memory.saveThread({
             thread: {
               id: threadId,
@@ -2212,7 +2217,7 @@ if (ENABLE_TESTS) {
             },
           });
           const baseTs = Date.now();
-          const ids = Array.from({ length: 5 }, () => randomUUID());
+          const ids = Array.from({ length: 5 }, () => globalThis.crypto.randomUUID());
           await memory.saveMessages({
             messages: ids.map((id, i) => ({
               id,
@@ -2247,7 +2252,7 @@ if (ENABLE_TESTS) {
       describe('persistWorkflowSnapshot and loadWorkflowSnapshot', () => {
         it('inserts a snapshot and reads it back', async () => {
           const { snapshot, runId } = createSampleWorkflowSnapshot('running');
-          const workflowName = `wf-${randomUUID()}`;
+          const workflowName = `wf-${globalThis.crypto.randomUUID()}`;
           await workflows.persistWorkflowSnapshot({ workflowName, runId, snapshot });
           const loaded = await workflows.loadWorkflowSnapshot({ workflowName, runId });
           expect(loaded?.runId).toBe(runId);
@@ -2256,7 +2261,7 @@ if (ENABLE_TESTS) {
 
         it('upserts on conflict', async () => {
           const { snapshot, runId } = createSampleWorkflowSnapshot('running');
-          const workflowName = `wf-${randomUUID()}`;
+          const workflowName = `wf-${globalThis.crypto.randomUUID()}`;
           await workflows.persistWorkflowSnapshot({ workflowName, runId, snapshot });
           await workflows.persistWorkflowSnapshot({
             workflowName,
@@ -2277,7 +2282,7 @@ if (ENABLE_TESTS) {
 
         it('preserves createdAt across subsequent upserts when caller omits it', async () => {
           const { snapshot, runId } = createSampleWorkflowSnapshot('running');
-          const workflowName = `wf-${randomUUID()}`;
+          const workflowName = `wf-${globalThis.crypto.randomUUID()}`;
           const originalCreatedAt = new Date('2024-01-15T10:00:00.000Z');
           await workflows.persistWorkflowSnapshot({
             workflowName,
@@ -2306,7 +2311,7 @@ if (ENABLE_TESTS) {
       describe('updateWorkflowResults', () => {
         it('merges step result and request context', async () => {
           const { snapshot, runId } = createSampleWorkflowSnapshot('running');
-          const workflowName = `wf-${randomUUID()}`;
+          const workflowName = `wf-${globalThis.crypto.randomUUID()}`;
           await workflows.persistWorkflowSnapshot({ workflowName, runId, snapshot });
           const merged = await workflows.updateWorkflowResults({
             workflowName,
@@ -2321,8 +2326,8 @@ if (ENABLE_TESTS) {
         });
 
         it('creates the snapshot when none exists', async () => {
-          const workflowName = `wf-${randomUUID()}`;
-          const runId = `run-${randomUUID()}`;
+          const workflowName = `wf-${globalThis.crypto.randomUUID()}`;
+          const runId = `run-${globalThis.crypto.randomUUID()}`;
           await workflows.updateWorkflowResults({
             workflowName,
             runId,
@@ -2336,7 +2341,7 @@ if (ENABLE_TESTS) {
 
         it('preserves createdAt on the existing row when stepping the snapshot', async () => {
           const { snapshot, runId } = createSampleWorkflowSnapshot('running');
-          const workflowName = `wf-${randomUUID()}`;
+          const workflowName = `wf-${globalThis.crypto.randomUUID()}`;
           const originalCreatedAt = new Date('2024-02-20T08:30:00.000Z');
           await workflows.persistWorkflowSnapshot({
             workflowName,
@@ -2365,7 +2370,7 @@ if (ENABLE_TESTS) {
       describe('updateWorkflowState', () => {
         it('merges options into the existing snapshot', async () => {
           const { snapshot, runId } = createSampleWorkflowSnapshot('running');
-          const workflowName = `wf-${randomUUID()}`;
+          const workflowName = `wf-${globalThis.crypto.randomUUID()}`;
           await workflows.persistWorkflowSnapshot({ workflowName, runId, snapshot });
           const updated = await workflows.updateWorkflowState({
             workflowName,
@@ -2388,7 +2393,7 @@ if (ENABLE_TESTS) {
       describe('getWorkflowRunById', () => {
         it('returns the run for a known runId', async () => {
           const { snapshot, runId } = createSampleWorkflowSnapshot('running');
-          const workflowName = `wf-${randomUUID()}`;
+          const workflowName = `wf-${globalThis.crypto.randomUUID()}`;
           await workflows.persistWorkflowSnapshot({ workflowName, runId, snapshot });
           const fetched = await workflows.getWorkflowRunById({ runId, workflowName });
           expect(fetched?.runId).toBe(runId);
@@ -2402,7 +2407,7 @@ if (ENABLE_TESTS) {
 
         it('finds runs by runId only', async () => {
           const { snapshot, runId } = createSampleWorkflowSnapshot('running');
-          const workflowName = `wf-${randomUUID()}`;
+          const workflowName = `wf-${globalThis.crypto.randomUUID()}`;
           await workflows.persistWorkflowSnapshot({ workflowName, runId, snapshot });
           const fetched = await workflows.getWorkflowRunById({ runId });
           expect(fetched?.runId).toBe(runId);
@@ -2422,7 +2427,7 @@ if (ENABLE_TESTS) {
       describe('deleteWorkflowRunById', () => {
         it('removes a snapshot row', async () => {
           const { snapshot, runId } = createSampleWorkflowSnapshot('running');
-          const workflowName = `wf-${randomUUID()}`;
+          const workflowName = `wf-${globalThis.crypto.randomUUID()}`;
           await workflows.persistWorkflowSnapshot({ workflowName, runId, snapshot });
           await workflows.deleteWorkflowRunById({ runId, workflowName });
           expect(await workflows.loadWorkflowSnapshot({ workflowName, runId })).toBeNull();
@@ -2436,9 +2441,9 @@ if (ENABLE_TESTS) {
       });
 
       describe('listWorkflowRuns', () => {
-        const workflowA = `wf-a-${randomUUID()}`;
-        const workflowB = `wf-b-${randomUUID()}`;
-        const resourceX = `resource-${randomUUID()}`;
+        const workflowA = `wf-a-${globalThis.crypto.randomUUID()}`;
+        const workflowB = `wf-b-${globalThis.crypto.randomUUID()}`;
+        const resourceX = `resource-${globalThis.crypto.randomUUID()}`;
 
         beforeAll(async () => {
           // Three runs of A (one with resourceId), two of B.
@@ -2570,8 +2575,8 @@ if (ENABLE_TESTS) {
       });
 
       describe('listTasks', () => {
-        const agentId = `agent-list-${randomUUID()}`;
-        const otherAgent = `agent-other-${randomUUID()}`;
+        const agentId = `agent-list-${globalThis.crypto.randomUUID()}`;
+        const otherAgent = `agent-other-${globalThis.crypto.randomUUID()}`;
 
         beforeAll(async () => {
           for (let i = 0; i < 3; i++) {
@@ -2639,7 +2644,7 @@ if (ENABLE_TESTS) {
 
       describe('deleteTasks', () => {
         it('deletes by status filter', async () => {
-          const agentId = `delete-${randomUUID()}`;
+          const agentId = `delete-${globalThis.crypto.randomUUID()}`;
           await backgroundTasks.createTask(createSampleTask({ agentId, status: 'pending' }));
           await backgroundTasks.createTask(createSampleTask({ agentId, status: 'completed' }));
 
@@ -2656,7 +2661,7 @@ if (ENABLE_TESTS) {
         it('is a no-op for an empty status array (does not emit `IN ()`)', async () => {
           // Bug guard: prior to the fix this would build invalid SQL like
           // `WHERE status IN ()` and throw at the Spanner layer.
-          const agentId = `delete-empty-${randomUUID()}`;
+          const agentId = `delete-empty-${globalThis.crypto.randomUUID()}`;
           await backgroundTasks.createTask(createSampleTask({ agentId, status: 'pending' }));
           await expect(backgroundTasks.deleteTasks({ status: [] })).resolves.toBeUndefined();
           // The pending task survives the no-op delete.
@@ -2671,7 +2676,7 @@ if (ENABLE_TESTS) {
           // Insert something so the table is non-empty; the empty status
           // filter must still return zero rows without hitting Spanner with
           // an invalid `IN ()` clause.
-          const agentId = `list-empty-status-${randomUUID()}`;
+          const agentId = `list-empty-status-${globalThis.crypto.randomUUID()}`;
           await backgroundTasks.createTask(createSampleTask({ agentId, status: 'pending' }));
           const result = await backgroundTasks.listTasks({ status: [] });
           expect(result).toEqual({ tasks: [], total: 0 });
@@ -2695,7 +2700,7 @@ if (ENABLE_TESTS) {
           // the dedicated COUNT(*) round-trip and reads `total` off the
           // returned array. This regression-checks both the count value and
           // that the count query was avoided.
-          const agentId = `list-no-pagination-${randomUUID()}`;
+          const agentId = `list-no-pagination-${globalThis.crypto.randomUUID()}`;
           await backgroundTasks.createTask(createSampleTask({ agentId, status: 'pending' }));
           await backgroundTasks.createTask(createSampleTask({ agentId, status: 'pending' }));
           await backgroundTasks.createTask(createSampleTask({ agentId, status: 'pending' }));
@@ -2755,8 +2760,8 @@ if (ENABLE_TESTS) {
         });
 
         it('counts running tasks scoped to the given agent', async () => {
-          const a1 = `agent-${randomUUID()}`;
-          const a2 = `agent-${randomUUID()}`;
+          const a1 = `agent-${globalThis.crypto.randomUUID()}`;
+          const a2 = `agent-${globalThis.crypto.randomUUID()}`;
           await backgroundTasks.createTask(createSampleTask({ agentId: a1, status: 'running' }));
           await backgroundTasks.createTask(createSampleTask({ agentId: a1, status: 'running' }));
           await backgroundTasks.createTask(createSampleTask({ agentId: a2, status: 'running' }));
@@ -2765,7 +2770,7 @@ if (ENABLE_TESTS) {
         });
 
         it('ignores non-running tasks for the same agent', async () => {
-          const a = `agent-${randomUUID()}`;
+          const a = `agent-${globalThis.crypto.randomUUID()}`;
           await backgroundTasks.createTask(createSampleTask({ agentId: a, status: 'running' }));
           await backgroundTasks.createTask(createSampleTask({ agentId: a, status: 'pending' }));
           await backgroundTasks.createTask(createSampleTask({ agentId: a, status: 'completed' }));
@@ -2774,8 +2779,8 @@ if (ENABLE_TESTS) {
         });
 
         it('ignores running tasks belonging to other agents', async () => {
-          const a1 = `agent-${randomUUID()}`;
-          const a2 = `agent-${randomUUID()}`;
+          const a1 = `agent-${globalThis.crypto.randomUUID()}`;
+          const a2 = `agent-${globalThis.crypto.randomUUID()}`;
           await backgroundTasks.createTask(createSampleTask({ agentId: a1, status: 'running' }));
           await backgroundTasks.createTask(createSampleTask({ agentId: a2, status: 'running' }));
           await backgroundTasks.createTask(createSampleTask({ agentId: a2, status: 'running' }));
@@ -2797,10 +2802,10 @@ if (ENABLE_TESTS) {
 
       describe('update', () => {
         it('updates status, activeVersionId, authorId, metadata', async () => {
-          const id = `update-${randomUUID()}`;
+          const id = `update-${globalThis.crypto.randomUUID()}`;
           await agents.create({ agent: { id, ...baseSnapshot } });
 
-          const versionId = randomUUID();
+          const versionId = globalThis.crypto.randomUUID();
           await agents.createVersion({
             id: versionId,
             agentId: id,
@@ -2832,10 +2837,10 @@ if (ENABLE_TESTS) {
 
       describe('delete', () => {
         it('removes the thin record and all versions', async () => {
-          const id = `delete-${randomUUID()}`;
+          const id = `delete-${globalThis.crypto.randomUUID()}`;
           await agents.create({ agent: { id, ...baseSnapshot } });
           await agents.createVersion({
-            id: randomUUID(),
+            id: globalThis.crypto.randomUUID(),
             agentId: id,
             versionNumber: 2,
             name: 'V2',
@@ -2860,7 +2865,7 @@ if (ENABLE_TESTS) {
           // Spy on the underlying SpannerDB.insert and reject when the call
           // targets the versions table; capture the original BEFORE the spy
           // so the thin-row insert can pass through without recursing.
-          const id = `orphan-create-${randomUUID()}`;
+          const id = `orphan-create-${globalThis.crypto.randomUUID()}`;
           const internalDb: SpannerDB = (agents as any).db;
           const originalInsert = internalDb.insert.bind(internalDb);
           const insertSpy = vi.spyOn(internalDb, 'insert').mockImplementation(async (args: any) => {
@@ -2881,7 +2886,7 @@ if (ENABLE_TESTS) {
         });
 
         it('init() sweeps orphaned draft=null,activeVersionId=null rows when cleanupStaleDraftsOnStartup is enabled', async () => {
-          const id = `orphan-init-${randomUUID()}`;
+          const id = `orphan-init-${globalThis.crypto.randomUUID()}`;
 
           // Simulate a prior crash: thin row exists but no version was ever
           // inserted. Use the underlying SpannerDB directly to plant the orphan.
@@ -2922,11 +2927,11 @@ if (ENABLE_TESTS) {
         });
 
         it('init() with cleanupStaleDraftsOnStartup leaves published agents and drafts with active versions untouched', async () => {
-          const publishedId = `keep-published-${randomUUID()}`;
-          const draftWithVersionId = `keep-draft-${randomUUID()}`;
+          const publishedId = `keep-published-${globalThis.crypto.randomUUID()}`;
+          const draftWithVersionId = `keep-draft-${globalThis.crypto.randomUUID()}`;
 
           await agents.create({ agent: { id: publishedId, ...baseSnapshot } });
-          const versionId = randomUUID();
+          const versionId = globalThis.crypto.randomUUID();
           await agents.createVersion({
             id: versionId,
             agentId: publishedId,
@@ -2939,7 +2944,7 @@ if (ENABLE_TESTS) {
 
           // A draft that DOES have an active version (e.g. mid-edit) must survive.
           await agents.create({ agent: { id: draftWithVersionId, ...baseSnapshot } });
-          const v1Id = randomUUID();
+          const v1Id = globalThis.crypto.randomUUID();
           await agents.createVersion({
             id: v1Id,
             agentId: draftWithVersionId,
@@ -2970,15 +2975,15 @@ if (ENABLE_TESTS) {
       });
 
       describe('list', () => {
-        const authorA = `author-a-${randomUUID()}`;
-        const authorB = `author-b-${randomUUID()}`;
+        const authorA = `author-a-${globalThis.crypto.randomUUID()}`;
+        const authorB = `author-b-${globalThis.crypto.randomUUID()}`;
 
         beforeAll(async () => {
           await agents.dangerouslyClearAll();
           for (let i = 0; i < 4; i++) {
             await agents.create({
               agent: {
-                id: `list-${randomUUID()}`,
+                id: `list-${globalThis.crypto.randomUUID()}`,
                 ...baseSnapshot,
                 authorId: i < 3 ? authorA : authorB,
                 metadata: { tier: i % 2 === 0 ? 'gold' : 'silver' },
@@ -3025,11 +3030,11 @@ if (ENABLE_TESTS) {
         const versionIds: string[] = [];
 
         beforeAll(async () => {
-          agentId = `versions-${randomUUID()}`;
+          agentId = `versions-${globalThis.crypto.randomUUID()}`;
           await agents.create({ agent: { id: agentId, ...baseSnapshot } });
           // create() already added v1; add v2 and v3.
           for (let n = 2; n <= 3; n++) {
-            const vid = randomUUID();
+            const vid = globalThis.crypto.randomUUID();
             versionIds.push(vid);
             await agents.createVersion({
               id: vid,
@@ -3085,10 +3090,10 @@ if (ENABLE_TESTS) {
         });
 
         it('deleteVersionsByParentId removes all versions for the agent', async () => {
-          const tempAgentId = `bulk-${randomUUID()}`;
+          const tempAgentId = `bulk-${globalThis.crypto.randomUUID()}`;
           await agents.create({ agent: { id: tempAgentId, ...baseSnapshot } });
           await agents.createVersion({
-            id: randomUUID(),
+            id: globalThis.crypto.randomUUID(),
             agentId: tempAgentId,
             versionNumber: 2,
             name: 'V2',
@@ -3108,7 +3113,7 @@ if (ENABLE_TESTS) {
       });
 
       it('getVersion returns the row by id', async () => {
-        const id = `mcp-c-${randomUUID()}`;
+        const id = `mcp-c-${globalThis.crypto.randomUUID()}`;
         await mcpClients.create({
           mcpClient: { id, name: 'Client', servers: { fs: { url: 'http://localhost' } as any } },
         });
@@ -3123,10 +3128,10 @@ if (ENABLE_TESTS) {
       });
 
       it('getVersionByNumber returns the matching version', async () => {
-        const id = `mcp-c-${randomUUID()}`;
+        const id = `mcp-c-${globalThis.crypto.randomUUID()}`;
         await mcpClients.create({ mcpClient: { id, name: 'C', servers: {} } });
         await mcpClients.createVersion({
-          id: randomUUID(),
+          id: globalThis.crypto.randomUUID(),
           mcpClientId: id,
           versionNumber: 2,
           name: 'C v2',
@@ -3139,9 +3144,9 @@ if (ENABLE_TESTS) {
       });
 
       it('deleteVersion removes a single version', async () => {
-        const id = `mcp-c-${randomUUID()}`;
+        const id = `mcp-c-${globalThis.crypto.randomUUID()}`;
         await mcpClients.create({ mcpClient: { id, name: 'C', servers: {} } });
-        const v2Id = randomUUID();
+        const v2Id = globalThis.crypto.randomUUID();
         await mcpClients.createVersion({
           id: v2Id,
           mcpClientId: id,
@@ -3157,7 +3162,7 @@ if (ENABLE_TESTS) {
 
       describe('orphan-draft handling', () => {
         it('rolls back the draft thin row when the version insert fails inside the create() transaction', async () => {
-          const id = `mcp-c-orphan-${randomUUID()}`;
+          const id = `mcp-c-orphan-${globalThis.crypto.randomUUID()}`;
           const internalDb: SpannerDB = (mcpClients as any).db;
           const originalInsert = internalDb.insert.bind(internalDb);
           const insertSpy = vi.spyOn(internalDb, 'insert').mockImplementation(async (args: any) => {
@@ -3177,7 +3182,7 @@ if (ENABLE_TESTS) {
         });
 
         it('init() sweeps orphaned draft+activeVersionId=NULL rows when cleanupStaleDraftsOnStartup is enabled', async () => {
-          const id = `mcp-c-init-orphan-${randomUUID()}`;
+          const id = `mcp-c-init-orphan-${globalThis.crypto.randomUUID()}`;
           const internalDb: SpannerDB = (mcpClients as any).db;
           const now = new Date();
           await internalDb.insert({
@@ -3206,8 +3211,8 @@ if (ENABLE_TESTS) {
         });
 
         it('init() with cleanupStaleDraftsOnStartup leaves published clients and drafts with active versions untouched', async () => {
-          const publishedId = `mcp-c-keep-pub-${randomUUID()}`;
-          const draftWithVersionId = `mcp-c-keep-draft-${randomUUID()}`;
+          const publishedId = `mcp-c-keep-pub-${globalThis.crypto.randomUUID()}`;
+          const draftWithVersionId = `mcp-c-keep-draft-${globalThis.crypto.randomUUID()}`;
 
           await mcpClients.create({ mcpClient: { id: publishedId, name: 'P', servers: {} } });
           const v1Pub = await mcpClients.getLatestVersion(publishedId);
@@ -3237,7 +3242,7 @@ if (ENABLE_TESTS) {
       });
 
       describe('list defaulting to status=published', () => {
-        const tag = `pub-default-${randomUUID()}`;
+        const tag = `pub-default-${globalThis.crypto.randomUUID()}`;
         beforeAll(async () => {
           await mcpClients.dangerouslyClearAll();
           // 2 drafts (left in initial draft state by create())
@@ -3278,13 +3283,13 @@ if (ENABLE_TESTS) {
           // number. Verifying the invariant is in force also means the
           // "unique index failure must not be swallowed at init()"
           // hardening is doing its job.
-          const id = `mcp-c-unique-${randomUUID()}`;
+          const id = `mcp-c-unique-${globalThis.crypto.randomUUID()}`;
           await mcpClients.create({ mcpClient: { id, name: 'C', servers: {} } });
           // The seed createVersion already wrote versionNumber=1; a second
           // write with the same number must throw.
           await expect(
             mcpClients.createVersion({
-              id: randomUUID(),
+              id: globalThis.crypto.randomUUID(),
               mcpClientId: id,
               versionNumber: 1,
               name: 'duplicate v1',
@@ -3301,10 +3306,10 @@ if (ENABLE_TESTS) {
       });
 
       it('delete removes the thin record and all versions', async () => {
-        const id = `mcp-s-${randomUUID()}`;
+        const id = `mcp-s-${globalThis.crypto.randomUUID()}`;
         await mcpServers.create({ mcpServer: { id, name: 'S', version: '0.1.0' } });
         await mcpServers.createVersion({
-          id: randomUUID(),
+          id: globalThis.crypto.randomUUID(),
           mcpServerId: id,
           versionNumber: 2,
           name: 'S v2',
@@ -3317,10 +3322,10 @@ if (ENABLE_TESTS) {
       });
 
       it('getVersionByNumber returns the matching version', async () => {
-        const id = `mcp-s-${randomUUID()}`;
+        const id = `mcp-s-${globalThis.crypto.randomUUID()}`;
         await mcpServers.create({ mcpServer: { id, name: 'S', version: '1.0.0' } });
         await mcpServers.createVersion({
-          id: randomUUID(),
+          id: globalThis.crypto.randomUUID(),
           mcpServerId: id,
           versionNumber: 2,
           name: 'S v2',
@@ -3332,11 +3337,11 @@ if (ENABLE_TESTS) {
       });
 
       it('getLatestVersion returns the highest version', async () => {
-        const id = `mcp-s-${randomUUID()}`;
+        const id = `mcp-s-${globalThis.crypto.randomUUID()}`;
         await mcpServers.create({ mcpServer: { id, name: 'S', version: '1.0.0' } });
         for (let n = 2; n <= 3; n++) {
           await mcpServers.createVersion({
-            id: randomUUID(),
+            id: globalThis.crypto.randomUUID(),
             mcpServerId: id,
             versionNumber: n,
             name: `S v${n}`,
@@ -3349,11 +3354,11 @@ if (ENABLE_TESTS) {
       });
 
       it('listVersions paginates and orders', async () => {
-        const id = `mcp-s-${randomUUID()}`;
+        const id = `mcp-s-${globalThis.crypto.randomUUID()}`;
         await mcpServers.create({ mcpServer: { id, name: 'List Server', version: '1.0.0' } });
         for (let n = 2; n <= 5; n++) {
           await mcpServers.createVersion({
-            id: randomUUID(),
+            id: globalThis.crypto.randomUUID(),
             mcpServerId: id,
             versionNumber: n,
             name: `v${n}`,
@@ -3376,9 +3381,9 @@ if (ENABLE_TESTS) {
       });
 
       it('deleteVersion removes a single version row', async () => {
-        const id = `mcp-s-${randomUUID()}`;
+        const id = `mcp-s-${globalThis.crypto.randomUUID()}`;
         await mcpServers.create({ mcpServer: { id, name: 'S', version: '0.1.0' } });
-        const v2Id = randomUUID();
+        const v2Id = globalThis.crypto.randomUUID();
         await mcpServers.createVersion({
           id: v2Id,
           mcpServerId: id,
@@ -3392,11 +3397,11 @@ if (ENABLE_TESTS) {
       });
 
       it('countVersions reports the version total', async () => {
-        const id = `mcp-s-${randomUUID()}`;
+        const id = `mcp-s-${globalThis.crypto.randomUUID()}`;
         await mcpServers.create({ mcpServer: { id, name: 'S', version: '0.1.0' } });
         expect(await mcpServers.countVersions(id)).toBe(1);
         await mcpServers.createVersion({
-          id: randomUUID(),
+          id: globalThis.crypto.randomUUID(),
           mcpServerId: id,
           versionNumber: 2,
           name: 'S v2',
@@ -3408,7 +3413,7 @@ if (ENABLE_TESTS) {
 
       describe('orphan-draft handling', () => {
         it('rolls back the draft thin row when the version insert fails inside the create() transaction', async () => {
-          const id = `mcp-s-orphan-${randomUUID()}`;
+          const id = `mcp-s-orphan-${globalThis.crypto.randomUUID()}`;
           const internalDb: SpannerDB = (mcpServers as any).db;
           const originalInsert = internalDb.insert.bind(internalDb);
           const insertSpy = vi.spyOn(internalDb, 'insert').mockImplementation(async (args: any) => {
@@ -3428,7 +3433,7 @@ if (ENABLE_TESTS) {
         });
 
         it('init() sweeps orphaned draft+activeVersionId=NULL rows when cleanupStaleDraftsOnStartup is enabled', async () => {
-          const id = `mcp-s-init-orphan-${randomUUID()}`;
+          const id = `mcp-s-init-orphan-${globalThis.crypto.randomUUID()}`;
           const internalDb: SpannerDB = (mcpServers as any).db;
           const now = new Date();
           await internalDb.insert({
@@ -3457,8 +3462,8 @@ if (ENABLE_TESTS) {
         });
 
         it('init() with cleanupStaleDraftsOnStartup leaves published servers and drafts with active versions untouched', async () => {
-          const publishedId = `mcp-s-keep-pub-${randomUUID()}`;
-          const draftWithVersionId = `mcp-s-keep-draft-${randomUUID()}`;
+          const publishedId = `mcp-s-keep-pub-${globalThis.crypto.randomUUID()}`;
+          const draftWithVersionId = `mcp-s-keep-draft-${globalThis.crypto.randomUUID()}`;
 
           await mcpServers.create({ mcpServer: { id: publishedId, name: 'P', version: '1.0.0' } });
           const v1Pub = await mcpServers.getLatestVersion(publishedId);
@@ -3490,7 +3495,7 @@ if (ENABLE_TESTS) {
       });
 
       describe('list defaulting to status=published', () => {
-        const tag = `mcp-s-pub-${randomUUID()}`;
+        const tag = `mcp-s-pub-${globalThis.crypto.randomUUID()}`;
         beforeAll(async () => {
           await mcpServers.dangerouslyClearAll();
           // 2 drafts (left in initial draft state by create())
@@ -3530,11 +3535,11 @@ if (ENABLE_TESTS) {
           // number. Verifying the invariant is in force also confirms
           // SpannerDB.createIndexes propagates unique-index failures
           // instead of silently swallowing them.
-          const id = `mcp-s-unique-${randomUUID()}`;
+          const id = `mcp-s-unique-${globalThis.crypto.randomUUID()}`;
           await mcpServers.create({ mcpServer: { id, name: 'S', version: '0.1.0' } });
           await expect(
             mcpServers.createVersion({
-              id: randomUUID(),
+              id: globalThis.crypto.randomUUID(),
               mcpServerId: id,
               versionNumber: 1, // duplicate
               name: 'duplicate v1',
@@ -3559,7 +3564,7 @@ if (ENABLE_TESTS) {
 
       describe('create', () => {
         it('creates the thin record as draft and seeds version 1', async () => {
-          const id = `skill-${randomUUID()}`;
+          const id = `skill-${globalThis.crypto.randomUUID()}`;
           const created = await skills.create({ skill: { id, ...baseSnapshot } });
           expect(created.id).toBe(id);
           expect(created.status).toBe('draft');
@@ -3572,7 +3577,7 @@ if (ENABLE_TESTS) {
         });
 
         it('persists optional snapshot fields', async () => {
-          const id = `skill-full-${randomUUID()}`;
+          const id = `skill-full-${globalThis.crypto.randomUUID()}`;
           await skills.create({
             skill: {
               id,
@@ -3599,11 +3604,11 @@ if (ENABLE_TESTS) {
         });
 
         it('defaults visibility to private for authored skills and persists explicit values', async () => {
-          const authored = `skill-vis-${randomUUID()}`;
+          const authored = `skill-vis-${globalThis.crypto.randomUUID()}`;
           await skills.create({ skill: { id: authored, ...baseSnapshot, authorId: 'author-1' } as any });
           expect(((await skills.getById(authored)) as any)?.visibility).toBe('private');
 
-          const pub = `skill-vis-${randomUUID()}`;
+          const pub = `skill-vis-${globalThis.crypto.randomUUID()}`;
           await skills.create({
             skill: { id: pub, ...baseSnapshot, authorId: 'author-1', visibility: 'public' } as any,
           });
@@ -3617,9 +3622,9 @@ if (ENABLE_TESTS) {
 
       describe('list filters', () => {
         it('filters by status and visibility', async () => {
-          const authorId = `author-${randomUUID()}`;
-          const draftPrivate = `skill-${randomUUID()}`;
-          const publishedPublic = `skill-${randomUUID()}`;
+          const authorId = `author-${globalThis.crypto.randomUUID()}`;
+          const draftPrivate = `skill-${globalThis.crypto.randomUUID()}`;
+          const publishedPublic = `skill-${globalThis.crypto.randomUUID()}`;
           await skills.create({ skill: { id: draftPrivate, ...baseSnapshot, authorId, visibility: 'private' } as any });
           await skills.create({
             skill: { id: publishedPublic, ...baseSnapshot, authorId, visibility: 'public' } as any,
@@ -3644,11 +3649,11 @@ if (ENABLE_TESTS) {
 
       describe('getById', () => {
         it('returns null for unknown ids', async () => {
-          expect(await skills.getById(`missing-${randomUUID()}`)).toBeNull();
+          expect(await skills.getById(`missing-${globalThis.crypto.randomUUID()}`)).toBeNull();
         });
 
         it('returns the thin record (no snapshot fields)', async () => {
-          const id = `skill-thin-${randomUUID()}`;
+          const id = `skill-thin-${globalThis.crypto.randomUUID()}`;
           await skills.create({ skill: { id, ...baseSnapshot } });
           const fetched = (await skills.getById(id)) as any;
           expect(fetched?.id).toBe(id);
@@ -3659,9 +3664,9 @@ if (ENABLE_TESTS) {
 
       describe('update', () => {
         it('updates activeVersionId, status and authorId', async () => {
-          const id = `skill-update-${randomUUID()}`;
+          const id = `skill-update-${globalThis.crypto.randomUUID()}`;
           await skills.create({ skill: { id, ...baseSnapshot } });
-          const versionId = randomUUID();
+          const versionId = globalThis.crypto.randomUUID();
           await skills.createVersion({
             id: versionId,
             skillId: id,
@@ -3689,16 +3694,18 @@ if (ENABLE_TESTS) {
         });
 
         it('throws for missing skills', async () => {
-          await expect(skills.update({ id: `missing-${randomUUID()}` })).rejects.toThrow(/not found/i);
+          await expect(skills.update({ id: `missing-${globalThis.crypto.randomUUID()}` })).rejects.toThrow(
+            /not found/i,
+          );
         });
       });
 
       describe('delete', () => {
         it('removes the thin record and all versions', async () => {
-          const id = `skill-delete-${randomUUID()}`;
+          const id = `skill-delete-${globalThis.crypto.randomUUID()}`;
           await skills.create({ skill: { id, ...baseSnapshot } });
           await skills.createVersion({
-            id: randomUUID(),
+            id: globalThis.crypto.randomUUID(),
             skillId: id,
             versionNumber: 2,
             name: 'method-skill',
@@ -3717,15 +3724,15 @@ if (ENABLE_TESTS) {
       });
 
       describe('list', () => {
-        const authorA = `author-a-${randomUUID()}`;
-        const authorB = `author-b-${randomUUID()}`;
+        const authorA = `author-a-${globalThis.crypto.randomUUID()}`;
+        const authorB = `author-b-${globalThis.crypto.randomUUID()}`;
 
         beforeAll(async () => {
           await skills.dangerouslyClearAll();
           for (let i = 0; i < 4; i++) {
             await skills.create({
               skill: {
-                id: `list-skill-${randomUUID()}`,
+                id: `list-skill-${globalThis.crypto.randomUUID()}`,
                 ...baseSnapshot,
                 authorId: i < 3 ? authorA : authorB,
               },
@@ -3797,10 +3804,10 @@ if (ENABLE_TESTS) {
         const versionIds: string[] = [];
 
         beforeAll(async () => {
-          skillId = `skill-versions-${randomUUID()}`;
+          skillId = `skill-versions-${globalThis.crypto.randomUUID()}`;
           await skills.create({ skill: { id: skillId, ...baseSnapshot } });
           for (let n = 2; n <= 3; n++) {
-            const vid = randomUUID();
+            const vid = globalThis.crypto.randomUUID();
             versionIds.push(vid);
             await skills.createVersion({
               id: vid,
@@ -3892,10 +3899,10 @@ if (ENABLE_TESTS) {
         });
 
         it('deleteVersionsByParentId removes all versions for the skill', async () => {
-          const tempId = `bulk-skill-${randomUUID()}`;
+          const tempId = `bulk-skill-${globalThis.crypto.randomUUID()}`;
           await skills.create({ skill: { id: tempId, ...baseSnapshot } });
           await skills.createVersion({
-            id: randomUUID(),
+            id: globalThis.crypto.randomUUID(),
             skillId: tempId,
             versionNumber: 2,
             name: 'method-skill',
@@ -3910,7 +3917,7 @@ if (ENABLE_TESTS) {
 
       describe('orphan-draft handling', () => {
         it('rolls back the draft thin row when the version insert fails inside the create() transaction', async () => {
-          const id = `skill-orphan-${randomUUID()}`;
+          const id = `skill-orphan-${globalThis.crypto.randomUUID()}`;
           const internalDb: SpannerDB = (skills as any).db;
           const originalInsert = internalDb.insert.bind(internalDb);
           const insertSpy = vi.spyOn(internalDb, 'insert').mockImplementation(async (args: any) => {
@@ -3930,7 +3937,7 @@ if (ENABLE_TESTS) {
         });
 
         it('init() sweeps orphaned draft+activeVersionId=NULL rows when cleanupStaleDraftsOnStartup is enabled', async () => {
-          const id = `skill-init-orphan-${randomUUID()}`;
+          const id = `skill-init-orphan-${globalThis.crypto.randomUUID()}`;
           const internalDb: SpannerDB = (skills as any).db;
           const now = new Date();
           await internalDb.insert({
@@ -3958,8 +3965,8 @@ if (ENABLE_TESTS) {
         });
 
         it('init() with cleanupStaleDraftsOnStartup leaves published skills and drafts with active versions untouched', async () => {
-          const publishedId = `skill-keep-pub-${randomUUID()}`;
-          const draftWithVersionId = `skill-keep-draft-${randomUUID()}`;
+          const publishedId = `skill-keep-pub-${globalThis.crypto.randomUUID()}`;
+          const draftWithVersionId = `skill-keep-draft-${globalThis.crypto.randomUUID()}`;
 
           await skills.create({ skill: { id: publishedId, ...baseSnapshot } });
           const v1Pub = await skills.getLatestVersion(publishedId);
@@ -3995,11 +4002,11 @@ if (ENABLE_TESTS) {
           // Verifying the invariant is in force also confirms that
           // SpannerDB.createIndexes propagates unique-index failures
           // instead of silently swallowing them.
-          const id = `skill-unique-${randomUUID()}`;
+          const id = `skill-unique-${globalThis.crypto.randomUUID()}`;
           await skills.create({ skill: { id, ...baseSnapshot } });
           await expect(
             skills.createVersion({
-              id: randomUUID(),
+              id: globalThis.crypto.randomUUID(),
               skillId: id,
               versionNumber: 1, // duplicate of the seed version
               name: 'duplicate v1',
@@ -4015,7 +4022,7 @@ if (ENABLE_TESTS) {
     describe('BlobsSpanner methods', () => {
       // Build a deterministic synthetic hash so tests don't depend on a real
       // SHA-256 implementation.
-      const makeHash = (label: string) => `sha256-${label}-${randomUUID()}`;
+      const makeHash = (label: string) => `sha256-${label}-${globalThis.crypto.randomUUID()}`;
       const makeEntry = (label = 'blob', overrides: Partial<Parameters<BlobsSpanner['put']>[0]> = {}) => ({
         hash: makeHash(label),
         content: `content for ${label}`,
@@ -4078,7 +4085,7 @@ if (ENABLE_TESTS) {
 
       describe('get', () => {
         it('returns null for unknown hashes', async () => {
-          expect(await blobs.get(`missing-${randomUUID()}`)).toBeNull();
+          expect(await blobs.get(`missing-${globalThis.crypto.randomUUID()}`)).toBeNull();
         });
       });
 
@@ -4090,7 +4097,7 @@ if (ENABLE_TESTS) {
         });
 
         it('returns false for unknown hashes', async () => {
-          expect(await blobs.has(`missing-${randomUUID()}`)).toBe(false);
+          expect(await blobs.has(`missing-${globalThis.crypto.randomUUID()}`)).toBe(false);
         });
       });
 
@@ -4103,7 +4110,7 @@ if (ENABLE_TESTS) {
         });
 
         it('returns false for unknown hashes', async () => {
-          expect(await blobs.delete(`missing-${randomUUID()}`)).toBe(false);
+          expect(await blobs.delete(`missing-${globalThis.crypto.randomUUID()}`)).toBe(false);
         });
 
         it('is safe to call twice on the same hash', async () => {
@@ -4146,7 +4153,7 @@ if (ENABLE_TESTS) {
         it('returns only the hashes that exist, omitting unknown ones', async () => {
           const a = makeEntry('many-get-a');
           const b = makeEntry('many-get-b');
-          const missing = `missing-${randomUUID()}`;
+          const missing = `missing-${globalThis.crypto.randomUUID()}`;
           await blobs.putMany([a, b]);
           const result = await blobs.getMany([a.hash, b.hash, missing]);
           expect(result.size).toBe(2);
@@ -4212,7 +4219,7 @@ if (ENABLE_TESTS) {
 
       describe('create', () => {
         it('creates the thin record as draft and seeds version 1', async () => {
-          const id = `pb-${randomUUID()}`;
+          const id = `pb-${globalThis.crypto.randomUUID()}`;
           const created = await promptBlocks.create({ promptBlock: { id, ...baseSnapshot } });
           expect(created.id).toBe(id);
           expect(created.status).toBe('draft');
@@ -4225,7 +4232,7 @@ if (ENABLE_TESTS) {
         });
 
         it('persists optional snapshot fields (rules and requestContextSchema)', async () => {
-          const id = `pb-full-${randomUUID()}`;
+          const id = `pb-full-${globalThis.crypto.randomUUID()}`;
           const rules = {
             type: 'all',
             children: [{ field: 'env', operator: 'equals', value: 'prod' }],
@@ -4256,11 +4263,11 @@ if (ENABLE_TESTS) {
 
       describe('getById', () => {
         it('returns null for unknown ids', async () => {
-          expect(await promptBlocks.getById(`missing-${randomUUID()}`)).toBeNull();
+          expect(await promptBlocks.getById(`missing-${globalThis.crypto.randomUUID()}`)).toBeNull();
         });
 
         it('returns the thin record (no snapshot fields)', async () => {
-          const id = `pb-thin-${randomUUID()}`;
+          const id = `pb-thin-${globalThis.crypto.randomUUID()}`;
           await promptBlocks.create({ promptBlock: { id, ...baseSnapshot } });
           const fetched = (await promptBlocks.getById(id)) as any;
           expect(fetched?.id).toBe(id);
@@ -4271,9 +4278,9 @@ if (ENABLE_TESTS) {
 
       describe('update', () => {
         it('updates activeVersionId, status, authorId, and metadata', async () => {
-          const id = `pb-update-${randomUUID()}`;
+          const id = `pb-update-${globalThis.crypto.randomUUID()}`;
           await promptBlocks.create({ promptBlock: { id, ...baseSnapshot } });
-          const versionId = randomUUID();
+          const versionId = globalThis.crypto.randomUUID();
           await promptBlocks.createVersion({
             id: versionId,
             blockId: id,
@@ -4302,11 +4309,13 @@ if (ENABLE_TESTS) {
         });
 
         it('throws for missing prompt blocks', async () => {
-          await expect(promptBlocks.update({ id: `missing-${randomUUID()}` })).rejects.toThrow(/not found/i);
+          await expect(promptBlocks.update({ id: `missing-${globalThis.crypto.randomUUID()}` })).rejects.toThrow(
+            /not found/i,
+          );
         });
 
         it('replaces metadata wholesale (DB adapter semantics)', async () => {
-          const id = `pb-meta-${randomUUID()}`;
+          const id = `pb-meta-${globalThis.crypto.randomUUID()}`;
           await promptBlocks.create({
             promptBlock: { id, ...baseSnapshot, metadata: { keep: true, drop: 'me' } },
           });
@@ -4318,10 +4327,10 @@ if (ENABLE_TESTS) {
 
       describe('delete', () => {
         it('removes the thin record and all versions', async () => {
-          const id = `pb-delete-${randomUUID()}`;
+          const id = `pb-delete-${globalThis.crypto.randomUUID()}`;
           await promptBlocks.create({ promptBlock: { id, ...baseSnapshot } });
           await promptBlocks.createVersion({
-            id: randomUUID(),
+            id: globalThis.crypto.randomUUID(),
             blockId: id,
             versionNumber: 2,
             name: 'method-block',
@@ -4339,15 +4348,15 @@ if (ENABLE_TESTS) {
       });
 
       describe('list', () => {
-        const authorA = `pb-author-a-${randomUUID()}`;
-        const authorB = `pb-author-b-${randomUUID()}`;
+        const authorA = `pb-author-a-${globalThis.crypto.randomUUID()}`;
+        const authorB = `pb-author-b-${globalThis.crypto.randomUUID()}`;
 
         beforeAll(async () => {
           await promptBlocks.dangerouslyClearAll();
           for (let i = 0; i < 4; i++) {
             await promptBlocks.create({
               promptBlock: {
-                id: `pb-list-${randomUUID()}`,
+                id: `pb-list-${globalThis.crypto.randomUUID()}`,
                 ...baseSnapshot,
                 authorId: i < 3 ? authorA : authorB,
                 metadata: { tier: i % 2 === 0 ? 'gold' : 'silver' },
@@ -4434,10 +4443,10 @@ if (ENABLE_TESTS) {
         const versionIds: string[] = [];
 
         beforeAll(async () => {
-          blockId = `pb-versions-${randomUUID()}`;
+          blockId = `pb-versions-${globalThis.crypto.randomUUID()}`;
           await promptBlocks.create({ promptBlock: { id: blockId, ...baseSnapshot } });
           for (let n = 2; n <= 3; n++) {
-            const vid = randomUUID();
+            const vid = globalThis.crypto.randomUUID();
             versionIds.push(vid);
             await promptBlocks.createVersion({
               id: vid,
@@ -4535,10 +4544,10 @@ if (ENABLE_TESTS) {
         });
 
         it('deleteVersionsByParentId removes all versions for the block', async () => {
-          const tempId = `pb-bulk-${randomUUID()}`;
+          const tempId = `pb-bulk-${globalThis.crypto.randomUUID()}`;
           await promptBlocks.create({ promptBlock: { id: tempId, ...baseSnapshot } });
           await promptBlocks.createVersion({
-            id: randomUUID(),
+            id: globalThis.crypto.randomUUID(),
             blockId: tempId,
             versionNumber: 2,
             name: 'method-block',
@@ -4575,7 +4584,7 @@ if (ENABLE_TESTS) {
 
       describe('create', () => {
         it('creates the thin record as draft and seeds version 1 (llm-judge)', async () => {
-          const id = `sd-${randomUUID()}`;
+          const id = `sd-${globalThis.crypto.randomUUID()}`;
           const created = await scorerDefinitions.create({
             scorerDefinition: { id, ...llmJudgeSnapshot },
           });
@@ -4592,7 +4601,7 @@ if (ENABLE_TESTS) {
         });
 
         it('persists preset-style snapshot fields', async () => {
-          const id = `sd-preset-${randomUUID()}`;
+          const id = `sd-preset-${globalThis.crypto.randomUUID()}`;
           await scorerDefinitions.create({
             scorerDefinition: {
               id,
@@ -4613,11 +4622,11 @@ if (ENABLE_TESTS) {
 
       describe('getById', () => {
         it('returns null for unknown ids', async () => {
-          expect(await scorerDefinitions.getById(`missing-${randomUUID()}`)).toBeNull();
+          expect(await scorerDefinitions.getById(`missing-${globalThis.crypto.randomUUID()}`)).toBeNull();
         });
 
         it('returns the thin record (no snapshot fields)', async () => {
-          const id = `sd-thin-${randomUUID()}`;
+          const id = `sd-thin-${globalThis.crypto.randomUUID()}`;
           await scorerDefinitions.create({ scorerDefinition: { id, ...llmJudgeSnapshot } });
           const fetched = (await scorerDefinitions.getById(id)) as any;
           expect(fetched?.id).toBe(id);
@@ -4629,9 +4638,9 @@ if (ENABLE_TESTS) {
 
       describe('update', () => {
         it('updates activeVersionId, status, authorId, and metadata', async () => {
-          const id = `sd-update-${randomUUID()}`;
+          const id = `sd-update-${globalThis.crypto.randomUUID()}`;
           await scorerDefinitions.create({ scorerDefinition: { id, ...llmJudgeSnapshot } });
-          const versionId = randomUUID();
+          const versionId = globalThis.crypto.randomUUID();
           await scorerDefinitions.createVersion({
             id: versionId,
             scorerDefinitionId: id,
@@ -4663,11 +4672,13 @@ if (ENABLE_TESTS) {
         });
 
         it('throws for missing scorer definitions', async () => {
-          await expect(scorerDefinitions.update({ id: `missing-${randomUUID()}` })).rejects.toThrow(/not found/i);
+          await expect(scorerDefinitions.update({ id: `missing-${globalThis.crypto.randomUUID()}` })).rejects.toThrow(
+            /not found/i,
+          );
         });
 
         it('replaces metadata wholesale (DB adapter semantics)', async () => {
-          const id = `sd-meta-${randomUUID()}`;
+          const id = `sd-meta-${globalThis.crypto.randomUUID()}`;
           await scorerDefinitions.create({
             scorerDefinition: { id, ...llmJudgeSnapshot, metadata: { keep: true, drop: 'me' } },
           });
@@ -4679,10 +4690,10 @@ if (ENABLE_TESTS) {
 
       describe('delete', () => {
         it('removes the thin record and all versions', async () => {
-          const id = `sd-delete-${randomUUID()}`;
+          const id = `sd-delete-${globalThis.crypto.randomUUID()}`;
           await scorerDefinitions.create({ scorerDefinition: { id, ...llmJudgeSnapshot } });
           await scorerDefinitions.createVersion({
-            id: randomUUID(),
+            id: globalThis.crypto.randomUUID(),
             scorerDefinitionId: id,
             versionNumber: 2,
             name: 'method-judge',
@@ -4700,15 +4711,15 @@ if (ENABLE_TESTS) {
       });
 
       describe('list', () => {
-        const authorA = `sd-author-a-${randomUUID()}`;
-        const authorB = `sd-author-b-${randomUUID()}`;
+        const authorA = `sd-author-a-${globalThis.crypto.randomUUID()}`;
+        const authorB = `sd-author-b-${globalThis.crypto.randomUUID()}`;
 
         beforeAll(async () => {
           await scorerDefinitions.dangerouslyClearAll();
           for (let i = 0; i < 4; i++) {
             await scorerDefinitions.create({
               scorerDefinition: {
-                id: `sd-list-${randomUUID()}`,
+                id: `sd-list-${globalThis.crypto.randomUUID()}`,
                 ...llmJudgeSnapshot,
                 authorId: i < 3 ? authorA : authorB,
                 metadata: { tier: i % 2 === 0 ? 'gold' : 'silver' },
@@ -4795,10 +4806,10 @@ if (ENABLE_TESTS) {
         const versionIds: string[] = [];
 
         beforeAll(async () => {
-          scorerId = `sd-versions-${randomUUID()}`;
+          scorerId = `sd-versions-${globalThis.crypto.randomUUID()}`;
           await scorerDefinitions.create({ scorerDefinition: { id: scorerId, ...llmJudgeSnapshot } });
           for (let n = 2; n <= 3; n++) {
-            const vid = randomUUID();
+            const vid = globalThis.crypto.randomUUID();
             versionIds.push(vid);
             await scorerDefinitions.createVersion({
               id: vid,
@@ -4904,10 +4915,10 @@ if (ENABLE_TESTS) {
         });
 
         it('deleteVersionsByParentId removes all versions for the scorer', async () => {
-          const tempId = `sd-bulk-${randomUUID()}`;
+          const tempId = `sd-bulk-${globalThis.crypto.randomUUID()}`;
           await scorerDefinitions.create({ scorerDefinition: { id: tempId, ...llmJudgeSnapshot } });
           await scorerDefinitions.createVersion({
-            id: randomUUID(),
+            id: globalThis.crypto.randomUUID(),
             scorerDefinitionId: tempId,
             versionNumber: 2,
             name: 'method-judge',
@@ -4929,7 +4940,7 @@ if (ENABLE_TESTS) {
           // of the transactional path. We capture a reference to the original
           // BEFORE installing the spy so the thin-row insert can pass through
           // without recursing back into the spied wrapper.
-          const id = `sd-orphan-${randomUUID()}`;
+          const id = `sd-orphan-${globalThis.crypto.randomUUID()}`;
           const internalDb: SpannerDB = (scorerDefinitions as any).db;
           const originalInsert = internalDb.insert.bind(internalDb);
           const insertSpy = vi.spyOn(internalDb, 'insert').mockImplementation(async (args: any) => {
@@ -4950,7 +4961,7 @@ if (ENABLE_TESTS) {
         });
 
         it('init() sweeps orphaned draft+activeVersionId=NULL rows when cleanupStaleDraftsOnStartup is enabled', async () => {
-          const id = `sd-init-orphan-${randomUUID()}`;
+          const id = `sd-init-orphan-${globalThis.crypto.randomUUID()}`;
           const internalDb: SpannerDB = (scorerDefinitions as any).db;
           const now = new Date();
           await internalDb.insert({
@@ -4979,8 +4990,8 @@ if (ENABLE_TESTS) {
         });
 
         it('init() with cleanupStaleDraftsOnStartup leaves published definitions and drafts with active versions untouched', async () => {
-          const publishedId = `sd-keep-pub-${randomUUID()}`;
-          const draftWithVersionId = `sd-keep-draft-${randomUUID()}`;
+          const publishedId = `sd-keep-pub-${globalThis.crypto.randomUUID()}`;
+          const draftWithVersionId = `sd-keep-draft-${globalThis.crypto.randomUUID()}`;
 
           await scorerDefinitions.create({
             scorerDefinition: { id: publishedId, ...llmJudgeSnapshot },
@@ -5023,13 +5034,13 @@ if (ENABLE_TESTS) {
           // number. Verifying the invariant is in force also confirms that
           // SpannerDB.createIndexes propagates unique-index failures instead
           // of silently swallowing them.
-          const id = `sd-unique-${randomUUID()}`;
+          const id = `sd-unique-${globalThis.crypto.randomUUID()}`;
           await scorerDefinitions.create({
             scorerDefinition: { id, ...llmJudgeSnapshot },
           });
           await expect(
             scorerDefinitions.createVersion({
-              id: randomUUID(),
+              id: globalThis.crypto.randomUUID(),
               scorerDefinitionId: id,
               versionNumber: 1, // duplicate of the seed version
               name: 'duplicate v1',
@@ -5047,13 +5058,13 @@ if (ENABLE_TESTS) {
       // Inlining keeps the dependency narrow and avoids reaching into the
       // test-utils package for an internal factory.
       function makeSamplePayload(overrides: Partial<Record<string, any>> = {}): any {
-        const scorerId = overrides.scorerId ?? `scorer-${randomUUID()}`;
+        const scorerId = overrides.scorerId ?? `scorer-${globalThis.crypto.randomUUID()}`;
         return {
           scorerId,
-          entityId: overrides.entityId ?? `agent-${randomUUID()}`,
+          entityId: overrides.entityId ?? `agent-${globalThis.crypto.randomUUID()}`,
           entityType: overrides.entityType ?? 'AGENT',
-          runId: overrides.runId ?? `run-${randomUUID()}`,
-          input: overrides.input ?? [{ id: randomUUID(), name: 'in', value: 'sample input' }],
+          runId: overrides.runId ?? `run-${globalThis.crypto.randomUUID()}`,
+          input: overrides.input ?? [{ id: globalThis.crypto.randomUUID(), name: 'in', value: 'sample input' }],
           output: overrides.output ?? { text: 'sample output' },
           score: overrides.score ?? 0.75,
           source: overrides.source ?? 'LIVE',
@@ -5108,15 +5119,15 @@ if (ENABLE_TESTS) {
         });
 
         it('returns null from getScoreById for an unknown id', async () => {
-          const result = await scores.getScoreById({ id: `missing-${randomUUID()}` });
+          const result = await scores.getScoreById({ id: `missing-${globalThis.crypto.randomUUID()}` });
           expect(result).toBeNull();
         });
       });
 
       describe('listScoresByScorerId', () => {
-        const scorerId = `scorer-${randomUUID()}`;
-        const otherScorerId = `scorer-${randomUUID()}`;
-        const entityId = `agent-${randomUUID()}`;
+        const scorerId = `scorer-${globalThis.crypto.randomUUID()}`;
+        const otherScorerId = `scorer-${globalThis.crypto.randomUUID()}`;
+        const entityId = `agent-${globalThis.crypto.randomUUID()}`;
 
         beforeAll(async () => {
           // Three scores for `scorerId` (two LIVE + one TEST), one for another scorer.
@@ -5175,7 +5186,7 @@ if (ENABLE_TESTS) {
 
         it('returns an empty page (total: 0) for an unknown scorerId', async () => {
           const result = await scores.listScoresByScorerId({
-            scorerId: `missing-${randomUUID()}`,
+            scorerId: `missing-${globalThis.crypto.randomUUID()}`,
             pagination: { page: 0, perPage: 10 },
           });
           expect(result.pagination.total).toBe(0);
@@ -5185,13 +5196,13 @@ if (ENABLE_TESTS) {
       });
 
       describe('listScoresByRunId', () => {
-        const runId = `run-${randomUUID()}`;
+        const runId = `run-${globalThis.crypto.randomUUID()}`;
 
         beforeAll(async () => {
           await scores.saveScore(makeSamplePayload({ runId }));
           await scores.saveScore(makeSamplePayload({ runId }));
           // Different runId  must NOT be returned.
-          await scores.saveScore(makeSamplePayload({ runId: `run-${randomUUID()}` }));
+          await scores.saveScore(makeSamplePayload({ runId: `run-${globalThis.crypto.randomUUID()}` }));
         });
 
         it('returns only scores for the requested runId', async () => {
@@ -5205,7 +5216,7 @@ if (ENABLE_TESTS) {
 
         it('returns an empty page for an unknown runId', async () => {
           const result = await scores.listScoresByRunId({
-            runId: `missing-${randomUUID()}`,
+            runId: `missing-${globalThis.crypto.randomUUID()}`,
             pagination: { page: 0, perPage: 10 },
           });
           expect(result.pagination.total).toBe(0);
@@ -5214,16 +5225,16 @@ if (ENABLE_TESTS) {
       });
 
       describe('listScoresBySpan', () => {
-        const traceId = `trace-${randomUUID()}`;
-        const spanId = `span-${randomUUID()}`;
+        const traceId = `trace-${globalThis.crypto.randomUUID()}`;
+        const spanId = `span-${globalThis.crypto.randomUUID()}`;
 
         beforeAll(async () => {
           await scores.saveScore(makeSamplePayload({ traceId, spanId }));
           await scores.saveScore(makeSamplePayload({ traceId, spanId }));
           // Same trace, different span  excluded.
-          await scores.saveScore(makeSamplePayload({ traceId, spanId: `span-${randomUUID()}` }));
+          await scores.saveScore(makeSamplePayload({ traceId, spanId: `span-${globalThis.crypto.randomUUID()}` }));
           // Different trace, same span string  excluded.
-          await scores.saveScore(makeSamplePayload({ traceId: `trace-${randomUUID()}`, spanId }));
+          await scores.saveScore(makeSamplePayload({ traceId: `trace-${globalThis.crypto.randomUUID()}`, spanId }));
         });
 
         it('matches on the (traceId, spanId) pair, not either column alone', async () => {
@@ -5238,8 +5249,8 @@ if (ENABLE_TESTS) {
 
         it('returns an empty page when no rows match the pair', async () => {
           const result = await scores.listScoresBySpan({
-            traceId: `missing-${randomUUID()}`,
-            spanId: `missing-${randomUUID()}`,
+            traceId: `missing-${globalThis.crypto.randomUUID()}`,
+            spanId: `missing-${globalThis.crypto.randomUUID()}`,
             pagination: { page: 0, perPage: 10 },
           });
           expect(result.pagination.total).toBe(0);
@@ -5257,8 +5268,8 @@ if (ENABLE_TESTS) {
       const now = () => new Date();
 
       function makeSpan(overrides: Record<string, any> = {}): any {
-        const traceId = overrides.traceId ?? `trace-${randomUUID()}`;
-        const spanId = overrides.spanId ?? `span-${randomUUID()}`;
+        const traceId = overrides.traceId ?? `trace-${globalThis.crypto.randomUUID()}`;
+        const spanId = overrides.spanId ?? `span-${globalThis.crypto.randomUUID()}`;
         const start = overrides.startedAt ?? now();
         return {
           traceId,
@@ -5764,7 +5775,7 @@ if (ENABLE_TESTS) {
 
         function makeMetric(overrides: Record<string, any> = {}): any {
           return {
-            metricId: overrides.metricId ?? randomUUID(),
+            metricId: overrides.metricId ?? globalThis.crypto.randomUUID(),
             timestamp: overrides.timestamp ?? baseDate,
             name: overrides.name ?? 'agent.duration_ms',
             value: overrides.value ?? 100,
@@ -5866,7 +5877,7 @@ if (ENABLE_TESTS) {
         });
 
         it('round-trips JSON columns (labels, tags, costMetadata, metadata, scope)', async () => {
-          const id = randomUUID();
+          const id = globalThis.crypto.randomUUID();
           await observability.batchCreateMetrics({
             metrics: [
               makeMetric({

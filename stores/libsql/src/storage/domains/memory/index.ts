@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { MessageList } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
@@ -1483,7 +1482,7 @@ export class MemoryLibSQL extends MemoryStorage {
     }
 
     // Use provided ID or generate a new one
-    const newThreadId = providedThreadId || crypto.randomUUID();
+    const newThreadId = providedThreadId || globalThis.crypto.randomUUID();
 
     // Check if the new thread ID already exists
     const existingThread = await this.getThreadById({ threadId: newThreadId });
@@ -1592,7 +1591,7 @@ export class MemoryLibSQL extends MemoryStorage {
         const targetResourceId = resourceId || sourceThread.resourceId;
 
         for (const sourceMsg of sourceMessages) {
-          const newMessageId = crypto.randomUUID();
+          const newMessageId = globalThis.crypto.randomUUID();
           const sourceMsgId = sourceMsg.id as string;
           messageIdMap[sourceMsgId] = newMessageId;
 
@@ -1763,7 +1762,7 @@ export class MemoryLibSQL extends MemoryStorage {
 
   async initializeObservationalMemory(input: CreateObservationalMemoryInput): Promise<ObservationalMemoryRecord> {
     try {
-      const id = crypto.randomUUID();
+      const id = globalThis.crypto.randomUUID();
       const now = new Date();
       const lookupKey = this.getOMKey(input.threadId, input.resourceId);
 
@@ -2001,7 +2000,7 @@ export class MemoryLibSQL extends MemoryStorage {
     tx: Transaction,
     input: CreateReflectionGenerationInput,
   ): Promise<ObservationalMemoryRecord> {
-    const id = crypto.randomUUID();
+    const id = globalThis.crypto.randomUUID();
     const now = new Date();
     const lookupKey = this.getOMKey(input.currentRecord.threadId, input.currentRecord.resourceId);
 
@@ -2374,7 +2373,7 @@ export class MemoryLibSQL extends MemoryStorage {
 
           // Create new chunk with ID and timestamp
           const newChunk: BufferedObservationChunk = {
-            id: `ombuf-${randomUUID()}`,
+            id: `ombuf-${globalThis.crypto.randomUUID()}`,
             cycleId: input.chunk.cycleId,
             observations: input.chunk.observations,
             tokenCount: input.chunk.tokenCount,

@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { beforeAll, describe, it, expect, beforeEach } from 'vitest';
 import { createSampleScore } from './data';
 import type { ScoreRowData } from '@mastra/core/evals';
@@ -58,8 +57,8 @@ export function createScoresTest({
     const itIfExperiments = storage.stores?.experiments ? it : it.skip;
 
     itIfExperiments('saveScore with a caller-supplied id upserts (latest score wins)', async () => {
-      const scorerId = `scorer-${randomUUID()}`;
-      const id = `expscore-${randomUUID()}`;
+      const scorerId = `scorer-${globalThis.crypto.randomUUID()}`;
+      const id = `expscore-${globalThis.crypto.randomUUID()}`;
 
       const first = createSampleScore({ scorerId });
       await scoresStorage.saveScore({ ...first, id, score: 0.4 });
@@ -78,7 +77,7 @@ export function createScoresTest({
     });
 
     it('should retrieve scores by scorer id', async () => {
-      const scorerId = `scorer-${randomUUID()}`;
+      const scorerId = `scorer-${globalThis.crypto.randomUUID()}`;
 
       // Create sample scores
       const score1 = createSampleScore({ scorerId });
@@ -114,20 +113,32 @@ export function createScoresTest({
 
     if (capabilities.deterministicScorePagination === true) {
       it('should paginate scores by scorer id in descending creation order', async () => {
-        const scorerId = `scorer-${randomUUID()}`;
+        const scorerId = `scorer-${globalThis.crypto.randomUUID()}`;
 
         const { score: oldest } = await scoresStorage.saveScore(
-          createSampleScore({ scorerId, traceId: randomUUID(), spanId: randomUUID() }),
+          createSampleScore({
+            scorerId,
+            traceId: globalThis.crypto.randomUUID(),
+            spanId: globalThis.crypto.randomUUID(),
+          }),
         );
         await new Promise(resolve => setTimeout(resolve, 20));
 
         const { score: middle } = await scoresStorage.saveScore(
-          createSampleScore({ scorerId, traceId: randomUUID(), spanId: randomUUID() }),
+          createSampleScore({
+            scorerId,
+            traceId: globalThis.crypto.randomUUID(),
+            spanId: globalThis.crypto.randomUUID(),
+          }),
         );
         await new Promise(resolve => setTimeout(resolve, 20));
 
         const { score: newest } = await scoresStorage.saveScore(
-          createSampleScore({ scorerId, traceId: randomUUID(), spanId: randomUUID() }),
+          createSampleScore({
+            scorerId,
+            traceId: globalThis.crypto.randomUUID(),
+            spanId: globalThis.crypto.randomUUID(),
+          }),
         );
 
         const firstPage = await scoresStorage.listScoresByScorerId({
@@ -153,7 +164,7 @@ export function createScoresTest({
     }
 
     it('should return score payload matching the saved score', async () => {
-      const scorerId = `scorer-${randomUUID()}`;
+      const scorerId = `scorer-${globalThis.crypto.randomUUID()}`;
       const score = createSampleScore({ scorerId });
 
       await scoresStorage.saveScore(score);
@@ -204,7 +215,7 @@ export function createScoresTest({
     });
 
     it('should retrieve scores by source', async () => {
-      const scorerId = `scorer-${randomUUID()}`;
+      const scorerId = `scorer-${globalThis.crypto.randomUUID()}`;
       const score1 = createSampleScore({ scorerId, source: 'TEST' });
       const score2 = createSampleScore({ scorerId, source: 'LIVE' });
       await scoresStorage.saveScore(score1);
@@ -219,7 +230,7 @@ export function createScoresTest({
     });
 
     it('should save scorer', async () => {
-      const scorerId = `scorer-${randomUUID()}`;
+      const scorerId = `scorer-${globalThis.crypto.randomUUID()}`;
       const scorer = createSampleScore({ scorerId });
       await scoresStorage.saveScore(scorer);
       const result = await scoresStorage.listScoresByRunId({
@@ -234,7 +245,7 @@ export function createScoresTest({
     });
 
     it('should retrieve saved score by its returned id', async () => {
-      const scorerId = `scorer-${randomUUID()}`;
+      const scorerId = `scorer-${globalThis.crypto.randomUUID()}`;
       const score = createSampleScore({ scorerId });
 
       // Save the score and get the returned score with its id
@@ -251,7 +262,7 @@ export function createScoresTest({
     });
 
     it('listScoresByEntityId should return paginated scores with total count when returnPaginationResults is true', async () => {
-      const scorer = createSampleScore({ scorerId: `scorer-${randomUUID()}` });
+      const scorer = createSampleScore({ scorerId: `scorer-${globalThis.crypto.randomUUID()}` });
       await scoresStorage.saveScore(scorer);
 
       const result = await scoresStorage.listScoresByEntityId({
@@ -269,9 +280,9 @@ export function createScoresTest({
     // listScoresBySpan defaults to true since most stores support it
     if (capabilities.listScoresBySpan !== false) {
       it('should retrieve scores by trace and span id', async () => {
-        const scorerId = `scorer-${randomUUID()}`;
-        const traceId = randomUUID();
-        const spanId = randomUUID();
+        const scorerId = `scorer-${globalThis.crypto.randomUUID()}`;
+        const traceId = globalThis.crypto.randomUUID();
+        const spanId = globalThis.crypto.randomUUID();
 
         const score = createSampleScore({ scorerId, traceId, spanId });
         await scoresStorage.saveScore(score);
@@ -290,9 +301,9 @@ export function createScoresTest({
       });
 
       it('should retrieve multiple scores by trace and span id', async () => {
-        const scorerId = `scorer-${randomUUID()}`;
-        const traceId = randomUUID();
-        const spanId = randomUUID();
+        const scorerId = `scorer-${globalThis.crypto.randomUUID()}`;
+        const traceId = globalThis.crypto.randomUUID();
+        const spanId = globalThis.crypto.randomUUID();
 
         // Create multiple scores for the same trace/span
         const score1 = createSampleScore({ scorerId, traceId, spanId });
@@ -317,15 +328,15 @@ export function createScoresTest({
       });
 
       it('should handle first page pagination correctly', async () => {
-        const scorerId = `scorer-${randomUUID()}`;
-        const traceId = randomUUID();
-        const spanId = randomUUID();
+        const scorerId = `scorer-${globalThis.crypto.randomUUID()}`;
+        const traceId = globalThis.crypto.randomUUID();
+        const spanId = globalThis.crypto.randomUUID();
 
         await createScores([
           { count: 5, scorerId, traceId, spanId }, // target scores
-          { count: 1, scorerId, traceId: randomUUID(), spanId }, // different trace
-          { count: 1, scorerId, traceId, spanId: randomUUID() }, // different span
-          { count: 1, scorerId, traceId: randomUUID(), spanId: randomUUID() }, // both different
+          { count: 1, scorerId, traceId: globalThis.crypto.randomUUID(), spanId }, // different trace
+          { count: 1, scorerId, traceId, spanId: globalThis.crypto.randomUUID() }, // different span
+          { count: 1, scorerId, traceId: globalThis.crypto.randomUUID(), spanId: globalThis.crypto.randomUUID() }, // both different
         ]);
 
         const firstPage = await scoresStorage.listScoresBySpan({
@@ -344,15 +355,15 @@ export function createScoresTest({
       });
 
       it('should handle middle page pagination correctly', async () => {
-        const scorerId = `scorer-${randomUUID()}`;
-        const traceId = randomUUID();
-        const spanId = randomUUID();
+        const scorerId = `scorer-${globalThis.crypto.randomUUID()}`;
+        const traceId = globalThis.crypto.randomUUID();
+        const spanId = globalThis.crypto.randomUUID();
 
         const allScores = await createScores([
           { count: 5, scorerId, traceId, spanId }, // target scores
-          { count: 1, scorerId, traceId: randomUUID(), spanId }, // different trace
-          { count: 1, scorerId, traceId, spanId: randomUUID() }, // different span
-          { count: 1, scorerId, traceId: randomUUID(), spanId: randomUUID() }, // both different
+          { count: 1, scorerId, traceId: globalThis.crypto.randomUUID(), spanId }, // different trace
+          { count: 1, scorerId, traceId, spanId: globalThis.crypto.randomUUID() }, // different span
+          { count: 1, scorerId, traceId: globalThis.crypto.randomUUID(), spanId: globalThis.crypto.randomUUID() }, // both different
         ]);
 
         const secondPage = await scoresStorage.listScoresBySpan({
@@ -371,14 +382,14 @@ export function createScoresTest({
       });
 
       it('should handle last page pagination', async () => {
-        const scorerId = `scorer-${randomUUID()}`;
-        const traceId = randomUUID();
-        const spanId = randomUUID();
+        const scorerId = `scorer-${globalThis.crypto.randomUUID()}`;
+        const traceId = globalThis.crypto.randomUUID();
+        const spanId = globalThis.crypto.randomUUID();
 
-        const otherTraceId1 = randomUUID();
-        const otherTraceId2 = randomUUID();
-        const otherSpanId1 = randomUUID();
-        const otherSpanId2 = randomUUID();
+        const otherTraceId1 = globalThis.crypto.randomUUID();
+        const otherTraceId2 = globalThis.crypto.randomUUID();
+        const otherSpanId1 = globalThis.crypto.randomUUID();
+        const otherSpanId2 = globalThis.crypto.randomUUID();
 
         await createScores([
           { count: 5, scorerId, traceId, spanId }, // target scores
@@ -422,7 +433,7 @@ export function createScoresTest({
 
     describe('multi-tenant filters', () => {
       it('persists organizationId and projectId on saved scores', async () => {
-        const scorerId = `scorer-${randomUUID()}`;
+        const scorerId = `scorer-${globalThis.crypto.randomUUID()}`;
         const score = createSampleScore({ scorerId, organizationId: 'org-a', projectId: 'proj-1' });
 
         const { score: saved } = await scoresStorage.saveScore(score);
@@ -432,7 +443,7 @@ export function createScoresTest({
       });
 
       it('round-trips batch and dataset provenance fields', async () => {
-        const scorerId = `scorer-${randomUUID()}`;
+        const scorerId = `scorer-${globalThis.crypto.randomUUID()}`;
         const { score: saved } = await scoresStorage.saveScore(
           createSampleScore({
             scorerId,
@@ -450,7 +461,7 @@ export function createScoresTest({
       });
 
       it('filters listScoresByScorerId by organizationId and projectId', async () => {
-        const scorerId = `scorer-${randomUUID()}`;
+        const scorerId = `scorer-${globalThis.crypto.randomUUID()}`;
         await scoresStorage.saveScore(createSampleScore({ scorerId, organizationId: 'org-a', projectId: 'proj-1' }));
         await scoresStorage.saveScore(createSampleScore({ scorerId, organizationId: 'org-a', projectId: 'proj-2' }));
         await scoresStorage.saveScore(createSampleScore({ scorerId, organizationId: 'org-b', projectId: 'proj-1' }));
@@ -473,8 +484,8 @@ export function createScoresTest({
       });
 
       it('filters listScoresByEntityId by tenancy', async () => {
-        const scorerId = `scorer-${randomUUID()}`;
-        const entityId = `agent-${randomUUID()}`;
+        const scorerId = `scorer-${globalThis.crypto.randomUUID()}`;
+        const entityId = `agent-${globalThis.crypto.randomUUID()}`;
         await scoresStorage.saveScore(createSampleScore({ scorerId, entityId, organizationId: 'org-a' }));
         await scoresStorage.saveScore(createSampleScore({ scorerId, entityId, organizationId: 'org-b' }));
 

@@ -1,21 +1,3 @@
-/**
- * Web OAuth sign-in routes for model providers (Settings › Providers).
- *
- * Wraps the SDK's step-based OAuth primitives (start/complete for Anthropic's
- * paste-code PKCE flow, start/poll for the Codex/Copilot/xAI device flows) in
- * HTTP routes. Flow state lives in login sessions — the `model-credentials`
- * domain's `oauth_login_sessions` table in tenant mode (any replica can
- * complete/poll), an in-memory store in local mode — so a flow can span
- * requests. Completed credentials are **user-scoped by default**; org admins
- * can start a flow with `{ scope: 'org' }` to share the credential with the
- * whole org. Local mode writes to the file-backed `AuthStorage`.
- *
- * Tokens never leave the server; responses only carry flow metadata (URLs,
- * user codes, poll delays).
- */
-
-import { randomUUID } from 'node:crypto';
-
 import { nextPollDelayMs } from '@mastra/code-sdk/auth/device-code';
 import { completeAnthropicLogin, startAnthropicLogin } from '@mastra/code-sdk/auth/providers/anthropic';
 import {
@@ -304,7 +286,7 @@ export class OAuthRoutes extends Route<OAuthRoutesDeps> {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 502);
           }
 
-          const sessionId = randomUUID();
+          const sessionId = globalThis.crypto.randomUUID();
           const tenant = sessionTenant(ctx);
           await (
             await sessionStore(ctx)

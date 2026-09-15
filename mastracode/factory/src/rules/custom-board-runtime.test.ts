@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import { Mastra } from '@mastra/core/mastra';
 import { MastraSandbox } from '@mastra/core/workspace';
 import type { ProviderStatus } from '@mastra/core/workspace';
@@ -17,7 +15,7 @@ import type { ModelCredentialsStorage } from '../storage/domains/credentials/bas
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 
 class ReleaseSandbox extends MastraSandbox {
-  readonly id = randomUUID();
+  readonly id = globalThis.crypto.randomUUID();
   readonly name = 'Release test sandbox';
   readonly provider = 'test';
   status: ProviderStatus = 'pending';
@@ -293,7 +291,7 @@ describe('custom board public runtime', () => {
           board: 'release',
           stage: 'preparing',
           expectedRevision: workItem.revision,
-          requestId: randomUUID(),
+          requestId: globalThis.crypto.randomUUID(),
           cause: 'release-draft',
         });
         expect(await denied.json()).toMatchObject({ result: { status: 'rejected', code: 'approval_required' } });
@@ -306,7 +304,7 @@ describe('custom board public runtime', () => {
           board: 'release',
           stage: 'preparing',
           expectedRevision: workItem.revision,
-          requestId: randomUUID(),
+          requestId: globalThis.crypto.randomUUID(),
           cause: 'release-approved',
         };
         const response = await post(transitionPath, approvedRequest);

@@ -1,18 +1,3 @@
-/**
- * Approach 3: dataset.startExperiment with per-item memory via inline task
- *
- * The dataset / experiment runner does NOT pass memory options to the agent.
- * Only `requestContext` is plumbed per item, and pre-seeding
- * `RequestContext.MastraMemory` does not drive the agent's thread resolution
- * (only `args.memory.thread` does).
- *
- * The supported way to run memory-enabled agents from a dataset today is to
- * skip the `target: agent` registry path and use an inline `task` instead.
- * The inline task receives per-item `metadata`, so we stash `{ threadId,
- * resourceId }` there at insert time and invoke `agent.generate(input, {
- * memory: { thread, resource } })` ourselves.
- */
-import { randomUUID } from 'node:crypto';
 import { buildAgent, containsScorer } from './shared.ts';
 
 async function main() {
@@ -25,8 +10,8 @@ async function main() {
     const resourceId = 'ci-user';
 
     const items = [
-      { input: 'Cats are mammals', groundTruth: 'mammals', thread: `ds-${randomUUID()}` },
-      { input: 'Dogs are mammals too', groundTruth: 'mammals', thread: `ds-${randomUUID()}` },
+      { input: 'Cats are mammals', groundTruth: 'mammals', thread: `ds-${globalThis.crypto.randomUUID()}` },
+      { input: 'Dogs are mammals too', groundTruth: 'mammals', thread: `ds-${globalThis.crypto.randomUUID()}` },
     ];
     for (const it of items) {
       await memory.createThread({ threadId: it.thread, resourceId, title: it.input });

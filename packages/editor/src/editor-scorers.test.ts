@@ -5,7 +5,6 @@ import { createScorer } from '@mastra/core/evals';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '@mastra/core/evals';
 import { MastraEditor } from './index';
-import { randomUUID } from 'node:crypto';
 import { LibSQLStore } from '@mastra/libsql';
 import { convertArrayToReadableStream, LanguageModelV2, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { MastraModelGateway, ProviderConfig } from '@mastra/core/llm';
@@ -16,7 +15,7 @@ import { MastraModelGateway, ProviderConfig } from '@mastra/core/llm';
 
 const createTestStorage = () => {
   return new LibSQLStore({
-    id: `test-${randomUUID()}`,
+    id: `test-${globalThis.crypto.randomUUID()}`,
     url: ':memory:',
   });
 };
@@ -32,7 +31,7 @@ const createTestStorage = () => {
  */
 const createScorerMockLLM = (score: number, reason: string) => {
   let callIndex = 0;
-  const modelId = `scorer-model-${randomUUID()}`;
+  const modelId = `scorer-model-${globalThis.crypto.randomUUID()}`;
 
   const mockLLM = new MockLanguageModelV2({
     doGenerate: async () => {
@@ -165,7 +164,7 @@ function createAgentTestRun({
       taggedSystemMessages: {},
     },
     output,
-    runId: randomUUID(),
+    runId: globalThis.crypto.randomUUID(),
   };
 }
 
@@ -348,7 +347,7 @@ describe('Scorer Definition CRUD (LibSQL)', () => {
     // Config changes require createVersion + update(activeVersionId)
     const scorerStore = await storage.getStore('scorerDefinitions');
     await scorerStore!.createVersion({
-      id: crypto.randomUUID(),
+      id: globalThis.crypto.randomUUID(),
       scorerDefinitionId: 'updatable',
       versionNumber: 2,
       name: 'Updated Name',
@@ -952,7 +951,7 @@ describe('End-to-end scorer storage and execution flow', () => {
     // Update — config changes require createVersion + update(activeVersionId)
     const scorerStore = await storage.getStore('scorerDefinitions');
     await scorerStore!.createVersion({
-      id: crypto.randomUUID(),
+      id: globalThis.crypto.randomUUID(),
       scorerDefinitionId: 'lifecycle-scorer',
       versionNumber: 2,
       name: 'Lifecycle Scorer v2',
@@ -1013,7 +1012,7 @@ describe('End-to-end scorer storage and execution flow', () => {
     // Config changes require createVersion + update(activeVersionId)
     const scorerStore = await storage.getStore('scorerDefinitions');
     await scorerStore!.createVersion({
-      id: crypto.randomUUID(),
+      id: globalThis.crypto.randomUUID(),
       scorerDefinitionId: 'lifecycle-1',
       versionNumber: 2,
       name: 'Updated Lifecycle 1',
@@ -1092,7 +1091,7 @@ describe('End-to-end scorer storage and execution flow', () => {
     // 4. Update the scorer definition (v2) — config changes require createVersion + update(activeVersionId)
     const scorerStore = await storage.getStore('scorerDefinitions');
     await scorerStore!.createVersion({
-      id: crypto.randomUUID(),
+      id: globalThis.crypto.randomUUID(),
       scorerDefinitionId: 'updatable-scorer',
       versionNumber: 2,
       name: 'Updatable Scorer v2',

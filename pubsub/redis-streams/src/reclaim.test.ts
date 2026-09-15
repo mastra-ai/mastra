@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { Event, EventCallback } from '@mastra/core/events';
 import { createClient } from 'redis';
 import type { RedisClientType } from 'redis';
@@ -50,7 +49,7 @@ describe('RedisStreamsPubSub reclaim loop', () => {
     // A single grouped consumer whose handler runs longer than reclaimIdleMs
     // and spans several reclaim ticks must be invoked exactly once.
     const ps = createPubSub();
-    const topic = `t-${randomUUID()}`;
+    const topic = `t-${globalThis.crypto.randomUUID()}`;
 
     let deliveries = 0;
     const cb: EventCallback = async (_event, ack) => {
@@ -58,7 +57,7 @@ describe('RedisStreamsPubSub reclaim loop', () => {
       await sleep(800);
       void ack?.();
     };
-    await ps.subscribe(topic, cb, { group: `inflight-${randomUUID()}` });
+    await ps.subscribe(topic, cb, { group: `inflight-${globalThis.crypto.randomUUID()}` });
     await ps.publish(topic, makeEvent({ type: 'long-running' }));
 
     await sleep(1500);
@@ -81,14 +80,14 @@ describe('RedisStreamsPubSub reclaim loop', () => {
     }) as any);
 
     const ps = createPubSub();
-    const topic = `t-${randomUUID()}`;
+    const topic = `t-${globalThis.crypto.randomUUID()}`;
 
     let deliveries = 0;
     const cb: EventCallback = async (_event, ack) => {
       deliveries++;
       void ack?.();
     };
-    await ps.subscribe(topic, cb, { group: `ackwin-${randomUUID()}` });
+    await ps.subscribe(topic, cb, { group: `ackwin-${globalThis.crypto.randomUUID()}` });
     await ps.publish(topic, makeEvent({ type: 'ack-window' }));
 
     await sleep(1500);
@@ -101,8 +100,8 @@ describe('RedisStreamsPubSub reclaim loop', () => {
     // so B — subscribing later in the same group — reclaims it. A is never
     // invoked a second time.
     const ps = createPubSub();
-    const topic = `t-${randomUUID()}`;
-    const group = `stalled-${randomUUID()}`;
+    const topic = `t-${globalThis.crypto.randomUUID()}`;
+    const group = `stalled-${globalThis.crypto.randomUUID()}`;
 
     let deliveriesA = 0;
     const cbA: EventCallback = () => {
@@ -149,8 +148,8 @@ describe('RedisStreamsPubSub reclaim loop', () => {
     // + 1 and ack the original. After maxDeliveryAttempts the event is
     // dropped, so total invocations equal the cap.
     const ps = createPubSub({ inFlightTimeoutMs: 300, maxDeliveryAttempts: 3 });
-    const topic = `t-${randomUUID()}`;
-    const group = `hung-${randomUUID()}`;
+    const topic = `t-${globalThis.crypto.randomUUID()}`;
+    const group = `hung-${globalThis.crypto.randomUUID()}`;
 
     const attempts: number[] = [];
     const cb: EventCallback = event => {
@@ -181,7 +180,7 @@ describe('RedisStreamsPubSub reclaim loop', () => {
     // to reclaim from and inFlightTimeoutMs is their only recovery path. The
     // reclaim loop must still run its expiry pass for them.
     const ps = createPubSub({ inFlightTimeoutMs: 300, maxDeliveryAttempts: 3 });
-    const topic = `t-${randomUUID()}`;
+    const topic = `t-${globalThis.crypto.randomUUID()}`;
 
     const attempts: number[] = [];
     const cb: EventCallback = event => {
@@ -200,7 +199,7 @@ describe('RedisStreamsPubSub reclaim loop', () => {
     // inFlightTimeoutMs must be measured from delivery, and a handler that
     // settles before the deadline is never nacked or re-invoked.
     const ps = createPubSub({ inFlightTimeoutMs: 1500 });
-    const topic = `t-${randomUUID()}`;
+    const topic = `t-${globalThis.crypto.randomUUID()}`;
 
     let deliveries = 0;
     const cb: EventCallback = async (_event, ack) => {
@@ -208,7 +207,7 @@ describe('RedisStreamsPubSub reclaim loop', () => {
       await sleep(600);
       void ack?.();
     };
-    await ps.subscribe(topic, cb, { group: `slow-${randomUUID()}` });
+    await ps.subscribe(topic, cb, { group: `slow-${globalThis.crypto.randomUUID()}` });
     await ps.publish(topic, makeEvent({ type: 'slow' }));
 
     await sleep(2200);
@@ -220,8 +219,8 @@ describe('RedisStreamsPubSub reclaim loop', () => {
     // every tick. If more than one XPENDING page of them sort before a
     // reclaimable entry, a single fixed-size page would never reach it.
     const ps = createPubSub();
-    const topic = `t-${randomUUID()}`;
-    const group = `page-${randomUUID()}`;
+    const topic = `t-${globalThis.crypto.randomUUID()}`;
+    const group = `page-${globalThis.crypto.randomUUID()}`;
     const streamKey = `mastra:topic:${topic}`;
     const IN_FLIGHT = 120;
 
@@ -274,8 +273,8 @@ describe('RedisStreamsPubSub reclaim loop', () => {
     // the entry back from B while B holds it; that path is B's concern.
     const psA = createPubSub({ inFlightTimeoutMs: 1000, reclaimIdleMs: 5000 });
     const psB = createPubSub();
-    const topic = `t-${randomUUID()}`;
-    const group = `owner-${randomUUID()}`;
+    const topic = `t-${globalThis.crypto.randomUUID()}`;
+    const group = `owner-${globalThis.crypto.randomUUID()}`;
     const streamKey = `mastra:topic:${topic}`;
 
     const attemptsA: number[] = [];
@@ -323,8 +322,8 @@ describe('RedisStreamsPubSub reclaim loop', () => {
     //
     // Simulate it by intercepting the write client's script call and moving
     // the entry to a sibling immediately before it is sent.
-    const topic = `t-${randomUUID()}`;
-    const group = `atomic-${randomUUID()}`;
+    const topic = `t-${globalThis.crypto.randomUUID()}`;
+    const group = `atomic-${globalThis.crypto.randomUUID()}`;
     const streamKey = `mastra:topic:${topic}`;
 
     const raw = createClient({ url: REDIS_URL }) as RedisClientType;

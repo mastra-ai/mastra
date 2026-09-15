@@ -1,15 +1,3 @@
-/**
- * AWS Bedrock AgentCore Runtime sandbox provider.
- *
- * This provider maps Mastra's one-shot command execution contract to
- * InvokeAgentRuntimeCommand. It intentionally does not expose process
- * management or filesystem mounts because AgentCore Runtime command execution
- * does not provide those WorkspaceSandbox semantics.
- *
- * @see https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-execute-command.html
- */
-
-import { randomUUID } from 'node:crypto';
 import {
   BedrockAgentCoreClient,
   InvokeAgentRuntimeCommandCommand,
@@ -140,7 +128,7 @@ function toAgentCoreTimeoutSeconds(timeoutMs: number): number {
 }
 
 function generateSessionId(): string {
-  return randomUUID();
+  return globalThis.crypto.randomUUID();
 }
 
 function getStreamException(event: AgentCoreStreamEvent): { key: string; value: unknown } | undefined {

@@ -41,7 +41,7 @@ type ApiRouteHandler = Awaited<ReturnType<ApiRouteCreateHandler>>;
  * Uses a short UUID for readability in logs.
  */
 export function generateTestId(): string {
-  return crypto.randomUUID().slice(0, 8);
+  return globalThis.crypto.randomUUID().slice(0, 8);
 }
 
 /**

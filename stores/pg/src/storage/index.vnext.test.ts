@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { createObservabilityVNextTests, normalizeTraceQueryResponse } from '@internal/storage-test-utils';
 import { coreFeatures } from '@mastra/core/features';
 import { SpanType } from '@mastra/core/observability';
@@ -192,7 +191,7 @@ describe.skipIf(!integrationEnabled)('PostgresStoreVNext / shared observability 
 
   beforeAll(async () => {
     const connection = parseConnectionString(TIMESCALE_URL);
-    sharedSchema = `pgvnext_shared_${randomUUID().replace(/-/g, '').slice(0, 8)}`;
+    sharedSchema = `pgvnext_shared_${globalThis.crypto.randomUUID().replace(/-/g, '').slice(0, 8)}`;
     sharedPool = new Pool({ connectionString: connection.connectionString, max: 2 });
     sharedClient = new PoolAdapter(sharedPool);
     await sharedClient.none('CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE');

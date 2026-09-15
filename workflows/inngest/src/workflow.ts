@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { emitErrorEvent } from '@mastra/core/agent/durable';
 import { RequestContext } from '@mastra/core/di';
 import type { PubSub } from '@mastra/core/events';
@@ -208,7 +207,7 @@ export class InngestWorkflow<
     disableScorers?: boolean;
     pubsub?: PubSub;
   }): Promise<Run<TEngineType, TSteps, TState, TInput, TOutput, TRequestContext>> {
-    const runIdToUse = options?.runId || randomUUID();
+    const runIdToUse = options?.runId || globalThis.crypto.randomUUID();
 
     // Return a new Run instance with object parameters
     const existingInMemoryRun = this.runs.get(runIdToUse);
@@ -364,7 +363,7 @@ export class InngestWorkflow<
           // run. Warn rather than reject: an unnamed run is still a valid way to
           // start a workflow, it just can't be cancelled by id afterwards.
           runId = await step.run(`workflow.${this.id}.runIdGen`, async () => {
-            return randomUUID();
+            return globalThis.crypto.randomUUID();
           });
           this.logger.warn?.(
             `Workflow "${this.id}" was triggered without a runId, so run "${runId}" cannot be cancelled by id. ` +

@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { Agent } from '@mastra/core/agent';
 import { MockStore } from '@mastra/core/storage';
 import { fastembed } from '@mastra/fastembed';
@@ -29,7 +28,7 @@ export function getInputProcessorsTests(config: InputProcessorsTestConfig) {
 
   describe(`Input Processor Verification - MessageHistory (${version})`, () => {
     it('should run MessageHistory input processor and include previous messages in LLM request', async () => {
-      const testStorage = new MockStore({ id: `mock-store-${randomUUID()}` });
+      const testStorage = new MockStore({ id: `mock-store-${globalThis.crypto.randomUUID()}` });
       const memory = new Memory({
         storage: testStorage,
         options: {
@@ -40,15 +39,15 @@ export function getInputProcessorsTests(config: InputProcessorsTestConfig) {
       const mockModel = createMockModel(config);
 
       const agent = new Agent({
-        id: `message-history-test-${version}-${randomUUID()}`,
+        id: `message-history-test-${version}-${globalThis.crypto.randomUUID()}`,
         name: 'Message History Test',
         instructions: 'You are a helpful assistant',
         model: mockModel,
         memory,
       });
 
-      const threadId = `msg-history-${version}-${randomUUID()}`;
-      const resourceId = `message-history-resource-${version}-${randomUUID()}`;
+      const threadId = `msg-history-${version}-${globalThis.crypto.randomUUID()}`;
+      const resourceId = `message-history-resource-${version}-${globalThis.crypto.randomUUID()}`;
 
       // First message
       await agent.generate('My name is Alice', {
@@ -113,7 +112,7 @@ export function getInputProcessorsTests(config: InputProcessorsTestConfig) {
     });
 
     it('should respect lastMessages limit in MessageHistory processor', async () => {
-      const testStorage = new MockStore({ id: `mock-store-${randomUUID()}` });
+      const testStorage = new MockStore({ id: `mock-store-${globalThis.crypto.randomUUID()}` });
 
       const memory = new Memory({
         storage: testStorage,
@@ -125,15 +124,15 @@ export function getInputProcessorsTests(config: InputProcessorsTestConfig) {
       const mockModel = createMockModel(config);
 
       const agent = new Agent({
-        id: `message-history-limit-test-${version}-${randomUUID()}`,
+        id: `message-history-limit-test-${version}-${globalThis.crypto.randomUUID()}`,
         name: 'Message History Limit Test',
         instructions: 'You are a helpful assistant',
         model: mockModel,
         memory,
       });
 
-      const threadId = `msg-limit-${version}-${randomUUID()}`;
-      const resourceId = `limit-test-resource-${version}-${randomUUID()}`;
+      const threadId = `msg-limit-${version}-${globalThis.crypto.randomUUID()}`;
+      const resourceId = `limit-test-resource-${version}-${globalThis.crypto.randomUUID()}`;
 
       // Create 3 exchanges (6 messages total)
       await agent.generate('Message 1', { memory: { thread: threadId, resource: resourceId }, maxSteps: 1 });
@@ -187,7 +186,7 @@ export function getInputProcessorsTests(config: InputProcessorsTestConfig) {
   describe(`Input Processor Verification - WorkingMemory (${version})`, () => {
     it('should run WorkingMemory input processor and include working memory in LLM request', async () => {
       const memory = new Memory({
-        storage: new MockStore({ id: `mock-store-${randomUUID()}` }),
+        storage: new MockStore({ id: `mock-store-${globalThis.crypto.randomUUID()}` }),
         options: {
           workingMemory: {
             enabled: true,
@@ -198,15 +197,15 @@ export function getInputProcessorsTests(config: InputProcessorsTestConfig) {
       const mockModel = createMockModel(config);
 
       const agent = new Agent({
-        id: `working-memory-test-${version}-${randomUUID()}`,
+        id: `working-memory-test-${version}-${globalThis.crypto.randomUUID()}`,
         name: 'Working Memory Test',
         instructions: 'You are a helpful assistant',
         model: mockModel,
         memory,
       });
 
-      const threadId = `wm-${version}-${randomUUID()}`;
-      const resourceId = `working-memory-resource-${version}-${randomUUID()}`;
+      const threadId = `wm-${version}-${globalThis.crypto.randomUUID()}`;
+      const resourceId = `working-memory-resource-${version}-${globalThis.crypto.randomUUID()}`;
 
       // Set working memory
       await memory.updateWorkingMemory({
@@ -259,7 +258,7 @@ export function getInputProcessorsTests(config: InputProcessorsTestConfig) {
       const customTemplate = `CUSTOM CONTEXT:\n\nUse this information to answer questions.`;
 
       const memory = new Memory({
-        storage: new MockStore({ id: `mock-store-${randomUUID()}` }),
+        storage: new MockStore({ id: `mock-store-${globalThis.crypto.randomUUID()}` }),
         options: {
           workingMemory: {
             enabled: true,
@@ -271,15 +270,15 @@ export function getInputProcessorsTests(config: InputProcessorsTestConfig) {
       const mockModel = createMockModel(config);
 
       const agent = new Agent({
-        id: `custom-template-test-${version}-${randomUUID()}`,
+        id: `custom-template-test-${version}-${globalThis.crypto.randomUUID()}`,
         name: 'Custom Template Test',
         instructions: 'You are a helpful assistant',
         model: mockModel,
         memory,
       });
 
-      const threadId = `custom-template-${version}-${randomUUID()}`;
-      const resourceId = `custom-template-resource-${version}-${randomUUID()}`;
+      const threadId = `custom-template-${version}-${globalThis.crypto.randomUUID()}`;
+      const resourceId = `custom-template-resource-${version}-${globalThis.crypto.randomUUID()}`;
 
       await memory.updateWorkingMemory({
         threadId,
@@ -314,12 +313,12 @@ export function getInputProcessorsTests(config: InputProcessorsTestConfig) {
       // Use shared in-memory database so storage and vector use the same DB
       const dbFile = 'file::memory:?cache=shared';
       const storage = new LibSQLStore({
-        id: `semantic-recall-storage-${version}-${randomUUID()}`,
+        id: `semantic-recall-storage-${version}-${globalThis.crypto.randomUUID()}`,
         url: dbFile,
       });
       const vector = new LibSQLVector({
         url: dbFile,
-        id: `semantic-recall-vector-${version}-${randomUUID()}`,
+        id: `semantic-recall-vector-${version}-${globalThis.crypto.randomUUID()}`,
       });
 
       // Initialize storage to create tables
@@ -342,16 +341,16 @@ export function getInputProcessorsTests(config: InputProcessorsTestConfig) {
       const mockModel = createMockModel(config);
 
       const agent = new Agent({
-        id: `semantic-recall-test-${version}-${randomUUID()}`,
+        id: `semantic-recall-test-${version}-${globalThis.crypto.randomUUID()}`,
         name: 'Semantic Recall Test',
         instructions: 'You are a helpful assistant',
         model: mockModel,
         memory,
       });
 
-      const resourceId = `semantic-recall-resource-${version}-${randomUUID()}`;
-      const thread1Id = `semantic-thread-1-${version}-${randomUUID()}`;
-      const thread2Id = `semantic-thread-2-${version}-${randomUUID()}`;
+      const resourceId = `semantic-recall-resource-${version}-${globalThis.crypto.randomUUID()}`;
+      const thread1Id = `semantic-thread-1-${version}-${globalThis.crypto.randomUUID()}`;
+      const thread2Id = `semantic-thread-2-${version}-${globalThis.crypto.randomUUID()}`;
 
       // Thread 1: Discuss Python programming
       await agent.generate('I love programming in Python, especially for data science', {
@@ -392,12 +391,12 @@ export function getInputProcessorsTests(config: InputProcessorsTestConfig) {
       // Use shared in-memory database so storage and vector use the same DB
       const dbFile = 'file::memory:?cache=shared';
       const storage = new LibSQLStore({
-        id: `semantic-topk-storage-${version}-${randomUUID()}`,
+        id: `semantic-topk-storage-${version}-${globalThis.crypto.randomUUID()}`,
         url: dbFile,
       });
       const vector = new LibSQLVector({
         url: dbFile,
-        id: `semantic-topk-vector-${version}-${randomUUID()}`,
+        id: `semantic-topk-vector-${version}-${globalThis.crypto.randomUUID()}`,
       });
 
       // Initialize storage to create tables
@@ -420,16 +419,16 @@ export function getInputProcessorsTests(config: InputProcessorsTestConfig) {
       const mockModel = createMockModel(config);
 
       const agent = new Agent({
-        id: `semantic-topk-test-${version}-${randomUUID()}`,
+        id: `semantic-topk-test-${version}-${globalThis.crypto.randomUUID()}`,
         name: 'Semantic TopK Test',
         instructions: 'You are a helpful assistant',
         model: mockModel,
         memory,
       });
 
-      const resourceId = `topk-resource-${version}-${randomUUID()}`;
-      const thread1Id = `topk-thread-1-${version}-${randomUUID()}`;
-      const thread2Id = `topk-thread-2-${version}-${randomUUID()}`;
+      const resourceId = `topk-resource-${version}-${globalThis.crypto.randomUUID()}`;
+      const thread1Id = `topk-thread-1-${version}-${globalThis.crypto.randomUUID()}`;
+      const thread2Id = `topk-thread-2-${version}-${globalThis.crypto.randomUUID()}`;
 
       // Create multiple messages in thread 1
       await agent.generate('I like cats', { memory: { thread: thread1Id, resource: resourceId } });
@@ -455,12 +454,12 @@ export function getInputProcessorsTests(config: InputProcessorsTestConfig) {
     it('should only fetch semantically matched messages, not all thread messages', async () => {
       const dbFile = 'file::memory:?cache=shared';
       const storage = new LibSQLStore({
-        id: `semantic-perpage-storage-${version}-${randomUUID()}`,
+        id: `semantic-perpage-storage-${version}-${globalThis.crypto.randomUUID()}`,
         url: dbFile,
       });
       const vector = new LibSQLVector({
         url: dbFile,
-        id: `semantic-perpage-vector-${version}-${randomUUID()}`,
+        id: `semantic-perpage-vector-${version}-${globalThis.crypto.randomUUID()}`,
       });
 
       await storage.init();
@@ -477,15 +476,15 @@ export function getInputProcessorsTests(config: InputProcessorsTestConfig) {
 
       const mockModel = createMockModel(config);
       const agent = new Agent({
-        id: `semantic-perpage-test-${version}-${randomUUID()}`,
+        id: `semantic-perpage-test-${version}-${globalThis.crypto.randomUUID()}`,
         name: 'Semantic PerPage Test',
         instructions: 'You are a helpful assistant',
         model: mockModel,
         memory,
       });
 
-      const resourceId = `perpage-resource-${version}-${randomUUID()}`;
-      const threadId = `perpage-thread-${version}-${randomUUID()}`;
+      const resourceId = `perpage-resource-${version}-${globalThis.crypto.randomUUID()}`;
+      const threadId = `perpage-thread-${version}-${globalThis.crypto.randomUUID()}`;
 
       // Create 4 messages with distinct topics
       await agent.generate('I really love apples, they are my favorite fruit', {
@@ -533,12 +532,12 @@ export function getInputProcessorsTests(config: InputProcessorsTestConfig) {
       // Use shared in-memory database so storage and vector use the same DB
       const dbFile = 'file::memory:?cache=shared';
       const storage = new LibSQLStore({
-        id: `combined-storage-${version}-${randomUUID()}`,
+        id: `combined-storage-${version}-${globalThis.crypto.randomUUID()}`,
         url: dbFile,
       });
       const vector = new LibSQLVector({
         url: dbFile,
-        id: `combined-vector-${version}-${randomUUID()}`,
+        id: `combined-vector-${version}-${globalThis.crypto.randomUUID()}`,
       });
 
       // Initialize storage to create tables
@@ -564,16 +563,16 @@ export function getInputProcessorsTests(config: InputProcessorsTestConfig) {
       const mockModel = createMockModel(config);
 
       const agent = new Agent({
-        id: `combined-test-${version}-${randomUUID()}`,
+        id: `combined-test-${version}-${globalThis.crypto.randomUUID()}`,
         name: 'Combined Test',
         instructions: 'You are a helpful assistant',
         model: mockModel,
         memory,
       });
 
-      const resourceId = `combined-resource-${version}-${randomUUID()}`;
-      const thread1Id = `combined-thread-1-${version}-${randomUUID()}`;
-      const thread2Id = `combined-thread-2-${version}-${randomUUID()}`;
+      const resourceId = `combined-resource-${version}-${globalThis.crypto.randomUUID()}`;
+      const thread1Id = `combined-thread-1-${version}-${globalThis.crypto.randomUUID()}`;
+      const thread2Id = `combined-thread-2-${version}-${globalThis.crypto.randomUUID()}`;
 
       // Set working memory
       await memory.updateWorkingMemory({

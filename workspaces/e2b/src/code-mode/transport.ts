@@ -1,24 +1,3 @@
-/**
- * Code Mode — E2B transport
- *
- * The default {@link StdioCodeModeTransport} in `@mastra/core` writes the
- * runner/program files to the *host* tmpdir and spawns `node <hostPath>`. That
- * only works when the sandbox shares the host filesystem (e.g. `LocalSandbox`).
- * E2B runs the program in a remote micro-VM with its own filesystem, so the
- * host paths don't exist there and `node` exits immediately.
- *
- * `E2BCodeModeTransport` writes the runner/program *into* the sandbox via the
- * E2B files API and runs plain `node <runnerPath>` inside the VM. TypeScript is
- * stripped on the host with esbuild before upload, so it doesn't depend on the
- * sandbox's Node version (the core transport relies on
- * `node --experimental-strip-types`, which needs Node >= 22.6).
- *
- * The RPC frame protocol (host <-> runner) is unchanged: it reuses
- * `buildProgramModule`, `buildRunner`, and `FRAME_PREFIX` from
- * `@mastra/core/tools`.
- */
-
-import { randomBytes } from 'node:crypto';
 import { buildProgramModule, buildRunner, FRAME_PREFIX, sanitizeToolId } from '@mastra/core/tools';
 import type { CodeModeRunnerFrame, CodeModeToolResult, CodeModeTransport } from '@mastra/core/tools';
 import type { ProcessHandle } from '@mastra/core/workspace';
@@ -67,7 +46,7 @@ export class E2BCodeModeTransport implements CodeModeTransport {
     const externals = toolIds.map(toolId => ({ toolId, externalName: sanitizeToolId(toolId) }));
     const allowList = new Set(toolIds);
 
-    const suffix = randomBytes(4).toString('hex');
+    const suffix = Buffer.from(globalThis.crypto.getRandomValues(new Uint8Array(4))).toString('hex');
     const dir = `${SANDBOX_TMP}/${suffix}`;
     const programPath = `${dir}/program-${suffix}.mjs`;
     const runnerPath = `${dir}/runner-${suffix}.mjs`;

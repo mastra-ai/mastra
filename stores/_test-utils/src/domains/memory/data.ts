@@ -1,7 +1,6 @@
 import type { MastraMessageV1, MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import type { StorageResourceType } from '@mastra/core/storage';
-import { randomUUID } from 'node:crypto';
 
 let role: 'assistant' | 'user' = 'assistant';
 export const getRole = () => {
@@ -15,8 +14,8 @@ export const resetRole = () => {
 };
 
 export const createSampleThread = ({
-  id = `thread-${randomUUID()}`,
-  resourceId = `resource-${randomUUID()}`,
+  id = `thread-${globalThis.crypto.randomUUID()}`,
+  resourceId = `resource-${globalThis.crypto.randomUUID()}`,
   date = new Date(),
 }: {
   id?: string;
@@ -48,7 +47,7 @@ export const createSampleThreadWithParams = (
 export const createSampleMessageV1 = ({
   threadId,
   content = 'Hello',
-  resourceId = `resource-${randomUUID()}`,
+  resourceId = `resource-${globalThis.crypto.randomUUID()}`,
   createdAt = new Date(),
 }: {
   threadId: string;
@@ -57,7 +56,7 @@ export const createSampleMessageV1 = ({
   createdAt?: Date;
 }) =>
   ({
-    id: `msg-${randomUUID()}`,
+    id: `msg-${globalThis.crypto.randomUUID()}`,
     role: getRole(),
     type: 'text',
     threadId,
@@ -82,7 +81,7 @@ export const createSampleMessageV2 = ({
   thread?: StorageThreadType;
 }): MastraDBMessage => {
   return {
-    id: randomUUID(),
+    id: globalThis.crypto.randomUUID(),
     threadId,
     resourceId: resourceId || thread?.resourceId || 'test-resource',
     role,
@@ -90,14 +89,14 @@ export const createSampleMessageV2 = ({
     content: {
       format: 2,
       parts: content?.parts || [{ type: 'text', text: content?.content ?? '' }],
-      content: content?.content || `Sample content ${randomUUID()}`,
+      content: content?.content || `Sample content ${globalThis.crypto.randomUUID()}`,
       ...content,
     },
   };
 };
 
 export const createSampleResource = ({
-  id = `resource-${randomUUID()}`,
+  id = `resource-${globalThis.crypto.randomUUID()}`,
   workingMemory = 'Sample working memory content',
   metadata = { key: 'value', test: true },
   date = new Date(),

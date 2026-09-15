@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { Event, EventCallback } from '@mastra/core/events';
 import { createClient } from 'redis';
 import type { RedisClientType } from 'redis';
@@ -70,7 +69,7 @@ describe('RedisStreamsPubSub', () => {
   describe('fan-out (no group)', () => {
     it('delivers each published message to all subscribers', async () => {
       const ps = createPubSub();
-      const topic = `t-${randomUUID()}`;
+      const topic = `t-${globalThis.crypto.randomUUID()}`;
       const a = captureCalls();
       const b = captureCalls();
 
@@ -86,7 +85,7 @@ describe('RedisStreamsPubSub', () => {
 
     it('does not deliver to unsubscribed callbacks', async () => {
       const ps = createPubSub();
-      const topic = `t-${randomUUID()}`;
+      const topic = `t-${globalThis.crypto.randomUUID()}`;
       const a = captureCalls();
       const b = captureCalls();
 
@@ -105,8 +104,8 @@ describe('RedisStreamsPubSub', () => {
 
     it('does not deliver across different topics', async () => {
       const ps = createPubSub();
-      const topicA = `t-${randomUUID()}`;
-      const topicB = `t-${randomUUID()}`;
+      const topicA = `t-${globalThis.crypto.randomUUID()}`;
+      const topicB = `t-${globalThis.crypto.randomUUID()}`;
       const a = captureCalls();
       const b = captureCalls();
 
@@ -124,7 +123,7 @@ describe('RedisStreamsPubSub', () => {
   describe('subscription start position', () => {
     it('skips existing events when a new consumer group starts from latest', async () => {
       const ps = createPubSub();
-      const topic = `t-${randomUUID()}`;
+      const topic = `t-${globalThis.crypto.randomUUID()}`;
       const received = captureCalls();
 
       await ps.publish(topic, makeEvent({ type: 'backlog' }));
@@ -139,7 +138,7 @@ describe('RedisStreamsPubSub', () => {
 
     it('does not reset an existing consumer group when startFrom is latest', async () => {
       const ps = createPubSub();
-      const topic = `t-${randomUUID()}`;
+      const topic = `t-${globalThis.crypto.randomUUID()}`;
       const first = captureCalls();
       const resumed = captureCalls();
 
@@ -159,7 +158,7 @@ describe('RedisStreamsPubSub', () => {
   describe('group (competing consumers)', () => {
     it('delivers each message to exactly one subscriber in the group', async () => {
       const ps = createPubSub();
-      const topic = `t-${randomUUID()}`;
+      const topic = `t-${globalThis.crypto.randomUUID()}`;
       const a = captureCalls();
       const b = captureCalls();
 
@@ -187,7 +186,7 @@ describe('RedisStreamsPubSub', () => {
 
     it('different groups on the same topic each receive every message', async () => {
       const ps = createPubSub();
-      const topic = `t-${randomUUID()}`;
+      const topic = `t-${globalThis.crypto.randomUUID()}`;
       const a = captureCalls();
       const b = captureCalls();
 
@@ -205,7 +204,7 @@ describe('RedisStreamsPubSub', () => {
   describe('ack/nack/redelivery', () => {
     it('nack increments deliveryAttempt and redelivers', async () => {
       const ps = createPubSub();
-      const topic = `t-${randomUUID()}`;
+      const topic = `t-${globalThis.crypto.randomUUID()}`;
       const seenAttempts: number[] = [];
 
       const cb: EventCallback = (event, ack, nack) => {
@@ -227,7 +226,7 @@ describe('RedisStreamsPubSub', () => {
 
     it('async handler that rejects is treated as nack and redelivered', async () => {
       const ps = createPubSub();
-      const topic = `t-${randomUUID()}`;
+      const topic = `t-${globalThis.crypto.randomUUID()}`;
       const seenAttempts: number[] = [];
 
       const cb: EventCallback = async (event, ack) => {
@@ -249,7 +248,7 @@ describe('RedisStreamsPubSub', () => {
 
     it('flush waits for in-flight publishes', async () => {
       const ps = createPubSub();
-      const topic = `t-${randomUUID()}`;
+      const topic = `t-${globalThis.crypto.randomUUID()}`;
 
       // Fire several publishes without awaiting, then flush.
       const promises = [
@@ -269,7 +268,7 @@ describe('RedisStreamsPubSub', () => {
     it('a separate pubsub instance can consume messages published by another', async () => {
       const producer = createPubSub();
       const consumer = createPubSub();
-      const topic = `t-${randomUUID()}`;
+      const topic = `t-${globalThis.crypto.randomUUID()}`;
       const cap = captureCalls();
 
       await consumer.subscribe(topic, cap.cbAutoAck, { group: 'shared' });
@@ -283,7 +282,7 @@ describe('RedisStreamsPubSub', () => {
   describe('lifecycle', () => {
     it('publish() on a closed instance throws', async () => {
       const ps = createPubSub();
-      const topic = `t-${randomUUID()}`;
+      const topic = `t-${globalThis.crypto.randomUUID()}`;
       // Trigger lazy connect first so close has something to tear down.
       await ps.publish(topic, makeEvent());
       await ps.close();
@@ -292,7 +291,7 @@ describe('RedisStreamsPubSub', () => {
 
     it('subscribe() on a closed instance throws', async () => {
       const ps = createPubSub();
-      const topic = `t-${randomUUID()}`;
+      const topic = `t-${globalThis.crypto.randomUUID()}`;
       await ps.publish(topic, makeEvent());
       await ps.close();
       const cap = captureCalls();
@@ -301,7 +300,7 @@ describe('RedisStreamsPubSub', () => {
 
     it('close() is idempotent', async () => {
       const ps = createPubSub();
-      const topic = `t-${randomUUID()}`;
+      const topic = `t-${globalThis.crypto.randomUUID()}`;
       await ps.publish(topic, makeEvent());
       await ps.close();
       await expect(ps.close()).resolves.toBeUndefined();
@@ -309,7 +308,7 @@ describe('RedisStreamsPubSub', () => {
 
     it('unsubscribe() for an unknown callback is a no-op', async () => {
       const ps = createPubSub();
-      const topic = `t-${randomUUID()}`;
+      const topic = `t-${globalThis.crypto.randomUUID()}`;
       const cap = captureCalls();
       // never subscribed — should not throw
       await expect(ps.unsubscribe(topic, cap.cbAutoAck)).resolves.toBeUndefined();
@@ -320,8 +319,8 @@ describe('RedisStreamsPubSub', () => {
     it('subscribe after publish in a fresh group still receives the published message', async () => {
       const producer = createPubSub();
       const consumer = createPubSub();
-      const topic = `t-${randomUUID()}`;
-      const groupName = `late-${randomUUID()}`;
+      const topic = `t-${globalThis.crypto.randomUUID()}`;
+      const groupName = `late-${globalThis.crypto.randomUUID()}`;
 
       // Publish first, with no consumer group anywhere.
       await producer.publish(topic, makeEvent({ type: 'before-subscribe' }));
@@ -337,9 +336,9 @@ describe('RedisStreamsPubSub', () => {
     it('an existing group keeps its own checkpoint and does not replay history', async () => {
       const ps = createPubSub();
       const keyPrefix = 'mastra:topic';
-      const topic = `t-${randomUUID()}`;
+      const topic = `t-${globalThis.crypto.randomUUID()}`;
       const streamKey = `${keyPrefix}:${topic}`;
-      const groupName = `existing-${randomUUID()}`;
+      const groupName = `existing-${globalThis.crypto.randomUUID()}`;
 
       // Publish event-1 first so the stream exists with at least one entry.
       await ps.publish(topic, makeEvent({ type: 'event-1' }));
@@ -381,8 +380,8 @@ describe('RedisStreamsPubSub', () => {
       });
       pubsubs.push(ps);
 
-      const topic = `t-${randomUUID()}`;
-      const groupName = `claim-${randomUUID()}`;
+      const topic = `t-${globalThis.crypto.randomUUID()}`;
+      const groupName = `claim-${globalThis.crypto.randomUUID()}`;
 
       // First subscriber never acks/nacks — its pending entry will go idle.
       const seenA: Event[] = [];
@@ -429,8 +428,8 @@ describe('RedisStreamsPubSub', () => {
       });
       pubsubs.push(ps);
 
-      const topic = `t-cap-${randomUUID()}`;
-      const groupName = `g-cap-${randomUUID()}`;
+      const topic = `t-cap-${globalThis.crypto.randomUUID()}`;
+      const groupName = `g-cap-${globalThis.crypto.randomUUID()}`;
       let attempts = 0;
       const cb: EventCallback = (_event, _ack, nack) => {
         attempts++;
@@ -455,8 +454,8 @@ describe('RedisStreamsPubSub', () => {
       });
       pubsubs.push(ps);
 
-      const topic = `t-cap-inf-${randomUUID()}`;
-      const groupName = `g-cap-inf-${randomUUID()}`;
+      const topic = `t-cap-inf-${globalThis.crypto.randomUUID()}`;
+      const groupName = `g-cap-inf-${globalThis.crypto.randomUUID()}`;
       let attempts = 0;
       const cb: EventCallback = (_event, _ack, nack) => {
         attempts++;
@@ -496,8 +495,8 @@ describe('RedisStreamsPubSub', () => {
         seen.push({ topic: event.type.startsWith('a-') ? 'A' : 'B', type: event.type });
         void ack?.();
       };
-      const topicA = `t-A-${randomUUID()}`;
-      const topicB = `t-B-${randomUUID()}`;
+      const topicA = `t-A-${globalThis.crypto.randomUUID()}`;
+      const topicB = `t-B-${globalThis.crypto.randomUUID()}`;
       await ps.subscribe(topicA, cb);
       await ps.subscribe(topicB, cb);
 
@@ -521,7 +520,7 @@ describe('RedisStreamsPubSub', () => {
   describe('lease', () => {
     it('grants a lease when the key is free', async () => {
       const ps = createPubSub();
-      const key = `lease-${randomUUID()}`;
+      const key = `lease-${globalThis.crypto.randomUUID()}`;
       const result = await ps.acquireLease(key, 'owner-a', 5000);
       expect(result).toEqual({ acquired: true, owner: 'owner-a' });
       expect(await ps.getLeaseOwner(key)).toBe('owner-a');
@@ -530,7 +529,7 @@ describe('RedisStreamsPubSub', () => {
     it('denies a lease while another owner holds it, across instances', async () => {
       const psA = createPubSub();
       const psB = createPubSub();
-      const key = `lease-${randomUUID()}`;
+      const key = `lease-${globalThis.crypto.randomUUID()}`;
 
       const a = await psA.acquireLease(key, 'owner-a', 5000);
       const b = await psB.acquireLease(key, 'owner-b', 5000);
@@ -543,7 +542,7 @@ describe('RedisStreamsPubSub', () => {
     it('lets exactly one of two racing instances win', async () => {
       const psA = createPubSub();
       const psB = createPubSub();
-      const key = `lease-${randomUUID()}`;
+      const key = `lease-${globalThis.crypto.randomUUID()}`;
 
       const [a, b] = await Promise.all([
         psA.acquireLease(key, 'owner-a', 5000),
@@ -560,7 +559,7 @@ describe('RedisStreamsPubSub', () => {
 
     it('lets the same owner re-acquire (idempotent, refreshes TTL)', async () => {
       const ps = createPubSub();
-      const key = `lease-${randomUUID()}`;
+      const key = `lease-${globalThis.crypto.randomUUID()}`;
       await ps.acquireLease(key, 'owner-a', 5000);
       const again = await ps.acquireLease(key, 'owner-a', 5000);
       expect(again).toEqual({ acquired: true, owner: 'owner-a' });
@@ -569,7 +568,7 @@ describe('RedisStreamsPubSub', () => {
     it('expires the lease after TTL and lets a new owner acquire it', async () => {
       const psA = createPubSub();
       const psB = createPubSub();
-      const key = `lease-${randomUUID()}`;
+      const key = `lease-${globalThis.crypto.randomUUID()}`;
 
       const a = await psA.acquireLease(key, 'owner-a', 100);
       expect(a.acquired).toBe(true);
@@ -585,7 +584,7 @@ describe('RedisStreamsPubSub', () => {
     it('does not release a lease held by a different owner', async () => {
       const psA = createPubSub();
       const psB = createPubSub();
-      const key = `lease-${randomUUID()}`;
+      const key = `lease-${globalThis.crypto.randomUUID()}`;
 
       await psA.acquireLease(key, 'owner-a', 5000);
       await psB.releaseLease(key, 'owner-b'); // non-owner — should no-op
@@ -594,7 +593,7 @@ describe('RedisStreamsPubSub', () => {
 
     it('releases a lease the caller owns', async () => {
       const ps = createPubSub();
-      const key = `lease-${randomUUID()}`;
+      const key = `lease-${globalThis.crypto.randomUUID()}`;
       await ps.acquireLease(key, 'owner-a', 5000);
       await ps.releaseLease(key, 'owner-a');
       expect(await ps.getLeaseOwner(key)).toBeUndefined();
@@ -602,7 +601,7 @@ describe('RedisStreamsPubSub', () => {
 
     it('renews a lease the caller owns', async () => {
       const ps = createPubSub();
-      const key = `lease-${randomUUID()}`;
+      const key = `lease-${globalThis.crypto.randomUUID()}`;
       await ps.acquireLease(key, 'owner-a', 200);
       // Renew before expiry.
       await new Promise(r => setTimeout(r, 100));
@@ -617,7 +616,7 @@ describe('RedisStreamsPubSub', () => {
     it('fails to renew a lease held by a different owner', async () => {
       const psA = createPubSub();
       const psB = createPubSub();
-      const key = `lease-${randomUUID()}`;
+      const key = `lease-${globalThis.crypto.randomUUID()}`;
       await psA.acquireLease(key, 'owner-a', 5000);
       const renewed = await psB.renewLease(key, 'owner-b', 5000);
       expect(renewed).toBe(false);
@@ -626,7 +625,7 @@ describe('RedisStreamsPubSub', () => {
 
     it('fails to renew a lease that has expired', async () => {
       const ps = createPubSub();
-      const key = `lease-${randomUUID()}`;
+      const key = `lease-${globalThis.crypto.randomUUID()}`;
       await ps.acquireLease(key, 'owner-a', 100);
       await new Promise(r => setTimeout(r, 200));
       const renewed = await ps.renewLease(key, 'owner-a', 1000);
@@ -635,7 +634,7 @@ describe('RedisStreamsPubSub', () => {
 
     it('transfers a lease from the current owner to a new owner', async () => {
       const ps = createPubSub();
-      const key = `lease-${randomUUID()}`;
+      const key = `lease-${globalThis.crypto.randomUUID()}`;
       await ps.acquireLease(key, 'owner-a', 5000);
       const transferred = await ps.transferLease!(key, 'owner-a', 'owner-b', 5000);
       expect(transferred).toBe(true);
@@ -644,7 +643,7 @@ describe('RedisStreamsPubSub', () => {
 
     it('does not transfer a lease the caller does not own', async () => {
       const ps = createPubSub();
-      const key = `lease-${randomUUID()}`;
+      const key = `lease-${globalThis.crypto.randomUUID()}`;
       await ps.acquireLease(key, 'owner-a', 5000);
       const transferred = await ps.transferLease!(key, 'someone-else', 'owner-b', 5000);
       expect(transferred).toBe(false);
@@ -653,7 +652,7 @@ describe('RedisStreamsPubSub', () => {
 
     it('does not transfer a lease that has expired', async () => {
       const ps = createPubSub();
-      const key = `lease-${randomUUID()}`;
+      const key = `lease-${globalThis.crypto.randomUUID()}`;
       await ps.acquireLease(key, 'owner-a', 100);
       await new Promise(r => setTimeout(r, 200));
       const transferred = await ps.transferLease!(key, 'owner-a', 'owner-b', 5000);
@@ -663,7 +662,7 @@ describe('RedisStreamsPubSub', () => {
 
     it('resets the TTL to the full window on transfer', async () => {
       const ps = createPubSub();
-      const key = `lease-${randomUUID()}`;
+      const key = `lease-${globalThis.crypto.randomUUID()}`;
       await ps.acquireLease(key, 'owner-a', 200);
       // Transfer just before the original TTL would expire, with a fresh window.
       await new Promise(r => setTimeout(r, 100));
@@ -676,14 +675,14 @@ describe('RedisStreamsPubSub', () => {
 
     it('returns undefined owner for a non-existent key', async () => {
       const ps = createPubSub();
-      expect(await ps.getLeaseOwner(`lease-${randomUUID()}`)).toBeUndefined();
+      expect(await ps.getLeaseOwner(`lease-${globalThis.crypto.randomUUID()}`)).toBeUndefined();
     });
   });
 
   describe('localOnly publish', () => {
     it('delivers to subscribers in the same process without round-tripping through Redis', async () => {
       const ps = createPubSub();
-      const topic = `t-${randomUUID()}`;
+      const topic = `t-${globalThis.crypto.randomUUID()}`;
       const a = captureCalls();
 
       await ps.subscribe(topic, a.cbAutoAck);
@@ -708,7 +707,7 @@ describe('RedisStreamsPubSub', () => {
     it('does not leak local-only events to other processes', async () => {
       const psA = createPubSub();
       const psB = createPubSub();
-      const topic = `t-${randomUUID()}`;
+      const topic = `t-${globalThis.crypto.randomUUID()}`;
       const remote = captureCalls();
 
       await psB.subscribe(topic, remote.cbAutoAck);
@@ -722,7 +721,7 @@ describe('RedisStreamsPubSub', () => {
 
     it('unsubscribe stops local delivery too', async () => {
       const ps = createPubSub();
-      const topic = `t-${randomUUID()}`;
+      const topic = `t-${globalThis.crypto.randomUUID()}`;
       const a = captureCalls();
 
       await ps.subscribe(topic, a.cbAutoAck);

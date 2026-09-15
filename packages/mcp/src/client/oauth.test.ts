@@ -1,18 +1,3 @@
-/**
- * OAuth Authentication Tests for MCP Client/Server
- *
- * Tests for the MCP OAuth implementation per:
- * - GitHub Issue: https://github.com/mastra-ai/mastra/issues/7058
- * - MCP Auth Spec: https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization
- *
- * The MCP spec requires:
- * 1. OAuth 2.0 Protected Resource Metadata (RFC9728) on servers
- * 2. Authorization Server Discovery by clients
- * 3. Dynamic Client Registration (RFC7591) support
- * 4. Token validation on protected endpoints
- */
-
-import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import type { Server as HttpServer, IncomingMessage, ServerResponse } from 'node:http';
 import { exchangeAuthorization, refreshAuthorization } from '@modelcontextprotocol/client';
@@ -526,7 +511,7 @@ describe('OAuth Middleware Integration', () => {
   const SERVER_URL = `http://localhost:${PORT}`;
   let httpServer: HttpServer;
 
-  const VALID_TOKEN = 'valid-test-token-' + randomUUID();
+  const VALID_TOKEN = 'valid-test-token-' + globalThis.crypto.randomUUID();
 
   beforeAll(async () => {
     // Create an MCP server with a simple tool

@@ -1,17 +1,3 @@
-/**
- * Mastra `apiRoutes` for the GitHub App project feature.
- *
- * Registered alongside the other `/web/*` routes, behind the host auth gate.
- * Every route additionally re-checks the authenticated user via the injected
- * `RouteAuth` seam and scopes all rows by that user's stable id, so a user can
- * only ever see and operate on their own installations and projects.
- *
- * When the feature is disabled (`isGithubFeatureEnabled()` false), `buildGithubRoutes`
- * returns only `GET /web/github/status`, which reports `enabled:false`
- * so the SPA can cleanly hide all GitHub UI.
- */
-
-import { randomUUID } from 'node:crypto';
 import type { MountedMastraCode } from '@mastra/code-sdk';
 import { resolveModel } from '@mastra/code-sdk/agents/model';
 import { RequestContext } from '@mastra/core/request-context';
@@ -1280,7 +1266,7 @@ function buildProjectGitRoutes({
         ) {
           return c.json({ error: 'Invalid sessionId' }, 400);
         }
-        const sessionId = requestedSessionId ?? randomUUID();
+        const sessionId = requestedSessionId ?? globalThis.crypto.randomUUID();
 
         const requestedTitle = body.title;
         if (requestedTitle !== undefined && typeof requestedTitle !== 'string') {

@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import { isLeaseProvider, NoopLeaseProvider } from '@mastra/core/events';
 import type { LeaseProvider, PubSub } from '@mastra/core/events';
 import { MastraWorker } from '@mastra/core/worker';
@@ -55,7 +53,7 @@ export class GithubReconcileWorker extends MastraWorker {
   readonly #intervalMs: number;
   readonly #issueIntervalMs: number;
   readonly #leaseTtlMs: number;
-  readonly #leaseOwner = randomUUID();
+  readonly #leaseOwner = globalThis.crypto.randomUUID();
   readonly #now: () => number;
 
   #running = false;

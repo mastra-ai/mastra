@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { Event } from '@mastra/core/events';
 import { expect, it } from 'vitest';
 import { ValkeyStreamsPubSub } from './index';
@@ -6,7 +5,7 @@ import { ValkeyStreamsPubSub } from './index';
 it('publishes and consumes through Valkey GLIDE', async () => {
   const pubsub = new ValkeyStreamsPubSub({ url: 'valkey://localhost:6381', blockMs: 50 });
   const received: Event[] = [];
-  const topic = `valkey-${randomUUID()}`;
+  const topic = `valkey-${globalThis.crypto.randomUUID()}`;
   try {
     await pubsub.subscribe(topic, (event, ack) => {
       received.push(event);
@@ -29,8 +28,8 @@ it('reclaims idle pending entries to a sibling consumer, never back to their stu
     reclaimIntervalMs: 250,
     reclaimIdleMs: 500,
   });
-  const topic = `valkey-${randomUUID()}`;
-  const group = `claim-${randomUUID()}`;
+  const topic = `valkey-${globalThis.crypto.randomUUID()}`;
+  const group = `claim-${globalThis.crypto.randomUUID()}`;
   const seenA: Event[] = [];
   const seenB: Event[] = [];
   try {

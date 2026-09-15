@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { PostgresStore } from '../../index';
@@ -8,7 +7,7 @@ const connectionString = process.env.DB_URL || 'postgresql://postgres:postgres@l
 describe('workflow snapshot status index', () => {
   let store: PostgresStore;
   let workflows: any;
-  const workflowName = `status-index-${randomUUID()}`;
+  const workflowName = `status-index-${globalThis.crypto.randomUUID()}`;
 
   beforeAll(async () => {
     store = new PostgresStore({ id: 'workflow-status-index-store', connectionString });
@@ -18,7 +17,7 @@ describe('workflow snapshot status index', () => {
     for (let i = 0; i < 50; i++) {
       await workflows.persistWorkflowSnapshot({
         workflowName,
-        runId: randomUUID(),
+        runId: globalThis.crypto.randomUUID(),
         snapshot: {
           status: i % 2 === 0 ? 'success' : 'failed',
           value: {},
@@ -27,7 +26,7 @@ describe('workflow snapshot status index', () => {
           serializedStepGraph: [],
           suspendedPaths: {},
           waitingPaths: {},
-          runId: randomUUID(),
+          runId: globalThis.crypto.randomUUID(),
           timestamp: Date.now(),
         } as any,
       });
@@ -69,7 +68,7 @@ describe('workflow snapshot status index', () => {
   });
 
   it('still filters correctly when snapshots contain Unicode escape sequences', async () => {
-    const runId = randomUUID();
+    const runId = globalThis.crypto.randomUUID();
     await workflows.persistWorkflowSnapshot({
       workflowName,
       runId,

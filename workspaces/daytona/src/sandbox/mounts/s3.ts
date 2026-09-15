@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import type { FilesystemMountConfig } from '@mastra/core/workspace';
 
 import { shellQuote } from '../../utils/shell-quote';
@@ -127,7 +125,7 @@ export async function mountS3(mountPath: string, config: DaytonaS3MountConfig, c
   }
 
   // A fresh private directory protects uploaded secrets even if the SDK replaces the file.
-  const credentialsDirectory = `${s3CredentialsPrefix(mountPath)}${randomUUID()}`;
+  const credentialsDirectory = `${s3CredentialsPrefix(mountPath)}${globalThis.crypto.randomUUID()}`;
   const credentialsPath = `${credentialsDirectory}/credentials`;
 
   // Allow non-root processes to use FUSE and the allow_other mount option.

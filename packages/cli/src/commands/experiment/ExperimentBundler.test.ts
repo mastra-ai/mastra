@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp, readFile, readlink, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -428,15 +428,15 @@ describe('ExperimentBundler', () => {
     const items = [{ id: 'item-1', input: { prompt: 'hello' }, groundTruth: 'world', toolMocks: [] }];
     const canonical = canonicalize(items);
     const digest = createHash('sha256').update(canonical).digest('hex');
-    const experimentId = randomUUID();
+    const experimentId = globalThis.crypto.randomUUID();
     const request = {
       type: 'run',
       protocolVersion: '1',
       supportedProtocolVersions: ['1'],
       experimentId,
-      jobId: randomUUID(),
+      jobId: globalThis.crypto.randomUUID(),
       attempt: 1,
-      idempotencyKey: randomUUID(),
+      idempotencyKey: globalThis.crypto.randomUUID(),
       deadlineAt: new Date(Date.now() + 30_000).toISOString(),
       datasetAttestation: { itemCount: items.length, digest, canonicalizationVersion: '1' },
       packet: {
@@ -488,15 +488,15 @@ describe('ExperimentBundler', () => {
     await writeFile(entryFile, entry);
     await writeWorkerManifest(directory, bundler.buildIdentity.buildId);
 
-    const experimentId = randomUUID();
+    const experimentId = globalThis.crypto.randomUUID();
     const request = {
       type: 'run',
       protocolVersion: '1',
       supportedProtocolVersions: ['1'],
       experimentId,
-      jobId: randomUUID(),
+      jobId: globalThis.crypto.randomUUID(),
       attempt: 1,
-      idempotencyKey: randomUUID(),
+      idempotencyKey: globalThis.crypto.randomUUID(),
       deadlineAt: new Date(Date.now() + 30_000).toISOString(),
       datasetAttestation: { itemCount: 0, digest: '0'.repeat(64), canonicalizationVersion: '1' },
       packet: {
@@ -539,15 +539,15 @@ describe('ExperimentBundler', () => {
 
     const items: unknown[] = [];
     const digest = createHash('sha256').update(canonicalize(items)).digest('hex');
-    const experimentId = randomUUID();
+    const experimentId = globalThis.crypto.randomUUID();
     const result = await runWorker(entryFile, {
       type: 'run',
       protocolVersion: '1',
       supportedProtocolVersions: ['1'],
       experimentId,
-      jobId: randomUUID(),
+      jobId: globalThis.crypto.randomUUID(),
       attempt: 1,
-      idempotencyKey: randomUUID(),
+      idempotencyKey: globalThis.crypto.randomUUID(),
       deadlineAt: new Date(Date.now() + 100).toISOString(),
       datasetAttestation: { itemCount: 0, digest, canonicalizationVersion: '1' },
       packet: {

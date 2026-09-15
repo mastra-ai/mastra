@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { PubSub } from '@mastra/core/events';
 import type { Event, EventCallback, LeaseProvider, PubSubDeliveryMode, SubscribeOptions } from '@mastra/core/events';
 import { createClient, createCluster } from 'redis';
@@ -293,7 +292,7 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
   #subKey(topic: string, cb: EventCallback): string {
     let cbId = this.#cbIds.get(cb);
     if (!cbId) {
-      cbId = randomUUID();
+      cbId = globalThis.crypto.randomUUID();
       this.#cbIds.set(cb, cbId);
     }
     return `${topic}::${cbId}`;
@@ -341,7 +340,7 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     if (options?.localOnly) {
       const localEvent: Event = {
         ...event,
-        id: randomUUID(),
+        id: globalThis.crypto.randomUUID(),
         createdAt: new Date(),
         deliveryAttempt: event.deliveryAttempt ?? 1,
       };
@@ -363,7 +362,7 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
   async #publishRemote(topic: string, event: Omit<Event, 'id' | 'createdAt'>): Promise<void> {
     await this.#ensureWriterConnected();
 
-    const id = randomUUID();
+    const id = globalThis.crypto.randomUUID();
     const createdAt = new Date();
     const payload: Event = {
       ...event,
@@ -424,8 +423,8 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     await this.#ensureWriterConnected();
 
     const isGrouped = !!options?.group;
-    const group = options?.group ?? `__fanout-${randomUUID()}`;
-    const consumer = `${group}-${randomUUID()}`;
+    const group = options?.group ?? `__fanout-${globalThis.crypto.randomUUID()}`;
+    const consumer = `${group}-${globalThis.crypto.randomUUID()}`;
     const streamKey = this.#streamKey(topic);
     const groupAnchor = options?.startFrom === 'latest' ? '$' : '0';
 

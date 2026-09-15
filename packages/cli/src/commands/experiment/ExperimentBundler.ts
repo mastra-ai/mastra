@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { lstat, mkdtemp, readFile, readdir, readlink, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -33,7 +33,7 @@ export interface ExperimentWorkerArtifactManifest {
 
 export class ExperimentBundler extends Bundler {
   readonly buildIdentity: ExperimentWorkerBuildIdentity = {
-    buildId: randomUUID(),
+    buildId: globalThis.crypto.randomUUID(),
     protocolVersion: EXPERIMENT_WORKER_PROTOCOL_VERSION,
     datasetCanonicalizationVersion: EXPERIMENT_DATASET_CANONICALIZATION_VERSION,
   };

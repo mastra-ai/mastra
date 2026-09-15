@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import { resolveProviderOMDefault } from '@mastra/code-sdk/onboarding/packs';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController } from '@mastra/core/agent-controller';
@@ -194,7 +192,7 @@ export async function ensureFactorySourceSession(
 
   const userId = args.attributeToUserId ?? resolved.connectedByUserId;
   const session = await sourceControl.sessions.create({
-    sessionId: randomUUID(),
+    sessionId: globalThis.crypto.randomUUID(),
     projectRepositoryId: resolved.projectRepositoryId,
     orgId,
     userId,
