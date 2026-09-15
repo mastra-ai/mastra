@@ -4002,10 +4002,14 @@ export class Agent<
       return convertedWorkspaceTools;
     }
 
-    const workspaceTools = await createWorkspaceTools(workspace, {
-      requestContext: requestContext ? Object.fromEntries(requestContext.entries()) : {},
+    const workspaceTools = await createWorkspaceTools(
       workspace,
-    });
+      {
+        requestContext: requestContext ? Object.fromEntries(requestContext.entries()) : {},
+        workspace,
+      },
+      { threadId, resourceId, runId },
+    );
 
     if (Object.keys(workspaceTools).length > 0) {
       this.logger.debug('Adding workspace tools', { agent: this.name, tools: Object.keys(workspaceTools), runId });

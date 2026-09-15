@@ -74,6 +74,44 @@ const workspace = new Workspace({
 });
 ```
 
+### Persisting read-before-write across suspend/resume
+
+By default `requireReadBeforeWrite` is tracked by an in-process tracker that is
+created fresh for each run. If a run suspends between a read and a write (plan
+approval, `requireApproval` tools, `askUserTool`) — especially on serverless or
+container runtimes that tear the process down while waiting for a human — the
+tracker is discarded and recreated empty on resume, so the first write is
+rejected with "has not been read".
+
+Inject a persistent, per-thread `fileReadTracker` (as an instance, or a factory
+that receives `{ threadId, resourceId, runId, requestContext }`) so read records
+survive suspend/resume:
+
+```typescript
+const trackers = new Map<string, FileReadTracker>();
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  tools: {
+    mastra_workspace_edit_file: { requireReadBeforeWrite: true },
+  },
+  // Return a tracker scoped (and persisted) per thread. Back it with your own
+  // storage to survive process restarts; an in-memory Map is shown for brevity.
+  fileReadTracker: ({ threadId }) => {
+    const key = threadId ?? 'default';
+    let tracker = trackers.get(key);
+    if (!tracker) {
+      tracker = new InMemoryFileReadTracker();
+      trackers.set(key, tracker);
+    }
+    return tracker;
+  },
+});
+```
+
+Tracker methods may be synchronous or return promises, so a storage-backed
+implementation can be fully asynchronous.
+
 ## Module Structure
 
 - `workspace.ts` - Main Workspace class

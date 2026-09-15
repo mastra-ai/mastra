@@ -17,7 +17,7 @@ import { InMemoryFileReadTracker, InMemoryFileWriteLock } from '../filesystem';
 import type { FileReadTracker, FileWriteLock, WorkspaceFilesystem } from '../filesystem';
 import type { WorkspaceSandbox } from '../sandbox';
 import { supportsComputer } from '../sandbox';
-import type { Workspace } from '../workspace';
+import type { Workspace, FileReadTrackerScope } from '../workspace';
 import { isAstGrepAvailable, astEditTool } from './ast-edit';
 import { computerClickTool } from './computer-click';
 import { computerDoubleClickTool } from './computer-double-click';
@@ -288,7 +288,7 @@ function wrapWithReadTracker(
         // Optimistic concurrency: attach the mtime from the last read
         // *before* stat so it's preserved even when the file has been
         // deleted externally (stat throws FileNotFoundError).
-        const record = readTracker.getReadRecord(input.path);
+        const record = await readTracker.getReadRecord(input.path);
         if (record) {
           enrichedContext = { ...enrichedContext, __expectedMtime: record.modifiedAtRead };
         }
@@ -306,7 +306,7 @@ function wrapWithReadTracker(
               true,
             );
             if (shouldRequireRead) {
-              const check = readTracker.needsReRead(input.path, stat.modifiedAt);
+              const check = await readTracker.needsReRead(input.path, stat.modifiedAt);
               if (check.needsReRead) {
                 throw new FileReadRequiredError(input.path, check.reason!);
               }
@@ -328,12 +328,12 @@ function wrapWithReadTracker(
       if (mode === 'read' && fs) {
         try {
           const stat = await fs.stat(input.path);
-          readTracker.recordRead(input.path, stat.modifiedAt);
+          await readTracker.recordRead(input.path, stat.modifiedAt);
         } catch {
           // Ignore stat errors for tracking
         }
       } else if (mode === 'write') {
-        readTracker.clearReadRecord(input.path);
+        await readTracker.clearReadRecord(input.path);
       }
 
       return result;
@@ -402,6 +402,7 @@ function wrapWithWriteLock(tool: any, writeLock: FileWriteLock): any {
 export async function createWorkspaceTools(
   workspace: Workspace,
   configContext?: Omit<ToolConfigContext, 'requestContext'> & { requestContext?: unknown },
+  scope?: Omit<FileReadTrackerScope, 'requestContext'>,
 ) {
   // Seed fallback context so dynamic enabled functions always get called,
   // even if the caller omits configContext.  Normalize requestContext so
@@ -421,8 +422,26 @@ export async function createWorkspaceTools(
 
   // Shared read tracker — always active so optimistic concurrency (mtime
   // checking) works on every write, regardless of the requireReadBeforeWrite
-  // policy setting.
-  const readTracker: FileReadTracker = new InMemoryFileReadTracker();
+  // policy setting. A custom tracker (or factory) can be injected via the
+  // workspace config so read records survive suspend/resume; otherwise we fall
+  // back to a fresh in-process tracker for this run.
+  let readTracker: FileReadTracker = new InMemoryFileReadTracker();
+  const customTracker = workspace.getFileReadTracker?.();
+  if (customTracker) {
+    try {
+      readTracker =
+        typeof customTracker === 'function'
+          ? await customTracker({ ...scope, requestContext: effectiveConfigContext.requestContext })
+          : customTracker;
+    } catch (error) {
+      console.warn(
+        `Failed to resolve custom fileReadTracker; falling back to in-memory tracker: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      readTracker = new InMemoryFileReadTracker();
+    }
+  }
 
   // Helper: add a tool with config-driven filtering
   const addTool = async (

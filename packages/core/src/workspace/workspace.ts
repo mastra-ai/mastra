@@ -39,7 +39,7 @@ import type { MastraVector } from '../vector';
 
 import { WorkspaceError, SearchNotAvailableError, WorkspaceNotReadyError } from './errors';
 import { CompositeFilesystem, LocalFilesystem } from './filesystem';
-import type { WorkspaceFilesystem, FilesystemInfo } from './filesystem';
+import type { WorkspaceFilesystem, FilesystemInfo, FileReadTracker } from './filesystem';
 import { MastraFilesystem } from './filesystem/mastra-filesystem';
 import { resolvePathPattern } from './glob';
 import type { ReaddirEntry } from './glob';
@@ -107,6 +107,26 @@ export type DynamicSandboxInstructions =
  * instance. Return `undefined` to fall back to per-RequestContext memoization.
  */
 export type WorkspaceSandboxCacheKey = (context: { requestContext: RequestContext }) => string | undefined;
+
+/**
+ * Identifies the run a file-read tracker is being resolved for. Passed to a
+ * {@link FileReadTrackerFactory} so a persistent tracker can scope its records
+ * (e.g. key them by `threadId`) and keep them consistent across suspend/resume.
+ */
+export interface FileReadTrackerScope {
+  threadId?: string;
+  resourceId?: string;
+  runId?: string;
+  requestContext: Record<string, unknown>;
+}
+
+/**
+ * Resolves a {@link FileReadTracker} per run. Return a persistent, scope-aware
+ * tracker so `requireReadBeforeWrite` (and optimistic-concurrency mtime checks)
+ * survive suspend/resume — useful on serverless/torn-down runtimes where the
+ * default in-process tracker is discarded while waiting for a human.
+ */
+export type FileReadTrackerFactory = (scope: FileReadTrackerScope) => FileReadTracker | Promise<FileReadTracker>;
 
 /**
  * Configuration for creating a Workspace.
@@ -437,6 +457,22 @@ export interface WorkspaceConfig<
    * ```
    */
   tools?: WorkspaceToolsConfig;
+
+  /**
+   * Custom file-read tracker for read-before-write tracking, or a factory that
+   * returns one per run.
+   *
+   * By default an in-process {@link InMemoryFileReadTracker} is created per run,
+   * so read records are lost when a run suspends (e.g. plan approval,
+   * `requireApproval` tools, `askUserTool`) and recreated empty on resume —
+   * causing the first `write_file`/`edit_file` to be rejected with
+   * "has not been read".
+   *
+   * Pass an instance to share tracking in-process, or a factory to return a
+   * persistent, scope-aware tracker (e.g. keyed by `threadId`) so
+   * `requireReadBeforeWrite` stays consistent across suspend/resume.
+   */
+  fileReadTracker?: FileReadTracker | FileReadTrackerFactory;
 
   // ---------------------------------------------------------------------------
   // Lifecycle Options
@@ -814,6 +850,14 @@ export class Workspace<
    */
   getToolsConfig(): WorkspaceToolsConfig | undefined {
     return this._config.tools;
+  }
+
+  /**
+   * Get the configured custom file-read tracker (instance or factory), if any.
+   * Returns undefined when the default in-process tracker should be used.
+   */
+  getFileReadTracker(): FileReadTracker | FileReadTrackerFactory | undefined {
+    return this._config.fileReadTracker;
   }
 
   /**
