@@ -259,9 +259,8 @@ describe('PlatformLinearIntegration', () => {
     });
 
     expect(result.issues).toEqual([expect.objectContaining({ id: 'issue-1', sourceId: project1SourceId })]);
-    expect(fetchImpl.mock.calls.map(call => String(call[0]))).not.toContain(
-      expect.stringContaining('/workspaces/workspace-2/issues'),
-    );
+    const requestedUrls = fetchImpl.mock.calls.map(call => String(call[0]));
+    expect(requestedUrls.some(url => url.includes('/workspaces/workspace-2/issues'))).toBe(false);
   });
   it('does not discover sources from attribution-only workspaces during team intake', async () => {
     const workspace2 = {
