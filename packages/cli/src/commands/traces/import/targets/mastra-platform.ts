@@ -80,10 +80,10 @@ export class MastraPlatformTraceTarget implements TraceImportTarget {
 
   async upload(batch: PreparedTraceBatch, options: TraceImportTargetUploadOptions = {}): Promise<void> {
     const body = serializePreparedTraceBatch(batch);
-    await this.waitForUploadSlot(batch.spanCount, options.signal);
 
     for (let attempt = 0; ; attempt++) {
       options.signal?.throwIfAborted();
+      await this.waitForUploadSlot(batch.spanCount, options.signal);
 
       let response: Response;
       try {

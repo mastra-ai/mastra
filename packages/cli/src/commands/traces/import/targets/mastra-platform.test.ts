@@ -52,6 +52,16 @@ function acknowledgement(spanCount = 1): Response {
   return Response.json({ ok: true, data: { spanCount } });
 }
 
+function controllableClock(startedAt = 1_000) {
+  let currentTime = startedAt;
+  return {
+    now: () => currentTime,
+    sleep: vi.fn(async (milliseconds: number) => {
+      currentTime += milliseconds;
+    }),
+  };
+}
+
 describe('MastraPlatformTraceTarget', () => {
   it('posts the exact prepared payload to the project-scoped collector', async () => {
     const fetch = vi.fn(async () => acknowledgement());
@@ -98,17 +108,17 @@ describe('MastraPlatformTraceTarget', () => {
       .mockResolvedValueOnce(new Response(null, { status: 429, headers: { 'Retry-After': '2' } }))
       .mockResolvedValueOnce(new Response(null, { status: 503 }))
       .mockResolvedValueOnce(acknowledgement());
-    const sleep = vi.fn(async () => undefined);
+    const clock = controllableClock();
     const target = new MastraPlatformTraceTarget(
       { accessToken: 'secret-token', projectId: 'project_1' },
-      { fetch, sleep },
+      { fetch, ...clock },
     );
 
     await target.upload(batch());
 
     expect(fetch).toHaveBeenCalledTimes(3);
-    expect(sleep).toHaveBeenNthCalledWith(1, 2000, undefined);
-    expect(sleep).toHaveBeenNthCalledWith(2, 1000, undefined);
+    expect(clock.sleep).toHaveBeenNthCalledWith(1, 2000, undefined);
+    expect(clock.sleep).toHaveBeenNthCalledWith(2, 1000, undefined);
     expect(fetch.mock.calls.map(call => call[1]?.body)).toEqual([
       fetch.mock.calls[0]![1]!.body,
       fetch.mock.calls[0]![1]!.body,
@@ -121,16 +131,16 @@ describe('MastraPlatformTraceTarget', () => {
       .fn<typeof globalThis.fetch>()
       .mockResolvedValueOnce(new Response(null, { status: 429, headers: { 'Retry-After': '120' } }))
       .mockResolvedValueOnce(acknowledgement());
-    const sleep = vi.fn(async () => undefined);
+    const clock = controllableClock();
     const target = new MastraPlatformTraceTarget(
       { accessToken: 'secret-token', projectId: 'project_1' },
-      { fetch, sleep },
+      { fetch, ...clock },
     );
 
     await target.upload(batch());
 
-    expect(sleep).toHaveBeenCalledOnce();
-    expect(sleep).toHaveBeenCalledWith(30_000, undefined);
+    expect(clock.sleep).toHaveBeenCalledOnce();
+    expect(clock.sleep).toHaveBeenCalledWith(30_000, undefined);
   });
 
   it('paces consecutive whole-trace batches to the default span rate', async () => {
@@ -160,25 +170,45 @@ describe('MastraPlatformTraceTarget', () => {
       .fn<typeof globalThis.fetch>()
       .mockRejectedValueOnce(new Error('connection reset'))
       .mockResolvedValueOnce(acknowledgement());
-    const sleep = vi.fn(async () => undefined);
+    const clock = controllableClock();
     const target = new MastraPlatformTraceTarget(
       { accessToken: 'secret-token', projectId: 'project_1' },
-      { fetch, sleep },
+      { fetch, ...clock },
     );
 
     await target.upload(batch());
 
     expect(fetch).toHaveBeenCalledTimes(2);
     expect(fetch.mock.calls[1]![1]!.body).toBe(fetch.mock.calls[0]![1]!.body);
-    expect(sleep).toHaveBeenCalledWith(500, undefined);
+    expect(clock.sleep).toHaveBeenCalledWith(500, undefined);
+  });
+
+  it('paces every attempt when retrying a whole-trace batch', async () => {
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockRejectedValueOnce(new Error('connection reset'))
+      .mockResolvedValueOnce(acknowledgement(250));
+    const clock = controllableClock();
+    const target = new MastraPlatformTraceTarget(
+      { accessToken: 'secret-token', projectId: 'project_1' },
+      { fetch, ...clock },
+    );
+
+    await target.upload(batchWithSpanCount(250));
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(clock.sleep.mock.calls).toEqual([
+      [500, undefined],
+      [2000, undefined],
+    ]);
   });
 
   it('retries a lost or invalid acknowledgement without advancing on assumption', async () => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(acknowledgement(0));
-    const sleep = vi.fn(async () => undefined);
+    const clock = controllableClock();
     const target = new MastraPlatformTraceTarget(
       { accessToken: 'secret-token', projectId: 'project_1' },
-      { fetch, sleep, maxAttempts: 2 },
+      { fetch, ...clock, maxAttempts: 2 },
     );
 
     await expect(target.upload(batch())).rejects.toMatchObject<Partial<MastraPlatformUploadError>>({
@@ -186,7 +216,7 @@ describe('MastraPlatformTraceTarget', () => {
       retryable: true,
     });
     expect(fetch).toHaveBeenCalledTimes(2);
-    expect(sleep).toHaveBeenCalledOnce();
+    expect(clock.sleep).toHaveBeenCalledOnce();
   });
 
   it.each([
