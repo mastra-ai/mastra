@@ -11,8 +11,6 @@ import { createLangfuseSpanImportId, createLangfuseTraceImportId, LANGFUSE_ID_AL
 import { LangfuseObservationsReader, type LangfuseReadWindow, type LangfuseTraceReadOptions } from './reader.js';
 import type { LangfuseObservation, LangfuseSourceTrace } from './types.js';
 
-const MAPPER_VERSION = 'langfuse-api-v2@1';
-
 const LANGFUSE_TYPE_MAP: Record<string, TraceImportSpan['spanType']> = {
   AGENT: 'agent_run',
   CHAIN: 'generic',
@@ -133,7 +131,6 @@ export class LangfuseTraceImportProvider implements TraceImportProvider {
       provider: 'langfuse',
       baseUrl: this.reader.baseUrl,
       projectId: project.id,
-      mapperVersion: MAPPER_VERSION,
       idAlgorithmVersion: LANGFUSE_ID_ALGORITHM_VERSION,
     };
   }
