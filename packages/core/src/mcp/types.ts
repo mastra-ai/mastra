@@ -349,7 +349,10 @@ export interface ServerDetailInfo extends ServerInfo {
  * What `executeTool` resolves to on a server with `mcpVersion === 2`. A tool that
  * calls `context.suspend(payload)` is reported as `suspended` together with the
  * payload and its `resumeSchema` (as JSON Schema) so the caller can ask for
- * exactly that input; otherwise the tool's output is returned as `completed`.
+ * exactly that input; otherwise the tool's output is returned as `completed`. There is
+ * no failure variant: a tool that throws, or input/resume data that fails the declared
+ * schemas, rejects the `executeTool` promise instead (core reports schema failures as a
+ * `ValidationError` output, which a 2.x server must not pass through as `completed`).
  */
 export type MCPToolExecutionResultV2 =
   | { status: 'completed'; output: unknown }

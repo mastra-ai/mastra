@@ -211,19 +211,31 @@ export abstract class MCPServerBase<TId extends string = string> extends MastraB
 
   /**
    * Start the MCP server using the standalone HTTP+SSE transport.
-   * Only `@mastra/mcp` 1.x implements this; MCP 2026-07-28 removed the transport.
+   * Only `@mastra/mcp` 1.x overrides this; MCP 2026-07-28 removed the transport, so the
+   * base implementation throws and 2.x servers inherit that.
    * @deprecated Removed in the next core major together with the 1.x server contract.
+   * Use `startHTTP` (Streamable HTTP) instead.
    * @param options Options for the SSE transport
    */
-  public startSSE?(options: MCPServerSSEOptions): Promise<void>;
+  public async startSSE(_options: MCPServerSSEOptions): Promise<void> {
+    throw new Error(
+      `MCP server '${this.id}' does not implement the standalone SSE transport (removed in MCP 2026-07-28); use startHTTP instead`,
+    );
+  }
 
   /**
    * Start the MCP server using the standalone Hono SSE transport.
-   * Only `@mastra/mcp` 1.x implements this; MCP 2026-07-28 removed the transport.
+   * Only `@mastra/mcp` 1.x overrides this; MCP 2026-07-28 removed the transport, so the
+   * base implementation throws and 2.x servers inherit that.
    * @deprecated Removed in the next core major together with the 1.x server contract.
+   * Use `startHTTP` (Streamable HTTP) instead.
    * @param options Options for the SSE transport
    */
-  public startHonoSSE?(options: MCPServerHonoSSEOptions): Promise<Response | undefined>;
+  public async startHonoSSE(_options: MCPServerHonoSSEOptions): Promise<Response | undefined> {
+    throw new Error(
+      `MCP server '${this.id}' does not implement the standalone Hono SSE transport (removed in MCP 2026-07-28); use startHTTP instead`,
+    );
+  }
 
   /**
    * Start the MCP server using HTTP transport
@@ -312,7 +324,9 @@ export abstract class MCPServerBase<TId extends string = string> extends MastraB
    * `suspendPayload`; the server supplies `context.suspend` and `context.mcp`.
    * @returns A promise that resolves to the result of the tool execution. A server with
    * `mcpVersion === 2` resolves to a `MCPToolExecutionResultV2` so a tool that suspended for
-   * input is reported instead of being mistaken for a completed call.
+   * input is reported instead of being mistaken for a completed call; such a server declares
+   * that return type on its override (the base stays `Promise<any>` so 1.x subclasses with a
+   * concrete return type keep compiling).
    * @throws Error if the tool is not found, or if execution fails.
    */
   public abstract executeTool(

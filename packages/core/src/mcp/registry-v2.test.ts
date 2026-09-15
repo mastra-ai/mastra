@@ -7,7 +7,7 @@ import type { ToolsInput } from '../agent';
 import { Mastra } from '../mastra';
 import { RequestContext } from '../request-context';
 import { standardSchemaToJSONSchema } from '../schema';
-import { createTool } from '../tools';
+import { createTool, isValidationError } from '../tools';
 import type { InternalCoreTool, MCPToolExecutionContext } from '../tools';
 import { makeCoreTool } from '../utils';
 import { Workflow } from '../workflows';
@@ -60,6 +60,9 @@ class NativeServer extends MCPServerBase {
         resumeSchema: resumeSchema ? standardSchemaToJSONSchema(resumeSchema, { io: 'input' }) : undefined,
       };
     }
+    // Core reports invalid input/resume data as a validation-error output (the same
+    // object agents see); a 2.x server rejects it like any other failed call.
+    if (isValidationError(output)) throw new Error(output.message);
     return { status: 'completed', output };
   }
   async startStdio() {}
@@ -180,7 +183,7 @@ function suspendingTool() {
 }
 
 describe('MCP v1/v2 registry boundaries', () => {
-  it('registers both families without changing legacy instances or tool identity', () => {
+  it('registers both families without changing legacy instances or tool identity', async () => {
     const confirm = suspendingTool();
     const ordinary = createTool({ id: 'ordinary', description: 'Ordinary tool', execute: async () => 1 });
     const modern = new NativeServer({
@@ -201,8 +204,11 @@ describe('MCP v1/v2 registry boundaries', () => {
     expect(modern.getServerInfo().version_detail.release_date).toBe('2026-07-28');
     expect(modern.mcpVersion).toBe(2);
     expect(legacy.mcpVersion).toBeUndefined();
-    expect('startSSE' in modern).toBe(false);
-    expect('startHonoSSE' in modern).toBe(false);
+    // The standalone SSE transport stays callable on the shared base type but a 2.x server
+    // inherits the throwing default; 1.x overrides keep working.
+    await expect(modern.startSSE({} as never)).rejects.toThrow('does not implement the standalone SSE transport');
+    await expect(modern.startHonoSSE({} as never)).rejects.toThrow('standalone Hono SSE transport');
+    await expect(legacy.startSSE({} as never)).resolves.toBeUndefined();
   });
 
   it('keeps the 1.x registry contract: slugified id, agent/workflow registration, Mastra tools only', () => {
@@ -349,8 +355,10 @@ describe('MCP v1/v2 registry boundaries', () => {
   it('validates the resume data and suspend payload against the declared schemas', async () => {
     const confirm = suspendingTool();
     const server = new NativeServer({ name: 'Modern', version: '2', tools: { confirm } });
-    const invalidResume = await server.executeTool('confirm', { amount: 1 }, { resumeData: { confirmed: 'yes' } });
-    expect(invalidResume.status).toBe('completed');
-    expect((invalidResume as { output: { error: boolean } }).output).toMatchObject({ error: true });
+    // Invalid data never reports as `completed`: it rejects, exactly like a tool that throws.
+    await expect(server.executeTool('confirm', { amount: 1 }, { resumeData: { confirmed: 'yes' } })).rejects.toThrow(
+      /confirmed/,
+    );
+    await expect(server.executeTool('confirm', { amount: 'lots' })).rejects.toThrow(/amount/);
   });
 });

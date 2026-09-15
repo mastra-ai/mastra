@@ -29,9 +29,12 @@ import { createRoute } from '../server-adapter/routes/route-builder';
 // Route Definitions (createRoute pattern for server adapters)
 // ============================================================================
 
-/** Only `@mastra/mcp` 1.x servers implement the standalone HTTP+SSE transport. */
-function hasSSETransport(server: MastraMCPServerImplementation): server is MCPSseTransportResult['server'] {
-  return typeof server.startSSE === 'function' && typeof server.startHonoSSE === 'function';
+/**
+ * Only `@mastra/mcp` 1.x servers implement the standalone HTTP+SSE transport; on a
+ * 2026-07-28 server the inherited `startSSE`/`startHonoSSE` throw.
+ */
+function hasSSETransport(server: MastraMCPServerImplementation): boolean {
+  return server.mcpVersion !== 2;
 }
 
 export const LIST_MCP_SERVERS_ROUTE = createRoute({
@@ -227,8 +230,16 @@ export const EXECUTE_MCP_SERVER_TOOL_ROUTE = createRoute({
     serverId,
     toolId,
     data,
+    resumeData,
+    suspendPayload,
     requestContext,
-  }: ServerContext & { serverId: string; toolId: string; data?: unknown }) => {
+  }: ServerContext & {
+    serverId: string;
+    toolId: string;
+    data?: unknown;
+    resumeData?: unknown;
+    suspendPayload?: unknown;
+  }) => {
     if (!mastra || typeof mastra.getMCPServerById !== 'function') {
       throw new HTTPException(500, { message: 'Mastra instance or getMCPServerById method not available' });
     }
@@ -245,8 +256,13 @@ export const EXECUTE_MCP_SERVER_TOOL_ROUTE = createRoute({
 
     if (server.mcpVersion === 2) {
       // A 2026-07-28 server runs the tool with no protocol client attached: a tool
-      // that suspends for input is reported as such instead of pretending it finished.
-      const execution: MCPToolExecutionResultV2 = await server.executeTool(toolId, data, { requestContext });
+      // that suspends for input is reported as such instead of pretending it finished, and
+      // the caller answers by sending the same args with `resumeData` and `suspendPayload`.
+      const execution: MCPToolExecutionResultV2 = await server.executeTool(toolId, data, {
+        requestContext,
+        resumeData,
+        suspendPayload,
+      });
       if (execution.status === 'suspended') {
         return {
           status: 'suspended' as const,
@@ -380,7 +396,7 @@ export interface MCPHttpTransportResult {
  */
 export interface MCPSseTransportResult {
   /** A 1.x server: the SSE route only resolves servers that still implement the transport. */
-  server: MastraMCPServerImplementation & Required<Pick<MastraMCPServerImplementation, 'startSSE' | 'startHonoSSE'>>;
+  server: MastraMCPServerImplementation;
   ssePath: string;
   messagePath: string;
 }

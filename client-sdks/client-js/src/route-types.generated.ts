@@ -12873,6 +12873,10 @@ export type PostMcpServerIdToolsToolIdExecute_PathParams = GetMcpServerIdToolsTo
 
 export type PostMcpServerIdToolsToolIdExecute_Body = {
   data?: unknown | undefined;
+  /** Answer for a tool that reported `status: "suspended"`; 2026-07-28 servers only */
+  resumeData?: unknown | undefined;
+  /** The `suspendPayload` from the suspended response, echoed back with `resumeData` */
+  suspendPayload?: unknown | undefined;
 };
 
 export type PostMcpServerIdToolsToolIdExecute_Response =

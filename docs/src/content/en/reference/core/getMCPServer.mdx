@@ -60,7 +60,7 @@ const serverById = mastra.getMCPServerById('my-mcp-server')
 
 ## MCP 1.x and 2026-07-28 servers
 
-Both `@mastra/mcp` 1.x and 2.x servers extend the same `MCPServerBase` from `@mastra/core/mcp`. A 2.x server sets `mcpVersion` to `2`, while 1.x servers leave it undefined and need no new properties or methods. The differences are limited to what the 2026-07-28 protocol changed: `startSSE` and `startHonoSSE` are optional (only 1.x implements the standalone SSE transport, and both are deprecated), and a server with `mcpVersion` set to `2` resolves `executeTool` to a `MCPToolExecutionResultV2` that reports a suspended tool rather than a bare result.
+Both `@mastra/mcp` 1.x and 2.x servers extend the same `MCPServerBase` from `@mastra/core/mcp`. A 2.x server sets `mcpVersion` to `2`, while 1.x servers leave it undefined and need no new properties or methods. The differences are limited to what the 2026-07-28 protocol changed: `startSSE` and `startHonoSSE` are no longer abstract and throw unless a 1.x server overrides them (only 1.x implements the standalone SSE transport, and both are deprecated), and a server with `mcpVersion` set to `2` resolves `executeTool` to a `MCPToolExecutionResultV2` that reports a suspended tool rather than a bare result.
 
 The 1.x-only surfaces are marked `@deprecated` and are removed in the next major release of `@mastra/core`: `startSSE`, `startHonoSSE`, `MCPServerSSEOptions`, `MCPServerHonoSSEOptions`, `MCPServerHTTPOptions.options`, and on `context.mcp` the members `elicitation`, `extra.sendNotification` and `extra.sendRequest`.
 
@@ -101,7 +101,7 @@ The 2026-07-28 protocol removed server-initiated requests, so on a 2.x server th
 
 ### Registration and execution
 
-Tools are registered on the Mastra instance exactly as a 1.x server registers them. On a server with `mcpVersion` set to `2`, `executeTool(toolId, args, context?)` returns `{ status: 'completed', output }` or, when the tool suspended, `{ status: 'suspended', suspendPayload, resumeSchema }` with `resumeSchema` as JSON Schema. Shared REST execution endpoints return the suspended shape instead of pretending the tool finished. Legacy SSE routes remain available only to servers that implement `startSSE` and `startHonoSSE`.
+Tools are registered on the Mastra instance exactly as a 1.x server registers them. On a server with `mcpVersion` set to `2`, `executeTool(toolId, args, context?)` returns `{ status: 'completed', output }` or, when the tool suspended, `{ status: 'suspended', suspendPayload, resumeSchema }` with `resumeSchema` as JSON Schema. The result has no failure variant: a tool that throws, or input or resume data that fails its schema, rejects the promise. Shared REST execution endpoints return the suspended shape instead of pretending the tool finished, and accept `resumeData` plus the echoed `suspendPayload` on the next call to continue the tool. Legacy SSE routes remain available only to 1.x servers. A server with `mcpVersion` set to `2` gets a 404 there.
 
 Registering another server under an occupied registry key keeps the existing instance. Registry keys and intrinsic server IDs remain distinct.
 

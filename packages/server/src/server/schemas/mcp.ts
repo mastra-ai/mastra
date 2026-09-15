@@ -17,6 +17,14 @@ export const mcpServerToolPathParams = z.object({
 
 export const executeToolBodySchema = z.object({
   data: z.unknown().optional(),
+  resumeData: z
+    .unknown()
+    .optional()
+    .describe('Answer for a tool that reported `status: "suspended"`; 2026-07-28 servers only'),
+  suspendPayload: z
+    .unknown()
+    .optional()
+    .describe('The `suspendPayload` from the suspended response, echoed back with `resumeData`'),
 });
 
 // Query parameters
